@@ -1,13 +1,16 @@
 // ==UserScript==
 // @name         JHS-YA
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      3.6.0
+// @version      3.7.0
 // @author       yaoser
 // @description  Jav-鉴黄师个人维护版：收藏、屏蔽、标记已下载、演员黑名单、收藏演员同步、新作品检测、热播/Top250/Fc2ppv/评论增强、相关清单、WebDAV数据备份、以图识图、字幕搜索；支持 JavDB / JavBus。
 // @license      MIT
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=javdb.com
+// @homepageURL  https://github.com/Yaoser-x/JHS
+// @supportURL   https://github.com/Yaoser-x/JHS/issues
 // @match        https://javdb.com/*
 // @match        https://www.javbus.com/*
+// @match        *://*.123pan.com/*
 // @include      https://javdb*.com/*
 // @include      https://*javbus*/*
 // @include      https://*javsee*/*
@@ -56,11 +59,14 @@
 // @connect      javtrailers.com
 // @connect      javdb.com
 // @connect      javbus.com
+// @connect      www.123pan.com
 // @connect      supjav.com
 // @connect      translate-pa.googleapis.com
 // @connect      127.0.0.1
 // @connect      *
 // @grant        GM_xmlhttpRequest
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @grant        GM_openInTab
 // @grant        unsafeWindow
 // @run-at       document-idle
@@ -6695,6 +6701,7 @@ class Re extends X {
         }
         e.empty(), 0 !== t.length ? (t.forEach((t => {
             const n = $(`\n                <div class="magnet-result">\n                    <div class="magnet-title"><a href="${t.magnet}">${t.title}</a></div>\n                    <div class="magnet-info">\n                        <span>大小: ${t.size || "未知"}</span>\n                        <span>日期: ${t.date || "未知"}</span>\n                    </div>\n                    <div class="magnet-copy">\n                        <button class="magnet-hub-btn copy-btn" data-magnet="${t.magnet}">复制链接</button>\n\n                    </div>\n                </div>\n            `);
+            n.find(".magnet-copy").append(`<button class="magnet-hub-btn one23-offline-btn" data-magnet="${t.magnet}">123离线</button>`), 
             e.append(n);
         })), e.on("click", ".copy-btn", (function() {
             const e = $(this), t = e.data("magnet");
@@ -7897,6 +7904,158 @@ class mt extends X {
     }
 }
 
+class OneTwoThreeOfflinePlugin extends X {
+    constructor() {
+        super(...arguments), this.tokenKey = "jhs_123pan_author_token";
+    }
+    getName() {
+        return "OneTwoThreeOfflinePlugin";
+    }
+    async initCss() {
+        return "\n            <style>\n                .one23-offline-btn {\n                    background-color: #1677ff !important;\n                    color: #fff !important;\n                    border-color: #1677ff !important;\n                }\n                .one23-offline-btn.loading {\n                    opacity: 0.65;\n                    cursor: wait;\n                }\n                .one23-native-btn {\n                    margin-left: 6px;\n                    padding: 3px 8px;\n                    border-radius: 3px;\n                    border: 1px solid #1677ff;\n                    background: #1677ff;\n                    color: #fff !important;\n                    cursor: pointer;\n                    font-size: 12px;\n                    line-height: 1.2;\n                }\n            </style>\n        ";
+    }
+    async handle() {
+        window.location.hostname.includes("123pan.com") ? this.captureToken() : (r || l) && (this.bindSubmit(), this.injectNativeButtons());
+    }
+    captureToken() {
+        const e = this.getTokenFrom123Pan();
+        if (!e) return;
+        const t = GM_getValue(this.tokenKey, "");
+        GM_setValue(this.tokenKey, e), t !== e && show.info("123 云盘授权已更新");
+    }
+    getTokenFrom123Pan() {
+        let e = localStorage.getItem("authorToken");
+        if (!e) try {
+            const t = JSON.parse(localStorage.getItem("userInfo") || "{}");
+            e = t.token || t.authorToken || "";
+        } catch (t) {}
+        if (!e) {
+            const t = document.cookie.split(";");
+            for (const n of t) {
+                const [t, a] = n.trim().split("=");
+                if (t && /token/i.test(t) && a) {
+                    e = a;
+                    break;
+                }
+            }
+        }
+        return e;
+    }
+    bindSubmit() {
+        $(document).off("click.one23", ".one23-offline-btn").on("click.one23", ".one23-offline-btn", (e => {
+            e.preventDefault(), e.stopPropagation();
+            const t = $(e.currentTarget), n = t.attr("data-magnet");
+            n && this.submitMagnet(n, t);
+        }));
+    }
+    injectNativeButtons() {
+        r && utils.loopDetector((() => $("#magnets-content .item").length > 0), (() => this.injectJavDbButtons()));
+        l && utils.loopDetector((() => $("#magnet-table td a[href^='magnet:']").length > 0), (() => this.injectJavBusButtons()));
+    }
+    injectJavDbButtons() {
+        $("#magnets-content .item").each(((e, t) => {
+            const n = $(t), a = n.find("a[href^='magnet:']").first().attr("href") || n.find(".copy-to-clipboard").attr("data-clipboard-text");
+            a && 0 === n.find(".one23-offline-btn").length && n.find(".buttons").first().append(`<button class="button is-info is-small one23-offline-btn" data-magnet="${escapeHtml(a)}" type="button">&nbsp;123离线&nbsp;</button>`);
+        }));
+    }
+    injectJavBusButtons() {
+        $("#magnet-table td a[href^='magnet:']").each(((e, t) => {
+            const n = $(t), a = n.attr("href");
+            a && 0 === n.siblings(".one23-offline-btn").length && n.after(`<button class="one23-native-btn one23-offline-btn" data-magnet="${escapeHtml(a)}" type="button">123离线</button>`);
+        }));
+    }
+    async submitMagnet(e, t) {
+        const n = GM_getValue(this.tokenKey, "");
+        if (!n) return show.error("请先打开并登录 123 云盘，刷新后再提交离线任务"), void GM_openInTab("https://www.123pan.com/", {
+            active: !0,
+            insert: !0
+        });
+        if (t.hasClass("loading")) return;
+        const a = t.text();
+        try {
+            t.addClass("loading").prop("disabled", !0).text("提交中");
+            const i = await this.resolveMagnet(e, n), s = await this.submitTask(i, n);
+            show.info(`已提交 123 离线：${s.fileCount} 个文件 / ${this.formatSize(s.totalSize)}`), t.text("已提交");
+        } catch (i) {
+            "TOKEN_EXPIRED" === i ? (GM_setValue(this.tokenKey, ""), show.error("123 云盘授权已过期，请重新打开 123 云盘刷新授权")) : show.error("123 离线提交失败：" + i), 
+            t.text(a);
+        } finally {
+            setTimeout((() => t.removeClass("loading").prop("disabled", !1).text(a)), 1800);
+        }
+    }
+    resolveMagnet(e, t) {
+        return new Promise(((n, a) => {
+            GM_xmlhttpRequest({
+                method: "POST",
+                url: "https://www.123pan.com/b/api/v2/offline_download/task/resolve",
+                headers: {
+                    Authorization: "Bearer " + t,
+                    "App-Version": "3",
+                    platform: "web",
+                    "Content-Type": "application/json;charset=UTF-8",
+                    Origin: "https://www.123pan.com",
+                    Referer: "https://www.123pan.com/"
+                },
+                data: JSON.stringify({
+                    urls: e
+                }),
+                onload: e => {
+                    if (401 === e.status) return void a("TOKEN_EXPIRED");
+                    try {
+                        const t = JSON.parse(e.responseText);
+                        0 === t.code && t.data && t.data.list && t.data.list.length > 0 ? n(t.data.list[0]) : a(t.message || `解析失败 (${t.code})`);
+                    } catch (t) {
+                        a("响应解析失败: " + t.message);
+                    }
+                },
+                onerror: () => a("网络请求失败")
+            });
+        }));
+    }
+    submitTask(e, t) {
+        return new Promise(((n, a) => {
+            if (!e.files || 0 === e.files.length) return void a("没有可建立离线的文件");
+            const i = e.files.map((e => e.id)), s = e.files.reduce(((e, t) => e + (t.size || 0)), 0);
+            GM_xmlhttpRequest({
+                method: "POST",
+                url: "https://www.123pan.com/b/api/v2/offline_download/task/submit",
+                headers: {
+                    Authorization: "Bearer " + t,
+                    "App-Version": "3",
+                    platform: "web",
+                    "Content-Type": "application/json;charset=UTF-8"
+                },
+                data: JSON.stringify({
+                    resource_list: [ {
+                        resource_id: e.id,
+                        select_file_id: i
+                    } ]
+                }),
+                onload: e => {
+                    if (401 === e.status) return void a("TOKEN_EXPIRED");
+                    try {
+                        const t = JSON.parse(e.responseText);
+                        0 === t.code ? n({
+                            fileCount: i.length,
+                            totalSize: s
+                        }) : a(t.message || "提交失败");
+                    } catch (t) {
+                        a("响应解析失败");
+                    }
+                },
+                onerror: () => a("网络请求失败")
+            });
+        }));
+    }
+    formatSize(e) {
+        if (!e) return "0B";
+        const t = [ "B", "KB", "MB", "GB", "TB" ];
+        let n = 0, a = e;
+        for (;a >= 1024 && n < t.length - 1; ) a /= 1024, n++;
+        return `${a.toFixed(n ? 2 : 0)}${t[n]}`;
+    }
+}
+
 class StatsPlugin extends X {
     getName() { return "StatsPlugin"; }
     async handle() { window.isListPage && this.createBtn(); }
@@ -7948,6 +8107,7 @@ const vt = function() {
     const e = new Y;
     unsafeWindow.pluginManager = e;
     let t = window.location.hostname;
+    (r || l || t.includes("123pan.com")) && e.register(OneTwoThreeOfflinePlugin);
     return r && (e.register(Ie), e.register(Be), e.register(le), e.register(de), e.register(Ce), 
     e.register(xe), e.register(Ae), e.register(fe), e.register(pe), e.register(ue), 
     e.register(Ee), e.register(Ue), e.register(Oe), e.register(Q), e.register($e), 
