@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS-YA
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      3.7.3
+// @version      3.7.4
 // @author       yaoser
 // @description  Jav-鉴黄师个人维护版：收藏、屏蔽、标记已下载、演员黑名单、收藏演员同步、新作品检测、热播/Top250/Fc2ppv/评论增强、相关清单、WebDAV数据备份、以图识图、字幕搜索；支持 JavDB / JavBus。
 // @license      MIT
@@ -188,7 +188,7 @@ e = new WeakSet, t = async function(e, t, n) {
         }
         a.push(e);
     }
-    return await this.forage.setItem(t, a), a;
+    return await this._setItemAndInvalidate(t, a), a;
 };
 
 let z = class n {
@@ -204,12 +204,26 @@ let z = class n {
             name: "JAV-JHS",
             version: 1,
             storeName: "appData"
-        })), i(this, "cache_filter_actor_actress_car_list", null), i(this, "cacheSettingObj", null), 
+        })), i(this, "cacheCarList", null), i(this, "cacheBlacklist", null),
+        i(this, "cacheTitleFilterKeyword", null), i(this, "cacheFavoriteActresses", null),
+        i(this, "cache_filter_actor_actress_car_list", null), i(this, "cacheSettingObj", null),
         n.instance) throw new Error("StorageManager已被实例化过了!");
         n.instance = this;
     }
     async getDataVersion() { return await this.forage.getItem("data_version") || 0; }
     async setDataVersion(e) { await this.forage.setItem("data_version", e); }
+    _invalidateCache(e = null) {
+        (!e || e === this.car_list_key) && (this.cacheCarList = null);
+        (!e || e === this.blacklist_key) && (this.cacheBlacklist = null);
+        (!e || e === this.filter_keyword_title_key) && (this.cacheTitleFilterKeyword = null);
+        (!e || e === this.favorite_actresses_key) && (this.cacheFavoriteActresses = null);
+        (!e || e === this.blacklist_car_list_key) && (this.cache_filter_actor_actress_car_list = null);
+        (!e || e === this.setting_key) && (this.cacheSettingObj = null);
+    }
+    async _setItemAndInvalidate(e, t) {
+        await this.forage.setItem(e, t);
+        this._invalidateCache(e);
+    }
     async withActressLock(fn) {
         let release;
         const lock = new Promise(r => release = r);
@@ -219,18 +233,19 @@ let z = class n {
         try { return await fn(); } finally { release(); }
     }
     async _rawUpdateFavoriteActress(e) {
-        const t = await this.forage.getItem(this.favorite_actresses_key) || [];
+        const t = await this.getFavoriteActressList();
         const {starId: n, name: a, allName: i, avatar: s, lastCheckTime: o, newVideoList: r, lastPublishTime: l, actressType: c, remark: d} = e;
         if (!n) throw new Error("缺失starId");
         let h = t.find((e => e.starId === n));
         if (!h) return clog.error("未找到演员信息", n, a), !1;
         a && (h.name = a), i && (h.allName = i), s && (h.avatar = s), null != c && (h.actressType = c),
         o && (h.lastCheckTime = o), r && (h.newVideoList = r), l && (h.lastPublishTime = l),
-        d && (h.remark = d), h.updateDate = utils.getNowStr(), await this.forage.setItem(this.favorite_actresses_key, t);
+        d && (h.remark = d), h.updateDate = utils.getNowStr(), await this._setItemAndInvalidate(this.favorite_actresses_key, t);
         return true;
     }
     async getCarList() {
-        return await this.forage.getItem(this.car_list_key) || [];
+        return null === this.cacheCarList && (this.cacheCarList = await this.forage.getItem(this.car_list_key) || []),
+        this.cacheCarList;
     }
     async getCar(e) {
         return (await this.getCarList()).find((t => t.carNum === e));
@@ -286,15 +301,15 @@ let z = class n {
         }
     }
     async saveCar(e) {
-        const t = await this.forage.getItem(this.car_list_key) || [];
-        this._saveSingleCar(e, t), await this.forage.setItem(this.car_list_key, t), await this.removeNewVideoList([ e.carNum ]);
+        const t = await this.getCarList();
+        this._saveSingleCar(e, t), await this._setItemAndInvalidate(this.car_list_key, t), await this.removeNewVideoList([ e.carNum ]);
     }
     async updateCarInfo(e) {
         let {carNum: t, url: n, names: a, actionType: i, publishTime: s, remark: o} = e;
         if (!t) throw show.error("番号为空!"), new Error("番号为空!");
         if (!n) throw show.error("url为空!"), new Error("url为空!");
         a && (a = a.trim());
-        const r = await this.forage.getItem(this.car_list_key) || [];
+        const r = await this.getCarList();
         let l = r.find((e => e.carNum === t));
         if (!l) {
             const e = "数据不存在: " + t;
@@ -322,17 +337,17 @@ let z = class n {
             const e = "actionType错误, 请联系作者更正: " + i;
             throw show.error(e), new Error(e);
         }
-        await this.forage.setItem(this.car_list_key, r), await this.removeNewVideoList([ t ]);
+        await this._setItemAndInvalidate(this.car_list_key, r), await this.removeNewVideoList([ t ]);
     }
     async saveCarList(e) {
         if (!e || !Array.isArray(e) || 0 === e.length) throw show.error("记录列表为空!"), new Error("记录列表为空!");
-        const t = await this.forage.getItem(this.car_list_key) || [];
+        const t = await this.getCarList();
         for (const a of e) try {
             this._saveSingleCar(a, t);
         } catch (n) {
             throw n;
         }
-        await this.forage.setItem(this.car_list_key, t), await this.removeNewVideoList(e.map((e => e.carNum)));
+        await this._setItemAndInvalidate(this.car_list_key, t), await this.removeNewVideoList(e.map((e => e.carNum)));
     }
     async removeNewVideoList(e) {
         return this.withActressLock(async () => {
@@ -348,20 +363,21 @@ let z = class n {
                 if (a.length === 0 && t.lastPublishTime) result.lastPublishTime = null;
                 return result;
             }));
-            n && await this.forage.setItem(this.favorite_actresses_key, a);
+            n && await this._setItemAndInvalidate(this.favorite_actresses_key, a);
         });
     }
     async removeCar(e) {
         const t = await this.getCarList(), n = t.length, a = t.filter((t => t.carNum !== e));
-        return a.length === n ? (show.error(`${e} 不存在`), !1) : (await this.forage.setItem(this.car_list_key, a), 
+        return a.length === n ? (show.error(`${e} 不存在`), !1) : (await this._setItemAndInvalidate(this.car_list_key, a),
         !0);
     }
     async batchRemoveCars(e) {
         const t = await this.getCarList(), n = t.length, a = new Set(e), i = t.filter((e => !a.has(e.carNum))), s = n - i.length;
-        return 0 !== s && (await this.forage.setItem(this.car_list_key, i), s);
+        return 0 !== s && (await this._setItemAndInvalidate(this.car_list_key, i), s);
     }
     async getBlacklist() {
-        return await this.forage.getItem(this.blacklist_key) || [];
+        return null === this.cacheBlacklist && (this.cacheBlacklist = await this.forage.getItem(this.blacklist_key) || []),
+        this.cacheBlacklist;
     }
     async addBlacklistItem(e) {
         let {starId: t, name: n, allName: a, role: i, movieType: s, url: o} = e;
@@ -381,21 +397,21 @@ let z = class n {
             };
             r.push(e), clog.log("增加黑名单演员信息", e);
         }
-        await this.forage.setItem(this.blacklist_key, r);
+        await this._setItemAndInvalidate(this.blacklist_key, r);
     }
     async updateBlacklistItem(e) {
         if (!e || !e.starId) throw new Error("参数不全");
         const t = await this.getBlacklist(), n = t.find((t => t.starId === e.starId));
         if (!n) throw new Error(`未找到黑名单演员信息:${e.name} ${e.starId}`);
         e.checkTime && (n.checkTime = e.checkTime), e.lastPublishTime && (n.lastPublishTime = e.lastPublishTime), 
-        await this.forage.setItem(this.blacklist_key, t);
+        await this._setItemAndInvalidate(this.blacklist_key, t);
     }
     async deleteBlacklistItem(e) {
         const t = await this.getBlacklist(), n = t.filter((t => t.starId !== e));
-        t.length !== n.length && await this.forage.setItem(this.blacklist_key, n);
+        t.length !== n.length && await this._setItemAndInvalidate(this.blacklist_key, n);
     }
     async getBlacklistCarList() {
-        return this.cache_filter_actor_actress_car_list && this.cache_filter_actor_actress_car_list.length > 0 || (this.cache_filter_actor_actress_car_list = await this.forage.getItem(this.blacklist_car_list_key) || []), 
+        return null !== this.cache_filter_actor_actress_car_list || (this.cache_filter_actor_actress_car_list = await this.forage.getItem(this.blacklist_car_list_key) || []),
         this.cache_filter_actor_actress_car_list;
     }
     async batchSaveBlacklistCarList(e) {
@@ -405,16 +421,17 @@ let z = class n {
             n.find((e => e.carNum === s.carNum)) || (this._saveSingleCar(s, n), clog.log(`屏蔽演员番号: <span style="color: #f40">${s.names} ${s.carNum}</span>`), 
             a = !0, i.push(s.carNum));
         }
-        a && (await this.forage.setItem(this.blacklist_car_list_key, n), await this.removeNewVideoList(i), 
+        a && (await this._setItemAndInvalidate(this.blacklist_car_list_key, n), await this.removeNewVideoList(i),
         window.cleanCache_filter_actor_actress_car_list());
     }
     async removeBlacklistCarList(e) {
         const t = await this.getBlacklistCarList(), n = t.filter((t => t.starId !== e));
-        n.length !== t.length && (await this.forage.setItem(this.blacklist_car_list_key, n), 
+        n.length !== t.length && (await this._setItemAndInvalidate(this.blacklist_car_list_key, n),
         window.cleanCache_filter_actor_actress_car_list());
     }
     async getFavoriteActressList() {
-        return await this.forage.getItem(this.favorite_actresses_key) || [];
+        return null === this.cacheFavoriteActresses && (this.cacheFavoriteActresses = await this.forage.getItem(this.favorite_actresses_key) || []),
+        this.cacheFavoriteActresses;
     }
     async addFavoriteActressList(e) {
         return this.withActressLock(async () => {
@@ -451,14 +468,14 @@ let z = class n {
                 actressType: c
             }), clog.log(`<span style="color: #f40">同步JavDB已收藏的演员: ${i}</span>`), n++;
         }
-        return n > 0 ? await this.forage.setItem(this.favorite_actresses_key, t) : clog.log("信息已记录, 无需要进行同步收藏的演员"),
+        return n > 0 ? await this._setItemAndInvalidate(this.favorite_actresses_key, t) : clog.log("信息已记录, 无需要进行同步收藏的演员"),
         n;
         });
     }
     async removeFavoriteActress(e) {
         return this.withActressLock(async () => {
             const t = await this.getFavoriteActressList(), n = t.length, a = t.filter((t => t.starId !== e));
-            return a.length === n ? (clog.error(`移除演员失败, ${e} 不存在`), !1) : (await this.forage.setItem(this.favorite_actresses_key, a), !0);
+            return a.length === n ? (clog.error(`移除演员失败, ${e} 不存在`), !1) : (await this._setItemAndInvalidate(this.favorite_actresses_key, a), !0);
         });
     }
     async updateFavoriteActress(e) {
@@ -486,11 +503,12 @@ let z = class n {
                 newVideoList: t
             };
         }));
-        i && await this.forage.setItem(this.favorite_actresses_key, o);
+        i && await this._setItemAndInvalidate(this.favorite_actresses_key, o);
         });
     }
     async getTitleFilterKeyword() {
-        return await this.forage.getItem(this.filter_keyword_title_key) || [];
+        return null === this.cacheTitleFilterKeyword && (this.cacheTitleFilterKeyword = await this.forage.getItem(this.filter_keyword_title_key) || []),
+        this.cacheTitleFilterKeyword;
     }
     async getReviewFilterKeywordList() {
         return await this.forage.getItem(this.filter_keyword_review_key) || [];
@@ -506,7 +524,7 @@ let z = class n {
         return a ? "true" === a || "false" === a ? "true" === a.toLowerCase() : "string" != typeof a || "" === a.trim() || isNaN(Number(a)) ? a : Number(a) : t;
     }
     async saveSetting(e) {
-        e ? (await this.forage.setItem(this.setting_key, e), window.clean_cacheSettingObj()) : show.error("设置对象为空");
+        e ? (await this._setItemAndInvalidate(this.setting_key, e), window.clean_cacheSettingObj()) : show.error("设置对象为空");
     }
     async saveSettingItem(e, t) {
         if (!e) return void show.error("key 不能为空");
@@ -514,10 +532,10 @@ let z = class n {
         n[e] = t, await this.saveSetting(n), window.clean_cacheSettingObj();
     }
     async importData(e) {
-        await this.forage.clear();
+        await this.forage.clear(), this._invalidateCache();
         const t = [];
         for (const n in e) {
-            const a = e[n], i = this.forage.setItem(n, a);
+            const a = e[n], i = this._setItemAndInvalidate(n, a);
             t.push(i);
         }
         await Promise.all(t);
@@ -532,17 +550,17 @@ let z = class n {
     /** 数据迁移: 将旧版扁平键名重命名为新格式 */
     async merge_table_name() {
         let e = "filter_actor_actress_info_list", t = await this.forage.getItem(e) || [];
-        t && t.length > 0 && (clog.debug("更正", e), await this.forage.setItem(this.blacklist_key, t)), 
+        t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.blacklist_key, t)),
         await this.forage.removeItem(e), e = "favorite_actresses_info_list", t = await this.forage.getItem(e) || [], 
-        t && t.length > 0 && (clog.debug("更正", e), await this.forage.setItem(this.favorite_actresses_key, t)), 
+        t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.favorite_actresses_key, t)),
         await this.forage.removeItem(e), e = "car_list_filter_actor_actress", t = await this.forage.getItem(e) || [], 
-        t && t.length > 0 && (clog.debug("更正", e), await this.forage.setItem(this.blacklist_car_list_key, t)), 
+        t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.blacklist_car_list_key, t)),
         await this.forage.removeItem(e), e = "title_filter_keyword", t = await this.forage.getItem(e) || [], 
-        t && t.length > 0 && (clog.debug("更正", e), await this.forage.setItem(this.filter_keyword_title_key, t)), 
+        t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.filter_keyword_title_key, t)),
         await this.forage.removeItem(e), e = "review_filter_keyword", t = await this.forage.getItem(e) || [], 
-        t && t.length > 0 && (clog.debug("更正", e), await this.forage.setItem(this.filter_keyword_review_key, t)), 
+        t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.filter_keyword_review_key, t)),
         await this.forage.removeItem(e), e = "highlightedTags", t = await this.forage.getItem(e) || [], 
-        t && t.length > 0 && (clog.debug("更正", e), await this.forage.setItem(this.highlighted_tags_key, t)), 
+        t && t.length > 0 && (clog.debug("更正", e), await this._setItemAndInvalidate(this.highlighted_tags_key, t)),
         await this.forage.removeItem(e);
     }
     async clean_no_url_blacklist() {
@@ -550,14 +568,14 @@ let z = class n {
         if (e.length && !e[0].actress) return;
         const n = new Set(t.map((e => e.name))), a = e.filter((e => !e.actress || n.has(e.actress)));
         e.length !== a.length && (clog.debug("清理 blacklistCarList 前", e.length), clog.debug("清理 blacklistCarList 后", a.length), 
-        await this.forage.setItem(this.blacklist_car_list_key, a), this.cache_filter_actor_actress_car_list = null);
+        await this._setItemAndInvalidate(this.blacklist_car_list_key, a));
         const i = new Set(a.map((e => e.actress)));
         let s = t.filter((e => i.has(e.name)));
         s = s.map((e => {
             const {key: t, recordTime: n, ...a} = e, i = a;
             return void 0 !== n && (i.createTime = n), i;
         })), (t.length !== s.length || t.some((e => "key" in e || "recordTime" in e))) && (clog.debug("清理 Blacklist 前", t.length), 
-        clog.debug("清理 Blacklist 后", s.length), await this.forage.setItem(this.blacklist_key, s));
+        clog.debug("清理 Blacklist 后", s.length), await this._setItemAndInvalidate(this.blacklist_key, s));
     }
     async async_merge_other() {
         const e = await this.getSetting();
@@ -597,7 +615,7 @@ let z = class n {
             }
             return n && (t = !0), e;
         }));
-        t && (clog.debug("更正 Blacklist 数据结构"), await this.forage.setItem(this.blacklist_key, n));
+        t && (clog.debug("更正 Blacklist 数据结构"), await this._setItemAndInvalidate(this.blacklist_key, n));
         const a = await this.getBlacklistCarList();
         t = !1;
         const i = a.map((n => {
@@ -607,7 +625,7 @@ let z = class n {
             }
             return n.type && (delete n.type, t = !0), n;
         }));
-        t && (clog.debug("更正 blacklistCarList 数据结构"), await this.forage.setItem(this.blacklist_car_list_key, i));
+        t && (clog.debug("更正 blacklistCarList 数据结构"), await this._setItemAndInvalidate(this.blacklist_car_list_key, i));
     }
     async merge_favoriteActress() {
         const e = await this.getFavoriteActressList();
@@ -617,7 +635,7 @@ let z = class n {
             let n = !1;
             return e.dbId && (e.starId = e.dbId, delete e.dbId, n = !0), n && (t = !0), e;
         }));
-        t && (clog.debug("更正 favoriteActressesInfoList 数据结构"), await this.forage.setItem(this.favorite_actresses_key, n));
+        t && (clog.debug("更正 favoriteActressesInfoList 数据结构"), await this._setItemAndInvalidate(this.favorite_actresses_key, n));
     }
     async merge_tow_car_list_table() {
         const e = await this.getBlacklistCarList(), t = await this.getCarList();
@@ -627,14 +645,14 @@ let z = class n {
             return void 0 !== e.actress && (e.names = e.actress, delete e.actress, t = !0), 
             t && (n = !0), e;
         }));
-        n && (clog.debug("更正 blacklistCarList 数据结构 actress->names"), await this.forage.setItem(this.blacklist_car_list_key, a)), 
+        n && (clog.debug("更正 blacklistCarList 数据结构 actress->names"), await this._setItemAndInvalidate(this.blacklist_car_list_key, a)),
         n = !1;
         const i = t.map((e => {
             let t = !1;
             return void 0 !== e.actress && (e.names = e.actress, delete e.actress, t = !0), 
             t && (n = !0), e;
         }));
-        n && (clog.debug("更正 carList 数据结构 actress->names"), await this.forage.setItem(this.car_list_key, i));
+        n && (clog.debug("更正 carList 数据结构 actress->names"), await this._setItemAndInvalidate(this.car_list_key, i));
     }
 };
 
@@ -4702,7 +4720,7 @@ class Ie extends X {
                 e.tableObj && e.tableObj.setData();
                 const t = this.getBean("NewVideoPlugin");
                 t && (t.showNewVideoCount().then(), t.loadData());
-            } else "cleanCache_filter_actor_actress_car_list" === t ? storageManager.cache_filter_actor_actress_car_list && (storageManager.cache_filter_actor_actress_car_list = null) : "clean_cacheSettingObj" === t && storageManager.cacheSettingObj && (storageManager.cacheSettingObj = null);
+            } else "cleanCache_filter_actor_actress_car_list" === t ? storageManager._invalidateCache(storageManager.blacklist_car_list_key) : "clean_cacheSettingObj" === t && storageManager._invalidateCache(storageManager.setting_key);
         })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), 
         await this.doFilter(), this.createQuickFilter(), this.applyVisibility(), this.bindClick().then(), this.bindListPageHotKey().then(), 
         this.rememberTagExpand(), $(this.getSelector().itemSelector + " a").attr("target", "_blank"), 
@@ -4790,8 +4808,25 @@ class Ie extends X {
     async doFilter() {
         if (!window.isListPage) return;
         let e = $(this.getSelector().itemSelector).toArray();
-        e.length && (await this.filterMovieList(e), 
-        l && await this.getBean("BusImgPlugin").logImageHeightsByRow());
+        e.length && (await this.filterMovieList(e), l && setTimeout((() => {
+            this.getBean("BusImgPlugin").logImageHeightsByRow().catch((e => clog.error("JavBus图片高度修正失败", e)));
+        })));
+    }
+    async yieldListFrame() {
+        await new Promise((e => {
+            window.requestAnimationFrame ? window.requestAnimationFrame((() => setTimeout(e))) : setTimeout(e);
+        }));
+    }
+    findMatchedTitleKeyword(e, t, n) {
+        for (const a of e) if (t.includes(a) || n.startsWith(a)) return a;
+        return null;
+    }
+    getStatusKey(e) {
+        return e === Te.IS_FILTERED ? "filter" : e === Te.IS_FAVORITE ? "favorite" : e === Te.IS_HAS_DOWN ? "hasDown" : e === Te.IS_HAS_WATCH ? "hasWatch" : "waitCheck";
+    }
+    async translateListItems(e) {
+        for (let t = 0; t < e.length; t++) t > 0 && t % 8 == 0 && await this.yieldListFrame(),
+        await this.translate(e[t]);
     }
     async filterMovieList(e) {
         utils.time("累计耗费时间"), utils.time("读取数据耗时");
@@ -4814,13 +4849,16 @@ class Ie extends X {
             actorCarNumToNameMap: new Map,
             actressCarNumToNameMap: new Map
         }), b = utils.time("组装数据耗时"), w = (null == s ? void 0 : s.showFilterItem) ?? C, y = (null == s ? void 0 : s.showFilterActorItem) ?? C, x = (null == s ? void 0 : s.showFilterKeywordItem) ?? C, k = (null == s ? void 0 : s.showFavoriteItem) ?? _, S = (null == s ? void 0 : s.showHasDownItem) ?? _, T = (null == s ? void 0 : s.showHasWatchItem) ?? _, I = (null == s ? void 0 : s.showAllItem) ?? C, P = (null == s ? void 0 : s.tagPosition) || "rightTop";
+        const O = n.filter((e => e));
         this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0, 
         this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0, 
-        this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时"), 
-        await Promise.all(e.map((async e => {
-            let t = $(e);
-            if (l && t.find(".avatar-box").length > 0) return;
-            const {carNum: a, title: i} = this.findCarNumAndHref(t), {filter: s, favorite: o, hasDown: d, hasWatch: h} = m, g = o.has(a), p = d.has(a), u = h.has(a), b = s.has(a), B = f.has(a), D = v.has(a), A = B || D, L = n.find((e => i.includes(e) || a.startsWith(e))), M = !!L;
+        this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时");
+        const R = [];
+        for (let n = 0; n < e.length; n++) {
+            n > 0 && n % 12 == 0 && await this.yieldListFrame();
+            let t = $(e[n]);
+            if (l && t.find(".avatar-box").length > 0) continue;
+            const {carNum: a, title: i} = this.findCarNumAndHref(t), {filter: s, favorite: o, hasDown: d, hasWatch: h} = m, g = o.has(a), p = d.has(a), u = h.has(a), b = s.has(a), B = f.has(a), D = v.has(a), A = B || D, L = this.findMatchedTitleKeyword(O, i, a), M = !!L;
             if (!c) {
                 let e = k === C && g || S === C && p || T === C && u || w === C && b && !(g || p || u) || y === C && A || x === C && M;
                 const n = t.attr("data-hide") === _;
@@ -4830,18 +4868,20 @@ class Ie extends X {
             b ? N = Te.IS_FILTERED : g ? N = Te.IS_FAVORITE : p ? N = Te.IS_HAS_DOWN : u ? N = Te.IS_HAS_WATCH : M ? (N = Te.IS_KEYWORD_FILTER, 
             j = L || "未知") : B ? (N = Te.IS_ACTOR_FILTER, j = f.get(a) || "") : D && (N = Te.IS_ACTRESS_FILTER, 
             j = v.get(a) || ""), j || (j = N.reasonType), N.isCounted && this[N.countKey]++, 
-            this.currentPageTotalCount++, t.find(".status-tag").remove();
-            t.attr("data-jhs-status", N === Te.IS_FILTERED ? "filter" : N === Te.IS_FAVORITE ? "favorite" : N === Te.IS_HAS_DOWN ? "hasDown" : N === Te.IS_HAS_WATCH ? "hasWatch" : "waitCheck");
+            this.currentPageTotalCount++;
+            const q = this.getStatusKey(N), F = t.attr("data-jhs-status") !== q || t.attr("data-jhs-tip") !== j || t.attr("data-jhs-tag-position") !== P;
+            t.attr("data-jhs-status", q).attr("data-jhs-tip", j).attr("data-jhs-tag-position", P);
             const E = "rightTop" === P ? "right: 0; top:5px;" : "left: 0; top:5px;";
-            if (N.text) {
+            if (F && (t.find(".status-tag").remove(), N.text)) {
                 const e = r ? `<span class="tag is-success status-tag" data-tip="${j}" title=""\n                        style="margin-right: 5px; border-radius:10px; position:absolute; \n                        z-index:10; background-color: ${N.color} !important; ${E}">\n                        ${N.text}\n                    </span>` : `<a class="a-primary status-tag" data-tip="${j}"  title=""\n                        style="margin-right: 5px; padding: 0 5px; color: #fff !important; border-radius:10px; position:absolute; \n                        z-index:10; background-color: ${N.color} !important; ${E}">\n                        <span class="tag" style="color:#fff !important;">${N.text}</span>\n                    </a>`;
                 if (r && t.find(".tags").append(e), l) {
                     const n = t.find(".item-tag");
                     n.length ? n.append(e) : t.find(".photo-info > span > div").append(e);
                 }
             }
-            await this.translate(t);
-        })));
+            R.push(t);
+        }
+        this.translateListItems(R).catch((e => clog.error("列表页翻译任务失败", e)));
         const D = utils.time("处理页面耗时"), A = utils.time("累计耗费时间");
         clog.log(`\n            <table class="countTable" style='border-collapse: collapse; width: 100%'>\n                <tr>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${o}</td>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${b}</td>\n                </tr>\n                \n                <tr>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${D}</td>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${A}</td>\n                </tr>\n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>项目</td>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>数量</td>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>项目</td>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>数量</td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>屏蔽单番号</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageFilterCount}</strong></td>\n                     <td style='padding: 3px; border: 1px solid #ccc;'>收藏</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageFavoriteCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>屏蔽演员</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageActorFilterCount}</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>已下载</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageHasDownCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>屏蔽关键词</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageKeywordFilterCount}</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>已观看</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageHasWatchCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>待鉴定</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageWaitCheckCount}</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'></td>\n                </tr>\n        \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>总数</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageTotalCount}</strong></td>\n                </tr>\n            </table>\n        `);
     }
