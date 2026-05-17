@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         JHS-3.4.1
-// @namespace    https://sleazyfork.org/zh-CN/scripts/533695-jav-jhs
-// @version      3.4.1-by yaoser
-// @author       xie bro
-// @description  Jav-鉴黄师 收藏、屏蔽、标记已下载; 屏蔽标签、屏蔽演员、同步收藏演员、新作品检测; 免VIP查看热播、Top250排行榜、Fc2ppv、可查看所有评论信息、相关清单; 支持云盘备份; 以图识图; 字幕搜索; JavDb|JavBus
+// @name         JHS-YA
+// @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
+// @version      3.6.0
+// @author       yaoser
+// @description  Jav-鉴黄师个人维护版：收藏、屏蔽、标记已下载、演员黑名单、收藏演员同步、新作品检测、热播/Top250/Fc2ppv/评论增强、相关清单、WebDAV数据备份、以图识图、字幕搜索；支持 JavDB / JavBus。
 // @license      MIT
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=javdb.com
 // @match        https://javdb.com/*
@@ -14,9 +14,6 @@
 // @include      https://*seejav*/*
 // @include      https://javtrailers.com/*
 // @include      https://subtitlecat.com/*
-// @include      https://www.aliyundrive.com/*
-// @include      https://www.alipan.com/*
-// @include      https://115.com/*
 // @exclude      https://*javbus*/forum/*
 // @exclude      https://*javbus*/*actresses
 // @exclude      https://*javsee*/forum/*
@@ -31,11 +28,8 @@
 // @require      https://cdn.jsdelivr.net/npm/toastify-js@1.12.0/src/toastify.min.js
 // @require      https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js
 // @require      https://cdn.jsdelivr.net/npm/viewerjs@1.11.1/dist/viewer.min.js
-// @require      https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js
 // @connect      xunlei.com
 // @connect      geilijiasu.com
-// @connect      aliyundrive.com
-// @connect      aliyundrive.net
 // @connect      ja.wikipedia.org
 // @connect      beta.magnet.pics
 // @connect      jdforrepam.com
@@ -63,15 +57,15 @@
 // @connect      javdb.com
 // @connect      javbus.com
 // @connect      supjav.com
-// @connect      115.com
+// @connect      translate-pa.googleapis.com
 // @connect      127.0.0.1
 // @connect      *
 // @grant        GM_xmlhttpRequest
 // @grant        GM_openInTab
 // @grant        unsafeWindow
 // @run-at       document-idle
-// @downloadURL https://update.sleazyfork.org/scripts/533695/JAV-JHS.user.js
-// @updateURL https://update.sleazyfork.org/scripts/533695/JAV-JHS.meta.js
+// @downloadURL https://update.sleazyfork.org/scripts/578503/JHS-YA.user.js
+// @updateURL https://update.sleazyfork.org/scripts/578503/JHS-YA.meta.js
 // ==/UserScript==
 
 var e, t, n = Object.defineProperty, a = e => {
@@ -147,46 +141,7 @@ const o = window.location.href, r = o.includes("javdb"), l = o.includes("javbus"
     canSelect: !0
 } ];
 
-function escapeHtml(e) {
-    const t = document.createElement("span");
-    return t.textContent = e, t.innerHTML;
-}
-
-let cryptoKeyPromise = null;
-function getCryptoKey() {
-    if (cryptoKeyPromise) return cryptoKeyPromise;
-    const e = new TextEncoder;
-    return cryptoKeyPromise = crypto.subtle.importKey("raw", e.encode("JHS-115-COOKIE-KEY-2026"), {
-        name: "PBKDF2"
-    }, !1, ["deriveKey"]).then((t => crypto.subtle.deriveKey({
-        name: "PBKDF2",
-        salt: e.encode("jhs-salt-115"),
-        iterations: 1e5,
-        hash: "SHA-256"
-    }, t, {
-        name: "AES-GCM",
-        length: 256
-    }, !1, ["encrypt", "decrypt"])));
-}
-async function encryptData(e) {
-    const t = await getCryptoKey(), n = crypto.getRandomValues(new Uint8Array(12)), a = (new TextEncoder).encode(e), i = await crypto.subtle.encrypt({
-        name: "AES-GCM",
-        iv: n
-    }, t, a), s = new Uint8Array(i);
-    return btoa(String.fromCharCode(...n) + "." + String.fromCharCode(...s));
-}
-async function decryptData(e) {
-    if (!e || !e.includes(".")) return e;
-    try {
-        const t = await getCryptoKey(), [n, a] = e.split("."), i = new Uint8Array([...atob(n)].map((e => e.charCodeAt(0)))), s = new Uint8Array([...atob(a)].map((e => e.charCodeAt(0)))), o = await crypto.subtle.decrypt({
-            name: "AES-GCM",
-            iv: i
-        }, t, s);
-        return (new TextDecoder).decode(o);
-    } catch (t) {
-        return console.error("解密 Cookie 失败，使用明文:", t), e;
-    }
-}
+function escapeHtml(e) { const t = document.createElement("span"); return t.textContent = e, t.innerHTML; }
 
 const CURRENT_DATA_VERSION = 1;
 
@@ -194,13 +149,13 @@ let M = "";
 
 window.location.href.includes("hideNav=1") && (M = "\n         .navbar-default {\n            display: none !important;\n        }\n        body {\n            padding-top:0px!important;\n        }\n    ");
 
-const N = `\n<style>\n    .top-bar {\n        z-index: 12345689 !important;\n    }\n    \n    ${M}\n\n    .masonry {\n        height: 100% !important;\n        width: 100% !important;\n        padding: 0 15px !important;\n    }\n    .masonry {\n        display: grid;\n        column-gap: 10px; /* 列间距*/\n        row-gap: 10px; /* 行间距 */\n        grid-template-columns: repeat(4, minmax(0, 1fr));\n        align-items: start;\n    }\n    .masonry .item {\n        top: initial !important;\n        left: initial !important;\n        float: none !important;\n        background-color:#c4b1b1;\n        position: relative !important;\n    }\n    \n    .masonry .item:hover {\n        box-shadow: 0 .5em 1em -.125em rgba(10, 10, 10, .1), 0 0 0 1px #485fc7;\n    }\n    .masonry .movie-box{\n        width: 100% !important;\n        height: 100% !important;\n        margin: 0 !important;\n        overflow: inherit !important;\n    }\n    .masonry .movie-box .photo-frame {\n        height:auto !important;\n        margin: 0 !important;\n        position:relative; /* 方便预览视频定位*/\n    }\n    .masonry .movie-box img {\n        max-height: 500px;\n        height: 100% !important;\n        object-fit: contain;\n        object-position: top;\n    }\n    .masonry .movie-box img:hover {\n      transform: scale(1.04);\n      transition: transform 0.3s;\n    }\n    .masonry .photo-info{\n    }\n    .masonry .photo-info span {\n      display: inline-block; /* 或者 block */\n      max-width: 100%;      /* 根据父容器限制宽度 */\n      white-space: nowrap;  /* 禁止换行 */\n      overflow: hidden;     /* 隐藏溢出内容 */\n      text-overflow: ellipsis; /* 显示省略号 */\n    }\n    \n    /* 无码页面的样式 */\n    .photo-frame .mheyzo,\n    .photo-frame .mcaribbeancom2{\n        margin-left: 0 !important;\n    }\n    .avatar-box{\n        width: 100% !important;\n        display: flex !important;\n        margin:0 !important;\n    }\n    .avatar-box .photo-info{\n        display: flex;\n        justify-content: center;\n        align-items: center;\n        gap: 30px;\n        flex-direction: row;\n        background-color:#fff !important;\n    }\n    \n    footer{\n        display: none!important;\n    }\n    \n        \n    .video-title {\n        white-space: normal !important;\n        height: 75px; /* 固定高度 容器就不会出现高低不一*/\n        \n        display: -webkit-box !important; /* 必须设置，使接下来的属性生效 */\n        -webkit-box-orient: vertical; /* 垂直方向堆叠行 */\n        -webkit-line-clamp: 3; /* 设置文本最多显示的行数*/\n    }\n\n    \n</style>\n`;
+const N = `\n<style>\n    .top-bar {\n        z-index: 12345689 !important;\n    }\n    \n    ${M}\n\n    .masonry {\n        height: 100% !important;\n        width: 100% !important;\n        padding: 0 15px !important;\n    }\n    .masonry {\n        display: grid;\n        column-gap: 10px; /* 列间距*/\n        row-gap: 10px; /* 行间距 */\n        grid-template-columns: repeat(4, minmax(0, 1fr));\n        align-items: start;\n    }\n    .masonry .item {\n        /*position: initial !important;*/\n        top: initial !important;\n        left: initial !important;\n        float: none !important;\n        background-color:#c4b1b1;\n        position: relative !important;\n    }\n    \n    .masonry .item:hover {\n        box-shadow: 0 .5em 1em -.125em rgba(10, 10, 10, .1), 0 0 0 1px #485fc7;\n    }\n    .masonry .movie-box{\n        width: 100% !important;\n        height: 100% !important;\n        margin: 0 !important;\n        overflow: inherit !important;\n    }\n    .masonry .movie-box .photo-frame {\n        /*height: 70% !important;*/\n        height:auto !important;\n        margin: 0 !important;\n        position:relative; /* 方便预览视频定位*/\n    }\n    .masonry .movie-box img {\n        max-height: 500px;\n        height: 100% !important;\n        object-fit: contain;\n        object-position: top;\n    }\n    .masonry .movie-box img:hover {\n      transform: scale(1.04);\n      transition: transform 0.3s;\n    }\n    .masonry .photo-info{\n        /*height: 30% !important;*/\n    }\n    .masonry .photo-info span {\n      display: inline-block; /* 或者 block */\n      max-width: 100%;      /* 根据父容器限制宽度 */\n      white-space: nowrap;  /* 禁止换行 */\n      overflow: hidden;     /* 隐藏溢出内容 */\n      text-overflow: ellipsis; /* 显示省略号 */\n    }\n    \n    /* 无码页面的样式 */\n    .photo-frame .mheyzo,\n    .photo-frame .mcaribbeancom2{\n        margin-left: 0 !important;\n    }\n    .avatar-box{\n        width: 100% !important;\n        display: flex !important;\n        margin:0 !important;\n    }\n    .avatar-box .photo-info{\n        display: flex;\n        justify-content: center;\n        align-items: center;\n        gap: 30px;\n        flex-direction: row;\n        background-color:#fff !important;\n    }\n    \n    footer{\n        display: none!important;\n    }\n    \n        \n    .video-title {\n        white-space: normal !important;\n        height: 75px; /* 固定高度 容器就不会出现高低不一*/\n        \n        display: -webkit-box !important; /* 必须设置，使接下来的属性生效 */\n        -webkit-box-orient: vertical; /* 垂直方向堆叠行 */\n        -webkit-line-clamp: 3; /* 设置文本最多显示的行数*/\n    }\n\n    \n</style>\n`;
 
 let j = "";
 
 window.location.href.includes("hideNav=1") && (j = "\n        .main-nav,#search-bar-container {\n            display: none !important;\n        }\n        \n        html {\n            padding-top:0px!important;\n        }\n    ");
 
-const E = `\n<style>\n    ${j}\n    \n    .navbar {\n        z-index: 12345679 !important;\n        padding: 0 0;\n    }\n    \n    .navbar-link:not(.is-arrowless) {\n        padding-right: 33px;\n    }\n    \n    .sub-header,\n    #footer,\n    .app-desktop-banner,\n    div[data-controller="movie-tab"] .tabs,\n    h3.main-title,\n    div.video-detail > div:nth-child(4) > div > div.tabs.no-bottom > ul > li:nth-child(3), /* 相关清单*/\n    div.video-detail > div:nth-child(4) > div > div.tabs.no-bottom > ul > li:nth-child(2), /* 短评按钮*/\n    div.video-detail > div:nth-child(4) > div > div.tabs.no-bottom > ul > li:nth-child(1), /*磁力面板 按钮*/\n    .top-meta,\n    .float-buttons {\n        display: none !important;\n    }\n    \n    div.tabs.no-bottom,\n    .tabs ul {\n        border-bottom: none !important;\n    }\n    \n    \n    /* 视频列表项 相对相对 方便标签绝对定位*/\n    .movie-list .item {\n        position: relative !important;\n    }\n    \n    .video-title {\n        white-space: normal !important;\n        height: 80px; /* 固定高度 容器就不会出现高低不一*/\n        \n        display: -webkit-box; /* 必须设置，使接下来的属性生效 */\n        -webkit-box-orient: vertical; /* 垂直方向堆叠行 */\n        -webkit-line-clamp: 3; /* 设置文本最多显示的行数*/\n    }\n    \n    /* 列表页顶部分类自适应 */\n    .main-tabs, .tabs {\n        overflow-x:hidden;\n        flex-wrap: wrap;\n        justify-content: flex-start;\n    }\n    \n    .main-tabs ul, .tabs ul {\n        flex-wrap: wrap;\n        flex-grow: 0;\n    }\n    \n    \n    /* 二级工具栏 大小封面,可播放,含磁链...*/\n    .toolbar {\n        display: flex;\n    }\n\n</style>\n`;
+const E = `\n<style>\n    ${j}\n    \n    .navbar {\n        z-index: 12345679 !important;\n        padding: 0 0;\n    }\n    \n    .navbar-link:not(.is-arrowless) {\n        padding-right: 33px;\n    }\n    \n    .sub-header,\n    /*#search-bar-container, !*搜索框*!*/\n    #footer,\n    /*.search-recent-keywords, !*搜索框底部热搜词条*!*/\n    .app-desktop-banner,\n    div[data-controller="movie-tab"] .tabs,\n    h3.main-title,\n    div.video-detail > div:nth-child(4) > div > div.tabs.no-bottom > ul > li:nth-child(3), /* 相关清单*/\n    div.video-detail > div:nth-child(4) > div > div.tabs.no-bottom > ul > li:nth-child(2), /* 短评按钮*/\n    div.video-detail > div:nth-child(4) > div > div.tabs.no-bottom > ul > li:nth-child(1), /*磁力面板 按钮*/\n    .top-meta,\n    .float-buttons {\n        display: none !important;\n    }\n    \n    div.tabs.no-bottom,\n    .tabs ul {\n        border-bottom: none !important;\n    }\n    \n    \n    /* 视频列表项 相对相对 方便标签绝对定位*/\n    .movie-list .item {\n        position: relative !important;\n    }\n    \n    .video-title {\n        white-space: normal !important;\n        height: 80px; /* 固定高度 容器就不会出现高低不一*/\n        \n        display: -webkit-box; /* 必须设置，使接下来的属性生效 */\n        -webkit-box-orient: vertical; /* 垂直方向堆叠行 */\n        -webkit-line-clamp: 3; /* 设置文本最多显示的行数*/\n    }\n    \n    /* 列表页顶部分类自适应 */\n    .main-tabs, .tabs {\n        overflow-x:hidden;\n        flex-wrap: wrap;\n        justify-content: flex-start;\n    }\n    \n    .main-tabs ul, .tabs ul {\n        flex-wrap: wrap;\n        flex-grow: 0;\n    }\n    \n    \n    /* 二级工具栏 大小封面,可播放,含磁链...*/\n    .toolbar {\n        display: flex;\n    }\n\n</style>\n`;
 
 const F = `\n<style>\n    /* 全局通用样式 */\n    .fr-btn {\n        float: right;\n        margin-left: 4px !important;\n    }\n    \n    .menu-box {\n        position: fixed;\n        right: 10px;\n        top: 50%;\n        transform: translateY(-50%);\n        display: flex;\n        flex-direction: column;\n        z-index: 1000;\n        gap: 6px;\n    }\n    \n    .menu-btn {\n        display: inline-block;\n        min-width: 80px;\n        padding: 7px 12px;\n        border-radius: 4px;\n        color: white !important;\n        text-decoration: none;\n        font-weight: bold;\n        font-size: 12px;\n        text-align: center;\n        cursor: pointer;\n        transition: all 0.3s ease;\n        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);\n        text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);\n        border: none;\n        line-height: 1.3;\n        margin: 0;\n    }\n    \n    .menu-btn:hover {\n        transform: translateY(-1px);\n        box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);\n        opacity: 0.9;\n    }\n    \n    .menu-btn:active {\n        transform: translateY(0);\n        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);\n    }\n    \n    .do-hide {\n        display: none !important;\n    }\n    \n    .main-tab-btn {\n        border-bottom:none !important; \n        border-radius:3px !important; \n        height: 30px; \n        margin-left: 5px !important; \n    }\n\n    .jhs-icon {\n        width: 16px;\n        height: 16px;\n    }\n    \n    .tool-box .jhs-icon {\n        width: 1.5rem;\n        height: 1.5rem; \n    }\n     \n    \n    /*表格内按钮溢出,防止被隐藏*/\n    .tabulator .tabulator-row .action-cell-dropdown {\n        overflow: visible !important;\n    }\n    /* 去除行内鼠标小手*/\n    .tabulator .tabulator-row.tabulator-selectable:hover {\n        cursor: default !important;\n    }\n    \n    /* 排序小箭头颜色 */\n    .tabulator .tabulator-col.tabulator-sortable[aria-sort="ascending"] .tabulator-arrow {\n        border-bottom-color: #337ab7 !important;\n    }\n    .tabulator .tabulator-col.tabulator-sortable[aria-sort="descending"] .tabulator-arrow {\n        border-top-color: #337ab7 !important;\n    }\n    \n    /* 针对折叠行的容器或内容进行样式修改 */\n    .tabulator-responsive-collapse {\n        border-top: none !important;\n    }\n    \n    .tabulator-responsive-collapse table{\n        margin-left: 50px !important;\n    }\n    \n    .tabulator-cell {\n        height:auto !important;\n    }\n    \n    /* 列允许换行,去除省略号 */\n    .tabulator .tabulator-cell {\n        white-space: normal !important; \n        text-overflow: clip !important; \n    }\n    \n    .tabulator-tableholder {\n        overflow-x: hidden !important;\n    }\n\n    ${function() {
     const e = [ ".jhs-scrollbar", ".content-panel", ".tabulator-tableholder", ".has-navbar-fixed-top", ".layui-layer-content" ], t = (e, t) => e.map((e => `${e}${t}`)).join(","), n = "::-webkit-scrollbar-track", a = "::-webkit-scrollbar-thumb", i = "::-webkit-scrollbar-thumb:hover";
@@ -214,7 +169,7 @@ function H(e) {
     }
 }
 
-l && H(N), r && H(E), H("\n<style>\n    .a-normal, /* 白色 */\n    .a-primary, /* 浅蓝色 */\n    .a-success, /* 浅绿色 */\n    .a-danger, /* 浅粉色 */\n    .a-warning, /* 浅橙色 */\n    .a-info /* 灰色 */\n    {\n        display: inline-flex;\n        align-items: center;\n        justify-content: center;\n        padding: 6px 14px;\n        margin-right: 10px;\n        border-radius: 6px;\n        text-decoration: none;\n        font-size: 13px;\n        font-weight: 500;\n        transition: all 0.2s ease;\n        cursor: pointer;\n        border: 1px solid rgba(0, 0, 0, 0.08);\n        white-space: nowrap;\n    }\n    \n    .a-primary {\n        background: #e0f2fe;\n        color: #0369a1;\n        border-color: #bae6fd;\n    }\n    \n    .a-primary:hover {\n        background: #bae6fd;\n    }\n    \n    .a-success {\n        background: #dcfce7;\n        color: #166534;\n        border-color: #bbf7d0;\n    }\n    \n    .a-success:hover {\n        background: #bbf7d0;\n    }\n    \n    .a-danger {\n        background: #fee2e2;\n        color: #b91c1c;\n        border-color: #fecaca;\n    }\n    \n    .a-danger:hover {\n        background: #fecaca;\n    }\n    \n    .a-warning {\n        background: #ffedd5;\n        color: #9a3412;\n        border-color: #fed7aa;\n    }\n    \n    .a-warning:hover {\n        background: #fed7aa;\n    }\n    \n    .a-info {\n        background: #e2e8f0;\n        color: #334155;\n        border-color: #cbd5e1;\n    }\n    \n    .a-info:hover {\n        background: #cbd5e1;\n    }\n    \n    .a-normal {\n        background: transparent;\n        color: #64748b;\n        border-color: #cbd5e1;\n    }\n    \n    .a-normal:hover {\n        background: #f8fafc;\n    }\n</style>\n"),
+l && H(N), r && H(E), H("\n<style>\n    .a-normal, /* 白色 */\n    .a-primary, /* 浅蓝色 */\n    .a-success, /* 浅绿色 */\n    .a-danger, /* 浅粉色 */\n    .a-warning, /* 浅橙色 */\n    .a-info /* 灰色 */\n    {\n        display: inline-flex;\n        align-items: center;\n        justify-content: center;\n        padding: 6px 14px;\n        margin-right: 10px;\n        border-radius: 6px;\n        text-decoration: none;\n        font-size: 13px;\n        font-weight: 500;\n        transition: all 0.2s ease;\n        cursor: pointer;\n        border: 1px solid rgba(0, 0, 0, 0.08);\n        white-space: nowrap;\n    }\n    \n    .a-primary {\n        background: #e0f2fe;\n        color: #0369a1;\n        border-color: #bae6fd;\n    }\n    \n    .a-primary:hover {\n        background: #bae6fd;\n    }\n    \n    .a-success {\n        background: #dcfce7;\n        color: #166534;\n        border-color: #bbf7d0;\n    }\n    \n    .a-success:hover {\n        background: #bbf7d0;\n    }\n    \n    .a-danger {\n        background: #fee2e2;\n        color: #b91c1c;\n        border-color: #fecaca;\n    }\n    \n    .a-danger:hover {\n        background: #fecaca;\n    }\n    \n    .a-warning {\n        background: #ffedd5;\n        color: #9a3412;\n        border-color: #fed7aa;\n    }\n    \n    .a-warning:hover {\n        background: #fed7aa;\n    }\n    \n    .a-info {\n        background: #e2e8f0;\n        color: #334155;\n        border-color: #cbd5e1;\n    }\n    \n    .a-info:hover {\n        background: #cbd5e1;\n    }\n    \n    .a-normal {\n        background: transparent;\n        color: #64748b;\n        border-color: #cbd5e1;\n    }\n    \n    .a-normal:hover {\n        background: #f8fafc;\n    }\n</style>\n"), 
 H(F);
 
 e = new WeakSet, t = async function(e, t, n) {
@@ -232,26 +187,22 @@ e = new WeakSet, t = async function(e, t, n) {
 let z = class n {
     constructor() {
         var t, s, o;
-        if (t = this, (s = e).has(t) ? a("Cannot add the same private member more than once") : s instanceof WeakSet ? s.add(t) : s.set(t, o),
-        i(this, "car_list_key", "car_list"), i(this, "filter_keyword_title_key", "filter_keyword_title"),
-        i(this, "filter_keyword_review_key", "filter_keyword_review"), i(this, "setting_key", "setting"),
-        i(this, "blacklist_key", "blacklist"), i(this, "blacklist_car_list_key", "blacklist_car_list"),
-        i(this, "favorite_actresses_key", "favorite_actresses"), i(this, "highlighted_tags_key", "highlighted_tags"),
-        i(this, "forage", localforage.createInstance({
+        if (t = this, (s = e).has(t) ? a("Cannot add the same private member more than once") : s instanceof WeakSet ? s.add(t) : s.set(t, o), 
+        i(this, "car_list_key", "car_list"), i(this, "filter_keyword_title_key", "filter_keyword_title"), 
+        i(this, "filter_keyword_review_key", "filter_keyword_review"), i(this, "setting_key", "setting"), 
+        i(this, "blacklist_key", "blacklist"), i(this, "blacklist_car_list_key", "blacklist_car_list"), 
+        i(this, "favorite_actresses_key", "favorite_actresses"), i(this, "highlighted_tags_key", "highlighted_tags"), 
+        i(this, "_actressLock", Promise.resolve()), i(this, "forage", localforage.createInstance({
             driver: localforage.INDEXEDDB,
             name: "JAV-JHS",
             version: 1,
             storeName: "appData"
-        })), i(this, "_actressLock", Promise.resolve()), i(this, "cache_filter_actor_actress_car_list", null), i(this, "cacheSettingObj", null),
+        })), i(this, "cache_filter_actor_actress_car_list", null), i(this, "cacheSettingObj", null), 
         n.instance) throw new Error("StorageManager已被实例化过了!");
         n.instance = this;
     }
-    async getDataVersion() {
-        return await this.forage.getItem("data_version") || 0;
-    }
-    async setDataVersion(e) {
-        await this.forage.setItem("data_version", e);
-    }
+    async getDataVersion() { return await this.forage.getItem("data_version") || 0; }
+    async setDataVersion(e) { await this.forage.setItem("data_version", e); }
     async withActressLock(fn) {
         let release;
         const lock = new Promise(r => release = r);
@@ -313,10 +264,12 @@ let z = class n {
             break;
 
           case g:
+            if (l.status === g) { const e = `${n} 已标记为已下载`; throw show.error(e), new Error(e); }
             l.status = g;
             break;
 
           case p:
+            if (l.status === p) { const e = `${n} 已标记为已观看`; throw show.error(e), new Error(e); }
             l.status = p;
             break;
 
@@ -340,7 +293,7 @@ let z = class n {
             const e = "数据不存在: " + t;
             throw show.error(e), new Error(e);
         }
-        switch (l.names = a, l.url = n, l.remark = o, l.updateDate = utils.getNowStr(),
+        switch (l.names = a, l.url = n, l.remark = o, l.updateDate = utils.getNowStr(), 
         i) {
           case d:
             l.status = d;
@@ -393,7 +346,7 @@ let z = class n {
     }
     async removeCar(e) {
         const t = await this.getCarList(), n = t.length, a = t.filter((t => t.carNum !== e));
-        return a.length === n ? (show.error(`${e} 不存在`), !1) : (await this.forage.setItem(this.car_list_key, a),
+        return a.length === n ? (show.error(`${e} 不存在`), !1) : (await this.forage.setItem(this.car_list_key, a), 
         !0);
     }
     async batchRemoveCars(e) {
@@ -427,7 +380,7 @@ let z = class n {
         if (!e || !e.starId) throw new Error("参数不全");
         const t = await this.getBlacklist(), n = t.find((t => t.starId === e.starId));
         if (!n) throw new Error(`未找到黑名单演员信息:${e.name} ${e.starId}`);
-        e.checkTime && (n.checkTime = e.checkTime), e.lastPublishTime && (n.lastPublishTime = e.lastPublishTime),
+        e.checkTime && (n.checkTime = e.checkTime), e.lastPublishTime && (n.lastPublishTime = e.lastPublishTime), 
         await this.forage.setItem(this.blacklist_key, t);
     }
     async deleteBlacklistItem(e) {
@@ -435,22 +388,22 @@ let z = class n {
         t.length !== n.length && await this.forage.setItem(this.blacklist_key, n);
     }
     async getBlacklistCarList() {
-        return this.cache_filter_actor_actress_car_list && this.cache_filter_actor_actress_car_list.length > 0 || (this.cache_filter_actor_actress_car_list = await this.forage.getItem(this.blacklist_car_list_key) || []),
+        return this.cache_filter_actor_actress_car_list && this.cache_filter_actor_actress_car_list.length > 0 || (this.cache_filter_actor_actress_car_list = await this.forage.getItem(this.blacklist_car_list_key) || []), 
         this.cache_filter_actor_actress_car_list;
     }
     async batchSaveBlacklistCarList(e) {
         const t = await this.getBlacklistCarList(), n = JSON.parse(JSON.stringify(t));
         let a = !1, i = [];
         for (const s of e) {
-            n.find((e => e.carNum === s.carNum)) || (this._saveSingleCar(s, n), clog.log(`屏蔽演员番号: <span style="color: #f40">${s.names} ${s.carNum}</span>`),
+            n.find((e => e.carNum === s.carNum)) || (this._saveSingleCar(s, n), clog.log(`屏蔽演员番号: <span style="color: #f40">${s.names} ${s.carNum}</span>`), 
             a = !0, i.push(s.carNum));
         }
-        a && (await this.forage.setItem(this.blacklist_car_list_key, n), await this.removeNewVideoList(i),
+        a && (await this.forage.setItem(this.blacklist_car_list_key, n), await this.removeNewVideoList(i), 
         window.cleanCache_filter_actor_actress_car_list());
     }
     async removeBlacklistCarList(e) {
         const t = await this.getBlacklistCarList(), n = t.filter((t => t.starId !== e));
-        n.length !== t.length && (await this.forage.setItem(this.blacklist_car_list_key, n),
+        n.length !== t.length && (await this.forage.setItem(this.blacklist_car_list_key, n), 
         window.cleanCache_filter_actor_actress_car_list());
     }
     async getFavoriteActressList() {
@@ -572,31 +525,31 @@ let z = class n {
     /** 数据迁移: 将旧版扁平键名重命名为新格式 */
     async merge_table_name() {
         let e = "filter_actor_actress_info_list", t = await this.forage.getItem(e) || [];
-        t && t.length > 0 && (console.log("更正", e), await this.forage.setItem(this.blacklist_key, t)),
-        await this.forage.removeItem(e), e = "favorite_actresses_info_list", t = await this.forage.getItem(e) || [],
-        t && t.length > 0 && (console.log("更正", e), await this.forage.setItem(this.favorite_actresses_key, t)),
-        await this.forage.removeItem(e), e = "car_list_filter_actor_actress", t = await this.forage.getItem(e) || [],
-        t && t.length > 0 && (console.log("更正", e), await this.forage.setItem(this.blacklist_car_list_key, t)),
-        await this.forage.removeItem(e), e = "title_filter_keyword", t = await this.forage.getItem(e) || [],
-        t && t.length > 0 && (console.log("更正", e), await this.forage.setItem(this.filter_keyword_title_key, t)),
-        await this.forage.removeItem(e), e = "review_filter_keyword", t = await this.forage.getItem(e) || [],
-        t && t.length > 0 && (console.log("更正", e), await this.forage.setItem(this.filter_keyword_review_key, t)),
-        await this.forage.removeItem(e), e = "highlightedTags", t = await this.forage.getItem(e) || [],
-        t && t.length > 0 && (console.log("更正", e), await this.forage.setItem(this.highlighted_tags_key, t)),
+        t && t.length > 0 && (clog.debug("更正", e), await this.forage.setItem(this.blacklist_key, t)), 
+        await this.forage.removeItem(e), e = "favorite_actresses_info_list", t = await this.forage.getItem(e) || [], 
+        t && t.length > 0 && (clog.debug("更正", e), await this.forage.setItem(this.favorite_actresses_key, t)), 
+        await this.forage.removeItem(e), e = "car_list_filter_actor_actress", t = await this.forage.getItem(e) || [], 
+        t && t.length > 0 && (clog.debug("更正", e), await this.forage.setItem(this.blacklist_car_list_key, t)), 
+        await this.forage.removeItem(e), e = "title_filter_keyword", t = await this.forage.getItem(e) || [], 
+        t && t.length > 0 && (clog.debug("更正", e), await this.forage.setItem(this.filter_keyword_title_key, t)), 
+        await this.forage.removeItem(e), e = "review_filter_keyword", t = await this.forage.getItem(e) || [], 
+        t && t.length > 0 && (clog.debug("更正", e), await this.forage.setItem(this.filter_keyword_review_key, t)), 
+        await this.forage.removeItem(e), e = "highlightedTags", t = await this.forage.getItem(e) || [], 
+        t && t.length > 0 && (clog.debug("更正", e), await this.forage.setItem(this.highlighted_tags_key, t)), 
         await this.forage.removeItem(e);
     }
     async clean_no_url_blacklist() {
         const [e, t] = await Promise.all([ this.getBlacklistCarList(), this.getBlacklist() ]);
         if (e.length && !e[0].actress) return;
         const n = new Set(t.map((e => e.name))), a = e.filter((e => !e.actress || n.has(e.actress)));
-        e.length !== a.length && (clog.debug("清理 blacklistCarList 前", e.length), clog.debug("清理 blacklistCarList 后", a.length),
+        e.length !== a.length && (clog.debug("清理 blacklistCarList 前", e.length), clog.debug("清理 blacklistCarList 后", a.length), 
         await this.forage.setItem(this.blacklist_car_list_key, a), this.cache_filter_actor_actress_car_list = null);
         const i = new Set(a.map((e => e.actress)));
         let s = t.filter((e => i.has(e.name)));
         s = s.map((e => {
             const {key: t, recordTime: n, ...a} = e, i = a;
             return void 0 !== n && (i.createTime = n), i;
-        })), (t.length !== s.length || t.some((e => "key" in e || "recordTime" in e))) && (clog.debug("清理 Blacklist 前", t.length),
+        })), (t.length !== s.length || t.some((e => "key" in e || "recordTime" in e))) && (clog.debug("清理 Blacklist 前", t.length), 
         clog.debug("清理 Blacklist 后", s.length), await this.forage.setItem(this.blacklist_key, s));
     }
     async async_merge_other() {
@@ -613,9 +566,8 @@ let z = class n {
             const i = n[a];
             Object.prototype.hasOwnProperty.call(e, a) && (e[i] = e[a], delete e[a], t = !0);
         }
-        e.checkFilterTime && (delete e.checkFilterTime, t = !0), e.checkFilterConcurrencyCount && (delete e.checkFilterConcurrencyCount,
-        t = !0), e.checkFilterSleep && (delete e.checkFilterSleep, t = !0), e.downPath115 && (delete e.downPath115,
-        t = !0), t && (await this.saveSetting(e), clog.debug("配置数据已更正"));
+        e.checkFilterTime && (delete e.checkFilterTime, t = !0), e.checkFilterConcurrencyCount && (delete e.checkFilterConcurrencyCount, 
+        t = !0), e.checkFilterSleep && (delete e.checkFilterSleep, t = !0), t && (await this.saveSetting(e), clog.debug("配置数据已更正"));
     }
     /** 数据迁移: 补全黑名单条目缺失的 role/starId/allName/movieType 字段 */
     async merge_blacklist() {
@@ -624,15 +576,15 @@ let z = class n {
         let t = !1;
         const n = e.map((e => {
             let n = !1;
-            if (Object.prototype.hasOwnProperty.call(e, "isActor") && !e.role && (e.role = e.isActor ? B : P,
+            if (Object.prototype.hasOwnProperty.call(e, "isActor") && !e.role && (e.role = e.isActor ? B : P, 
             delete e.isActor, n = !0), !e.starId && e.url) try {
                 const t = new URL(e.url).pathname, a = t.split("/").filter((e => "" !== e.trim())).pop();
                 e.starId !== a && (e.starId = a, n = !0);
             } catch (a) {
                 clog.error("提取url-starId发生错误", e.url, a);
             }
-            if (e.allName || (e.allName = e.name ? [ e.name ] : [], n = !0), e.movieType || (e.movieType = D,
-            n = !0), !e.url && e.url.includes("sort_type")) {
+            if (e.allName || (e.allName = e.name ? [ e.name ] : [], n = !0), e.movieType || (e.movieType = D, 
+            n = !0), e.url && e.url.includes("sort_type")) {
                 const t = new URL(e.url);
                 t.searchParams.delete("sort_type"), e.url = t.toString(), clog.debug("去除黑名单地址sort_type参数");
             }
@@ -665,14 +617,14 @@ let z = class n {
         let n = !1;
         const a = e.map((e => {
             let t = !1;
-            return void 0 !== e.actress && (e.names = e.actress, delete e.actress, t = !0),
+            return void 0 !== e.actress && (e.names = e.actress, delete e.actress, t = !0), 
             t && (n = !0), e;
         }));
-        n && (clog.debug("更正 blacklistCarList 数据结构 actress->names"), await this.forage.setItem(this.blacklist_car_list_key, a)),
+        n && (clog.debug("更正 blacklistCarList 数据结构 actress->names"), await this.forage.setItem(this.blacklist_car_list_key, a)), 
         n = !1;
         const i = t.map((e => {
             let t = !1;
-            return void 0 !== e.actress && (e.names = e.actress, delete e.actress, t = !0),
+            return void 0 !== e.actress && (e.names = e.actress, delete e.actress, t = !0), 
             t && (n = !0), e;
         }));
         n && (clog.debug("更正 carList 数据结构 actress->names"), await this.forage.setItem(this.car_list_key, i));
@@ -739,11 +691,13 @@ const R = async (e, t = 1, n = 20) => {
     };
     return (await gmHttp.get(n, null, a)).data.movies;
 }, q = async (e = "all", t = "", n = 1, a = 40) => {
-    let i = `${U}/v1/movies/top?start_rank=1&type=${e}&type_value=${t}&ignore_watched=false&page=${n}&limit=${a}`, s = {
+    let i = `${U}/v1/movies/top?start_rank=1&type=${e}&type_value=${t}&ignore_watched=false&page=${n}&limit=${a}`;
+    const l = localStorage.getItem("jhs_appAuthorization"), c = l ? await decryptData(l) : "";
+    let s = {
         "user-agent": "Dart/3.5 (dart:io)",
         "accept-language": "zh-TW",
         host: "jdforrepam.com",
-        authorization: "Bearer " + localStorage.getItem("jhs_appAuthorization"),
+        authorization: "Bearer " + c,
         jdsignature: await O()
     };
     return await gmHttp.get(i, null, s);
@@ -785,8 +739,8 @@ class J {
     }
     importResource(e) {
         let t;
-        e.indexOf("css") >= 0 ? (t = document.createElement("link"), t.setAttribute("rel", "stylesheet"),
-        t.href = e) : (t = document.createElement("script"), t.setAttribute("type", "text/javascript"),
+        e.indexOf("css") >= 0 ? (t = document.createElement("link"), t.setAttribute("rel", "stylesheet"), 
+        t.href = e) : (t = document.createElement("script"), t.setAttribute("type", "text/javascript"), 
         t.src = e), document.documentElement.appendChild(t);
     }
     openPage(e, t, n, a) {
@@ -794,7 +748,7 @@ class J {
             insert: 0
         });
         let i = e;
-        e.includes("/actors/") || e.includes("/star/") || (i = e.includes("?") ? `${e}&hideNav=1` : `${e}?hideNav=1`),
+        e.includes("/actors/") || e.includes("/star/") || (i = e.includes("?") ? `${e}&hideNav=1` : `${e}?hideNav=1`), 
         layer.open({
             type: 2,
             title: t,
@@ -826,8 +780,8 @@ class J {
     }
     setupEscClose(e) {
         var t;
-        this._boundHandler || (this._boundHandler = this._handleGlobalEscKey.bind(this),
-        $(document).off("keydown.globalLayerEsc"), $(document).on("keydown.globalLayerEsc", this._boundHandler)),
+        this._boundHandler || (this._boundHandler = this._handleGlobalEscKey.bind(this), 
+        $(document).off("keydown.globalLayerEsc"), $(document).on("keydown.globalLayerEsc", this._boundHandler)), 
         -1 === this.layerIndexStack.indexOf(e) && this.layerIndexStack.push(e);
         const n = $(`#layui-layer-iframe${e}`), a = `keydown.layerEsc${e}`;
         try {
@@ -864,8 +818,8 @@ class J {
     }
     rightClick(e, t, n) {
         let a;
-        "string" == typeof e ? a = document.querySelector(e) : e instanceof HTMLElement && (a = e),
-        a || (console.warn("rightClick(), 容器无效或未提供，将使用 document.body 进行全局委托。"), a = document.body),
+        "string" == typeof e ? a = document.querySelector(e) : e instanceof HTMLElement && (a = e), 
+        a || (console.warn("rightClick(), 容器无效或未提供，将使用 document.body 进行全局委托。"), a = document.body), 
         "string" == typeof t && "" !== t.trim() ? a.addEventListener("contextmenu", (e => {
             const a = e.target.closest(t);
             a && n(e, a);
@@ -873,7 +827,7 @@ class J {
     }
     q(e, t, n, a) {
         let i, s;
-        e ? (i = e.clientX - 130, s = e.clientY - 120) : (i = window.innerWidth / 2 - 120,
+        e ? (i = e.clientX - 130, s = e.clientY - 120) : (i = window.innerWidth / 2 - 120, 
         s = window.innerHeight / 2 - 120);
         let o = layer.confirm(t, {
             offset: [ s, i ],
@@ -985,8 +939,8 @@ class J {
                 const e = t.split("=");
                 if (e.length >= 2 && e[0].trim()) {
                     let t = [ `${e[0].trim()}=${e.slice(1).join("=")}` ];
-                    n > 0 && t.push(`max-age=${n}`), t.push(`path=${a}`), i && t.push(`domain=${i}`),
-                    s && t.push("Secure"), o && t.push(`SameSite=${o}`), console.log("document.cookie = '" + t.join("; ") + "'"),
+                    n > 0 && t.push(`max-age=${n}`), t.push(`path=${a}`), i && t.push(`domain=${i}`), 
+                    s && t.push("Secure"), o && t.push(`SameSite=${o}`), clog.debug("document.cookie = '" + t.join("; ") + "'"),
                     document.cookie = t.join("; ");
                 }
             }
@@ -1000,7 +954,7 @@ class J {
         if (this.timers.has(e)) {
             const t = this.timers.get(e), n = performance.now() - t.startTime;
             let a, i;
-            return "s" === t.unit ? (a = (n / 1e3).toFixed(t.precision), i = "秒") : (a = n.toFixed(t.precision),
+            return "s" === t.unit ? (a = (n / 1e3).toFixed(t.precision), i = "秒") : (a = n.toFixed(t.precision), 
             i = "毫秒"), this.timers.delete(e), `${e}: ${a}${i}`;
         }
         this.timers.set(e, {
@@ -1027,7 +981,7 @@ class J {
             for (const s of t) {
                 const {key: t, order: o = "asc"} = s;
                 let r = e, l = a;
-                null != t && ("function" == typeof t ? (r = t(e), l = t(a)) : (r = e && "object" == typeof e ? e[t] : void 0,
+                null != t && ("function" == typeof t ? (r = t(e), l = t(a)) : (r = e && "object" == typeof e ? e[t] : void 0, 
                 l = a && "object" == typeof a ? a[t] : void 0));
                 const c = i(r), d = i(l);
                 let h = 0;
@@ -1035,7 +989,7 @@ class J {
                 if (g && p) return 0;
                 if (g) return n ? 1 : -1;
                 if (p) return n ? 1 : -1;
-                if (h = c instanceof Date && d instanceof Date ? c.getTime() - d.getTime() : "number" == typeof r && "number" == typeof l ? r - l : "string" == typeof r && "string" == typeof l ? r.localeCompare(l) : String(r).localeCompare(String(l)),
+                if (h = c instanceof Date && d instanceof Date ? c.getTime() - d.getTime() : "number" == typeof r && "number" == typeof l ? r - l : "string" == typeof r && "string" == typeof l ? r.localeCompare(l) : String(r).localeCompare(String(l)), 
                 "desc" === o && (h *= -1), 0 !== h) return h;
             }
             return 0;
@@ -1070,7 +1024,7 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
     postForm(e, t = {}, n = {}) {
         n || (n = {}), n["Content-Type"] || (n["Content-Type"] = "application/x-www-form-urlencoded");
         let a = "";
-        return t && Object.keys(t).length > 0 && (a = Object.entries(t).map((([e, t]) => `${e}=${t}`)).join("&")),
+        return t && Object.keys(t).length > 0 && (a = Object.entries(t).map((([e, t]) => `${e}=${t}`)).join("&")), 
         this.gmRequest("POST", e, a, null, n);
     }
     postFileFormData(e, t = {}, n = {}) {
@@ -1078,7 +1032,7 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
         const a = `----WebKitFormBoundary${Math.random().toString(36).substring(2)}`;
         n["Content-Type"] = `multipart/form-data; boundary=${a}`;
         let i = "";
-        return t && Object.keys(t).length > 0 && (i = Object.entries(t).map((([e, t]) => `--${a}\r\nContent-Disposition: form-data; name="${e}"\r\n\r\n${t}\r\n`)).join("")),
+        return t && Object.keys(t).length > 0 && (i = Object.entries(t).map((([e, t]) => `--${a}\r\nContent-Disposition: form-data; name="${e}"\r\n\r\n${t}\r\n`)).join("")), 
         i += `--${a}--`, this.gmRequest("POST", e, i, null, n);
     }
     async downloadFileInChunks(e, t = {}, n, a) {
@@ -1133,7 +1087,7 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
                     timeout: i,
                     responseType: "arraybuffer",
                     onload: e => {
-                        206 === e.status || 200 === e.status ? e.response instanceof ArrayBuffer ? (h[f] = e.response,
+                        206 === e.status || 200 === e.status ? e.response instanceof ArrayBuffer ? (h[f] = e.response, 
                         clog.log(`[${n}] 成功下载第 ${f + 1}/${c} 块 (${r})`), a()) : s(new Error(`第 ${f + 1} 块响应不是 ArrayBuffer。`)) : s(new Error(`第 ${f + 1} 块请求失败，状态码: ${e.status}`));
                     },
                     onerror: e => s(new Error(`第 ${f + 1} 块网络错误: ${e.error}`)),
@@ -1207,12 +1161,12 @@ window.refresh = function() {
     G.postMessage({
         type: "clean_cacheSettingObj"
     });
-}, document.head.insertAdjacentHTML("beforeend", '\n        <style>\n            .loading-container {\n                position: fixed;\n                top: 0;\n                left: 0;\n                width: 100%;\n                height: 100%;\n                display: flex;\n                justify-content: center;\n                align-items: center;\n                background-color: rgba(0, 0, 0, 0.1);\n                z-index: 99999999;\n            }\n    \n            .loading-animation {\n                position: relative;\n                width: 60px;\n                height: 12px;\n                background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);\n                border-radius: 6px;\n                animation: loading-animate 1.8s ease-in-out infinite;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before,\n            .loading-animation:after {\n                position: absolute;\n                display: block;\n                content: "";\n                animation: loading-animate 1.8s ease-in-out infinite;\n                height: 12px;\n                border-radius: 6px;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before {\n                top: -20px;\n                left: 10px;\n                width: 40px;\n                background: linear-gradient(90deg, #ff758c 0%, #ff7eb3 100%);\n            }\n    \n            .loading-animation:after {\n                bottom: -20px;\n                width: 35px;\n                background: linear-gradient(90deg, #ff9a9e 0%, #fad0c4 100%);\n            }\n    \n            @keyframes loading-animate {\n                0% {\n                    transform: translateX(40px);\n                }\n                50% {\n                    transform: translateX(-30px);\n                }\n                100% {\n                    transform: translateX(40px);\n                }\n            }\n        </style>\n    '),
+}, document.head.insertAdjacentHTML("beforeend", '\n        <style>\n            .loading-container {\n                position: fixed;\n                top: 0;\n                left: 0;\n                width: 100%;\n                height: 100%;\n                display: flex;\n                justify-content: center;\n                align-items: center;\n                background-color: rgba(0, 0, 0, 0.1);\n                z-index: 99999999;\n            }\n    \n            .loading-animation {\n                position: relative;\n                width: 60px;\n                height: 12px;\n                background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);\n                border-radius: 6px;\n                animation: loading-animate 1.8s ease-in-out infinite;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before,\n            .loading-animation:after {\n                position: absolute;\n                display: block;\n                content: "";\n                animation: loading-animate 1.8s ease-in-out infinite;\n                height: 12px;\n                border-radius: 6px;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before {\n                top: -20px;\n                left: 10px;\n                width: 40px;\n                background: linear-gradient(90deg, #ff758c 0%, #ff7eb3 100%);\n            }\n    \n            .loading-animation:after {\n                bottom: -20px;\n                width: 35px;\n                background: linear-gradient(90deg, #ff9a9e 0%, #fad0c4 100%);\n            }\n    \n            @keyframes loading-animate {\n                0% {\n                    transform: translateX(40px);\n                }\n                50% {\n                    transform: translateX(-30px);\n                }\n                100% {\n                    transform: translateX(40px);\n                }\n            }\n        </style>\n    '), 
 unsafeWindow.loading = window.loading = function() {
     const e = document.createElement("div");
     e.className = "loading-container";
     const t = document.createElement("div");
-    return t.className = "loading-animation", e.appendChild(t), document.body.appendChild(e),
+    return t.className = "loading-animation", e.appendChild(t), document.body.appendChild(e), 
     {
         close: () => {
             e && e.parentNode && e.parentNode.removeChild(e);
@@ -1221,7 +1175,7 @@ unsafeWindow.loading = window.loading = function() {
 }, function() {
     const e = (e, t, n, a, i) => {
         let s;
-        "object" == typeof n ? s = n : (s = "object" == typeof a ? a : i || {}, s.gravity = n || "top",
+        "object" == typeof n ? s = n : (s = "object" == typeof a ? a : i || {}, s.gravity = n || "top", 
         s.position = "string" == typeof a ? a : "center"), s.gravity && "center" !== s.gravity || (s.offset = {
             y: "calc(50vh - 150px)"
         });
@@ -1275,10 +1229,10 @@ unsafeWindow.loading = window.loading = function() {
             document.documentElement.style.overflow = e > 0 ? "hidden" : "";
         }), e);
     }
-    document.head.insertAdjacentHTML("beforeend", "\n        <style>\n            .viewer-canvas {\n                overflow: auto !important;\n            }\n            \n            .viewer-close {\n                background: rgba(255,0,0,0.6) !important;\n            }\n            .viewer-close:hover {\n                background: rgba(255,0,0,0.8) !important;\n            }\n        </style>\n    "),
+    document.head.insertAdjacentHTML("beforeend", "\n        <style>\n            .viewer-canvas {\n                overflow: auto !important;\n            }\n            \n            .viewer-close {\n                background: rgba(255,0,0,0.6) !important;\n            }\n            .viewer-close:hover {\n                background: rgba(255,0,0,0.8) !important;\n            }\n        </style>\n    "), 
     window.showImageViewer = function(t, n = "") {
         let a = null, i = !1;
-        "string" == typeof t || t instanceof String ? (a = $('<div class="temporary-container" style="display:none;">').append(`<img src="${t}" alt="${n}">`).appendTo("body"),
+        "string" == typeof t || t instanceof String ? (a = $('<div class="temporary-container" style="display:none;">').append(`<img src="${t}" alt="${n}">`).appendTo("body"), 
         i = !0) : a = $(t);
         const s = {
             zIndex: 999999990,
@@ -1303,16 +1257,16 @@ unsafeWindow.loading = window.loading = function() {
                 o.moveTo(e, 0);
             },
             shown() {
-                i && a.remove(), document.documentElement.style.overflow = "hidden", document.body.style.overflow = "hidden",
+                i && a.remove(), document.documentElement.style.overflow = "hidden", document.body.style.overflow = "hidden", 
                 o.handleKeydown = function(t) {
-                    "Escape" !== t.key && " " !== t.key || (t.preventDefault(), t.stopPropagation(),
-                    o.destroy(), document.removeEventListener("keydown", o.handleKeydown), document.documentElement.style.overflow = "",
+                    "Escape" !== t.key && " " !== t.key || (t.preventDefault(), t.stopPropagation(), 
+                    o.destroy(), document.removeEventListener("keydown", o.handleKeydown), document.documentElement.style.overflow = "", 
                     document.body.style.overflow = "", e());
                 }, document.addEventListener("keydown", o.handleKeydown);
             },
             hidden() {
-                o && o.handleKeydown && document.removeEventListener("keydown", o.handleKeydown),
-                o.destroy(), document.documentElement.style.overflow = "", document.body.style.overflow = "",
+                o && o.handleKeydown && document.removeEventListener("keydown", o.handleKeydown), 
+                o.destroy(), document.documentElement.style.overflow = "", document.body.style.overflow = "", 
                 e();
             }
         }, o = new Viewer(a[0], s);
@@ -1331,7 +1285,7 @@ unsafeWindow.loading = window.loading = function() {
             transition: .2,
             autoAdjustPosition: !0,
             ...e
-        }, this.preview = null, this.currentTarget = null, this.timer = null, this.imgElement = null,
+        }, this.preview = null, this.currentTarget = null, this.timer = null, this.imgElement = null, 
         this.boundElements = new WeakSet, this.init();
     }
     init() {
@@ -1342,13 +1296,13 @@ unsafeWindow.loading = window.loading = function() {
         document.head.insertAdjacentHTML("beforeend", e);
     }
     createPreviewElement() {
-        this.preview = document.createElement("div"), this.preview.className = "image-hover-preview",
+        this.preview = document.createElement("div"), this.preview.className = "image-hover-preview", 
         document.body.appendChild(this.preview);
     }
     bindEvents() {
         document.querySelectorAll(this.config.selector).forEach((e => {
-            this.boundElements.has(e) || (e.addEventListener("mouseenter", (e => this.handleMouseEnter(e))),
-            e.addEventListener("mouseleave", (e => this.handleMouseLeave(e))), e.addEventListener("mousemove", (e => this.handleMouseMove(e))),
+            this.boundElements.has(e) || (e.addEventListener("mouseenter", (e => this.handleMouseEnter(e))), 
+            e.addEventListener("mouseleave", (e => this.handleMouseLeave(e))), e.addEventListener("mousemove", (e => this.handleMouseMove(e))), 
             this.boundElements.add(e));
         }));
     }
@@ -1356,14 +1310,14 @@ unsafeWindow.loading = window.loading = function() {
         clearTimeout(this.timer), this.currentTarget = e.currentTarget;
         const t = this.currentTarget.getAttribute(this.config.dataAttribute) || this.currentTarget.src;
         if (!t) return;
-        this.preview.innerHTML = "", this.preview.classList.add("loading"), this.preview.style.display = "block",
+        this.preview.innerHTML = "", this.preview.classList.add("loading"), this.preview.style.display = "block", 
         this.preview.classList.remove("active");
         const n = new Image;
         n.onload = () => {
-            this.preview.classList.remove("loading"), this.preview.innerHTML = `<img src="${t.replace(/"/g, '&quot;')}" alt="预览图">`,
+            this.preview.classList.remove("loading"), this.preview.innerHTML = `<img src="${t}" alt="预览图">`, 
             this.imgElement = this.preview.querySelector("img");
             const {width: a, height: i} = this.calculateImageSize(n);
-            this.preview.style.width = `${a}px`, this.preview.style.height = `${i}px`, this.preview.offsetHeight,
+            this.preview.style.width = `${a}px`, this.preview.style.height = `${i}px`, this.preview.offsetHeight, 
             this.preview.classList.add("active"), this.handleMouseMove(e);
         }, n.onerror = () => {
             this.preview.classList.remove("loading"), this.preview.innerHTML = '<div style="padding:10px;color:#f00;">图片加载失败</div>';
@@ -1385,19 +1339,19 @@ unsafeWindow.loading = window.loading = function() {
         let {offsetX: t, offsetY: n} = this.config, a = e.clientX + t, i = e.clientY + n;
         if (this.config.autoAdjustPosition) {
             const s = this.preview.offsetWidth, o = this.preview.offsetHeight;
-            a + s > window.innerWidth && (a = e.clientX - s - t), i + o > window.innerHeight && (i = e.clientY - o - n),
+            a + s > window.innerWidth && (a = e.clientX - s - t), i + o > window.innerHeight && (i = e.clientY - o - n), 
             a = Math.max(0, a), i = Math.max(0, i);
         }
         this.preview.style.left = `${a}px`, this.preview.style.top = `${i}px`;
     }
     handleMouseLeave() {
-        this.preview.classList.remove("active"), this.preview.style.display = "none", this.currentTarget = null,
+        this.preview.classList.remove("active"), this.preview.style.display = "none", this.currentTarget = null, 
         this.imgElement = null;
     }
     destroy() {
         document.querySelectorAll(this.config.selector).forEach((e => {
-            this.boundElements.has(e) && (e.removeEventListener("mouseenter", this.handleMouseEnter),
-            e.removeEventListener("mouseleave", this.handleMouseLeave), e.removeEventListener("mousemove", this.handleMouseMove),
+            this.boundElements.has(e) && (e.removeEventListener("mouseenter", this.handleMouseEnter), 
+            e.removeEventListener("mouseleave", this.handleMouseLeave), e.removeEventListener("mousemove", this.handleMouseMove), 
             this.boundElements.delete(e));
         })), this.preview && this.preview.parentNode && this.preview.parentNode.removeChild(this.preview);
     }
@@ -1433,50 +1387,50 @@ unsafeWindow.loading = window.loading = function() {
     class o {
         constructor() {
             const t = localStorage.getItem(s);
-            this.currentFilter = t && e[t] ? t : "base", this.logs = [], this.isInitialized = !1,
+            this.currentFilter = t && e[t] ? t : "base", this.logs = [], this.isInitialized = !1, 
             this.userScrolledUp = !1;
         }
         tryInitialize() {
-            return "loading" !== document.readyState && (this.isInitialized || (this.init(),
+            return "loading" !== document.readyState && (this.isInitialized || (this.init(), 
             this.isInitialized = !0), !0);
         }
         init() {
             this.createContainer(), this.bindEvents(), this.checkInitialMaximizeState(), this.checkInitialCollapseState();
         }
         createContainer() {
-            this.container = document.createElement("div"), this.container.className = "console-logger-container",
-            this.container.style.display = "none", this.toggleBtn = document.createElement("div"),
-            this.toggleBtn.className = "console-logger-toggle collapsed", this.container.appendChild(this.toggleBtn),
+            this.container = document.createElement("div"), this.container.className = "console-logger-container", 
+            this.container.style.display = "none", this.toggleBtn = document.createElement("div"), 
+            this.toggleBtn.className = "console-logger-toggle collapsed", this.container.appendChild(this.toggleBtn), 
             this.window = document.createElement("div"), this.window.className = "console-logger-window collapsed";
             const t = document.createElement("div");
             t.className = "console-logger-header";
             const n = document.createElement("div");
-            n.className = "console-logger-title", n.textContent = "JHS V3.3.2";
+            n.className = "console-logger-title", n.textContent = "JHS V3.6.0";
             const a = document.createElement("div");
-            a.className = "console-logger-controls", this.maximizeBtn = document.createElement("button"),
-            this.maximizeBtn.textContent = "", this.maximizeBtn.classList.add("console-logger-maximize-toggle"),
+            a.className = "console-logger-controls", this.maximizeBtn = document.createElement("button"), 
+            this.maximizeBtn.textContent = "", this.maximizeBtn.classList.add("console-logger-maximize-toggle"), 
             a.appendChild(this.maximizeBtn);
             const i = document.createElement("button");
-            i.textContent = "清空", i.addEventListener("click", (() => this.clear())), a.appendChild(i),
-            t.appendChild(n), t.appendChild(a), this.filtersContainer = document.createElement("div"),
-            this.filtersContainer.className = "console-logger-filters", this.filterButtonGroup = document.createElement("div"),
-            this.filterButtonGroup.className = "console-logger-filter-group", this.filtersContainer.appendChild(this.filterButtonGroup),
-            this.scrollToBottomBtn = document.createElement("button"), this.scrollToBottomBtn.className = "console-logger-scroll-to-bottom",
-            this.scrollToBottomBtn.textContent = "到底部", this.filtersContainer.appendChild(this.scrollToBottomBtn),
-            this.content = document.createElement("div"), this.content.className = "console-logger-content jhs-scrollbar",
-            this.window.appendChild(t), this.window.appendChild(this.filtersContainer), this.window.appendChild(this.content),
-            this.container.appendChild(this.window), document.body.appendChild(this.container),
+            i.textContent = "清空", i.addEventListener("click", (() => this.clear())), a.appendChild(i), 
+            t.appendChild(n), t.appendChild(a), this.filtersContainer = document.createElement("div"), 
+            this.filtersContainer.className = "console-logger-filters", this.filterButtonGroup = document.createElement("div"), 
+            this.filterButtonGroup.className = "console-logger-filter-group", this.filtersContainer.appendChild(this.filterButtonGroup), 
+            this.scrollToBottomBtn = document.createElement("button"), this.scrollToBottomBtn.className = "console-logger-scroll-to-bottom", 
+            this.scrollToBottomBtn.textContent = "到底部", this.filtersContainer.appendChild(this.scrollToBottomBtn), 
+            this.content = document.createElement("div"), this.content.className = "console-logger-content jhs-scrollbar", 
+            this.window.appendChild(t), this.window.appendChild(this.filtersContainer), this.window.appendChild(this.content), 
+            this.container.appendChild(this.window), document.body.appendChild(this.container), 
             Object.keys(e).forEach((t => {
                 const n = document.createElement("div");
-                n.className = "console-logger-filter", t === this.currentFilter && n.classList.add("active"),
-                n.textContent = e[t].label, n.dataset.type = t, n.addEventListener("click", (() => this.setFilter(t))),
+                n.className = "console-logger-filter", t === this.currentFilter && n.classList.add("active"), 
+                n.textContent = e[t].label, n.dataset.type = t, n.addEventListener("click", (() => this.setFilter(t))), 
                 this.filterButtonGroup.appendChild(n);
             }));
         }
         bindEvents() {
             this.toggleBtn.addEventListener("click", (() => {
                 this.toggleExpandCollapsed();
-            })), this.maximizeBtn.addEventListener("click", (() => this.toggleMaximize())),
+            })), this.maximizeBtn.addEventListener("click", (() => this.toggleMaximize())), 
             this.scrollToBottomBtn.addEventListener("click", (() => {
                 this.content.scrollTop = this.content.scrollHeight, this.userScrolledUp = !1;
             })), this.content.addEventListener("scroll", (() => {
@@ -1491,23 +1445,23 @@ unsafeWindow.loading = window.loading = function() {
         }
         toggleExpandCollapsed() {
             const e = this.window.classList.toggle("collapsed");
-            this.toggleBtn.classList.toggle("collapsed"), e ? localStorage.setItem(i, "no") : (localStorage.setItem(i, "yes"),
+            this.toggleBtn.classList.toggle("collapsed"), e ? localStorage.setItem(i, "no") : (localStorage.setItem(i, "yes"), 
             this.reRenderAllLogs());
         }
         checkInitialCollapseState() {
             const e = localStorage.getItem(i);
-            e && "no" !== e ? (this.window.classList.toggle("collapsed"), this.toggleBtn.classList.toggle("collapsed"),
+            e && "no" !== e ? (this.window.classList.toggle("collapsed"), this.toggleBtn.classList.toggle("collapsed"), 
             setTimeout((() => {
                 this.content.scrollTop = this.content.scrollHeight;
             }), 0)) : (this.window.classList.add("collapsed"), this.toggleBtn.classList.add("collapsed"));
         }
         checkInitialMaximizeState() {
-            "maximized" === localStorage.getItem(a) && (this.window.classList.add("maximized"),
+            "maximized" === localStorage.getItem(a) && (this.window.classList.add("maximized"), 
             this.maximizeBtn.classList.add("active"));
         }
         toggleMaximize() {
             const e = this.window.classList.toggle("maximized");
-            this.maximizeBtn.classList.toggle("active", e), e ? localStorage.setItem(a, "maximized") : localStorage.setItem(a, "minimized"),
+            this.maximizeBtn.classList.toggle("active", e), e ? localStorage.setItem(a, "maximized") : localStorage.setItem(a, "minimized"), 
             this.window.classList.contains("collapsed") || (this.content.scrollTop = this.content.scrollHeight);
         }
         addLog(t, a = "base", ...i) {
@@ -1595,7 +1549,7 @@ unsafeWindow.loading = window.loading = function() {
             const a = e[t.type] || e.base;
             n.style.borderLeft = "3px solid " + a.borderLeftColor, n.style.background = a.background;
             const i = (t.timestamp instanceof Date ? t.timestamp : new Date(t.timestamp)).toTimeString().split(" ")[0];
-            return n.innerHTML = `\n                <span class="console-logger-timestamp">[${i}]</span>\n                <span class="console-logger-message" data-type="${escapeHtml(t.messageType)}">${escapeHtml(t.message)}</span>\n            `,
+            return n.innerHTML = `\n                <span class="console-logger-timestamp">[${i}]</span>\n                <span class="console-logger-message" data-type="${t.messageType}">${t.message}</span>\n            `, 
             n;
         }
         setFilter(e) {
@@ -1609,7 +1563,7 @@ unsafeWindow.loading = window.loading = function() {
             this.logs = [], this.content.innerHTML = "";
         }
         show() {
-            (this.isInitialized && this.container || this.tryInitialize() && this.container) && (this.container.style.display = "",
+            (this.isInitialized && this.container || this.tryInitialize() && this.container) && (this.container.style.display = "", 
             this.reRenderAllLogs());
         }
         hide() {
@@ -1635,7 +1589,7 @@ unsafeWindow.loading = window.loading = function() {
         })), window.addEventListener("unhandledrejection", (function(t) {
             const n = t.reason, a = (null == n ? void 0 : n.message) ?? "";
             if (a.includes("play()")) return;
-            if (a.includes("The element has no supported sources")) return show.error("播放失败, 请检查是否已对节点分流?"),
+            if (a.includes("The element has no supported sources")) return show.error("播放失败, 请检查是否已对节点分流?"), 
             void e.error("播放失败, 请检查是否已对节点分流?");
             if (a.includes("<span>1005</span>") && a.includes("fc2ppvdb")) return;
             const i = `[全局 Promise 异常捕获] ${n.message || n}`;
@@ -1667,7 +1621,7 @@ unsafeWindow.loading = window.loading = function() {
             break;
 
           case "bottom":
-            c = i.bottom + 0, c + s.height > r - 8 && h(i.top - s.height - 0) && (c = i.top - s.height - 0,
+            c = i.bottom + 0, c + s.height > r - 8 && h(i.top - s.height - 0) && (c = i.top - s.height - 0, 
             d = "top");
             break;
 
@@ -1676,12 +1630,12 @@ unsafeWindow.loading = window.loading = function() {
             break;
 
           case "right":
-            l = i.right + 0, l + s.width > o - 8 && g(i.left - s.width - 0) && (l = i.left - s.width - 0,
+            l = i.right + 0, l + s.width > o - 8 && g(i.left - s.width - 0) && (l = i.left - s.width - 0, 
             d = "left");
         }
         const u = "left" === d || "right" === d;
-        "top" === d || "bottom" === d ? (l = p, l < 8 ? l = 8 : l + s.width > o - 8 && (l = o - s.width - 8)) : u && (c = m,
-        c < 8 ? c = 8 : c + s.height > r - 8 && (c = r - s.height - 8)), a.style.left = `${l}px`,
+        "top" === d || "bottom" === d ? (l = p, l < 8 ? l = 8 : l + s.width > o - 8 && (l = o - s.width - 8)) : u && (c = m, 
+        c < 8 ? c = 8 : c + s.height > r - 8 && (c = r - s.height - 8)), a.style.left = `${l}px`, 
         a.style.top = `${c}px`, a.classList.add("is-active"), e.tooltipElement = a;
     }
     document.head.insertAdjacentHTML("beforeend", "\n        <style>\n            .js-tooltip {\n                /* 通用样式 */\n                position: fixed;\n                padding: 8px 12px; \n                border-radius: 6px; \n                white-space: normal;\n                max-width: 600px; \n                \n                pointer-events: none;\n                font-size: 14px;\n                line-height: 1.5;\n                z-index: 9999999999;\n                \n                background: #F0FDF4; \n                color: #166534;      \n                border: none; \n                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3); \n                \n                display: none; \n            }\n            .js-tooltip.is-active {\n                display: block !important;\n            }\n\n        </style>\n    ");
@@ -1690,11 +1644,11 @@ unsafeWindow.loading = window.loading = function() {
         const a = n.target.closest(t);
         if (a && !a.tooltipElement) {
             let t, n = "top";
-            if (a.hasAttribute("data-tip-bottom") ? (t = a.getAttribute("data-tip-bottom"),
-            n = "bottom") : a.hasAttribute("data-tip-left") ? (t = a.getAttribute("data-tip-left"),
-            n = "left") : a.hasAttribute("data-tip-right") ? (t = a.getAttribute("data-tip-right"),
-            n = "right") : a.hasAttribute("data-tip-top") ? (t = a.getAttribute("data-tip-top"),
-            n = "top") : a.hasAttribute("data-tip") && (t = a.getAttribute("data-tip"), n = "top"),
+            if (a.hasAttribute("data-tip-bottom") ? (t = a.getAttribute("data-tip-bottom"), 
+            n = "bottom") : a.hasAttribute("data-tip-left") ? (t = a.getAttribute("data-tip-left"), 
+            n = "left") : a.hasAttribute("data-tip-right") ? (t = a.getAttribute("data-tip-right"), 
+            n = "right") : a.hasAttribute("data-tip-top") ? (t = a.getAttribute("data-tip-top"), 
+            n = "top") : a.hasAttribute("data-tip") && (t = a.getAttribute("data-tip"), n = "top"), 
             !t) return;
             a.hoverTimeout = setTimeout((() => {
                 a.matches(":hover") && !a.tooltipElement && e(a, t, n);
@@ -1703,7 +1657,7 @@ unsafeWindow.loading = window.loading = function() {
     })), document.addEventListener("mouseout", (e => {
         const n = e.target.closest(t);
         var a;
-        n && (n.hoverTimeout && (clearTimeout(n.hoverTimeout), n.hoverTimeout = null), n.contains(e.relatedTarget) || n.tooltipElement && ((a = n.tooltipElement) && a.parentNode && a.remove(),
+        n && (n.hoverTimeout && (clearTimeout(n.hoverTimeout), n.hoverTimeout = null), n.contains(e.relatedTarget) || n.tooltipElement && ((a = n.tooltipElement) && a.parentNode && a.remove(), 
         n.tooltipElement = null));
     }));
 }();
@@ -1768,22 +1722,22 @@ class Y {
 
 class X {
     constructor() {
-        i(this, "pluginManager", null), i(this, "settingSvg", '<svg t="1760926954860" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4947" width="200" height="200"><path d="M511.099222 365.825763c-80.7786 0-146.26579 65.482515-146.26579 146.259556 0 80.7786 65.48719 146.259556 146.26579 146.259556 80.777041 0 146.259556-65.480957 146.259556-146.259556C657.358779 431.308278 591.876263 365.825763 511.099222 365.825763L511.099222 365.825763zM511.099222 585.215097c-40.391637 0-73.136012-32.742816-73.136012-73.129778 0-40.391637 32.742816-73.129778 73.136012-73.129778 40.386962 0 73.129778 32.738141 73.129778 73.129778C584.229 552.472281 551.486184 585.215097 511.099222 585.215097L511.099222 585.215097zM511.099222 585.215097M900.893017 568.24369l-26.451395-15.268032c3.065451-27.021784 3.138697-54.472139 0.077922-81.822754l26.373473-15.225955c69.953678-40.391637 93.920921-129.844512 53.533959-199.799749-40.390079-69.95212-129.839837-93.925596-199.799749-53.533959l-26.373473 15.225955c-22.153219-16.330888-45.963059-29.99217-70.896534-40.843585l0-30.545416c0-80.777041-65.48719-146.259556-146.26579-146.259556-80.7786 0-146.259556 65.482515-146.259556 146.259556l0 30.515806c-12.377127 5.421811-24.587501 11.55583-36.562551 18.473743-11.97505 6.917913-23.396854 14.420242-34.277879 22.432179l-26.431136-15.258682c-69.958353-40.391637-159.406553-16.424395-199.79819 53.533959C27.378272 326.082437 51.343956 415.535311 121.299193 455.922273l26.449837 15.275825c-3.063892 27.020226-3.137139 54.465905-0.077922 81.822754l-26.373473 15.224397c-69.953678 40.391637-93.920921 129.841395-53.533959 199.799749 40.391637 69.95212 129.839837 93.920921 199.79819 53.533959l26.375032-15.224397c22.153219 16.32933 45.963059 29.984378 70.896534 40.843585l0 30.537624c0 80.7786 65.48719 146.26579 146.26579 146.26579 80.777041 0 146.259556-65.48719 146.259556-146.26579l0-30.515806c12.377127-5.415577 24.587501-11.55583 36.567226-18.467509 11.97505-6.917913 23.398412-14.420242 34.277879-22.432179l26.423343 15.258682c69.959912 40.391637 159.408111 16.418162 199.799749-53.533959C994.813938 698.085085 970.848254 608.635327 900.893017 568.24369L900.893017 568.24369zM891.096666 731.474653c-20.198936 34.982294-64.923035 46.962019-99.900654 26.770875l-63.331869-36.567226 0 0 0 0-7.988562-4.611422c-18.134004 18.450366-39.024886 34.787489-62.516805 48.353705-23.49971 13.559983-48.091888 23.482568-73.129778 29.964118l0 9.222846 0 0 0 65.828489 0 7.301289c0 40.391637-32.742816 73.136012-73.136012 73.136012-40.386962 0-73.129778-32.742816-73.129778-73.136012l0-7.402588 0-65.72719 0 0 0-9.300768c-50.682014-13.090892-97.855981-39.682547-135.652816-78.232109l-7.983886 4.606747 0 0-63.331869 36.567226c-34.977618 20.191144-79.706394 8.206743-99.900654-26.770875-20.192702-34.977618-8.206743-79.701718 26.770875-99.899095l6.341291-3.657657 0 0 64.972905-37.516316c-14.487254-52.005129-13.929333-106.151555 0.073247-156.593569l-8.057133-4.650384 0 0-63.331869-36.567226c-34.982294-20.192702-46.963578-64.923035-26.770875-99.900654 20.192702-34.97606 64.923035-46.962019 99.900654-26.763083l6.324148 3.649866 0 0 64.996282 37.528784c18.132445-18.450366 39.024886-34.790606 62.516805-48.353705 23.493477-13.559983 48.085654-23.485685 73.129778-29.964118l0-9.229079L437.960093 153.739276l0-7.309082c0-40.385404 32.742816-73.129778 73.129778-73.129778 40.391637 0 73.129778 32.744375 73.129778 73.129778l0 7.404147 0 65.72719 0 9.307001c50.686689 13.086217 97.862215 39.684106 135.657491 78.232109l48.487732-27.997368 22.828023-13.176607c34.977618-20.192702 79.701718-8.212977 99.89442 26.763083 20.198936 34.982294 8.212977 79.706394-26.764641 99.900654l-30.822819 17.79738-32.50905 18.769847 0 0 0 0-7.983886 4.605189c14.488813 52.009805 13.929333 106.159347-0.077922 156.599803l64.979139 37.511641 0 0 6.414537 3.701294C899.303409 651.772936 911.289368 696.498594 891.096666 731.474653L891.096666 731.474653zM891.096666 731.474653M197.330785 324.240361c-1.932465 3.232203-3.824411 6.497135-5.649343 9.785442L197.330785 324.240361 197.330785 324.240361zM197.330785 324.240361M830.515443 690.133926l-5.655577 9.804144C826.793889 696.699632 828.685835 693.433143 830.515443 690.133926L830.515443 690.133926zM830.515443 690.133926M505.297151 146.430195l11.304921 0C512.835324 146.369416 509.067017 146.374091 505.297151 146.430195L505.297151 146.430195zM505.297151 146.430195M516.898176 877.740444l-11.31583 0C509.350653 877.796547 513.125193 877.796547 516.898176 877.740444L516.898176 877.740444zM516.898176 877.740444" fill="#272636" p-id="4948"></path></svg>'),
-        i(this, "editSvg", '<svg t="1760920692801" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="3545" width="200" height="200"><path d="M1013.929675 128.26571a143.759824 143.759824 0 0 1 10.44409 53.858738 84.576649 84.576649 0 0 1-5.836403 30.308339 92.870485 92.870485 0 0 1-18.635533 29.284408 1314.726599 1314.726599 0 0 1-24.983901 24.574329c-7.372299 7.06512-13.82306 13.311095-19.249891 18.737926-6.143582 6.143582-12.082378 11.672806-17.406817 16.382886L720.266444 82.598415c9.317766-8.601015 20.478607-18.942712 33.277737-31.02509s23.448006-21.604931 31.946628-28.67005a102.085858 102.085858 0 0 1 68.193763-22.731255c11.263234 0.307179 22.116896 2.047861 32.560985 5.222045 10.546483 3.071791 19.659463 6.655547 27.441334 10.546483 16.280493 8.601015 34.301667 23.550399 54.063524 45.052936 19.864249 21.502538 35.120812 43.82422 46.076867 67.272226z m-907.20231 570.943576l32.560986-33.38013c17.099637-17.509209 38.397389-39.216533 64.098041-64.917186l84.986221-85.395793 94.303987-94.815953 250.350976-251.477299L850.817567 389.163169 600.46659 640.640468l-93.177663 94.815953c-31.02509 30.410732-58.978389 58.364031-83.859898 83.655111-24.779115 25.29108-45.360116 46.17926-61.743001 62.562146a504.797674 504.797674 0 0 1-55.804206 50.274981c-10.239304 7.884264-20.581 14.130239-31.537055 18.737926a507.152714 507.152714 0 0 1-47.715156 19.86425 1609.311367 1609.311367 0 0 1-131.063087 42.185931c-20.478607 5.426831-35.837563 8.908194-45.974474 10.546483-20.88818 2.35504-34.813633-0.819144-41.981145-9.42016-6.860333-8.601015-8.805801-22.93604-5.73401-43.312254a396.261054 396.261054 0 0 1 11.058448-47.305584c5.836403-20.683394 12.082378-42.185931 18.635532-64.40522 6.553154-22.219289 13.003916-42.697897 19.249891-61.435822 6.143582-18.635533 11.263234-31.537055 15.15417-38.602176 4.607687-10.853662 9.829732-20.785787 15.666135-29.796373a192.49891 192.49891 0 0 1 25.086294-29.796374z" fill="#FF9500" p-id="3546"></path></svg>'),
-        i(this, "deleteSvg", '<svg t="1760921450746" class="jhs-icon icon" viewBox="0 0 1194 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4530" width="200" height="200"><path d="M761.086847 36.028779s309.754321-147.538628 424.952209 231.50509c2.047962 6.570546 71.337359 253.862013-220.838618 415.139055-12.970429 7.167869-267.515096 145.746661-370.339877 341.327076 0 0-90.963666-205.649563-393.379455-351.566888-6.399883-3.071944-304.549083-156.583796-163.751664-487.2444 3.669266-8.533177 163.666333-336.20717 466.423449-99.411511l24.575549 27.391498L387.931021 324.279495l237.648977 159.570408-109.139333 145.746661L625.579998 849.069874l-30.719437-205.820227 166.226286-169.81022-216.486698-168.103585L761.086847 36.028779z" fill="#F4382E" p-id="4531"></path></svg>'),
-        i(this, "checkSvg", '<svg t="1760921633527" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5603" width="200" height="200"><path d="M924.928 544A413.76 413.76 0 0 1 544 924.736v3.264h-64v-3.2A413.696 413.696 0 0 1 99.072 544H96v-64h3.072A413.696 413.696 0 0 1 480 99.2V96h64v3.2a413.76 413.76 0 0 1 380.928 380.8h3.072v64h-3.072z m-64-64A350.016 350.016 0 0 0 544 163.2V288h-64V163.2A350.016 350.016 0 0 0 163.072 480H288v64H163.072A350.016 350.016 0 0 0 480 860.8V736h64v124.8a350.016 350.016 0 0 0 316.928-316.8H736v-64h124.928zM512 544a32 32 0 1 1 32-32 32 32 0 0 1-32 32z" fill="#333333" p-id="5604"></path></svg>'),
-        i(this, "actressSvg", '<svg t="1760926744637" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1948" width="200" height="200"><path d="M265.950168 668.467036V209.809493A209.809493 209.809493 0 0 1 475.759661 0h40.949536A209.809493 209.809493 0 0 1 726.564189 209.809493v440.435" p-id="1949"></path><path d="M916.558657 825.861124a193.463804 193.463804 0 0 0-137.442564-155.83573l-186.001889-45.795231-10.487631-124.293214H424.106373L412.231008 624.025416l-170.623063 44.44162a193.452429 193.452429 0 0 0-133.666108 154.698244L76.410695 1023.192384h871.189985z" fill="#FFE7D9" p-id="1950"></path><path d="M668.472724 265.682859c68.431223-29.187919 96.140409 100.349111 5.20969 151.774902z" fill="#FFCFB5" p-id="1951"></path><path d="M676.378259 334.421203c1.137487-99.814492-38.674561-172.158671-38.674561-172.15867l-59.740822 11.920865a493.805894 493.805894 0 0 1-80.761583 9.099896 493.669396 493.669396 0 0 1-80.761583-9.099896l-59.683948-11.88674s-39.812048 72.344179-38.776934 172.15867l-1.080613 92.05683c5.209691 56.271486 92.4777 121.381247 195.022161 119.163147 61.196805 0.034125 165.59537-51.573665 165.59537-119.197272z" fill="#FFE7D9" p-id="1952"></path><path d="M322.198905 274.703131c-68.419848-29.187919-96.140409 100.349111-5.209691 151.774902z" fill="#FFCFB5" p-id="1953"></path><path d="M297.390311 812.461526H742.034014a38.458438 38.458438 0 0 1 38.458438 38.458439V1020.325917H258.931873V850.90859a38.458438 38.458438 0 0 1 38.458438-38.447064z" fill="#FFD527" p-id="1954"></path><path d="M690.539973 92.284327c-20.645391 84.287793-275.613121 235.323328-424.589805 117.525166l104.955934-95.548915 139.399042-64.529643z" p-id="1955"></path><path d="M285.321573 383.708519h33.624119v177.118114h-33.624119zM675.855015 383.708519h33.624118v177.118114h-33.624118z" fill="#FFD527" p-id="1956"></path></svg>'),
-        i(this, "newSvg", '<svg t="1760926857487" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="3954" width="200" height="200"><path d="M508.330667 733.994667c-11.008-7.338667-13.44-17.109333-7.338667-29.333334 28.117333-37.888 41.557333-98.986667 40.341333-183.317333v-165.013333c0-14.656 7.338667-23.210667 21.994667-25.664 37.888-1.216 82.496-5.504 133.845333-12.842667 13.44-2.432 21.376 3.072 23.829334 16.512 1.216 12.224-4.266667 19.562667-16.512 21.994667a1787.093333 1787.093333 0 0 1-113.664 11.008c-6.101333 0-9.173333 3.669333-9.173334 10.986666v84.330667h135.68c12.224 1.237333 18.944 7.957333 20.16 20.181333-1.216 10.986667-7.936 17.109333-20.16 18.346667h-36.672v223.658667c-1.216 12.202667-7.936 18.944-20.16 20.16-11.008-1.216-17.109333-7.957333-18.346666-20.16V501.162667h-60.48v18.346666c1.216 92.885333-13.44 161.92-44.010667 207.146667-6.101333 12.224-15.893333 14.677333-29.333333 7.338667z m-131.989334-282.325334c-1.237333 0-2.453333 0.618667-3.669333 1.834667h45.824a522.666667 522.666667 0 0 0 16.512-31.168c7.317333-12.224 12.224-20.778667 14.656-25.664 6.122667-11.008 15.274667-14.677333 27.52-11.008 9.770667 6.122667 12.202667 14.058667 7.317333 23.829333-4.906667 9.792-13.44 24.448-25.664 44.010667h49.493334c9.770667 1.216 15.274667 6.72 16.512 16.490667-1.237333 11.008-6.741333 17.109333-16.512 18.346666h-82.496a12.437333 12.437333 0 0 1 3.669333 9.173334v38.485333h69.653333c9.792 1.216 15.296 6.72 16.512 16.490667-1.216 11.008-6.72 17.130667-16.512 18.346666h-69.653333v108.16c0 34.218667-15.274667 51.946667-45.845333 53.162667h-16.490667a195.157333 195.157333 0 0 1-20.16 1.834667c-12.224 0-19.562667-6.72-22.016-20.16 1.237333-12.224 7.338667-18.944 18.346667-20.16 2.432 0 6.101333 0.597333 10.986666 1.834666h11.008c15.893333 0 23.829333-8.554667 23.829334-25.685333v-98.986667H314.026667c-11.008-1.216-17.109333-7.338667-18.346667-18.346666 1.237333-9.770667 7.338667-15.274667 18.346667-16.490667h75.157333V497.493333c0-3.669333 1.216-6.72 3.669333-9.173333h-89.813333c-11.029333-1.216-17.130667-7.317333-18.346667-18.325333 1.216-9.770667 7.317333-15.274667 18.346667-16.490667h56.810667c-3.669333-1.216-6.72-4.266667-9.173334-9.173333-1.216-1.216-3.050667-4.266667-5.482666-9.173334a758.336 758.336 0 0 0-14.677334-23.829333c-4.885333-9.770667-3.050667-17.706667 5.504-23.829333 11.008-3.669333 19.562667-1.216 25.664 7.338666 2.453333 2.432 6.122667 7.338667 11.008 14.656 6.101333 8.554667 9.770667 14.08 10.986667 16.512 4.906667 9.770667 2.453333 18.346667-7.317333 25.664z m-60.501333-71.509333c-9.792-1.216-15.274667-7.317333-16.512-18.346667 1.237333-9.749333 6.72-15.253333 16.512-16.490666h75.157333c-3.669333-12.202667-7.338667-21.973333-10.986666-29.333334-1.237333-12.202667 3.648-19.541333 14.656-21.973333 12.224-2.453333 21.397333 1.216 27.52 10.986667 0 1.216 0.597333 3.669333 1.813333 7.338666 4.906667 15.872 9.173333 26.88 12.842667 32.981334h60.48c11.008 1.237333 17.130667 6.741333 18.346666 16.512-1.216 11.008-7.338667 17.109333-18.346666 18.346666h-181.482667z m-14.677333 311.68c-8.533333-6.122667-10.986667-14.08-7.338667-23.829333a1659.648 1659.648 0 0 0 33.002667-66.005334c4.906667-9.792 12.224-12.842667 22.016-9.173333 9.770667 4.906667 13.44 12.224 10.986666 21.994667-3.669333 6.122667-9.173333 17.728-16.490666 34.837333-8.554667 15.893333-14.677333 27.52-18.346667 34.837333-4.885333 8.554667-12.821333 11.008-23.829333 7.338667z m201.664-25.664c-9.770667 4.885333-18.346667 2.432-25.664-7.338667a1138.56 1138.56 0 0 1-27.498667-44.010666c-4.885333-8.533333-3.050667-16.490667 5.504-23.829334 9.770667-3.669333 18.346667-1.216 25.664 7.338667l14.677333 21.994667c6.101333 9.770667 10.389333 17.109333 12.821334 21.994666 4.906667 8.554667 3.050667 16.512-5.504 23.850667z" fill="#333333" p-id="3955"></path><path d="M675.328 117.717333A425.429333 425.429333 0 0 0 512 85.333333C276.352 85.333333 85.333333 276.352 85.333333 512s191.018667 426.666667 426.666667 426.666667 426.666667-191.018667 426.666667-426.666667c0-56.746667-11.093333-112-32.384-163.328a21.333333 21.333333 0 0 0-39.402667 16.341333A382.762667 382.762667 0 0 1 896 512c0 212.074667-171.925333 384-384 384S128 724.074667 128 512 299.925333 128 512 128c51.114667 0 100.8 9.984 146.986667 29.12a21.333333 21.333333 0 0 0 16.341333-39.402667z" fill="#333333" p-id="3956"></path></svg>'),
-        i(this, "refreshSvg", '<svg t="1760926993643" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5942" width="200" height="200"><path d="M511.966722 0a511.966722 511.966722 0 1 0 179.828311 32.445891l-22.46254 59.964102A447.970882 447.970882 0 1 1 511.966722 63.99584a31.99792 31.99792 0 0 0 0-63.99584z" fill="#333333" p-id="5943"></path><path d="M649.2378 9.151405A30.909991 30.909991 0 0 1 671.316364 0h193.267438a31.99792 31.99792 0 0 1 31.357962 31.99792c0 17.662852-13.759106 31.99792-31.357962 31.99792H703.954243v160.629559a31.99792 31.99792 0 0 1-31.99792 31.357962 31.485953 31.485953 0 0 1-31.99792-31.357962V31.357962c0-8.511447 3.647763-16.318939 9.343392-21.950573z" fill="#333333" p-id="5944"></path></svg>'),
-        i(this, "blacklistSvg", '<svg t="1761386375897" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1936" width="200" height="200"><path d="M513.199827 65.667605c-246.537999 0-446.399933 199.861934-446.399933 446.399933 0 246.553349 199.861934 446.399933 446.399933 446.399933 246.553349 0 446.399933-199.846584 446.399933-446.399933C959.599759 265.529539 759.753175 65.667605 513.199827 65.667605zM513.199827 894.697075c-211.320916 0-382.629537-171.322947-382.629537-382.628514 0-94.183056 34.029024-180.417069 90.461291-247.080352l165.389818 165.389818c4.320399 39.651069 26.816762 73.840752 58.981323 94.068446-72.189136 27.369348-123.517151 97.156784-123.517151 178.936345l337.541643 0 100.846826 100.846826C693.608709 860.664981 607.375719 894.697075 513.199827 894.697075zM805.362956 759.14175 697.264982 651.0448c-16.556071-58.332547-60.10082-105.306394-116.275213-126.601396 35.888372-22.570042 59.752896-62.511729 59.752896-108.032482 0-70.436212-57.108672-127.542838-127.542838-127.542838-48.218188 0-90.184999 26.765597-111.865787 66.245773L266.120498 219.900316c66.663282-56.432267 152.897296-90.461291 247.079328-90.461291 211.304544 0 382.628514 171.308621 382.628514 382.629537C895.82834 606.244454 861.796246 692.476421 805.362956 759.14175z" fill="#272636" p-id="1937"></path></svg>'),
-        i(this, "copySvg", '<svg t="1749017229420" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="9184" width="200" height="200"><path d="M512 74.666667C270.933333 74.666667 74.666667 270.933333 74.666667 512S270.933333 949.333333 512 949.333333 949.333333 753.066667 949.333333 512 753.066667 74.666667 512 74.666667z m0 810.666666c-204.8 0-373.333333-168.533333-373.333333-373.333333S307.2 138.666667 512 138.666667 885.333333 307.2 885.333333 512 716.8 885.333333 512 885.333333z" fill="#666666" p-id="9185"></path><path d="M512 512m-42.666667 0a42.666667 42.666667 0 1 0 85.333334 0 42.666667 42.666667 0 1 0-85.333334 0Z" fill="#666666" p-id="9186"></path><path d="M341.333333 512m-42.666666 0a42.666667 42.666667 0 1 0 85.333333 0 42.666667 42.666667 0 1 0-85.333333 0Z" fill="#666666" p-id="9187"></path><path d="M682.666667 512m-42.666667 0a42.666667 42.666667 0 1 0 85.333333 0 42.666667 42.666667 0 1 0-85.333333 0Z" fill="#666666" p-id="9188"></path></svg>'),
-        i(this, "titleSvg", '<svg t="1747553289744" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="7507" width="200" height="200"><path d="M959.8 150.8c0-2.3-1.9-4.2-4.2-4.2H253.3c-2.3 0-4.2 1.9-4.2 4.2v115.9c0 2.3 1.9 4.2 4.2 4.2h702.3c2.3 0 4.2-1.9 4.2-4.2V150.8z" fill="" p-id="7508"></path><path d="M126.4 208.8m-62.2 0a62.2 62.2 0 1 0 124.4 0 62.2 62.2 0 1 0-124.4 0Z" fill="" p-id="7509"></path><path d="M851.5 453.7c0-2.1-1.8-3.9-3.9-3.9H252.9c-2.1 0-3.9 1.7-3.9 3.9v116.6c0 2.1 1.7 3.9 3.9 3.9h594.7c2.1 0 3.9-1.7 3.9-3.9V453.7z" fill="" p-id="7510"></path><path d="M126.4 512m-62.2 0a62.2 62.2 0 1 0 124.4 0 62.2 62.2 0 1 0-124.4 0Z" fill="" p-id="7511"></path><path d="M851.5 756.9c0-2.1-1.8-3.9-3.9-3.9H252.9c-2.1 0-3.9 1.8-3.9 3.9v116.6c0 2.1 1.7 3.9 3.9 3.9h594.7c2.1 0 3.9-1.7 3.9-3.9V756.9z" fill="" p-id="7512"></path><path d="M126.4 815.2m-62.2 0a62.2 62.2 0 1 0 124.4 0 62.2 62.2 0 1 0-124.4 0Z" fill="" p-id="7513"></path></svg>'),
-        i(this, "carNumSvg", '<svg t="1747552574854" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="3539" width="200" height="200"><path d="M920.337035 447.804932c-6.067182-6.067182-10.918677-11.643178-16.985859-17.71036l48.536436-30.334889-42.469254-109.207238-121.340579 12.134365c-6.067182-6.067182-6.067182-12.134365-12.134365-18.201547-12.134365-12.134365-18.201547-24.267706-24.267706-30.334889-24.26873-36.402071-30.334889-42.469254-54.603619-42.469254H339.116511c-18.201547 0-24.267706 6.067182-54.603619 42.469254-6.067182 6.067182-12.134365 18.201547-24.267706 30.334889 0 0-6.067182 6.067182-12.134365 18.201547l-115.27442-12.134365-48.536436 109.207238 51.090608 24.378223c-6.067182 6.067182-30.334889 34.660404-30.334889 34.660405l-15.542998 22.280446-12.282744 17.018605c-6.067182 12.134365-5.064342 10.868535-5.064342 29.070082v224.480635c0 36.402071 18.201547 60.670801 54.603618 60.670801h115.273397c36.402071 0 54.603619-24.267706 54.603619-54.603619v-18.201547h424.693562v18.201547c0 30.334889 18.201547 54.603619 54.603618 54.603619h115.273397c36.402071 0 60.670801-24.267706 60.670801-60.670801V539.300786c0-42.469254 0.685615-46.662763-11.44875-64.863287-4.731768-6.744611-11.94403-16.196891-20.101827-26.632567z m-35.186383-78.381161l-30.334889 18.201547-12.134365-12.134365c-6.067182-8.899694-12.134365-12.134365-12.134365-18.201547l42.469254-6.067183 12.134365 18.201548z m-533.899776-97.072873h339.755054l78.871325 103.140055H272.378527l78.872349-103.140055zM175.305655 357.290429h36.402071c-6.067182 6.067182-6.067182 12.134365-12.134365 18.201547l-18.201547 6.067183-18.201547-12.134365 12.135388-12.134365z m667.375743 394.35765h-54.603619V678.843936H242.043638v72.804143H132.837424V527.167444c0-12.134365-0.041956-20.662599 1.216711-23.556508 1.258667-2.89391 9.955746-16.924461 21.193695-29.173437l35.722596-38.276768h639.576607l21.917172 20.938891c6.067182 6.067182 21.847587 21.366633 25.712615 28.732392 7.621585 9.996678 6.973832 10.999518 13.041014 23.133883v242.682182h-48.536436zM242.043638 533.234627h133.474944v60.670801H242.043638v-60.670801z m412.559197 0h133.474944v60.670801H654.602835v-60.670801z" p-id="3540"></path></svg>'),
-        i(this, "downSvg", '<svg t="1747552626242" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4551" width="200" height="200"><path d="M641.6 660l-8.64-64 32-4.32a211.2 211.2 0 0 0-26.72-420.32 215.36 215.36 0 0 0-213.12 192 94.56 94.56 0 0 0 0 11.52v41.28h-64V384v-7.04a153.12 153.12 0 0 1 0-19.52A279.84 279.84 0 0 1 636.16 108H640A275.2 275.2 0 0 1 673.28 656z" fill="#333333" p-id="4552"></path><path d="M490.4 446.24l-7.52-39.84a182.4 182.4 0 0 1 107.52-162.88l29.12-13.28L646.08 288l-29.12 13.28a117.92 117.92 0 0 0-70.08 101.28l6.24 30.4zM392.96 652.32h-78.72A202.24 202.24 0 0 1 256 256l30.72-9.12 18.24 61.28-30.72 9.12a138.24 138.24 0 0 0 39.68 270.72h78.72zM479.2 512h64v320h-64z" fill="#333333" p-id="4553"></path><path d="M510.4 908l-156.32-147.68 43.84-46.4 112.48 106.08 112.8-106.08 43.84 46.56-156.64 147.52z" fill="#333333" p-id="4554"></path></svg>'),
-        i(this, "handleSvg", '<svg t="1749106236917" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="2628" width="200" height="200"><path d="M838 989.48a32 32 0 0 1-22.5-9.22L519.3 687.6 207.48 980.8a32 32 0 0 1-54-23.32V136.52A98.54 98.54 0 0 1 252 38.1h519.6A98.52 98.52 0 0 1 870 136.52v820.96a32 32 0 0 1-32 32zM252 102.1a34.46 34.46 0 0 0-34.42 34.42v746.96L498 619.84a32 32 0 0 1 44.42 0.56L806 880.88V136.52a34.46 34.46 0 0 0-34.4-34.42z" p-id="2629"></path><path d="M648 604.92a28 28 0 0 1-16.46-5.34l-112.84-82-112.84 82a28 28 0 0 1-43.08-31.32l43.1-132.64-112.84-82a28 28 0 0 1 16.46-50.66h139.48L492 170.34a28 28 0 0 1 53.26 0l43.1 132.64h139.48a28 28 0 0 1 16.46 50.66l-112.84 82 43.1 132.64A28 28 0 0 1 648 604.92z m-129.3-150a27.86 27.86 0 0 1 16.46 5.36l59.58 43.28-22.76-70a28 28 0 0 1 10.02-31.28l59.58-43.3H568a28 28 0 0 1-26.64-19.34l-22.76-70-22.76 70a28 28 0 0 1-26.62 19.34h-73.64l59.58 43.3a28 28 0 0 1 10.16 31.3l-22.76 70 59.58-43.28a28 28 0 0 1 16.46-5.32z" p-id="2630"></path></svg>'),
-        i(this, "siteSvg", '<svg t="1749107903569" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="12439" width="200" height="200"><path d="M882.758621 133.674884C882.758621 59.84828 822.91034 0 749.083736 0 675.25715 0 615.40887 59.84828 615.40887 133.674884 615.40887 163.358402 625.152318 191.656395 642.813352 214.773283L670.872117 193.336726 648.314739 166.170836 253.911693 493.666092 276.469054 520.831982 302.371681 496.834595C277.256669 469.725608 241.995388 453.990153 204.295574 453.990153 130.46897 453.990153 70.62069 513.838433 70.62069 587.66502 70.62069 661.491624 130.46897 721.339904 204.295574 721.339904 255.555319 721.339904 301.619094 692.208675 324.036714 647.136344L276.646223 663.002394 706.082022 877.440106 721.856794 845.849335 690.37312 829.861888C680.932829 848.452414 675.940882 869.068818 675.940882 890.325116 675.940882 964.15172 735.789162 1024 809.615766 1024 883.442353 1024 943.290633 964.15172 943.290633 890.325116 943.290633 874.050807 940.36533 858.125365 934.723584 843.16446L868.645076 868.0826C871.294817 875.109252 872.669943 882.595452 872.669943 890.325116 872.669943 925.14899 844.439623 953.37931 809.615766 953.37931 774.791892 953.37931 746.561571 925.14899 746.561571 890.325116 746.561571 880.245089 748.902894 870.575616 753.340487 861.836782L769.436089 830.140063 737.631567 814.258564 308.195769 599.820853 276.554929 584.02108 260.805279 615.686903C250.212352 636.984797 228.494795 650.719214 204.295574 650.719214 169.4717 650.719214 141.241379 622.488894 141.241379 587.66502 141.241379 552.841163 169.4717 524.610842 204.295574 524.610842 222.12269 524.610842 238.680594 531.99985 250.566444 544.829369L273.29589 569.363385 299.026432 547.997855 693.429478 220.502616 719.514606 198.84265 698.930882 171.900169C690.596687 160.991373 686.029559 147.727007 686.029559 133.674884 686.029559 98.85101 714.25988 70.62069 749.083736 70.62069 783.90761 70.62069 812.137931 98.85101 812.137931 133.674884 812.137931 148.208022 807.249885 161.899255 798.379608 172.996785L853.543883 217.089695C872.331935 193.584128 882.758621 164.379366 882.758621 133.674884ZM749.083736 196.729062C729.149334 196.729062 710.818745 187.460449 698.930882 171.900169L642.813352 214.773283C667.922573 247.639305 706.904064 267.349751 749.083736 267.349751 790.225902 267.349751 828.357809 248.599782 853.543883 217.089695L798.379608 172.996785C786.455411 187.915034 768.530291 196.729062 749.083736 196.729062ZM337.970441 587.66502C337.970441 553.551854 325.093782 521.360666 302.371681 496.834595L250.566444 544.829369C261.309069 556.424898 267.349751 571.526356 267.349751 587.66502 267.349751 597.565263 265.091478 607.069184 260.805279 615.686903L324.036714 647.136344C333.156105 628.801148 337.970441 608.540036 337.970441 587.66502ZM809.615766 756.650249C758.753986 756.650249 712.986006 785.330865 690.37312 829.861888L753.340487 861.836782C764.027215 840.791658 785.603302 827.270938 809.615766 827.270938 836.08553 827.270938 859.461862 843.730308 868.645076 868.0826L934.723584 843.16446C915.252259 791.529949 865.714547 756.650249 809.615766 756.650249Z" fill="#389BFF" p-id="12440"></path></svg>'),
-        i(this, "videoSvg", '<svg t="1749003664455" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1952" width="200" height="200"><path d="M825.6 153.6H198.4C124.5 153.6 64 214.1 64 288v448c0 73.9 60.5 134.4 134.4 134.4h627.2c73.9 0 134.4-60.5 134.4-134.4V288c0-73.9-60.5-134.4-134.4-134.4z m-138.2 44.8l112 112H706l-112-112h93.4z m-156.8 0l112 112H526.7l-112-112h115.9z m-179.2 0l112 112H347.5l-112-112h115.9zM108.8 288c0-41.4 28.4-76.1 66.7-86.3l108.7 108.7H108.8V288z m806.4 448c0 49.4-40.2 89.6-89.6 89.6H198.4c-49.4 0-89.6-40.2-89.6-89.6V355.2h806.4V736z m0-425.6h-52.5l-112-112h74.9c49.4 0 89.6 40.2 89.6 89.6v22.4z" p-id="1953"></path><path d="M454 687.2l149.3-77.6c27.5-13.8 27.5-53 0-66.8L468 472.2c-31.2-15.6-68 7.1-68 42v139.6c0 27.8 29.2 45.8 54 33.4zM444.8 512l134.4 67.2-134.4 67.2V512z" p-id="1954"></path></svg>'),
-        i(this, "screenSvg", '<svg t="1750691468062" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="2693" width="200" height="200"><path d="M288 160a64 64 0 0 0-64 64v576a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64v-576a64 64 0 0 0-64-64h-448m0-64h448a128 128 0 0 1 128 128v576a128 128 0 0 1-128 128h-448a128 128 0 0 1-128-128v-576a128 128 0 0 1 128-128z" fill="#4078FD" p-id="2694"></path><path d="M416 352m-64 0a64 64 0 1 0 128 0 64 64 0 1 0-128 0Z" fill="#FE9C23" p-id="2695"></path><path d="M352 732.448a32 32 0 0 1-32-32v-160a32 32 0 0 1 44.224-29.568l130.112 53.632 153.952-169.984a32 32 0 0 1 55.712 21.472v284.448a32 32 0 0 1-32 32z m0-32h320z" fill="#4078FD" opacity=".2" p-id="2696"></path><path d="M672 416l-169.088 186.656-150.912-62.208v160h320V416m0-32a32 32 0 0 1 32 32v284.448a32 32 0 0 1-32 32h-320a32 32 0 0 1-32-32v-160a32 32 0 0 1 44.192-29.6l130.112 53.632 153.984-169.984a32 32 0 0 1 23.712-10.496z" fill="#4078FD" p-id="2697"></path></svg>'),
+        i(this, "pluginManager", null), i(this, "settingSvg", '<svg t="1760926954860" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4947" width="200" height="200"><path d="M511.099222 365.825763c-80.7786 0-146.26579 65.482515-146.26579 146.259556 0 80.7786 65.48719 146.259556 146.26579 146.259556 80.777041 0 146.259556-65.480957 146.259556-146.259556C657.358779 431.308278 591.876263 365.825763 511.099222 365.825763L511.099222 365.825763zM511.099222 585.215097c-40.391637 0-73.136012-32.742816-73.136012-73.129778 0-40.391637 32.742816-73.129778 73.136012-73.129778 40.386962 0 73.129778 32.738141 73.129778 73.129778C584.229 552.472281 551.486184 585.215097 511.099222 585.215097L511.099222 585.215097zM511.099222 585.215097M900.893017 568.24369l-26.451395-15.268032c3.065451-27.021784 3.138697-54.472139 0.077922-81.822754l26.373473-15.225955c69.953678-40.391637 93.920921-129.844512 53.533959-199.799749-40.390079-69.95212-129.839837-93.925596-199.799749-53.533959l-26.373473 15.225955c-22.153219-16.330888-45.963059-29.99217-70.896534-40.843585l0-30.545416c0-80.777041-65.48719-146.259556-146.26579-146.259556-80.7786 0-146.259556 65.482515-146.259556 146.259556l0 30.515806c-12.377127 5.421811-24.587501 11.55583-36.562551 18.473743-11.97505 6.917913-23.396854 14.420242-34.277879 22.432179l-26.431136-15.258682c-69.958353-40.391637-159.406553-16.424395-199.79819 53.533959C27.378272 326.082437 51.343956 415.535311 121.299193 455.922273l26.449837 15.275825c-3.063892 27.020226-3.137139 54.465905-0.077922 81.822754l-26.373473 15.224397c-69.953678 40.391637-93.920921 129.841395-53.533959 199.799749 40.391637 69.95212 129.839837 93.920921 199.79819 53.533959l26.375032-15.224397c22.153219 16.32933 45.963059 29.984378 70.896534 40.843585l0 30.537624c0 80.7786 65.48719 146.26579 146.26579 146.26579 80.777041 0 146.259556-65.48719 146.259556-146.26579l0-30.515806c12.377127-5.415577 24.587501-11.55583 36.567226-18.467509 11.97505-6.917913 23.398412-14.420242 34.277879-22.432179l26.423343 15.258682c69.959912 40.391637 159.408111 16.418162 199.799749-53.533959C994.813938 698.085085 970.848254 608.635327 900.893017 568.24369L900.893017 568.24369zM891.096666 731.474653c-20.198936 34.982294-64.923035 46.962019-99.900654 26.770875l-63.331869-36.567226 0 0 0 0-7.988562-4.611422c-18.134004 18.450366-39.024886 34.787489-62.516805 48.353705-23.49971 13.559983-48.091888 23.482568-73.129778 29.964118l0 9.222846 0 0 0 65.828489 0 7.301289c0 40.391637-32.742816 73.136012-73.136012 73.136012-40.386962 0-73.129778-32.742816-73.129778-73.136012l0-7.402588 0-65.72719 0 0 0-9.300768c-50.682014-13.090892-97.855981-39.682547-135.652816-78.232109l-7.983886 4.606747 0 0-63.331869 36.567226c-34.977618 20.191144-79.706394 8.206743-99.900654-26.770875-20.192702-34.977618-8.206743-79.701718 26.770875-99.899095l6.341291-3.657657 0 0 64.972905-37.516316c-14.487254-52.005129-13.929333-106.151555 0.073247-156.593569l-8.057133-4.650384 0 0-63.331869-36.567226c-34.982294-20.192702-46.963578-64.923035-26.770875-99.900654 20.192702-34.97606 64.923035-46.962019 99.900654-26.763083l6.324148 3.649866 0 0 64.996282 37.528784c18.132445-18.450366 39.024886-34.790606 62.516805-48.353705 23.493477-13.559983 48.085654-23.485685 73.129778-29.964118l0-9.229079L437.960093 153.739276l0-7.309082c0-40.385404 32.742816-73.129778 73.129778-73.129778 40.391637 0 73.129778 32.744375 73.129778 73.129778l0 7.404147 0 65.72719 0 9.307001c50.686689 13.086217 97.862215 39.684106 135.657491 78.232109l48.487732-27.997368 22.828023-13.176607c34.977618-20.192702 79.701718-8.212977 99.89442 26.763083 20.198936 34.982294 8.212977 79.706394-26.764641 99.900654l-30.822819 17.79738-32.50905 18.769847 0 0 0 0-7.983886 4.605189c14.488813 52.009805 13.929333 106.159347-0.077922 156.599803l64.979139 37.511641 0 0 6.414537 3.701294C899.303409 651.772936 911.289368 696.498594 891.096666 731.474653L891.096666 731.474653zM891.096666 731.474653M197.330785 324.240361c-1.932465 3.232203-3.824411 6.497135-5.649343 9.785442L197.330785 324.240361 197.330785 324.240361zM197.330785 324.240361M830.515443 690.133926l-5.655577 9.804144C826.793889 696.699632 828.685835 693.433143 830.515443 690.133926L830.515443 690.133926zM830.515443 690.133926M505.297151 146.430195l11.304921 0C512.835324 146.369416 509.067017 146.374091 505.297151 146.430195L505.297151 146.430195zM505.297151 146.430195M516.898176 877.740444l-11.31583 0C509.350653 877.796547 513.125193 877.796547 516.898176 877.740444L516.898176 877.740444zM516.898176 877.740444" fill="#272636" p-id="4948"></path></svg>'), 
+        i(this, "editSvg", '<svg t="1760920692801" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="3545" width="200" height="200"><path d="M1013.929675 128.26571a143.759824 143.759824 0 0 1 10.44409 53.858738 84.576649 84.576649 0 0 1-5.836403 30.308339 92.870485 92.870485 0 0 1-18.635533 29.284408 1314.726599 1314.726599 0 0 1-24.983901 24.574329c-7.372299 7.06512-13.82306 13.311095-19.249891 18.737926-6.143582 6.143582-12.082378 11.672806-17.406817 16.382886L720.266444 82.598415c9.317766-8.601015 20.478607-18.942712 33.277737-31.02509s23.448006-21.604931 31.946628-28.67005a102.085858 102.085858 0 0 1 68.193763-22.731255c11.263234 0.307179 22.116896 2.047861 32.560985 5.222045 10.546483 3.071791 19.659463 6.655547 27.441334 10.546483 16.280493 8.601015 34.301667 23.550399 54.063524 45.052936 19.864249 21.502538 35.120812 43.82422 46.076867 67.272226z m-907.20231 570.943576l32.560986-33.38013c17.099637-17.509209 38.397389-39.216533 64.098041-64.917186l84.986221-85.395793 94.303987-94.815953 250.350976-251.477299L850.817567 389.163169 600.46659 640.640468l-93.177663 94.815953c-31.02509 30.410732-58.978389 58.364031-83.859898 83.655111-24.779115 25.29108-45.360116 46.17926-61.743001 62.562146a504.797674 504.797674 0 0 1-55.804206 50.274981c-10.239304 7.884264-20.581 14.130239-31.537055 18.737926a507.152714 507.152714 0 0 1-47.715156 19.86425 1609.311367 1609.311367 0 0 1-131.063087 42.185931c-20.478607 5.426831-35.837563 8.908194-45.974474 10.546483-20.88818 2.35504-34.813633-0.819144-41.981145-9.42016-6.860333-8.601015-8.805801-22.93604-5.73401-43.312254a396.261054 396.261054 0 0 1 11.058448-47.305584c5.836403-20.683394 12.082378-42.185931 18.635532-64.40522 6.553154-22.219289 13.003916-42.697897 19.249891-61.435822 6.143582-18.635533 11.263234-31.537055 15.15417-38.602176 4.607687-10.853662 9.829732-20.785787 15.666135-29.796373a192.49891 192.49891 0 0 1 25.086294-29.796374z" fill="#FF9500" p-id="3546"></path></svg>'), 
+        i(this, "deleteSvg", '<svg t="1760921450746" class="jhs-icon icon" viewBox="0 0 1194 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4530" width="200" height="200"><path d="M761.086847 36.028779s309.754321-147.538628 424.952209 231.50509c2.047962 6.570546 71.337359 253.862013-220.838618 415.139055-12.970429 7.167869-267.515096 145.746661-370.339877 341.327076 0 0-90.963666-205.649563-393.379455-351.566888-6.399883-3.071944-304.549083-156.583796-163.751664-487.2444 3.669266-8.533177 163.666333-336.20717 466.423449-99.411511l24.575549 27.391498L387.931021 324.279495l237.648977 159.570408-109.139333 145.746661L625.579998 849.069874l-30.719437-205.820227 166.226286-169.81022-216.486698-168.103585L761.086847 36.028779z" fill="#F4382E" p-id="4531"></path></svg>'), 
+        i(this, "checkSvg", '<svg t="1760921633527" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5603" width="200" height="200"><path d="M924.928 544A413.76 413.76 0 0 1 544 924.736v3.264h-64v-3.2A413.696 413.696 0 0 1 99.072 544H96v-64h3.072A413.696 413.696 0 0 1 480 99.2V96h64v3.2a413.76 413.76 0 0 1 380.928 380.8h3.072v64h-3.072z m-64-64A350.016 350.016 0 0 0 544 163.2V288h-64V163.2A350.016 350.016 0 0 0 163.072 480H288v64H163.072A350.016 350.016 0 0 0 480 860.8V736h64v124.8a350.016 350.016 0 0 0 316.928-316.8H736v-64h124.928zM512 544a32 32 0 1 1 32-32 32 32 0 0 1-32 32z" fill="#333333" p-id="5604"></path></svg>'), 
+        i(this, "actressSvg", '<svg t="1760926744637" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1948" width="200" height="200"><path d="M265.950168 668.467036V209.809493A209.809493 209.809493 0 0 1 475.759661 0h40.949536A209.809493 209.809493 0 0 1 726.564189 209.809493v440.435" p-id="1949"></path><path d="M916.558657 825.861124a193.463804 193.463804 0 0 0-137.442564-155.83573l-186.001889-45.795231-10.487631-124.293214H424.106373L412.231008 624.025416l-170.623063 44.44162a193.452429 193.452429 0 0 0-133.666108 154.698244L76.410695 1023.192384h871.189985z" fill="#FFE7D9" p-id="1950"></path><path d="M668.472724 265.682859c68.431223-29.187919 96.140409 100.349111 5.20969 151.774902z" fill="#FFCFB5" p-id="1951"></path><path d="M676.378259 334.421203c1.137487-99.814492-38.674561-172.158671-38.674561-172.15867l-59.740822 11.920865a493.805894 493.805894 0 0 1-80.761583 9.099896 493.669396 493.669396 0 0 1-80.761583-9.099896l-59.683948-11.88674s-39.812048 72.344179-38.776934 172.15867l-1.080613 92.05683c5.209691 56.271486 92.4777 121.381247 195.022161 119.163147 61.196805 0.034125 165.59537-51.573665 165.59537-119.197272z" fill="#FFE7D9" p-id="1952"></path><path d="M322.198905 274.703131c-68.419848-29.187919-96.140409 100.349111-5.209691 151.774902z" fill="#FFCFB5" p-id="1953"></path><path d="M297.390311 812.461526H742.034014a38.458438 38.458438 0 0 1 38.458438 38.458439V1020.325917H258.931873V850.90859a38.458438 38.458438 0 0 1 38.458438-38.447064z" fill="#FFD527" p-id="1954"></path><path d="M690.539973 92.284327c-20.645391 84.287793-275.613121 235.323328-424.589805 117.525166l104.955934-95.548915 139.399042-64.529643z" p-id="1955"></path><path d="M285.321573 383.708519h33.624119v177.118114h-33.624119zM675.855015 383.708519h33.624118v177.118114h-33.624118z" fill="#FFD527" p-id="1956"></path></svg>'), 
+        i(this, "newSvg", '<svg t="1760926857487" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="3954" width="200" height="200"><path d="M508.330667 733.994667c-11.008-7.338667-13.44-17.109333-7.338667-29.333334 28.117333-37.888 41.557333-98.986667 40.341333-183.317333v-165.013333c0-14.656 7.338667-23.210667 21.994667-25.664 37.888-1.216 82.496-5.504 133.845333-12.842667 13.44-2.432 21.376 3.072 23.829334 16.512 1.216 12.224-4.266667 19.562667-16.512 21.994667a1787.093333 1787.093333 0 0 1-113.664 11.008c-6.101333 0-9.173333 3.669333-9.173334 10.986666v84.330667h135.68c12.224 1.237333 18.944 7.957333 20.16 20.181333-1.216 10.986667-7.936 17.109333-20.16 18.346667h-36.672v223.658667c-1.216 12.202667-7.936 18.944-20.16 20.16-11.008-1.216-17.109333-7.957333-18.346666-20.16V501.162667h-60.48v18.346666c1.216 92.885333-13.44 161.92-44.010667 207.146667-6.101333 12.224-15.893333 14.677333-29.333333 7.338667z m-131.989334-282.325334c-1.237333 0-2.453333 0.618667-3.669333 1.834667h45.824a522.666667 522.666667 0 0 0 16.512-31.168c7.317333-12.224 12.224-20.778667 14.656-25.664 6.122667-11.008 15.274667-14.677333 27.52-11.008 9.770667 6.122667 12.202667 14.058667 7.317333 23.829333-4.906667 9.792-13.44 24.448-25.664 44.010667h49.493334c9.770667 1.216 15.274667 6.72 16.512 16.490667-1.237333 11.008-6.741333 17.109333-16.512 18.346666h-82.496a12.437333 12.437333 0 0 1 3.669333 9.173334v38.485333h69.653333c9.792 1.216 15.296 6.72 16.512 16.490667-1.216 11.008-6.72 17.130667-16.512 18.346666h-69.653333v108.16c0 34.218667-15.274667 51.946667-45.845333 53.162667h-16.490667a195.157333 195.157333 0 0 1-20.16 1.834667c-12.224 0-19.562667-6.72-22.016-20.16 1.237333-12.224 7.338667-18.944 18.346667-20.16 2.432 0 6.101333 0.597333 10.986666 1.834666h11.008c15.893333 0 23.829333-8.554667 23.829334-25.685333v-98.986667H314.026667c-11.008-1.216-17.109333-7.338667-18.346667-18.346666 1.237333-9.770667 7.338667-15.274667 18.346667-16.490667h75.157333V497.493333c0-3.669333 1.216-6.72 3.669333-9.173333h-89.813333c-11.029333-1.216-17.130667-7.317333-18.346667-18.325333 1.216-9.770667 7.317333-15.274667 18.346667-16.490667h56.810667c-3.669333-1.216-6.72-4.266667-9.173334-9.173333-1.216-1.216-3.050667-4.266667-5.482666-9.173334a758.336 758.336 0 0 0-14.677334-23.829333c-4.885333-9.770667-3.050667-17.706667 5.504-23.829333 11.008-3.669333 19.562667-1.216 25.664 7.338666 2.453333 2.432 6.122667 7.338667 11.008 14.656 6.101333 8.554667 9.770667 14.08 10.986667 16.512 4.906667 9.770667 2.453333 18.346667-7.317333 25.664z m-60.501333-71.509333c-9.792-1.216-15.274667-7.317333-16.512-18.346667 1.237333-9.749333 6.72-15.253333 16.512-16.490666h75.157333c-3.669333-12.202667-7.338667-21.973333-10.986666-29.333334-1.237333-12.202667 3.648-19.541333 14.656-21.973333 12.224-2.453333 21.397333 1.216 27.52 10.986667 0 1.216 0.597333 3.669333 1.813333 7.338666 4.906667 15.872 9.173333 26.88 12.842667 32.981334h60.48c11.008 1.237333 17.130667 6.741333 18.346666 16.512-1.216 11.008-7.338667 17.109333-18.346666 18.346666h-181.482667z m-14.677333 311.68c-8.533333-6.122667-10.986667-14.08-7.338667-23.829333a1659.648 1659.648 0 0 0 33.002667-66.005334c4.906667-9.792 12.224-12.842667 22.016-9.173333 9.770667 4.906667 13.44 12.224 10.986666 21.994667-3.669333 6.122667-9.173333 17.728-16.490666 34.837333-8.554667 15.893333-14.677333 27.52-18.346667 34.837333-4.885333 8.554667-12.821333 11.008-23.829333 7.338667z m201.664-25.664c-9.770667 4.885333-18.346667 2.432-25.664-7.338667a1138.56 1138.56 0 0 1-27.498667-44.010666c-4.885333-8.533333-3.050667-16.490667 5.504-23.829334 9.770667-3.669333 18.346667-1.216 25.664 7.338667l14.677333 21.994667c6.101333 9.770667 10.389333 17.109333 12.821334 21.994666 4.906667 8.554667 3.050667 16.512-5.504 23.850667z" fill="#333333" p-id="3955"></path><path d="M675.328 117.717333A425.429333 425.429333 0 0 0 512 85.333333C276.352 85.333333 85.333333 276.352 85.333333 512s191.018667 426.666667 426.666667 426.666667 426.666667-191.018667 426.666667-426.666667c0-56.746667-11.093333-112-32.384-163.328a21.333333 21.333333 0 0 0-39.402667 16.341333A382.762667 382.762667 0 0 1 896 512c0 212.074667-171.925333 384-384 384S128 724.074667 128 512 299.925333 128 512 128c51.114667 0 100.8 9.984 146.986667 29.12a21.333333 21.333333 0 0 0 16.341333-39.402667z" fill="#333333" p-id="3956"></path></svg>'), 
+        i(this, "refreshSvg", '<svg t="1760926993643" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="5942" width="200" height="200"><path d="M511.966722 0a511.966722 511.966722 0 1 0 179.828311 32.445891l-22.46254 59.964102A447.970882 447.970882 0 1 1 511.966722 63.99584a31.99792 31.99792 0 0 0 0-63.99584z" fill="#333333" p-id="5943"></path><path d="M649.2378 9.151405A30.909991 30.909991 0 0 1 671.316364 0h193.267438a31.99792 31.99792 0 0 1 31.357962 31.99792c0 17.662852-13.759106 31.99792-31.357962 31.99792H703.954243v160.629559a31.99792 31.99792 0 0 1-31.99792 31.357962 31.485953 31.485953 0 0 1-31.99792-31.357962V31.357962c0-8.511447 3.647763-16.318939 9.343392-21.950573z" fill="#333333" p-id="5944"></path></svg>'), 
+        i(this, "blacklistSvg", '<svg t="1761386375897" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1936" width="200" height="200"><path d="M513.199827 65.667605c-246.537999 0-446.399933 199.861934-446.399933 446.399933 0 246.553349 199.861934 446.399933 446.399933 446.399933 246.553349 0 446.399933-199.846584 446.399933-446.399933C959.599759 265.529539 759.753175 65.667605 513.199827 65.667605zM513.199827 894.697075c-211.320916 0-382.629537-171.322947-382.629537-382.628514 0-94.183056 34.029024-180.417069 90.461291-247.080352l165.389818 165.389818c4.320399 39.651069 26.816762 73.840752 58.981323 94.068446-72.189136 27.369348-123.517151 97.156784-123.517151 178.936345l337.541643 0 100.846826 100.846826C693.608709 860.664981 607.375719 894.697075 513.199827 894.697075zM805.362956 759.14175 697.264982 651.0448c-16.556071-58.332547-60.10082-105.306394-116.275213-126.601396 35.888372-22.570042 59.752896-62.511729 59.752896-108.032482 0-70.436212-57.108672-127.542838-127.542838-127.542838-48.218188 0-90.184999 26.765597-111.865787 66.245773L266.120498 219.900316c66.663282-56.432267 152.897296-90.461291 247.079328-90.461291 211.304544 0 382.628514 171.308621 382.628514 382.629537C895.82834 606.244454 861.796246 692.476421 805.362956 759.14175z" fill="#272636" p-id="1937"></path></svg>'), 
+        i(this, "copySvg", '<svg t="1749017229420" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="9184" width="200" height="200"><path d="M512 74.666667C270.933333 74.666667 74.666667 270.933333 74.666667 512S270.933333 949.333333 512 949.333333 949.333333 753.066667 949.333333 512 753.066667 74.666667 512 74.666667z m0 810.666666c-204.8 0-373.333333-168.533333-373.333333-373.333333S307.2 138.666667 512 138.666667 885.333333 307.2 885.333333 512 716.8 885.333333 512 885.333333z" fill="#666666" p-id="9185"></path><path d="M512 512m-42.666667 0a42.666667 42.666667 0 1 0 85.333334 0 42.666667 42.666667 0 1 0-85.333334 0Z" fill="#666666" p-id="9186"></path><path d="M341.333333 512m-42.666666 0a42.666667 42.666667 0 1 0 85.333333 0 42.666667 42.666667 0 1 0-85.333333 0Z" fill="#666666" p-id="9187"></path><path d="M682.666667 512m-42.666667 0a42.666667 42.666667 0 1 0 85.333333 0 42.666667 42.666667 0 1 0-85.333333 0Z" fill="#666666" p-id="9188"></path></svg>'), 
+        i(this, "titleSvg", '<svg t="1747553289744" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="7507" width="200" height="200"><path d="M959.8 150.8c0-2.3-1.9-4.2-4.2-4.2H253.3c-2.3 0-4.2 1.9-4.2 4.2v115.9c0 2.3 1.9 4.2 4.2 4.2h702.3c2.3 0 4.2-1.9 4.2-4.2V150.8z" fill="" p-id="7508"></path><path d="M126.4 208.8m-62.2 0a62.2 62.2 0 1 0 124.4 0 62.2 62.2 0 1 0-124.4 0Z" fill="" p-id="7509"></path><path d="M851.5 453.7c0-2.1-1.8-3.9-3.9-3.9H252.9c-2.1 0-3.9 1.7-3.9 3.9v116.6c0 2.1 1.7 3.9 3.9 3.9h594.7c2.1 0 3.9-1.7 3.9-3.9V453.7z" fill="" p-id="7510"></path><path d="M126.4 512m-62.2 0a62.2 62.2 0 1 0 124.4 0 62.2 62.2 0 1 0-124.4 0Z" fill="" p-id="7511"></path><path d="M851.5 756.9c0-2.1-1.8-3.9-3.9-3.9H252.9c-2.1 0-3.9 1.8-3.9 3.9v116.6c0 2.1 1.7 3.9 3.9 3.9h594.7c2.1 0 3.9-1.7 3.9-3.9V756.9z" fill="" p-id="7512"></path><path d="M126.4 815.2m-62.2 0a62.2 62.2 0 1 0 124.4 0 62.2 62.2 0 1 0-124.4 0Z" fill="" p-id="7513"></path></svg>'), 
+        i(this, "carNumSvg", '<svg t="1747552574854" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="3539" width="200" height="200"><path d="M920.337035 447.804932c-6.067182-6.067182-10.918677-11.643178-16.985859-17.71036l48.536436-30.334889-42.469254-109.207238-121.340579 12.134365c-6.067182-6.067182-6.067182-12.134365-12.134365-18.201547-12.134365-12.134365-18.201547-24.267706-24.267706-30.334889-24.26873-36.402071-30.334889-42.469254-54.603619-42.469254H339.116511c-18.201547 0-24.267706 6.067182-54.603619 42.469254-6.067182 6.067182-12.134365 18.201547-24.267706 30.334889 0 0-6.067182 6.067182-12.134365 18.201547l-115.27442-12.134365-48.536436 109.207238 51.090608 24.378223c-6.067182 6.067182-30.334889 34.660404-30.334889 34.660405l-15.542998 22.280446-12.282744 17.018605c-6.067182 12.134365-5.064342 10.868535-5.064342 29.070082v224.480635c0 36.402071 18.201547 60.670801 54.603618 60.670801h115.273397c36.402071 0 54.603619-24.267706 54.603619-54.603619v-18.201547h424.693562v18.201547c0 30.334889 18.201547 54.603619 54.603618 54.603619h115.273397c36.402071 0 60.670801-24.267706 60.670801-60.670801V539.300786c0-42.469254 0.685615-46.662763-11.44875-64.863287-4.731768-6.744611-11.94403-16.196891-20.101827-26.632567z m-35.186383-78.381161l-30.334889 18.201547-12.134365-12.134365c-6.067182-8.899694-12.134365-12.134365-12.134365-18.201547l42.469254-6.067183 12.134365 18.201548z m-533.899776-97.072873h339.755054l78.871325 103.140055H272.378527l78.872349-103.140055zM175.305655 357.290429h36.402071c-6.067182 6.067182-6.067182 12.134365-12.134365 18.201547l-18.201547 6.067183-18.201547-12.134365 12.135388-12.134365z m667.375743 394.35765h-54.603619V678.843936H242.043638v72.804143H132.837424V527.167444c0-12.134365-0.041956-20.662599 1.216711-23.556508 1.258667-2.89391 9.955746-16.924461 21.193695-29.173437l35.722596-38.276768h639.576607l21.917172 20.938891c6.067182 6.067182 21.847587 21.366633 25.712615 28.732392 7.621585 9.996678 6.973832 10.999518 13.041014 23.133883v242.682182h-48.536436zM242.043638 533.234627h133.474944v60.670801H242.043638v-60.670801z m412.559197 0h133.474944v60.670801H654.602835v-60.670801z" p-id="3540"></path></svg>'), 
+        i(this, "downSvg", '<svg t="1747552626242" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="4551" width="200" height="200"><path d="M641.6 660l-8.64-64 32-4.32a211.2 211.2 0 0 0-26.72-420.32 215.36 215.36 0 0 0-213.12 192 94.56 94.56 0 0 0 0 11.52v41.28h-64V384v-7.04a153.12 153.12 0 0 1 0-19.52A279.84 279.84 0 0 1 636.16 108H640A275.2 275.2 0 0 1 673.28 656z" fill="#333333" p-id="4552"></path><path d="M490.4 446.24l-7.52-39.84a182.4 182.4 0 0 1 107.52-162.88l29.12-13.28L646.08 288l-29.12 13.28a117.92 117.92 0 0 0-70.08 101.28l6.24 30.4zM392.96 652.32h-78.72A202.24 202.24 0 0 1 256 256l30.72-9.12 18.24 61.28-30.72 9.12a138.24 138.24 0 0 0 39.68 270.72h78.72zM479.2 512h64v320h-64z" fill="#333333" p-id="4553"></path><path d="M510.4 908l-156.32-147.68 43.84-46.4 112.48 106.08 112.8-106.08 43.84 46.56-156.64 147.52z" fill="#333333" p-id="4554"></path></svg>'), 
+        i(this, "handleSvg", '<svg t="1749106236917" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="2628" width="200" height="200"><path d="M838 989.48a32 32 0 0 1-22.5-9.22L519.3 687.6 207.48 980.8a32 32 0 0 1-54-23.32V136.52A98.54 98.54 0 0 1 252 38.1h519.6A98.52 98.52 0 0 1 870 136.52v820.96a32 32 0 0 1-32 32zM252 102.1a34.46 34.46 0 0 0-34.42 34.42v746.96L498 619.84a32 32 0 0 1 44.42 0.56L806 880.88V136.52a34.46 34.46 0 0 0-34.4-34.42z" p-id="2629"></path><path d="M648 604.92a28 28 0 0 1-16.46-5.34l-112.84-82-112.84 82a28 28 0 0 1-43.08-31.32l43.1-132.64-112.84-82a28 28 0 0 1 16.46-50.66h139.48L492 170.34a28 28 0 0 1 53.26 0l43.1 132.64h139.48a28 28 0 0 1 16.46 50.66l-112.84 82 43.1 132.64A28 28 0 0 1 648 604.92z m-129.3-150a27.86 27.86 0 0 1 16.46 5.36l59.58 43.28-22.76-70a28 28 0 0 1 10.02-31.28l59.58-43.3H568a28 28 0 0 1-26.64-19.34l-22.76-70-22.76 70a28 28 0 0 1-26.62 19.34h-73.64l59.58 43.3a28 28 0 0 1 10.16 31.3l-22.76 70 59.58-43.28a28 28 0 0 1 16.46-5.32z" p-id="2630"></path></svg>'), 
+        i(this, "siteSvg", '<svg t="1749107903569" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="12439" width="200" height="200"><path d="M882.758621 133.674884C882.758621 59.84828 822.91034 0 749.083736 0 675.25715 0 615.40887 59.84828 615.40887 133.674884 615.40887 163.358402 625.152318 191.656395 642.813352 214.773283L670.872117 193.336726 648.314739 166.170836 253.911693 493.666092 276.469054 520.831982 302.371681 496.834595C277.256669 469.725608 241.995388 453.990153 204.295574 453.990153 130.46897 453.990153 70.62069 513.838433 70.62069 587.66502 70.62069 661.491624 130.46897 721.339904 204.295574 721.339904 255.555319 721.339904 301.619094 692.208675 324.036714 647.136344L276.646223 663.002394 706.082022 877.440106 721.856794 845.849335 690.37312 829.861888C680.932829 848.452414 675.940882 869.068818 675.940882 890.325116 675.940882 964.15172 735.789162 1024 809.615766 1024 883.442353 1024 943.290633 964.15172 943.290633 890.325116 943.290633 874.050807 940.36533 858.125365 934.723584 843.16446L868.645076 868.0826C871.294817 875.109252 872.669943 882.595452 872.669943 890.325116 872.669943 925.14899 844.439623 953.37931 809.615766 953.37931 774.791892 953.37931 746.561571 925.14899 746.561571 890.325116 746.561571 880.245089 748.902894 870.575616 753.340487 861.836782L769.436089 830.140063 737.631567 814.258564 308.195769 599.820853 276.554929 584.02108 260.805279 615.686903C250.212352 636.984797 228.494795 650.719214 204.295574 650.719214 169.4717 650.719214 141.241379 622.488894 141.241379 587.66502 141.241379 552.841163 169.4717 524.610842 204.295574 524.610842 222.12269 524.610842 238.680594 531.99985 250.566444 544.829369L273.29589 569.363385 299.026432 547.997855 693.429478 220.502616 719.514606 198.84265 698.930882 171.900169C690.596687 160.991373 686.029559 147.727007 686.029559 133.674884 686.029559 98.85101 714.25988 70.62069 749.083736 70.62069 783.90761 70.62069 812.137931 98.85101 812.137931 133.674884 812.137931 148.208022 807.249885 161.899255 798.379608 172.996785L853.543883 217.089695C872.331935 193.584128 882.758621 164.379366 882.758621 133.674884ZM749.083736 196.729062C729.149334 196.729062 710.818745 187.460449 698.930882 171.900169L642.813352 214.773283C667.922573 247.639305 706.904064 267.349751 749.083736 267.349751 790.225902 267.349751 828.357809 248.599782 853.543883 217.089695L798.379608 172.996785C786.455411 187.915034 768.530291 196.729062 749.083736 196.729062ZM337.970441 587.66502C337.970441 553.551854 325.093782 521.360666 302.371681 496.834595L250.566444 544.829369C261.309069 556.424898 267.349751 571.526356 267.349751 587.66502 267.349751 597.565263 265.091478 607.069184 260.805279 615.686903L324.036714 647.136344C333.156105 628.801148 337.970441 608.540036 337.970441 587.66502ZM809.615766 756.650249C758.753986 756.650249 712.986006 785.330865 690.37312 829.861888L753.340487 861.836782C764.027215 840.791658 785.603302 827.270938 809.615766 827.270938 836.08553 827.270938 859.461862 843.730308 868.645076 868.0826L934.723584 843.16446C915.252259 791.529949 865.714547 756.650249 809.615766 756.650249Z" fill="#389BFF" p-id="12440"></path></svg>'), 
+        i(this, "videoSvg", '<svg t="1749003664455" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="1952" width="200" height="200"><path d="M825.6 153.6H198.4C124.5 153.6 64 214.1 64 288v448c0 73.9 60.5 134.4 134.4 134.4h627.2c73.9 0 134.4-60.5 134.4-134.4V288c0-73.9-60.5-134.4-134.4-134.4z m-138.2 44.8l112 112H706l-112-112h93.4z m-156.8 0l112 112H526.7l-112-112h115.9z m-179.2 0l112 112H347.5l-112-112h115.9zM108.8 288c0-41.4 28.4-76.1 66.7-86.3l108.7 108.7H108.8V288z m806.4 448c0 49.4-40.2 89.6-89.6 89.6H198.4c-49.4 0-89.6-40.2-89.6-89.6V355.2h806.4V736z m0-425.6h-52.5l-112-112h74.9c49.4 0 89.6 40.2 89.6 89.6v22.4z" p-id="1953"></path><path d="M454 687.2l149.3-77.6c27.5-13.8 27.5-53 0-66.8L468 472.2c-31.2-15.6-68 7.1-68 42v139.6c0 27.8 29.2 45.8 54 33.4zM444.8 512l134.4 67.2-134.4 67.2V512z" p-id="1954"></path></svg>'), 
+        i(this, "screenSvg", '<svg t="1750691468062" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="2693" width="200" height="200"><path d="M288 160a64 64 0 0 0-64 64v576a64 64 0 0 0 64 64h448a64 64 0 0 0 64-64v-576a64 64 0 0 0-64-64h-448m0-64h448a128 128 0 0 1 128 128v576a128 128 0 0 1-128 128h-448a128 128 0 0 1-128-128v-576a128 128 0 0 1 128-128z" fill="#4078FD" p-id="2694"></path><path d="M416 352m-64 0a64 64 0 1 0 128 0 64 64 0 1 0-128 0Z" fill="#FE9C23" p-id="2695"></path><path d="M352 732.448a32 32 0 0 1-32-32v-160a32 32 0 0 1 44.224-29.568l130.112 53.632 153.952-169.984a32 32 0 0 1 55.712 21.472v284.448a32 32 0 0 1-32 32z m0-32h320z" fill="#4078FD" opacity=".2" p-id="2696"></path><path d="M672 416l-169.088 186.656-150.912-62.208v160h320V416m0-32a32 32 0 0 1 32 32v284.448a32 32 0 0 1-32 32h-320a32 32 0 0 1-32-32v-160a32 32 0 0 1 44.192-29.6l130.112 53.632 153.984-169.984a32 32 0 0 1 23.712-10.496z" fill="#4078FD" p-id="2697"></path></svg>'), 
         i(this, "recoveryVideoSvg", '<svg t="1749003779161" class="jhs-icon icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="8204" width="200" height="200"><path d="M938.666667 553.92V768c0 64.8-52.533333 117.333333-117.333334 117.333333H202.666667c-64.8 0-117.333333-52.533333-117.333334-117.333333V256c0-64.8 52.533333-117.333333 117.333334-117.333333h618.666666c64.8 0 117.333333 52.533333 117.333334 117.333333v297.92z m-64-74.624V256a53.333333 53.333333 0 0 0-53.333334-53.333333H202.666667a53.333333 53.333333 0 0 0-53.333334 53.333333v344.48A290.090667 290.090667 0 0 1 192 597.333333a286.88 286.88 0 0 1 183.296 65.845334C427.029333 528.384 556.906667 437.333333 704 437.333333c65.706667 0 126.997333 16.778667 170.666667 41.962667z m0 82.24c-5.333333-8.32-21.130667-21.653333-43.648-32.917333C796.768 511.488 753.045333 501.333333 704 501.333333c-121.770667 0-229.130667 76.266667-270.432 188.693334-2.730667 7.445333-7.402667 20.32-13.994667 38.581333-7.68 21.301333-34.453333 28.106667-51.370666 13.056-16.437333-14.634667-28.554667-25.066667-36.138667-31.146667A222.890667 222.890667 0 0 0 192 661.333333c-14.464 0-28.725333 1.365333-42.666667 4.053334V768a53.333333 53.333333 0 0 0 53.333334 53.333333h618.666666a53.333333 53.333333 0 0 0 53.333334-53.333333V561.525333zM320 480a96 96 0 1 1 0-192 96 96 0 0 1 0 192z m0-64a32 32 0 1 0 0-64 32 32 0 0 0 0 64z" fill="#000000" p-id="8205"></path></svg>');
     }
     getName() {
@@ -1798,12 +1752,12 @@ class X {
     async handle() {}
     getPageInfo() {
         let e, t, n, a, i, s = window.location.href;
-        return r && (e = $('a[title="複製番號"]').attr("data-clipboard-text"), t = s.split("?")[0].split("#")[0],
-        n = $(".female").prev().map(((e, t) => $(t).text())).get().join(" "), a = $(".male").prev().map(((e, t) => $(t).text())).get().join(" "),
-        i = $('strong:contains("日期:")').parent(".panel-block").find(".value").text().trim()),
-        l && (t = s.split("?")[0], e = t.split("/").filter(Boolean).pop().replace(/_\d{4}-\d{2}-\d{2}$/, ""),
-        n = $('span[onmouseover*="star_"] a').map(((e, t) => $(t).text())).get().join(" "),
-        a = "", i = $('span.header:contains("發行日期:")').parent("p").text().trim().replace("發行日期:", "").trim()),
+        return r && (e = $('a[title="複製番號"]').attr("data-clipboard-text"), t = s.split("?")[0].split("#")[0], 
+        n = $(".female").prev().map(((e, t) => $(t).text())).get().join(" "), a = $(".male").prev().map(((e, t) => $(t).text())).get().join(" "), 
+        i = $('strong:contains("日期:")').parent(".panel-block").find(".value").text().trim()), 
+        l && (t = s.split("?")[0], e = t.split("/").filter(Boolean).pop().replace(/_\d{4}-\d{2}-\d{2}$/, ""), 
+        n = $('span[onmouseover*="star_"] a').map(((e, t) => $(t).text())).get().join(" "), 
+        a = "", i = $('span.header:contains("發行日期:")').parent("p").text().trim().replace("發行日期:", "").trim()), 
         {
             carNum: e,
             url: t,
@@ -1880,7 +1834,7 @@ class X {
         const c = e.find(".video-title");
         if (c.length > 0) {
             const n = c.find("strong");
-            if (n.length > 0 && (o = n.text().trim()), r = null == (t = i.attr("title")) ? void 0 : t.trim(),
+            if (n.length > 0 && (o = n.text().trim()), r = null == (t = i.attr("title")) ? void 0 : t.trim(), 
             !r) {
                 const e = c.text().trim();
                 r = o && e.includes(o) ? e.replace(o, "").trim() : e;
@@ -1895,7 +1849,7 @@ class X {
         }
         if (!o) {
             const t = "提取番号信息失败: carNum 为空";
-            throw console.error("Error in getBoxCarInfo:", t, "Box Element:", e.get(0)), show.error(t),
+            throw console.error("Error in getBoxCarInfo:", t, "Box Element:", e.get(0)), show.error(t), 
             new Error(t);
         }
         return {
@@ -1906,7 +1860,7 @@ class X {
         };
     }
     getBoxCarInfoList(e = null) {
-        if (e || (e = $(this.getSelector().itemSelector)), 0 === e.length) return clog.error("获取当前列表页所有item的番号信息失败!"),
+        if (e || (e = $(this.getSelector().itemSelector)), 0 === e.length) return clog.error("获取当前列表页所有item的番号信息失败!"), 
         [];
         const t = [];
         return e.each(((e, n) => {
@@ -1945,18 +1899,7 @@ class Q extends X {
         window.isDetailPage && ($(".video-meta-panel a").each((function() {
             const e = $(this).attr("href");
             e && (e.startsWith("http://") || e.startsWith("https://") || e.startsWith("/")) && $(this).attr("target", "_blank");
-        })), this.handleFancyBox());
-    }
-    handleFancyBox() {
-        if (document.addEventListener("click", (function(e) {
-            if (e.target.closest(".fancybox-button--thumbs")) {
-                const e = !$(".fancybox-thumbs").is(":hidden");
-                localStorage.setItem("jhs_fancyboxThumbs", e.toString()), unsafeWindow.$.fancybox.defaults.thumbs.autoStart = e;
-            }
-        })), void 0 !== unsafeWindow.$.fancybox) {
-            const e = localStorage.getItem("jhs_fancyboxThumbs");
-            unsafeWindow.$.fancybox.defaults.thumbs.autoStart = "true" === e;
-        }
+        })));
     }
 }
 
@@ -2029,8 +1972,8 @@ class te {
                 clog.debug(`--- 成功通过 ${n} 找到 Content IDs ---`);
                 const t = $("#fanzaBtn");
                 let a = `https://www.dmm.co.jp/search/=/searchstr=${e}`, i = "single";
-                c.length > 1 ? (t.attr("href", a), t.append('<span class="site-tag" style="top:-15px">多结果</span>'),
-                t.css("backgroundColor", "#7bc73b"), i = "multiple") : (a = c[0].pageUrl, t.attr("href", a),
+                c.length > 1 ? (t.attr("href", a), t.append('<span class="site-tag" style="top:-15px">多结果</span>'), 
+                t.css("backgroundColor", "#7bc73b"), i = "multiple") : (a = c[0].pageUrl, t.attr("href", a), 
                 t.css("backgroundColor", "#7bc73b"));
                 const s = "jhs_other_site_dmm", o = localStorage.getItem(s) ? JSON.parse(localStorage.getItem(s)) : {};
                 return o[this.carNum] = {
@@ -2042,7 +1985,7 @@ class te {
         }
         clog.warn("所有关键词尝试均未找到匹配的Content ID, 解析Dmm视频失败");
         const i = $("#fanzaBtn");
-        return i.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`),
+        return i.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`), 
         i.attr("title", "未查询到, 点击前往搜索页"), i.css("backgroundColor", "#de3333"), null;
     }
     async _extractTrailerLinks({contentId: e, serviceCode: t, floorCode: n}) {
@@ -2085,7 +2028,7 @@ class te {
         } catch (n) {
             clog.error("DMM API 搜索失败:", n);
             const e = $("#fanzaBtn");
-            return e.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`),
+            return e.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`), 
             e.attr("title", "未查询到, 点击前往搜索页"), e.css("backgroundColor", "#de3333"), null;
         }
         if (!t || 0 === t.length) return null;
@@ -2099,7 +2042,7 @@ class te {
                 clog.error(`解析失败: ${t}`, e), this.showErrorMessages && show.error(`解析失败: ${t}`);
             }
             const t = $("#fanzaBtn");
-            return t.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`),
+            return t.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`), 
             t.attr("title", "未查询到, 点击前往搜索页"), t.css("backgroundColor", "#de3333"), null;
         }
     }
@@ -2266,7 +2209,7 @@ const ie = class e {
     }
 };
 
-i(ie, "isMac", 0 === navigator.platform.indexOf("Mac")), i(ie, "registerHotKeyMap", new Map),
+i(ie, "isMac", 0 === navigator.platform.indexOf("Mac")), i(ie, "registerHotKeyMap", new Map), 
 i(ie, "handleKeydown", (e => {
     for (const [t, n] of ie.registerHotKeyMap) {
         let t = n.hotkeyString, a = n.callback;
@@ -2298,7 +2241,7 @@ class oe extends X {
         let e = window.location.href;
         if (!e.includes("handle=1")) return;
         if ($("h1:contains('Page not found')").length) {
-            console.log("番号无法匹配, 跳搜索");
+            clog.log("番号无法匹配, 跳搜索");
             let t = e.split("?")[0].split("video/")[1].toLowerCase().replace("00", "-");
             return void (window.location.href = "/search/" + encodeURIComponent(t) + window.location.search);
         }
@@ -2314,7 +2257,7 @@ class oe extends X {
             t && (t.currentTime += 5);
         }));
         const n = new URLSearchParams(window.location.search), a = n.get("filterHotKey"), i = n.get("favoriteHotKey"), s = n.get("speedVideoHotKey");
-        a && se.registerHotkey(a, (() => window.parent.postMessage(a, "*"))), i && se.registerHotkey(i, (() => window.parent.postMessage(i, "*"))),
+        a && se.registerHotkey(a, (() => window.parent.postMessage(a, "*"))), i && se.registerHotkey(i, (() => window.parent.postMessage(i, "*"))), 
         s && se.registerHotkey(s, (() => {
             const e = document.getElementById("vjs_video_3_html5_api");
             e && (e.currentTime += 5);
@@ -2325,7 +2268,7 @@ class oe extends X {
             setTimeout((() => {
                 this.hasBand = !0;
                 let e = document.getElementById("vjs_video_3_html5_api");
-                console.log(e), e.play(), e.currentTime = 5, e.addEventListener("timeupdate", (function() {
+                clog.debug(e), e.play(), e.currentTime = 5, e.addEventListener("timeupdate", (function() {
                     e.currentTime >= 14 && e.currentTime < 16 && (e.currentTime += 2);
                 })), $("#vjs_video_3_html5_api").css({
                     position: "fixed",
@@ -2378,7 +2321,7 @@ class le extends X {
     }
     handle() {
         let e = "/advanced_search?type=3&score_min=0&d=1";
-        if ($('.navbar-item:contains("FC2")').attr("href", e), $('.tabs a:contains("FC2")').attr("href", e),
+        if ($('.navbar-item:contains("FC2")').attr("href", e), $('.tabs a:contains("FC2")').attr("href", e), 
         o.includes("advanced_search?type=3")) {
             $("h2.section-title").contents().first().replaceWith("Fc2PPV"), $(".section .container > .box").remove();
         }
@@ -2439,8 +2382,8 @@ class le extends X {
                         actionType: p,
                         publishTime: i
                     }), window.refresh(), layer.closeAll();
-                })), $("#search-subtitle-btn").on("click", (e => utils.openPage(`https://subtitlecat.com/index.php?search=${t}`, t, !1, e))),
-                $("#xunLeiSubtitleBtn").on("click", (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(t))),
+                })), $("#search-subtitle-btn").on("click", (e => utils.openPage(`https://subtitlecat.com/index.php?search=${t}`, t, !1, e))), 
+                $("#xunLeiSubtitleBtn").on("click", (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(t))), 
                 $("#magnetSearchBtn").on("click", (() => {
                     let e = this.getBean("MagnetHubPlugin").createMagnetHub(t);
                     layer.open({
@@ -2473,17 +2416,17 @@ class le extends X {
                 let e = "";
                 for (let n = 0; n < t.length; n++) {
                     let i = t[n];
-                    a += `<span class="actor-tag"><a href="/actors/${i.id}" target="_blank">${i.name}</a></span>`,
+                    a += `<span class="actor-tag"><a href="/actors/${i.id}" target="_blank">${i.name}</a></span>`, 
                     0 === i.gender && (e += i.name + " ");
                 }
                 $("#data-actress").text(e);
             } else a = '<span class="no-data">暂无演员信息</span>';
             let i = "";
-            i = Array.isArray(n) && n.length > 0 ? n.map(((e, t) => `\n                <a href="${e}" data-fancybox="movie-gallery" data-caption="剧照 ${t + 1}">\n                    <img src="${e}" class="movie-image-thumb"  alt=""/>\n                </a>\n            `)).join("") : '<div class="no-data">暂无剧照</div>',
-            $(".movie-info-container").html(`\n                <h3 class="movie-title"><strong class="current-title">${e.title || "无标题"}</strong></h3>\n                <div class="movie-meta">\n                    <span><strong>番号: </strong>${e.carNum || "未知"}</span>\n                    <span><strong>年份: </strong>${e.releaseDate || "未知"}</span>\n                    <span><strong>评分: </strong>${e.score || "无"}</span>\n                    <span><strong>时长: </strong>${e.duration + " m" || "无"}</span>\n                </div>\n                <div class="movie-meta">\n                    <span>\n                        <strong>站点: </strong>\n                        <a href="https://fc2ppvdb.com/articles/${e.carNum.replace("FC2-", "")}" target="_blank">fc2ppvdb</a>\n                        <a style="margin-left: 5px;" href="https://adult.contents.fc2.com/article/${e.carNum.replace("FC2-", "")}/" target="_blank">fc2电子市场</a>\n                    </span>\n                </div>\n                <div class="movie-actors">\n                    <div class="actor-list"><strong>主演: </strong>${a}</div>\n                </div>\n                <div class="movie-gallery" style="margin-top:10px">\n                    <strong>剧照: </strong>\n                    <div class="image-list">${i}</div>\n                </div>\n                <div id="data-releaseDate" style="display: none">${e.releaseDate || ""}</div>\n            `),
+            i = Array.isArray(n) && n.length > 0 ? n.map(((e, t) => `\n                <a href="${e}" data-fancybox="movie-gallery" data-caption="剧照 ${t + 1}">\n                    <img src="${e}" class="movie-image-thumb"  alt=""/>\n                </a>\n            `)).join("") : '<div class="no-data">暂无剧照</div>', 
+            $(".movie-info-container").html(`\n                <h3 class="movie-title"><strong class="current-title">${e.title || "无标题"}</strong></h3>\n                <div class="movie-meta">\n                    <span><strong>番号: </strong>${e.carNum || "未知"}</span>\n                    <span><strong>年份: </strong>${e.releaseDate || "未知"}</span>\n                    <span><strong>评分: </strong>${e.score || "无"}</span>\n                    <span><strong>时长: </strong>${e.duration + " m" || "无"}</span>\n                </div>\n                <div class="movie-meta">\n                    <span>\n                        <strong>站点: </strong>\n                        <a href="https://fc2ppvdb.com/articles/${e.carNum.replace("FC2-", "")}" target="_blank">fc2ppvdb</a>\n                        <a style="margin-left: 5px;" href="https://adult.contents.fc2.com/article/${e.carNum.replace("FC2-", "")}/" target="_blank">fc2电子市场</a>\n                    </span>\n                </div>\n                <div class="movie-actors">\n                    <div class="actor-list"><strong>主演: </strong>${a}</div>\n                </div>\n                <div class="movie-gallery" style="margin-top:10px">\n                    <strong>剧照: </strong>\n                    <div class="image-list">${i}</div>\n                </div>\n                <div id="data-releaseDate" style="display: none">${e.releaseDate || ""}</div>\n            `), 
             this.getBean("TranslatePlugin").translate(e.carNum, !1).then();
         })).catch((e => {
-            console.error(e), $(".movie-info-container").html(`\n                <div class="movie-error">加载失败: ${e.message}</div>\n            `);
+            console.error(e), $(".movie-info-container").html(`\n                <div class="movie-error">加载失败: ${escapeHtml(e.message)}</div>\n            `);
         }));
     }
     handleLongImg(e) {
@@ -2505,21 +2448,8 @@ class le extends X {
                 let a = e[n], i = "";
                 n % 2 == 0 && (i = "odd"), t += `\n                        <div class="item columns is-desktop ${i}">\n                            <div class="magnet-name column is-four-fifths">\n                                <a href="magnet:?xt=urn:btih:${a.hash}" title="右鍵點擊並選擇「複製鏈接地址」">\n                                    <span class="name">${a.name}</span>\n                                    <br>\n                                    <span class="meta">\n                                        ${(a.size / 1024).toFixed(2)}GB, ${a.files_count}個文件 \n                                     </span>\n                                    <br>\n                                    <div class="tags">\n                                        ${a.hd ? '<span class="tag is-primary is-small is-light">高清</span>' : ""}\n                                        ${a.cnsub ? '<span class="tag is-warning is-small is-light">字幕</span>' : ""}\n                                    </div>\n                                </a>\n                            </div>\n                            <div class="buttons column">\n                                <button class="button is-info is-small copy-to-clipboard" data-clipboard-text="magnet:?xt=urn:btih:${a.hash}" type="button">&nbsp;複製&nbsp;</button>\n                            </div>\n                            <div class="date column"><span class="time">${a.created_at}</span></div>\n                        </div>\n                    `;
             } else t = '<span class="no-data">暂无磁力信息</span>';
-            $("#magnets-content").html(t), $(".buttons button[data-clipboard-text*='magnet:']").each(((e, t) => {
-                $(t).parent().append($("<button>").text("115离线下载").addClass("button is-info is-small").click((async e => {
-                    e.stopPropagation(), e.preventDefault();
-                    let n = loading();
-                    try {
-                        await this.getBean("WangPan115TaskPlugin").handleAddTask($(t).attr("data-clipboard-text"));
-                    } catch (a) {
-                        show.error("发生错误:" + a), console.error(a);
-                    } finally {
-                        n.close();
-                    }
-                })));
-            }));
-        })).catch((e => {
-            console.error(e), $("#magnets-content").html(`\n                <div class="movie-error">加载失败: ${e.message}</div>\n            `);
+            $("#magnets-content").html(t)        })).catch((e => {
+            console.error(e), $("#magnets-content").html(`\n                <div class="movie-error">加载失败: ${escapeHtml(e.message)}</div>\n            `);
         }));
     }
     async openFc2Page(e, t, n) {
@@ -2544,7 +2474,7 @@ class ce extends X {
         let n = !1;
         e.each(((e, a) => {
             const i = $(a), s = i.text().toLowerCase(), o = t.some((e => s.includes(e)));
-            i.parent().parent().parent().addClass("magnet-row"), s.includes("4k") && i.css("color", "#f40"),
+            i.parent().parent().parent().addClass("magnet-row"), s.includes("4k") && i.css("color", "#f40"), 
             o && (n = !0, i.parent().parent().parent().addClass("high-quality"));
         })), n ? $("#magnets-content .magnet-row").not(".high-quality").hide() : $("#enable-magnets-filter").addClass("do-hide");
     }
@@ -2555,7 +2485,7 @@ class ce extends X {
             e.each(((e, a) => {
                 const i = $(a), s = i.find("td:first-child"), o = s.find("a:first-child"), r = s.find("a:nth-child(2)"), l = o.text().toLowerCase();
                 l.includes("4k") && o.css("color", "#f40");
-                (t.some((e => l.includes(e))) || r.length && r.text().includes("字幕")) && (n = !0,
+                (t.some((e => l.includes(e))) || r.length && r.text().includes("字幕")) && (n = !0, 
                 i.addClass("high-quality"));
             })), n ? e.each(((e, t) => {
                 const n = $(t);
@@ -2605,7 +2535,7 @@ class de extends X {
             n.find(".highlight-btn").remove();
             const a = n.text().trim().replace(/\s*\(\d+\)$/, "");
             let i = await storageManager.getHighlightedTags();
-            i.includes(a) ? (i = i.filter((e => e !== a)), t.removeClass("highlighted")) : (i.push(a),
+            i.includes(a) ? (i = i.filter((e => e !== a)), t.removeClass("highlighted")) : (i.push(a), 
             t.addClass("highlighted")), await storageManager.setHighlightedTags(i);
         }));
     }
@@ -2617,10 +2547,10 @@ class de extends X {
         if (!n) return;
         $(".tabs").append(`\n            <div style="display: flex;align-items: center;flex-grow:1;justify-content: flex-end;">\n                <div>已选分类: <span id="jhs-check-tag">${n}</span></div>\n                <a class="menu-btn  main-tab-btn" id="foldCategoryBtn" style="background-color:#d23e60 !important;">\n                    <span></span>\n                    ${e ? ` (${e})` : ""}\n                    <i style="margin-left: 10px"></i>\n                </a>\n\n            </div>\n        `);
         let a = $("h2.section-title");
-        if (a.length > 0 && (a.append('\n                <div id="foldCategoryBtn">\n                    <a class="menu-btn" style="background-color:#d23e60 !important;margin-left: 20px;border-bottom:none !important;border-radius:3px;">\n                        <span></span>\n                        <i style="margin-left: 10px"></i>\n                    </a>\n                </div>\n            '),
+        if (a.length > 0 && (a.append('\n                <div id="foldCategoryBtn">\n                    <a class="menu-btn" style="background-color:#d23e60 !important;margin-left: 20px;border-bottom:none !important;border-radius:3px;">\n                        <span></span>\n                        <i style="margin-left: 10px"></i>\n                    </a>\n                </div>\n            '), 
         t = $("section > div > div.box")), !t) return;
         let i = $("#foldCategoryBtn"), s = localStorage.getItem("jhs_foldCategory") === _, [o, r] = s ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];
-        i.find("span").text(o).end().find("i").attr("class", r), window.location.href.includes("noFold=1") || t[s ? "hide" : "show"](),
+        i.find("span").text(o).end().find("i").attr("class", r), window.location.href.includes("noFold=1") || t[s ? "hide" : "show"](), 
         i.on("click", (async e => {
             e.preventDefault(), s = !s, localStorage.setItem("jhs_foldCategory", s ? _ : C);
             const [n, a] = s ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];
@@ -2659,7 +2589,7 @@ class he extends X {
                 console.error("该名称查询失败,尝试其它名称");
             }
             let r = "";
-            r = a ? `\n                    <div class="panel-block actress-info">\n                        <strong>${t}:</strong>\n                        <a href="${a.url}" style="margin-left: 5px" target="_blank">\n                            <span class="info-tag">${a.birthday} ${a.age}</span>\n                            <span class="info-tag">${a.height} ${a.weight}</span>\n                            <span class="info-tag">${a.threeSizeText} ${a.braSize}</span>\n                        </a>\n                    </div>\n                ` : `<div class="panel-block actress-info"><a href="${this.apiUrl + t}" target="_blank"><strong>${t}:</strong></a></div> `,
+            r = a ? `\n                    <div class="panel-block actress-info">\n                        <strong>${t}:</strong>\n                        <a href="${a.url}" style="margin-left: 5px" target="_blank">\n                            <span class="info-tag">${a.birthday} ${a.age}</span>\n                            <span class="info-tag">${a.height} ${a.weight}</span>\n                            <span class="info-tag">${a.threeSizeText} ${a.braSize}</span>\n                        </a>\n                    </div>\n                ` : `<div class="panel-block actress-info"><a href="${this.apiUrl + t}" target="_blank"><strong>${t}:</strong></a></div> `, 
             i += r;
         }
         $('strong:contains("演員")').parent().after(i), localStorage.setItem(t, JSON.stringify(n));
@@ -2690,7 +2620,7 @@ class he extends X {
             i[e] = s;
         }));
         let o = '<div class="actress-info" style="font-size: 17px; font-weight: normal; margin-top: 5px;">无此相关演员信息</div>';
-        s && (o = `\n                <a class="actress-info" href="${s.url}" target="_blank">\n                    <div style="font-size: 17px; font-weight: normal; margin-top: 5px;">\n                        <div style="display: flex; margin-bottom: 10px;">\n                            <span style="width: 300px;">出生日期: ${s.birthday}</span>\n                            <span style="width: 200px;">年龄: ${s.age}</span>\n                            <span style="width: 200px;">身高: ${s.height}</span>\n                        </div>\n                        <div style="display: flex; margin-bottom: 10px;">\n                            <span style="width: 300px;">体重: ${s.weight}</span>\n                            <span style="width: 200px;">三围: ${s.threeSizeText}</span>\n                            <span style="width: 200px;">罩杯: ${s.braSize}</span>\n                        </div>\n                    </div>\n                </a>\n            `),
+        s && (o = `\n                <a class="actress-info" href="${s.url}" target="_blank">\n                    <div style="font-size: 17px; font-weight: normal; margin-top: 5px;">\n                        <div style="display: flex; margin-bottom: 10px;">\n                            <span style="width: 300px;">出生日期: ${s.birthday}</span>\n                            <span style="width: 200px;">年龄: ${s.age}</span>\n                            <span style="width: 200px;">身高: ${s.height}</span>\n                        </div>\n                        <div style="display: flex; margin-bottom: 10px;">\n                            <span style="width: 300px;">体重: ${s.weight}</span>\n                            <span style="width: 200px;">三围: ${s.threeSizeText}</span>\n                            <span style="width: 200px;">罩杯: ${s.braSize}</span>\n                        </div>\n                    </div>\n                </a>\n            `), 
         t.parent().append(o), localStorage.setItem(a, JSON.stringify(i));
     }
     async searchInfo(e) {
@@ -2710,25 +2640,6 @@ class he extends X {
     }
 }
 
-class ge extends X {
-    getName() {
-        return "AliyunPanPlugin";
-    }
-    handle() {
-        $("body").append('<a class="a-success" id="refresh-token-btn" style="position:fixed; right: 0; top:50%;z-index:99999">获取refresh_token</a>'),
-        $("#refresh-token-btn").on("click", (e => {
-            let t = localStorage.getItem("token");
-            if (!t) return void alert("请先登录!");
-            let n = JSON.parse(t).refresh_token;
-            navigator.clipboard.writeText(n).then((() => {
-                alert("已复制到剪切板 如失败, 请手动复制: " + n);
-            })).catch((e => {
-                console.error("Failed to copy refresh token: ", e);
-            }));
-        }));
-    }
-}
-
 class pe extends X {
     constructor() {
         super(), i(this, "$contentBox", $(".section .container"));
@@ -2743,8 +2654,8 @@ class pe extends X {
     }
     hookPage() {
         let e = $("h2.section-title");
-        e.contents().first().replaceWith("热播"), e.css("marginBottom", "0"), $(".empty-message").remove(),
-        $(".section .container .box").remove(), $("#sort-toggle-btn").remove(), this.$contentBox.append('<div class="tool-box" style="margin-top: 10px"></div>'),
+        e.contents().first().replaceWith("热播"), e.css("marginBottom", "0"), $(".empty-message").remove(), 
+        $(".section .container .box").remove(), $("#sort-toggle-btn").remove(), this.$contentBox.append('<div class="tool-box" style="margin-top: 10px"></div>'), 
         this.$contentBox.append('<div class="movie-list h cols-4 vcols-8" style="margin-top: 10px"></div>');
     }
     async handlePlayback() {
@@ -2792,7 +2703,7 @@ class pe extends X {
                 for (;!document.hasFocus(); ) await new Promise((e => setTimeout(e, 500)));
                 const s = await V(e);
                 let o = s.score, r = s.watchedCount, l = `\n                        <span class="value">\n                            <span class="score-stars">${this.getStarRating(o)}</span> \n                            &nbsp; ${o}分，由${r}人評價\n                        </span>\n                    `;
-                this.appendScoreHtml(e, l), n[e] = l, localStorage.setItem(t, JSON.stringify(n)),
+                this.appendScoreHtml(e, l), n[e] = l, localStorage.setItem(t, JSON.stringify(n)), 
                 await new Promise((e => setTimeout(e, 500)));
             } catch (n) {
                 clog.error(`🚨 解析评分数据失败 | 编号: ${a.number}\n`, `错误详情: ${n.message}\n`, n.stack ? `调用栈:\n${n.stack}` : "");
@@ -2817,14 +2728,14 @@ const me = "jhs_appAuthorization";
 
 class ue extends X {
     constructor() {
-        super(), i(this, "has_cnsub", ""), i(this, "$contentBox", $(".section .container")),
+        super(), i(this, "has_cnsub", ""), i(this, "$contentBox", $(".section .container")), 
         i(this, "movies", []);
     }
     getName() {
         return "TOP250Plugin";
     }
     handle() {
-        $('.main-tabs ul li:contains("猜你喜歡")').html('<a href="/rankings/top"><span>Top250</span></a>'),
+        $('.main-tabs ul li:contains("猜你喜歡")').html('<a href="/rankings/top"><span>Top250</span></a>'), 
         $('a[href*="rankings/top"]').on("click", (e => {
             e.preventDefault(), e.stopPropagation();
             const t = $(e.target), n = (t.is("a") ? t : t.closest("a")).attr("href");
@@ -2834,9 +2745,9 @@ class ue extends X {
         })), this.handleTop().then();
     }
     hookPage() {
-        $("h2.section-title").contents().first().replaceWith("Top250"), $(".empty-message").remove(),
-        $(".section .container .box").remove(), $("#sort-toggle-btn").remove(), this.$contentBox.append('<div class="tool-box" style="margin-top: 10px"></div>'),
-        this.$contentBox.append('<div class="movie-list h cols-4 vcols-8" style="margin-top: 10px"></div>'),
+        $("h2.section-title").contents().first().replaceWith("Top250"), $(".empty-message").remove(), 
+        $(".section .container .box").remove(), $("#sort-toggle-btn").remove(), this.$contentBox.append('<div class="tool-box" style="margin-top: 10px"></div>'), 
+        this.$contentBox.append('<div class="movie-list h cols-4 vcols-8" style="margin-top: 10px"></div>'), 
         this.renderPagination();
     }
     renderPagination() {
@@ -2878,17 +2789,17 @@ class ue extends X {
                 const n = t.filter((e => "1" === this.has_cnsub ? e.has_cnsub : "0" !== this.has_cnsub || !e.has_cnsub)), a = this.getBean("HitShowPlugin");
                 let r = a.markDataListHtml(n);
                 i.html(r), a.loadScore(n), o = !0;
-            } else console.error(e), i.html(`<h3>${l}</h3>`), show.error(l), "JWTVerificationError" === c && (await localStorage.removeItem(me),
+            } else console.error(e), i.html(`<h3>${escapeHtml(l)}</h3>`), show.error(l), "JWTVerificationError" === c && (await localStorage.removeItem(me), 
             await this.checkLogin(null, new URLSearchParams(window.location.search))), o = !0;
         } catch (r) {
-            l < 3 ? (clog.error(`获取Top数据失败 (第 ${l} 次重试):`, r), await new Promise((e => setTimeout(e, 1e3)))) : (clog.error("所有重试尝试均失败，无法获取Top数据。", r),
+            l < 3 ? (clog.error(`获取Top数据失败 (第 ${l} 次重试):`, r), await new Promise((e => setTimeout(e, 1e3)))) : (clog.error("所有重试尝试均失败，无法获取Top数据。", r), 
             i.html("<h3>无法加载数据，请稍后再试。</h3>"));
         } finally {
             (o || 3 === l) && s.close();
         }
     }
     toolBar(e, t, n) {
-        "5" === n.toString() && $(".pagination-next").remove(), $(".pagination-ellipsis").closest("li").remove(),
+        "5" === n.toString() && $(".pagination-next").remove(), $(".pagination-ellipsis").closest("li").remove(), 
         $(".pagination-list li a").each((function() {
             parseInt($(this).text()) > 5 && $(this).closest("li").remove();
         }));
@@ -2897,7 +2808,7 @@ class ue extends X {
         let i = `\n            <div class="button-group">\n                <div class="buttons has-addons" id="conditionBox" style="margin-bottom: 0!important;">\n                    <a style="padding:18px 18px !important;" class="button is-small ${"all" === e ? "is-info" : ""}" href="/advanced_search?handleTop=1&handleType=all&type_value=&has_cnsub=${this.has_cnsub}">全部</a>\n                    <a style="padding:18px 18px !important;" class="button is-small ${"0" === t ? "is-info" : ""}" href="/advanced_search?handleTop=1&handleType=video_type&type_value=0&has_cnsub=${this.has_cnsub}">有码</a>\n                    <a style="padding:18px 18px !important;" class="button is-small ${"1" === t ? "is-info" : ""}" href="/advanced_search?handleTop=1&handleType=video_type&type_value=1&has_cnsub=${this.has_cnsub}">无码</a>\n                    <a style="padding:18px 18px !important;" class="button is-small ${"2" === t ? "is-info" : ""}" href="/advanced_search?handleTop=1&handleType=video_type&type_value=2&has_cnsub=${this.has_cnsub}">欧美</a>\n                    <a style="padding:18px 18px !important;" class="button is-small ${"3" === t ? "is-info" : ""}" href="/advanced_search?handleTop=1&handleType=video_type&type_value=3&has_cnsub=${this.has_cnsub}">Fc2</a>\n                    \n                    <a style="padding:18px 18px !important;margin-left: 50px" class="button is-small ${"1" === this.has_cnsub ? "is-info" : ""}" data-cnsub-value="1">含中字磁鏈</a>\n                    <a style="padding:18px 18px !important;" class="button is-small ${"0" === this.has_cnsub ? "is-info" : ""}" data-cnsub-value="0">无字幕</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-cnsub-value="">重置</a>\n                </div>\n                \n                <div class="buttons has-addons" id="conditionBox">\n                    ${a}\n                </div>\n            </div>\n        `;
         this.$contentBox.append(i), $("a[data-cnsub-value]").on("click", (e => {
             const t = $(e.currentTarget).data("cnsub-value");
-            this.has_cnsub = t.toString(), $("a[data-cnsub-value]").removeClass("is-info"),
+            this.has_cnsub = t.toString(), $("a[data-cnsub-value]").removeClass("is-info"), 
             $(e.currentTarget).addClass("is-info"), $(".toolbar a.button").not("[data-cnsub-value]").each(((e, n) => {
                 const a = $(n), i = new URL(a.attr("href"), window.location.origin);
                 i.searchParams.set("has_cnsub", t), a.attr("href", i.toString());
@@ -2910,7 +2821,7 @@ class ue extends X {
     async checkLogin(e, t) {
         if (!localStorage.getItem(me)) return show.error("该类别依赖移动端接口，请先完成登录"), void this.openLoginDialog();
         let n = "all", a = "", i = t.get("t") || "";
-        /^y\d+$/.test(i) ? (n = "year", a = i.substring(1)) : "" !== i && (n = "video_type",
+        /^y\d+$/.test(i) ? (n = "year", a = i.substring(1)) : "" !== i && (n = "video_type", 
         a = i);
         let s = `/advanced_search?handleTop=1&handleType=${n}&type_value=${a}`;
         e && (e.ctrlKey || e.metaKey) ? GM_openInTab(window.location.origin + s, {
@@ -2944,7 +2855,7 @@ class ue extends X {
                             if (1 !== n) throw clog.error("登录失败", e), new Error(e.message);
                             {
                                 let n = e.data.token;
-                                await localStorage.setItem(me, n), show.ok("登录成功"), layer.close(t), window.location.href = "/advanced_search?handleTop=1&period=daily";
+                                await localStorage.setItem(me, await encryptData(n)), show.ok("登录成功"), layer.close(t), window.location.href = "/advanced_search?handleTop=1&period=daily";
                             }
                         }
                     })).catch((e => {
@@ -2963,10 +2874,10 @@ class fe extends X {
         return "NavBarPlugin";
     }
     async initCss() {
-        return "\n            .highlight-red {\n    /* 核心要求：高亮红色文本 */\n    color: red !important; \n    \n    /* 建议：增加字体加粗，效果更明显 */\n    font-weight: bold;\n    \n    /* 建议：增加背景色，效果更突出 */\n}\n        ";
+        return "\n            .highlight-red {\n    /* 核心要求：高亮红色文本 */\n    color: red !important; \n    \n    /* 建议：增加字体加粗，效果更明显 */\n    font-weight: bold;\n    \n    /* 建议：增加背景色，效果更突出 */\n    /* background-color: yellow; */ \n}\n        ";
     }
     handle() {
-        if (this.margeNav(), this.hookSearch(), this.hookOldSearch(), this.toggleOtherNavItem(),
+        if (this.margeNav(), this.hookSearch(), this.hookOldSearch(), this.toggleOtherNavItem(), 
         $(window).resize(this.toggleOtherNavItem), window.location.href.includes("/search")) {
             const e = new URLSearchParams(window.location.search);
             let t = e.get("q"), n = e.get("f");
@@ -2983,7 +2894,7 @@ class fe extends X {
         }));
     }
     hookSearch() {
-        $("#navbar-menu-hero").after('\n            <div class="navbar-menu" id="search-box">\n                <div class="navbar-start" style="display: flex; align-items: center; gap: 5px;">\n                    <select id="search-type" style="padding: 8px 12px; border: 1px solid #555; border-radius: 4px; background-color: #333; color: #eee; font-size: 14px; outline: none;">\n                        <option value="all">影片</option>\n                        <option value="actor">演員</option>\n                        <option value="series">系列</option>\n                        <option value="maker">片商</option>\n                        <option value="director">導演</option>\n                        <option value="code">番號</option>\n                        <option value="list">清單</option>\n                    </select>\n                    <input id="search-keyword" type="text" placeholder="輸入影片番號，演員名等關鍵字進行檢索" style="padding: 8px 12px; border: 1px solid #555; border-radius: 4px; flex-grow: 1; font-size: 14px; background-color: #333; color: #eee; outline: none;">\n                    <a href="/advanced_search?noFold=1" title="進階檢索" style="padding: 6px 12px; background-color: #444; border-radius: 4px; text-decoration: none; color: #ddd; font-size: 14px; border: 1px solid #555;"><span>...</span></a>\n                    <a id="search-img-btn" style="padding: 6px 16px; background-color: #444; color: #fff; border-radius: 4px; text-decoration: none; font-weight: 500; cursor: pointer; border: 1px solid #555;">识图</a>\n                    <a id="search-btn" style="padding: 6px 16px; background-color: #444; color: #fff; border-radius: 4px; text-decoration: none; font-weight: 500; cursor: pointer; border: 1px solid #555;">檢索</a>\n                </div>\n            </div>\n        '),
+        $("#navbar-menu-hero").after('\n            <div class="navbar-menu" id="search-box">\n                <div class="navbar-start" style="display: flex; align-items: center; gap: 5px;">\n                    <select id="search-type" style="padding: 8px 12px; border: 1px solid #555; border-radius: 4px; background-color: #333; color: #eee; font-size: 14px; outline: none;">\n                        <option value="all">影片</option>\n                        <option value="actor">演員</option>\n                        <option value="series">系列</option>\n                        <option value="maker">片商</option>\n                        <option value="director">導演</option>\n                        <option value="code">番號</option>\n                        <option value="list">清單</option>\n                    </select>\n                    <input id="search-keyword" type="text" placeholder="輸入影片番號，演員名等關鍵字進行檢索" style="padding: 8px 12px; border: 1px solid #555; border-radius: 4px; flex-grow: 1; font-size: 14px; background-color: #333; color: #eee; outline: none;">\n                    <a href="/advanced_search?noFold=1" title="進階檢索" style="padding: 6px 12px; background-color: #444; border-radius: 4px; text-decoration: none; color: #ddd; font-size: 14px; border: 1px solid #555;"><span>...</span></a>\n                    <a id="search-img-btn" style="padding: 6px 16px; background-color: #444; color: #fff; border-radius: 4px; text-decoration: none; font-weight: 500; cursor: pointer; border: 1px solid #555;">识图</a>\n                    <a id="search-btn" style="padding: 6px 16px; background-color: #444; color: #fff; border-radius: 4px; text-decoration: none; font-weight: 500; cursor: pointer; border: 1px solid #555;">檢索</a>\n                </div>\n            </div>\n        '), 
         $("#search-keyword").on("paste", (e => {
             const t = e.originalEvent.clipboardData.items;
             for (let n = 0; n < t.length; n++) if (-1 !== t[n].type.indexOf("image")) {
@@ -3012,18 +2923,18 @@ class fe extends X {
         const e = document.querySelector(".search-image");
         if (!e) return;
         const t = e.cloneNode(!0);
-        e.parentNode.replaceChild(t, e), $("#button-search-image").attr("data-tooltip", "以图识图"),
+        e.parentNode.replaceChild(t, e), $("#button-search-image").attr("data-tooltip", "以图识图"), 
         $(".search-image").on("click", (e => {
             this.getBean("SearchByImagePlugin").open();
         }));
     }
     margeNav() {
-        $('a[href*="/feedbacks/new"]').remove(), $('a[href*="theporndude.com"]').remove(),
+        $('a[href*="/feedbacks/new"]').remove(), $('a[href*="theporndude.com"]').remove(), 
         $('a.navbar-link[href="/makers"]').parent().after('\n            <div class="navbar-item has-dropdown is-hoverable">\n                <a class="navbar-link">其它</a>\n                <div class="navbar-dropdown is-boxed">\n                  <a class="navbar-item" href="/feedbacks/new" target="_blank" >反饋</a>\n                  <a class="navbar-item" rel="nofollow noopener" target="_blank" href="https://theporndude.com/zh">ThePornDude</a>\n                </div>\n              </div>\n        ');
     }
     toggleOtherNavItem() {
         let e = $("#search-box"), t = $("#search-bar-container");
-        $(window).width() < 1600 && $(window).width() > 1023 && (e.hide(), t.show()), $(window).width() > 1600 && (e.show(),
+        $(window).width() < 1600 && $(window).width() > 1023 && (e.hide(), t.show()), $(window).width() > 1600 && (e.show(), 
         t.hide());
     }
 }
@@ -3044,8 +2955,8 @@ class ve {
 
 class be extends X {
     constructor() {
-        super(...arguments), i(this, "okBackgroundColor", "#7bc73b"), i(this, "errorBackgroundColor", "#de3333"),
-        i(this, "warnBackgroundColor", "#d7a80c"), i(this, "domainErrorBackgroundColor", "#d7780c"),
+        super(...arguments), i(this, "okBackgroundColor", "#7bc73b"), i(this, "errorBackgroundColor", "#de3333"), 
+        i(this, "warnBackgroundColor", "#d7a80c"), i(this, "domainErrorBackgroundColor", "#d7780c"), 
         i(this, "siteConfigs", [ {
             id: "javTrailersBtn",
             getBaseUrl: async () => await this.getJavTrailersUrl(),
@@ -3139,16 +3050,16 @@ class be extends X {
     }
     async handleSite(e, t) {
         const n = $(`#${t.id}`);
-        if (t.initUrl && (n.attr("href", t.initUrl(e)), n.css("backgroundColor", this.warnBackgroundColor)),
+        if (t.initUrl && (n.attr("href", t.initUrl(e)), n.css("backgroundColor", this.warnBackgroundColor)), 
         t.noHandle && !0 === t.noHandle) {
             const t = "jhs_other_site_dmm", a = (localStorage.getItem(t) ? JSON.parse(localStorage.getItem(t)) : {})[e];
-            a && ("single" === a.type ? (n.attr("href", a.url), n.css("backgroundColor", this.okBackgroundColor)) : "multiple" === a.type && (n.attr("href", a.url),
+            a && ("single" === a.type ? (n.attr("href", a.url), n.css("backgroundColor", this.okBackgroundColor)) : "multiple" === a.type && (n.attr("href", a.url), 
             n.append('<span class="site-tag" style="top:-15px">多结果</span>'), n.css("backgroundColor", this.okBackgroundColor)));
         } else try {
             if (n.attr("href")) return;
             if (utils.isHidden(n)) return;
             const a = "jhs_other_site", i = localStorage.getItem(a) ? JSON.parse(localStorage.getItem(a)) : {}, s = e + "_" + t.id.replace("Btn", ""), o = i[s];
-            if (o) return void ("single" === o.type ? (n.attr("href", o.url), n.css("backgroundColor", this.okBackgroundColor)) : "multiple" === o.type && (n.attr("href", o.url),
+            if (o) return void ("single" === o.type ? (n.attr("href", o.url), n.css("backgroundColor", this.okBackgroundColor)) : "multiple" === o.type && (n.attr("href", o.url), 
             n.append('<span class="site-tag" style="top:-15px">多结果</span>'), n.css("backgroundColor", this.okBackgroundColor)));
             const r = await t.getBaseUrl(), l = t.searchPath(r, e);
             n.attr("href", l);
@@ -3167,7 +3078,7 @@ class be extends X {
                     type: "single",
                     url: e
                 };
-            } else h.length > 1 ? (n.attr("href", l), g += '<span class="site-tag" style="top:-15px">多结果</span>',
+            } else h.length > 1 ? (n.attr("href", l), g += '<span class="site-tag" style="top:-15px">多结果</span>', 
             n.css("backgroundColor", this.okBackgroundColor), p = {
                 type: "multiple",
                 url: l
@@ -3178,16 +3089,16 @@ class be extends X {
             })), g && n.append(g);
         } catch (a) {
             const e = String(a), i = t.id.replace("Btn", "");
-            e.includes("Just a moment") ? (n.attr("title", "请求失败：Cloudflare 安全检查。"), n.css("backgroundColor", this.warnBackgroundColor),
-            clog.warn(`检测第三方资源失败, ${i} 需Cloudflare安全检查`)) : e.includes("重定向") ? (n.attr("title", "域名失效"),
-            n.css("backgroundColor", this.domainErrorBackgroundColor), clog.warn(`检测第三方资源失败, ${i} 域名被重定向`)) : e.includes("404 Page Not Found") ? (n.attr("title", "未查询到, 点击前往搜索页"),
-            n.css("backgroundColor", this.errorBackgroundColor)) : (console.error(a), n.attr("title", "请求失败。"),
+            e.includes("Just a moment") ? (n.attr("title", "请求失败：Cloudflare 安全检查。"), n.css("backgroundColor", this.warnBackgroundColor), 
+            clog.warn(`检测第三方资源失败, ${i} 需Cloudflare安全检查`)) : e.includes("重定向") ? (n.attr("title", "域名失效"), 
+            n.css("backgroundColor", this.domainErrorBackgroundColor), clog.warn(`检测第三方资源失败, ${i} 域名被重定向`)) : e.includes("404 Page Not Found") ? (n.attr("title", "未查询到, 点击前往搜索页"), 
+            n.css("backgroundColor", this.errorBackgroundColor)) : (console.error(a), n.attr("title", "请求失败。"), 
             n.css("backgroundColor", this.errorBackgroundColor), clog.warn(`检测第三方资源失败, ${i}`));
         }
     }
     async getSettingCache() {
         const e = Date.now();
-        return (!this.settingCache || e - this.lastFetchTime > this.CACHE_DURATION) && (this.settingCache = await storageManager.getSetting(),
+        return (!this.settingCache || e - this.lastFetchTime > this.CACHE_DURATION) && (this.settingCache = await storageManager.getSetting(), 
         this.lastFetchTime = e), this.settingCache;
     }
     async getMissAvUrl() {
@@ -3282,8 +3193,8 @@ class we extends X {
             const t = e.nextElementSibling;
             if (t && "SPAN" === t.tagName) {
                 const e = t.textContent.trim(), n = document.createElement("button");
-                n.textContent = "复制", n.style.marginLeft = "10px", n.style.padding = "0 10px", n.style.cursor = "pointer",
-                n.style.border = "1px solid #ccc", n.style.borderRadius = "5px", n.style.backgroundColor = "#f0f0f0",
+                n.textContent = "复制", n.style.marginLeft = "10px", n.style.padding = "0 10px", n.style.cursor = "pointer", 
+                n.style.border = "1px solid #ccc", n.style.borderRadius = "5px", n.style.backgroundColor = "#f0f0f0", 
                 n.style.fontSize = "12px", n.addEventListener("click", (function(t) {
                     t.preventDefault();
                     const n = e => {
@@ -3309,14 +3220,14 @@ class ye extends X {
     }
     async handle() {
         let e = await storageManager.getSetting();
-        this.filterHotKey = e.filterHotKey, this.favoriteHotKey = e.favoriteHotKey, this.hasDownHotKey = e.hasDownHotKey,
-        this.hasWatchHotKey = e.hasWatchHotKey, this.speedVideoHotKey = e.speedVideoHotKey,
+        this.filterHotKey = e.filterHotKey, this.favoriteHotKey = e.favoriteHotKey, this.hasDownHotKey = e.hasDownHotKey, 
+        this.hasWatchHotKey = e.hasWatchHotKey, this.speedVideoHotKey = e.speedVideoHotKey, 
         this.bindHotkey().then(), this.hideVideoControls(), window.isDetailPage && this.createMenuBtn();
     }
     async createMenuBtn() {
         const e = this.getPageInfo(), t = e.carNum, n = `\n            <div style="margin: 10px auto; display: flex; justify-content: space-between; align-items: center; flex-wrap:wrap;gap: 20px;">\n                <div style="display: flex; gap: 10px; flex-wrap:wrap;">\n                    <a id="filterBtn" class="menu-btn" style="width: 120px; background-color:${f}; color: white; text-align: center; padding: 8px 0;">\n                        <span>${m}</span>\n                    </a>\n                    <a id="favoriteBtn" class="menu-btn" style="width: 120px; background-color:${w}; color: white; text-align: center; padding: 8px 0;">\n                        <span>${v}</span>\n                    </a>\n                    <a id="hasDownBtn" class="menu-btn" style="width: 120px; background-color:${x}; color: white; text-align: center; padding: 8px 0;">\n                        <span>${y}</span>\n                    </a>\n                    <a id="hasWatchBtn" class="menu-btn" style="width: 120px; background-color:${S}; color: white; text-align: center; padding: 8px 0;">\n                        <span>${k}</span>\n                    </a>\n                </div>\n        \n                <div style="display: flex; gap: 10px; flex-wrap:wrap;">\n                    <a id="enable-magnets-filter" class="menu-btn" style="width: 140px; background-color: #c2bd4c; color: white; text-align: center; padding: 8px 0;">\n                        <span id="magnets-span">关闭磁力过滤</span>\n                    </a>\n                    <a id="magnetSearchBtn" class="menu-btn" style="width: 120px; background: linear-gradient(to right, rgb(245,140,1), rgb(84,161,29)); color: white; text-align: center; padding: 8px 0;">\n                        <span>磁力搜索</span>\n                    </a>\n                    <a id="xunLeiSubtitleBtn" class="menu-btn" style="width: 120px; background: linear-gradient(to left, #375f7c, #2196F3); color: white; text-align: center; padding: 8px 0;">\n                        <span>字幕 (迅雷)</span>\n                    </a>\n                    <a id="search-subtitle-btn" class="menu-btn" style="width: 160px; background: linear-gradient(to bottom, #8d5656, rgb(196,159,91)); color: white; text-align: center; padding: 8px 0;">\n                        <span>字幕 (SubTitleCat)</span>\n                    </a>\n                </div>\n            </div>\n        `;
-        r && $(".tabs").after(n), l && $("#mag-submit-show").before(n), $("#favoriteBtn").on("click", (() => this.favoriteOne())),
-        $("#filterBtn").on("click", (e => this.filterOne(e))), $("#hasDownBtn").on("click", (async () => this.hasDownOne())),
+        r && $(".tabs").after(n), l && $("#mag-submit-show").before(n), $("#favoriteBtn").on("click", (() => this.favoriteOne())), 
+        $("#filterBtn").on("click", (e => this.filterOne(e))), $("#hasDownBtn").on("click", (async () => this.hasDownOne())), 
         $("#hasWatchBtn").on("click", (async () => this.hasWatchOne())), $("#magnetSearchBtn").on("click", (() => {
             let t = this.getBean("MagnetHubPlugin").createMagnetHub(e.carNum);
             layer.open({
@@ -3331,17 +3242,17 @@ class ye extends X {
             });
         }));
         const a = this.getBean("HighlightMagnetPlugin"), i = await storageManager.getSetting("enableMagnetsFilter", _);
-        $("#magnets-span").text(i === _ ? "关闭磁力过滤" : "开启磁力过滤"), i === _ && a.doFilterMagnet(),
+        $("#magnets-span").text(i === _ ? "关闭磁力过滤" : "开启磁力过滤"), i === _ && a.doFilterMagnet(), 
         $("#enable-magnets-filter").on("click", (e => {
             let t = $("#magnets-span");
-            "关闭磁力过滤" === t.text() ? (a.showAll(), t.text("开启磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", C)) : (a.doFilterMagnet(),
+            "关闭磁力过滤" === t.text() ? (a.showAll(), t.text("开启磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", C)) : (a.doFilterMagnet(), 
             t.text("关闭磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", _));
-        })), $("#search-subtitle-btn").on("click", (e => utils.openPage(`https://subtitlecat.com/index.php?search=${t}`, t, !1, e))),
+        })), $("#search-subtitle-btn").on("click", (e => utils.openPage(`https://subtitlecat.com/index.php?search=${t}`, t, !1, e))), 
         $("#xunLeiSubtitleBtn").on("click", (() => this.searchXunLeiSubtitle(t))), this.showStatus(t).then();
     }
     async showStatus(e) {
         const t = $("#filterBtn span"), n = $("#favoriteBtn span"), a = $("#hasDownBtn span"), i = $("#hasWatchBtn span"), s = e => e ? `(${e})` : "";
-        t.text(`${m} ${s(this.filterHotKey)}`), n.text(`${v} ${s(this.favoriteHotKey)}`),
+        t.text(`${m} ${s(this.filterHotKey)}`), n.text(`${v} ${s(this.favoriteHotKey)}`), 
         a.text(`${y} ${s(this.hasDownHotKey)}`), i.text(`${k} ${s(this.hasWatchHotKey)}`);
         const o = await storageManager.getCar(e);
         if (o) switch (o.status) {
@@ -3477,7 +3388,7 @@ class ye extends X {
             names: n.actress,
             actionType: d,
             publishTime: n.publishTime
-        }), this.showStatus(n.carNum).then(), window.refresh(), utils.closePage(), layer.closeAll(),
+        }), this.showStatus(n.carNum).then(), window.refresh(), utils.closePage(), layer.closeAll(), 
         this.answerCount = 1) : utils.q(e, `是否屏蔽${n.carNum}?`, (async () => {
             await storageManager.saveCar({
                 carNum: n.carNum,
@@ -3493,7 +3404,7 @@ class ye extends X {
     speedVideo() {
         if ($("#preview-video").is(":visible")) {
             const e = document.getElementById("preview-video");
-            return void (e && (e.muted = !1, e.controls = !1, e.currentTime + 5 < e.duration ? e.currentTime += 5 : (show.info("预览视频结束, 已回到开头"),
+            return void (e && (e.muted = !1, e.controls = !1, e.currentTime + 5 < e.duration ? e.currentTime += 5 : (show.info("预览视频结束, 已回到开头"), 
             e.currentTime = 1)));
         }
         const e = $('iframe[id^="layui-layer-iframe"]');
@@ -3514,8 +3425,8 @@ class ye extends X {
         const e = {};
         this.filterHotKey && (e[this.filterHotKey] = () => {
             this.answerCount >= 2 ? this.filterOne(null, !0) : this.filterOne(null), this.answerCount++;
-        }), this.favoriteHotKey && (e[this.favoriteHotKey] = () => this.favoriteOne(null)),
-        this.hasDownHotKey && (e[this.hasDownHotKey] = () => this.hasDownOne()), this.hasWatchHotKey && (e[this.hasWatchHotKey] = () => this.hasWatchOne()),
+        }), this.favoriteHotKey && (e[this.favoriteHotKey] = () => this.favoriteOne(null)), 
+        this.hasDownHotKey && (e[this.hasDownHotKey] = () => this.hasDownOne()), this.hasWatchHotKey && (e[this.hasWatchHotKey] = () => this.hasWatchOne()), 
         this.speedVideoHotKey && (e[this.speedVideoHotKey] = () => this.speedVideo());
         const t = (e, t) => {
             se.registerHotkey(e, (n => {
@@ -3574,16 +3485,16 @@ class xe extends X {
         return "\n            <style>\n                /* 下拉菜单容器（相对定位） */\n                .sub-btns {\n                    position: relative;\n                    display: inline-block;\n                }\n                \n                /* 下拉菜单内容（默认隐藏） */\n                .sub-btns-menu {\n                    display: none;\n                    position: absolute;\n                    right: 80px;\n                    top:-10px;\n                    background: white;\n                    padding:10px;\n                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);\n                    z-index: 100;\n                    border-radius: 4px;\n                    overflow: hidden;\n                }\n                \n                \n                /* 点击后显示菜单（JS 控制） */\n                .sub-btns-menu.show {\n                    display: flex !important;\n                    flex-direction: column;\n                }\n                \n                .table-link-param {\n                    cursor: pointer;\n                }\n            </style\n        ";
     }
     handleResize() {
-        $(".navbar-search").is(":hidden") ? ($(".historyBtnBox").show(), $(".miniHistoryBtnBox").hide()) : ($(".historyBtnBox").hide(),
+        $(".navbar-search").is(":hidden") ? ($(".historyBtnBox").show(), $(".miniHistoryBtnBox").hide()) : ($(".historyBtnBox").hide(), 
         $(".miniHistoryBtnBox").show());
     }
     handle() {
-        r && ($(".navbar-end").prepend('<div class="navbar-item has-sub-btns is-hoverable historyBtnBox">\n                    <a id="historyBtn" class="navbar-link nav-btn" style="color: #aade66 !important;padding-right:15px !important;">\n                        鉴定记录\n                    </a>\n                </div>'),
-        $(".navbar-search").css("margin-left", "0").before('\n                <div class="navbar-item miniHistoryBtnBox">\n                    <a id="miniHistoryBtn" class="navbar-link nav-btn" style="color: #aade66 !important;padding-left:0 !important;padding-right:0 !important;">\n                        鉴定记录\n                    </a>\n                </div>\n            '),
+        r && ($(".navbar-end").prepend('<div class="navbar-item has-sub-btns is-hoverable historyBtnBox">\n                    <a id="historyBtn" class="navbar-link nav-btn" style="color: #aade66 !important;padding-right:15px !important;">\n                        鉴定记录\n                    </a>\n                </div>'), 
+        $(".navbar-search").css("margin-left", "0").before('\n                <div class="navbar-item miniHistoryBtnBox">\n                    <a id="miniHistoryBtn" class="navbar-link nav-btn" style="color: #aade66 !important;padding-left:0 !important;padding-right:0 !important;">\n                        鉴定记录\n                    </a>\n                </div>\n            '), 
         this.handleResize(), $(window).resize((() => {
             this.handleResize();
         })), $("#historyBtn,#miniHistoryBtn").on("click", (e => this.openHistory()))), l && utils.loopDetector((() => $("#setting-btn").length), (() => {
-            $("#top-right-box").append('\n                    <a id="historyBtn" class="menu-btn main-tab-btn" style="background-color:#b68625 !important;">\n                        鉴定记录\n                    </a>\n               '),
+            $("#top-right-box").append('\n                    <a id="historyBtn" class="menu-btn main-tab-btn" style="background-color:#b68625 !important;">\n                        鉴定记录\n                    </a>\n               '), 
             $("#historyBtn,#miniHistoryBtn").on("click", (e => this.openHistory()));
         }), 1, 1e4, !1), this.bindClick();
     }
@@ -3599,7 +3510,7 @@ class xe extends X {
             anim: -1,
             success: async e => {
                 await this.loadTableData(), $(".layui-layer-content").on("click", "#clearSearchbtn", (async e => {
-                    $("#searchCarNum").val(""), $("#dataType").val("all"), await this.reloadTable(),
+                    $("#searchCarNum").val(""), $("#dataType").val("all"), await this.reloadTable(), 
                     $("#allSelectBox").hide();
                 })).on("focusout keydown", "#searchCarNum", (async e => {
                     if ("focusout" === e.type || "Enter" === e.key) {
@@ -3649,8 +3560,8 @@ class xe extends X {
             e.preventDefault(), e.stopPropagation();
             const t = $(e.currentTarget);
             let n = this.tableObj.getSelectedData(), a = "", i = "";
-            t.hasClass("multiple-history-filterBtn") ? (a = "屏蔽", i = d) : t.hasClass("multiple-history-favoriteBtn") ? (a = "收藏",
-            i = h) : t.hasClass("multiple-history-hasDownBtn") ? (a = "已下载", i = g) : t.hasClass("multiple-history-hasWatchBtn") ? (a = "已观看",
+            t.hasClass("multiple-history-filterBtn") ? (a = "屏蔽", i = d) : t.hasClass("multiple-history-favoriteBtn") ? (a = "收藏", 
+            i = h) : t.hasClass("multiple-history-hasDownBtn") ? (a = "已下载", i = g) : t.hasClass("multiple-history-hasWatchBtn") ? (a = "已观看", 
             i = p) : t.hasClass("multiple-history-deleteBtn") && (a = "移除", i = "delete"), utils.q(e, `当前已勾选${n.length}条数据, 是否全标记为 ${a}?`, (async () => {
                 let e = loading();
                 try {
@@ -3675,7 +3586,7 @@ class xe extends X {
     async getDataList(e, t, n) {
         let a = await storageManager.getCarList();
         this.allCount = a.length, this.filterCount = 0, this.favoriteCount = 0, this.hasDownCount = 0,
-        this.hasWatchCount = 0, a.forEach((e => {
+        this.hasWatchCount = 0, this.waitCheckCount = 0, a.forEach((e => {
             switch (e.status) {
               case d:
                 this.filterCount++;
@@ -3691,12 +3602,17 @@ class xe extends X {
 
               case p:
                 this.hasWatchCount++;
+                break;
+
+              default:
+                this.waitCheckCount++;
             }
-        })), $('#dataType option[value="all"]').text(`所有 (${this.allCount})`), $('#dataType option[value="filter"]').text(`${u} (${this.filterCount})`),
-        $('#dataType option[value="favorite"]').text(`${b} (${this.favoriteCount})`), $('#dataType option[value="hasDown"]').text(`${y} (${this.hasDownCount})`),
+        })), $('#dataType option[value="all"]').text(`所有 (${this.allCount})`), $('#dataType option[value="waitCheck"]').text(`待鉴定 (${this.waitCheckCount})`),
+        $('#dataType option[value="filter"]').text(`${u} (${this.filterCount})`), 
+        $('#dataType option[value="favorite"]').text(`${b} (${this.favoriteCount})`), $('#dataType option[value="hasDown"]').text(`${y} (${this.hasDownCount})`), 
         $('#dataType option[value="hasWatch"]').text(`${k} (${this.hasWatchCount})`);
         const i = $("#dataType").val();
-        let s = "all" === i ? a : a.filter((e => e.status === i));
+        let s = "all" === i ? a : "waitCheck" === i ? a.filter((e => "" === e.status || !e.status)) : a.filter((e => e.status === i));
         const o = $("#searchCarNum").val().trim();
         if (o) {
             let e = o.toLowerCase().replace("-c", "").replace("-uc", "").replace("-4k", "");
@@ -3896,7 +3812,7 @@ class xe extends X {
     }
     handleDelete(e, t) {
         utils.q(e, `是否移除${t}?`, (async () => {
-            await storageManager.removeCar(t), this.getBean("ListPagePlugin").showCarNumBox(t),
+            await storageManager.removeCar(t), this.getBean("ListPagePlugin").showCarNumBox(t), 
             this.reloadTable(null).then();
         }));
     }
@@ -3930,6 +3846,7 @@ class xe extends X {
             value: p,
             text: k
         } ];
+        clog.debug(l);
         const c = `\n            <div style="padding: 20px;">\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">番号:</label>\n                    <input type="text" id="edit-carNum" value="${t}" style="${r} background-color: #f0f0f0;" readonly>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">演员 (用空格隔开):</label>\n                    <textarea id="edit-names" style="${o}">${n}</textarea>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">状态:</label>\n                    <select id="edit-status" style="width: 100%; padding: 10px; border: 1px solid #ddd;">\n                        <option value="" ${"" === i ? "selected" : ""}>-- 请选择 --</option>\n                        ${l.map((e => `\n                            <option value="${e.value}" ${i === e.value ? "selected" : ""}>${e.text}</option>\n                        `)).join("")}\n                    </select>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">链接:</label>\n                    <input type="text" id="edit-url" value="${a}" style="${r}">\n                </div>\n                \n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">备注:</label>\n                    <textarea id="edit-remark" style="${o}">${s}</textarea>\n                </div>\n            </div>\n        `;
         layer.open({
             type: 1,
@@ -3950,7 +3867,9 @@ class xe extends X {
                 })), n(i);
             },
             yes: async t => {
-                const n = $("#edit-names").val().trim(), a = $("#edit-status").val(), i = $("#edit-url").val().trim(), s = $("#edit-remark").val().trim(), o = {
+                const n = $("#edit-names").val().trim(), a = $("#edit-status").val(), i = $("#edit-url").val().trim(), s = $("#edit-remark").val().trim();
+                if (!a) return show.error("请选择状态"), !1;
+                const o = {
                     ...e,
                     names: n,
                     actionType: a,
@@ -3971,17 +3890,7 @@ class $e extends X {
         return "ReviewPlugin";
     }
     async handle() {
-        if ($(document).on("click", ".down-115", (async e => {
-            const t = $(e.currentTarget).data("magnet");
-            let n = loading();
-            try {
-                await this.getBean("WangPan115TaskPlugin").handleAddTask(t);
-            } catch (a) {
-                show.error("发生错误:" + a), console.error(a);
-            } finally {
-                n.close();
-            }
-        })), window.isDetailPage) {
+        if (window.isDetailPage) {
             if (r) {
                 const e = this.parseMovieId(window.location.href);
                 await this.showReview(e), await this.getBean("RelatedPlugin").showRelated($("#magnets-content"), e);
@@ -4021,15 +3930,15 @@ class $e extends X {
     }
     async showReview(e, t) {
         const n = await storageManager.getSetting("enableLoadReview", _), a = t || $("#magnets-content");
-        a.append(`\n            <div style="display: flex; align-items: center; margin: 16px 0; color: #666; font-size: 14px;">\n                <span style="flex: 1; height: 1px; background: linear-gradient(to right, transparent, #999, transparent);"></span>\n                <span style="padding: 0 10px;" data-tip="想要发表评论? 滑上去, 点击上面的按钮-看过">❓ 评论区</span>\n                <a id="reviewsFold" style="margin-left: 8px; color: #1890ff; text-decoration: none; display: flex; align-items: center;">\n                    <span class="toggle-text">${n === _ ? "折叠" : "展开"}</span>\n                    <span class="toggle-icon" style="margin-left: 4px;">${n === _ ? "▲" : "▼"}</span>\n                </a>\n                <span style="flex: 1; height: 1px; background: linear-gradient(to right, transparent, #999, transparent);"></span>\n            </div>\n        `),
+        a.append(`\n            <div style="display: flex; align-items: center; margin: 16px 0; color: #666; font-size: 14px;">\n                <span style="flex: 1; height: 1px; background: linear-gradient(to right, transparent, #999, transparent);"></span>\n                <span style="padding: 0 10px;" data-tip="想要发表评论? 滑上去, 点击上面的按钮-看过">❓ 评论区</span>\n                <a id="reviewsFold" style="margin-left: 8px; color: #1890ff; text-decoration: none; display: flex; align-items: center;">\n                    <span class="toggle-text">${n === _ ? "折叠" : "展开"}</span>\n                    <span class="toggle-icon" style="margin-left: 4px;">${n === _ ? "▲" : "▼"}</span>\n                </a>\n                <span style="flex: 1; height: 1px; background: linear-gradient(to right, transparent, #999, transparent);"></span>\n            </div>\n        `), 
         $("#reviewsFold").on("click", (t => {
             t.preventDefault(), t.stopPropagation();
             const n = $("#reviewsFold .toggle-text"), a = $("#reviewsFold .toggle-icon"), i = "展开" === n.text();
-            n.text(i ? "折叠" : "展开"), a.text(i ? "▲" : "▼"), i ? ($("#reviewsContainer").show(),
-            $("#reviewsFooter").show(), this.isInit || (this.fetchAndDisplayReviews(e), this.isInit = !0),
-            storageManager.saveSettingItem("enableLoadReview", _)) : ($("#reviewsContainer").hide(),
+            n.text(i ? "折叠" : "展开"), a.text(i ? "▲" : "▼"), i ? ($("#reviewsContainer").show(), 
+            $("#reviewsFooter").show(), this.isInit || (this.fetchAndDisplayReviews(e), this.isInit = !0), 
+            storageManager.saveSettingItem("enableLoadReview", _)) : ($("#reviewsContainer").hide(), 
             $("#reviewsFooter").hide(), storageManager.saveSettingItem("enableLoadReview", C));
-        })), a.append('<div id="reviewsContainer"></div>'), a.append('<div id="reviewsFooter"></div>'),
+        })), a.append('<div id="reviewsContainer"></div>'), a.append('<div id="reviewsFooter"></div>'), 
         n === _ && await this.fetchAndDisplayReviews(e);
     }
     async fetchAndDisplayReviews(e) {
@@ -4040,12 +3949,12 @@ class $e extends X {
         try {
             i = await R(e, 1, a);
         } catch (o) {
-            o.toString().includes("簽名已過期") && show.error("生成签名失败, 请检查系统时间及时区是否正确!"), clog.error("获取评论失败:", o),
+            o.toString().includes("簽名已過期") && show.error("生成签名失败, 请检查系统时间及时区是否正确!"), clog.error("获取评论失败:", o), 
             console.error("获取评论失败:", o);
         } finally {
             $("#reviewsLoading").remove();
         }
-        if (!i) return t.append('\n                <div style="margin-top:15px;background-color:#ffffff;padding:10px;margin-left: -10px;">\n                    获取评论失败\n                    <a id="retryFetchReviews" href="javascript:;" style="margin-left: 10px; color: #1890ff; text-decoration: none;">重试</a>\n                </div>\n            '),
+        if (!i) return t.append('\n                <div style="margin-top:15px;background-color:#ffffff;padding:10px;margin-left: -10px;">\n                    获取评论失败\n                    <a id="retryFetchReviews" href="javascript:;" style="margin-left: 10px; color: #1890ff; text-decoration: none;">重试</a>\n                </div>\n            '), 
         void $("#retryFetchReviews").on("click", (async () => {
             $("#retryFetchReviews").parent().remove(), await this.fetchAndDisplayReviews(e);
         }));
@@ -4069,11 +3978,13 @@ class $e extends X {
         } else n.html('<div style="text-align:center; padding:10px; color:#666; margin-top:10px;">已加载全部评论</div>');
     }
     displayReviews(e, t, n) {
-        e.length && (e.forEach((e => {
+        if (!e.length) return;
+        const o = [];
+        e.forEach((e => {
             if (n.some((t => e.content.includes(t)))) return;
-            const a = Array(e.score).fill('<i class="icon-star"></i>').join(""), i = e.content.replace(/ed2k:\/\/\|file\|[^|]+\|\d+\|[a-fA-F0-9]{32}\|\/|magnet:\?[^\s"'<>`\u4e00-\u9fa5，。？！（）【】]+|https?:\/\/[^\s"'<>`\u4e00-\u9fa5，。？！（）【】]+/g, (e => e.startsWith("ed2k://") ? `\n                            <span style="word-break: break-all;background: #e0f2fe;color: #0369a1;">${e}</span>\n                            <button class="button is-info down-115" data-magnet="${e}" style="font-size: 11px">115离线下载</button>\n                        ` : e.startsWith("magnet:") ? `\n                            <a href="${e}" class="a-primary" style="padding:0; word-break: break-all; white-space: pre-wrap;" target="_blank" rel="noopener noreferrer">${e}</a>\n                            <button class="button is-info down-115" data-magnet="${e}" style="font-size: 11px">115离线下载</button>\n                        ` : e.startsWith("http://") || e.startsWith("https://") ? `\n                            <a href="${e}" class="a-primary" style="padding:0; word-break: break-all; white-space: pre-wrap;" target="_blank" rel="noopener noreferrer">${e}</a>\n                        ` : e)), s = `\n                <div class="item columns is-desktop" style="display:block;margin-top:6px;background-color:#ffffff;padding:10px;margin-left: -10px;word-break: break-word;position:relative;">\n                    <span style="position:absolute;top:5px;right:10px;color:#999;font-size:12px;">#${this.floorIndex++}楼</span>\n                    ${e.username} &nbsp;&nbsp; <span class="score-stars">${a}</span> \n                    <span class="time">${utils.formatDate(e.created_at)}</span> \n                    &nbsp;&nbsp; 点赞:${e.likes_count}\n                    <p class="review-content" style="margin-top: 5px;"> ${i} </p>\n                </div>\n            `;
-            t.append(s);
-        })), this.rightClickFilter());
+            const a = Array(e.score).fill('<i class="icon-star"></i>').join(""), i = e.content.replace(/ed2k:\/\/\|file\|[^|]+\|\d+\|[a-fA-F0-9]{32}\|\/|magnet:\?[^\s"'<>`\u4e00-\u9fa5，。？！（）【】]+|https?:\/\/[^\s"'<>`\u4e00-\u9fa5，。？！（）【】]+/g, (e => e.startsWith("ed2k://") ? `\n                            <span style="word-break: break-all;background: #e0f2fe;color: #0369a1;">${e}</span>\n\n                        ` : e.startsWith("magnet:") ? `\n                            <a href="${e}" class="a-primary" style="padding:0; word-break: break-all; white-space: pre-wrap;" target="_blank" rel="noopener noreferrer">${e}</a>\n\n                        ` : e.startsWith("http://") || e.startsWith("https://") ? `\n                            <a href="${e}" class="a-primary" style="padding:0; word-break: break-all; white-space: pre-wrap;" target="_blank" rel="noopener noreferrer">${e}</a>\n                        ` : e)), s = `\n                <div class="item columns is-desktop" style="display:block;margin-top:6px;background-color:#ffffff;padding:10px;margin-left: -10px;word-break: break-word;position:relative;">\n                    <span style="position:absolute;top:5px;right:10px;color:#999;font-size:12px;">#${this.floorIndex++}楼</span>\n                    ${e.username} &nbsp;&nbsp; <span class="score-stars">${a}</span> \n                    <span class="time">${utils.formatDate(e.created_at)}</span> \n                    &nbsp;&nbsp; 点赞:${e.likes_count}\n                    <p class="review-content" style="margin-top: 5px;"> ${i} </p>\n                </div>\n            `;
+            o.push(s);
+        })), o.length && t.append(o.join("")), this.rightClickFilter();
     }
     async rightClickFilter() {
         await storageManager.getSetting("enableTitleSelectFilter", _) === _ && utils.rightClick(document.body, ".review-content", (async e => {
@@ -4132,10 +4043,10 @@ class Se extends X {
                 movieType: t,
                 blacklistUrl: e.toString()
             }, i = `是否将分类 <span style="color: #f40">${t}</span> 加入到黑名单中?`, n && (i = `分类 <span style="color: #f40">${t}</span> 已在黑名单中, 是否从当前页开始追加屏蔽?`);
-        } else a = this.getActressPageInfo(), i = `是否将该演员 <span style="color: #f40">${a.name}</span> 加入到黑名单中?`,
+        } else a = this.getActressPageInfo(), i = `是否将该演员 <span style="color: #f40">${a.name}</span> 加入到黑名单中?`, 
         n && (i = `演员 <span style="color: #f40">${a.name}</span> 已在黑名单中, 是否从当前页开始追加屏蔽?`);
         const {starId: s, name: r, allName: c, role: d, movieType: h, blacklistUrl: g} = a;
-        if (o.includes("page") && !o.includes("page=1") && (i += "<br/> 注意: 当前页面非第一页, 屏蔽数据将从此页面开始"),
+        if (o.includes("page") && !o.includes("page=1") && (i += "<br/> 注意: 当前页面非第一页, 屏蔽数据将从此页面开始"), 
         l) {
             const e = o.split("/star/")[1].split("/");
             if (e.length > 1) {
@@ -4185,7 +4096,7 @@ class Se extends X {
     }
     async resetBtnTip() {
         const e = this.getBean("TaskPlugin"), t = localStorage.getItem(e.lastCheckBlacklistTimeKey) || "无", n = await storageManager.getSetting("checkBlacklist_intervalTime", 12);
-        this.checkBlacklist_ruleTime = await storageManager.getSetting("checkBlacklist_ruleTime", 8760),
+        this.checkBlacklist_ruleTime = await storageManager.getSetting("checkBlacklist_ruleTime", 8760), 
         $("#checkBlacklistBtn").attr("data-tip", `上次检测时间: ${t}; 检测间隔时间: ${n}小时`);
     }
     async openBlacklistDialog() {
@@ -4253,13 +4164,13 @@ class Se extends X {
         const h = t.map((t => {
             t.role === B ? c++ : t.role === P && d++;
             let n = !1;
-            return t.lastPublishTime && (n = !e.isUnnecessaryCheck(t.lastPublishTime, this.checkBlacklist_ruleTime)),
+            return t.lastPublishTime && (n = !e.isUnnecessaryCheck(t.lastPublishTime, this.checkBlacklist_ruleTime)), 
             {
                 ...t,
                 isUnCheck: n
             };
         })).filter((e => !(a && !e.name.includes(a)) && (("normal" !== i || !e.isUnCheck) && (!("stop" === i && !e.isUnCheck) && (o ? e.role === o : !("hasT" === r && !e.url.includes("t=")) && ("noT" !== r || !e.url.includes("t=")))))));
-        s.html(`\n            <option value="">所有 (${l})</option>\n            <option value="actor">男演员 (${c})</option>\n            <option value="actress">女演员 (${d})</option>\n        `),
+        s.html(`\n            <option value="">所有 (${l})</option>\n            <option value="actor">男演员 (${c})</option>\n            <option value="actress">女演员 (${d})</option>\n        `), 
         s.val(o);
         const g = new Map;
         for (const m of n) {
@@ -4366,7 +4277,7 @@ class Se extends X {
                 responsive: 1,
                 formatter: (e, t, n) => {
                     let a = "", i = "正常检测";
-                    return e.getData().isUnCheck && (a = `停更${this.checkBlacklist_ruleTime / 24 / 365}年以上, 下轮任务不再进行检测`,
+                    return e.getData().isUnCheck && (a = `停更${this.checkBlacklist_ruleTime / 24 / 365}年以上, 下轮任务不再进行检测`, 
                     i = "停止检测"), `<span data-tip="${a}" style="${a ? "color: #cc4444;" : ""}">${i}</span>`;
                 }
             }, {
@@ -4383,7 +4294,7 @@ class Se extends X {
                         null == (t = e.getElement().querySelector(".delete-btn")) || t.addEventListener("click", (e => {
                             const t = a.name, n = a.starId;
                             t ? n ? utils.q(e, `是否移除对 ${t} 的屏蔽?`, (async () => {
-                                await storageManager.removeBlacklistCarList(n), await storageManager.deleteBlacklistItem(n),
+                                await storageManager.removeBlacklistCarList(n), await storageManager.deleteBlacklistItem(n), 
                                 show.info("操作成功"), this.reloadTable().then();
                             })) : show.error("获取starId失败") : show.error("获取名称失败");
                         })), null == (n = e.getElement().querySelector(".keyword-btn")) || n.addEventListener("click", (e => {
@@ -4394,6 +4305,7 @@ class Se extends X {
                                 prefix: e,
                                 count: t
                             }))).sort(((e, t) => t.count - e.count));
+                            clog.debug(n);
                         }));
                     })), '\n                           \x3c!-- <a class="a-normal keyword-btn"> <span>提取屏蔽词</span> </a>--\x3e\n                            <a class="a-danger delete-btn"> <span>✂️ 删除</span> </a>\n                        ';
                 }
@@ -4425,8 +4337,8 @@ class Se extends X {
         let e = window.location.href.replace(/([&?])sort_type=[^&]+(&|$)/, "$1");
         e = e.replace(/[&?]$/, ""), e = e.replace(/\?&/, "?");
         let t = e;
-        return t = t.replace(/([&?])page=\d+(&|$)/, "$1"), t = t.replace(/[&?]$/, ""), t = t.replace(/\?&/, "?"),
-        t = t.replace(/\/(\d+)(?:\/(\d+))?(\?|$)/, ((e, t, n, a) => void 0 !== n ? `/${t}${a}` : e)),
+        return t = t.replace(/([&?])page=\d+(&|$)/, "$1"), t = t.replace(/[&?]$/, ""), t = t.replace(/\?&/, "?"), 
+        t = t.replace(/\/(\d+)(?:\/(\d+))?(\?|$)/, ((e, t, n, a) => void 0 !== n ? `/${t}${a}` : e)), 
         t;
     }
     parseUrlId(e) {
@@ -4435,9 +4347,9 @@ class Se extends X {
     }
     async filterAllVideo(e, t) {
         let n, a;
-        if (t ? (l && t.find(".avatar-box").length > 0 && t.find(".avatar-box").parent().remove(),
-        n = t.find(this.getSelector().requestDomItemSelector), a = t.find(this.getSelector().nextPageSelector).attr("href")) : (n = $(this.getSelector().itemSelector),
-        a = $(this.getSelector().nextPageSelector).attr("href")), a && 0 === n.length) throw show.error("解析列表失败"),
+        if (t ? (l && t.find(".avatar-box").length > 0 && t.find(".avatar-box").parent().remove(), 
+        n = t.find(this.getSelector().requestDomItemSelector), a = t.find(this.getSelector().nextPageSelector).attr("href")) : (n = $(this.getSelector().itemSelector), 
+        a = $(this.getSelector().nextPageSelector).attr("href")), a && 0 === n.length) throw show.error("解析列表失败"), 
         new Error("解析列表失败");
         for (const s of n) {
             const t = $(s), {carNum: n, url: a, publishTime: o} = this.getBean("ListPagePlugin").findCarNumAndHref(t);
@@ -4468,37 +4380,22 @@ class Se extends X {
             const n = $(i), {carNum: a, url: o, publishTime: r} = this.getBean("ListPagePlugin").findCarNumAndHref(n);
             if (o && a) try {
                 if (await storageManager.getCar(a)) continue;
-                await storageManager.saveCar({
-                    carNum: a,
-                    url: o,
-                    names: e,
-                    actionType: t,
-                    publishTime: r
-                }), clog.log("批量操作", e, a, t);
-            } catch (s) {
-                console.error(`保存失败 [${a}]:`, s);
-            }
+                await storageManager.saveCar({carNum: a, url: o, names: e, actionType: t, publishTime: r}), clog.log("批量操作", e, a, t);
+            } catch (s) { console.error(`保存失败 [${a}]:`, s); }
         }
-        if (a) {
-            show.info("请不要关闭窗口, 正在解析下一页:" + a), await new Promise((e => setTimeout(e, 500)));
+        if (a) { show.info("请不要关闭窗口, 正在解析下一页:" + a), await new Promise((e => setTimeout(e, 500)));
             const i = await gmHttp.get(a), s = new DOMParser, o = $(s.parseFromString(i, "text/html"));
-            await this.batchSaveAllVideos(e, t);
-        } else show.ok("执行结束!"), window.refresh();
+            await this.batchSaveAllVideos(e, t); }
+        else show.ok("执行结束!"), window.refresh();
     }
     async filterActorVideo(e, t, n) {
         let {nextPageLink: a} = await this.parseAndSaveFilterInfo(n, e, t);
         if (this.nextPageLink = a, a) {
             let n;
             this.lastPageLink = a, show.info("请不要关闭窗口, 正在解析下一页:" + a);
-            const i = utils.getUrlParam(a, "page") || 0, s = this.getBean("Beyond60Plugin");
-            if (r && s && i > 60) {
-                let {html: e, nextUrl: t, hasMore: i} = await s.handleBeyond60(a), o = `\n                    <div class ='movie-list'>${e}</div>\n                    ${t ? `<a class="pagination-next" href="${t}"></a>` : ""}\n                `;
-                n = utils.htmlTo$dom(o);
-            } else {
-                clog.log("正在请求下一页内容:", a);
-                const e = await gmHttp.get(a);
-                n = utils.htmlTo$dom(e);
-            }
+            clog.log("正在请求下一页内容:", a);
+            const i = await gmHttp.get(a);
+            n = utils.htmlTo$dom(i);
             await this.filterActorVideo(e, t, n);
         } else show.ok("执行结束!"), window.refresh();
     }
@@ -4506,7 +4403,7 @@ class Se extends X {
         let a, i;
         if (e) {
             let t = !1, n = T;
-            e.text().includes(I) && (t = !0, n = I), t && e.find(".avatar-box").length > 0 && e.find(".avatar-box").parent().remove(),
+            e.text().includes(I) && (t = !0, n = I), t && e.find(".avatar-box").length > 0 && e.find(".avatar-box").parent().remove(), 
             a = e.find(this.getSelector(n).requestDomItemSelector), i = e.find(this.getSelector(n).nextPageSelector).attr("href");
         } else a = $(this.getSelector().itemSelector), i = $(this.getSelector().nextPageSelector).attr("href");
         if (i && 0 === a.length) return {
@@ -4565,7 +4462,7 @@ class Ce extends X {
             const r = o.includes("advanced_search");
             r ? t = $("h2.section-title") : i = "flex-grow:1;";
             const l = localStorage.getItem("jhs_sortMethod"), d = "当前排序方式: " + ("rateCount" === l ? "评价人数" : "date" === l ? "时间" : "默认");
-            t.append(`\n                <div style="display: flex;align-items: center; ${i} ">\n                    <a id="waitCheckBtn" class="menu-btn main-tab-btn" style="background-color:#56c938 !important;"><span>打开待鉴定</span></a>\n                    <a id="waitDownBtn" class="menu-btn main-tab-btn" style="background-color:#2caac0 !important;"><span>打开已收藏</span></a>\n                    ${e ? `\n                     <a id="addBlacklistBtn" class="menu-btn main-tab-btn" style="background-color:${a} !important;" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></a>\n                     <a id="filterAllVideo" class="menu-btn main-tab-btn" style="background-color:#e8ab39 !important;" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></a>\n                     <a id="favoriteAllVideo" class="menu-btn main-tab-btn" style="background-color:#25b1dc !important;" data-tip="一键收藏当前页面所有作品"><span>⭐ 一键收藏所有作品</span></a>\n                     <a id="hasDownAllVideo" class="menu-btn main-tab-btn" style="background-color:#7bc73b !important;margin-right: 30px!important;" data-tip="一键标记当前页面所有作品为已下载"><span>📥️ 一键已下载所有作品</span></a>\n                    ` : ""}\n                    ${o.includes("/tags") ? `\n                      <a id="addBlacklistBtn" class="menu-btn main-tab-btn" style="background-color:${a} !important;" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></a>\n                    ` : ""}\n                </div>\n                <div style="display: flex;align-items: center;">\n                    <a id="newVideoBtn" class="menu-btn main-tab-btn" style="background-color:#2c6cc0 !important;"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></a>\n                    <a id="blacklistBtn" class="menu-btn main-tab-btn" style="background-color:#34393f !important;"><span>演员黑名单</span></a>\n                    ${c || r ? "" : `<a id="sort-toggle-btn" class="menu-btn main-tab-btn" style="background-color:#8783ab !important;"> ${d} </a>`}\n                </div>\n            `);
+            t.append(`\n                <div style="display: flex;align-items: center; ${i} ">\n                    <a id="waitCheckBtn" class="menu-btn main-tab-btn" style="background-color:#56c938 !important;"><span>打开待鉴定</span></a>\n                    ${e ? `\n                     <a id="addBlacklistBtn" class="menu-btn main-tab-btn" style="background-color:${a} !important;" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></a>\n                     <a id="filterAllVideo" class="menu-btn main-tab-btn" style="background-color:#e8ab39 !important;" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></a>\n                     <a id="favoriteAllVideo" class="menu-btn main-tab-btn" style="background-color:#25b1dc !important;" data-tip="一键收藏当前页面所有作品"><span>一键收藏所有作品</span></a>\n                     <a id="hasDownAllVideo" class="menu-btn main-tab-btn" style="background-color:#7bc73b !important;margin-right: 30px!important;" data-tip="一键标记当前页面所有作品为已下载"><span>一键已下载所有作品</span></a>\n                    ` : ""}\n                    ${o.includes("/tags") ? `\n                      <a id="addBlacklistBtn" class="menu-btn main-tab-btn" style="background-color:${a} !important;" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></a>\n                    ` : ""}\n                </div>\n                <div style="display: flex;align-items: center;">\n                    <a id="newVideoBtn" class="menu-btn main-tab-btn" style="background-color:#2c6cc0 !important;"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></a>\n                    <a id="blacklistBtn" class="menu-btn main-tab-btn" style="background-color:#34393f !important;"><span>演员黑名单</span></a>\n                    ${c || r ? "" : `<a id="sort-toggle-btn" class="menu-btn main-tab-btn" style="background-color:#8783ab !important;"> ${d} </a>`}\n                </div>\n            `);
         }
         if (l) {
             const e = o.includes("/star/");
@@ -4574,14 +4471,12 @@ class Ce extends X {
                 const e = await storageManager.getBlacklist(), a = this.getActressPageInfo();
                 e.find((e => e.starId === a.starId)) && (t = "已加入黑名单", n = "#885d5d");
             }
-            $(".masonry").parent().prepend(`\n                <div style="margin: 10px; display: flex;">\n                    <a id="waitCheckBtn" class="menu-btn main-tab-btn" style="background-color:#56c938 !important;"><span>打开待鉴定</span></a>\n                    <a id="waitDownBtn" class="menu-btn main-tab-btn" style="background-color:#2caac0 !important;"><span>打开已收藏</span></a>\n                    \n                    ${e ? `    \n                        <a id="addBlacklistBtn" class="menu-btn main-tab-btn" style="background-color:${n} !important;" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${t}</span></a>\n                        <a id="filterAllVideo" class="menu-btn main-tab-btn" style="background-color:#e8ab39 !important;" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></a>\n                        <a id="favoriteAllVideo" class="menu-btn main-tab-btn" style="background-color:#25b1dc !important;" data-tip="一键收藏当前页面所有作品"><span>⭐ 一键收藏所有作品</span></a>\n                        <a id="hasDownAllVideo" class="menu-btn main-tab-btn" style="background-color:#7bc73b !important;" data-tip="一键标记当前页面所有作品为已下载"><span>📥️ 一键已下载所有作品</span></a>\n                    ` : '<a id="blacklistBtn" class="menu-btn main-tab-btn" style="background-color:#34393f !important;"><span>演员黑名单</span></a>'}\n                </div>\n            `);
+            $(".masonry").parent().prepend(`\n                <div style="margin: 10px; display: flex;">\n                    <a id="waitCheckBtn" class="menu-btn main-tab-btn" style="background-color:#56c938 !important;"><span>打开待鉴定</span></a>\n                    ${e ? `    \n                        <a id="addBlacklistBtn" class="menu-btn main-tab-btn" style="background-color:${n} !important;" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${t}</span></a>\n                        <a id="filterAllVideo" class="menu-btn main-tab-btn" style="background-color:#e8ab39 !important;" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></a>\n                        <a id="favoriteAllVideo" class="menu-btn main-tab-btn" style="background-color:#25b1dc !important;" data-tip="一键收藏当前页面所有作品"><span>一键收藏所有作品</span></a>\n                        <a id="hasDownAllVideo" class="menu-btn main-tab-btn" style="background-color:#7bc73b !important;" data-tip="一键标记当前页面所有作品为已下载"><span>一键已下载所有作品</span></a>\n                    ` : '<a id="blacklistBtn" class="menu-btn main-tab-btn" style="background-color:#34393f !important;"><span>演员黑名单</span></a>'}\n                </div>\n            `);
         }
     }
     bindEvent() {
         $("#waitCheckBtn").on("click", (e => {
             this.openWaitCheck(e).then();
-        })), $("#waitDownBtn").on("click", (e => {
-            this.openFavorite(e).then();
         })), $("#newVideoBtn").on("click", (e => {
             this.getBean("NewVideoPlugin").openDialog();
         })), $("#blacklistBtn").on("click", (e => {
@@ -4613,43 +4508,23 @@ class Ce extends X {
                     await e.filterAllVideo(i), window.refresh();
                 } catch (t) {
                     console.error(t);
-                } finally {
-                    this.loadObj.close();
-                }
+                } finally { this.loadObj.close(); }
             }));
         })), $("#favoriteAllVideo").on("click", (async t => {
-            let n = {
-                clientX: t.clientX,
-                clientY: t.clientY + 80
-            }, a = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
+            let n = {clientX: t.clientX, clientY: t.clientY + 80}, a = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
             if (0 === a.length) return void show.error("获取演员名称失败");
             let i = a.text().trim().split(",")[0];
             utils.q(n, "一键收藏所有可见作品?", (async () => {
                 this.loadObj = loading();
-                try {
-                    await e.batchSaveAllVideos(i, h), window.refresh();
-                } catch (t) {
-                    console.error(t);
-                } finally {
-                    this.loadObj.close();
-                }
+                try { await e.batchSaveAllVideos(i, h), window.refresh(); } catch (t) { console.error(t); } finally { this.loadObj.close(); }
             }));
         })), $("#hasDownAllVideo").on("click", (async t => {
-            let n = {
-                clientX: t.clientX,
-                clientY: t.clientY + 80
-            }, a = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
+            let n = {clientX: t.clientX, clientY: t.clientY + 80}, a = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
             if (0 === a.length) return void show.error("获取演员名称失败");
             let i = a.text().trim().split(",")[0];
             utils.q(n, "一键已下载所有可见作品?", (async () => {
                 this.loadObj = loading();
-                try {
-                    await e.batchSaveAllVideos(i, g), window.refresh();
-                } catch (t) {
-                    console.error(t);
-                } finally {
-                    this.loadObj.close();
-                }
+                try { await e.batchSaveAllVideos(i, g), window.refresh(); } catch (t) { console.error(t); } finally { this.loadObj.close(); }
             }));
         }));
     }
@@ -4703,19 +4578,6 @@ class Ce extends X {
             }
             a++;
         })), 0 === a && show.info("没有需鉴定的视频");
-    }
-    async openFavorite() {
-        let e = await storageManager.getSetting("waitCheckCount", 5);
-        const t = (await storageManager.getCarList()).filter((e => e.status === h)).sort(((e, t) => t.createDate - e.createDate));
-        for (let n = 0; n < e; n++) {
-            if (n >= t.length) return;
-            let e = t[n], a = e.carNum, i = e.url;
-            if (a.includes("FC2-")) {
-                const e = this.parseMovieId(i);
-                await this.getBean("Fc2Plugin").openFc2Page(e, a, i);
-            } else window.open(i);
-            clog.debug("打开已收藏", a, i);
-        }
     }
 }
 
@@ -4792,10 +4654,10 @@ const _e = async (e, t = "ja", n = "zh-CN") => {
 
 class Ie extends X {
     constructor() {
-        super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0),
-        i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0),
-        i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0),
-        i(this, "currentPageTotalCount", 0), i(this, "cache", localStorage.getItem("jhs_translate") ? JSON.parse(localStorage.getItem("jhs_translate")) : {}),
+        super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0), 
+        i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0), 
+        i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0), 
+        i(this, "currentPageTotalCount", 0), i(this, "cache", localStorage.getItem("jhs_translate") ? JSON.parse(localStorage.getItem("jhs_translate")) : {}), 
         i(this, "writeQueue", Promise.resolve());
     }
     getName() {
@@ -4805,31 +4667,23 @@ class Ie extends X {
         new BroadcastChannel("channel-refresh").addEventListener("message", (async e => {
             let t = e.data.type;
             if ("refresh" === t) {
-                await this.doFilter();
+                await this.doFilter(), this.applyVisibility();
                 const e = this.getBean("HistoryPlugin");
                 e.tableObj && e.tableObj.setData();
                 const t = this.getBean("NewVideoPlugin");
                 t && (t.showNewVideoCount().then(), t.loadData());
             } else "cleanCache_filter_actor_actress_car_list" === t ? storageManager.cache_filter_actor_actress_car_list && (storageManager.cache_filter_actor_actress_car_list = null) : "clean_cacheSettingObj" === t && storageManager.cacheSettingObj && (storageManager.cacheSettingObj = null);
-        })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
-        await this.doFilter(), this.createQuickFilter(), this.bindClick().then(), this.bindListPageHotKey().then(),
-        this.rememberTagExpand(), $(this.getSelector().itemSelector + " a").attr("target", "_blank"),
+        })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), 
+        await this.doFilter(), this.createQuickFilter(), this.applyVisibility(), this.bindClick().then(), this.bindListPageHotKey().then(), 
+        this.rememberTagExpand(), $(this.getSelector().itemSelector + " a").attr("target", "_blank"), 
         this.checkDom();
     }
     createQuickFilter() {
         if ($("#jhs-quick-filter").length) return;
-        const e = this.getSelector(), t = `
-            <div id="jhs-quick-filter" style="margin:8px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-                <span style="font-size:12px;color:#888;margin-right:4px">筛选:</span>
-                <a class="jhs-filter-btn active" data-jhs-filter="all" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#485fc7;color:#fff;border:none">全部</a>
-                <a class="jhs-filter-btn" data-jhs-filter="waitCheck" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#f5f5f5;color:#666;border:1px solid #ddd">待鉴定</a>
-                <a class="jhs-filter-btn" data-jhs-filter="favorite" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#f5f5f5;color:#666;border:1px solid #ddd">⭐ 已收藏</a>
-                <a class="jhs-filter-btn" data-jhs-filter="hasDown" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#f5f5f5;color:#666;border:1px solid #ddd">📥️ 已下载</a>
-                <a class="jhs-filter-btn" data-jhs-filter="filter" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#f5f5f5;color:#666;border:1px solid #ddd">🚫 已屏蔽</a>
-            </div>`;
+        const e = this.getSelector(), t = '\n            <div id="jhs-quick-filter" style="margin:8px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">\n                <span style="font-size:12px;color:#888;margin-right:4px">筛选:</span>\n                <a class="jhs-filter-btn" data-jhs-filter="all" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#f5f5f5;color:#666;border:1px solid #ddd">全部</a>\n                <a class="jhs-filter-btn active" data-jhs-filter="waitCheck" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#485fc7;color:#fff;border:none">待鉴定</a>\n                <a class="jhs-filter-btn" data-jhs-filter="favorite" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#f5f5f5;color:#666;border:1px solid #ddd">已收藏</a>\n                <a class="jhs-filter-btn" data-jhs-filter="hasDown" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#f5f5f5;color:#666;border:1px solid #ddd">已下载</a>\n                <a class="jhs-filter-btn" data-jhs-filter="hasWatch" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#f5f5f5;color:#666;border:1px solid #ddd">已观看</a>\n                <a class="jhs-filter-btn" data-jhs-filter="filter" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#f5f5f5;color:#666;border:1px solid #ddd">已屏蔽</a>\n            </div>';
         r ? $(e.boxSelector).before(t) : l && $(".masonry").before(t);
         const n = this;
-        $("#jhs-quick-filter").on("click", ".jhs-filter-btn", (function() {
+        this.activeQuickFilter = "waitCheck", this.applyQuickFilter("waitCheck"), $("#jhs-quick-filter").on("click", ".jhs-filter-btn", (function() {
             const t = $(this).data("jhs-filter");
             $("#jhs-quick-filter .jhs-filter-btn").css({
                 background: "#f5f5f5",
@@ -4839,15 +4693,18 @@ class Ie extends X {
                 background: "#485fc7",
                 color: "#fff",
                 border: "none"
-            }).addClass("active"), n.applyQuickFilter(t);
+            }).addClass("active"), n.activeQuickFilter = t, n.applyQuickFilter(t);
+        }));
+    }
+    applyVisibility() {
+        const e = this.activeQuickFilter || "waitCheck", t = this.getSelector().itemSelector;
+        $(t).each((function() {
+            const n = $(this), a = n.attr("data-hide") === "yes", i = n.attr("data-jhs-status") || "waitCheck", s = "all" !== e && i !== e;
+            a || s ? n.hide() : n.show();
         }));
     }
     applyQuickFilter(e) {
-        const t = this.getSelector().itemSelector;
-        "all" === e ? $(t).show().removeAttr("data-filter-hidden") : ($(t).each((function() {
-            const n = $(this).attr("data-jhs-status") || "waitCheck";
-            n === e ? $(this).show().removeAttr("data-filter-hidden") : $(this).hide().attr("data-filter-hidden", "1");
-        })));
+        this.activeQuickFilter = e, this.applyVisibility();
     }
     rememberTagExpand() {
         if (!window.location.href.includes("actors")) return;
@@ -4856,7 +4713,7 @@ class Ie extends X {
         const t = "jhs_tag_expand", n = "true" === localStorage.getItem(t), a = $(".actor-tags .content");
         n && a.hasClass("collapse") && e[0].click(), e.on("click", (function() {
             const e = !a.hasClass("collapse");
-            console.log("触发"), localStorage.setItem(t, e.toString());
+            clog.debug("触发"), localStorage.setItem(t, e.toString());
         }));
     }
     checkDom() {
@@ -4866,8 +4723,8 @@ class Ie extends X {
         const n = new MutationObserver((async e => {
             n.disconnect();
             try {
-                this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(),
-                await this.getBean("ListPageButtonPlugin").sortItems(), this.getBean("CoverButtonPlugin").addSvgBtn(),
+                this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), this.applyVisibility(),
+                await this.getBean("ListPageButtonPlugin").sortItems(), this.getBean("CoverButtonPlugin").addSvgBtn(), 
                 $(this.getSelector().itemSelector + " a").attr("target", "_blank"), this.getBean("AutoPagePlugin").checkLoad();
             } finally {
                 n.observe(t, a);
@@ -4885,7 +4742,7 @@ class Ie extends X {
             let n = $(e);
             if (n.find(".avatar-box").length > 0) return;
             const a = (null == (t = n.find("img").attr("title")) ? void 0 : t.trim()) || "";
-            n.find(".photo-info span:first").contents().first().wrap(`<span class="video-title" title="${a}">${a}</span>`),
+            n.find(".photo-info span:first").contents().first().wrap(`<span class="video-title" title="${a}">${a}</span>`), 
             n.find("br").remove();
         }));
     }
@@ -4903,7 +4760,7 @@ class Ie extends X {
     async doFilter() {
         if (!window.isListPage) return;
         let e = $(this.getSelector().itemSelector).toArray();
-        e.length && (await this.filterMovieList(e), await this.getBean("WangPan115MatchPlugin").matchMovieList(e),
+        e.length && (await this.filterMovieList(e), 
         l && await this.getBean("BusImgPlugin").logImageHeightsByRow());
     }
     async filterMovieList(e) {
@@ -4927,9 +4784,9 @@ class Ie extends X {
             actorCarNumToNameMap: new Map,
             actressCarNumToNameMap: new Map
         }), b = utils.time("组装数据耗时"), w = (null == s ? void 0 : s.showFilterItem) ?? C, y = (null == s ? void 0 : s.showFilterActorItem) ?? C, x = (null == s ? void 0 : s.showFilterKeywordItem) ?? C, k = (null == s ? void 0 : s.showFavoriteItem) ?? _, S = (null == s ? void 0 : s.showHasDownItem) ?? _, T = (null == s ? void 0 : s.showHasWatchItem) ?? _, I = (null == s ? void 0 : s.showAllItem) ?? C, P = (null == s ? void 0 : s.tagPosition) || "rightTop";
-        this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0,
-        this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0,
-        this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时"),
+        this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0, 
+        this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0, 
+        this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时"), 
         await Promise.all(e.map((async e => {
             let t = $(e);
             if (l && t.find(".avatar-box").length > 0) return;
@@ -4940,9 +4797,9 @@ class Ie extends X {
                 I === _ && (e = !1), e && !n ? t.hide().attr("data-hide", _) : !e && n && t.show().removeAttr("data-hide");
             }
             let N = Te.IS_WAIT_CHECK, j = null;
-            b ? N = Te.IS_FILTERED : g ? N = Te.IS_FAVORITE : p ? N = Te.IS_HAS_DOWN : u ? N = Te.IS_HAS_WATCH : M ? (N = Te.IS_KEYWORD_FILTER,
-            j = L || "未知") : B ? (N = Te.IS_ACTOR_FILTER, j = f.get(a) || "") : D && (N = Te.IS_ACTRESS_FILTER,
-            j = v.get(a) || ""), j || (j = N.reasonType), N.isCounted && this[N.countKey]++,
+            b ? N = Te.IS_FILTERED : g ? N = Te.IS_FAVORITE : p ? N = Te.IS_HAS_DOWN : u ? N = Te.IS_HAS_WATCH : M ? (N = Te.IS_KEYWORD_FILTER, 
+            j = L || "未知") : B ? (N = Te.IS_ACTOR_FILTER, j = f.get(a) || "") : D && (N = Te.IS_ACTRESS_FILTER, 
+            j = v.get(a) || ""), j || (j = N.reasonType), N.isCounted && this[N.countKey]++, 
             this.currentPageTotalCount++, t.find(".status-tag").remove();
             t.attr("data-jhs-status", N === Te.IS_FILTERED ? "filter" : N === Te.IS_FAVORITE ? "favorite" : N === Te.IS_HAS_DOWN ? "hasDown" : N === Te.IS_HAS_WATCH ? "hasWatch" : "waitCheck");
             const E = "rightTop" === P ? "right: 0; top:5px;" : "left: 0; top:5px;";
@@ -4956,21 +4813,20 @@ class Ie extends X {
             await this.translate(t);
         })));
         const D = utils.time("处理页面耗时"), A = utils.time("累计耗费时间");
-        $("#waitDownBtn span").text(`打开已收藏 (${m.favorite.size})`), clog.log(`\n            <table class="countTable" style='border-collapse: collapse; width: 100%'>\n                <tr>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${o}</td>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${b}</td>\n                </tr>\n                \n                <tr>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${D}</td>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${A}</td>\n                </tr>\n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>项目</td>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>数量</td>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>项目</td>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>数量</td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>屏蔽单番号</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageFilterCount}</strong></td>\n                     <td style='padding: 3px; border: 1px solid #ccc;'>收藏</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageFavoriteCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>屏蔽演员</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageActorFilterCount}</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>已下载</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageHasDownCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>屏蔽关键词</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageKeywordFilterCount}</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>已观看</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageHasWatchCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>待鉴定</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageWaitCheckCount}</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'></td>\n                </tr>\n        \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>总数</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageTotalCount}</strong></td>\n                </tr>\n            </table>\n        `);
+        clog.log(`\n            <table class="countTable" style='border-collapse: collapse; width: 100%'>\n                <tr>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${o}</td>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${b}</td>\n                </tr>\n                \n                <tr>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${D}</td>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${A}</td>\n                </tr>\n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>项目</td>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>数量</td>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>项目</td>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>数量</td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>屏蔽单番号</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageFilterCount}</strong></td>\n                     <td style='padding: 3px; border: 1px solid #ccc;'>收藏</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageFavoriteCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>屏蔽演员</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageActorFilterCount}</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>已下载</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageHasDownCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>屏蔽关键词</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageKeywordFilterCount}</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>已观看</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageHasWatchCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>待鉴定</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageWaitCheckCount}</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'></td>\n                </tr>\n        \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>总数</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageTotalCount}</strong></td>\n                </tr>\n            </table>\n        `);
     }
     async bindClick() {
         let e = this.getSelector();
         $(e.boxSelector).on("click", ".item img", (async e => {
             if (e.preventDefault(), e.stopPropagation(), $(e.target).closest("div.meta-buttons").length) return;
             const t = $(e.target).closest(".item"), {carNum: n, aHref: a} = this.findCarNumAndHref(t);
-            let i = await storageManager.getSetting("dialogOpenDetail", _);
             if (n.includes("FC2-")) {
                 let e = this.parseMovieId(a);
                 this.getBean("Fc2Plugin").openFc2Dialog(e, n, a);
-            } else i === _ ? (utils.openPage(a, n, !0, e), this.$currentImage = null) : window.open(a);
+            } else utils.openPage(a, n, !0, e), this.$currentImage = null;
         })), $(e.boxSelector).on("click", ".item video", (async e => {
             const t = e.currentTarget;
-            t.paused ? t.play().catch((e => console.error("播放失败:", e))) : t.pause(), e.preventDefault(),
+            t.paused ? t.play().catch((e => console.error("播放失败:", e))) : t.pause(), e.preventDefault(), 
             e.stopPropagation();
         })), $(e.boxSelector).on("click", ".item .video-title", (async e => {
             if ($(e.target).closest('[class^="jhs-match-"]').length) return;
@@ -5002,7 +4858,7 @@ class Ie extends X {
         if (await storageManager.getSetting("enableSaveActressCarInfo", C) === _) {
             clog.debug("鉴定补录演员信息-已启用, 开始解析详情页"), clog.debug("开始解析演员详情页", e);
             const n = await gmHttp.get(e), a = utils.htmlTo$dom(n);
-            r ? t = a.find(".female").prev().map(((e, t) => $(t).text())).get().join(" ") : l && (t = a.find('span[onmouseover*="star_"] a').map(((e, t) => $(t).text())).get().join(" ")),
+            r ? t = a.find(".female").prev().map(((e, t) => $(t).text())).get().join(" ") : l && (t = a.find('span[onmouseover*="star_"] a').map(((e, t) => $(t).text())).get().join(" ")), 
             clog.debug("解析到名称:", t);
         }
         return t;
@@ -5014,9 +4870,9 @@ class Ie extends X {
             this.$currentImage = null;
         }));
         let e = await storageManager.getSetting();
-        if (this.filterHotKey = e.filterHotKey, this.favoriteHotKey = e.favoriteHotKey,
-        this.hasDownHotKey = e.hasDownHotKey, this.hasWatchHotKey = e.hasWatchHotKey, this.enableImageHotKey = e.enableImageHotKey || C,
-        this.clogHotKey = e.clogHotKey, this.foldCategoryHotKey = e.foldCategoryHotKey,
+        if (this.filterHotKey = e.filterHotKey, this.favoriteHotKey = e.favoriteHotKey, 
+        this.hasDownHotKey = e.hasDownHotKey, this.hasWatchHotKey = e.hasWatchHotKey, this.enableImageHotKey = e.enableImageHotKey || C, 
+        this.clogHotKey = e.clogHotKey, this.foldCategoryHotKey = e.foldCategoryHotKey, 
         this.enableImageHotKey === C) return;
         const t = async (e, t) => {
             setTimeout((async () => {
@@ -5062,7 +4918,7 @@ class Ie extends X {
         let a, i, s, o = e.find("a"), r = o.attr("href"), l = e.find(".video-title");
         if (l.length > 0) {
             let t = l.find("strong");
-            t.length > 0 && (a = t.text().trim()), i = o.attr("title") ? o.attr("title").trim() : a ? l.text().replace(a, "").trim() : l.text().trim(),
+            t.length > 0 && (a = t.text().trim()), i = o.attr("title") ? o.attr("title").trim() : a ? l.text().replace(a, "").trim() : l.text().trim(), 
             s = e.find(".meta").text().trim();
         }
         if (!a) {
@@ -5091,15 +4947,15 @@ class Ie extends X {
         }
     }
     replaceHdImg(e) {
-        if (e && "string" == typeof e.jquery && (e = e.toArray()), e || (e = document.querySelectorAll(this.getSelector().coverImgSelector)),
+        if (e && "string" == typeof e.jquery && (e = e.toArray()), e || (e = document.querySelectorAll(this.getSelector().coverImgSelector)), 
         r && e.forEach((e => {
             e.src = e.src.replace("thumbs", "covers"), e.title = "";
         })), l) {
             const t = /\/(imgs|pics)\/(thumb|thumbs)\//, n = /(\.jpg|\.jpeg|\.png)$/i, a = e => {
-                e.src && t.test(e.src) && "true" !== e.dataset.hdReplaced && (e.src = e.src.replace(t, "/$1/cover/").replace(n, "_b$1"),
+                e.src && t.test(e.src) && "true" !== e.dataset.hdReplaced && (e.src = e.src.replace(t, "/$1/cover/").replace(n, "_b$1"), 
                 e.dataset.hdReplaced = "true", e.dataset.title = e.title, e.title = "");
             }, i = /ps(\.jpg|\.jpeg|\.png)$/i, s = e => {
-                e.src && i.test(e.src) && "true" !== e.dataset.hdReplaced && (e.src = e.src.replace(i, "pl$1"),
+                e.src && i.test(e.src) && "true" !== e.dataset.hdReplaced && (e.src = e.src.replace(i, "pl$1"), 
                 e.dataset.hdReplaced = "true", e.dataset.title = e.title, e.title = "");
             };
             e.forEach((e => {
@@ -5115,8 +4971,8 @@ class Ie extends X {
     async translate(e) {
         if (await storageManager.getSetting("translateTitle", _) !== _) return;
         let t, n, a = e.find(".video-title");
-        if (r ? (t = a.contents().filter(((e, t) => 3 === t.nodeType && "" !== t.textContent.trim())).text().trim(),
-        n = e.find(".video-title strong").text().trim()) : (t = e.find("img").attr("data-title").trim(),
+        if (r ? (t = a.contents().filter(((e, t) => 3 === t.nodeType && "" !== t.textContent.trim())).text().trim(), 
+        n = e.find(".video-title strong").text().trim()) : (t = e.find("img").attr("data-title").trim(), 
         n = e.find("a").attr("href").split("/").filter(Boolean).pop().trim()), this.cache[n]) {
             let e = this;
             return a.contents().each((function() {
@@ -5177,7 +5033,7 @@ class Ie extends X {
 
 class Be extends X {
     constructor() {
-        super(...arguments), i(this, "preloadDistance", 500), i(this, "currentPage", this.getInitialPageNumber()),
+        super(...arguments), i(this, "preloadDistance", 500), i(this, "currentPage", this.getInitialPageNumber()), 
         i(this, "pageItems", []);
     }
     getName() {
@@ -5204,8 +5060,8 @@ class Be extends X {
         if (await this.shouldDisablePaging()) return;
         const e = this.getSelector();
         if (this.container = document.querySelector(e.boxSelector), !this.container) return void console.error("没有找到容器节点,停止瀑布流!");
-        this.loader = document.createElement("div"), this.loader.className = "jhs-scroll",
-        this.container.parentNode.insertBefore(this.loader, this.container.nextSibling),
+        this.loader = document.createElement("div"), this.loader.className = "jhs-scroll", 
+        this.container.parentNode.insertBefore(this.loader, this.container.nextSibling), 
         this.pageItems.push({
             page: this.currentPage,
             top: 0,
@@ -5227,32 +5083,13 @@ class Be extends X {
         this.isLoading = !0, this.setState("waterfall-loading", "加载中...");
         const t = this.getSelector();
         try {
-            const n = utils.getUrlParam(this.nextUrl, "page");
-            let a = 60;
-            if (o.includes("c11") && (a = 30), r && n > a || o.includes("month")) {
-                const e = this.getBean("Beyond60Plugin");
-                if (e) {
-                    const {html: t, nextUrl: a, hasMore: i} = await e.handleBeyond60(this.nextUrl);
-                    if (t) {
-                        const e = this.container.scrollHeight;
-                        this.pageItems.push({
-                            page: this.currentPage + 1,
-                            top: e,
-                            url: this.nextUrl
-                        }), $(".movie-list").append(t);
-                    }
-                    this.hasMore = i, this.nextUrl = a;
-                    const s = e.createPagination(n, i);
-                    return $(".pagination").html(s), this.setState("waterfall-loading", ""), void (this.hasMore || this.setState("waterfall-no-more", "已经到底了"));
-                }
-            }
             const i = await gmHttp.get(this.nextUrl);
             clog.log("请求下一页内容:", this.nextUrl);
             const s = utils.htmlTo$dom(i);
             l && s.find(".avatar-box").length > 0 && s.find(".avatar-box").parent().remove();
             let c = s.find(this.getSelector().requestDomItemSelector);
             const d = this.getBoxCarInfoList(), h = this.getBoxCarInfoList(c);
-            if (this.checkDuplicateCarNumbers(d, h)) return this.nextUrl = null, this.hasMore = !1,
+            if (this.checkDuplicateCarNumbers(d, h)) return this.nextUrl = null, this.hasMore = !1, 
             void this.setState("waterfall-error", "翻页内容出现重复数据, 页码受JavDB限制, 已停止瀑布流");
             const g = this.container.scrollHeight;
             this.pageItems.push({
@@ -5262,7 +5099,7 @@ class Be extends X {
             });
             const p = this.getBean("ListPagePlugin");
             let m = s.find(this.getSelector().coverImgSelector);
-            p.replaceHdImg(m), $(this.getSelector().boxSelector).append(c), this.nextUrl = null == (e = s.find(t.nextPageSelector)) ? void 0 : e.attr("href"),
+            p.replaceHdImg(m), $(this.getSelector().boxSelector).append(c), this.nextUrl = null == (e = s.find(t.nextPageSelector)) ? void 0 : e.attr("href"), 
             this.hasMore = !!this.nextUrl;
             let u = s.find(".pagination");
             $(".pagination").replaceWith(u), this.setState("waterfall-loading", ""), this.hasMore || this.setState("waterfall-no-more", "已经到底了");
@@ -5304,160 +5141,9 @@ class Be extends X {
     }
 }
 
-class Pe {
-    constructor(e) {
-        this.baseApiUrl = "https://api.aliyundrive.com", this.refresh_token = e, this.authorization = null,
-        this.default_drive_id = null, this.backupFolderId = null;
-    }
-    async getDefaultDriveId() {
-        return this.default_drive_id || (this.userInfo = await this.getUserInfo(), this.default_drive_id = this.userInfo.default_drive_id),
-        this.default_drive_id;
-    }
-    async getHeaders() {
-        return this.authorization || (this.authorization = await this.getAuthorization()),
-        {
-            authorization: this.authorization
-        };
-    }
-    async getAuthorization() {
-        let e = this.baseApiUrl + "/v2/account/token", t = {
-            refresh_token: this.refresh_token,
-            grant_type: "refresh_token"
-        };
-        try {
-            return "Bearer " + (await gmHttp.post(e, t)).access_token;
-        } catch (n) {
-            throw n.message.includes("is not valid") ? new Error("refresh_token无效, 请重新填写并保存") : n;
-        }
-    }
-    async getUserInfo() {
-        const e = await this.getHeaders();
-        let t = this.baseApiUrl + "/v2/user/get";
-        return await gmHttp.post(t, {}, e);
-    }
-    async deleteFile(e, t = null) {
-        if (!e) throw new Error("未传入file_id");
-        t || (t = await this.getDefaultDriveId());
-        let n = {
-            file_id: e,
-            drive_id: t
-        }, a = this.baseApiUrl + "/v2/recyclebin/trash";
-        const i = await this.getHeaders();
-        return await gmHttp.post(a, n, i), {};
-    }
-    async createFolder(e, t = null, n = "root") {
-        t || (t = await this.getDefaultDriveId());
-        let a = this.baseApiUrl + "/adrive/v2/file/createWithFolders", i = {
-            name: e,
-            type: "folder",
-            parent_file_id: n,
-            check_name_mode: "auto_rename",
-            content_hash_name: "sha1",
-            drive_id: t
-        };
-        const s = await this.getHeaders();
-        return await gmHttp.post(a, i, s);
-    }
-    async getFileList(e = "root", t = null) {
-        t || (t = await this.getDefaultDriveId());
-        let n = this.baseApiUrl + "/adrive/v3/file/list";
-        const a = {
-            drive_id: t,
-            parent_file_id: e,
-            limit: 200,
-            all: !1,
-            url_expire_sec: 14400,
-            image_thumbnail_process: "image/resize,w_256/format,avif",
-            image_url_process: "image/resize,w_1920/format,avif",
-            video_thumbnail_process: "video/snapshot,t_120000,f_jpg,m_lfit,w_256,ar_auto,m_fast",
-            fields: "*",
-            order_by: "updated_at",
-            order_direction: "DESC"
-        }, i = await this.getHeaders();
-        return (await gmHttp.post(n, a, i)).items;
-    }
-    async uploadFile(e, t, n, a = null) {
-        show.info("请求存储空间中...");
-        let i = this.baseApiUrl + "/adrive/v2/file/createWithFolders";
-        a || (a = await this.getDefaultDriveId());
-        let s = {
-            drive_id: a,
-            part_info_list: [ {
-                part_number: 1
-            } ],
-            parent_file_id: e,
-            name: t,
-            type: "file",
-            check_name_mode: "auto_rename"
-        };
-        const o = await this.getHeaders(), r = await gmHttp.post(i, s, o), l = r.upload_id, c = r.file_id, d = r.part_info_list[0].upload_url;
-        show.info("开始上传文件..."), await this._doUpload(d, n);
-        await gmHttp.post("https://api.aliyundrive.com/v2/file/complete", s = {
-            drive_id: a,
-            file_id: c,
-            upload_id: l
-        }, o);
-    }
-    _doUpload(e, t) {
-        return new Promise(((n, a) => {
-            $.ajax({
-                type: "PUT",
-                url: e,
-                data: t,
-                contentType: " ",
-                processData: !1,
-                success: (e, t, i) => {
-                    200 === i.status ? n({}) : a(i);
-                },
-                error: e => {
-                    clog.error("上传失败", e.responseText), a(e);
-                }
-            });
-        }));
-    }
-    async getDownloadUrl(e, t = null) {
-        t || (t = await this.getDefaultDriveId());
-        let n = this.baseApiUrl + "/v2/file/get_download_url";
-        const a = await this.getHeaders();
-        let i = {
-            file_id: e,
-            drive_id: t
-        };
-        return (await gmHttp.post(n, i, a)).url;
-    }
-    async _createBackupFolder(e) {
-        const t = await this.getFileList();
-        let n = null;
-        for (let a = 0; a < t.length; a++) {
-            let i = t[a];
-            if (i.name === e) {
-                n = i;
-                break;
-            }
-        }
-        n || (show.info("不存在备份目录, 进行创建"), n = await this.createFolder(e)), this.backupFolderId = n.file_id;
-    }
-    async backup(e, t, n) {
-        this.backupFolderId || await this._createBackupFolder(e), await this.uploadFile(this.backupFolderId, t, n);
-    }
-    async getBackupList(e) {
-        let t;
-        this.backupFolderId || await this._createBackupFolder(e), t = await this.getFileList(this.backupFolderId);
-        const n = [];
-        return t.forEach((e => {
-            n.push({
-                name: e.name,
-                fileId: e.file_id,
-                createTime: e.created_at,
-                size: e.size
-            });
-        })), n;
-    }
-}
-
 class De {
     constructor(e, t, n) {
-        this.davUrl = e.endsWith("/") ? e : e + "/", this.username = t, this.password = n,
+        this.davUrl = e.endsWith("/") ? e : e + "/", this.username = t, this.password = n, 
         this.folderName = null;
     }
     _getAuthHeaders() {
@@ -5486,8 +5172,15 @@ class De {
             });
         }));
     }
+    async _ensureFolder(e) {
+        try {
+            await this._sendRequest("MKCOL", e);
+        } catch (t) {
+            if (!/请求失败 (405|409):/.test(t.message)) throw t;
+        }
+    }
     async backup(e, t, n) {
-        await this._sendRequest("MKCOL", e);
+        await this._ensureFolder(e);
         const a = e + "/" + t;
         await this._sendRequest("PUT", a, {
             "Content-Type": "text/plain"
@@ -5518,7 +5211,7 @@ class De {
         });
     }
     async getBackupList(e) {
-        return this.folderName = e, await this._sendRequest("MKCOL", e), this.getFileList(e);
+        return this.folderName = e, await this._ensureFolder(e), this.getFileList(e);
     }
     async getFileContent(e) {
         let t = this.folderName + "/" + e;
@@ -5564,33 +5257,33 @@ class Ae extends X {
         let t = (null == e ? void 0 : e.containerWidth) ?? "100", n = utils.isMobile() && window.innerWidth < 1e3 ? 1 : (null == e ? void 0 : e.containerColumns) ?? 5;
         this.applyImageMode().then();
         let a = `\n            section .container{\n                max-width: 1000px !important;\n                min-width: ${t}%;\n            }\n            .movie-list, .movie-list.v{\n                grid-template-columns: repeat(${n}, minmax(0, 1fr));\n            }\n        `;
-        return l && (a = `\n                .container-fluid .row{\n                    max-width: 1000px !important;\n                    min-width: ${t}%;\n                    margin: auto auto;\n                }\n                \n                .container {\n                    max-width: 1000px !important;\n                    min-width: 80%;\n                    margin: auto auto;\n                }\n                \n                .masonry {\n                    grid-template-columns: repeat(${n}, minmax(0, 1fr));\n                }\n            `),
-        `\n            <style>\n                ${a}\n                .nav-btn::after {\n                    content:none !important;\n                }\n                \n                #cache-data-display pre {\n                    font-family: Consolas, Monaco, 'Andale Mono', monospace;\n                    white-space: pre-wrap;\n                    word-wrap: break-word;\n                    line-height: 1.5;\n                    color: #333;\n                    border: 1px solid #ddd;\n                }\n                \n                .cache-item {\n                    transition: all 0.2s ease;\n                }\n                .cache-item:hover {\n                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);\n                    transform: translateY(-2px);\n                }\n\n                .tooltip-icon {\n                    display: inline-block;\n                    width: 16px;\n                    height: 16px;\n                    line-height: 16px;\n                    text-align: center;\n                    border-radius: 50%;\n                    background-color: #ccc;\n                    color: white;\n                    font-size: 12px;\n                    margin-right: 5px;\n                    cursor: help;\n                }\n                .setting-item {\n                    display: flex;\n                    align-items: baseline;\n                    justify-content: space-between;\n                    margin-bottom: 3px;\n                    padding: 3px;\n                }\n                .simple-setting .setting-item{\n                    align-items:center;\n                }\n                .setting-label {\n                    font-size: 14px;\n                    min-width: 160px;\n                    font-weight: bold;\n                    margin-right: 10px;\n                }\n                .form-content{\n                    max-width: 160px;\n                    min-width: 160px;\n                }\n                .form-content * {\n                    width: 100%;\n                    padding: 5px;\n                    margin-right: 10px;\n                    text-align: center;\n                }\n                \n                .keyword-label {\n                    display: inline-flex;\n                    align-items: center;\n                    padding: 4px 8px;\n                    border-radius: 4px;\n                    font-size: 14px;\n                    position: relative;\n                    margin-left: 8px;\n                    margin-bottom: 5px;\n                }\n                .keyword-remove {\n                    margin-left: 6px;\n                    cursor: pointer;\n                    font-size: 12px;\n                    line-height: 1;\n                }\n                .keyword-input {\n                    padding: 6px 12px;\n                    border: 1px solid #ccc;\n                    border-radius: 4px;\n                    font-size: 14px;\n                    float:right;\n                }\n                .add-tag-btn {\n                    padding: 6px 12px;\n                    background-color: #e2e8f0;\n                    color: #334155;\n                    border: none;\n                    border-radius: 4px;\n                    cursor: pointer;\n                    font-size: 14px;\n                    margin-left: 8px;\n                    float:right;\n                }\n                .add-tag-btn:hover {\n                    background-color: #cbd5e1;\n                }\n                .tag-box {\n                    margin-top:15px;\n                }\n                \n                \n                #saveBtn,#moreBtn,#helpBtn,#clean-all {\n                    padding: 8px 20px;\n                    background-color: #4CAF50;\n                    color: white;\n                    border: none;\n                    border-radius: 4px;\n                    cursor: pointer;\n                    font-size: 16px;\n                    margin-top: 10px;\n                }\n                #saveBtn:hover {\n                    background-color: #45a049;\n                }\n                #moreBtn {\n                    background-color: #5cb85c;\n                    color: white;\n                }\n                #moreBtn:hover {\n                    background-color: #4cae4c;\n                }\n                #helpBtn {\n                    background-color: #e67e22;\n                    color: white;\n                }\n                #helpBtn:hover {\n                    background-color: #d35400;\n                }\n                .simple-setting, .mini-simple-setting {\n                    display: none;\n                    background: rgba(255,255,255,1); \n                    position: absolute;\n                    top: ${r ? "35px" : "25px"};\n                    right: ${r ? "-300%" : "0"};\n                    z-index: 1000;\n                    border: 1px solid #ddd;\n                    border-radius: 4px;\n                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);\n                    padding: 0;\n                    margin-top: 5px; /* 稍微拉开一点距离 */\n                    color: #333;\n                }\n                \n                .mini-switch {\n                  appearance: none;\n                  -webkit-appearance: none;\n                  width: 40px;\n                  height: 20px;\n                  background: #e0e0e0;\n                  border-radius: 20px;\n                  position: relative;\n                  cursor: pointer;\n                  outline: none;\n                }\n                \n                .mini-switch:checked {\n                  background: #4CAF50;\n                }\n                \n                .mini-switch::before {\n                  content: "";\n                  position: absolute;\n                  width: 16px;\n                  height: 16px;\n                  border-radius: 50%;\n                  background: white;\n                  top: 2px;\n                  left: 2px;\n                  box-shadow: 0 1px 3px rgba(0,0,0,0.2);\n                }\n                \n                .mini-switch:checked::before {\n                  left: calc(100% - 18px);\n                }\n                \n                .side-menu-item {\n                    padding: 12px 12px;\n                    cursor: pointer;\n                    color: #333;\n                    border-left: 3px solid transparent;\n                    transition: all 0.2s;\n                    display: flex;\n                    gap: 5px;\n                }\n                \n                .side-menu-item .icon {\n                     height: 24px; \n                     width: 24px;\n                }\n                \n                .side-menu-item:hover {\n                    background-color: #e9e9e9;\n                }\n                \n                .side-menu-item.active {\n                    background-color: #e0e0e0;\n                    border-left: 3px solid #5d87c2;\n                    font-weight: bold;\n                }\n                \n                .content-panel {\n                    display: none;\n                    margin-top:20px;\n                    padding: 0 10px 10px 0;\n                    height: 100%;\n                    overflow-x: hidden;\n                    overflow-y: auto;\n                }\n                \n                .content-panel.active {\n                    display: block;\n                }\n                \n                input[type="checkbox"]:disabled {\n                    opacity: 0.6; \n                    cursor: default !important;\n                }\n            </style>\n        `;
+        return l && (a = `\n                .container-fluid .row{\n                    max-width: 1000px !important;\n                    min-width: ${t}%;\n                    margin: auto auto;\n                }\n                \n                .container {\n                    max-width: 1000px !important;\n                    min-width: 80%;\n                    margin: auto auto;\n                }\n                \n                .masonry {\n                    grid-template-columns: repeat(${n}, minmax(0, 1fr));\n                }\n            `), 
+        `\n            <style>\n                ${a}\n                .nav-btn::after {\n                    content:none !important;\n                }\n                \n                #cache-data-display pre {\n                    font-family: Consolas, Monaco, 'Andale Mono', monospace;\n                    white-space: pre-wrap;\n                    word-wrap: break-word;\n                    line-height: 1.5;\n                    color: #333;\n                    border: 1px solid #ddd;\n                }\n                \n                .cache-item {\n                    transition: all 0.2s ease;\n                }\n                .cache-item:hover {\n                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);\n                    transform: translateY(-2px);\n                }\n\n                .tooltip-icon {\n                    display: inline-block;\n                    width: 16px;\n                    height: 16px;\n                    line-height: 16px;\n                    text-align: center;\n                    border-radius: 50%;\n                    background-color: #ccc;\n                    color: white;\n                    font-size: 12px;\n                    margin-right: 5px;\n                    cursor: help;\n                }\n                .setting-item {\n                    display: flex;\n                    align-items: baseline;\n                    justify-content: space-between;\n                    margin-bottom: 3px;\n                    padding: 3px;\n                    /*border: 1px solid #ddd;\n                    border-radius: 5px;*/\n                }\n                .simple-setting .setting-item{\n                    align-items:center;\n                }\n                .setting-label {\n                    font-size: 14px;\n                    min-width: 160px;\n                    font-weight: bold;\n                    margin-right: 10px;\n                }\n                .form-content{\n                    max-width: 160px;\n                    min-width: 160px;\n                }\n                .form-content * {\n                    width: 100%;\n                    padding: 5px;\n                    margin-right: 10px;\n                    text-align: center;\n                }\n                \n                .keyword-label {\n                    display: inline-flex;\n                    align-items: center;\n                    padding: 4px 8px;\n                    border-radius: 4px;\n                    font-size: 14px;\n                    position: relative;\n                    margin-left: 8px;\n                    margin-bottom: 5px;\n                }\n                .keyword-remove {\n                    margin-left: 6px;\n                    cursor: pointer;\n                    font-size: 12px;\n                    line-height: 1;\n                }\n                .keyword-input {\n                    padding: 6px 12px;\n                    border: 1px solid #ccc;\n                    border-radius: 4px;\n                    font-size: 14px;\n                    float:right;\n                }\n                .add-tag-btn {\n                    padding: 6px 12px;\n                    background-color: #e2e8f0;\n                    color: #334155;\n                    border: none;\n                    border-radius: 4px;\n                    cursor: pointer;\n                    font-size: 14px;\n                    margin-left: 8px;\n                    float:right;\n                }\n                .add-tag-btn:hover {\n                    background-color: #cbd5e1;\n                }\n                .tag-box {\n                    margin-top:15px;\n                }\n                \n                \n                #saveBtn,#moreBtn,#helpBtn,#clean-all {\n                    padding: 8px 20px;\n                    background-color: #4CAF50;\n                    color: white;\n                    border: none;\n                    border-radius: 4px;\n                    cursor: pointer;\n                    font-size: 16px;\n                    margin-top: 10px;\n                }\n                #saveBtn:hover {\n                    background-color: #45a049;\n                }\n                #moreBtn {\n                    background-color: #5cb85c;\n                    color: white;\n                }\n                #moreBtn:hover {\n                    background-color: #4cae4c;\n                }\n                #helpBtn {\n                    background-color: #e67e22;\n                    color: white;\n                }\n                #helpBtn:hover {\n                    background-color: #d35400;\n                }\n                .simple-setting, .mini-simple-setting {\n                    display: none;\n                    background: rgba(255,255,255,1); \n                    position: absolute;\n                    top: ${r ? "35px" : "25px"};\n                    right: ${r ? "-300%" : "0"};\n                    z-index: 1000;\n                    border: 1px solid #ddd;\n                    border-radius: 4px;\n                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);\n                    padding: 0;\n                    margin-top: 5px; /* 稍微拉开一点距离 */\n                    color: #333;\n                }\n                \n                .mini-switch {\n                  appearance: none;\n                  -webkit-appearance: none;\n                  width: 40px;\n                  height: 20px;\n                  background: #e0e0e0;\n                  border-radius: 20px;\n                  position: relative;\n                  cursor: pointer;\n                  outline: none;\n                  /*transition: all 0.2s ease;*/\n                }\n                \n                .mini-switch:checked {\n                  background: #4CAF50;\n                }\n                \n                .mini-switch::before {\n                  content: "";\n                  position: absolute;\n                  width: 16px;\n                  height: 16px;\n                  border-radius: 50%;\n                  background: white;\n                  top: 2px;\n                  left: 2px;\n                  box-shadow: 0 1px 3px rgba(0,0,0,0.2);\n                  /*transition: all 0.2s ease;*/\n                }\n                \n                .mini-switch:checked::before {\n                  left: calc(100% - 18px);\n                }\n                \n                .side-menu-item {\n                    padding: 12px 12px;\n                    cursor: pointer;\n                    color: #333;\n                    border-left: 3px solid transparent;\n                    transition: all 0.2s;\n                    display: flex;\n                    gap: 5px;\n                }\n                \n                .side-menu-item .icon {\n                     height: 24px; \n                     width: 24px;\n                }\n                \n                .side-menu-item:hover {\n                    background-color: #e9e9e9;\n                }\n                \n                .side-menu-item.active {\n                    background-color: #e0e0e0;\n                    border-left: 3px solid #5d87c2;\n                    font-weight: bold;\n                }\n                \n                .content-panel {\n                    display: none;\n                    margin-top:20px;\n                    padding: 0 10px 10px 0;\n                    height: 100%;\n                    overflow-x: hidden;\n                    overflow-y: auto;\n                }\n                \n                .content-panel.active {\n                    display: block;\n                }\n                \n                input[type="checkbox"]:disabled {\n                    opacity: 0.6; \n                    cursor: default !important;\n                }\n            </style>\n        `;
     }
     async handle() {
         if (await storageManager.getSetting("enableClog", _) === _ && clog.show(), r) {
             let e = function() {
-                $(".navbar-search").is(":hidden") ? ($(".mini-setting-box").hide(), $(".setting-box").show()) : ($(".mini-setting-box").show(),
+                $(".navbar-search").is(":hidden") ? ($(".mini-setting-box").hide(), $(".setting-box").show()) : ($(".mini-setting-box").show(), 
                 $(".setting-box").hide());
             };
-            $("#navbar-menu-user .navbar-end").prepend('<div class="navbar-item has-dropdown is-hoverable setting-box" style="position:relative;">\n                    <a id="setting-btn" class="navbar-link nav-btn" style="color: #ff8400 !important;padding-right:15px !important;">\n                        设置\n                    </a>\n                    <div class="simple-setting"></div>\n                </div>'),
+            $("#navbar-menu-user .navbar-end").prepend('<div class="navbar-item has-dropdown is-hoverable setting-box" style="position:relative;">\n                    <a id="setting-btn" class="navbar-link nav-btn" style="color: #ff8400 !important;padding-right:15px !important;">\n                        设置\n                    </a>\n                    <div class="simple-setting"></div>\n                </div>'), 
             utils.loopDetector((() => $("#miniHistoryBtn").length > 0), (() => {
-                $(".miniHistoryBtnBox").before('\n                    <div class="navbar-item mini-setting-box" style="position:relative;margin-left: auto;">\n                        <a id="mini-setting-btn" class="navbar-link nav-btn" style="color: #ff8400 !important;padding-left:0 !important;padding-right:0 !important;">\n                            设置\n                        </a>\n                        <div class="mini-simple-setting"></div>\n                    </div>\n                '),
+                $(".miniHistoryBtnBox").before('\n                    <div class="navbar-item mini-setting-box" style="position:relative;margin-left: auto;">\n                        <a id="mini-setting-btn" class="navbar-link nav-btn" style="color: #ff8400 !important;padding-left:0 !important;padding-right:0 !important;">\n                            设置\n                        </a>\n                        <div class="mini-simple-setting"></div>\n                    </div>\n                '), 
                 e();
             })), $(window).resize(e);
         }
         l && (utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
             $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" style="position: relative; display: flex; flex-grow: 1;justify-content: flex-end;z-index: 12345679 !important;">\n                        <div class="setting-box">\n                            <a id="setting-btn" class="menu-btn main-tab-btn" style="background-color:#6e685e !important;">\n                                <span>设置</span>\n                            </a>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
-        }), 1, 1e4, !1), isDetailPage && $("h3").before('\n                    <div class="container-fluid" style="margin-top:20px">\n                        <div id="top-right-box" style="position: relative; display: flex; flex-grow: 1;justify-content: flex-end;z-index: 12345679 !important;">\n                            <div class="setting-box">\n                                <a id="setting-btn" class="menu-btn main-tab-btn" style="background-color:#6e685e !important;">\n                                    <span>设置</span>\n                                </a>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ')),
+        }), 1, 1e4, !1), isDetailPage && $("h3").before('\n                    <div class="container-fluid" style="margin-top:20px">\n                        <div id="top-right-box" style="position: relative; display: flex; flex-grow: 1;justify-content: flex-end;z-index: 12345679 !important;">\n                            <div class="setting-box">\n                                <a id="setting-btn" class="menu-btn main-tab-btn" style="background-color:#6e685e !important;">\n                                    <span>设置</span>\n                                </a>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ')), 
         $(".main-nav, .container-fluid").on("click", "#setting-btn, #mini-setting-btn", (() => {
             clog.lowZIndex(), this.openSettingDialog();
         })), $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (() => {
-            $(".simple-setting").html(this.simpleSetting()).show(), this.initSimpleSettingForm().then(),
+            $(".simple-setting").html(this.simpleSetting()).show(), this.initSimpleSettingForm().then(), 
             clog.lowZIndex();
         })).on("mouseleave", ".setting-box", (() => {
             $(".simple-setting").html("").hide();
         })), $(".main-nav, .container-fluid").on("mouseenter", ".mini-setting-box", (() => {
-            $(".mini-simple-setting").html(this.simpleSetting()).show(), this.initSimpleSettingForm().then(),
+            $(".mini-simple-setting").html(this.simpleSetting()).show(), this.initSimpleSettingForm().then(), 
             clog.lowZIndex();
         })).on("mouseleave", ".mini-setting-box", (() => {
             $(".mini-simple-setting").html("").hide();
@@ -5603,7 +5296,7 @@ class Ae extends X {
             e.canSelect && (a += `<option value="${e.quality}">${e.text}</option>`);
         }));
         const i = this.getBean("CoverButtonPlugin");
-        let s = `\n            <div style="display: flex; height: 100%;">\n                <div style="width: 140px; flex-shrink: 0; padding: 15px 0; background: #f5f5f5; border-right: 1px solid #ddd;">\n                    <div class="side-menu-item ${"backup-panel" === e ? "active" : ""}" data-panel="backup-panel">💾 数据备份</div>\n                    <div class="side-menu-item ${"base-panel" === e ? "active" : ""}" data-panel="base-panel">⚙️ 基础配置</div>\n                    <div class="side-menu-item ${"filter-panel" === e ? "active" : ""}" data-panel="filter-panel">🚫 屏蔽配置</div>\n                    <div class="side-menu-item ${"task-panel" === e ? "active" : ""}" data-panel="task-panel">📋 定时任务</div>\n                    <div class="side-menu-item ${"domain-panel" === e ? "active" : ""}" data-panel="domain-panel" title="第三方视频资源域名配置">🌐 外部网站</div>\n                    <div class="side-menu-item ${"hotkey-panel" === e ? "active" : ""}" data-panel="hotkey-panel">⌨️ 快捷键配置</div>\n                    <div class="side-menu-item ${"cache-panel" === e ? "active" : ""}" data-panel="cache-panel">🧹 清理缓存</div>\n                    <div class="side-menu-item ${"tip-author-panel" === e ? "active" : ""}" data-panel="tip-author-panel">💵 打赏作者</div>\n                </div>\n        \n                <div style="flex: 1; display: flex; flex-direction: column; height: 100%; ">\n                    <div style="flex: 1; margin: 0 10px; padding-bottom: 20px;overflow: hidden">\n                    \n                        \x3c!-- 阿里云盘面板 --\x3e\n                        <div id="backup-panel" class="content-panel" style="display: ${"backup-panel" === e ? "block" : "none"};">\n                            <div style="margin-bottom: 20px">\n                                <a id="importBtn" class="menu-btn" style="background-color:#d25a88"><span>导入数据</span></a>\n                                <a id="exportBtn" class="menu-btn" style="background-color:#85d0a3"><span>导出数据</span></a>\n                                <a id="getRefreshTokenBtn" class="menu-btn fr-btn" style="background-color:#c4a35e"><span>获取refresh_token</span></a>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">阿里云盘备份</span>\n                                <div>\n                                    <a id="backupListBtn" class="menu-btn" style="background-color:#5d87c2"><span>查看备份</span></a>\n                                    <a id="backupBtn" class="menu-btn" style="background-color:#64bb69"><span>备份数据</span></a>\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">refresh_token:</span>\n                                <div class="form-content">\n                                    <input id="refresh_token">\n                                </div>\n                            </div>\n                            \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">WebDav备份</span>\n                                <div>\n                                    <a id="webdavBackupListBtn" class="menu-btn" style="background-color:#5d87c2"><span>查看备份</span></a>\n                                    <a id="webdavBackupBtn" class="menu-btn" style="background-color:#64bb69"><span>备份数据</span></a>\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">服务地址:</span>\n                                <div class="form-content">\n                                    <input id="webDavUrl">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">用户名:</span>\n                                <div class="form-content">\n                                    <input id="webDavUsername">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">密码:</span>\n                                <div class="form-content">\n                                    <input id="webDavPassword">\n                                </div>\n                            </div>\n                        </div>\n                        \n                        \n                        \x3c!-- 基础设置面板 --\x3e\n                        <div id="base-panel" class="content-panel" style="display: ${"base-panel" === e ? "block" : "none"};">\n                            <div class="setting-item">\n                                <span class="setting-label">打开待鉴定|已收藏 窗口数:</span>\n                                <div class="form-content">\n                                    <input type="number" id="waitCheckCount" min="1" max="20" style="width: 100%;">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">已鉴定标签展示位置:</span>\n                                <div class="form-content">\n                                    <select id="tagPosition">\n                                        <option value="rightTop">右上</option>\n                                        <option value="leftTop">左上</option>\n                                    </select>\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">\n                                    鉴定补录演员信息 <span data-tip="在列表页进行鉴定是获取不到演员名称的, 开启后, 额外解析详情页补录演员名称, 因发请求解析费时, 会被以往慢1秒左右">❓</span>\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableSaveActressCarInfo" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                            \n                            <div class="setting-item" style="margin-top:10px">\n                                <span class="setting-label">\n                                    封面快捷按钮\n                                </span>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">\n                                    ${i.screenSvg}长缩略图:\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableScreenSvg" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">\n                                    ${i.videoSvg}预览视频:\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableVideoSvg" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">\n                                    ${i.handleSvg}鉴定按钮:\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableHandleSvg" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">\n                                    ${i.siteSvg}第三方跳转:\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableSiteSvg" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">\n                                    ${i.copySvg}复制按钮:\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableCopySvg" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                            <div class="setting-item">\n                                <span class="setting-label">预览视频默认画质:</span>\n                                <div class="form-content">\n                                    <select id="videoQuality">\n                                        ${a}\n                                    </select>\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">评论区条数:</span>\n                                <div class="form-content">\n                                    <select id="reviewCount">\n                                        <option value="10">10条</option>\n                                        <option value="20">20条</option>\n                                        <option value="30">30条</option>\n                                        <option value="40">40条</option>\n                                        <option value="50">50条</option>\n                                    </select>\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item ${r ? "" : "do-hide"}">\n                                <span class="setting-label">\n                                    高亮已收藏演员 <span data-tip="详情页, 对已收藏的演员进行边框高亮提醒">❓</span>\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableFavoriteActresses" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item ${r ? "" : "do-hide"}">\n                                <span id="highlightedTagLabel" class="setting-label">\n                                    分类标签|高亮演员-边框样式:\n                                </span>\n                                <div class="form-content" style="display: flex; align-items: center;">\n                                    <input type="number" id="highlightedTagNumber" min="0" max="20">\n                                    <input type="color" id="highlightedTagColor">\n                                </div>\n                            </div>\n\n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">请求超时时间(毫秒):</span>\n                                <div class="form-content">\n                                    <input type="number" id="httpTimeout" min="1000" max="10000" style="width: 100%;">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">请求失败重试次数:</span>\n                                <div class="form-content">\n                                    <input type="number" id="httpRetryCount" min="0" max="10" style="width: 100%;">\n                                </div>\n                            </div>\n                            \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">\n                                    启用控制台日志:\n                                </span>\n                                <div class="form-content">\n                                    <select id="enableClog">\n                                        <option value="no">禁用</option>\n                                        <option value="yes">开启</option>\n                                    </select>\n                                </div>\n                            </div>\n\n                            <div class="setting-item">\n                                <span class="setting-label">日志最大行数:</span>\n                                <div class="form-content">\n                                    <input type="number" id="clogMsgCount" min="100" max="3000" style="width: 100%;">\n                                </div>\n                            </div>\n                        </div>\n                        \n                        \x3c!-- 定时任务 --\x3e\n                        <div id="task-panel" class="content-panel" style="display: ${"task-panel" === e ? "block" : "none"};">\n                        \n                            <div class="setting-item">\n                                <span class="setting-label">请求并发数量:</span>\n                                <div class="form-content">\n                                    <input type="number" id="checkConcurrencyCount" min="2" max="5" style="width: 100%;">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">请求间隔时间(毫秒):</span>\n                                <div class="form-content">\n                                    <input type="number" id="checkRequestSleep" min="0" max="3000" style="width: 100%;">\n                                </div>\n                            </div>\n                        \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                        \n                            <div id="setting-blacklist" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 15px;">\n                                <span style="font-size: 14px; font-weight: bold; padding:3px">自动检测屏蔽黑名单演员</span>\n                                <div class="setting-item">\n                                    <span class="setting-label">\n                                        任务开关: <span data-tip="变更后, 刷新页面生效">❓</span> \n                                    </span>\n                                    <div class="form-content">\n                                        <select id="enableCheckBlacklist">\n                                            <option value="no">禁用</option>\n                                            <option value="yes">开启</option>\n                                        </select>\n                                    </div>\n                                </div>\n                                <div class="setting-item">\n                                    <span class="setting-label">任务间隔时间:</span>\n                                    <div class="form-content">\n                                         <select id="checkBlacklist_intervalTime">\n                                            <option value="2">每2小时</option>\n                                            <option value="3">每3小时</option>\n                                            <option value="6">每6小时</option>\n                                            <option value="12">每12小时</option>\n                                            <option value="24">每24小时</option>\n                                        </select>\n                                    </div>\n                                </div>\n                                <div class="setting-item">\n                                    <span class="setting-label">检测规则:</span>\n                                    <div class="form-content">\n                                         <select id="checkBlacklist_ruleTime">\n                                            <option value="0">全部检测</option>\n                                            <option value="8760">不检测停更1年以上</option>\n                                            <option value="17520">不检测停更2年以上</option>\n                                            <option value="26280">不检测停更3年以上</option>\n                                        </select>\n                                    </div>\n                                </div>\n                            </div>\n                        \n                            <div id="setting-checkFavoriteActress" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 15px;" class="${r ? "" : "do-hide"}">\n                                <span style="font-size: 14px; font-weight: bold; padding:3px">自动同步已收藏的演员</span>\n                                <div class="setting-item">\n                                    <span class="setting-label">\n                                        任务开关: <span data-tip="变更后, 刷新页面生效">❓</span> \n                                    </span>\n                                    <div class="form-content">\n                                        <select id="enableCheckFavoriteActress">\n                                            <option value="no">禁用</option>\n                                            <option value="yes">开启</option>\n                                        </select>\n                                    </div>\n                                </div>\n                                <div class="setting-item">\n                                    <span class="setting-label">任务间隔时间:</span>\n                                    <div class="form-content">\n                                         <select id="checkFavoriteActress_IntervalTime">\n                                            <option value="12">每12小时</option>\n                                            <option value="24">每24小时</option>\n                                        </select>\n                                    </div>\n                                </div>\n                            </div>\n                        \n                            <div id="setting-checkNewVideo" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 15px;" class="${r ? "" : "do-hide"}">\n                                <span style="font-size: 14px; font-weight: bold; padding:3px">自动检测已收藏演员的最新作品</span>\n                                <div class="setting-item">\n                                    <span class="setting-label">\n                                        任务开关: <span data-tip="变更后, 刷新页面生效">❓</span> \n                                    </span>\n                                    <div class="form-content">\n                                        <select id="enableCheckNewVideo">\n                                            <option value="no">禁用</option>\n                                            <option value="yes">开启</option>\n                                        </select>\n                                    </div>\n                                </div>\n                                <div class="setting-item">\n                                    <span class="setting-label">任务间隔时间:</span>\n                                    <div class="form-content">\n                                         <select id="checkNewVideo_intervalTime">\n                                            <option value="2">每2小时</option>\n                                            <option value="3">每3小时</option>\n                                            <option value="6">每6小时</option>\n                                            <option value="12">每12小时</option>\n                                            <option value="24">每24小时</option>\n                                        </select>\n                                    </div>\n                                </div>\n                                <div class="setting-item">\n                                    <span class="setting-label">检测规则:</span>\n                                    <div class="form-content">\n                                         <select id="checkNewVideo_ruleTime">\n                                            <option value="0">全部检测</option>\n                                            <option value="8760">不检测停更1年以上</option>\n                                            <option value="17520">不检测停更2年以上</option>\n                                            <option value="26280">不检测停更3年以上</option>\n                                        </select>\n                                    </div>\n                                </div>\n                            </div>\n                        </div>               \n         \n                        \x3c!-- 域名设置面板 --\x3e\n                        <div id="domain-panel" class="content-panel" style="display: ${"domain-panel" === e ? "block" : "none"};">\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - MissAv:</span>\n                                <div class="form-content">\n                                    <input id="missAvUrl">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - Jable:</span>\n                                <div class="form-content">\n                                    <input id="jableUrl">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - Avgle:</span>\n                                <div class="form-content">\n                                    <input id="avgleUrl">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - JavTrailer:</span>\n                                <div class="form-content">\n                                    <input id="javTrailersUrl">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - 123Av:</span>\n                                <div class="form-content">\n                                    <input id="av123Url">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - JavDb:</span>\n                                <div class="form-content">\n                                    <input id="javDbUrl">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - JavBus:</span>\n                                <div class="form-content">\n                                    <input id="javBusUrl">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - SupJav:</span>\n                                <div class="form-content">\n                                    <input id="supJavUrl">\n                                </div>\n                            </div>           \n                        </div>\n                         \n                         \x3c!-- 快捷键 --\x3e\n                        <div id="hotkey-panel" class="content-panel" style="display: ${"hotkey-panel" === e ? "block" : "none"};">\n                            <p style="color: #666; font-size: 0.9em;">修改后, 刷新页面生效</p>\n                            <div class="setting-item">\n                                <span class="setting-label">${m}:</span>\n                                <div class="form-content">\n                                    <input id="filterHotKey" placeholder="录入快捷键" data-default-hotkey="a">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">${v}:</span>\n                                <div class="form-content">\n                                    <input id="favoriteHotKey" placeholder="录入快捷键" data-default-hotkey="s">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">${y}:</span>\n                                <div class="form-content">\n                                    <input id="hasDownHotKey" placeholder="录入快捷键">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">${k}:</span>\n                                <div class="form-content">\n                                    <input id="hasWatchHotKey" placeholder="录入快捷键">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">⏩ 快进:</span>\n                                <div class="form-content">\n                                    <input id="speedVideoHotKey" placeholder="录入快捷键" data-default-hotkey="z">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">▲ 折叠:</span>\n                                <div class="form-content">\n                                    <input id="foldCategoryHotKey" placeholder="录入快捷键">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">💻 控制台:</span>\n                                <div class="form-content">\n                                    <input id="clogHotKey" placeholder="录入快捷键">\n                                </div>\n                            </div>\n                            \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">\n                                    <span data-tip="列表页,鼠标放置图片上时可使用快捷键">❓ </span> 对视频列表页启用快捷键:\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableImageHotKey" class="mini-switch">\n                                </div>\n                            </div>\n\n                        </div>\n                        \n                        \x3c!-- 屏蔽设置面板 --\x3e\n                        <div id="filter-panel" class="content-panel" style="display: ${"filter-panel" === e ? "block" : "none"};">\n                            <div class="setting-item">\n                                <span class="setting-label">\n                                     启用划词屏蔽 <span data-tip="视频详情页中, 标题或评论区选中文字, 按右键可快捷加入屏蔽词">❓ </span>\n                                </span>\n                                <div style="display: flex">\n                                    <input type="checkbox" id="enableTitleSelectFilter" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                            \n                            <div id="reviewKeywordContainer">\n                                <div class="setting-item">\n                                    <span class="setting-label">评论区屏蔽词:</span>\n                                    <div style="display: flex">\n                                        <input type="text" class="keyword-input" placeholder="添加屏蔽词">\n                                        <button class="add-tag-btn">添加</button>\n                                    </div>\n                                </div>\n                                <div class="tag-box"> </div>\n                            </div>\n                            \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                            \n                            <div id="filterKeywordContainer">\n                                <div class="setting-item">\n                                    <span class="setting-label">视频标题屏蔽词:</span>\n                                    <div style="display: flex">\n                                        <input type="text" class="keyword-input" placeholder="添加屏蔽词">\n                                        <button class="add-tag-btn">添加</button>\n                                    </div>\n                                </div>\n                                <div class="tag-box"> </div>\n                            </div>\n                        </div>\n                        <div id="cache-panel" class="content-panel" style="display: ${"cache-panel" === e ? "block" : "none"};">\n                            <h1 style="text-align:center;font-size: 20px;font-weight: bold">以下操作, 不会对核心数据造成影响</h1>\n                            <br/>               \n                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 20px;">\n                                ${n}\n                            </div>    \n                            <div id="cache-data-display" style="margin-top: 20px; display: none;">\n                                <pre style="background: #f5f5f5; padding: 10px; border-radius: 5px; max-height: 400px; overflow: auto;"></pre>\n                            </div>\n                        </div>                        \n                        <div id="tip-author-panel" class="content-panel" style="display: ${"tip-author-panel" === e ? "block" : "none"};">\n                            <p style="color: #666; font-size: 0.9em;">如果JAV-JHS给您带来了便捷和价值，请考虑给予一点支持，您的鼓励是我持续创作的最大动力！感谢您的慷慨支持！</p>\n                            <div>\n                                <div style="display: flex; justify-content: space-around; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap;">\n                                    <div style="text-align: center; margin: 10px; flex: 1 1 30%; min-width: 150px;">\n                                        <img src="https://imgur.com/AvF0r3r.png" alt="TRC20-USDT二维码" style="width: 350px; height: 350px; border: 1px solid #ddd; padding: 5px; display: block; margin: 0 auto 5px;">\n                                        <p>TRC20-USDT</p>\n                                        <input type="text" readonly value="TYphgzpJ2hoDTa3J7kzj5xaHWbcPAyhbd5" onclick="this.select();document.execCommand('copy');alert('地址已复制！');" \n                                            style="width: 90%; padding: 5px; margin-top: 5px; border: 1px solid #a99087; background-color: #fff; text-align: center; font-size: 0.8em; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">\n                                        <p style="font-size: 0.75em; color: #5a504c; margin-top: 4px;">点击地址可复制</p>\n                                    </div>\n                                </div>\n                            </div>\n                        </div>\n                    </div>\n                    \n                    <div style="flex-shrink: 0; padding: 15px 20px; text-align: right; border-top: 1px solid #eee; background: white;">   \n                        <button id="saveBtn">保存设置</button>\n                        <button id="clean-all" style="display: none">♾️ 清理全部缓存</button>\n                    </div>\n                </div>\n            </div>\n        `;
+        let s = `\n            <div style="display: flex; height: 100%;">\n                <div style="width: 140px; flex-shrink: 0; padding: 15px 0; background: #f5f5f5; border-right: 1px solid #ddd;">\n                    <div class="side-menu-item ${"backup-panel" === e ? "active" : ""}" data-panel="backup-panel">💾 数据备份</div>\n                    <div class="side-menu-item ${"base-panel" === e ? "active" : ""}" data-panel="base-panel">⚙️ 基础配置</div>\n                    <div class="side-menu-item ${"filter-panel" === e ? "active" : ""}" data-panel="filter-panel">🚫 屏蔽配置</div>\n                    <div class="side-menu-item ${"task-panel" === e ? "active" : ""}" data-panel="task-panel">📋 定时任务</div>\n                    <div class="side-menu-item ${"domain-panel" === e ? "active" : ""}" data-panel="domain-panel" title="第三方视频资源域名配置">🌐 外部网站</div>\n                    <div class="side-menu-item ${"hotkey-panel" === e ? "active" : ""}" data-panel="hotkey-panel">⌨️ 快捷键配置</div>\n                    <div class="side-menu-item ${"cache-panel" === e ? "active" : ""}" data-panel="cache-panel">🧹 清理缓存</div>\n                </div>\n        \n                <div style="flex: 1; display: flex; flex-direction: column; height: 100%; ">\n                    <div style="flex: 1; margin: 0 10px; padding-bottom: 20px;overflow: hidden">\n                    \n                        \x3c!-- 数据备份面板 --\x3e\n                        <div id="backup-panel" class="content-panel" style="display: ${"backup-panel" === e ? "block" : "none"};">\n                            <div style="margin-bottom: 20px">\n                                <a id="importBtn" class="menu-btn" style="background-color:#d25a88"><span>导入数据</span></a>\n                                <a id="exportBtn" class="menu-btn" style="background-color:#85d0a3"><span>导出数据</span></a>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">WebDav备份</span>\n                                <div>\n                                    <a id="webdavBackupListBtn" class="menu-btn" style="background-color:#5d87c2"><span>查看备份</span></a>\n                                    <a id="webdavBackupBtn" class="menu-btn" style="background-color:#64bb69"><span>备份数据</span></a>\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">服务地址:</span>\n                                <div class="form-content">\n                                    <input id="webDavUrl">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">用户名:</span>\n                                <div class="form-content">\n                                    <input id="webDavUsername">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">密码:</span>\n                                <div class="form-content">\n                                    <input id="webDavPassword">\n                                </div>\n                            </div>\n                        </div>\n                        \n                        \n                        \x3c!-- 基础设置面板 --\x3e\n                        <div id="base-panel" class="content-panel" style="display: ${"base-panel" === e ? "block" : "none"};">\n                            <div class="setting-item">\n                                <span class="setting-label">打开待鉴定窗口数:</span>\n                                <div class="form-content">\n                                    <input type="number" id="waitCheckCount" min="1" max="20" style="width: 100%;">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">已鉴定标签展示位置:</span>\n                                <div class="form-content">\n                                    <select id="tagPosition">\n                                        <option value="rightTop">右上</option>\n                                        <option value="leftTop">左上</option>\n                                    </select>\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">\n                                    鉴定补录演员信息 <span data-tip="在列表页进行鉴定是获取不到演员名称的, 开启后, 额外解析详情页补录演员名称, 因发请求解析费时, 会被以往慢1秒左右">❓</span>\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableSaveActressCarInfo" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                            \n                            <div class="setting-item" style="margin-top:10px">\n                                <span class="setting-label">\n                                    封面快捷按钮\n                                </span>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">\n                                    ${i.screenSvg}长缩略图:\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableScreenSvg" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">\n                                    ${i.videoSvg}预览视频:\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableVideoSvg" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">\n                                    ${i.handleSvg}鉴定按钮:\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableHandleSvg" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">\n                                    ${i.siteSvg}第三方跳转:\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableSiteSvg" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">\n                                    ${i.copySvg}复制按钮:\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableCopySvg" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                            <div class="setting-item">\n                                <span class="setting-label">预览视频默认画质:</span>\n                                <div class="form-content">\n                                    <select id="videoQuality">\n                                        ${a}\n                                    </select>\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">评论区条数:</span>\n                                <div class="form-content">\n                                    <select id="reviewCount">\n                                        <option value="10">10条</option>\n                                        <option value="20">20条</option>\n                                        <option value="30">30条</option>\n                                        <option value="40">40条</option>\n                                        <option value="50">50条</option>\n                                    </select>\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item ${r ? "" : "do-hide"}">\n                                <span class="setting-label">\n                                    高亮已收藏演员 <span data-tip="详情页, 对已收藏的演员进行边框高亮提醒">❓</span>\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableFavoriteActresses" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item ${r ? "" : "do-hide"}">\n                                <span id="highlightedTagLabel" class="setting-label">\n                                    分类标签|高亮演员-边框样式:\n                                </span>\n                                <div class="form-content" style="display: flex; align-items: center;">\n                                    <input type="number" id="highlightedTagNumber" min="0" max="20">\n                                    <input type="color" id="highlightedTagColor">\n                                </div>\n                            </div>\n\n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">请求超时时间(毫秒):</span>\n                                <div class="form-content">\n                                    <input type="number" id="httpTimeout" min="1000" max="10000" style="width: 100%;">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">请求失败重试次数:</span>\n                                <div class="form-content">\n                                    <input type="number" id="httpRetryCount" min="0" max="10" style="width: 100%;">\n                                </div>\n                            </div>\n                            \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">\n                                    启用控制台日志:\n                                </span>\n                                <div class="form-content">\n                                    <select id="enableClog">\n                                        <option value="no">禁用</option>\n                                        <option value="yes">开启</option>\n                                    </select>\n                                </div>\n                            </div>\n\n                            <div class="setting-item">\n                                <span class="setting-label">日志最大行数:</span>\n                                <div class="form-content">\n                                    <input type="number" id="clogMsgCount" min="100" max="3000" style="width: 100%;">\n                                </div>\n                            </div>\n                        </div>\n                        \n                        \x3c!-- 定时任务 --\x3e\n                        <div id="task-panel" class="content-panel" style="display: ${"task-panel" === e ? "block" : "none"};">\n                        \n                            <div class="setting-item">\n                                <span class="setting-label">请求并发数量:</span>\n                                <div class="form-content">\n                                    <input type="number" id="checkConcurrencyCount" min="2" max="5" style="width: 100%;">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">请求间隔时间(毫秒):</span>\n                                <div class="form-content">\n                                    <input type="number" id="checkRequestSleep" min="0" max="3000" style="width: 100%;">\n                                </div>\n                            </div>\n                        \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                        \n                            <div id="setting-blacklist" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 15px;">\n                                <span style="font-size: 14px; font-weight: bold; padding:3px">自动检测屏蔽黑名单演员</span>\n                                <div class="setting-item">\n                                    <span class="setting-label">\n                                        任务开关: <span data-tip="变更后, 刷新页面生效">❓</span> \n                                    </span>\n                                    <div class="form-content">\n                                        <select id="enableCheckBlacklist">\n                                            <option value="no">禁用</option>\n                                            <option value="yes">开启</option>\n                                        </select>\n                                    </div>\n                                </div>\n                                <div class="setting-item">\n                                    <span class="setting-label">任务间隔时间:</span>\n                                    <div class="form-content">\n                                         <select id="checkBlacklist_intervalTime">\n                                            <option value="2">每2小时</option>\n                                            <option value="3">每3小时</option>\n                                            <option value="6">每6小时</option>\n                                            <option value="12">每12小时</option>\n                                            <option value="24">每24小时</option>\n                                        </select>\n                                    </div>\n                                </div>\n                                <div class="setting-item">\n                                    <span class="setting-label">检测规则:</span>\n                                    <div class="form-content">\n                                         <select id="checkBlacklist_ruleTime">\n                                            <option value="0">全部检测</option>\n                                            <option value="8760">不检测停更1年以上</option>\n                                            <option value="17520">不检测停更2年以上</option>\n                                            <option value="26280">不检测停更3年以上</option>\n                                        </select>\n                                    </div>\n                                </div>\n                            </div>\n                        \n                            <div id="setting-checkFavoriteActress" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 15px;" class="${r ? "" : "do-hide"}">\n                                <span style="font-size: 14px; font-weight: bold; padding:3px">自动同步已收藏的演员</span>\n                                <div class="setting-item">\n                                    <span class="setting-label">\n                                        任务开关: <span data-tip="变更后, 刷新页面生效">❓</span> \n                                    </span>\n                                    <div class="form-content">\n                                        <select id="enableCheckFavoriteActress">\n                                            <option value="no">禁用</option>\n                                            <option value="yes">开启</option>\n                                        </select>\n                                    </div>\n                                </div>\n                                <div class="setting-item">\n                                    <span class="setting-label">任务间隔时间:</span>\n                                    <div class="form-content">\n                                         <select id="checkFavoriteActress_IntervalTime">\n                                            <option value="12">每12小时</option>\n                                            <option value="24">每24小时</option>\n                                        </select>\n                                    </div>\n                                </div>\n                            </div>\n                        \n                            <div id="setting-checkNewVideo" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 15px;" class="${r ? "" : "do-hide"}">\n                                <span style="font-size: 14px; font-weight: bold; padding:3px">自动检测已收藏演员的最新作品</span>\n                                <div class="setting-item">\n                                    <span class="setting-label">\n                                        任务开关: <span data-tip="变更后, 刷新页面生效">❓</span> \n                                    </span>\n                                    <div class="form-content">\n                                        <select id="enableCheckNewVideo">\n                                            <option value="no">禁用</option>\n                                            <option value="yes">开启</option>\n                                        </select>\n                                    </div>\n                                </div>\n                                <div class="setting-item">\n                                    <span class="setting-label">任务间隔时间:</span>\n                                    <div class="form-content">\n                                         <select id="checkNewVideo_intervalTime">\n                                            <option value="2">每2小时</option>\n                                            <option value="3">每3小时</option>\n                                            <option value="6">每6小时</option>\n                                            <option value="12">每12小时</option>\n                                            <option value="24">每24小时</option>\n                                        </select>\n                                    </div>\n                                </div>\n                                <div class="setting-item">\n                                    <span class="setting-label">检测规则:</span>\n                                    <div class="form-content">\n                                         <select id="checkNewVideo_ruleTime">\n                                            <option value="0">全部检测</option>\n                                            <option value="8760">不检测停更1年以上</option>\n                                            <option value="17520">不检测停更2年以上</option>\n                                            <option value="26280">不检测停更3年以上</option>\n                                        </select>\n                                    </div>\n                                </div>\n                            </div>\n                        </div>               \n         \n                        \x3c!-- 域名设置面板 --\x3e\n                        <div id="domain-panel" class="content-panel" style="display: ${"domain-panel" === e ? "block" : "none"};">\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - MissAv:</span>\n                                <div class="form-content">\n                                    <input id="missAvUrl">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - Jable:</span>\n                                <div class="form-content">\n                                    <input id="jableUrl">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - Avgle:</span>\n                                <div class="form-content">\n                                    <input id="avgleUrl">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - JavTrailer:</span>\n                                <div class="form-content">\n                                    <input id="javTrailersUrl">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - 123Av:</span>\n                                <div class="form-content">\n                                    <input id="av123Url">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - JavDb:</span>\n                                <div class="form-content">\n                                    <input id="javDbUrl">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - JavBus:</span>\n                                <div class="form-content">\n                                    <input id="javBusUrl">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">域名 - SupJav:</span>\n                                <div class="form-content">\n                                    <input id="supJavUrl">\n                                </div>\n                            </div>           \n                        </div>\n                         \n                         \x3c!-- 快捷键 --\x3e\n                        <div id="hotkey-panel" class="content-panel" style="display: ${"hotkey-panel" === e ? "block" : "none"};">\n                            <p style="color: #666; font-size: 0.9em;">修改后, 刷新页面生效</p>\n                            <div class="setting-item">\n                                <span class="setting-label">${m}:</span>\n                                <div class="form-content">\n                                    <input id="filterHotKey" placeholder="录入快捷键" data-default-hotkey="a">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">${v}:</span>\n                                <div class="form-content">\n                                    <input id="favoriteHotKey" placeholder="录入快捷键" data-default-hotkey="s">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">${y}:</span>\n                                <div class="form-content">\n                                    <input id="hasDownHotKey" placeholder="录入快捷键">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">${k}:</span>\n                                <div class="form-content">\n                                    <input id="hasWatchHotKey" placeholder="录入快捷键">\n                                </div>\n                            </div>\n                            <div class="setting-item">\n                                <span class="setting-label">⏩ 快进:</span>\n                                <div class="form-content">\n                                    <input id="speedVideoHotKey" placeholder="录入快捷键" data-default-hotkey="z">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">▲ 折叠:</span>\n                                <div class="form-content">\n                                    <input id="foldCategoryHotKey" placeholder="录入快捷键">\n                                </div>\n                            </div>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">💻 控制台:</span>\n                                <div class="form-content">\n                                    <input id="clogHotKey" placeholder="录入快捷键">\n                                </div>\n                            </div>\n                            \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                            \n                            <div class="setting-item">\n                                <span class="setting-label">\n                                    <span data-tip="列表页,鼠标放置图片上时可使用快捷键">❓ </span> 对视频列表页启用快捷键:\n                                </span>\n                                <div class="form-content">\n                                    <input type="checkbox" id="enableImageHotKey" class="mini-switch">\n                                </div>\n                            </div>\n\n                        </div>\n                        \n                        \x3c!-- 屏蔽设置面板 --\x3e\n                        <div id="filter-panel" class="content-panel" style="display: ${"filter-panel" === e ? "block" : "none"};">\n                            <div class="setting-item">\n                                <span class="setting-label">\n                                     启用划词屏蔽 <span data-tip="视频详情页中, 标题或评论区选中文字, 按右键可快捷加入屏蔽词">❓ </span>\n                                </span>\n                                <div style="display: flex">\n                                    <input type="checkbox" id="enableTitleSelectFilter" class="mini-switch">\n                                </div>\n                            </div>\n                            \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                            \n                            <div id="reviewKeywordContainer">\n                                <div class="setting-item">\n                                    <span class="setting-label">评论区屏蔽词:</span>\n                                    <div style="display: flex">\n                                        <input type="text" class="keyword-input" placeholder="添加屏蔽词">\n                                        <button class="add-tag-btn">添加</button>\n                                    </div>\n                                </div>\n                                <div class="tag-box"> </div>\n                            </div>\n                            \n                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                            \n                            <div id="filterKeywordContainer">\n                                <div class="setting-item">\n                                    <span class="setting-label">视频标题屏蔽词:</span>\n                                    <div style="display: flex">\n                                        <input type="text" class="keyword-input" placeholder="添加屏蔽词">\n                                        <button class="add-tag-btn">添加</button>\n                                    </div>\n                                </div>\n                                <div class="tag-box"> </div>\n                            </div>\n                        </div>\n                        <div id="cache-panel" class="content-panel" style="display: ${"cache-panel" === e ? "block" : "none"};">\n                            <h1 style="text-align:center;font-size: 20px;font-weight: bold">以下操作, 不会对核心数据造成影响</h1>\n                            <br/>               \n                            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 20px;">\n                                ${n}\n                            </div>    \n                            <div id="cache-data-display" style="margin-top: 20px; display: none;">\n                                <pre style="background: #f5f5f5; padding: 10px; border-radius: 5px; max-height: 400px; overflow: auto;"></pre>\n                            </div>\n                        </div>                        \n                    </div>\n                    \n                    <div style="flex-shrink: 0; padding: 15px 20px; text-align: right; border-top: 1px solid #eee; background: white;">   \n                        <button id="saveBtn">保存设置</button>\n                        <button id="clean-all" style="display: none">♾️ 清理全部缓存</button>\n                    </div>\n                </div>\n            </div>\n        `;
         layer.open({
             type: 1,
             title: "设置",
@@ -5611,7 +5304,7 @@ class Ae extends X {
             area: utils.getResponsiveArea([ "55%", "90%" ]),
             scrollbar: !1,
             success: (e, n) => {
-                $(e).find(".layui-layer-content").css("position", "relative"), this.loadForm(),
+                $(e).find(".layui-layer-content").css("position", "relative"), this.loadForm(), 
                 this.bindClick(), utils.setupEscClose(n), t && t();
             },
             end: () => {
@@ -5620,34 +5313,34 @@ class Ae extends X {
         });
     }
     simpleSetting() {
-        return `\n             <div class="jhs-scrollbar" style="margin-top:20px;max-height:90vh; overflow-y:auto;">\n                <div style="margin: 0 10px;">\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            显示已鉴定内容:\n                        </span>\n                        <div class="form-content" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;">\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽单番号: </span><input type="checkbox" id="showFilterItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽演员: </span><input type="checkbox" id="showFilterActorItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽关键词: </span><input type="checkbox" id="showFilterKeywordItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">收藏: </span><input type="checkbox" id="showFavoriteItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">已下载: </span><input type="checkbox" id="showHasDownItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">已观看: </span><input type="checkbox" id="showHasWatchItem" class="mini-switch"><br/>\n                        </div>\n                    </div>\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="快速显示所有已鉴定内容,减少对以上开关的频繁操作">❓ </span> 显示所有:\n                        </span>\n                        <div class="form-content" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;">\n                            <input type="checkbox" id="showAllItem" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="点击封面的打开方式,弹窗|新窗口">❓ </span>弹窗方式打开页面:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                             <input type="checkbox" id="dialogOpenDetail" class="mini-switch">\n                        </div>\n                    </div>      \n                    \n                    <div class="setting-item">\n                        <span class="setting-label">鉴定后立即关闭页面:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="needClosePage" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    <div class="setting-item">\n                        <span class="setting-label">\n                             <span data-tip="使用瀑布流模式, 排序方式将调整为默认">❓ </span>瀑布流模式:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="autoPage" class="mini-switch">\n                        </div>\n                    </div>\n       \n                    <div class="setting-item">\n                        <span class="setting-label">启用标题翻译:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="translateTitle" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">启用悬浮大图:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="hoverBigImg" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                                        \n                    <div class="setting-item">\n                        <span class="setting-label">启用115视频匹配: </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enable115Match" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    ${r ? '\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页是否展示女优年龄、三围等信息">❓ </span>加载女优信息:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadActressInfo" class="mini-switch">\n                        </div>\n                    </div>' : ""}\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页第三方资源检测,如missAv,123AV">❓ </span>加载第三方视频资源:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadOtherSite" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页图片区首列位置加载长缩略图">❓ </span>加载长缩略图:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadScreenShot" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                     <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页解析更多更高画质的预览视频">❓ </span>更高画质预览视频:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadPreviewVideo" class="mini-switch">\n                        </div>\n                    </div>\n\n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="列数6以上,建议开启竖图">❓ </span>竖图模式:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableVerticalModel" class="mini-switch">\n                        </div>\n                    </div>\n                                    \n                    <div class="setting-item">\n                        <span class="setting-label">页面列数: <span id="showContainerColumns"></span></span>\n                        <div class="form-content">\n                            <input type="range" id="containerColumns" min="2" max="10" step="1" style="padding:5px 0">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">页面宽度: <span id="showContainerWidth"></span></span>\n                        <div class="form-content">\n                            <input type="range" id="containerWidth" min="0" max="30" step="1" style="padding:5px 0">\n                        </div>\n                    </div>\n                </div>\n                <div style="padding: 0 20px 15px; text-align: right; border-top: 1px solid #eee;">   \n                    <button id="helpBtn" style="float:left;">常见问题</button>\n                    <button id="moreBtn">更多设置</button>\n                </div>\n            </div>\n        `;
+        return `\n             <div class="jhs-scrollbar" style="margin-top:20px;max-height:90vh; overflow-y:auto;">\n                <div style="margin: 0 10px;">\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            显示已鉴定内容:\n                        </span>\n                        <div class="form-content" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;">\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽单番号: </span><input type="checkbox" id="showFilterItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽演员: </span><input type="checkbox" id="showFilterActorItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽关键词: </span><input type="checkbox" id="showFilterKeywordItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">收藏: </span><input type="checkbox" id="showFavoriteItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">已下载: </span><input type="checkbox" id="showHasDownItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">已观看: </span><input type="checkbox" id="showHasWatchItem" class="mini-switch"><br/>\n                        </div>\n                    </div>\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="快速显示所有已鉴定内容,减少对以上开关的频繁操作">❓ </span> 显示所有:\n                        </span>\n                        <div class="form-content" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;">\n                            <input type="checkbox" id="showAllItem" class="mini-switch">\n                        </div>\n                    </div>\n                    \n\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">鉴定后立即关闭页面:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="needClosePage" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    <div class="setting-item">\n                        <span class="setting-label">\n                             <span data-tip="使用瀑布流模式, 排序方式将调整为默认">❓ </span>瀑布流模式:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="autoPage" class="mini-switch">\n                        </div>\n                    </div>\n       \n                    <div class="setting-item">\n                        <span class="setting-label">启用标题翻译:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="translateTitle" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">启用悬浮大图:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="hoverBigImg" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                                        \n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    ${r ? '\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页是否展示女优年龄、三围等信息">❓ </span>加载女优信息:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadActressInfo" class="mini-switch">\n                        </div>\n                    </div>' : ""}\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页第三方资源检测,如missAv,123AV">❓ </span>加载第三方视频资源:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadOtherSite" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页图片区首列位置加载长缩略图">❓ </span>加载长缩略图:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadScreenShot" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                     <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页解析更多更高画质的预览视频">❓ </span>更高画质预览视频:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadPreviewVideo" class="mini-switch">\n                        </div>\n                    </div>\n\n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="列数6以上,建议开启竖图">❓ </span>竖图模式:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableVerticalModel" class="mini-switch">\n                        </div>\n                    </div>\n                                    \n                    <div class="setting-item">\n                        <span class="setting-label">页面列数: <span id="showContainerColumns"></span></span>\n                        <div class="form-content">\n                            <input type="range" id="containerColumns" min="2" max="10" step="1" style="padding:5px 0">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">页面宽度: <span id="showContainerWidth"></span></span>\n                        <div class="form-content">\n                            <input type="range" id="containerWidth" min="0" max="30" step="1" style="padding:5px 0">\n                        </div>\n                    </div>\n                </div>\n                <div style="padding: 0 20px 15px; text-align: right; border-top: 1px solid #eee;">   \n                    <button id="helpBtn" style="float:left;">常见问题</button>\n                    <button id="moreBtn">更多设置</button>\n                </div>\n            </div>\n        `;
     }
     async loadForm() {
         let e = await storageManager.getSetting();
-        $("#videoQuality").val(e.videoQuality), $("#reviewCount").val(e.reviewCount || 20),
-        $("#tagPosition").val(e.tagPosition || "rightTop"), $("#waitCheckCount").val(e.waitCheckCount || 5),
-        $("#checkConcurrencyCount").val(e.checkConcurrencyCount || 2), $("#checkRequestSleep").val(e.checkRequestSleep || 100),
-        $("#enableCheckBlacklist").val(e.enableCheckBlacklist || _), $("#checkBlacklist_intervalTime").val(e.checkBlacklist_intervalTime || 12),
-        $("#checkBlacklist_ruleTime").val(e.checkBlacklist_ruleTime || 8760), $("#enableCheckFavoriteActress").val(e.enableCheckFavoriteActress || _),
-        $("#checkFavoriteActress_IntervalTime").val(e.checkFavoriteActress_IntervalTime || 24),
-        $("#enableCheckNewVideo").val(e.enableCheckNewVideo || _), $("#checkNewVideo_intervalTime").val(e.checkNewVideo_intervalTime || 12),
+        $("#videoQuality").val(e.videoQuality), $("#reviewCount").val(e.reviewCount || 20), 
+        $("#tagPosition").val(e.tagPosition || "rightTop"), $("#waitCheckCount").val(e.waitCheckCount || 5), 
+        $("#checkConcurrencyCount").val(e.checkConcurrencyCount || 2), $("#checkRequestSleep").val(e.checkRequestSleep || 100), 
+        $("#enableCheckBlacklist").val(e.enableCheckBlacklist || _), $("#checkBlacklist_intervalTime").val(e.checkBlacklist_intervalTime || 12), 
+        $("#checkBlacklist_ruleTime").val(e.checkBlacklist_ruleTime || 8760), $("#enableCheckFavoriteActress").val(e.enableCheckFavoriteActress || _), 
+        $("#checkFavoriteActress_IntervalTime").val(e.checkFavoriteActress_IntervalTime || 24), 
+        $("#enableCheckNewVideo").val(e.enableCheckNewVideo || _), $("#checkNewVideo_intervalTime").val(e.checkNewVideo_intervalTime || 12), 
         $("#checkNewVideo_ruleTime").val(e.checkNewVideo_ruleTime || 8760);
         const t = e.highlightedTagNumber || 1, n = e.highlightedTagColor || "#ce2222";
-        $("#highlightedTagNumber").val(e.highlightedTagNumber || 1), $("#highlightedTagColor").val(e.highlightedTagColor || "#ce2222"),
-        $("#highlightedTagLabel").css("border", `${t}px solid ${n}`), $("#enableClog").val(e.enableClog || _),
-        $("#clogMsgCount").val(e.clogMsgCount || 2e3), $("#refresh_token").val(e.refresh_token || ""),
-        $("#httpTimeout").val(e.httpTimeout || 5e3), $("#httpRetryCount").val(e.httpRetryCount || 3),
-        $("#webDavUrl").val(e.webDavUrl || ""), $("#webDavUsername").val(e.webDavUsername || ""),
-        $("#webDavPassword").val(e.webDavPassword || ""), $("#enableTitleSelectFilter").prop("checked", !e.enableTitleSelectFilter || e.enableTitleSelectFilter === _),
-        $("#enableFavoriteActresses").prop("checked", !e.enableFavoriteActresses || e.enableFavoriteActresses === _),
-        $("#enableSaveActressCarInfo").prop("checked", !!e.enableSaveActressCarInfo && e.enableSaveActressCarInfo === _),
-        $("#enableScreenSvg").prop("checked", !e.enableScreenSvg || e.enableScreenSvg === _),
-        $("#enableVideoSvg").prop("checked", !e.enableVideoSvg || e.enableVideoSvg === _),
-        $("#enableHandleSvg").prop("checked", !e.enableHandleSvg || e.enableHandleSvg === _),
-        $("#enableSiteSvg").prop("checked", !e.enableSiteSvg || e.enableSiteSvg === _),
+        $("#highlightedTagNumber").val(e.highlightedTagNumber || 1), $("#highlightedTagColor").val(e.highlightedTagColor || "#ce2222"), 
+        $("#highlightedTagLabel").css("border", `${t}px solid ${n}`), $("#enableClog").val(e.enableClog || _), 
+        $("#clogMsgCount").val(e.clogMsgCount || 2e3), 
+        $("#httpTimeout").val(e.httpTimeout || 5e3), $("#httpRetryCount").val(e.httpRetryCount || 3), 
+        $("#webDavUrl").val(e.webDavUrl || ""), $("#webDavUsername").val(e.webDavUsername || ""), 
+        $("#webDavPassword").val(await decryptCredential(e.webDavPassword) || ""), $("#enableTitleSelectFilter").prop("checked", !e.enableTitleSelectFilter || e.enableTitleSelectFilter === _), 
+        $("#enableFavoriteActresses").prop("checked", !e.enableFavoriteActresses || e.enableFavoriteActresses === _), 
+        $("#enableSaveActressCarInfo").prop("checked", !!e.enableSaveActressCarInfo && e.enableSaveActressCarInfo === _), 
+        $("#enableScreenSvg").prop("checked", !e.enableScreenSvg || e.enableScreenSvg === _), 
+        $("#enableVideoSvg").prop("checked", !e.enableVideoSvg || e.enableVideoSvg === _), 
+        $("#enableHandleSvg").prop("checked", !e.enableHandleSvg || e.enableHandleSvg === _), 
+        $("#enableSiteSvg").prop("checked", !e.enableSiteSvg || e.enableSiteSvg === _), 
         $("#enableCopySvg").prop("checked", !e.enableCopySvg || e.enableCopySvg === _);
         const a = this.getBean("OtherSitePlugin"), i = await a.getMissAvUrl(), s = await a.getjableUrl(), o = await a.getAvgleUrl(), r = await a.getJavTrailersUrl(), l = await a.getAv123Url(), c = await a.getJavDbUrl(), d = await a.getJavBusUrl(), h = await a.getSupJavUrl();
-        $("#missAvUrl").val(i), $("#jableUrl").val(s), $("#avgleUrl").val(o), $("#javTrailersUrl").val(r),
+        $("#missAvUrl").val(i), $("#jableUrl").val(s), $("#avgleUrl").val(o), $("#javTrailersUrl").val(r), 
         $("#av123Url").val(l), $("#javDbUrl").val(c), $("#javBusUrl").val(d), $("#supJavUrl").val(h);
         let g = await storageManager.getReviewFilterKeywordList(), p = await storageManager.getTitleFilterKeyword();
         g && g.forEach((e => {
@@ -5662,7 +5355,7 @@ class Ae extends X {
             const n = $(`#${t}`), a = void 0 !== e[t] ? e[t] : n.attr("data-default-hotkey") || "";
             n.val(a).on("input", (e => {
                 let t = $(e.target).val();
-                (/[\u4e00-\u9fa5]/.test(t) || /^Shift[a-zA-Z0-9]+$/.test(t)) && ($(e.target).val(""),
+                (/[\u4e00-\u9fa5]/.test(t) || /^Shift[a-zA-Z0-9]+$/.test(t)) && ($(e.target).val(""), 
                 show.error("非法输入：不能输入中文或输入法转换错误"));
             })).on("keydown", (e => this.handleHotkeyInput(e, n)));
         })), $("#enableImageHotKey").prop("checked", !!e.enableImageHotKey && e.enableImageHotKey === _);
@@ -5675,7 +5368,7 @@ class Ae extends X {
     parseHotkey(e) {
         if ("Backspace" === e.key || "Process" === e.key) return "";
         const t = [];
-        e.ctrlKey && t.push("Ctrl"), e.shiftKey && t.push("Shift"), e.altKey && t.push("Alt"),
+        e.ctrlKey && t.push("Ctrl"), e.shiftKey && t.push("Shift"), e.altKey && t.push("Alt"), 
         e.metaKey && t.push("Cmd");
         const n = {
             " ": "Space",
@@ -5696,13 +5389,12 @@ class Ae extends X {
     }
     async initSimpleSettingForm() {
         let e = await storageManager.getSetting();
-        $("#containerColumns").val(e.containerColumns || 5), $("#showContainerColumns").text(e.containerColumns || 5),
-        $("#containerWidth").val((e.containerWidth || 100) - 70), $("#showContainerWidth").text((e.containerWidth || 100) + "%"),
-        $("#dialogOpenDetail").prop("checked", !e.dialogOpenDetail || e.dialogOpenDetail === _),
-        $("#needClosePage").prop("checked", !e.needClosePage || e.needClosePage === _),
-        $("#autoPage").prop("checked", !e.autoPage || e.autoPage === _), $("#translateTitle").prop("checked", !e.translateTitle || e.translateTitle === _),
-        $("#enableLoadActressInfo").prop("checked", !e.enableLoadActressInfo || e.enableLoadActressInfo === _),
-        $("#enableLoadOtherSite").prop("checked", !e.enableLoadOtherSite || e.enableLoadOtherSite === _),
+        $("#containerColumns").val(e.containerColumns || 5), $("#showContainerColumns").text(e.containerColumns || 5), 
+        $("#containerWidth").val((e.containerWidth || 100) - 70), $("#showContainerWidth").text((e.containerWidth || 100) + "%"), 
+        $("#needClosePage").prop("checked", !e.needClosePage || e.needClosePage === _), 
+        $("#autoPage").prop("checked", !e.autoPage || e.autoPage === _), $("#translateTitle").prop("checked", !e.translateTitle || e.translateTitle === _), 
+        $("#enableLoadActressInfo").prop("checked", !e.enableLoadActressInfo || e.enableLoadActressInfo === _), 
+        $("#enableLoadOtherSite").prop("checked", !e.enableLoadOtherSite || e.enableLoadOtherSite === _), 
         $("#containerColumns").on("input", (async e => {
             let t = $("#containerColumns").val();
             if ($("#showContainerColumns").text(t), r) {
@@ -5722,15 +5414,12 @@ class Ae extends X {
                 document.querySelector(".container-fluid .row").style.minWidth = n;
             }
             storageManager.saveSettingItem("containerWidth", t + 70);
-        })), $("#dialogOpenDetail").on("change", (e => {
-            let t = $("#dialogOpenDetail").is(":checked") ? _ : C;
-            storageManager.saveSettingItem("dialogOpenDetail", t);
-        })), $("#showFilterItem").prop("checked", !!e.showFilterItem && e.showFilterItem === _),
-        $("#showFilterActorItem").prop("checked", !!e.showFilterActorItem && e.showFilterActorItem === _),
-        $("#showFilterKeywordItem").prop("checked", !!e.showFilterKeywordItem && e.showFilterKeywordItem === _),
-        $("#showFavoriteItem").prop("checked", !e.showFavoriteItem || e.showFavoriteItem === _),
-        $("#showHasDownItem").prop("checked", !e.showHasDownItem || e.showHasDownItem === _),
-        $("#showHasWatchItem").prop("checked", !e.showHasWatchItem || e.showHasWatchItem === _),
+        })), $("#showFilterItem").prop("checked", !!e.showFilterItem && e.showFilterItem === _), 
+        $("#showFilterActorItem").prop("checked", !!e.showFilterActorItem && e.showFilterActorItem === _), 
+        $("#showFilterKeywordItem").prop("checked", !!e.showFilterKeywordItem && e.showFilterKeywordItem === _), 
+        $("#showFavoriteItem").prop("checked", !e.showFavoriteItem || e.showFavoriteItem === _), 
+        $("#showHasDownItem").prop("checked", !e.showHasDownItem || e.showHasDownItem === _), 
+        $("#showHasWatchItem").prop("checked", !e.showHasWatchItem || e.showHasWatchItem === _), 
         $("#showFilterItem").on("change", (async e => {
             let t = $("#showFilterItem").is(":checked") ? _ : C;
             await storageManager.saveSettingItem("showFilterItem", t), window.refresh();
@@ -5758,17 +5447,17 @@ class Ae extends X {
             let t = $("#showAllItem").is(":checked") ? _ : C;
             await storageManager.saveSettingItem("showAllItem", t), n(), window.refresh();
         })), n(), $("#needClosePage").on("change", (async e => {
-            await storageManager.saveSettingItem("needClosePage", $("#needClosePage").is(":checked") ? _ : C),
+            await storageManager.saveSettingItem("needClosePage", $("#needClosePage").is(":checked") ? _ : C), 
             window.refresh();
         })), $("#autoPage").on("change", (async e => {
             const t = $("#autoPage").is(":checked") ? _ : C;
             await storageManager.saveSettingItem("autoPage", t), t === _ ? $("#sort-toggle-btn").hide() : $("#sort-toggle-btn").show();
         })), $("#translateTitle").on("change", (async e => {
             const t = $("#translateTitle").is(":checked") ? _ : C;
-            await storageManager.saveSettingItem("translateTitle", t), t === _ ? (await this.getBean("ListPagePlugin").doFilter(),
-            isDetailPage && await this.getBean("TranslatePlugin").translate()) : (await this.getBean("ListPagePlugin").revertTranslation(),
+            await storageManager.saveSettingItem("translateTitle", t), t === _ ? (await this.getBean("ListPagePlugin").doFilter(), 
+            isDetailPage && await this.getBean("TranslatePlugin").translate()) : (await this.getBean("ListPagePlugin").revertTranslation(), 
             $(".translated-title").remove());
-        })), $("#hoverBigImg").prop("checked", !!e.hoverBigImg && e.hoverBigImg === _),
+        })), $("#hoverBigImg").prop("checked", !!e.hoverBigImg && e.hoverBigImg === _), 
         $("#hoverBigImg").on("change", (async e => {
             const t = $("#hoverBigImg").is(":checked") ? _ : C;
             await storageManager.saveSettingItem("hoverBigImg", t), t === _ ? window.imageHoverPreviewObj = new ImageHoverPreview({
@@ -5780,21 +5469,15 @@ class Ae extends X {
         })), $("#enableLoadOtherSite").on("change", (async e => {
             const t = $("#enableLoadOtherSite").is(":checked") ? _ : C;
             await storageManager.saveSettingItem("enableLoadOtherSite", t), t === _ ? this.getBean("OtherSitePlugin").loadOtherSite().then() : $("#otherSiteBox").remove();
-        })), $("#enableLoadScreenShot").prop("checked", !e.enableLoadScreenShot || e.enableLoadScreenShot === _),
+        })), $("#enableLoadScreenShot").prop("checked", !e.enableLoadScreenShot || e.enableLoadScreenShot === _), 
         $("#enableLoadScreenShot").on("change", (async e => {
             const t = $("#enableLoadScreenShot").is(":checked") ? _ : C;
             await storageManager.saveSettingItem("enableLoadScreenShot", t), t === _ ? this.getBean("ScreenShotPlugin").loadScreenShot().then() : $(".screen-container").remove();
-        })), $("#enableLoadPreviewVideo").prop("checked", !e.enableLoadPreviewVideo || e.enableLoadPreviewVideo === _),
+        })), $("#enableLoadPreviewVideo").prop("checked", !e.enableLoadPreviewVideo || e.enableLoadPreviewVideo === _), 
         $("#enableLoadPreviewVideo").on("change", (async e => {
             const t = $("#enableLoadPreviewVideo").is(":checked") ? _ : C;
             await storageManager.saveSettingItem("enableLoadPreviewVideo", t);
-        })), $("#enable115Match").prop("checked", !!e.enable115Match && e.enable115Match === _),
-        $("#enable115Match").on("change", (async e => {
-            const t = $("#enable115Match").is(":checked") ? _ : C;
-            await storageManager.saveSettingItem("enable115Match", t);
-            let n = $(this.getSelector().itemSelector).toArray();
-            await this.getBean("WangPan115MatchPlugin").matchMovieList(n);
-        })), $("#enableVerticalModel").prop("checked", !!e.enableVerticalModel && e.enableVerticalModel === _),
+        })), $("#enableVerticalModel").prop("checked", !!e.enableVerticalModel && e.enableVerticalModel === _), 
         $("#enableVerticalModel").on("change", (async e => {
             const t = $("#enableVerticalModel").is(":checked") ? _ : C;
             await storageManager.saveSettingItem("enableVerticalModel", t), this.applyImageMode();
@@ -5806,7 +5489,7 @@ class Ae extends X {
                 title: "",
                 shadeClose: !0,
                 scrollbar: !1,
-                content: '\n<style>\n    .help-container {\n        font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif;\n        color: #333;\n        padding: 15px;\n        max-height: 100%;\n        overflow-y: auto;\n    }\n    \n    .help-section {\n        margin-bottom: 25px;\n    }\n    \n    .help-section summary {\n        font-size: 18px;\n        color: #3498db;\n        margin-bottom: 12px;\n        cursor: pointer;\n    }\n    \n    .help-content {\n        background-color: #f9f9f9;\n        border-radius: 5px;\n        padding: 15px;\n        border-left: 4px solid #3498db;\n    }\n    \n    .help-content p {\n        line-height: 1.6;\n        margin-bottom: 10px;\n    }\n    .help-section img {\n        max-width: 100%;\n        height: auto;\n        border: 1px solid #ddd;\n        border-radius: 4px;\n        box-shadow: 0 2px 4px rgba(0,0,0,0.1);\n    }\n\n</style>\n\n<div class="help-container">\n    <h1 style="font-size: 22px; margin-bottom: 20px; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px;">使用说明</h1>\n    \n    <details class="help-section">\n        <summary>1. 无法查看预览视频，提示分流?</summary>\n        <div class="help-content">\n            <p>JavDB限制日本IP的访问，而预览视频来自DMM，需要日本IP才能访问。</p>\n            <p>这样会导致二者无法同时使用，需要对其一进行代理转发。</p>\n            <p>将 cc3001.dmm.co.jp 及 dmm.co 分流到日本ip。</p>\n            <p><a href="https://youtu.be/wQUK8z_YeU4?t=121" target="_blank">Clash Verge分流规则设置 </a> (如果你是别的代理软件，自行搜索如何分流)</p>\n        </div>\n    </details>\n    \n    <details class="help-section">\n        <summary>2. 如何屏蔽某一系列的番号?</summary>\n        <div class="help-content">\n            <p>方法一：设置中-添加视频标题关键词，如: VENX-</p>\n            <p>方法二：进入详情页，选中标题文字，右键可加入</p>\n            <img src="https://i.imgur.com/lVnhK5A.png" alt="进入详情页，选中标题，进行右键"/>\n        </div>\n    </details>\n\n    <details class="help-section">\n        <summary>3. 屏蔽某演员，如何只屏蔽单体影片?</summary>\n        <div class="help-content">\n            <p>屏蔽演员前，先筛选分类，再点屏蔽</p>\n            <img src="https://imgur.com/Ue7eCAi.png" alt="屏蔽演员前，先筛选分类，再点屏蔽"/>\n        </div>\n    </details>\n    \n    <details class="help-section">\n        <summary>4. 如何多浏览器同时登录115网盘?</summary>\n        <div class="help-content">\n            <p>① 访问115登录页, 选择JHS-扫码面板, 并扫码登录</p>\n            <img src="https://imgur.com/XbaisWD.png" alt=""/>\n        </div>\n        <div class="help-content">\n            <p>② 进入网盘后, 右下角悬浮按钮, 复制Cookie</p>\n            <img src="https://imgur.com/GvzJ2Gy.png" alt=""/>\n        </div>\n        <div class="help-content">\n            <p>③ 打开另一个浏览器(需装JHS脚本), 进入登录页面, 选择JHS-扫码面板, 输入Cookie并回车</p>\n            <img src="https://imgur.com/FX08qdO.png" alt=""/>\n        </div>\n    </details>\n</div>\n',
+                content: '\n<style>\n    .help-container {\n        font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif;\n        color: #333;\n        padding: 15px;\n        max-height: 100%;\n        overflow-y: auto;\n    }\n    \n    .help-section {\n        margin-bottom: 25px;\n    }\n    \n    .help-section summary {\n        font-size: 18px;\n        color: #3498db;\n        margin-bottom: 12px;\n        cursor: pointer;\n    }\n    \n    .help-content {\n        background-color: #f9f9f9;\n        border-radius: 5px;\n        padding: 15px;\n        border-left: 4px solid #3498db;\n    }\n    \n    .help-content p {\n        line-height: 1.6;\n        margin-bottom: 10px;\n    }\n    .help-section img {\n        max-width: 100%;\n        height: auto;\n        border: 1px solid #ddd;\n        border-radius: 4px;\n        box-shadow: 0 2px 4px rgba(0,0,0,0.1);\n    }\n\n</style>\n\n<div class="help-container">\n    <h1 style="font-size: 22px; margin-bottom: 20px; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px;">使用说明</h1>\n    \n    <details class="help-section">\n        <summary>1. 无法查看预览视频，提示分流?</summary>\n        <div class="help-content">\n            <p>JavDB限制日本IP的访问，而预览视频来自DMM，需要日本IP才能访问。</p>\n            <p>这样会导致二者无法同时使用，需要对其一进行代理转发。</p>\n            <p>将 cc3001.dmm.co.jp 及 dmm.co 分流到日本ip。</p>\n            <p><a href="https://youtu.be/wQUK8z_YeU4?t=121" target="_blank">Clash Verge分流规则设置 </a> (如果你是别的代理软件，自行搜索如何分流)</p>\n        </div>\n    </details>\n    \n    <details class="help-section">\n        <summary>2. 如何屏蔽某一系列的番号?</summary>\n        <div class="help-content">\n            <p>方法一：设置中-添加视频标题关键词，如: VENX-</p>\n            <p>方法二：进入详情页，选中标题文字，右键可加入</p>\n            <img src="https://i.imgur.com/lVnhK5A.png" alt="进入详情页，选中标题，进行右键"/>\n        </div>\n    </details>\n\n    <details class="help-section">\n        <summary>3. 屏蔽某演员，如何只屏蔽单体影片?</summary>\n        <div class="help-content">\n            <p>屏蔽演员前，先筛选分类，再点屏蔽</p>\n            <img src="https://imgur.com/Ue7eCAi.png" alt="屏蔽演员前，先筛选分类，再点屏蔽"/>\n        </div>\n    </details>\n    \n    \n</div>\n',
                 area: utils.getResponsiveArea([ "50%", "90%" ])
             });
         }));
@@ -5828,21 +5511,16 @@ class Ae extends X {
         $(".side-menu-item").on("click", (function() {
             $(".side-menu-item").removeClass("active"), $(this).addClass("active"), $(".content-panel").hide();
             const e = $(this).data("panel");
-            $("#" + e).show(), "cache-panel" === e ? ($("#saveBtn").hide(), $("#clean-all").show()) : ($("#saveBtn").show(),
+            $("#" + e).show(), "cache-panel" === e ? ($("#saveBtn").hide(), $("#clean-all").show()) : ($("#saveBtn").show(), 
             $("#clean-all").hide());
-        })), $("#importBtn").on("click", (e => this.importData(e))), $("#exportBtn").on("click", (e => this.exportData(e))),
-        $("#backupBtn").on("click", (e => this.backupData(e))), $("#backupListBtn").on("click", (e => this.backupListBtn(e))),
-        $("#webdavBackupBtn").on("click", (e => this.backupDataByWebDav(e))), $("#webdavBackupListBtn").on("click", (e => this.backupListBtnByWebDav(e))),
-        $("#getRefreshTokenBtn").on("click", (e => layer.alert("即将跳转阿里云盘, 请登录后, 点击最右侧悬浮按钮获取refresh_token", {
-            yes: function(e, t, n) {
-                window.open("https://www.aliyundrive.com/drive/home"), layer.close(e);
-            }
-        }))), $("#saveBtn").on("click", (() => this.saveForm())), $(".clean-btn").on("click", (e => {
+        })), $("#importBtn").on("click", (e => this.importData(e))), $("#exportBtn").on("click", (e => this.exportData(e))), 
+        $("#webdavBackupBtn").on("click", (e => this.backupDataByWebDav(e))), $("#webdavBackupListBtn").on("click", (e => this.backupListBtnByWebDav(e))), 
+        $("#saveBtn").on("click", (() => this.saveForm())), $(".clean-btn").on("click", (e => {
             const t = $(e.currentTarget).data("key"), n = this.cacheItems.find((e => e.key === t));
-            localStorage.removeItem(t), show.ok(`${n.text} 清理成功`), $("#cache-data-display").hide(),
+            localStorage.removeItem(t), show.ok(`${n.text} 清理成功`), $("#cache-data-display").hide(), 
             "jhs_dmm_video" === t && localStorage.removeItem("jhs_other_site_dmm");
         })), $("#clean-all").on("click", (() => {
-            this.cacheItems.forEach((e => localStorage.removeItem(e.key))), show.ok("全部缓存已清理"),
+            this.cacheItems.forEach((e => localStorage.removeItem(e.key))), show.ok("全部缓存已清理"), 
             $("#cache-data-display").hide(), localStorage.removeItem("jhs_other_site_dmm");
         })), $(".view-btn").on("click", (e => {
             const t = $(e.currentTarget).data("key"), n = localStorage.getItem(t), a = $("#cache-data-display"), i = a.find("pre");
@@ -5862,27 +5540,26 @@ class Ae extends X {
     }
     async saveForm() {
         let e = await storageManager.getSetting();
-        e.videoQuality = $("#videoQuality").val(), e.reviewCount = $("#reviewCount").val(),
-        e.tagPosition = $("#tagPosition").val(), e.waitCheckCount = $("#waitCheckCount").val(),
-        e.refresh_token = $("#refresh_token").val(), e.highlightedTagNumber = $("#highlightedTagNumber").val(),
-        e.highlightedTagColor = $("#highlightedTagColor").val(), e.checkConcurrencyCount = $("#checkConcurrencyCount").val(),
-        e.checkRequestSleep = $("#checkRequestSleep").val(), e.enableCheckBlacklist = $("#enableCheckBlacklist").val(),
-        e.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(),
-        e.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(),
-        e.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(),
-        e.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e.httpTimeout = $("#httpTimeout").val(),
-        e.httpRetryCount = $("#httpRetryCount").val(), e.enableClog = $("#enableClog").val(),
-        e.enableClog === _ ? clog.show() : clog.hide(), e.clogMsgCount = $("#clogMsgCount").val(),
-        e.webDavUrl = $("#webDavUrl").val(), e.webDavUsername = $("#webDavUsername").val(),
-        e.webDavPassword = $("#webDavPassword").val(), e.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""),
-        e.jableUrl = $("#jableUrl").val().replace(/\/$/, ""), e.avgleUrl = $("#avgleUrl").val().replace(/\/$/, ""),
-        e.javTrailersUrl = $("#javTrailersUrl").val().replace(/\/$/, ""), e.av123Url = $("#av123Url").val().replace(/\/$/, ""),
-        e.javDbUrl = $("#javDbUrl").val().replace(/\/$/, ""), e.javBusUrl = $("#javBusUrl").val().replace(/\/$/, ""),
-        e.supJavUrl = $("#supJavUrl").val().replace(/\/$/, ""), e.enableTitleSelectFilter = $("#enableTitleSelectFilter").is(":checked") ? _ : C,
-        e.enableFavoriteActresses = $("#enableFavoriteActresses").is(":checked") ? _ : C,
-        e.enableSaveActressCarInfo = $("#enableSaveActressCarInfo").is(":checked") ? _ : C,
-        e.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C,
-        e.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C,
+        e.videoQuality = $("#videoQuality").val(), e.reviewCount = $("#reviewCount").val(), 
+        e.tagPosition = $("#tagPosition").val(), e.waitCheckCount = $("#waitCheckCount").val(), e.highlightedTagNumber = $("#highlightedTagNumber").val(), 
+        e.highlightedTagColor = $("#highlightedTagColor").val(), e.checkConcurrencyCount = $("#checkConcurrencyCount").val(), 
+        e.checkRequestSleep = $("#checkRequestSleep").val(), e.enableCheckBlacklist = $("#enableCheckBlacklist").val(), 
+        e.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(), 
+        e.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(), 
+        e.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(), 
+        e.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e.httpTimeout = $("#httpTimeout").val(), 
+        e.httpRetryCount = $("#httpRetryCount").val(), e.enableClog = $("#enableClog").val(), 
+        e.enableClog === _ ? clog.show() : clog.hide(), e.clogMsgCount = $("#clogMsgCount").val(), 
+        e.webDavUrl = $("#webDavUrl").val(), e.webDavUsername = $("#webDavUsername").val(), 
+        e.webDavPassword = await encryptCredential($("#webDavPassword").val()), e.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""), 
+        e.jableUrl = $("#jableUrl").val().replace(/\/$/, ""), e.avgleUrl = $("#avgleUrl").val().replace(/\/$/, ""), 
+        e.javTrailersUrl = $("#javTrailersUrl").val().replace(/\/$/, ""), e.av123Url = $("#av123Url").val().replace(/\/$/, ""), 
+        e.javDbUrl = $("#javDbUrl").val().replace(/\/$/, ""), e.javBusUrl = $("#javBusUrl").val().replace(/\/$/, ""), 
+        e.supJavUrl = $("#supJavUrl").val().replace(/\/$/, ""), e.enableTitleSelectFilter = $("#enableTitleSelectFilter").is(":checked") ? _ : C, 
+        e.enableFavoriteActresses = $("#enableFavoriteActresses").is(":checked") ? _ : C, 
+        e.enableSaveActressCarInfo = $("#enableSaveActressCarInfo").is(":checked") ? _ : C, 
+        e.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C, 
+        e.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C, 
         e.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C, $("#hotkey-panel [id]").map(((e, t) => t.id)).get().forEach((t => {
             e[t] = $(`#${t}`).val();
         })), e.enableImageHotKey = $("#enableImageHotKey").is(":checked") ? _ : C, await storageManager.saveSetting(e);
@@ -5902,7 +5579,7 @@ class Ae extends X {
     addLabelTag(e, t) {
         const n = $(`${e} .tag-box`);
         let a, i = "#cbd5e1", s = "#333";
-        /^[a-z]{2,}-/i.test(t) && r ? (s = "#3477ad", a = $(`\n                <a class="keyword-label" data-keyword="${t}" style="background-color: ${i}; color: ${s}" href="/video_codes/${t.replace("-", "")}" target="_blank">\n                    ${t}\n                    <span class="keyword-remove">×</span>\n                </a>\n            `)) : a = $(`\n                <div class="keyword-label" data-keyword="${t}" style="background-color: ${i}; color: ${s}">\n                    ${t}\n                    <span class="keyword-remove">×</span>\n                </div>\n            `),
+        /^[a-z]{2,}-/i.test(t) && r ? (s = "#3477ad", a = $(`\n                <a class="keyword-label" data-keyword="${t}" style="background-color: ${i}; color: ${s}" href="/video_codes/${t.replace("-", "")}" target="_blank">\n                    ${t}\n                    <span class="keyword-remove">×</span>\n                </a>\n            `)) : a = $(`\n                <div class="keyword-label" data-keyword="${t}" style="background-color: ${i}; color: ${s}">\n                    ${t}\n                    <span class="keyword-remove">×</span>\n                </div>\n            `), 
         a.find(".keyword-remove").click((e => {
             e.stopPropagation(), e.preventDefault();
             const t = $(e.currentTarget);
@@ -5945,44 +5622,15 @@ class Ae extends X {
             console.error(e), show.error("导入数据时出错: " + e.message);
         }
     }
-    async backupData(e) {
-        let t = loading();
-        try {
-            const e = await storageManager.getSetting("refresh_token");
-            if (!e) return void show.error("请填写refresh_token并保存后, 再试此功能");
-            show.info("正在整理数据...");
-            let t = utils.getNowStr("_", "_") + ".json", n = JSON.stringify(await storageManager.exportData());
-            n = Me(n);
-            const a = new Pe(e);
-            await a.backup(this.folderName, t, n), show.ok("备份完成");
-        } catch (n) {
-            console.error(n), show.error(n.toString());
-        } finally {
-            t.close();
-        }
-    }
-    async backupListBtn(e) {
-        const t = await storageManager.getSetting("refresh_token");
-        if (!t) return void show.error("请填写refresh_token并保存后, 再试此功能");
-        let n = loading();
-        try {
-            const e = new Pe(t), n = await e.getBackupList(this.folderName);
-            this.openFileListDialog(n, e, "阿里云盘");
-        } catch (a) {
-            console.error(a), show.error(`发生错误: ${a ? a.message : a}`);
-        } finally {
-            n.close();
-        }
-    }
     async backupDataByWebDav(e) {
         const t = await storageManager.getSetting(), n = t.webDavUrl;
         if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
         const a = t.webDavUsername;
         if (!a) return void show.error("请填写webDav用户名并保存后, 再试此功能");
-        const i = t.webDavPassword;
+        const i = await decryptCredential(t.webDavPassword);
         if (!i) return void show.error("请填写webDav密码并保存后, 再试此功能");
         let s = utils.getNowStr("_", "_") + ".json", o = JSON.stringify(await storageManager.exportData());
-        o = Me(o);
+        o = await encryptData(o);
         let r = loading();
         try {
             const e = new De(n, a, i);
@@ -5998,7 +5646,7 @@ class Ae extends X {
         if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
         const a = t.webDavUsername;
         if (!a) return void show.error("请填写webDav用户名并保存后, 再试此功能");
-        const i = t.webDavPassword;
+        const i = await decryptCredential(t.webDavPassword);
         if (!i) return void show.error("请填写webDav密码并保存后, 再试此功能");
         let s = loading();
         try {
@@ -6075,7 +5723,7 @@ class Ae extends X {
                                         try {
                                             await t.deleteFile(o.fileId);
                                             let e = await t.getBackupList(this.folderName);
-                                            i.replaceData(e), "阿里云盘" === n ? layer.alert("已移至回收站, 请到阿里云盘回收站二次删除") : layer.alert("删除成功");
+                                            i.replaceData(e), layer.alert("删除成功");
                                         } catch (s) {
                                             console.error(s), show.error(`发生错误: ${s ? s.message : s}`);
                                         } finally {
@@ -6085,16 +5733,8 @@ class Ae extends X {
                                 })), s && s.addEventListener("click", (async e => {
                                     let a = loading();
                                     try {
-                                        if ("阿里云盘" === n) {
-                                            show.info("获取下载地址...");
-                                            const e = await t.getDownloadUrl(o.fileId);
-                                            show.info("获取文件内容..."), await gmHttp.downloadFileInChunks(e, {
-                                                Referer: "https://www.aliyundrive.com/"
-                                            }, o.name, (e => Ne(e)));
-                                        } else {
-                                            const e = Ne(await t.getFileContent(o.fileId));
+                                        const e = await decryptData(await t.getFileContent(o.fileId));
                                             utils.download(e, o.name);
-                                        }
                                     } catch (i) {
                                         clog.error(i), show.error("下载失败: " + i);
                                     } finally {
@@ -6109,15 +5749,8 @@ class Ae extends X {
                                         layer.close(e);
                                         let a = loading();
                                         try {
-                                            let e;
-                                            if ("阿里云盘" === n) {
-                                                show.info("获取下载地址...");
-                                                const n = await t.getDownloadUrl(o.fileId);
-                                                show.info("获取文件内容..."), e = await gmHttp.get(n, null, {
-                                                    Referer: "https://www.aliyundrive.com/"
-                                                });
-                                            } else e = await t.getFileContent(o.fileId);
-                                            show.info("解密文件内容..."), e = Ne(e), show.info("解密完成, 开始导入...");
+                                            let e = await t.getFileContent(o.fileId);
+                                            show.info("解密文件内容..."), e = await decryptData(e), show.info("解密完成, 开始导入...");
                                             const a = JSON.parse(e);
                                             await storageManager.importData(a), show.ok("导入成功!"), window.location.reload();
                                         } catch (i) {
@@ -6161,20 +5794,61 @@ class Ae extends X {
     }
 }
 
-const Le = "x7k9p3";
+const ENCRYPTION_SALT = "x7k9p3";
 
-function Me(e) {
-    return (Le + e + Le).split("").map((e => {
-        const t = e.codePointAt(0);
-        return String.fromCodePoint(t + 5);
-    })).join("");
+async function getEncryptionKey() {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(ENCRYPTION_SALT + ".jhs.v1"), {
+        name: "PBKDF2"
+    }, false, [ "deriveKey" ]);
+    return crypto.subtle.deriveKey({
+        name: "PBKDF2",
+        salt: enc.encode("jhs-backup"),
+        iterations: 1e5,
+        hash: "SHA-256"
+    }, keyMaterial, {
+        name: "AES-GCM",
+        length: 256
+    }, false, [ "encrypt", "decrypt" ]);
 }
 
-function Ne(e) {
-    return e.split("").map((e => {
-        const t = e.codePointAt(0);
-        return String.fromCodePoint(t - 5);
-    })).join("").slice(Le.length, -Le.length);
+function arrayBufferToBase64(e) {
+    const t = new Uint8Array(e), n = 0x8000;
+    let a = "";
+    for (let i = 0; i < t.length; i += n) a += String.fromCharCode.apply(null, t.subarray(i, i + n));
+    return btoa(a);
+}
+
+function base64ToArrayBuffer(e) {
+    const t = atob(e), n = new Uint8Array(t.length);
+    for (let a = 0; a < t.length; a++) n[a] = t.charCodeAt(a);
+    return n;
+}
+
+async function encryptData(e) {
+    const t = await getEncryptionKey(), n = crypto.getRandomValues(new Uint8Array(12)), a = new TextEncoder(), i = await crypto.subtle.encrypt({
+        name: "AES-GCM",
+        iv: n
+    }, t, a.encode(e)), s = new Uint8Array(n.length + i.byteLength);
+    return s.set(n), s.set(new Uint8Array(i), n.length), arrayBufferToBase64(s);
+}
+
+async function decryptData(e) {
+    const t = await getEncryptionKey(), n = base64ToArrayBuffer(e), a = n.slice(0, 12), i = n.slice(12), s = await crypto.subtle.decrypt({
+        name: "AES-GCM",
+        iv: a
+    }, t, i);
+    return new TextDecoder().decode(s);
+}
+
+const CREDENTIAL_PREFIX = "AES:";
+
+async function encryptCredential(e) {
+    return e && !e.startsWith(CREDENTIAL_PREFIX) ? CREDENTIAL_PREFIX + await encryptData(e) : e;
+}
+
+async function decryptCredential(e) {
+    return e && e.startsWith(CREDENTIAL_PREFIX) ? await decryptData(e.slice(CREDENTIAL_PREFIX.length)) : e;
 }
 
 class je extends X {
@@ -6223,14 +5897,14 @@ class je extends X {
         if (n.length > 0) return e.addClass("is-open"), void n[0].play().catch((e => console.warn("尝试播放失败 (可能被浏览器阻止):", e)));
         let a = this.getPageInfo().carNum;
         const i = await ne(a);
-        i && 0 !== Object.keys(i).length ? (await this.createVideoPlayerAndControls(i, t),
+        i && 0 !== Object.keys(i).length ? (await this.createVideoPlayerAndControls(i, t), 
         n = $("#preview-video"), n.length > 0 ? (e.addClass("is-open"), n[0].play().catch((e => console.warn("尝试播放失败 (可能被浏览器阻止):", e)))) : show.error("视频播放器创建失败。")) : show.error("未找到可用的视频源。");
     }
     async createVideoPlayerAndControls(e, t) {
         let n = await storageManager.getSetting("videoQuality");
         n = Z(Object.keys(e), n);
         let a = e[n];
-        t.html(`\n            <div class="video-player-wrapper">\n                <video id="preview-video" controls playsinline>\n                    <source src="${a.replace(/"/g, '&quot;')}" />\n                </video>\n            </div>\n            <div class="video-control-box">\n                </div>\n        `);
+        t.html(`\n            <div class="video-player-wrapper">\n                <video id="preview-video" controls playsinline>\n                    <source src="${a}" />\n                </video>\n            </div>\n            <div class="video-control-box">\n                </div>\n        `);
         const i = $("#preview-video"), s = i.find("source"), o = t.find(".video-control-box");
         if (!i.length || !s.length) return;
         const r = i[0], l = localStorage.getItem("jhs_videoMuted");
@@ -6304,12 +5978,12 @@ class Ee extends X {
         })).on("dragleave", (() => {
             e.removeClass("highlight");
         })).on("drop", (t => {
-            t.preventDefault(), e.removeClass("highlight"), t.originalEvent.dataTransfer.files && t.originalEvent.dataTransfer.files[0] && (this.handleImageFile(t.originalEvent.dataTransfer.files[0]),
+            t.preventDefault(), e.removeClass("highlight"), t.originalEvent.dataTransfer.files && t.originalEvent.dataTransfer.files[0] && (this.handleImageFile(t.originalEvent.dataTransfer.files[0]), 
             this.resetSearchUI());
         })), n.on("click", (() => {
             t.trigger("click");
         })), t.on("change", (e => {
-            e.target.files && e.target.files[0] && (this.handleImageFile(e.target.files[0]),
+            e.target.files && e.target.files[0] && (this.handleImageFile(e.target.files[0]), 
             this.resetSearchUI());
         })), $(document).on("paste.searchImg", (async e => {
             const t = e.originalEvent.clipboardData.items;
@@ -6404,7 +6078,7 @@ class Fe extends X {
         return "BusNavBarPlugin";
     }
     handle() {
-        $("#navbar > div > div > span").append('\n            <button class="btn btn-default" style="color: #0d9488" id="search-img-btn">识图</button>\n       '),
+        $("#navbar > div > div > span").append('\n            <button class="btn btn-default" style="color: #0d9488" id="search-img-btn">识图</button>\n       '), 
         $("#search-img-btn").on("click", (() => {
             this.getBean("SearchByImagePlugin").open();
         }));
@@ -6420,15 +6094,15 @@ class He extends X {
     }
     async showRelated(e, t) {
         const n = await storageManager.getSetting("enableLoadRelated", C), a = e;
-        t ? (a.append(`\n            <div style="display: flex; align-items: center; margin: 16px 0; color: #666; font-size: 14px;">\n                <span style="flex: 1; height: 1px; background: linear-gradient(to right, transparent, #999, transparent);"></span>\n                <span style="padding: 0 10px;">相关清单</span>\n                <a id="relatedFold" style="margin-left: 8px; color: #1890ff; text-decoration: none; display: flex; align-items: center;">\n                    <span class="toggle-text">${n === _ ? "折叠" : "展开"}</span>\n                    <span class="toggle-icon" style="margin-left: 4px;">${n === _ ? "▲" : "▼"}</span>\n                </a>\n                <span style="flex: 1; height: 1px; background: linear-gradient(to right, transparent, #999, transparent);"></span>\n            </div>\n        `),
+        t ? (a.append(`\n            <div style="display: flex; align-items: center; margin: 16px 0; color: #666; font-size: 14px;">\n                <span style="flex: 1; height: 1px; background: linear-gradient(to right, transparent, #999, transparent);"></span>\n                <span style="padding: 0 10px;">相关清单</span>\n                <a id="relatedFold" style="margin-left: 8px; color: #1890ff; text-decoration: none; display: flex; align-items: center;">\n                    <span class="toggle-text">${n === _ ? "折叠" : "展开"}</span>\n                    <span class="toggle-icon" style="margin-left: 4px;">${n === _ ? "▲" : "▼"}</span>\n                </a>\n                <span style="flex: 1; height: 1px; background: linear-gradient(to right, transparent, #999, transparent);"></span>\n            </div>\n        `), 
         $("#relatedFold").on("click", (e => {
             e.preventDefault(), e.stopPropagation();
             const n = $("#relatedFold .toggle-text"), a = $("#relatedFold .toggle-icon"), i = "展开" === n.text();
-            n.text(i ? "折叠" : "展开"), a.text(i ? "▲" : "▼"), i ? ($("#relatedContainer").show(),
-            $("#relatedFooter").show(), this.isInit || (this.fetchAndDisplayRelateds(t), this.isInit = !0),
-            storageManager.saveSettingItem("enableLoadRelated", _)) : ($("#relatedContainer").hide(),
+            n.text(i ? "折叠" : "展开"), a.text(i ? "▲" : "▼"), i ? ($("#relatedContainer").show(), 
+            $("#relatedFooter").show(), this.isInit || (this.fetchAndDisplayRelateds(t), this.isInit = !0), 
+            storageManager.saveSettingItem("enableLoadRelated", _)) : ($("#relatedContainer").hide(), 
             $("#relatedFooter").hide(), storageManager.saveSettingItem("enableLoadRelated", C));
-        })), a.append('<div id="relatedContainer"></div>'), a.append('<div id="relatedFooter"></div>'),
+        })), a.append('<div id="relatedContainer"></div>'), a.append('<div id="relatedFooter"></div>'), 
         n === _ && await this.fetchAndDisplayRelateds(t)) : show.error("未传入movieId");
     }
     async fetchAndDisplayRelateds(e) {
@@ -6442,7 +6116,7 @@ class He extends X {
         } finally {
             $("#relatedLoading").remove();
         }
-        if (!a) return t.append('\n                <div style="margin-top:15px;background-color:#ffffff;padding:10px;margin-left: -10px;">\n                    获取清单失败\n                    <a id="retryFetchRelateds" href="javascript:;" style="margin-left: 10px; color: #1890ff; text-decoration: none;">重试</a>\n                </div>\n            '),
+        if (!a) return t.append('\n                <div style="margin-top:15px;background-color:#ffffff;padding:10px;margin-left: -10px;">\n                    获取清单失败\n                    <a id="retryFetchRelateds" href="javascript:;" style="margin-left: 10px; color: #1890ff; text-decoration: none;">重试</a>\n                </div>\n            '), 
         void $("#retryFetchRelateds").on("click", (async () => {
             $("#retryFetchRelateds").parent().remove(), await this.fetchAndDisplayRelateds(e);
         }));
@@ -6479,10 +6153,10 @@ class ze extends X {
         return "WantAndWatchedVideosPlugin";
     }
     async handle() {
-        window.location.href.includes("/want_watch_videos") && ($("h3").append('<a class="a-primary" id="wantWatchBtn" style="padding:10px;">导入至 JHS</a>'),
+        window.location.href.includes("/want_watch_videos") && ($("h3").append('<a class="a-primary" id="wantWatchBtn" style="padding:10px;">导入至 JHS</a>'), 
         $("#wantWatchBtn").on("click", (e => {
             this.type = h, this.importWantWatchVideos(e, "是否将 想看的影片 导入到 JHS-收藏?");
-        }))), window.location.href.includes("/watched_videos") && ($("h3").append('<a class="a-success" id="wantWatchBtn" style="padding:10px;">导入至 JHS</a>'),
+        }))), window.location.href.includes("/watched_videos") && ($("h3").append('<a class="a-success" id="wantWatchBtn" style="padding:10px;">导入至 JHS</a>'), 
         $("#wantWatchBtn").on("click", (e => {
             this.type = g, this.importWantWatchVideos(e, "是否将 看过的影片 导入到 JHS-已下载?");
         })));
@@ -6501,7 +6175,7 @@ class ze extends X {
     }
     async parseMovieList(e) {
         let t, n;
-        e ? (t = e.find(this.getSelector().itemSelector), n = e.find(".pagination-next").attr("href")) : (t = $(this.getSelector().itemSelector),
+        e ? (t = e.find(this.getSelector().itemSelector), n = e.find(".pagination-next").attr("href")) : (t = $(this.getSelector().itemSelector), 
         n = $(".pagination-next").attr("href"));
         for (const i of t) {
             const e = $(i), t = e.find("a").attr("href"), n = e.find(".video-title strong").text().trim(), s = e.find(".meta").text().trim();
@@ -6521,7 +6195,7 @@ class ze extends X {
                 console.error(`保存失败 [${n}]:`, a);
             }
         }
-        n ? (show.info("发现下一页，正在解析:", n), await new Promise((e => setTimeout(e, 1e3))),
+        n ? (show.info("发现下一页，正在解析:", n), await new Promise((e => setTimeout(e, 1e3))), 
         $.ajax({
             url: n,
             method: "GET",
@@ -6549,7 +6223,7 @@ class Ue extends X {
     async addSvgBtn() {
         $(this.getSelector().itemSelector).toArray().forEach((e => {
             let t = $(e);
-            if (!(t.find(".tool-box").length > 0) && (r && t.find(".tags").append(`\n                    <div class="tool-box" style="margin-left: auto; display: flex; align-items: center">\n                        <span class="screenSvg" title="长缩略图" style="margin-right: 15px;">${this.screenSvg}</span>\n                        \n                        <span class="videoSvg" title="播放视频" style="margin-right: 15px;">${this.videoSvg}</span>\n                        \n                        <div class="more-tools-container handleSvg" style="position: relative; margin-right: 15px;">\n                            <div title="鉴定处理" style="padding: 5px; margin: -5px;opacity:.3">${this.handleSvg}</div>\n                            \n                            <div class="more-tools" style=" position: absolute; bottom: 33px; right: -30px; display: none;\n                                background-color: rgba(255, 255, 255, 0);z-index: 10;">\n                                <a class="menu-btn hasWatchBtn" style="background-color:${S};color:white !important;margin-bottom: 5px"><span style="opacity: 1;">${k}</span></a>\n                                <a class="menu-btn hasDownBtn" style="background-color:${x}; color:white !important;margin-bottom: 5px"><span style="opacity: 1;">${y}</span></a>\n                                <a class="menu-btn favoriteBtn" style="background-color:${w}; color:white !important;margin-bottom: 5px"><span style="opacity: 1;">${v}</span></a>\n                                <a class="menu-btn filterBtn" style="background-color:${f};   color:white !important;margin-bottom: 5px"><span style="opacity: 1;">${m}</span></a>\n                            </div>\n                        </div>\n                        \n                        <div class="more-tools-container siteSvg"  style="position: relative; margin-right: 15px;">\n                            <div title="第三方网站" style="padding: 5px; margin: -5px;opacity:.3">${this.siteSvg}</div>\n                            \n                             <div class="more-tools" style=" position: absolute; bottom: 33px; right: -30px; display: none;\n                                background-color: rgba(255, 255, 255, 0);z-index: 10;">\n                                <a class="site-btn site-jable" style="color:white !important;margin-bottom: 5px;background-color:#71bb59;">\n                                    <span style="opacity: 1;">Jable</span>\n                                </a>\n                                <a class="site-btn site-avgle" style="margin-bottom: 5px;background-color:#71bb59;">\n                                    <span style="opacity: 1;">Avgle</span>\n                                </a>\n                                <a class="site-btn site-miss-av" style="color:white !important;margin-bottom: 5px;background-color:#71bb59;">\n                                    <span style="opacity: 1;">MissAv</span>\n                                </a>\n                                <a class="site-btn site-123-av" style="color:white !important;margin-bottom: 5px;background-color:#71bb59;">\n                                    <span style="opacity: 1;">123Av</span>\n                                </a>\n                            </div>\n                        </div>\n                        \n                        <div class="more-tools-container copySvg" style="position: relative; margin-right: 15px;">\n                            <div title="复制按钮" style="padding: 5px; margin: -5px;opacity:.3">${this.copySvg}</div>\n                            \n                            <div class="more-tools" style="\n                                position: absolute;\n                                bottom: 20px;\n                                right: -10px;\n                                display: none;\n                                background: white;\n                                box-shadow: 0 2px 8px rgba(0,0,0,0.15);\n                                border-radius: 20px;\n                                padding: 10px 0;\n                                margin-bottom: 15px;\n                                z-index: 10;\n                            ">\n                                <span class="carNumSvg" title="复制番号" style="padding: 5px 10px; white-space: nowrap;">${this.carNumSvg}</span>\n                                <span class="titleSvg" title="复制标题" style="padding: 5px 10px; white-space: nowrap;">${this.titleSvg}</span>\n                                <span class="downSvg" title="下载封面" style="padding: 5px 10px; white-space: nowrap;">${this.downSvg}</span>\n                            </div>\n                        </div>\n                    </div>\n                `),
+            if (!(t.find(".tool-box").length > 0) && (r && t.find(".tags").append(`\n                    <div class="tool-box" style="margin-left: auto; display: flex; align-items: center">\n                        <span class="screenSvg" title="长缩略图" style="margin-right: 15px;">${this.screenSvg}</span>\n                        \n                        <span class="videoSvg" title="播放视频" style="margin-right: 15px;">${this.videoSvg}</span>\n                        \n                        <div class="more-tools-container handleSvg" style="position: relative; margin-right: 15px;">\n                            <div title="鉴定处理" style="padding: 5px; margin: -5px;opacity:.3">${this.handleSvg}</div>\n                            \n                            <div class="more-tools" style=" position: absolute; bottom: 33px; right: -30px; display: none;\n                                background-color: rgba(255, 255, 255, 0);z-index: 10;">\n                                <a class="menu-btn hasWatchBtn" style="background-color:${S};color:white !important;margin-bottom: 5px"><span style="opacity: 1;">${k}</span></a>\n                                <a class="menu-btn hasDownBtn" style="background-color:${x}; color:white !important;margin-bottom: 5px"><span style="opacity: 1;">${y}</span></a>\n                                <a class="menu-btn favoriteBtn" style="background-color:${w}; color:white !important;margin-bottom: 5px"><span style="opacity: 1;">${v}</span></a>\n                                <a class="menu-btn filterBtn" style="background-color:${f};   color:white !important;margin-bottom: 5px"><span style="opacity: 1;">${m}</span></a>\n                            </div>\n                        </div>\n                        \n                        <div class="more-tools-container siteSvg"  style="position: relative; margin-right: 15px;">\n                            <div title="第三方网站" style="padding: 5px; margin: -5px;opacity:.3">${this.siteSvg}</div>\n                            \n                             <div class="more-tools" style=" position: absolute; bottom: 33px; right: -30px; display: none;\n                                background-color: rgba(255, 255, 255, 0);z-index: 10;">\n                                <a class="site-btn site-jable" style="color:white !important;margin-bottom: 5px;background-color:#71bb59;">\n                                    <span style="opacity: 1;">Jable</span>\n                                </a>\n                                <a class="site-btn site-avgle" style="margin-bottom: 5px;background-color:#71bb59;">\n                                    <span style="opacity: 1;">Avgle</span>\n                                </a>\n                                <a class="site-btn site-miss-av" style="color:white !important;margin-bottom: 5px;background-color:#71bb59;">\n                                    <span style="opacity: 1;">MissAv</span>\n                                </a>\n                                <a class="site-btn site-123-av" style="color:white !important;margin-bottom: 5px;background-color:#71bb59;">\n                                    <span style="opacity: 1;">123Av</span>\n                                </a>\n                            </div>\n                        </div>\n                        \n                        <div class="more-tools-container copySvg" style="position: relative; margin-right: 15px;">\n                            <div title="复制按钮" style="padding: 5px; margin: -5px;opacity:.3">${this.copySvg}</div>\n                            \n                            <div class="more-tools" style="\n                                position: absolute;\n                                bottom: 20px;\n                                right: -10px;\n                                display: none;\n                                background: white;\n                                box-shadow: 0 2px 8px rgba(0,0,0,0.15);\n                                border-radius: 20px;\n                                padding: 10px 0;\n                                margin-bottom: 15px;\n                                z-index: 10;\n                            ">\n                                <span class="carNumSvg" title="复制番号" style="padding: 5px 10px; white-space: nowrap;">${this.carNumSvg}</span>\n                                <span class="titleSvg" title="复制标题" style="padding: 5px 10px; white-space: nowrap;">${this.titleSvg}</span>\n                                <span class="downSvg" title="下载封面" style="padding: 5px 10px; white-space: nowrap;">${this.downSvg}</span>\n                            </div>\n                        </div>\n                    </div>\n                `), 
             l)) {
                 if (t.find(".avatar-box").length > 0) return;
                 t.find(".photo-info").append(`\n                    <div class="tool-box" style="display: flex; align-items: center;justify-content: flex-end">\n                        <span class="screenSvg" title="长缩略图" style="margin-right: 15px;">${this.screenSvg}</span>\n\n                        <span class="videoSvg" title="播放视频" style="margin-right: 15px;">${this.videoSvg}</span>\n                        \n                        <div class="more-tools-container handleSvg" style="position: relative; margin-right: 15px;">\n                            <div title="鉴定处理" style="padding: 5px; margin: -5px;opacity:.3">${this.handleSvg}</div>\n                            \n                            <div class="more-tools" style=" position: absolute; bottom: 33px; right: -30px; display: none;\n                                background-color: rgba(255, 255, 255, 0);z-index: 10;">\n                                <a class="menu-btn hasWatchBtn" style="background-color:${S};color:white;margin-bottom: 5px"><span style="opacity: 1;display: inline; color:white !important">${k}</span></a>\n                                <a class="menu-btn hasDownBtn" style="background-color:${x}; color:white;margin-bottom: 5px"><span style="opacity: 1;display: inline; color:white !important">${y}</span></a>\n                                <a class="menu-btn favoriteBtn" style="background-color:${w}; color:white;margin-bottom: 5px"><span style="opacity: 1;display: inline; color:white !important">${v}</span></a>\n                                <a class="menu-btn filterBtn" style="background-color:${f};   color:white;margin-bottom: 5px"><span style="opacity: 1;display: inline; color:white !important">${m}</span></a>\n                            </div>\n                        </div>\n                        \n                        <div class="more-tools-container siteSvg" style="position: relative; margin-right: 15px;">\n                            <div title="第三方网站" style="padding: 5px; margin: -5px;opacity:.3">${this.siteSvg}</div>\n                            \n                             <div class="more-tools" style=" position: absolute; bottom: 33px; right: -30px; display: none;\n                                background-color: rgba(255, 255, 255, 0);z-index: 10;">\n                                <a class="site-btn site-jable" style="color:white;margin-bottom: 5px;background-color:#71bb59;">\n                                    <span style="opacity: 1;display: inline; color:white !important">Jable</span>\n                                </a>\n                                <a class="site-btn site-avgle" style="margin-bottom: 5px;background-color:#71bb59;">\n                                    <span style="opacity: 1;display: inline; color:white !important">Avgle</span>\n                                </a>\n                                <a class="site-btn site-miss-av" style="color:white;margin-bottom: 5px;background-color:#71bb59;">\n                                    <span style="opacity: 1;display: inline; color:white !important">MissAv</span>\n                                </a>\n                                <a class="site-btn site-123-av" style="color:white;margin-bottom: 5px;background-color:#71bb59;">\n                                    <span style="opacity: 1;display: inline; color:white !important">123Av</span>\n                                </a>\n                            </div>\n                        </div>\n                      \n                        <div class="more-tools-container copySvg" style="position: relative;">\n                            <div title="复制按钮" style="padding: 5px; margin: -5px;opacity:.3">${this.copySvg}</div>\n                            \n                            <div class="more-tools" style="\n                                max-width: 44px;\n                                position: absolute;\n                                bottom: 20px;\n                                right: -10px;\n                                display: none;\n                                background: white;\n                                box-shadow: 0 2px 8px rgba(0,0,0,0.15);\n                                border-radius: 20px;\n                                padding: 10px 0;\n                                margin-bottom: 15px;\n                                z-index: 10;\n                                text-align: center;\n                            ">\n                                <span class="carNumSvg" title="复制番号" style="padding: 5px 10px; white-space: nowrap;display: inline">${this.carNumSvg}</span>\n                                <span class="titleSvg" title="复制标题"  style="padding: 5px 10px; white-space: nowrap;display: inline">${this.titleSvg}</span>\n                                <span class="downSvg" title="下载封面"   style="padding: 5px 10px; white-space: nowrap;display: inline">${this.downSvg}</span>\n                            </div>\n                        </div>\n                    </div>\n                `);
@@ -6583,7 +6257,7 @@ class Ue extends X {
         $(document).on("click", ".more-tools-container", (e => {
             e.preventDefault();
             var t = $(e.target).closest(".more-tools-container").find(".more-tools");
-            $(".more-tools").not(t).stop(!0, !0).removeClass("elastic-in").addClass("elastic-out").hide(),
+            $(".more-tools").not(t).stop(!0, !0).removeClass("elastic-in").addClass("elastic-out").hide(), 
             t.is(":visible") ? t.stop(!0, !0).removeClass("elastic-in").addClass("elastic-out").hide() : t.stop(!0, !0).removeClass("elastic-out").addClass("elastic-in").show();
         })), $(document).on("click", (function(e) {
             $(e.target).closest(".more-tools-container").length || $(".more-tools").stop(!0, !0).removeClass("elastic-in").addClass("elastic-out").hide();
@@ -6627,7 +6301,7 @@ class Ue extends X {
                     publishTime: o
                 }), window.refresh(), show.ok("操作成功");
             };
-            n.hasClass("filterBtn") ? utils.q(t, `是否屏蔽${i}?`, (() => r(d))) : n.hasClass("favoriteBtn") ? r(h).then() : n.hasClass("hasDownBtn") ? r(g).then() : n.hasClass("hasWatchBtn") && r(p).then(),
+            n.hasClass("filterBtn") ? utils.q(t, `是否屏蔽${i}?`, (() => r(d))) : n.hasClass("favoriteBtn") ? r(h).then() : n.hasClass("hasDownBtn") ? r(g).then() : n.hasClass("hasWatchBtn") && r(p).then(), 
             $(".more-tools").stop(!0, !0).removeClass("elastic-in").addClass("elastic-out").hide();
         }));
         const t = this.getBean("OtherSitePlugin"), n = await t.getMissAvUrl(), a = await t.getjableUrl(), i = await t.getAvgleUrl(), s = await t.getAv123Url();
@@ -6635,7 +6309,7 @@ class Ue extends X {
             t.preventDefault(), t.stopPropagation();
             const o = $(t.currentTarget), r = o.closest(".item"), {carNum: l} = e.findCarNumAndHref(r);
             let c = null;
-            o.hasClass("site-jable") ? c = `${a}/search/${l}/` : o.hasClass("site-avgle") ? c = `${i}/vod/search.html?wd=${l}` : o.hasClass("site-miss-av") ? c = `${n}/search/${l}` : o.hasClass("site-123-av") && (c = `${s}/ja/search?keyword=${l}`),
+            o.hasClass("site-jable") ? c = `${a}/search/${l}/` : o.hasClass("site-avgle") ? c = `${i}/vod/search.html?wd=${l}` : o.hasClass("site-miss-av") ? c = `${n}/search/${l}` : o.hasClass("site-123-av") && (c = `${s}/ja/search?keyword=${l}`), 
             t && (t.ctrlKey || t.metaKey) ? GM_openInTab(c, {
                 insert: 0
             }) : window.open(c);
@@ -6650,7 +6324,7 @@ class Ue extends X {
     showImg(e, t, n) {
         e.html(this.videoSvg).attr("title", "播放视频");
         let a = $(`#${`${n}_preview_video`}`);
-        a.length > 0 && (a[0].pause(), a.parent().hide()), t.show(), t.removeClass("loading"),
+        a.length > 0 && (a[0].pause(), a.parent().hide()), t.show(), t.removeClass("loading"), 
         t.next(".loading-spinner").remove();
     }
     async showVideo(e, t, n) {
@@ -6663,8 +6337,8 @@ class Ue extends X {
         let r = await storageManager.getSetting("videoQuality");
         r = Z(Object.keys(o), r);
         let c = o[r], d = `\n            <div style="display: flex; justify-content: center; align-items: center; position: absolute; top:0; left:0; height: 100%; width: 100%; z-index: 10; overflow: hidden">\n                <video \n                    src="${c}" \n                    poster="${s}" \n                    id="${a}" \n                    controls \n                    loop \n                    muted \n                    playsinline\n                    style="max-height: 100%; max-width: 100%; object-fit: contain"\n                ></video>\n            </div>\n        `;
-        l && (d = `\n                <div>\n                    <video \n                        src="${c}" \n                        poster="${s}" \n                        id="${a}" \n                        controls \n                        loop \n                        muted \n                        playsinline\n                        style="max-height: 100%; max-width: 100%; object-fit: contain"\n                    ></video>\n                </div>\n            `),
-        t.parent().append(d), t.hide(), t.removeClass("loading"), t.next(".loading-spinner").remove(),
+        l && (d = `\n                <div>\n                    <video \n                        src="${c}" \n                        poster="${s}" \n                        id="${a}" \n                        controls \n                        loop \n                        muted \n                        playsinline\n                        style="max-height: 100%; max-width: 100%; object-fit: contain"\n                    ></video>\n                </div>\n            `), 
+        t.parent().append(d), t.hide(), t.removeClass("loading"), t.next(".loading-spinner").remove(), 
         i = $(`#${a}`);
         let h = i[0];
         h.load(), h.muted = !1, h.play(), i.trigger("focus");
@@ -6673,8 +6347,8 @@ class Ue extends X {
 
 class Oe extends X {
     constructor() {
-        super(...arguments), i(this, "$contentBox", $(".section .container")), i(this, "urlParams", new URLSearchParams(window.location.search)),
-        i(this, "sortVal", this.urlParams.get("sort") || "release_date"), i(this, "currentPage", this.urlParams.get("page") ? parseInt(this.urlParams.get("page")) : 1),
+        super(...arguments), i(this, "$contentBox", $(".section .container")), i(this, "urlParams", new URLSearchParams(window.location.search)), 
+        i(this, "sortVal", this.urlParams.get("sort") || "release_date"), i(this, "currentPage", this.urlParams.get("page") ? parseInt(this.urlParams.get("page")) : 1), 
         i(this, "maxPage", null), i(this, "keyword", this.urlParams.get("keyword") || null);
     }
     getName() {
@@ -6685,39 +6359,39 @@ class Oe extends X {
         return await e.getAv123Url() + "/ja";
     }
     handle() {
-        $("#navbar-menu-hero > div > div:nth-child(1) > div > a:nth-child(4)").after('<a class="navbar-item" href="/advanced_search?type=100&released_start=2099-09">123Av-Fc2</a>'),
-        $('.tabs li:contains("FC2")').after('<li><a href="/advanced_search?type=100&released_start=2099-09"><span>123Av-Fc2</span></a></li>'),
+        $("#navbar-menu-hero > div > div:nth-child(1) > div > a:nth-child(4)").after('<a class="navbar-item" href="/advanced_search?type=100&released_start=2099-09">123Av-Fc2</a>'), 
+        $('.tabs li:contains("FC2")').after('<li><a href="/advanced_search?type=100&released_start=2099-09"><span>123Av-Fc2</span></a></li>'), 
         o.includes("/advanced_search?type=100") && (this.hookPage(), this.handleQuery().then());
     }
     hookPage() {
         let e = $("h2.section-title");
-        e.contents().first().replaceWith("123Av"), e.css("marginBottom", "0"), e.append('\n            <div style="margin-left: 100px; width: 400px;">\n                <input id="search-123av-keyword" type="text" placeholder="搜索123Av Fc2ppv内容" style="padding: 4px 5px;margin-right: 0">\n                <a id="search-123av-btn" class="a-primary" style="margin-left: 0">搜索</a>\n                <a id="clear-123av-btn" class="a-info" style="margin-left: 0">重置</a>\n            </div>\n        '),
+        e.contents().first().replaceWith("123Av"), e.css("marginBottom", "0"), e.append('\n            <div style="margin-left: 100px; width: 400px;">\n                <input id="search-123av-keyword" type="text" placeholder="搜索123Av Fc2ppv内容" style="padding: 4px 5px;margin-right: 0">\n                <a id="search-123av-btn" class="a-primary" style="margin-left: 0">搜索</a>\n                <a id="clear-123av-btn" class="a-info" style="margin-left: 0">重置</a>\n            </div>\n        '), 
         $("#search-123av-keyword").val(this.keyword), $("#search-123av-btn").on("click", (async () => {
             let e = $("#search-123av-keyword").val().trim();
             e && (this.keyword = e, utils.setHrefParam("keyword", e), await this.handleQuery());
         })), $("#clear-123av-btn").on("click", (async () => {
-            $("#search-123av-keyword").val(""), this.keyword = "", utils.setHrefParam("keyword", ""),
+            $("#search-123av-keyword").val(""), this.keyword = "", utils.setHrefParam("keyword", ""), 
             $(".page-box").show(), $(".tool-box").show(), await this.handleQuery();
-        })), $(".empty-message").remove(), $("#foldCategoryBtn").remove(), $(".section .container .box").remove(),
-        $("#sort-toggle-btn").remove(), this.$contentBox.append('<div class="tool-box" style="margin-top: 10px"></div>'),
-        this.$contentBox.append('<div class="movie-list h cols-4 vcols-8" style="margin-top: 10px"></div>'),
+        })), $(".empty-message").remove(), $("#foldCategoryBtn").remove(), $(".section .container .box").remove(), 
+        $("#sort-toggle-btn").remove(), this.$contentBox.append('<div class="tool-box" style="margin-top: 10px"></div>'), 
+        this.$contentBox.append('<div class="movie-list h cols-4 vcols-8" style="margin-top: 10px"></div>'), 
         this.$contentBox.append('<div class="page-box"></div>');
-        $(".tool-box").append('\n            <div class="button-group">\n                <div class="buttons has-addons" id="conditionBox">\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="release_date">发布日期</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="recent_update">最近更新</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="trending">热门</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="most_viewed_today">今天最多观看</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="most_viewed_week">本周最多观看</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="most_viewed_month">本月最多观看</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="most_viewed">最多观看</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="most_favourited">最受欢迎</a>\n                </div>\n            </div>\n        '),
-        $(`#conditionBox a[data-sort="${this.sortVal}"]`).addClass("is-info"), utils.setHrefParam("sort", this.sortVal),
+        $(".tool-box").append('\n            <div class="button-group">\n                <div class="buttons has-addons" id="conditionBox">\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="release_date">发布日期</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="recent_update">最近更新</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="trending">热门</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="most_viewed_today">今天最多观看</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="most_viewed_week">本周最多观看</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="most_viewed_month">本月最多观看</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="most_viewed">最多观看</a>\n                    <a style="padding:18px 18px !important;" class="button is-small" data-sort="most_favourited">最受欢迎</a>\n                </div>\n            </div>\n        '), 
+        $(`#conditionBox a[data-sort="${this.sortVal}"]`).addClass("is-info"), utils.setHrefParam("sort", this.sortVal), 
         utils.setHrefParam("page", this.currentPage), $("#conditionBox").on("click", "a.button", (e => {
             let t = $(e.target);
-            this.sortVal = t.data("sort"), utils.setHrefParam("sort", this.sortVal), t.siblings().removeClass("is-info"),
+            this.sortVal = t.data("sort"), utils.setHrefParam("sort", this.sortVal), t.siblings().removeClass("is-info"), 
             t.addClass("is-info"), this.handleQuery();
         }));
-        $(".page-box").append('\n            <nav class="pagination">\n                <a class="pagination-previous">上一页</a>\n                <ul class="pagination-list"></ul>\n                <a class="pagination-next">下一页</a>\n            </nav>\n        '),
+        $(".page-box").append('\n            <nav class="pagination">\n                <a class="pagination-previous">上一页</a>\n                <ul class="pagination-list"></ul>\n                <a class="pagination-next">下一页</a>\n            </nav>\n        '), 
         $(document).on("click", ".pagination-link", (e => {
-            e.preventDefault(), this.currentPage = parseInt($(e.target).data("page")), utils.setHrefParam("page", this.currentPage),
+            e.preventDefault(), this.currentPage = parseInt($(e.target).data("page")), utils.setHrefParam("page", this.currentPage), 
             this.renderPagination(), this.handleQuery();
         })), $(".pagination-previous").on("click", (e => {
-            e.preventDefault(), this.currentPage > 1 && (this.currentPage--, utils.setHrefParam("page", this.currentPage),
+            e.preventDefault(), this.currentPage > 1 && (this.currentPage--, utils.setHrefParam("page", this.currentPage), 
             this.renderPagination(), this.handleQuery());
         })), $(".pagination-next").on("click", (e => {
-            e.preventDefault(), this.currentPage < this.maxPage && (this.currentPage++, utils.setHrefParam("page", this.currentPage),
+            e.preventDefault(), this.currentPage < this.maxPage && (this.currentPage++, utils.setHrefParam("page", this.currentPage), 
             this.renderPagination(), this.handleQuery());
         }));
     }
@@ -6725,20 +6399,20 @@ class Oe extends X {
         const e = $(".pagination-list");
         e.empty();
         let t = Math.max(1, this.currentPage - 2), n = Math.min(this.maxPage, this.currentPage + 2);
-        this.currentPage <= 3 ? n = Math.min(6, this.maxPage) : this.currentPage >= this.maxPage - 2 && (t = Math.max(this.maxPage - 5, 1)),
+        this.currentPage <= 3 ? n = Math.min(6, this.maxPage) : this.currentPage >= this.maxPage - 2 && (t = Math.max(this.maxPage - 5, 1)), 
         t > 1 && (e.append('<li><a class="pagination-link" data-page="1">1</a></li>'), t > 2 && e.append('<li><span class="pagination-ellipsis">…</span></li>'));
         for (let a = t; a <= n; a++) {
             const t = a === this.currentPage ? " is-current" : "";
             e.append(`<li><a class="pagination-link${t}" data-page="${a}">${a}</a></li>`);
         }
-        n < this.maxPage && (n < this.maxPage - 1 && e.append('<li><span class="pagination-ellipsis">…</span></li>'),
+        n < this.maxPage && (n < this.maxPage - 1 && e.append('<li><span class="pagination-ellipsis">…</span></li>'), 
         e.append(`<li><a class="pagination-link" data-page="${this.maxPage}">${this.maxPage}</a></li>`));
     }
     async handleQuery() {
         let e = loading();
         try {
             let e = [];
-            e = 1 === this.currentPage ? [ 1, 2 ] : [ 2 * this.currentPage - 1, 2 * this.currentPage ],
+            e = 1 === this.currentPage ? [ 1, 2 ] : [ 2 * this.currentPage - 1, 2 * this.currentPage ], 
             this.keyword && (e = [ 1 ], $(".page-box").hide(), $(".tool-box").hide());
             const t = await this.getBaseUrl(), n = e.map((e => {
                 let n = `${t}/tags/fc2?sort=${this.sortVal}&page=${e}`;
@@ -6767,7 +6441,7 @@ class Oe extends X {
                 }
             }
             if (0 === i.length) {
-                console.log(i), show.error("无结果");
+                clog.log(i), show.error("无结果");
                 let e = `${t}/dm4/tags/fc2?sort=${this.sortVal}`;
                 this.keyword && (e = `${t}/search?keyword=${this.keyword}`), console.error("获取数据失败!", e);
             }
@@ -6793,7 +6467,7 @@ class Oe extends X {
             success: (n, a) => {
                 utils.setupEscClose(a), this.loadData(e, t);
                 let i = e.replace("FC2-", "");
-                $("#magnets-content").append(this.getBean("MagnetHubPlugin").createMagnetHub(i)),
+                $("#magnets-content").append(this.getBean("MagnetHubPlugin").createMagnetHub(i)), 
                 $("#favoriteBtn").on("click", (async n => {
                     const a = $("#data-actress").text(), i = $("#data-publishTime").text();
                     await storageManager.saveCar({
@@ -6832,7 +6506,7 @@ class Oe extends X {
                         actionType: p,
                         publishTime: i
                     }), window.refresh(), layer.closeAll();
-                })), $("#search-subtitle-btn").on("click", (t => utils.openPage(`https://subtitlecat.com/index.php?search=${e}`, e, !1, t))),
+                })), $("#search-subtitle-btn").on("click", (t => utils.openPage(`https://subtitlecat.com/index.php?search=${e}`, e, !1, t))), 
                 $("#xunLeiSubtitleBtn").on("click", (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(e)));
                 let s = e.replace("FC2-", "");
                 this.getBean("OtherSitePlugin").loadOtherSite(s, e).then();
@@ -6843,7 +6517,7 @@ class Oe extends X {
         let n = loading();
         try {
             const {id: n, publishDate: a, title: i, moviePoster: s} = await this.get123AvVideoInfo(t);
-            $(".movie-info-container").html(`\n                    <h3 class="movie-title" style="margin-bottom: 10px"><strong class="current-title">${i || "无标题"}</strong></h3>\n                    <div class="movie-meta" style="margin-bottom: 10px">\n                        <span><strong>番号: </strong>${e || "未知"}</span>\n                        <span><strong>年份: </strong>${a || "未知"}</span>\n                        <span>\n                            <strong>站点: </strong>\n                            <a href="https://fc2ppvdb.com/articles/${e.replace("FC2-", "")}" target="_blank">fc2ppvdb</a>\n                            <a style="margin-left: 5px;" href="https://adult.contents.fc2.com/article/${e.replace("FC2-", "")}/" target="_blank">fc2电子市场</a>\n                        </span>\n                    </div>\n                    <div class="movie-actors" style="margin-bottom: 10px">\n                        <div class="actor-list"><strong>主演: </strong></div>\n                    </div>\n                    <div class="movie-seller" style="margin-bottom: 10px">\n                        <span><strong>販売者: </strong></span>\n                    </div>\n                    <div class="movie-gallery" style="margin-bottom: 10px">\n                        <strong>剧照: </strong>\n                        <div class="image-list"></div>\n                    </div>\n                    \n                    <div id="data-publishTime" style="display: none">${a || ""}</div>\n\n                `),
+            $(".movie-info-container").html(`\n                    <h3 class="movie-title" style="margin-bottom: 10px"><strong class="current-title">${escapeHtml(i || "无标题")}</strong></h3>\n                    <div class="movie-meta" style="margin-bottom: 10px">\n                        <span><strong>番号: </strong>${e || "未知"}</span>\n                        <span><strong>年份: </strong>${a || "未知"}</span>\n                        <span>\n                            <strong>站点: </strong>\n                            <a href="https://fc2ppvdb.com/articles/${e.replace("FC2-", "")}" target="_blank">fc2ppvdb</a>\n                            <a style="margin-left: 5px;" href="https://adult.contents.fc2.com/article/${e.replace("FC2-", "")}/" target="_blank">fc2电子市场</a>\n                        </span>\n                    </div>\n                    <div class="movie-actors" style="margin-bottom: 10px">\n                        <div class="actor-list"><strong>主演: </strong></div>\n                    </div>\n                    <div class="movie-seller" style="margin-bottom: 10px">\n                        <span><strong>販売者: </strong></span>\n                    </div>\n                    <div class="movie-gallery" style="margin-bottom: 10px">\n                        <strong>剧照: </strong>\n                        <div class="image-list"></div>\n                    </div>\n                    \n                    <div id="data-publishTime" style="display: none">${a || ""}</div>\n\n                `), 
             this.getImgList(e).then(), this.getActressInfo(e).then(), this.getBean("TranslatePlugin").translate(e, !1).then();
         } catch (a) {
             console.error(a);
@@ -6855,7 +6529,7 @@ class Oe extends X {
         utils.loopDetector((() => $(".movie-gallery .image-list").length > 0), (async () => {
             $(".movie-gallery .image-list").prepend(' <a class="tile-item screen-container" style="overflow:hidden;max-height: 150px;max-width:150px; text-align:center;"><div style="margin-top: 50px;color: #000;cursor: auto">正在加载缩略图</div></a> ');
             const t = await this.getBean("ScreenShotPlugin").getScreenshot(e);
-            t && ($(".screen-container").html(`<img src="${t.replace(/"/g, '&quot;')}" alt="" loading="lazy" style="width: 100%;">`),
+            t && ($(".screen-container").html(`<img src="${t}" alt="" loading="lazy" style="width: 100%;">`), 
             $(".screen-container").on("click", (e => {
                 e.stopPropagation(), e.preventDefault(), showImageViewer(e.currentTarget);
             })));
@@ -6882,7 +6556,7 @@ class Oe extends X {
             let e = "";
             s.each(((t, n) => {
                 let a = $(n), i = a.text(), s = a.attr("href");
-                o += `<span class="actor-tag"><a href="https://fc2ppvdb.com${s}" target="_blank">${i}</a></span>`,
+                o += `<span class="actor-tag"><a href="https://fc2ppvdb.com${s}" target="_blank">${i}</a></span>`, 
                 e += i + " ";
             })), $("#data-actress").text(e);
         } else o += "<span>暂无演员信息</span>";
@@ -6895,7 +6569,7 @@ class Oe extends X {
             if (e.length > 0) {
                 const t = $(e[0]);
                 let n = t.text(), a = t.attr("href");
-                $(".movie-seller").html(`<span><strong>販売者: </strong><a href="https://fc2ppvdb.com${escapeHtml(a)}" target="_blank">${escapeHtml(n)}</a></span>`);
+                $(".movie-seller").html(`<span><strong>販売者: </strong><a href="https://fc2ppvdb.com${a}" target="_blank">${n}</a></span>`);
             }
         }
     }
@@ -6907,7 +6581,7 @@ class Oe extends X {
         let i = $(a).find(".items_article_SampleImagesArea img").map((function() {
             return $(this).attr("src");
         })).get(), s = "";
-        Array.isArray(i) && i.length > 0 ? s = i.map(((e, t) => `\n                <a href="${e}" data-fancybox="movie-gallery" data-caption="剧照 ${t + 1}">\n                    <img src="${e}" class="movie-image-thumb"  alt=""/>\n                </a>\n            `)).join("") : $(".movie-gallery").html("<h4>剧照: 暂无剧照</h4>"),
+        Array.isArray(i) && i.length > 0 ? s = i.map(((e, t) => `\n                <a href="${e}" data-fancybox="movie-gallery" data-caption="剧照 ${t + 1}">\n                    <img src="${e}" class="movie-image-thumb"  alt=""/>\n                </a>\n            `)).join("") : $(".movie-gallery").html("<h4>剧照: 暂无剧照</h4>"), 
         $(".image-list").html(s), this.handleLongImg(t);
     }
     async getMovie(e, t) {
@@ -6938,19 +6612,19 @@ class Re extends X {
             id: "u9a9",
             url: "https://u9a9.com/?type=2&search={keyword}",
             targetPage: "https://u9a9.com/?type=2&search={keyword}",
-            parseHtml: this.parseU3C3
+            parseHtml: this.parseTorrentList
         }, {
             name: "U3C3",
             id: "u3c3",
             url: "https://u3c3.com/?search2=a8lr16lo&search={keyword}",
             targetPage: "https://u3c3.com/?search2=a8lr16lo&search={keyword}",
-            parseHtml: this.parseU3C3
+            parseHtml: this.parseTorrentList
         }, {
             name: "Sukebei",
             id: "Sukebei",
             url: "https://sukebei.nyaa.si/?f=0&c=0_0&q={keyword}",
             targetPage: "https://sukebei.nyaa.si/?f=0&c=0_0&q={keyword}",
-            parseHtml: this.parseSukebei
+            parseHtml: this.parseTorrentList
         } ]);
     }
     getName() {
@@ -6966,23 +6640,26 @@ class Re extends X {
         const o = $('<div style="display: flex;"></div>');
         this.searchEngines.forEach(((e, t) => {
             const n = $(`<div class="magnet-tab" data-engine="${e.id}">${e.name}</div>`);
-            i && e.id === i ? (n.addClass("active"), this.currentEngine = e, s = t) : 0 !== t || i || (n.addClass("active"),
+            i && e.id === i ? (n.addClass("active"), this.currentEngine = e, s = t) : 0 !== t || i || (n.addClass("active"), 
             this.currentEngine = e), o.append(n);
-        })), n.append(o), n.append(`<a style="margin-right: 20px;margin-top:3px" id="targetBox" href="${this.currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e))}" target="_blank">原网页</a>`),
+        })), n.append(o), n.append(`<a style="margin-right: 20px;margin-top:3px" id="targetBox" href="${this.currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e))}" target="_blank">原网页</a>`), 
         t.append(n);
         const r = $('<div class="magnet-results"></div>');
         return t.append(r), t.on("click", ".magnet-tab", (n => {
             const i = $(n.target).data("engine");
-            this.currentEngine = this.searchEngines.find((e => e.id === i)), $("#targetBox").attr("href", this.currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e))),
-            localStorage.setItem(a, i), t.find(".magnet-tab").removeClass("active"), $(n.target).addClass("active"),
+            this.currentEngine = this.searchEngines.find((e => e.id === i)), $("#targetBox").attr("href", this.currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e))), 
+            localStorage.setItem(a, i), t.find(".magnet-tab").removeClass("active"), $(n.target).addClass("active"), 
             this.searchEngine(r, this.currentEngine, e);
         })), this.searchEngine(r, this.currentEngine || this.searchEngines[s], e), t;
     }
     searchEngine(e, t, n) {
-        e.html(`<div class="magnet-loading">正在从 ${escapeHtml(t.name)} 搜索 "${escapeHtml(n)}"...</div>`);
+        e.html(`<div class="magnet-loading">正在从 ${t.name} 搜索 "${n}"...</div>`);
         const a = `${t.name}_${n}`;
-        sessionStorage.getItem(a);
-        const i = t.url.replace("{keyword}", encodeURIComponent(n));
+        const i = sessionStorage.getItem(a);
+        if (i) try {
+            const s = JSON.parse(i);
+            return void this.displayResults(e, s, t.name);
+        } catch (s) {}
         t.parseHtml && GM_xmlhttpRequest({
             method: "GET",
             url: i,
@@ -7017,7 +6694,7 @@ class Re extends X {
             document.body.removeChild(n);
         }
         e.empty(), 0 !== t.length ? (t.forEach((t => {
-            const n = $(`\n                <div class="magnet-result">\n                    <div class="magnet-title"><a href="${t.magnet}">${t.title}</a></div>\n                    <div class="magnet-info">\n                        <span>大小: ${t.size || "未知"}</span>\n                        <span>日期: ${t.date || "未知"}</span>\n                    </div>\n                    <div class="magnet-copy">\n                        <button class="magnet-hub-btn copy-btn" data-magnet="${t.magnet}">复制链接</button>\n                        <button class="magnet-hub-btn down-115" data-magnet="${t.magnet}">115离线下载</button>\n                    </div>\n                </div>\n            `);
+            const n = $(`\n                <div class="magnet-result">\n                    <div class="magnet-title"><a href="${t.magnet}">${t.title}</a></div>\n                    <div class="magnet-info">\n                        <span>大小: ${t.size || "未知"}</span>\n                        <span>日期: ${t.date || "未知"}</span>\n                    </div>\n                    <div class="magnet-copy">\n                        <button class="magnet-hub-btn copy-btn" data-magnet="${t.magnet}">复制链接</button>\n\n                    </div>\n                </div>\n            `);
             e.append(n);
         })), e.on("click", ".copy-btn", (function() {
             const e = $(this), t = e.data("magnet");
@@ -7026,16 +6703,6 @@ class Re extends X {
             })).catch((n => {
                 i(t, e);
             })) : i(t, e);
-        })), e.on("click", ".down-115", (async e => {
-            const t = $(e.currentTarget).data("magnet");
-            let n = loading();
-            try {
-                await this.getBean("WangPan115TaskPlugin").handleAddTask(t);
-            } catch (a) {
-                show.error("发生错误:" + a), console.error(a);
-            } finally {
-                n.close();
-            }
         }))) : e.append('<div class="magnet-error">没有找到相关结果</div>');
     }
     parseBTSOW(e, t, n, a) {
@@ -7069,23 +6736,7 @@ class Re extends X {
             }
         });
     }
-    parseU3C3(e, t) {
-        const n = utils.htmlTo$dom(e), a = [];
-        return n.find(".torrent-list tbody tr").each(((e, n) => {
-            const i = $(n);
-            if (i.text().includes("置顶")) return;
-            const s = i.find("td:nth-child(2) a").attr("title") || i.find("td:nth-child(2) a").text().trim();
-            if (!s.toLowerCase().includes(t.toLowerCase())) return;
-            const o = i.find("td:nth-child(3) a[href^='magnet:']").attr("href"), r = i.find("td:nth-child(4)").text().trim(), l = i.find("td:nth-child(5)").text().trim();
-            o && a.push({
-                title: s,
-                magnet: o,
-                size: r,
-                date: l
-            });
-        })), a;
-    }
-    parseSukebei(e, t) {
+    parseTorrentList(e, t) {
         const n = utils.htmlTo$dom(e), a = [];
         return n.find(".torrent-list tbody tr").each(((e, n) => {
             const i = $(n);
@@ -7114,7 +6765,7 @@ class Ve extends X {
         if (!isDetailPage) return;
         if ("yes" !== await storageManager.getSetting("enableLoadScreenShot", "yes")) return;
         let e = this.getPageInfo().carNum;
-        r && $(".preview-images .tile-item").first().before(' <a class="tile-item screen-container" style="overflow:hidden;max-height: 215px;text-align:center;"><div style="margin-top: 50px;color: #000;cursor: auto">正在加载缩略图</div></a> '),
+        r && $(".preview-images .tile-item").first().before(' <a class="tile-item screen-container" style="overflow:hidden;max-height: 215px;text-align:center;"><div style="margin-top: 50px;color: #000;cursor: auto">正在加载缩略图</div></a> '), 
         l && $("#sample-waterfall .sample-box:first").after(' <a class="sample-box screen-container" style="overflow:hidden; height: 110px; text-align:center;"><div style="margin-top: 30px;color: #000;cursor: auto">正在加载缩略图</div></a> ');
         try {
             const t = await this.getScreenshot(e);
@@ -7134,7 +6785,7 @@ class Ve extends X {
         }
         if (!n) return this.showErrorFallback(e, null), null;
         const a = n.indexOf("https://");
-        return -1 !== a && (n = n.substring(a)), t[e] = n, clog.log("缩略图获取成功:", n), localStorage.setItem("jhs_screenShot", JSON.stringify(t)),
+        return -1 !== a && (n = n.substring(a)), t[e] = n, clog.log("缩略图获取成功:", n), localStorage.setItem("jhs_screenShot", JSON.stringify(t)), 
         n;
     }
     async getJavStoreScreenShot(e) {
@@ -7144,7 +6795,7 @@ class Ve extends X {
         const a = utils.htmlTo$dom(n);
         let i = null;
         if (a.find("#content_news h3 span a").each((function() {
-            if ($(this).attr("title").toLowerCase().includes(e.toLowerCase())) return i = $(this).attr("href"),
+            if ($(this).attr("title").toLowerCase().includes(e.toLowerCase())) return i = $(this).attr("href"), 
             !1;
         })), !i) return clog.error("JavStore, 查询番号失败:", t), null;
         let s = await gmHttp.get(i);
@@ -7159,7 +6810,7 @@ class Ve extends X {
         const a = utils.htmlTo$dom(n), i = a.find(".app_loop_thumb a").first().attr("href");
         if (!i) throw clog.error("解析JavBest搜索页失败:", t), new Error("解析JavBest搜索页失败");
         const s = a.find(".app_loop_thumb a").first().attr("title");
-        if (!s.toLowerCase().includes(e.toLowerCase())) throw clog.error("解析JavBest搜索页失败:", s),
+        if (!s.toLowerCase().includes(e.toLowerCase())) throw clog.error("解析JavBest搜索页失败:", s), 
         new Error("解析JavBest搜索页失败");
         const o = await gmHttp.get(i);
         let r = $(o).find('#content a img[src*="_t.jpg"]').attr("src");
@@ -7182,8 +6833,8 @@ class Ve extends X {
         return r.at(-1);
     }
     addImg(e, t) {
-        t && (r && $(".screen-container").html(`<img src="${t.replace(/"/g, '&quot;')}" alt="${escapeHtml(e)}" loading="lazy" style="width: 100%;">`),
-        l && $(".screen-container").html(`<div class="photo-frame"><img src="${t.replace(/"/g, '&quot;')}" style="height: inherit;width: 100%;" title="${escapeHtml(e)}" alt="${escapeHtml(e)}"></div>`),
+        t && (r && $(".screen-container").html(`<img src="${t}" alt="${e}" loading="lazy" style="width: 100%;">`), 
+        l && $(".screen-container").html(`<div class="photo-frame"><img src="${t}" style="height: inherit;width: 100%;" title="${e}" alt="${e}"></div>`), 
         $(".screen-container").on("click", (e => {
             e.stopPropagation(), e.preventDefault(), showImageViewer(e.currentTarget);
         })));
@@ -7205,464 +6856,6 @@ class Ve extends X {
         }));
     }
 }
-
-const Ke = async () => {
-    const e = await gmHttp.get("https://webapi.115.com/offine/downpath");
-    return "object" == typeof e ? e.data : null;
-}, We = async (e, t = 0, n = 30) => {
-    const a = `https://webapi.115.com/files/search?search_value=${encodeURIComponent(e)}&offset=${t}&limit=${n}`;
-    return await gmHttp.get(a);
-};
-
-class qe extends X {
-    getName() {
-        return "WangPan115TaskPlugin";
-    }
-    async handle() {
-        $(".buttons button[data-clipboard-text*='magnet:']").each(((e, t) => {
-            $(t).parent().append($("<button>").text("115离线下载").addClass("button is-info is-small").click((async e => {
-                e.stopPropagation(), e.preventDefault();
-                let n = loading();
-                try {
-                    await this.handleAddTask($(t).attr("data-clipboard-text"));
-                } catch (a) {
-                    show.error("发生错误:" + a), console.error(a);
-                } finally {
-                    n.close();
-                }
-            })));
-        })), l && isDetailPage && utils.loopDetector((() => $("#magnet-table td a").length > 0), (() => {
-            this.bus115Down();
-        }));
-    }
-    async bus115Down() {
-        $("#magnet-table tr").each(((e, t) => {
-            const n = $(t).find("td:nth-child(1) a").attr("href");
-            if (n && n.includes("magnet:")) {
-                const e = $("<td>").addClass("action-cell");
-                $("<button>").text("115离线下载").addClass("button is-info is-small").click((async e => {
-                    e.stopPropagation(), e.preventDefault();
-                    let t = loading();
-                    try {
-                        await this.handleAddTask(n);
-                    } catch (a) {
-                        show.error("发生错误:" + a), console.error(a);
-                    } finally {
-                        t.close();
-                    }
-                })).appendTo(e), $(t).append(e);
-            }
-        })), $("#magnet-table tbody").length > 0 && $("#magnet-table tbody tr").append($("<td>").text("操作"));
-    }
-    async getSavePathId(e) {
-        let t = await storageManager.getSetting("savePath115", "云下载");
-        e && (t = t.replaceAll("{ny}", e)), t = t.replaceAll("{date}", utils.formatDate(new Date));
-    }
-    async handleAddTask(e, t) {
-        const n = await (async () => {
-            const e = await gmHttp.get("https://115.com/?ct=offline&ac=space&_=" + (new Date).getTime());
-            return "object" == typeof e ? e : null;
-        })();
-        if (!n) return void show.error("未登录115网盘", {
-            close: !0,
-            duration: -1,
-            callback: async () => {
-                window.open("https://115.com");
-            }
-        });
-        const a = n.sign, i = n.time, s = this.getUserId(), o = await (async (e, t = "", n, a, i) => {
-            const s = {
-                url: encodeURIComponent(e),
-                wp_path_id: "",
-                uid: n,
-                sign: a,
-                time: i
-            };
-            return await gmHttp.postForm("https://115.com/web/lixian/?ct=lixian&ac=add_task_url", s);
-        })(e, s, a, i);
-        console.log("离线下载返回值:", o);
-        let r = o.info_hash, l = await this.getFileId(s, a, i, r), c = "https://115.com/?tab=offline&mode=wangpan";
-        l && (c = `https://115.com/?cid=${l}&offset=0&mode=wangpan`);
-        let d = "添加成功, 是否前往查看?";
-        !1 === o.state && (d = o.error_msg + " 是否前往查看?"), utils.q(null, d, (async () => {
-            let e = await this.getFileId(s, a, i, r);
-            e && (c = `https://115.com/?cid=${e}&offset=0&mode=wangpan`), window.open(c);
-        }));
-    }
-    async getUserId() {
-        let e = await Ke();
-        if (e && e.length > 0) return e[0].id;
-        {
-            show.info("没有默认离线目录, 正在创建中...");
-            const t = (await (async (e, t = 0) => {
-                const n = {
-                    pid: t,
-                    cname: e
-                };
-                return await gmHttp.postFileFormData("https://webapi.115.com/files/add", n);
-            })("云下载")).file_id;
-            if (await (async e => {
-                const t = {
-                    file_id: e
-                };
-                return await gmHttp.postFileFormData("https://webapi.115.com/offine/downpath", t);
-            })(t), show.info("创建完成, 开始执行离线下载"), e = await Ke(), e && e.length > 0) return e[0].id;
-            throw new Error("获取115用户Id失败");
-        }
-    }
-    async getFileId(e, t, n, a) {
-        const i = await (async (e, t, n) => {
-            const a = {
-                page: 1,
-                uid: e,
-                sign: t,
-                time: n
-            };
-            return (await gmHttp.postForm("https://115.com/web/lixian/?ct=lixian&ac=task_lists", a)).tasks;
-        })(e, t, n);
-        console.log("云离线列表:", i);
-        let s = null;
-        for (let o = 0; o < i.length; o++) {
-            let e = i[o];
-            if (e.info_hash === a) {
-                s = e.file_id;
-                break;
-            }
-        }
-        return s;
-    }
-}
-
-class Je extends X {
-    constructor() {
-        super(...arguments), i(this, "JHS_115_COOKIE", "jhs_115_cookie"), i(this, "JHS_115_MAX_AGE", "jhs_115_max_age");
-    }
-    getName() {
-        return "WangPan115Plugin";
-    }
-    async initCss() {
-        return "\n            <style>\n                .login-box .ltab-office {\n                    border: 1px solid #DEE4EE;\n                }\n                \n                .change-bg::before {\n                    background-color:#F9FAFB !important;\n                }\n                \n                .site-login-wrap {\n                    height: auto;\n                }\n                \n                #jhs-cookie-panel {\n                    width: 200px;\n                    position: fixed;\n                    bottom: 20px;\n                    right: 20px;\n                    z-index: 10000;\n                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n                    cursor: pointer;\n                    background-color: #FFFFFF;\n                    color: #333333;\n                    padding: 0;\n                    border-radius: 6px;\n                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);\n                    transition: all 0.3s ease;\n                    border: 1px solid #E0E0E0;\n                }\n    \n                #jhs-cookie-panel.expanded {\n                    padding: 0;\n                    border-radius: 8px;\n                    background-color: #FFFFFF;\n                    color: #333333;\n                    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);\n                }\n    \n                #jhs-cookie-header {\n                    padding: 10px 15px;\n                    background-color: #0078D4;\n                    color: white;\n                    border-radius: 6px 6px 0 0;\n                    display: flex;\n                    justify-content: space-between;\n                    align-items: center;\n                    font-weight: 600;\n                }\n                \n                #jhs-cookie-panel:not(.expanded) #jhs-cookie-header {\n                    border-radius: 6px;\n                    padding: 8px 15px;\n                }\n    \n                #jhs-cookie-content {\n                    max-height: 0;\n                    overflow: hidden;\n                    transition: max-height 0.3s ease-out;\n                    padding: 0 15px;\n                }\n    \n                #jhs-cookie-panel.expanded #jhs-cookie-content {\n                    max-height: 250px;\n                    padding: 15px;\n                }\n    \n                #jhs-cookie-value {\n                    max-height: 100px;\n                    overflow-y: auto;\n                    white-space: pre-wrap;\n                    word-break: break-all;\n                    margin-bottom: 15px;\n                    padding: 10px;\n                    border: 1px solid #CCCCCC;\n                    background-color: #F8F8F8;\n                    font-size: 12px;\n                    border-radius: 4px;\n                    color: #555;\n                }\n    \n                #jhs-copy-btn {\n                    background-color: #10B981;\n                    color: white;\n                    border: none;\n                    padding: 8px 15px;\n                    text-align: center;\n                    text-decoration: none;\n                    display: inline-block;\n                    font-size: 14px;\n                    margin: 0;\n                    cursor: pointer;\n                    border-radius: 4px;\n                    width: 100%;\n                    font-weight: 600;\n                    transition: background-color 0.2s ease;\n                }\n                \n                #jhs-copy-btn:hover {\n                    background-color: #059669;\n                }\n            </style>\n        ";
-    }
-    async handle() {
-        o.includes("&ac=userfile") || o.includes("115") && (utils.loopDetector((() => $("#js-login-box").length > 0), (() => {
-            0 !== $("#js-login-box").length && (this.reLogin(), this.hookPage(), this.bindClick());
-        }), 20, 4e3, !0), this.createCookiePanel());
-    }
-    reLogin() {
-        utils.loopDetector((() => $(".login-finished").length > 0), (async () => {
-            if ($(".login-finished").length > 0 || 0 === $("#js-login-box").length) return;
-            const e = await decryptData(localStorage.getItem(this.JHS_115_COOKIE)), t = localStorage.getItem(this.JHS_115_MAX_AGE);
-            document.cookie.includes("SEID") || null === e || utils.q(null, "检测到上次登录已有缓存cookie, 是否使用并登录?", (() => {
-                utils.addCookie(e, {
-                    maxAge: parseInt(t),
-                    domain: ".115.com"
-                }), window.location.href = "https://115.com/?cid=0&offset=0&mode=wangpan";
-            }));
-        }), 20, 1500, !0);
-    }
-    hookPage() {
-        const e = $('<a id="jhs-cookie"><s>🔰 JHS-扫码</s></a>');
-        $(".ltab-office").after(e);
-        const t = $(`\n            <div id="jhs_cookie_box" style="display: none; padding: 0 20px; max-width: 300px; margin: auto;">\n                <div style="margin-bottom: 15px; text-align: center;">\n                    <span style="font-size: 18px; font-weight: bold; color: #333; display: block; margin-bottom: 10px;"> 使用115App扫码登录 </span>\n                    <div style="text-align: left;">\n                        <select id="login-115-type" style="width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #ddd; font-size: 14px; box-sizing: border-box; background-color: white;">\n                            <option value="" style="color: #999;">请选择登录方式</option>\n                            <option value="wechatmini">微信小程序</option>\n                            <option value="alipaymini">支付宝小程序</option>\n                        </select>\n                    </div>\n                </div>\n                \n                <div style="text-align: left;">\n                    <select id="cookie-expiry-select" style="width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #ddd; font-size: 14px; box-sizing: border-box; background-color: white;">\n                        ${[ {
-            label: "有效期: 会话 (关闭浏览器)",
-            value: 0
-        }, {
-            label: "有效期: 1 天",
-            value: 86400
-        }, {
-            label: "有效期: 7 天",
-            value: 604800
-        }, {
-            label: "有效期: 30 天",
-            value: 2592e3,
-            default: !0
-        }, {
-            label: "有效期: 60 天",
-            value: 5184e3
-        }, {
-            label: "有效期: 180 天",
-            value: 15552e3
-        } ].map((e => `<option value="${e.value}"  ${e.default ? "selected" : ""} > ${e.label} </option>`)).join("")}\n                    </select>\n                </div>\n                \n                <div id="qrcode-box" style="display: none; justify-content:center; min-height: 100px; border: 1px dashed #aaa; padding: 15px; text-align: center; margin-top: 15px; border-radius: 4px; background-color: #fff; line-height: 70px; color: #666;">\n                    二维码占位区域\n                </div>\n                \n                                \n                <div style="margin-bottom: 15px; text-align: center; margin-top:50px">\n                    <span style="font-size: 18px; font-weight: bold; color: #333; display: block; margin-bottom: 10px;">已有Cookie? 在此输入并回车</span>\n                    <div style="text-align: left;">\n                        <input type="text" id="cookie-str-input" style="width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #ddd; font-size: 14px; box-sizing: border-box; background-color: white;">\n                    </div>\n                </div>\n            </div>\n        `);
-        $("#js-login_box").find(".login-footer").before(t);
-    }
-    bindClick() {
-        $("#jhs-cookie").on("click", (() => {
-            const e = document.querySelector('[lg_rel="finished"]');
-            e ? e.style.display = "none" : (document.querySelector('[lg_rel="qrcode"]').style.display = "none",
-            document.querySelector(".login-footer").style.display = "none", document.querySelector(".list-other-login").style.display = "none"),
-            document.querySelectorAll("#js-login_way > *").forEach((e => {
-                e.classList.remove("current");
-            })), document.querySelector("#jhs_cookie_box").style.display = "block", $("#jhs-cookie").css("background", "#fff"),
-            $(".ltab-cloud").addClass("change-bg");
-        })), $(".ltab-cloud").on("click", (() => {
-            document.querySelector("#jhs_cookie_box").style.display = "none";
-            const e = document.querySelector('[lg_rel="finished"]');
-            e ? e.style.display = "flex" : (document.querySelector('[lg_rel="qrcode"]').style.display = "block",
-            document.querySelector(".login-footer").style.display = "block", document.querySelector(".list-other-login").style.display = "block"),
-            $("#jhs-cookie").css("background", "#F9FAFB"), $(".ltab-cloud").removeClass("change-bg");
-        }));
-        let e = null;
-        $("#login-115-type").on("change", (async t => {
-            let n = $("#login-115-type").val();
-            if (!n) return;
-            const a = (await (async e => {
-                let t = `https://qrcodeapi.115.com/api/1.0/${e}/1.0/token/`;
-                return await gmHttp.get(t);
-            })(n)).data, i = a.qrcode, s = a.sign, o = a.time, r = a.uid;
-            console.log("生成二维码:", a);
-            const l = $("#qrcode-box");
-            l.css("display", "flex"), l.html(""), new QRCode(l[0], {
-                text: i,
-                width: 150,
-                height: 150,
-                correctLevel: QRCode.CorrectLevel.H
-            }), e && clearTimeout(e);
-            const c = async () => {
-                try {
-                    const t = await (async (e, t, n) => {
-                        let a = `https://qrcodeapi.115.com/get/status/?uid=${e}&time=${t}&sign=${n}`;
-                        return await gmHttp.get(a);
-                    })(r, o, s);
-                    console.log("已扫码, 正在获取结果:", t);
-                    let a = t.data, i = a.msg, l = a.status;
-                    if (i && (console.log(i), show.info(i)), 2 === l) {
-                        show.ok("扫码登录成功");
-                        const e = await (async (e, t) => {
-                            const n = {
-                                app: e,
-                                account: t
-                            }, a = `https://passportapi.115.com/app/1.0/${e}/1.0/login/qrcode/`;
-                            return await gmHttp.postFileFormData(a, n);
-                        })(n, r);
-                        if (console.log("扫码登录成功:", e), e.data && e.data.cookie) {
-                            const t = e.data.cookie, n = `UID=${t.UID}; CID=${t.CID}; SEID=${t.SEID}; KID=${t.KID}`;
-                            console.log("解析出cookie:", n), localStorage.setItem(this.JHS_115_COOKIE, await encryptData(n)), localStorage.setItem(this.JHS_115_MAX_AGE, $("#cookie-expiry-select").val()),
-                            window.location.href = "https://115.com/?cid=0&offset=0&mode=wangpan";
-                        }
-                        return;
-                    }
-                    e = setTimeout(c, 500);
-                } catch (t) {
-                    console.error("登录检查失败:", t);
-                }
-            };
-            await c();
-        }));
-        const t = document.getElementById("cookie-str-input");
-        t.addEventListener("keydown", (function(e) {
-            if ("Enter" === e.key) {
-                e.preventDefault();
-                const n = t.value, a = document.getElementById("cookie-expiry-select");
-                let i = parseInt(a.value);
-                utils.addCookie(n, {
-                    maxAge: i,
-                    domain: ".115.com"
-                }), window.location.href = "https://115.com/?cid=0&offset=0&mode=wangpan";
-            }
-        }));
-    }
-    showMessage(e) {
-        const t = document.createElement("div");
-        t.textContent = e, t.style.cssText = "\n            position: fixed;\n            top: 20px;\n            right: 20px;\n            background-color: #333;\n            color: white;\n            padding: 10px 20px;\n            border-radius: 5px;\n            z-index: 20000;\n            opacity: 0;\n            transition: opacity 0.5s ease-in-out;\n        ",
-        document.body.appendChild(t), setTimeout((() => {
-            t.style.opacity = "1";
-        }), 10), setTimeout((() => {
-            t.style.opacity = "0", setTimeout((() => t.remove()), 500);
-        }), 3e3);
-    }
-    async createCookiePanel() {
-        const e = await decryptData(localStorage.getItem(this.JHS_115_COOKIE));
-        if (!e) return;
-        const t = document.createElement("div");
-        t.id = "jhs-cookie-panel", t.innerHTML = `\n            <div id="jhs-cookie-header">\n                <span>JHS-115-Cookie</span>\n                <span id="jhs-toggle-icon">▼</span>\n            </div>\n            <div id="jhs-cookie-content">\n                <div id="jhs-cookie-value">${escapeHtml(e)}</div>\n                <button id="jhs-copy-btn">复制 Cookie</button>\n            </div>\n        `,
-        document.body.appendChild(t);
-        const n = document.getElementById("jhs-cookie-header");
-        document.getElementById("jhs-cookie-content");
-        const a = document.getElementById("jhs-toggle-icon"), i = document.getElementById("jhs-copy-btn");
-        n.addEventListener("click", (() => {
-            const e = t.classList.toggle("expanded");
-            a.textContent = e ? "▲" : "▼";
-        })), i.addEventListener("click", (async t => {
-            t.stopPropagation();
-            try {
-                await navigator.clipboard.writeText(e), this.showMessage("Cookie 已成功复制到剪贴板!");
-            } catch (n) {
-                console.error("Failed to copy text using clipboard API: ", n);
-                const t = document.createElement("textarea");
-                t.value = e, document.body.appendChild(t), t.select(), document.execCommand("copy"),
-                document.body.removeChild(t), this.showMessage("Cookie 已复制! (回退方案)");
-            }
-        })), t.classList.remove("expanded");
-    }
-}
-
-const Ge = class e extends X {
-    constructor() {
-        super(...arguments), i(this, "loginStatus", e.LoginStatus.UNCHECKED);
-    }
-    getName() {
-        return "WangPan115MatchPlugin";
-    }
-    async initCss() {
-        return "\n            <style>\n                [class^='jhs-match-'] {\n                    padding: 1px 2px;\n                    margin-left: 0;\n                    margin-right: 5px;\n                }\n                \n                .jhs-match-detail {\n                    z-index: 1000;\n                    background: #fff;\n                    border: 1px solid #ddd;\n                    border-radius: 4px;\n                    padding: 10px;\n                    max-width: 800px;\n                    max-height: 500px;\n                    overflow-y: auto;\n                }\n                .jhs-match-detail.isListPage{\n                    position: absolute;\n                    box-shadow: 0 2px 10px rgba(0,0,0,0.2);\n                }\n                .jhs-match-detail table {\n                    width: 100%;\n                    border-collapse: collapse;\n                }\n                .jhs-match-detail th, .jhs-match-detail td {\n                    padding: 4px 8px;\n                    border: 1px solid #eee;\n                    text-align: left;\n                }\n                .jhs-match-detail th {\n                    background-color: #f5f5f5;\n                }\n                .jhs-match-detail tr:hover {\n                    background-color: #f9f9f9;\n                }\n            </style>\n        ";
-    }
-    async handle() {
-        this.$box115 = l ? $(".container .info") : $(".movie-panel-info"), $(document).on("click", ".jhs-match-no-login-btn", (async e => {
-            e.preventDefault(), e.stopPropagation(), await this.handleLoginRedirect();
-        })), $(document).on("click", ".jhs-match-btn", (e => {
-            e.preventDefault(), e.stopImmediatePropagation(), this.showMatchDetail(e.currentTarget);
-        })), $(document).on("click", ".jhs-match-error-btn", (async e => {
-            e.preventDefault(), e.stopPropagation(), await this.retryMatch(e.currentTarget);
-        })), await this.matchDetailPage(), $(document).on("click", ".jhs-match-detail-error-btn", (async e => {
-            e.preventDefault(), e.stopPropagation();
-            $(e.currentTarget).replaceWith("<a class='jhs-match-btn' title=\"匹配中...\">匹配中...</a>");
-            try {
-                const e = this.getPageInfo().carNum, t = await this.searchFiles(e);
-                $(".jhs-match-detail").remove(), await this.matchDetailPage(t);
-            } catch (t) {
-                console.error(`重新匹配失败 [${carNum}]:`, t), this.showMatchError($box, carNum, t);
-            }
-        }));
-    }
-    async matchDetailPage(t) {
-        if (!isDetailPage) return;
-        if (await storageManager.getSetting("enable115Match", C) === C) return;
-        const n = $('\n            <div class="jhs-match-detail">\n                <table>\n                    <thead>\n                        <tr style="text-align: center">\n                            <th colspan="4">115匹配</th>\n                        </tr>\n                        <tr>\n                            <th>名称</th>\n                            <th>大小</th>\n                            <th>时间</th>\n                            <th>播放</th>\n                        </tr>\n                    </thead>\n                    <tbody>\n                    </tbody>\n                </table>\n            </div>\n        '), a = n.find("tbody");
-        try {
-            const n = this.getPageInfo().carNum;
-            if (t || (t = await this.searchFiles(n)), await this.checkLoginStatus(), this.loginStatus === e.LoginStatus.LOGGED_OUT) a.append(`<tr><td colspan="4">\n                     <a class='jhs-match-no-login-btn a-info'\n                        data-keyword="${n}"\n                        title="未登录115网盘">未登录</a>\n                 </td></tr>`); else if (t.length > 0) {
-                const e = t.map((e => `\n                <tr>\n                    <td>${e.name}</td>\n                    <td>${this.formatSize(e.size)}</td>\n                    <td>${e.createTime}</td>\n                    <td>\n                        <a href="https://115vod.com/?pickcode=${e.videoId}&share_id=0"\n                           target="_blank"\n                           class="a-success"\n                           title="播放">播放</a>\n                    </td>\n                </tr>\n            `)).join("");
-                a.append(e);
-            } else a.append(`<tr><td colspan="4">\n                     <a class='jhs-match-detail-error-btn a-info'\n                        data-keyword="${n}"\n                        title="未匹配,点击重试">未匹配</a>\n                 </td></tr>`);
-        } catch (i) {
-            a.append(`<tr><td colspan="4">\n                 <a class="a-danger jhs-match-detail-error-btn" title="${i.message || "加载失败"}">加载失败，请重试</a>\n             </td></tr>`),
-            console.error("加载文件列表时发生错误:", i);
-        }
-        this.$box115.append(n);
-    }
-    async matchMovieList(e) {
-        await storageManager.getSetting("enable115Match", C) !== C ? (await this.checkLoginStatus(),
-        await this.processMovieElements(e)) : $(".video-title [class^='jhs-match-']").remove();
-    }
-    showMatchDetail(e) {
-        const t = $(e), n = t.attr("data-match");
-        $(".jhs-match-detail").remove();
-        const a = this.parseMatchData(n);
-        if (0 === a.length) return;
-        if (1 === a.length) {
-            const e = a[0].videoId;
-            return void window.open(`https://115vod.com/?pickcode=${e}&share_id=0`, "_blank");
-        }
-        const i = this.createMatchDetailElement(a);
-        this.positionDetailElement(i, t), this.addOutsideClickHandler(i), i.on("click", (e => {
-            e.stopPropagation();
-        }));
-    }
-    parseMatchData(e) {
-        try {
-            return JSON.parse(e) || [];
-        } catch (t) {
-            return console.error("解析匹配数据失败:", t), [];
-        }
-    }
-    createMatchDetailElement(e) {
-        const t = $(`\n            <div class="jhs-match-detail isListPage">\n                <table>\n                    <thead>\n                        <tr>\n                            <th>名称</th>\n                            <th>大小</th>\n                            <th>时间</th>\n                            <th>播放</th>\n                        </tr>\n                    </thead>\n                    <tbody>\n                        ${e.map((e => `\n                            <tr>\n                                <td>${e.name}</td>\n                                <td>${this.formatSize(e.size)}</td>\n                                <td>${e.createTime}</td>\n                                <td>\n                                    <a href="https://115vod.com/?pickcode=${e.videoId}&share_id=0" \n                                       target="_blank" \n                                       class="a-success"\n                                       title="播放">播放</a>\n                                </td>\n                            </tr>\n                        `)).join("")}\n                    </tbody>\n                </table>\n            </div>\n        `);
-        return $("body").append(t), t;
-    }
-    positionDetailElement(e, t) {
-        const n = t.offset();
-        e.css({
-            top: n.top - e.outerHeight() + 20,
-            left: n.left
-        });
-    }
-    addOutsideClickHandler(e) {
-        const t = "click.jhs-match-detail";
-        setTimeout((() => {
-            $(document).on(t, (n => {
-                e.is(n.target) || 0 !== e.has(n.target).length || (e.remove(), $(document).off(t));
-            }));
-        }), 100);
-    }
-    async retryMatch(e) {
-        const t = $(e), n = t.closest(".movie-box, .item"), a = t.attr("data-keyword");
-        t.replaceWith("<a class='jhs-match-btn' title=\"匹配中...\">匹配中...</a>");
-        try {
-            const e = await this.searchFiles(a);
-            this.updateMatchStatus(n, a, e);
-        } catch (i) {
-            console.error(`重新匹配失败 [${a}]:`, i), this.showMatchError(n, a, i);
-        }
-    }
-    updateMatchStatus(e, t, n) {
-        n.length > 0 ? e.find(".jhs-match-btn").replaceWith(`<a class='jhs-match-btn a-success' \n                   data-keyword="${t}"\n                   data-match='${JSON.stringify(n)}'\n                   title="点击查看匹配详情">匹配${n.length}个</a>`) : e.find(".jhs-match-btn").replaceWith(`<a class='jhs-match-error-btn a-info' data-keyword="${t}" \n                  title="点击重新尝试匹配">未匹配</a>`);
-    }
-    async handleLoginRedirect() {
-        window.open("https://115.com");
-    }
-    async searchFiles(e) {
-        var t;
-        let n = e.toLowerCase().replace("fc2-", "");
-        return (null == (t = (await We(n)).data) ? void 0 : t.map((e => ({
-            folderId: e.fid,
-            videoId: e.pc,
-            name: e.n,
-            createTime: utils.formatDate(new Date(1e3 * e.te)),
-            size: e.s,
-            isVideo: [ ".mp4", ".avi", ".mov", ".mkv", ".flv", ".wmv" ].some((t => {
-                var n;
-                return null == (n = e.n) ? void 0 : n.toLowerCase().endsWith(t);
-            }))
-        }))).filter((e => e.folderId && e.isVideo && e.name.toLowerCase().includes(n)))) || [];
-    }
-    showMatchError(e, t, n) {
-        e.find(".jhs-match-btn").replaceWith(`<a class='jhs-match-error-btn' data-keyword="${t}" \n              title="匹配失败，点击重试">匹配失败</a>`),
-        show.error(`${t} 匹配失败: ${n.message || "网络错误"}`);
-    }
-    async checkLoginStatus() {
-        var t;
-        if (this.loginStatus === e.LoginStatus.UNCHECKED) try {
-            const n = await We("test");
-            this.loginStatus = (null == (t = n.error) ? void 0 : t.includes("登录")) ? e.LoginStatus.LOGGED_OUT : e.LoginStatus.LOGGED_IN;
-        } catch {
-            this.loginStatus = e.LoginStatus.LOGGED_OUT;
-        }
-    }
-    async processMovieElements(e) {
-        const t = Array.from(e).filter((e => !utils.isHidden(e))).filter((e => !(l && $(e).find(".avatar-box").length > 0))).map((e => this.processSingleMovieElement(e)));
-        await Promise.all(t);
-    }
-    async processSingleMovieElement(t) {
-        const n = $(t), {carNum: a} = this.getBean("ListPagePlugin").findCarNumAndHref(n);
-        if (!(n.find("[class^='jhs-match-']").length > 0)) if (this.loginStatus !== e.LoginStatus.LOGGED_OUT) try {
-            const e = await this.searchFiles(a);
-            this.addTag(n, a, e);
-        } catch (i) {
-            console.error(`搜索失败 [${a}]:`, i), this.addTag(n, a, []);
-        } else this.addTag(n, a, []);
-    }
-    addTag(t, n, a) {
-        if (!(t.find("[class^='jhs-match-']").length > 0)) if (this.loginStatus === e.LoginStatus.LOGGED_OUT) t.find(".video-title").prepend(`<a class='jhs-match-no-login-btn a-info' \n                   data-keyword="${n}" \n                   title="未登录115网盘">未登录</a>`); else if (a.length > 0) {
-            const e = 1 === a.length ? "点击直接播放" : `点击查看${a.length}个匹配结果`;
-            t.find(".video-title").prepend(`<a class='jhs-match-btn a-success' \n                       data-keyword="${n}"\n                       data-match='${JSON.stringify(a)}'\n                       title="${e}">匹配${a.length}个</a>`);
-        } else t.find(".video-title").prepend(`<a class='jhs-match-error-btn a-info' \n                   data-keyword="${n}" \n                   title="未匹配,点击重试">未匹配</a>`);
-    }
-    formatSize(e) {
-        if (!e) return "-";
-        const t = [ "B", "KB", "MB", "GB", "TB" ];
-        let n = parseFloat(e), a = 0;
-        for (;n >= 1024 && a < t.length - 1; ) n /= 1024, a++;
-        return `${n.toFixed(2)} ${t[a]}`;
-    }
-};
-
-i(Ge, "LoginStatus", {
-    UNCHECKED: -1,
-    LOGGED_OUT: 0,
-    LOGGED_IN: 1
-});
-
-let Ye = Ge;
 
 class Xe extends X {
     getName() {
@@ -7736,7 +6929,7 @@ class Xe extends X {
                 $(".section-columns").prepend(e), n = $(".avatar").first();
             }
             if (0 === n.length) return;
-            n.css("background-image").trim().toLowerCase() !== e.trim().toLowerCase() && (n.css("background-image", e),
+            n.css("background-image").trim().toLowerCase() !== e.trim().toLowerCase() && (n.css("background-image", e), 
             n.css("background-size", "cover"), n.css("background-position", "top center"), n.css("background-repeat", "no-repeat"));
         }
     }
@@ -7813,15 +7006,15 @@ class Ze extends X {
         s[e] ? i.html(t ? e + "&nbsp;&nbsp;&nbsp;" + s[e] : s[e]) : _e(a, "ja", "zh-CN").then((n => {
             i.html(t ? e + "&nbsp;&nbsp;&nbsp;" + n : n);
         })).catch((e => {
-            console.error("翻译失败:", e), i.replaceWith(`<div class="translated-title" style="color: red;">翻译失败: ${e.message}</div>`);
+            console.error("翻译失败:", e), i.replaceWith(`<div class="translated-title" style="color: red;">翻译失败: ${escapeHtml(e.message)}</div>`);
         }));
     }
 }
 
 class et extends X {
     constructor() {
-        super(...arguments), i(this, "singleTaskKey", "checkNewActressActorFilterCar"),
-        i(this, "taskConfig", null), i(this, "storageQueue", new ve), i(this, "lastCheckFavoriteActressTimeKey", "jhs_time_checkFavoriteActress"),
+        super(...arguments), i(this, "singleTaskKey", "checkNewActressActorFilterCar"), 
+        i(this, "taskConfig", null), i(this, "storageQueue", new ve), i(this, "lastCheckFavoriteActressTimeKey", "jhs_time_checkFavoriteActress"), 
         i(this, "lastCheckBlacklistTimeKey", "jhs_time_checkBlacklist"), i(this, "lastCheckNewVideoTimeKey", "jhs_time_checkNewVideo");
     }
     getName() {
@@ -7837,7 +7030,7 @@ class et extends X {
             }));
             if (i.push(e), o++, i.length >= t) {
                 const e = s - o;
-                clog.debug(`剩余任务数: <span style="color: #f40">${e}</span>`), await Promise.race(i),
+                clog.debug(`剩余任务数: <span style="color: #f40">${e}</span>`), await Promise.race(i), 
                 await utils.sleep(n);
             }
         }
@@ -7857,12 +7050,12 @@ class et extends X {
         });
     }
     async doTask() {
-        if (isListPage) return await this.loadConfig(), this.javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl(),
+        if (isListPage) return await this.loadConfig(), this.javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl(), 
         navigator.locks.request(this.singleTaskKey, {
             ifAvailable: !0
         }, (async e => {
             if (e) {
-                if (isListPage && (this.taskConfig.enableCheckBlacklist === _ ? await this.checkBlacklist() : clog.warn("自动检测屏蔽黑名单-禁用"),
+                if (isListPage && (this.taskConfig.enableCheckBlacklist === _ ? await this.checkBlacklist() : clog.warn("自动检测屏蔽黑名单-禁用"), 
                 !l)) {
                     if (this.taskConfig.enableCheckFavoriteActress === _) {
                         const e = localStorage.getItem(this.lastCheckFavoriteActressTimeKey), t = this.taskConfig.checkFavoriteActress_IntervalTime, n = e && this.isUnnecessaryCheck(e, t), a = $('a[href*="/users/profile"]').length > 0;
@@ -7930,18 +7123,18 @@ class et extends X {
                     });
                 }));
             } catch (i) {
-                $("#checkBlacklistMsg").text(`检测屏蔽演员信息, 发生错误: ${a}`), clog.error("检测屏蔽演员信息, 发生错误:", a, i),
+                $("#checkBlacklistMsg").text(`检测屏蔽演员信息, 发生错误: ${a}`), clog.error("检测屏蔽演员信息, 发生错误:", a, i), 
                 show.error("检测屏蔽演员信息, 发生错误:" + i, "bottom", "right");
             }
         })), await this.storageQueue.waitAllFinished();
         const d = utils.getNowStr();
-        localStorage.setItem(this.lastCheckBlacklistTimeKey, d), clog.log('<span style="color: #f40">-------- END 检测屏蔽黑名单 END --------</span>'),
+        localStorage.setItem(this.lastCheckBlacklistTimeKey, d), clog.log('<span style="color: #f40">-------- END 检测屏蔽黑名单 END --------</span>'), 
         $("#checkBlacklistMsg").text("检测屏蔽黑名单, 结束"), this.getBean("BlacklistPlugin").resetBtnTip().then();
     }
     async checkFavoriteActress() {
         const e = `${this.javDbUrl}/users/collection_actors`, t = [];
-        await this.scrapeActorInfo(e, t), clog.log("所有演员信息已收集, 总计数量:", t.length), $("#checkNewVideoMsg").text("同步完成"),
-        t.length > 0 && (await storageManager.addFavoriteActressList(t), localStorage.setItem(this.lastCheckFavoriteActressTimeKey, utils.getNowStr()),
+        await this.scrapeActorInfo(e, t), clog.log("所有演员信息已收集, 总计数量:", t.length), $("#checkNewVideoMsg").text("同步完成"), 
+        t.length > 0 && (await storageManager.addFavoriteActressList(t), localStorage.setItem(this.lastCheckFavoriteActressTimeKey, utils.getNowStr()), 
         this.getBean("NewVideoPlugin").resetBtnTip().then());
     }
     async scrapeActorInfo(e, t) {
@@ -7998,15 +7191,11 @@ class et extends X {
             clog.log(e);
         })), clog.log(`<span style='color: #f40'>检测最新作品, 总任务数: ${l.length}, 并发限制:${a}, 请求间隔时间:${i}ms</span>`);
         const d = await storageManager.getTitleFilterKeyword(), h = await storageManager.getBlacklistCarList(), g = new Set(h.map((e => e.carNum)));
-        let _done = 0;
-        const _total = l.length;
-        $("#checkNewVideoMsg").text(`检测中 0/${_total}`);
         await this.limitConcurrency(l, a, i, (async e => {
             const {lastCheckTime: t, name: n, starId: a} = e;
             let i = `${this.javDbUrl}/actors/${a}?t=d`;
             try {
-                _done++;
-                clog.log("正在检测最新作品, 演员:", n, i), $("#checkNewVideoMsg").text(`检测中 ${_done}/${_total} - ${n}`);
+                clog.log("正在检测最新作品, 演员:", n, i), $("#checkNewVideoMsg").text(`正在检测最新作品, 演员: ${n}`);
                 const e = await gmHttp.get(i), t = utils.htmlTo$dom(e);
                 this.storageQueue.addTask((async () => {
                     await this.parsePage(t, a, n, d, g);
@@ -8014,18 +7203,16 @@ class et extends X {
             } catch (s) {
                 clog.error("检测屏蔽演员信息, 发生错误:", i, s), console.error("检测屏蔽演员信息, 发生错误:", i, s), show.error("检测屏蔽演员信息, 发生错误:" + s, "bottom", "right");
             }
-        })), await this.storageQueue.waitAllFinished(), localStorage.setItem(this.lastCheckNewVideoTimeKey, utils.getNowStr()),
-        clog.log('<span style="color: #f40">检测最新作品---结束</span>');
+        })), await this.storageQueue.waitAllFinished(), localStorage.setItem(this.lastCheckNewVideoTimeKey, utils.getNowStr()), 
+        clog.log('<span style="color: #f40">检测最新作品---结束</span>'), $("#checkNewVideoMsg").text("检测完毕");
         const p = this.getBean("NewVideoPlugin");
-        p.showNewVideoCount();
-        $("#checkNewVideoMsg").text(`检测完成: 共检测 ${_total} 个演员`);
         p.loadData(), p.resetBtnTip().then();
     }
     async parsePage(e, t, n, a, i) {
         let s, o, r = !1, l = T;
-        if (e.text().includes(I) && (r = !0, l = I), r && e.find(".avatar-box").length > 0 && e.find(".avatar-box").parent().remove(),
-        s = e.find(this.getSelector(l).requestDomItemSelector), o = e.find(this.getSelector(l).nextPageSelector).attr("href"),
-        o && 0 === s.length) throw clog.error("新作品检测-解析列表失败"), show.error("新作品检测-解析列表失败"),
+        if (e.text().includes(I) && (r = !0, l = I), r && e.find(".avatar-box").length > 0 && e.find(".avatar-box").parent().remove(), 
+        s = e.find(this.getSelector(l).requestDomItemSelector), o = e.find(this.getSelector(l).nextPageSelector).attr("href"), 
+        o && 0 === s.length) throw clog.error("新作品检测-解析列表失败"), show.error("新作品检测-解析列表失败"), 
         new Error("新作品检测-解析列表失败");
         let c = [], d = null;
         for (const m of s) {
@@ -8034,7 +7221,7 @@ class et extends X {
             a.find((e => s.includes(e) || t.includes(e))) || (i.has(t) || (d || (d = o), c.push(t)));
         }
         const h = await storageManager.getCarList(), g = new Set(h.map((e => e.carNum))), p = c.filter((e => !g.has(e)));
-        p.length > 0 && clog.log(`<span style='color: #f40'>检测出新作品, ${n}, 共${p.length}部</span>`),
+        p.length > 0 && clog.log(`<span style='color: #f40'>检测出新作品, ${n}, 共${p.length}部</span>`), 
         await storageManager.updateFavoriteActress({
             starId: t,
             lastCheckTime: utils.getNowStr(),
@@ -8049,11 +7236,11 @@ class et extends X {
         try {
             clog.log("正在检测最新作品, 演员:", s, r), l.text(`正在检测最新作品, 演员: ${s}`);
             const e = await gmHttp.get(r), n = utils.htmlTo$dom(e);
-            await this.parsePage(n, o, s, t, a), clog.log('<span style="color: #f40">检测最新作品---结束</span>'),
+            await this.parsePage(n, o, s, t, a), clog.log('<span style="color: #f40">检测最新作品---结束</span>'), 
             l.text("检测完毕");
             this.getBean("NewVideoPlugin").loadData();
         } catch (c) {
-            clog.error("检测屏蔽演员信息, 发生错误:", r, c), show.error("检测屏蔽演员信息, 发生错误:" + c, "bottom", "right"),
+            clog.error("检测屏蔽演员信息, 发生错误:", r, c), show.error("检测屏蔽演员信息, 发生错误:" + c, "bottom", "right"), 
             l.text(`检测屏蔽演员信息, 发生错误: ${r}`);
         }
     }
@@ -8153,6 +7340,7 @@ async function gt(e) {
                 }
                 return ct;
             }
+            clog.error(n);
             throw new Error("解析头像数据源失败");
         }();
     } catch (i) {
@@ -8183,11 +7371,15 @@ class pt extends X {
     async handle() {
         await this.showNewVideoCount();
     }
+    getPendingNewVideoCount(e, t) {
+        return Array.isArray(e?.newVideoList) ? e.newVideoList.filter((e => !t.has(e))).length : 0;
+    }
+    async getPendingNewVideoTotal() {
+        const e = new Set((await storageManager.getCarList()).map((e => e.carNum)));
+        return (await storageManager.getFavoriteActressList()).reduce(((t, n) => t + this.getPendingNewVideoCount(n, e)), 0);
+    }
     async showNewVideoCount() {
-        const carSet = new Set((await storageManager.getCarList()).map((e => e.carNum)));
-        const e = (await storageManager.getFavoriteActressList()).reduce(((e, t) => {
-            return e + (Array.isArray(t.newVideoList) ? t.newVideoList.filter((v => !carSet.has(v))).length : 0);
-        }), 0);
+        const e = await this.getPendingNewVideoTotal();
         $("#newVideoCount").text(`${e}`);
     }
     async resetBtnTip() {
@@ -8269,20 +7461,19 @@ class pt extends X {
         let t = await storageManager.getFavoriteActressList();
         const n = $("#paramActressType").val();
         "all" !== n && (t = t.filter((e => e.actressType === n)));
+        const _carSet = new Set((await storageManager.getCarList()).map((e => e.carNum)));
+        const _newVideoCount = e => this.getPendingNewVideoCount(e, _carSet);
         const sortBy = $("#paramSortBy").val();
         const sortMap = {
             "lastPublishTime_desc": [{ key: "lastPublishTime", order: "desc" }],
             "lastPublishTime_asc":  [{ key: "lastPublishTime", order: "asc" }],
             "lastCheckTime_desc":   [{ key: "lastCheckTime", order: "desc" }],
             "lastCheckTime_asc":    [{ key: "lastCheckTime", order: "asc" }],
-            "newVideoCount_desc":   [{ key: e => (e.newVideoList?.length) ?? 0, order: "desc" }],
-            "newVideoCount_asc":    [{ key: e => (e.newVideoList?.length) ?? 0, order: "asc" }]
+            "newVideoCount_desc":   [{ key: _newVideoCount, order: "desc" }],
+            "newVideoCount_asc":    [{ key: _newVideoCount, order: "asc" }]
         };
         const defaultSort = [{
-            key: e => {
-                var t;
-                return (null == (t = e.newVideoList) ? void 0 : t.length) ?? 0;
-            },
+            key: _newVideoCount,
             order: "desc"
         }, {
             key: "lastPublishTime",
@@ -8294,12 +7485,11 @@ class pt extends X {
             e.html('<div style="text-align:center; padding: 40px; color: #999;">暂无数据</div>');
             return void this.renderPagination(i, s);
         }
-        const _carSet = new Set((await storageManager.getCarList()).map((e => e.carNum)));
         const _escHtml = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
         const g = l.map((e => {
             const a = Array.isArray(e.allName) ? e.allName.join("，") : "";
             const _a = _escHtml(a), _name = _escHtml(e.name || ""), _remark = _escHtml(e.remark || "");
-            const _newCount = Array.isArray(e.newVideoList) ? e.newVideoList.filter((v => !_carSet.has(v))).length : 0;
+            const _newCount = this.getPendingNewVideoCount(e, _carSet);
             const _effectivePublishTime = _newCount > 0 ? (e.lastPublishTime || "") : "";
             const i = `${c}/actors/${e.starId}?t=d`;
             let s = !1;
@@ -8487,16 +7677,14 @@ class mt extends X {
             try {
                 const e = await gmHttp.get(this.baseUrl + "/ping");
                 e && 200 === e.code && (this.canRun = !0);
-            } catch (e) {
-                console.error("本地服务(127.0.0.1:7890)连通性检查失败:", e);
-            }
-            this.canRun && isListPage && utils.loopDetector((() => $("#addBlacklistBtn").length || $("#waitDownBtn").length), (() => {
+            } catch (e) { console.error("本地服务连通性检查失败:", e); }
+            this.canRun && isListPage && utils.loopDetector((() => $("#addBlacklistBtn").length), (() => {
                 this.createBtn();
             }), 1, 1e4, !1);
         }
     }
     createBtn() {
-        $("#addBlacklistBtn,#waitDownBtn").last().after('\n            <a id="archiveBtn" class="menu-btn main-tab-btn" style="background-color:#39babe !important;margin-left: 20px!important;"><span>视频归档</span></a>\n            <a id="checkSubtitleBtn" class="menu-btn main-tab-btn" style="background-color:#d08736 !important;"><span>检查字幕</span></a>\n        '),
+        $("#addBlacklistBtn").last().after('\n            <a id="archiveBtn" class="menu-btn main-tab-btn" style="background-color:#39babe !important;margin-left: 20px!important;"><span>视频归档</span></a>\n            <a id="checkSubtitleBtn" class="menu-btn main-tab-btn" style="background-color:#d08736 !important;"><span>检查字幕</span></a>\n        '), 
         $("#archiveBtn").on("click", (e => {
             this.archiveFile().then();
         })), $("#checkSubtitleBtn").on("click", (e => {
@@ -8690,7 +7878,7 @@ class mt extends X {
     }
     checkHasDown() {
         this.allowRepeatDown = !1;
-        $("#enable-magnets-filter").after('<a id="allowRepeatDown" class="menu-btn" style="background-color:#b8d747;margin-left: 5px"><span>关闭重复下载检验</span></a>'),
+        $("#enable-magnets-filter").after('<a id="allowRepeatDown" class="menu-btn" style="background-color:#b8d747;margin-left: 5px"><span>关闭重复下载检验</span></a>'), 
         $("#allowRepeatDown").on("click", (e => {
             this.allowRepeatDown = !this.allowRepeatDown, $("#allowRepeatDown span").text(this.allowRepeatDown ? "开启重复下载检验" : "关闭重复下载检验");
         }));
@@ -8710,90 +7898,24 @@ class mt extends X {
 }
 
 class StatsPlugin extends X {
-    getName() {
-        return "StatsPlugin";
-    }
-    async handle() {
-        window.isListPage && this.createBtn();
-    }
+    getName() { return "StatsPlugin"; }
+    async handle() { window.isListPage && this.createBtn(); }
     createBtn() {
         const e = '<a id="statsBtn" class="menu-btn main-tab-btn" style="background-color:#6c5ce7 !important;"><span>统计</span></a>';
-        r ? $("#waitDownBtn").after(e) : l && $("#waitDownBtn").after(e);
+        r ? $("#newVideoBtn").after(e) : l && $("#newVideoBtn").after(e);
         $("#statsBtn").on("click", (() => { this.openDialog(); }));
     }
     async openDialog() {
         const e = await storageManager.getCarList(), t = await storageManager.getFavoriteActressList(), n = await storageManager.getBlacklist(), a = e.length, i = { filter: 0, favorite: 0, hasDown: 0, hasWatch: 0 }, s = {};
-        e.forEach((e => {
-            const t = e.status || "";
-            t && (i[t] = (i[t] || 0) + 1), e.names && e.names.split(" ").forEach((e => { e && (s[e] = (s[e] || 0) + 1); }));
-        }));
-        const o = Object.entries(s).sort(((e, t) => t[1] - e[1])).slice(0, 10), c = o.length > 0 ? o[0][1] : 1, d = a - i.filter - i.favorite - i.hasDown - i.hasWatch;
-        let h = 0;
-        t.forEach((e => { h += (e.newVideoList || []).length; }));
-        const g = e => `<span style="display:inline-block;height:18px;width:${Math.round(e / c * 100)}%;background:#6c5ce7;border-radius:3px;min-width:2px"></span>`, p = (e, t, r) => {
-            const c = a > 0 ? Math.round(e / a * 100) : 0;
-            return `\n                <div style="display:flex;align-items:center;margin-bottom:6px;gap:8px">\n                    <span style="width:60px;font-size:13px;text-align:right">${t}</span>\n                    <span style="flex:1;background:#eee;border-radius:3px;height:18px">\n                        <span style="display:inline-block;height:18px;width:${c}%;background:${r};border-radius:3px;min-width:2px"></span>\n                    </span>\n                    <span style="width:50px;font-size:12px;color:#888">${e} (${c}%)</span>\n                </div>`;
-        }, m = `
-            <div style="padding:10px 20px;height:100%;overflow:auto" class="jhs-scrollbar">
-                <div style="display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap">
-                    <div style="flex:1;min-width:100px;background:#f8f9fa;border-radius:8px;padding:12px;text-align:center">
-                        <div style="font-size:24px;font-weight:bold;color:#333">${a}</div>
-                        <div style="font-size:12px;color:#888">总数</div>
-                    </div>
-                    <div style="flex:1;min-width:100px;background:#f0f7ff;border-radius:8px;padding:12px;text-align:center">
-                        <div style="font-size:24px;font-weight:bold;color:#25b1dc">${i.favorite || 0}</div>
-                        <div style="font-size:12px;color:#888">已收藏</div>
-                    </div>
-                    <div style="flex:1;min-width:100px;background:#f0fff4;border-radius:8px;padding:12px;text-align:center">
-                        <div style="font-size:24px;font-weight:bold;color:#7bc73b">${i.hasDown || 0}</div>
-                        <div style="font-size:12px;color:#888">已下载</div>
-                    </div>
-                    <div style="flex:1;min-width:100px;background:#fff9f0;border-radius:8px;padding:12px;text-align:center">
-                        <div style="font-size:24px;font-weight:bold;color:#d7a80c">${i.hasWatch || 0}</div>
-                        <div style="font-size:12px;color:#888">已观看</div>
-                    </div>
-                    <div style="flex:1;min-width:100px;background:#fff5f5;border-radius:8px;padding:12px;text-align:center">
-                        <div style="font-size:24px;font-weight:bold;color:#de3333">${i.filter || 0}</div>
-                        <div style="font-size:12px;color:#888">已屏蔽</div>
-                    </div>
-                    <div style="flex:1;min-width:100px;background:#f5f5f5;border-radius:8px;padding:12px;text-align:center">
-                        <div style="font-size:24px;font-weight:bold;color:#666">${d}</div>
-                        <div style="font-size:12px;color:#888">待鉴定</div>
-                    </div>
-                </div>
-                <div style="display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap">
-                    <div style="flex:1;min-width:100px;background:#f8f0ff;border-radius:8px;padding:12px;text-align:center">
-                        <div style="font-size:24px;font-weight:bold;color:#6c5ce7">${t.length}</div>
-                        <div style="font-size:12px;color:#888">收藏演员</div>
-                    </div>
-                    <div style="flex:1;min-width:100px;background:#fff0f0;border-radius:8px;padding:12px;text-align:center">
-                        <div style="font-size:24px;font-weight:bold;color:#b22222">${n.length}</div>
-                        <div style="font-size:12px;color:#888">黑名单演员</div>
-                    </div>
-                    <div style="flex:1;min-width:100px;background:#fffef0;border-radius:8px;padding:12px;text-align:center">
-                        <div style="font-size:24px;font-weight:bold;color:#e8ab39">${h}</div>
-                        <div style="font-size:12px;color:#888">新作品待看</div>
-                    </div>
-                </div>
-                <div style="font-size:14px;font-weight:bold;margin-bottom:8px;color:#333">状态分布</div>
-                ${p(i.favorite || 0, "已收藏", "#25b1dc")}
-                ${p(i.hasDown || 0, "已下载", "#7bc73b")}
-                ${p(i.hasWatch || 0, "已观看", "#d7a80c")}
-                ${p(i.filter || 0, "已屏蔽", "#de3333")}
-                ${p(d, "待鉴定", "#888")}
-                ${o.length > 0 ? `<div style="font-size:14px;font-weight:bold;margin:12px 0 8px;color:#333">Top10 演员</div>` + o.map(((e, t) => `\n                    <div style="display:flex;align-items:center;margin-bottom:4px;gap:8px">\n                        <span style="width:24px;font-size:12px;color:#888;text-align:right">${t + 1}</span>\n                        <span style="width:100px;font-size:13px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${e[0]}">${e[0]}</span>\n                        ${g(e[1])}\n                        <span style="width:36px;font-size:12px;color:#888">${e[1]}</span>\n                    </div>`)).join("") : ""}
-            </div>`;
-        layer.open({
-            type: 1,
-            title: "收藏统计",
-            content: m,
-            scrollbar: !1,
-            area: utils.getResponsiveArea(["60%", "80%"]),
-            anim: -1,
-            success: (e, t) => {
-                utils.setupEscClose(t);
-            }
-        });
+        e.forEach((e => { const t = e.status || ""; t && (i[t] = (i[t] || 0) + 1), e.names && e.names.split(" ").forEach((e => { e && (s[e] = (s[e] || 0) + 1); })); }));
+        const o = Object.entries(s).sort(((e, t) => t[1] - e[1])).slice(0, 10), r = o.length > 0 ? o[0][1] : 1, l = a - i.filter - i.favorite - i.hasDown - i.hasWatch;
+        let c = 0;
+        const pendingCarSet = new Set(e.map((e => e.carNum))), pendingCounter = this.getBean("NewVideoPlugin");
+        t.forEach((e => { c += pendingCounter.getPendingNewVideoCount(e, pendingCarSet); }));
+        const d = e => '<span style="display:inline-block;height:18px;width:' + Math.round(e / r * 100) + '%;background:#6c5ce7;border-radius:3px;min-width:2px"></span>',
+            h = (e, t, r) => { const c = a > 0 ? Math.round(e / a * 100) : 0; return '<div style="display:flex;align-items:center;margin-bottom:6px;gap:8px"><span style="width:60px;font-size:13px;text-align:right">' + t + '</span><span style="flex:1;background:#eee;border-radius:3px;height:18px"><span style="display:inline-block;height:18px;width:' + c + '%;background:' + r + ';border-radius:3px;min-width:2px"></span></span><span style="width:50px;font-size:12px;color:#888">' + e + ' (' + c + '%)</span></div>'; },
+            g = '<div style="padding:10px 20px;height:100%;overflow:auto" class="jhs-scrollbar"><div style="display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap"><div style="flex:1;min-width:100px;background:#f8f9fa;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#333">' + a + '</div><div style="font-size:12px;color:#888">总数</div></div><div style="flex:1;min-width:100px;background:#f0f7ff;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#25b1dc">' + (i.favorite || 0) + '</div><div style="font-size:12px;color:#888">已收藏</div></div><div style="flex:1;min-width:100px;background:#f0fff4;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#7bc73b">' + (i.hasDown || 0) + '</div><div style="font-size:12px;color:#888">已下载</div></div><div style="flex:1;min-width:100px;background:#fff9f0;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#d7a80c">' + (i.hasWatch || 0) + '</div><div style="font-size:12px;color:#888">已观看</div></div><div style="flex:1;min-width:100px;background:#fff5f5;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#de3333">' + (i.filter || 0) + '</div><div style="font-size:12px;color:#888">已屏蔽</div></div><div style="flex:1;min-width:100px;background:#f5f5f5;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#666">' + l + '</div><div style="font-size:12px;color:#888">待鉴定</div></div></div><div style="display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap"><div style="flex:1;min-width:100px;background:#f8f0ff;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#6c5ce7">' + t.length + '</div><div style="font-size:12px;color:#888">收藏演员</div></div><div style="flex:1;min-width:100px;background:#fff0f0;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#b22222">' + n.length + '</div><div style="font-size:12px;color:#888">黑名单演员</div></div><div style="flex:1;min-width:100px;background:#fffef0;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#e8ab39">' + c + '</div><div style="font-size:12px;color:#888">新作品待看</div></div></div><div style="font-size:14px;font-weight:bold;margin-bottom:8px;color:#333">状态分布</div>' + h(i.favorite || 0, "已收藏", "#25b1dc") + h(i.hasDown || 0, "已下载", "#7bc73b") + h(i.hasWatch || 0, "已观看", "#d7a80c") + h(i.filter || 0, "已屏蔽", "#de3333") + h(l, "待鉴定", "#888") + (o.length > 0 ? '<div style="font-size:14px;font-weight:bold;margin:12px 0 8px;color:#333">Top10 演员</div>' + o.map(((e, t) => '<div style="display:flex;align-items:center;margin-bottom:4px;gap:8px"><span style="width:24px;font-size:12px;color:#888;text-align:right">' + (t + 1) + '</span><span style="width:100px;font-size:13px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(e[0]) + '">' + escapeHtml(e[0]) + '</span>' + d(e[1]) + '<span style="width:36px;font-size:12px;color:#888">' + e[1] + '</span></div>')).join("") : "") + '</div>';
+        layer.open({ type: 1, title: "收藏统计", content: g, scrollbar: !1, area: utils.getResponsiveArea(["60%", "80%"]), anim: -1, success: (e, t) => { utils.setupEscClose(t); } });
     }
 }
 
@@ -8816,29 +7938,29 @@ layer.open = function(e) {
     return e.success = function(e, n) {
         "function" == typeof t && t.call(this, e, n), utils.setupEscClose(n);
     }, ft.call(this, e);
-}, utils.importResource("https://cdn.jsdelivr.net/npm/layui-layer@1.0.9/layer.min.css"),
-utils.importResource("https://cdn.jsdelivr.net/npm/toastify-js@1.12.0/src/toastify.min.css"),
-utils.importResource("https://cdn.jsdelivr.net/npm/viewerjs@1.11.1/dist/viewer.min.css"),
+}, utils.importResource("https://cdn.jsdelivr.net/npm/layui-layer@1.0.9/layer.min.css"), 
+utils.importResource("https://cdn.jsdelivr.net/npm/toastify-js@1.12.0/src/toastify.min.css"), 
+utils.importResource("https://cdn.jsdelivr.net/npm/viewerjs@1.11.1/dist/viewer.min.css"), 
 utils.importResource("https://cdn.jsdelivr.net/npm/tabulator-tables@6.3.1/dist/css/tabulator_semanticui.min.css");
 
-/** 插件注册中心: 按站点注册所有插件 (javdb=30, javbus=24), 暴露到 unsafeWindow.pluginManager */
+/** 插件注册中心: 按站点注册所有插件, 暴露到 unsafeWindow.pluginManager */
 const vt = function() {
     const e = new Y;
     unsafeWindow.pluginManager = e;
     let t = window.location.hostname;
-    return r && (e.register(Ie), e.register(Be), e.register(le), e.register(de), e.register(Ce),
-    e.register(xe), e.register(Ae), e.register(fe), e.register(pe), e.register(ue),
-    e.register(Ee), e.register(Ue), e.register(Oe), e.register(Ye), e.register(Q), e.register($e),
-    e.register(He), e.register(ye), e.register(ce), e.register(ae), e.register(ke),
-    e.register(he), e.register(be), e.register(qe), e.register(Ze), e.register(ze),
-    e.register(Re), e.register(Ve), e.register(Se), e.register(Xe), e.register(pt),
-    e.register(et), e.register(mt), e.register(StatsPlugin)), l && (e.register(Ie), e.register(Ce), e.register(Ae),
-    e.register(xe), e.register(Be), e.register(Ee), e.register(Fe), e.register(Ue),
-    e.register(Ye), e.register(Qe), e.register(we), e.register(ye), e.register($e),
-    e.register(ke), e.register(ce), e.register(je), e.register(Re), e.register(Ve),
-    e.register(be), e.register(qe), e.register(Ze), e.register(Se), e.register(et), e.register(StatsPlugin)),
-    t.includes("javtrailers") && e.register(oe), t.includes("subtitlecat") && e.register(re),
-    (t.includes("aliyundrive") || t.includes("alipan")) && e.register(ge), t.includes("115.com") && e.register(Je),
+    return r && (e.register(Ie), e.register(Be), e.register(le), e.register(de), e.register(Ce), 
+    e.register(xe), e.register(Ae), e.register(fe), e.register(pe), e.register(ue), 
+    e.register(Ee), e.register(Ue), e.register(Oe), e.register(Q), e.register($e), 
+    e.register(He), e.register(ye), e.register(ce), e.register(ae), e.register(ke), 
+    e.register(he), e.register(be), e.register(Ze), e.register(ze), 
+    e.register(Re), e.register(Ve), e.register(Se), e.register(Xe), e.register(pt), 
+    e.register(et), e.register(mt), e.register(StatsPlugin)), l && (e.register(Ie), e.register(Ce), e.register(Ae), 
+    e.register(xe), e.register(Be), e.register(Ee), e.register(Fe), e.register(Ue), 
+    e.register(Qe), e.register(we), e.register(ye), e.register($e), 
+    e.register(ke), e.register(ce), e.register(je), e.register(Re), e.register(Ve), 
+    e.register(be), e.register(Ze), e.register(Se), e.register(et), e.register(StatsPlugin)), 
+    t.includes("javtrailers") && e.register(oe), t.includes("subtitlecat") && e.register(re), 
+    
     e;
 }();
 
@@ -8861,7 +7983,7 @@ vt.processCss().then(), async function() {
         await storageManager.merge_favoriteActress(),
         await storageManager.merge_tow_car_list_table(),
         await storageManager.setDataVersion(CURRENT_DATA_VERSION));
-    })(),
+    })(), 
     r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie) && show.error("请切换到中文语言下才可正常使用本脚本", {
         duration: -1
     }), vt.processPlugins().then();
