@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS-YA
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      3.7.1
+// @version      3.7.3
 // @author       yaoser
 // @description  Jav-鉴黄师个人维护版：收藏、屏蔽、标记已下载、演员黑名单、收藏演员同步、新作品检测、热播/Top250/Fc2ppv/评论增强、相关清单、WebDAV数据备份、以图识图、字幕搜索；支持 JavDB / JavBus。
 // @license      MIT
@@ -60,6 +60,7 @@
 // @connect      javdb.com
 // @connect      javbus.com
 // @connect      www.123pan.com
+// @connect      yun.123pan.com
 // @connect      supjav.com
 // @connect      translate-pa.googleapis.com
 // @connect      127.0.0.1
@@ -7939,7 +7940,7 @@ class OneTwoThreeOfflinePlugin extends X {
         return "\n            <style>\n                .one23-offline-btn {\n                    background-color: #1677ff !important;\n                    color: #fff !important;\n                    border-color: #1677ff !important;\n                }\n                .one23-offline-btn.loading {\n                    opacity: 0.65;\n                    cursor: wait;\n                }\n                .one23-native-btn {\n                    margin-left: 6px;\n                    padding: 3px 8px;\n                    border-radius: 3px;\n                    border: 1px solid #1677ff;\n                    background: #1677ff;\n                    color: #fff !important;\n                    cursor: pointer;\n                    font-size: 12px;\n                    line-height: 1.2;\n                }\n            </style>\n        ";
     }
     async handle() {
-        window.location.hostname.includes("123pan.com") ? this.startTokenSync() : (r || l) && (this.bindSubmit(), this.injectNativeButtons());
+        "yun.123pan.com" === window.location.hostname ? this.startTokenSync() : (r || l) && (this.bindSubmit(), this.injectNativeButtons());
     }
     startTokenSync() {
         this.syncTokenOnce(), this.syncTimer && clearInterval(this.syncTimer), this.syncTimer = setInterval((() => this.syncTokenOnce()), 12e3);
@@ -8001,15 +8002,8 @@ class OneTwoThreeOfflinePlugin extends X {
         const n = e.message || e.msg || t || "请求失败";
         throw /token is expired/i.test(n) ? "TOKEN_EXPIRED" : n;
     }
-    open123PanAuth() {
-        GM_openInTab("https://www.123pan.com/", {
-            active: !0,
-            insert: !0
-        });
-    }
     handleTokenExpired() {
-        this.clearStoredToken("expired"), show.error("123 云盘授权已过期，请重新打开或刷新 123pan 后再提交");
-        this.open123PanAuth();
+        this.clearStoredToken("expired"), show.error("123 云盘授权已过期，请登录或刷新 yun.123pan.com 后再提交");
     }
     bindSubmit() {
         $(document).off("click.one23", ".one23-offline-btn").on("click.one23", ".one23-offline-btn", (e => {
@@ -8036,19 +8030,50 @@ class OneTwoThreeOfflinePlugin extends X {
     }
     async submitMagnet(e, t) {
         const n = this.getStoredToken();
-        if (!n) return show.error("请先打开并登录 123 云盘，刷新后再提交离线任务"), void this.open123PanAuth();
+        if (!n) return void show.error("请先登录或刷新 yun.123pan.com，等待授权自动同步后再提交离线任务");
         if (t.hasClass("loading")) return;
         const a = t.text();
         try {
             t.addClass("loading").prop("disabled", !0).text("提交中");
             const i = await this.resolveMagnet(e, n), s = await this.submitTask(i, n);
-            show.info(`已提交 123 离线：${s.fileCount} 个文件 / ${this.formatSize(s.totalSize)}`), t.text("已提交");
+            const o = await this.markCurrentVideoAsHasDown(t);
+            show.info(`已提交 123 离线：${s.fileCount} 个文件 / ${this.formatSize(s.totalSize)}${o ? "，已标记为已下载" : ""}`), 
+            t.text("已提交");
         } catch (i) {
             this.isTokenExpiredError(i) ? this.handleTokenExpired() : show.error("123 离线提交失败：" + i + this.getTokenMetaText()), 
             t.text(a);
         } finally {
             setTimeout((() => t.removeClass("loading").prop("disabled", !1).text(a)), 1800);
         }
+    }
+    /** 离线任务提交成功后，复用 JHS 影片状态存储标记为已下载。 */
+    async markCurrentVideoAsHasDown(e) {
+        try {
+            const t = this.getOfflineVideoInfo(e);
+            if (!t || !t.carNum || !t.url) return !1;
+            const n = await storageManager.getCar(t.carNum);
+            if (n && n.status === g) return !1;
+            await storageManager.saveCar({
+                carNum: t.carNum,
+                url: t.url,
+                names: t.actress || t.names,
+                actionType: g,
+                publishTime: t.publishTime
+            });
+            const a = this.getBean("DetailPageButtonPlugin");
+            a && a.showStatus && a.showStatus(t.carNum).then(), window.refresh();
+            return !0;
+        } catch (t) {
+            console.error("123 离线成功后标记已下载失败:", t);
+            show.error("123 离线已提交，但自动标记已下载失败：" + t);
+            return !1;
+        }
+    }
+    /** 从详情页或按钮所在列表项提取当前影片信息。 */
+    getOfflineVideoInfo(e) {
+        if (window.isDetailPage) return this.getPageInfo();
+        const t = e && e.closest ? e.closest(".item") : $();
+        return t && t.length ? this.getBean("ListPagePlugin").findCarNumAndHref(t) : this.getPageInfo();
     }
     resolveMagnet(e, t) {
         return new Promise(((n, a) => {
