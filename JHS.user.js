@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS-YA
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      3.7.0
+// @version      3.7.1
 // @author       yaoser
 // @description  Jav-鉴黄师个人维护版：收藏、屏蔽、标记已下载、演员黑名单、收藏演员同步、新作品检测、热播/Top250/Fc2ppv/评论增强、相关清单、WebDAV数据备份、以图识图、字幕搜索；支持 JavDB / JavBus。
 // @license      MIT
@@ -70,8 +70,8 @@
 // @grant        GM_openInTab
 // @grant        unsafeWindow
 // @run-at       document-idle
-// @downloadURL https://update.sleazyfork.org/scripts/578503/JHS-YA.user.js
-// @updateURL https://update.sleazyfork.org/scripts/578503/JHS-YA.meta.js
+// @downloadURL https://github.com/Yaoser-x/JHS/releases/latest/download/JHS.user.js
+// @updateURL https://raw.githubusercontent.com/Yaoser-x/JHS/main/JHS.user.js
 // ==/UserScript==
 
 var e, t, n = Object.defineProperty, a = e => {
@@ -3035,27 +3035,50 @@ class be extends X {
         return "\n            <style>\n                .site-btn {\n                    position: relative !important;\n                    min-width: 80px;\n                    display: inline-block;\n                    padding: 5px 10px;\n                    color: white !important;\n                    background-color:#938585;\n                    text-decoration: none;\n                    border-radius: 4px;\n                    text-align: center;\n                    margin-bottom: 5px;\n                }\n                .site-btn:hover {\n                    color: white;\n                    transform: translateY(-2px);\n                    box-shadow: 0 2px 5px rgba(0,0,0,0.1);\n                }\n                .site-tag {\n                    position: absolute; \n                    top: -15px; \n                    right: 0; \n                    background-color: #ffc107; \n                    color: #333; \n                    font-size: 12px; \n                    padding: 2px 6px; \n                    border-radius: 4px;\n                }\n            </style>\n        ";
     }
     async handle() {
-        isDetailPage && this.loadOtherSite().then();
+        isDetailPage && this.loadOtherSite(null, null, {
+            autoDetect: !1
+        }).then();
     }
-    async loadOtherSite(e, t) {
+    async loadOtherSite(e, t, n = {}) {
         if ("yes" !== await storageManager.getSetting("enableLoadOtherSite", "yes")) return;
+        $("#otherSiteBox,#settingsArea").remove();
         e || (e = this.getPageInfo().carNum);
-        const n = this.getEnabledSites(), a = `\n            <div id="otherSiteBox" class="panel-block" style="${r ? "margin-top:8px;font-size:13px" : "margin-top:10px;font-size:13px"}; user-select: none; ">\n                <div style="display: flex;gap: 5px;flex-wrap: wrap">\n                    ${this.siteConfigs.map((e => {
+        const a = this.getEnabledSites(), i = `\n            <div id="otherSiteBox" class="panel-block" style="${r ? "margin-top:8px;font-size:13px" : "margin-top:10px;font-size:13px"}; user-select: none; ">\n                <div style="display: flex;gap: 5px;flex-wrap: wrap">\n                    ${this.siteConfigs.map((e => {
             if (e.sourceCarNum = t, e.condition && !1 === e.condition(e.sourceCarNum)) return "";
-            return `<a target="_blank" class="site-btn" style="${n.includes(e.id) ? "" : "display:none"}" id="${e.id}"><span>${e.id.replace("Btn", "")}</span></a>`;
-        })).join("")}\n                    <a id="settingSiteBtn" class="site-btn"><span>设置</span></a>\n                </div>\n            </div>\n            \n            <div id="settingsArea" class="panel-block"  style="display: none; margin-top:10px; margin-bottom: 10px; user-select: none; ">\n                <div id="siteCheckboxes" style="display: flex;gap: 5px;flex-wrap: wrap">\n                </div>\n            </div>\n        `;
-        $(".movie-panel-info").append(a), $(".container .info").append(a), $("#javTrailersBtn").on("click", (async t => {
+            return `<a target="_blank" class="site-btn" style="${a.includes(e.id) ? "" : "display:none"}" id="${e.id}"><span>${e.id.replace("Btn", "")}</span></a>`;
+        })).join("")}\n                    <a id="detectOtherSiteBtn" class="site-btn" style="background-color:#1677ff"><span>检测外部站点</span></a>\n                    <a id="settingSiteBtn" class="site-btn"><span>设置</span></a>\n                </div>\n            </div>\n            \n            <div id="settingsArea" class="panel-block"  style="display: none; margin-top:10px; margin-bottom: 10px; user-select: none; ">\n                <div id="siteCheckboxes" style="display: flex;gap: 5px;flex-wrap: wrap">\n                </div>\n            </div>\n        `;
+        $(".movie-panel-info").append(i), $(".container .info").append(i), $("#javTrailersBtn").on("click", (async t => {
             t.preventDefault();
             let n = await storageManager.getSetting();
             const a = n.filterHotKey, i = n.favoriteHotKey, s = n.speedVideoHotKey;
             let o = $("#javTrailersBtn").attr("href"), r = o + `?handle=1&filterHotKey=${a}&favoriteHotKey=${i}&speedVideoHotKey=${s}`;
             t && (t.ctrlKey || t.metaKey) && (r = o), utils.openPage(r, e, !1, t);
         })), await Promise.all(this.siteConfigs.map((async t => {
+            t.condition && !1 === t.condition(t.sourceCarNum) || await this.prepareSiteLink(e, t);
+        }))), this.renderSettingsArea(), this.setupEventListeners(), $("#detectOtherSiteBtn").off("click").on("click", (t => {
+            t.preventDefault(), this.detectOtherSites(e);
+        })), n.autoDetect && await this.detectOtherSites(e);
+    }
+    async prepareSiteLink(e, t) {
+        const n = $(`#${t.id}`);
+        if (t.initUrl) return void (n.attr("href", t.initUrl(e)), n.css("backgroundColor", this.warnBackgroundColor), 
+        n.attr("title", "点击前往外部搜索页"));
+        try {
+            const a = await t.getBaseUrl(), i = t.searchPath(a, e);
+            n.attr("href", i), n.attr("title", "点击前往外部搜索页；点击检测按钮后才自动检测"), n.css("backgroundColor", this.warnBackgroundColor);
+        } catch (a) {
+            n.attr("title", "外部站点地址未配置或不可用"), n.css("backgroundColor", this.domainErrorBackgroundColor);
+        }
+    }
+    async detectOtherSites(e) {
+        const t = $("#detectOtherSiteBtn"), n = t.text();
+        return t.text("检测中").css("backgroundColor", "#938585"), await Promise.all(this.siteConfigs.map((async t => {
             t.condition && !1 === t.condition(t.sourceCarNum) || await this.handleSite(e, t);
-        }))), this.renderSettingsArea(), this.setupEventListeners();
+        }))), t.text(n).css("backgroundColor", "#1677ff");
     }
     async handleSite(e, t) {
         const n = $(`#${t.id}`);
+        n.removeAttr("href").find(".site-tag").remove();
         if (t.initUrl && (n.attr("href", t.initUrl(e)), n.css("backgroundColor", this.warnBackgroundColor)), 
         t.noHandle && !0 === t.noHandle) {
             const t = "jhs_other_site_dmm", a = (localStorage.getItem(t) ? JSON.parse(localStorage.getItem(t)) : {})[e];
@@ -3158,7 +3181,7 @@ class be extends X {
                 if (t.target.checked) {
                     $(`#${n}`).show();
                     const e = this.getPageInfo().carNum, t = this.siteConfigs.find((e => e.id === n));
-                    this.handleSite(e, t).then();
+                    this.prepareSiteLink(e, t).then();
                 } else $(`#${n}`).hide();
                 const a = Array.from(e.querySelectorAll('input[type="checkbox"]:checked')).map((e => e.getAttribute("data-site-id")));
                 this.saveEnabledSites(a);
@@ -5319,7 +5342,7 @@ class Ae extends X {
         });
     }
     simpleSetting() {
-        return `\n             <div class="jhs-scrollbar" style="margin-top:20px;max-height:90vh; overflow-y:auto;">\n                <div style="margin: 0 10px;">\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            显示已鉴定内容:\n                        </span>\n                        <div class="form-content" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;">\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽单番号: </span><input type="checkbox" id="showFilterItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽演员: </span><input type="checkbox" id="showFilterActorItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽关键词: </span><input type="checkbox" id="showFilterKeywordItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">收藏: </span><input type="checkbox" id="showFavoriteItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">已下载: </span><input type="checkbox" id="showHasDownItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">已观看: </span><input type="checkbox" id="showHasWatchItem" class="mini-switch"><br/>\n                        </div>\n                    </div>\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="快速显示所有已鉴定内容,减少对以上开关的频繁操作">❓ </span> 显示所有:\n                        </span>\n                        <div class="form-content" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;">\n                            <input type="checkbox" id="showAllItem" class="mini-switch">\n                        </div>\n                    </div>\n                    \n\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">鉴定后立即关闭页面:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="needClosePage" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    <div class="setting-item">\n                        <span class="setting-label">\n                             <span data-tip="使用瀑布流模式, 排序方式将调整为默认">❓ </span>瀑布流模式:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="autoPage" class="mini-switch">\n                        </div>\n                    </div>\n       \n                    <div class="setting-item">\n                        <span class="setting-label">启用标题翻译:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="translateTitle" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">启用悬浮大图:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="hoverBigImg" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                                        \n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    ${r ? '\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页是否展示女优年龄、三围等信息">❓ </span>加载女优信息:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadActressInfo" class="mini-switch">\n                        </div>\n                    </div>' : ""}\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页第三方资源检测,如missAv,123AV">❓ </span>加载第三方视频资源:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadOtherSite" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页图片区首列位置加载长缩略图">❓ </span>加载长缩略图:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadScreenShot" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                     <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页解析更多更高画质的预览视频">❓ </span>更高画质预览视频:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadPreviewVideo" class="mini-switch">\n                        </div>\n                    </div>\n\n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="列数6以上,建议开启竖图">❓ </span>竖图模式:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableVerticalModel" class="mini-switch">\n                        </div>\n                    </div>\n                                    \n                    <div class="setting-item">\n                        <span class="setting-label">页面列数: <span id="showContainerColumns"></span></span>\n                        <div class="form-content">\n                            <input type="range" id="containerColumns" min="2" max="10" step="1" style="padding:5px 0">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">页面宽度: <span id="showContainerWidth"></span></span>\n                        <div class="form-content">\n                            <input type="range" id="containerWidth" min="0" max="30" step="1" style="padding:5px 0">\n                        </div>\n                    </div>\n                </div>\n                <div style="padding: 0 20px 15px; text-align: right; border-top: 1px solid #eee;">   \n                    <button id="helpBtn" style="float:left;">常见问题</button>\n                    <button id="moreBtn">更多设置</button>\n                </div>\n            </div>\n        `;
+        return `\n             <div class="jhs-scrollbar" style="margin-top:20px;max-height:90vh; overflow-y:auto;">\n                <div style="margin: 0 10px;">\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            显示已鉴定内容:\n                        </span>\n                        <div class="form-content" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;">\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽单番号: </span><input type="checkbox" id="showFilterItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽演员: </span><input type="checkbox" id="showFilterActorItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽关键词: </span><input type="checkbox" id="showFilterKeywordItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">收藏: </span><input type="checkbox" id="showFavoriteItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">已下载: </span><input type="checkbox" id="showHasDownItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">已观看: </span><input type="checkbox" id="showHasWatchItem" class="mini-switch"><br/>\n                        </div>\n                    </div>\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="快速显示所有已鉴定内容,减少对以上开关的频繁操作">❓ </span> 显示所有:\n                        </span>\n                        <div class="form-content" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;">\n                            <input type="checkbox" id="showAllItem" class="mini-switch">\n                        </div>\n                    </div>\n                    \n\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">鉴定后立即关闭页面:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="needClosePage" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    <div class="setting-item">\n                        <span class="setting-label">\n                             <span data-tip="使用瀑布流模式, 排序方式将调整为默认">❓ </span>瀑布流模式:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="autoPage" class="mini-switch">\n                        </div>\n                    </div>\n       \n                    <div class="setting-item">\n                        <span class="setting-label">启用标题翻译:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="translateTitle" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">启用悬浮大图:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="hoverBigImg" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                                        \n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    ${r ? '\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页是否展示女优年龄、三围等信息">❓ </span>加载女优信息:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadActressInfo" class="mini-switch">\n                        </div>\n                    </div>' : ""}\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页显示外部网站入口；点击检测外部站点后才请求第三方站点">❓ </span>显示外部网站:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadOtherSite" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页图片区首列位置加载长缩略图">❓ </span>加载长缩略图:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadScreenShot" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                     <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页解析更多更高画质的预览视频">❓ </span>更高画质预览视频:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadPreviewVideo" class="mini-switch">\n                        </div>\n                    </div>\n\n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="列数6以上,建议开启竖图">❓ </span>竖图模式:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableVerticalModel" class="mini-switch">\n                        </div>\n                    </div>\n                                    \n                    <div class="setting-item">\n                        <span class="setting-label">页面列数: <span id="showContainerColumns"></span></span>\n                        <div class="form-content">\n                            <input type="range" id="containerColumns" min="2" max="10" step="1" style="padding:5px 0">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">页面宽度: <span id="showContainerWidth"></span></span>\n                        <div class="form-content">\n                            <input type="range" id="containerWidth" min="0" max="30" step="1" style="padding:5px 0">\n                        </div>\n                    </div>\n                </div>\n                <div style="padding: 0 20px 15px; text-align: right; border-top: 1px solid #eee;">   \n                    <button id="helpBtn" style="float:left;">常见问题</button>\n                    <button id="moreBtn">更多设置</button>\n                </div>\n            </div>\n        `;
     }
     async loadForm() {
         let e = await storageManager.getSetting();
@@ -7906,7 +7929,8 @@ class mt extends X {
 
 class OneTwoThreeOfflinePlugin extends X {
     constructor() {
-        super(...arguments), this.tokenKey = "jhs_123pan_author_token";
+        super(...arguments), this.tokenKey = "jhs_123pan_author_token", this.tokenMetaKey = "jhs_123pan_author_token_meta", 
+        this.syncTimer = null;
     }
     getName() {
         return "OneTwoThreeOfflinePlugin";
@@ -7915,31 +7939,77 @@ class OneTwoThreeOfflinePlugin extends X {
         return "\n            <style>\n                .one23-offline-btn {\n                    background-color: #1677ff !important;\n                    color: #fff !important;\n                    border-color: #1677ff !important;\n                }\n                .one23-offline-btn.loading {\n                    opacity: 0.65;\n                    cursor: wait;\n                }\n                .one23-native-btn {\n                    margin-left: 6px;\n                    padding: 3px 8px;\n                    border-radius: 3px;\n                    border: 1px solid #1677ff;\n                    background: #1677ff;\n                    color: #fff !important;\n                    cursor: pointer;\n                    font-size: 12px;\n                    line-height: 1.2;\n                }\n            </style>\n        ";
     }
     async handle() {
-        window.location.hostname.includes("123pan.com") ? this.captureToken() : (r || l) && (this.bindSubmit(), this.injectNativeButtons());
+        window.location.hostname.includes("123pan.com") ? this.startTokenSync() : (r || l) && (this.bindSubmit(), this.injectNativeButtons());
     }
-    captureToken() {
-        const e = this.getTokenFrom123Pan();
-        if (!e) return;
-        const t = GM_getValue(this.tokenKey, "");
-        GM_setValue(this.tokenKey, e), t !== e && show.info("123 云盘授权已更新");
+    startTokenSync() {
+        this.syncTokenOnce(), this.syncTimer && clearInterval(this.syncTimer), this.syncTimer = setInterval((() => this.syncTokenOnce()), 12e3);
     }
     getTokenFrom123Pan() {
-        let e = localStorage.getItem("authorToken");
-        if (!e) try {
+        let e = (localStorage.getItem("authorToken") || "").trim();
+        if (e) return {
+            token: e,
+            source: "authorToken"
+        };
+        try {
             const t = JSON.parse(localStorage.getItem("userInfo") || "{}");
-            e = t.token || t.authorToken || "";
+            if (t.authorToken || t.token) return {
+                token: (t.authorToken || t.token || "").trim(),
+                source: t.authorToken ? "userInfo.authorToken" : "userInfo.token"
+            };
         } catch (t) {}
-        if (!e) {
-            const t = document.cookie.split(";");
-            for (const n of t) {
-                const [t, a] = n.trim().split("=");
-                if (t && /token/i.test(t) && a) {
-                    e = a;
-                    break;
-                }
-            }
+        const t = document.cookie.split(";");
+        for (const n of t) {
+            const [t, a] = n.trim().split("=");
+            if (t && /token/i.test(t) && a) return {
+                token: decodeURIComponent(a).trim(),
+                source: `cookie.${t}`
+            };
         }
-        return e;
+        return {
+            token: "",
+            source: ""
+        };
+    }
+    syncTokenOnce() {
+        const e = this.getTokenFrom123Pan();
+        if (!e.token) return;
+        const t = GM_getValue(this.tokenKey, "");
+        GM_setValue(this.tokenKey, e.token), GM_setValue(this.tokenMetaKey, {
+            source: e.source,
+            updatedAt: (new Date).toISOString()
+        }), t !== e.token && show.info(`123 云盘授权已更新：${e.source}`);
+    }
+    getStoredToken() {
+        return GM_getValue(this.tokenKey, "");
+    }
+    clearStoredToken(e) {
+        GM_setValue(this.tokenKey, ""), GM_setValue(this.tokenMetaKey, {
+            source: "cleared",
+            reason: e,
+            updatedAt: (new Date).toISOString()
+        });
+    }
+    isTokenExpiredError(e) {
+        return "TOKEN_EXPIRED" === e || String(e || "").toLowerCase().includes("token is expired");
+    }
+    getTokenMetaText() {
+        const e = GM_getValue(this.tokenMetaKey, null);
+        return e && e.source && e.updatedAt ? `（来源：${e.source}，更新：${new Date(e.updatedAt).toLocaleString()}）` : "";
+    }
+    assertApiResult(e, t) {
+        if (0 === e.code) return;
+        const n = e.message || e.msg || t || "请求失败";
+        throw /token is expired/i.test(n) ? "TOKEN_EXPIRED" : n;
+    }
+    open123PanAuth() {
+        GM_openInTab("https://www.123pan.com/", {
+            active: !0,
+            insert: !0
+        });
+    }
+    handleTokenExpired() {
+        this.clearStoredToken("expired"), show.error("123 云盘授权已过期，请重新打开或刷新 123pan 后再提交");
+        this.open123PanAuth();
     }
     bindSubmit() {
         $(document).off("click.one23", ".one23-offline-btn").on("click.one23", ".one23-offline-btn", (e => {
@@ -7965,11 +8035,8 @@ class OneTwoThreeOfflinePlugin extends X {
         }));
     }
     async submitMagnet(e, t) {
-        const n = GM_getValue(this.tokenKey, "");
-        if (!n) return show.error("请先打开并登录 123 云盘，刷新后再提交离线任务"), void GM_openInTab("https://www.123pan.com/", {
-            active: !0,
-            insert: !0
-        });
+        const n = this.getStoredToken();
+        if (!n) return show.error("请先打开并登录 123 云盘，刷新后再提交离线任务"), void this.open123PanAuth();
         if (t.hasClass("loading")) return;
         const a = t.text();
         try {
@@ -7977,7 +8044,7 @@ class OneTwoThreeOfflinePlugin extends X {
             const i = await this.resolveMagnet(e, n), s = await this.submitTask(i, n);
             show.info(`已提交 123 离线：${s.fileCount} 个文件 / ${this.formatSize(s.totalSize)}`), t.text("已提交");
         } catch (i) {
-            "TOKEN_EXPIRED" === i ? (GM_setValue(this.tokenKey, ""), show.error("123 云盘授权已过期，请重新打开 123 云盘刷新授权")) : show.error("123 离线提交失败：" + i), 
+            this.isTokenExpiredError(i) ? this.handleTokenExpired() : show.error("123 离线提交失败：" + i + this.getTokenMetaText()), 
             t.text(a);
         } finally {
             setTimeout((() => t.removeClass("loading").prop("disabled", !1).text(a)), 1800);
@@ -8003,9 +8070,9 @@ class OneTwoThreeOfflinePlugin extends X {
                     if (401 === e.status) return void a("TOKEN_EXPIRED");
                     try {
                         const t = JSON.parse(e.responseText);
-                        0 === t.code && t.data && t.data.list && t.data.list.length > 0 ? n(t.data.list[0]) : a(t.message || `解析失败 (${t.code})`);
+                        this.assertApiResult(t, "解析失败"), t.data && t.data.list && t.data.list.length > 0 ? n(t.data.list[0]) : a(t.message || `解析失败 (${t.code})`);
                     } catch (t) {
-                        a("响应解析失败: " + t.message);
+                        a(this.isTokenExpiredError(t) ? "TOKEN_EXPIRED" : t.message ? "响应解析失败: " + t.message : String(t));
                     }
                 },
                 onerror: () => a("网络请求失败")
@@ -8035,12 +8102,12 @@ class OneTwoThreeOfflinePlugin extends X {
                     if (401 === e.status) return void a("TOKEN_EXPIRED");
                     try {
                         const t = JSON.parse(e.responseText);
-                        0 === t.code ? n({
+                        this.assertApiResult(t, "提交失败"), n({
                             fileCount: i.length,
                             totalSize: s
-                        }) : a(t.message || "提交失败");
+                        });
                     } catch (t) {
-                        a("响应解析失败");
+                        a(this.isTokenExpiredError(t) ? "TOKEN_EXPIRED" : t.message ? "响应解析失败: " + t.message : String(t));
                     }
                 },
                 onerror: () => a("网络请求失败")

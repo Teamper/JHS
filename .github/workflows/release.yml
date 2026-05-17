@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read userscript version
+        id: version
+        shell: bash
+        run: |
+          version="$(awk '/^\/\/ @version/{print $3; exit}' JHS.user.js)"
+          if [[ -z "$version" ]]; then
+            echo "Cannot read // @version from JHS.user.js" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare dev artifact
+        if: github.ref_name == 'dev'
+        run: cp JHS.user.js JHS-dev.user.js
+
+      - name: Upload dev artifact
+        if: github.ref_name == 'dev'
+        uses: actions/upload-artifact@v4
+        with:
+          name: JHS-dev-${{ steps.version.outputs.version }}
+          path: JHS-dev.user.js
+
+      - name: Create release tag
+        if: github.ref_name == 'main'
+        shell: bash
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          if git ls-remote --tags origin "$tag" | grep -q "refs/tags/$tag$"; then
+            echo "Tag $tag already exists"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "$tag"
+          git push origin "$tag"
+
+      - name: Publish GitHub Release
+        if: github.ref_name == 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" JHS.user.js --clobber
+          else
+            gh release create "$tag" JHS.user.js \
+              --title "JHS ${{ steps.version.outputs.version }}" \
+              --generate-notes \
+              --latest
+          fi
+
