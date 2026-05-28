@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS-YA
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      4.0.0
+// @version      4.0.1
 // @author       yaoser
 // @description  Jav-鉴黄师个人维护版：收藏、屏蔽、标记已下载、演员黑名单、收藏演员同步、新作品检测、热播/Top250/Fc2ppv/评论增强、相关清单、WebDAV数据备份、以图识图、字幕搜索；支持 JavDB / JavBus。
 // @license      MIT
@@ -4974,12 +4974,12 @@ class Ie extends X {
         }));
     }
     applyVisibility() {
-        const e = this.activeQuickFilter || "waitCheck", t = this.getSelector().itemSelector;
+        const e = this.activeQuickFilter || "waitCheck", t = this.getSelector().itemSelector, n = ["filter", "keywordFilter", "actorFilter"];
         $(t).each((function() {
-            const n = $(this), a = n.attr("data-hide") === "yes", i = n.attr("data-jhs-status") || "waitCheck";
-            if (e === "all") { i === "filter" ? n.hide() : n.show(); return; }
-            if (i === e) { n.show(); return; }
-            a || (i !== e) ? n.hide() : n.show();
+            const t = $(this), a = t.attr("data-hide") === "yes", i = t.attr("data-jhs-status") || "waitCheck";
+            if (e === "all") { (n.includes(i) || a) ? t.hide() : t.show(); return; }
+            if (i === e) { a ? t.hide() : t.show(); return; }
+            a || (i !== e) ? t.hide() : t.show();
         }));
     }
     applyQuickFilter(e) {
@@ -5053,7 +5053,7 @@ class Ie extends X {
         return null;
     }
     getStatusKey(e) {
-        return e === Te.IS_FILTERED ? "filter" : e === Te.IS_FAVORITE ? "favorite" : e === Te.IS_HAS_DOWN ? "hasDown" : e === Te.IS_HAS_WATCH ? "hasWatch" : "waitCheck";
+        return e === Te.IS_FILTERED ? "filter" : e === Te.IS_FAVORITE ? "favorite" : e === Te.IS_HAS_DOWN ? "hasDown" : e === Te.IS_HAS_WATCH ? "hasWatch" : e === Te.IS_KEYWORD_FILTER ? "keywordFilter" : e === Te.IS_ACTOR_FILTER ? "actorFilter" : e === Te.IS_ACTRESS_FILTER ? "actorFilter" : "waitCheck";
     }
     async translateListItems(e) {
         for (let t = 0; t < e.length; t++) t > 0 && t % 8 == 0 && await this.yieldListFrame(),

@@ -1,6 +1,6 @@
 # JHS
 
-JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `4.0.0`。
+JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `4.0.1`。
 
 ## 安装
 
@@ -41,6 +41,10 @@ npm run check
 - `v4.1.0`: 新作品中心 + 磁力评分。
 - `v4.2.0`: WebDAV 差异同步 + 数据恢复。
 - `v4.3.0`: 插件开关中心 + 性能诊断面板。
+
+## 4.0.1
+
+- 修复列表页关键词屏蔽和演员屏蔽后内容仍然显示的问题：`getStatusKey()` 缺少 keywordFilter/actorFilter 状态映射，`applyVisibility()` 未尊重 `data-hide` 属性。
 
 ## 4.0.0
 
