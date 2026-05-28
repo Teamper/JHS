@@ -1,6 +1,6 @@
 {
   "name": "jhs-ya",
-  "version": "4.0.0-alpha.1",
+  "version": "4.0.0-alpha.2",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "check": "npm run build && node --check scripts/build.mjs && node --check src/main.js && node --check JHS.user.js && node --check dist/JHS.user.js"
+    "check": "npm run build && node --check scripts/build.mjs && node --check src/core/constants.js && node --check src/core/storage-index.js && node --check src/core/storage.js && node --check src/core/javdb-api.js && node --check src/core/utils.js && node --check src/core/http.js && node --check src/core/event-bus.js && node --check src/core/logger.js && node --check src/core/plugin-manager.js && node --check src/main.js && node --check JHS.user.js && node --check dist/JHS.user.js"
   },
   "devDependencies": {
     "esbuild": "^0.28.0"
