@@ -64,11 +64,11 @@ assert(
   "userscript @namespace changed"
 );
 assert(
-  extractMetadata(rootOutput, "downloadURL") === "https://github.com/Yaoser-x/JHS/releases/latest/download/JHS.user.js",
+  extractMetadata(rootOutput, "downloadURL") === "https://github.com/Yaoser-Archive/JHS/releases/latest/download/JHS.user.js",
   "userscript @downloadURL changed"
 );
 assert(
-  extractMetadata(rootOutput, "updateURL") === "https://raw.githubusercontent.com/Yaoser-x/JHS/main/JHS.user.js",
+  extractMetadata(rootOutput, "updateURL") === "https://raw.githubusercontent.com/Yaoser-Archive/JHS/main/JHS.user.js",
   "userscript @updateURL changed"
 );
 

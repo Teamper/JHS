@@ -6,8 +6,8 @@
 // @description  Jav-鉴黄师个人维护版：收藏、屏蔽、标记已下载、演员黑名单、收藏演员同步、新作品检测、热播/Top250/Fc2ppv/评论增强、相关清单、WebDAV数据备份、以图识图、字幕搜索；支持 JavDB / JavBus。
 // @license      MIT
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=javdb.com
-// @homepageURL  https://github.com/Yaoser-x/JHS
-// @supportURL   https://github.com/Yaoser-x/JHS/issues
+// @homepageURL  https://github.com/Yaoser-Archive/JHS
+// @supportURL   https://github.com/Yaoser-Archive/JHS/issues
 // @match        https://javdb.com/*
 // @match        https://www.javbus.com/*
 // @match        *://*.123pan.com/*
@@ -71,8 +71,8 @@
 // @grant        GM_openInTab
 // @grant        unsafeWindow
 // @run-at       document-idle
-// @downloadURL https://github.com/Yaoser-x/JHS/releases/latest/download/JHS.user.js
-// @updateURL https://raw.githubusercontent.com/Yaoser-x/JHS/main/JHS.user.js
+// @downloadURL https://github.com/Yaoser-Archive/JHS/releases/latest/download/JHS.user.js
+// @updateURL https://raw.githubusercontent.com/Yaoser-Archive/JHS/main/JHS.user.js
 // ==/UserScript==
 
 const ut = layer.close;
