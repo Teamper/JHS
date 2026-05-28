@@ -89,7 +89,7 @@ const stableReleaseChecks = [
   ["third-party cache identity", storage, 'i(this, "third_party_cache_key", "third_party_ttl_cache")'],
   ["import format compatibility", storage, "async importData(e)"],
   ["import format compatibility", storage, "for (const n in e)"],
-  ["import format compatibility", storage, "this._setItemAndInvalidate(n, a)"],
+  ["import format compatibility", storage, "this._setItemAndInvalidate(n, e[n])"],
   ["export format compatibility", storage, "async exportData()"],
   ["export format compatibility", storage, "this.forage.iterate"],
   ["build source chain", buildScript, 'const srcPath = join(repoRoot, "src", "main.js")'],

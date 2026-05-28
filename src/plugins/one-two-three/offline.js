@@ -34,7 +34,9 @@ class OneTwoThreeOfflinePlugin extends X {
         } catch (t) {}
         const t = document.cookie.split(";");
         for (const n of t) {
-            const [t, a] = n.trim().split("=");
+            const e = n.indexOf("=");
+            if (e < 0) continue;
+            const t = n.substring(0, e).trim(), a = n.substring(e + 1);
             if (t && /token/i.test(t) && a) return {
                 token: decodeURIComponent(a).trim(),
                 source: `cookie.${t}`
@@ -131,7 +133,7 @@ class OneTwoThreeOfflinePlugin extends X {
             await storageManager.saveCar({
                 carNum: t.carNum,
                 url: t.url,
-                names: t.actress || t.names,
+                names: t.actress || t.names || "",
                 actionType: g,
                 publishTime: t.publishTime
             });

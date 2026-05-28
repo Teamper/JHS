@@ -485,10 +485,10 @@ class Ae extends X {
     }
     importData() {
         try {
-            const e = document.createElement("input");
-            e.type = "file", e.accept = ".json", e.onchange = e => {
+            const input = document.createElement("input");
+            input.type = "file", input.accept = ".json", input.onchange = e => {
                 const t = e.target.files[0];
-                if (!t) return;
+                if (!t) return void document.body.removeChild(input);
                 const n = new FileReader;
                 n.onload = e => {
                     try {
@@ -501,12 +501,12 @@ class Ae extends X {
                             await storageManager.importData(n), show.ok("数据导入成功"), layer.close(e), location.reload();
                         }));
                     } catch (t) {
-                        console.error(t), show.error("导入失败：文件内容不是有效的JSON格式 " + t);
+                        console.error(t), show.error("导入失败：文件内容不是有效的JSON格式 " + t), document.body.removeChild(input);
                     }
                 }, n.onerror = () => {
-                    show.error("读取文件时出错");
+                    show.error("读取文件时出错"), document.body.removeChild(input);
                 }, n.readAsText(t);
-            }, document.body.appendChild(e), e.click(), setTimeout((() => document.body.removeChild(e)), 1e3);
+            }, document.body.appendChild(input), input.click();
         } catch (e) {
             console.error(e), show.error("导入数据时出错: " + e.message);
         }

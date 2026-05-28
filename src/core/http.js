@@ -13,7 +13,7 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
     postForm(e, t = {}, n = {}) {
         n || (n = {}), n["Content-Type"] || (n["Content-Type"] = "application/x-www-form-urlencoded");
         let a = "";
-        return t && Object.keys(t).length > 0 && (a = Object.entries(t).map((([e, t]) => `${e}=${t}`)).join("&")),
+        return t && Object.keys(t).length > 0 && (a = Object.entries(t).map((([e, t]) => `${e}=${encodeURIComponent(t)}`)).join("&")),
         this.gmRequest("POST", e, a, null, n);
     }
     postFileFormData(e, t = {}, n = {}) {

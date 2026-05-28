@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.0.3] - 2026-05-28
+
+### Fixed
+- 修复插件失败时错误报告本身崩溃的问题：`processCss`/`processPlugins` 中 `Promise.allSettled` rejected 结果误用 `.value` 而非 `.reason`。
+- 修复 `importData` 先清库再写入导致写入失败时数据丢失：改为先写入新数据再清除旧 key。
+- 修复 `showCarNumBox` 比较 `data-hide` 值错误（`"${e}-hide"` vs `"yes"`），导致历史记录删除后无法恢复列表项显示。
+- 修复插件重复注册错误信息引用 `window.name` 而非实际插件名。
+- 修复 `postForm` 未对表单值进行 URL 编码，含特殊字符的值会导致请求体损坏。
+- 修复 `saveSettingItem` 读-改-写竞态条件：添加 `navigator.locks` 写入锁。
+- 修复 123 云盘 Cookie 解析截断含 `=` 的 base64 token。
+- 修复 123 离线从列表页提交时 `names` 为 undefined。
+- 修复本地导入文件选择 input 过早移除（1 秒定时器 → 在回调中清理）。
+- 修复新作品抓取单页失败后静默中止后续所有页：改为跳过失败页继续。
+- 修正 README 中功能范围数量（16 → 20）。
+
 ## [4.0.2] - 2026-05-28
 
 ### Changed
@@ -56,7 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.2...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.3...HEAD
+[4.0.3]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.2...v4.0.3
 [4.0.2]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/Yaoser-Archive/JHS/compare/v3.8.0...v4.0.0

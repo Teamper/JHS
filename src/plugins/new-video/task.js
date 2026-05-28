@@ -126,6 +126,7 @@ class et extends X {
     }
     async scrapeActorInfo(e, t) {
         clog.log(`正在抓取页面: ${e}`), $("#checkNewVideoMsg").text(`正在解析已收藏的演员: ${e}`);
+        let nextUrl = null;
         try {
             const n = await gmHttp.get(e), a = utils.htmlTo$dom(n);
             a.find("#actors .actor-box a").each(((e, n) => {
@@ -148,13 +149,16 @@ class et extends X {
                 }
             }));
             const i = a.find(".pagination-next").attr("href");
-            if (i) {
-                const e = new URL(i, this.javDbUrl).href;
-                await this.scrapeActorInfo(e, t);
-            }
+            if (i) nextUrl = new URL(i, this.javDbUrl).href;
         } catch (n) {
-            clog.error(`抓取 ${e} 时发生错误:`, n);
+            clog.error(`抓取 ${e} 时发生错误，跳过当前页继续:`, n);
+            const url = new URL(e), page = parseInt(url.searchParams.get("page") || "1");
+            if (!isNaN(page)) {
+                url.searchParams.set("page", String(page + 1));
+                nextUrl = url.href;
+            }
         }
+        if (nextUrl) await this.scrapeActorInfo(nextUrl, t);
     }
     async checkNewVideo(e) {
         const t = await storageManager.getFavoriteActressList(), n = utils.genericSort(t, [ {

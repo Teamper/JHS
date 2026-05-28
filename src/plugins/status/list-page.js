@@ -382,7 +382,7 @@ class Ie extends X {
         const t = $(".movie-list .item").toArray().find((t => $(t).find(".video-title strong").text() === e));
         if (t) {
             const n = $(t);
-            n.attr("data-hide") === `${e}-hide` && (n.show(), n.removeAttr("data-hide"));
+            n.attr("data-hide") === "yes" && (n.show(), n.removeAttr("data-hide"));
         }
     }
     replaceHdImg(e) {
