@@ -1,6 +1,6 @@
 # JHS
 
-JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `4.0.0-alpha.3`。
+JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `4.0.0-beta.1`。
 
 ## 安装
 
@@ -23,6 +23,8 @@ npm run check
 
 `npm run build` 会从 `src/main.js` 构建 `dist/JHS.user.js`，并同步生成根目录 `JHS.user.js`。用户安装入口仍然使用根目录发布文件和 Release 附件，不需要改为安装 `src` 或 `dist`。
 
+`npm run check` 会执行构建、源码语法检查、发布产物语法检查和 beta 回归静态门禁，覆盖插件注册顺序、用户脚本元数据、根目录/`dist` 一致性、事件总线、多站点关键插件入口和第三方请求缓存入口。
+
 ## 版本流
 
 - `main`: 正式发布分支。推送后 GitHub Actions 会读取 `JHS.user.js` 中的 `// @version`，创建对应 `vX.Y.Z` tag，并发布 GitHub Release。
@@ -39,6 +41,14 @@ npm run check
 - `v4.1.0`: 新作品中心 + 磁力评分。
 - `v4.2.0`: WebDAV 差异同步 + 数据恢复。
 - `v4.3.0`: 插件开关中心 + 性能诊断面板。
+
+## 4.0.0-beta.1
+
+- 进入回归测试阶段，不再做大拆分；本版只修复兼容性问题并补充回归门禁。
+- 修复拆分后事件总线消息名未加引号的问题，避免 `BroadcastChannel` 初始化和多标签页刷新消息在运行时抛出 `ReferenceError`。
+- 新增 `scripts/regression-check.mjs`，静态覆盖 JavDB/JavBus 列表页、详情页、演员页、123pan 授权与离线提交、新作品检测、黑名单、统计、导入导出、WebDAV、快捷键、图片查看器、第三方请求失败入口和多标签页同步。
+- CI 改为运行 `npm run check`，将源码语法检查、回归门禁、发布文件一致性纳入 release workflow。
+- 继续保持根目录 `JHS.user.js`、`dist/JHS.user.js` 和用户安装/更新 URL 不变。
 
 ## 4.0.0-alpha.3
 

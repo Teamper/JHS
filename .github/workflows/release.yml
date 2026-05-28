@@ -40,8 +40,7 @@ jobs:
       - name: Validate JS syntax
         shell: bash
         run: |
-          node --check JHS.user.js
-          node --check dist/JHS.user.js
+          npm run check
 
       - name: Validate release metadata
         shell: bash

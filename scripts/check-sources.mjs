@@ -11,7 +11,7 @@ async function listJavaScriptFiles(dir) {
     if (entry.isDirectory()) {
       return listJavaScriptFiles(fullPath);
     }
-    return entry.isFile() && entry.name.endsWith(".js") ? [fullPath] : [];
+    return entry.isFile() && /\.(mjs|js)$/.test(entry.name) ? [fullPath] : [];
   }));
   return files.flat();
 }

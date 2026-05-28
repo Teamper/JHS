@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS-YA
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      4.0.0-alpha.3
+// @version      4.0.0-beta.1
 // @author       yaoser
 // @description  Jav-鉴黄师个人维护版：收藏、屏蔽、标记已下载、演员黑名单、收藏演员同步、新作品检测、热播/Top250/Fc2ppv/评论增强、相关清单、WebDAV数据备份、以图识图、字幕搜索；支持 JavDB / JavBus。
 // @license      MIT
@@ -1384,23 +1384,23 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
     }
 }, unsafeWindow.storageManager = window.storageManager = new z;
 
-const G = new BroadcastChannel(channel-refresh);
+const G = new BroadcastChannel("channel-refresh");
 
 window.refresh = function() {
     G.postMessage({
-        type: refresh
+        type: "refresh"
     });
 };
 
 window.cleanCache_filter_actor_actress_car_list = function() {
     G.postMessage({
-        type: cleanCache_filter_actor_actress_car_list
+        type: "cleanCache_filter_actor_actress_car_list"
     });
 };
 
 window.clean_cacheSettingObj = function() {
     G.postMessage({
-        type: clean_cacheSettingObj
+        type: "clean_cacheSettingObj"
     });
 };
 
