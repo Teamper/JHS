@@ -1,6 +1,6 @@
 # JHS
 
-JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `3.7.8`。
+JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `3.7.9`。
 
 ## 安装
 
@@ -13,6 +13,10 @@ JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `3.7.
 
 - `main`: 正式发布分支。推送后 GitHub Actions 会读取 `JHS.user.js` 中的 `// @version`，创建对应 `vX.Y.Z` tag，并发布 GitHub Release。
 - `dev`: 预览分支。推送后只上传 `JHS-dev.user.js` artifact，不创建 tag，不创建正式 Release。
+
+## 3.7.9
+
+- 修复 3.7.8 语法错误导致脚本无法加载的问题。
 
 ## 3.7.8
 
