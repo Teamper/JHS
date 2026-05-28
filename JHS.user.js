@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS-YA
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      3.7.9
+// @version      3.8.0
 // @author       yaoser
 // @description  Jav-鉴黄师个人维护版：收藏、屏蔽、标记已下载、演员黑名单、收藏演员同步、新作品检测、热播/Top250/Fc2ppv/评论增强、相关清单、WebDAV数据备份、以图识图、字幕搜索；支持 JavDB / JavBus。
 // @license      MIT
@@ -198,6 +198,7 @@ let z = class n {
         i(this, "car_list_key", "car_list"), i(this, "filter_keyword_title_key", "filter_keyword_title"), 
         i(this, "filter_keyword_review_key", "filter_keyword_review"), i(this, "setting_key", "setting"), 
         i(this, "blacklist_key", "blacklist"), i(this, "blacklist_car_list_key", "blacklist_car_list"), 
+        i(this, "third_party_cache_key", "third_party_ttl_cache"),
         i(this, "favorite_actresses_key", "favorite_actresses"), i(this, "highlighted_tags_key", "highlighted_tags"), 
         i(this, "_actressLock", Promise.resolve()), i(this, "forage", localforage.createInstance({
             driver: localforage.INDEXEDDB,
@@ -207,16 +208,18 @@ let z = class n {
         })), i(this, "cacheCarList", null), i(this, "cacheBlacklist", null),
         i(this, "cacheTitleFilterKeyword", null), i(this, "cacheFavoriteActresses", null),
         i(this, "cache_filter_actor_actress_car_list", null), i(this, "cacheSettingObj", null),
+        i(this, "cacheCarMap", null), i(this, "cacheStatusMap", null),
+        i(this, "cacheBlacklistMap", null), i(this, "cacheFavoriteActressMap", null),
         n.instance) throw new Error("StorageManager已被实例化过了!");
         n.instance = this;
     }
     async getDataVersion() { return await this.forage.getItem("data_version") || 0; }
     async setDataVersion(e) { await this.forage.setItem("data_version", e); }
     _invalidateCache(e = null) {
-        (!e || e === this.car_list_key) && (this.cacheCarList = null);
-        (!e || e === this.blacklist_key) && (this.cacheBlacklist = null);
+        (!e || e === this.car_list_key) && (this.cacheCarList = null, this.cacheCarMap = null, this.cacheStatusMap = null);
+        (!e || e === this.blacklist_key) && (this.cacheBlacklist = null, this.cacheBlacklistMap = null);
         (!e || e === this.filter_keyword_title_key) && (this.cacheTitleFilterKeyword = null);
-        (!e || e === this.favorite_actresses_key) && (this.cacheFavoriteActresses = null);
+        (!e || e === this.favorite_actresses_key) && (this.cacheFavoriteActresses = null, this.cacheFavoriteActressMap = null);
         (!e || e === this.blacklist_car_list_key) && (this.cache_filter_actor_actress_car_list = null);
         (!e || e === this.setting_key) && (this.cacheSettingObj = null);
     }
@@ -247,8 +250,29 @@ let z = class n {
         return null === this.cacheCarList && (this.cacheCarList = await this.forage.getItem(this.car_list_key) || []),
         this.cacheCarList;
     }
+    async getCarMap() {
+        if (null === this.cacheCarMap) {
+            const e = await this.getCarList();
+            this.cacheCarMap = new Map(e.filter((e => e && e.carNum)).map((e => [ e.carNum, e ])));
+        }
+        return this.cacheCarMap;
+    }
+    async getStatusMap() {
+        if (null === this.cacheStatusMap) {
+            const e = await this.getCarList(), t = {
+                [d]: new Set,
+                [h]: new Set,
+                [g]: new Set,
+                [p]: new Set
+            };
+            e.forEach((e => {
+                e && t.hasOwnProperty(e.status) && t[e.status].add(e.carNum);
+            })), this.cacheStatusMap = t;
+        }
+        return this.cacheStatusMap;
+    }
     async getCar(e) {
-        return (await this.getCarList()).find((t => t.carNum === e));
+        return (await this.getCarMap()).get(e);
     }
     _saveSingleCar(e, t) {
         let {carNum: n, url: a, names: i, actionType: s, publishTime: o, starId: r} = e;
@@ -379,6 +403,13 @@ let z = class n {
         return null === this.cacheBlacklist && (this.cacheBlacklist = await this.forage.getItem(this.blacklist_key) || []),
         this.cacheBlacklist;
     }
+    async getBlacklistMap() {
+        if (null === this.cacheBlacklistMap) {
+            const e = await this.getBlacklist();
+            this.cacheBlacklistMap = new Map(e.filter((e => e && e.starId)).map((e => [ e.starId, e ])));
+        }
+        return this.cacheBlacklistMap;
+    }
     async addBlacklistItem(e) {
         let {starId: t, name: n, allName: a, role: i, movieType: s, url: o} = e;
         if (!t) throw new Error("缺失starId");
@@ -432,6 +463,13 @@ let z = class n {
     async getFavoriteActressList() {
         return null === this.cacheFavoriteActresses && (this.cacheFavoriteActresses = await this.forage.getItem(this.favorite_actresses_key) || []),
         this.cacheFavoriteActresses;
+    }
+    async getActressMap() {
+        if (null === this.cacheFavoriteActressMap) {
+            const e = await this.getFavoriteActressList();
+            this.cacheFavoriteActressMap = new Map(e.filter((e => e && e.starId)).map((e => [ e.starId, e ])));
+        }
+        return this.cacheFavoriteActressMap;
     }
     async addFavoriteActressList(e) {
         return this.withActressLock(async () => {
@@ -546,6 +584,145 @@ let z = class n {
             e[n] = t;
         })), 0 === Object.keys(e).length) throw new Error("没有可导出的数据");
         return e;
+    }
+    async getThirdPartyCache() {
+        return await this.forage.getItem(this.third_party_cache_key) || {};
+    }
+    async setThirdPartyCache(e) {
+        await this.forage.setItem(this.third_party_cache_key, e || {});
+    }
+    async clearThirdPartyCache() {
+        await this.forage.removeItem(this.third_party_cache_key);
+    }
+    async getThirdPartyCacheStats() {
+        const e = await this.getThirdPartyCache(), t = Date.now();
+        let n = 0, a = 0;
+        return Object.values(e).forEach((e => {
+            n++, e && e.time && e.ttl && t - e.time < e.ttl && a++;
+        })), {
+            total: n,
+            valid: a,
+            expired: n - a
+        };
+    }
+    async cachedRequest(e, t, n) {
+        const a = Date.now(), i = await this.getThirdPartyCache(), s = i[e];
+        if (s && s.time && a - s.time < (s.ttl || t)) return s.data;
+        const o = await n();
+        if (void 0 === o || null === o) return o;
+        return i[e] = {
+            time: a,
+            ttl: t,
+            data: o
+        }, await this.setThirdPartyCache(i), o;
+    }
+    _groupDuplicateItems(e, t) {
+        const n = new Map;
+        return e.forEach((e => {
+            const a = e && e[t];
+            a && n.set(a, (n.get(a) || 0) + 1);
+        })), Array.from(n.entries()).filter((e => e[1] > 1));
+    }
+    _dedupeByKey(e, t) {
+        const n = new Map, a = [];
+        let i = !1;
+        for (const s of e) {
+            const e = s && s[t];
+            if (!e) {
+                a.push(s);
+                continue;
+            }
+            if (n.has(e)) {
+                Object.assign(n.get(e), s), i = !0;
+            } else n.set(e, s), a.push(s);
+        }
+        return {
+            list: a,
+            changed: i
+        };
+    }
+    async inspectDataHealth() {
+        const [e, t, n, a] = await Promise.all([ this.getCarList(), this.getFavoriteActressList(), this.getBlacklist(), this.getBlacklistCarList() ]), i = await this.getCarMap(), s = {
+            checkedAt: utils.getNowStr(),
+            totals: {
+                carList: e.length,
+                favoriteActresses: t.length,
+                blacklist: n.length,
+                blacklistCarList: a.length
+            },
+            fixable: [],
+            readonly: []
+        }, o = (e, t, n) => s.fixable.push({
+            type: e,
+            message: t,
+            count: n
+        }), r = (e, t, n) => s.readonly.push({
+            type: e,
+            message: t,
+            count: n
+        });
+        const l = this._groupDuplicateItems(e, "carNum"), c = this._groupDuplicateItems(t, "starId"), d = this._groupDuplicateItems(n, "starId");
+        l.length && o("duplicate-car", "重复番号记录", l.length), c.length && o("duplicate-actress", "重复收藏演员", c.length),
+        d.length && o("duplicate-blacklist", "重复黑名单演员", d.length);
+        const h = e.filter((e => e && e.actress)).length, g = a.filter((e => e && e.actress)).length, p = t.filter((e => e && Object.prototype.hasOwnProperty.call(e, "dbId"))).length, m = n.filter((e => e && ("key" in e || "recordTime" in e || "isActor" in e))).length;
+        h + g + p + m > 0 && o("legacy-fields", "旧字段残留", h + g + p + m);
+        const u = t.filter((e => e && e.name && !Array.isArray(e.allName))).length + n.filter((e => e && e.name && !Array.isArray(e.allName))).length;
+        u && o("invalid-all-name", "演员别名不是数组", u);
+        let f = 0;
+        t.forEach((e => {
+            Array.isArray(e?.newVideoList) && (f += e.newVideoList.filter((e => i.has(e))).length);
+        })), f && o("stored-new-video", "新作品列表中已有鉴定记录", f);
+        const v = e.filter((e => e && e.carNum && !e.url)).length;
+        v && r("missing-url", "番号记录缺失 url，需要人工确认来源", v);
+        const b = t.filter((e => e && !e.starId)).length + n.filter((e => e && !e.starId)).length;
+        b && r("missing-star-id", "演员缺失 starId，需要人工确认身份", b);
+        const w = new Set(n.map((e => e && e.starId)).filter(Boolean)), y = a.filter((e => e && e.starId && !w.has(e.starId))).length;
+        return y && r("orphan-blacklist-car", "黑名单作品找不到关联演员", y), s;
+    }
+    async repairDataHealth() {
+        let e = 0, t = await this.getCarList(), n = await this.getFavoriteActressList(), a = await this.getBlacklist(), i = await this.getBlacklistCarList();
+        const s = this._dedupeByKey(t, "carNum");
+        s.changed && (t = s.list, e++);
+        const o = this._dedupeByKey(n, "starId");
+        o.changed && (n = o.list, e++);
+        const r = this._dedupeByKey(a, "starId");
+        r.changed && (a = r.list, e++);
+        t = t.map((t => {
+            if (!t) return t;
+            let n = !1;
+            return void 0 !== t.actress && (t.names = t.actress, delete t.actress, n = !0), n && e++, t;
+        })), i = i.map((t => {
+            if (!t) return t;
+            let n = !1;
+            return void 0 !== t.actress && (t.names = t.actress, delete t.actress, n = !0), Object.prototype.hasOwnProperty.call(t, "type") && (delete t.type, n = !0),
+            n && e++, t;
+        })), n = n.map((t => {
+            if (!t) return t;
+            let n = !1;
+            return Object.prototype.hasOwnProperty.call(t, "dbId") && (t.starId || (t.starId = t.dbId), delete t.dbId, n = !0), t.name && !Array.isArray(t.allName) && (t.allName = t.allName ? [ t.allName ] : [ t.name ],
+            n = !0), n && e++, t;
+        })), a = a.map((t => {
+            if (!t) return t;
+            let n = !1;
+            return Object.prototype.hasOwnProperty.call(t, "isActor") && (t.role || (t.role = t.isActor ? B : P),
+            delete t.isActor, n = !0), Object.prototype.hasOwnProperty.call(t, "recordTime") && (t.createTime || (t.createTime = t.recordTime), delete t.recordTime,
+            n = !0), Object.prototype.hasOwnProperty.call(t, "key") && (delete t.key, n = !0), t.name && !Array.isArray(t.allName) && (t.allName = t.allName ? [ t.allName ] : [ t.name ],
+            n = !0), n && e++, t;
+        }));
+        const l = new Set(t.filter((e => e && e.carNum)).map((e => e.carNum)));
+        n = n.map((t => {
+            if (!Array.isArray(t?.newVideoList)) return t;
+            const n = t.newVideoList.filter((e => !l.has(e)));
+            return n.length !== t.newVideoList.length && (t = {
+                ...t,
+                newVideoList: n
+            }, 0 === n.length && t.lastPublishTime && (t.lastPublishTime = null), e++), t;
+        })), await this._setItemAndInvalidate(this.car_list_key, t), await this._setItemAndInvalidate(this.favorite_actresses_key, n),
+        await this._setItemAndInvalidate(this.blacklist_key, a), await this._setItemAndInvalidate(this.blacklist_car_list_key, i);
+        return {
+            fixedGroups: e,
+            report: await this.inspectDataHealth()
+        };
     }
     /** 数据迁移: 将旧版扁平键名重命名为新格式 */
     async merge_table_name() {
@@ -670,16 +847,24 @@ const R = async (e, t = 1, n = 20) => {
     let a = `${U}/v1/movies/${e}/reviews`, i = {
         jdSignature: await O()
     };
-    return (await gmHttp.get(a, {
-        page: t,
-        sort_by: "hotly",
-        limit: n
-    }, i)).data.reviews;
+    return await storageManager.cachedRequest(`reviews:${e}:${t}:${n}`, 864e5, (async () => {
+        const e = await gmHttp.get(a, {
+            page: t,
+            sort_by: "hotly",
+            limit: n
+        }, i);
+        if (!e?.data?.reviews) throw new Error(e?.message || "获取评论失败");
+        return e.data.reviews;
+    }));
 }, V = async e => {
     let t = `${U}/v4/movies/${e}`, n = {
         jdSignature: await O()
     };
-    const a = await gmHttp.get(t, null, n);
+    const a = await storageManager.cachedRequest(`movie-detail:${e}`, 6048e5, (async () => {
+        const e = await gmHttp.get(t, null, n);
+        if (!e.data) throw new Error(e.message || "获取视频详情失败");
+        return e;
+    }));
     if (!a.data) throw show.error("获取视频详情失败: " + a.message), new Error(a.message);
     const i = a.data.movie, s = i.preview_images, o = [];
     return s.forEach((e => {
@@ -699,7 +884,11 @@ const R = async (e, t = 1, n = 20) => {
     let a = `${U}/v1/lists/related?movie_id=${e}&page=${t}&limit=${n}`, i = {
         jdSignature: await O()
     };
-    const s = await gmHttp.get(a, null, i), o = [];
+    const s = await storageManager.cachedRequest(`related:${e}:${t}:${n}`, 864e5, (async () => {
+        const e = await gmHttp.get(a, null, i);
+        if (!e?.data?.lists) throw new Error(e?.message || "获取相关清单失败");
+        return e;
+    })), o = [];
     return s.data.lists.forEach((e => {
         o.push({
             relatedId: e.id,
@@ -3106,12 +3295,12 @@ class be extends X {
         } else try {
             if (n.attr("href")) return;
             if (utils.isHidden(n)) return;
-            const a = "jhs_other_site", i = localStorage.getItem(a) ? JSON.parse(localStorage.getItem(a)) : {}, s = e + "_" + t.id.replace("Btn", ""), o = i[s];
-            if (o) return void ("single" === o.type ? (n.attr("href", o.url), n.css("backgroundColor", this.okBackgroundColor)) : "multiple" === o.type && (n.attr("href", o.url), 
+            const a = "jhs_other_site", i = localStorage.getItem(a) ? JSON.parse(localStorage.getItem(a)) : {}, s = e + "_" + t.id.replace("Btn", ""), o = i[s], m = Date.now();
+            if (o && o.time && m - o.time < 864e5) return void ("single" === o.type ? (n.attr("href", o.url), n.css("backgroundColor", this.okBackgroundColor)) : "multiple" === o.type && (n.attr("href", o.url),
             n.append('<span class="site-tag" style="top:-15px">多结果</span>'), n.css("backgroundColor", this.okBackgroundColor)));
             const r = await t.getBaseUrl(), l = t.searchPath(r, e);
             n.attr("href", l);
-            const c = await gmHttp.get(l, null, t.headers, !0), d = utils.htmlTo$dom(c), h = [];
+            const c = await storageManager.cachedRequest(`other-site:${t.id}:${e}`, 864e5, (() => gmHttp.get(l, null, t.headers, !0))), d = utils.htmlTo$dom(c), h = [];
             d.find(t.itemSelector).each(((n, a) => {
                 const i = $(a);
                 if (!t.findCarNumOrTitle(i).toLowerCase().includes(e.toLowerCase())) return;
@@ -3123,13 +3312,15 @@ class be extends X {
             if (1 === h.length) {
                 let e = h[0];
                 n.attr("href", e), n.css("backgroundColor", this.okBackgroundColor), p = {
-                    type: "single",
-                    url: e
-                };
+                type: "single",
+                url: e,
+                time: m
+            };
             } else h.length > 1 ? (n.attr("href", l), g += '<span class="site-tag" style="top:-15px">多结果</span>', 
             n.css("backgroundColor", this.okBackgroundColor), p = {
                 type: "multiple",
-                url: l
+                url: l,
+                time: m
             }) : (n.attr("href", l), n.attr("title", "未查询到, 点击前往搜索页"), n.css("backgroundColor", this.errorBackgroundColor));
             p && (new ve).addTask((() => {
                 const e = localStorage.getItem(a) ? JSON.parse(localStorage.getItem(a)) : {};
@@ -4840,18 +5031,10 @@ class Ie extends X {
     }
     async filterMovieList(e) {
         utils.time("累计耗费时间"), utils.time("读取数据耗时");
-        const [t, n, a, i, s] = await Promise.all([ storageManager.getCarList(), storageManager.getTitleFilterKeyword(), storageManager.getBlacklist(), storageManager.getBlacklistCarList(), storageManager.getSetting() ]), o = utils.time("读取数据耗时"), m = t.reduce(((e, t) => {
-            const n = t.status;
-            return e.hasOwnProperty(n) && e[n].add(t.carNum), e;
-        }), {
-            [d]: new Set,
-            [h]: new Set,
-            [g]: new Set,
-            [p]: new Set
-        });
+        const [n, a, i, s, m] = await Promise.all([ storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getStatusMap() ]), o = utils.time("读取数据耗时");
         utils.time("组装数据耗时");
-        const u = new Map(a.map((e => [ e.starId, e.role ]))), {actorCarNumToNameMap: f, actressCarNumToNameMap: v} = i.reduce(((e, t) => {
-            const n = u.get(t.starId);
+        const u = a, {actorCarNumToNameMap: f, actressCarNumToNameMap: v} = i.reduce(((e, t) => {
+            const n = u.get(t.starId)?.role;
             if (!n) return clog.error("黑名单数据源丢失演员信息", t), e;
             const a = n === B ? e.actorCarNumToNameMap : e.actressCarNumToNameMap;
             return a.has(t.carNum) || a.set(t.carNum, t.names), e;
@@ -5333,6 +5516,10 @@ class Ae extends X {
             key: "jhs_score_info",
             text: "⭐ Top250|热播 评分数据",
             title: "Top250及热播的评分数据"
+        }, {
+            key: "third_party_ttl_cache",
+            text: "⏱️ 第三方TTL缓存",
+            title: "评论、相关清单、磁力搜索、缩略图等请求缓存"
         } ]);
     }
     getName() {
@@ -5390,13 +5577,36 @@ class Ae extends X {
             area: utils.getResponsiveArea([ "55%", "90%" ]),
             scrollbar: !1,
             success: (e, n) => {
-                $(e).find(".layui-layer-content").css("position", "relative"), this.loadForm(), 
+                $(e).find(".layui-layer-content").css("position", "relative"), this.injectHealthPanel(), this.loadForm(),
                 this.bindClick(), utils.setupEscClose(n), t && t();
             },
             end: () => {
                 this.getBean("CoverButtonPlugin").enableSvgBtn();
             }
         });
+    }
+    injectHealthPanel() {
+        const e = $(".side-menu-item").parent();
+        e.length && !e.find('[data-panel="health-panel"]').length && e.append('<div class="side-menu-item" data-panel="health-panel">🩺 数据体检</div>');
+        const t = $(".content-panel").parent();
+        t.length && !$("#health-panel").length && t.append('\n            <div id="health-panel" class="content-panel" style="display:none;">\n                <div style="display:flex; gap:8px; margin-bottom:12px;">\n                    <a id="runHealthCheckBtn" class="menu-btn" style="background-color:#448cc2"><span>重新体检</span></a>\n                    <a id="repairHealthBtn" class="menu-btn" style="background-color:#64bb69"><span>备份并修复</span></a>\n                </div>\n                <div id="health-data-display" style="background:#f8f9fa; border:1px solid #ddd; border-radius:5px; padding:12px; min-height:180px;">点击重新体检查看结果</div>\n            </div>\n        ');
+    }
+    async renderDataHealthPanel() {
+        const e = $("#health-data-display");
+        if (!e.length) return;
+        e.text("体检中...");
+        try {
+            const t = await storageManager.inspectDataHealth(), n = t.fixable.reduce(((e, t) => e + t.count), 0), a = t.readonly.reduce(((e, t) => e + t.count), 0), i = t => t.length ? t.map((e => `<li><strong>${escapeHtml(e.message)}</strong>：${e.count}</li>`)).join("") : "<li>无</li>";
+            e.html(`\n                <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin-bottom:12px;">\n                    <div>番号记录：<strong>${t.totals.carList}</strong></div>\n                    <div>收藏演员：<strong>${t.totals.favoriteActresses}</strong></div>\n                    <div>黑名单演员：<strong>${t.totals.blacklist}</strong></div>\n                    <div>黑名单作品：<strong>${t.totals.blacklistCarList}</strong></div>\n                </div>\n                <div style="margin-bottom:8px;">体检时间：${escapeHtml(t.checkedAt)}；可修复问题 <strong>${n}</strong> 项，只读问题 <strong>${a}</strong> 项。</div>\n                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">\n                    <div><div style="font-weight:bold;margin-bottom:4px;">可安全修复</div><ul>${i(t.fixable)}</ul></div>\n                    <div><div style="font-weight:bold;margin-bottom:4px;">仅报告</div><ul>${i(t.readonly)}</ul></div>\n                </div>\n            `);
+        } catch (t) {
+            console.error(t), e.text("体检失败: " + t);
+        }
+    }
+    async repairDataHealthWithBackup() {
+        const e = JSON.stringify(await storageManager.exportData()), t = `health-backup-${utils.getNowStr("_", "_")}.json`;
+        utils.download(e, t);
+        const n = await storageManager.repairDataHealth();
+        show.ok(`已修复 ${n.fixedGroups} 组数据问题，修复前备份已下载`), await this.renderDataHealthPanel();
     }
     simpleSetting() {
         return `\n             <div class="jhs-scrollbar" style="margin-top:20px;max-height:90vh; overflow-y:auto;">\n                <div style="margin: 0 10px;">\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            显示已鉴定内容:\n                        </span>\n                        <div class="form-content" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;">\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽单番号: </span><input type="checkbox" id="showFilterItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽演员: </span><input type="checkbox" id="showFilterActorItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽关键词: </span><input type="checkbox" id="showFilterKeywordItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">收藏: </span><input type="checkbox" id="showFavoriteItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">已下载: </span><input type="checkbox" id="showHasDownItem" class="mini-switch"><br/>\n                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">已观看: </span><input type="checkbox" id="showHasWatchItem" class="mini-switch"><br/>\n                        </div>\n                    </div>\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="快速显示所有已鉴定内容,减少对以上开关的频繁操作">❓ </span> 显示所有:\n                        </span>\n                        <div class="form-content" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;">\n                            <input type="checkbox" id="showAllItem" class="mini-switch">\n                        </div>\n                    </div>\n                    \n\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">鉴定后立即关闭页面:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="needClosePage" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    <div class="setting-item">\n                        <span class="setting-label">\n                             <span data-tip="使用瀑布流模式, 排序方式将调整为默认">❓ </span>瀑布流模式:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="autoPage" class="mini-switch">\n                        </div>\n                    </div>\n       \n                    <div class="setting-item">\n                        <span class="setting-label">启用标题翻译:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="translateTitle" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">启用悬浮大图:</span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="hoverBigImg" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                                        \n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    ${r ? '\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页是否展示女优年龄、三围等信息">❓ </span>加载女优信息:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadActressInfo" class="mini-switch">\n                        </div>\n                    </div>' : ""}\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页显示外部网站入口；点击检测外部站点后才请求第三方站点">❓ </span>显示外部网站:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadOtherSite" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页图片区首列位置加载长缩略图">❓ </span>加载长缩略图:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadScreenShot" class="mini-switch">\n                        </div>\n                    </div>\n                    \n                     <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="详情页解析更多更高画质的预览视频">❓ </span>更高画质预览视频:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableLoadPreviewVideo" class="mini-switch">\n                        </div>\n                    </div>\n\n                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>\n\n                    <div class="setting-item">\n                        <span class="setting-label">\n                            <span data-tip="列数6以上,建议开启竖图">❓ </span>竖图模式:\n                        </span>\n                        <div class="form-content" style="text-align: right;">\n                            <input type="checkbox" id="enableVerticalModel" class="mini-switch">\n                        </div>\n                    </div>\n                                    \n                    <div class="setting-item">\n                        <span class="setting-label">页面列数: <span id="showContainerColumns"></span></span>\n                        <div class="form-content">\n                            <input type="range" id="containerColumns" min="2" max="10" step="1" style="padding:5px 0">\n                        </div>\n                    </div>\n                    \n                    <div class="setting-item">\n                        <span class="setting-label">页面宽度: <span id="showContainerWidth"></span></span>\n                        <div class="form-content">\n                            <input type="range" id="containerWidth" min="0" max="30" step="1" style="padding:5px 0">\n                        </div>\n                    </div>\n                </div>\n                <div style="padding: 0 20px 15px; text-align: right; border-top: 1px solid #eee;">   \n                    <button id="helpBtn" style="float:left;">常见问题</button>\n                    <button id="moreBtn">更多设置</button>\n                </div>\n            </div>\n        `;
@@ -5594,22 +5804,27 @@ class Ae extends X {
         l && this.getBean("BusImgPlugin").logImageHeightsByRow();
     }
     bindClick() {
+        const settingPlugin = this;
         $(".side-menu-item").on("click", (function() {
             $(".side-menu-item").removeClass("active"), $(this).addClass("active"), $(".content-panel").hide();
             const e = $(this).data("panel");
             $("#" + e).show(), "cache-panel" === e ? ($("#saveBtn").hide(), $("#clean-all").show()) : ($("#saveBtn").show(), 
-            $("#clean-all").hide());
+            $("#clean-all").hide()), "health-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), settingPlugin.renderDataHealthPanel());
         })), $("#importBtn").on("click", (e => this.importData(e))), $("#exportBtn").on("click", (e => this.exportData(e))), 
         $("#webdavBackupBtn").on("click", (e => this.backupDataByWebDav(e))), $("#webdavBackupListBtn").on("click", (e => this.backupListBtnByWebDav(e))), 
-        $("#saveBtn").on("click", (() => this.saveForm())), $(".clean-btn").on("click", (e => {
+        $("#saveBtn").on("click", (() => this.saveForm())), $("#runHealthCheckBtn").on("click", (() => this.renderDataHealthPanel())),
+        $("#repairHealthBtn").on("click", (e => {
+            utils.q(e, "修复前会自动下载备份，是否继续?", (() => this.repairDataHealthWithBackup()));
+        })), $(".clean-btn").on("click", (async e => {
             const t = $(e.currentTarget).data("key"), n = this.cacheItems.find((e => e.key === t));
-            localStorage.removeItem(t), show.ok(`${n.text} 清理成功`), $("#cache-data-display").hide(), 
+            t === storageManager.third_party_cache_key ? await storageManager.clearThirdPartyCache() : localStorage.removeItem(t),
+            show.ok(`${n.text} 清理成功`), $("#cache-data-display").hide(),
             "jhs_dmm_video" === t && localStorage.removeItem("jhs_other_site_dmm");
-        })), $("#clean-all").on("click", (() => {
+        })), $("#clean-all").on("click", (async () => {
             this.cacheItems.forEach((e => localStorage.removeItem(e.key))), show.ok("全部缓存已清理"), 
-            $("#cache-data-display").hide(), localStorage.removeItem("jhs_other_site_dmm");
-        })), $(".view-btn").on("click", (e => {
-            const t = $(e.currentTarget).data("key"), n = localStorage.getItem(t), a = $("#cache-data-display"), i = a.find("pre");
+            $("#cache-data-display").hide(), localStorage.removeItem("jhs_other_site_dmm"), await storageManager.clearThirdPartyCache();
+        })), $(".view-btn").on("click", (async e => {
+            const t = $(e.currentTarget).data("key"), n = t === storageManager.third_party_cache_key ? JSON.stringify(await storageManager.getThirdPartyCache()) : localStorage.getItem(t), a = $("#cache-data-display"), i = a.find("pre");
             if (a.show(), n) try {
                 const e = JSON.parse(n);
                 i.text(JSON.stringify(e, null, 2));
@@ -6744,7 +6959,7 @@ class Re extends X {
             this.searchEngine(r, this.currentEngine, e);
         })), this.searchEngine(r, this.currentEngine || this.searchEngines[s], e), t;
     }
-    searchEngine(e, t, n) {
+    async searchEngine(e, t, n) {
         e.html(`<div class="magnet-loading">正在从 ${t.name} 搜索 "${n}"...</div>`);
         const a = `${t.name}_${n}`;
         const i = sessionStorage.getItem(a);
@@ -6752,21 +6967,26 @@ class Re extends X {
             const s = JSON.parse(i);
             return void this.displayResults(e, s, t.name);
         } catch (s) {}
-        t.parseHtml && GM_xmlhttpRequest({
-            method: "GET",
-            url: i,
-            onload: i => {
-                try {
-                    const s = t.parseHtml.call(this, i.responseText, n);
-                    s.length > 0 && sessionStorage.setItem(a, JSON.stringify(s)), this.displayResults(e, s, t.name);
-                } catch (s) {
-                    e.html(`<div class="magnet-error">解析 ${t.name} 结果失败: ${s.message}</div>`);
-                }
-            },
-            onerror: n => {
-                e.html(`<div class="magnet-error">从 ${t.name} 获取数据失败: ${n.statusText}</div>`);
-            }
-        }), t.parseJson && t.parseJson.call(this, e, t, n, a);
+        if (t.parseHtml) try {
+            const i = t.url.replace("{keyword}", encodeURIComponent(n)), s = await storageManager.cachedRequest(`magnet:${t.id}:${n}`, 216e5, (() => new Promise(((e, a) => {
+                GM_xmlhttpRequest({
+                    method: "GET",
+                    url: i,
+                    onload: i => {
+                        try {
+                            e(t.parseHtml.call(this, i.responseText, n));
+                        } catch (s) {
+                            a(s);
+                        }
+                    },
+                    onerror: e => a(new Error(e.statusText || "请求失败"))
+                });
+            }))));
+            return s.length > 0 && sessionStorage.setItem(a, JSON.stringify(s)), void this.displayResults(e, s, t.name);
+        } catch (s) {
+            return void e.html(`<div class="magnet-error">解析 ${t.name} 结果失败: ${s.message}</div>`);
+        }
+        t.parseJson && t.parseJson.call(this, e, t, n, a);
     }
     displayResults(e, t, n) {
         function a(e) {
@@ -6872,7 +7092,7 @@ class Ve extends X {
         if (t[e]) return clog.debug("缓存中存在缩略图:", e, t[e]), t[e];
         let n;
         try {
-            n = await Promise.any([ this.getJavStoreScreenShot(e) ]);
+            n = await storageManager.cachedRequest(`screenshot:${e}`, 6048e5, (() => Promise.any([ this.getJavStoreScreenShot(e) ])));
         } catch (i) {
             throw clog.error("获取缩略图资源失败:", n, i), i;
         }
@@ -7313,7 +7533,7 @@ class et extends X {
             if (!t) continue;
             a.find((e => s.includes(e) || t.includes(e))) || (i.has(t) || (d || (d = o), c.push(t)));
         }
-        const h = await storageManager.getCarList(), g = new Set(h.map((e => e.carNum))), p = c.filter((e => !g.has(e)));
+        const h = await storageManager.getCarMap(), p = c.filter((e => !h.has(e)));
         p.length > 0 && clog.log(`<span style='color: #f40'>检测出新作品, ${n}, 共${p.length}部</span>`), 
         await storageManager.updateFavoriteActress({
             starId: t,
@@ -7468,7 +7688,7 @@ class pt extends X {
         return Array.isArray(e?.newVideoList) ? e.newVideoList.filter((e => !t.has(e))).length : 0;
     }
     async getPendingNewVideoTotal() {
-        const e = new Set((await storageManager.getCarList()).map((e => e.carNum)));
+        const e = await storageManager.getCarMap();
         return (await storageManager.getFavoriteActressList()).reduce(((t, n) => t + this.getPendingNewVideoCount(n, e)), 0);
     }
     async showNewVideoCount() {
@@ -7554,7 +7774,7 @@ class pt extends X {
         let t = await storageManager.getFavoriteActressList();
         const n = $("#paramActressType").val();
         "all" !== n && (t = t.filter((e => e.actressType === n)));
-        const _carSet = new Set((await storageManager.getCarList()).map((e => e.carNum)));
+        const _carSet = await storageManager.getCarMap();
         const _newVideoCount = e => this.getPendingNewVideoCount(e, _carSet);
         const sortBy = $("#paramSortBy").val();
         const sortMap = {
@@ -7993,7 +8213,7 @@ class mt extends X {
 class OneTwoThreeOfflinePlugin extends X {
     constructor() {
         super(...arguments), this.tokenKey = "jhs_123pan_author_token", this.tokenMetaKey = "jhs_123pan_author_token_meta", 
-        this.syncTimer = null;
+        this.syncTimer = null, this.syncFallbackMs = 3e5;
     }
     getName() {
         return "OneTwoThreeOfflinePlugin";
@@ -8005,7 +8225,11 @@ class OneTwoThreeOfflinePlugin extends X {
         "yun.123pan.com" === window.location.hostname ? this.startTokenSync() : (r || l) && (this.bindSubmit(), this.injectNativeButtons());
     }
     startTokenSync() {
-        this.syncTokenOnce(), this.syncTimer && clearInterval(this.syncTimer), this.syncTimer = setInterval((() => this.syncTokenOnce()), 12e3);
+        this.syncTokenOnce(), this.syncTimer && clearInterval(this.syncTimer), this.syncTimer = setInterval((() => this.syncTokenOnce()), this.syncFallbackMs);
+        const e = () => this.syncTokenOnce();
+        window.addEventListener("storage", e), window.addEventListener("focus", e), document.addEventListener("visibilitychange", (() => {
+            document.hidden || this.syncTokenOnce();
+        }));
     }
     getTokenFrom123Pan() {
         let e = (localStorage.getItem("authorToken") || "").trim();
@@ -8036,7 +8260,8 @@ class OneTwoThreeOfflinePlugin extends X {
     syncTokenOnce() {
         const e = this.getTokenFrom123Pan();
         if (!e.token) return;
-        const t = GM_getValue(this.tokenKey, "");
+        const t = GM_getValue(this.tokenKey, ""), n = GM_getValue(this.tokenMetaKey, null);
+        if (t === e.token && n && n.source === e.source) return;
         GM_setValue(this.tokenKey, e.token), GM_setValue(this.tokenMetaKey, {
             source: e.source,
             updatedAt: (new Date).toISOString()
@@ -8219,11 +8444,11 @@ class StatsPlugin extends X {
         $("#statsBtn").on("click", (() => { this.openDialog(); }));
     }
     async openDialog() {
-        const e = await storageManager.getCarList(), t = await storageManager.getFavoriteActressList(), n = await storageManager.getBlacklist(), a = e.length, i = { filter: 0, favorite: 0, hasDown: 0, hasWatch: 0 }, s = {};
-        e.forEach((e => { const t = e.status || ""; t && (i[t] = (i[t] || 0) + 1), e.names && e.names.split(" ").forEach((e => { e && (s[e] = (s[e] || 0) + 1); })); }));
+        const e = await storageManager.getCarList(), t = await storageManager.getFavoriteActressList(), n = await storageManager.getBlacklist(), a = e.length, m = await storageManager.getStatusMap(), i = { filter: m[d].size, favorite: m[h].size, hasDown: m[g].size, hasWatch: m[p].size }, s = {};
+        e.forEach((e => { e.names && e.names.split(" ").forEach((e => { e && (s[e] = (s[e] || 0) + 1); })); }));
         const o = Object.entries(s).sort(((e, t) => t[1] - e[1])).slice(0, 10), r = o.length > 0 ? o[0][1] : 1, l = a - i.filter - i.favorite - i.hasDown - i.hasWatch;
         let c = 0;
-        const pendingCarSet = new Set(e.map((e => e.carNum))), pendingCounter = this.getBean("NewVideoPlugin");
+        const pendingCarSet = await storageManager.getCarMap(), pendingCounter = this.getBean("NewVideoPlugin");
         t.forEach((e => { c += pendingCounter.getPendingNewVideoCount(e, pendingCarSet); }));
         const d = e => '<span style="display:inline-block;height:18px;width:' + Math.round(e / r * 100) + '%;background:#6c5ce7;border-radius:3px;min-width:2px"></span>',
             h = (e, t, r) => { const c = a > 0 ? Math.round(e / a * 100) : 0; return '<div style="display:flex;align-items:center;margin-bottom:6px;gap:8px"><span style="width:60px;font-size:13px;text-align:right">' + t + '</span><span style="flex:1;background:#eee;border-radius:3px;height:18px"><span style="display:inline-block;height:18px;width:' + c + '%;background:' + r + ';border-radius:3px;min-width:2px"></span></span><span style="width:50px;font-size:12px;color:#888">' + e + ' (' + c + '%)</span></div>'; },

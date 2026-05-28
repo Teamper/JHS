@@ -1,6 +1,6 @@
 # JHS
 
-JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `3.7.9`。
+JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `3.8.0`。
 
 ## 安装
 
@@ -13,6 +13,14 @@ JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `3.7.
 
 - `main`: 正式发布分支。推送后 GitHub Actions 会读取 `JHS.user.js` 中的 `// @version`，创建对应 `vX.Y.Z` tag，并发布 GitHub Release。
 - `dev`: 预览分支。推送后只上传 `JHS-dev.user.js` artifact，不创建 tag，不创建正式 Release。
+
+## 3.8.0
+
+- 新增 `carMap`、`actressMap`、`blacklistMap`、`statusMap` 运行时索引，降低大数据量下的重复扫描。
+- 新增第三方请求 TTL 缓存，覆盖评论、相关清单、影片详情、磁力搜索、外部站点检测和缩略图请求。
+- 优化 123 云盘授权同步策略，由 12 秒轮询改为事件触发加 5 分钟兜底同步。
+- 新增设置页数据体检面板，支持备份后修复低风险数据问题。
+- 新增 GitHub Actions 元数据和 README 版本一致性校验。
 
 ## 3.7.9
 
