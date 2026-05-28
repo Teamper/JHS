@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS-YA
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      4.0.0-alpha.2
+// @version      4.0.0-alpha.3
 // @author       yaoser
 // @description  Jav-鉴黄师个人维护版：收藏、屏蔽、标记已下载、演员黑名单、收藏演员同步、新作品检测、热播/Top250/Fc2ppv/评论增强、相关清单、WebDAV数据备份、以图识图、字幕搜索；支持 JavDB / JavBus。
 // @license      MIT
@@ -8487,6 +8487,51 @@ class StatsPlugin extends X {
     }
 }
 
+const DEFAULT_JAVDB_PLUGINS = [
+    Ie, Be, le, de, Ce,
+    xe, Ae, fe, pe, ue,
+    Ee, Ue, Oe, Q, $e,
+    He, ye, ce, ae, ke,
+    he, be, Ze, ze,
+    Re, Ve, Se, Xe, pt,
+    et, mt, StatsPlugin
+];
+
+const DEFAULT_JAVBUS_PLUGINS = [
+    Ie, Ce, Ae,
+    xe, Be, Ee, Fe, Ue,
+    Qe, we, ye, $e,
+    ke, ce, je, Re, Ve,
+    be, Ze, Se, et, StatsPlugin
+];
+
+const DEFAULT_SHARED_PLUGIN_RULES = [
+    {
+        shouldRegister: hostname => r || l || hostname.includes("123pan.com"),
+        plugins: [ OneTwoThreeOfflinePlugin ]
+    },
+    {
+        shouldRegister: hostname => hostname.includes("javtrailers"),
+        plugins: [ oe ]
+    },
+    {
+        shouldRegister: hostname => hostname.includes("subtitlecat"),
+        plugins: [ re ]
+    }
+];
+
+function registerPluginGroup(pluginManager, plugins) {
+    plugins.forEach((pluginClass => pluginManager.register(pluginClass)));
+}
+
+function registerSitePlugins(pluginManager, hostname = window.location.hostname) {
+    DEFAULT_SHARED_PLUGIN_RULES.forEach((rule => {
+        rule.shouldRegister(hostname) && registerPluginGroup(pluginManager, rule.plugins);
+    }));
+    r && registerPluginGroup(pluginManager, DEFAULT_JAVDB_PLUGINS);
+    l && registerPluginGroup(pluginManager, DEFAULT_JAVBUS_PLUGINS);
+}
+
 const ut = layer.close;
 
 layer.close = function(e) {
@@ -8515,22 +8560,8 @@ utils.importResource("https://cdn.jsdelivr.net/npm/tabulator-tables@6.3.1/dist/c
 const vt = function() {
     const e = new Y;
     unsafeWindow.pluginManager = e;
-    let t = window.location.hostname;
-    (r || l || t.includes("123pan.com")) && e.register(OneTwoThreeOfflinePlugin);
-    return r && (e.register(Ie), e.register(Be), e.register(le), e.register(de), e.register(Ce),
-    e.register(xe), e.register(Ae), e.register(fe), e.register(pe), e.register(ue),
-    e.register(Ee), e.register(Ue), e.register(Oe), e.register(Q), e.register($e),
-    e.register(He), e.register(ye), e.register(ce), e.register(ae), e.register(ke),
-    e.register(he), e.register(be), e.register(Ze), e.register(ze),
-    e.register(Re), e.register(Ve), e.register(Se), e.register(Xe), e.register(pt),
-    e.register(et), e.register(mt), e.register(StatsPlugin)), l && (e.register(Ie), e.register(Ce), e.register(Ae),
-    e.register(xe), e.register(Be), e.register(Ee), e.register(Fe), e.register(Ue),
-    e.register(Qe), e.register(we), e.register(ye), e.register($e),
-    e.register(ke), e.register(ce), e.register(je), e.register(Re), e.register(Ve),
-    e.register(be), e.register(Ze), e.register(Se), e.register(et), e.register(StatsPlugin)),
-    t.includes("javtrailers") && e.register(oe), t.includes("subtitlecat") && e.register(re),
-
-    e;
+    registerSitePlugins(e);
+    return e;
 }();
 
 vt.processCss().then(), async function() {
