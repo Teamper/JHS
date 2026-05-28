@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.0.4] - 2026-05-28
+
+### Fixed
+- 修复快速筛选"已下载"/"全部"无法显示已标记项目的问题（回归 v3.7.5）：`applyVisibility` 中 `data-hide` 检查与筛选按钮语义冲突，快速筛选应覆盖设置项的隐藏逻辑。
+
 ## [4.0.3] - 2026-05-28
 
 ### Fixed
@@ -71,7 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.3...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.4...HEAD
+[4.0.4]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.3...v4.0.4
 [4.0.3]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.2...v4.0.3
 [4.0.2]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.0...v4.0.1

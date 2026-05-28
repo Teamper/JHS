@@ -117,8 +117,8 @@ class Ie extends X {
         const e = this.activeQuickFilter || "waitCheck", t = this.getSelector().itemSelector, n = ["filter", "keywordFilter", "actorFilter"];
         $(t).each((function() {
             const t = $(this), a = t.attr("data-hide") === "yes", i = t.attr("data-jhs-status") || "waitCheck";
-            if (e === "all") { (n.includes(i) || a) ? t.hide() : t.show(); return; }
-            if (i === e) { a ? t.hide() : t.show(); return; }
+            if (e === "all") { n.includes(i) ? t.hide() : t.show(); return; }
+            if (i === e) { t.show(); return; }
             a || (i !== e) ? t.hide() : t.show();
         }));
     }
