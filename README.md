@@ -1,6 +1,6 @@
 # JHS
 
-JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `4.0.0-alpha.2`。
+JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `4.0.0-alpha.3`。
 
 ## 安装
 
@@ -39,6 +39,14 @@ npm run check
 - `v4.1.0`: 新作品中心 + 磁力评分。
 - `v4.2.0`: WebDAV 差异同步 + 数据恢复。
 - `v4.3.0`: 插件开关中心 + 性能诊断面板。
+
+## 4.0.0-alpha.3
+
+- 拆出 `src/plugins/`，按 status、favorite、blacklist、new-video、one-two-three、stats、translate、avatar、external-search、backup、subtitle、image-viewer 等目录归档业务插件。
+- 构建脚本按固定顺序拼接 `src/core/`、`src/plugins/` 和 `src/main.js`，保持根目录 `JHS.user.js` 与 `dist/JHS.user.js` 一致。
+- `src/main.js` 保留 userscript 元数据、全局资源初始化、插件注册入口和启动逻辑，插件注册顺序与 alpha.2 保持一致。
+- 新增 `scripts/check-sources.mjs`，自动对 `src/**/*.js` 和构建脚本做语法检查，避免后续新增插件文件时漏加检查命令。
+- 不改功能、不改 UI、不改用户安装地址和 Release 发布文件。
 
 ## 4.0.0-alpha.2
 
