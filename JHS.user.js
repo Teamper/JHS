@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS-YA
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      3.7.6
+// @version      3.7.7
 // @author       yaoser
 // @description  Jav-鉴黄师个人维护版：收藏、屏蔽、标记已下载、演员黑名单、收藏演员同步、新作品检测、热播/Top250/Fc2ppv/评论增强、相关清单、WebDAV数据备份、以图识图、字幕搜索；支持 JavDB / JavBus。
 // @license      MIT
@@ -3321,34 +3321,40 @@ class ye extends X {
         }
     }
     async favoriteOne() {
-        let e = this.getPageInfo();
-        await storageManager.saveCar({
-            carNum: e.carNum,
-            url: e.url,
-            names: e.actress,
-            actionType: h,
-            publishTime: e.publishTime
-        }), this.showStatus(e.carNum).then(), window.refresh(), utils.closePage();
+        try {
+            let e = this.getPageInfo();
+            await storageManager.saveCar({
+                carNum: e.carNum,
+                url: e.url,
+                names: e.actress,
+                actionType: h,
+                publishTime: e.publishTime
+            }), this.showStatus(e.carNum).then(), window.refresh(), utils.closePage();
+        } catch (t) { console.error("收藏操作失败:", t), show.error("操作失败"); }
     }
     async hasDownOne() {
-        let e = this.getPageInfo();
-        await storageManager.saveCar({
-            carNum: e.carNum,
-            url: e.url,
-            names: e.actress,
-            actionType: g,
-            publishTime: e.publishTime
-        }), this.showStatus(e.carNum).then(), window.refresh(), utils.closePage();
+        try {
+            let e = this.getPageInfo();
+            await storageManager.saveCar({
+                carNum: e.carNum,
+                url: e.url,
+                names: e.actress,
+                actionType: g,
+                publishTime: e.publishTime
+            }), this.showStatus(e.carNum).then(), window.refresh(), utils.closePage();
+        } catch (t) { console.error("标记已下载失败:", t), show.error("操作失败"); }
     }
     async hasWatchOne() {
-        let e = this.getPageInfo();
-        await storageManager.saveCar({
-            carNum: e.carNum,
-            url: e.url,
-            names: e.actress,
-            actionType: p,
-            publishTime: e.publishTime
-        }), this.showStatus(e.carNum).then(), window.refresh(), utils.closePage();
+        try {
+            let e = this.getPageInfo();
+            await storageManager.saveCar({
+                carNum: e.carNum,
+                url: e.url,
+                names: e.actress,
+                actionType: p,
+                publishTime: e.publishTime
+            }), this.showStatus(e.carNum).then(), window.refresh(), utils.closePage();
+        } catch (t) { console.error("标记已观看失败:", t), show.error("操作失败"); }
     }
     searchXunLeiSubtitle(e) {
         let t = loading();
@@ -3593,12 +3599,14 @@ class xe extends X {
         })), $(document).on("click", ".history-deleteBtn, .history-filterBtn, .history-favoriteBtn, .history-hasDownBtn, .history-hasWatchBtn, .history-detailBtn", (e => {
             e.preventDefault(), e.stopPropagation();
             const t = $(e.currentTarget), n = t.closest(".action-btns"), a = n.attr("data-car-num"), i = n.attr("data-href"), s = async e => {
-                await storageManager.saveCar({
-                    carNum: a,
-                    url: i,
-                    names: null,
-                    actionType: e
-                }), window.refresh(), await this.reloadTable();
+                try {
+                    await storageManager.saveCar({
+                        carNum: a,
+                        url: i,
+                        names: null,
+                        actionType: e
+                    }), window.refresh(), await this.reloadTable();
+                } catch (s) { console.error("历史记录操作失败:", s), show.error("操作失败"); }
             };
             t.hasClass("history-filterBtn") ? utils.q(e, `是否屏蔽${a}?`, (() => s(d))) : t.hasClass("history-favoriteBtn") ? s(h).then() : t.hasClass("history-hasDownBtn") ? s(g).then() : t.hasClass("history-hasWatchBtn") ? s(p).then() : t.hasClass("history-deleteBtn") ? this.handleDelete(e, a) : t.hasClass("history-detailBtn") && this.handleClickDetail(e, {
                 carNum: a,
@@ -4762,7 +4770,7 @@ class Ie extends X {
         if (0 === e.length) return;
         const t = "jhs_tag_expand", n = "true" === localStorage.getItem(t), a = $(".actor-tags .content");
         n && a.hasClass("collapse") && e[0].click(), e.on("click", (function() {
-            const e = !a.hasClass("collapse");
+            const e = !$(".actor-tags .content").hasClass("collapse");
             clog.debug("触发"), localStorage.setItem(t, e.toString());
         }));
     }
@@ -4890,12 +4898,14 @@ class Ie extends X {
     async bindClick() {
         let e = this.getSelector();
         $(e.boxSelector).on("click", ".item img", (async e => {
-            if (e.preventDefault(), e.stopPropagation(), $(e.target).closest("div.meta-buttons").length) return;
-            const t = $(e.target).closest(".item"), {carNum: n, aHref: a} = this.findCarNumAndHref(t);
-            if (n.includes("FC2-")) {
-                let e = this.parseMovieId(a);
-                this.getBean("Fc2Plugin").openFc2Dialog(e, n, a);
-            } else utils.openPage(a, n, !0, e), this.$currentImage = null;
+            try {
+                if (e.preventDefault(), e.stopPropagation(), $(e.target).closest("div.meta-buttons").length) return;
+                const t = $(e.target).closest(".item"), {carNum: n, aHref: a} = this.findCarNumAndHref(t);
+                if (n.includes("FC2-")) {
+                    let e = this.parseMovieId(a);
+                    this.getBean("Fc2Plugin").openFc2Dialog(e, n, a), this.$currentImage = null;
+                } else utils.openPage(a, n, !0, e), this.$currentImage = null;
+            } catch (t) { console.error("点击图片处理失败:", t); }
         })), $(e.boxSelector).on("click", ".item video", (async e => {
             const t = e.currentTarget;
             t.paused ? t.play().catch((e => console.error("播放失败:", e))) : t.pause(), e.preventDefault(), 
@@ -4909,20 +4919,22 @@ class Ie extends X {
                 this.getBean("Fc2Plugin").openFc2Dialog(t, n, a);
             }
         })), $(e.boxSelector).on("contextmenu", ".item img, .item video", (async e => {
-            e.preventDefault();
-            const t = $(e.target).closest(".item"), {carNum: n, url: a, publishTime: i} = this.findCarNumAndHref(t);
-            let s = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10"), o = "";
-            s.length && (o = s.text().trim().split(",")[0].replace("(無碼)", "")), utils.q(e, `是否屏蔽番号 ${n}?`, (async () => {
-                setTimeout((async () => {
-                    o || (o = await this.parseActressName(a)), await storageManager.saveCar({
-                        carNum: n,
-                        url: a,
-                        names: o,
-                        actionType: d,
-                        publishTime: i
-                    }), window.refresh(), show.ok("操作成功");
+            try {
+                e.preventDefault();
+                const t = $(e.target).closest(".item"), {carNum: n, url: a, publishTime: i} = this.findCarNumAndHref(t);
+                let s = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10"), o = "";
+                s.length && (o = s.text().trim().split(",")[0].replace("(無碼)", "")), utils.q(e, `是否屏蔽番号 ${n}?`, (async () => {
+                    try {
+                        o || (o = await this.parseActressName(a)), await storageManager.saveCar({
+                            carNum: n,
+                            url: a,
+                            names: o,
+                            actionType: d,
+                            publishTime: i
+                        }), window.refresh(), show.ok("操作成功");
+                    } catch (s) { console.error("屏蔽操作失败:", s), show.error("操作失败"); }
                 }));
-            }));
+            } catch (t) { console.error("右键菜单处理失败:", t); }
         }));
     }
     async parseActressName(e) {
@@ -4942,20 +4954,27 @@ class Ie extends X {
             this.$currentImage = null;
         }));
         let e = await storageManager.getSetting();
-        if (this.filterHotKey = e.filterHotKey, this.favoriteHotKey = e.favoriteHotKey, 
-        this.hasDownHotKey = e.hasDownHotKey, this.hasWatchHotKey = e.hasWatchHotKey, this.enableImageHotKey = e.enableImageHotKey || C, 
-        this.clogHotKey = e.clogHotKey, this.foldCategoryHotKey = e.foldCategoryHotKey, 
-        this.enableImageHotKey === C) return;
+        if (this.filterHotKey = e.filterHotKey, this.favoriteHotKey = e.favoriteHotKey,
+        this.hasDownHotKey = e.hasDownHotKey, this.hasWatchHotKey = e.hasWatchHotKey, this.enableImageHotKey = e.enableImageHotKey || C,
+        this.clogHotKey = e.clogHotKey, this.foldCategoryHotKey = e.foldCategoryHotKey,
+        this.clogHotKey && se.registerHotkey(this.clogHotKey, (e => {
+            clog.toggleExpandCollapsed();
+        })), this.foldCategoryHotKey && se.registerHotkey(this.foldCategoryHotKey, (e => {
+            const t = $("#foldCategoryBtn");
+            t.length && t[0].click();
+        })), this.enableImageHotKey === C) return;
         const t = async (e, t) => {
             setTimeout((async () => {
-                let n = await this.parseActressName(e.url);
-                await storageManager.saveCar({
-                    carNum: e.carNum,
-                    url: e.url,
-                    names: n,
-                    actionType: t,
-                    publishTime: e.publishTime
-                }), window.refresh(), show.ok("操作成功");
+                try {
+                    let n = await this.parseActressName(e.url);
+                    await storageManager.saveCar({
+                        carNum: e.carNum,
+                        url: e.url,
+                        names: n,
+                        actionType: t,
+                        publishTime: e.publishTime
+                    }), window.refresh(), show.ok("操作成功");
+                } catch (t) { console.error("快捷键操作失败:", t), show.error("操作失败"); }
             }));
         }, n = {};
         this.filterHotKey && (n[this.filterHotKey] = e => {
@@ -4966,11 +4985,6 @@ class Ie extends X {
             t(e, g);
         }), this.hasWatchHotKey && (n[this.hasWatchHotKey] = e => {
             t(e, p);
-        }), this.clogHotKey && se.registerHotkey(this.clogHotKey, (e => {
-            clog.toggleExpandCollapsed();
-        })), this.foldCategoryHotKey && se.registerHotkey(this.foldCategoryHotKey, (e => {
-            const t = $("#foldCategoryBtn");
-            t.length && t[0].click();
         }));
         const a = (e, t) => {
             se.registerHotkey(e, (e => {
@@ -6363,23 +6377,28 @@ class Ue extends X {
             }
         })), $(document).on("click", ".filterBtn, .favoriteBtn, .hasDownBtn, .hasWatchBtn", (t => {
             t.preventDefault(), t.stopPropagation();
-            const n = $(t.target).closest(".menu-btn"), a = n.closest(".item"), {carNum: i, url: s, publishTime: o} = e.findCarNumAndHref(a), r = async t => {
-                let n = await e.parseActressName(s);
-                await storageManager.saveCar({
-                    carNum: i,
-                    url: s,
-                    names: n,
-                    actionType: t,
-                    publishTime: o
-                }), window.refresh(), show.ok("操作成功");
-            };
-            n.hasClass("filterBtn") ? utils.q(t, `是否屏蔽${i}?`, (() => r(d))) : n.hasClass("favoriteBtn") ? r(h).then() : n.hasClass("hasDownBtn") ? r(g).then() : n.hasClass("hasWatchBtn") && r(p).then(), 
-            $(".more-tools").stop(!0, !0).removeClass("elastic-in").addClass("elastic-out").hide();
+            try {
+                const n = $(t.target).closest(".menu-btn"), a = n.closest(".item"), {carNum: i, url: s, publishTime: o} = e.findCarNumAndHref(a), r = async t => {
+                    try {
+                        let n = await e.parseActressName(s);
+                        await storageManager.saveCar({
+                            carNum: i,
+                            url: s,
+                            names: n,
+                            actionType: t,
+                            publishTime: o
+                        }), window.refresh(), show.ok("操作成功");
+                    } catch (r) { console.error("保存操作失败:", r), show.error("操作失败"); }
+                };
+                n.hasClass("filterBtn") ? utils.q(t, `是否屏蔽${i}?`, (() => r(d))) : n.hasClass("favoriteBtn") ? r(h).then() : n.hasClass("hasDownBtn") ? r(g).then() : n.hasClass("hasWatchBtn") && r(p).then(),
+                $(".more-tools").stop(!0, !0).removeClass("elastic-in").addClass("elastic-out").hide();
+            } catch (t) { console.error("按钮点击处理失败:", t); }
         }));
-        const t = this.getBean("OtherSitePlugin"), n = await t.getMissAvUrl(), a = await t.getjableUrl(), i = await t.getAvgleUrl(), s = await t.getAv123Url();
-        $(document).on("click", ".site-jable, .site-avgle, .site-miss-av, .site-123-av", (t => {
+        $(document).on("click", ".site-jable, .site-avgle, .site-miss-av, .site-123-av", (async t => {
             t.preventDefault(), t.stopPropagation();
             const o = $(t.currentTarget), r = o.closest(".item"), {carNum: l} = e.findCarNumAndHref(r);
+            const T = this.getBean("OtherSitePlugin");
+            let n = await T.getMissAvUrl(), a = await T.getjableUrl(), i = await T.getAvgleUrl(), s = await T.getAv123Url();
             let c = null;
             o.hasClass("site-jable") ? c = `${a}/search/${l}/` : o.hasClass("site-avgle") ? c = `${i}/vod/search.html?wd=${l}` : o.hasClass("site-miss-av") ? c = `${n}/search/${l}` : o.hasClass("site-123-av") && (c = `${s}/ja/search?keyword=${l}`), 
             t && (t.ctrlKey || t.metaKey) ? GM_openInTab(c, {
@@ -6975,7 +6994,7 @@ class Xe extends X {
             let o = $(".section-meta:not(:contains('影片'))");
             if (o.length && o.text().trim().split(",").forEach((e => {
                 i.push(e.trim());
-            })), !i) return void clog.error("获取演员名称失败");
+            })), !i.length) return void clog.error("获取演员名称失败");
             const r = i[0];
             if (!a) return void clog.error("无法获取演员ID进行收藏操作。");
             const l = ($(".avatar").first().css("background-image") || "").replace(/^url\(["']?|["']?\)$/g, ""), c = {
