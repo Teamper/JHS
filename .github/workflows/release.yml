@@ -19,9 +19,29 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build userscript
+        run: npm run build
+
+      - name: Validate generated artifacts
+        shell: bash
+        run: |
+          git diff --exit-code -- JHS.user.js dist/JHS.user.js
+          cmp -s JHS.user.js dist/JHS.user.js
+
       - name: Validate JS syntax
         shell: bash
-        run: node --check JHS.user.js
+        run: |
+          node --check JHS.user.js
+          node --check dist/JHS.user.js
 
       - name: Validate release metadata
         shell: bash

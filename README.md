@@ -1,6 +1,6 @@
 # JHS
 
-JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `3.8.0`。
+JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `4.0.0-alpha.1`。
 
 ## 安装
 
@@ -9,10 +9,44 @@ JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `3.8.
 
 脚本的 `@updateURL` 指向 `main` 分支的 `JHS.user.js`，`@downloadURL` 指向最新 GitHub Release 附件。
 
+## 开发构建
+
+- 源码入口: `src/main.js`
+- 构建产物: `dist/JHS.user.js`
+- 发布文件: `JHS.user.js`
+
+```bash
+npm ci
+npm run build
+npm run check
+```
+
+`npm run build` 会从 `src/main.js` 构建 `dist/JHS.user.js`，并同步生成根目录 `JHS.user.js`。用户安装入口仍然使用根目录发布文件和 Release 附件，不需要改为安装 `src` 或 `dist`。
+
 ## 版本流
 
 - `main`: 正式发布分支。推送后 GitHub Actions 会读取 `JHS.user.js` 中的 `// @version`，创建对应 `vX.Y.Z` tag，并发布 GitHub Release。
 - `dev`: 预览分支。推送后只上传 `JHS-dev.user.js` artifact，不创建 tag，不创建正式 Release。
+
+## Roadmap
+
+- `v3.8.0`: 数据与性能收口。
+- `v4.0.0-alpha.1`: 建立工程化骨架。
+- `v4.0.0-alpha.2`: 拆分 core 层。
+- `v4.0.0-alpha.3`: 拆分 plugin 层。
+- `v4.0.0-beta.1`: 全站点回归测试。
+- `v4.0.0`: 工程化稳定版。
+- `v4.1.0`: 新作品中心 + 磁力评分。
+- `v4.2.0`: WebDAV 差异同步 + 数据恢复。
+- `v4.3.0`: 插件开关中心 + 性能诊断面板。
+
+## 4.0.0-alpha.1
+
+- 新增 `package.json`、`package-lock.json` 和 `scripts/build.mjs`，引入 `esbuild` 构建链路。
+- 新增 `src/main.js` 作为源码入口，暂不拆分任何业务逻辑。
+- 新增 `dist/JHS.user.js` 构建产物，并由构建脚本同步生成根目录 `JHS.user.js`。
+- CI 增加 `npm ci`、`npm run build`、构建产物一致性校验和 `dist` 语法检查。
+- 保持 `@updateURL` / `@downloadURL` 指向不变，用户安装方式不变。
 
 ## 3.8.0
 

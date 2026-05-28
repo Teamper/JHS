@@ -1,0 +1,16 @@
+{
+  "name": "jhs-ya",
+  "version": "4.0.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check": "npm run build && node --check scripts/build.mjs && node --check src/main.js && node --check JHS.user.js && node --check dist/JHS.user.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0"
+  }
+}
