@@ -114,12 +114,12 @@ class Ie extends X {
         }));
     }
     applyVisibility() {
-        const e = this.activeQuickFilter || "waitCheck", t = this.getSelector().itemSelector;
+        const e = this.activeQuickFilter || "waitCheck", t = this.getSelector().itemSelector, n = ["filter", "keywordFilter", "actorFilter"];
         $(t).each((function() {
-            const n = $(this), a = n.attr("data-hide") === "yes", i = n.attr("data-jhs-status") || "waitCheck";
-            if (e === "all") { i === "filter" ? n.hide() : n.show(); return; }
-            if (i === e) { n.show(); return; }
-            a || (i !== e) ? n.hide() : n.show();
+            const t = $(this), a = t.attr("data-hide") === "yes", i = t.attr("data-jhs-status") || "waitCheck";
+            if (e === "all") { (n.includes(i) || a) ? t.hide() : t.show(); return; }
+            if (i === e) { a ? t.hide() : t.show(); return; }
+            a || (i !== e) ? t.hide() : t.show();
         }));
     }
     applyQuickFilter(e) {
@@ -193,7 +193,7 @@ class Ie extends X {
         return null;
     }
     getStatusKey(e) {
-        return e === Te.IS_FILTERED ? "filter" : e === Te.IS_FAVORITE ? "favorite" : e === Te.IS_HAS_DOWN ? "hasDown" : e === Te.IS_HAS_WATCH ? "hasWatch" : "waitCheck";
+        return e === Te.IS_FILTERED ? "filter" : e === Te.IS_FAVORITE ? "favorite" : e === Te.IS_HAS_DOWN ? "hasDown" : e === Te.IS_HAS_WATCH ? "hasWatch" : e === Te.IS_KEYWORD_FILTER ? "keywordFilter" : e === Te.IS_ACTOR_FILTER ? "actorFilter" : e === Te.IS_ACTRESS_FILTER ? "actorFilter" : "waitCheck";
     }
     async translateListItems(e) {
         for (let t = 0; t < e.length; t++) t > 0 && t % 8 == 0 && await this.yieldListFrame(),
