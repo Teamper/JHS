@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.0.2] - 2026-05-28
+
+### Changed
+- 扩大回归门禁覆盖范围：新增快速筛选、标记状态与隐藏、设置页、演员信息解析 4 个功能范围。
+- 补充关键函数签名断言（applyVisibility、filterMovieList、getStatusKey、doFilter）。
+- 更新 Roadmap，明确后续版本规划。
+
 ## [4.0.1] - 2026-05-28
 
 ### Fixed
@@ -49,7 +56,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.1...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.2...HEAD
+[4.0.2]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/Yaoser-Archive/JHS/compare/v3.8.0...v4.0.0
 [3.8.0]: https://github.com/Yaoser-Archive/JHS/compare/v3.7.0...v3.8.0

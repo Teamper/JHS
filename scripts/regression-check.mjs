@@ -114,6 +114,13 @@ assertIncludes(eventBus, 'type: "clean_cacheSettingObj"', "event bus");
 assert(!rootOutput.includes("new BroadcastChannel(channel-refresh)"), "generated output contains unquoted channel-refresh");
 assert(!rootOutput.includes("type: refresh"), "generated output contains unquoted refresh message type");
 
+// List page function signature assertions
+const listPageSource = await read("src/plugins/status/list-page.js");
+assertIncludes(listPageSource, "applyVisibility()", "list page function signature");
+assertIncludes(listPageSource, "async filterMovieList(", "list page function signature");
+assertIncludes(listPageSource, "getStatusKey(", "list page function signature");
+assertIncludes(listPageSource, "async doFilter()", "list page function signature");
+
 const expectedPlugins = [
   ["status/detail-page.js", "Q", "DetailPagePlugin"],
   ["image-viewer/preview-video.js", "ae", "PreviewVideoPlugin"],
@@ -208,7 +215,11 @@ const regressionMatrix = [
   ["快捷键", [["status/list-page.js", "bindListPageHotKey"], ["external-search/javtrailers.js", "registerHotkey"], ["backup/setting.js", "hotkey-panel"]]],
   ["图片查看器", [["core/logger.js", "showImageViewer"], ["core/logger.js", "new Viewer"], ["image-viewer/screenshot.js", "ScreenShotPlugin"]]],
   ["第三方请求失败场景", [["core/storage.js", "cachedRequest"], ["core/http.js", "onerror"], ["external-search/other-site.js", "detectOtherSites"]]],
-  ["多标签页同步", [["core/event-bus.js", "BroadcastChannel"], ["status/list-page.js", "channel-refresh"], ["status/list-page.js", "clean_cacheSettingObj"]]]
+  ["多标签页同步", [["core/event-bus.js", "BroadcastChannel"], ["status/list-page.js", "channel-refresh"], ["status/list-page.js", "clean_cacheSettingObj"]]],
+  ["快速筛选", [["status/list-page.js", "createQuickFilter"], ["status/list-page.js", "applyQuickFilter"], ["status/list-page.js", "activeQuickFilter"]]],
+  ["标记状态与隐藏", [["status/list-page.js", "data-jhs-status"], ["status/list-page.js", "data-hide"], ["status/list-page.js", "getStatusKey"]]],
+  ["设置页", [["backup/setting.js", "SettingPlugin"], ["backup/setting.js", "hotkey-panel"], ["backup/setting.js", "importData"]]],
+  ["演员信息解析", [["core/plugin-manager.js", "getActressPageInfo"], ["status/list-page.js", "parseActressName"]]]
 ];
 
 for (const [scope, checks] of regressionMatrix) {
