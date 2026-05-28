@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS-YA
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      3.7.7
+// @version      3.7.8
 // @author       yaoser
 // @description  Jav-鉴黄师个人维护版：收藏、屏蔽、标记已下载、演员黑名单、收藏演员同步、新作品检测、热播/Top250/Fc2ppv/评论增强、相关清单、WebDAV数据备份、以图识图、字幕搜索；支持 JavDB / JavBus。
 // @license      MIT
@@ -6394,16 +6394,17 @@ class Ue extends X {
                 $(".more-tools").stop(!0, !0).removeClass("elastic-in").addClass("elastic-out").hide();
             } catch (t) { console.error("按钮点击处理失败:", t); }
         }));
-        $(document).on("click", ".site-jable, .site-avgle, .site-miss-av, .site-123-av", (async t => {
-            t.preventDefault(), t.stopPropagation();
-            const o = $(t.currentTarget), r = o.closest(".item"), {carNum: l} = e.findCarNumAndHref(r);
-            const T = this.getBean("OtherSitePlugin");
-            let n = await T.getMissAvUrl(), a = await T.getjableUrl(), i = await T.getAvgleUrl(), s = await T.getAv123Url();
-            let c = null;
-            o.hasClass("site-jable") ? c = `${a}/search/${l}/` : o.hasClass("site-avgle") ? c = `${i}/vod/search.html?wd=${l}` : o.hasClass("site-miss-av") ? c = `${n}/search/${l}` : o.hasClass("site-123-av") && (c = `${s}/ja/search?keyword=${l}`), 
-            t && (t.ctrlKey || t.metaKey) ? GM_openInTab(c, {
-                insert: 0
-            }) : window.open(c);
+        const t = this.getBean("OtherSitePlugin"), n = await t.getMissAvUrl(), a = await t.getjableUrl(), i = await t.getAvgleUrl(), s = await t.getAv123Url();
+        $(document).on("click", ".site-jable, .site-avgle, .site-miss-av, .site-123-av", (t => {
+            try {
+                t.preventDefault(), t.stopPropagation();
+                const o = $(t.currentTarget), r = o.closest(".item"), {carNum: l} = e.findCarNumAndHref(r);
+                let c = null;
+                o.hasClass("site-jable") ? c = `${a}/search/${l}/` : o.hasClass("site-avgle") ? c = `${i}/vod/search.html?wd=${l}` : o.hasClass("site-miss-av") ? c = `${n}/search/${l}` : o.hasClass("site-123-av") && (c = `${s}/ja/search?keyword=${l}`),
+                t && (t.ctrlKey || t.metaKey) ? GM_openInTab(c, {
+                    insert: 0
+                }) : window.open(c);
+            } catch (t) { console.error("站点按钮处理失败:", t); }
         })), $(document).on("click", ".titleSvg, .carNumSvg, .downSvg", (t => {
             t.preventDefault(), t.stopPropagation();
             const n = $(t.currentTarget).closest(".item"), {carNum: a, title: i} = e.findCarNumAndHref(n), s = n.find(l ? ".photo-frame img" : ".cover img");
