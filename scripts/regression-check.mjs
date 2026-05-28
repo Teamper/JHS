@@ -45,6 +45,8 @@ const distOutput = await read("dist/JHS.user.js");
 const packageJson = JSON.parse(await read("package.json"));
 const readme = await read("README.md");
 const workflow = await read(".github/workflows/release.yml");
+const buildScript = await read("scripts/build.mjs");
+const storage = await read("src/core/storage.js");
 const eventBus = await read("src/core/event-bus.js");
 const registry = await read("src/plugins/registry.js");
 
@@ -72,6 +74,41 @@ assert(
 
 assertIncludes(workflow, "npm run check", "release workflow");
 assertIncludes(workflow, "当前发布版为 \\`$version\\`", "release workflow README gate");
+assertIncludes(workflow, "- main", "release workflow main branch");
+assertIncludes(workflow, "- dev", "release workflow dev branch");
+assertIncludes(workflow, "JHS-dev.user.js", "release workflow dev artifact");
+assertIncludes(workflow, "actions/upload-artifact@v4", "release workflow dev artifact upload");
+assertIncludes(workflow, "gh release create", "release workflow main release");
+assertIncludes(workflow, "gh release upload", "release workflow main release update");
+assertIncludes(workflow, "JHS.user.js --clobber", "release workflow release artifact overwrite");
+
+const stableReleaseChecks = [
+  ["storage database identity", storage, 'name: "JAV-JHS"'],
+  ["storage database identity", storage, 'storeName: "appData"'],
+  ["storage key identity", storage, 'i(this, "car_list_key", "car_list")'],
+  ["storage key identity", storage, 'i(this, "favorite_actresses_key", "favorite_actresses")'],
+  ["storage key identity", storage, 'i(this, "blacklist_key", "blacklist")'],
+  ["storage key identity", storage, 'i(this, "blacklist_car_list_key", "blacklist_car_list")'],
+  ["third-party cache identity", storage, 'i(this, "third_party_cache_key", "third_party_ttl_cache")'],
+  ["import format compatibility", storage, "async importData(e)"],
+  ["import format compatibility", storage, "for (const n in e)"],
+  ["import format compatibility", storage, "this._setItemAndInvalidate(n, a)"],
+  ["export format compatibility", storage, "async exportData()"],
+  ["export format compatibility", storage, "this.forage.iterate"],
+  ["build source chain", buildScript, 'const srcPath = join(repoRoot, "src", "main.js")'],
+  ["build source chain", buildScript, "const corePaths = ["],
+  ["build source chain", buildScript, 'join(repoRoot, "src", "core", file)'],
+  ["build source chain", buildScript, "const pluginPaths = ["],
+  ["build source chain", buildScript, 'join(repoRoot, "src", "plugins", file)'],
+  ["build output chain", buildScript, 'const distPath = join(distDir, "JHS.user.js")'],
+  ["build output chain", buildScript, 'const rootPath = join(repoRoot, "JHS.user.js")'],
+  ["build output chain", buildScript, 'writeFile(distPath, output, "utf8")'],
+  ["build output chain", buildScript, 'writeFile(rootPath, output, "utf8")']
+];
+
+for (const [label, source, token] of stableReleaseChecks) {
+  assertIncludes(source, token, label);
+}
 
 assertIncludes(eventBus, 'new BroadcastChannel("channel-refresh")', "event bus");
 assertIncludes(eventBus, 'type: "refresh"', "event bus");
@@ -151,7 +188,7 @@ const sourceByFile = new Map();
 for (const [file] of expectedPlugins) {
   sourceByFile.set(file, await read(`src/plugins/${file}`));
 }
-sourceByFile.set("core/storage.js", await read("src/core/storage.js"));
+sourceByFile.set("core/storage.js", storage);
 sourceByFile.set("core/logger.js", await read("src/core/logger.js"));
 sourceByFile.set("core/javdb-api.js", await read("src/core/javdb-api.js"));
 sourceByFile.set("core/http.js", await read("src/core/http.js"));
@@ -185,4 +222,6 @@ for (const [scope, checks] of regressionMatrix) {
   }
 }
 
-console.log(`Regression checks passed for ${version}: ${expectedPlugins.length} plugins, ${regressionMatrix.length} scopes`);
+console.log(
+  `Regression checks passed for ${version}: ${expectedPlugins.length} plugins, ${regressionMatrix.length} scopes, ${stableReleaseChecks.length} stable release checks`
+);
