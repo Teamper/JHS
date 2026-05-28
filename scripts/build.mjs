@@ -6,12 +6,24 @@ import * as esbuild from "esbuild";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const srcPath = join(repoRoot, "src", "main.js");
 const packagePath = join(repoRoot, "package.json");
+const corePaths = [
+  "constants.js",
+  "storage-index.js",
+  "storage.js",
+  "javdb-api.js",
+  "utils.js",
+  "http.js",
+  "event-bus.js",
+  "logger.js",
+  "plugin-manager.js"
+].map((file) => join(repoRoot, "src", "core", file));
 const distDir = join(repoRoot, "dist");
 const distPath = join(distDir, "JHS.user.js");
 const rootPath = join(repoRoot, "JHS.user.js");
 
 const source = await readFile(srcPath, "utf8");
 const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
+const coreSources = await Promise.all(corePaths.map((file) => readFile(file, "utf8")));
 const metadataMatch = source.match(/^\/\/ ==UserScript==[\s\S]*?^\/\/ ==\/UserScript==\r?\n?/m);
 
 if (!metadataMatch) {
@@ -19,7 +31,8 @@ if (!metadataMatch) {
 }
 
 const metadata = metadataMatch[0].trimEnd();
-const entry = source.slice(metadataMatch[0].length);
+const mainEntry = source.slice(metadataMatch[0].length).trimStart();
+const entry = [...coreSources.map((item) => item.trimEnd()), mainEntry.trimEnd()].join("\n\n") + "\n";
 const userscriptVersion = metadata.match(/^\/\/ @version\s+(.+)$/m)?.[1];
 
 if (packageJson.version !== userscriptVersion) {
@@ -45,7 +58,7 @@ await esbuild.build({
   logLevel: "silent"
 });
 
-const output = source.trimEnd() + "\n";
+const output = `${metadata}\n\n${entry}`;
 
 await mkdir(distDir, { recursive: true });
 await writeFile(distPath, output, "utf8");
