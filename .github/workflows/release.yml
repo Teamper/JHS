@@ -23,6 +23,13 @@ jobs:
         shell: bash
         run: node --check JHS.user.js
 
+      - name: Validate release metadata
+        shell: bash
+        run: |
+          grep -q '^// @version' JHS.user.js
+          grep -q '^// @downloadURL' JHS.user.js
+          grep -q '^// @updateURL' JHS.user.js
+
       - name: Read userscript version
         id: version
         shell: bash
@@ -34,6 +41,12 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Validate README version
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          grep -q "当前发布版为 \`$version\`" README.md
 
       - name: Prepare dev artifact
         if: github.ref_name == 'dev'
@@ -74,4 +87,3 @@ jobs:
               --generate-notes \
               --latest
           fi
-
