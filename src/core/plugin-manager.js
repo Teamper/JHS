@@ -7,7 +7,7 @@ class Y {
         const t = new e;
         t.pluginManager = this;
         const n = t.getName();
-        if (this.plugins.has(n)) throw new Error(`插件"${name}"已注册`);
+        if (this.plugins.has(n)) throw new Error(`插件"${n}"已注册`);
         this.plugins.set(n, t);
     }
     getBean(e) {
@@ -35,7 +35,7 @@ class Y {
                 };
             }
         })))).filter((e => "rejected" === e.status));
-        e.length && console.error("以下插件的 CSS 加载失败：", e.map((e => e.value.name)));
+        e.length && console.error("以下插件的 CSS 加载失败：", e.map((e => e.reason.name)));
     }
     async processPlugins() {
         const e = (await Promise.allSettled(Array.from(this.plugins).map((async ([e, t]) => {
@@ -52,7 +52,7 @@ class Y {
                 };
             }
         })))).filter((e => "rejected" === e.status));
-        e.length && console.error("以下插件执行失败：", e.map((e => e.value.name)));
+        e.length && console.error("以下插件执行失败：", e.map((e => e.reason.name)));
     }
 }
 

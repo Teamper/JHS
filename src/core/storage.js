@@ -378,17 +378,21 @@ let z = class n {
     }
     async saveSettingItem(e, t) {
         if (!e) return void show.error("key 不能为空");
-        let n = await this.getSetting();
-        n[e] = t, await this.saveSetting(n), window.clean_cacheSettingObj();
+        await navigator.locks.request("jhs_setting_lock", async () => {
+            let n = await this.getSetting();
+            n[e] = t, await this.saveSetting(n);
+        }), window.clean_cacheSettingObj();
     }
     async importData(e) {
-        await this.forage.clear(), this._invalidateCache();
         const t = [];
         for (const n in e) {
-            const a = e[n], i = this._setItemAndInvalidate(n, a);
-            t.push(i);
+            t.push(this._setItemAndInvalidate(n, e[n]));
         }
         await Promise.all(t);
+        await this.forage.iterate(((t, n) => {
+            n in e || this.forage.removeItem(n);
+        }));
+        this._invalidateCache();
     }
     async exportData() {
         const e = {};

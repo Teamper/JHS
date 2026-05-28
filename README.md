@@ -18,7 +18,7 @@ npm ci
 npm run check
 ```
 
-`npm run check` 执行源码语法检查、回归门禁（39 插件、16 功能范围）和产物语法校验。
+`npm run check` 执行源码语法检查、回归门禁（39 插件、20 功能范围）和产物语法校验。
 
 推送后 GitHub Actions 自动构建 `JHS.user.js` 并提交回仓库。
 
