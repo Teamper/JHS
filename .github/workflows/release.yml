@@ -53,11 +53,21 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version" >> "$GITHUB_OUTPUT"
 
-      - name: Validate README version
+      - name: Extract changelog for this version
+        id: changelog
+        if: github.ref_name == 'main'
         shell: bash
         run: |
           version="${{ steps.version.outputs.version }}"
-          grep -q "当前发布版为 \`$version\`" README.md
+          body=$(awk -v ver="$version" '
+            /^## \[/ { if (found) exit; if ($0 ~ "\\[" ver "\\]") found=1; next }
+            found { print }
+          ' CHANGELOG.md)
+          if [[ -z "$body" ]]; then
+            body="Release v$version"
+          fi
+          # Write to file to preserve multiline content
+          echo "$body" > /tmp/release-body.md
 
       - name: Commit built artifacts
         shell: bash
@@ -106,6 +116,6 @@ jobs:
           else
             gh release create "$tag" JHS.user.js \
               --title "JHS ${{ steps.version.outputs.version }}" \
-              --generate-notes \
+              --notes-file /tmp/release-body.md \
               --latest
           fi

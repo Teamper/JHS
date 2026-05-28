@@ -43,7 +43,6 @@ const sourceMain = await read("src/main.js");
 const rootOutput = await read("JHS.user.js");
 const distOutput = await read("dist/JHS.user.js");
 const packageJson = JSON.parse(await read("package.json"));
-const readme = await read("README.md");
 const workflow = await read(".github/workflows/release.yml");
 const buildScript = await read("scripts/build.mjs");
 const storage = await read("src/core/storage.js");
@@ -55,7 +54,6 @@ assert(version, "Cannot read userscript version from src/main.js");
 assert(packageJson.version === version, "package.json version does not match userscript version");
 assert(extractVersion(rootOutput) === version, "root JHS.user.js version does not match src/main.js");
 assert(extractVersion(distOutput) === version, "dist/JHS.user.js version does not match src/main.js");
-assert(readme.includes(`当前发布版为 \`${version}\``), "README current version does not match userscript version");
 assert(hash(rootOutput) === hash(distOutput), "dist/JHS.user.js and root JHS.user.js are not byte-identical");
 
 assert(extractMetadata(rootOutput, "name") === "JHS-YA", "userscript @name changed");
@@ -73,7 +71,6 @@ assert(
 );
 
 assertIncludes(workflow, "npm run check", "release workflow");
-assertIncludes(workflow, "当前发布版为 \\`$version\\`", "release workflow README gate");
 assertIncludes(workflow, "- main", "release workflow main branch");
 assertIncludes(workflow, "- dev", "release workflow dev branch");
 assertIncludes(workflow, "JHS-dev.user.js", "release workflow dev artifact");
