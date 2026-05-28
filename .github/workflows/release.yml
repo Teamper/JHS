@@ -19,6 +19,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Validate JS syntax
+        shell: bash
+        run: node --check JHS.user.js
+
       - name: Read userscript version
         id: version
         shell: bash
