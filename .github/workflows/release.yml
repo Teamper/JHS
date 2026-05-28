@@ -31,16 +31,8 @@ jobs:
       - name: Build userscript
         run: npm run build
 
-      - name: Validate generated artifacts
-        shell: bash
-        run: |
-          git diff --exit-code -- JHS.user.js dist/JHS.user.js
-          cmp -s JHS.user.js dist/JHS.user.js
-
       - name: Validate JS syntax
-        shell: bash
-        run: |
-          npm run check
+        run: npm run check
 
       - name: Validate release metadata
         shell: bash
@@ -66,6 +58,17 @@ jobs:
         run: |
           version="${{ steps.version.outputs.version }}"
           grep -q "当前发布版为 \`$version\`" README.md
+
+      - name: Commit built artifacts
+        shell: bash
+        run: |
+          if ! git diff --quiet -- JHS.user.js dist/JHS.user.js; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add JHS.user.js dist/JHS.user.js
+            git commit -m "Build: update JHS.user.js [skip ci]"
+            git push
+          fi
 
       - name: Prepare dev artifact
         if: github.ref_name == 'dev'

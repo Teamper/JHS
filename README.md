@@ -4,8 +4,8 @@ JHS 是面向 JavDB / JavBus 等站点的油猴脚本，当前发布版为 `4.0.
 
 ## 安装
 
-- 正式版安装地址: <https://github.com/Yaoser-x/JHS/releases/latest/download/JHS.user.js>
-- 源码地址: <https://github.com/Yaoser-x/JHS>
+- 正式版安装地址: <https://github.com/Yaoser-Archive/JHS/releases/latest/download/JHS.user.js>
+- 源码地址: <https://github.com/Yaoser-Archive/JHS>
 
 脚本的 `@updateURL` 指向 `main` 分支的 `JHS.user.js`，`@downloadURL` 指向最新 GitHub Release 附件。
 
