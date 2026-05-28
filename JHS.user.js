@@ -4985,7 +4985,7 @@ class Ie extends X {
             t(e, g);
         }), this.hasWatchHotKey && (n[this.hasWatchHotKey] = e => {
             t(e, p);
-        }));
+        });
         const a = (e, t) => {
             se.registerHotkey(e, (e => {
                 const n = document.activeElement;
