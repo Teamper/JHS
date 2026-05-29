@@ -243,6 +243,7 @@ class Ae extends X {
             "auto-restore": "恢复前自动"
         };
         if (0 === e.length) return void $("#snapshot-list").html('<div style="text-align:center;color:#999;padding:30px;">暂无快照，点击上方按钮创建</div>');
+        $("#snapshot-list").find(".tabulator").length && $("#snapshot-list").empty();
         const n = new Tabulator("#snapshot-list", {
             layout: "fitColumns",
             placeholder: "暂无数据",
@@ -259,7 +260,7 @@ class Ae extends X {
                         return a((() => {
                             const t = e.getElement().querySelector(".snap-restore"), a = e.getElement().querySelector(".snap-download"), s = e.getElement().querySelector(".snap-delete");
                             t && t.addEventListener("click", (async e => {
-                                utils.q(e, `恢复到快照「${i.name}」? 当前数据会自动备份。`, (async () => {
+                                utils.q(e, `恢复到快照「${escapeHtml(i.name)}」? 当前数据会自动备份。`, (async () => {
                                     let e = loading();
                                     try {
                                         await storageManager.restoreSnapshot(i.id), show.ok("恢复成功, 页面将刷新"), setTimeout(() => location.reload(), 1e3);
@@ -272,11 +273,13 @@ class Ae extends X {
                                 try {
                                     const e = await storageManager.getSnapshot(i.id);
                                     if (!e) throw new Error("快照不存在");
-                                    utils.download(JSON.stringify(e.data), `snapshot_${i.name}.json`), show.ok("下载成功");
+                                    utils.download(JSON.stringify(e.data), `snapshot_${escapeHtml(i.name)}.json`), show.ok("下载成功");
                                 } catch (n) { show.error("下载失败: " + n.message); } finally { t.close(); }
                             })), s && s.addEventListener("click", (async e => {
-                                utils.q(e, `删除快照「${i.name}」?`, (async () => {
-                                    await storageManager.deleteSnapshot(i.id), show.ok("已删除"), this.renderSnapshotPanel();
+                                utils.q(e, `删除快照「${escapeHtml(i.name)}」?`, (async () => {
+                                    try {
+                                        await storageManager.deleteSnapshot(i.id), show.ok("已删除"), this.renderSnapshotPanel();
+                                    } catch (t) { console.error(t), show.error("删除失败: " + t.message); }
                                 }));
                             }));
                         })), '<a class="a-success snap-restore">恢复</a> <a class="a-primary snap-download">下载</a> <a class="a-danger snap-delete">删除</a>';
@@ -305,7 +308,7 @@ class Ae extends X {
             s += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
             s += '<thead><tr style="background:#f5f5f5;"><th style="padding:8px;text-align:left;">数据源</th><th style="padding:8px;">状态</th><th style="padding:8px;">当前</th><th style="padding:8px;">导入</th><th style="padding:8px;">新增</th><th style="padding:8px;">删除</th><th style="padding:8px;">修改</th></tr></thead><tbody>';
             const o = { added: "🆕 新增", removed: "❌ 缺失", modified: "📝 变更", unchanged: "✅ 无变化" };
-            for (const r of i) s += `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px 8px;">${r.store}</td><td style="padding:6px 8px;">${o[r.status]}</td><td style="padding:6px 8px;text-align:center;">${r.oldCount}</td><td style="padding:6px 8px;text-align:center;">${r.newCount}</td><td style="padding:6px 8px;text-align:center;color:#7bc73b;">${r.added || "-"}</td><td style="padding:6px 8px;text-align:center;color:#de3333;">${r.removed || "-"}</td><td style="padding:6px 8px;text-align:center;color:#f59e0b;">${r.modified || "-"}</td></tr>`;
+            for (const r of i) s += `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px 8px;">${escapeHtml(r.store)}</td><td style="padding:6px 8px;">${o[r.status] || r.status}</td><td style="padding:6px 8px;text-align:center;">${r.oldCount}</td><td style="padding:6px 8px;text-align:center;">${r.newCount}</td><td style="padding:6px 8px;text-align:center;color:#7bc73b;">${r.added || "-"}</td><td style="padding:6px 8px;text-align:center;color:#de3333;">${r.removed || "-"}</td><td style="padding:6px 8px;text-align:center;color:#f59e0b;">${r.modified || "-"}</td></tr>`;
             s += '</tbody></table></div>';
         } else {
             s += '<div style="text-align:center;color:#999;padding:20px;">数据完全一致，无需导入</div>';
@@ -324,7 +327,7 @@ class Ae extends X {
                 let o = loading();
                 try {
                     await storageManager.createSnapshot("导入前自动备份", "auto-import"),
-                    n ? (await storageManager.importData(n), show.ok("导入成功!"), location.reload()) : t && (await storageManager.importData(t), show.ok("导入成功!"), location.reload());
+                    n ? (await storageManager.importData(n), show.ok("导入成功!"), void setTimeout(() => location.reload(), 1e3)) : t && (await storageManager.importData(t), show.ok("导入成功!"), void setTimeout(() => location.reload(), 1e3));
                 } catch (r) {
                     console.error(r), show.error("导入失败: " + r.message);
                 } finally { o.close(); }
@@ -738,13 +741,18 @@ class Ae extends X {
     async importData() {
         try {
             const input = document.createElement("input");
-            input.type = "file", input.accept = ".json", input.onchange = async e => {
+            input.type = "file", input.accept = ".json";
+            const cleanup = () => { try { document.body.removeChild(input); } catch (e) {} };
+            input.onchange = async e => {
                 const t = e.target.files[0];
-                if (!t) return void document.body.removeChild(input);
+                if (!t) return void cleanup();
                 const n = new FileReader;
                 n.onload = async e => {
+                    cleanup();
                     try {
-                        const t = e.target.result.toString(), n = JSON.parse(t), a = loading();
+                        const t = e.target.result.toString(), n = JSON.parse(t);
+                        if (!n || "object" != typeof n || Array.isArray(n)) throw new Error("文件内容不是有效的数据对象");
+                        const a = loading();
                         try {
                             const e = await storageManager.exportData(), t = await storageManager.diffData(e, n);
                             a.close(), this.showDiffPreview(t, n, null);
@@ -752,12 +760,13 @@ class Ae extends X {
                             a.close(), console.error(i), show.error("差异分析失败: " + i.message);
                         }
                     } catch (t) {
-                        console.error(t), show.error("导入失败：文件内容不是有效的JSON格式 " + t), document.body.removeChild(input);
+                        console.error(t), show.error("导入失败：文件内容不是有效的JSON格式 " + t.message);
                     }
                 }, n.onerror = () => {
-                    show.error("读取文件时出错"), document.body.removeChild(input);
+                    cleanup(), show.error("读取文件时出错");
                 }, n.readAsText(t);
             }, document.body.appendChild(input), input.click();
+            setTimeout(cleanup, 3e5);
         } catch (e) {
             console.error(e), show.error("导入数据时出错: " + e.message);
         }
