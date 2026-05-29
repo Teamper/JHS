@@ -165,7 +165,7 @@ class Ae extends X {
             area: utils.getResponsiveArea([ "55%", "90%" ]),
             scrollbar: !1,
             success: (e, n) => {
-                $(e).find(".layui-layer-content").css("position", "relative"), this.injectHealthPanel(), this.loadForm(),
+                $(e).find(".layui-layer-content").css("position", "relative"), this.injectHealthPanel(), this.injectPluginMgmtPanel(), this.loadForm(),
                 this.bindClick(), utils.setupEscClose(n), t && t();
             },
             end: () => {
@@ -178,6 +178,137 @@ class Ae extends X {
         e.length && !e.find('[data-panel="health-panel"]').length && e.append('<div class="side-menu-item" data-panel="health-panel">🩺 数据体检</div>');
         const t = $(".content-panel").parent();
         t.length && !$("#health-panel").length && t.append('\n            <div id="health-panel" class="content-panel" style="display:none;">\n                <div style="display:flex; gap:8px; margin-bottom:12px;">\n                    <a id="runHealthCheckBtn" class="menu-btn" style="background-color:#448cc2"><span>重新体检</span></a>\n                    <a id="repairHealthBtn" class="menu-btn" style="background-color:#64bb69"><span>备份并修复</span></a>\n                </div>\n                <div id="health-data-display" style="background:#f8f9fa; border:1px solid #ddd; border-radius:5px; padding:12px; min-height:180px;">点击重新体检查看结果</div>\n            </div>\n        ');
+    }
+    injectPluginMgmtPanel() {
+        const e = $(".side-menu-item").parent();
+        e.length && !e.find('[data-panel="plugin-mgmt-panel"]').length && e.append('<div class="side-menu-item" data-panel="plugin-mgmt-panel">🔧 插件管理</div>');
+        const t = $(".content-panel").parent();
+        if (!t.length || $("#plugin-mgmt-panel").length) return;
+        const n = {
+            status: { label: "📋 状态管理", plugins: ["DetailPagePlugin","ListPagePlugin","NavBarPlugin","BusNavBarPlugin","BusDetailPagePlugin","DetailPageButtonPlugin","ListPageButtonPlugin","HighlightMagnetPlugin","FoldCategoryPlugin","AutoPagePlugin","HistoryPlugin","WantAndWatchedVideosPlugin"] },
+            blacklist: { label: "🚫 屏蔽过滤", plugins: ["BlacklistPlugin","FilterTitleKeywordPlugin"] },
+            favorite: { label: "⭐ 收藏", plugins: ["FavoriteActressesPlugin"] },
+            "new-video": { label: "🆕 新作品", plugins: ["NewVideoPlugin","TaskPlugin"] },
+            "external-search": { label: "🌍 外部搜索", plugins: ["OtherSitePlugin","Fc2Plugin","Fc2By123AvPlugin","HitShowPlugin","TOP250Plugin","ReviewPlugin","RelatedPlugin","MagnetHubPlugin","JavTrailersPlugin"] },
+            "image-viewer": { label: "🖼️ 图片预览", plugins: ["CoverButtonPlugin","PreviewVideoPlugin","BusPreviewVideoPlugin","ScreenShotPlugin","BusImgPlugin"] },
+            avatar: { label: "👤 演员信息", plugins: ["ActressInfoPlugin","SearchByImagePlugin"] },
+            translate: { label: "🆎 翻译", plugins: ["TranslatePlugin"] },
+            subtitle: { label: "📝 字幕", plugins: ["SubTitleCatPlugin"] },
+            backup: { label: "💾 备份设置", plugins: ["SettingPlugin","LocalPlugin"] },
+            "one-two-three": { label: "☁️ 云盘", plugins: ["OneTwoThreeOfflinePlugin"] },
+            stats: { label: "📊 统计", plugins: ["StatsPlugin"] }
+        };
+        const a = ["SettingPlugin","StatsPlugin"];
+        let i = '<div id="plugin-mgmt-panel" class="content-panel" style="display:none;">';
+        i += '<div style="display:flex;gap:8px;margin-bottom:15px;flex-wrap:wrap;">';
+        i += '<div style="flex:1;min-width:120px;background:#f0f7ff;border-radius:8px;padding:10px;text-align:center"><div id="pm-total" style="font-size:20px;font-weight:bold;color:#25b1dc">0</div><div style="font-size:12px;color:#888">总插件数</div></div>';
+        i += '<div style="flex:1;min-width:120px;background:#f0fff4;border-radius:8px;padding:10px;text-align:center"><div id="pm-enabled" style="font-size:20px;font-weight:bold;color:#7bc73b">0</div><div style="font-size:12px;color:#888">已启用</div></div>';
+        i += '<div style="flex:1;min-width:120px;background:#fff5f5;border-radius:8px;padding:10px;text-align:center"><div id="pm-disabled" style="font-size:20px;font-weight:bold;color:#de3333">0</div><div style="font-size:12px;color:#888">已禁用</div></div>';
+        i += '</div>';
+        i += '<p style="color:#666;font-size:0.85em;margin-bottom:10px;">禁用插件后需刷新页面生效。核心插件不可禁用。</p>';
+        i += '<div id="plugin-mgmt-list"></div>';
+        i += '<hr style="border:0;height:1px;margin:20px 0;background-image:linear-gradient(to right,rgba(0,0,0,0),rgba(159,137,137,0.75),rgba(0,0,0,0));"/>';
+        i += '<h3 style="font-size:15px;font-weight:bold;margin-bottom:10px;">⏱️ 插件执行耗时</h3>';
+        i += '<p style="color:#666;font-size:0.85em;margin-bottom:8px;">页面加载时各插件 handle() 的执行时间。</p>';
+        i += '<div id="plugin-timing-table"></div>';
+        i += '<hr style="border:0;height:1px;margin:20px 0;background-image:linear-gradient(to right,rgba(0,0,0,0),rgba(159,137,137,0.75),rgba(0,0,0,0));"/>';
+        i += '<h3 style="font-size:15px;font-weight:bold;margin-bottom:10px;">🪵 错误日志</h3>';
+        i += '<div style="display:flex;gap:8px;margin-bottom:8px;"><a id="pm-clear-log" class="menu-btn" style="background-color:#e74c3c"><span>清空日志</span></a></div>';
+        i += '<div id="plugin-error-log" style="max-height:250px;overflow:auto;background:#f8f9fa;border:1px solid #ddd;border-radius:5px;padding:10px;font-size:13px;">无错误记录</div>';
+        i += '<hr style="border:0;height:1px;margin:20px 0;background-image:linear-gradient(to right,rgba(0,0,0,0),rgba(159,137,137,0.75),rgba(0,0,0,0));"/>';
+        i += '<h3 style="font-size:15px;font-weight:bold;margin-bottom:10px;">📈 缓存命中率</h3>';
+        i += '<div id="cache-hit-stats" style="background:#f8f9fa;border:1px solid #ddd;border-radius:5px;padding:10px;"></div>';
+        i += '</div>';
+        t.append(i);
+    }
+    async renderPluginMgmtPanel() {
+        const disabled = JSON.parse(await storageManager.getSetting("disabledPlugins", "[]"));
+        const allNames = unsafeWindow.pluginManager.getPluginNames();
+        const categories = {
+            status: { label: "📋 状态管理", plugins: ["DetailPagePlugin","ListPagePlugin","NavBarPlugin","BusNavBarPlugin","BusDetailPagePlugin","DetailPageButtonPlugin","ListPageButtonPlugin","HighlightMagnetPlugin","FoldCategoryPlugin","AutoPagePlugin","HistoryPlugin","WantAndWatchedVideosPlugin"] },
+            blacklist: { label: "🚫 屏蔽过滤", plugins: ["BlacklistPlugin","FilterTitleKeywordPlugin"] },
+            favorite: { label: "⭐ 收藏", plugins: ["FavoriteActressesPlugin"] },
+            "new-video": { label: "🆕 新作品", plugins: ["NewVideoPlugin","TaskPlugin"] },
+            "external-search": { label: "🌍 外部搜索", plugins: ["OtherSitePlugin","Fc2Plugin","Fc2By123AvPlugin","HitShowPlugin","TOP250Plugin","ReviewPlugin","RelatedPlugin","MagnetHubPlugin","JavTrailersPlugin"] },
+            "image-viewer": { label: "🖼️ 图片预览", plugins: ["CoverButtonPlugin","PreviewVideoPlugin","BusPreviewVideoPlugin","ScreenShotPlugin","BusImgPlugin"] },
+            avatar: { label: "👤 演员信息", plugins: ["ActressInfoPlugin","SearchByImagePlugin"] },
+            translate: { label: "🆎 翻译", plugins: ["TranslatePlugin"] },
+            subtitle: { label: "📝 字幕", plugins: ["SubTitleCatPlugin"] },
+            backup: { label: "💾 备份设置", plugins: ["SettingPlugin","LocalPlugin"] },
+            "one-two-three": { label: "☁️ 云盘", plugins: ["OneTwoThreeOfflinePlugin"] },
+            stats: { label: "📊 统计", plugins: ["StatsPlugin"] }
+        };
+        const corePlugins = ["SettingPlugin","StatsPlugin"];
+        const registeredSet = new Set(allNames);
+        let html = "";
+        for (const [catKey, cat] of Object.entries(categories)) {
+            const visiblePlugins = cat.plugins.filter(p => registeredSet.has(p));
+            if (!visiblePlugins.length) continue;
+            html += `<div style="border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:10px;">`;
+            html += `<div style="font-weight:bold;font-size:14px;margin-bottom:8px;">${escapeHtml(cat.label)}</div>`;
+            for (const pName of visiblePlugins) {
+                const isCore = corePlugins.includes(pName);
+                const isDisabled = disabled.includes(pName);
+                html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;">`;
+                html += `<span style="font-size:13px;">${escapeHtml(pName)}${isCore ? ' <span style="color:#888;font-size:11px;">[核心]</span>' : ""}</span>`;
+                if (isCore) {
+                    html += `<input type="checkbox" class="mini-switch" checked disabled>`;
+                } else {
+                    html += `<input type="checkbox" class="mini-switch pm-toggle" data-plugin="${escapeHtml(pName)}" ${isDisabled ? "" : "checked"}>`;
+                }
+                html += `</div>`;
+            }
+            html += `</div>`;
+        }
+        $("#plugin-mgmt-list").html(html);
+        const enabledCount = allNames.length - disabled.length;
+        $("#pm-total").text(allNames.length);
+        $("#pm-enabled").text(enabledCount);
+        $("#pm-disabled").text(disabled.length);
+        $(".pm-toggle").off("change").on("change", async (e) => {
+            const name = $(e.target).data("plugin");
+            let list = JSON.parse(await storageManager.getSetting("disabledPlugins", "[]"));
+            if ($(e.target).is(":checked")) {
+                list = list.filter(x => x !== name);
+            } else {
+                if (!list.includes(name)) list.push(name);
+            }
+            await storageManager.saveSettingItem("disabledPlugins", JSON.stringify(list));
+            const all = unsafeWindow.pluginManager.getPluginNames();
+            $("#pm-total").text(all.length);
+            $("#pm-enabled").text(all.length - list.length);
+            $("#pm-disabled").text(list.length);
+            show.ok(`插件 "${name}" 已${$(e.target).is(":checked") ? "启用" : "禁用"}，刷新后生效`);
+        });
+        const timings = unsafeWindow.pluginManager.getTimings();
+        if (timings.length) {
+            const sorted = [...timings].sort((a, b) => b.elapsed - a.elapsed);
+            let tHtml = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+            tHtml += '<tr style="background:#f0f0f0;"><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd;">插件</th><th style="text-align:right;padding:6px;border-bottom:1px solid #ddd;">耗时(ms)</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">状态</th></tr>';
+            for (const t of sorted) {
+                const color = t.status === "disabled" ? "#ccc" : t.elapsed > 500 ? "#e74c3c" : t.elapsed > 200 ? "#f39c12" : "#333";
+                const statusText = t.status === "disabled" ? "已禁用" : t.status === "error" ? "❌ 错误" : "✅ 正常";
+                tHtml += `<tr><td style="padding:4px 6px;border-bottom:1px solid #f0f0f0;color:${color}">${escapeHtml(t.name)}</td><td style="text-align:right;padding:4px 6px;border-bottom:1px solid #f0f0f0;color:${color};font-weight:${t.elapsed > 500 ? "bold" : "normal"}">${t.elapsed.toFixed(1)}</td><td style="text-align:center;padding:4px 6px;border-bottom:1px solid #f0f0f0;">${statusText}</td></tr>`;
+            }
+            tHtml += '</table>';
+            $("#plugin-timing-table").html(tHtml);
+        } else {
+            $("#plugin-timing-table").html('<p style="color:#888;font-size:13px;">暂无数据，刷新页面后自动采集。</p>');
+        }
+        const errorLog = unsafeWindow.pluginManager.getErrorLog();
+        if (errorLog.length) {
+            let eHtml = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+            eHtml += '<tr style="background:#f0f0f0;"><th style="text-align:left;padding:4px;">时间</th><th style="text-align:left;padding:4px;">插件</th><th style="text-align:left;padding:4px;">阶段</th><th style="text-align:left;padding:4px;">错误信息</th></tr>';
+            for (const err of [...errorLog].reverse()) {
+                eHtml += `<tr><td style="padding:3px 4px;border-bottom:1px solid #f0f0f0;color:#888;white-space:nowrap;">${escapeHtml(err.time.substring(11, 19))}</td><td style="padding:3px 4px;border-bottom:1px solid #f0f0f0;">${escapeHtml(err.plugin)}</td><td style="padding:3px 4px;border-bottom:1px solid #f0f0f0;">${escapeHtml(err.phase)}</td><td style="padding:3px 4px;border-bottom:1px solid #f0f0f0;color:#e74c3c;word-break:break-all;">${escapeHtml(err.message)}</td></tr>`;
+            }
+            eHtml += '</table>';
+            $("#plugin-error-log").html(eHtml);
+        } else {
+            $("#plugin-error-log").text("无错误记录");
+        }
+        const cacheStats = storageManager.getCacheHitStats();
+        $("#cache-hit-stats").html(`<div style="display:flex;gap:15px;flex-wrap:wrap;"><span>命中: <strong style="color:#7bc73b">${cacheStats.hits}</strong></span><span>未命中: <strong style="color:#e74c3c">${cacheStats.misses}</strong></span><span>总计: <strong>${cacheStats.total}</strong></span><span>命中率: <strong style="color:#25b1dc">${cacheStats.rate}</strong></span></div>`);
     }
     async renderDataHealthPanel() {
         const e = $("#health-data-display");
@@ -397,12 +528,15 @@ class Ae extends X {
             $(".side-menu-item").removeClass("active"), $(this).addClass("active"), $(".content-panel").hide();
             const e = $(this).data("panel");
             $("#" + e).show(), "cache-panel" === e ? ($("#saveBtn").hide(), $("#clean-all").show()) : ($("#saveBtn").show(),
-            $("#clean-all").hide()), "health-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), settingPlugin.renderDataHealthPanel());
+            $("#clean-all").hide()), "health-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), settingPlugin.renderDataHealthPanel()),
+            "plugin-mgmt-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), settingPlugin.renderPluginMgmtPanel());
         })), $("#importBtn").on("click", (e => this.importData(e))), $("#exportBtn").on("click", (e => this.exportData(e))),
         $("#webdavBackupBtn").on("click", (e => this.backupDataByWebDav(e))), $("#webdavBackupListBtn").on("click", (e => this.backupListBtnByWebDav(e))),
         $("#saveBtn").on("click", (() => this.saveForm())), $("#runHealthCheckBtn").on("click", (() => this.renderDataHealthPanel())),
         $("#repairHealthBtn").on("click", (e => {
             utils.q(e, "修复前会自动下载备份，是否继续?", (() => this.repairDataHealthWithBackup()));
+        })), $("#pm-clear-log").on("click", (() => {
+            unsafeWindow.pluginManager.clearErrorLog(), $("#plugin-error-log").text("无错误记录"), show.ok("错误日志已清空");
         })), $(".clean-btn").on("click", (async e => {
             const t = $(e.currentTarget).data("key"), n = this.cacheItems.find((e => e.key === t));
             t === storageManager.third_party_cache_key ? await storageManager.clearThirdPartyCache() : localStorage.removeItem(t),

@@ -29,6 +29,7 @@ let z = class n {
         i(this, "cache_filter_actor_actress_car_list", null), i(this, "cacheSettingObj", null),
         i(this, "cacheCarMap", null), i(this, "cacheStatusMap", null),
         i(this, "cacheBlacklistMap", null), i(this, "cacheFavoriteActressMap", null),
+        i(this, "_cacheStats", { hits: 0, misses: 0 }),
         n.instance) throw new Error("StorageManager已被实例化过了!");
         n.instance = this;
     }
@@ -423,7 +424,8 @@ let z = class n {
     }
     async cachedRequest(e, t, n) {
         const a = Date.now(), i = await this.getThirdPartyCache(), s = i[e];
-        if (s && s.time && a - s.time < (s.ttl || t)) return s.data;
+        if (s && s.time && a - s.time < (s.ttl || t)) return this._cacheStats.hits++, s.data;
+        this._cacheStats.misses++;
         const o = await n();
         if (void 0 === o || null === o) return o;
         return i[e] = {
@@ -432,6 +434,16 @@ let z = class n {
             data: o
         }, await this.setThirdPartyCache(i), o;
     }
+    getCacheHitStats() {
+        const e = this._cacheStats.hits + this._cacheStats.misses;
+        return {
+            hits: this._cacheStats.hits,
+            misses: this._cacheStats.misses,
+            total: e,
+            rate: e > 0 ? (this._cacheStats.hits / e * 100).toFixed(1) + "%" : "N/A"
+        };
+    }
+    resetCacheHitStats() { this._cacheStats = { hits: 0, misses: 0 }; }
     _groupDuplicateItems(e, t) {
         return groupDuplicateItems(e, t);
     }

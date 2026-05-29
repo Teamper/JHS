@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-05-29
+
+### Added
+- 插件开关：设置面板新增"插件管理"页面，支持按分类启用/禁用单个插件，核心插件（SettingPlugin、StatsPlugin）不可禁用。
+- 插件执行耗时统计：自动采集每个插件 handle() 的执行时间，在插件管理面板中按耗时降序展示，高亮超过 500ms 的慢插件。
+- 插件错误日志：PluginManager 内存收集最近 200 条插件错误（含时间、插件名、阶段、堆栈），支持清空。
+- 缓存命中率：cachedRequest 新增命中/未命中运行时计数器，在插件管理面板展示命中率。
+
+### Changed
+- PluginManager 的 processCss/processPlugins 在执行阶段跳过被禁用插件（而非注册阶段），确保 getBean() 跨插件引用不崩溃。
+
 ## [4.0.4] - 2026-05-28
 
 ### Fixed
@@ -76,7 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.4...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.1.0...HEAD
+[4.1.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.4...v4.1.0
 [4.0.4]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.3...v4.0.4
 [4.0.3]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.2...v4.0.3
 [4.0.2]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.1...v4.0.2

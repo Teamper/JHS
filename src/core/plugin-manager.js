@@ -1,6 +1,8 @@
 class Y {
     constructor() {
         this.plugins = new Map;
+        this._errorLog = [];
+        this._lastTimings = [];
     }
     register(e) {
         if ("function" != typeof e) throw new Error("插件必须是一个类");
@@ -13,45 +15,69 @@ class Y {
     getBean(e) {
         return this.plugins.get(e);
     }
+    _addError(e, t, n) {
+        this._errorLog.push({
+            time: new Date().toISOString(),
+            plugin: e,
+            phase: t,
+            message: n?.message || String(n),
+            stack: n?.stack || ""
+        });
+        this._errorLog.length > 200 && this._errorLog.shift();
+    }
+    getErrorLog() { return [...this._errorLog]; }
+    clearErrorLog() { this._errorLog = []; }
+    getTimings() { return [...this._lastTimings]; }
+    getPluginNames() { return Array.from(this.plugins.keys()); }
+    async _getDisabledPlugins() {
+        try {
+            const e = await storageManager.getSetting("disabledPlugins", "[]");
+            return JSON.parse(e);
+        } catch (e) { return []; }
+    }
     async processCss() {
-        const e = (await Promise.allSettled(Array.from(this.plugins).map((async ([e, t]) => {
+        const t = await this._getDisabledPlugins();
+        const e = (await Promise.allSettled(Array.from(this.plugins).map((async ([e, n]) => {
             try {
-                if ("function" == typeof t.initCss) {
-                    const n = await t.initCss();
-                    return n && utils.insertStyle(n), {
+                if (t.includes(e)) return { name: e, status: "disabled" };
+                if ("function" == typeof n.initCss) {
+                    const t = await n.initCss();
+                    return t && utils.insertStyle(t), {
                         name: e,
                         status: "fulfilled"
                     };
                 }
-                return {
-                    name: e,
-                    status: "skipped"
-                };
-            } catch (n) {
-                return console.error(`插件 ${e} 加载 CSS 失败`, n), {
+                return { name: e, status: "skipped" };
+            } catch (a) {
+                return console.error(`插件 ${e} 加载 CSS 失败`, a),
+                this._addError(e, "initCss", a), {
                     name: e,
                     status: "rejected",
-                    error: n
+                    error: a
                 };
             }
         })))).filter((e => "rejected" === e.status));
         e.length && console.error("以下插件的 CSS 加载失败：", e.map((e => e.reason.name)));
     }
     async processPlugins() {
-        const e = (await Promise.allSettled(Array.from(this.plugins).map((async ([e, t]) => {
+        const t = await this._getDisabledPlugins();
+        const a = [];
+        const e = (await Promise.allSettled(Array.from(this.plugins).map((async ([e, n]) => {
+            if (t.includes(e)) return a.push({ name: e, elapsed: 0, status: "disabled" }), { name: e, status: "disabled" };
+            const i = performance.now();
             try {
-                if ("function" == typeof t.handle) return await t.handle(), {
-                    name: e,
-                    status: "fulfilled"
-                };
-            } catch (n) {
-                return clog.error(`插件 ${e} 执行失败`, n), {
-                    name: e,
-                    status: "rejected",
-                    error: n
-                };
+                if ("function" == typeof n.handle) await n.handle();
+                const s = performance.now() - i;
+                return a.push({ name: e, elapsed: s, status: "ok" }), { name: e, status: "fulfilled" };
+            } catch (s) {
+                const o = performance.now() - i;
+                return clog.error(`插件 ${e} 执行失败`, s),
+                this._addError(e, "handle", s),
+                a.push({ name: e, elapsed: o, status: "error", error: s.message }),
+                { name: e, status: "rejected", error: s };
             }
         })))).filter((e => "rejected" === e.status));
+        this._lastTimings = a;
         e.length && console.error("以下插件执行失败：", e.map((e => e.reason.name)));
     }
 }
