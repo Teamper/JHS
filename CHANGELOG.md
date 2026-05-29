@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.3.2] - 2026-05-29
+
+### Fixed
+- 新作品封面获取：实时抓取演员页面提取封面图和标题，解决旧数据无封面的问题。
+- 新作品网格布局改为 CSS Grid 响应式（repeat(auto-fill, minmax(160px, 1fr))），与首页风格一致。
+
 ## [4.3.1] - 2026-05-29
 
 ### Fixed
@@ -117,7 +123,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.1...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.2...HEAD
+[4.3.2]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.1...v4.3.2
 [4.3.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.0...v4.3.1
 [4.3.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.1.0...v4.2.0
