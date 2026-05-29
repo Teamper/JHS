@@ -214,7 +214,10 @@ class et extends X {
                 if (coverUrl && !coverUrl.startsWith("http")) {
                     coverUrl = coverUrl.startsWith("/") ? this.javDbUrl + coverUrl : this.javDbUrl + "/" + coverUrl;
                 }
-                c.push({ carNum: s, coverUrl: coverUrl, title: r || "", publishTime: l || "" });
+                const score = parseFloat(e.find(".score .value, .score").text().trim()) || 0;
+                const voteText = e.find(".score .count, .meta .count").text().trim();
+                const voteCount = parseInt(voteText.replace(/[^\d]/g, "")) || 0;
+                c.push({ carNum: s, coverUrl: coverUrl, title: r || "", publishTime: l || "", score: score, voteCount: voteCount });
             })()));
         }
         const h = await storageManager.getCarMap(), p = c.filter((e => !h.has(e.carNum)));
