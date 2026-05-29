@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.3.1] - 2026-05-29
+
+### Fixed
+- 修复新作品列表视图：改为封面图卡片网格布局，按作品日期排序（非发现时间）。
+- 升级 newVideoList 数据结构为对象数组（含 coverUrl/title/publishTime），向后兼容旧格式。
+- 磁力评分：修复 seeders 提取和评分显示，结果默认按评分降序排列。
+
 ## [4.3.0] - 2026-05-29
 
 ### Added
@@ -110,7 +117,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.0...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.1...HEAD
+[4.3.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.0...v4.3.1
 [4.3.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.4...v4.1.0
