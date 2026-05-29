@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.3.5] - 2026-05-29
+
+### Improved
+- 新作品列表封面加大（minmax 240px），卡片增加 hover 浮动效果。
+- 封面图支持 hover 放大预览（复用 ImageHoverPreview）。
+- 新作品列表改为分页显示（每页 60 个），解决大量数据卡顿问题。
+- 修复列表视图无法滚动的问题（overflow-y: auto）。
+- 新增列表视图排序：按发行时间、演员名、番号排序。
+
 ## [4.3.4] - 2026-05-29
 
 ### Fixed
