@@ -192,8 +192,8 @@ let z = class n {
             let n = !1;
             const a = t.map((t => {
                 if (!t.newVideoList || !Array.isArray(t.newVideoList)) return t;
-                const a = t.newVideoList.filter((a => {
-                    const i = e.includes(a);
+                const a = t.newVideoList.filter((t => {
+                    const a = "string" == typeof t ? t : t.carNum, i = e.includes(a);
                     return i && (clog.log("移除关联女优新作品", t.name, a), n = !0), !i;
                 }));
                 const result = { ...t, newVideoList: a };
@@ -346,8 +346,8 @@ let z = class n {
         const o = a.map((e => {
             if (!e.newVideoList || !Array.isArray(e.newVideoList)) return e;
             const t = e.newVideoList.filter((t => {
-                const a = t.startsWith(n);
-                return a && (clog.log("移除关联女优新作品", e.name, t), i = !0), !a;
+                const s = "string" == typeof t ? t : t.carNum, a = s.startsWith(n);
+                return a && (clog.log("移除关联女优新作品", e.name, s), i = !0), !a;
             }));
             return {
                 ...e,
@@ -481,7 +481,7 @@ let z = class n {
         u && o("invalid-all-name", "演员别名不是数组", u);
         let f = 0;
         t.forEach((e => {
-            Array.isArray(e?.newVideoList) && (f += e.newVideoList.filter((e => i.has(e))).length);
+            Array.isArray(e?.newVideoList) && (f += e.newVideoList.filter((e => { const t = "string" == typeof e ? e : e.carNum; return i.has(t); })).length);
         })), f && o("stored-new-video", "新作品列表中已有鉴定记录", f);
         const v = e.filter((e => e && e.carNum && !e.url)).length;
         v && r("missing-url", "番号记录缺失 url，需要人工确认来源", v);
@@ -523,7 +523,7 @@ let z = class n {
         const l = new Set(t.filter((e => e && e.carNum)).map((e => e.carNum)));
         n = n.map((t => {
             if (!Array.isArray(t?.newVideoList)) return t;
-            const n = t.newVideoList.filter((e => !l.has(e)));
+            const n = t.newVideoList.filter((e => { const n = "string" == typeof e ? e : e.carNum; return !l.has(n); }));
             return n.length !== t.newVideoList.length && (t = {
                 ...t,
                 newVideoList: n

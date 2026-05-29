@@ -124,7 +124,7 @@ class pt extends X {
         await this.showNewVideoCount();
     }
     getPendingNewVideoCount(e, t) {
-        return Array.isArray(e?.newVideoList) ? e.newVideoList.filter((e => !t.has(e))).length : 0;
+        return Array.isArray(e?.newVideoList) ? e.newVideoList.filter((e => { const n = "string" == typeof e ? e : e.carNum; return !t.has(n); })).length : 0;
     }
     async getPendingNewVideoTotal() {
         const e = await storageManager.getCarMap();
@@ -294,11 +294,13 @@ class pt extends X {
             if ("all" !== n && i.actressType !== n) continue;
             if (!Array.isArray(i.newVideoList)) continue;
             for (const e of i.newVideoList) {
-                if (t.has(e)) continue;
-                a.push({ carNum: e, actressName: i.name || "", starId: i.starId || "", actressType: i.actressType || "", discoveredAt: i.lastPublishTime || i.lastCheckTime || "" });
+                const n = "string" == typeof e ? e : e.carNum;
+                if (t.has(n)) continue;
+                const s = "object" == typeof e ? e : {};
+                a.push({ carNum: n, coverUrl: s.coverUrl || "", title: s.title || "", publishTime: s.publishTime || "", actressName: i.name || "", starId: i.starId || "" });
             }
         }
-        return a.sort(((e, t) => (t.discoveredAt || "").localeCompare(e.discoveredAt || ""))), a;
+        return a.sort(((e, t) => (t.publishTime || "").localeCompare(e.publishTime || ""))), a;
     }
     async renderNewVideoList() {
         const e = $("#new-video-list-container");
@@ -308,43 +310,39 @@ class pt extends X {
         if (0 === t.length) return e.html('<div style="text-align:center;padding:40px;color:#999;">暂无待鉴定的新作品</div>'),
         void $("#new-video-list-footer").html("");
         const a = new Set, i = new Set;
-        for (const o of t) a.add(o.actressName), i.add(o.carNum);
-        e.empty();
-        const s = new Tabulator(e[0], {
-            layout: "fitColumns",
-            placeholder: "暂无数据",
-            data: t,
-            selectable: !0,
-            columnDefaults: { headerHozAlign: "center", hozAlign: "center" },
-            columns: [
-                { formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", width: 40, headerSort: !1 },
-                { title: "番号", field: "carNum", width: 150, headerSort: !1, formatter: e => `<a href="${n}/search?q=${encodeURIComponent(e.getValue())}" target="_blank" style="color:#007bff;text-decoration:underline;">${e.getValue()}</a>` },
-                { title: "演员", field: "actressName", width: 120, headerSort: !1 },
-                { title: "类别", field: "actressType", width: 80, headerSort: !1, formatter: e => { const t = e.getValue(); return "uncensored" === t ? '<span style="color:#4CAF50;">无码</span>' : "censored" === t ? '<span style="color:#FF9800;">有码</span>' : '<span style="color:#999;">未知</span>'; } },
-                { title: "发现时间", field: "discoveredAt", width: 170, headerSort: !1 },
-                { title: "操作", width: 100, headerSort: !1, formatter: e => `<a href="${n}/search?q=${encodeURIComponent(e.getData().carNum)}" target="_blank" class="a-info" style="font-size:12px;">查看详情</a>` }
-            ],
-            locale: "zh-cn"
-        });
-        $("#new-video-list-footer").html(`<span>共 <b>${t.length}</b> 个待鉴定番号，涉及 <b>${a.size}</b> 位演员</span>\n            <a class="a-normal" id="batchMarkWatched" style="margin-left:15px;">标记已看</a>\n            <a class="a-normal" id="batchMarkDownloaded" style="margin-left:8px;">标记已下载</a>`);
+        for (const r of t) a.add(r.actressName), i.add(r.carNum);
+        let s = "";
+        s += '<div style="display:flex;flex-wrap:wrap;gap:12px;padding:5px;">';
+        for (const r of t) {
+            const e = escapeHtml(r.carNum), t = escapeHtml(r.title || r.carNum), a = r.coverUrl ? r.coverUrl.replace("thumbs", "covers") : "", i = `${n}/search?q=${encodeURIComponent(r.carNum)}`;
+            s += `<div class="nv-card" data-car="${e}" style="width:180px;cursor:pointer;" title="${t}">`;
+            s += `<a href="${i}" target="_blank" style="display:block;text-decoration:none;color:inherit;">`;
+            s += `<div style="width:180px;height:120px;overflow:hidden;border-radius:6px;background:#f0f0f0;">`;
+            a ? s += `<img src="${a}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;\\'>无封面</div>';">` : s += `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">无封面</div>`;
+            s += `</div>`;
+            s += `<div style="padding:6px 2px;">`;
+            s += `<div style="font-size:12px;font-weight:bold;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e}</div>`;
+            s += `<div style="font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(r.actressName)}</div>`;
+            r.publishTime && (s += `<div style="font-size:10px;color:#aaa;">${r.publishTime}</div>`);
+            s += `</div></a></div>`;
+        }
+        s += "</div>", e.html(s), $("#new-video-list-footer").html(`<span>共 <b>${t.length}</b> 个待鉴定番号，涉及 <b>${a.size}</b> 位演员</span>\n            <a class="a-normal" id="batchMarkWatched" style="margin-left:15px;">全部标记已看</a>\n            <a class="a-normal" id="batchMarkDownloaded" style="margin-left:8px;">全部标记已下载</a>`);
         $("#batchMarkWatched").off("click").on("click", (async () => {
-            const e = s.getSelectedData();
-            if (0 === e.length) return void show.error("请先勾选要操作的番号");
-            utils.q({ clientX: 0, clientY: 0 }, `确认将 ${e.length} 个番号标记为已看?`, (async () => {
-                const t = e.map((e => ({ carNum: e.carNum, url: `/search?q=${encodeURIComponent(e.carNum)}`, names: e.actressName, actionType: p })));
-                try { await storageManager.saveCarList(t), show.ok(`已标记 ${e.length} 个`), this.renderNewVideoList(), this.showNewVideoCount(); } catch (n) { show.error("标记失败: " + n.message); }
+            if (0 === t.length) return;
+            utils.q({ clientX: 0, clientY: 0 }, `确认将 ${t.length} 个番号全部标记为已看?`, (async () => {
+                const e = t.map((e => ({ carNum: e.carNum, url: `/search?q=${encodeURIComponent(e.carNum)}`, names: e.actressName, actionType: p })));
+                try { await storageManager.saveCarList(e), show.ok(`已标记 ${e.length} 个`), this.renderNewVideoList(), this.showNewVideoCount(); } catch (n) { show.error("标记失败: " + n.message); }
             }));
         })), $("#batchMarkDownloaded").off("click").on("click", (async () => {
-            const e = s.getSelectedData();
-            if (0 === e.length) return void show.error("请先勾选要操作的番号");
-            utils.q({ clientX: 0, clientY: 0 }, `确认将 ${e.length} 个番号标记为已下载?`, (async () => {
-                const t = e.map((e => ({ carNum: e.carNum, url: `/search?q=${encodeURIComponent(e.carNum)}`, names: e.actressName, actionType: g })));
-                try { await storageManager.saveCarList(t), show.ok(`已标记 ${e.length} 个`), this.renderNewVideoList(), this.showNewVideoCount(); } catch (n) { show.error("标记失败: " + n.message); }
+            if (0 === t.length) return;
+            utils.q({ clientX: 0, clientY: 0 }, `确认将 ${t.length} 个番号全部标记为已下载?`, (async () => {
+                const e = t.map((e => ({ carNum: e.carNum, url: `/search?q=${encodeURIComponent(e.carNum)}`, names: e.actressName, actionType: g })));
+                try { await storageManager.saveCarList(e), show.ok(`已标记 ${e.length} 个`), this.renderNewVideoList(), this.showNewVideoCount(); } catch (n) { show.error("标记失败: " + n.message); }
             }));
         }));
     }
     async editActress(e) {
-        const t = e.name, n = e.avatar, a = e.remark || "", i = Array.isArray(e.allName) ? e.allName.join("，") : "", s = Array.isArray(e.newVideoList) ? e.newVideoList.join("，") : "", o = e.starId, r = "width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; min-height: 60px; overflow-y: hidden;", l = e.actressType || "", c = `\n            <div style="padding: 20px;">\n                <div style="margin-bottom: 15px; text-align: center;">\n                    <img id="edit-avatar-preview" src="${n}" alt="Avatar Preview" \n                         style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 10px; border: 2px solid #ddd;">\n                    <div style="text-align: left">\n                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">头像链接:</label>\n                        <input type="text" id="edit-actress-avatar" value="${n}" \n                               style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">\n                       <div style="display: flex; gap: 5px; margin-top: 5px;">\n                            <button type="button" id="search-avatar-btn" \n                                style="flex-grow: 1; padding: 8px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">\n                                搜索头像\n                            </button>\n                            <button type="button" id="select-cdn-btn" \n                                style="width: 100px; padding: 8px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">\n                                选择 CDN 源\n                            </button>\n                        </div>\n                    </div>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">主名称:</label>\n                    <input type="text" id="edit-actress-name" value="${t}" \n                           style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">所有别名(用逗号隔开):</label>\n                    <textarea id="edit-actress-allname" style="${r}">${i}</textarea>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">演员类别:</label>\n                    <select id="actressType" style="width: 100%; padding: 10px; border: 1px solid #ddd;">\n                        <option value="" ${"" === l ? "selected" : ""}>未知</option>\n                        <option value="censored" ${"censored" === l ? "selected" : ""}>有码</option>\n                        <option value="uncensored" ${"uncensored" === l ? "selected" : ""}>无码</option>\n                    </select>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">最新作品(用逗号隔开):</label>\n                    <textarea id="edit-actress-newvideolist" style="${r}">${s}</textarea>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">备注:</label>\n                   <textarea id="edit-remark" style="${r}">${a}</textarea>\n                </div>\n            </div>\n        `;
+        const t = e.name, n = e.avatar, a = e.remark || "", i = Array.isArray(e.allName) ? e.allName.join("，") : "", s = Array.isArray(e.newVideoList) ? e.newVideoList.map((e => "string" == typeof e ? e : e.carNum)).join("，") : "", o = e.starId, r = "width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; min-height: 60px; overflow-y: hidden;", l = e.actressType || "", c = `\n            <div style="padding: 20px;">\n                <div style="margin-bottom: 15px; text-align: center;">\n                    <img id="edit-avatar-preview" src="${n}" alt="Avatar Preview" \n                         style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 10px; border: 2px solid #ddd;">\n                    <div style="text-align: left">\n                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">头像链接:</label>\n                        <input type="text" id="edit-actress-avatar" value="${n}" \n                               style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">\n                       <div style="display: flex; gap: 5px; margin-top: 5px;">\n                            <button type="button" id="search-avatar-btn" \n                                style="flex-grow: 1; padding: 8px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">\n                                搜索头像\n                            </button>\n                            <button type="button" id="select-cdn-btn" \n                                style="width: 100px; padding: 8px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">\n                                选择 CDN 源\n                            </button>\n                        </div>\n                    </div>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">主名称:</label>\n                    <input type="text" id="edit-actress-name" value="${t}" \n                           style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">所有别名(用逗号隔开):</label>\n                    <textarea id="edit-actress-allname" style="${r}">${i}</textarea>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">演员类别:</label>\n                    <select id="actressType" style="width: 100%; padding: 10px; border: 1px solid #ddd;">\n                        <option value="" ${"" === l ? "selected" : ""}>未知</option>\n                        <option value="censored" ${"censored" === l ? "selected" : ""}>有码</option>\n                        <option value="uncensored" ${"uncensored" === l ? "selected" : ""}>无码</option>\n                    </select>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">最新作品(用逗号隔开):</label>\n                    <textarea id="edit-actress-newvideolist" style="${r}">${s}</textarea>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">备注:</label>\n                   <textarea id="edit-remark" style="${r}">${a}</textarea>\n                </div>\n            </div>\n        `;
         layer.open({
             type: 1,
             title: `编辑女优: ${t} (${o})`,
