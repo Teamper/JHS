@@ -140,7 +140,7 @@ class pt extends X {
     }
     async openDialog() {
         const e = this.getBean("TaskPlugin"), t = await storageManager.getSetting(), n = localStorage.getItem(e.lastCheckFavoriteActressTimeKey) || "无", a = t.checkFavoriteActress_IntervalTime, i = localStorage.getItem(e.lastCheckNewVideoTimeKey) || "无", s = t.checkNewVideo_intervalTime;
-        let o = `\n            <div class="newVideoToolBox" style="display: flex; flex-direction: column; height: 100%; overflow: hidden; padding:10px">\n                <div style="margin-bottom: 15px;display: flex; justify-content: space-between;">\n                    <div>\n                        <a class="a-danger" id="checkFavoriteActress" data-tip="上次自动同步时间: ${n}; 检测间隔时间: ${a}小时">${this.actressSvg} &nbsp;&nbsp; 手动同步演员</a>\n                        <a class="a-warning" id="checkNewVideo" data-tip="上次检测时间: ${i}; 检测间隔时间: ${s}小时">${this.newSvg} &nbsp;&nbsp; 手动检测最新作品</a>\n                        <a class="a-info" id="toSetting">${this.settingSvg} &nbsp;&nbsp; 配置</a>\n                        <span id="checkNewVideoMsg"></span>\n                    </div>\n                    <div style="display: flex; align-items: center; flex-wrap:wrap; gap:10px;">\n                        <select id="paramActressType" style="text-align: center; height: 100%; min-width: 150px; border: 1px solid #ddd;">\n                            <option value="all" selected>所有</option>\n                            <option value="uncensored">无码</option>\n                            <option value="censored">有码</option>\n                            <option value="">未知</option>\n                        </select>\n                        <select id="paramSortBy" style="text-align: center; height: 100%; min-width: 150px; border: 1px solid #ddd;">\n                            <option value="default" selected>默认排序</option>\n                            <optgroup label="发行时间">\n                                <option value="lastPublishTime_desc">发行时间 新→旧</option>\n                                <option value="lastPublishTime_asc">发行时间 旧→新</option>\n                            </optgroup>\n                            <optgroup label="检测时间">\n                                <option value="lastCheckTime_desc">检测时间 新→旧</option>\n                                <option value="lastCheckTime_asc">检测时间 旧→新</option>\n                            </optgroup>\n                            <optgroup label="新作品数">\n                                <option value="newVideoCount_desc">新作品数 多→少</option>\n                                <option value="newVideoCount_asc">新作品数 少→多</option>\n                            </optgroup>\n                        </select>\n                        <select id="nvSortBy" style="display:none; text-align:center; height:100%; min-width:150px; border:1px solid #ddd;">\n                            <option value="publishTime_desc" selected>发行时间 新→旧</option>\n                            <option value="publishTime_asc">发行时间 旧→新</option>\n                            <option value="actress_asc">演员名 A→Z</option>\n                            <option value="actress_desc">演员名 Z→A</option>\n                            <option value="carNum_asc">番号 A→Z</option>\n                            <option value="carNum_desc">番号 Z→A</option>\n                        </select>\n                        <a class="a-normal" id="toggleViewMode" style="margin-left: 5px;">📋 新作品列表</a>\n                        <a class="a-normal" id="reLoad">${this.refreshSvg} &nbsp;&nbsp; 刷新</a>\n                    </div>\n\n                </div>\n                <div id="actress-card-container" class="jhs-scrollbar"></div>\n                <div id="new-video-list-container" style="display:none; flex:1; overflow-y:auto;"></div>\n                <div id="nv-pagination" style="display:none; padding:8px 0; text-align:center;"></div>\n                <div id="new-video-list-footer" style="display:none; padding:8px 0; border-top:1px solid #eee; font-size:13px; color:#666;"></div>\n                <div id="actress-pagination"></div>\n            </div>\n        `;
+        let o = `\n            <div class="newVideoToolBox" style="display: flex; flex-direction: column; height: 100%; overflow: hidden; padding:10px">\n                <div style="margin-bottom: 15px;display: flex; justify-content: space-between;">\n                    <div>\n                        <a class="a-danger" id="checkFavoriteActress" data-tip="上次自动同步时间: ${n}; 检测间隔时间: ${a}小时">${this.actressSvg} &nbsp;&nbsp; 手动同步演员</a>\n                        <a class="a-warning" id="checkNewVideo" data-tip="上次检测时间: ${i}; 检测间隔时间: ${s}小时">${this.newSvg} &nbsp;&nbsp; 手动检测最新作品</a>\n                        <a class="a-info" id="toSetting">${this.settingSvg} &nbsp;&nbsp; 配置</a>\n                        <span id="checkNewVideoMsg"></span>\n                    </div>\n                    <div style="display: flex; align-items: center; flex-wrap:wrap; gap:10px;">\n                        <select id="paramActressType" style="text-align: center; height: 100%; min-width: 150px; border: 1px solid #ddd;">\n                            <option value="all" selected>所有</option>\n                            <option value="uncensored">无码</option>\n                            <option value="censored">有码</option>\n                            <option value="">未知</option>\n                        </select>\n                        <select id="paramSortBy" style="text-align: center; height: 100%; min-width: 150px; border: 1px solid #ddd;">\n                            <option value="default" selected>默认排序</option>\n                            <optgroup label="发行时间">\n                                <option value="lastPublishTime_desc">发行时间 新→旧</option>\n                                <option value="lastPublishTime_asc">发行时间 旧→新</option>\n                            </optgroup>\n                            <optgroup label="检测时间">\n                                <option value="lastCheckTime_desc">检测时间 新→旧</option>\n                                <option value="lastCheckTime_asc">检测时间 旧→新</option>\n                            </optgroup>\n                            <optgroup label="新作品数">\n                                <option value="newVideoCount_desc">新作品数 多→少</option>\n                                <option value="newVideoCount_asc">新作品数 少→多</option>\n                            </optgroup>\n                        </select>\n                        <select id="nvSortBy" style="display:none; text-align:center; height:100%; min-width:150px; border:1px solid #ddd;">\n                            <option value="publishTime_desc" selected>发行时间 新→旧</option>\n                            <option value="publishTime_asc">发行时间 旧→新</option>\n                            <option value="score_desc">评分 高→低</option>\n                            <option value="score_asc">评分 低→高</option>\n                            <option value="actress_asc">演员名 A→Z</option>\n                            <option value="actress_desc">演员名 Z→A</option>\n                            <option value="carNum_asc">番号 A→Z</option>\n                            <option value="carNum_desc">番号 Z→A</option>\n                        </select>\n                        <a class="a-normal" id="toggleViewMode" style="margin-left: 5px;">📋 新作品列表</a>\n                        <a class="a-normal" id="reLoad">${this.refreshSvg} &nbsp;&nbsp; 刷新</a>\n                    </div>\n\n                </div>\n                <div id="actress-card-container" class="jhs-scrollbar"></div>\n                <div id="new-video-list-container" style="display:none; flex:1; overflow-y:auto;"></div>\n                <div id="new-video-list-footer" style="display:none; padding:8px 0; border-top:1px solid #eee; font-size:13px; color:#666;"></div>\n                <div id="actress-pagination"></div>\n            </div>\n        `;
         layer.open({
             type: 1,
             title: '<span style="padding: 0 10px;" data-tip="数据来源: 女优页面首页,含磁链分类">新作品检测 ❓</span>',
@@ -204,7 +204,7 @@ class pt extends X {
             const t = "list" === this._viewMode;
             $("#actress-card-container").toggle(!t), $("#actress-pagination").toggle(!t),
             $("#new-video-list-container").toggle(t), $("#new-video-list-footer").toggle(t),
-            $("#nv-pagination").toggle(t), $("#paramSortBy").toggle(!t), $("#nvSortBy").toggle(t),
+            $("#paramSortBy").toggle(!t), $("#nvSortBy").toggle(t),
             $("#toggleViewMode").text(t ? "👤 演员视图" : "📋 新作品列表"),
             t ? this.renderNewVideoList() : this.loadData();
         }));
@@ -299,7 +299,7 @@ class pt extends X {
                 const n = "string" == typeof e ? e : e.carNum;
                 if (t.has(n)) continue;
                 const s = "object" == typeof e ? e : {};
-                a.push({ carNum: n, coverUrl: s.coverUrl || "", title: s.title || "", publishTime: s.publishTime || "", actressName: i.name || "", starId: i.starId || "" });
+                a.push({ carNum: n, coverUrl: s.coverUrl || "", title: s.title || "", publishTime: s.publishTime || "", actressName: i.name || "", starId: i.starId || "", score: s.score || 0, voteCount: s.voteCount || 0 });
             }
         }
         return a.sort(((e, t) => (t.publishTime || "").localeCompare(e.publishTime || ""))), a;
@@ -381,6 +381,9 @@ class pt extends X {
               case "carNum":
                 i = (e.carNum || "").localeCompare(t.carNum || "");
                 break;
+              case "score":
+                i = (e.score || 0) - (t.score || 0);
+                break;
             }
             return "desc" === a ? -i : i;
         }));
@@ -388,36 +391,39 @@ class pt extends X {
     nvRenderPage() {
         const e = this.nvFlatListCache;
         if (!e || 0 === e.length) return;
-        const t = this.nvSortList(e), n = this.nvPageSize, a = (this.nvCurrentPage - 1) * n, i = a + n, s = t.slice(a, i), o = Math.ceil(t.length / n), r = this.getBean("OtherSitePlugin").getJavDbUrl().then((o => {
-            const r = $("#new-video-list-container");
-            let l = "";
-            l += '<div id="nv-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;padding:5px;">';
+        const t = this.nvSortList(e), n = this.nvPageSize, a = (this.nvCurrentPage - 1) * n, i = a + n, s = t.slice(a, i), o = Math.ceil(t.length / n), r = this.getBean("OtherSitePlugin").getJavDbUrl().then((r => {
+            const l = $("#new-video-list-container");
+            let c = "";
+            c += '<div id="nv-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;padding:5px;">';
             for (const n of s) {
-                const e = escapeHtml(n.carNum), t = escapeHtml(n.title || n.carNum), a = n.coverUrl ? n.coverUrl.replace("thumbs", "covers") : "", i = `${o}/search?q=${encodeURIComponent(n.carNum)}`, s = `番号: ${e}\\n标题: ${t}\\n演员: ${escapeHtml(n.actressName)}\\n发行: ${n.publishTime || "未知"}`;
-                l += `<div class="nv-card" data-car="${e}" title="${s}">`;
-                l += `<a href="${i}" target="_blank" style="display:block;text-decoration:none;color:inherit;">`;
-                l += `<div style="width:100%;aspect-ratio:3/2;overflow:hidden;border-radius:6px;background:#f0f0f0;position:relative;">`;
-                a ? l += `<img class="nv-cover-img" src="${a}" data-full="${a}" loading="lazy" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div style="display:none;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">无封面</div>` : l += `<div class="nv-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">加载中...</div>`;
-                l += `</div>`;
-                l += `<div style="padding:8px 4px;">`;
-                l += `<div style="font-size:13px;font-weight:bold;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${e}">${e}</div>`;
-                l += `<div style="font-size:12px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(n.actressName)}">${escapeHtml(n.actressName)}</div>`;
-                n.publishTime && (l += `<div style="font-size:11px;color:#999;">${n.publishTime}</div>`);
-                l += `</div></a></div>`;
+                const e = escapeHtml(n.carNum), t = escapeHtml(n.title || n.carNum), a = n.coverUrl ? n.coverUrl.replace("thumbs", "covers") : "", i = `${r}/search?q=${encodeURIComponent(n.carNum)}`;
+                let o = `番号: ${e}\\n演员: ${escapeHtml(n.actressName)}\\n发行: ${n.publishTime || "未知"}`;
+                n.score && (o += `\\n评分: ${n.score}`);
+                const l = n.score ? `<span style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.7);color:#fff;font-size:11px;padding:2px 5px;border-radius:3px;">⭐${n.score}</span>` : "";
+                c += `<div class="nv-card" data-car="${e}" title="${o}">`;
+                c += `<a href="${i}" target="_blank" style="display:block;text-decoration:none;color:inherit;">`;
+                c += `<div style="width:100%;aspect-ratio:3/2;overflow:hidden;border-radius:6px;background:#f0f0f0;position:relative;">`;
+                a ? c += `<img class="nv-cover-img" src="${a}" data-full="${a}" loading="lazy" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">${l}<div style="display:none;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">无封面</div>` : c += `<div class="nv-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">加载中...</div>`;
+                c += `</div>`;
+                c += `<div style="padding:8px 4px;">`;
+                c += `<div style="font-size:13px;font-weight:bold;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${e}">${e}</div>`;
+                c += `<div style="font-size:12px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(n.actressName)}">${escapeHtml(n.actressName)}</div>`;
+                n.publishTime && (c += `<div style="font-size:11px;color:#999;">${n.publishTime}</div>`);
+                c += `</div></a></div>`;
             }
-            l += "</div>", r.html(l);
-            const c = $("#nv-pagination");
-            if (o <= 1) return void c.hide();
-            c.show();
-            let d = "";
-            this.nvCurrentPage > 1 && (d += `<button class="pagination-btn" data-nvpage="${this.nvCurrentPage - 1}" style="padding:6px 12px;margin:0 3px;background:#f0f0f0;border:1px solid #ddd;border-radius:4px;cursor:pointer;">上一页</button>`);
-            let h = Math.max(1, this.nvCurrentPage - 2), g = Math.min(o, h + 4);
-            g - h < 4 && (h = Math.max(1, g - 4));
-            for (let e = h; e <= g; e++) d += `<button class="pagination-btn" data-nvpage="${e}" style="padding:6px 12px;margin:0 3px;border:1px solid #ddd;border-radius:4px;cursor:pointer;${e === this.nvCurrentPage ? "background:#007bff;color:white;border-color:#007bff;" : "background:#f0f0f0;"}">${e}</button>`;
-            this.nvCurrentPage < o && (d += `<button class="pagination-btn" data-nvpage="${this.nvCurrentPage + 1}" style="padding:6px 12px;margin:0 3px;background:#f0f0f0;border:1px solid #ddd;border-radius:4px;cursor:pointer;">下一页</button>`),
-            d += `<span style="margin-left:15px;color:#666;">第 ${this.nvCurrentPage}/${o} 页</span>`, c.html(d), c.find(".pagination-btn").off("click").on("click", (e => {
-                const t = parseInt($(e.currentTarget).data("nvpage"));
-                t >= 1 && t <= o && t !== this.nvCurrentPage && (this.nvCurrentPage = t, this.nvRenderPage(), document.getElementById("new-video-list-container") && (document.getElementById("new-video-list-container").scrollTop = 0));
+            c += "</div>";
+            if (o > 1) {
+                c += '<div id="nv-pagination-bar" style="padding:12px 0;text-align:center;border-top:1px solid #eee;margin-top:8px;">';
+                this.nvCurrentPage > 1 && (c += `<button class="pagination-btn" data-nvpage="${this.nvCurrentPage - 1}" style="padding:6px 14px;margin:0 3px;background:#f0f0f0;border:1px solid #ddd;border-radius:4px;cursor:pointer;">上一页</button>`);
+                let e = Math.max(1, this.nvCurrentPage - 2), n = Math.min(o, e + 4);
+                n - e < 4 && (e = Math.max(1, n - 4));
+                for (let t = e; t <= n; t++) c += `<button class="pagination-btn" data-nvpage="${t}" style="padding:6px 14px;margin:0 3px;border:1px solid #ddd;border-radius:4px;cursor:pointer;${t === this.nvCurrentPage ? "background:#007bff;color:white;border-color:#007bff;" : "background:#f0f0f0;"}">${t}</button>`;
+                this.nvCurrentPage < o && (c += `<button class="pagination-btn" data-nvpage="${this.nvCurrentPage + 1}" style="padding:6px 14px;margin:0 3px;background:#f0f0f0;border:1px solid #ddd;border-radius:4px;cursor:pointer;">下一页</button>`),
+                c += `<span style="margin-left:15px;color:#666;font-size:13px;">第 ${this.nvCurrentPage}/${o} 页，共 ${t.length} 条</span>`, c += "</div>";
+            }
+            l.html(c), l.find(".pagination-btn").off("click").on("click", (e => {
+                const n = parseInt($(e.currentTarget).data("nvpage"));
+                n >= 1 && n <= o && n !== this.nvCurrentPage && (this.nvCurrentPage = n, this.nvRenderPage(), l.scrollTop(0));
             })), window.imageHoverPreviewObj ? window.imageHoverPreviewObj.bindEvents() : window.imageHoverPreviewObj = new ImageHoverPreview({
                 selector: ".nv-cover-img", dataAttribute: "data-full"
             });

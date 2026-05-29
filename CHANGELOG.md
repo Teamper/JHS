@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.3.6] - 2026-05-29
+
+### Fixed
+- 修复新作品列表分页控件不可见/不可用的问题：分页按钮移入滚动容器内部。
+- 新增按评分排序：从 JavDB 演员页面抓取评分数据，支持按评分高低排序。
+- 卡片封面右上角显示评分徽章。
+
 ## [4.3.5] - 2026-05-29
 
 ### Improved
