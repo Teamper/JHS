@@ -209,7 +209,13 @@ class et extends X {
         for (const m of s) {
             const e = $(m), {carNum: s, url: o, title: r, publishTime: l} = this.getBean("ListPagePlugin").findCarNumAndHref(e);
             if (!s) continue;
-            a.find((e => r.includes(e) || s.includes(e))) || (i.has(s) || (d || (d = l), c.push({ carNum: s, coverUrl: e.find("img").attr("src") || "", title: r || "", publishTime: l || "" })));
+            a.find((e => r.includes(e) || s.includes(e))) || (i.has(s) || (d || (d = l), (() => {
+                let coverUrl = e.find("img").attr("src") || "";
+                if (coverUrl && !coverUrl.startsWith("http")) {
+                    coverUrl = coverUrl.startsWith("/") ? this.javDbUrl + coverUrl : this.javDbUrl + "/" + coverUrl;
+                }
+                c.push({ carNum: s, coverUrl: coverUrl, title: r || "", publishTime: l || "" });
+            })()));
         }
         const h = await storageManager.getCarMap(), p = c.filter((e => !h.has(e.carNum)));
         p.length > 0 && clog.log(`<span style='color: #f40'>检测出新作品, ${n}, 共${p.length}部</span>`),

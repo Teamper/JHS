@@ -310,15 +310,25 @@ class pt extends X {
             n[a.starId] = !0;
             try {
                 const i = await gmHttp.get(`${t}/actors/${a.starId}?t=d`), s = utils.htmlTo$dom(i);
-                s.find(".movie-list .item").each(((e, t) => {
-                    const n = $(t), i = n.find(".video-title strong").text().trim(), s = n.find("img").attr("src") || "", o = n.find(".video-title").text().replace(i, "").trim(), r = n.find(".meta date").text().trim();
-                    i && $(`.nv-card[data-car="${i}"]`).each(((e, t) => {
-                        const n = $(t).find("img");
-                        if (n.length && s) {
-                            const e = s.replace("thumbs", "covers");
-                            n.attr("src", e).on("error", (function() { $(this).hide().next().show(); }));
+                s.find(".movie-list .item").each(((e, n) => {
+                    const i = $(n), o = i.find(".video-title strong").text().trim(), r = i.find("img").attr("src") || "";
+                    if (!o || !r) return;
+                    let l = r;
+                    if (!l.startsWith("http")) {
+                        l = l.startsWith("/") ? t + l : t + "/" + l;
+                    }
+                    const c = l.replace("thumbs", "covers"), d = i.find(".video-title").text().replace(o, "").trim();
+                    $(`.nv-card[data-car="${o}"]`).each(((e, t) => {
+                        const n = $(t), i = n.find("img");
+                        if (i.length) {
+                            i.attr("src", c).on("error", (function() { $(this).hide().next().show(); }));
+                        } else {
+                            const e = n.find(".nv-placeholder, div[style*='加载中']");
+                            if (e.length) {
+                                e.replaceWith(`<img src="${c}" loading="lazy" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div style="display:none;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">无封面</div>`);
+                            }
                         }
-                        o && $(t).attr("title", o);
+                        d && n.attr("title", d);
                     }));
                 }));
             } catch (i) { clog.warn("获取演员封面失败:", a.actressName, i); }
