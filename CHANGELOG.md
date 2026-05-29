@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.3.3] - 2026-05-29
+
+### Fixed
+- 修复新作品列表白屏：封面获取改为非阻塞，先渲染列表再异步加载封面。
+- 加载失败时显示错误信息而非空白页。
+
 ## [4.3.2] - 2026-05-29
 
 ### Fixed
@@ -123,7 +129,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.2...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.3...HEAD
+[4.3.3]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.2...v4.3.3
 [4.3.2]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.1...v4.3.2
 [4.3.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.0...v4.3.1
 [4.3.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.2.0...v4.3.0
