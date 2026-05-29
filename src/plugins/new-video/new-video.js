@@ -288,16 +288,34 @@ class pt extends X {
             }));
         })), this.renderPagination(i, s), show.ok("加载完成");
     }
-    async getNewVideoFlatList() {
-        const e = await storageManager.getFavoriteActressList(), t = await storageManager.getCarMap(), n = $("#paramActressType").val(), a = [];
+    async fetchActressCoverMap(e, t) {
+        const n = {}, a = await this.getBean("OtherSitePlugin").getJavDbUrl();
         for (const i of e) {
-            if ("all" !== n && i.actressType !== n) continue;
-            if (!Array.isArray(i.newVideoList)) continue;
-            for (const e of i.newVideoList) {
-                const n = "string" == typeof e ? e : e.carNum;
-                if (t.has(n)) continue;
-                const s = "object" == typeof e ? e : {};
-                a.push({ carNum: n, coverUrl: s.coverUrl || "", title: s.title || "", publishTime: s.publishTime || "", actressName: i.name || "", starId: i.starId || "" });
+            if (!i.starId || 0 === i.newVideoList.length) continue;
+            if (i.newVideoList.every((e => { const t = "object" == typeof e; return t && e.coverUrl; }))) continue;
+            try {
+                const e = await gmHttp.get(`${a}/actors/${i.starId}?t=d`), t = utils.htmlTo$dom(e);
+                t.find(".movie-list .item").each(((e, t) => {
+                    const a = $(t), i = a.find(".video-title strong").text().trim(), s = a.find("img").attr("src") || "", o = a.find(".video-title").text().replace(i, "").trim(), r = a.find(".meta date").text().trim();
+                    i && (n[i] = { coverUrl: s, title: o, publishTime: r });
+                }));
+            } catch (s) { clog.warn("获取演员封面失败:", i.name, s); }
+        }
+        return n;
+    }
+    async getNewVideoFlatList() {
+        const e = await storageManager.getFavoriteActressList(), t = await storageManager.getCarMap(), n = $("#paramActressType").val(), a = [], i = [];
+        for (const o of e) {
+            if ("all" !== n && o.actressType !== n) continue;
+            if (!Array.isArray(o.newVideoList)) continue;
+            const e = o.newVideoList.filter((e => { const n = "string" == typeof e ? e : e.carNum; return !t.has(n); }));
+            e.length > 0 && i.push({ actress: o, items: e });
+        }
+        const s = await this.fetchActressCoverMap(i.map((e => e.actress)), t);
+        for (const {actress: o, items: r} of i) {
+            for (const e of r) {
+                const t = "string" == typeof e ? e : e.carNum, n = "object" == typeof e ? e : {}, i = s[t] || {};
+                a.push({ carNum: t, coverUrl: n.coverUrl || i.coverUrl || "", title: n.title || i.title || "", publishTime: n.publishTime || i.publishTime || "", actressName: o.name || "", starId: o.starId || "" });
             }
         }
         return a.sort(((e, t) => (t.publishTime || "").localeCompare(e.publishTime || ""))), a;
@@ -310,20 +328,20 @@ class pt extends X {
         if (0 === t.length) return e.html('<div style="text-align:center;padding:40px;color:#999;">暂无待鉴定的新作品</div>'),
         void $("#new-video-list-footer").html("");
         const a = new Set, i = new Set;
-        for (const r of t) a.add(r.actressName), i.add(r.carNum);
+        for (const o of t) a.add(o.actressName), i.add(o.carNum);
         let s = "";
-        s += '<div style="display:flex;flex-wrap:wrap;gap:12px;padding:5px;">';
-        for (const r of t) {
-            const e = escapeHtml(r.carNum), t = escapeHtml(r.title || r.carNum), a = r.coverUrl ? r.coverUrl.replace("thumbs", "covers") : "", i = `${n}/search?q=${encodeURIComponent(r.carNum)}`;
-            s += `<div class="nv-card" data-car="${e}" style="width:180px;cursor:pointer;" title="${t}">`;
+        s += '<div id="nv-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;padding:5px;">';
+        for (const o of t) {
+            const e = escapeHtml(o.carNum), t = escapeHtml(o.title || o.carNum), a = o.coverUrl ? o.coverUrl.replace("thumbs", "covers") : "", i = `${n}/search?q=${encodeURIComponent(o.carNum)}`;
+            s += `<div class="nv-card" title="${t}">`;
             s += `<a href="${i}" target="_blank" style="display:block;text-decoration:none;color:inherit;">`;
-            s += `<div style="width:180px;height:120px;overflow:hidden;border-radius:6px;background:#f0f0f0;">`;
-            a ? s += `<img src="${a}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<div style=\\'display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;\\'>无封面</div>';">` : s += `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">无封面</div>`;
+            s += `<div style="width:100%;aspect-ratio:3/2;overflow:hidden;border-radius:6px;background:#f0f0f0;">`;
+            a ? s += `<img src="${a}" loading="lazy" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div style="display:none;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">无封面</div>` : s += `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">无封面</div>`;
             s += `</div>`;
             s += `<div style="padding:6px 2px;">`;
             s += `<div style="font-size:12px;font-weight:bold;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e}</div>`;
-            s += `<div style="font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(r.actressName)}</div>`;
-            r.publishTime && (s += `<div style="font-size:10px;color:#aaa;">${r.publishTime}</div>`);
+            s += `<div style="font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(o.actressName)}</div>`;
+            o.publishTime && (s += `<div style="font-size:10px;color:#aaa;">${o.publishTime}</div>`);
             s += `</div></a></div>`;
         }
         s += "</div>", e.html(s), $("#new-video-list-footer").html(`<span>共 <b>${t.length}</b> 个待鉴定番号，涉及 <b>${a.size}</b> 位演员</span>\n            <a class="a-normal" id="batchMarkWatched" style="margin-left:15px;">全部标记已看</a>\n            <a class="a-normal" id="batchMarkDownloaded" style="margin-left:8px;">全部标记已下载</a>`);
