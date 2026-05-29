@@ -288,63 +288,74 @@ class pt extends X {
             }));
         })), this.renderPagination(i, s), show.ok("加载完成");
     }
-    async fetchActressCoverMap(e, t) {
-        const n = {}, a = await this.getBean("OtherSitePlugin").getJavDbUrl();
-        for (const i of e) {
-            if (!i.starId || 0 === i.newVideoList.length) continue;
-            if (i.newVideoList.every((e => { const t = "object" == typeof e; return t && e.coverUrl; }))) continue;
-            try {
-                const e = await gmHttp.get(`${a}/actors/${i.starId}?t=d`), t = utils.htmlTo$dom(e);
-                t.find(".movie-list .item").each(((e, t) => {
-                    const a = $(t), i = a.find(".video-title strong").text().trim(), s = a.find("img").attr("src") || "", o = a.find(".video-title").text().replace(i, "").trim(), r = a.find(".meta date").text().trim();
-                    i && (n[i] = { coverUrl: s, title: o, publishTime: r });
-                }));
-            } catch (s) { clog.warn("获取演员封面失败:", i.name, s); }
-        }
-        return n;
-    }
     async getNewVideoFlatList() {
-        const e = await storageManager.getFavoriteActressList(), t = await storageManager.getCarMap(), n = $("#paramActressType").val(), a = [], i = [];
-        for (const o of e) {
-            if ("all" !== n && o.actressType !== n) continue;
-            if (!Array.isArray(o.newVideoList)) continue;
-            const e = o.newVideoList.filter((e => { const n = "string" == typeof e ? e : e.carNum; return !t.has(n); }));
-            e.length > 0 && i.push({ actress: o, items: e });
-        }
-        const s = await this.fetchActressCoverMap(i.map((e => e.actress)), t);
-        for (const {actress: o, items: r} of i) {
-            for (const e of r) {
-                const t = "string" == typeof e ? e : e.carNum, n = "object" == typeof e ? e : {}, i = s[t] || {};
-                a.push({ carNum: t, coverUrl: n.coverUrl || i.coverUrl || "", title: n.title || i.title || "", publishTime: n.publishTime || i.publishTime || "", actressName: o.name || "", starId: o.starId || "" });
+        const e = await storageManager.getFavoriteActressList(), t = await storageManager.getCarMap(), n = $("#paramActressType").val(), a = [];
+        for (const i of e) {
+            if ("all" !== n && i.actressType !== n) continue;
+            if (!Array.isArray(i.newVideoList)) continue;
+            for (const e of i.newVideoList) {
+                const n = "string" == typeof e ? e : e.carNum;
+                if (t.has(n)) continue;
+                const s = "object" == typeof e ? e : {};
+                a.push({ carNum: n, coverUrl: s.coverUrl || "", title: s.title || "", publishTime: s.publishTime || "", actressName: i.name || "", starId: i.starId || "" });
             }
         }
         return a.sort(((e, t) => (t.publishTime || "").localeCompare(e.publishTime || ""))), a;
+    }
+    async loadCoverForItems(e) {
+        const t = await this.getBean("OtherSitePlugin").getJavDbUrl(), n = {};
+        for (const a of e) {
+            if (n[a.starId]) continue;
+            if (e.every((e => e.starId !== a.starId || e.coverUrl))) continue;
+            n[a.starId] = !0;
+            try {
+                const i = await gmHttp.get(`${t}/actors/${a.starId}?t=d`), s = utils.htmlTo$dom(i);
+                s.find(".movie-list .item").each(((e, t) => {
+                    const n = $(t), i = n.find(".video-title strong").text().trim(), s = n.find("img").attr("src") || "", o = n.find(".video-title").text().replace(i, "").trim(), r = n.find(".meta date").text().trim();
+                    i && $(`.nv-card[data-car="${i}"]`).each(((e, t) => {
+                        const n = $(t).find("img");
+                        if (n.length && s) {
+                            const e = s.replace("thumbs", "covers");
+                            n.attr("src", e).on("error", (function() { $(this).hide().next().show(); }));
+                        }
+                        o && $(t).attr("title", o);
+                    }));
+                }));
+            } catch (i) { clog.warn("获取演员封面失败:", a.actressName, i); }
+        }
     }
     async renderNewVideoList() {
         const e = $("#new-video-list-container");
         if (!e.length) return;
         e.html('<div style="text-align:center;padding:40px;color:#999;">加载中...</div>');
-        const t = await this.getNewVideoFlatList(), n = await this.getBean("OtherSitePlugin").getJavDbUrl();
+        let t;
+        try {
+            t = await this.getNewVideoFlatList();
+        } catch (n) {
+            return console.error(n), void e.html(`<div style="text-align:center;padding:40px;color:#e74c3c;">加载失败: ${escapeHtml(n.message)}</div>`);
+        }
+        const a = await this.getBean("OtherSitePlugin").getJavDbUrl();
         if (0 === t.length) return e.html('<div style="text-align:center;padding:40px;color:#999;">暂无待鉴定的新作品</div>'),
         void $("#new-video-list-footer").html("");
-        const a = new Set, i = new Set;
-        for (const o of t) a.add(o.actressName), i.add(o.carNum);
-        let s = "";
-        s += '<div id="nv-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;padding:5px;">';
-        for (const o of t) {
-            const e = escapeHtml(o.carNum), t = escapeHtml(o.title || o.carNum), a = o.coverUrl ? o.coverUrl.replace("thumbs", "covers") : "", i = `${n}/search?q=${encodeURIComponent(o.carNum)}`;
-            s += `<div class="nv-card" title="${t}">`;
-            s += `<a href="${i}" target="_blank" style="display:block;text-decoration:none;color:inherit;">`;
-            s += `<div style="width:100%;aspect-ratio:3/2;overflow:hidden;border-radius:6px;background:#f0f0f0;">`;
-            a ? s += `<img src="${a}" loading="lazy" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div style="display:none;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">无封面</div>` : s += `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">无封面</div>`;
-            s += `</div>`;
-            s += `<div style="padding:6px 2px;">`;
-            s += `<div style="font-size:12px;font-weight:bold;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e}</div>`;
-            s += `<div style="font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(o.actressName)}</div>`;
-            o.publishTime && (s += `<div style="font-size:10px;color:#aaa;">${o.publishTime}</div>`);
-            s += `</div></a></div>`;
+        const i = new Set, s = new Set;
+        for (const r of t) i.add(r.actressName), s.add(r.carNum);
+        let o = "";
+        o += '<div id="nv-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;padding:5px;">';
+        for (const r of t) {
+            const e = escapeHtml(r.carNum), t = escapeHtml(r.title || r.carNum), n = r.coverUrl ? r.coverUrl.replace("thumbs", "covers") : "", i = `${a}/search?q=${encodeURIComponent(r.carNum)}`;
+            o += `<div class="nv-card" data-car="${e}" title="${t}">`;
+            o += `<a href="${i}" target="_blank" style="display:block;text-decoration:none;color:inherit;">`;
+            o += `<div style="width:100%;aspect-ratio:3/2;overflow:hidden;border-radius:6px;background:#f0f0f0;">`;
+            n ? o += `<img src="${n}" loading="lazy" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div style="display:none;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">无封面</div>` : o += `<div class="nv-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">加载中...</div>`;
+            o += `</div>`;
+            o += `<div style="padding:6px 2px;">`;
+            o += `<div style="font-size:12px;font-weight:bold;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e}</div>`;
+            o += `<div style="font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(r.actressName)}</div>`;
+            r.publishTime && (o += `<div style="font-size:10px;color:#aaa;">${r.publishTime}</div>`);
+            o += `</div></a></div>`;
         }
-        s += "</div>", e.html(s), $("#new-video-list-footer").html(`<span>共 <b>${t.length}</b> 个待鉴定番号，涉及 <b>${a.size}</b> 位演员</span>\n            <a class="a-normal" id="batchMarkWatched" style="margin-left:15px;">全部标记已看</a>\n            <a class="a-normal" id="batchMarkDownloaded" style="margin-left:8px;">全部标记已下载</a>`);
+        o += "</div>", e.html(o), $("#new-video-list-footer").html(`<span>共 <b>${t.length}</b> 个待鉴定番号，涉及 <b>${i.size}</b> 位演员</span>\n            <a class="a-normal" id="batchMarkWatched" style="margin-left:15px;">全部标记已看</a>\n            <a class="a-normal" id="batchMarkDownloaded" style="margin-left:8px;">全部标记已下载</a>`),
+        this.loadCoverForItems(t).catch((e => clog.warn("封面加载异常:", e)));
         $("#batchMarkWatched").off("click").on("click", (async () => {
             if (0 === t.length) return;
             utils.q({ clientX: 0, clientY: 0 }, `确认将 ${t.length} 个番号全部标记为已看?`, (async () => {
