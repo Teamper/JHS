@@ -207,11 +207,11 @@ class et extends X {
         new Error("新作品检测-解析列表失败");
         let c = [], d = null;
         for (const m of s) {
-            const e = $(m), {carNum: t, url: n, title: s, publishTime: o} = this.getBean("ListPagePlugin").findCarNumAndHref(e);
-            if (!t) continue;
-            a.find((e => s.includes(e) || t.includes(e))) || (i.has(t) || (d || (d = o), c.push(t)));
+            const e = $(m), {carNum: s, url: o, title: r, publishTime: l} = this.getBean("ListPagePlugin").findCarNumAndHref(e);
+            if (!s) continue;
+            a.find((e => r.includes(e) || s.includes(e))) || (i.has(s) || (d || (d = l), c.push({ carNum: s, coverUrl: e.find("img").attr("src") || "", title: r || "", publishTime: l || "" })));
         }
-        const h = await storageManager.getCarMap(), p = c.filter((e => !h.has(e)));
+        const h = await storageManager.getCarMap(), p = c.filter((e => !h.has(e.carNum)));
         p.length > 0 && clog.log(`<span style='color: #f40'>检测出新作品, ${n}, 共${p.length}部</span>`),
         await storageManager.updateFavoriteActress({
             starId: t,
