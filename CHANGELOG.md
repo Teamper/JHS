@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-05-29
+
+### Added
+- 新作品列表视图：NewVideoPlugin 对话框新增「📋 新作品列表」视图切换按钮，平铺展示所有待鉴定番号（按发现时间倒序），底部汇总统计（待鉴定总数、涉及演员数），支持批量勾选标记已看/已下载。
+- 磁力评分：MagnetHubPlugin 每条搜索结果新增综合评分（0-100），5 维度加权：做种人数 35%、分辨率 25%、字幕标记 20%、新鲜度 15%、内容完整性 5%。结果默认按评分降序排列，评分徽章（🟢80+ 🟡60-79 🔴<60），hover 显示各维度得分详情。
+- 磁力解析增强：parseTorrentList 额外提取 seeders/leechers 列。
+
+### Changed
+- 新作品列表视图的演员类别过滤（所有/无码/有码）同时作用于演员视图和列表视图。
+
 ## [4.2.0] - 2026-05-29
 
 ### Added
@@ -99,7 +109,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.2.0...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.0...HEAD
+[4.3.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.4...v4.1.0
 [4.0.4]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.3...v4.0.4

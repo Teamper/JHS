@@ -140,7 +140,7 @@ class pt extends X {
     }
     async openDialog() {
         const e = this.getBean("TaskPlugin"), t = await storageManager.getSetting(), n = localStorage.getItem(e.lastCheckFavoriteActressTimeKey) || "无", a = t.checkFavoriteActress_IntervalTime, i = localStorage.getItem(e.lastCheckNewVideoTimeKey) || "无", s = t.checkNewVideo_intervalTime;
-        let o = `\n            <div class="newVideoToolBox" style="display: flex; flex-direction: column; height: 100%; overflow: hidden; padding:10px">\n                <div style="margin-bottom: 15px;display: flex; justify-content: space-between;">\n                    <div>\n                        <a class="a-danger" id="checkFavoriteActress" data-tip="上次自动同步时间: ${n}; 检测间隔时间: ${a}小时">${this.actressSvg} &nbsp;&nbsp; 手动同步演员</a>\n                        <a class="a-warning" id="checkNewVideo" data-tip="上次检测时间: ${i}; 检测间隔时间: ${s}小时">${this.newSvg} &nbsp;&nbsp; 手动检测最新作品</a>\n                        <a class="a-info" id="toSetting">${this.settingSvg} &nbsp;&nbsp; 配置</a>\n                        <span id="checkNewVideoMsg"></span>\n                    </div>\n                    <div style="display: flex; align-items: flex-start;">\n                        <select id="paramActressType" style="text-align: center; height: 100%; min-width: 150px; border: 1px solid #ddd; margin-right: 10px">\n                            <option value="all" selected>所有</option>\n                            <option value="uncensored">无码</option>\n                            <option value="censored">有码</option>\n                            <option value="">未知</option>\n                        </select>\n                        <select id="paramSortBy" style="text-align: center; height: 100%; min-width: 150px; border: 1px solid #ddd; margin-right: 10px">\n                            <option value="default" selected>默认排序</option>\n                            <optgroup label="发行时间">\n                                <option value="lastPublishTime_desc">发行时间 新→旧</option>\n                                <option value="lastPublishTime_asc">发行时间 旧→新</option>\n                            </optgroup>\n                            <optgroup label="检测时间">\n                                <option value="lastCheckTime_desc">检测时间 新→旧</option>\n                                <option value="lastCheckTime_asc">检测时间 旧→新</option>\n                            </optgroup>\n                            <optgroup label="新作品数">\n                                <option value="newVideoCount_desc">新作品数 多→少</option>\n                                <option value="newVideoCount_asc">新作品数 少→多</option>\n                            </optgroup>\n                        </select>\n                        \n                        <a class="a-normal" id="reLoad">${this.refreshSvg} &nbsp;&nbsp; 刷新</a>\n                    </div>\n\n                </div>\n                <div id="actress-card-container" class="jhs-scrollbar"></div>\n                <div id="actress-pagination"></div>\n            </div>\n        `;
+        let o = `\n            <div class="newVideoToolBox" style="display: flex; flex-direction: column; height: 100%; overflow: hidden; padding:10px">\n                <div style="margin-bottom: 15px;display: flex; justify-content: space-between;">\n                    <div>\n                        <a class="a-danger" id="checkFavoriteActress" data-tip="上次自动同步时间: ${n}; 检测间隔时间: ${a}小时">${this.actressSvg} &nbsp;&nbsp; 手动同步演员</a>\n                        <a class="a-warning" id="checkNewVideo" data-tip="上次检测时间: ${i}; 检测间隔时间: ${s}小时">${this.newSvg} &nbsp;&nbsp; 手动检测最新作品</a>\n                        <a class="a-info" id="toSetting">${this.settingSvg} &nbsp;&nbsp; 配置</a>\n                        <span id="checkNewVideoMsg"></span>\n                    </div>\n                    <div style="display: flex; align-items: flex-start;">\n                        <select id="paramActressType" style="text-align: center; height: 100%; min-width: 150px; border: 1px solid #ddd; margin-right: 10px">\n                            <option value="all" selected>所有</option>\n                            <option value="uncensored">无码</option>\n                            <option value="censored">有码</option>\n                            <option value="">未知</option>\n                        </select>\n                        <select id="paramSortBy" style="text-align: center; height: 100%; min-width: 150px; border: 1px solid #ddd; margin-right: 10px">\n                            <option value="default" selected>默认排序</option>\n                            <optgroup label="发行时间">\n                                <option value="lastPublishTime_desc">发行时间 新→旧</option>\n                                <option value="lastPublishTime_asc">发行时间 旧→新</option>\n                            </optgroup>\n                            <optgroup label="检测时间">\n                                <option value="lastCheckTime_desc">检测时间 新→旧</option>\n                                <option value="lastCheckTime_asc">检测时间 旧→新</option>\n                            </optgroup>\n                            <optgroup label="新作品数">\n                                <option value="newVideoCount_desc">新作品数 多→少</option>\n                                <option value="newVideoCount_asc">新作品数 少→多</option>\n                            </optgroup>\n                        </select>\n                        <a class="a-normal" id="toggleViewMode" style="margin-left: 10px;">📋 新作品列表</a>\n                        <a class="a-normal" id="reLoad">${this.refreshSvg} &nbsp;&nbsp; 刷新</a>\n                    </div>\n\n                </div>\n                <div id="actress-card-container" class="jhs-scrollbar"></div>\n                <div id="new-video-list-container" style="display:none; flex:1; overflow:hidden;"></div>\n                <div id="new-video-list-footer" style="display:none; padding:8px 0; border-top:1px solid #eee; font-size:13px; color:#666;"></div>\n                <div id="actress-pagination"></div>\n            </div>\n        `;
         layer.open({
             type: 1,
             title: '<span style="padding: 0 10px;" data-tip="数据来源: 女优页面首页,含磁链分类">新作品检测 ❓</span>',
@@ -194,9 +194,17 @@ class pt extends X {
                 }));
             }));
         })), $("#paramActressType").on("change", (e => {
-            this.loadData();
+            "list" === this._viewMode ? this.renderNewVideoList() : this.loadData();
         })), $("#paramSortBy").on("change", (e => {
             this.loadData();
+        })), $("#toggleViewMode").on("click", (e => {
+            this._viewMode = "list" === this._viewMode ? "card" : "list";
+            const t = "list" === this._viewMode;
+            $("#actress-card-container").toggle(!t), $("#actress-pagination").toggle(!t),
+            $("#new-video-list-container").toggle(t), $("#new-video-list-footer").toggle(t),
+            $("#paramSortBy").parent().toggle(!t),
+            $("#toggleViewMode").text(t ? "👤 演员视图" : "📋 新作品列表"),
+            t ? this.renderNewVideoList() : this.loadData();
         }));
     }
     loadData() {
@@ -279,6 +287,61 @@ class pt extends X {
                 console.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
             }));
         })), this.renderPagination(i, s), show.ok("加载完成");
+    }
+    async getNewVideoFlatList() {
+        const e = await storageManager.getFavoriteActressList(), t = await storageManager.getCarMap(), n = $("#paramActressType").val(), a = [];
+        for (const i of e) {
+            if ("all" !== n && i.actressType !== n) continue;
+            if (!Array.isArray(i.newVideoList)) continue;
+            for (const e of i.newVideoList) {
+                if (t.has(e)) continue;
+                a.push({ carNum: e, actressName: i.name || "", starId: i.starId || "", actressType: i.actressType || "", discoveredAt: i.lastPublishTime || i.lastCheckTime || "" });
+            }
+        }
+        return a.sort(((e, t) => (t.discoveredAt || "").localeCompare(e.discoveredAt || ""))), a;
+    }
+    async renderNewVideoList() {
+        const e = $("#new-video-list-container");
+        if (!e.length) return;
+        e.html('<div style="text-align:center;padding:40px;color:#999;">加载中...</div>');
+        const t = await this.getNewVideoFlatList(), n = await this.getBean("OtherSitePlugin").getJavDbUrl();
+        if (0 === t.length) return e.html('<div style="text-align:center;padding:40px;color:#999;">暂无待鉴定的新作品</div>'),
+        void $("#new-video-list-footer").html("");
+        const a = new Set, i = new Set;
+        for (const o of t) a.add(o.actressName), i.add(o.carNum);
+        e.empty();
+        const s = new Tabulator(e[0], {
+            layout: "fitColumns",
+            placeholder: "暂无数据",
+            data: t,
+            selectable: !0,
+            columnDefaults: { headerHozAlign: "center", hozAlign: "center" },
+            columns: [
+                { formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", width: 40, headerSort: !1 },
+                { title: "番号", field: "carNum", width: 150, headerSort: !1, formatter: e => `<a href="${n}/search?q=${encodeURIComponent(e.getValue())}" target="_blank" style="color:#007bff;text-decoration:underline;">${e.getValue()}</a>` },
+                { title: "演员", field: "actressName", width: 120, headerSort: !1 },
+                { title: "类别", field: "actressType", width: 80, headerSort: !1, formatter: e => { const t = e.getValue(); return "uncensored" === t ? '<span style="color:#4CAF50;">无码</span>' : "censored" === t ? '<span style="color:#FF9800;">有码</span>' : '<span style="color:#999;">未知</span>'; } },
+                { title: "发现时间", field: "discoveredAt", width: 170, headerSort: !1 },
+                { title: "操作", width: 100, headerSort: !1, formatter: e => `<a href="${n}/search?q=${encodeURIComponent(e.getData().carNum)}" target="_blank" class="a-info" style="font-size:12px;">查看详情</a>` }
+            ],
+            locale: "zh-cn"
+        });
+        $("#new-video-list-footer").html(`<span>共 <b>${t.length}</b> 个待鉴定番号，涉及 <b>${a.size}</b> 位演员</span>\n            <a class="a-normal" id="batchMarkWatched" style="margin-left:15px;">标记已看</a>\n            <a class="a-normal" id="batchMarkDownloaded" style="margin-left:8px;">标记已下载</a>`);
+        $("#batchMarkWatched").off("click").on("click", (async () => {
+            const e = s.getSelectedData();
+            if (0 === e.length) return void show.error("请先勾选要操作的番号");
+            utils.q({ clientX: 0, clientY: 0 }, `确认将 ${e.length} 个番号标记为已看?`, (async () => {
+                const t = e.map((e => ({ carNum: e.carNum, url: `/search?q=${encodeURIComponent(e.carNum)}`, names: e.actressName, actionType: p })));
+                try { await storageManager.saveCarList(t), show.ok(`已标记 ${e.length} 个`), this.renderNewVideoList(), this.showNewVideoCount(); } catch (n) { show.error("标记失败: " + n.message); }
+            }));
+        })), $("#batchMarkDownloaded").off("click").on("click", (async () => {
+            const e = s.getSelectedData();
+            if (0 === e.length) return void show.error("请先勾选要操作的番号");
+            utils.q({ clientX: 0, clientY: 0 }, `确认将 ${e.length} 个番号标记为已下载?`, (async () => {
+                const t = e.map((e => ({ carNum: e.carNum, url: `/search?q=${encodeURIComponent(e.carNum)}`, names: e.actressName, actionType: g })));
+                try { await storageManager.saveCarList(t), show.ok(`已标记 ${e.length} 个`), this.renderNewVideoList(), this.showNewVideoCount(); } catch (n) { show.error("标记失败: " + n.message); }
+            }));
+        }));
     }
     async editActress(e) {
         const t = e.name, n = e.avatar, a = e.remark || "", i = Array.isArray(e.allName) ? e.allName.join("，") : "", s = Array.isArray(e.newVideoList) ? e.newVideoList.join("，") : "", o = e.starId, r = "width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; min-height: 60px; overflow-y: hidden;", l = e.actressType || "", c = `\n            <div style="padding: 20px;">\n                <div style="margin-bottom: 15px; text-align: center;">\n                    <img id="edit-avatar-preview" src="${n}" alt="Avatar Preview" \n                         style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 10px; border: 2px solid #ddd;">\n                    <div style="text-align: left">\n                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">头像链接:</label>\n                        <input type="text" id="edit-actress-avatar" value="${n}" \n                               style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">\n                       <div style="display: flex; gap: 5px; margin-top: 5px;">\n                            <button type="button" id="search-avatar-btn" \n                                style="flex-grow: 1; padding: 8px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">\n                                搜索头像\n                            </button>\n                            <button type="button" id="select-cdn-btn" \n                                style="width: 100px; padding: 8px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">\n                                选择 CDN 源\n                            </button>\n                        </div>\n                    </div>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">主名称:</label>\n                    <input type="text" id="edit-actress-name" value="${t}" \n                           style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">所有别名(用逗号隔开):</label>\n                    <textarea id="edit-actress-allname" style="${r}">${i}</textarea>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">演员类别:</label>\n                    <select id="actressType" style="width: 100%; padding: 10px; border: 1px solid #ddd;">\n                        <option value="" ${"" === l ? "selected" : ""}>未知</option>\n                        <option value="censored" ${"censored" === l ? "selected" : ""}>有码</option>\n                        <option value="uncensored" ${"uncensored" === l ? "selected" : ""}>无码</option>\n                    </select>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">最新作品(用逗号隔开):</label>\n                    <textarea id="edit-actress-newvideolist" style="${r}">${s}</textarea>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">备注:</label>\n                   <textarea id="edit-remark" style="${r}">${a}</textarea>\n                </div>\n            </div>\n        `;
