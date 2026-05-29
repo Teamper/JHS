@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.3.4] - 2026-05-29
+
+### Fixed
+- 修复新作品封面永远加载不出来：将 coverUrl 转为绝对 URL（解决相对路径无法加载的问题），并修复异步封面获取时无法创建 `<img>` 元素的 bug。
+
 ## [4.3.3] - 2026-05-29
 
 ### Fixed
