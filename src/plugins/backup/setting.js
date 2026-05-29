@@ -165,7 +165,7 @@ class Ae extends X {
             area: utils.getResponsiveArea([ "55%", "90%" ]),
             scrollbar: !1,
             success: (e, n) => {
-                $(e).find(".layui-layer-content").css("position", "relative"), this.injectHealthPanel(), this.injectPluginMgmtPanel(), this.loadForm(),
+                $(e).find(".layui-layer-content").css("position", "relative"), this.injectHealthPanel(), this.injectPluginMgmtPanel(), this.injectSnapshotPanel(), this.loadForm(),
                 this.bindClick(), utils.setupEscClose(n), t && t();
             },
             end: () => {
@@ -220,6 +220,116 @@ class Ae extends X {
         i += '<div id="cache-hit-stats" style="background:#f8f9fa;border:1px solid #ddd;border-radius:5px;padding:10px;"></div>';
         i += '</div>';
         t.append(i);
+    }
+    injectSnapshotPanel() {
+        const e = $(".side-menu-item").parent();
+        e.length && !e.find('[data-panel="snapshot-panel"]').length && e.append('<div class="side-menu-item" data-panel="snapshot-panel">📸 恢复点</div>');
+        const t = $(".content-panel").parent();
+        if (!t.length || $("#snapshot-panel").length) return;
+        let n = '<div id="snapshot-panel" class="content-panel" style="display:none;">';
+        n += '<div style="display:flex;gap:8px;margin-bottom:15px;">';
+        n += '<a id="createSnapshotBtn" class="menu-btn" style="background-color:#64bb69"><span>创建快照</span></a>';
+        n += '</div>';
+        n += '<p style="color:#666;font-size:0.85em;margin-bottom:10px;">快照保存当前全部数据状态，可用于恢复。最多保留 10 个，超出自动清理最旧的。</p>';
+        n += '<div id="snapshot-list"></div>';
+        n += '</div>';
+        t.append(n);
+    }
+    async renderSnapshotPanel() {
+        const e = await storageManager.getSnapshotList(), t = {
+            "manual": "手动创建",
+            "auto-import": "导入前自动",
+            "auto-repair": "修复前自动",
+            "auto-restore": "恢复前自动"
+        };
+        if (0 === e.length) return void $("#snapshot-list").html('<div style="text-align:center;color:#999;padding:30px;">暂无快照，点击上方按钮创建</div>');
+        const n = new Tabulator("#snapshot-list", {
+            layout: "fitColumns",
+            placeholder: "暂无数据",
+            data: e,
+            columnDefaults: { headerHozAlign: "center", hozAlign: "center" },
+            columns: [
+                { title: "名称", field: "name", width: 200, headerSort: !1 },
+                { title: "来源", field: "source", width: 100, headerSort: !1, formatter: e => t[e.getValue()] || e.getValue() },
+                { title: "时间", field: "time", width: 170, headerSort: !1 },
+                { title: "数据量", field: "itemCount", width: 80, headerSort: !1 },
+                {
+                    title: "操作", minWidth: 220, headerSort: !1, formatter: (e, t, a) => {
+                        const i = e.getData();
+                        return a((() => {
+                            const t = e.getElement().querySelector(".snap-restore"), a = e.getElement().querySelector(".snap-download"), s = e.getElement().querySelector(".snap-delete");
+                            t && t.addEventListener("click", (async e => {
+                                utils.q(e, `恢复到快照「${i.name}」? 当前数据会自动备份。`, (async () => {
+                                    let e = loading();
+                                    try {
+                                        await storageManager.restoreSnapshot(i.id), show.ok("恢复成功, 页面将刷新"), setTimeout(() => location.reload(), 1e3);
+                                    } catch (t) {
+                                        console.error(t), show.error("恢复失败: " + t.message);
+                                    } finally { e.close(); }
+                                }));
+                            })), a && a.addEventListener("click", (async e => {
+                                let t = loading();
+                                try {
+                                    const e = await storageManager.getSnapshot(i.id);
+                                    if (!e) throw new Error("快照不存在");
+                                    utils.download(JSON.stringify(e.data), `snapshot_${i.name}.json`), show.ok("下载成功");
+                                } catch (n) { show.error("下载失败: " + n.message); } finally { t.close(); }
+                            })), s && s.addEventListener("click", (async e => {
+                                utils.q(e, `删除快照「${i.name}」?`, (async () => {
+                                    await storageManager.deleteSnapshot(i.id), show.ok("已删除"), this.renderSnapshotPanel();
+                                }));
+                            }));
+                        })), '<a class="a-success snap-restore">恢复</a> <a class="a-primary snap-download">下载</a> <a class="a-danger snap-delete">删除</a>';
+                    }
+                }
+            ],
+            locale: "zh-cn"
+        });
+    }
+    showDiffPreview(e, t, n = null) {
+        const a = e.summary, i = [];
+        for (const [s, o] of Object.entries(e.stores)) {
+            if ("unchanged" === o.status) continue;
+            const e = { store: s, status: o.status, oldCount: o.oldCount, newCount: o.newCount, added: o.added.length, removed: o.removed.length, modified: o.modified.length };
+            i.push(e);
+        }
+        let s = '<div style="padding:15px;">';
+        s += '<div style="display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap;">';
+        s += `<div style="flex:1;min-width:100px;background:#f0fff4;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:bold;color:#7bc73b">${a.added}</div><div style="font-size:12px;color:#888">新增数据源</div></div>`;
+        s += `<div style="flex:1;min-width:100px;background:#fff5f5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:bold;color:#de3333">${a.removed}</div><div style="font-size:12px;color:#888">缺失数据源</div></div>`;
+        s += `<div style="flex:1;min-width:100px;background:#fff8e1;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:bold;color:#f59e0b">${a.modified}</div><div style="font-size:12px;color:#888">有变更</div></div>`;
+        s += `<div style="flex:1;min-width:100px;background:#f5f5f5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:bold;color:#999">${a.unchanged}</div><div style="font-size:12px;color:#888">无变化</div></div>`;
+        s += '</div>';
+        if (i.length > 0) {
+            s += '<div style="max-height:350px;overflow:auto;border:1px solid #eee;border-radius:5px;">';
+            s += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+            s += '<thead><tr style="background:#f5f5f5;"><th style="padding:8px;text-align:left;">数据源</th><th style="padding:8px;">状态</th><th style="padding:8px;">当前</th><th style="padding:8px;">导入</th><th style="padding:8px;">新增</th><th style="padding:8px;">删除</th><th style="padding:8px;">修改</th></tr></thead><tbody>';
+            const o = { added: "🆕 新增", removed: "❌ 缺失", modified: "📝 变更", unchanged: "✅ 无变化" };
+            for (const r of i) s += `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px 8px;">${r.store}</td><td style="padding:6px 8px;">${o[r.status]}</td><td style="padding:6px 8px;text-align:center;">${r.oldCount}</td><td style="padding:6px 8px;text-align:center;">${r.newCount}</td><td style="padding:6px 8px;text-align:center;color:#7bc73b;">${r.added || "-"}</td><td style="padding:6px 8px;text-align:center;color:#de3333;">${r.removed || "-"}</td><td style="padding:6px 8px;text-align:center;color:#f59e0b;">${r.modified || "-"}</td></tr>`;
+            s += '</tbody></table></div>';
+        } else {
+            s += '<div style="text-align:center;color:#999;padding:20px;">数据完全一致，无需导入</div>';
+        }
+        s += '<div style="margin-top:12px;color:#e74c3c;font-size:12px;">⚠️ 导入将覆盖当前数据，建议先创建快照备份</div>';
+        s += '</div>';
+        const r = layer.open({
+            type: 1,
+            title: "数据差异预览",
+            content: s,
+            area: ["700px", "auto"],
+            btn: ["确认导入", "取消"],
+            anim: -1,
+            yes: async s => {
+                layer.close(s);
+                let o = loading();
+                try {
+                    await storageManager.createSnapshot("导入前自动备份", "auto-import"),
+                    n ? (await storageManager.importData(n), show.ok("导入成功!"), location.reload()) : t && (await storageManager.importData(t), show.ok("导入成功!"), location.reload());
+                } catch (r) {
+                    console.error(r), show.error("导入失败: " + r.message);
+                } finally { o.close(); }
+            }
+        });
     }
     async renderPluginMgmtPanel() {
         const disabled = JSON.parse(await storageManager.getSetting("disabledPlugins", "[]"));
@@ -529,7 +639,8 @@ class Ae extends X {
             const e = $(this).data("panel");
             $("#" + e).show(), "cache-panel" === e ? ($("#saveBtn").hide(), $("#clean-all").show()) : ($("#saveBtn").show(),
             $("#clean-all").hide()), "health-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), settingPlugin.renderDataHealthPanel()),
-            "plugin-mgmt-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), settingPlugin.renderPluginMgmtPanel());
+            "plugin-mgmt-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), settingPlugin.renderPluginMgmtPanel()),
+            "snapshot-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), settingPlugin.renderSnapshotPanel());
         })), $("#importBtn").on("click", (e => this.importData(e))), $("#exportBtn").on("click", (e => this.exportData(e))),
         $("#webdavBackupBtn").on("click", (e => this.backupDataByWebDav(e))), $("#webdavBackupListBtn").on("click", (e => this.backupListBtnByWebDav(e))),
         $("#saveBtn").on("click", (() => this.saveForm())), $("#runHealthCheckBtn").on("click", (() => this.renderDataHealthPanel())),
@@ -537,6 +648,13 @@ class Ae extends X {
             utils.q(e, "修复前会自动下载备份，是否继续?", (() => this.repairDataHealthWithBackup()));
         })), $("#pm-clear-log").on("click", (() => {
             unsafeWindow.pluginManager.clearErrorLog(), $("#plugin-error-log").text("无错误记录"), show.ok("错误日志已清空");
+        })), $("#createSnapshotBtn").on("click", (async () => {
+            let e = loading();
+            try {
+                await storageManager.createSnapshot("手动快照", "manual"), show.ok("快照创建成功"), this.renderSnapshotPanel();
+            } catch (t) {
+                console.error(t), show.error("创建快照失败: " + t.message);
+            } finally { e.close(); }
         })), $(".clean-btn").on("click", (async e => {
             const t = $(e.currentTarget).data("key"), n = this.cacheItems.find((e => e.key === t));
             t === storageManager.third_party_cache_key ? await storageManager.clearThirdPartyCache() : localStorage.removeItem(t),
@@ -617,23 +735,22 @@ class Ae extends X {
         const a = n.val().trim();
         a && (this.addLabelTag(t, a), n.val(""));
     }
-    importData() {
+    async importData() {
         try {
             const input = document.createElement("input");
-            input.type = "file", input.accept = ".json", input.onchange = e => {
+            input.type = "file", input.accept = ".json", input.onchange = async e => {
                 const t = e.target.files[0];
                 if (!t) return void document.body.removeChild(input);
                 const n = new FileReader;
-                n.onload = e => {
+                n.onload = async e => {
                     try {
-                        const t = e.target.result.toString(), n = JSON.parse(t);
-                        layer.confirm("确定是否要覆盖导入？", {
-                            icon: 3,
-                            title: "确认覆盖",
-                            btn: [ "确定", "取消" ]
-                        }, (async function(e) {
-                            await storageManager.importData(n), show.ok("数据导入成功"), layer.close(e), location.reload();
-                        }));
+                        const t = e.target.result.toString(), n = JSON.parse(t), a = loading();
+                        try {
+                            const e = await storageManager.exportData(), t = await storageManager.diffData(e, n);
+                            a.close(), this.showDiffPreview(t, n, null);
+                        } catch (i) {
+                            a.close(), console.error(i), show.error("差异分析失败: " + i.message);
+                        }
                     } catch (t) {
                         console.error(t), show.error("导入失败：文件内容不是有效的JSON格式 " + t), document.body.removeChild(input);
                     }
@@ -764,24 +881,15 @@ class Ae extends X {
                                         a.close();
                                     }
                                 })), r && r.addEventListener("click", (async e => {
-                                    layer.confirm(`是否将该云备份数据 ${o.name} 导入?`, {
-                                        icon: 3,
-                                        title: "提示",
-                                        btn: [ "确定", "取消" ]
-                                    }, (async e => {
-                                        layer.close(e);
-                                        let a = loading();
-                                        try {
-                                            let e = await t.getFileContent(o.fileId);
-                                            show.info("解密文件内容..."), e = await decryptData(e), show.info("解密完成, 开始导入...");
-                                            const a = JSON.parse(e);
-                                            await storageManager.importData(a), show.ok("导入成功!"), window.location.reload();
-                                        } catch (i) {
-                                            console.error(i), show.error(i);
-                                        } finally {
-                                            a.close();
-                                        }
-                                    }));
+                                    let a = loading();
+                                    try {
+                                        let e = await t.getFileContent(o.fileId);
+                                        e = await decryptData(e);
+                                        const n = JSON.parse(e), i = await storageManager.exportData(), s = await storageManager.diffData(i, n);
+                                        a.close(), this.showDiffPreview(s, null, n);
+                                    } catch (i) {
+                                        a.close(), console.error(i), show.error("预览失败: " + (i ? i.message : i));
+                                    }
                                 }));
                             })), '\n                                    <a class="a-danger">删除</a>\n                                    <a class="a-primary">下载</a>\n                                    <a class="a-success">导入</a>\n                                ';
                         }

@@ -640,4 +640,100 @@ let z = class n {
         }));
         n && (clog.debug("更正 carList 数据结构 actress->names"), await this._setItemAndInvalidate(this.car_list_key, i));
     }
+    /* ───── 快照管理 ───── */
+    async _getSnapshots() { return await this.forage.getItem("snapshots") || []; }
+    async _saveSnapshots(e) { await this.forage.setItem("snapshots", e); }
+    async createSnapshot(e = "", t = "manual") {
+        const n = await this._getSnapshots(), a = await this.exportData();
+        let i = 0;
+        for (const s of Object.values(a)) Array.isArray(s) && (i += s.length);
+        const s = {
+            id: "snap_" + Date.now(),
+            name: e || utils.getNowStr(),
+            source: t,
+            time: utils.getNowStr(),
+            itemCount: i,
+            data: a
+        };
+        n.push(s), n.length > 10 && n.splice(0, n.length - 10);
+        await this._saveSnapshots(n);
+        return clog.log(`创建快照: ${s.name} (${t})`), s;
+    }
+    async getSnapshotList() {
+        const e = await this._getSnapshots();
+        return e.map((e => ({ id: e.id, name: e.name, source: e.source, time: e.time, itemCount: e.itemCount }))).reverse();
+    }
+    async getSnapshot(e) {
+        return (await this._getSnapshots()).find((t => t.id === e)) || null;
+    }
+    async deleteSnapshot(e) {
+        const t = await this._getSnapshots(), n = t.filter((t => t.id !== e));
+        n.length !== t.length && (await this._saveSnapshots(n), clog.log("删除快照: " + e));
+    }
+    async restoreSnapshot(e) {
+        const t = await this.getSnapshot(e);
+        if (!t) throw new Error("快照不存在: " + e);
+        await this.createSnapshot("恢复前自动备份", "auto-restore");
+        await this.importData(t.data);
+        clog.log("已恢复快照: " + t.name);
+        return t;
+    }
+    /* ───── 差异对比引擎 ───── */
+    async diffData(e, t) {
+        const n = new Set([ ...Object.keys(e), ...Object.keys(t) ]), a = {}, i = { added: 0, removed: 0, modified: 0, unchanged: 0 };
+        for (const o of n) {
+            const n = e[o], s = t[o];
+            if (void 0 === n && void 0 === s) continue;
+            if (void 0 === n) {
+                const e = Array.isArray(s) ? s.length : 1;
+                a[o] = { status: "added", oldCount: 0, newCount: e, added: Array.isArray(s) ? s : [], removed: [], modified: [] },
+                i.added++;
+            } else if (void 0 === s) {
+                const t = Array.isArray(n) ? n.length : 1;
+                a[o] = { status: "removed", oldCount: t, newCount: 0, added: [], removed: Array.isArray(n) ? n : [], modified: [] },
+                i.removed++;
+            } else if (Array.isArray(n) && Array.isArray(s)) {
+                const e = this._diffArrays(n, s, o);
+                a[o] = { status: e.status, oldCount: n.length, newCount: s.length, ...e },
+                i[e.status]++;
+            } else if ("object" == typeof n && "object" == typeof s && !Array.isArray(n) && !Array.isArray(s)) {
+                const e = this._diffObjects(n, s);
+                a[o] = { status: e.status, oldCount: Object.keys(n).length, newCount: Object.keys(s).length, added: [], removed: [], modified: e.changes },
+                i[e.status]++;
+            } else n === s ? (a[o] = { status: "unchanged", oldCount: 1, newCount: 1, added: [], removed: [], modified: [] },
+            i.unchanged++) : (a[o] = { status: "modified", oldCount: 1, newCount: 1, added: [], removed: [], modified: [{ key: o, changes: { _value: [n, s] } }] },
+            i.modified++);
+        }
+        return { summary: i, stores: a };
+    }
+    _getArrayKey(e) {
+        return "car_list" === e || "blacklist_car_list" === e ? "carNum" : "blacklist" === e || "favorite_actresses" === e ? "starId" : null;
+    }
+    _diffArrays(e, t, n) {
+        const a = this._getArrayKey(n);
+        if (!a) {
+            const n = JSON.stringify(e), i = JSON.stringify(t);
+            return n === i ? { status: "unchanged", added: [], removed: [], modified: [] } : { status: "modified", added: t.filter((t => !e.some((e => JSON.stringify(e) === JSON.stringify(t))))), removed: e.filter((e => !t.some((t => JSON.stringify(t) === JSON.stringify(e))))), modified: [] };
+        }
+        const i = new Map(e.map((e => [ e[a], e ]))), s = new Map(t.map((e => [ e[a], e ]))), o = [], r = [], l = [];
+        for (const [c, d] of s) {
+            const t = i.get(c);
+            if (!t) o.push(d); else {
+                const e = this._diffObjects(t, d);
+                "unchanged" !== e.status && l.push({ key: c, changes: e.changes });
+            }
+        }
+        for (const [c] of i) s.has(c) || r.push(i.get(c));
+        const c = o.length + r.length + l.length;
+        return { status: 0 === c ? "unchanged" : "modified", added: o, removed: r, modified: l };
+    }
+    _diffObjects(e, t) {
+        const n = new Set([ ...Object.keys(e), ...Object.keys(t) ]), a = {};
+        let i = 0;
+        for (const s of n) {
+            const n = e[s], o = t[s];
+            JSON.stringify(n) !== JSON.stringify(o) && (a[s] = [ n, o ], i++);
+        }
+        return { status: 0 === i ? "unchanged" : "modified", changes: a };
+    }
 };
