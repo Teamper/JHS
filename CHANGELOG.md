@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-05-29
+
+### Added
+- 快照管理：StorageManager 新增快照系统，支持创建/列表/恢复/删除快照，最多保留 10 个，FIFO 自动清理。
+- 差异对比引擎：新增 diffData 方法，支持 array 类型 store（按主键条目级 diff）和 object 类型 store（key-value 级 diff），返回结构化差异报告。
+- 冲突预览对话框：导入数据（本地文件/WebDAV）前展示差异预览面板，包含汇总统计卡片和各数据源详细差异表格，确认前自动创建快照备份。
+- 恢复点面板：设置面板新增"📸 恢复点"页面，展示快照列表（名称、来源、时间、数据量），支持恢复、下载、删除操作。
+
+### Changed
+- 本地文件导入流程改造：从简单 confirm 对话框升级为差异预览 → 确认导入流程。
+- WebDAV 恢复流程改造：从直接导入升级为解密 → 差异预览 → 确认导入流程。
+
 ## [4.1.0] - 2026-05-29
 
 ### Added
@@ -87,7 +99,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.1.0...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.2.0...HEAD
+[4.2.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.4...v4.1.0
 [4.0.4]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.3...v4.0.4
 [4.0.3]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.2...v4.0.3
