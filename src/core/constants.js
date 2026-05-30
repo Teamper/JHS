@@ -257,7 +257,7 @@ const MOBILE_CSS = `
             font-size: var(--jhs-text-base) !important;
             font-weight: 600 !important;
         }
-        .layui-layer-msg { bottom: calc(80px + env(safe-area-inset-bottom, 0px)) !important; }
+        .layui-layer-msg { bottom: calc(100px + env(safe-area-inset-bottom, 0px)) !important; }
 
         /* ========== 设置面板：侧栏改顶部标签 ========== */
         .jhs-mobile-sidebar {
@@ -366,7 +366,7 @@ const MOBILE_CSS = `
             flex: 1 !important;
         }
 
-        /* ========== 详情页按钮：底部栏已覆盖全部操作，隐藏内联按钮 ========== */
+        /* ========== 详情页按钮：FAB浮动菜单已覆盖全部操作，隐藏内联按钮 ========== */
         .jhs-detail-btn-row { display: none !important; }
 
         /* ========== 列表页按钮：隐藏与底部栏重复的按钮 ========== */
