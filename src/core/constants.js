@@ -170,9 +170,10 @@ const MOBILE_CSS = `
         }
 
         /* 触控目标最小 44px */
-        button, a[class], select, .menu-btn, .side-menu-item,
+        button, select, .menu-btn, .side-menu-item,
         .a-normal, .a-primary, .a-success, .a-danger, .a-warning, .a-info,
-        .jhs-bar-item, .jhs-drawer-btn, .cache-item, .keyword-label {
+        .jhs-bar-item, .jhs-drawer-btn, .cache-item, .keyword-label,
+        .jhs-backup-btn, .main-tab-btn, .jhs-sub-tab {
             min-height: 44px;
         }
         .menu-btn, .side-menu-item, .a-normal, .a-primary, .a-success, .a-danger, .a-warning, .a-info {
@@ -211,7 +212,7 @@ const MOBILE_CSS = `
 
         /* ========== Tabulator 表格 ========== */
         .tabulator-tableholder { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
-        .tabulator { min-width: 600px; }
+        .tabulator { min-width: 400px; }
 
         /* ========== 弹窗打磨 ========== */
         .layui-layer {
@@ -221,13 +222,14 @@ const MOBILE_CSS = `
         .layui-layer-title {
             border-radius: 12px 12px 0 0 !important;
             padding: 14px 16px !important;
+            padding-top: calc(14px + env(safe-area-inset-top, 0px)) !important;
             font-size: var(--jhs-text-lg) !important;
             font-weight: 600 !important;
             background: var(--jhs-bg) !important;
             border-bottom: 1px solid var(--jhs-border) !important;
             color: var(--jhs-text-primary) !important;
         }
-        .layui-layer-setwin { top: 8px !important; right: 8px !important; }
+        .layui-layer-setwin { top: calc(8px + env(safe-area-inset-top, 0px)) !important; right: 8px !important; }
         .layui-layer-setwin a {
             width: 44px !important;
             height: 44px !important;
@@ -255,7 +257,7 @@ const MOBILE_CSS = `
             font-size: var(--jhs-text-base) !important;
             font-weight: 600 !important;
         }
-        .layui-layer-msg { bottom: 80px !important; }
+        .layui-layer-msg { bottom: calc(80px + env(safe-area-inset-bottom, 0px)) !important; }
 
         /* ========== 设置面板：侧栏改顶部标签 ========== */
         .jhs-mobile-sidebar {

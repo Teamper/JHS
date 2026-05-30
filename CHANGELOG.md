@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.5.6] - 2026-05-30
+
+### Fixed
+- 修复 local.js 归档弹窗和字幕检测弹窗硬编码 area 未适配移动端，改为 `getResponsiveArea()`。
+- 修复 detail-page-button.js 字幕预览弹窗硬编码 area 未适配移动端。
+- 修复 fc2-by-123av.js 使用 `getDefaultArea()` 在移动端不是全屏，改为 `getResponsiveArea()`。
+- 修复 `utils.q()` 确认弹窗在移动端使用鼠标坐标定位可能偏移出屏幕，改为居中显示。
+- 修复弹窗标题栏未适配 iPhone 刘海/Dynamic Island，添加 `safe-area-inset-top`。
+- 修复 toast 提示可能被底部栏遮挡，定位改为考虑 safe-area。
+- 修复 `a[class]` 选择器过于宽泛导致内联链接被强制 44px 高度。
+- Tabulator 表格移动端最小宽度从 600px 降至 400px，减少不必要的横向滚动。
+
 ## [4.5.5] - 2026-05-30
 
 ### Changed

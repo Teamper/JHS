@@ -114,7 +114,7 @@ class Oe extends X {
             type: 1,
             title: e,
             content: a,
-            area: utils.getDefaultArea(),
+            area: utils.getResponsiveArea(),
             skin: "movie-detail-layer",
             scrollbar: !1,
             success: (n, a) => {

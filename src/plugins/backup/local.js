@@ -46,7 +46,7 @@ class mt extends X {
             scrollbar: !1,
             content: '\n                    <div style="height: 100%;overflow:hidden;"> \n                        <div id="archive-container" style="height: 100%;"></div>\n                    </div>\n                ',
             anim: -1,
-            area: [ "50%", "70%" ],
+            area: utils.getResponsiveArea([ "50%", "70%" ]),
             success: e => {
                 new Tabulator("#archive-container", {
                     layout: "fitColumns",
@@ -119,7 +119,7 @@ class mt extends X {
             scrollbar: !1,
             content: '\n                    <div style="height: 100%;overflow:hidden;"> \n                        <div id="checkSubTitle-table-container" style="height: 100%;padding-bottom: 10px"></div>\n                    </div>\n                ',
             anim: -1,
-            area: [ "70%", "70%" ],
+            area: utils.getResponsiveArea([ "70%", "70%" ]),
             success: e => {
                 new Tabulator("#checkSubTitle-table-container", {
                     layout: "fitColumns",

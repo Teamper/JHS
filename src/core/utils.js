@@ -121,20 +121,34 @@ class J {
         })) : console.error("rightClick(), 必须提供有效的 targetSelector。");
     }
     q(e, t, n, a) {
-        let i, s;
-        e ? (i = e.clientX - 130, s = e.clientY - 120) : (i = window.innerWidth / 2 - 120,
-        s = window.innerHeight / 2 - 120);
-        let o = layer.confirm(t, {
-            offset: [ s, i ],
-            title: "提示",
-            btn: [ "确定", "取消" ],
-            shade: 0,
-            zIndex: 999999991
-        }, (function() {
-            n && n(), layer.close(o);
-        }), (function() {
-            a && a();
-        }));
+        let o;
+        if (this.isMobileMode()) {
+            o = layer.confirm(t, {
+                title: "提示",
+                btn: [ "确定", "取消" ],
+                shade: 0,
+                zIndex: 999999991
+            }, (function() {
+                n && n(), layer.close(o);
+            }), (function() {
+                a && a();
+            }));
+        } else {
+            let i, s;
+            e ? (i = e.clientX - 130, s = e.clientY - 120) : (i = window.innerWidth / 2 - 120,
+            s = window.innerHeight / 2 - 120);
+            o = layer.confirm(t, {
+                offset: [ s, i ],
+                title: "提示",
+                btn: [ "确定", "取消" ],
+                shade: 0,
+                zIndex: 999999991
+            }, (function() {
+                n && n(), layer.close(o);
+            }), (function() {
+                a && a();
+            }));
+        }
     }
     getNowStr(e = "-", t = ":", n = null) {
         let a;

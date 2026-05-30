@@ -212,7 +212,7 @@ class ye extends X {
             layer.open({
                 type: 1,
                 title: i,
-                area: [ "80%", "80%" ],
+                area: utils.getResponsiveArea([ "80%", "80%" ]),
                 scrollbar: !1,
                 content: `<div style="padding:15px 5px;background:#1E1E1E;color:#FFF;font-family:Consolas,Monaco,monospace;white-space:pre-wrap;overflow:auto;height:100%;">${l}</div>`,
                 btn: [ "下载", "关闭" ],
