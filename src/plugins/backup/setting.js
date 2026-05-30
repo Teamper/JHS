@@ -193,6 +193,9 @@ class Ae extends X {
             success: (e, n) => {
                 $(e).find(".layui-layer-content").css("position", "relative"), this.injectHealthPanel(), this.injectPluginMgmtPanel(), this.injectSnapshotPanel(), this.injectNetworkPanel(), this.loadForm(),
                 this.bindClick(), utils.setupEscClose(n), t && t();
+                if (utils.isMobileMode()) {
+                    this.collapseAdvancedTabs();
+                }
             },
             end: () => {
                 this.getBean("CoverButtonPlugin").enableSvgBtn();
@@ -283,6 +286,77 @@ class Ae extends X {
         n += '<div id="domain-stats-table"></div>';
         n += '</div>';
         t.append(n);
+    }
+    collapseAdvancedTabs() {
+        const advancedPanels = [
+            { id: "health-panel", label: "🩺 数据体检", render: () => this.renderDataHealthPanel && this.renderDataHealthPanel() },
+            { id: "plugin-mgmt-panel", label: "🔧 插件管理", render: () => this.renderPluginMgmtPanel && this.renderPluginMgmtPanel() },
+            { id: "snapshot-panel", label: "📸 恢复点", render: () => this.renderSnapshotPanel && this.renderSnapshotPanel() },
+            { id: "network-panel", label: "🔗 外部请求", render: () => this.renderNetworkPanel && this.renderNetworkPanel() }
+        ];
+        const sidebar = $(".jhs-mobile-sidebar");
+        const contentParent = $(".content-panel").parent();
+        if (!sidebar.length || !contentParent.length) return;
+        // Remove advanced sidebar items
+        advancedPanels.forEach(p => {
+            sidebar.find(`[data-panel="${p.id}"]`).remove();
+        });
+        // Add single "更多工具" sidebar item
+        if (!sidebar.find('[data-panel="more-tools-panel"]').length) {
+            sidebar.append('<div class="side-menu-item" data-panel="more-tools-panel">🔧 更多工具</div>');
+        }
+        // Create wrapper panel if not exists
+        if ($("#more-tools-panel").length) return;
+        let subTabsHtml = advancedPanels.map((p, i) =>
+            `<div class="jhs-sub-tab${i === 0 ? " active" : ""}" data-sub-panel="${p.id}">${p.label}</div>`
+        ).join("");
+        let subPanelsHtml = advancedPanels.map((p, i) =>
+            `<div id="sub-${p.id}" class="jhs-sub-panel${i === 0 ? " active" : ""}" data-rendered="false"></div>`
+        ).join("");
+        const wrapperHtml = `
+            <div id="more-tools-panel" class="content-panel" style="display:none;">
+                <div class="jhs-sub-tabs">${subTabsHtml}</div>
+                <div class="jhs-sub-panels">${subPanelsHtml}</div>
+            </div>
+        `;
+        contentParent.append(wrapperHtml);
+        // Move existing panel contents into sub-panels
+        advancedPanels.forEach(p => {
+            const src = $(`#${p.id}`);
+            if (src.length) {
+                src.children().appendTo(`#sub-${p.id}`);
+                src.remove();
+                $(`#sub-${p.id}`).attr("data-rendered", "true");
+            }
+        });
+        // Sidebar click for "更多工具" — bindClick() won't catch dynamically added items
+        sidebar.on("click", '[data-panel="more-tools-panel"]', function() {
+            $(".side-menu-item").removeClass("active"), $(this).addClass("active"), $(".content-panel").hide();
+            $("#more-tools-panel").show(), $("#saveBtn").show(), $("#clean-all").hide();
+        });
+        // Sub-tab click handler
+        const self = this;
+        $("#more-tools-panel").on("click", ".jhs-sub-tab", function() {
+            const target = $(this).data("sub-panel");
+            $("#more-tools-panel .jhs-sub-tab").removeClass("active");
+            $(this).addClass("active");
+            $("#more-tools-panel .jhs-sub-panel").removeClass("active");
+            $(`#sub-${target}`).addClass("active");
+            // Lazy render on first switch
+            if ($(`#sub-${target}`).attr("data-rendered") !== "true") {
+                $(`#sub-${target}`).attr("data-rendered", "true");
+            }
+            // Call render methods for panels that need data loading
+            if (target === "health-panel" && self.renderDataHealthPanel) {
+                self.renderDataHealthPanel();
+            } else if (target === "plugin-mgmt-panel" && self.renderPluginMgmtPanel) {
+                self.renderPluginMgmtPanel();
+            } else if (target === "snapshot-panel" && self.renderSnapshotPanel) {
+                self.renderSnapshotPanel();
+            } else if (target === "network-panel" && self.renderNetworkPanel) {
+                self.renderNetworkPanel();
+            }
+        });
     }
     async renderNetworkPanel() {
         const e = gmHttp.getCircuitBreakerStatus(), t = gmHttp.getDomainStats(), n = await storageManager.getSetting("circuitBreakerThreshold", 3), a = await storageManager.getSetting("circuitBreakerCooldown", 6e4);
@@ -861,7 +935,90 @@ class Ae extends X {
             s.close();
         }
     }
+    openFileListDialogMobile(e, t, n) {
+        const formatSize = (size) => {
+            const units = ["B", "KB", "MB", "GB", "TB", "PB"];
+            let i = 0, s = size;
+            for (; s >= 1024 && i < units.length - 1;) s /= 1024, i++;
+            return `${s % 1 == 0 ? s.toFixed(0) : s.toFixed(2)} ${units[i]}`;
+        };
+        const renderCards = (files) => {
+            if (!files || files.length === 0) {
+                return '<div class="jhs-backup-empty">暂无数据</div>';
+            }
+            return files.map((file, idx) => `
+                <div class="jhs-backup-card" data-idx="${idx}">
+                    <div class="jhs-backup-card-name">${escapeHtml(file.name)}</div>
+                    <div class="jhs-backup-card-meta">${formatSize(file.size)} · ${utils.getNowStr("-", ":", file.createTime)}</div>
+                    <div class="jhs-backup-card-actions">
+                        <button class="jhs-backup-btn jhs-backup-btn-danger" data-action="delete" data-idx="${idx}">删除</button>
+                        <button class="jhs-backup-btn jhs-backup-btn-primary" data-action="download" data-idx="${idx}">下载</button>
+                        <button class="jhs-backup-btn jhs-backup-btn-success" data-action="import" data-idx="${idx}">导入</button>
+                    </div>
+                </div>
+            `).join("");
+        };
+        const containerId = "jhs-backup-card-list";
+        layer.open({
+            type: 1,
+            title: n + "备份文件",
+            content: `<div id="${containerId}" style="padding:0 4px;">${renderCards(e)}</div>`,
+            area: utils.getResponsiveArea(["800px", "70%"]),
+            anim: -1,
+            success: (layerEl) => {
+                const container = $(layerEl).find(`#${containerId}`);
+                container.on("click", ".jhs-backup-btn", async (ev) => {
+                    const btn = $(ev.currentTarget);
+                    const action = btn.data("action");
+                    const idx = btn.data("idx");
+                    const file = e[idx];
+                    if (!file) return;
+                    if (action === "delete") {
+                        layer.confirm(`是否删除 ${file.name} ?`, {
+                            icon: 3, title: "提示", btn: ["确定", "取消"]
+                        }, async (confirmIdx) => {
+                            layer.close(confirmIdx);
+                            let load = loading();
+                            try {
+                                await t.deleteFile(file.fileId);
+                                e = await t.getBackupList(this.folderName);
+                                container.html(renderCards(e));
+                                layer.alert("删除成功");
+                            } catch (err) {
+                                console.error(err), show.error(`发生错误: ${err ? err.message : err}`);
+                            } finally { load.close(); }
+                        });
+                    } else if (action === "download") {
+                        let load = loading();
+                        try {
+                            const data = await decryptData(await t.getFileContent(file.fileId));
+                            utils.download(data, file.name);
+                        } catch (err) {
+                            clog.error(err), show.error("下载失败: " + err);
+                        } finally { load.close(); }
+                    } else if (action === "import") {
+                        let load = loading();
+                        try {
+                            let data = await t.getFileContent(file.fileId);
+                            data = await decryptData(data);
+                            const parsed = JSON.parse(data);
+                            const currentData = await storageManager.exportData();
+                            const diff = await storageManager.diffData(currentData, parsed);
+                            load.close();
+                            this.showDiffPreview(diff, null, parsed);
+                        } catch (err) {
+                            load.close(), console.error(err), show.error("预览失败: " + (err ? err.message : err));
+                        }
+                    }
+                });
+            }
+        });
+    }
     openFileListDialog(e, t, n) {
+        if (utils.isMobileMode()) {
+            this.openFileListDialogMobile(e, t, n);
+            return;
+        }
         layer.open({
             type: 1,
             title: n + "备份文件",

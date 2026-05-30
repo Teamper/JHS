@@ -336,53 +336,40 @@ const MOBILE_CSS = `
             margin-left: var(--jhs-space-sm) !important;
         }
 
-        /* 缓存面板单列 */
+        /* 缓存面板单列 + 按钮纵向堆叠 */
         .jhs-cache-grid {
             grid-template-columns: 1fr !important;
         }
-
-        /* ========== 详情页按钮：2×2 网格 + 水平滚动 ========== */
-        .jhs-detail-btn-row {
+        .cache-item > div:last-child {
             flex-direction: column !important;
-            gap: var(--jhs-space-md) !important;
         }
-        .jhs-detail-btn-row > div:first-child {
-            display: grid !important;
-            grid-template-columns: 1fr 1fr !important;
-            gap: var(--jhs-space-sm) !important;
-        }
-        .jhs-detail-btn-row > div:first-child .menu-btn {
+        .cache-item .menu-btn {
             width: 100% !important;
-            text-align: center !important;
-            padding: 10px 8px !important;
-            border-radius: var(--jhs-radius-sm) !important;
-            font-size: var(--jhs-text-sm) !important;
             min-height: 44px !important;
-            font-weight: 600 !important;
-            box-shadow: var(--jhs-shadow-sm) !important;
         }
-        .jhs-detail-btn-row > div:last-child {
+
+        /* 备份面板按钮并排 */
+        #backup-panel > div:first-child {
             display: flex !important;
-            overflow-x: auto !important;
-            -webkit-overflow-scrolling: touch !important;
             gap: var(--jhs-space-sm) !important;
-            padding-bottom: var(--jhs-space-xs) !important;
-            scrollbar-width: none !important;
         }
-        .jhs-detail-btn-row > div:last-child::-webkit-scrollbar { display: none !important; }
-        .jhs-detail-btn-row > div:last-child .menu-btn {
-            flex-shrink: 0 !important;
-            width: auto !important;
-            white-space: nowrap !important;
-            padding: 8px 16px !important;
-            border-radius: var(--jhs-radius-full) !important;
-            font-size: var(--jhs-text-sm) !important;
-            min-height: 40px !important;
-            font-weight: 500 !important;
+        #backup-panel > div:first-child .menu-btn {
+            flex: 1 !important;
         }
-        .jhs-detail-btn-row .menu-btn[style*="linear-gradient"] {
-            background-image: none !important;
+        #backup-panel .setting-item > div {
+            display: flex !important;
+            gap: var(--jhs-space-sm) !important;
         }
+        #backup-panel .setting-item > div .menu-btn {
+            flex: 1 !important;
+        }
+
+        /* ========== 详情页按钮：底部栏已覆盖全部操作，隐藏内联按钮 ========== */
+        .jhs-detail-btn-row { display: none !important; }
+
+        /* ========== 列表页按钮：隐藏与底部栏重复的按钮 ========== */
+        .jhs-list-btn-row:nth-of-type(2) { display: none !important; }
+        .jhs-list-btn-row:first-of-type #waitCheckBtn { display: none !important; }
 
         /* ========== 列表页按钮：水平滚动胶囊 ========== */
         .jhs-list-btn-row {
@@ -424,6 +411,88 @@ const MOBILE_CSS = `
 
         /* ========== JavBus 浮动设置区 ========== */
         #top-right-box { flex-wrap: wrap !important; }
+
+        /* ========== WebDAV 备份卡片列表 ========== */
+        .jhs-backup-card {
+            background: var(--jhs-bg);
+            border: 1px solid var(--jhs-border);
+            border-radius: var(--jhs-radius-md);
+            padding: var(--jhs-space-lg);
+            margin-bottom: var(--jhs-space-md);
+        }
+        .jhs-backup-card-name {
+            font-size: var(--jhs-text-base);
+            font-weight: 600;
+            color: var(--jhs-text-primary);
+            word-break: break-all;
+            margin-bottom: var(--jhs-space-xs);
+        }
+        .jhs-backup-card-meta {
+            font-size: var(--jhs-text-sm);
+            color: var(--jhs-text-secondary);
+            margin-bottom: var(--jhs-space-md);
+        }
+        .jhs-backup-card-actions {
+            display: flex;
+            gap: var(--jhs-space-sm);
+        }
+        .jhs-backup-btn {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 44px;
+            border-radius: var(--jhs-radius-sm);
+            font-size: var(--jhs-text-base);
+            font-weight: 600;
+            color: white;
+            cursor: pointer;
+            border: none;
+            transition: transform 0.15s, opacity 0.15s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .jhs-backup-btn:active {
+            transform: scale(0.96);
+            opacity: 0.9;
+        }
+        .jhs-backup-btn-danger { background: var(--jhs-error); }
+        .jhs-backup-btn-primary { background: var(--jhs-accent); }
+        .jhs-backup-btn-success { background: var(--jhs-success); }
+        .jhs-backup-empty {
+            text-align: center;
+            color: var(--jhs-text-tertiary);
+            padding: var(--jhs-space-2xl) 0;
+            font-size: var(--jhs-text-base);
+        }
+
+        /* ========== 设置面板高级工具子标签 ========== */
+        .jhs-sub-tabs {
+            display: flex;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            gap: 0;
+            border-bottom: 1px solid var(--jhs-border);
+            margin-bottom: var(--jhs-space-md);
+            scrollbar-width: none;
+        }
+        .jhs-sub-tabs::-webkit-scrollbar { display: none; }
+        .jhs-sub-tab {
+            padding: 8px 12px;
+            font-size: var(--jhs-text-sm);
+            color: var(--jhs-text-secondary);
+            white-space: nowrap;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: color 0.2s, border-color 0.2s;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .jhs-sub-tab.active {
+            color: var(--jhs-accent);
+            border-bottom-color: var(--jhs-accent);
+            font-weight: 600;
+        }
+        .jhs-sub-panel { display: none; }
+        .jhs-sub-panel.active { display: block; }
     }
 </style>`;
 H(MOBILE_CSS);
