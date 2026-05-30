@@ -162,8 +162,8 @@ const MOBILE_CSS = `
         body { font-family: var(--jhs-font); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
 
         /* 触控反馈 */
-        button:active, .menu-btn:active, a[class]:active, .side-menu-item:active,
-        .jhs-bar-item:active, .jhs-drawer-btn:active, .cache-item:active {
+        button:active, .menu-btn:active, .side-menu-item:active,
+        .jhs-fab-menu-item:active, .cache-item:active {
             transform: scale(0.97);
             opacity: 0.85;
             transition: transform 0.1s, opacity 0.1s;
@@ -172,7 +172,7 @@ const MOBILE_CSS = `
         /* 触控目标最小 44px */
         button, select, .menu-btn, .side-menu-item,
         .a-normal, .a-primary, .a-success, .a-danger, .a-warning, .a-info,
-        .jhs-bar-item, .jhs-drawer-btn, .cache-item, .keyword-label,
+        .jhs-fab-menu-item, .cache-item, .keyword-label,
         .jhs-backup-btn, .main-tab-btn, .jhs-sub-tab {
             min-height: 44px;
         }

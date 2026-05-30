@@ -7,246 +7,239 @@ class MobileBottomBarPlugin extends X {
     }
     async initCss() {
         return `
-            #jhs-mobile-bar {
+            /* FAB 浮动操作按钮 */
+            #jhs-fab {
                 position: fixed;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                z-index: 10002;
-                background: rgba(255,255,255,0.92);
-                backdrop-filter: blur(20px);
-                -webkit-backdrop-filter: blur(20px);
-                border-top: 0.5px solid rgba(0,0,0,0.1);
+                bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+                right: 20px;
+                width: 56px;
+                height: 56px;
+                border-radius: 50%;
+                background: linear-gradient(135deg, #3b82f6, #1e40af);
+                color: white;
+                font-size: 26px;
                 display: flex;
-                justify-content: space-around;
-                align-items: center;
-                padding: 6px 0 env(safe-area-inset-bottom, 6px);
-                box-shadow: 0 -1px 20px rgba(0,0,0,0.06);
-                -webkit-user-select: none;
-                user-select: none;
-            }
-            #jhs-mobile-bar .jhs-bar-item {
-                display: flex;
-                flex-direction: column;
                 align-items: center;
                 justify-content: center;
-                flex: 1;
-                min-height: 44px;
-                padding: 4px 0;
                 cursor: pointer;
-                color: #555;
-                font-size: 11px;
-                gap: 3px;
-                transition: all 0.15s ease;
+                z-index: 10002;
+                box-shadow: 0 4px 16px rgba(59,130,246,0.4);
+                transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1), box-shadow 0.3s;
                 -webkit-tap-highlight-color: transparent;
-                border-radius: 8px;
-                margin: 0 2px;
+                user-select: none;
+                -webkit-user-select: none;
             }
-            #jhs-mobile-bar .jhs-bar-item:active {
-                color: #1a73e8;
-                background: rgba(93,135,194,0.08);
-                transform: scale(0.95);
+            #jhs-fab:active {
+                transform: scale(0.9);
             }
-            #jhs-mobile-bar .jhs-bar-item .jhs-bar-icon {
-                font-size: 22px;
-                line-height: 1.2;
-            }
-            #jhs-mobile-bar .jhs-bar-item .jhs-bar-label {
-                font-size: 11px;
-                font-weight: 500;
-                color: #6b7280;
-                white-space: nowrap;
+            #jhs-fab.jhs-fab-open {
+                transform: rotate(135deg);
+                background: linear-gradient(135deg, #ef4444, #b91c1c);
+                box-shadow: 0 4px 16px rgba(239,68,68,0.4);
             }
 
-            /* 抽屉背景遮罩 */
-            .jhs-drawer-backdrop {
+            /* FAB 遮罩 */
+            .jhs-fab-backdrop {
                 position: fixed;
                 inset: 0;
-                background: rgba(0,0,0,0.3);
+                background: rgba(0,0,0,0.25);
                 z-index: 10000;
                 opacity: 0;
                 pointer-events: none;
                 transition: opacity 0.3s;
             }
-            .jhs-drawer-backdrop.jhs-backdrop-visible {
+            .jhs-fab-backdrop.jhs-fab-backdrop-visible {
                 opacity: 1;
                 pointer-events: auto;
             }
 
-            /* 抽屉面板 */
-            #jhs-mobile-bar .jhs-bar-drawer {
+            /* FAB 菜单 */
+            .jhs-fab-menu {
                 position: fixed;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                background: #fff;
-                border-radius: 16px 16px 0 0;
-                padding: 16px;
-                padding-bottom: calc(80px + env(safe-area-inset-bottom, 16px));
-                box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+                bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+                right: 16px;
                 z-index: 10001;
-                transform: translateY(100%);
-                transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+                align-items: flex-end;
+                opacity: 0;
+                transform: translateY(16px) scale(0.92);
+                pointer-events: none;
+                transition: opacity 0.25s, transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
             }
-            #jhs-mobile-bar .jhs-bar-drawer.jhs-drawer-open {
-                transform: translateY(0);
+            .jhs-fab-menu.jhs-fab-menu-open {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+                pointer-events: auto;
             }
 
-            /* 抽屉拖拽手柄 */
-            .jhs-drawer-handle {
-                width: 36px;
-                height: 4px;
-                background: #d1d5db;
-                border-radius: 2px;
-                margin: 0 auto 12px;
-            }
-
-            /* 抽屉按钮 */
-            #jhs-mobile-bar .jhs-drawer-btn {
-                display: inline-flex;
+            /* FAB 菜单项 */
+            .jhs-fab-menu-item {
+                display: flex;
                 align-items: center;
-                justify-content: center;
-                padding: 0 16px;
-                border-radius: 8px;
-                color: white;
-                font-size: 13px;
-                font-weight: 600;
+                gap: 10px;
+                padding: 10px 16px;
+                background: white;
+                border-radius: 24px;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.1);
                 cursor: pointer;
-                border: none;
+                white-space: nowrap;
                 min-height: 44px;
-                flex: 1;
-                min-width: 0;
-                transition: transform 0.15s, opacity 0.15s;
+                font-size: 14px;
+                font-weight: 500;
+                color: #333;
+                transition: transform 0.15s, background 0.15s;
                 -webkit-tap-highlight-color: transparent;
+                user-select: none;
+                -webkit-user-select: none;
             }
-            #jhs-mobile-bar .jhs-drawer-btn:active {
-                transform: scale(0.96);
-                opacity: 0.9;
+            .jhs-fab-menu-item:active {
+                transform: scale(0.95);
+                background: #f3f4f6;
             }
-            #jhs-mobile-bar .jhs-btn-gold { background: #d7a80c; }
-            #jhs-mobile-bar .jhs-btn-olive { background: #c2bd4c; }
-            #jhs-mobile-bar .jhs-btn-gradient-orange { background: linear-gradient(135deg, #f59e0b, #22c55e); }
-            #jhs-mobile-bar .jhs-btn-gradient-blue { background: linear-gradient(135deg, #3b82f6, #1e40af); }
+            .jhs-fab-menu-item .jhs-fab-icon {
+                font-size: 18px;
+                width: 24px;
+                text-align: center;
+                flex-shrink: 0;
+            }
 
             @media (min-width: 769px) {
-                #jhs-mobile-bar { display: none !important; }
-                .jhs-drawer-backdrop { display: none !important; }
+                #jhs-fab, .jhs-fab-menu, .jhs-fab-backdrop { display: none !important; }
             }
         `;
     }
     async handle() {
         if (!utils.isMobileMode()) return;
-        // add padding to body so content isn't hidden behind the bar
-        $("body").css("padding-bottom", "calc(64px + env(safe-area-inset-bottom, 0px))");
-        // add backdrop
-        $('<div class="jhs-drawer-backdrop"></div>').appendTo("body");
-        const bar = this.createBar();
-        $("body").append(bar);
-        this.bindEvents();
+        // 添加遮罩
+        const backdrop = $('<div class="jhs-fab-backdrop"></div>').appendTo("body");
+        // 添加菜单
+        const menu = this.createMenu();
+        $("body").append(menu);
+        // 添加 FAB 按钮
+        const fab = $('<div id="jhs-fab">＋</div>').appendTo("body");
+        this.bindEvents(fab, backdrop);
     }
-    createBar() {
+    createMenu() {
         const isList = window.isListPage;
         const isDetail = window.isDetailPage;
-        let primaryItems = "";
-        let drawerBtns = "";
+        let items = "";
 
         if (isList) {
-            primaryItems = `
-                <div class="jhs-bar-item" id="jhs-bar-check"><span class="jhs-bar-icon">📋</span><span class="jhs-bar-label">待鉴定</span></div>
-                <div class="jhs-bar-item" id="jhs-bar-new"><span class="jhs-bar-icon">🎬</span><span class="jhs-bar-label">新作品</span></div>
-                <div class="jhs-bar-item" id="jhs-bar-blacklist"><span class="jhs-bar-icon">🚫</span><span class="jhs-bar-label">黑名单</span></div>
-                <div class="jhs-bar-item" id="jhs-bar-setting"><span class="jhs-bar-icon">⚙️</span><span class="jhs-bar-label">设置</span></div>
+            const sortMethod = localStorage.getItem("jhs_sortMethod") || "default";
+            const sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
+            items = `
+                <div class="jhs-fab-menu-item" data-action="check"><span class="jhs-fab-icon">📋</span>待鉴定</div>
+                <div class="jhs-fab-menu-item" data-action="newVideo"><span class="jhs-fab-icon">🎬</span>新作品</div>
+                <div class="jhs-fab-menu-item" data-action="blacklist"><span class="jhs-fab-icon">🚫</span>黑名单</div>
+                <div class="jhs-fab-menu-item" data-action="sort"><span class="jhs-fab-icon">🔄</span>排序: ${sortLabel}</div>
+                <div class="jhs-fab-menu-item" data-action="setting"><span class="jhs-fab-icon">⚙️</span>设置</div>
             `;
         } else if (isDetail) {
-            primaryItems = `
-                <div class="jhs-bar-item" id="jhs-bar-filter"><span class="jhs-bar-icon">🚫</span><span class="jhs-bar-label">${m}</span></div>
-                <div class="jhs-bar-item" id="jhs-bar-fav"><span class="jhs-bar-icon">⭐</span><span class="jhs-bar-label">${v}</span></div>
-                <div class="jhs-bar-item" id="jhs-bar-down"><span class="jhs-bar-icon">📥</span><span class="jhs-bar-label">${y}</span></div>
-                <div class="jhs-bar-item jhs-bar-more" id="jhs-bar-more"><span class="jhs-bar-icon">⋯</span><span class="jhs-bar-label">更多</span>
-                    <div class="jhs-bar-drawer">
-                        <div class="jhs-drawer-handle"></div>
-                        <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">
-                            <a class="jhs-drawer-btn jhs-btn-gold" id="jhs-bar-watch">${k}</a>
-                            <a class="jhs-drawer-btn jhs-btn-olive" id="jhs-bar-magnet-filter">磁力过滤</a>
-                            <a class="jhs-drawer-btn jhs-btn-gradient-orange" id="jhs-bar-magnet">磁力搜索</a>
-                            <a class="jhs-drawer-btn jhs-btn-gradient-blue" id="jhs-bar-subtitle">字幕</a>
-                        </div>
-                    </div>
-                </div>
-                <div class="jhs-bar-item" id="jhs-bar-setting"><span class="jhs-bar-icon">⚙️</span><span class="jhs-bar-label">设置</span></div>
+            items = `
+                <div class="jhs-fab-menu-item" data-action="filter"><span class="jhs-fab-icon">🚫</span>${m}</div>
+                <div class="jhs-fab-menu-item" data-action="fav"><span class="jhs-fab-icon">⭐</span>${v}</div>
+                <div class="jhs-fab-menu-item" data-action="down"><span class="jhs-fab-icon">📥</span>${y}</div>
+                <div class="jhs-fab-menu-item" data-action="watch"><span class="jhs-fab-icon">🔍</span>${k}</div>
+                <div class="jhs-fab-menu-item" data-action="magnetFilter"><span class="jhs-fab-icon">🧲</span>磁力过滤</div>
+                <div class="jhs-fab-menu-item" data-action="magnet"><span class="jhs-fab-icon">⚡</span>磁力搜索</div>
+                <div class="jhs-fab-menu-item" data-action="subtitle"><span class="jhs-fab-icon">📝</span>字幕</div>
+                <div class="jhs-fab-menu-item" data-action="setting"><span class="jhs-fab-icon">⚙️</span>设置</div>
             `;
         } else {
-            primaryItems = `
-                <div class="jhs-bar-item" id="jhs-bar-setting"><span class="jhs-bar-icon">⚙️</span><span class="jhs-bar-label">设置</span></div>
+            items = `
+                <div class="jhs-fab-menu-item" data-action="setting"><span class="jhs-fab-icon">⚙️</span>设置</div>
             `;
         }
-        return `<div id="jhs-mobile-bar">${primaryItems}</div>`;
+        return $(`<div class="jhs-fab-menu">${items}</div>`);
     }
-    bindEvents() {
-        const bar = $("#jhs-mobile-bar");
-        const backdrop = $(".jhs-drawer-backdrop");
-        const closeDrawer = () => {
-            $(".jhs-bar-drawer").removeClass("jhs-drawer-open");
-            backdrop.removeClass("jhs-backdrop-visible");
+    bindEvents(fab, backdrop) {
+        const menu = $(".jhs-fab-menu");
+        const closeMenu = () => {
+            fab.removeClass("jhs-fab-open");
+            menu.removeClass("jhs-fab-menu-open");
+            backdrop.removeClass("jhs-fab-backdrop-visible");
         };
-        // list page buttons
-        bar.on("click", "#jhs-bar-check", () => {
-            const btn = $("#waitCheckBtn");
-            btn.length && btn.click();
-        });
-        bar.on("click", "#jhs-bar-new", () => {
-            const plugin = this.getBean("NewVideoPlugin");
-            plugin && plugin.openDialog();
-        });
-        bar.on("click", "#jhs-bar-blacklist", () => {
-            const plugin = this.getBean("BlacklistPlugin");
-            plugin && plugin.openBlacklistDialog();
-        });
-        bar.on("click", "#jhs-bar-setting", () => {
-            const plugin = this.getBean("SettingPlugin");
-            plugin && plugin.openSettingDialog();
-        });
-        // detail page buttons
-        bar.on("click", "#jhs-bar-filter", (e) => {
-            $("#filterBtn").length && $("#filterBtn").click();
-        });
-        bar.on("click", "#jhs-bar-fav", () => {
-            $("#favoriteBtn").length && $("#favoriteBtn").click();
-        });
-        bar.on("click", "#jhs-bar-down", () => {
-            $("#hasDownBtn").length && $("#hasDownBtn").click();
-        });
-        bar.on("click", "#jhs-bar-watch", () => {
-            $("#hasWatchBtn").length && $("#hasWatchBtn").click();
-        });
-        bar.on("click", "#jhs-bar-magnet-filter", () => {
-            $("#enable-magnets-filter").length && $("#enable-magnets-filter").click();
-        });
-        bar.on("click", "#jhs-bar-magnet", () => {
-            $("#magnetSearchBtn").length && $("#magnetSearchBtn").click();
-        });
-        bar.on("click", "#jhs-bar-subtitle", (e) => {
-            $("#search-subtitle-btn").length && $("#search-subtitle-btn").click();
-        });
-        // more drawer toggle
-        bar.on("click", "#jhs-bar-more", (e) => {
-            if ($(e.target).closest(".jhs-drawer-btn").length) return;
-            const drawer = $(e.currentTarget).find(".jhs-bar-drawer");
-            const isOpen = drawer.hasClass("jhs-drawer-open");
+        const toggleMenu = () => {
+            const isOpen = fab.hasClass("jhs-fab-open");
             if (isOpen) {
-                closeDrawer();
+                closeMenu();
             } else {
-                drawer.addClass("jhs-drawer-open");
-                backdrop.addClass("jhs-backdrop-visible");
+                fab.addClass("jhs-fab-open");
+                menu.addClass("jhs-fab-menu-open");
+                backdrop.addClass("jhs-fab-backdrop-visible");
+                // 刷新排序标签
+                if (window.isListPage) {
+                    const sortMethod = localStorage.getItem("jhs_sortMethod") || "default";
+                    const sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
+                    menu.find('[data-action="sort"] .jhs-fab-icon').next().remove();
+                    menu.find('[data-action="sort"]').append(`排序: ${sortLabel}`);
+                    // 重新生成排序文本
+                    const sortItem = menu.find('[data-action="sort"]');
+                    sortItem.html(`<span class="jhs-fab-icon">🔄</span>排序: ${sortLabel}`);
+                }
             }
+        };
+        // FAB 点击切换
+        fab.on("click", toggleMenu);
+        // 遮罩点击关闭
+        backdrop.on("click", closeMenu);
+        // 菜单项点击
+        menu.on("click", ".jhs-fab-menu-item", (e) => {
+            const action = $(e.currentTarget).data("action");
+            this.handleAction(action);
+            closeMenu();
         });
-        // close drawer when clicking outside
-        $(document).on("click", (e) => {
-            if (!$(e.target).closest("#jhs-bar-more").length) {
-                closeDrawer();
+    }
+    handleAction(action) {
+        switch (action) {
+            // 列表页操作
+            case "check":
+                $("#waitCheckBtn").length && $("#waitCheckBtn").click();
+                break;
+            case "newVideo":
+                this.getBean("NewVideoPlugin")?.openDialog();
+                break;
+            case "blacklist":
+                this.getBean("BlacklistPlugin")?.openBlacklistDialog();
+                break;
+            case "sort": {
+                const cur = localStorage.getItem("jhs_sortMethod") || "default";
+                const next = cur === "default" ? "rateCount" : cur === "rateCount" ? "date" : "default";
+                localStorage.setItem("jhs_sortMethod", next);
+                const btnPlugin = this.getBean("ListPageButtonPlugin");
+                btnPlugin?.sortItems?.();
+                const label = { default: "默认", rateCount: "评价人数", date: "时间" }[next];
+                show.info(`排序: ${label}`);
+                break;
             }
-        });
-        // close drawer when clicking backdrop
-        backdrop.on("click", closeDrawer);
+            // 详情页操作
+            case "filter":
+                $("#filterBtn").length && $("#filterBtn").click();
+                break;
+            case "fav":
+                $("#favoriteBtn").length && $("#favoriteBtn").click();
+                break;
+            case "down":
+                $("#hasDownBtn").length && $("#hasDownBtn").click();
+                break;
+            case "watch":
+                $("#hasWatchBtn").length && $("#hasWatchBtn").click();
+                break;
+            case "magnetFilter":
+                $("#enable-magnets-filter").length && $("#enable-magnets-filter").click();
+                break;
+            case "magnet":
+                $("#magnetSearchBtn").length && $("#magnetSearchBtn").click();
+                break;
+            case "subtitle":
+                $("#search-subtitle-btn").length && $("#search-subtitle-btn").click();
+                break;
+            // 通用
+            case "setting":
+                this.getBean("SettingPlugin")?.openSettingDialog();
+                break;
+        }
     }
 }

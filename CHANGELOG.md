@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.5.8] - 2026-05-31
+
+### Changed
+- 移动端底部固定栏(bottom bar)替换为 FAB 浮动操作按钮：右下角圆形按钮，点击展开菜单。
+- FAB 菜单包含排序方式切换（列表页）、所有详情页操作按钮。
+- 移动端弹窗高度从 100% 改为 90%，底部内容不再被裁剪。
+
+### Fixed
+- 修复移动端排序控件（按评价人数/时间）不可见的问题。
+- 修复触控反馈选择器 `a[class]:active` 过于宽泛影响普通链接的问题。
+
 ## [4.5.7] - 2026-05-30
 
 ### Fixed

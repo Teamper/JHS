@@ -224,7 +224,7 @@ class J {
     }
     getResponsiveArea(e) {
         const t = window.innerWidth;
-        return this.isMobileMode() ? [ "100%", "100%" ] : t >= 1200 ? e || this.getDefaultArea() : [ "70%", "90%" ];
+        return this.isMobileMode() ? [ "100%", "90%" ] : t >= 1200 ? e || this.getDefaultArea() : [ "70%", "90%" ];
     }
     getDefaultArea() {
         return [ "85%", "90%" ];
