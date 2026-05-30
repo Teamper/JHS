@@ -9,7 +9,7 @@ var e, t, n = Object.defineProperty, a = e => {
     t.has(e) || a("Cannot " + n);
 })(e, t, "access private method"), n);
 
-const o = window.location.href, r = o.includes("javdb"), l = o.includes("javbus") || o.includes("seejav") || o.includes("bus") || o.includes("javsee") || $("title").text().trim().startsWith("JavBus - AV"), c = o.includes("/search?q") || o.includes("/search/") || o.includes("/users/"), d = "filter", h = "favorite", g = "hasDown", p = "hasWatch", m = "🚫 屏蔽", u = "🚫 已屏蔽", f = "#de3333", v = "⭐ 收藏", b = "⭐ 已收藏", w = "#25b1dc", y = "📥️ 已下载", x = "#7bc73b", k = "🔍 已观看", S = "#d7a80c", C = "no", _ = "yes", T = "javdb", I = "javbus", B = "actor", P = "actress", D = "censored", A = "uncensored", L = [ {
+const o = window.location.href, r = o.includes("javdb"), l = o.includes("javbus") || o.includes("seejav") || o.includes("bus") || o.includes("javsee") || $("title").text().trim().startsWith("JavBus - AV"), c = o.includes("/search?q") || o.includes("/search/") || o.includes("/users/"), d = "filter", h = "favorite", g = "hasDown", p = "hasWatch", m = "屏蔽", u = "已屏蔽", f = "#de3333", v = "收藏", b = "已收藏", w = "#25b1dc", y = "已下载", x = "#7bc73b", k = "已观看", S = "#d7a80c", C = "no", _ = "yes", T = "javdb", I = "javbus", B = "actor", P = "actress", D = "censored", A = "uncensored", L = [ {
     id: "video-mhb",
     quality: "dmb_w",
     text: "旧视频源-中画质宽版 (404p)",

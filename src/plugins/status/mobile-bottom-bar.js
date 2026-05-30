@@ -98,12 +98,6 @@ class MobileBottomBarPlugin extends X {
                 transform: scale(0.95);
                 background: #f3f4f6;
             }
-            .jhs-fab-menu-item .jhs-fab-icon {
-                font-size: 18px;
-                width: 24px;
-                text-align: center;
-                flex-shrink: 0;
-            }
 
             @media (min-width: 769px) {
                 #jhs-fab, .jhs-fab-menu, .jhs-fab-backdrop { display: none !important; }
@@ -130,26 +124,26 @@ class MobileBottomBarPlugin extends X {
             const sortMethod = localStorage.getItem("jhs_sortMethod") || "default";
             const sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
             items = `
-                <div class="jhs-fab-menu-item" data-action="check"><span class="jhs-fab-icon">📋</span>待鉴定</div>
-                <div class="jhs-fab-menu-item" data-action="newVideo"><span class="jhs-fab-icon">🎬</span>新作品</div>
-                <div class="jhs-fab-menu-item" data-action="blacklist"><span class="jhs-fab-icon">🚫</span>黑名单</div>
-                <div class="jhs-fab-menu-item" data-action="sort"><span class="jhs-fab-icon">🔄</span>排序: ${sortLabel}</div>
-                <div class="jhs-fab-menu-item" data-action="setting"><span class="jhs-fab-icon">⚙️</span>设置</div>
+                <div class="jhs-fab-menu-item" data-action="check">待鉴定</div>
+                <div class="jhs-fab-menu-item" data-action="newVideo">新作品</div>
+                <div class="jhs-fab-menu-item" data-action="blacklist">黑名单</div>
+                <div class="jhs-fab-menu-item" data-action="sort">排序: ${sortLabel}</div>
+                <div class="jhs-fab-menu-item" data-action="setting">设置</div>
             `;
         } else if (isDetail) {
             items = `
-                <div class="jhs-fab-menu-item" data-action="filter"><span class="jhs-fab-icon">🚫</span>${m}</div>
-                <div class="jhs-fab-menu-item" data-action="fav"><span class="jhs-fab-icon">⭐</span>${v}</div>
-                <div class="jhs-fab-menu-item" data-action="down"><span class="jhs-fab-icon">📥</span>${y}</div>
-                <div class="jhs-fab-menu-item" data-action="watch"><span class="jhs-fab-icon">🔍</span>${k}</div>
-                <div class="jhs-fab-menu-item" data-action="magnetFilter"><span class="jhs-fab-icon">🧲</span>磁力过滤</div>
-                <div class="jhs-fab-menu-item" data-action="magnet"><span class="jhs-fab-icon">⚡</span>磁力搜索</div>
-                <div class="jhs-fab-menu-item" data-action="subtitle"><span class="jhs-fab-icon">📝</span>字幕</div>
-                <div class="jhs-fab-menu-item" data-action="setting"><span class="jhs-fab-icon">⚙️</span>设置</div>
+                <div class="jhs-fab-menu-item" data-action="filter">${m}</div>
+                <div class="jhs-fab-menu-item" data-action="fav">${v}</div>
+                <div class="jhs-fab-menu-item" data-action="down">${y}</div>
+                <div class="jhs-fab-menu-item" data-action="watch">${k}</div>
+                <div class="jhs-fab-menu-item" data-action="magnetFilter">磁力过滤</div>
+                <div class="jhs-fab-menu-item" data-action="magnet">磁力搜索</div>
+                <div class="jhs-fab-menu-item" data-action="subtitle">字幕</div>
+                <div class="jhs-fab-menu-item" data-action="setting">设置</div>
             `;
         } else {
             items = `
-                <div class="jhs-fab-menu-item" data-action="setting"><span class="jhs-fab-icon">⚙️</span>设置</div>
+                <div class="jhs-fab-menu-item" data-action="setting">设置</div>
             `;
         }
         return $(`<div class="jhs-fab-menu">${items}</div>`);
@@ -173,11 +167,7 @@ class MobileBottomBarPlugin extends X {
                 if (window.isListPage) {
                     const sortMethod = localStorage.getItem("jhs_sortMethod") || "default";
                     const sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
-                    menu.find('[data-action="sort"] .jhs-fab-icon').next().remove();
-                    menu.find('[data-action="sort"]').append(`排序: ${sortLabel}`);
-                    // 重新生成排序文本
-                    const sortItem = menu.find('[data-action="sort"]');
-                    sortItem.html(`<span class="jhs-fab-icon">🔄</span>排序: ${sortLabel}`);
+                    menu.find('[data-action="sort"]').html(`排序: ${sortLabel}`);
                 }
             }
         };

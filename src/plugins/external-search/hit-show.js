@@ -64,7 +64,7 @@ class pe extends X {
                 this.appendScoreHtml(e, l), n[e] = l, localStorage.setItem(t, JSON.stringify(n)),
                 await new Promise((e => setTimeout(e, 500)));
             } catch (n) {
-                clog.error(`🚨 解析评分数据失败 | 编号: ${a.number}\n`, `错误详情: ${n.message}\n`, n.stack ? `调用栈:\n${n.stack}` : "");
+                clog.error(`解析评分数据失败 | 编号: ${a.number}\n`, `错误详情: ${n.message}\n`, n.stack ? `调用栈:\n${n.stack}` : "");
             }
         })();
     }

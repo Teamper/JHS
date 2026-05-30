@@ -285,7 +285,7 @@ class Se extends X {
                             }))).sort(((e, t) => t.count - e.count));
                             clog.debug(n);
                         }));
-                    })), '\n                           \x3c!-- <a class="a-normal keyword-btn"> <span>提取屏蔽词</span> </a>--\x3e\n                            <a class="a-danger delete-btn"> <span>✂️ 删除</span> </a>\n                        ';
+                    })), '\n                           \x3c!-- <a class="a-normal keyword-btn"> <span>提取屏蔽词</span> </a>--\x3e\n                            <a class="a-danger delete-btn"> <span>删除</span> </a>\n                        ';
                 }
             } ],
             initialSort: [ {

@@ -48,11 +48,11 @@ class ye extends X {
             break;
 
           case g:
-            a.text("📥️ 已标记下载");
+            a.text("已标记下载");
             break;
 
           case p:
-            i.text("🔍 已标记观看");
+            i.text("已标记观看");
         }
     }
     async favoriteOne() {

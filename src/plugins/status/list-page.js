@@ -40,21 +40,21 @@ const _e = async (e, t = "ja", n = "zh-CN") => {
         countKey: "currentPageHasWatchCount"
     },
     IS_KEYWORD_FILTER: {
-        text: "❌ 关键词屏蔽",
+        text: "关键词屏蔽",
         color: "#de3333",
         reasonType: "",
         isCounted: !0,
         countKey: "currentPageKeywordFilterCount"
     },
     IS_ACTOR_FILTER: {
-        text: "♂️ 男演员屏蔽",
+        text: "男演员屏蔽",
         color: "#b22222",
         reasonType: "",
         isCounted: !0,
         countKey: "currentPageActorFilterCount"
     },
     IS_ACTRESS_FILTER: {
-        text: "♀️ 女演员屏蔽",
+        text: "女演员屏蔽",
         color: "#cd5c5c",
         reasonType: "",
         isCounted: !0,
