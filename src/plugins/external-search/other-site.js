@@ -145,6 +145,11 @@ class be extends X {
             n.append('<span class="site-tag" style="top:-15px">多结果</span>'), n.css("backgroundColor", this.okBackgroundColor)));
             const r = await t.getBaseUrl(), l = t.searchPath(r, e);
             n.attr("href", l);
+            const _domain = gmHttp._getDomain(l), _breaker = gmHttp._checkCircuitBreaker(_domain);
+            if (_breaker) {
+                n.attr("title", `站点已熔断，${_breaker.remaining}秒后重试`), n.css("backgroundColor", this.domainErrorBackgroundColor);
+                return;
+            }
             const c = await storageManager.cachedRequest(`other-site:${t.id}:${e}`, 864e5, (() => gmHttp.get(l, null, t.headers, !0))), d = utils.htmlTo$dom(c), h = [];
             d.find(t.itemSelector).each(((n, a) => {
                 const i = $(a);
@@ -173,7 +178,8 @@ class be extends X {
             })), g && n.append(g);
         } catch (a) {
             const e = String(a), i = t.id.replace("Btn", "");
-            e.includes("Just a moment") ? (n.attr("title", "请求失败：Cloudflare 安全检查。"), n.css("backgroundColor", this.warnBackgroundColor),
+            a._circuitBroken ? (n.attr("title", e), n.css("backgroundColor", this.domainErrorBackgroundColor),
+            clog.warn(`检测第三方资源跳过, ${i} 已熔断`)) : e.includes("Just a moment") ? (n.attr("title", "请求失败：Cloudflare 安全检查。"), n.css("backgroundColor", this.warnBackgroundColor),
             clog.warn(`检测第三方资源失败, ${i} 需Cloudflare安全检查`)) : e.includes("重定向") ? (n.attr("title", "域名失效"),
             n.css("backgroundColor", this.domainErrorBackgroundColor), clog.warn(`检测第三方资源失败, ${i} 域名被重定向`)) : e.includes("404 Page Not Found") ? (n.attr("title", "未查询到, 点击前往搜索页"),
             n.css("backgroundColor", this.errorBackgroundColor)) : (console.error(a), n.attr("title", "请求失败。"),

@@ -108,6 +108,14 @@ class Ae extends X {
             key: "third_party_ttl_cache",
             text: "⏱️ 第三方TTL缓存",
             title: "评论、相关清单、磁力搜索、缩略图等请求缓存"
+        }, {
+            key: "_circuitBreaker",
+            text: "🔌 熔断状态",
+            title: "各站点的熔断计数和状态"
+        }, {
+            key: "_domainStats",
+            text: "📊 域名请求统计",
+            title: "各域名的请求次数和错误统计"
         } ]);
     }
     getName() {
@@ -165,7 +173,7 @@ class Ae extends X {
             area: utils.getResponsiveArea([ "55%", "90%" ]),
             scrollbar: !1,
             success: (e, n) => {
-                $(e).find(".layui-layer-content").css("position", "relative"), this.injectHealthPanel(), this.injectPluginMgmtPanel(), this.injectSnapshotPanel(), this.loadForm(),
+                $(e).find(".layui-layer-content").css("position", "relative"), this.injectHealthPanel(), this.injectPluginMgmtPanel(), this.injectSnapshotPanel(), this.injectNetworkPanel(), this.loadForm(),
                 this.bindClick(), utils.setupEscClose(n), t && t();
             },
             end: () => {
@@ -234,6 +242,61 @@ class Ae extends X {
         n += '<div id="snapshot-list"></div>';
         n += '</div>';
         t.append(n);
+    }
+    injectNetworkPanel() {
+        const e = $(".side-menu-item").parent();
+        e.length && !e.find('[data-panel="network-panel"]').length && e.append('<div class="side-menu-item" data-panel="network-panel">🔗 外部请求</div>');
+        const t = $(".content-panel").parent();
+        if (!t.length || $("#network-panel").length) return;
+        let n = '<div id="network-panel" class="content-panel" style="display:none;">';
+        n += '<h3 style="font-size:15px;font-weight:bold;margin-bottom:10px;">🛡️ 熔断器配置</h3>';
+        n += '<p style="color:#666;font-size:0.85em;margin-bottom:10px;">连续请求失败达到阈值后，自动停止对该站点的请求，避免拖慢整体体验。</p>';
+        n += '<div class="setting-item"><span class="setting-label">熔断阈值(次):</span><div class="form-content"><input type="number" id="circuitBreakerThreshold" min="2" max="10" style="width:100%;"></div></div>';
+        n += '<div class="setting-item"><span class="setting-label">冷却时间(秒):</span><div class="form-content"><input type="number" id="circuitBreakerCooldownSec" min="10" max="300" style="width:100%;"></div></div>';
+        n += '<div style="display:flex;gap:8px;margin:10px 0;"><a id="resetAllBreakersBtn" class="menu-btn" style="background-color:#e74c3c"><span>重置全部熔断</span></a></div>';
+        n += '<hr style="border:0;height:1px;margin:20px 0;background-image:linear-gradient(to right,rgba(0,0,0,0),rgba(159,137,137,0.75),rgba(0,0,0,0));"/>';
+        n += '<h3 style="font-size:15px;font-weight:bold;margin-bottom:10px;">🩺 站点健康状态</h3>';
+        n += '<p style="color:#666;font-size:0.85em;margin-bottom:10px;">各外部站点的熔断状态和请求统计。</p>';
+        n += '<div id="site-health-table"></div>';
+        n += '<hr style="border:0;height:1px;margin:20px 0;background-image:linear-gradient(to right,rgba(0,0,0,0),rgba(159,137,137,0.75),rgba(0,0,0,0));"/>';
+        n += '<h3 style="font-size:15px;font-weight:bold;margin-bottom:10px;">📊 域名使用统计</h3>';
+        n += '<p style="color:#666;font-size:0.85em;margin-bottom:10px;">脚本实际请求过的域名及次数。</p>';
+        n += '<div style="display:flex;gap:8px;margin-bottom:8px;"><a id="clearDomainStatsBtn" class="menu-btn" style="background-color:#e74c3c"><span>清空统计</span></a></div>';
+        n += '<div id="domain-stats-table"></div>';
+        n += '</div>';
+        t.append(n);
+    }
+    async renderNetworkPanel() {
+        const e = gmHttp.getCircuitBreakerStatus(), t = gmHttp.getDomainStats(), n = await storageManager.getSetting("circuitBreakerThreshold", 3), a = await storageManager.getSetting("circuitBreakerCooldown", 6e4);
+        $("#circuitBreakerThreshold").val(n), $("#circuitBreakerCooldownSec").val(Math.round(a / 1e3));
+        const i = Object.entries(e);
+        if (i.length) {
+            let t = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+            t += '<tr style="background:#f0f0f0;"><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd;">域名</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">状态</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">失败次数</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">操作</th></tr>';
+            for (const [n, a] of i) {
+                const i = "open" === a.state ? "🔴 熔断" : "half-open" === a.state ? "🟡 半开" : "🟢 正常", s = "open" === a.state ? `剩余${Math.ceil((a.cooldownMs - (Date.now() - a.openTime)) / 1e3)}秒` : "";
+                t += `<tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:4px 6px;">${escapeHtml(n)}</td><td style="text-align:center;padding:4px 6px;">${i} ${s}</td><td style="text-align:center;padding:4px 6px;">${a.failCount}</td><td style="text-align:center;padding:4px 6px;"><a class="a-danger reset-breaker" data-domain="${escapeHtml(n)}">重置</a></td></tr>`;
+            }
+            t += '</table>', $("#site-health-table").html(t);
+        } else $("#site-health-table").html('<p style="color:#888;font-size:13px;">暂无熔断记录</p>');
+        const s = Object.entries(t).sort(((e, t) => t[1].count - e[1].count));
+        if (s.length) {
+            let e = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+            e += '<tr style="background:#f0f0f0;"><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd;">域名</th><th style="text-align:right;padding:6px;border-bottom:1px solid #ddd;">请求数</th><th style="text-align:right;padding:6px;border-bottom:1px solid #ddd;">错误数</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">最后使用</th></tr>';
+            for (const [t, n] of s) {
+                const a = n.lastUsed ? new Date(n.lastUsed).toLocaleTimeString() : "-";
+                e += `<tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:4px 6px;">${escapeHtml(t)}</td><td style="text-align:right;padding:4px 6px;">${n.count}</td><td style="text-align:right;padding:4px 6px;color:${n.errors > 0 ? "#e74c3c" : "#333"};">${n.errors}</td><td style="text-align:center;padding:4px 6px;">${a}</td></tr>`;
+            }
+            e += '</table>', e += `<p style="color:#888;font-size:12px;margin-top:8px;">共 ${s.length} 个域名</p>`, $("#domain-stats-table").html(e);
+        } else $("#domain-stats-table").html('<p style="color:#888;font-size:13px;">暂无统计数据</p>');
+        $(".reset-breaker").off("click").on("click", (e => {
+            const t = $(e.target).data("domain");
+            gmHttp.resetCircuitBreaker(t), show.ok(`已重置 ${t} 的熔断状态`), this.renderNetworkPanel();
+        })), $("#resetAllBreakersBtn").off("click").on("click", (() => {
+            gmHttp.resetAllCircuitBreakers(), show.ok("已重置全部熔断状态"), this.renderNetworkPanel();
+        })), $("#clearDomainStatsBtn").off("click").on("click", (() => {
+            gmHttp.clearDomainStats(), show.ok("已清空域名统计"), this.renderNetworkPanel();
+        }));
     }
     async renderSnapshotPanel() {
         const e = await storageManager.getSnapshotList(), t = {
@@ -643,7 +706,8 @@ class Ae extends X {
             $("#" + e).show(), "cache-panel" === e ? ($("#saveBtn").hide(), $("#clean-all").show()) : ($("#saveBtn").show(),
             $("#clean-all").hide()), "health-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), settingPlugin.renderDataHealthPanel()),
             "plugin-mgmt-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), settingPlugin.renderPluginMgmtPanel()),
-            "snapshot-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), settingPlugin.renderSnapshotPanel());
+            "snapshot-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), settingPlugin.renderSnapshotPanel()),
+            "network-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), settingPlugin.renderNetworkPanel());
         })), $("#importBtn").on("click", (e => this.importData(e))), $("#exportBtn").on("click", (e => this.exportData(e))),
         $("#webdavBackupBtn").on("click", (e => this.backupDataByWebDav(e))), $("#webdavBackupListBtn").on("click", (e => this.backupListBtnByWebDav(e))),
         $("#saveBtn").on("click", (() => this.saveForm())), $("#runHealthCheckBtn").on("click", (() => this.renderDataHealthPanel())),
@@ -660,7 +724,7 @@ class Ae extends X {
             } finally { e.close(); }
         })), $(".clean-btn").on("click", (async e => {
             const t = $(e.currentTarget).data("key"), n = this.cacheItems.find((e => e.key === t));
-            t === storageManager.third_party_cache_key ? await storageManager.clearThirdPartyCache() : localStorage.removeItem(t),
+            t === storageManager.third_party_cache_key ? await storageManager.clearThirdPartyCache() : "_circuitBreaker" === t ? gmHttp.resetAllCircuitBreakers() : "_domainStats" === t ? gmHttp.clearDomainStats() : localStorage.removeItem(t),
             show.ok(`${n.text} 清理成功`), $("#cache-data-display").hide(),
             "jhs_dmm_video" === t && localStorage.removeItem("jhs_other_site_dmm");
         })), $("#clean-all").on("click", (async () => {
@@ -692,7 +756,8 @@ class Ae extends X {
         e.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(),
         e.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(),
         e.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e.httpTimeout = $("#httpTimeout").val(),
-        e.httpRetryCount = $("#httpRetryCount").val(), e.enableClog = $("#enableClog").val(),
+        e.httpRetryCount = $("#httpRetryCount").val(), e.circuitBreakerThreshold = $("#circuitBreakerThreshold").val(),
+        e.circuitBreakerCooldown = Number($("#circuitBreakerCooldownSec").val()) * 1e3, e.enableClog = $("#enableClog").val(),
         e.enableClog === _ ? clog.show() : clog.hide(), e.clogMsgCount = $("#clogMsgCount").val(),
         e.webDavUrl = $("#webDavUrl").val(), e.webDavUsername = $("#webDavUsername").val(),
         e.webDavPassword = await encryptCredential($("#webDavPassword").val()), e.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""),

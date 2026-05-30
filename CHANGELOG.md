@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.4.0] - 2026-05-30
+
+### Added
+- 外部站点熔断器：连续失败 3 次自动熔断 60 秒，避免移动网络下反复请求不可用站点。可在设置中调整阈值和冷却时间。
+- 域名使用统计：自动记录每个外部域名的请求次数和错误次数，在"外部请求"设置面板中展示。
+- 本地服务 ping 缓存：sessionStorage 缓存本地服务连通状态（默认 30 秒），减少重复探测。
+- "外部请求"设置面板：展示站点健康状态、域名统计、熔断配置、缓存清理入口。
+
+### Changed
+- 磁力搜索（MagnetHubPlugin）的请求统一走 gmHttp，接入熔断和统计。
+- 123 云盘（OneTwoThreeOfflinePlugin）的请求统一走 gmHttp，接入熔断和统计。
+- gmRequest 非 2xx 错误附加 HTTP status 属性，便于调用方区分错误类型。
+- 外部站点检测（OtherSitePlugin）在请求前检查熔断状态，已熔断站点直接跳过并显示提示。
+- 本地服务（LocalPlugin）ping 结果增加 sessionStorage 缓存，30 秒内不重复请求。
+
 ## [4.3.7] - 2026-05-29
 
 ### Fixed
@@ -155,7 +170,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.3...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.4.0...HEAD
+[4.4.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.7...v4.4.0
+[4.3.7]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.3...v4.3.7
 [4.3.3]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.2...v4.3.3
 [4.3.2]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.1...v4.3.2
 [4.3.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.0...v4.3.1
