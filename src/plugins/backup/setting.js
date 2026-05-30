@@ -275,7 +275,7 @@ class Ae extends X {
             t += '<tr style="background:#f0f0f0;"><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd;">域名</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">状态</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">失败次数</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">操作</th></tr>';
             for (const [n, a] of i) {
                 const i = "open" === a.state ? "🔴 熔断" : "half-open" === a.state ? "🟡 半开" : "🟢 正常", s = "open" === a.state ? `剩余${Math.ceil((a.cooldownMs - (Date.now() - a.openTime)) / 1e3)}秒` : "";
-                t += `<tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:4px 6px;">${escapeHtml(n)}</td><td style="text-align:center;padding:4px 6px;">${i} ${s}</td><td style="text-align:center;padding:4px 6px;">${a.failCount}</td><td style="text-align:center;padding:4px 6px;"><a class="a-danger reset-breaker" data-domain="${escapeHtml(n)}">重置</a></td></tr>`;
+                t += `<tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:4px 6px;">${escapeHtml(n)}</td><td style="text-align:center;padding:4px 6px;">${i} ${s}</td><td style="text-align:center;padding:4px 6px;">${Number(a.failCount) || 0}</td><td style="text-align:center;padding:4px 6px;"><a class="a-danger reset-breaker" data-domain="${escapeHtml(n)}">重置</a></td></tr>`;
             }
             t += '</table>', $("#site-health-table").html(t);
         } else $("#site-health-table").html('<p style="color:#888;font-size:13px;">暂无熔断记录</p>');
@@ -731,7 +731,13 @@ class Ae extends X {
             this.cacheItems.forEach((e => localStorage.removeItem(e.key))), show.ok("全部缓存已清理"),
             $("#cache-data-display").hide(), localStorage.removeItem("jhs_other_site_dmm"), await storageManager.clearThirdPartyCache();
         })), $(".view-btn").on("click", (async e => {
-            const t = $(e.currentTarget).data("key"), n = t === storageManager.third_party_cache_key ? JSON.stringify(await storageManager.getThirdPartyCache()) : localStorage.getItem(t), a = $("#cache-data-display"), i = a.find("pre");
+            const t = $(e.currentTarget).data("key");
+            let n;
+            if (t === storageManager.third_party_cache_key) n = JSON.stringify(await storageManager.getThirdPartyCache());
+            else if ("_circuitBreaker" === t) n = JSON.stringify(gmHttp.getCircuitBreakerStatus());
+            else if ("_domainStats" === t) n = JSON.stringify(gmHttp.getDomainStats());
+            else n = localStorage.getItem(t);
+            const a = $("#cache-data-display"), i = a.find("pre");
             if (a.show(), n) try {
                 const e = JSON.parse(n);
                 i.text(JSON.stringify(e, null, 2));
@@ -755,8 +761,8 @@ class Ae extends X {
         e.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(),
         e.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(),
         e.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(),
-        e.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e.httpTimeout = $("#httpTimeout").val(),
-        e.httpRetryCount = $("#httpRetryCount").val(), e.circuitBreakerThreshold = $("#circuitBreakerThreshold").val(),
+        e.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e.httpTimeout = Number($("#httpTimeout").val()) || 5e3,
+        e.httpRetryCount = Number($("#httpRetryCount").val()) || 3, e.circuitBreakerThreshold = Number($("#circuitBreakerThreshold").val()) || 3,
         e.circuitBreakerCooldown = Number($("#circuitBreakerCooldownSec").val()) * 1e3, e.enableClog = $("#enableClog").val(),
         e.enableClog === _ ? clog.show() : clog.hide(), e.clogMsgCount = $("#clogMsgCount").val(),
         e.webDavUrl = $("#webDavUrl").val(), e.webDavUsername = $("#webDavUsername").val(),

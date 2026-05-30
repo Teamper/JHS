@@ -145,7 +145,8 @@ class be extends X {
             n.append('<span class="site-tag" style="top:-15px">多结果</span>'), n.css("backgroundColor", this.okBackgroundColor)));
             const r = await t.getBaseUrl(), l = t.searchPath(r, e);
             n.attr("href", l);
-            const _domain = gmHttp._getDomain(l), _breaker = gmHttp._checkCircuitBreaker(_domain);
+            /* 预检查仅用于 UI 展示，实际拦截依赖 gmRequest 内部熔断检查 */
+            const _breaker = gmHttp.isDomainCircuitBroken(l);
             if (_breaker) {
                 n.attr("title", `站点已熔断，${_breaker.remaining}秒后重试`), n.css("backgroundColor", this.domainErrorBackgroundColor);
                 return;
@@ -172,10 +173,11 @@ class be extends X {
                 url: l,
                 time: m
             }) : (n.attr("href", l), n.attr("title", "未查询到, 点击前往搜索页"), n.css("backgroundColor", this.errorBackgroundColor));
-            p && (new ve).addTask((() => {
+            if (p) {
                 const e = localStorage.getItem(a) ? JSON.parse(localStorage.getItem(a)) : {};
                 e[s] = p, localStorage.setItem(a, JSON.stringify(e));
-            })), g && n.append(g);
+            }
+            g && n.append(g);
         } catch (a) {
             const e = String(a), i = t.id.replace("Btn", "");
             a._circuitBroken ? (n.attr("title", e), n.css("backgroundColor", this.domainErrorBackgroundColor),

@@ -4,20 +4,25 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
         this._domainStats = new Map();
     }
     _getDomain(e) {
-        try { return new URL(e).hostname; } catch { return e; }
+        try { return new URL(e).hostname; } catch { return "unknown"; }
     }
     _checkCircuitBreaker(e) {
         const t = this._circuitBreakers.get(e);
         if (!t) return null;
         if ("open" === t.state) {
             const n = Date.now() - t.openTime;
-            return n < t.cooldownMs ? { state: "open", remaining: Math.ceil((t.cooldownMs - n) / 1e3) } : (t.state = "half-open", null);
+            return n < t.cooldownMs ? { state: "open", remaining: Math.ceil((t.cooldownMs - n) / 1e3) } : (t.state = "half-open", t.failCount = 0, t.probing = !1, null);
         }
+        if ("half-open" === t.state && t.probing) return { state: "half-open", remaining: 0 };
         return null;
     }
+    isDomainCircuitBroken(e) {
+        return this._checkCircuitBreaker(this._getDomain(e));
+    }
+    /* domainStats.count 统计请求数（含重试），非独立请求数 */
     _recordSuccess(e) {
         let t = this._circuitBreakers.get(e);
-        t && (t.state = "closed", t.failCount = 0);
+        t && (t.state = "closed", t.failCount = 0, t.probing = !1);
         let n = this._domainStats.get(e);
         n || (n = { count: 0, errors: 0, lastUsed: 0 }, this._domainStats.set(e, n)), n.count++, n.lastUsed = Date.now();
     }
@@ -78,6 +83,7 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
         return t && Object.keys(t).length > 0 && (i = Object.entries(t).map((([e, t]) => `--${a}\r\nContent-Disposition: form-data; name="${e}"\r\n\r\n${t}\r\n`)).join("")),
         i += `--${a}--`, this.gmRequest("POST", e, i, null, n);
     }
+    /* 注意: 分块下载未使用 AbortController, 某块失败时其他飞行中的请求不会被取消 */
     async downloadFileInChunks(e, t = {}, n, a) {
         if (!n) throw new Error("请提供文件名 (filename) 用于保存。");
         const i = await storageManager.getSetting("httpTimeout", 5e3), s = await storageManager.getSetting("httpRetryCount", 3);
@@ -115,7 +121,7 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
         }
         if (!o || o <= 0) throw new Error("获取到的文件大小无效或服务器拒绝提供大小信息。");
         const l = 1048576, c = Math.ceil(o / l), d = [], h = new Array(c);
-        clog.log(`[${n}] 文件将被分为 ${c} 块进行下载 (每块约 ${1..toFixed(2)} MB)`);
+        clog.log(`[${n}] 文件将被分为 ${c} 块进行下载 (每块约 1.00 MB)`);
         for (let f = 0; f < c; f++) {
             const a = f * l, r = `bytes=${a}-${Math.min(a + l - 1, o - 1)}`, g = await utils.retry((() => new Promise(((a, s) => {
                 const o = {
@@ -155,14 +161,15 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
             const e = new URLSearchParams(a).toString();
             t += (t.includes("?") ? "&" : "?") + e;
         }
-        const o = this._getDomain(t), m = await storageManager.getSetting("httpTimeout", 5e3), r = await storageManager.getSetting("httpRetryCount", 3), b = await storageManager.getSetting("circuitBreakerThreshold", 3), k = await storageManager.getSetting("circuitBreakerCooldown", 6e4);
+        const o = this._getDomain(t), [m, r, b, k] = await Promise.all([storageManager.getSetting("httpTimeout", 5e3), storageManager.getSetting("httpRetryCount", 3), storageManager.getSetting("circuitBreakerThreshold", 3), storageManager.getSetting("circuitBreakerCooldown", 6e4)]);
         let u = this._circuitBreakers.get(o);
-        u ? u.threshold = b : (u = { state: "closed", failCount: 0, openTime: 0, cooldownMs: k, threshold: b }, this._circuitBreakers.set(o, u));
+        u || (u = { state: "closed", failCount: 0, openTime: 0, cooldownMs: k, threshold: b, probing: !1 }, this._circuitBreakers.set(o, u));
         const w = this._checkCircuitBreaker(o);
         if (w) {
             const e = new Error(`站点 ${o} 已熔断，${w.remaining}秒后重试`);
             throw e._circuitBroken = !0, e;
         }
+        "half-open" === u.state && (u.probing = !0);
         return n || (n = void 0), await utils.retry((() => new Promise(((a, r) => {
             GM_xmlhttpRequest({
                 method: e,

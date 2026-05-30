@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.4.1] - 2026-05-30
+
+### Fixed
+- 修复磁力搜索结果标题未转义导致的存储型 XSS 漏洞（Critical）。
+- 修复熔断器 half-open 状态下并发请求竞态条件：限制只放行一个探针请求。
+- 修复熔断器配置被设置面板动态覆盖的问题：只在创建时应用配置。
+- 修复设置面板"查看"按钮对熔断状态和域名统计缓存无效的问题。
+- 修复本地服务 ping 逻辑重复实现，统一使用 utils.pingLocalService()。
+- 修复 retry 函数对对象类型 reject 处理不一致的问题。
+- 修复 saveForm 中 httpTimeout/httpRetryCount/circuitBreakerThreshold 未做 Number 转换。
+- 修复 other-site.js 访问 gmHttp 私有方法，新增公开方法 isDomainCircuitBroken()。
+- 修复 TOKEN_EXPIRED 错误处理增加对 Error 对象的支持。
+- 修复 window.refresh() 可能未定义的边界条件。
+- 修复 filePath 参数添加基本路径遍历防护。
+- 优化 retry 函数增加指数退避（500ms × 重试次数）。
+- 优化 gmRequest 设置读取改为 Promise.all 并行读取。
+- 移除磁力搜索的 sessionStorage 双重缓存层。
+- 重构 calcMagnetScore 避免重复计算各维度分数。
+- 提取 offline.js 的 1800ms 魔法数字为 BUTTON_COOLDOWN_MS 常量。
+
 ## [4.4.0] - 2026-05-30
 
 ### Added
@@ -170,7 +190,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.4.0...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.4.1...HEAD
+[4.4.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.4.0...v4.4.1
 [4.4.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.7...v4.4.0
 [4.3.7]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.3...v4.3.7
 [4.3.3]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.2...v4.3.3

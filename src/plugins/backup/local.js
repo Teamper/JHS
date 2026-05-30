@@ -6,14 +6,9 @@ class mt extends X {
         if (r && !window.location.href.includes("/actors/")) {
             this.baseUrl = "http://127.0.0.1:7890", this.canRun = !1;
             try {
-                const e = "jhs_local_ping_" + this.baseUrl, t = sessionStorage.getItem(e);
-                if (t) {
-                    const {result: n, time: a} = JSON.parse(t);
-                    if (Date.now() - a < 3e4) return void (this.canRun = n);
-                }
-                const n = await gmHttp.get(this.baseUrl + "/ping");
-                n && 200 === n.code && (this.canRun = !0), sessionStorage.setItem(e, JSON.stringify({result: this.canRun, time: Date.now()}));
-            } catch (e) { sessionStorage.setItem("jhs_local_ping_" + this.baseUrl, JSON.stringify({result: !1, time: Date.now()})), console.error("本地服务连通性检查失败:", e); }
+                const result = await utils.pingLocalService(this.baseUrl, 3e4);
+                this.canRun = result && result.ok;
+            } catch (e) { this.canRun = !1, console.error("本地服务连通性检查失败:", e); }
             this.canRun && isListPage && utils.loopDetector((() => $("#addBlacklistBtn").length), (() => {
                 this.createBtn();
             }), 1, 1e4, !1);
@@ -82,7 +77,7 @@ class mt extends X {
                                 var t;
                                 null == (t = e.getElement().querySelector(".a-primary")) || t.addEventListener("click", (e => {
                                     gmHttp.get(this.baseUrl + "/openFilePath", {
-                                        filePath: a.file
+                                        filePath: a.file ? String(a.file).replace(/\.\./g, "") : ""
                                     });
                                 }));
                             })), '<a class="a-primary">打开路径</a>';
@@ -108,7 +103,7 @@ class mt extends X {
                 });
             },
             end() {
-                window.refresh();
+                window.refresh && window.refresh();
             }
         }) : show.info("没有可归档文件");
     }
@@ -161,7 +156,7 @@ class mt extends X {
                                 var t, n, i, s, o;
                                 null == (t = e.getElement().querySelector(".a-success")) || t.addEventListener("click", (e => {
                                     gmHttp.get(this.baseUrl + "/openFilePath", {
-                                        filePath: a.filePath
+                                        filePath: a.filePath ? String(a.filePath).replace(/\.\./g, "") : ""
                                     });
                                 })), null == (n = e.getElement().querySelector(".a-info")) || n.addEventListener("click", (e => {
                                     let t = a.carNum, n = a.url;
@@ -202,7 +197,7 @@ class mt extends X {
                 });
             },
             end() {
-                window.refresh();
+                window.refresh && window.refresh();
             }
         }) : show.info("视频字幕完整");
     }

@@ -1,7 +1,7 @@
 class OneTwoThreeOfflinePlugin extends X {
     constructor() {
         super(...arguments), this.tokenKey = "jhs_123pan_author_token", this.tokenMetaKey = "jhs_123pan_author_token_meta",
-        this.syncTimer = null, this.syncFallbackMs = 3e5;
+        this.syncTimer = null, this.syncFallbackMs = 3e5, this.BUTTON_COOLDOWN_MS = 1800;
     }
     getName() {
         return "OneTwoThreeOfflinePlugin";
@@ -68,7 +68,8 @@ class OneTwoThreeOfflinePlugin extends X {
         });
     }
     isTokenExpiredError(e) {
-        return "TOKEN_EXPIRED" === e || String(e || "").toLowerCase().includes("token is expired");
+        const msg = e instanceof Error ? e.message : "object" == typeof e && e ? e.message || "" : String(e || "");
+        return "TOKEN_EXPIRED" === e || "TOKEN_EXPIRED" === msg || msg.toLowerCase().includes("token is expired");
     }
     getTokenMetaText() {
         const e = GM_getValue(this.tokenMetaKey, null);
@@ -120,7 +121,7 @@ class OneTwoThreeOfflinePlugin extends X {
             this.isTokenExpiredError(i) ? this.handleTokenExpired() : show.error("123 离线提交失败：" + i + this.getTokenMetaText()),
             t.text(a);
         } finally {
-            setTimeout((() => t.removeClass("loading").prop("disabled", !1).text(a)), 1800);
+            setTimeout((() => t.removeClass("loading").prop("disabled", !1).text(a)), this.BUTTON_COOLDOWN_MS);
         }
     }
     /** 离线任务提交成功后，复用 JHS 影片状态存储标记为已下载。 */
@@ -152,6 +153,7 @@ class OneTwoThreeOfflinePlugin extends X {
         const t = e && e.closest ? e.closest(".item") : $();
         return t && t.length ? this.getBean("ListPagePlugin").findCarNumAndHref(t) : this.getPageInfo();
     }
+    /* 依赖 gmRequest 在非 2xx 时 reject 对象上附加 status 属性 */
     async resolveMagnet(e, t) {
         try {
             const n = await gmHttp.post("https://www.123pan.com/b/api/v2/offline_download/task/resolve", { urls: e }, {

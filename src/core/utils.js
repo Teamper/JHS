@@ -296,20 +296,20 @@ class J {
             const t = await e();
             return n > 0 && clog.debug(`[重试] 请求成功，共发起 ${n + 1} 次。`), t;
         } catch (a) {
-            const e = String(a);
+            const e = a instanceof Error ? a.message : "object" == typeof a ? JSON.stringify(a) : String(a);
             if (e.includes("Just a moment") || e.includes("重定向") || e.toLowerCase().includes("404 not found")) throw a;
             if (n++, n === t) throw clog.debug(`[重试] 达到最大重试次数 (${t})，最终失败：`, a), a;
-            clog.debug(`[重试] 请求失败，准备第 ${n + 1} 次重试, 错误信息: ${e}`);
+            await this.sleep(500 * n), clog.debug(`[重试] 请求失败，准备第 ${n + 1} 次重试, 错误信息: ${e}`);
         }
     }
-    async pingLocalService(e, t = 3e4) {
+    async pingLocalService(e, t = 3e4, timeout = 2e3) {
         const n = "jhs_ping_" + e, a = sessionStorage.getItem(n);
         if (a) {
             const {result: e, time: n} = JSON.parse(a);
             if (Date.now() - n < t) return e;
         }
         try {
-            const t = new AbortController, a = setTimeout((() => t.abort()), 2e3), i = await fetch(e, {
+            const t = new AbortController, a = setTimeout((() => t.abort()), timeout), i = await fetch(e, {
                 signal: t.signal,
                 mode: "no-cors"
             });

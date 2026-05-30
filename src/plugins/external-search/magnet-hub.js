@@ -46,18 +46,13 @@ class Re extends X {
         })), this.searchEngine(r, this.currentEngine || this.searchEngines[s], e), t;
     }
     async searchEngine(e, t, n) {
-        e.html(`<div class="magnet-loading">正在从 ${t.name} 搜索 "${n}"...</div>`);
+        e.html(`<div class="magnet-loading">正在从 ${escapeHtml(t.name)} 搜索 "${escapeHtml(n)}"...</div>`);
         const a = `${t.name}_${n}`;
-        const i = sessionStorage.getItem(a);
-        if (i) try {
-            const s = JSON.parse(i);
-            return void this.displayResults(e, s, t.name);
-        } catch (s) {}
         if (t.parseHtml) try {
             const i = t.url.replace("{keyword}", encodeURIComponent(n)), s = await storageManager.cachedRequest(`magnet:${t.id}:${n}`, 216e5, (() => gmHttp.get(i).then((e => t.parseHtml.call(this, e, n)))));
-            return s.length > 0 && sessionStorage.setItem(a, JSON.stringify(s)), void this.displayResults(e, s, t.name);
+            return void this.displayResults(e, s, t.name);
         } catch (s) {
-            return void e.html(`<div class="magnet-error">解析 ${t.name} 结果失败: ${s.message}</div>`);
+            return void e.html(`<div class="magnet-error">解析 ${escapeHtml(t.name)} 结果失败: ${escapeHtml(s.message)}</div>`);
         }
         t.parseJson && await t.parseJson.call(this, e, t, n, a);
     }
@@ -82,7 +77,8 @@ class Re extends X {
         t.sort(((e, t) => t._score.total - e._score.total)),
         t.forEach((t => {
             const n = t._score ? t._score.total : 0, a = n >= 80 ? "🟢" : n >= 60 ? "🟡" : "🔴", i = t._score ? `做种:${t._score.seeders}/35 分辨率:${t._score.resolution}/25 字幕:${t._score.subtitle}/20 新鲜度:${t._score.freshness}/15 完整性:${t._score.completeness}/5` : "";
-            $(`\n                <div class="magnet-result">\n                    <div class="magnet-title">\n                        <span class="magnet-score" title="${i}" style="cursor:help;font-size:14px;margin-right:6px;">${a} ${n}</span>\n                        <a href="${t.magnet}">${t.title}</a>\n                    </div>\n                    <div class="magnet-info">\n                        <span>大小: ${t.size || "未知"}</span>\n                        <span>做种: ${t.seeders || "—"}</span>\n                        <span>日期: ${t.date || "未知"}</span>\n                    </div>\n                    <div class="magnet-copy">\n                        <button class="magnet-hub-btn copy-btn" data-magnet="${t.magnet}">复制链接</button>\n                    </div>\n                </div>\n            `).find(".magnet-copy").append(`<button class="magnet-hub-btn one23-offline-btn" data-magnet="${t.magnet}">123离线</button>`).end().appendTo(e);
+            const safeTitle = escapeHtml(t.title), safeMagnet = escapeHtml(t.magnet);
+            $(`\n                <div class="magnet-result">\n                    <div class="magnet-title">\n                        <span class="magnet-score" title="${i}" style="cursor:help;font-size:14px;margin-right:6px;">${a} ${n}</span>\n                        <a href="${safeMagnet}">${safeTitle}</a>\n                    </div>\n                    <div class="magnet-info">\n                        <span>大小: ${t.size || "未知"}</span>\n                        <span>做种: ${t.seeders || "—"}</span>\n                        <span>日期: ${t.date || "未知"}</span>\n                    </div>\n                    <div class="magnet-copy">\n                        <button class="magnet-hub-btn copy-btn" data-magnet="${safeMagnet}">复制链接</button>\n                    </div>\n                </div>\n            `).find(".magnet-copy").append(`<button class="magnet-hub-btn one23-offline-btn" data-magnet="${safeMagnet}">123离线</button>`).end().appendTo(e);
         })), e.on("click", ".copy-btn", (function() {
             const e = $(this), t = e.data("magnet");
             navigator.clipboard ? navigator.clipboard.writeText(t).then((() => {
@@ -104,9 +100,9 @@ class Re extends X {
                     date: utils.formatDate(new Date(1e3 * t.lastUpdateTime))
                 });
             }
-            o.length > 0 && sessionStorage.setItem(a, JSON.stringify(o)), this.displayResults(e, o, t.name);
+            o.length > 0 && this.displayResults(e, o, t.name);
         } catch (i) {
-            e.html(`<div class="magnet-error">从 ${t.name} 获取数据失败: ${i.message || i}</div>`);
+            e.html(`<div class="magnet-error">从 ${escapeHtml(t.name)} 获取数据失败: ${escapeHtml(String(i.message || i))}</div>`);
         }
     }
     parseTorrentList(e, t) {
@@ -130,14 +126,19 @@ class Re extends X {
     calcMagnetScore(e) {
         let t = 0;
         const n = (e.seeders || 0);
-        n >= 50 ? t += 35 : n >= 10 ? t += 25 : n >= 1 ? t += 15 : t += 3;
+        const seedersScore = n >= 50 ? 35 : n >= 10 ? 25 : n >= 1 ? 15 : 3;
+        t += seedersScore;
         const a = (e.title || "").toLowerCase();
-        /4k|2160p/.test(a) ? t += 25 : /1080p/.test(a) ? t += 20 : /720p/.test(a) ? t += 15 : t += 5;
-        /-c\b|-uc\b|chinese|中字|字幕/.test(a) && (t += 20);
+        const resolutionScore = /4k|2160p/.test(a) ? 25 : /1080p/.test(a) ? 20 : /720p/.test(a) ? 15 : 5;
+        t += resolutionScore;
+        const subtitleScore = /-c\b|-uc\b|chinese|中字|字幕/.test(a) ? 20 : 0;
+        t += subtitleScore;
         const i = e.date ? this._daysSince(e.date) : 999;
-        i <= 7 ? t += 15 : i <= 30 ? t += 12 : i <= 90 ? t += 8 : t += 3;
-        /sample|预告|trailer/.test(a) && (t -= 15);
-        return { total: Math.max(0, Math.min(100, t)), seeders: n >= 50 ? 35 : n >= 10 ? 25 : n >= 1 ? 15 : 3, resolution: /4k|2160p/.test(a) ? 25 : /1080p/.test(a) ? 20 : /720p/.test(a) ? 15 : 5, subtitle: /-c\b|-uc\b|chinese|中字|字幕/.test(a) ? 20 : 0, freshness: i <= 7 ? 15 : i <= 30 ? 12 : i <= 90 ? 8 : 3, completeness: /sample|预告|trailer/.test(a) ? -15 : 0 };
+        const freshnessScore = i <= 7 ? 15 : i <= 30 ? 12 : i <= 90 ? 8 : 3;
+        t += freshnessScore;
+        const completenessScore = /sample|预告|trailer/.test(a) ? -15 : 0;
+        t += completenessScore;
+        return { total: Math.max(0, Math.min(100, t)), seeders: seedersScore, resolution: resolutionScore, subtitle: subtitleScore, freshness: freshnessScore, completeness: completenessScore };
     }
     _daysSince(e) {
         try {
