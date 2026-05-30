@@ -324,6 +324,18 @@ const MOBILE_CSS = `
             font-weight: 600 !important;
         }
 
+        /* 设置面板内按钮统一 */
+        .layui-layer-content .menu-btn {
+            padding: 8px 14px !important;
+            font-size: var(--jhs-text-sm) !important;
+            font-weight: 600 !important;
+            border-radius: var(--jhs-radius-sm) !important;
+            min-height: 40px !important;
+        }
+        .layui-layer-content .menu-btn + .menu-btn {
+            margin-left: var(--jhs-space-sm) !important;
+        }
+
         /* 缓存面板单列 */
         .jhs-cache-grid {
             grid-template-columns: 1fr !important;
@@ -342,10 +354,10 @@ const MOBILE_CSS = `
         .jhs-detail-btn-row > div:first-child .menu-btn {
             width: 100% !important;
             text-align: center !important;
-            padding: 12px 8px !important;
+            padding: 10px 8px !important;
             border-radius: var(--jhs-radius-sm) !important;
             font-size: var(--jhs-text-sm) !important;
-            min-height: 48px !important;
+            min-height: 44px !important;
             font-weight: 600 !important;
             box-shadow: var(--jhs-shadow-sm) !important;
         }
@@ -364,8 +376,8 @@ const MOBILE_CSS = `
             white-space: nowrap !important;
             padding: 8px 16px !important;
             border-radius: var(--jhs-radius-full) !important;
-            font-size: var(--jhs-text-xs) !important;
-            min-height: 36px !important;
+            font-size: var(--jhs-text-sm) !important;
+            min-height: 40px !important;
             font-weight: 500 !important;
         }
         .jhs-detail-btn-row .menu-btn[style*="linear-gradient"] {
@@ -387,8 +399,8 @@ const MOBILE_CSS = `
             white-space: nowrap !important;
             border-radius: var(--jhs-radius-full) !important;
             padding: 6px 14px !important;
-            font-size: var(--jhs-text-xs) !important;
-            min-height: 36px !important;
+            font-size: var(--jhs-text-sm) !important;
+            min-height: 40px !important;
             height: auto !important;
             box-shadow: var(--jhs-shadow-sm) !important;
         }

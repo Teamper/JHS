@@ -31,7 +31,7 @@ class MobileBottomBarPlugin extends X {
                 align-items: center;
                 justify-content: center;
                 flex: 1;
-                min-height: 48px;
+                min-height: 44px;
                 padding: 4px 0;
                 cursor: pointer;
                 color: #555;
@@ -113,7 +113,7 @@ class MobileBottomBarPlugin extends X {
                 font-weight: 600;
                 cursor: pointer;
                 border: none;
-                min-height: 48px;
+                min-height: 44px;
                 flex: 1;
                 min-width: 0;
                 transition: transform 0.15s, opacity 0.15s;
