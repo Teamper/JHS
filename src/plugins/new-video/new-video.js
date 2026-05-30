@@ -394,7 +394,7 @@ class pt extends X {
         const t = this.nvSortList(e), n = this.nvPageSize, a = (this.nvCurrentPage - 1) * n, i = a + n, s = t.slice(a, i), o = Math.ceil(t.length / n), r = this.getBean("OtherSitePlugin").getJavDbUrl().then((r => {
             const l = $("#new-video-list-container");
             let c = "";
-            c += '<div id="nv-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;padding:5px;">';
+            c += '<div id="nv-grid" class="jhs-new-video-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;padding:5px;">';
             for (const n of s) {
                 const e = escapeHtml(n.carNum), t = escapeHtml(n.title || n.carNum), a = n.coverUrl ? n.coverUrl.replace("thumbs", "covers") : "", i = `${r}/search?q=${encodeURIComponent(n.carNum)}`;
                 let o = `番号: ${e}\\n演员: ${escapeHtml(n.actressName)}\\n发行: ${n.publishTime || "未知"}`;

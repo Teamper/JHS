@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.5.3] - 2026-05-30
+
+### Fixed
+- 修复新作品网格移动端布局未生效：`nv-grid` 缺少 `jhs-new-video-grid` class。
+- 修复设置面板内容区 `overflow: hidden` 裁切下拉框，改为 `overflow-y: auto`。
+- 修复底栏 body padding 未考虑 `safe-area-inset-bottom`，iPhone 刘海屏内容被遮挡。
+- 修复底栏与遮罩 z-index 相同（均 10000），底栏提升至 10002 确保层级明确。
+- 修复统计弹窗 NewVideoPlugin 被禁用时的空指针崩溃。
+
 ## [4.5.2] - 2026-05-30
 
 ### Removed

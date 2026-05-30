@@ -12,7 +12,7 @@ class MobileBottomBarPlugin extends X {
                 bottom: 0;
                 left: 0;
                 right: 0;
-                z-index: 10000;
+                z-index: 10002;
                 background: rgba(255,255,255,0.92);
                 backdrop-filter: blur(20px);
                 -webkit-backdrop-filter: blur(20px);
@@ -137,7 +137,7 @@ class MobileBottomBarPlugin extends X {
     async handle() {
         if (!utils.isMobileMode()) return;
         // add padding to body so content isn't hidden behind the bar
-        $("body").css("padding-bottom", "64px");
+        $("body").css("padding-bottom", "calc(64px + env(safe-area-inset-bottom, 0px))");
         // add backdrop
         $('<div class="jhs-drawer-backdrop"></div>').appendTo("body");
         const bar = this.createBar();
