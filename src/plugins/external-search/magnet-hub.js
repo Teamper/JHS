@@ -54,25 +54,12 @@ class Re extends X {
             return void this.displayResults(e, s, t.name);
         } catch (s) {}
         if (t.parseHtml) try {
-            const i = t.url.replace("{keyword}", encodeURIComponent(n)), s = await storageManager.cachedRequest(`magnet:${t.id}:${n}`, 216e5, (() => new Promise(((e, a) => {
-                GM_xmlhttpRequest({
-                    method: "GET",
-                    url: i,
-                    onload: i => {
-                        try {
-                            e(t.parseHtml.call(this, i.responseText, n));
-                        } catch (s) {
-                            a(s);
-                        }
-                    },
-                    onerror: e => a(new Error(e.statusText || "请求失败"))
-                });
-            }))));
+            const i = t.url.replace("{keyword}", encodeURIComponent(n)), s = await storageManager.cachedRequest(`magnet:${t.id}:${n}`, 216e5, (() => gmHttp.get(i).then((e => t.parseHtml.call(this, e, n)))));
             return s.length > 0 && sessionStorage.setItem(a, JSON.stringify(s)), void this.displayResults(e, s, t.name);
         } catch (s) {
             return void e.html(`<div class="magnet-error">解析 ${t.name} 结果失败: ${s.message}</div>`);
         }
-        t.parseJson && t.parseJson.call(this, e, t, n, a);
+        t.parseJson && await t.parseJson.call(this, e, t, n, a);
     }
     displayResults(e, t, n) {
         function a(e) {
@@ -105,36 +92,22 @@ class Re extends X {
             })) : i(t, e);
         }))) : e.append('<div class="magnet-error">没有找到相关结果</div>');
     }
-    parseBTSOW(e, t, n, a) {
-        const i = this;
-        GM_xmlhttpRequest({
-            method: "POST",
-            url: t.url,
-            headers: {
-                "Content-Type": "application/json"
-            },
-            data: `[{"search":"${n}"},50,1]`,
-            onload: n => {
-                try {
-                    const s = JSON.parse(n.responseText).data, o = [];
-                    for (let e = 0; e < s.length; e++) {
-                        let t = s[e];
-                        o.push({
-                            title: t.name,
-                            magnet: "magnet:?xt=urn:btih:" + t.hash,
-                            size: (t.size / 1073741824).toFixed(2) + " GB",
-                            date: utils.formatDate(new Date(1e3 * t.lastUpdateTime))
-                        });
-                    }
-                    o.length > 0 && sessionStorage.setItem(a, JSON.stringify(o)), i.displayResults(e, o, t.name);
-                } catch (s) {
-                    e.html(`<div class="magnet-error">解析 ${t.name} 结果失败: ${s.message}</div>`);
-                }
-            },
-            onerror: n => {
-                e.html(`<div class="magnet-error">从 ${t.name} 获取数据失败: ${n.statusText}</div>`);
+    async parseBTSOW(e, t, n, a) {
+        try {
+            const i = await gmHttp.post(t.url, [{ search: n }, 50, 1]), s = i.data || [], o = [];
+            for (let e = 0; e < s.length; e++) {
+                let t = s[e];
+                o.push({
+                    title: t.name,
+                    magnet: "magnet:?xt=urn:btih:" + t.hash,
+                    size: (t.size / 1073741824).toFixed(2) + " GB",
+                    date: utils.formatDate(new Date(1e3 * t.lastUpdateTime))
+                });
             }
-        });
+            o.length > 0 && sessionStorage.setItem(a, JSON.stringify(o)), this.displayResults(e, o, t.name);
+        } catch (i) {
+            e.html(`<div class="magnet-error">从 ${t.name} 获取数据失败: ${i.message || i}</div>`);
+        }
     }
     parseTorrentList(e, t) {
         const n = utils.htmlTo$dom(e), a = [];

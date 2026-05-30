@@ -6,9 +6,14 @@ class mt extends X {
         if (r && !window.location.href.includes("/actors/")) {
             this.baseUrl = "http://127.0.0.1:7890", this.canRun = !1;
             try {
-                const e = await gmHttp.get(this.baseUrl + "/ping");
-                e && 200 === e.code && (this.canRun = !0);
-            } catch (e) { console.error("本地服务连通性检查失败:", e); }
+                const e = "jhs_local_ping_" + this.baseUrl, t = sessionStorage.getItem(e);
+                if (t) {
+                    const {result: n, time: a} = JSON.parse(t);
+                    if (Date.now() - a < 3e4) return void (this.canRun = n);
+                }
+                const n = await gmHttp.get(this.baseUrl + "/ping");
+                n && 200 === n.code && (this.canRun = !0), sessionStorage.setItem(e, JSON.stringify({result: this.canRun, time: Date.now()}));
+            } catch (e) { sessionStorage.setItem("jhs_local_ping_" + this.baseUrl, JSON.stringify({result: !1, time: Date.now()})), console.error("本地服务连通性检查失败:", e); }
             this.canRun && isListPage && utils.loopDetector((() => $("#addBlacklistBtn").length), (() => {
                 this.createBtn();
             }), 1, 1e4, !1);
