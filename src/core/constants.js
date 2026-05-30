@@ -105,81 +105,280 @@ H(F);
 const MOBILE_CSS = `
 <style>
     @media (max-width: 768px) {
-        /* 消除 300ms 点击延迟 */
-        * { touch-action: manipulation; }
+        /* ========== 设计令牌 ========== */
+        :root {
+            --jhs-space-xs: 4px;
+            --jhs-space-sm: 8px;
+            --jhs-space-md: 12px;
+            --jhs-space-lg: 16px;
+            --jhs-space-xl: 24px;
+            --jhs-space-2xl: 32px;
+            --jhs-bg: #ffffff;
+            --jhs-bg-secondary: #f8f9fa;
+            --jhs-bg-tertiary: #f0f1f3;
+            --jhs-border: #e5e7eb;
+            --jhs-border-light: #f0f1f3;
+            --jhs-text-primary: #1a1a1a;
+            --jhs-text-secondary: #6b7280;
+            --jhs-text-tertiary: #9ca3af;
+            --jhs-accent: #5d87c2;
+            --jhs-accent-light: #eef2f8;
+            --jhs-success: #22c55e;
+            --jhs-error: #ef4444;
+            --jhs-warning: #f59e0b;
+            --jhs-shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --jhs-shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --jhs-shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+            --jhs-radius-sm: 8px;
+            --jhs-radius-md: 12px;
+            --jhs-radius-lg: 16px;
+            --jhs-radius-full: 9999px;
+            --jhs-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --jhs-text-xs: 11px;
+            --jhs-text-sm: 13px;
+            --jhs-text-base: 15px;
+            --jhs-text-lg: 17px;
+            --jhs-text-xl: 20px;
+        }
 
-        /* 隐藏桌面端浮动菜单 */
-        .menu-box { display: none !important; }
+        /* ========== 全局基础 ========== */
+        * { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+        html { scroll-behavior: smooth; }
+        body { font-family: var(--jhs-font); -webkit-font-smoothing: antialiased; }
 
-        /* 隐藏桌面端 hover 下拉设置面板 */
-        .simple-setting, .mini-simple-setting { display: none !important; }
-
-        /* Tabulator 表格水平滚动 */
-        .tabulator-tableholder { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
-        .tabulator { min-width: 600px; }
+        /* 触控反馈 */
+        button:active, .menu-btn:active, a[class]:active, .side-menu-item:active,
+        .jhs-bar-item:active, .jhs-drawer-btn:active, .cache-item:active {
+            transform: scale(0.97);
+            opacity: 0.85;
+            transition: transform 0.1s, opacity 0.1s;
+        }
 
         /* 触控目标最小 44px */
-        .menu-btn, .side-menu-item, .a-normal, .a-primary, .a-success, .a-danger, .a-warning, .a-info {
+        button, a[class], select, .menu-btn, .side-menu-item,
+        .a-normal, .a-primary, .a-success, .a-danger, .a-warning, .a-info,
+        .jhs-bar-item, .jhs-drawer-btn, .cache-item, .keyword-label {
             min-height: 44px;
+        }
+        .menu-btn, .side-menu-item, .a-normal, .a-primary, .a-success, .a-danger, .a-warning, .a-info {
             display: inline-flex;
             align-items: center;
         }
 
-        /* layui-layer 弹窗全屏无圆角 */
-        .layui-layer { border-radius: 0 !important; }
-        .layui-layer-title { border-radius: 0 !important; }
+        /* 表单元素统一 */
+        input[type="text"], input[type="number"], input[type="password"],
+        input[type="url"], select, textarea {
+            font-size: 16px !important;
+            padding: 10px 12px !important;
+            border: 1.5px solid var(--jhs-border) !important;
+            border-radius: var(--jhs-radius-sm) !important;
+            background: var(--jhs-bg) !important;
+            width: 100% !important;
+            max-width: none !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+            transition: border-color 0.2s !important;
+        }
+        input:focus, select:focus, textarea:focus {
+            border-color: var(--jhs-accent) !important;
+            outline: none !important;
+            box-shadow: 0 0 0 3px rgba(93,135,194,0.15) !important;
+        }
 
-        /* 设置面板：侧栏改顶部标签 */
+        /* 滚动条隐藏（内容面板保留细滚动条） */
+        * { scrollbar-width: none; }
+        *::-webkit-scrollbar { display: none; }
+        .content-panel::-webkit-scrollbar { display: block; width: 4px; }
+
+        /* ========== 隐藏桌面端元素 ========== */
+        .menu-box { display: none !important; }
+        .simple-setting, .mini-simple-setting { display: none !important; }
+
+        /* ========== Tabulator 表格 ========== */
+        .tabulator-tableholder { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+        .tabulator { min-width: 600px; }
+
+        /* ========== 弹窗打磨 ========== */
+        .layui-layer {
+            border-radius: 0 !important;
+            box-shadow: none !important;
+        }
+        .layui-layer-title {
+            border-radius: 0 !important;
+            padding: 14px 16px !important;
+            font-size: var(--jhs-text-lg) !important;
+            font-weight: 600 !important;
+            background: var(--jhs-bg) !important;
+            border-bottom: 1px solid var(--jhs-border) !important;
+            color: var(--jhs-text-primary) !important;
+        }
+        .layui-layer-setwin { top: 8px !important; right: 8px !important; }
+        .layui-layer-setwin a {
+            width: 44px !important;
+            height: 44px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            font-size: 20px !important;
+            color: var(--jhs-text-secondary) !important;
+            border-radius: var(--jhs-radius-sm) !important;
+        }
+        .layui-layer-content {
+            padding: var(--jhs-space-lg) !important;
+            font-size: var(--jhs-text-base) !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+        .layui-layer-btn {
+            padding: var(--jhs-space-md) var(--jhs-space-lg) !important;
+            padding-bottom: calc(var(--jhs-space-md) + env(safe-area-inset-bottom, 0px)) !important;
+        }
+        .layui-layer-btn a {
+            min-height: 44px !important;
+            padding: 10px 20px !important;
+            border-radius: var(--jhs-radius-sm) !important;
+            font-size: var(--jhs-text-base) !important;
+            font-weight: 600 !important;
+        }
+        .layui-layer-msg { bottom: 80px !important; }
+
+        /* ========== 设置面板：侧栏改顶部标签 ========== */
         .jhs-mobile-sidebar {
             display: flex !important;
             overflow-x: auto !important;
             -webkit-overflow-scrolling: touch !important;
             white-space: nowrap !important;
-            padding: 10px 5px !important;
-            background: #f5f5f5 !important;
-            border-bottom: 1px solid #ddd !important;
+            padding: 0 !important;
+            background: var(--jhs-bg) !important;
+            border-bottom: 1px solid var(--jhs-border) !important;
             border-right: none !important;
             width: 100% !important;
             flex-shrink: 0 !important;
+            gap: 0 !important;
         }
         .jhs-mobile-sidebar .side-menu-item {
             display: inline-flex !important;
             flex-shrink: 0 !important;
-            padding: 8px 12px !important;
-            font-size: 13px !important;
+            padding: 10px 14px !important;
+            font-size: var(--jhs-text-sm) !important;
             border-left: none !important;
-            border-bottom: 3px solid transparent !important;
+            border-bottom: 2px solid transparent !important;
+            color: var(--jhs-text-secondary) !important;
+            transition: color 0.2s, border-color 0.2s !important;
         }
         .jhs-mobile-sidebar .side-menu-item.active {
             border-left: none !important;
-            border-bottom: 3px solid #5d87c2 !important;
+            border-bottom: 2px solid var(--jhs-accent) !important;
+            color: var(--jhs-accent) !important;
+            font-weight: 600 !important;
+            background: transparent !important;
         }
 
         /* 设置项纵向堆叠 */
         .setting-item {
             flex-direction: column !important;
             align-items: stretch !important;
+            padding: var(--jhs-space-md) 0 !important;
+            margin-bottom: 0 !important;
+            border-bottom: 1px solid var(--jhs-border-light) !important;
         }
         .setting-label {
             min-width: auto !important;
-            margin-bottom: 4px !important;
+            font-size: var(--jhs-text-sm) !important;
+            font-weight: 500 !important;
+            color: var(--jhs-text-primary) !important;
+            margin-bottom: var(--jhs-space-xs) !important;
         }
         .form-content {
             max-width: none !important;
-            min-width: auto !important;
+            min-width: 0 !important;
         }
 
-        /* 详情页按钮行纵向堆叠 */
+        /* 设置面板底部操作栏 */
+        .jhs-setting-footer {
+            padding: var(--jhs-space-md) var(--jhs-space-lg) !important;
+            padding-bottom: calc(var(--jhs-space-md) + env(safe-area-inset-bottom, 0px)) !important;
+            display: flex !important;
+            gap: var(--jhs-space-sm) !important;
+        }
+        #saveBtn, #clean-all {
+            flex: 1 !important;
+            padding: 12px 16px !important;
+            border-radius: var(--jhs-radius-sm) !important;
+            font-size: var(--jhs-text-base) !important;
+            font-weight: 600 !important;
+        }
+
+        /* 缓存面板单列 */
+        .jhs-cache-grid {
+            grid-template-columns: 1fr !important;
+        }
+
+        /* ========== 详情页按钮：2×2 网格 + 水平滚动 ========== */
         .jhs-detail-btn-row {
             flex-direction: column !important;
-            gap: 8px !important;
+            gap: var(--jhs-space-md) !important;
         }
-        .jhs-detail-btn-row .menu-btn {
+        .jhs-detail-btn-row > div:first-child {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr !important;
+            gap: var(--jhs-space-sm) !important;
+        }
+        .jhs-detail-btn-row > div:first-child .menu-btn {
             width: 100% !important;
             text-align: center !important;
+            padding: 12px 8px !important;
+            border-radius: var(--jhs-radius-sm) !important;
+            font-size: var(--jhs-text-sm) !important;
+            min-height: 48px !important;
+            font-weight: 600 !important;
+            box-shadow: var(--jhs-shadow-sm) !important;
+        }
+        .jhs-detail-btn-row > div:last-child {
+            display: flex !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            gap: var(--jhs-space-sm) !important;
+            padding-bottom: var(--jhs-space-xs) !important;
+            scrollbar-width: none !important;
+        }
+        .jhs-detail-btn-row > div:last-child::-webkit-scrollbar { display: none !important; }
+        .jhs-detail-btn-row > div:last-child .menu-btn {
+            flex-shrink: 0 !important;
+            width: auto !important;
+            white-space: nowrap !important;
+            padding: 8px 16px !important;
+            border-radius: var(--jhs-radius-full) !important;
+            font-size: var(--jhs-text-xs) !important;
+            min-height: 36px !important;
+            font-weight: 500 !important;
+        }
+        .jhs-detail-btn-row .menu-btn[style*="linear-gradient"] {
+            background-image: none !important;
         }
 
-        /* 原生表格横滚容器 */
+        /* ========== 列表页按钮：水平滚动胶囊 ========== */
+        .jhs-list-btn-row {
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            flex-wrap: nowrap !important;
+            gap: var(--jhs-space-sm) !important;
+            padding: var(--jhs-space-sm) 0 !important;
+            scrollbar-width: none !important;
+        }
+        .jhs-list-btn-row::-webkit-scrollbar { display: none !important; }
+        .jhs-list-btn-row .main-tab-btn {
+            flex-shrink: 0 !important;
+            white-space: nowrap !important;
+            border-radius: var(--jhs-radius-full) !important;
+            padding: 6px 14px !important;
+            font-size: var(--jhs-text-xs) !important;
+            min-height: 32px !important;
+            height: auto !important;
+            box-shadow: var(--jhs-shadow-sm) !important;
+        }
+
+        /* ========== 原生表格横滚 ========== */
         .jhs-mobile-table-wrap {
             overflow-x: auto !important;
             -webkit-overflow-scrolling: touch !important;
@@ -187,22 +386,16 @@ const MOBILE_CSS = `
         .jhs-mobile-table-wrap table {
             min-width: 500px !important;
         }
-
-        /* 弹窗内原生表格横滚 */
         .layui-layer-content table {
             min-width: 500px !important;
         }
-        .layui-layer-content {
-            overflow-x: auto !important;
-            -webkit-overflow-scrolling: touch !important;
-        }
 
-        /* 新作品网格适配 */
+        /* ========== 新作品网格适配 ========== */
         .jhs-new-video-grid {
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
         }
 
-        /* 隐藏桌面端 JavBus 浮动设置区 */
+        /* ========== JavBus 浮动设置区 ========== */
         #top-right-box { flex-wrap: wrap !important; }
     }
 </style>`;
