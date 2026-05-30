@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.5.7] - 2026-05-30
+
+### Fixed
+- 修复移动端页面可左右滑动露出空白：html/body 添加 `overflow-x: hidden`。
+- 修复用户自定义容器宽度(containerWidth)超过100%时移动端页面溢出，强制限制为100%。
+- 修复演员信息面板固定宽度 span(300px+200px+200px=700px)在移动端溢出，改为响应式 flex 布局。
+
 ## [4.5.6] - 2026-05-30
 
 ### Fixed

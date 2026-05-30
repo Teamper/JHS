@@ -158,8 +158,8 @@ const MOBILE_CSS = `
 
         /* ========== 全局基础 ========== */
         * { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-        html { scroll-behavior: smooth; }
-        body { font-family: var(--jhs-font); -webkit-font-smoothing: antialiased; }
+        html { scroll-behavior: smooth; overflow-x: hidden; }
+        body { font-family: var(--jhs-font); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
 
         /* 触控反馈 */
         button:active, .menu-btn:active, a[class]:active, .side-menu-item:active,
@@ -413,6 +413,17 @@ const MOBILE_CSS = `
 
         /* ========== JavBus 浮动设置区 ========== */
         #top-right-box { flex-wrap: wrap !important; }
+
+        /* ========== 演员信息：固定宽度改为响应式 ========== */
+        .actress-info div[style*="display: flex"] {
+            flex-wrap: wrap !important;
+        }
+        .actress-info span[style*="width: 300px"],
+        .actress-info span[style*="width: 200px"] {
+            width: auto !important;
+            min-width: 0 !important;
+            flex: 1 1 45% !important;
+        }
 
         /* ========== WebDAV 备份卡片列表 ========== */
         .jhs-backup-card {
