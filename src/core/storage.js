@@ -374,6 +374,11 @@ let z = class n {
         const a = n[e];
         return a ? "true" === a || "false" === a ? "true" === a.toLowerCase() : "string" != typeof a || "" === a.trim() || isNaN(Number(a)) ? a : Number(a) : t;
     }
+    getSettingSync(e, t) {
+        if (!this.cacheSettingObj) return t;
+        const n = this.cacheSettingObj[e];
+        return n ? "true" === n || "false" === n ? "true" === n.toLowerCase() : "string" != typeof n || "" === n.trim() || isNaN(Number(n)) ? n : Number(n) : t;
+    }
     async saveSetting(e) {
         e ? (await this._setItemAndInvalidate(this.setting_key, e), window.clean_cacheSettingObj()) : show.error("设置对象为空");
     }

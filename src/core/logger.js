@@ -127,6 +127,7 @@ unsafeWindow.loading = window.loading = function() {
         this.boundElements = new WeakSet, this.init();
     }
     init() {
+        if (utils.isMobileMode()) return;
         this.injectStyles(), this.createPreviewElement(), this.bindEvents();
     }
     injectStyles() {

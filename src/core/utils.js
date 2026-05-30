@@ -210,7 +210,7 @@ class J {
     }
     getResponsiveArea(e) {
         const t = window.innerWidth;
-        return t >= 1200 ? e || this.getDefaultArea() : t >= 768 ? [ "70%", "90%" ] : [ "95%", "95%" ];
+        return this.isMobileMode() ? [ "100%", "100%" ] : t >= 1200 ? e || this.getDefaultArea() : [ "70%", "90%" ];
     }
     getDefaultArea() {
         return [ "85%", "90%" ];
@@ -218,6 +218,10 @@ class J {
     isMobile() {
         const e = navigator.userAgent.toLowerCase();
         return [ "iphone", "ipod", "ipad", "android", "blackberry", "windows phone", "nokia", "webos", "opera mini", "mobile", "mobi", "tablet" ].some((t => e.includes(t)));
+    }
+    isMobileMode() {
+        const e = storageManager.getSettingSync("mobileMode", "auto");
+        return "on" === e || ("off" !== e && (this.isMobile() || window.innerWidth < 768));
     }
     copyToClipboard(e, t) {
         navigator.clipboard.writeText(t).then((() => show.info(`${e}已复制到剪切板, ${t}`))).catch((e => console.error("复制失败: ", e)));

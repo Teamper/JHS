@@ -57,6 +57,7 @@ const pluginPaths = [
   "backup/local.js",
   "one-two-three/offline.js",
   "stats/stats.js",
+  "status/mobile-bottom-bar.js",
   "registry.js"
 ].map((file) => join(repoRoot, "src", "plugins", file));
 const distDir = join(repoRoot, "dist");

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.5.0] - 2026-05-30
+
+### Added
+- 移动端基础适配：`mobileMode` 全局标志，支持 `auto`/`on`/`off` 三种模式（自动检测/强制开启/强制关闭）。
+- 底部操作栏：移动端注入固定底部操作栏，收编桌面端浮动菜单的核心功能（待鉴定、新作品、黑名单、设置、详情页快捷操作）。
+- 全局移动端 CSS：通过 `@media (max-width: 768px)` 注入响应式样式，覆盖触控目标放大、弹窗全屏、表格横向滚动等。
+- 移动端插件降级钩子：BasePlugin 新增 `shouldSkipOnMobile()` 方法，PluginManager 在移动端自动跳过标记的插件。
+- StorageManager 新增 `getSettingSync()` 同步读取缓存中的设置值。
+
+### Changed
+- `utils.getResponsiveArea()` 移动端返回 `["100%", "100%"]` 全屏尺寸。
+- `utils.isMobileMode()` 综合判断 UA + 屏幕宽度 + 用户设置。
+- 设置面板移动端适配：侧栏改为顶部横向滚动标签栏，设置项纵向堆叠，移除 `min-width` 限制。
+- 详情页按钮行添加 `jhs-detail-btn-row` 类，移动端纵向堆叠全宽显示。
+- ImageHoverPreview 在移动端自动跳过初始化（hover 无意义）。
+- Tabulator 表格移动端启用水平滚动，设置面板内原生表格同样支持横滚。
+
 ## [4.4.1] - 2026-05-30
 
 ### Fixed
@@ -190,7 +207,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.4.1...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.0...HEAD
+[4.5.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.4.1...v4.5.0
 [4.4.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.4.0...v4.4.1
 [4.4.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.7...v4.4.0
 [4.3.7]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.3...v4.3.7

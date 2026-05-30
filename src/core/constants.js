@@ -101,3 +101,109 @@ function H(e) {
 
 l && H(N), r && H(E), H("\n<style>\n    .a-normal, /* 白色 */\n    .a-primary, /* 浅蓝色 */\n    .a-success, /* 浅绿色 */\n    .a-danger, /* 浅粉色 */\n    .a-warning, /* 浅橙色 */\n    .a-info /* 灰色 */\n    {\n        display: inline-flex;\n        align-items: center;\n        justify-content: center;\n        padding: 6px 14px;\n        margin-right: 10px;\n        border-radius: 6px;\n        text-decoration: none;\n        font-size: 13px;\n        font-weight: 500;\n        transition: all 0.2s ease;\n        cursor: pointer;\n        border: 1px solid rgba(0, 0, 0, 0.08);\n        white-space: nowrap;\n    }\n    \n    .a-primary {\n        background: #e0f2fe;\n        color: #0369a1;\n        border-color: #bae6fd;\n    }\n    \n    .a-primary:hover {\n        background: #bae6fd;\n    }\n    \n    .a-success {\n        background: #dcfce7;\n        color: #166534;\n        border-color: #bbf7d0;\n    }\n    \n    .a-success:hover {\n        background: #bbf7d0;\n    }\n    \n    .a-danger {\n        background: #fee2e2;\n        color: #b91c1c;\n        border-color: #fecaca;\n    }\n    \n    .a-danger:hover {\n        background: #fecaca;\n    }\n    \n    .a-warning {\n        background: #ffedd5;\n        color: #9a3412;\n        border-color: #fed7aa;\n    }\n    \n    .a-warning:hover {\n        background: #fed7aa;\n    }\n    \n    .a-info {\n        background: #e2e8f0;\n        color: #334155;\n        border-color: #cbd5e1;\n    }\n    \n    .a-info:hover {\n        background: #cbd5e1;\n    }\n    \n    .a-normal {\n        background: transparent;\n        color: #64748b;\n        border-color: #cbd5e1;\n    }\n    \n    .a-normal:hover {\n        background: #f8fafc;\n    }\n</style>\n"),
 H(F);
+
+const MOBILE_CSS = `
+<style>
+    @media (max-width: 768px) {
+        /* 消除 300ms 点击延迟 */
+        * { touch-action: manipulation; }
+
+        /* 隐藏桌面端浮动菜单 */
+        .menu-box { display: none !important; }
+
+        /* 隐藏桌面端 hover 下拉设置面板 */
+        .simple-setting, .mini-simple-setting { display: none !important; }
+
+        /* Tabulator 表格水平滚动 */
+        .tabulator-tableholder { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+        .tabulator { min-width: 600px; }
+
+        /* 触控目标最小 44px */
+        .menu-btn, .side-menu-item, .a-normal, .a-primary, .a-success, .a-danger, .a-warning, .a-info {
+            min-height: 44px;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        /* layui-layer 弹窗全屏无圆角 */
+        .layui-layer { border-radius: 0 !important; }
+        .layui-layer-title { border-radius: 0 !important; }
+
+        /* 设置面板：侧栏改顶部标签 */
+        .jhs-mobile-sidebar {
+            display: flex !important;
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            white-space: nowrap !important;
+            padding: 10px 5px !important;
+            background: #f5f5f5 !important;
+            border-bottom: 1px solid #ddd !important;
+            border-right: none !important;
+            width: 100% !important;
+            flex-shrink: 0 !important;
+        }
+        .jhs-mobile-sidebar .side-menu-item {
+            display: inline-flex !important;
+            flex-shrink: 0 !important;
+            padding: 8px 12px !important;
+            font-size: 13px !important;
+            border-left: none !important;
+            border-bottom: 3px solid transparent !important;
+        }
+        .jhs-mobile-sidebar .side-menu-item.active {
+            border-left: none !important;
+            border-bottom: 3px solid #5d87c2 !important;
+        }
+
+        /* 设置项纵向堆叠 */
+        .setting-item {
+            flex-direction: column !important;
+            align-items: stretch !important;
+        }
+        .setting-label {
+            min-width: auto !important;
+            margin-bottom: 4px !important;
+        }
+        .form-content {
+            max-width: none !important;
+            min-width: auto !important;
+        }
+
+        /* 详情页按钮行纵向堆叠 */
+        .jhs-detail-btn-row {
+            flex-direction: column !important;
+            gap: 8px !important;
+        }
+        .jhs-detail-btn-row .menu-btn {
+            width: 100% !important;
+            text-align: center !important;
+        }
+
+        /* 原生表格横滚容器 */
+        .jhs-mobile-table-wrap {
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+        .jhs-mobile-table-wrap table {
+            min-width: 500px !important;
+        }
+
+        /* 弹窗内原生表格横滚 */
+        .layui-layer-content table {
+            min-width: 500px !important;
+        }
+        .layui-layer-content {
+            overflow-x: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+
+        /* 新作品网格适配 */
+        .jhs-new-video-grid {
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+        }
+
+        /* 隐藏桌面端 JavBus 浮动设置区 */
+        #top-right-box { flex-wrap: wrap !important; }
+    }
+</style>`;
+H(MOBILE_CSS);

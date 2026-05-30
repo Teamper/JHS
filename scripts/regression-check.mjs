@@ -160,7 +160,8 @@ const expectedPlugins = [
   ["new-video/new-video.js", "pt", "NewVideoPlugin"],
   ["backup/local.js", "mt", "LocalPlugin"],
   ["one-two-three/offline.js", "OneTwoThreeOfflinePlugin", "OneTwoThreeOfflinePlugin"],
-  ["stats/stats.js", "StatsPlugin", "StatsPlugin"]
+  ["stats/stats.js", "StatsPlugin", "StatsPlugin"],
+  ["status/mobile-bottom-bar.js", "MobileBottomBarPlugin", "MobileBottomBarPlugin"]
 ];
 
 const mainClassMatches = sourceMain.match(/^class\s+[\w$]+\s+extends\s+X\s*\{/gm) || [];
@@ -176,11 +177,11 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractRegistryArray(registry, "DEFAULT_JAVDB_PLUGINS");
 const javbusPlugins = extractRegistryArray(registry, "DEFAULT_JAVBUS_PLUGINS");
 assert(
-  javdbPlugins.join(",") === "Ie,Be,le,de,Ce,xe,Ae,fe,pe,ue,Ee,Ue,Oe,Q,$e,He,ye,ce,ae,ke,he,be,Ze,ze,Re,Ve,Se,Xe,pt,et,mt,StatsPlugin",
+  javdbPlugins.join(",") === "Ie,Be,le,de,Ce,xe,Ae,fe,pe,ue,Ee,Ue,Oe,Q,$e,He,ye,ce,ae,ke,he,be,Ze,ze,Re,Ve,Se,Xe,pt,et,mt,StatsPlugin,MobileBottomBarPlugin",
   "JavDB plugin registration order changed"
 );
 assert(
-  javbusPlugins.join(",") === "Ie,Ce,Ae,xe,Be,Ee,Fe,Ue,Qe,we,ye,$e,ke,ce,je,Re,Ve,be,Ze,Se,et,StatsPlugin",
+  javbusPlugins.join(",") === "Ie,Ce,Ae,xe,Be,Ee,Fe,Ue,Qe,we,ye,$e,ke,ce,je,Re,Ve,be,Ze,Se,et,StatsPlugin,MobileBottomBarPlugin",
   "JavBus plugin registration order changed"
 );
 assertIncludes(registry, 'hostname.includes("123pan.com")', "shared registry");
@@ -198,6 +199,7 @@ sourceByFile.set("core/javdb-api.js", await read("src/core/javdb-api.js"));
 sourceByFile.set("core/http.js", await read("src/core/http.js"));
 sourceByFile.set("core/event-bus.js", await read("src/core/event-bus.js"));
 sourceByFile.set("core/plugin-manager.js", await read("src/core/plugin-manager.js"));
+sourceByFile.set("core/utils.js", await read("src/core/utils.js"));
 
 const regressionMatrix = [
   ["JavDB 列表页", [["status/list-page.js", "filterMovieList"], ["status/list-page-button.js", "ListPageButtonPlugin"], ["image-viewer/cover-button.js", "CoverButtonPlugin"], ["core/storage.js", "getStatusMap"]]],
@@ -219,7 +221,8 @@ const regressionMatrix = [
   ["快速筛选", [["status/list-page.js", "createQuickFilter"], ["status/list-page.js", "applyQuickFilter"], ["status/list-page.js", "activeQuickFilter"]]],
   ["标记状态与隐藏", [["status/list-page.js", "data-jhs-status"], ["status/list-page.js", "data-hide"], ["status/list-page.js", "getStatusKey"]]],
   ["设置页", [["backup/setting.js", "SettingPlugin"], ["backup/setting.js", "hotkey-panel"], ["backup/setting.js", "importData"]]],
-  ["演员信息解析", [["core/plugin-manager.js", "getActressPageInfo"], ["status/list-page.js", "parseActressName"]]]
+  ["演员信息解析", [["core/plugin-manager.js", "getActressPageInfo"], ["status/list-page.js", "parseActressName"]]],
+  ["移动端适配", [["status/mobile-bottom-bar.js", "MobileBottomBarPlugin"], ["core/utils.js", "isMobileMode"], ["core/plugin-manager.js", "shouldSkipOnMobile"]]]
 ];
 
 for (const [scope, checks] of regressionMatrix) {

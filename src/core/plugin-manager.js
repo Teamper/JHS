@@ -37,9 +37,11 @@ class Y {
     }
     async processCss() {
         const t = await this._getDisabledPlugins();
+        const m = utils.isMobileMode();
         const e = (await Promise.allSettled(Array.from(this.plugins).map((async ([e, n]) => {
             try {
                 if (t.includes(e)) return { name: e, status: "disabled" };
+                if (m && "function" == typeof n.shouldSkipOnMobile && n.shouldSkipOnMobile()) return { name: e, status: "skipped" };
                 if ("function" == typeof n.initCss) {
                     const t = await n.initCss();
                     return t && utils.insertStyle(t), {
@@ -62,8 +64,10 @@ class Y {
     async processPlugins() {
         const t = await this._getDisabledPlugins();
         const a = [];
+        const m = utils.isMobileMode();
         const e = (await Promise.allSettled(Array.from(this.plugins).map((async ([e, n]) => {
             if (t.includes(e)) return a.push({ name: e, elapsed: 0, status: "disabled" }), { name: e, status: "disabled" };
+            if (m && "function" == typeof n.shouldSkipOnMobile && n.shouldSkipOnMobile()) return a.push({ name: e, elapsed: 0, status: "skipped-mobile" }), { name: e, status: "skipped" };
             const i = performance.now();
             try {
                 if ("function" == typeof n.handle) await n.handle();
@@ -112,6 +116,7 @@ class X {
         return "";
     }
     async handle() {}
+    shouldSkipOnMobile() { return false; }
     getPageInfo() {
         let e, t, n, a, i, s = window.location.href;
         return r && (e = $('a[title="複製番號"]').attr("data-clipboard-text"), t = s.split("?")[0].split("#")[0],
