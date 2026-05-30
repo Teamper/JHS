@@ -377,7 +377,7 @@ class xe extends X {
         layer.open({
             type: 1,
             title: `编辑记录: ${t}`,
-            area: [ "500px", "650px" ],
+            area: utils.getResponsiveArea([ "500px", "650px" ]),
             content: c,
             btn: [ "保存", "取消" ],
             success: (e, t) => {

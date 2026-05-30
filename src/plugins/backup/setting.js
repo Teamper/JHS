@@ -400,7 +400,7 @@ class Ae extends X {
             type: 1,
             title: "数据差异预览",
             content: s,
-            area: ["700px", "auto"],
+            area: utils.getResponsiveArea(["700px", "auto"]),
             btn: ["确认导入", "取消"],
             anim: -1,
             yes: async s => {
@@ -866,7 +866,7 @@ class Ae extends X {
             type: 1,
             title: n + "备份文件",
             content: '\n                <div style="height: 100%;overflow:hidden;"> \n                    <div id="table-container" style="margin:auto auto !important;"></div>\n                </div>\n            ',
-            area: [ "800px", "70%" ],
+            area: utils.getResponsiveArea([ "800px", "70%" ]),
             anim: -1,
             success: a => {
                 const i = new Tabulator("#table-container", {

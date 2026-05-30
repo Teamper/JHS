@@ -460,7 +460,7 @@ class pt extends X {
                         layer.open({
                             type: 1,
                             title: "选择 CDN 源",
-                            area: [ "400px", "auto" ],
+                            area: utils.getResponsiveArea([ "400px", "auto" ]),
                             content: n,
                             btn: [ "确定", "取消" ],
                             success: (e, t) => {
