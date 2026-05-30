@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.5.9] - 2026-05-31
+
+### Fixed
+- 修复移动端 toast 消息与 FAB 按钮重叠：bottom 从 80px 调整为 100px。
+- 修正移动端 CSS 注释：底部栏 → FAB 浮动菜单。
+
 ## [4.5.8] - 2026-05-31
 
 ### Changed
