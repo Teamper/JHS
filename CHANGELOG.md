@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.5.4] - 2026-05-30
+
+### Fixed
+- 修复 5 处弹窗硬编码像素尺寸未适配移动端：查看备份、导入预览、CDN 源选择、TOP250、历史记录编辑全部改为 `getResponsiveArea`。
+
 ## [4.5.3] - 2026-05-30
 
 ### Fixed
