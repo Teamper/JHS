@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.5.2] - 2026-05-30
+
+### Fixed
+- 修复统计弹窗无法打开：`openDialog()` 局部变量 `d/h/g` 与全局常量 TDZ 冲突，重命名为 `barPct/barRow/dialogHtml`。
+- 修复设计令牌仅在移动端可用：将 `:root` CSS 变量从 `@media` 内提升到全局。
+- 修复弹窗移动端无圆角：改为顶部 12px 圆角，保留全屏感。
+- 修复列表页按钮触控高度不足：`min-height` 从 32px 提升到 36px。
+
+### Changed
+- 桌面端按钮增加 `:active` 按压反馈和 `:focus-visible` 键盘导航轮廓。
+- 桌面端设置面板间距加大（`margin-bottom` 3px→6px）、表单宽度放宽（160px→200px）、文本左对齐。
+- 设置面板底部操作栏改为 flexbox 布局。
+- Toast 默认显示时长从 1 秒延长到 2.5 秒。
+
 ## [4.5.1] - 2026-05-30
 
 ### Fixed

@@ -27,7 +27,7 @@ unsafeWindow.loading = window.loading = function() {
             zIndex: 999999999
         }, p = {
             text: e,
-            duration: 1e3,
+            duration: 2500,
             close: !1,
             gravity: "top",
             position: "center",

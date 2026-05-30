@@ -104,42 +104,57 @@ H(F);
 
 const MOBILE_CSS = `
 <style>
+    /* ========== 设计令牌（全局） ========== */
+    :root {
+        --jhs-space-xs: 4px;
+        --jhs-space-sm: 8px;
+        --jhs-space-md: 12px;
+        --jhs-space-lg: 16px;
+        --jhs-space-xl: 24px;
+        --jhs-space-2xl: 32px;
+        --jhs-bg: #ffffff;
+        --jhs-bg-secondary: #f8f9fa;
+        --jhs-bg-tertiary: #f0f1f3;
+        --jhs-border: #e5e7eb;
+        --jhs-border-light: #f0f1f3;
+        --jhs-text-primary: #1a1a1a;
+        --jhs-text-secondary: #6b7280;
+        --jhs-text-tertiary: #9ca3af;
+        --jhs-accent: #5d87c2;
+        --jhs-accent-light: #eef2f8;
+        --jhs-success: #22c55e;
+        --jhs-error: #ef4444;
+        --jhs-warning: #f59e0b;
+        --jhs-shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+        --jhs-shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+        --jhs-shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+        --jhs-radius-sm: 8px;
+        --jhs-radius-md: 12px;
+        --jhs-radius-lg: 16px;
+        --jhs-radius-full: 9999px;
+        --jhs-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        --jhs-text-xs: 11px;
+        --jhs-text-sm: 13px;
+        --jhs-text-base: 15px;
+        --jhs-text-lg: 17px;
+        --jhs-text-xl: 20px;
+    }
+
+    /* ========== 桌面端按钮增强 ========== */
+    .a-normal:active, .a-primary:active, .a-success:active, .a-danger:active, .a-warning:active, .a-info:active {
+        transform: scale(0.97);
+        opacity: 0.85;
+        transition: transform 0.1s, opacity 0.1s;
+    }
+    .a-normal:focus-visible, .a-primary:focus-visible, .a-success:focus-visible, .a-danger:focus-visible, .a-warning:focus-visible, .a-info:focus-visible {
+        outline: 2px solid var(--jhs-accent);
+        outline-offset: 2px;
+    }
+    .a-normal:last-child, .a-primary:last-child, .a-success:last-child, .a-danger:last-child, .a-warning:last-child, .a-info:last-child {
+        margin-right: 0;
+    }
+
     @media (max-width: 768px) {
-        /* ========== 设计令牌 ========== */
-        :root {
-            --jhs-space-xs: 4px;
-            --jhs-space-sm: 8px;
-            --jhs-space-md: 12px;
-            --jhs-space-lg: 16px;
-            --jhs-space-xl: 24px;
-            --jhs-space-2xl: 32px;
-            --jhs-bg: #ffffff;
-            --jhs-bg-secondary: #f8f9fa;
-            --jhs-bg-tertiary: #f0f1f3;
-            --jhs-border: #e5e7eb;
-            --jhs-border-light: #f0f1f3;
-            --jhs-text-primary: #1a1a1a;
-            --jhs-text-secondary: #6b7280;
-            --jhs-text-tertiary: #9ca3af;
-            --jhs-accent: #5d87c2;
-            --jhs-accent-light: #eef2f8;
-            --jhs-success: #22c55e;
-            --jhs-error: #ef4444;
-            --jhs-warning: #f59e0b;
-            --jhs-shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
-            --jhs-shadow-md: 0 4px 12px rgba(0,0,0,0.08);
-            --jhs-shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
-            --jhs-radius-sm: 8px;
-            --jhs-radius-md: 12px;
-            --jhs-radius-lg: 16px;
-            --jhs-radius-full: 9999px;
-            --jhs-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            --jhs-text-xs: 11px;
-            --jhs-text-sm: 13px;
-            --jhs-text-base: 15px;
-            --jhs-text-lg: 17px;
-            --jhs-text-xl: 20px;
-        }
 
         /* ========== 全局基础 ========== */
         * { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
@@ -200,11 +215,11 @@ const MOBILE_CSS = `
 
         /* ========== 弹窗打磨 ========== */
         .layui-layer {
-            border-radius: 0 !important;
-            box-shadow: none !important;
+            border-radius: 12px 12px 0 0 !important;
+            box-shadow: 0 -2px 20px rgba(0,0,0,0.08) !important;
         }
         .layui-layer-title {
-            border-radius: 0 !important;
+            border-radius: 12px 12px 0 0 !important;
             padding: 14px 16px !important;
             font-size: var(--jhs-text-lg) !important;
             font-weight: 600 !important;
@@ -373,7 +388,7 @@ const MOBILE_CSS = `
             border-radius: var(--jhs-radius-full) !important;
             padding: 6px 14px !important;
             font-size: var(--jhs-text-xs) !important;
-            min-height: 32px !important;
+            min-height: 36px !important;
             height: auto !important;
             box-shadow: var(--jhs-shadow-sm) !important;
         }
