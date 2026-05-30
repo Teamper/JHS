@@ -102,9 +102,7 @@ class be extends X {
         })).join("")}\n                    <a id="detectOtherSiteBtn" class="site-btn" style="background-color:#1677ff"><span>检测外部站点</span></a>\n                    <a id="settingSiteBtn" class="site-btn"><span>设置</span></a>\n                </div>\n            </div>\n            \n            <div id="settingsArea" class="panel-block"  style="display: none; margin-top:10px; margin-bottom: 10px; user-select: none; ">\n                <div id="siteCheckboxes" style="display: flex;gap: 5px;flex-wrap: wrap">\n                </div>\n            </div>\n        `;
         $(".movie-panel-info").append(i), $(".container .info").append(i), $("#javTrailersBtn").on("click", (async t => {
             t.preventDefault();
-            let n = await storageManager.getSetting();
-            const a = n.filterHotKey, i = n.favoriteHotKey, s = n.speedVideoHotKey;
-            let o = $("#javTrailersBtn").attr("href"), r = o + `?handle=1&filterHotKey=${a}&favoriteHotKey=${i}&speedVideoHotKey=${s}`;
+            let o = $("#javTrailersBtn").attr("href"), r = o + "?handle=1";
             t && (t.ctrlKey || t.metaKey) && (r = o), utils.openPage(r, e, !1, t);
         })), await Promise.all(this.siteConfigs.map((async t => {
             t.condition && !1 === t.condition(t.sourceCarNum) || await this.prepareSiteLink(e, t);

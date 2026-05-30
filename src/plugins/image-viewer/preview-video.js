@@ -155,7 +155,6 @@ class ae extends X {
     async handle() {
         if (!isDetailPage) return;
         let e = await storageManager.getSetting();
-        this.filterHotKey = e.filterHotKey, this.favoriteHotKey = e.favoriteHotKey, this.speedVideoHotKey = e.speedVideoHotKey;
         let t = $(".preview-video-container");
         t.on("click", (e => {
             utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => {
@@ -237,11 +236,11 @@ class ae extends X {
             gap: "5px",
             "align-items": "center",
             "margin-left": "auto"
-        }), d = $(`<button class="menu-btn" id="video-filterBtn" style="min-width: 120px; background-color:#de3333;">屏蔽 ${this.filterHotKey ? "(" + this.filterHotKey + ")" : ""}</button>`);
+        }), d = $(`<button class="menu-btn" id="video-filterBtn" style="min-width: 120px; background-color:#de3333;">屏蔽</button>`);
         c.append(d);
-        let h = $(`<button class="menu-btn" id="video-favoriteBtn" style="min-width: 120px; background-color:#25b1dc;">收藏 ${this.favoriteHotKey ? "(" + this.favoriteHotKey + ")" : ""}</button>`);
+        let h = $(`<button class="menu-btn" id="video-favoriteBtn" style="min-width: 120px; background-color:#25b1dc;">收藏</button>`);
         c.append(h);
-        let g = $(`<button class="menu-btn" id="speed-btn" style="min-width: 120px; background-color:#76b45d;">快进 ${this.speedVideoHotKey ? "(" + this.speedVideoHotKey + ")" : ""}</button>`);
+        let g = $(`<button class="menu-btn" id="speed-btn" style="min-width: 120px; background-color:#76b45d;">快进</button>`);
         c.append(g), o.append(c), t.append(o), o.on("click", ".video-control-btn", (async t => {
             const a = $(t.currentTarget), i = a.data("video-src");
             if (!a.hasClass("active")) try {

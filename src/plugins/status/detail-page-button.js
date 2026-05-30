@@ -6,10 +6,7 @@ class ye extends X {
         super(), this.answerCount = 1;
     }
     async handle() {
-        let e = await storageManager.getSetting();
-        this.filterHotKey = e.filterHotKey, this.favoriteHotKey = e.favoriteHotKey, this.hasDownHotKey = e.hasDownHotKey,
-        this.hasWatchHotKey = e.hasWatchHotKey, this.speedVideoHotKey = e.speedVideoHotKey,
-        this.bindHotkey().then(), this.hideVideoControls(), window.isDetailPage && this.createMenuBtn();
+        this.hideVideoControls(), window.isDetailPage && this.createMenuBtn();
     }
     async createMenuBtn() {
         const e = this.getPageInfo(), t = e.carNum, n = `\n            <div class="jhs-detail-btn-row" style="margin: 10px auto; display: flex; justify-content: space-between; align-items: center; flex-wrap:wrap;gap: 20px;">\n                <div style="display: flex; gap: 10px; flex-wrap:wrap;">\n                    <a id="filterBtn" class="menu-btn" style="width: 120px; background-color:${f}; color: white; text-align: center; padding: 8px 0;">\n                        <span>${m}</span>\n                    </a>\n                    <a id="favoriteBtn" class="menu-btn" style="width: 120px; background-color:${w}; color: white; text-align: center; padding: 8px 0;">\n                        <span>${v}</span>\n                    </a>\n                    <a id="hasDownBtn" class="menu-btn" style="width: 120px; background-color:${x}; color: white; text-align: center; padding: 8px 0;">\n                        <span>${y}</span>\n                    </a>\n                    <a id="hasWatchBtn" class="menu-btn" style="width: 120px; background-color:${S}; color: white; text-align: center; padding: 8px 0;">\n                        <span>${k}</span>\n                    </a>\n                </div>\n        \n                <div style="display: flex; gap: 10px; flex-wrap:wrap;">\n                    <a id="enable-magnets-filter" class="menu-btn" style="width: 140px; background-color: #c2bd4c; color: white; text-align: center; padding: 8px 0;">\n                        <span id="magnets-span">关闭磁力过滤</span>\n                    </a>\n                    <a id="magnetSearchBtn" class="menu-btn" style="width: 120px; background: linear-gradient(to right, rgb(245,140,1), rgb(84,161,29)); color: white; text-align: center; padding: 8px 0;">\n                        <span>磁力搜索</span>\n                    </a>\n                    <a id="xunLeiSubtitleBtn" class="menu-btn" style="width: 120px; background: linear-gradient(to left, #375f7c, #2196F3); color: white; text-align: center; padding: 8px 0;">\n                        <span>字幕 (迅雷)</span>\n                    </a>\n                    <a id="search-subtitle-btn" class="menu-btn" style="width: 160px; background: linear-gradient(to bottom, #8d5656, rgb(196,159,91)); color: white; text-align: center; padding: 8px 0;">\n                        <span>字幕 (SubTitleCat)</span>\n                    </a>\n                </div>\n            </div>\n        `;
@@ -38,25 +35,24 @@ class ye extends X {
         $("#xunLeiSubtitleBtn").on("click", (() => this.searchXunLeiSubtitle(t))), this.showStatus(t).then();
     }
     async showStatus(e) {
-        const t = $("#filterBtn span"), n = $("#favoriteBtn span"), a = $("#hasDownBtn span"), i = $("#hasWatchBtn span"), s = e => e ? `(${e})` : "";
-        t.text(`${m} ${s(this.filterHotKey)}`), n.text(`${v} ${s(this.favoriteHotKey)}`),
-        a.text(`${y} ${s(this.hasDownHotKey)}`), i.text(`${k} ${s(this.hasWatchHotKey)}`);
+        const t = $("#filterBtn span"), n = $("#favoriteBtn span"), a = $("#hasDownBtn span"), i = $("#hasWatchBtn span");
+        t.text(m), n.text(v), a.text(y), i.text(k);
         const o = await storageManager.getCar(e);
         if (o) switch (o.status) {
           case d:
-            t.text(`${u} ${s(this.filterHotKey)}`);
+            t.text(u);
             break;
 
           case h:
-            n.text(`${b} ${s(this.favoriteHotKey)}`);
+            n.text(b);
             break;
 
           case g:
-            a.text(`📥️ 已标记下载 ${s(this.hasDownHotKey)}`);
+            a.text("📥️ 已标记下载");
             break;
 
           case p:
-            i.text(`🔍 已标记观看 ${s(this.hasWatchHotKey)}`);
+            i.text("🔍 已标记观看");
         }
     }
     async favoriteOne() {
@@ -194,46 +190,9 @@ class ye extends X {
             this.answerCount = 1;
         }));
     }
-    speedVideo() {
-        if ($("#preview-video").is(":visible")) {
-            const e = document.getElementById("preview-video");
-            return void (e && (e.muted = !1, e.controls = !1, e.currentTime + 5 < e.duration ? e.currentTime += 5 : (show.info("预览视频结束, 已回到开头"),
-            e.currentTime = 1)));
-        }
-        const e = $('iframe[id^="layui-layer-iframe"]');
-        if (e.length > 0) return void e[0].contentWindow.postMessage("speedVideo", "*");
-        let t = $(".preview-video-container");
-        if (t.length > 0) {
-            t[0].click();
-            const e = document.getElementById("preview-video");
-            e && (e.currentTime += 5, e.muted = !1);
-        } else $("#javTrailersBtn").click();
-    }
     hideVideoControls() {
         $(document).on("mouseenter", "#preview-video", (function() {
             $(this).prop("controls", !0);
-        }));
-    }
-    async bindHotkey() {
-        const e = {};
-        this.filterHotKey && (e[this.filterHotKey] = () => {
-            this.answerCount >= 2 ? this.filterOne(null, !0) : this.filterOne(null), this.answerCount++;
-        }), this.favoriteHotKey && (e[this.favoriteHotKey] = () => this.favoriteOne(null)),
-        this.hasDownHotKey && (e[this.hasDownHotKey] = () => this.hasDownOne()), this.hasWatchHotKey && (e[this.hasWatchHotKey] = () => this.hasWatchOne()),
-        this.speedVideoHotKey && (e[this.speedVideoHotKey] = () => this.speedVideo());
-        const t = (e, t) => {
-            se.registerHotkey(e, (n => {
-                const a = document.activeElement;
-                "INPUT" === a.tagName || "TEXTAREA" === a.tagName || a.isContentEditable || (window.isDetailPage ? t() : (e => {
-                    const t = $(".layui-layer-content iframe");
-                    0 !== t.length && t[0].contentWindow.postMessage(e, "*");
-                })(e));
-            }));
-        };
-        window.isDetailPage && window.addEventListener("message", (t => {
-            e[t.data] && e[t.data]();
-        })), Object.entries(e).forEach((([e, n]) => {
-            t(e, n);
         }));
     }
     async previewSubtitle(e, t) {

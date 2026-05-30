@@ -91,7 +91,7 @@ class Ie extends X {
                 t && (t.showNewVideoCount().then(), t.loadData());
             } else "cleanCache_filter_actor_actress_car_list" === t ? storageManager._invalidateCache(storageManager.blacklist_car_list_key) : "clean_cacheSettingObj" === t && storageManager._invalidateCache(storageManager.setting_key);
         })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
-        await this.doFilter(), this.createQuickFilter(), this.applyVisibility(), this.bindClick().then(), this.bindListPageHotKey().then(),
+        await this.doFilter(), this.createQuickFilter(), this.applyVisibility(), this.bindClick().then(),
         this.rememberTagExpand(), $(this.getSelector().itemSelector + " a").attr("target", "_blank"),
         this.checkDom();
     }
@@ -299,58 +299,6 @@ class Ie extends X {
             clog.debug("解析到名称:", t);
         }
         return t;
-    }
-    async bindListPageHotKey() {
-        this.$currentImage = null, $(document).on("mouseenter", this.getSelector().coverImgSelector, (e => {
-            this.$currentImage = $(e.currentTarget);
-        })).on("mouseleave", this.getSelector().coverImgSelector, (() => {
-            this.$currentImage = null;
-        }));
-        let e = await storageManager.getSetting();
-        if (this.filterHotKey = e.filterHotKey, this.favoriteHotKey = e.favoriteHotKey,
-        this.hasDownHotKey = e.hasDownHotKey, this.hasWatchHotKey = e.hasWatchHotKey, this.enableImageHotKey = e.enableImageHotKey || C,
-        this.clogHotKey = e.clogHotKey, this.foldCategoryHotKey = e.foldCategoryHotKey,
-        this.clogHotKey && se.registerHotkey(this.clogHotKey, (e => {
-            clog.toggleExpandCollapsed();
-        })), this.foldCategoryHotKey && se.registerHotkey(this.foldCategoryHotKey, (e => {
-            const t = $("#foldCategoryBtn");
-            t.length && t[0].click();
-        })), this.enableImageHotKey === C) return;
-        const t = async (e, t) => {
-            setTimeout((async () => {
-                try {
-                    let n = await this.parseActressName(e.url);
-                    await storageManager.saveCar({
-                        carNum: e.carNum,
-                        url: e.url,
-                        names: n,
-                        actionType: t,
-                        publishTime: e.publishTime
-                    }), window.refresh(), show.ok("操作成功");
-                } catch (t) { console.error("快捷键操作失败:", t), show.error("操作失败"); }
-            }));
-        }, n = {};
-        this.filterHotKey && (n[this.filterHotKey] = e => {
-            t(e, d);
-        }), this.favoriteHotKey && (n[this.favoriteHotKey] = e => {
-            t(e, h);
-        }), this.hasDownHotKey && (n[this.hasDownHotKey] = e => {
-            t(e, g);
-        }), this.hasWatchHotKey && (n[this.hasWatchHotKey] = e => {
-            t(e, p);
-        });
-        const a = (e, t) => {
-            se.registerHotkey(e, (e => {
-                const n = document.activeElement;
-                if (!("INPUT" === n.tagName || "TEXTAREA" === n.tagName || n.isContentEditable) && this.$currentImage) {
-                    const e = this.$currentImage.closest(".item"), n = this.findCarNumAndHref(e);
-                    t(n);
-                }
-            }));
-        };
-        Object.entries(n).forEach((([e, t]) => {
-            a(e, t);
-        }));
     }
     findCarNumAndHref(e) {
         var t, n;

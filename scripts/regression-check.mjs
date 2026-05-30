@@ -214,13 +214,12 @@ const regressionMatrix = [
   ["统计面板", [["stats/stats.js", "StatsPlugin"], ["stats/stats.js", "getPendingNewVideoCount"], ["core/storage.js", "getStatusMap"]]],
   ["数据导入导出", [["backup/setting.js", "importData"], ["backup/setting.js", "exportData"], ["core/storage.js", "exportData"]]],
   ["WebDAV 备份", [["backup/setting.js", "class De"], ["backup/setting.js", "backupDataByWebDav"], ["backup/setting.js", "PROPFIND"]]],
-  ["快捷键", [["status/list-page.js", "bindListPageHotKey"], ["external-search/javtrailers.js", "registerHotkey"], ["backup/setting.js", "hotkey-panel"]]],
   ["图片查看器", [["core/logger.js", "showImageViewer"], ["core/logger.js", "new Viewer"], ["image-viewer/screenshot.js", "ScreenShotPlugin"]]],
   ["第三方请求失败场景", [["core/storage.js", "cachedRequest"], ["core/http.js", "onerror"], ["external-search/other-site.js", "detectOtherSites"]]],
   ["多标签页同步", [["core/event-bus.js", "BroadcastChannel"], ["status/list-page.js", "channel-refresh"], ["status/list-page.js", "clean_cacheSettingObj"]]],
   ["快速筛选", [["status/list-page.js", "createQuickFilter"], ["status/list-page.js", "applyQuickFilter"], ["status/list-page.js", "activeQuickFilter"]]],
   ["标记状态与隐藏", [["status/list-page.js", "data-jhs-status"], ["status/list-page.js", "data-hide"], ["status/list-page.js", "getStatusKey"]]],
-  ["设置页", [["backup/setting.js", "SettingPlugin"], ["backup/setting.js", "hotkey-panel"], ["backup/setting.js", "importData"]]],
+  ["设置页", [["backup/setting.js", "SettingPlugin"], ["backup/setting.js", "importData"]]],
   ["演员信息解析", [["core/plugin-manager.js", "getActressPageInfo"], ["status/list-page.js", "parseActressName"]]],
   ["移动端适配", [["status/mobile-bottom-bar.js", "MobileBottomBarPlugin"], ["core/utils.js", "isMobileMode"], ["core/plugin-manager.js", "shouldSkipOnMobile"]]]
 ];

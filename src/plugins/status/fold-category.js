@@ -37,12 +37,11 @@ class de extends X {
         }));
     }
     async createFoldBtn() {
-        const e = await storageManager.getSetting("foldCategoryHotKey");
         let t = $("#tags"), n = $("#tags dl div.tag.is-info").map((function() {
             return $(this).text().replaceAll("\n", "").replaceAll(" ", "");
         })).get().join(" ");
         if (!n) return;
-        $(".tabs").append(`\n            <div style="display: flex;align-items: center;flex-grow:1;justify-content: flex-end;">\n                <div>已选分类: <span id="jhs-check-tag">${n}</span></div>\n                <a class="menu-btn  main-tab-btn" id="foldCategoryBtn" style="background-color:#d23e60 !important;">\n                    <span></span>\n                    ${e ? ` (${e})` : ""}\n                    <i style="margin-left: 10px"></i>\n                </a>\n\n            </div>\n        `);
+        $(".tabs").append(`\n            <div style="display: flex;align-items: center;flex-grow:1;justify-content: flex-end;">\n                <div>已选分类: <span id="jhs-check-tag">${n}</span></div>\n                <a class="menu-btn  main-tab-btn" id="foldCategoryBtn" style="background-color:#d23e60 !important;">\n                    <span></span>\n                    <i style="margin-left: 10px"></i>\n                </a>\n\n            </div>\n        `);
         let a = $("h2.section-title");
         if (a.length > 0 && (a.append('\n                <div id="foldCategoryBtn">\n                    <a class="menu-btn" style="background-color:#d23e60 !important;margin-left: 20px;border-bottom:none !important;border-radius:3px;">\n                        <span></span>\n                        <i style="margin-left: 10px"></i>\n                    </a>\n                </div>\n            '),
         t = $("section > div > div.box")), !t) return;
