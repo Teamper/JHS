@@ -302,4 +302,23 @@ class J {
             clog.debug(`[重试] 请求失败，准备第 ${n + 1} 次重试, 错误信息: ${e}`);
         }
     }
+    async pingLocalService(e, t = 3e4) {
+        const n = "jhs_ping_" + e, a = sessionStorage.getItem(n);
+        if (a) {
+            const {result: e, time: n} = JSON.parse(a);
+            if (Date.now() - n < t) return e;
+        }
+        try {
+            const t = new AbortController, a = setTimeout((() => t.abort()), 2e3), i = await fetch(e, {
+                signal: t.signal,
+                mode: "no-cors"
+            });
+            clearTimeout(a);
+            const s = {ok: !0, url: e};
+            return sessionStorage.setItem(n, JSON.stringify({result: s, time: Date.now()})), s;
+        } catch (i) {
+            const t = {ok: !1, url: e, error: i.message};
+            return sessionStorage.setItem(n, JSON.stringify({result: t, time: Date.now()})), t;
+        }
+    }
 }

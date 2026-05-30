@@ -152,69 +152,37 @@ class OneTwoThreeOfflinePlugin extends X {
         const t = e && e.closest ? e.closest(".item") : $();
         return t && t.length ? this.getBean("ListPagePlugin").findCarNumAndHref(t) : this.getPageInfo();
     }
-    resolveMagnet(e, t) {
-        return new Promise(((n, a) => {
-            GM_xmlhttpRequest({
-                method: "POST",
-                url: "https://www.123pan.com/b/api/v2/offline_download/task/resolve",
-                headers: {
-                    Authorization: "Bearer " + t,
-                    "App-Version": "3",
-                    platform: "web",
-                    "Content-Type": "application/json;charset=UTF-8",
-                    Origin: "https://www.123pan.com",
-                    Referer: "https://www.123pan.com/"
-                },
-                data: JSON.stringify({
-                    urls: e
-                }),
-                onload: e => {
-                    if (401 === e.status) return void a("TOKEN_EXPIRED");
-                    try {
-                        const t = JSON.parse(e.responseText);
-                        this.assertApiResult(t, "解析失败"), t.data && t.data.list && t.data.list.length > 0 ? n(t.data.list[0]) : a(t.message || `解析失败 (${t.code})`);
-                    } catch (t) {
-                        a(this.isTokenExpiredError(t) ? "TOKEN_EXPIRED" : t.message ? "响应解析失败: " + t.message : String(t));
-                    }
-                },
-                onerror: () => a("网络请求失败")
+    async resolveMagnet(e, t) {
+        try {
+            const n = await gmHttp.post("https://www.123pan.com/b/api/v2/offline_download/task/resolve", { urls: e }, {
+                Authorization: "Bearer " + t,
+                "App-Version": "3",
+                platform: "web",
+                Origin: "https://www.123pan.com",
+                Referer: "https://www.123pan.com/"
             });
-        }));
+            return this.assertApiResult(n, "解析失败"), n.data && n.data.list && n.data.list.length > 0 ? n.data.list[0] : Promise.reject(n.message || `解析失败 (${n.code})`);
+        } catch (a) {
+            if (a && 401 === a.status) throw "TOKEN_EXPIRED";
+            throw this.isTokenExpiredError(a) ? "TOKEN_EXPIRED" : a.message ? "响应解析失败: " + a.message : String(a);
+        }
     }
-    submitTask(e, t) {
-        return new Promise(((n, a) => {
-            if (!e.files || 0 === e.files.length) return void a("没有可建立离线的文件");
-            const i = e.files.map((e => e.id)), s = e.files.reduce(((e, t) => e + (t.size || 0)), 0);
-            GM_xmlhttpRequest({
-                method: "POST",
-                url: "https://www.123pan.com/b/api/v2/offline_download/task/submit",
-                headers: {
-                    Authorization: "Bearer " + t,
-                    "App-Version": "3",
-                    platform: "web",
-                    "Content-Type": "application/json;charset=UTF-8"
-                },
-                data: JSON.stringify({
-                    resource_list: [ {
-                        resource_id: e.id,
-                        select_file_id: i
-                    } ]
-                }),
-                onload: e => {
-                    if (401 === e.status) return void a("TOKEN_EXPIRED");
-                    try {
-                        const t = JSON.parse(e.responseText);
-                        this.assertApiResult(t, "提交失败"), n({
-                            fileCount: i.length,
-                            totalSize: s
-                        });
-                    } catch (t) {
-                        a(this.isTokenExpiredError(t) ? "TOKEN_EXPIRED" : t.message ? "响应解析失败: " + t.message : String(t));
-                    }
-                },
-                onerror: () => a("网络请求失败")
+    async submitTask(e, t) {
+        if (!e.files || 0 === e.files.length) throw "没有可建立离线的文件";
+        const n = e.files.map((e => e.id)), a = e.files.reduce(((e, t) => e + (t.size || 0)), 0);
+        try {
+            const i = await gmHttp.post("https://www.123pan.com/b/api/v2/offline_download/task/submit", {
+                resource_list: [{ resource_id: e.id, select_file_id: n }]
+            }, {
+                Authorization: "Bearer " + t,
+                "App-Version": "3",
+                platform: "web"
             });
-        }));
+            return this.assertApiResult(i, "提交失败"), { fileCount: n.length, totalSize: a };
+        } catch (i) {
+            if (i && 401 === i.status) throw "TOKEN_EXPIRED";
+            throw this.isTokenExpiredError(i) ? "TOKEN_EXPIRED" : i.message ? "响应解析失败: " + i.message : String(i);
+        }
     }
     formatSize(e) {
         if (!e) return "0B";
