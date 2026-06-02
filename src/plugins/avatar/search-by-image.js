@@ -124,7 +124,7 @@ class Ee extends X {
                     if (h.success && h.data && h.data.link) return h.data.link;
                     throw new Error((null == (t = h.data) ? void 0 : t.error) || "上传到Imgur失败");
                 }(e);
-                if (!n) return void show.error("上传到失败");
+                if (!n) return void show.error("上传失败");
                 t = n;
             }
             return t;

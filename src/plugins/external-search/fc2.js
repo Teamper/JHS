@@ -102,13 +102,13 @@ class le extends X {
                 let e = "";
                 for (let n = 0; n < t.length; n++) {
                     let i = t[n];
-                    a += `<span class="actor-tag"><a href="/actors/${i.id}" target="_blank">${i.name}</a></span>`,
+                    a += `<span class="actor-tag"><a href="/actors/${escapeHtml(i.id)}" target="_blank">${escapeHtml(i.name)}</a></span>`,
                     0 === i.gender && (e += i.name + " ");
                 }
                 $("#data-actress").text(e);
             } else a = '<span class="no-data">暂无演员信息</span>';
             let i = "";
-            i = Array.isArray(n) && n.length > 0 ? n.map(((e, t) => `\n                <a href="${e}" data-fancybox="movie-gallery" data-caption="剧照 ${t + 1}">\n                    <img src="${e}" class="movie-image-thumb"  alt=""/>\n                </a>\n            `)).join("") : '<div class="no-data">暂无剧照</div>',
+            i = Array.isArray(n) && n.length > 0 ? n.map(((e, t) => `\n                <a href="${e}" data-fancybox="movie-gallery" data-caption="剧照 ${t + 1}">\n                    <img src="${e}" class="movie-image-thumb" loading="lazy" alt=""/>\n                </a>\n            `)).join("") : '<div class="no-data">暂无剧照</div>',
             $(".movie-info-container").html(`\n                <h3 class="movie-title"><strong class="current-title">${e.title || "无标题"}</strong></h3>\n                <div class="movie-meta">\n                    <span><strong>番号: </strong>${e.carNum || "未知"}</span>\n                    <span><strong>年份: </strong>${e.releaseDate || "未知"}</span>\n                    <span><strong>评分: </strong>${e.score || "无"}</span>\n                    <span><strong>时长: </strong>${e.duration + " m" || "无"}</span>\n                </div>\n                <div class="movie-meta">\n                    <span>\n                        <strong>站点: </strong>\n                        <a href="https://fc2ppvdb.com/articles/${e.carNum.replace("FC2-", "")}" target="_blank">fc2ppvdb</a>\n                        <a style="margin-left: 5px;" href="https://adult.contents.fc2.com/article/${e.carNum.replace("FC2-", "")}/" target="_blank">fc2电子市场</a>\n                    </span>\n                </div>\n                <div class="movie-actors">\n                    <div class="actor-list"><strong>主演: </strong>${a}</div>\n                </div>\n                <div class="movie-gallery" style="margin-top:10px">\n                    <strong>剧照: </strong>\n                    <div class="image-list">${i}</div>\n                </div>\n                <div id="data-releaseDate" style="display: none">${e.releaseDate || ""}</div>\n            `),
             this.getBean("TranslatePlugin").translate(e.carNum, !1).then();
         })).catch((e => {

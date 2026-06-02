@@ -43,7 +43,7 @@ function getUrlParam(e, t) {
 function genericSort(e, t, n = !0) {
     if (!Array.isArray(e) || 0 === e.length) return [];
     if (!Array.isArray(t) || 0 === t.length) return [ ...e ];
-    const a = [ ...e ], i = e => {
+    const i = e => {
         if (e instanceof Date) return e;
         if ("string" == typeof e) {
             const t = new Date(e);
@@ -51,23 +51,27 @@ function genericSort(e, t, n = !0) {
         }
         return e;
     };
-    return a.sort(((e, a) => {
+    const getVal = (e, t) => null != t ? "function" == typeof t ? t(e) : e && "object" == typeof e ? e[t] : void 0 : e;
+    const nulls = [], nonNulls = [];
+    for (const item of e) {
+        let hasNull = !1;
+        for (const s of t) {
+            const val = getVal(item, s.key);
+            if (null == val || void 0 === val) { hasNull = !0; break; }
+        }
+        hasNull ? nulls.push(item) : nonNulls.push(item);
+    }
+    return nonNulls.sort(((e, a) => {
         for (const s of t) {
             const {key: t, order: o = "asc"} = s;
-            let r = e, l = a;
-            null != t && ("function" == typeof t ? (r = t(e), l = t(a)) : (r = e && "object" == typeof e ? e[t] : void 0,
-            l = a && "object" == typeof a ? a[t] : void 0));
+            let r = getVal(e, t), l = getVal(a, t);
             const c = i(r), d = i(l);
-            let h = 0;
-            const g = null == r, p = null == l;
-            if (g && p) return 0;
-            if (g) return n ? 1 : -1;
-            if (p) return n ? 1 : -1;
-            if (h = c instanceof Date && d instanceof Date ? c.getTime() - d.getTime() : "number" == typeof r && "number" == typeof l ? r - l : "string" == typeof r && "string" == typeof l ? r.localeCompare(l) : String(r).localeCompare(String(l)),
-            "desc" === o && (h *= -1), 0 !== h) return h;
+            let h = c instanceof Date && d instanceof Date ? c.getTime() - d.getTime() : "number" == typeof r && "number" == typeof l ? r - l : "string" == typeof r && "string" == typeof l ? r.localeCompare(l) : String(r).localeCompare(String(l));
+            "desc" === o && (h *= -1);
+            if (0 !== h) return h;
         }
         return 0;
-    }));
+    })), n ? [ ...nonNulls, ...nulls ] : [ ...nulls, ...nonNulls ];
 }
 
 // --- Tests ---
@@ -203,7 +207,17 @@ describe('genericSort', () => {
         expect(result.map(i => `${i.type}-${i.val}`)).toEqual(['A-1', 'A-2', 'B-1']);
     });
 
-    it('should sort non-null items and preserve null presence', () => {
+    it('should push null values to the end with nullsLast', () => {
+        const items = [{ val: 3 }, { val: null }, { val: 1 }, { val: 2 }];
+        const result = genericSort(items, [{ key: 'val' }], true);
+        // null should be last
+        expect(result[result.length - 1].val).toBe(null);
+        // non-null items should be sorted ascending
+        const nonNull = result.filter(i => i.val !== null);
+        expect(nonNull.map(i => i.val)).toEqual([1, 2, 3]);
+    });
+
+    it('should sort non-null items correctly', () => {
         const items = [{ val: 3 }, { val: 1 }, { val: 2 }];
         const result = genericSort(items, [{ key: 'val' }]);
         expect(result.map(i => i.val)).toEqual([1, 2, 3]);

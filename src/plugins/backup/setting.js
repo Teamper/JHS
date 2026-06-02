@@ -47,7 +47,7 @@ class Ae extends X {
         utils.isMobileMode() && (t = "100");
         let n = utils.isMobile() && window.innerWidth < 1e3 ? 1 : (null == e ? void 0 : e.containerColumns) ?? 5;
         window.getBeanForSetting = this.getBean.bind(this);
-        applyImageMode().then();
+        applyImageMode().catch((e => console.error("[JHS] applyImageMode failed:", e)));
         return buildSettingCss(t, n, l, r);
     }
     async handle() {

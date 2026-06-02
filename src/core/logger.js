@@ -153,7 +153,7 @@ unsafeWindow.loading = window.loading = function() {
         this.preview.classList.remove("active");
         const n = new Image;
         n.onload = () => {
-            this.preview.classList.remove("loading"), this.preview.innerHTML = `<img src="${t}" alt="预览图">`,
+            this.preview.classList.remove("loading"), this.preview.innerHTML = `<img src="${escapeHtml(t)}" alt="预览图">`,
             this.imgElement = this.preview.querySelector("img");
             const {width: a, height: i} = this.calculateImageSize(n);
             this.preview.style.width = `${a}px`, this.preview.style.height = `${i}px`, this.preview.offsetHeight,
@@ -321,7 +321,7 @@ unsafeWindow.loading = window.loading = function() {
             h = h.replace(/(?:(?:https?|ftp):\/\/|www\.|(?:\/\/))[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|]/gi, (e => {
                 const t = e.startsWith("http") || e.startsWith("ftp"), n = e.startsWith("//"), a = e.startsWith("www.");
                 let i = e;
-                return n ? i = `http:${e}` : !t && a && (i = `http://${e}`), `<a href="${i}" target="_blank">${e}</a>`;
+                return n ? i = `http:${e}` : !t && a && (i = `http://${e}`), `<a href="${escapeHtml(i)}" target="_blank">${escapeHtml(e)}</a>`;
             }));
             const g = {
                 message: h,
