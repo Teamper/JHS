@@ -200,6 +200,12 @@ sourceByFile.set("core/http.js", await read("src/core/http.js"));
 sourceByFile.set("core/event-bus.js", await read("src/core/event-bus.js"));
 sourceByFile.set("core/plugin-manager.js", await read("src/core/plugin-manager.js"));
 sourceByFile.set("core/utils.js", await read("src/core/utils.js"));
+sourceByFile.set("backup/webdav-client.js", await read("src/plugins/backup/webdav-client.js"));
+sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
+sourceByFile.set("backup/setting-styles.js", await read("src/plugins/backup/setting-styles.js"));
+sourceByFile.set("backup/setting-templates.js", await read("src/plugins/backup/setting-templates.js"));
+sourceByFile.set("backup/setting-panels.js", await read("src/plugins/backup/setting-panels.js"));
+sourceByFile.set("backup/setting-forms.js", await read("src/plugins/backup/setting-forms.js"));
 
 const regressionMatrix = [
   ["JavDB 列表页", [["status/list-page.js", "filterMovieList"], ["status/list-page-button.js", "ListPageButtonPlugin"], ["image-viewer/cover-button.js", "CoverButtonPlugin"], ["core/storage.js", "getStatusMap"]]],
@@ -212,14 +218,14 @@ const regressionMatrix = [
   ["新作品检测", [["new-video/task.js", "TaskPlugin"], ["new-video/new-video.js", "NewVideoPlugin"], ["core/storage.js", "newVideoList"]]],
   ["黑名单检测", [["blacklist/blacklist.js", "BlacklistPlugin"], ["blacklist/filter-title-keyword.js", "FilterTitleKeywordPlugin"], ["core/storage.js", "batchSaveBlacklistCarList"]]],
   ["统计面板", [["stats/stats.js", "StatsPlugin"], ["stats/stats.js", "getPendingNewVideoCount"], ["core/storage.js", "getStatusMap"]]],
-  ["数据导入导出", [["backup/setting.js", "importData"], ["backup/setting.js", "exportData"], ["core/storage.js", "exportData"]]],
-  ["WebDAV 备份", [["backup/setting.js", "class De"], ["backup/setting.js", "backupDataByWebDav"], ["backup/setting.js", "PROPFIND"]]],
+  ["数据导入导出", [["backup/setting-backup.js", "importSettingData"], ["backup/setting-backup.js", "exportSettingData"], ["core/storage.js", "exportData"]]],
+  ["WebDAV 备份", [["backup/webdav-client.js", "class De"], ["backup/setting-backup.js", "backupDataByWebDav"], ["backup/webdav-client.js", "PROPFIND"]]],
   ["图片查看器", [["core/logger.js", "showImageViewer"], ["core/logger.js", "new Viewer"], ["image-viewer/screenshot.js", "ScreenShotPlugin"]]],
   ["第三方请求失败场景", [["core/storage.js", "cachedRequest"], ["core/http.js", "onerror"], ["external-search/other-site.js", "detectOtherSites"]]],
   ["多标签页同步", [["core/event-bus.js", "BroadcastChannel"], ["status/list-page.js", "channel-refresh"], ["status/list-page.js", "clean_cacheSettingObj"]]],
   ["快速筛选", [["status/list-page.js", "createQuickFilter"], ["status/list-page.js", "applyQuickFilter"], ["status/list-page.js", "activeQuickFilter"]]],
   ["标记状态与隐藏", [["status/list-page.js", "data-jhs-status"], ["status/list-page.js", "data-hide"], ["status/list-page.js", "getStatusKey"]]],
-  ["设置页", [["backup/setting.js", "SettingPlugin"], ["backup/setting.js", "importData"]]],
+  ["设置页", [["backup/setting.js", "SettingPlugin"], ["backup/setting-backup.js", "importSettingData"]]],
   ["演员信息解析", [["core/plugin-manager.js", "getActressPageInfo"], ["status/list-page.js", "parseActressName"]]],
   ["移动端适配", [["status/mobile-bottom-bar.js", "MobileBottomBarPlugin"], ["core/utils.js", "isMobileMode"], ["core/plugin-manager.js", "shouldSkipOnMobile"]]]
 ];
