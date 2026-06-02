@@ -214,10 +214,21 @@ class et extends X {
                 if (coverUrl && !coverUrl.startsWith("http")) {
                     coverUrl = coverUrl.startsWith("/") ? this.javDbUrl + coverUrl : this.javDbUrl + "/" + coverUrl;
                 }
-                const score = parseFloat(e.find(".score .value, .score").text().trim()) || 0;
-                const voteText = e.find(".score .count, .meta .count").text().trim();
-                const voteCount = parseInt(voteText.replace(/[^\d]/g, "")) || 0;
-                c.push({ carNum: s, coverUrl: coverUrl, title: r || "", publishTime: l || "", score: score, voteCount: voteCount });
+                let url = o || "";
+                if (url && !url.startsWith("http")) {
+                    url = url.startsWith("/") ? this.javDbUrl + url : this.javDbUrl + "/" + url;
+                }
+                const scoreText = e.find(".score .value, .score").text().trim();
+                const score = parseFloat(scoreText) || 0;
+                const voteMatch = scoreText.match(/由(\d+)人/);
+                let voteCount = 0;
+                if (voteMatch) {
+                    voteCount = parseInt(voteMatch[1]);
+                } else {
+                    const voteText = e.find(".score .count, .meta .count").text().trim();
+                    voteCount = parseInt(voteText.replace(/[^\d]/g, "")) || 0;
+                }
+                c.push({ carNum: s, coverUrl: coverUrl, title: r || "", publishTime: l || "", score: score, voteCount: voteCount, url: url });
             })()));
         }
         const h = await storageManager.getCarMap(), p = c.filter((e => !h.has(e.carNum)));

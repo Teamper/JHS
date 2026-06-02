@@ -299,7 +299,7 @@ class pt extends X {
                 const n = "string" == typeof e ? e : e.carNum;
                 if (t.has(n)) continue;
                 const s = "object" == typeof e ? e : {};
-                a.push({ carNum: n, coverUrl: s.coverUrl || "", title: s.title || "", publishTime: s.publishTime || "", actressName: i.name || "", starId: i.starId || "", score: s.score || 0, voteCount: s.voteCount || 0 });
+                a.push({ carNum: n, coverUrl: s.coverUrl || "", title: s.title || "", publishTime: s.publishTime || "", actressName: i.name || "", starId: i.starId || "", score: s.score || 0, voteCount: s.voteCount || 0, url: s.url || "" });
             }
         }
         return a.sort(((e, t) => (t.publishTime || "").localeCompare(e.publishTime || ""))), a;
@@ -396,7 +396,7 @@ class pt extends X {
             let c = "";
             c += '<div id="nv-grid" class="jhs-new-video-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;padding:5px;">';
             for (const n of s) {
-                const e = escapeHtml(n.carNum), t = escapeHtml(n.title || n.carNum), a = n.coverUrl ? n.coverUrl.replace("thumbs", "covers") : "", i = `${r}/search?q=${encodeURIComponent(n.carNum)}`;
+                const e = escapeHtml(n.carNum), t = escapeHtml(n.title || n.carNum), a = n.coverUrl ? n.coverUrl.replace("thumbs", "covers") : "", i = n.url || `${r}/search?q=${encodeURIComponent(n.carNum)}`;
                 let o = `番号: ${e}\\n演员: ${escapeHtml(n.actressName)}\\n发行: ${n.publishTime || "未知"}`;
                 n.voteCount && (o += `\\n评价人数: ${n.voteCount}`);
                 const l = n.voteCount ? `<span style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.7);color:#fff;font-size:11px;padding:2px 5px;border-radius:3px;">${n.voteCount}人评价</span>` : "";
@@ -516,7 +516,7 @@ class pt extends X {
         n < t && (a += `<button class="pagination-btn" data-page="${n + 1}" style="padding: 8px 12px; margin: 0 5px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">下一页</button>`),
         n < t && t > 5 && (a += `<button class="pagination-btn" data-page="${t}" style="padding: 8px 12px; margin: 0 5px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">尾页</button>`),
         a += `<span style="margin-left: 20px; color: #666;">共 ${e} 条记录 (第 ${n}/${t} 页)</span>`,
-        i.html(a), $(".pagination-btn").off("click").on("click", (e => {
+        i.html(a), i.find(".pagination-btn").off("click").on("click", (e => {
             if ($(e.currentTarget).is("[disabled]")) return;
             const n = parseInt($(e.currentTarget).data("page"));
             n >= 1 && n <= t && n !== this.currentPage && (this.currentPage = n, this.renderActressCards());
