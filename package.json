@@ -1,6 +1,6 @@
 {
   "name": "jhs-ya",
-  "version": "4.5.9",
+  "version": "4.7.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,9 +8,12 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "check": "npm run build && node scripts/check-sources.mjs && node scripts/regression-check.mjs && node --check JHS.user.js && node --check dist/JHS.user.js"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run test && npm run build && node scripts/check-sources.mjs && node scripts/regression-check.mjs && node --check JHS.user.js && node --check dist/JHS.user.js"
   },
   "devDependencies": {
-    "esbuild": "^0.28.0"
+    "esbuild": "^0.28.0",
+    "vitest": "^4.1.8"
   }
 }

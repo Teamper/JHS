@@ -8,6 +8,7 @@ const srcPath = join(repoRoot, "src", "main.js");
 const packagePath = join(repoRoot, "package.json");
 const corePaths = [
   "constants.js",
+  "css-injection.js",
   "storage-index.js",
   "storage.js",
   "javdb-api.js",
@@ -39,6 +40,12 @@ const pluginPaths = [
   "status/list-page-button.js",
   "status/list-page.js",
   "status/auto-page.js",
+  "backup/webdav-client.js",
+  "backup/setting-styles.js",
+  "backup/setting-templates.js",
+  "backup/setting-panels.js",
+  "backup/setting-forms.js",
+  "backup/setting-backup.js",
   "backup/setting.js",
   "image-viewer/bus-preview-video.js",
   "avatar/search-by-image.js",

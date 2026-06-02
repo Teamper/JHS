@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.7.0] - 2026-06-02
+
+### Fixed
+- 修复 `genericSort` 的 `nullsLast` 参数无效：comparator 对 null 值的排序逻辑错误，改为预处理分离 null 值再排序。
+- 修复多处 XSS 漏洞：logger.js 内部 innerHTML 注入、fc2-by-123av.js/hit-show.js/fc2.js 远程数据未转义、storage.js 日志消息未转义。
+- 修复 `importData` 缺少 schema 校验：导入文件可注入任意 key，现改为白名单校验。
+- 修复 `search-by-image.js` 错别字："上传到失败" → "上传失败"。
+- 修复 `main.js` 中 `processCss()`/`processPlugins()` 的 Promise 未捕获异常。
+- 修复 `setting.js` 中 `applyImageMode()` 的 Promise 未捕获异常。
+- 修复 CHANGELOG v4.5.2 重复段落。
+- 修复 CHANGELOG v4.3.5 `### Improved` 标题不一致。
+
+### Changed
+- 移除 `@connect *` 通配符：该通配符使所有具体 `@connect` 条目无效，存在数据泄露风险。
+- 补全 CHANGELOG v4.5.1-v4.6.1 的 compare links。
+
+## [4.6.1] - 2026-06-02
+
+### Changed
+- 代码审计重构：setting.js (133KB) 拆分为 7 个独立模块（webdav-client、styles、templates、panels、forms、backup、orchestrator）。
+- constants.js (32KB) 拆分为纯常量 (~100行) + css-injection.js (~300行)。
+- 新增 Vitest 单元测试框架，覆盖 92 个测试用例（storage-index、utils、circuit-breaker、storage-pure）。
+- 构建流水线集成测试：`npm run check` 现在先运行单元测试再构建。
+
+## [4.6.0] - 2026-06-01
+
+### Added
+- 演员卡片头像、FC2 剧照缩略图添加 `loading="lazy"` 懒加载，减少首屏流量。
+- 详情页原生磁力列表注入评分徽章（高/中/低 + 数值），基于分辨率、字幕、做种数等维度综合评分。
+- FAB 菜单详情页新增状态感知：展开时读取当前番号状态，已标记的操作项显示对应颜色色块。
+- FAB 菜单分组排列：状态操作、工具、设置三组，组间分隔线。
+- FAB 菜单 stagger 动画：菜单项依次弹出，遮罩背景模糊效果。
+
+### Changed
+- 新作品中心移动端工具栏改为纵向堆叠，筛选下拉全宽显示，按钮自适应。
+- 演员卡片网格移动端列宽从 243px 降至 150px，单行可放 2 列。
+- 演员卡片头像尺寸从 100px 缩至 72px（移动端），减少占用空间。
+- 分页按钮移动端增大触控区域（44px），批量操作按钮全宽显示。
+- 设置面板子标签（更多工具）增大触控高度至 44px。
+- 设置面板 checkbox 增大至 20px，关联文本行高 44px。
+- 设置面板内容区启用平滑滚动。
+- 磁力评分函数 `calcMagnetScore` 从 MagnetHubPlugin 提取为全局函数，供多处复用。
+
 ## [4.5.9] - 2026-05-31
 
 ### Fixed
@@ -71,18 +114,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### Removed
 - 移除快捷键功能：HotkeyManager 类、设置面板快捷键配置页、详情页/列表页快捷键绑定、预览视频快捷键标签、JavTrailers iframe 快捷键注册。
-
-### Fixed
-- 修复统计弹窗无法打开：`openDialog()` 局部变量 `d/h/g` 与全局常量 TDZ 冲突，重命名为 `barPct/barRow/dialogHtml`。
-- 修复设计令牌仅在移动端可用：将 `:root` CSS 变量从 `@media` 内提升到全局。
-- 修复弹窗移动端无圆角：改为顶部 12px 圆角，保留全屏感。
-- 修复列表页按钮触控高度不足：`min-height` 从 32px 提升到 36px。
-
-### Changed
-- 桌面端按钮增加 `:active` 按压反馈和 `:focus-visible` 键盘导航轮廓。
-- 桌面端设置面板间距加大（`margin-bottom` 3px→6px）、表单宽度放宽（160px→200px）、文本左对齐。
-- 设置面板底部操作栏改为 flexbox 布局。
-- Toast 默认显示时长从 1 秒延长到 2.5 秒。
 
 ### Fixed
 - 修复统计弹窗无法打开：`openDialog()` 局部变量 `d/h/g` 与全局常量 TDZ 冲突，重命名为 `barPct/barRow/dialogHtml`。
@@ -176,7 +207,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [4.3.5] - 2026-05-29
 
-### Improved
+### Changed
 - 新作品列表封面加大（minmax 240px），卡片增加 hover 浮动效果。
 - 封面图支持 hover 放大预览（复用 ImageHoverPreview）。
 - 新作品列表改为分页显示（每页 60 个），解决大量数据卡顿问题。
@@ -310,7 +341,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.0...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.7.0...HEAD
+[4.7.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.6.1...v4.7.0
+[4.6.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.6.0...v4.6.1
+[4.6.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.9...v4.6.0
+[4.5.9]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.8...v4.5.9
+[4.5.8]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.7...v4.5.8
+[4.5.7]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.6...v4.5.7
+[4.5.6]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.5...v4.5.6
+[4.5.5]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.4...v4.5.5
+[4.5.4]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.3...v4.5.4
+[4.5.3]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.2...v4.5.3
+[4.5.2]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.1...v4.5.2
+[4.5.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.0...v4.5.1
 [4.5.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.4.1...v4.5.0
 [4.4.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.4.0...v4.4.1
 [4.4.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.7...v4.4.0

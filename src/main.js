@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS-YA
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      4.5.9
+// @version      4.7.0
 // @author       yaoser
 // @description  Jav-鉴黄师个人维护版：收藏、屏蔽、标记已下载、演员黑名单、收藏演员同步、新作品检测、热播/Top250/Fc2ppv/评论增强、相关清单、WebDAV数据备份、以图识图、字幕搜索；支持 JavDB / JavBus。
 // @license      MIT
@@ -64,7 +64,6 @@
 // @connect      supjav.com
 // @connect      translate-pa.googleapis.com
 // @connect      127.0.0.1
-// @connect      *
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -107,7 +106,7 @@ const vt = function() {
     return e;
 }();
 
-vt.processCss().then(), async function() {
+vt.processCss().catch((e => console.error("[JHS] processCss failed:", e))), async function() {
     window.isDetailPage = function() {
         let e = window.location.href;
         return r ? e.split("?")[0].includes("/v/") : !!l && $("#magnet-table").length > 0;
@@ -129,5 +128,5 @@ vt.processCss().then(), async function() {
     })(),
     r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie) && show.error("请切换到中文语言下才可正常使用本脚本", {
         duration: -1
-    }), vt.processPlugins().then();
+    }), vt.processPlugins().catch((e => console.error("[JHS] processPlugins failed:", e)));
 }();

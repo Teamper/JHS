@@ -209,7 +209,7 @@ class Oe extends X {
             let e = "";
             s.each(((t, n) => {
                 let a = $(n), i = a.text(), s = a.attr("href");
-                o += `<span class="actor-tag"><a href="https://fc2ppvdb.com${s}" target="_blank">${i}</a></span>`,
+                o += `<span class="actor-tag"><a href="https://fc2ppvdb.com${escapeHtml(s)}" target="_blank">${escapeHtml(i)}</a></span>`,
                 e += i + " ";
             })), $("#data-actress").text(e);
         } else o += "<span>暂无演员信息</span>";
@@ -222,7 +222,7 @@ class Oe extends X {
             if (e.length > 0) {
                 const t = $(e[0]);
                 let n = t.text(), a = t.attr("href");
-                $(".movie-seller").html(`<span><strong>販売者: </strong><a href="https://fc2ppvdb.com${a}" target="_blank">${n}</a></span>`);
+                $(".movie-seller").html(`<span><strong>販売者: </strong><a href="https://fc2ppvdb.com${escapeHtml(a)}" target="_blank">${escapeHtml(n)}</a></span>`);
             }
         }
     }
@@ -234,7 +234,7 @@ class Oe extends X {
         let i = $(a).find(".items_article_SampleImagesArea img").map((function() {
             return $(this).attr("src");
         })).get(), s = "";
-        Array.isArray(i) && i.length > 0 ? s = i.map(((e, t) => `\n                <a href="${e}" data-fancybox="movie-gallery" data-caption="剧照 ${t + 1}">\n                    <img src="${e}" class="movie-image-thumb"  alt=""/>\n                </a>\n            `)).join("") : $(".movie-gallery").html("<h4>剧照: 暂无剧照</h4>"),
+        Array.isArray(i) && i.length > 0 ? s = i.map(((e, t) => `\n                <a href="${e}" data-fancybox="movie-gallery" data-caption="剧照 ${t + 1}">\n                    <img src="${e}" class="movie-image-thumb" loading="lazy" alt=""/>\n                </a>\n            `)).join("") : $(".movie-gallery").html("<h4>剧照: 暂无剧照</h4>"),
         $(".image-list").html(s), this.handleLongImg(t);
     }
     async getMovie(e, t) {

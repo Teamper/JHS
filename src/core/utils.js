@@ -282,7 +282,7 @@ class J {
     genericSort(e, t, n = !0) {
         if (!Array.isArray(e) || 0 === e.length) return [];
         if (!Array.isArray(t) || 0 === t.length) return [ ...e ];
-        const a = [ ...e ], i = e => {
+        const i = e => {
             if (e instanceof Date) return e;
             if ("string" == typeof e) {
                 const t = new Date(e);
@@ -290,23 +290,28 @@ class J {
             }
             return e;
         };
-        return a.sort(((e, a) => {
+        const getVal = (e, t) => null != t ? "function" == typeof t ? t(e) : e && "object" == typeof e ? e[t] : void 0 : e;
+        /* Separate nulls and non-nulls, sort non-nulls, then reassemble */
+        const nulls = [], nonNulls = [];
+        for (const item of e) {
+            let hasNull = !1;
+            for (const s of t) {
+                const val = getVal(item, s.key);
+                if (null == val || void 0 === val) { hasNull = !0; break; }
+            }
+            hasNull ? nulls.push(item) : nonNulls.push(item);
+        }
+        return nonNulls.sort(((e, a) => {
             for (const s of t) {
                 const {key: t, order: o = "asc"} = s;
-                let r = e, l = a;
-                null != t && ("function" == typeof t ? (r = t(e), l = t(a)) : (r = e && "object" == typeof e ? e[t] : void 0,
-                l = a && "object" == typeof a ? a[t] : void 0));
+                let r = getVal(e, t), l = getVal(a, t);
                 const c = i(r), d = i(l);
-                let h = 0;
-                const g = null == r, p = null == l;
-                if (g && p) return 0;
-                if (g) return n ? 1 : -1;
-                if (p) return n ? 1 : -1;
-                if (h = c instanceof Date && d instanceof Date ? c.getTime() - d.getTime() : "number" == typeof r && "number" == typeof l ? r - l : "string" == typeof r && "string" == typeof l ? r.localeCompare(l) : String(r).localeCompare(String(l)),
-                "desc" === o && (h *= -1), 0 !== h) return h;
+                let h = c instanceof Date && d instanceof Date ? c.getTime() - d.getTime() : "number" == typeof r && "number" == typeof l ? r - l : "string" == typeof r && "string" == typeof l ? r.localeCompare(l) : String(r).localeCompare(String(l));
+                "desc" === o && (h *= -1);
+                if (0 !== h) return h;
             }
             return 0;
-        }));
+        })), n ? [ ...nonNulls, ...nulls ] : [ ...nulls, ...nonNulls ];
     }
     async retry(e, t = 3) {
         let n = 0;
