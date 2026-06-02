@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.7.1] - 2026-06-02
+
+### Fixed
+- 修复新作品检测「评价人数」排序无效：`parsePage` 中 voteCount 提取选择器 `.score .count` 不匹配实际 DOM，改为从 `.score .value` 文本正则提取（与首页排序一致）。
+- 修复新作品检测点击作品跳转到搜索页而非直接进入作品页：`parsePage` 新增保存作品直接 URL，渲染时优先使用。
+- 修复新作品检测切换列表视图后分页按钮失效：`renderPagination` 中全局 `$(".pagination-btn").off("click")` 误删新作品列表分页事件，改为容器内 scoped 选择器。
+
 ## [4.7.0] - 2026-06-02
 
 ### Fixed
