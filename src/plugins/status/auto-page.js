@@ -35,9 +35,14 @@ class Be extends X {
             url: window.location.href
         }), this.loader.addEventListener("click", (() => {
             this.loader.classList.contains("waterfall-error") && this.loadNextPage().then();
-        })), window.addEventListener("scroll", (() => {
-            this.checkLoad(), this.checkScrollPosition();
-        }));
+        })), (() => {
+            let t = !1;
+            window.addEventListener("scroll", (() => {
+                t || (t = !0, requestAnimationFrame((() => {
+                    this.checkLoad(), this.checkScrollPosition(), t = !1;
+                })));
+            }));
+        })();
         const t = document.querySelector(e.nextPageSelector);
         this.nextUrl = null == t ? void 0 : t.href, this.hasMore = !!this.nextUrl, setTimeout((() => {
             this.checkLoad();

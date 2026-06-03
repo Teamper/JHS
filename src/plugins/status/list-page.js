@@ -75,7 +75,7 @@ class Ie extends X {
         i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0),
         i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0),
         i(this, "currentPageTotalCount", 0), i(this, "cache", localStorage.getItem("jhs_translate") ? JSON.parse(localStorage.getItem("jhs_translate")) : {}),
-        i(this, "writeQueue", Promise.resolve());
+        i(this, "writeQueue", Promise.resolve()), i(this, "_debouncedTranslateWrite", null);
     }
     getName() {
         return "ListPagePlugin";
@@ -139,20 +139,18 @@ class Ie extends X {
         if (!window.isListPage) return;
         const e = this.getSelector(), t = document.querySelector(e.boxSelector);
         if (!t) return void console.error("没有找到容器节点!");
-        const n = new MutationObserver((async e => {
-            n.disconnect();
-            try {
+        let n = null;
+        const a = new MutationObserver((() => {
+            n && clearTimeout(n), n = setTimeout((async () => {
                 this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), this.applyVisibility(),
                 await this.getBean("ListPageButtonPlugin").sortItems(), this.getBean("CoverButtonPlugin").addSvgBtn(),
                 $(this.getSelector().itemSelector + " a").attr("target", "_blank"), this.getBean("AutoPagePlugin").checkLoad();
-            } finally {
-                n.observe(t, a);
-            }
-        })), a = {
+            }), 100);
+        }));
+        a.observe(t, {
             childList: !0,
             subtree: !1
-        };
-        n.observe(t, a);
+        });
     }
     fixBusTitleBox() {
         if (!l) return;
@@ -333,22 +331,29 @@ class Ie extends X {
             n.attr("data-hide") === "yes" && (n.show(), n.removeAttr("data-hide"));
         }
     }
+    _replaceSingleHdImg(e) {
+        if ("true" === e.dataset.hdReplaced) return;
+        if (r) e.src = e.src.replace("thumbs", "covers"), e.title = ""; else if (l) {
+            const t = /\/(imgs|pics)\/(thumb|thumbs)\//, n = /(\.jpg|\.jpeg|\.png)$/i;
+            t.test(e.src) ? (e.src = e.src.replace(t, "/$1/cover/").replace(n, "_b$1"), e.dataset.hdReplaced = "true",
+            e.dataset.title = e.title, e.title = "") : /ps(\.jpg|\.jpeg|\.png)$/i.test(e.src) && (e.src = e.src.replace(/ps(\.jpg|\.jpeg|\.png)$/i, "pl$1"),
+            e.dataset.hdReplaced = "true", e.dataset.title = e.title, e.title = "");
+        }
+    }
     replaceHdImg(e) {
         if (e && "string" == typeof e.jquery && (e = e.toArray()), e || (e = document.querySelectorAll(this.getSelector().coverImgSelector)),
-        r && e.forEach((e => {
-            e.src = e.src.replace("thumbs", "covers"), e.title = "";
-        })), l) {
-            const t = /\/(imgs|pics)\/(thumb|thumbs)\//, n = /(\.jpg|\.jpeg|\.png)$/i, a = e => {
-                e.src && t.test(e.src) && "true" !== e.dataset.hdReplaced && (e.src = e.src.replace(t, "/$1/cover/").replace(n, "_b$1"),
-                e.dataset.hdReplaced = "true", e.dataset.title = e.title, e.title = "");
-            }, i = /ps(\.jpg|\.jpeg|\.png)$/i, s = e => {
-                e.src && i.test(e.src) && "true" !== e.dataset.hdReplaced && (e.src = e.src.replace(i, "pl$1"),
-                e.dataset.hdReplaced = "true", e.dataset.title = e.title, e.title = "");
-            };
-            e.forEach((e => {
-                a(e), s(e);
-            }));
-        }
+        !e.length) return;
+        const t = Array.from(e), n = t.slice(0, 12), a = t.slice(12);
+        if (n.forEach((e => this._replaceSingleHdImg(e))), a.length && "IntersectionObserver" in window) {
+            const t = new IntersectionObserver((e => {
+                e.forEach((e => {
+                    e.isIntersecting && (this._replaceSingleHdImg(e.target), t.unobserve(e.target));
+                }));
+            }), {
+                rootMargin: "200px"
+            });
+            a.forEach((e => t.observe(e)));
+        } else a.forEach((e => this._replaceSingleHdImg(e)));
         storageManager.getSetting("hoverBigImg", C).then((e => {
             e === _ && (window.imageHoverPreviewObj ? window.imageHoverPreviewObj.bindEvents() : window.imageHoverPreviewObj = new ImageHoverPreview({
                 selector: this.getSelector().coverImgSelector
@@ -369,9 +374,10 @@ class Ie extends X {
         _e(t).then((e => {
             r ? (a.contents().each((function() {
                 3 !== this.nodeType || "" === this.textContent.trim() || this.textContent.includes(n) || (this.textContent = " " + e + " ");
-            })), a.attr("title", e)) : a.text(e), this.writeQueue = this.writeQueue.then((() => {
-                this.cache[n] = e, localStorage.setItem("jhs_translate", JSON.stringify(this.cache));
-            }));
+            })), a.attr("title", e)) : a.text(e), this.cache[n] = e, this._debouncedTranslateWrite && clearTimeout(this._debouncedTranslateWrite),
+            this._debouncedTranslateWrite = setTimeout((() => {
+                localStorage.setItem("jhs_translate", JSON.stringify(this.cache));
+            }), 500);
         })).catch((e => {
             console.error("翻译失败:", e);
         }));

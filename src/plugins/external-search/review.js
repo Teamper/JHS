@@ -76,7 +76,7 @@ class $e extends X {
         }));
         if (0 === i.length) return void t.append('<div style="margin-top:15px;background-color:#ffffff;padding:10px;margin-left: -10px;">无评论</div>');
         const s = await storageManager.getReviewFilterKeywordList();
-        if (this.displayReviews(i, t, s), i.length === a) {
+        if (this.displayReviews(i, t, s), i.length === a && R(e, 2, a).catch((() => {})), i.length === a) {
             n.html('\n                <button id="loadMoreReviews" style="width:100%; background-color: #e1f5fe; border:none; padding:10px; margin-top:10px; cursor:pointer; color:#0277bd; font-weight:bold; border-radius:4px;">\n                    加载更多评论\n                </button>\n                <div id="reviewsEnd" style="display:none; text-align:center; padding:10px; color:#666; margin-top:10px;">已加载全部评论</div>\n            ');
             let i = 1, r = $("#loadMoreReviews");
             r.on("click", (async () => {
@@ -95,9 +95,9 @@ class $e extends X {
     }
     displayReviews(e, t, n) {
         if (!e.length) return;
-        const o = [];
+        const o = [], c = n.length > 0 ? new RegExp(n.map((e => e.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).join("|")) : null;
         e.forEach((e => {
-            if (n.some((t => e.content.includes(t)))) return;
+            if (c && c.test(e.content)) return;
             const a = Array(e.score).fill('<i class="icon-star"></i>').join(""), i = e.content.replace(/ed2k:\/\/\|file\|[^|]+\|\d+\|[a-fA-F0-9]{32}\|\/|magnet:\?[^\s"'<>`\u4e00-\u9fa5，。？！（）【】]+|https?:\/\/[^\s"'<>`\u4e00-\u9fa5，。？！（）【】]+/g, (e => e.startsWith("ed2k://") ? `\n                            <span style="word-break: break-all;background: #e0f2fe;color: #0369a1;">${e}</span>\n\n                        ` : e.startsWith("magnet:") ? `\n                            <a href="${e}" class="a-primary" style="padding:0; word-break: break-all; white-space: pre-wrap;" target="_blank" rel="noopener noreferrer">${e}</a>\n\n                        ` : e.startsWith("http://") || e.startsWith("https://") ? `\n                            <a href="${e}" class="a-primary" style="padding:0; word-break: break-all; white-space: pre-wrap;" target="_blank" rel="noopener noreferrer">${e}</a>\n                        ` : e)), s = `\n                <div class="item columns is-desktop" style="display:block;margin-top:6px;background-color:#ffffff;padding:10px;margin-left: -10px;word-break: break-word;position:relative;">\n                    <span style="position:absolute;top:5px;right:10px;color:#999;font-size:12px;">#${this.floorIndex++}楼</span>\n                    ${e.username} &nbsp;&nbsp; <span class="score-stars">${a}</span> \n                    <span class="time">${utils.formatDate(e.created_at)}</span> \n                    &nbsp;&nbsp; 点赞:${e.likes_count}\n                    <p class="review-content" style="margin-top: 5px;"> ${i} </p>\n                </div>\n            `;
             o.push(s);
         })), o.length && t.append(o.join("")), this.rightClickFilter();
