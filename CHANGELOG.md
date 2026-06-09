@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.8.0] - 2026-06-09
+
+### Fixed
+- 恢复 `@connect *` 通配符：v4.7.0 移除后导致 WebDAV 备份功能完全失效（`GM_xmlhttpRequest` 被油猴拦截，触发 onerror）。WebDAV 用户可配置任意服务器地址，无法逐个列明白名单，该通配符为必需项。
+
 ## [4.7.1] - 2026-06-02
 
 ### Fixed
@@ -349,6 +354,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 加密存储敏感凭据。
 
 [Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.7.0...HEAD
+[4.8.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.7.2...v4.8.0
+[4.7.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.7.0...v4.7.1
 [4.7.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.6.1...v4.7.0
 [4.6.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.6.0...v4.6.1
 [4.6.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.9...v4.6.0
