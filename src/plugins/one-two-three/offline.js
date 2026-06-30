@@ -156,12 +156,12 @@ class OneTwoThreeOfflinePlugin extends X {
     /* 依赖 gmRequest 在非 2xx 时 reject 对象上附加 status 属性 */
     async resolveMagnet(e, t) {
         try {
-            const n = await gmHttp.post("https://www.123pan.com/b/api/v2/offline_download/task/resolve", { urls: e }, {
+            const n = await gmHttp.post(this._signUrl("https://yun.123pan.com/b/api/v2/offline_download/task/resolve"), { urls: e }, {
                 Authorization: "Bearer " + t,
                 "App-Version": "3",
                 platform: "web",
-                Origin: "https://www.123pan.com",
-                Referer: "https://www.123pan.com/"
+                Origin: "https://yun.123pan.com",
+                Referer: "https://yun.123pan.com/"
             });
             return this.assertApiResult(n, "解析失败"), n.data && n.data.list && n.data.list.length > 0 ? n.data.list[0] : Promise.reject(n.message || `解析失败 (${n.code})`);
         } catch (a) {
@@ -173,7 +173,7 @@ class OneTwoThreeOfflinePlugin extends X {
         if (!e.files || 0 === e.files.length) throw "没有可建立离线的文件";
         const n = e.files.map((e => e.id)), a = e.files.reduce(((e, t) => e + (t.size || 0)), 0);
         try {
-            const i = await gmHttp.post("https://www.123pan.com/b/api/v2/offline_download/task/submit", {
+            const i = await gmHttp.post(this._signUrl("https://yun.123pan.com/b/api/v2/offline_download/task/submit"), {
                 resource_list: [{ resource_id: e.id, select_file_id: n }]
             }, {
                 Authorization: "Bearer " + t,
@@ -192,5 +192,31 @@ class OneTwoThreeOfflinePlugin extends X {
         let n = 0, a = e;
         for (;a >= 1024 && n < t.length - 1; ) a /= 1024, n++;
         return `${a.toFixed(n ? 2 : 0)}${t[n]}`;
+    }
+    /** CRC32-IEEE (poly 0xEDB88320) — 与 Go crc32.ChecksumIEEE 一致 */
+    _crc32(e) {
+        const t = new Array(256);
+        for (let n = 0; n < 256; n++) {
+            let a = n;
+            for (let i = 0; i < 8; i++) a = 1 & a ? 3988292384 ^ a >>> 1 : a >>> 1;
+            t[n] = a;
+        }
+        let n = 4294967295;
+        for (let a = 0; a < e.length; a++) n = t[(n ^ e.charCodeAt(a)) & 255] ^ n >>> 8;
+        return (n ^ 4294967295) >>> 0;
+    }
+    /** 为 123 云盘 API URL 附加签名查询参数（与 Go signPath 算法一致） */
+    _signUrl(e) {
+        const t = [ "a", "d", "e", "f", "g", "h", "l", "m", "y", "i", "j", "n", "o", "p", "k", "q", "r", "s", "t", "u", "b", "c", "v", "w", "s", "z" ];
+        const n = Math.round(1e7 * Math.random());
+        const a = new Date;
+        const i = new Date(a.getTime() + 6e4 * a.getTimezoneOffset() + 288e5);
+        const s = `${i.getFullYear()}${String(i.getMonth() + 1).padStart(2, "0")}${String(i.getDate()).padStart(2, "0")}${String(i.getHours()).padStart(2, "0")}${String(i.getMinutes()).padStart(2, "0")}`;
+        let o = "";
+        for (let r = 0; r < s.length; r++) o += t[parseInt(s[r])];
+        const r = this._crc32(o), l = Math.floor(i.getTime() / 1e3);
+        const c = `${l}|${n}|${new URL(e).pathname}|web|3|${r}`;
+        const u = this._crc32(c), d = new URL(e);
+        return d.searchParams.set(String(r), `${l}-${n}-${u}`), d.toString();
     }
 }
