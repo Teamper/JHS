@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.8.1] - 2026-06-30
+
+### Fixed
+- 修复 123 云盘离线提交「响应解析失败: MethodNotAllowed」错误：123 云盘 API 新增签名参数强制校验，未签名请求被 CDN 路由至 OSS 导致 POST 方法被拒。新增 `_crc32` / `_signUrl` 方法，与 Go 参考实现（OpenListTeam/OpenList）的 `signPath` 算法一致，为 `resolveMagnet` 和 `submitTask` 的请求 URL 附加 CRC32 时间戳签名。
+
 ## [4.8.0] - 2026-06-09
 
 ### Fixed
@@ -353,7 +358,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.7.0...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.8.1...HEAD
+[4.8.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.8.0...v4.8.1
 [4.8.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.7.2...v4.8.0
 [4.7.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.7.0...v4.7.1
 [4.7.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.6.1...v4.7.0
