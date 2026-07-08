@@ -333,7 +333,21 @@ class Ie extends X {
     }
     _replaceSingleHdImg(e) {
         if ("true" === e.dataset.hdReplaced) return;
-        if (r) e.src = e.src.replace("thumbs", "covers"), e.title = ""; else if (l) {
+        if (r) {
+            const isJavdbCdn = /jdbstatic\.com|javdb\.com/i.test(e.src);
+            if (isJavdbCdn) {
+                const originalSrc = e.src;
+                e.src = e.src.replace("thumbs", "covers");
+                e.dataset.hdReplaced = "true";
+                e.title = "";
+                e.onerror = function() {
+                    if (this.src !== originalSrc) {
+                        this.src = originalSrc;
+                        this.onerror = null;
+                    }
+                };
+            }
+        } else if (l) {
             const t = /\/(imgs|pics)\/(thumb|thumbs)\//, n = /(\.jpg|\.jpeg|\.png)$/i;
             t.test(e.src) ? (e.src = e.src.replace(t, "/$1/cover/").replace(n, "_b$1"), e.dataset.hdReplaced = "true",
             e.dataset.title = e.title, e.title = "") : /ps(\.jpg|\.jpeg|\.png)$/i.test(e.src) && (e.src = e.src.replace(/ps(\.jpg|\.jpeg|\.png)$/i, "pl$1"),

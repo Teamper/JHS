@@ -33,7 +33,7 @@ const R = async (e, t = 1, n = 20) => {
     if (!a.data) throw show.error("获取视频详情失败: " + a.message), new Error(a.message);
     const i = a.data.movie, s = i.preview_images, o = [];
     return s.forEach((e => {
-        o.push(e.large_url.replace("https://tp-iu.cmastd.com/rhe951l4q", "https://c0.jdbstatic.com"));
+        o.push(e.large_url.replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com"));
     })), {
         movieId: i.id,
         actors: i.actors,

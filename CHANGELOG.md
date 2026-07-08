@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [4.9.0] - 2026-07-08
+
+### Fixed
+- 修复 advanced_search 页面（handleTop=1/handlePlayback=1）海报图片不显示：API 返回的 `cover_url` 使用多种移动端 CDN 域名（`tp.spfcas.com`、`tp-iu.cmastd.com` 等），原代码仅替换 `tp-iu.cmastd.com` → `c0.jdbstatic.com`，其他 CDN 域名未被处理导致图片在第三方 CDN 上加载失败。改为正则匹配 `/rhe951l4q` 路径前缀，统一替换为 `c0.jdbstatic.com`。
+
+### Changed
+- `hit-show.js`: `markDataListHtml` 中 `cover_url` 的 CDN 替换改为 `/https:\/\/[^/]+\/rhe951l4q/` → `c0.jdbstatic.com`
+- `javdb-api.js`: `V()` 函数中 `large_url` 同上正则替换
+- `list-page.js`: `_replaceSingleHdImg` 增加 CDN 域名校验（仅 `jdbstatic.com`/`javdb.com` 做 `thumbs`→`covers` 替换）+ `onerror` 回退机制
+
 ## [4.8.1] - 2026-06-30
 
 ### Fixed
@@ -358,7 +368,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.8.1...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.9.0...HEAD
+[4.9.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.8.1...v4.9.0
 [4.8.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.8.0...v4.8.1
 [4.8.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.7.2...v4.8.0
 [4.7.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.7.0...v4.7.1
