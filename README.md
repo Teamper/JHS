@@ -18,7 +18,7 @@ npm ci
 npm run check
 ```
 
-`npm run check` 执行源码语法检查、回归门禁（39 插件、20 功能范围）和产物语法校验。
+`npm run check` 执行单元测试、源码语法检查、回归门禁（39 插件、20 功能范围）和产物语法校验。
 
 推送后 GitHub Actions 自动构建 `JHS.user.js` 并提交回仓库。
 
@@ -27,13 +27,16 @@ npm run check
 - `main`: 正式发布。CI 自动构建产物、创建 tag、发布 GitHub Release。
 - `dev`: 预览版。CI 上传 `JHS-dev.user.js` artifact。
 
-## Roadmap
+## 性能诊断
 
-- ~~**v4.4.0** 外部站点请求治理：熔断、限流、快速失败、本地服务 ping 缓存、站点健康状态、`@connect` 域名收敛~~ ✅
-- ~~**v4.5.0** 移动端基础适配：`mobileMode`、插件移动端降级、底部操作栏、弹窗自适应、表格横滚、Android 优先支持（iOS 实验性）~~ ✅
-- **v4.6.0** 移动端轻量模式：新作品中心移动版、磁力评分移动版、状态操作 Bottom Sheet、移动端设置页、图片懒加载
-- **v4.7.0** 跨端数据同步：WebDAV 一键同步、移动端快照、简化差异预览、PC / 手机数据一致性
-- **v4.8.1** 修复 123 云盘离线提交 MethodNotAllowed；**v4.8.0** 长期维护版：移动端安装文档、兼容矩阵、权限收敛、默认配置优化、问题诊断入口
+脚本会分别记录插件注册、样式初始化、即时插件和空闲任务状态。可在浏览器控制台查看：
+
+```js
+pluginManager.getStartupReport()
+pluginManager.getTimings().sort((a, b) => b.elapsed - a.elapsed)
+```
+
+`readyMs` 表示脚本开始执行到即时插件完成的耗时，不包含 `@require` 资源下载和浏览器解析脚本的时间；`pending-idle` 表示任务已移出首屏关键路径，正在等待浏览器空闲时段执行。构建产物同时执行安全的语法与空白压缩，并由回归门禁限制在 620 KiB 以内。
 
 ## 变更日志
 

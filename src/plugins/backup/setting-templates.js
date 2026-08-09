@@ -14,7 +14,7 @@ function getPluginCategories() {
             avatar: { label: "演员信息", plugins: ["ActressInfoPlugin","SearchByImagePlugin"] },
             translate: { label: "翻译", plugins: ["TranslatePlugin"] },
             subtitle: { label: "字幕", plugins: ["SubTitleCatPlugin"] },
-            backup: { label: "备份设置", plugins: ["SettingPlugin","LocalPlugin"] },
+            backup: { label: "备份设置", plugins: ["SettingPlugin"] },
             "one-two-three": { label: "云盘", plugins: ["OneTwoThreeOfflinePlugin"] },
             stats: { label: "统计", plugins: ["StatsPlugin"] }
         },

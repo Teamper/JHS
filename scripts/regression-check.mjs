@@ -55,6 +55,7 @@ assert(packageJson.version === version, "package.json version does not match use
 assert(extractVersion(rootOutput) === version, "root JHS.user.js version does not match src/main.js");
 assert(extractVersion(distOutput) === version, "dist/JHS.user.js version does not match src/main.js");
 assert(hash(rootOutput) === hash(distOutput), "dist/JHS.user.js and root JHS.user.js are not byte-identical");
+assert(Buffer.byteLength(rootOutput, "utf8") <= 620 * 1024, "generated userscript exceeds 620 KiB size budget");
 
 assert(extractMetadata(rootOutput, "name") === "JHS-YA", "userscript @name changed");
 assert(
@@ -158,7 +159,6 @@ const expectedPlugins = [
   ["translate/translate.js", "Ze", "TranslatePlugin"],
   ["new-video/task.js", "et", "TaskPlugin"],
   ["new-video/new-video.js", "pt", "NewVideoPlugin"],
-  ["backup/local.js", "mt", "LocalPlugin"],
   ["one-two-three/offline.js", "OneTwoThreeOfflinePlugin", "OneTwoThreeOfflinePlugin"],
   ["stats/stats.js", "StatsPlugin", "StatsPlugin"],
   ["status/mobile-bottom-bar.js", "MobileBottomBarPlugin", "MobileBottomBarPlugin"]
@@ -177,7 +177,7 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractRegistryArray(registry, "DEFAULT_JAVDB_PLUGINS");
 const javbusPlugins = extractRegistryArray(registry, "DEFAULT_JAVBUS_PLUGINS");
 assert(
-  javdbPlugins.join(",") === "Ie,Be,le,de,Ce,xe,Ae,fe,pe,ue,Ee,Ue,Oe,Q,$e,He,ye,ce,ae,ke,he,be,Ze,ze,Re,Ve,Se,Xe,pt,et,mt,StatsPlugin,MobileBottomBarPlugin",
+  javdbPlugins.join(",") === "Ie,Be,le,de,Ce,xe,Ae,fe,pe,ue,Ee,Ue,Oe,Q,$e,He,ye,ce,ae,ke,he,be,Ze,ze,Re,Ve,Se,Xe,pt,et,StatsPlugin,MobileBottomBarPlugin",
   "JavDB plugin registration order changed"
 );
 assert(

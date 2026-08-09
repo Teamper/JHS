@@ -7,21 +7,31 @@ class et extends X {
     getName() {
         return "TaskPlugin";
     }
+    getStartupMode() {
+        return "idle";
+    }
     async limitConcurrency(e, t, n, a) {
         this.showIsRun();
-        const i = [], s = e.length;
-        let o = 0;
-        for (const r of e) {
-            const e = a(r).finally((() => {
-                i.splice(i.indexOf(e), 1);
-            }));
-            if (i.push(e), o++, i.length >= t) {
-                const e = s - o;
-                clog.debug(`剩余任务数: <span style="color: #f40">${e}</span>`), await Promise.race(i),
-                await utils.sleep(n);
+        let i = 0, s = !1;
+        const o = Math.max(1, Math.min(t, e.length)), r = Array.from({ length: o }, (async () => {
+            for (;!s; ) {
+                const t = i++;
+                if (t >= e.length) return;
+                try {
+                    await a(e[t]);
+                } catch (e) {
+                    if (this.isNetworkBlocked(e)) throw s = !0, e;
+                    throw e;
+                }
+                const o = e.length - i;
+                o > 0 && (clog.debug(`剩余任务数: <span style="color: #f40">${o}</span>`), await utils.sleep(n));
             }
-        }
-        await Promise.all(i);
+        }));
+        const l = await Promise.allSettled(r), c = l.find((e => "rejected" === e.status));
+        if (c) throw c.reason;
+    }
+    isNetworkBlocked(e) {
+        return !0 === e?._cfBlocked || !0 === e?._circuitBroken;
     }
     isUnnecessaryCheck(e, t) {
         if (!t) throw new Error("未传入checkIntervalTime");
@@ -29,7 +39,7 @@ class et extends X {
         return utils.getHourDifference(new Date(e), new Date) < t;
     }
     handle() {
-        this.doTask().then();
+        return this.doTask();
     }
     showIsRun() {
         show.info("正在执行检测任务中, 请勿关闭当前窗口", {
@@ -52,7 +62,8 @@ class et extends X {
                 }
             } else clog.debug("争夺任务锁失败, 跳过执行");
         })).catch((e => {
-            console.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
+            this.isNetworkBlocked(e) ? clog.warn(`后台检测已停止: ${e.message}`) : (console.error("锁任务出现错误:", e),
+            clog.error("锁任务出现错误:", e));
         })).finally((() => {
             setTimeout((() => {
                 this.doTask();
@@ -110,6 +121,7 @@ class et extends X {
                     });
                 }));
             } catch (i) {
+                if (this.isNetworkBlocked(i)) throw i;
                 $("#checkBlacklistMsg").text(`检测屏蔽演员信息, 发生错误: ${a}`), clog.error("检测屏蔽演员信息, 发生错误:", a, i),
                 show.error("检测屏蔽演员信息, 发生错误:" + i, "bottom", "right");
             }
@@ -151,12 +163,7 @@ class et extends X {
             const i = a.find(".pagination-next").attr("href");
             if (i) nextUrl = new URL(i, this.javDbUrl).href;
         } catch (n) {
-            clog.error(`抓取 ${e} 时发生错误，跳过当前页继续:`, n);
-            const url = new URL(e), page = parseInt(url.searchParams.get("page") || "1");
-            if (!isNaN(page)) {
-                url.searchParams.set("page", String(page + 1));
-                nextUrl = url.href;
-            }
+            throw clog.error(`抓取 ${e} 时发生错误，停止本轮同步:`, n), n;
         }
         if (nextUrl) await this.scrapeActorInfo(nextUrl, t);
     }
@@ -192,6 +199,7 @@ class et extends X {
                     await this.parsePage(t, a, n, d, g);
                 }));
             } catch (s) {
+                if (this.isNetworkBlocked(s)) throw s;
                 clog.error("检测屏蔽演员信息, 发生错误:", i, s), console.error("检测屏蔽演员信息, 发生错误:", i, s), show.error("检测屏蔽演员信息, 发生错误:" + s, "bottom", "right");
             }
         })), await this.storageQueue.waitAllFinished(), localStorage.setItem(this.lastCheckNewVideoTimeKey, utils.getNowStr()),

@@ -114,23 +114,6 @@ class Re extends X {
             })) : i(t, e);
         }))) : e.append('<div class="magnet-error">没有找到相关结果</div>');
     }
-    async parseBTSOW(e, t, n, a) {
-        try {
-            const i = await gmHttp.post(t.url, [{ search: n }, 50, 1]), s = i.data || [], o = [];
-            for (let e = 0; e < s.length; e++) {
-                let t = s[e];
-                o.push({
-                    title: t.name,
-                    magnet: "magnet:?xt=urn:btih:" + t.hash,
-                    size: (t.size / 1073741824).toFixed(2) + " GB",
-                    date: utils.formatDate(new Date(1e3 * t.lastUpdateTime))
-                });
-            }
-            o.length > 0 && this.displayResults(e, o, t.name);
-        } catch (i) {
-            e.html(`<div class="magnet-error">从 ${escapeHtml(t.name)} 获取数据失败: ${escapeHtml(String(i.message || i))}</div>`);
-        }
-    }
     parseTorrentList(e, t) {
         const n = utils.htmlTo$dom(e), a = [];
         return n.find(".torrent-list tbody tr").each(((e, n) => {

@@ -5,7 +5,7 @@ const DEFAULT_JAVDB_PLUGINS = [
     He, ye, ce, ae, ke,
     he, be, Ze, ze,
     Re, Ve, Se, Xe, pt,
-    et, mt, StatsPlugin, MobileBottomBarPlugin
+    et, StatsPlugin, MobileBottomBarPlugin
 ];
 
 const DEFAULT_JAVBUS_PLUGINS = [

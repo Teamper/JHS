@@ -47,35 +47,6 @@ class Ve extends X {
         let r = o.find("a:contains('CLICK HERE')").attr("href") || o.find("img[src*='_s.jpg']").attr("src");
         return r ? r.replace(".th", "") : (clog.error("JavStore, 解析预览图失败:", t), null);
     }
-    async getJavBestScreenShot(e) {
-        let t = `https://javbest.net/?s=${e}`;
-        clog.log("正在解析缩略图:", t);
-        let n = await gmHttp.get(t);
-        const a = utils.htmlTo$dom(n), i = a.find(".app_loop_thumb a").first().attr("href");
-        if (!i) throw clog.error("解析JavBest搜索页失败:", t), new Error("解析JavBest搜索页失败");
-        const s = a.find(".app_loop_thumb a").first().attr("title");
-        if (!s.toLowerCase().includes(e.toLowerCase())) throw clog.error("解析JavBest搜索页失败:", s),
-        new Error("解析JavBest搜索页失败");
-        const o = await gmHttp.get(i);
-        let r = $(o).find('#content a img[src*="_t.jpg"]').attr("src");
-        if (!r) throw clog.error("解析JavBest缩略图失败:", t), new Error("解析JavBest缩略图失败");
-        return r = r.replace("_t", "").replace("http:", "https:"), r;
-    }
-    async getJavFreeScreenShot(e) {
-        let t = `https://javfree.me/search/${e}/`, n = await gmHttp.get(t);
-        const a = utils.htmlTo$dom(n).find("article h2.entry-title a");
-        if (!a || 0 === a.length) throw clog.error("解析JavFree搜索页失败:", t), new Error("解析JavFree搜索页失败");
-        let i = $(a[0]).attr("href"), s = await gmHttp.get(i);
-        const o = utils.htmlTo$dom(s).find("#main > article > .entry-content > p img");
-        if (!o || 0 === o.length) throw clog.error("解析JavFree详情页失败:", i), new Error("解析JavFree详情页失败");
-        const r = o.filter((function() {
-            const e = $(this).attr("src");
-            return e && e.toLowerCase().endsWith(".jpeg");
-        })).map((function() {
-            return $(this).attr("src");
-        })).get();
-        return r.at(-1);
-    }
     addImg(e, t) {
         t && (r && $(".screen-container").html(`<img src="${t}" alt="${e}" loading="lazy" style="width: 100%;">`),
         l && $(".screen-container").html(`<div class="photo-frame"><img src="${t}" style="height: inherit;width: 100%;" title="${e}" alt="${e}"></div>`),

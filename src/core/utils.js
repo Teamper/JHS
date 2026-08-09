@@ -29,7 +29,14 @@ class J {
             webm: "video/webm",
             ogg: "audio/ogg"
         }), i(this, "timers", new Map), i(this, "insertStyle", (e => {
-            e && (-1 === e.indexOf("<style>") && (e = "<style>" + e + "</style>"), $("head").append(e));
+            const t = (Array.isArray(e) ? e : [ e ]).filter(Boolean);
+            if (0 === t.length) return;
+            const n = document.createDocumentFragment();
+            for (const e of t) {
+                const t = document.createElement("style");
+                t.textContent = e.replace(/^\s*<style[^>]*>/i, "").replace(/<\/style>?\s*$/i, ""), n.append(t);
+            }
+            document.head.append(n);
         })), i(this, "layerIndexStack", []), J.instance || (J.instance = this), J.instance;
     }
     importResource(e) {
@@ -198,9 +205,6 @@ class J {
             }));
         }));
     }
-    simpleId() {
-        return crypto.randomUUID().replace("-", "");
-    }
     isUrl(e) {
         try {
             return new URL(e), !0;
@@ -218,9 +222,6 @@ class J {
         const a = new RegExp(`(?:^|&)${t}=([^&]*)`), i = n.match(a);
         let s = "";
         return i && i[1] && (s = decodeURIComponent(i[1].replace(/\+/g, " "))), s ? "true" === s || "false" === s ? "true" === s.toLowerCase() : "string" != typeof s || "" === s.trim() || isNaN(Number(s)) ? s : Number(s) : s;
-    }
-    reBuildSignature() {
-        return O();
     }
     getResponsiveArea(e) {
         const t = window.innerWidth;
@@ -243,21 +244,6 @@ class J {
     htmlTo$dom(e) {
         const t = new DOMParser;
         return $(t.parseFromString(e, "text/html"));
-    }
-    addCookie(e, t = {}) {
-        const {maxAge: n = 604800, path: a = "/", domain: i = "", secure: s = !1, sameSite: o = "Lax"} = t;
-        e.split(";").forEach((e => {
-            const t = e.trim();
-            if (t) {
-                const e = t.split("=");
-                if (e.length >= 2 && e[0].trim()) {
-                    let t = [ `${e[0].trim()}=${e.slice(1).join("=")}` ];
-                    n > 0 && t.push(`max-age=${n}`), t.push(`path=${a}`), i && t.push(`domain=${i}`),
-                    s && t.push("Secure"), o && t.push(`SameSite=${o}`), clog.debug("document.cookie = '" + t.join("; ") + "'"),
-                    document.cookie = t.join("; ");
-                }
-            }
-        }));
     }
     isHidden(e) {
         const t = e.jquery ? e[0] : e;
@@ -320,28 +306,9 @@ class J {
             return n > 0 && clog.debug(`[重试] 请求成功，共发起 ${n + 1} 次。`), t;
         } catch (a) {
             const e = a instanceof Error ? a.message : "object" == typeof a ? JSON.stringify(a) : String(a);
-            if (e.includes("Just a moment") || e.includes("重定向") || e.toLowerCase().includes("404 not found")) throw a;
+            if (a?._cfBlocked || a?._circuitBroken || e.includes("Just a moment") || e.includes("重定向") || e.toLowerCase().includes("404 not found")) throw a;
             if (n++, n === t) throw clog.debug(`[重试] 达到最大重试次数 (${t})，最终失败：`, a), a;
             await this.sleep(500 * n), clog.debug(`[重试] 请求失败，准备第 ${n + 1} 次重试, 错误信息: ${e}`);
-        }
-    }
-    async pingLocalService(e, t = 3e4, timeout = 2e3) {
-        const n = "jhs_ping_" + e, a = sessionStorage.getItem(n);
-        if (a) {
-            const {result: e, time: n} = JSON.parse(a);
-            if (Date.now() - n < t) return e;
-        }
-        try {
-            const t = new AbortController, a = setTimeout((() => t.abort()), timeout), i = await fetch(e, {
-                signal: t.signal,
-                mode: "no-cors"
-            });
-            clearTimeout(a);
-            const s = {ok: !0, url: e};
-            return sessionStorage.setItem(n, JSON.stringify({result: s, time: Date.now()})), s;
-        } catch (i) {
-            const t = {ok: !1, url: e, error: i.message};
-            return sessionStorage.setItem(n, JSON.stringify({result: t, time: Date.now()})), t;
         }
     }
 }

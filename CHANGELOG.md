@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-08-09
+
+### Fixed
+- 修复 Cloudflare 阻断后收藏演员分页不断猜测下一页并无限递归的问题；挑战页、熔断状态现在会立即停止重试和当前批量任务，避免错误日志与 Toast 风暴拖死页面。
+
+### Changed
+- 将新作品面板初始化和后台检查任务延后到浏览器空闲阶段，首屏插件并发完成后即可进入就绪状态。
+- 插件基类的通用 SVG 改为原型共享，避免每个插件实例重复保存相同图标属性。
+- 构建产物启用仅语法与空白压缩，保留标识符名称，并增加 620 KiB 体积门禁。
+- 移除已失效且代码未使用的 GreasyFork `parallel_GM_xmlhttpRequest.js` 依赖。
+- 移除没有配套后端实现的 `LocalPlugin`、本地端口探测及 `127.0.0.1` 权限，同时清理失去配置入口的 BTSOW 解析器和 5 个旧外部服务权限。
+- 移除 16 个无内部调用的网络、存储、Cookie、分页及废弃图片源方法，并同步删除 JavBest 冗余权限。
+
+### Performance
+- 合并同一 IndexedDB 键的并发缓存读取，并通过缓存代次阻止失效前的旧读取回填。
+- 将各插件 CSS 收集后一次性写入文档，减少启动阶段重复 DOM 修改和样式重计算。
+- 新增 `pluginManager.getStartupReport()` 启动报告，设置页同步展示即时/空闲阶段、启动摘要和任务状态。
+
+### Tests
+- 增加启动任务调度、CSS 批量插入、共享 SVG、存储并发读取、缓存失效竞态、网络阻断快速终止、死代码及遗留服务清理测试。
+
 ## [4.9.0] - 2026-07-08
 
 ### Fixed
@@ -368,7 +389,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v4.9.0...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v5.0.0...HEAD
+[5.0.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.9.0...v5.0.0
 [4.9.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.8.1...v4.9.0
 [4.8.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.8.0...v4.8.1
 [4.8.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.7.2...v4.8.0

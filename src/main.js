@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS-YA
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      4.9.0
+// @version      5.0.0
 // @author       yaoser
 // @description  Jav-鉴黄师个人维护版：收藏、屏蔽、标记已下载、演员黑名单、收藏演员同步、新作品检测、热播/Top250/Fc2ppv/评论增强、相关清单、WebDAV数据备份、以图识图、字幕搜索；支持 JavDB / JavBus。
 // @license      MIT
@@ -23,7 +23,6 @@
 // @exclude      https://*javsee*/*actresses
 // @exclude      https://*seejav*/forum/*
 // @exclude      https://*seejav*/*actresses
-// @require      https://update.greasyfork.org/scripts/540597/1613170/parallel_GM_xmlhttpRequest.js
 // @require      https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js
 // @require      https://cdn.jsdelivr.net/npm/tabulator-tables@6.3.1/dist/js/tabulator.min.js
 // @require      https://cdn.jsdelivr.net/npm/layui-layer@1.0.9/dist/layer.min.js
@@ -32,9 +31,7 @@
 // @require      https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js
 // @require      https://cdn.jsdelivr.net/npm/viewerjs@1.11.1/dist/viewer.min.js
 // @connect      xunlei.com
-// @connect      geilijiasu.com
 // @connect      ja.wikipedia.org
-// @connect      beta.magnet.pics
 // @connect      jdforrepam.com
 // @connect      cc3001.dmm.co.jp
 // @connect      cc3001.dmm.com
@@ -47,14 +44,10 @@
 // @connect      123av.com
 // @connect      u3c3.com
 // @connect      u9a9.com
-// @connect      btsow.lol
 // @connect      sukebei.nyaa.si
 // @connect      javstore.net
-// @connect      3xplanet.com
-// @connect      javbest.net
 // @connect      missav.live
 // @connect      jable.tv
-// @connect      www.av.gl
 // @connect      jav.rs
 // @connect      javtrailers.com
 // @connect      javdb.com
@@ -63,7 +56,6 @@
 // @connect      yun.123pan.com
 // @connect      supjav.com
 // @connect      translate-pa.googleapis.com
-// @connect      127.0.0.1
 // @connect      *
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
@@ -107,7 +99,7 @@ const vt = function() {
     return e;
 }();
 
-vt.processCss().catch((e => console.error("[JHS] processCss failed:", e))), async function() {
+(async function() {
     window.isDetailPage = function() {
         let e = window.location.href;
         return r ? e.split("?")[0].includes("/v/") : !!l && $("#magnet-table").length > 0;
@@ -117,7 +109,8 @@ vt.processCss().catch((e => console.error("[JHS] processCss failed:", e))), asyn
     }(), window.isFc2Page = function() {
         let e = window.location.href;
         return e.includes("advanced_search?type=3") || e.includes("advanced_search?type=100");
-    }(), await (async () => {
+    }();
+    const e = (async () => {
         const e = await storageManager.getDataVersion();
         e < CURRENT_DATA_VERSION && (await storageManager.merge_table_name(),
         await storageManager.clean_no_url_blacklist(),
@@ -126,8 +119,9 @@ vt.processCss().catch((e => console.error("[JHS] processCss failed:", e))), asyn
         await storageManager.merge_favoriteActress(),
         await storageManager.merge_tow_car_list_table(),
         await storageManager.setDataVersion(CURRENT_DATA_VERSION));
-    })(),
+    })();
+    await Promise.all([ vt.processCss(), e ]),
     r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie) && show.error("请切换到中文语言下才可正常使用本脚本", {
         duration: -1
-    }), vt.processPlugins().catch((e => console.error("[JHS] processPlugins failed:", e)));
-}();
+    }), await vt.processPlugins();
+})().catch((e => console.error("[JHS] bootstrap failed:", e)));

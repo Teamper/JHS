@@ -61,7 +61,6 @@ const pluginPaths = [
   "translate/translate.js",
   "new-video/task.js",
   "new-video/new-video.js",
-  "backup/local.js",
   "one-two-three/offline.js",
   "stats/stats.js",
   "status/mobile-bottom-bar.js",
@@ -94,29 +93,23 @@ if (packageJson.version !== userscriptVersion) {
   throw new Error(`Version mismatch: package.json ${packageJson.version}, userscript ${userscriptVersion}`);
 }
 
-await esbuild.build({
-  stdin: {
-    contents: entry,
-    loader: "js",
-    resolveDir: repoRoot,
-    sourcefile: "src/main.js"
-  },
-  bundle: true,
-  write: false,
-  format: "iife",
+const transformed = await esbuild.transform(entry, {
+  loader: "js",
   target: "es2020",
   charset: "utf8",
   legalComments: "none",
-  banner: {
-    js: metadata
-  },
+  minifySyntax: true,
+  minifyWhitespace: true,
+  minifyIdentifiers: false,
+  sourcefile: "src/main.js",
   logLevel: "silent"
 });
 
-const output = `${metadata}\n\n${entry}`;
+const output = `${metadata}\n\n${transformed.code.trimStart()}`;
+const outputBytes = Buffer.byteLength(output, "utf8");
 
 await mkdir(distDir, { recursive: true });
 await writeFile(distPath, output, "utf8");
 await writeFile(rootPath, output, "utf8");
 
-console.log("Built dist/JHS.user.js and JHS.user.js from src/core, src/plugins, and src/main.js");
+console.log(`Built dist/JHS.user.js and JHS.user.js (${outputBytes} bytes)`);

@@ -99,12 +99,6 @@ class Be extends X {
         if (!window.isListPage) return !0;
         return await storageManager.getSetting("autoPage", _), [ "search?q", "handlePlayback=1", "handleTop=1", "/want_watch_videos", "/watched_videos", "/advanced_search?type=100" ].some((e => o.includes(e)));
     }
-    updatePageUrl_old(e) {
-        if (window.history.pushState({}, "", e), l) {
-            const t = e.match(/\/(page|star\/.*?)\/(\d+)/), n = t ? parseInt(t[2], 10) : null;
-            document.title = document.title.replace(/第\d+頁/, "第" + n + "頁");
-        }
-    }
     updatePageUrl(e) {
         window.history.replaceState({}, "", e), l && (document.title = document.title.replace(/第\d+頁/, `第${this.currentPage}頁`));
     }

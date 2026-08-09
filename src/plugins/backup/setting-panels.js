@@ -181,20 +181,22 @@ async function renderPluginMgmtPanel() {
         $("#pm-disabled").text(list.length);
         show.ok(`插件 "${name}" 已${$(e.target).is(":checked") ? "启用" : "禁用"}，刷新后生效`);
     });
-    const timings = unsafeWindow.pluginManager.getTimings();
+    const startup = unsafeWindow.pluginManager.getStartupReport?.(), timings = unsafeWindow.pluginManager.getTimings();
+    const formatMs = value => Number.isFinite(value) ? value.toFixed(1) : "0.0";
+    let startupHtml = startup ? `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:13px;"><span>就绪: <strong>${formatMs(startup.readyMs)} ms</strong></span><span>注册: ${formatMs(startup.registrationMs)} ms</span><span>样式: ${formatMs(startup.cssMs)} ms</span><span>即时插件: ${formatMs(startup.immediateMs)} ms</span><span>空闲任务: ${startup.idleCompleted}/${startup.idleCompleted + startup.idlePending}</span></div><p style="color:#888;font-size:12px;margin:0 0 8px;">就绪耗时不包含 @require 下载及浏览器脚本解析时间。</p>` : "";
     if (timings.length) {
         const sorted = [...timings].sort((a, b) => b.elapsed - a.elapsed);
         let tHtml = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
-        tHtml += '<tr style="background:#f0f0f0;"><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd;">插件</th><th style="text-align:right;padding:6px;border-bottom:1px solid #ddd;">耗时(ms)</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">状态</th></tr>';
+        tHtml += '<tr style="background:#f0f0f0;"><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd;">插件</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">阶段</th><th style="text-align:right;padding:6px;border-bottom:1px solid #ddd;">耗时(ms)</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">状态</th></tr>';
         for (const t of sorted) {
             const color = t.status === "disabled" ? "#ccc" : t.elapsed > 500 ? "#e74c3c" : t.elapsed > 200 ? "#f39c12" : "#333";
-            const statusText = t.status === "disabled" ? "已禁用" : t.status === "error" ? "错误" : "正常";
-            tHtml += `<tr><td style="padding:4px 6px;border-bottom:1px solid #f0f0f0;color:${color}">${escapeHtml(t.name)}</td><td style="text-align:right;padding:4px 6px;border-bottom:1px solid #f0f0f0;color:${color};font-weight:${t.elapsed > 500 ? "bold" : "normal"}">${t.elapsed.toFixed(1)}</td><td style="text-align:center;padding:4px 6px;border-bottom:1px solid #f0f0f0;">${statusText}</td></tr>`;
+            const statusText = t.status === "disabled" ? "已禁用" : t.status === "error" ? "错误" : t.status === "pending-idle" ? "等待空闲" : t.status === "skipped-mobile" ? "移动端跳过" : "正常";
+            tHtml += `<tr><td style="padding:4px 6px;border-bottom:1px solid #f0f0f0;color:${color}">${escapeHtml(t.name)}</td><td style="text-align:center;padding:4px 6px;border-bottom:1px solid #f0f0f0;">${t.startupMode === "idle" ? "空闲" : "即时"}</td><td style="text-align:right;padding:4px 6px;border-bottom:1px solid #f0f0f0;color:${color};font-weight:${t.elapsed > 500 ? "bold" : "normal"}">${t.elapsed.toFixed(1)}</td><td style="text-align:center;padding:4px 6px;border-bottom:1px solid #f0f0f0;">${statusText}</td></tr>`;
         }
         tHtml += '</table>';
-        $("#plugin-timing-table").html(tHtml);
+        $("#plugin-timing-table").html(startupHtml + tHtml);
     } else {
-        $("#plugin-timing-table").html('<p style="color:#888;font-size:13px;">暂无数据，刷新页面后自动采集。</p>');
+        $("#plugin-timing-table").html(startupHtml + '<p style="color:#888;font-size:13px;">暂无数据，刷新页面后自动采集。</p>');
     }
     const errorLog = unsafeWindow.pluginManager.getErrorLog();
     if (errorLog.length) {

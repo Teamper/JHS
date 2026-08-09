@@ -28,18 +28,39 @@ let z = class n {
         i(this, "cacheTitleFilterKeyword", null), i(this, "cacheFavoriteActresses", null),
         i(this, "cache_filter_actor_actress_car_list", null), i(this, "cacheSettingObj", null),
         i(this, "cacheCarMap", null), i(this, "cacheStatusMap", null),
-        i(this, "cacheBlacklistMap", null), i(this, "cacheFavoriteActressMap", null),
+        i(this, "cacheBlacklistMap", null),
+        i(this, "_pendingReads", new Map()), i(this, "_cacheGenerations", new Map()),
         i(this, "_cacheStats", { hits: 0, misses: 0 }),
         n.instance) throw new Error("StorageManager已被实例化过了!");
         n.instance = this;
     }
     async getDataVersion() { return await this.forage.getItem("data_version") || 0; }
     async setDataVersion(e) { await this.forage.setItem("data_version", e); }
+    _getCacheGeneration(e) { return this._cacheGenerations.get(e) || 0; }
+    _invalidateRead(e) {
+        this._cacheGenerations.set(e, this._getCacheGeneration(e) + 1);
+        this._pendingReads.delete(e);
+    }
+    /** 合并同一存储键的并发读取，并阻止失效前的旧读取回填缓存。 */
+    async _readCached(e, t, n) {
+        if (null !== this[e]) return this[e];
+        const a = this._pendingReads.get(t);
+        if (a) return a;
+        const i = this._getCacheGeneration(t), s = this.forage.getItem(t).then((a) => {
+            const s = a || n;
+            return i === this._getCacheGeneration(t) && null === this[e] && (this[e] = s), s;
+        }).finally(() => {
+            this._pendingReads.get(t) === s && this._pendingReads.delete(t);
+        });
+        return this._pendingReads.set(t, s), s;
+    }
     _invalidateCache(e = null) {
+        const t = [ this.car_list_key, this.blacklist_key, this.filter_keyword_title_key, this.favorite_actresses_key, this.blacklist_car_list_key, this.setting_key ];
+        (null === e ? t : t.includes(e) ? [ e ] : []).forEach((e => this._invalidateRead(e)));
         (!e || e === this.car_list_key) && (this.cacheCarList = null, this.cacheCarMap = null, this.cacheStatusMap = null);
         (!e || e === this.blacklist_key) && (this.cacheBlacklist = null, this.cacheBlacklistMap = null);
         (!e || e === this.filter_keyword_title_key) && (this.cacheTitleFilterKeyword = null);
-        (!e || e === this.favorite_actresses_key) && (this.cacheFavoriteActresses = null, this.cacheFavoriteActressMap = null);
+        (!e || e === this.favorite_actresses_key) && (this.cacheFavoriteActresses = null);
         (!e || e === this.blacklist_car_list_key) && (this.cache_filter_actor_actress_car_list = null);
         (!e || e === this.setting_key) && (this.cacheSettingObj = null);
     }
@@ -67,8 +88,7 @@ let z = class n {
         return true;
     }
     async getCarList() {
-        return null === this.cacheCarList && (this.cacheCarList = await this.forage.getItem(this.car_list_key) || []),
-        this.cacheCarList;
+        return this._readCached("cacheCarList", this.car_list_key, []);
     }
     async getCarMap() {
         if (null === this.cacheCarMap) {
@@ -213,8 +233,7 @@ let z = class n {
         return 0 !== s && (await this._setItemAndInvalidate(this.car_list_key, i), s);
     }
     async getBlacklist() {
-        return null === this.cacheBlacklist && (this.cacheBlacklist = await this.forage.getItem(this.blacklist_key) || []),
-        this.cacheBlacklist;
+        return this._readCached("cacheBlacklist", this.blacklist_key, []);
     }
     async getBlacklistMap() {
         if (null === this.cacheBlacklistMap) {
@@ -255,8 +274,7 @@ let z = class n {
         t.length !== n.length && await this._setItemAndInvalidate(this.blacklist_key, n);
     }
     async getBlacklistCarList() {
-        return null !== this.cache_filter_actor_actress_car_list || (this.cache_filter_actor_actress_car_list = await this.forage.getItem(this.blacklist_car_list_key) || []),
-        this.cache_filter_actor_actress_car_list;
+        return this._readCached("cache_filter_actor_actress_car_list", this.blacklist_car_list_key, []);
     }
     async batchSaveBlacklistCarList(e) {
         const t = await this.getBlacklistCarList(), n = JSON.parse(JSON.stringify(t));
@@ -274,15 +292,7 @@ let z = class n {
         window.cleanCache_filter_actor_actress_car_list());
     }
     async getFavoriteActressList() {
-        return null === this.cacheFavoriteActresses && (this.cacheFavoriteActresses = await this.forage.getItem(this.favorite_actresses_key) || []),
-        this.cacheFavoriteActresses;
-    }
-    async getActressMap() {
-        if (null === this.cacheFavoriteActressMap) {
-            const e = await this.getFavoriteActressList();
-            this.cacheFavoriteActressMap = createIndexedMap(e, "starId");
-        }
-        return this.cacheFavoriteActressMap;
+        return this._readCached("cacheFavoriteActresses", this.favorite_actresses_key, []);
     }
     async addFavoriteActressList(e) {
         return this.withActressLock(async () => {
@@ -358,8 +368,7 @@ let z = class n {
         });
     }
     async getTitleFilterKeyword() {
-        return null === this.cacheTitleFilterKeyword && (this.cacheTitleFilterKeyword = await this.forage.getItem(this.filter_keyword_title_key) || []),
-        this.cacheTitleFilterKeyword;
+        return this._readCached("cacheTitleFilterKeyword", this.filter_keyword_title_key, []);
     }
     async getReviewFilterKeywordList() {
         return await this.forage.getItem(this.filter_keyword_review_key) || [];
@@ -368,8 +377,7 @@ let z = class n {
         return s(this, e, t).call(this, n, this.filter_keyword_review_key, "评论关键词");
     }
     async getSetting(e = null, t) {
-        this.cacheSettingObj || (this.cacheSettingObj = await this.forage.getItem(this.setting_key) || {});
-        let n = this.cacheSettingObj;
+        let n = await this._readCached("cacheSettingObj", this.setting_key, {});
         if (null === e) return n;
         const a = n[e];
         return a ? "true" === a || "false" === a ? "true" === a.toLowerCase() : "string" != typeof a || "" === a.trim() || isNaN(Number(a)) ? a : Number(a) : t;
@@ -420,17 +428,6 @@ let z = class n {
     async clearThirdPartyCache() {
         await this.forage.removeItem(this.third_party_cache_key);
     }
-    async getThirdPartyCacheStats() {
-        const e = await this.getThirdPartyCache(), t = Date.now();
-        let n = 0, a = 0;
-        return Object.values(e).forEach((e => {
-            n++, e && e.time && e.ttl && t - e.time < e.ttl && a++;
-        })), {
-            total: n,
-            valid: a,
-            expired: n - a
-        };
-    }
     async cachedRequest(e, t, n) {
         const a = Date.now(), i = await this.getThirdPartyCache(), s = i[e];
         if (s && s.time && a - s.time < (s.ttl || t)) return this._cacheStats.hits++, s.data;
@@ -452,7 +449,6 @@ let z = class n {
             rate: e > 0 ? (this._cacheStats.hits / e * 100).toFixed(1) + "%" : "N/A"
         };
     }
-    resetCacheHitStats() { this._cacheStats = { hits: 0, misses: 0 }; }
     _groupDuplicateItems(e, t) {
         return groupDuplicateItems(e, t);
     }

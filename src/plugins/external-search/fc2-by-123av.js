@@ -237,19 +237,6 @@ class Oe extends X {
         Array.isArray(i) && i.length > 0 ? s = i.map(((e, t) => `\n                <a href="${e}" data-fancybox="movie-gallery" data-caption="剧照 ${t + 1}">\n                    <img src="${e}" class="movie-image-thumb" loading="lazy" alt=""/>\n                </a>\n            `)).join("") : $(".movie-gallery").html("<h4>剧照: 暂无剧照</h4>"),
         $(".image-list").html(s), this.handleLongImg(t);
     }
-    async getMovie(e, t) {
-        let n = `${await this.getBaseUrl()}/ajax/v/${e}/videos`, a = loading();
-        try {
-            let e = (await gmHttp.get(n)).result.watch;
-            return e.length > 0 ? (e.forEach((e => {
-                e.url = e.url + "?poster=" + t;
-            })), e) : null;
-        } catch (i) {
-            console.error(i);
-        } finally {
-            a.close();
-        }
-    }
     markDataListHtml(e) {
         let t = "";
         return e.forEach((e => {

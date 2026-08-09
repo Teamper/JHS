@@ -311,18 +311,6 @@ class Se extends X {
             }
         });
     }
-    getCurrentStarUrl() {
-        let e = window.location.href.replace(/([&?])sort_type=[^&]+(&|$)/, "$1");
-        e = e.replace(/[&?]$/, ""), e = e.replace(/\?&/, "?");
-        let t = e;
-        return t = t.replace(/([&?])page=\d+(&|$)/, "$1"), t = t.replace(/[&?]$/, ""), t = t.replace(/\?&/, "?"),
-        t = t.replace(/\/(\d+)(?:\/(\d+))?(\?|$)/, ((e, t, n, a) => void 0 !== n ? `/${t}${a}` : e)),
-        t;
-    }
-    parseUrlId(e) {
-        if (!e) throw new Error("url未传入");
-        return new URL(e).pathname.split("/").filter((e => "" !== e.trim())).pop();
-    }
     async filterAllVideo(e, t) {
         let n, a;
         if (t ? (l && t.find(".avatar-box").length > 0 && t.find(".avatar-box").parent().remove(),
