@@ -57,19 +57,41 @@ assert(extractVersion(distOutput) === version, "dist/JHS.user.js version does no
 assert(hash(rootOutput) === hash(distOutput), "dist/JHS.user.js and root JHS.user.js are not byte-identical");
 assert(Buffer.byteLength(rootOutput, "utf8") <= 620 * 1024, "generated userscript exceeds 620 KiB size budget");
 
-assert(extractMetadata(rootOutput, "name") === "JHS-YA", "userscript @name changed");
+assert(extractMetadata(rootOutput, "name") === "JHS", "userscript @name changed");
+assert(extractMetadata(rootOutput, "author") === "JHS Contributors", "userscript @author changed");
+assert(
+  extractMetadata(rootOutput, "description")?.startsWith("JAV Helper Suite："),
+  "userscript @description changed"
+);
 assert(
   extractMetadata(rootOutput, "namespace") === "https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya",
   "userscript @namespace changed"
 );
 assert(
-  extractMetadata(rootOutput, "downloadURL") === "https://github.com/Yaoser-Archive/JHS/releases/latest/download/JHS.user.js",
+  extractMetadata(rootOutput, "homepageURL") === "https://github.com/Teamper/JHS",
+  "userscript @homepageURL changed"
+);
+assert(
+  extractMetadata(rootOutput, "supportURL") === "https://github.com/Teamper/JHS/issues",
+  "userscript @supportURL changed"
+);
+assert(
+  extractMetadata(rootOutput, "downloadURL") === "https://github.com/Teamper/JHS/releases/latest/download/JHS.user.js",
   "userscript @downloadURL changed"
 );
 assert(
-  extractMetadata(rootOutput, "updateURL") === "https://raw.githubusercontent.com/Yaoser-Archive/JHS/main/JHS.user.js",
+  extractMetadata(rootOutput, "updateURL") === "https://raw.githubusercontent.com/Teamper/JHS/main/JHS.user.js",
   "userscript @updateURL changed"
 );
+
+const legacyBrands = [
+  ["JHS", "YA"].join("-"),
+  ["鉴", "黄", "师"].join(""),
+  ["Yao", "ser"].join("")
+];
+for (const legacyBrand of legacyBrands) {
+  assert(!rootOutput.includes(legacyBrand), `generated userscript contains legacy brand: ${legacyBrand}`);
+}
 
 assertIncludes(workflow, "npm run check", "release workflow");
 assertIncludes(workflow, "- main", "release workflow main branch");

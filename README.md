@@ -1,19 +1,21 @@
 <div align="center">
 
-# JHS-YA（鉴黄师）
+# JHS
 
-面向 JavDB、JavBus 的模块化 Tampermonkey 增强脚本
+**JAV Helper Suite**
 
-[![Version](https://img.shields.io/github/v/release/Yaoser-Archive/JHS?label=version)](https://github.com/Yaoser-Archive/JHS/releases/latest)
-[![Userscript](https://img.shields.io/badge/Tampermonkey-userscript-f59e0b)](https://github.com/Yaoser-Archive/JHS/releases/latest/download/JHS.user.js)
+JAV 浏览、收藏与信息增强脚本
+
+[![Version](https://img.shields.io/github/v/release/Teamper/JHS?label=version)](https://github.com/Teamper/JHS/releases/latest)
+[![Userscript](https://img.shields.io/badge/Tampermonkey-userscript-f59e0b)](https://github.com/Teamper/JHS/releases/latest/download/JHS.user.js)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-43853d)](package.json)
 [![License](https://img.shields.io/badge/license-MIT-22c55e)](src/main.js)
 
-[安装正式版](https://github.com/Yaoser-Archive/JHS/releases/latest/download/JHS.user.js) · [查看更新记录](CHANGELOG.md) · [反馈问题](https://github.com/Yaoser-Archive/JHS/issues)
+[安装正式版](https://github.com/Teamper/JHS/releases/latest/download/JHS.user.js) · [查看更新记录](CHANGELOG.md) · [反馈问题](https://github.com/Teamper/JHS/issues)
 
 </div>
 
-JHS-YA 将作品状态、演员收藏、新作追踪、外部检索、媒体预览、字幕搜索、云盘离线和数据备份整合到站点页面中。脚本以插件方式按页面加载，并针对桌面端和移动端提供对应交互。
+JHS 将作品状态、演员收藏、新作追踪、外部检索、媒体预览、字幕搜索、云盘离线和数据备份整合到站点页面中。脚本以插件方式按页面加载，并针对桌面端和移动端提供对应交互。
 
 > 本项目仅提供网页信息整理与效率增强能力。请遵守所在地法律、目标网站条款及第三方服务规则，并仅处理你有权访问的内容。
 
@@ -50,9 +52,9 @@ JHS-YA 将作品状态、演员收藏、新作追踪、外部检索、媒体预�
 
 在浏览器中安装 Tampermonkey 或兼容的用户脚本管理器，并允许其运行用户脚本。
 
-### 2. 安装 JHS-YA
+### 2. 安装 JHS
 
-点击 **[安装最新正式版](https://github.com/Yaoser-Archive/JHS/releases/latest/download/JHS.user.js)**，在用户脚本管理器中确认安装。
+点击 **[安装最新正式版](https://github.com/Teamper/JHS/releases/latest/download/JHS.user.js)**，在用户脚本管理器中确认安装。
 
 安装后的更新来源：
 
@@ -121,9 +123,9 @@ src/main.js
 
 环境要求：Node.js 20 或更高版本。
 
+克隆仓库并进入项目根目录后执行：
+
 ```bash
-git clone https://github.com/Yaoser-Archive/JHS.git
-cd JHS
 npm ci
 npm run check
 ```
@@ -163,7 +165,7 @@ pluginManager.getTimings().sort((a, b) => b.elapsed - a.elapsed)
 - `main`：正式发布分支。CI 构建产物、创建版本标签并发布 GitHub Release。
 - `dev`：预览分支。CI 构建并上传 `JHS-dev.user.js` artifact。
 
-正式版入口始终指向 [latest release](https://github.com/Yaoser-Archive/JHS/releases/latest)，历史变化见 [CHANGELOG.md](CHANGELOG.md)。
+正式版入口始终指向 [latest release](https://github.com/Teamper/JHS/releases/latest)，历史变化见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 常见问题
 
@@ -191,7 +193,7 @@ pluginManager.getTimings().sort((a, b) => b.elapsed - a.elapsed)
 <details>
 <summary>如何反馈问题</summary>
 
-前往 [GitHub Issues](https://github.com/Yaoser-Archive/JHS/issues)，说明复现步骤、目标站点、脚本版本和控制台错误。请勿提交账号、Cookie、WebDAV 密码或云盘凭据。
+前往 [GitHub Issues](https://github.com/Teamper/JHS/issues)，说明复现步骤、目标站点、脚本版本和控制台错误。请勿提交账号、Cookie、WebDAV 密码或云盘凭据。
 
 </details>
 

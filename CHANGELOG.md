@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-08-09
+
+### Changed
+- 正式品牌统一为 `JHS`，英文全称调整为 `JAV Helper Suite`，移除旧名称中的个人维护标识。
+- UserScript 作者统一为 `JHS Contributors`，简介改为面向 JavDB / JavBus 的功能定位说明。
+- npm 包名调整为 `jhs-userscript`，README 同步采用新的项目名称和品牌描述。
+- 项目主页、问题反馈、下载和自动更新地址统一迁移到 `Teamper/JHS`。
+- 保留 `JAV-JHS`、`jhs_*` 与 `jhs-*` 等内部兼容标识，确保现有数据、设置和页面交互可以原地升级。
+- 保留既有 UserScript namespace 作为兼容身份，避免升级后隔离已有 GM 存储和 123 云盘授权数据。
+
+### Fixed
+- 移除日志窗口中已经过期的 `V3.6.0` 固定版本文案。
+
 ## [5.0.2] - 2026-08-09
 
 ### Documentation
@@ -370,7 +383,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 构建产物仍然是单个 `JHS.user.js`，对终端用户透明。
 - 新增 CI/CD：版本一致性、产物字节一致性、回归门禁（39 插件、16 功能范围）。
 - 新增统计仪表盘、数据体检、第三方 TTL 缓存、数据版本化迁移。
-- 仓库地址迁移到 Yaoser-Archive，CI 自动构建发布。
+- 启用模块化仓库和 CI 自动构建发布。
 
 ### Removed
 - 移除阿里云盘备份（被 WebDAV 替代）。
@@ -399,39 +412,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v5.0.1...HEAD
-[5.0.1]: https://github.com/Yaoser-Archive/JHS/compare/v5.0.0...v5.0.1
-[5.0.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.9.0...v5.0.0
-[4.9.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.8.1...v4.9.0
-[4.8.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.8.0...v4.8.1
-[4.8.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.7.2...v4.8.0
-[4.7.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.7.0...v4.7.1
-[4.7.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.6.1...v4.7.0
-[4.6.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.6.0...v4.6.1
-[4.6.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.9...v4.6.0
-[4.5.9]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.8...v4.5.9
-[4.5.8]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.7...v4.5.8
-[4.5.7]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.6...v4.5.7
-[4.5.6]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.5...v4.5.6
-[4.5.5]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.4...v4.5.5
-[4.5.4]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.3...v4.5.4
-[4.5.3]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.2...v4.5.3
-[4.5.2]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.1...v4.5.2
-[4.5.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.5.0...v4.5.1
-[4.5.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.4.1...v4.5.0
-[4.4.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.4.0...v4.4.1
-[4.4.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.7...v4.4.0
-[4.3.7]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.3...v4.3.7
-[4.3.3]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.2...v4.3.3
-[4.3.2]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.1...v4.3.2
-[4.3.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.3.0...v4.3.1
-[4.3.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.2.0...v4.3.0
-[4.2.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.1.0...v4.2.0
-[4.1.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.4...v4.1.0
-[4.0.4]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.3...v4.0.4
-[4.0.3]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.2...v4.0.3
-[4.0.2]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.1...v4.0.2
-[4.0.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.0.0...v4.0.1
-[4.0.0]: https://github.com/Yaoser-Archive/JHS/compare/v3.8.0...v4.0.0
-[3.8.0]: https://github.com/Yaoser-Archive/JHS/compare/v3.7.0...v3.8.0
-[3.7.0]: https://github.com/Yaoser-Archive/JHS/releases/tag/v3.7.0
+[Unreleased]: ../../compare/v6.0.0...HEAD
+[6.0.0]: ../../compare/v5.0.2...v6.0.0
+[5.0.2]: ../../compare/v5.0.1...v5.0.2
+[5.0.1]: ../../compare/v5.0.0...v5.0.1
+[5.0.0]: ../../compare/v4.9.0...v5.0.0
+[4.9.0]: ../../compare/v4.8.1...v4.9.0
+[4.8.1]: ../../compare/v4.8.0...v4.8.1
+[4.8.0]: ../../compare/v4.7.2...v4.8.0
+[4.7.1]: ../../compare/v4.7.0...v4.7.1
+[4.7.0]: ../../compare/v4.6.1...v4.7.0
+[4.6.1]: ../../compare/v4.6.0...v4.6.1
+[4.6.0]: ../../compare/v4.5.9...v4.6.0
+[4.5.9]: ../../compare/v4.5.8...v4.5.9
+[4.5.8]: ../../compare/v4.5.7...v4.5.8
+[4.5.7]: ../../compare/v4.5.6...v4.5.7
+[4.5.6]: ../../compare/v4.5.5...v4.5.6
+[4.5.5]: ../../compare/v4.5.4...v4.5.5
+[4.5.4]: ../../compare/v4.5.3...v4.5.4
+[4.5.3]: ../../compare/v4.5.2...v4.5.3
+[4.5.2]: ../../compare/v4.5.1...v4.5.2
+[4.5.1]: ../../compare/v4.5.0...v4.5.1
+[4.5.0]: ../../compare/v4.4.1...v4.5.0
+[4.4.1]: ../../compare/v4.4.0...v4.4.1
+[4.4.0]: ../../compare/v4.3.7...v4.4.0
+[4.3.7]: ../../compare/v4.3.3...v4.3.7
+[4.3.3]: ../../compare/v4.3.2...v4.3.3
+[4.3.2]: ../../compare/v4.3.1...v4.3.2
+[4.3.1]: ../../compare/v4.3.0...v4.3.1
+[4.3.0]: ../../compare/v4.2.0...v4.3.0
+[4.2.0]: ../../compare/v4.1.0...v4.2.0
+[4.1.0]: ../../compare/v4.0.4...v4.1.0
+[4.0.4]: ../../compare/v4.0.3...v4.0.4
+[4.0.3]: ../../compare/v4.0.2...v4.0.3
+[4.0.2]: ../../compare/v4.0.1...v4.0.2
+[4.0.1]: ../../compare/v4.0.0...v4.0.1
+[4.0.0]: ../../compare/v3.8.0...v4.0.0
+[3.8.0]: ../../compare/v3.7.0...v3.8.0
+[3.7.0]: ../../releases/tag/v3.7.0

@@ -244,7 +244,7 @@ unsafeWindow.loading = window.loading = function() {
             const t = document.createElement("div");
             t.className = "console-logger-header";
             const n = document.createElement("div");
-            n.className = "console-logger-title", n.textContent = "JHS V3.6.0";
+            n.className = "console-logger-title", n.textContent = "JHS Console";
             const a = document.createElement("div");
             a.className = "console-logger-controls", this.maximizeBtn = document.createElement("button"),
             this.maximizeBtn.textContent = "", this.maximizeBtn.classList.add("console-logger-maximize-toggle"),
