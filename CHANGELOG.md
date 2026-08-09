@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [5.0.2] - 2026-08-09
+
+### Documentation
+- 将 README 扩展为完整项目信息页，补充功能范围、支持站点、安装使用、数据隐私、项目架构、开发验证、发布流程和常见问题说明。
+
 ## [5.0.1] - 2026-08-09
 
 ### Fixed
