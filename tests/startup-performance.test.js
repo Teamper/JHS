@@ -270,4 +270,27 @@ describe("HTTP Cloudflare handling", () => {
     expect(request).toHaveBeenCalledTimes(1);
     expect(http.getCircuitBreakerStatus()["javdb.example"]).toMatchObject({ state: "closed", probing: false, failCount: 0 });
   });
+
+  it("preserves the POST method while checking the circuit breaker before retries", async () => {
+    const request = vi.fn((options) => options.onload({
+      status: 200,
+      finalUrl: options.url,
+      responseText: '{"code":0}'
+    }));
+    const http = loadHttpManager(request);
+
+    await expect(http.post(
+      "https://yun.123pan.com/resolve",
+      { urls: "magnet:test" },
+      { Authorization: "Bearer token" }
+    )).resolves.toEqual({ code: 0 });
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0][0]).toMatchObject({
+      method: "POST",
+      url: "https://yun.123pan.com/resolve",
+      data: '{"urls":"magnet:test"}',
+      headers: { Authorization: "Bearer token", "Content-Type": "application/json" }
+    });
+  });
 });

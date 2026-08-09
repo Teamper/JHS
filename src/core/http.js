@@ -85,9 +85,9 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
             throw e._circuitBroken = !0, e;
         }
         return n || (n = void 0), await utils.retry(() => {
-            const e = this._checkCircuitBreaker(o);
-            if (e) {
-                const t = new Error(`站点 ${o} 已熔断，${e.remaining}秒后重试`);
+            const c = this._checkCircuitBreaker(o);
+            if (c) {
+                const t = new Error(`站点 ${o} 已熔断，${c.remaining}秒后重试`);
                 return t._circuitBroken = !0, Promise.reject(t);
             }
             "half-open" === u.state && (u.probing = !0);

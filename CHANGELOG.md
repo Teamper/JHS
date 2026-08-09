@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [5.0.1] - 2026-08-09
+
+### Fixed
+- 修复 v5.0.0 网络重试检查中的变量遮蔽导致 `GM_xmlhttpRequest` 请求方法变成 `null` 的问题，恢复 123 云盘离线提交及其他 POST 请求。
+
 ## [5.0.0] - 2026-08-09
 
 ### Fixed
@@ -389,7 +394,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v5.0.0...HEAD
+[Unreleased]: https://github.com/Yaoser-Archive/JHS/compare/v5.0.1...HEAD
+[5.0.1]: https://github.com/Yaoser-Archive/JHS/compare/v5.0.0...v5.0.1
 [5.0.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.9.0...v5.0.0
 [4.9.0]: https://github.com/Yaoser-Archive/JHS/compare/v4.8.1...v4.9.0
 [4.8.1]: https://github.com/Yaoser-Archive/JHS/compare/v4.8.0...v4.8.1
