@@ -2,6 +2,15 @@ class Se extends X {
     getName() {
         return "BlacklistPlugin";
     }
+    async initCss() {
+        return `<style>
+            .jhs-blacklist-layout { display:flex; flex-direction:column; height:100%; min-height:0; padding:var(--jhs-space-3) var(--jhs-space-4); overflow:hidden; }
+            .jhs-blacklist-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:var(--jhs-space-2); margin-bottom:var(--jhs-space-2); }
+            .jhs-blacklist-toolbar__group { display:flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-2); }
+            .jhs-blacklist-layout #table-container { flex:1; min-height:0; }
+            .jhs-table-counter-note { margin-left:var(--jhs-space-2); }
+        </style>`;
+    }
     async addBlacklist(e) {
         let t = {
             clientX: e.clientX,
@@ -20,9 +29,9 @@ class Se extends X {
                 role: "虚拟演员",
                 movieType: t,
                 blacklistUrl: e.toString()
-            }, i = `是否将分类 <span style="color: #f40">${t}</span> 加入到黑名单中?`, n && (i = `分类 <span style="color: #f40">${t}</span> 已在黑名单中, 是否从当前页开始追加屏蔽?`);
-        } else a = this.getActressPageInfo(), i = `是否将该演员 <span style="color: #f40">${a.name}</span> 加入到黑名单中?`,
-        n && (i = `演员 <span style="color: #f40">${a.name}</span> 已在黑名单中, 是否从当前页开始追加屏蔽?`);
+            }, i = `是否将分类 <span class="jhs-task-emphasis">${t}</span> 加入到黑名单中?`, n && (i = `分类 <span class="jhs-task-emphasis">${t}</span> 已在黑名单中, 是否从当前页开始追加屏蔽?`);
+        } else a = this.getActressPageInfo(), i = `是否将该演员 <span class="jhs-task-emphasis">${a.name}</span> 加入到黑名单中?`,
+        n && (i = `演员 <span class="jhs-task-emphasis">${a.name}</span> 已在黑名单中, 是否从当前页开始追加屏蔽?`);
         const {starId: s, name: r, allName: c, role: d, movieType: h, blacklistUrl: g} = a;
         if (o.includes("page") && !o.includes("page=1") && (i += "<br/> 注意: 当前页面非第一页, 屏蔽数据将从此页面开始"),
         l) {
@@ -79,21 +88,24 @@ class Se extends X {
     }
     async openBlacklistDialog() {
         const e = this.getBean("TaskPlugin"), t = await storageManager.getSetting();
-        let n = `\n            <div style="padding: 10px 20px; height: 100%;overflow:hidden;"> \n                 <div style="display: flex;justify-content: space-between;">\n                    <div style="display: flex; gap:5px">\n                        <a id="checkBlacklistBtn" class="a-danger" data-tip="上次检测时间: ${localStorage.getItem(e.lastCheckBlacklistTimeKey) || "无"}; 检测间隔时间: ${t.checkBlacklist_intervalTime}小时">${this.blacklistSvg} &nbsp;手动检测黑名单</a>\n                        <a class="a-info" id="toSetting">${this.settingSvg} &nbsp;&nbsp; 配置</a>\n                    </div>\n                    <div style="display: flex; gap:5px">\n                        <select id="dataType" style="text-align: center;min-width: 150px;">\n                            <option value="" selected>所有</option>\n                            <option value="actor">男演员</option>\n                            <option value="actress">女演员</option>\n                        </select>\n                        <select id="statusType" style="text-align: center;min-width: 150px;">\n                            <option value="" selected>--检测状态--</option>\n                            <option value="normal">正常检测</option>\n                            <option value="stop">停止检测</option>\n                        </select>\n                        <select id="urlType" data-tip="在演员页屏蔽时,是否选择了分类" style="text-align: center;min-width: 150px; ${r ? "" : "display: none;"}">\n                            <option value="" selected>--屏蔽类型--</option>\n                            <option value="hasT">按所选分类屏蔽</option>\n                            <option value="noT">未筛选分类</option>\n                        </select>\n                        <input id="searchValue" type="text" placeholder="搜索演员" style="padding: 4px 5px;">\n                        <a id="cleanQueryBtn" class="a-info" style="margin-left: 0">重置</a>\n                    </div>\n\n                </div>\n                <div id="table-container" style="height: calc(100% - 50px);"></div>\n            </div>\n        `;
+        let n = `\n            <div class="jhs-layout-7cb3f981"> \n                 <div class="jhs-layout-da5a4919">\n                    <div class="jhs-layout-31a824a2">\n                        <button type="button" id="checkBlacklistBtn" class="jhs-btn jhs-btn--danger" data-tip="上次检测时间: ${localStorage.getItem(e.lastCheckBlacklistTimeKey) || "无"}; 检测间隔时间: ${t.checkBlacklist_intervalTime}小时">${this.blacklistSvg} &nbsp;手动检测黑名单</button>\n                        <button type="button" class="jhs-btn jhs-btn--secondary" id="toSetting">${this.settingSvg} &nbsp;&nbsp; 配置</button>\n                    </div>\n                    <div class="jhs-layout-31a824a2">\n                        <select id="dataType" class="jhs-select-source">\n                            <option value="" selected>所有</option>\n                            <option value="actor">男演员</option>\n                            <option value="actress">女演员</option>\n                        </select>\n                        <select id="statusType" class="jhs-select-source">\n                            <option value="" selected>--检测状态--</option>\n                            <option value="normal">正常检测</option>\n                            <option value="stop">停止检测</option>\n                        </select>\n                        <select id="urlType" data-tip="在演员页屏蔽时,是否选择了分类" class="jhs-select-source${r ? "" : " jhs-is-hidden"}">\n                            <option value="" selected>--屏蔽类型--</option>\n                            <option value="hasT">按所选分类屏蔽</option>\n                            <option value="noT">未筛选分类</option>\n                        </select>\n                        <input id="searchValue" type="text" placeholder="搜索演员" class="jhs-field">\n                        <button type="button" id="cleanQueryBtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                    </div>\n\n                </div>\n                <div id="table-container" class="jhs-layout-d44e70c7"></div>\n            </div>\n        `;
         layer.open({
             type: 1,
             title: "演员黑名单",
             content: n,
             scrollbar: !1,
-            area: utils.getResponsiveArea([ "80%", "90%" ]),
+            area: utils.getDialogArea("xl"),
             anim: -1,
             success: async t => {
+                const dialog = $(t).find(".layui-layer-content > div").first().addClass("jhs-blacklist-layout").removeAttr("style"), toolbar = dialog.children("div").first().addClass("jhs-blacklist-toolbar").removeAttr("style");
+                toolbar.children("div").addClass("jhs-blacklist-toolbar__group").removeAttr("style"), toolbar.find("select,input,a").removeAttr("style"), dialog.find("#table-container").removeAttr("style");
+                JhsSelect.enhance(t);
                 await this.loadTableData(), $(".layui-layer-content").on("click", "#cleanQueryBtn", (async e => {
-                    $("#searchValue").val(""), $("#dataType").val(""), $("#statusType").val(""), await this.reloadTable();
+                    $("#searchValue").val(""), JhsSelect.setValue("#dataType", ""), JhsSelect.setValue("#statusType", ""), await this.reloadTable();
                 })).on("focusout keydown", "#searchValue", (async e => {
                     if ("focusout" === e.type || "Enter" === e.key) {
                         if ("Enter" === e.key && e.preventDefault(), "keydown" === e.type && "Enter" !== e.key) return;
-                        $("#dataType").val(""), await this.reloadTable();
+                        JhsSelect.setValue("#dataType", ""), await this.reloadTable();
                     }
                 })).on("change", "#dataType", (async () => {
                     $("#searchValue").val(""), await this.reloadTable();
@@ -104,7 +116,7 @@ class Se extends X {
                 })).on("click", "#toSetting", (() => {
                     this.getBean("SettingPlugin").openSettingDialog("task-panel", (() => {
                         $("#setting-blacklist").css({
-                            border: "1px solid #f40"
+                            border: "1px solid var(--jhs-status-filter)"
                         });
                     }));
                 })).on("click", ".open-url", (e => {
@@ -149,7 +161,7 @@ class Se extends X {
             };
         })).filter((e => !(a && !e.name.includes(a)) && (("normal" !== i || !e.isUnCheck) && (!("stop" === i && !e.isUnCheck) && (o ? e.role === o : !("hasT" === r && !e.url.includes("t=")) && ("noT" !== r || !e.url.includes("t=")))))));
         s.html(`\n            <option value="">所有 (${l})</option>\n            <option value="actor">男演员 (${c})</option>\n            <option value="actress">女演员 (${d})</option>\n        `),
-        s.val(o);
+        JhsSelect.setValue(s, o);
         const g = new Map;
         for (const m of n) {
             const e = m.starId;
@@ -177,7 +189,7 @@ class Se extends X {
             paginationMode: "local",
             paginationSize: 20,
             paginationSizeSelector: [ 20, 50, 100, 1e3, 99999 ],
-            paginationCounter: (e, t, n, a, i) => `演员: ${a} &nbsp;&nbsp;&nbsp;番号总数: ${this.currentCarCount}  <span id="checkBlacklistMsg" style="margin-left: 10px"></span>`,
+            paginationCounter: (e, t, n, a, i) => `演员: ${a} &nbsp;&nbsp;&nbsp;番号总数: ${this.currentCarCount}  <span id="checkBlacklistMsg" class="jhs-table-counter-note"></span>`,
             responsiveLayout: "collapse",
             responsiveLayoutCollapse: !0,
             columnDefaults: {
@@ -227,7 +239,7 @@ class Se extends X {
                 visible: r,
                 formatter: (e, t, n) => {
                     let a = e.getData().url.includes("t=");
-                    return `<span style="${a ? "color:#cc4444" : ""}">${a ? "按所选分类屏蔽" : "未筛选分类"}</span>`;
+                    return `<span class="jhs-badge ${a ? "jhs-badge--filter" : "jhs-badge--neutral"}">${a ? "按所选分类屏蔽" : "未筛选分类"}</span>`;
                 }
             }, {
                 title: "番号数量",
@@ -256,7 +268,7 @@ class Se extends X {
                 formatter: (e, t, n) => {
                     let a = "", i = "正常检测";
                     return e.getData().isUnCheck && (a = `停更${this.checkBlacklist_ruleTime / 24 / 365}年以上, 下轮任务不再进行检测`,
-                    i = "停止检测"), `<span data-tip="${a}" style="${a ? "color: #cc4444;" : ""}">${i}</span>`;
+                    i = "停止检测"), `<span class="jhs-badge ${a ? "jhs-badge--filter" : "jhs-badge--neutral"}" data-tip="${a}">${i}</span>`;
                 }
             }, {
                 title: "操作",
@@ -285,7 +297,7 @@ class Se extends X {
                             }))).sort(((e, t) => t.count - e.count));
                             clog.debug(n);
                         }));
-                    })), '\n                           \x3c!-- <a class="a-normal keyword-btn"> <span>提取屏蔽词</span> </a>--\x3e\n                            <a class="a-danger delete-btn"> <span>删除</span> </a>\n                        ';
+                    })), '<button type="button" class="jhs-btn jhs-btn--danger delete-btn"><span>删除</span></button>';
                 }
             } ],
             initialSort: [ {

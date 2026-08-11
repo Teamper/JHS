@@ -90,9 +90,9 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn) {
                     <div class="jhs-backup-card-name">${escapeHtml(file.name)}</div>
                     <div class="jhs-backup-card-meta">${formatSize(file.size)} · ${utils.getNowStr("-", ":", file.createTime)}</div>
                     <div class="jhs-backup-card-actions">
-                        <button class="jhs-backup-btn jhs-backup-btn-danger" data-action="delete" data-idx="${idx}">删除</button>
-                        <button class="jhs-backup-btn jhs-backup-btn-primary" data-action="download" data-idx="${idx}">下载</button>
-                        <button class="jhs-backup-btn jhs-backup-btn-success" data-action="import" data-idx="${idx}">导入</button>
+                        <button class="jhs-btn jhs-backup-btn jhs-backup-btn-danger" data-action="delete" data-idx="${idx}">删除</button>
+                        <button class="jhs-btn jhs-backup-btn jhs-backup-btn-primary" data-action="download" data-idx="${idx}">下载</button>
+                        <button class="jhs-btn jhs-backup-btn jhs-backup-btn-success" data-action="import" data-idx="${idx}">导入</button>
                     </div>
                 </div>
             `).join("");
@@ -101,7 +101,7 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn) {
     layer.open({
         type: 1,
         title: n + "备份文件",
-        content: `<div id="${containerId}" style="padding:0 4px;">${renderCards(e)}</div>`,
+        content: `<div id="${containerId}" class="jhs-backup-cards">${renderCards(e)}</div>`,
         area: utils.getResponsiveArea(["800px", "70%"]),
         anim: -1,
         success: (layerEl) => {
@@ -163,7 +163,7 @@ function openFileListDialog(e, t, n, folderName, showDiffPreviewFn) {
     layer.open({
         type: 1,
         title: n + "备份文件",
-        content: '\n                <div style="height: 100%;overflow:hidden;"> \n                    <div id="table-container" style="margin:auto auto !important;"></div>\n                </div>\n            ',
+        content: '\n                <div class="jhs-table-dialog"> \n                    <div id="table-container" class="jhs-table-dialog__content"></div>\n                </div>\n            ',
         area: utils.getResponsiveArea([ "800px", "70%" ]),
         anim: -1,
         success: a => {
@@ -212,7 +212,7 @@ function openFileListDialog(e, t, n, folderName, showDiffPreviewFn) {
                     formatter: (e, a, s) => {
                         const o = e.getData();
                         return s((() => {
-                            const a = e.getElement().querySelector(".a-danger"), s = e.getElement().querySelector(".a-primary"), r = e.getElement().querySelector(".a-success");
+                            const a = e.getElement().querySelector(".backup-delete"), s = e.getElement().querySelector(".backup-download"), r = e.getElement().querySelector(".backup-import");
                             a && a.addEventListener("click", (e => {
                                 layer.confirm(`是否删除 ${o.name} ?`, {
                                     icon: 3,
@@ -252,7 +252,7 @@ function openFileListDialog(e, t, n, folderName, showDiffPreviewFn) {
                                     a.close(), console.error(i), show.error("预览失败: " + (i ? i.message : i));
                                 }
                             }));
-                        })), '\n                                    <a class="a-danger">删除</a>\n                                    <a class="a-primary">下载</a>\n                                    <a class="a-success">导入</a>\n                                ';
+                        })), '\n                                    <button type="button" class="jhs-btn jhs-btn--danger backup-delete">删除</button>\n                                    <button type="button" class="jhs-btn jhs-btn--secondary backup-download">下载</button>\n                                    <button type="button" class="jhs-btn jhs-btn--primary backup-import">导入</button>\n                                ';
                     }
                 } ],
                 locale: "zh-cn",

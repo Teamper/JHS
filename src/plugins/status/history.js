@@ -6,35 +6,58 @@ class xe extends X {
         return "HistoryPlugin";
     }
     async initCss() {
-        return "\n            <style>\n                /* 下拉菜单容器（相对定位） */\n                .sub-btns {\n                    position: relative;\n                    display: inline-block;\n                }\n                \n                /* 下拉菜单内容（默认隐藏） */\n                .sub-btns-menu {\n                    display: none;\n                    position: absolute;\n                    right: 80px;\n                    top:-10px;\n                    background: white;\n                    padding:10px;\n                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);\n                    z-index: 100;\n                    border-radius: 4px;\n                    overflow: hidden;\n                }\n                \n                \n                /* 点击后显示菜单（JS 控制） */\n                .sub-btns-menu.show {\n                    display: flex !important;\n                    flex-direction: column;\n                }\n                \n                .table-link-param {\n                    cursor: pointer;\n                }\n            </style\n        ";
+        return `
+            <style>
+                .jhs-history-layout { display:flex; flex-direction:column; height:100%; min-height:0; padding:var(--jhs-space-3) var(--jhs-space-4); overflow:hidden; }
+                #filterBox, #allSelectBox { display:flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-2); margin-bottom:var(--jhs-space-2); }
+                #table-container { flex:1; min-height:0; overflow-x:hidden; }
+                .sub-btns { position:relative; display:inline-block; }
+                .sub-btns-menu { position:absolute; top:calc(100% + var(--jhs-space-1)); right:0; z-index:100; display:none; min-width:156px; padding:var(--jhs-space-1); overflow:hidden; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
+                .sub-btns-menu.show { display:grid !important; gap:var(--jhs-space-1); }
+                .sub-btns-menu .jhs-btn { width:100%; justify-content:flex-start; }
+                .table-link-param { cursor:pointer; }
+                .action-btns { display:flex; justify-content:center; gap:var(--jhs-space-2); }
+                .jhs-history-edit-field { width:100%; padding:8px; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); }
+                .jhs-history-edit-field[readonly] { background:var(--jhs-input-bg); }
+                textarea.jhs-history-edit-field { min-height:60px; overflow-y:hidden; }
+            </style>`;
     }
     handleResize() {
         $(".navbar-search").is(":hidden") ? ($(".historyBtnBox").show(), $(".miniHistoryBtnBox").hide()) : ($(".historyBtnBox").hide(),
         $(".miniHistoryBtnBox").show());
     }
-    handle() {
-        r && ($(".navbar-end").prepend('<div class="navbar-item has-sub-btns is-hoverable historyBtnBox">\n                    <a id="historyBtn" class="navbar-link nav-btn" style="color: #aade66 !important;padding-right:15px !important;">\n                        鉴定记录\n                    </a>\n                </div>'),
-        $(".navbar-search").css("margin-left", "0").before('\n                <div class="navbar-item miniHistoryBtnBox">\n                    <a id="miniHistoryBtn" class="navbar-link nav-btn" style="color: #aade66 !important;padding-left:0 !important;padding-right:0 !important;">\n                        鉴定记录\n                    </a>\n                </div>\n            '),
+    async handle() {
+        r && ($(".navbar-end").prepend('<div class="navbar-item has-sub-btns is-hoverable historyBtnBox">\n                    <button type="button" id="historyBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>'),
+        $(".navbar-search").css("margin-left", "0").before('\n                <div class="navbar-item miniHistoryBtnBox">\n                    <button type="button" id="miniHistoryBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>\n            '),
         this.handleResize(), $(window).resize((() => {
             this.handleResize();
-        })), $("#historyBtn,#miniHistoryBtn").on("click", (e => this.openHistory()))), l && utils.loopDetector((() => $("#setting-btn").length), (() => {
-            $("#top-right-box").append('\n                    <a id="historyBtn" class="menu-btn main-tab-btn" style="background-color:#b68625 !important;">\n                        鉴定记录\n                    </a>\n               '),
-            $("#historyBtn,#miniHistoryBtn").on("click", (e => this.openHistory()));
-        }), 1, 1e4, !1), this.bindClick();
+        })), $("#historyBtn,#miniHistoryBtn").on("click", (e => this.openHistory()))), l && await this.createBusButton(), this.bindClick();
+    }
+    async createBusButton() {
+        const ready = await new Promise((resolve => {
+            const startedAt = Date.now(), timer = setInterval((() => {
+                if ($("#setting-btn").length && $("#top-right-box").length) return clearInterval(timer), resolve(!0);
+                Date.now() - startedAt >= 2500 && (clearInterval(timer), resolve(!1));
+            }), 25);
+        }));
+        if (!ready) return void clog.warn("鉴定记录入口未创建：JavBus 顶部工具区未就绪");
+        $("#top-right-box").append('<button type="button" id="historyBtn" class="jhs-btn jhs-btn--secondary">鉴定记录</button>'),
+        $("#historyBtn,#miniHistoryBtn").on("click", (e => this.openHistory()));
     }
     openHistory() {
-        let e = `\n            <div style="padding: 10px 20px; height: 100%;overflow:hidden;"> \n                 <div id="filterBox" style="display: flex;gap: 5px;">\n                    <select id="dataType" style="text-align: center;min-width: 150px;">\n                        <option value="all" selected>所有</option>\n                        <option value="filter">${u}</option>\n                        <option value="favorite">${b}</option>\n                        <option value="hasDown">${y}</option>\n                        <option value="hasWatch">${k}</option>\n                    </select>\n                    <input id="searchCarNum" type="text" placeholder="搜索番号|演员" style="padding: 4px 5px;">\n                    <a id="clearSearchbtn" class="a-info" style="margin-left: 0">重置</a>\n                </div>\n                <div id="allSelectBox" style="margin-top: 8px;display: none">\n                    <a class="menu-btn multiple-history-deleteBtn" style="background-color:#8c8080; color:white; margin-bottom: 5px;"> <span>移除</span> </a>\n                    <a class="menu-btn multiple-history-hasWatchBtn" style="background-color:${S};margin-bottom: 5px">${k}</a>\n                    <a class="menu-btn multiple-history-hasDownBtn" style="background-color:${x};margin-bottom: 5px">${y}</a>\n                    <a class="menu-btn multiple-history-favoriteBtn" style="background-color:${w};margin-bottom: 5px">${v}</a>\n                    <a class="menu-btn multiple-history-filterBtn" style="background-color:${f};margin-bottom: 5px">${m}</a>\n                </div>\n                <div id="table-container" style="height: calc(100% - 50px); overflow-x:hidden;"></div>\n            </div>\n        `;
+        let e = `\n            <div class="jhs-layout-7cb3f981"> \n                 <div id="filterBox" class="jhs-layout-53809f1e">\n                    <select id="dataType" class="jhs-select-source">\n                        <option value="all" selected>所有</option>\n                        <option value="filter">${u}</option>\n                        <option value="favorite">${b}</option>\n                        <option value="hasDown">${y}</option>\n                        <option value="hasWatch">${k}</option>\n                    </select>\n                    <input id="searchCarNum" type="text" placeholder="搜索番号|演员" class="jhs-field">\n                    <button type="button" id="clearSearchbtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                </div>\n                <div id="allSelectBox" class="jhs-layout-66253c00">\n                    <button type="button" class="jhs-btn jhs-btn--dark multiple-history-deleteBtn jhs-layout-7daea5fa"> <span>移除</span> </button>\n                    <button type="button" class="jhs-btn jhs-btn--watch multiple-history-hasWatchBtn jhs-layout-2e003268">${k}</button>\n                    <button type="button" class="jhs-btn jhs-btn--down multiple-history-hasDownBtn jhs-layout-2e003268">${y}</button>\n                    <button type="button" class="jhs-btn jhs-btn--fav multiple-history-favoriteBtn jhs-layout-2e003268">${v}</button>\n                    <button type="button" class="jhs-btn jhs-btn--filter multiple-history-filterBtn jhs-layout-2e003268">${m}</button>\n                </div>\n                <div id="table-container" class="jhs-layout-81eaab28"></div>\n            </div>\n        `;
         layer.open({
             type: 1,
             title: "鉴定记录",
             content: e,
             scrollbar: !1,
             shadeClose: !0,
-            area: utils.getResponsiveArea([ "70%", "90%" ]),
+            area: utils.getDialogArea("xl"),
             anim: -1,
             success: async e => {
+                JhsSelect.enhance(e);
                 await this.loadTableData(), $(".layui-layer-content").on("click", "#clearSearchbtn", (async e => {
-                    $("#searchCarNum").val(""), $("#dataType").val("all"), await this.reloadTable(),
+                    $("#searchCarNum").val(""), JhsSelect.setValue("#dataType", "all"), await this.reloadTable(),
                     $("#allSelectBox").hide();
                 })).on("focusout keydown", "#searchCarNum", (async e => {
                     if ("focusout" === e.type || "Enter" === e.key) {
@@ -59,13 +82,20 @@ class xe extends X {
     bindClick() {
         document.addEventListener("click", (function(e) {
             if (e.target.closest(".sub-btns-toggle")) {
-                const t = e.target.closest(".sub-btns").querySelector(".sub-btns-menu");
+                const button = e.target.closest(".sub-btns-toggle"), t = button.closest(".sub-btns").querySelector(".sub-btns-menu");
                 document.querySelectorAll(".sub-btns-menu.show").forEach((e => {
-                    e !== t && e.classList.remove("show");
-                })), t.classList.toggle("show");
+                    e !== t && (e.classList.remove("show"), e.previousElementSibling?.setAttribute("aria-expanded", "false"));
+                })), t.classList.toggle("show"), button.setAttribute("aria-expanded", String(t.classList.contains("show")));
             } else document.querySelectorAll(".sub-btns-menu.show").forEach((e => {
-                e.classList.remove("show");
+                e.classList.remove("show"), e.previousElementSibling?.setAttribute("aria-expanded", "false");
             }));
+        })), $(document).on("keydown", ".sub-btns", (e => {
+            const menu = $(e.currentTarget).find(".sub-btns-menu"), items = menu.find('[role="menuitem"]'), current = items.index(document.activeElement);
+            if ("Escape" === e.key) return e.preventDefault(), menu.removeClass("show"), $(e.currentTarget).find(".sub-btns-toggle").attr("aria-expanded", "false").trigger("focus");
+            if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(e.key) || !menu.hasClass("show")) return;
+            e.preventDefault();
+            const next = "Home" === e.key ? 0 : "End" === e.key ? items.length - 1 : "ArrowDown" === e.key ? (current + 1 + items.length) % items.length : (current - 1 + items.length) % items.length;
+            items.eq(next).trigger("focus");
         })), $(document).on("click", ".history-deleteBtn, .history-filterBtn, .history-favoriteBtn, .history-hasDownBtn, .history-hasWatchBtn, .history-detailBtn", (e => {
             e.preventDefault(), e.stopPropagation();
             const t = $(e.currentTarget), n = t.closest(".action-btns"), a = n.attr("data-car-num"), i = n.attr("data-href"), s = async e => {
@@ -214,7 +244,7 @@ class xe extends X {
                 formatter: (e, t, n) => {
                     const a = e.getData().carNum, i = a.indexOf("-");
                     if (-1 === i) return a;
-                    return `<a class="table-link-param">${a.substring(0, i + 1)}</a>${a.substring(i + 1)}`;
+                    return `<button type="button" class="jhs-btn jhs-btn--ghost jhs-btn--sm table-link-param">${a.substring(0, i + 1)}</button>${a.substring(i + 1)}`;
                 }
             }, {
                 title: "演员",
@@ -223,7 +253,7 @@ class xe extends X {
                 sorter: "string",
                 responsive: 5,
                 headerSort: !0,
-                formatter: (e, t, n) => (e.getData().names || "").split(" ").filter((e => "" !== e.trim())).map((e => `<a class="table-link-param">${e}</a>`)).join(" ")
+                formatter: (e, t, n) => (e.getData().names || "").split(" ").filter((e => "" !== e.trim())).map((e => `<button type="button" class="jhs-btn jhs-btn--ghost jhs-btn--sm table-link-param">${e}</button>`)).join(" ")
             }, {
                 title: "创建时间",
                 field: "createDate",
@@ -251,7 +281,7 @@ class xe extends X {
                 hozAlign: "left",
                 formatter: (e, t, n) => {
                     let a = e.getData().url;
-                    return a ? a.includes("javdb") ? '<span style="color:#d34f9e">Javdb</span>' : a.includes("javbus") ? '<span style="color:#eaa813">JavBus</span>' : a.includes("123av") ? '<span style="color:#eaa813">123Av</span>' : `<span style="color:#050505">${a}</span>` : "";
+                    return a ? `<span class="jhs-badge jhs-badge--neutral">${a.includes("javdb") ? "JavDB" : a.includes("javbus") ? "JavBus" : a.includes("123av") ? "123AV" : "其他"}</span>` : "";
                 }
             }, {
                 title: "状态",
@@ -262,28 +292,28 @@ class xe extends X {
                 headerSort: !1,
                 formatter: (e, t, n) => {
                     const a = e.getData().status;
-                    let i = "", s = "";
+                    let i = "neutral", s = "";
                     switch (a) {
                       case "filter":
-                        i = f, s = m;
+                        i = "filter", s = m;
                         break;
 
                       case "favorite":
-                        i = w, s = v;
+                        i = "fav", s = v;
                         break;
 
                       case "hasDown":
-                        i = x, s = y;
+                        i = "down", s = y;
                         break;
 
                       case "hasWatch":
-                        i = S, s = k;
+                        i = "watch", s = k;
                         break;
 
                       default:
                         s = a;
                     }
-                    return `<span style="color:${i}">${s}</span>`;
+                    return `<span class="jhs-badge jhs-badge--soft jhs-badge--${i}">${s || "待鉴定"}</span>`;
                 }
             }, {
                 title: "备注",
@@ -305,7 +335,21 @@ class xe extends X {
                         null == (t = e.getElement().querySelector(".history-editBtn")) || t.addEventListener("click", (e => {
                             this.editRecord(a);
                         }));
-                    })), `\n                            <div class="action-btns" style="display: flex; gap: 5px;justify-content:center" data-car-num="${a.carNum}" data-href="${a.url ? a.url : ""}">\n                                <div class="sub-btns">\n                                    <a class="menu-btn sub-btns-toggle" style="background-color:#c59d36; color:white; margin-bottom: 5px;">\n                                        <span>变更</span>\n                                    </a>\n                                    <div class="sub-btns-menu">\n                                        <a class="menu-btn history-editBtn" style="background-color:#007bff; color:white; margin-bottom: 5px;"> <span>编辑</span> </a>\n                                        <a class="menu-btn history-deleteBtn" style="background-color:#8c8080; color:white; margin-bottom: 5px;"> <span>移除</span> </a>\n                                        <a class="menu-btn history-hasWatchBtn" style="background-color:${S};margin-bottom: 5px">${k}</a>\n                                        <a class="menu-btn history-hasDownBtn" style="background-color:${x};margin-bottom: 5px">${y}</a>\n                                        <a class="menu-btn history-favoriteBtn" style="background-color:${w};margin-bottom: 5px">${v}</a>\n                                        <a class="menu-btn history-filterBtn" style="background-color:${f};margin-bottom: 5px">${m}</a>\n                                    </div>\n                                </div>\n                                \n                                <a class="menu-btn history-detailBtn" style="background-color:#3397de; color:white; margin-bottom: 5px;"> <span>详情页</span> </a>\n                                \n                            </div>\n                        `;
+                    })), `
+                        <div class="action-btns" data-car-num="${a.carNum}" data-href="${a.url ? a.url : ""}">
+                            <button type="button" class="jhs-btn jhs-btn--secondary history-detailBtn"><span>查看</span></button>
+                            <div class="sub-btns">
+                                <button type="button" class="jhs-btn jhs-btn--ghost sub-btns-toggle" aria-haspopup="menu" aria-expanded="false"><span>更多操作</span></button>
+                                <div class="sub-btns-menu" role="menu">
+                                    <button type="button" class="jhs-btn jhs-btn--ghost history-editBtn" role="menuitem"><span>编辑</span></button>
+                                    <button type="button" class="jhs-btn jhs-btn--danger history-deleteBtn" role="menuitem"><span>移除</span></button>
+                                    <button type="button" class="jhs-btn jhs-btn--ghost history-hasWatchBtn" role="menuitem">${k}</button>
+                                    <button type="button" class="jhs-btn jhs-btn--ghost history-hasDownBtn" role="menuitem">${y}</button>
+                                    <button type="button" class="jhs-btn jhs-btn--ghost history-favoriteBtn" role="menuitem">${v}</button>
+                                    <button type="button" class="jhs-btn jhs-btn--ghost history-filterBtn" role="menuitem">${m}</button>
+                                </div>
+                            </div>
+                        </div>`;
                 }
             } ],
             initialSort: [ {
@@ -359,7 +403,7 @@ class xe extends X {
         }
     }
     async editRecord(e) {
-        const t = e.carNum, n = e.names || "", a = e.url || "", i = e.status, s = e.remark || "", o = "width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; min-height: 60px; overflow-y: hidden;", r = "width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;", l = [ {
+        const t = e.carNum, n = e.names || "", a = e.url || "", i = e.status, s = e.remark || "", l = [ {
             value: d,
             text: m
         }, {
@@ -373,14 +417,15 @@ class xe extends X {
             text: k
         } ];
         clog.debug(l);
-        const c = `\n            <div style="padding: 20px;">\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">番号:</label>\n                    <input type="text" id="edit-carNum" value="${t}" style="${r} background-color: #f0f0f0;" readonly>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">演员 (用空格隔开):</label>\n                    <textarea id="edit-names" style="${o}">${n}</textarea>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">状态:</label>\n                    <select id="edit-status" style="width: 100%; padding: 10px; border: 1px solid #ddd;">\n                        <option value="" ${"" === i ? "selected" : ""}>-- 请选择 --</option>\n                        ${l.map((e => `\n                            <option value="${e.value}" ${i === e.value ? "selected" : ""}>${e.text}</option>\n                        `)).join("")}\n                    </select>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">链接:</label>\n                    <input type="text" id="edit-url" value="${a}" style="${r}">\n                </div>\n                \n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">备注:</label>\n                    <textarea id="edit-remark" style="${o}">${s}</textarea>\n                </div>\n            </div>\n        `;
+        const c = `\n            <div class="jhs-layout-8cddc29a">\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">番号:</label>\n                    <input type="text" id="edit-carNum" value="${t}" class="jhs-field jhs-history-edit-field" readonly>\n                </div>\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">演员 (用空格隔开):</label>\n                    <textarea id="edit-names" class="jhs-textarea jhs-history-edit-field">${n}</textarea>\n                </div>\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">状态:</label>\n                    <select id="edit-status" class="jhs-select-source">\n                        <option value="" ${"" === i ? "selected" : ""}>-- 请选择 --</option>\n                        ${l.map((e => `\n                            <option value="${e.value}" ${i === e.value ? "selected" : ""}>${e.text}</option>\n                        `)).join("")}\n                    </select>\n                </div>\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">链接:</label>\n                    <input type="text" id="edit-url" value="${a}" class="jhs-field jhs-history-edit-field">\n                </div>\n                \n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">备注:</label>\n                    <textarea id="edit-remark" class="jhs-textarea jhs-history-edit-field">${s}</textarea>\n                </div>\n            </div>\n        `;
         layer.open({
             type: 1,
             title: `编辑记录: ${t}`,
-            area: utils.getResponsiveArea([ "500px", "650px" ]),
+            area: utils.getDialogArea("sm"),
             content: c,
             btn: [ "保存", "取消" ],
             success: (e, t) => {
+                JhsSelect.enhance(e);
                 const n = e => {
                     e.css("height", "auto"), e.css("height", e[0].scrollHeight + 15 + "px");
                 }, a = $("#edit-names");

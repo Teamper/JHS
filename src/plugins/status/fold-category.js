@@ -4,7 +4,7 @@ class de extends X {
     }
     async initCss() {
         const e = await storageManager.getSetting();
-        return `\n            <style>\n                #tags a.tag, .tags a.tag {\n                    position:relative;\n                }\n                .highlight-btn {\n                    position: absolute;\n                    top: -10px;\n                    right: -10px;\n                    background-color: #4CAF50;\n                    color: white;\n                    border: none;\n                    border-radius: 50%;\n                    width: 24px;\n                    height: 24px;\n                    font-size: 14px;\n                    line-height: 24px;\n                    text-align: center;\n                    cursor: pointer;\n                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);\n                    display: none;\n                    z-index: 999;\n                }\n                /* 当父元素被高亮时，按钮变为其他颜色 */\n                .highlighted .highlight-btn {\n                    background-color: #FF5722;\n                }\n                /* 高亮状态下的标签样式 */\n                .highlighted {\n                    /* 浅黄色 */\n                    border: ${e.highlightedTagNumber || 1}px solid ${e.highlightedTagColor || "#ce2222"};\n                }\n            </style>\n        `;
+        return `\n            <style>\n                #tags a.tag, .tags a.tag {\n                    position:relative;\n                }\n                .highlight-btn {\n                    position: absolute;\n                    top: -10px;\n                    right: -10px;\n                    background-color: var(--jhs-status-down);\n                    color: var(--jhs-status-down-on);\n                    border: none;\n                    border-radius: 50%;\n                    width: 24px;\n                    height: 24px;\n                    font-size: 14px;\n                    line-height: 24px;\n                    text-align: center;\n                    cursor: pointer;\n                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);\n                    display: none;\n                    z-index: 999;\n                }\n                /* 当父元素被高亮时，按钮变为其他颜色 */\n                .highlighted .highlight-btn {\n                    background-color: var(--jhs-status-watch);\n                }\n                /* 高亮状态下的标签样式 */\n                .highlighted {\n                    /* 浅黄色 */\n                    border: ${e.highlightedTagNumber || 1}px solid ${e.highlightedTagColor || "var(--jhs-status-filter)"};\n                }\n            </style>\n        `;
     }
     async handle() {
         window.isListPage && (o.includes("advanced_search") || (this.highlightTag(), utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
@@ -20,7 +20,7 @@ class de extends X {
                 $(`#tags a.tag:contains(${e})`).addClass("highlighted"), $(`.tags a.tag:contains(${e})`).addClass("highlighted");
             }));
         })().then(), $("#tags a.tag, .tags a.tag").hover((function() {
-            const e = $(this), t = $('<button class="highlight-btn" title="高亮显示">★</button>');
+            const e = $(this), t = $('<button class="jhs-btn highlight-btn" title="高亮显示">★</button>');
             e.append(t), t.fadeIn(0);
         }), (function() {
             $(this).find(".highlight-btn").fadeOut(0, (function() {
@@ -41,9 +41,9 @@ class de extends X {
             return $(this).text().replaceAll("\n", "").replaceAll(" ", "");
         })).get().join(" ");
         if (!n) return;
-        $(".tabs").append(`\n            <div style="display: flex;align-items: center;flex-grow:1;justify-content: flex-end;">\n                <div>已选分类: <span id="jhs-check-tag">${n}</span></div>\n                <a class="menu-btn  main-tab-btn" id="foldCategoryBtn" style="background-color:#d23e60 !important;">\n                    <span></span>\n                    <i style="margin-left: 10px"></i>\n                </a>\n\n            </div>\n        `);
+        $(".tabs").append(`\n            <div class="jhs-layout-8453d189">\n                <div>已选分类: <span id="jhs-check-tag">${n}</span></div>\n                <button type="button" class="jhs-btn jhs-btn--ghost jhs-layout-3a1fc324" id="foldCategoryBtn">\n                    <span></span>\n                    <i class="jhs-layout-78fa54ea"></i>\n                </button>\n\n            </div>\n        `);
         let a = $("h2.section-title");
-        if (a.length > 0 && (a.append('\n                <div id="foldCategoryBtn">\n                    <a class="menu-btn" style="background-color:#d23e60 !important;margin-left: 20px;border-bottom:none !important;border-radius:3px;">\n                        <span></span>\n                        <i style="margin-left: 10px"></i>\n                    </a>\n                </div>\n            '),
+        if (a.length > 0 && (a.append('\n                <div id="foldCategoryBtn">\n                    <button type="button" class="jhs-btn jhs-btn--ghost jhs-layout-2100e73d">\n                        <span></span>\n                        <i class="jhs-layout-78fa54ea"></i>\n                    </button>\n                </div>\n            '),
         t = $("section > div > div.box")), !t) return;
         let i = $("#foldCategoryBtn"), s = localStorage.getItem("jhs_foldCategory") === _, [o, r] = s ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];
         i.find("span").text(o).end().find("i").attr("class", r), window.location.href.includes("noFold=1") || t[s ? "hide" : "show"](),

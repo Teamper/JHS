@@ -13,49 +13,56 @@ const _e = async (e, t = "ja", n = "zh-CN") => {
 }, Te = {
     IS_FILTERED: {
         text: u,
-        color: f,
+        color: "var(--jhs-status-filter)",
+        on: "var(--jhs-status-filter-on)",
         reasonType: "单番号屏蔽",
         isCounted: !0,
         countKey: "currentPageFilterCount"
     },
     IS_FAVORITE: {
         text: b,
-        color: w,
+        color: "var(--jhs-status-fav)",
+        on: "var(--jhs-status-fav-on)",
         reasonType: "",
         isCounted: !0,
         countKey: "currentPageFavoriteCount"
     },
     IS_HAS_DOWN: {
         text: y,
-        color: x,
+        color: "var(--jhs-status-down)",
+        on: "var(--jhs-status-down-on)",
         reasonType: "",
         isCounted: !0,
         countKey: "currentPageHasDownCount"
     },
     IS_HAS_WATCH: {
         text: k,
-        color: S,
+        color: "var(--jhs-status-watch)",
+        on: "var(--jhs-status-watch-on)",
         reasonType: "",
         isCounted: !0,
         countKey: "currentPageHasWatchCount"
     },
     IS_KEYWORD_FILTER: {
         text: "关键词屏蔽",
-        color: "#de3333",
+        color: "var(--jhs-status-filter)",
+        on: "var(--jhs-status-filter-on)",
         reasonType: "",
         isCounted: !0,
         countKey: "currentPageKeywordFilterCount"
     },
     IS_ACTOR_FILTER: {
         text: "男演员屏蔽",
-        color: "#b22222",
+        color: "var(--jhs-status-filter)",
+        on: "var(--jhs-status-filter-on)",
         reasonType: "",
         isCounted: !0,
         countKey: "currentPageActorFilterCount"
     },
     IS_ACTRESS_FILTER: {
         text: "女演员屏蔽",
-        color: "#cd5c5c",
+        color: "var(--jhs-status-filter)",
+        on: "var(--jhs-status-filter-on)",
         reasonType: "",
         isCounted: !0,
         countKey: "currentPageActorFilterCount"
@@ -63,6 +70,7 @@ const _e = async (e, t = "ja", n = "zh-CN") => {
     IS_WAIT_CHECK: {
         text: "",
         color: "",
+        on: "",
         reasonType: "",
         isCounted: !0,
         countKey: "currentPageWaitCheckCount"
@@ -70,6 +78,9 @@ const _e = async (e, t = "ja", n = "zh-CN") => {
 };
 
 class Ie extends X {
+    async initCss() {
+        return `<style>.status-tag{position:absolute;z-index:10;margin-right:5px;padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}</style>`;
+    }
     constructor() {
         super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0),
         i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0),
@@ -97,20 +108,12 @@ class Ie extends X {
     }
     createQuickFilter() {
         if ($("#jhs-quick-filter").length) return;
-        const e = this.getSelector(), t = '\n            <div id="jhs-quick-filter" style="margin:8px 0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">\n                <span style="font-size:12px;color:#888;margin-right:4px">筛选:</span>\n                <a class="jhs-filter-btn" data-jhs-filter="all" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#f5f5f5;color:#666;border:1px solid #ddd">全部</a>\n                <a class="jhs-filter-btn active" data-jhs-filter="waitCheck" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#485fc7;color:#fff;border:none">待鉴定</a>\n                <a class="jhs-filter-btn" data-jhs-filter="favorite" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#f5f5f5;color:#666;border:1px solid #ddd">已收藏</a>\n                <a class="jhs-filter-btn" data-jhs-filter="hasDown" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#f5f5f5;color:#666;border:1px solid #ddd">已下载</a>\n                <a class="jhs-filter-btn" data-jhs-filter="hasWatch" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#f5f5f5;color:#666;border:1px solid #ddd">已观看</a>\n                <a class="jhs-filter-btn" data-jhs-filter="filter" style="padding:3px 10px;border-radius:12px;font-size:12px;cursor:pointer;background:#f5f5f5;color:#666;border:1px solid #ddd">已屏蔽</a>\n            </div>';
+        const e = this.getSelector(), t = '\n            <div id="jhs-quick-filter" class="jhs-segmented" role="tablist" aria-label="状态筛选">\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="all">全部</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item active" aria-selected="true" data-jhs-filter="waitCheck">待鉴定</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="favorite">已收藏</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="hasDown">已下载</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="hasWatch">已观看</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="filter">已屏蔽</button>\n            </div>';
         r ? $(e.boxSelector).before(t) : l && $(".masonry").before(t);
         const n = this;
-        this.activeQuickFilter = "waitCheck", this.applyQuickFilter("waitCheck"), $("#jhs-quick-filter").on("click", ".jhs-filter-btn", (function() {
+        this.activeQuickFilter = "waitCheck", this.applyQuickFilter("waitCheck"), $("#jhs-quick-filter").on("click", ".jhs-segmented__item", (function() {
             const t = $(this).data("jhs-filter");
-            $("#jhs-quick-filter .jhs-filter-btn").css({
-                background: "#f5f5f5",
-                color: "#666",
-                border: "1px solid #ddd"
-            }).removeClass("active"), $(this).css({
-                background: "#485fc7",
-                color: "#fff",
-                border: "none"
-            }).addClass("active"), n.activeQuickFilter = t, n.applyQuickFilter(t);
+            $("#jhs-quick-filter .jhs-segmented__item").removeClass("active").attr("aria-selected", "false"), $(this).addClass("active").attr("aria-selected", "true"), n.activeQuickFilter = t, n.applyQuickFilter(t);
         }));
     }
     applyVisibility() {
@@ -234,7 +237,9 @@ class Ie extends X {
             t.attr("data-jhs-status", q).attr("data-jhs-tip", j).attr("data-jhs-tag-position", P);
             const E = "rightTop" === P ? "right: 0; top:5px;" : "left: 0; top:5px;";
             if (F && (t.find(".status-tag").remove(), N.text)) {
-                const e = r ? `<span class="tag is-success status-tag" data-tip="${j}" title=""\n                        style="margin-right: 5px; border-radius:10px; position:absolute; \n                        z-index:10; background-color: ${N.color} !important; ${E}">\n                        ${N.text}\n                    </span>` : `<a class="a-primary status-tag" data-tip="${j}"  title=""\n                        style="margin-right: 5px; padding: 0 5px; color: #fff !important; border-radius:10px; position:absolute; \n                        z-index:10; background-color: ${N.color} !important; ${E}">\n                        <span class="tag" style="color:#fff !important;">${N.text}</span>\n                    </a>`;
+                const e = $(r ? `<span class="tag is-success status-tag" data-tip="${j}" title="">${N.text}</span>` : `<span class="jhs-badge status-tag" data-tip="${j}" title=""><span class="tag">${N.text}</span></span>`);
+                e.css({ color: N.on, backgroundColor: N.color, right: "rightTop" === P ? 0 : "auto", left: "rightTop" === P ? "auto" : 0, top: "5px" });
+                e.find(".tag").css("color", N.on);
                 if (r && t.find(".tags").append(e), l) {
                     const n = t.find(".item-tag");
                     n.length ? n.append(e) : t.find(".photo-info > span > div").append(e);
@@ -244,7 +249,7 @@ class Ie extends X {
         }
         this.translateListItems(R).catch((e => clog.error("列表页翻译任务失败", e)));
         const D = utils.time("处理页面耗时"), A = utils.time("累计耗费时间");
-        clog.log(`\n            <table class="countTable" style='border-collapse: collapse; width: 100%'>\n                <tr>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${o}</td>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${b}</td>\n                </tr>\n                \n                <tr>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${D}</td>\n                    <td colspan="2" style='padding: 3px; border: 1px solid #ccc;'>${A}</td>\n                </tr>\n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>项目</td>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>数量</td>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>项目</td>\n                    <td style='padding: 3px; border: 1px solid #ccc; font-weight: bold;'>数量</td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>屏蔽单番号</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageFilterCount}</strong></td>\n                     <td style='padding: 3px; border: 1px solid #ccc;'>收藏</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageFavoriteCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>屏蔽演员</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageActorFilterCount}</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>已下载</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageHasDownCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>屏蔽关键词</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageKeywordFilterCount}</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>已观看</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageHasWatchCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'>待鉴定</td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageWaitCheckCount}</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'></td>\n                </tr>\n        \n                <tr>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>总数</strong></td>\n                    <td style='padding: 3px; border: 1px solid #ccc;'><strong>${this.currentPageTotalCount}</strong></td>\n                </tr>\n            </table>\n        `);
+        clog.log(`\n            <table class="countTable jhs-layout-b12542a5">\n                <tr>\n                    <td colspan="2" class="jhs-count-table__cell">${o}</td>\n                    <td colspan="2" class="jhs-count-table__cell">${b}</td>\n                </tr>\n                \n                <tr>\n                    <td colspan="2" class="jhs-count-table__cell">${D}</td>\n                    <td colspan="2" class="jhs-count-table__cell">${A}</td>\n                </tr>\n                <tr>\n                    <td class="jhs-count-table__head">项目</td>\n                    <td class="jhs-count-table__head">数量</td>\n                    <td class="jhs-count-table__head">项目</td>\n                    <td class="jhs-count-table__head">数量</td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽单番号</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageFilterCount}</strong></td>\n                     <td class="jhs-count-table__cell">收藏</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageFavoriteCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽演员</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageActorFilterCount}</strong></td>\n                    <td class="jhs-count-table__cell">已下载</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasDownCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽关键词</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageKeywordFilterCount}</strong></td>\n                    <td class="jhs-count-table__cell">已观看</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasWatchCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">待鉴定</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageWaitCheckCount}</strong></td>\n                    <td class="jhs-count-table__cell"></td>\n                    <td class="jhs-count-table__cell"></td>\n                </tr>\n        \n                <tr>\n                    <td class="jhs-count-table__cell"><strong>总数</strong></td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageTotalCount}</strong></td>\n                </tr>\n            </table>\n        `);
     }
     async bindClick() {
         let e = this.getSelector();
@@ -412,16 +417,13 @@ class Ie extends X {
         const e = "gemini-jump-page-control";
         if ($("#" + e).length > 0) return;
         if (0 === $(".pagination-link.is-current").length) return;
-        const t = utils.getUrlParam(o, "page") || 1, n = $("<input>", {
-            type: "number",
+        const t = utils.getUrlParam(o, "page") || 1, n = $('<input type="number" class="jhs-field jhs-jump-page-input">', {
             id: "jumpPageInput",
             placeholder: "页码",
             min: "1",
-            style: "width: 60px; margin-left: 10px; padding: 10px; border: 1px solid #ccc; font-size: 14px;",
             value: t + 1
-        }), a = $("<button>", {
+        }), a = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-jump-page-btn">', {
             text: "跳转",
-            style: "margin-left: 5px; padding: 9px 8px; cursor: pointer; border: 1px solid #ccc; background-color: #f0f0f0; font-size: 14px;"
         }), i = $("<li>", {
             id: e
         }).append(n).append(a);

@@ -24,7 +24,7 @@ class et extends X {
                     throw e;
                 }
                 const o = e.length - i;
-                o > 0 && (clog.debug(`剩余任务数: <span style="color: #f40">${o}</span>`), await utils.sleep(n));
+                o > 0 && (clog.debug(`剩余任务数: <span class="jhs-task-emphasis">${o}</span>`), await utils.sleep(n));
             }
         }));
         const l = await Promise.allSettled(r), c = l.find((e => "rejected" === e.status));
@@ -85,7 +85,13 @@ class et extends X {
             checkNewVideo_ruleTime: e.checkNewVideo_ruleTime ? Number(e.checkNewVideo_ruleTime) : 8760
         };
     }
+    /** 确保所有任务入口均已具备配置和站点地址。 */
+    async ensureReady() {
+        this.taskConfig || await this.loadConfig(), this.javDbUrl || (this.javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl());
+        if (!this.javDbUrl) throw new Error("JavDB 地址未配置");
+    }
     async checkBlacklist(e) {
+        await this.ensureReady();
         let t = await storageManager.getBlacklist();
         if (0 === t.length) return;
         t = t.sort(((e, t) => e.createTime < t.createTime ? 1 : e.createTime > t.createTime ? -1 : 0));
@@ -104,14 +110,14 @@ class et extends X {
         if (0 === r.length) return;
         l.forEach((e => {
             clog.log(e);
-        })), clog.log(`<span style='color: #f40'>检测屏蔽黑名单, 总任务数: ${r.length}, 并发限制:${n}, 请求间隔时间:${a}ms</span>`);
+        })), clog.log(`<span class="jhs-task-emphasis">检测屏蔽黑名单, 总任务数: ${r.length}, 并发限制:${n}, 请求间隔时间:${a}ms</span>`);
         const c = this.getBean("BlacklistPlugin");
         await this.limitConcurrency(r, n, a, (async e => {
             let {starId: t, name: n, url: a} = e;
             try {
                 clog.log("正在检屏黑名单演员:", n, a), $("#checkBlacklistMsg").text(`正在检屏黑名单演员: ${n} ${a}`);
                 const e = await gmHttp.get(a), i = utils.htmlTo$dom(e);
-                this.storageQueue.addTask((async () => {
+                await this.storageQueue.addTask((async () => {
                     let {lastPublishTime: e} = await c.parseAndSaveFilterInfo(i, n, t);
                     await storageManager.updateBlacklistItem({
                         starId: t,
@@ -127,10 +133,11 @@ class et extends X {
             }
         })), await this.storageQueue.waitAllFinished();
         const d = utils.getNowStr();
-        localStorage.setItem(this.lastCheckBlacklistTimeKey, d), clog.log('<span style="color: #f40">-------- END 检测屏蔽黑名单 END --------</span>'),
+        localStorage.setItem(this.lastCheckBlacklistTimeKey, d), clog.log('<span class="jhs-task-emphasis">-------- END 检测屏蔽黑名单 END --------</span>'),
         $("#checkBlacklistMsg").text("检测屏蔽黑名单, 结束"), this.getBean("BlacklistPlugin").resetBtnTip().then();
     }
     async checkFavoriteActress() {
+        await this.ensureReady();
         const e = `${this.javDbUrl}/users/collection_actors`, t = [];
         await this.scrapeActorInfo(e, t), clog.log("所有演员信息已收集, 总计数量:", t.length), $("#checkNewVideoMsg").text("同步完成"),
         t.length > 0 && (await storageManager.addFavoriteActressList(t), localStorage.setItem(this.lastCheckFavoriteActressTimeKey, utils.getNowStr()),
@@ -168,7 +175,10 @@ class et extends X {
         if (nextUrl) await this.scrapeActorInfo(nextUrl, t);
     }
     async checkNewVideo(e) {
-        const t = await storageManager.getFavoriteActressList(), n = utils.genericSort(t, [ {
+        await this.ensureReady();
+        const result = { success: 0, parseFailed: 0, networkFailed: 0, skippedStopped: 0, skippedInterval: 0, aborted: 0 }, t = await storageManager.getFavoriteActressList();
+        if (!t.length) return this.renderCheckResult(result, "没有需要检测的演员（当前收藏为空）"), result;
+        const n = utils.genericSort(t, [ {
             key: e => {
                 var t;
                 return (null == (t = e.newVideoList) ? void 0 : t.length) ?? 0;
@@ -178,41 +188,62 @@ class et extends X {
             key: "lastPublishTime",
             order: "desc"
         } ]), a = this.taskConfig.checkConcurrencyCount, i = this.taskConfig.checkRequestSleep, s = this.taskConfig.checkNewVideo_intervalTime, o = this.taskConfig.checkNewVideo_ruleTime, r = localStorage.getItem(this.lastCheckNewVideoTimeKey);
-        if (!e && r && this.isUnnecessaryCheck(r, s)) return void clog.debug(`检测新作品, 上次检测时间: ${r} 检测间隔时间: ${s}小时 未到时间`);
+        if (!e && r && this.isUnnecessaryCheck(r, s)) return result.skippedInterval = t.length,
+        clog.debug(`检测新作品, 上次检测时间: ${r} 检测间隔时间: ${s}小时 未到时间`), this.renderCheckResult(result, "检测间隔未到"), result;
         const l = [], c = [];
         for (const m of n) {
             const {lastCheckTime: t, lastPublishTime: n, name: a} = m;
-            !e && t && this.isUnnecessaryCheck(t, s) || (!n || 0 === o || this.isUnnecessaryCheck(n, o) ? l.push(m) : c.push(`检测新作品: ${a} ${n} 停更超过${o / 24 / 365}年,跳过检测`));
+            !e && t && this.isUnnecessaryCheck(t, s) ? result.skippedInterval++ : !n || 0 === o || this.isUnnecessaryCheck(n, o) ? l.push(m) : (result.skippedStopped++,
+            c.push(`检测新作品: ${a} ${n} 停更超过${o / 24 / 365}年,跳过检测`));
         }
-        if (0 === l.length) return;
+        if (0 === l.length) return this.renderCheckResult(result, "没有需要检测的演员"), result;
         c.forEach((e => {
             clog.log(e);
-        })), clog.log(`<span style='color: #f40'>检测最新作品, 总任务数: ${l.length}, 并发限制:${a}, 请求间隔时间:${i}ms</span>`);
+        })), clog.log(`<span class="jhs-task-emphasis">检测最新作品, 总任务数: ${l.length}, 并发限制:${a}, 请求间隔时间:${i}ms</span>`);
         const d = await storageManager.getTitleFilterKeyword(), h = await storageManager.getBlacklistCarList(), g = new Set(h.map((e => e.carNum)));
-        await this.limitConcurrency(l, a, i, (async e => {
+        try {
+            await this.limitConcurrency(l, a, i, (async e => {
             const {lastCheckTime: t, name: n, starId: a} = e;
             let i = `${this.javDbUrl}/actors/${a}?t=d`;
             try {
                 clog.log("正在检测最新作品, 演员:", n, i), $("#checkNewVideoMsg").text(`正在检测最新作品, 演员: ${n}`);
                 const e = await gmHttp.get(i), t = utils.htmlTo$dom(e);
-                this.storageQueue.addTask((async () => {
-                    await this.parsePage(t, a, n, d, g);
-                }));
+                try {
+                    await this.storageQueue.addTask((async () => this.parsePage(t, T, a, n, d, g))), result.success++;
+                } catch (e) {
+                    result.parseFailed++, clog.error("解析或保存演员作品失败:", i, e);
+                }
             } catch (s) {
-                if (this.isNetworkBlocked(s)) throw s;
-                clog.error("检测屏蔽演员信息, 发生错误:", i, s), console.error("检测屏蔽演员信息, 发生错误:", i, s), show.error("检测屏蔽演员信息, 发生错误:" + s, "bottom", "right");
+                if (this.isNetworkBlocked(s)) throw result.networkFailed++, s;
+                result.networkFailed++, clog.error("检测演员信息发生网络错误:", i, s), console.error("检测演员信息发生网络错误:", i, s);
             }
-        })), await this.storageQueue.waitAllFinished(), localStorage.setItem(this.lastCheckNewVideoTimeKey, utils.getNowStr()),
-        clog.log('<span style="color: #f40">检测最新作品---结束</span>'), $("#checkNewVideoMsg").text("检测完毕");
+            })), await this.storageQueue.waitAllFinished();
+        } catch (error) {
+            if (!this.isNetworkBlocked(error)) throw error;
+            result.aborted = Math.max(0, l.length - result.success - result.parseFailed - result.networkFailed), clog.warn(`网络阻断，本轮停止，未执行 ${result.aborted}`);
+        }
+        result.success > 0 && 0 === result.parseFailed + result.networkFailed + result.aborted && localStorage.setItem(this.lastCheckNewVideoTimeKey, utils.getNowStr()),
+        clog.log('<span class="jhs-task-emphasis">检测最新作品---结束</span>'), this.renderCheckResult(result);
         const p = this.getBean("NewVideoPlugin");
         p.loadData(), p.resetBtnTip().then();
+        return result;
     }
-    async parsePage(e, t, n, a, i) {
-        let s, o, r = !1, l = T;
-        if (e.text().includes(I) && (r = !0, l = I), r && e.find(".avatar-box").length > 0 && e.find(".avatar-box").parent().remove(),
-        s = e.find(this.getSelector(l).requestDomItemSelector), o = e.find(this.getSelector(l).nextPageSelector).attr("href"),
-        o && 0 === s.length) throw clog.error("新作品检测-解析列表失败"), show.error("新作品检测-解析列表失败"),
-        new Error("新作品检测-解析列表失败");
+    renderCheckResult(result, prefix = "检测结束") {
+        const message = `${prefix}：成功 ${result.success}，解析失败 ${result.parseFailed}，网络失败 ${result.networkFailed}，停更跳过 ${result.skippedStopped}，间隔跳过 ${result.skippedInterval}${result.aborted ? `，未执行 ${result.aborted}` : ""}`;
+        $("#checkNewVideoMsg").text(message), clog.log(message);
+    }
+    async parsePage(e, site, t, n, a, i) {
+        const selector = this.getSelector(site);
+        site === I && e.find(".avatar-box").length > 0 && e.find(".avatar-box").parent().remove();
+        const pageTitle = e.find("title").text(), hasChallenge = /Just a moment|Attention Required|Cloudflare/i.test(pageTitle) || e.find("[class*='cf-chl'], #challenge-form").length > 0;
+        const listContainer = e.find(site === I ? `${selector.boxSelector}, #waterfall` : selector.boxSelector).first();
+        if (hasChallenge || !listContainer.length) throw clog.error("新作品检测-解析列表失败"), new Error("新作品检测-解析列表失败");
+        const s = e.find(selector.requestDomItemSelector), o = e.find(selector.nextPageSelector).attr("href");
+        if (0 === s.length) return await storageManager.updateFavoriteActress({
+            starId: t,
+            lastCheckTime: utils.getNowStr(),
+            newVideoList: []
+        }), 0;
         let c = [], d = null;
         for (const m of s) {
             const e = $(m), {carNum: s, url: o, title: r, publishTime: l} = this.getBean("ListPagePlugin").findCarNumAndHref(e);
@@ -240,22 +271,24 @@ class et extends X {
             })()));
         }
         const h = await storageManager.getCarMap(), p = c.filter((e => !h.has(e.carNum)));
-        p.length > 0 && clog.log(`<span style='color: #f40'>检测出新作品, ${n}, 共${p.length}部</span>`),
+        p.length > 0 && clog.log(`<span class="jhs-task-emphasis">检测出新作品, ${n}, 共${p.length}部</span>`),
         await storageManager.updateFavoriteActress({
             starId: t,
             lastCheckTime: utils.getNowStr(),
             newVideoList: p,
             lastPublishTime: d
         });
+        return p.length;
     }
     async checkOneNewVideo(e) {
+        await this.ensureReady();
         const t = await storageManager.getTitleFilterKeyword(), n = await storageManager.getBlacklistCarList(), a = new Set(n.map((e => e.carNum))), {lastCheckTime: i, name: s, starId: o} = e;
         let r = `${this.javDbUrl}/actors/${o}?t=d`;
         const l = $("#checkNewVideoMsg");
         try {
             clog.log("正在检测最新作品, 演员:", s, r), l.text(`正在检测最新作品, 演员: ${s}`);
             const e = await gmHttp.get(r), n = utils.htmlTo$dom(e);
-            await this.parsePage(n, o, s, t, a), clog.log('<span style="color: #f40">检测最新作品---结束</span>'),
+            await this.parsePage(n, T, o, s, t, a), clog.log('<span class="jhs-task-emphasis">检测最新作品---结束</span>'),
             l.text("检测完毕");
             this.getBean("NewVideoPlugin").loadData();
         } catch (c) {

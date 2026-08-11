@@ -1,59 +1,84 @@
 class He extends X {
     constructor() {
-        super(...arguments), i(this, "floorIndex", 1), i(this, "isInit", !1);
+        super(...arguments), i(this, "floorIndex", 1), i(this, "isInit", !1), i(this, "$panel", null);
     }
     getName() {
         return "RelatedPlugin";
     }
-    async showRelated(e, t) {
-        const n = await storageManager.getSetting("enableLoadRelated", C), a = e;
-        t ? (a.append(`\n            <div style="display: flex; align-items: center; margin: 16px 0; color: #666; font-size: 14px;">\n                <span style="flex: 1; height: 1px; background: linear-gradient(to right, transparent, #999, transparent);"></span>\n                <span style="padding: 0 10px;">相关清单</span>\n                <a id="relatedFold" style="margin-left: 8px; color: #1890ff; text-decoration: none; display: flex; align-items: center;">\n                    <span class="toggle-text">${n === _ ? "折叠" : "展开"}</span>\n                    <span class="toggle-icon" style="margin-left: 4px;">${n === _ ? "▲" : "▼"}</span>\n                </a>\n                <span style="flex: 1; height: 1px; background: linear-gradient(to right, transparent, #999, transparent);"></span>\n            </div>\n        `),
-        $("#relatedFold").on("click", (e => {
-            e.preventDefault(), e.stopPropagation();
-            const n = $("#relatedFold .toggle-text"), a = $("#relatedFold .toggle-icon"), i = "展开" === n.text();
-            n.text(i ? "折叠" : "展开"), a.text(i ? "▲" : "▼"), i ? ($("#relatedContainer").show(),
-            $("#relatedFooter").show(), this.isInit || (this.fetchAndDisplayRelateds(t), this.isInit = !0),
-            storageManager.saveSettingItem("enableLoadRelated", _)) : ($("#relatedContainer").hide(),
-            $("#relatedFooter").hide(), storageManager.saveSettingItem("enableLoadRelated", C));
-        })), a.append('<div id="relatedContainer"></div>'), a.append('<div id="relatedFooter"></div>'),
-        n === _ && await this.fetchAndDisplayRelateds(t)) : show.error("未传入movieId");
+    async initCss() {
+        return `
+            <style>
+                .jhs-related-panel { min-width:0; }
+                .jhs-related-list { display:grid; }
+                .jhs-related-item { display:grid; gap:var(--jhs-space-2); padding:var(--jhs-space-3) 0; border-bottom:1px solid color-mix(in srgb,var(--jhs-border) 55%,transparent); }
+                .jhs-related-item:last-child { border-bottom:0; }
+                .jhs-related-heading { display:flex; min-width:0; align-items:baseline; gap:var(--jhs-space-2); }
+                .jhs-related-index { flex:none; color:var(--jhs-text-faint); font-size:14px; }
+                .jhs-related-title { min-width:0; overflow:hidden; color:var(--jhs-accent); font-size:16px; font-weight:600; text-overflow:ellipsis; text-decoration:none; white-space:nowrap; }
+                .jhs-related-meta { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2) var(--jhs-space-4); color:var(--jhs-text-muted); font-size:14px; }
+                .jhs-related-time { color:var(--jhs-text-faint); font-size:14px; white-space:nowrap; }
+            </style>`;
     }
-    async fetchAndDisplayRelateds(e) {
-        const t = $("#relatedContainer"), n = $("#relatedFooter");
-        t.append('<div id="relatedLoading" style="margin-top:15px;background-color:#ffffff;padding:10px;margin-left: -10px;">获取清单中...</div>');
-        let a = null;
-        try {
-            a = await K(e, 1, 20);
-        } catch (i) {
-            console.error("获取清单失败:", i);
-        } finally {
-            $("#relatedLoading").remove();
-        }
-        if (!a) return t.append('\n                <div style="margin-top:15px;background-color:#ffffff;padding:10px;margin-left: -10px;">\n                    获取清单失败\n                    <a id="retryFetchRelateds" href="javascript:;" style="margin-left: 10px; color: #1890ff; text-decoration: none;">重试</a>\n                </div>\n            '),
-        void $("#retryFetchRelateds").on("click", (async () => {
-            $("#retryFetchRelateds").parent().remove(), await this.fetchAndDisplayRelateds(e);
+    async showRelated(target, movieId) {
+        const enabled = await storageManager.getSetting("enableLoadRelated", C), host = target;
+        if (!movieId) return void show.error("未传入movieId");
+        const panel = $('<section class="jhs-related-panel" data-jhs-panel="related"></section>'), header = $('<header class="jhs-panel-header"><h3>相关清单</h3></header>'), toggle = $('<button type="button" id="relatedFold" class="jhs-btn jhs-btn--secondary jhs-panel-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>');
+        header.append(toggle), panel.append(header, '<div id="relatedContainer" class="jhs-related-list"></div>', '<div id="relatedFooter" class="jhs-panel-footer"></div>'), host.append(panel), this.$panel = panel;
+        this.updateToggle(toggle, enabled === _);
+        toggle.on("click", (event => {
+            event.preventDefault(), event.stopPropagation();
+            const expanded = "展开" === toggle.find(".toggle-text").text();
+            this.updateToggle(toggle, expanded), panel.find("#relatedContainer, #relatedFooter").toggle(expanded), expanded && !this.isInit && (this.fetchAndDisplayRelateds(movieId),
+            this.isInit = !0), storageManager.saveSettingItem("enableLoadRelated", expanded ? _ : C);
         }));
-        if (0 !== a.length) if (this.displayRelateds(a, t), 20 === a.length) {
-            n.html('\n                <button id="loadMoreRelateds" style="width:100%; background-color: #e1f5fe; border:none; padding:10px; margin-top:10px; cursor:pointer; color:#0277bd; font-weight:bold; border-radius:4px;">\n                    加载更多清单\n                </button>\n                <div id="relatedEnd" style="display:none; text-align:center; padding:10px; color:#666; margin-top:10px;">已加载全部清单</div>\n            ');
-            let a = 1, s = $("#loadMoreRelateds");
-            s.on("click", (async () => {
-                let n;
-                s.text("加载中...").prop("disabled", !0), a++;
-                try {
-                    n = await K(e, a, 20);
-                } catch (i) {
-                    console.error("加载更多清单失败:", i);
-                } finally {
-                    s.text("加载失败, 请点击重试").prop("disabled", !1);
-                }
-                n && (this.displayRelateds(n, t), n.length < 20 ? (s.remove(), $("#relatedEnd").show()) : s.text("加载更多清单").prop("disabled", !1));
-            }));
-        } else n.html('<div style="text-align:center; padding:10px; color:#666; margin-top:10px;">已加载全部清单</div>'); else t.append('<div style="margin-top:15px;background-color:#ffffff;padding:10px;margin-left: -10px;">无清单</div>');
+        enabled === _ ? (await this.fetchAndDisplayRelateds(movieId), this.isInit = !0) : panel.find("#relatedContainer, #relatedFooter").hide();
     }
-    displayRelateds(e, t) {
-        e.length && e.forEach((e => {
-            let n = `\n                <div class="item columns is-desktop" style="display:block;margin-top:6px;background-color:#ffffff;padding:10px;margin-left: -10px;word-break: break-word;position:relative;">\n                   <span style="position:absolute;top:5px;right:10px;color:#999;font-size:12px;">#${this.floorIndex++}</span>\n                   <span style="position:absolute;bottom:5px;right:10px;color:#999;font-size:12px;">创建时间: ${e.createTime}</span>\n                   <p><a href="/lists/${e.relatedId}" target="_blank" style="color:#2e8abb">${e.name}</a></p>\n                   <p style="margin-top: 5px;">视频个数: ${e.movieCount}</p>\n                   <p style="margin-top: 5px;">收藏次数: ${e.collectionCount} 被查看次数: ${e.viewCount}</p>\n                </div>\n            `;
-            t.append(n);
+    updateToggle(toggle, expanded) {
+        toggle.attr("aria-expanded", String(expanded)), toggle.find(".toggle-text").text(expanded ? "折叠" : "展开"),
+        toggle.find(".toggle-icon").text(expanded ? "▲" : "▼");
+    }
+    async fetchAndDisplayRelateds(movieId) {
+        const container = this.$panel.find("#relatedContainer"), footer = this.$panel.find("#relatedFooter");
+        container.empty().append($('<div class="jhs-panel-state"></div>').text("获取清单中...")), footer.empty();
+        let related;
+        try {
+            related = await K(movieId, 1, 20);
+        } catch (error) {
+            console.error("获取清单失败:", error);
+            return void this.renderRetry(container, (() => this.fetchAndDisplayRelateds(movieId)));
+        }
+        container.empty();
+        if (!related.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无清单"));
+        this.displayRelateds(related, container), 20 === related.length ? this.bindLoadMore(movieId, container, footer) : footer.append($('<div class="jhs-panel-end"></div>').text("已加载全部清单"));
+    }
+    renderRetry(container, retry) {
+        container.empty();
+        const state = $('<div class="jhs-panel-state"></div>').append(document.createTextNode("获取清单失败 "));
+        state.append($('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry)), container.append(state);
+    }
+    bindLoadMore(movieId, container, footer) {
+        const button = $('<button type="button" id="loadMoreRelateds" class="jhs-btn jhs-btn--secondary">加载更多清单</button>'), end = $('<div id="relatedEnd" class="jhs-panel-end">已加载全部清单</div>').hide();
+        footer.empty().append(button, end);
+        let page = 1;
+        button.on("click", (async () => {
+            button.text("加载中...").prop("disabled", !0), page++;
+            try {
+                const related = await K(movieId, page, 20);
+                this.displayRelateds(related, container), related.length < 20 ? (button.remove(), end.show()) : button.text("加载更多清单").prop("disabled", !1);
+            } catch (error) {
+                console.error("加载更多清单失败:", error), button.text("加载失败，请重试").prop("disabled", !1);
+            }
+        }));
+    }
+    displayRelateds(related, container) {
+        related.forEach((item => {
+            const row = $('<article class="jhs-related-item"></article>'), title = $("<a></a>").addClass("jhs-related-title").attr({
+                href: `/lists/${encodeURIComponent(item.relatedId)}`,
+                target: "_blank",
+                rel: "noopener noreferrer"
+            }).text(item.name || "未命名清单"), heading = $('<div class="jhs-related-heading"></div>').append($("<span></span>").addClass("jhs-related-index").text(`#${this.floorIndex++}`), title), meta = $('<div class="jhs-related-meta"></div>'), time = $('<time class="jhs-related-time"></time>').text(`创建时间：${item.createTime || "未知"}`);
+            meta.append($("<span></span>").text(`视频：${Number(item.movieCount) || 0}`), $("<span></span>").text(`收藏：${Number(item.collectionCount) || 0}`),
+            $("<span></span>").text(`查看：${Number(item.viewCount) || 0}`), time), row.append(heading, meta), container.append(row);
         }));
     }
 }

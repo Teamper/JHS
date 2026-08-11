@@ -3,37 +3,36 @@
  * Returns { categories, corePlugins }.
  */
 function getPluginCategories() {
+    const pluginMeta = {
+        SettingPlugin:["设置中心","core"], StatsPlugin:["统计中心","core"], MobileBottomBarPlugin:["工具栏与移动操作","core"],
+        ListPagePlugin:["列表状态处理","list"], NavBarPlugin:["JavDB 导航","list"], BusNavBarPlugin:["JavBus 导航","list"], ListPageButtonPlugin:["列表操作","list"], HighlightMagnetPlugin:["磁力标记","list"], FoldCategoryPlugin:["分类折叠","list"], AutoPagePlugin:["自动翻页","list"], HitShowPlugin:["热播榜单","list"], TOP250Plugin:["TOP 250","list"],
+        DetailPagePlugin:["JavDB 详情页","detail"], BusDetailPagePlugin:["JavBus 详情页","detail"], DetailPageButtonPlugin:["详情操作","detail"], ReviewPlugin:["评论","detail"], RelatedPlugin:["相关影片","detail"], TranslatePlugin:["标题翻译","detail"], WantAndWatchedVideosPlugin:["想看与看过","detail"],
+        CoverButtonPlugin:["封面快捷操作","media"], PreviewVideoPlugin:["JavDB 预览视频","media"], BusPreviewVideoPlugin:["JavBus 预览视频","media"], ScreenShotPlugin:["剧照","media"], BusImgPlugin:["JavBus 图片适配","media"], ActressInfoPlugin:["演员资料","media"], SearchByImagePlugin:["以图搜图","media"],
+        HistoryPlugin:["鉴定记录","data"], BlacklistPlugin:["黑名单","data"], FilterTitleKeywordPlugin:["关键词筛选","data"], FavoriteActressesPlugin:["演员收藏","data"], NewVideoPlugin:["新作品检测","data"], TaskPlugin:["定时任务","data"],
+        OtherSitePlugin:["外部站点","network"], Fc2Plugin:["FC2 详情","network"], Fc2By123AvPlugin:["FC2 123AV","network"], MagnetHubPlugin:["磁力聚合","network"], JavTrailersPlugin:["预告片","network"], SubTitleCatPlugin:["字幕搜索","network"], OneTwoThreeOfflinePlugin:["123 云盘离线","network"]
+    };
+    const group = (key, label) => ({ label, plugins:Object.entries(pluginMeta).filter((e => e[1][1] === key)).map((e => e[0])) });
     return {
         categories: {
-            status: { label: "状态管理", plugins: ["DetailPagePlugin","ListPagePlugin","NavBarPlugin","BusNavBarPlugin","BusDetailPagePlugin","DetailPageButtonPlugin","ListPageButtonPlugin","HighlightMagnetPlugin","FoldCategoryPlugin","AutoPagePlugin","HistoryPlugin","WantAndWatchedVideosPlugin"] },
-            blacklist: { label: "屏蔽过滤", plugins: ["BlacklistPlugin","FilterTitleKeywordPlugin"] },
-            favorite: { label: "收藏", plugins: ["FavoriteActressesPlugin"] },
-            "new-video": { label: "新作品", plugins: ["NewVideoPlugin","TaskPlugin"] },
-            "external-search": { label: "外部搜索", plugins: ["OtherSitePlugin","Fc2Plugin","Fc2By123AvPlugin","HitShowPlugin","TOP250Plugin","ReviewPlugin","RelatedPlugin","MagnetHubPlugin","JavTrailersPlugin"] },
-            "image-viewer": { label: "图片预览", plugins: ["CoverButtonPlugin","PreviewVideoPlugin","BusPreviewVideoPlugin","ScreenShotPlugin","BusImgPlugin"] },
-            avatar: { label: "演员信息", plugins: ["ActressInfoPlugin","SearchByImagePlugin"] },
-            translate: { label: "翻译", plugins: ["TranslatePlugin"] },
-            subtitle: { label: "字幕", plugins: ["SubTitleCatPlugin"] },
-            backup: { label: "备份设置", plugins: ["SettingPlugin"] },
-            "one-two-three": { label: "云盘", plugins: ["OneTwoThreeOfflinePlugin"] },
-            stats: { label: "统计", plugins: ["StatsPlugin"] }
+            core:group("core", "基础核心"), list:group("list", "列表页"), detail:group("detail", "详情页"),
+            media:group("media", "媒体"), data:group("data", "数据"), network:group("network", "网络")
         },
-        corePlugins: ["SettingPlugin","StatsPlugin"]
+        corePlugins: ["SettingPlugin","StatsPlugin"], pluginMeta
     };
 }
 
 /** Build the HTML for the cache items grid in the settings dialog. */
 function buildCacheItemsHtml(cacheItems) {
     return cacheItems.map(e => `
-            <div class="cache-item" style="border: 1px solid #eee; border-radius: 8px; padding: 12px;">
-                <div style="font-weight: bold; margin-bottom: 8px;">${e.text}</div>
-                <div style="display: flex; gap: 8px;">
-                    <a class="menu-btn clean-btn" data-key="${e.key}" style="background-color:#448cc2; flex:1; text-align:center;" title="${e.title}">
+            <div class="cache-item">
+                <div class="cache-item__title">${e.text}</div>
+                <div class="cache-item__actions">
+                    <button type="button" class="jhs-btn jhs-btn--secondary clean-btn" data-key="${e.key}" title="${e.title}">
                         <span>清理</span>
-                    </a>
-                    <a class="menu-btn view-btn" data-key="${e.key}" style="background-color:#b2bec0; flex:1; text-align:center;" >
+                    </button>
+                    <button type="button" class="jhs-btn jhs-btn--secondary view-btn" data-key="${e.key}" >
                         <span>查看</span>
-                    </a>
+                    </button>
                 </div>
             </div>
         `).join("");
@@ -52,95 +51,96 @@ function buildVideoQualityOptions() {
 function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
     const n = buildCacheItemsHtml(cacheItems);
     const a = buildVideoQualityOptions();
-    const isMobile = utils.isMobileMode();
-    const sidebarDir = isMobile ? "column" : "row";
     return `
-            <div style="display: flex; flex-direction: ${sidebarDir}; height: 100%;">
-                <div class="jhs-mobile-sidebar" style="width: 140px; flex-shrink: 0; padding: 15px 0; background: #f5f5f5; border-right: 1px solid #ddd;">
-                    <div class="side-menu-item ${"backup-panel" === activePanel ? "active" : ""}" data-panel="backup-panel">数据备份</div>
-                    <div class="side-menu-item ${"base-panel" === activePanel ? "active" : ""}" data-panel="base-panel">基础配置</div>
-                    <div class="side-menu-item ${"filter-panel" === activePanel ? "active" : ""}" data-panel="filter-panel">屏蔽配置</div>
-                    <div class="side-menu-item ${"task-panel" === activePanel ? "active" : ""}" data-panel="task-panel">定时任务</div>
-                    <div class="side-menu-item ${"domain-panel" === activePanel ? "active" : ""}" data-panel="domain-panel" title="第三方视频资源域名配置">外部网站</div>
+            <div class="jhs-setting-layout jhs-ui">
+                <nav class="jhs-mobile-sidebar" aria-label="设置分类">
+                    <button type="button" class="jhs-btn side-menu-item ${"backup-panel" === activePanel ? "active" : ""}" data-panel="backup-panel" aria-controls="backup-panel">数据备份</button>
+                    <button type="button" class="jhs-btn side-menu-item ${"base-panel" === activePanel ? "active" : ""}" data-panel="base-panel" aria-controls="base-panel">基础配置</button>
+                    <button type="button" class="jhs-btn side-menu-item ${"filter-panel" === activePanel ? "active" : ""}" data-panel="filter-panel" aria-controls="filter-panel">屏蔽配置</button>
+                    <button type="button" class="jhs-btn side-menu-item ${"task-panel" === activePanel ? "active" : ""}" data-panel="task-panel" aria-controls="task-panel">定时任务</button>
+                    <button type="button" class="jhs-btn side-menu-item ${"domain-panel" === activePanel ? "active" : ""}" data-panel="domain-panel" aria-controls="domain-panel" title="第三方视频资源域名配置">外部网站</button>
 
-                    <div class="side-menu-item ${"cache-panel" === activePanel ? "active" : ""}" data-panel="cache-panel">清理缓存</div>
-                </div>
+                    <button type="button" class="jhs-btn side-menu-item ${"cache-panel" === activePanel ? "active" : ""}" data-panel="cache-panel" aria-controls="cache-panel">清理缓存</button>
+                </nav>
 
-                <div style="flex: 1; display: flex; flex-direction: column; height: 100%; ">
-                    <div style="flex: 1; margin: 0 10px; padding-bottom: 20px;overflow-y: auto;overflow-x: hidden">
+                <div class="jhs-setting-main">
+                    <div class="jhs-setting-body">
 
 
-                        <div id="backup-panel" class="content-panel" style="display: ${"backup-panel" === activePanel ? "block" : "none"};">
-                            <div style="margin-bottom: 20px">
-                                <a id="importBtn" class="menu-btn" style="background-color:#d25a88"><span>导入数据</span></a>
-                                <a id="exportBtn" class="menu-btn" style="background-color:#85d0a3"><span>导出数据</span></a>
+                        <div id="backup-panel" class="content-panel ${"backup-panel" === activePanel ? "active" : ""}" role="region">
+                            <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>数据备份</h3><p>导入、导出和远程备份 JHS 数据。</p></header><div class="jhs-setting-group">
+                            <div class="jhs-toolbar">
+                                <button type="button" id="importBtn" class="jhs-btn jhs-btn--secondary"><span>导入数据</span></button>
+                                <button type="button" id="exportBtn" class="jhs-btn jhs-btn--primary"><span>导出数据</span></button>
                             </div>
 
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">WebDav备份</span>
                                 <div>
-                                    <a id="webdavBackupListBtn" class="menu-btn" style="background-color:#5d87c2"><span>查看备份</span></a>
-                                    <a id="webdavBackupBtn" class="menu-btn" style="background-color:#64bb69"><span>备份数据</span></a>
+                                    <button type="button" id="webdavBackupListBtn" class="jhs-btn jhs-btn--secondary"><span>查看备份</span></button>
+                                    <button type="button" id="webdavBackupBtn" class="jhs-btn jhs-btn--primary"><span>备份数据</span></button>
                                 </div>
                             </div>
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">服务地址:</span>
                                 <div class="form-content">
-                                    <input id="webDavUrl">
+                                    <input type="url" id="webDavUrl" class="jhs-field">
                                 </div>
                             </div>
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">用户名:</span>
                                 <div class="form-content">
-                                    <input id="webDavUsername">
+                                    <input type="text" id="webDavUsername" class="jhs-field">
                                 </div>
                             </div>
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">密码:</span>
                                 <div class="form-content">
-                                    <input id="webDavPassword">
+                                    <input type="password" id="webDavPassword" class="jhs-field">
                                 </div>
                             </div>
+                        </div></section>
                         </div>
 
 
-                        <div id="base-panel" class="content-panel" style="display: ${"base-panel" === activePanel ? "block" : "none"};">
-                            <div class="setting-item">
+                        <div id="base-panel" class="content-panel ${"base-panel" === activePanel ? "active" : ""}" role="region">
+                            <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>基础配置</h3><p>配置列表显示、媒体加载、网络和主题。</p></header><div class="jhs-setting-group">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">打开待鉴定窗口数:</span>
                                 <div class="form-content">
-                                    <input type="number" id="waitCheckCount" min="1" max="20" style="width: 100%;">
+                                    <input type="number" id="waitCheckCount" class="jhs-field" min="1" max="20">
                                 </div>
                             </div>
 
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">已鉴定标签展示位置:</span>
                                 <div class="form-content">
-                                    <select id="tagPosition">
+                                    <select id="tagPosition" class="jhs-select-source">
                                         <option value="rightTop">右上</option>
                                         <option value="leftTop">左上</option>
                                     </select>
                                 </div>
                             </div>
 
-                            <div class="setting-item">
-                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">
-                                    鉴定补录演员信息 <span data-tip="在列表页进行鉴定是获取不到演员名称的, 开启后, 额外解析详情页补录演员名称, 因发请求解析费时, 会被以往慢1秒左右">(?)</span>
+                            <div class="jhs-setting-row">
+                                <span class="setting-label jhs-setting-label-inline">
+                                    鉴定补录演员信息
                                 </span>
                                 <div class="form-content">
                                     <input type="checkbox" id="enableSaveActressCarInfo" class="mini-switch">
                                 </div>
                             </div>
 
-                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>
 
-                            <div class="setting-item" style="margin-top:10px">
+
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">
                                     封面快捷按钮
                                 </span>
                             </div>
 
-                            <div class="setting-item">
-                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">
+                            <div class="jhs-setting-row">
+                                <span class="setting-label jhs-setting-label-inline">
                                     ${coverButtonPlugin.screenSvg}长缩略图:
                                 </span>
                                 <div class="form-content">
@@ -148,8 +148,8 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                                 </div>
                             </div>
 
-                            <div class="setting-item">
-                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">
+                            <div class="jhs-setting-row">
+                                <span class="setting-label jhs-setting-label-inline">
                                     ${coverButtonPlugin.videoSvg}预览视频:
                                 </span>
                                 <div class="form-content">
@@ -157,8 +157,8 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                                 </div>
                             </div>
 
-                            <div class="setting-item">
-                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">
+                            <div class="jhs-setting-row">
+                                <span class="setting-label jhs-setting-label-inline">
                                     ${coverButtonPlugin.handleSvg}鉴定按钮:
                                 </span>
                                 <div class="form-content">
@@ -166,8 +166,8 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                                 </div>
                             </div>
 
-                            <div class="setting-item">
-                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">
+                            <div class="jhs-setting-row">
+                                <span class="setting-label jhs-setting-label-inline">
                                     ${coverButtonPlugin.siteSvg}第三方跳转:
                                 </span>
                                 <div class="form-content">
@@ -175,8 +175,8 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                                 </div>
                             </div>
 
-                            <div class="setting-item">
-                                <span class="setting-label" style="display:flex; align-items:center; gap:5px">
+                            <div class="jhs-setting-row">
+                                <span class="setting-label jhs-setting-label-inline">
                                     ${coverButtonPlugin.copySvg}复制按钮:
                                 </span>
                                 <div class="form-content">
@@ -184,21 +184,21 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                                 </div>
                             </div>
 
-                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>
 
-                            <div class="setting-item">
+
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">预览视频默认画质:</span>
                                 <div class="form-content">
-                                    <select id="videoQuality">
+                                    <select id="videoQuality" class="jhs-select-source">
                                         ${a}
                                     </select>
                                 </div>
                             </div>
 
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">评论区条数:</span>
                                 <div class="form-content">
-                                    <select id="reviewCount">
+                                    <select id="reviewCount" class="jhs-select-source">
                                         <option value="10">10条</option>
                                         <option value="20">20条</option>
                                         <option value="30">30条</option>
@@ -208,113 +208,143 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                                 </div>
                             </div>
 
-                            <div class="setting-item ${r ? "" : "do-hide"}">
+                            <div class="jhs-setting-row ${r ? "" : "do-hide"}">
                                 <span class="setting-label">
-                                    高亮已收藏演员 <span data-tip="详情页, 对已收藏的演员进行边框高亮提醒">(?)</span>
+                                    高亮已收藏演员
                                 </span>
                                 <div class="form-content">
                                     <input type="checkbox" id="enableFavoriteActresses" class="mini-switch">
                                 </div>
                             </div>
 
-                            <div class="setting-item ${r ? "" : "do-hide"}">
+                            <div class="jhs-setting-row ${r ? "" : "do-hide"}">
                                 <span id="highlightedTagLabel" class="setting-label">
                                     分类标签|高亮演员-边框样式:
                                 </span>
-                                <div class="form-content" style="display: flex; align-items: center;">
-                                    <input type="number" id="highlightedTagNumber" min="0" max="20">
+                                <div class="form-content">
+                                    <input type="number" id="highlightedTagNumber" class="jhs-field" min="0" max="20">
                                     <input type="color" id="highlightedTagColor">
                                 </div>
                             </div>
 
-                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>
 
-                            <div class="setting-item">
+
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">请求超时时间(毫秒):</span>
                                 <div class="form-content">
-                                    <input type="number" id="httpTimeout" min="1000" max="10000" style="width: 100%;">
+                                    <input type="number" id="httpTimeout" class="jhs-field" min="1000" max="10000">
                                 </div>
                             </div>
 
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">请求失败重试次数:</span>
                                 <div class="form-content">
-                                    <input type="number" id="httpRetryCount" min="0" max="10" style="width: 100%;">
+                                    <input type="number" id="httpRetryCount" class="jhs-field" min="0" max="10">
                                 </div>
                             </div>
 
-                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>
 
-                            <div class="setting-item">
+
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">
                                     启用控制台日志:
                                 </span>
                                 <div class="form-content">
-                                    <select id="enableClog">
+                                    <select id="enableClog" class="jhs-select-source">
                                         <option value="no">禁用</option>
                                         <option value="yes">开启</option>
                                     </select>
                                 </div>
                             </div>
 
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">日志最大行数:</span>
                                 <div class="form-content">
-                                    <input type="number" id="clogMsgCount" min="100" max="3000" style="width: 100%;">
+                                    <input type="number" id="clogMsgCount" class="jhs-field" min="100" max="3000">
                                 </div>
                             </div>
 
 
-                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>
 
-                            <div class="setting-item">
+
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">
-                                    移动端模式 <span data-tip="auto=自动检测设备, on=强制移动端UI, off=强制桌面端UI">(?)</span>
+                                    移动端模式
                                 </span>
                                 <div class="form-content">
-                                    <select id="mobileMode">
+                                    <select id="mobileMode" class="jhs-select-source">
                                         <option value="auto">自动检测</option>
                                         <option value="on">强制开启</option>
                                         <option value="off">强制关闭</option>
                                     </select>
                                 </div>
                             </div>
+
+                            <div class="jhs-setting-row">
+                                <span class="setting-label">
+                                    外观主题
+                                </span>
+                                <div class="form-content">
+                                    <select id="themeMode" class="jhs-select-source">
+                                        <option value="light">浅色</option>
+                                        <option value="dark">深色</option>
+                                        <option value="auto">跟随系统</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="jhs-setting-row" data-description="分别控制各类已鉴定内容是否继续显示。">
+                                <span class="setting-label">列表状态显示</span>
+                                <div class="form-content jhs-setting-toggle-grid">
+                                    <label><input type="checkbox" id="showFilterItem" class="mini-switch"><span>屏蔽单番号</span></label>
+                                    <label><input type="checkbox" id="showFilterActorItem" class="mini-switch"><span>屏蔽演员</span></label>
+                                    <label><input type="checkbox" id="showFilterKeywordItem" class="mini-switch"><span>屏蔽关键词</span></label>
+                                    <label><input type="checkbox" id="showFavoriteItem" class="mini-switch"><span>收藏</span></label>
+                                    <label><input type="checkbox" id="showHasDownItem" class="mini-switch"><span>已下载</span></label>
+                                    <label><input type="checkbox" id="showHasWatchItem" class="mini-switch"><span>已观看</span></label>
+                                </div>
+                            </div>
+                            <div class="jhs-setting-row ${r ? "" : "do-hide"}"><span class="setting-label">加载女优信息</span><div class="form-content"><input type="checkbox" id="enableLoadActressInfo" class="mini-switch"></div></div>
+                            <div class="jhs-setting-row"><span class="setting-label">竖图模式</span><div class="form-content"><input type="checkbox" id="enableVerticalModel" class="mini-switch"></div></div>
+                            <div class="jhs-setting-row"><span class="setting-label">页面列数：<span id="showContainerColumns"></span></span><div class="form-content"><input type="range" class="jhs-range" id="containerColumns" min="2" max="10" step="1"></div></div>
+                            <div class="jhs-setting-row"><span class="setting-label">页面宽度：<span id="showContainerWidth"></span></span><div class="form-content"><input type="range" class="jhs-range" id="containerWidth" min="0" max="30" step="1"></div></div>
+                        </div></section>
                         </div>
 
-                        <div id="task-panel" class="content-panel" style="display: ${"task-panel" === activePanel ? "block" : "none"};">
+                        <div id="task-panel" class="content-panel ${"task-panel" === activePanel ? "active" : ""}" role="region">
+                            <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>定时任务</h3><p>配置黑名单、演员同步和新作品检测。</p></header><div class="jhs-setting-group">
 
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">请求并发数量:</span>
                                 <div class="form-content">
-                                    <input type="number" id="checkConcurrencyCount" min="2" max="5" style="width: 100%;">
+                                    <input type="number" id="checkConcurrencyCount" class="jhs-field" min="2" max="5">
                                 </div>
                             </div>
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">请求间隔时间(毫秒):</span>
                                 <div class="form-content">
-                                    <input type="number" id="checkRequestSleep" min="0" max="3000" style="width: 100%;">
+                                    <input type="number" id="checkRequestSleep" class="jhs-field" min="0" max="3000">
                                 </div>
                             </div>
 
-                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>
 
-                            <div id="setting-blacklist" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 15px;">
-                                <span style="font-size: 14px; font-weight: bold; padding:3px">自动检测屏蔽黑名单演员</span>
-                                <div class="setting-item">
+
+                            <div id="setting-blacklist" class="jhs-setting-rows">
+                                <h4 class="jhs-setting-subtitle">自动检测屏蔽黑名单演员</h4>
+                                <div class="jhs-setting-row">
                                     <span class="setting-label">
-                                        任务开关: <span data-tip="变更后, 刷新页面生效">(?)</span>
+                                        任务开关:
                                     </span>
                                     <div class="form-content">
-                                        <select id="enableCheckBlacklist">
+                                        <select id="enableCheckBlacklist" class="jhs-select-source">
                                             <option value="no">禁用</option>
                                             <option value="yes">开启</option>
                                         </select>
                                     </div>
                                 </div>
-                                <div class="setting-item">
+                                <div class="jhs-setting-row">
                                     <span class="setting-label">任务间隔时间:</span>
                                     <div class="form-content">
-                                         <select id="checkBlacklist_intervalTime">
+                                         <select id="checkBlacklist_intervalTime" class="jhs-select-source">
                                             <option value="2">每2小时</option>
                                             <option value="3">每3小时</option>
                                             <option value="6">每6小时</option>
@@ -323,10 +353,10 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                                         </select>
                                     </div>
                                 </div>
-                                <div class="setting-item">
+                                <div class="jhs-setting-row">
                                     <span class="setting-label">检测规则:</span>
                                     <div class="form-content">
-                                         <select id="checkBlacklist_ruleTime">
+                                         <select id="checkBlacklist_ruleTime" class="jhs-select-source">
                                             <option value="0">全部检测</option>
                                             <option value="8760">不检测停更1年以上</option>
                                             <option value="17520">不检测停更2年以上</option>
@@ -336,23 +366,23 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                                 </div>
                             </div>
 
-                            <div id="setting-checkFavoriteActress" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 15px;" class="${r ? "" : "do-hide"}">
-                                <span style="font-size: 14px; font-weight: bold; padding:3px">自动同步已收藏的演员</span>
-                                <div class="setting-item">
+                            <div id="setting-checkFavoriteActress" class="jhs-setting-rows ${r ? "" : "do-hide"}">
+                                <h4 class="jhs-setting-subtitle">自动同步已收藏的演员</h4>
+                                <div class="jhs-setting-row">
                                     <span class="setting-label">
-                                        任务开关: <span data-tip="变更后, 刷新页面生效">(?)</span>
+                                        任务开关:
                                     </span>
                                     <div class="form-content">
-                                        <select id="enableCheckFavoriteActress">
+                                        <select id="enableCheckFavoriteActress" class="jhs-select-source">
                                             <option value="no">禁用</option>
                                             <option value="yes">开启</option>
                                         </select>
                                     </div>
                                 </div>
-                                <div class="setting-item">
+                                <div class="jhs-setting-row">
                                     <span class="setting-label">任务间隔时间:</span>
                                     <div class="form-content">
-                                         <select id="checkFavoriteActress_IntervalTime">
+                                         <select id="checkFavoriteActress_IntervalTime" class="jhs-select-source">
                                             <option value="12">每12小时</option>
                                             <option value="24">每24小时</option>
                                         </select>
@@ -360,23 +390,23 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                                 </div>
                             </div>
 
-                            <div id="setting-checkNewVideo" style="border: 1px solid #ccc; padding: 10px; margin-bottom: 15px;" class="${r ? "" : "do-hide"}">
-                                <span style="font-size: 14px; font-weight: bold; padding:3px">自动检测已收藏演员的最新作品</span>
-                                <div class="setting-item">
+                            <div id="setting-checkNewVideo" class="jhs-setting-rows ${r ? "" : "do-hide"}">
+                                <h4 class="jhs-setting-subtitle">自动检测已收藏演员的最新作品</h4>
+                                <div class="jhs-setting-row">
                                     <span class="setting-label">
-                                        任务开关: <span data-tip="变更后, 刷新页面生效">(?)</span>
+                                        任务开关:
                                     </span>
                                     <div class="form-content">
-                                        <select id="enableCheckNewVideo">
+                                        <select id="enableCheckNewVideo" class="jhs-select-source">
                                             <option value="no">禁用</option>
                                             <option value="yes">开启</option>
                                         </select>
                                     </div>
                                 </div>
-                                <div class="setting-item">
+                                <div class="jhs-setting-row">
                                     <span class="setting-label">任务间隔时间:</span>
                                     <div class="form-content">
-                                         <select id="checkNewVideo_intervalTime">
+                                         <select id="checkNewVideo_intervalTime" class="jhs-select-source">
                                             <option value="2">每2小时</option>
                                             <option value="3">每3小时</option>
                                             <option value="6">每6小时</option>
@@ -385,10 +415,10 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                                         </select>
                                     </div>
                                 </div>
-                                <div class="setting-item">
+                                <div class="jhs-setting-row">
                                     <span class="setting-label">检测规则:</span>
                                     <div class="form-content">
-                                         <select id="checkNewVideo_ruleTime">
+                                         <select id="checkNewVideo_ruleTime" class="jhs-select-source">
                                             <option value="0">全部检测</option>
                                             <option value="8760">不检测停更1年以上</option>
                                             <option value="17520">不检测停更2年以上</option>
@@ -397,111 +427,118 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                                     </div>
                                 </div>
                             </div>
+                        </div></section>
                         </div>
 
-                        <div id="domain-panel" class="content-panel" style="display: ${"domain-panel" === activePanel ? "block" : "none"};">
-                            <div class="setting-item">
+                        <div id="domain-panel" class="content-panel ${"domain-panel" === activePanel ? "active" : ""}" role="region">
+                            <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>外部网站</h3><p>配置外部资源来源、域名与网络。</p></header><div class="jhs-setting-group">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">域名 - MissAv:</span>
                                 <div class="form-content">
-                                    <input id="missAvUrl">
+                                    <input type="url" id="missAvUrl" class="jhs-field">
                                 </div>
                             </div>
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">域名 - Jable:</span>
                                 <div class="form-content">
-                                    <input id="jableUrl">
+                                    <input type="url" id="jableUrl" class="jhs-field">
                                 </div>
                             </div>
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">域名 - Avgle:</span>
                                 <div class="form-content">
-                                    <input id="avgleUrl">
+                                    <input type="url" id="avgleUrl" class="jhs-field">
                                 </div>
                             </div>
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">域名 - JavTrailer:</span>
                                 <div class="form-content">
-                                    <input id="javTrailersUrl">
+                                    <input type="url" id="javTrailersUrl" class="jhs-field">
                                 </div>
                             </div>
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">域名 - 123Av:</span>
                                 <div class="form-content">
-                                    <input id="av123Url">
+                                    <input type="url" id="av123Url" class="jhs-field">
                                 </div>
                             </div>
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">域名 - JavDb:</span>
                                 <div class="form-content">
-                                    <input id="javDbUrl">
+                                    <input type="url" id="javDbUrl" class="jhs-field">
                                 </div>
                             </div>
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">域名 - JavBus:</span>
                                 <div class="form-content">
-                                    <input id="javBusUrl">
+                                    <input type="url" id="javBusUrl" class="jhs-field">
                                 </div>
                             </div>
-                            <div class="setting-item">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">域名 - SupJav:</span>
                                 <div class="form-content">
-                                    <input id="supJavUrl">
+                                    <input type="url" id="supJavUrl" class="jhs-field">
                                 </div>
                             </div>
+                        </div></section>
                         </div>
 
 
-                        <div id="filter-panel" class="content-panel" style="display: ${"filter-panel" === activePanel ? "block" : "none"};">
-                            <div class="setting-item">
+                        <div id="filter-panel" class="content-panel ${"filter-panel" === activePanel ? "active" : ""}" role="region">
+                            <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>屏蔽配置</h3><p>配置文本、演员和类别筛选规则。</p></header><div class="jhs-setting-group">
+                            <div class="jhs-setting-row">
                                 <span class="setting-label">
-                                     启用划词屏蔽 <span data-tip="视频详情页中, 标题或评论区选中文字, 按右键可快捷加入屏蔽词">(?) </span>
+                                     启用划词屏蔽
                                 </span>
-                                <div style="display: flex">
+                                <div class="jhs-inline-fields">
                                     <input type="checkbox" id="enableTitleSelectFilter" class="mini-switch">
                                 </div>
                             </div>
 
-                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>
+
 
                             <div id="reviewKeywordContainer">
-                                <div class="setting-item">
+                                <div class="jhs-setting-row">
                                     <span class="setting-label">评论区屏蔽词:</span>
-                                    <div style="display: flex">
-                                        <input type="text" class="keyword-input" placeholder="添加屏蔽词">
-                                        <button class="add-tag-btn">添加</button>
+                                    <div class="jhs-inline-fields">
+                                        <input type="text" class="keyword-input jhs-field" placeholder="添加屏蔽词">
+                                        <button class="jhs-btn add-tag-btn">添加</button>
                                     </div>
                                 </div>
                                 <div class="tag-box"> </div>
                             </div>
 
-                            <hr style="border: 0; height: 1px; margin:20px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>
+
 
                             <div id="filterKeywordContainer">
-                                <div class="setting-item">
+                                <div class="jhs-setting-row">
                                     <span class="setting-label">视频标题屏蔽词:</span>
-                                    <div style="display: flex">
-                                        <input type="text" class="keyword-input" placeholder="添加屏蔽词">
-                                        <button class="add-tag-btn">添加</button>
+                                    <div class="jhs-inline-fields">
+                                        <input type="text" class="keyword-input jhs-field" placeholder="添加屏蔽词">
+                                        <button class="jhs-btn add-tag-btn">添加</button>
                                     </div>
                                 </div>
                                 <div class="tag-box"> </div>
                             </div>
+                        </div></section>
                         </div>
-                        <div id="cache-panel" class="content-panel" style="display: ${"cache-panel" === activePanel ? "block" : "none"};">
-                            <h1 style="text-align:center;font-size: 20px;font-weight: bold">以下操作, 不会对核心数据造成影响</h1>
+                        <div id="cache-panel" class="content-panel ${"cache-panel" === activePanel ? "active" : ""}" role="region">
+                            <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>缓存管理</h3><p>查看并清理非核心缓存数据。</p></header><div class="jhs-setting-group">
+                            <h2 class="jhs-section__heading">以下操作不会影响核心数据</h2>
                             <br/>
-                            <div class="jhs-cache-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-top: 20px;">
+                            <div class="jhs-cache-grid">
                                 ${n}
                             </div>
-                            <div id="cache-data-display" style="margin-top: 20px; display: none;">
-                                <pre style="background: #f5f5f5; padding: 10px; border-radius: 5px; max-height: 400px; overflow: auto;"></pre>
+                            <div id="cache-data-display" class="jhs-is-hidden">
+                                <pre class="jhs-cache-preview"></pre>
                             </div>
+                    </div></section>
                         </div>
-                    </div>
+                        </div>
 
-                    <div class="jhs-setting-footer" style="flex-shrink: 0; padding: 15px 20px; display: flex; gap: 8px; justify-content: flex-end; border-top: 1px solid #eee; background: white;">
-                        <button id="saveBtn">保存设置</button>
-                        <button id="clean-all" style="display: none">清理全部缓存</button>
+                    <div class="jhs-setting-footer">
+                        <button type="button" id="saveBtn" class="jhs-btn jhs-btn--primary">保存设置</button>
+                        <button id="clean-all" class="jhs-btn jhs-btn--danger jhs-is-hidden">清理全部缓存</button>
                     </div>
                 </div>
             </div>
@@ -511,15 +548,17 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
 /** Inject the Data Health sidebar item and panel HTML into the dialog. */
 function injectHealthPanel() {
     const e = $(".side-menu-item").parent();
-    e.length && !e.find('[data-panel="health-panel"]').length && e.append('<div class="side-menu-item" data-panel="health-panel">数据体检</div>');
+    e.length && !e.find('[data-panel="health-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="health-panel" aria-controls="health-panel">数据体检</button>');
     const t = $(".content-panel").parent();
     t.length && !$("#health-panel").length && t.append(`
-            <div id="health-panel" class="content-panel" style="display:none;">
-                <div style="display:flex; gap:8px; margin-bottom:12px;">
-                    <a id="runHealthCheckBtn" class="menu-btn" style="background-color:#448cc2"><span>重新体检</span></a>
-                    <a id="repairHealthBtn" class="menu-btn" style="background-color:#64bb69"><span>备份并修复</span></a>
+            <div id="health-panel" class="content-panel">
+                <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>数据体检</h3><p>检查本地数据并在备份后修复异常。</p></header>
+                <div class="jhs-toolbar jhs-health-actions">
+                    <button type="button" id="runHealthCheckBtn" class="jhs-btn jhs-btn--primary"><span>重新体检</span></button>
+                    <button type="button" id="repairHealthBtn" class="jhs-btn jhs-btn--secondary"><span>备份并修复</span></button>
                 </div>
-                <div id="health-data-display" style="background:#f8f9fa; border:1px solid #ddd; border-radius:5px; padding:12px; min-height:180px;">点击重新体检查看结果</div>
+                <div id="health-data-display" class="jhs-setting-output">点击重新体检查看结果</div>
+                </section>
             </div>
         `);
 }
@@ -527,203 +566,76 @@ function injectHealthPanel() {
 /** Inject the Plugin Management sidebar item and panel HTML into the dialog. */
 function injectPluginMgmtPanel() {
     const e = $(".side-menu-item").parent();
-    e.length && !e.find('[data-panel="plugin-mgmt-panel"]').length && e.append('<div class="side-menu-item" data-panel="plugin-mgmt-panel">插件管理</div>');
+    e.length && !e.find('[data-panel="plugin-mgmt-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="plugin-mgmt-panel" aria-controls="plugin-mgmt-panel">插件管理</button>');
     const t = $(".content-panel").parent();
     if (!t.length || $("#plugin-mgmt-panel").length) return;
-    let i = '<div id="plugin-mgmt-panel" class="content-panel" style="display:none;">';
-    i += '<div style="display:flex;gap:8px;margin-bottom:15px;flex-wrap:wrap;">';
-    i += '<div style="flex:1;min-width:120px;background:#f0f7ff;border-radius:8px;padding:10px;text-align:center"><div id="pm-total" style="font-size:20px;font-weight:bold;color:#25b1dc">0</div><div style="font-size:12px;color:#888">总插件数</div></div>';
-    i += '<div style="flex:1;min-width:120px;background:#f0fff4;border-radius:8px;padding:10px;text-align:center"><div id="pm-enabled" style="font-size:20px;font-weight:bold;color:#7bc73b">0</div><div style="font-size:12px;color:#888">已启用</div></div>';
-    i += '<div style="flex:1;min-width:120px;background:#fff5f5;border-radius:8px;padding:10px;text-align:center"><div id="pm-disabled" style="font-size:20px;font-weight:bold;color:#de3333">0</div><div style="font-size:12px;color:#888">已禁用</div></div>';
-    i += '</div>';
-    i += '<p style="color:#666;font-size:0.85em;margin-bottom:10px;">禁用插件后需刷新页面生效。核心插件不可禁用。</p>';
-    i += '<div id="plugin-mgmt-list"></div>';
-    i += '<hr style="border:0;height:1px;margin:20px 0;background-image:linear-gradient(to right,rgba(0,0,0,0),rgba(159,137,137,0.75),rgba(0,0,0,0));"/>';
-    i += '<h3 style="font-size:15px;font-weight:bold;margin-bottom:10px;">插件执行耗时</h3>';
-    i += '<p style="color:#666;font-size:0.85em;margin-bottom:8px;">页面加载时各插件 handle() 的执行时间。</p>';
-    i += '<div id="plugin-timing-table"></div>';
-    i += '<hr style="border:0;height:1px;margin:20px 0;background-image:linear-gradient(to right,rgba(0,0,0,0),rgba(159,137,137,0.75),rgba(0,0,0,0));"/>';
-    i += '<h3 style="font-size:15px;font-weight:bold;margin-bottom:10px;">错误日志</h3>';
-    i += '<div style="display:flex;gap:8px;margin-bottom:8px;"><a id="pm-clear-log" class="menu-btn" style="background-color:#e74c3c"><span>清空日志</span></a></div>';
-    i += '<div id="plugin-error-log" style="max-height:250px;overflow:auto;background:#f8f9fa;border:1px solid #ddd;border-radius:5px;padding:10px;font-size:13px;">无错误记录</div>';
-    i += '<hr style="border:0;height:1px;margin:20px 0;background-image:linear-gradient(to right,rgba(0,0,0,0),rgba(159,137,137,0.75),rgba(0,0,0,0));"/>';
-    i += '<h3 style="font-size:15px;font-weight:bold;margin-bottom:10px;">缓存命中率</h3>';
-    i += '<div id="cache-hit-stats" style="background:#f8f9fa;border:1px solid #ddd;border-radius:5px;padding:10px;"></div>';
-    i += '</div>';
+    const i = `<div id="plugin-mgmt-panel" class="content-panel">
+        <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>插件管理</h3><p>按功能查看插件状态、耗时和错误记录。</p></header>
+        <div class="jhs-setting-metrics">
+            <div class="jhs-setting-metric"><strong id="pm-total">0</strong><span>总插件数</span></div>
+            <div class="jhs-setting-metric"><strong id="pm-enabled">0</strong><span>已启用</span></div>
+            <div class="jhs-setting-metric"><strong id="pm-disabled">0</strong><span>已禁用</span></div>
+        </div>
+        <p class="jhs-setting-help">禁用插件后需刷新页面生效。核心插件不可禁用。</p>
+        <div id="plugin-mgmt-list"></div>
+        <details class="jhs-diagnostics"><summary>诊断信息</summary><div class="jhs-diagnostics__content">
+        <h3 class="jhs-setting-subheading">插件执行耗时</h3><p class="jhs-setting-help">页面加载时各插件 handle() 的执行时间。</p><div id="plugin-timing-table"></div>
+        <h3 class="jhs-setting-subheading">错误日志</h3><div class="jhs-toolbar"><button type="button" id="pm-clear-log" class="jhs-btn jhs-btn--danger"><span>清空日志</span></button></div><div id="plugin-error-log" class="jhs-setting-output jhs-setting-output--compact">无错误记录</div>
+        <h3 class="jhs-setting-subheading">缓存命中率</h3><div id="cache-hit-stats" class="jhs-setting-output"></div>
+        </div></details></section>
+    </div>`;
     t.append(i);
 }
 
 /** Inject the Snapshot sidebar item and panel HTML into the dialog. */
 function injectSnapshotPanel() {
     const e = $(".side-menu-item").parent();
-    e.length && !e.find('[data-panel="snapshot-panel"]').length && e.append('<div class="side-menu-item" data-panel="snapshot-panel">恢复点</div>');
+    e.length && !e.find('[data-panel="snapshot-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="snapshot-panel" aria-controls="snapshot-panel">恢复点</button>');
     const t = $(".content-panel").parent();
     if (!t.length || $("#snapshot-panel").length) return;
-    let n = '<div id="snapshot-panel" class="content-panel" style="display:none;">';
-    n += '<div style="display:flex;gap:8px;margin-bottom:15px;">';
-    n += '<a id="createSnapshotBtn" class="menu-btn" style="background-color:#64bb69"><span>创建快照</span></a>';
-    n += '</div>';
-    n += '<p style="color:#666;font-size:0.85em;margin-bottom:10px;">快照保存当前全部数据状态，可用于恢复。最多保留 10 个，超出自动清理最旧的。</p>';
-    n += '<div id="snapshot-list"></div>';
-    n += '</div>';
+    const n = '<div id="snapshot-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>恢复点</h3><p>创建、下载或恢复本地数据快照。</p></header><div class="jhs-toolbar"><button type="button" id="createSnapshotBtn" class="jhs-btn jhs-btn--primary"><span>创建快照</span></button></div><p class="jhs-setting-help">快照保存当前全部数据状态，可用于恢复。最多保留 10 个，超出自动清理最旧的。</p><div id="snapshot-list"></div></section></div>';
     t.append(n);
 }
 
 /** Inject the Network/External Requests sidebar item and panel HTML into the dialog. */
 function injectNetworkPanel() {
     const e = $(".side-menu-item").parent();
-    e.length && !e.find('[data-panel="network-panel"]').length && e.append('<div class="side-menu-item" data-panel="network-panel">外部请求</div>');
+    e.length && !e.find('[data-panel="network-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="network-panel" aria-controls="network-panel">外部请求</button>');
     const t = $(".content-panel").parent();
     if (!t.length || $("#network-panel").length) return;
-    let n = '<div id="network-panel" class="content-panel" style="display:none;">';
-    n += '<h3 style="font-size:15px;font-weight:bold;margin-bottom:10px;">熔断器配置</h3>';
-    n += '<p style="color:#666;font-size:0.85em;margin-bottom:10px;">连续请求失败达到阈值后，自动停止对该站点的请求，避免拖慢整体体验。</p>';
-    n += '<div class="setting-item"><span class="setting-label">熔断阈值(次):</span><div class="form-content"><input type="number" id="circuitBreakerThreshold" min="2" max="10" style="width:100%;"></div></div>';
-    n += '<div class="setting-item"><span class="setting-label">冷却时间(秒):</span><div class="form-content"><input type="number" id="circuitBreakerCooldownSec" min="10" max="300" style="width:100%;"></div></div>';
-    n += '<div style="display:flex;gap:8px;margin:10px 0;"><a id="resetAllBreakersBtn" class="menu-btn" style="background-color:#e74c3c"><span>重置全部熔断</span></a></div>';
-    n += '<hr style="border:0;height:1px;margin:20px 0;background-image:linear-gradient(to right,rgba(0,0,0,0),rgba(159,137,137,0.75),rgba(0,0,0,0));"/>';
-    n += '<h3 style="font-size:15px;font-weight:bold;margin-bottom:10px;">站点健康状态</h3>';
-    n += '<p style="color:#666;font-size:0.85em;margin-bottom:10px;">各外部站点的熔断状态和请求统计。</p>';
-    n += '<div id="site-health-table"></div>';
-    n += '<hr style="border:0;height:1px;margin:20px 0;background-image:linear-gradient(to right,rgba(0,0,0,0),rgba(159,137,137,0.75),rgba(0,0,0,0));"/>';
-    n += '<h3 style="font-size:15px;font-weight:bold;margin-bottom:10px;">域名使用统计</h3>';
-    n += '<p style="color:#666;font-size:0.85em;margin-bottom:10px;">脚本实际请求过的域名及次数。</p>';
-    n += '<div style="display:flex;gap:8px;margin-bottom:8px;"><a id="clearDomainStatsBtn" class="menu-btn" style="background-color:#e74c3c"><span>清空统计</span></a></div>';
-    n += '<div id="domain-stats-table"></div>';
-    n += '</div>';
+    const n = `<div id="network-panel" class="content-panel">
+        <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>外部请求</h3><p>配置熔断规则并查看站点健康状态。</p></header>
+        <h3 class="jhs-setting-subheading">熔断器配置</h3><p class="jhs-setting-help">连续请求失败达到阈值后，自动停止对该站点的请求，避免拖慢整体体验。</p>
+        <div class="jhs-setting-row"><span class="setting-label">熔断阈值(次):</span><div class="form-content"><input type="number" id="circuitBreakerThreshold" class="jhs-field" min="2" max="10"></div></div>
+        <div class="jhs-setting-row"><span class="setting-label">冷却时间(秒):</span><div class="form-content"><input type="number" id="circuitBreakerCooldownSec" class="jhs-field" min="10" max="300"></div></div>
+        <div class="jhs-toolbar"><button type="button" id="resetAllBreakersBtn" class="jhs-btn jhs-btn--danger"><span>重置全部熔断</span></button></div>
+        <h3 class="jhs-setting-subheading">站点健康状态</h3><p class="jhs-setting-help">各外部站点的熔断状态和请求统计。</p><div id="site-health-table"></div>
+        <h3 class="jhs-setting-subheading">域名使用统计</h3><p class="jhs-setting-help">脚本实际请求过的域名及次数。</p><div class="jhs-toolbar"><button type="button" id="clearDomainStatsBtn" class="jhs-btn jhs-btn--danger"><span>清空统计</span></button></div><div id="domain-stats-table"></div></section>
+    </div>`;
     t.append(n);
 }
 
 /** Build the HTML for the hover dropdown quick-settings panel. */
 function buildSimpleSettingHtml() {
+    const rows = [
+        [ "显示全部已鉴定内容", "showAllItem", "快速显示全部已鉴定状态。" ],
+        [ "鉴定后立即关闭", "needClosePage", "完成鉴定后关闭当前详情窗口。" ],
+        [ "瀑布流", "autoPage", "连续加载列表；启用后普通列表只支持默认排序。" ],
+        [ "标题翻译", "translateTitle", "翻译列表和详情页标题。" ],
+        [ "悬浮大图", "hoverBigImg", "鼠标悬停封面时显示大图。" ],
+        [ "外部站点", "enableLoadOtherSite", "在详情页提供第三方站点入口。" ],
+        [ "长缩略图", "enableLoadScreenShot", "在详情页图片区加载长缩略图。" ],
+        [ "高画质预览", "enableLoadPreviewVideo", "解析更高画质的预览视频。" ]
+    ];
     return `
-             <div class="jhs-scrollbar" style="margin-top:20px;max-height:90vh; overflow-y:auto;">
-                <div style="margin: 0 10px;">
-                    <div class="setting-item">
-                        <span class="setting-label">
-                            显示已鉴定内容:
-                        </span>
-                        <div class="form-content" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;">
-                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽单番号: </span><input type="checkbox" id="showFilterItem" class="mini-switch"><br/>
-                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽演员: </span><input type="checkbox" id="showFilterActorItem" class="mini-switch"><br/>
-                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">屏蔽关键词: </span><input type="checkbox" id="showFilterKeywordItem" class="mini-switch"><br/>
-                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">收藏: </span><input type="checkbox" id="showFavoriteItem" class="mini-switch"><br/>
-                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">已下载: </span><input type="checkbox" id="showHasDownItem" class="mini-switch"><br/>
-                            <span style="display:inline-block; width: 80px; font-size:13px; font-weight:bold; text-align: left">已观看: </span><input type="checkbox" id="showHasWatchItem" class="mini-switch"><br/>
-                        </div>
-                    </div>
-                    <div class="setting-item">
-                        <span class="setting-label">
-                            <span data-tip="快速显示所有已鉴定内容,减少对以上开关的频繁操作">(?) </span> 显示所有:
-                        </span>
-                        <div class="form-content" style="display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;">
-                            <input type="checkbox" id="showAllItem" class="mini-switch">
-                        </div>
-                    </div>
-
-
-
-                    <div class="setting-item">
-                        <span class="setting-label">鉴定后立即关闭页面:</span>
-                        <div class="form-content" style="text-align: right;">
-                            <input type="checkbox" id="needClosePage" class="mini-switch">
-                        </div>
-                    </div>
-
-                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>
-
-                    <div class="setting-item">
-                        <span class="setting-label">
-                             <span data-tip="使用瀑布流模式, 排序方式将调整为默认">(?) </span>瀑布流模式:
-                        </span>
-                        <div class="form-content" style="text-align: right;">
-                            <input type="checkbox" id="autoPage" class="mini-switch">
-                        </div>
-                    </div>
-
-                    <div class="setting-item">
-                        <span class="setting-label">启用标题翻译:</span>
-                        <div class="form-content" style="text-align: right;">
-                            <input type="checkbox" id="translateTitle" class="mini-switch">
-                        </div>
-                    </div>
-
-                    <div class="setting-item">
-                        <span class="setting-label">启用悬浮大图:</span>
-                        <div class="form-content" style="text-align: right;">
-                            <input type="checkbox" id="hoverBigImg" class="mini-switch">
-                        </div>
-                    </div>
-
-
-                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>
-
-                    ${r ? `
-                    <div class="setting-item">
-                        <span class="setting-label">
-                            <span data-tip="详情页是否展示女优年龄、三围等信息">(?) </span>加载女优信息:
-                        </span>
-                        <div class="form-content" style="text-align: right;">
-                            <input type="checkbox" id="enableLoadActressInfo" class="mini-switch">
-                        </div>
-                    </div>` : ""}
-
-                    <div class="setting-item">
-                        <span class="setting-label">
-                            <span data-tip="详情页显示外部网站入口；点击检测外部站点后才请求第三方站点">(?) </span>显示外部网站:
-                        </span>
-                        <div class="form-content" style="text-align: right;">
-                            <input type="checkbox" id="enableLoadOtherSite" class="mini-switch">
-                        </div>
-                    </div>
-
-                    <div class="setting-item">
-                        <span class="setting-label">
-                            <span data-tip="详情页图片区首列位置加载长缩略图">(?) </span>加载长缩略图:
-                        </span>
-                        <div class="form-content" style="text-align: right;">
-                            <input type="checkbox" id="enableLoadScreenShot" class="mini-switch">
-                        </div>
-                    </div>
-
-                     <div class="setting-item">
-                        <span class="setting-label">
-                            <span data-tip="详情页解析更多更高画质的预览视频">(?) </span>更高画质预览视频:
-                        </span>
-                        <div class="form-content" style="text-align: right;">
-                            <input type="checkbox" id="enableLoadPreviewVideo" class="mini-switch">
-                        </div>
-                    </div>
-
-                    <hr style="border: 0; height: 1px; margin:10px 0;background-image: linear-gradient(to right, rgba(0,0,0,0), rgba(159,137,137,0.75), rgba(0,0,0,0));"/>
-
-                    <div class="setting-item">
-                        <span class="setting-label">
-                            <span data-tip="列数6以上,建议开启竖图">(?) </span>竖图模式:
-                        </span>
-                        <div class="form-content" style="text-align: right;">
-                            <input type="checkbox" id="enableVerticalModel" class="mini-switch">
-                        </div>
-                    </div>
-
-                    <div class="setting-item">
-                        <span class="setting-label">页面列数: <span id="showContainerColumns"></span></span>
-                        <div class="form-content">
-                            <input type="range" id="containerColumns" min="2" max="10" step="1" style="padding:5px 0">
-                        </div>
-                    </div>
-
-                    <div class="setting-item">
-                        <span class="setting-label">页面宽度: <span id="showContainerWidth"></span></span>
-                        <div class="form-content">
-                            <input type="range" id="containerWidth" min="0" max="30" step="1" style="padding:5px 0">
-                        </div>
-                    </div>
-                </div>
-                <div style="padding: 0 20px 15px; text-align: right; border-top: 1px solid #eee;">
-                    <button id="helpBtn" style="float:left;">常见问题</button>
-                    <button id="moreBtn">更多设置</button>
+        <div class="simple-setting__panel jhs-ui">
+            <div class="simple-setting__scroll jhs-scrollbar">
+                <div class="simple-setting__list">
+                    ${rows.map((e => `<label class="jhs-setting-row" for="${e[1]}"><span class="jhs-setting-row__copy"><span class="jhs-setting-row__label">${e[0]}</span><span class="jhs-setting-row__description">${e[2]}</span></span><span class="jhs-setting-row__control"><input type="checkbox" id="${e[1]}" class="mini-switch"></span></label>`)).join("")}
                 </div>
             </div>
-        `;
+            <footer class="simple-setting__footer">
+                <button type="button" id="moreBtn" class="jhs-btn jhs-btn--ghost">更多设置</button>
+            </footer>
+        </div>`;
 }

@@ -3,7 +3,7 @@ class Ze extends X {
         return "TranslatePlugin";
     }
     async initCss() {
-        return "\n            <style> \n                .translated-title {\n                    margin-top: 8px; \n                    padding: 12px; \n                    border-radius: 5px; \n                    border-left: 4px solid rgb(76, 175, 80);\n                    background: linear-gradient(135deg, rgb(255, 255, 255) 0%, rgb(245, 245, 245) 100%); \n                    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);\n                    font-size: 20px;\n                }\n            </style>\n        ";
+        return "\n            <style>\n                .translated-title { margin-top:var(--jhs-space-2); color:var(--jhs-text); font-size:clamp(16px,1.5vw,18px); font-weight:500; line-height:1.5; }\n                .translated-title.is-error { color:var(--jhs-danger); }\n            </style>";
     }
     handle() {
         isDetailPage && this.translate();
@@ -15,14 +15,23 @@ class Ze extends X {
         if (n.length || (n = $(".current-title")), n.length || (n = $("h3")), !n.length) return;
         const a = n.text().trim();
         if (!a) return void show.error("获取标题失败, 无法进行翻译");
-        n.after('<div class="translated-title">翻译中...</div>');
-        const i = n.next(".translated-title");
+        let i = n.nextAll(".translated-title").first();
+        i.length || (i = $('<div class="translated-title"></div>').insertAfter(n)), i.removeClass("is-error").text("翻译中...");
         e || (e = this.getPageInfo().carNum);
-        const s = localStorage.getItem("jhs_translate") ? JSON.parse(localStorage.getItem("jhs_translate")) : {};
-        s[e] ? i.html(t ? e + "&nbsp;&nbsp;&nbsp;" + s[e] : s[e]) : _e(a, "ja", "zh-CN").then((n => {
-            i.html(t ? e + "&nbsp;&nbsp;&nbsp;" + n : n);
-        })).catch((e => {
-            console.error("翻译失败:", e), i.replaceWith(`<div class="translated-title" style="color: red;">翻译失败: ${escapeHtml(e.message)}</div>`);
-        }));
+        const s = "string" == typeof e ? e.trim() : "", o = s && "undefined" !== s ? s : a;
+        let r = {};
+        try {
+            const e = localStorage.getItem("jhs_translate");
+            e && (r = JSON.parse(e) || {});
+        } catch (l) {
+            clog.warn("翻译缓存无法解析，已忽略旧缓存", l);
+        }
+        if (r[o]) return void i.text(r[o]);
+        try {
+            const e = await _e(a, "ja", "zh-CN");
+            i.text(e), r[o] = e, localStorage.setItem("jhs_translate", JSON.stringify(r));
+        } catch (l) {
+            console.error("翻译失败:", l), i.addClass("is-error").text(`翻译失败: ${l.message || String(l)}`);
+        }
     }
 }

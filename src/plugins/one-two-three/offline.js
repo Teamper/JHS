@@ -7,7 +7,7 @@ class OneTwoThreeOfflinePlugin extends X {
         return "OneTwoThreeOfflinePlugin";
     }
     async initCss() {
-        return "\n            <style>\n                .one23-offline-btn {\n                    background-color: #1677ff !important;\n                    color: #fff !important;\n                    border-color: #1677ff !important;\n                }\n                .one23-offline-btn.loading {\n                    opacity: 0.65;\n                    cursor: wait;\n                }\n                .one23-native-btn {\n                    margin-left: 6px;\n                    padding: 3px 8px;\n                    border-radius: 3px;\n                    border: 1px solid #1677ff;\n                    background: #1677ff;\n                    color: #fff !important;\n                    cursor: pointer;\n                    font-size: 12px;\n                    line-height: 1.2;\n                }\n            </style>\n        ";
+        return "\n            <style>\n                .one23-offline-btn {\n                    background-color: var(--jhs-accent) !important;\n                    color: var(--jhs-accent-text-on) !important;\n                    border-color: var(--jhs-accent) !important;\n                }\n                .one23-offline-btn.loading {\n                    opacity: 0.65;\n                    cursor: wait;\n                }\n                .one23-native-btn {\n                    margin-left: 6px;\n                    padding: 3px 8px;\n                    border-radius: 3px;\n                    border: 1px solid var(--jhs-accent);\n                    background: var(--jhs-accent);\n                    color: var(--jhs-accent-text-on) !important;\n                    cursor: pointer;\n                    font-size: 12px;\n                    line-height: 1.2;\n                }\n            </style>\n        ";
     }
     async handle() {
         "yun.123pan.com" === window.location.hostname ? this.startTokenSync() : (r || l) && (this.bindSubmit(), this.injectNativeButtons());
@@ -97,13 +97,13 @@ class OneTwoThreeOfflinePlugin extends X {
     injectJavDbButtons() {
         $("#magnets-content .item").each(((e, t) => {
             const n = $(t), a = n.find("a[href^='magnet:']").first().attr("href") || n.find(".copy-to-clipboard").attr("data-clipboard-text");
-            a && 0 === n.find(".one23-offline-btn").length && n.find(".buttons").first().append(`<button class="button is-info is-small one23-offline-btn" data-magnet="${escapeHtml(a)}" type="button">&nbsp;123离线&nbsp;</button>`);
+            a && 0 === n.find(".one23-offline-btn").length && n.find(".buttons").first().append(`<button class="jhs-btn button is-info is-small one23-offline-btn" data-magnet="${escapeHtml(a)}" type="button">&nbsp;123离线&nbsp;</button>`);
         }));
     }
     injectJavBusButtons() {
         $("#magnet-table td a[href^='magnet:']").each(((e, t) => {
             const n = $(t), a = n.attr("href");
-            a && 0 === n.siblings(".one23-offline-btn").length && n.after(`<button class="one23-native-btn one23-offline-btn" data-magnet="${escapeHtml(a)}" type="button">123离线</button>`);
+            a && 0 === n.siblings(".one23-offline-btn").length && n.after(`<button class="jhs-btn one23-native-btn one23-offline-btn" data-magnet="${escapeHtml(a)}" type="button">123离线</button>`);
         }));
     }
     async submitMagnet(e, t) {

@@ -31,7 +31,7 @@ class we extends X {
             if (t && "SPAN" === t.tagName) {
                 const e = t.textContent.trim(), n = document.createElement("button");
                 n.textContent = "复制", n.style.marginLeft = "10px", n.style.padding = "0 10px", n.style.cursor = "pointer",
-                n.style.border = "1px solid #ccc", n.style.borderRadius = "5px", n.style.backgroundColor = "#f0f0f0",
+                n.style.border = "1px solid var(--jhs-border)", n.style.borderRadius = "5px", n.style.backgroundColor = "var(--jhs-surface-2)",
                 n.style.fontSize = "12px", n.addEventListener("click", (function(t) {
                     t.preventDefault();
                     const n = e => {

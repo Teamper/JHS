@@ -1,6 +1,6 @@
 {
   "name": "jhs-userscript",
-  "version": "6.0.0",
+  "version": "6.1.0",
   "description": "JAV Helper Suite for JavDB and JavBus",
   "private": true,
   "license": "MIT",
@@ -20,7 +20,7 @@
     "build": "node scripts/build.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run test && npm run build && node scripts/check-sources.mjs && node scripts/regression-check.mjs && node --check JHS.user.js && node --check dist/JHS.user.js"
+    "check": "npm run test && npm run build && node scripts/check-sources.mjs && node scripts/regression-check.mjs && node scripts/contrast-audit.mjs && node scripts/ui-consistency-audit.mjs && node --check JHS.user.js && node --check dist/JHS.user.js"
   },
   "devDependencies": {
     "esbuild": "^0.28.0",

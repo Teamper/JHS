@@ -1,21 +1,49 @@
 class StatsPlugin extends X {
     getName() { return "StatsPlugin"; }
+    async initCss() {
+        return `
+            <style>
+                .jhs-stats { height:100%; padding:var(--jhs-space-4); overflow:auto; }
+                .jhs-stats__metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border-top:1px solid var(--jhs-border); border-left:1px solid var(--jhs-border); }
+                .jhs-stats__metric { display:grid; gap:var(--jhs-space-1); padding:var(--jhs-space-4); border-right:1px solid var(--jhs-border); border-bottom:1px solid var(--jhs-border); background:var(--jhs-surface); }
+                .jhs-stats__metric strong { color:var(--jhs-text); font-size:28px; line-height:1; }
+                .jhs-stats__metric span { color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
+                .jhs-stats__group { margin-top:var(--jhs-space-5); }
+                .jhs-stats__group h3 { margin:0 0 var(--jhs-space-3); color:var(--jhs-text); font-size:var(--jhs-font-size-md); }
+                .jhs-stats__rows { display:grid; gap:var(--jhs-space-2); }
+                .jhs-stats__row { display:grid; grid-template-columns:90px minmax(0,1fr) 76px; align-items:center; gap:var(--jhs-space-3); min-height:32px; }
+                .jhs-stats__label { overflow:hidden; color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); text-align:right; text-overflow:ellipsis; white-space:nowrap; }
+                .jhs-stats__track { height:10px; overflow:hidden; border-radius:var(--jhs-radius-pill); background:var(--jhs-surface-2); }
+                .jhs-stats__bar { display:block; width:var(--jhs-value,0%); height:100%; border-radius:inherit; background:var(--jhs-bar,var(--jhs-accent)); }
+                .jhs-stats__value { color:var(--jhs-text-faint); font-size:var(--jhs-font-size-xs); }
+                @media (max-width:767px) { .jhs-stats__metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } .jhs-stats__row { grid-template-columns:72px minmax(0,1fr) 58px; gap:var(--jhs-space-2); } }
+            </style>`;
+    }
     async handle() { window.isListPage && this.createBtn(); }
     createBtn() {
-        const e = '<a id="statsBtn" class="menu-btn main-tab-btn" style="background-color:#6c5ce7 !important;"><span>统计</span></a>';
-        r ? $("#newVideoBtn").after(e) : l && $("#newVideoBtn").after(e);
-        $("#statsBtn").on("click", (() => { this.openDialog(); }));
+        const e = '<button type="button" id="statsBtn" class="jhs-btn jhs-btn--secondary"><span>统计</span></button>';
+        $("#newVideoBtn").after(e), $("#statsBtn").on("click", (() => this.openDialog()));
     }
     async openDialog() {
-        const e = await storageManager.getCarList(), t = await storageManager.getFavoriteActressList(), n = await storageManager.getBlacklist(), a = e.length, m = await storageManager.getStatusMap(), i = { filter: m[d].size, favorite: m[h].size, hasDown: m[g].size, hasWatch: m[p].size }, s = {};
-        e.forEach((e => { e.names && e.names.split(" ").forEach((e => { e && (s[e] = (s[e] || 0) + 1); })); }));
-        const o = Object.entries(s).sort(((e, t) => t[1] - e[1])).slice(0, 10), r = o.length > 0 ? o[0][1] : 1, l = a - i.filter - i.favorite - i.hasDown - i.hasWatch;
-        let c = 0;
-        const pendingCarSet = await storageManager.getCarMap(), pendingCounter = this.getBean("NewVideoPlugin");
-        t.forEach((e => { if (pendingCounter) c += pendingCounter.getPendingNewVideoCount(e, pendingCarSet); }));
-        const barPct = e => '<span style="display:inline-block;height:18px;width:' + Math.round(e / r * 100) + '%;background:#6c5ce7;border-radius:3px;min-width:2px"></span>',
-            barRow = (e, t, r) => { const c = a > 0 ? Math.round(e / a * 100) : 0; return '<div style="display:flex;align-items:center;margin-bottom:6px;gap:8px"><span style="width:60px;font-size:13px;text-align:right">' + t + '</span><span style="flex:1;background:#eee;border-radius:3px;height:18px"><span style="display:inline-block;height:18px;width:' + c + '%;background:' + r + ';border-radius:3px;min-width:2px"></span></span><span style="width:50px;font-size:12px;color:#888">' + e + ' (' + c + '%)</span></div>'; },
-            dialogHtml = '<div style="padding:10px 20px;height:100%;overflow:auto" class="jhs-scrollbar"><div style="display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap"><div style="flex:1;min-width:100px;background:#f8f9fa;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#333">' + a + '</div><div style="font-size:12px;color:#888">总数</div></div><div style="flex:1;min-width:100px;background:#f0f7ff;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#25b1dc">' + (i.favorite || 0) + '</div><div style="font-size:12px;color:#888">已收藏</div></div><div style="flex:1;min-width:100px;background:#f0fff4;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#7bc73b">' + (i.hasDown || 0) + '</div><div style="font-size:12px;color:#888">已下载</div></div><div style="flex:1;min-width:100px;background:#fff9f0;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#d7a80c">' + (i.hasWatch || 0) + '</div><div style="font-size:12px;color:#888">已观看</div></div><div style="flex:1;min-width:100px;background:#fff5f5;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#de3333">' + (i.filter || 0) + '</div><div style="font-size:12px;color:#888">已屏蔽</div></div><div style="flex:1;min-width:100px;background:#f5f5f5;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#666">' + l + '</div><div style="font-size:12px;color:#888">待鉴定</div></div></div><div style="display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap"><div style="flex:1;min-width:100px;background:#f8f0ff;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#6c5ce7">' + t.length + '</div><div style="font-size:12px;color:#888">收藏演员</div></div><div style="flex:1;min-width:100px;background:#fff0f0;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#b22222">' + n.length + '</div><div style="font-size:12px;color:#888">黑名单演员</div></div><div style="flex:1;min-width:100px;background:#fffef0;border-radius:8px;padding:12px;text-align:center"><div style="font-size:24px;font-weight:bold;color:#e8ab39">' + c + '</div><div style="font-size:12px;color:#888">新作品待看</div></div></div><div style="font-size:14px;font-weight:bold;margin-bottom:8px;color:#333">状态分布</div>' + barRow(i.favorite || 0, "已收藏", "#25b1dc") + barRow(i.hasDown || 0, "已下载", "#7bc73b") + barRow(i.hasWatch || 0, "已观看", "#d7a80c") + barRow(i.filter || 0, "已屏蔽", "#de3333") + barRow(l, "待鉴定", "#888") + (o.length > 0 ? '<div style="font-size:14px;font-weight:bold;margin:12px 0 8px;color:#333">Top10 演员</div>' + o.map(((e, t) => '<div style="display:flex;align-items:center;margin-bottom:4px;gap:8px"><span style="width:24px;font-size:12px;color:#888;text-align:right">' + (t + 1) + '</span><span style="width:100px;font-size:13px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escapeHtml(e[0]) + '">' + escapeHtml(e[0]) + '</span>' + barPct(e[1]) + '<span style="width:36px;font-size:12px;color:#888">' + e[1] + '</span></div>')).join("") : "") + '</div>';
-        layer.open({ type: 1, title: "收藏统计", content: dialogHtml, scrollbar: !1, area: utils.getResponsiveArea(["60%", "80%"]), anim: -1, success: (e, t) => { utils.setupEscClose(t); } });
+        const cars = await storageManager.getCarList(), actresses = await storageManager.getFavoriteActressList(), blacklist = await storageManager.getBlacklist(), total = cars.length, statusMap = await storageManager.getStatusMap();
+        const counts = { filter: statusMap[d].size, favorite: statusMap[h].size, hasDown: statusMap[g].size, hasWatch: statusMap[p].size };
+        const actressCounts = {};
+        cars.forEach((car => { car.names && car.names.split(" ").forEach((name => { name && (actressCounts[name] = (actressCounts[name] || 0) + 1); })); }));
+        const topActresses = Object.entries(actressCounts).sort(((left, right) => right[1] - left[1])).slice(0, 10), topValue = topActresses[0]?.[1] || 1;
+        const pending = total - counts.filter - counts.favorite - counts.hasDown - counts.hasWatch, carMap = await storageManager.getCarMap(), counter = this.getBean("NewVideoPlugin");
+        let newVideos = 0;
+        actresses.forEach((actress => { counter && (newVideos += counter.getPendingNewVideoCount(actress, carMap)); }));
+        const metrics = [ [ "总记录", total ], [ "已收藏", counts.favorite ], [ "已下载", counts.hasDown ], [ "已观看", counts.hasWatch ], [ "已屏蔽", counts.filter ], [ "待鉴定", pending ], [ "收藏演员", actresses.length ], [ "黑名单演员", blacklist.length ], [ "新作品待看", newVideos ] ];
+        const statusRows = [ [ "已收藏", counts.favorite, "var(--jhs-status-fav)" ], [ "已下载", counts.hasDown, "var(--jhs-status-down)" ], [ "已观看", counts.hasWatch, "var(--jhs-status-watch)" ], [ "已屏蔽", counts.filter, "var(--jhs-status-filter)" ], [ "待鉴定", pending, "var(--jhs-border-strong)" ] ];
+        const row = (label, value, max, color) => `<div class="jhs-stats__row"><span class="jhs-stats__label" title="${escapeHtml(label)}">${escapeHtml(label)}</span><span class="jhs-stats__track"><span class="jhs-stats__bar" data-width="${max ? Math.round(value / max * 100) : 0}" data-color="${color}"></span></span><span class="jhs-stats__value">${value}${max === total && total ? ` (${Math.round(value / total * 100)}%)` : ""}</span></div>`;
+        const dialogHtml = `<div class="jhs-stats jhs-scrollbar jhs-ui">
+            <div class="jhs-stats__metrics">${metrics.map((metric => `<div class="jhs-stats__metric"><strong>${metric[1]}</strong><span>${metric[0]}</span></div>`)).join("")}</div>
+            <section class="jhs-stats__group"><h3>状态分布</h3><div class="jhs-stats__rows">${statusRows.map((item => row(item[0], item[1], total, item[2]))).join("")}</div></section>
+            ${topActresses.length ? `<section class="jhs-stats__group"><h3>Top 10 演员</h3><div class="jhs-stats__rows">${topActresses.map((item => row(item[0], item[1], topValue, "var(--jhs-accent)"))).join("")}</div></section>` : ""}
+        </div>`;
+        layer.open({ type: 1, title: "收藏统计", content: dialogHtml, scrollbar: !1, area: utils.getDialogArea("lg"), anim: -1, success: (layerElement, layerIndex) => {
+            $(layerElement).find(".jhs-stats__bar").each((function() { $(this).css({ "--jhs-value": `${$(this).data("width")}%`, "--jhs-bar": $(this).data("color") }); }));
+            utils.setupEscClose(layerIndex);
+        } });
     }
 }

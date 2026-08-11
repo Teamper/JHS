@@ -39,22 +39,33 @@ function loadStorageManager(forage) {
   return new context.TestStorageManager();
 }
 
-function loadTaskPlugin(gmHttp) {
+function loadTaskPlugin(gmHttp, overrides = {}) {
+  const defaultUtils = { sleep: vi.fn(async () => {}), getNowStr: vi.fn(() => "2026-08-11 20:00:00") };
   const context = vm.createContext({
     console,
     URL,
     gmHttp,
     i: (target, key, value) => (target[key] = value),
     X: class {},
+    T: "javdb",
+    I: "javbus",
     ve: class { constructor() { this.queue = Promise.resolve(); } },
     clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
     show: { info: vi.fn(), error: vi.fn() },
-    utils: { sleep: vi.fn(async () => {}) },
+    utils: { ...defaultUtils, ...overrides.utils },
+    storageManager: overrides.storageManager || {},
     $: () => ({ text: vi.fn() })
   });
   const source = `${readFileSync(join(repoRoot, "src/plugins/new-video/task.js"), "utf8")}\nglobalThis.TestTaskPlugin = et;`;
   vm.runInContext(source, context);
   return new context.TestTaskPlugin();
+}
+
+function loadStorageQueue() {
+  const context = vm.createContext({ clog: { error: vi.fn() } });
+  const queueSource = readFileSync(join(repoRoot, "src/plugins/external-search/other-site.js"), "utf8").split("class be")[0];
+  vm.runInContext(`${queueSource}\nglobalThis.TestStorageQueue = ve;`, context);
+  return { Queue: context.TestStorageQueue, error: context.clog.error };
 }
 
 function loadHttpManager(requestHandler) {
@@ -89,6 +100,27 @@ function loadHttpManager(requestHandler) {
 }
 
 describe("startup scheduling", () => {
+  it("runs afterPluginsReady only after every immediate handle completes", async () => {
+    const { PluginManager, BasePlugin } = loadPluginClasses();
+    const events = [];
+    class SlowPlugin extends BasePlugin {
+      getName() { return "SlowPlugin"; }
+      async handle() { await new Promise((resolve) => setTimeout(resolve, 10)); events.push("slow"); }
+    }
+    class ToolbarPlugin extends BasePlugin {
+      getName() { return "ToolbarPlugin"; }
+      async handle() { events.push("toolbar-handle"); }
+      async afterPluginsReady() { events.push("toolbar-ready"); }
+    }
+    const manager = new PluginManager();
+    manager.register(SlowPlugin);
+    manager.register(ToolbarPlugin);
+
+    await manager.processPlugins();
+
+    expect(events).toEqual(["toolbar-handle", "slow", "toolbar-ready"]);
+  });
+
   it("finishes immediate plugins before idle plugins", async () => {
     const { PluginManager, BasePlugin, idleCallbacks } = loadPluginClasses();
     const events = [];
@@ -219,6 +251,53 @@ describe("storage read coalescing", () => {
 });
 
 describe("blocked network task termination", () => {
+  it("initializes direct task entrypoints without relying on idle startup", async () => {
+    const task = loadTaskPlugin({ get: vi.fn() });
+    task.loadConfig = vi.fn(async () => { task.taskConfig = { checkConcurrencyCount: 2 }; });
+    task.getBean = vi.fn(() => ({ getJavDbUrl: vi.fn(async () => "https://javdb.example") }));
+
+    await task.ensureReady();
+
+    expect(task.loadConfig).toHaveBeenCalledOnce();
+    expect(task.javDbUrl).toBe("https://javdb.example");
+  });
+
+  it("propagates queue failures while allowing later tasks to run", async () => {
+    const { Queue, error } = loadStorageQueue();
+    const queue = new Queue(), events = [];
+    const failed = queue.addTask(async () => { events.push("failed"); throw new Error("write failed"); });
+    const succeeded = queue.addTask(async () => { events.push("succeeded"); return 42; });
+
+    await expect(failed).rejects.toThrow("write failed");
+    await expect(succeeded).resolves.toBe(42);
+    await expect(queue.waitAllFinished()).resolves.toBe(42);
+    expect(events).toEqual([ "failed", "succeeded" ]);
+    expect(error).toHaveBeenCalledOnce();
+  });
+
+  it("treats an empty valid movie container as a successful empty result", async () => {
+    const updateFavoriteActress = vi.fn(async () => true), task = loadTaskPlugin({ get: vi.fn() }, { storageManager: { updateFavoriteActress } });
+    task.getSelector = () => ({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" });
+    const dom = { find: (selector) => ({
+      length: selector === ".movie-list" ? 1 : 0,
+      first() { return this; },
+      text: () => "",
+      attr: () => undefined
+    }) };
+
+    await expect(task.parsePage(dom, "javdb", "actor-1", "演员", [], new Set())).resolves.toBe(0);
+    expect(updateFavoriteActress).toHaveBeenCalledWith({ starId: "actor-1", lastCheckTime: "2026-08-11 20:00:00", newVideoList: [] });
+  });
+
+  it("rejects a structurally invalid empty page without advancing actress state", async () => {
+    const updateFavoriteActress = vi.fn(), task = loadTaskPlugin({ get: vi.fn() }, { storageManager: { updateFavoriteActress } });
+    task.getSelector = () => ({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" });
+    const dom = { find: () => ({ length: 0, first() { return this; }, text: () => "", attr: () => undefined }) };
+
+    await expect(task.parsePage(dom, "javdb", "actor-1", "演员", [], new Set())).rejects.toThrow("新作品检测-解析列表失败");
+    expect(updateFavoriteActress).not.toHaveBeenCalled();
+  });
+
   it("stops pagination after the first blocked page", async () => {
     const blocked = Object.assign(new Error("Cloudflare blocked"), { _cfBlocked: true });
     const get = vi.fn().mockRejectedValue(blocked);

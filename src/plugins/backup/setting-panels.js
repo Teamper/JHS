@@ -4,24 +4,22 @@ async function renderNetworkPanel() {
     $("#circuitBreakerThreshold").val(n), $("#circuitBreakerCooldownSec").val(Math.round(a / 1e3));
     const i = Object.entries(e);
     if (i.length) {
-        let t = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
-        t += '<tr style="background:#f0f0f0;"><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd;">域名</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">状态</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">失败次数</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">操作</th></tr>';
+        let t = '<table class="jhs-data-table"><tr><th>域名</th><th class="is-center">状态</th><th class="is-center">失败次数</th><th class="is-center">操作</th></tr>';
         for (const [n, a] of i) {
             const i = "open" === a.state ? "熔断" : "half-open" === a.state ? "半开" : "正常", s = "open" === a.state ? `剩余${Math.ceil((a.cooldownMs - (Date.now() - a.openTime)) / 1e3)}秒` : "";
-            t += `<tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:4px 6px;">${escapeHtml(n)}</td><td style="text-align:center;padding:4px 6px;">${i} ${s}</td><td style="text-align:center;padding:4px 6px;">${Number(a.failCount) || 0}</td><td style="text-align:center;padding:4px 6px;"><a class="a-danger reset-breaker" data-domain="${escapeHtml(n)}">重置</a></td></tr>`;
+            t += `<tr><td>${escapeHtml(n)}</td><td class="is-center">${i} ${s}</td><td class="is-center">${Number(a.failCount) || 0}</td><td class="is-center"><button type="button" class="jhs-btn jhs-btn--danger reset-breaker" data-domain="${escapeHtml(n)}">重置</button></td></tr>`;
         }
         t += '</table>', $("#site-health-table").html(t);
-    } else $("#site-health-table").html('<p style="color:#888;font-size:13px;">暂无熔断记录</p>');
+    } else $("#site-health-table").html('<p class="jhs-empty-note">暂无熔断记录</p>');
     const s = Object.entries(t).sort(((e, t) => t[1].count - e[1].count));
     if (s.length) {
-        let e = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
-        e += '<tr style="background:#f0f0f0;"><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd;">域名</th><th style="text-align:right;padding:6px;border-bottom:1px solid #ddd;">请求数</th><th style="text-align:right;padding:6px;border-bottom:1px solid #ddd;">错误数</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">最后使用</th></tr>';
+        let e = '<table class="jhs-data-table"><tr><th>域名</th><th class="is-right">请求数</th><th class="is-right">错误数</th><th class="is-center">最后使用</th></tr>';
         for (const [t, n] of s) {
             const a = n.lastUsed ? new Date(n.lastUsed).toLocaleTimeString() : "-";
-            e += `<tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:4px 6px;">${escapeHtml(t)}</td><td style="text-align:right;padding:4px 6px;">${n.count}</td><td style="text-align:right;padding:4px 6px;color:${n.errors > 0 ? "#e74c3c" : "#333"};">${n.errors}</td><td style="text-align:center;padding:4px 6px;">${a}</td></tr>`;
+            e += `<tr><td>${escapeHtml(t)}</td><td class="is-right">${n.count}</td><td class="is-right ${n.errors > 0 ? "is-danger" : ""}">${n.errors}</td><td class="is-center">${a}</td></tr>`;
         }
-        e += '</table>', e += `<p style="color:#888;font-size:12px;margin-top:8px;">共 ${s.length} 个域名</p>`, $("#domain-stats-table").html(e);
-    } else $("#domain-stats-table").html('<p style="color:#888;font-size:13px;">暂无统计数据</p>');
+        e += '</table>', e += `<p class="jhs-caption">共 ${s.length} 个域名</p>`, $("#domain-stats-table").html(e);
+    } else $("#domain-stats-table").html('<p class="jhs-empty-note">暂无统计数据</p>');
     $(".reset-breaker").off("click").on("click", (e => {
         const t = $(e.target).data("domain");
         gmHttp.resetCircuitBreaker(t), show.ok(`已重置 ${t} 的熔断状态`), renderNetworkPanel();
@@ -40,7 +38,7 @@ async function renderSnapshotPanel() {
         "auto-repair": "修复前自动",
         "auto-restore": "恢复前自动"
     };
-    if (0 === e.length) return void $("#snapshot-list").html('<div style="text-align:center;color:#999;padding:30px;">暂无快照，点击上方按钮创建</div>');
+    if (0 === e.length) return void $("#snapshot-list").html('<div class="jhs-empty-note">暂无快照，点击上方按钮创建</div>');
     $("#snapshot-list").find(".tabulator").length && $("#snapshot-list").empty();
     const n = new Tabulator("#snapshot-list", {
         layout: "fitColumns",
@@ -80,7 +78,7 @@ async function renderSnapshotPanel() {
                                 } catch (t) { console.error(t), show.error("删除失败: " + t.message); }
                             }));
                         }));
-                    })), '<a class="a-success snap-restore">恢复</a> <a class="a-primary snap-download">下载</a> <a class="a-danger snap-delete">删除</a>';
+                    })), '<button type="button" class="jhs-btn jhs-btn--primary snap-restore">恢复</button> <button type="button" class="jhs-btn jhs-btn--secondary snap-download">下载</button> <button type="button" class="jhs-btn jhs-btn--danger snap-delete">删除</button>';
                 }
             }
         ],
@@ -96,24 +94,22 @@ function showDiffPreview(e, t, n = null) {
         const e = { store: s, status: o.status, oldCount: o.oldCount, newCount: o.newCount, added: o.added.length, removed: o.removed.length, modified: o.modified.length };
         i.push(e);
     }
-    let s = '<div style="padding:15px;">';
-    s += '<div style="display:flex;gap:10px;margin-bottom:15px;flex-wrap:wrap;">';
-    s += `<div style="flex:1;min-width:100px;background:#f0fff4;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:bold;color:#7bc73b">${a.added}</div><div style="font-size:12px;color:#888">新增数据源</div></div>`;
-    s += `<div style="flex:1;min-width:100px;background:#fff5f5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:bold;color:#de3333">${a.removed}</div><div style="font-size:12px;color:#888">缺失数据源</div></div>`;
-    s += `<div style="flex:1;min-width:100px;background:#fff8e1;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:bold;color:#f59e0b">${a.modified}</div><div style="font-size:12px;color:#888">有变更</div></div>`;
-    s += `<div style="flex:1;min-width:100px;background:#f5f5f5;border-radius:8px;padding:10px;text-align:center"><div style="font-size:20px;font-weight:bold;color:#999">${a.unchanged}</div><div style="font-size:12px;color:#888">无变化</div></div>`;
+    let s = '<div class="jhs-dialog-content">';
+    s += '<div class="jhs-summary-grid">';
+    s += `<div class="jhs-summary-card jhs-summary-card--success"><strong>${a.added}</strong><span>新增数据源</span></div>`;
+    s += `<div class="jhs-summary-card jhs-summary-card--danger"><strong>${a.removed}</strong><span>缺失数据源</span></div>`;
+    s += `<div class="jhs-summary-card jhs-summary-card--warning"><strong>${a.modified}</strong><span>有变更</span></div>`;
+    s += `<div class="jhs-summary-card"><strong>${a.unchanged}</strong><span>无变化</span></div>`;
     s += '</div>';
     if (i.length > 0) {
-        s += '<div style="max-height:350px;overflow:auto;border:1px solid #eee;border-radius:5px;">';
-        s += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
-        s += '<thead><tr style="background:#f5f5f5;"><th style="padding:8px;text-align:left;">数据源</th><th style="padding:8px;">状态</th><th style="padding:8px;">当前</th><th style="padding:8px;">导入</th><th style="padding:8px;">新增</th><th style="padding:8px;">删除</th><th style="padding:8px;">修改</th></tr></thead><tbody>';
+        s += '<div class="jhs-scroll-frame"><table class="jhs-data-table"><thead><tr><th>数据源</th><th>状态</th><th class="is-center">当前</th><th class="is-center">导入</th><th class="is-center">新增</th><th class="is-center">删除</th><th class="is-center">修改</th></tr></thead><tbody>';
         const o = { added: "新增", removed: "缺失", modified: "变更", unchanged: "无变化" };
-        for (const r of i) s += `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px 8px;">${escapeHtml(r.store)}</td><td style="padding:6px 8px;">${o[r.status] || r.status}</td><td style="padding:6px 8px;text-align:center;">${r.oldCount}</td><td style="padding:6px 8px;text-align:center;">${r.newCount}</td><td style="padding:6px 8px;text-align:center;color:#7bc73b;">${r.added || "-"}</td><td style="padding:6px 8px;text-align:center;color:#de3333;">${r.removed || "-"}</td><td style="padding:6px 8px;text-align:center;color:#f59e0b;">${r.modified || "-"}</td></tr>`;
+        for (const r of i) s += `<tr><td>${escapeHtml(r.store)}</td><td>${o[r.status] || r.status}</td><td class="is-center">${r.oldCount}</td><td class="is-center">${r.newCount}</td><td class="is-center is-success">${r.added || "-"}</td><td class="is-center is-danger">${r.removed || "-"}</td><td class="is-center is-warning">${r.modified || "-"}</td></tr>`;
         s += '</tbody></table></div>';
     } else {
-        s += '<div style="text-align:center;color:#999;padding:20px;">数据完全一致，无需导入</div>';
+        s += '<div class="jhs-empty-note">数据完全一致，无需导入</div>';
     }
-    s += '<div style="margin-top:12px;color:#e74c3c;font-size:12px;">导入将覆盖当前数据，建议先创建快照备份</div>';
+    s += '<div class="jhs-warning-note">导入将覆盖当前数据，建议先创建快照备份</div>';
     s += '</div>';
     const r = layer.open({
         type: 1,
@@ -139,27 +135,28 @@ function showDiffPreview(e, t, n = null) {
 async function renderPluginMgmtPanel() {
     const disabled = JSON.parse(await storageManager.getSetting("disabledPlugins", "[]"));
     const allNames = unsafeWindow.pluginManager.getPluginNames();
-    const { categories, corePlugins } = getPluginCategories();
+    const { categories, corePlugins, pluginMeta } = getPluginCategories();
     const registeredSet = new Set(allNames);
     let html = "";
     for (const [catKey, cat] of Object.entries(categories)) {
         const visiblePlugins = cat.plugins.filter(p => registeredSet.has(p));
         if (!visiblePlugins.length) continue;
-        html += `<div style="border:1px solid #eee;border-radius:8px;padding:10px;margin-bottom:10px;">`;
-        html += `<div style="font-weight:bold;font-size:14px;margin-bottom:8px;">${escapeHtml(cat.label)}</div>`;
+        html += '<section class="jhs-plugin-group">';
+        html += `<h4 class="jhs-plugin-group__title">${escapeHtml(cat.label)}</h4>`;
         for (const pName of visiblePlugins) {
             const isCore = corePlugins.includes(pName);
             const isDisabled = disabled.includes(pName);
-            html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;">`;
-            html += `<span style="font-size:13px;">${escapeHtml(pName)}${isCore ? ' <span style="color:#888;font-size:11px;">[核心]</span>' : ""}</span>`;
+            const productName = pluginMeta[pName]?.[0] || pName;
+            html += '<div class="jhs-plugin-row">';
+            html += `<span class="jhs-plugin-copy" title="内部插件名：${escapeHtml(pName)}"><strong>${escapeHtml(productName)}</strong></span>`;
             if (isCore) {
-                html += `<input type="checkbox" class="mini-switch" checked disabled>`;
+                html += '<span class="jhs-badge jhs-badge--neutral">核心</span>';
             } else {
                 html += `<input type="checkbox" class="mini-switch pm-toggle" data-plugin="${escapeHtml(pName)}" ${isDisabled ? "" : "checked"}>`;
             }
             html += `</div>`;
         }
-        html += `</div>`;
+        html += `</section>`;
     }
     $("#plugin-mgmt-list").html(html);
     const enabledCount = allNames.length - disabled.length;
@@ -183,27 +180,25 @@ async function renderPluginMgmtPanel() {
     });
     const startup = unsafeWindow.pluginManager.getStartupReport?.(), timings = unsafeWindow.pluginManager.getTimings();
     const formatMs = value => Number.isFinite(value) ? value.toFixed(1) : "0.0";
-    let startupHtml = startup ? `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:13px;"><span>就绪: <strong>${formatMs(startup.readyMs)} ms</strong></span><span>注册: ${formatMs(startup.registrationMs)} ms</span><span>样式: ${formatMs(startup.cssMs)} ms</span><span>即时插件: ${formatMs(startup.immediateMs)} ms</span><span>空闲任务: ${startup.idleCompleted}/${startup.idleCompleted + startup.idlePending}</span></div><p style="color:#888;font-size:12px;margin:0 0 8px;">就绪耗时不包含 @require 下载及浏览器脚本解析时间。</p>` : "";
+    let startupHtml = startup ? `<div class="jhs-inline-metrics"><span>就绪: <strong>${formatMs(startup.readyMs)} ms</strong></span><span>注册: ${formatMs(startup.registrationMs)} ms</span><span>样式: ${formatMs(startup.cssMs)} ms</span><span>即时插件: ${formatMs(startup.immediateMs)} ms</span><span>空闲任务: ${startup.idleCompleted}/${startup.idleCompleted + startup.idlePending}</span></div><p class="jhs-caption">就绪耗时不包含 @require 下载及浏览器脚本解析时间。</p>` : "";
     if (timings.length) {
         const sorted = [...timings].sort((a, b) => b.elapsed - a.elapsed);
-        let tHtml = '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
-        tHtml += '<tr style="background:#f0f0f0;"><th style="text-align:left;padding:6px;border-bottom:1px solid #ddd;">插件</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">阶段</th><th style="text-align:right;padding:6px;border-bottom:1px solid #ddd;">耗时(ms)</th><th style="text-align:center;padding:6px;border-bottom:1px solid #ddd;">状态</th></tr>';
+        let tHtml = '<table class="jhs-data-table"><tr><th>插件</th><th class="is-center">阶段</th><th class="is-right">耗时(ms)</th><th class="is-center">状态</th></tr>';
         for (const t of sorted) {
-            const color = t.status === "disabled" ? "#ccc" : t.elapsed > 500 ? "#e74c3c" : t.elapsed > 200 ? "#f39c12" : "#333";
+            const stateClass = t.status === "disabled" ? "is-muted" : t.elapsed > 500 ? "is-slow" : t.elapsed > 200 ? "is-warning" : "";
             const statusText = t.status === "disabled" ? "已禁用" : t.status === "error" ? "错误" : t.status === "pending-idle" ? "等待空闲" : t.status === "skipped-mobile" ? "移动端跳过" : "正常";
-            tHtml += `<tr><td style="padding:4px 6px;border-bottom:1px solid #f0f0f0;color:${color}">${escapeHtml(t.name)}</td><td style="text-align:center;padding:4px 6px;border-bottom:1px solid #f0f0f0;">${t.startupMode === "idle" ? "空闲" : "即时"}</td><td style="text-align:right;padding:4px 6px;border-bottom:1px solid #f0f0f0;color:${color};font-weight:${t.elapsed > 500 ? "bold" : "normal"}">${t.elapsed.toFixed(1)}</td><td style="text-align:center;padding:4px 6px;border-bottom:1px solid #f0f0f0;">${statusText}</td></tr>`;
+            tHtml += `<tr><td class="${stateClass}">${escapeHtml(t.name)}</td><td class="is-center">${t.startupMode === "idle" ? "空闲" : "即时"}</td><td class="is-right ${stateClass}">${t.elapsed.toFixed(1)}</td><td class="is-center">${statusText}</td></tr>`;
         }
         tHtml += '</table>';
         $("#plugin-timing-table").html(startupHtml + tHtml);
     } else {
-        $("#plugin-timing-table").html(startupHtml + '<p style="color:#888;font-size:13px;">暂无数据，刷新页面后自动采集。</p>');
+        $("#plugin-timing-table").html(startupHtml + '<p class="jhs-empty-note">暂无数据，刷新页面后自动采集。</p>');
     }
     const errorLog = unsafeWindow.pluginManager.getErrorLog();
     if (errorLog.length) {
-        let eHtml = '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
-        eHtml += '<tr style="background:#f0f0f0;"><th style="text-align:left;padding:4px;">时间</th><th style="text-align:left;padding:4px;">插件</th><th style="text-align:left;padding:4px;">阶段</th><th style="text-align:left;padding:4px;">错误信息</th></tr>';
+        let eHtml = '<table class="jhs-data-table"><tr><th>时间</th><th>插件</th><th>阶段</th><th>错误信息</th></tr>';
         for (const err of [...errorLog].reverse()) {
-            eHtml += `<tr><td style="padding:3px 4px;border-bottom:1px solid #f0f0f0;color:#888;white-space:nowrap;">${escapeHtml(err.time.substring(11, 19))}</td><td style="padding:3px 4px;border-bottom:1px solid #f0f0f0;">${escapeHtml(err.plugin)}</td><td style="padding:3px 4px;border-bottom:1px solid #f0f0f0;">${escapeHtml(err.phase)}</td><td style="padding:3px 4px;border-bottom:1px solid #f0f0f0;color:#e74c3c;word-break:break-all;">${escapeHtml(err.message)}</td></tr>`;
+            eHtml += `<tr><td class="is-muted">${escapeHtml(err.time.substring(11, 19))}</td><td>${escapeHtml(err.plugin)}</td><td>${escapeHtml(err.phase)}</td><td class="is-danger">${escapeHtml(err.message)}</td></tr>`;
         }
         eHtml += '</table>';
         $("#plugin-error-log").html(eHtml);
@@ -211,7 +206,7 @@ async function renderPluginMgmtPanel() {
         $("#plugin-error-log").text("无错误记录");
     }
     const cacheStats = storageManager.getCacheHitStats();
-    $("#cache-hit-stats").html(`<div style="display:flex;gap:15px;flex-wrap:wrap;"><span>命中: <strong style="color:#7bc73b">${cacheStats.hits}</strong></span><span>未命中: <strong style="color:#e74c3c">${cacheStats.misses}</strong></span><span>总计: <strong>${cacheStats.total}</strong></span><span>命中率: <strong style="color:#25b1dc">${cacheStats.rate}</strong></span></div>`);
+    $("#cache-hit-stats").html(`<div class="jhs-inline-metrics"><span>命中: <strong>${cacheStats.hits}</strong></span><span>未命中: <strong>${cacheStats.misses}</strong></span><span>总计: <strong>${cacheStats.total}</strong></span><span>命中率: <strong>${cacheStats.rate}</strong></span></div>`);
 }
 
 /** Render the data health check panel with totals and issue breakdown. */
@@ -222,16 +217,16 @@ async function renderDataHealthPanel() {
     try {
         const t = await storageManager.inspectDataHealth(), n = t.fixable.reduce(((e, t) => e + t.count), 0), a = t.readonly.reduce(((e, t) => e + t.count), 0), i = t => t.length ? t.map((e => `<li><strong>${escapeHtml(e.message)}</strong>：${e.count}</li>`)).join("") : "<li>无</li>";
         e.html(`
-                <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin-bottom:12px;">
+                <div class="jhs-summary-grid">
                     <div>番号记录：<strong>${t.totals.carList}</strong></div>
                     <div>收藏演员：<strong>${t.totals.favoriteActresses}</strong></div>
                     <div>黑名单演员：<strong>${t.totals.blacklist}</strong></div>
                     <div>黑名单作品：<strong>${t.totals.blacklistCarList}</strong></div>
                 </div>
-                <div style="margin-bottom:8px;">体检时间：${escapeHtml(t.checkedAt)}；可修复问题 <strong>${n}</strong> 项，只读问题 <strong>${a}</strong> 项。</div>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-                    <div><div style="font-weight:bold;margin-bottom:4px;">可安全修复</div><ul>${i(t.fixable)}</ul></div>
-                    <div><div style="font-weight:bold;margin-bottom:4px;">仅报告</div><ul>${i(t.readonly)}</ul></div>
+                <div class="jhs-health-summary">体检时间：${escapeHtml(t.checkedAt)}；可修复问题 <strong>${n}</strong> 项，只读问题 <strong>${a}</strong> 项。</div>
+                <div class="jhs-health-columns">
+                    <div><h4>可安全修复</h4><ul>${i(t.fixable)}</ul></div>
+                    <div><h4>仅报告</h4><ul>${i(t.readonly)}</ul></div>
                 </div>
             `);
     } catch (t) {

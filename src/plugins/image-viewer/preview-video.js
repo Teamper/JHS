@@ -67,9 +67,9 @@ class te {
                 clog.debug(`--- 成功通过 ${n} 找到 Content IDs ---`);
                 const t = $("#fanzaBtn");
                 let a = `https://www.dmm.co.jp/search/=/searchstr=${e}`, i = "single";
-                c.length > 1 ? (t.attr("href", a), t.append('<span class="site-tag" style="top:-15px">多结果</span>'),
-                t.css("backgroundColor", "#7bc73b"), i = "multiple") : (a = c[0].pageUrl, t.attr("href", a),
-                t.css("backgroundColor", "#7bc73b"));
+                c.length > 1 ? (t.attr("href", a), t.append('<span class="site-tag jhs-layout-294497f1">多结果</span>'),
+                t.css("backgroundColor", "var(--jhs-status-down)"), i = "multiple") : (a = c[0].pageUrl, t.attr("href", a),
+                t.css("backgroundColor", "var(--jhs-status-down)"));
                 const s = "jhs_other_site_dmm", o = localStorage.getItem(s) ? JSON.parse(localStorage.getItem(s)) : {};
                 return o[this.carNum] = {
                     type: i,
@@ -81,7 +81,7 @@ class te {
         clog.warn("所有关键词尝试均未找到匹配的Content ID, 解析Dmm视频失败");
         const i = $("#fanzaBtn");
         return i.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`),
-        i.attr("title", "未查询到, 点击前往搜索页"), i.css("backgroundColor", "#de3333"), null;
+        i.attr("title", "未查询到, 点击前往搜索页"), i.css("backgroundColor", "var(--jhs-status-filter)"), null;
     }
     async _extractTrailerLinks({contentId: e, serviceCode: t, floorCode: n}) {
         const a = `https://www.dmm.co.jp/service/digitalapi/-/html5_player/=/cid=${e}/mtype=AhRVShI_/service=${t}/floor=${n}/mode=/`, i = await gmHttp.get(a, null, {
@@ -112,6 +112,9 @@ class te {
         return r;
     }
     async fetchVideo() {
+        const carNum = normalizeCarNum(this.carNum);
+        if (!carNum) return clog.warn("跳过 DMM 解析：番号不可用"), null;
+        this.carNum = carNum;
         const e = this._checkCache();
         if (e) return e;
         let t;
@@ -124,7 +127,7 @@ class te {
             clog.error("DMM API 搜索失败:", n);
             const e = $("#fanzaBtn");
             return e.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`),
-            e.attr("title", "未查询到, 点击前往搜索页"), e.css("backgroundColor", "#de3333"), null;
+            e.attr("title", "未查询到, 点击前往搜索页"), e.css("backgroundColor", "var(--jhs-status-filter)"), null;
         }
         if (!t || 0 === t.length) return null;
         try {
@@ -138,7 +141,7 @@ class te {
             }
             const t = $("#fanzaBtn");
             return t.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`),
-            t.attr("title", "未查询到, 点击前往搜索页"), t.css("backgroundColor", "#de3333"), null;
+            t.attr("title", "未查询到, 点击前往搜索页"), t.css("backgroundColor", "var(--jhs-status-filter)"), null;
         }
     }
 }
@@ -150,7 +153,7 @@ class ae extends X {
         return "PreviewVideoPlugin";
     }
     async initCss() {
-        return "\n            .video-control-btn {\n                min-width:120px;\n                padding: 7px 12px;\n                font-size: 12px;\n                background: rgba(0,0,0,0.7);\n                color: white;\n                border: none;\n                border-radius: 4px;\n                cursor: pointer;\n            }\n            .video-control-btn.active {\n                background-color: #1890ff;\n                color: white;\n                font-weight: bold;\n                border: 2px solid #096dd9;\n            }\n        ";
+        return "\n            .video-control-btn {\n                min-width:120px;\n                padding: 7px 12px;\n                font-size: 12px;\n                background: rgba(0,0,0,0.7);\n                color: white;\n                border: none;\n                border-radius: 4px;\n                cursor: pointer;\n            }\n            .video-control-btn.active {\n                background-color: var(--jhs-accent);\n                color: var(--jhs-accent-text-on);\n                font-weight: bold;\n                border: 2px solid var(--jhs-accent);\n            }\n        ";
     }
     async handle() {
         if (!isDetailPage) return;
@@ -184,7 +187,7 @@ class ae extends X {
             } else {
                 clog.debug("JavDB没有视频播放元素, 开始创建...");
                 const e = $(".column-video-cover img").attr("src");
-                $(".preview-images").prepend(`\n                    <a class="preview-video-container" data-fancybox="gallery" href="#preview-video">\n                        <span>預告片</span>\n                        <img src="${e}" class="video-cover" style="width: 150px; height: auto;" alt="">\n                    </a>\n                `);
+                $(".preview-images").prepend(`\n                    <a class="preview-video-container" data-fancybox="gallery" href="#preview-video">\n                        <span>預告片</span>\n                        <img src="${e}" class="video-cover jhs-layout-8cf76fd7" alt="">\n                    </a>\n                `);
                 $(".preview-video-container").on("click", (e => {
                     utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (async () => {
                         await this.handleVideo();
@@ -225,7 +228,7 @@ class ae extends X {
                 let t = s[e.quality];
                 if (t) {
                     const n = l === e.quality;
-                    let a = $(`\n                    <button class="video-control-btn${n ? " active" : ""}" \n                            id="${e.id}" \n                            data-quality="${e.quality}"\n                            data-video-src="${t}"\n                            style="min-width: 40px; border: 1px solid #ccc; background-color: ${n ? "#007bff" : "#fff"}; color: ${n ? "white" : "black"};">\n                        ${e.text}\n                    </button>\n                `);
+                    let a = $(`\n                    <button class="jhs-btn video-control-btn${n ? " active" : ""}" \n                            id="${e.id}" \n                            data-quality="${e.quality}"\n                            data-video-src="${t}">\n                        ${e.text}\n                    </button>\n                `);
                     r.append(a);
                 }
             }));
@@ -236,21 +239,21 @@ class ae extends X {
             gap: "5px",
             "align-items": "center",
             "margin-left": "auto"
-        }), d = $(`<button class="menu-btn" id="video-filterBtn" style="min-width: 120px; background-color:#de3333;">屏蔽</button>`);
+        }), d = $(`<button type="button" class="jhs-btn jhs-btn--filter jhs-layout-3f0d74e1" id="video-filterBtn">屏蔽</button>`);
         c.append(d);
-        let h = $(`<button class="menu-btn" id="video-favoriteBtn" style="min-width: 120px; background-color:#25b1dc;">收藏</button>`);
+        let h = $(`<button type="button" class="jhs-btn jhs-btn--fav jhs-layout-2afc43dc" id="video-favoriteBtn">收藏</button>`);
         c.append(h);
-        let g = $(`<button class="menu-btn" id="speed-btn" style="min-width: 120px; background-color:#76b45d;">快进</button>`);
+        let g = $(`<button type="button" class="jhs-btn jhs-btn--down jhs-layout-5c319329" id="speed-btn">快进</button>`);
         c.append(g), o.append(c), t.append(o), o.on("click", ".video-control-btn", (async t => {
             const a = $(t.currentTarget), i = a.data("video-src");
             if (!a.hasClass("active")) try {
                 const t = n.currentTime;
                 e.attr("src", i), n.load(), n.currentTime = t, await n.play(), o.find(".video-control-btn").removeClass("active").css({
-                    "background-color": "#fff",
-                    color: "black"
+                    "background-color": "var(--jhs-surface)",
+                    color: "var(--jhs-text)"
                 }), a.addClass("active").css({
-                    "background-color": "#007bff",
-                    color: "white"
+                    "background-color": "var(--jhs-accent)",
+                    color: "var(--jhs-accent-text-on)"
                 });
             } catch (s) {
                 console.error("切换画质失败:", s);

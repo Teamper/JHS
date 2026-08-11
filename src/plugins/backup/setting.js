@@ -56,15 +56,15 @@ class Ae extends X {
                 $(".navbar-search").is(":hidden") ? ($(".mini-setting-box").hide(), $(".setting-box").show()) : ($(".mini-setting-box").show(),
                 $(".setting-box").hide());
             };
-            $("#navbar-menu-user .navbar-end").prepend('<div class="navbar-item has-dropdown is-hoverable setting-box" style="position:relative;">\n                    <a id="setting-btn" class="navbar-link nav-btn" style="color: #ff8400 !important;padding-right:15px !important;">\n                        设置\n                    </a>\n                    <div class="simple-setting"></div>\n                </div>'),
+            $("#navbar-menu-user .navbar-end").prepend('<div class="navbar-item has-dropdown is-hoverable setting-box jhs-setting-nav-item">\n                    <button type="button" id="setting-btn" class="jhs-btn navbar-link nav-btn jhs-nav-btn jhs-nav-button">\n                        设置\n                    </button>\n                    <div class="simple-setting"></div>\n                </div>'),
             utils.loopDetector((() => $("#miniHistoryBtn").length > 0), (() => {
-                $(".miniHistoryBtnBox").before('\n                    <div class="navbar-item mini-setting-box" style="position:relative;margin-left: auto;">\n                        <a id="mini-setting-btn" class="navbar-link nav-btn" style="color: #ff8400 !important;padding-left:0 !important;padding-right:0 !important;">\n                            设置\n                        </a>\n                        <div class="mini-simple-setting"></div>\n                    </div>\n                '),
+                $(".miniHistoryBtnBox").before('\n                    <div class="navbar-item mini-setting-box jhs-mini-setting-box">\n                        <button type="button" id="mini-setting-btn" class="jhs-btn navbar-link nav-btn jhs-nav-btn jhs-mini-setting-trigger">\n                            设置\n                        </button>\n                        <div class="mini-simple-setting"></div>\n                    </div>\n                '),
                 e();
             })), $(window).resize(e);
         }
         l && (utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
-            $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" style="position: relative; display: flex; flex-grow: 1;justify-content: flex-end;z-index: 12345679 !important;">\n                        <div class="setting-box">\n                            <a id="setting-btn" class="menu-btn main-tab-btn" style="background-color:#6e685e !important;">\n                                <span>设置</span>\n                            </a>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
-        }), 1, 1e4, !1), isDetailPage && $("h3").before('\n                    <div class="container-fluid" style="margin-top:20px">\n                        <div id="top-right-box" style="position: relative; display: flex; flex-grow: 1;justify-content: flex-end;z-index: 12345679 !important;">\n                            <div class="setting-box">\n                                <a id="setting-btn" class="menu-btn main-tab-btn" style="background-color:#6e685e !important;">\n                                    <span>设置</span>\n                                </a>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ')),
+            $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" class="jhs-setting-anchor">\n                        <div class="setting-box">\n                            <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                <span>设置</span>\n                            </button>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
+        }), 1, 1e4, !1), isDetailPage && $("h3").before('\n                    <div class="container-fluid jhs-setting-detail-anchor">\n                        <div id="top-right-box" class="jhs-setting-anchor">\n                            <div class="setting-box">\n                                <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                    <span>设置</span>\n                                </button>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ')),
         $(".main-nav, .container-fluid").on("click", "#setting-btn, #mini-setting-btn", (() => {
             clog.lowZIndex(), this.openSettingDialog();
         })), $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (() => {
@@ -86,11 +86,11 @@ class Ae extends X {
             type: 1,
             title: "设置",
             content: s,
-            area: utils.getResponsiveArea([ "55%", "90%" ]),
+            area: utils.getDialogArea("lg"),
             scrollbar: !1,
-            success: (e, n) => {
-                $(e).find(".layui-layer-content").css("position", "relative"), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), loadSettingForm(this.getBean.bind(this)),
-                this.bindClick(), utils.setupEscClose(n), t && t();
+            success: async (e, n) => {
+                $(e).find(".layui-layer-content").css("position", "relative"), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), await loadSettingForm(this.getBean.bind(this)),
+                JhsSelect.enhance(e), this.bindClick(), $(".side-menu-item.active").attr("aria-current", "page"), utils.setupEscClose(n), t && t();
                 if (utils.isMobileMode()) {
                     this.collapseAdvancedTabs();
                 }
@@ -114,18 +114,18 @@ class Ae extends X {
             sidebar.find(`[data-panel="${p.id}"]`).remove();
         });
         if (!sidebar.find('[data-panel="more-tools-panel"]').length) {
-            sidebar.append('<div class="side-menu-item" data-panel="more-tools-panel">更多工具</div>');
+            sidebar.append('<button type="button" class="jhs-btn side-menu-item" data-panel="more-tools-panel" aria-controls="more-tools-panel">更多工具</button>');
         }
         if ($("#more-tools-panel").length) return;
         let subTabsHtml = advancedPanels.map((p, i) =>
-            `<div class="jhs-sub-tab${i === 0 ? " active" : ""}" data-sub-panel="${p.id}">${p.label}</div>`
+            `<button type="button" role="tab" aria-selected="${i === 0}" tabindex="${i === 0 ? "0" : "-1"}" class="jhs-btn jhs-sub-tab${i === 0 ? " active" : ""}" data-sub-panel="${p.id}">${p.label}</button>`
         ).join("");
         let subPanelsHtml = advancedPanels.map((p, i) =>
             `<div id="sub-${p.id}" class="jhs-sub-panel${i === 0 ? " active" : ""}" data-rendered="false"></div>`
         ).join("");
         const wrapperHtml = `
-            <div id="more-tools-panel" class="content-panel" style="display:none;">
-                <div class="jhs-sub-tabs">${subTabsHtml}</div>
+            <div id="more-tools-panel" class="content-panel jhs-more-tools-panel">
+                <div class="jhs-sub-tabs" role="tablist" aria-label="更多工具">${subTabsHtml}</div>
                 <div class="jhs-sub-panels">${subPanelsHtml}</div>
             </div>
         `;
@@ -139,13 +139,13 @@ class Ae extends X {
             }
         });
         sidebar.on("click", '[data-panel="more-tools-panel"]', function() {
-            $(".side-menu-item").removeClass("active"), $(this).addClass("active"), $(".content-panel").hide();
-            $("#more-tools-panel").show(), $("#saveBtn").show(), $("#clean-all").hide();
+            $(".side-menu-item").removeClass("active").attr("aria-current", "false"), $(this).addClass("active").attr("aria-current", "page"), $(".content-panel").hide();
+            $("#more-tools-panel").show(), $("#saveBtn").show(), $("#clean-all").addClass("jhs-is-hidden");
         });
         $("#more-tools-panel").on("click", ".jhs-sub-tab", function() {
             const target = $(this).data("sub-panel");
-            $("#more-tools-panel .jhs-sub-tab").removeClass("active");
-            $(this).addClass("active");
+            $("#more-tools-panel .jhs-sub-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" });
+            $(this).addClass("active").attr({ "aria-selected": "true", tabindex: "0" });
             $("#more-tools-panel .jhs-sub-panel").removeClass("active");
             $(`#sub-${target}`).addClass("active");
             if ($(`#sub-${target}`).attr("data-rendered") !== "true") {
@@ -155,18 +155,24 @@ class Ae extends X {
             if (panel && panel.render) {
                 panel.render();
             }
+        }).on("keydown", ".jhs-sub-tab", function(e) {
+            if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(e.key)) return;
+            e.preventDefault();
+            const tabs = $("#more-tools-panel .jhs-sub-tab"), current = tabs.index(this);
+            const next = e.key === "Home" ? 0 : e.key === "End" ? tabs.length - 1 : e.key === "ArrowRight" ? (current + 1) % tabs.length : (current - 1 + tabs.length) % tabs.length;
+            tabs.eq(next).trigger("click").trigger("focus");
         });
     }
     bindClick() {
         const settingPlugin = this;
         $(".side-menu-item").on("click", (function() {
-            $(".side-menu-item").removeClass("active"), $(this).addClass("active"), $(".content-panel").hide();
+            $(".side-menu-item").removeClass("active").attr("aria-current", "false"), $(this).addClass("active").attr("aria-current", "page"), $(".content-panel").hide();
             const e = $(this).data("panel");
-            $("#" + e).show(), "cache-panel" === e ? ($("#saveBtn").hide(), $("#clean-all").show()) : ($("#saveBtn").show(),
-            $("#clean-all").hide()), "health-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), renderDataHealthPanel()),
-            "plugin-mgmt-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), renderPluginMgmtPanel()),
-            "snapshot-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), renderSnapshotPanel()),
-            "network-panel" === e && ($("#saveBtn").hide(), $("#clean-all").hide(), renderNetworkPanel());
+            $("#" + e).show(), "cache-panel" === e ? ($("#saveBtn").hide(), $("#clean-all").removeClass("jhs-is-hidden")) : ($("#saveBtn").show(),
+            $("#clean-all").addClass("jhs-is-hidden")), "health-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderDataHealthPanel()),
+            "plugin-mgmt-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderPluginMgmtPanel()),
+            "snapshot-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderSnapshotPanel()),
+            "network-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderNetworkPanel());
         })), $("#importBtn").on("click", (e => importSettingData(showDiffPreview))), $("#exportBtn").on("click", (e => exportSettingData())),
         $("#webdavBackupBtn").on("click", (e => backupDataByWebDav(this.folderName))), $("#webdavBackupListBtn").on("click", (e => backupListBtnByWebDav(this.folderName, (files, client, label) => openFileListDialog(files, client, label, this.folderName, showDiffPreview)))),
         $("#saveBtn").on("click", (() => saveSettingForm(this.getBean.bind(this)))), $("#runHealthCheckBtn").on("click", (() => renderDataHealthPanel())),
@@ -184,11 +190,11 @@ class Ae extends X {
         })), $(".clean-btn").on("click", (async e => {
             const t = $(e.currentTarget).data("key"), n = this.cacheItems.find((e => e.key === t));
             t === storageManager.third_party_cache_key ? await storageManager.clearThirdPartyCache() : "_circuitBreaker" === t ? gmHttp.resetAllCircuitBreakers() : "_domainStats" === t ? gmHttp.clearDomainStats() : localStorage.removeItem(t),
-            show.ok(`${n.text} 清理成功`), $("#cache-data-display").hide(),
+            show.ok(`${n.text} 清理成功`), $("#cache-data-display").addClass("jhs-is-hidden"),
             "jhs_dmm_video" === t && localStorage.removeItem("jhs_other_site_dmm");
         })), $("#clean-all").on("click", (async () => {
             this.cacheItems.forEach((e => localStorage.removeItem(e.key))), show.ok("全部缓存已清理"),
-            $("#cache-data-display").hide(), localStorage.removeItem("jhs_other_site_dmm"), await storageManager.clearThirdPartyCache();
+            $("#cache-data-display").addClass("jhs-is-hidden"), localStorage.removeItem("jhs_other_site_dmm"), await storageManager.clearThirdPartyCache();
         })), $(".view-btn").on("click", (async e => {
             const t = $(e.currentTarget).data("key");
             let n;
@@ -197,7 +203,7 @@ class Ae extends X {
             else if ("_domainStats" === t) n = JSON.stringify(gmHttp.getDomainStats());
             else n = localStorage.getItem(t);
             const a = $("#cache-data-display"), i = a.find("pre");
-            if (a.show(), n) try {
+            if (a.removeClass("jhs-is-hidden"), n) try {
                 const e = JSON.parse(n);
                 i.text(JSON.stringify(e, null, 2));
             } catch {
@@ -210,5 +216,8 @@ class Ae extends X {
             n.css("border", `${a}px solid ${i}`);
         }
         e.on("input", a), t.on("input", a);
+        $("#themeMode").on("change", (async function() {
+            await storageManager.saveSettingItem("themeMode", $(this).val()), applyTheme();
+        }));
     }
 }

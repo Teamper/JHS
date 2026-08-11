@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      6.0.0
+// @version      6.1.0
 // @author       JHS Contributors
 // @description  JAV Helper Suite：为 JavDB / JavBus 提供浏览、收藏、筛选、资源检索、数据备份与统计增强。
 // @license      MIT
@@ -120,7 +120,7 @@ const vt = function() {
         await storageManager.merge_tow_car_list_table(),
         await storageManager.setDataVersion(CURRENT_DATA_VERSION));
     })();
-    await Promise.all([ vt.processCss(), e ]),
+    await Promise.all([ vt.processCss(), e, applyTheme() ]),
     r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie) && show.error("请切换到中文语言下才可正常使用本脚本", {
         duration: -1
     }), await vt.processPlugins();

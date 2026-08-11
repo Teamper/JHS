@@ -6,16 +6,16 @@ class ze extends X {
         return "WantAndWatchedVideosPlugin";
     }
     async handle() {
-        window.location.href.includes("/want_watch_videos") && ($("h3").append('<a class="a-primary" id="wantWatchBtn" style="padding:10px;">导入至 JHS</a>'),
+        window.location.href.includes("/want_watch_videos") && ($("h3").append('<button type="button" class="jhs-btn jhs-btn--primary jhs-layout-481ed7e7" id="wantWatchBtn">导入至 JHS</button>'),
         $("#wantWatchBtn").on("click", (e => {
             this.type = h, this.importWantWatchVideos(e, "是否将 想看的影片 导入到 JHS-收藏?");
-        }))), window.location.href.includes("/watched_videos") && ($("h3").append('<a class="a-success" id="wantWatchBtn" style="padding:10px;">导入至 JHS</a>'),
+        }))), window.location.href.includes("/watched_videos") && ($("h3").append('<button type="button" class="jhs-btn jhs-btn--primary jhs-layout-481ed7e7" id="wantWatchBtn">导入至 JHS</button>'),
         $("#wantWatchBtn").on("click", (e => {
             this.type = g, this.importWantWatchVideos(e, "是否将 看过的影片 导入到 JHS-已下载?");
         })));
     }
     importWantWatchVideos(e, t) {
-        utils.q(null, `${t} <br/> <span style='color: #f40'>执行此功能前请记得备份数据</span>`, (async () => {
+        utils.q(null, `${t} <br/> <span class="jhs-task-emphasis">执行此功能前请记得备份数据</span>`, (async () => {
             let e = loading();
             try {
                 await this.parseMovieList();

@@ -60,8 +60,8 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
     clearDomainStats() {
         this._domainStats.clear();
     }
-    async get(e, t = {}, n = {}, a) {
-        return this.gmRequest("GET", e, null, t, n, a);
+    async get(e, t = {}, n = {}, a, i = {}) {
+        return this.gmRequest("GET", e, null, t, n, a, i);
     }
     post(e, t = {}, n = {}) {
         n = {
@@ -71,7 +71,7 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
         let a = JSON.stringify(t);
         return this.gmRequest("POST", e, a, null, n);
     }
-    async gmRequest(e, t, n = {}, a = {}, i = {}, s = !1) {
+    async gmRequest(e, t, n = {}, a = {}, i = {}, s = !1, requestOptions = {}) {
         if (a && Object.keys(a).length) {
             const e = new URLSearchParams(a).toString();
             t += (t.includes("?") ? "&" : "?") + e;
@@ -100,6 +100,7 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
                 data: n,
                 onload: e => {
                     try {
+                        if (404 === e.status && requestOptions.ignoreNotFound) return void a(null);
                         if (this._isCloudflareChallenge(e.responseText)) {
                             this._recordFailure(o);
                             const n = new Error(`Cloudflare challenge blocked: ${o}`);

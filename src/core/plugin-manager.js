@@ -131,6 +131,14 @@ class Y {
             return this._runPlugin(e);
         })));
         this._immediateMs = performance.now() - s;
+        for (const e of n) {
+            if ("function" != typeof e.plugin.afterPluginsReady) continue;
+            try {
+                await e.plugin.afterPluginsReady();
+            } catch (t) {
+                clog.error(`插件 ${e.name} 完成初始化后执行失败`, t), this._addError(e.name, "after-ready", t);
+            }
+        }
         this._readyMs = performance.now() - this._startedAt;
         this._idlePending = a.length;
         a.length && this._scheduleIdle((() => this._runIdlePlugins(a)));
@@ -177,20 +185,34 @@ class X {
     getStartupMode() { return "immediate"; }
     shouldSkipOnMobile() { return false; }
     getPageInfo() {
-        let e, t, n, a, i, s = window.location.href;
-        return r && (e = $('a[title="複製番號"]').attr("data-clipboard-text"), t = s.split("?")[0].split("#")[0],
-        n = $(".female").prev().map(((e, t) => $(t).text())).get().join(" "), a = $(".male").prev().map(((e, t) => $(t).text())).get().join(" "),
-        i = $('strong:contains("日期:")').parent(".panel-block").find(".value").text().trim()),
-        l && (t = s.split("?")[0], e = t.split("/").filter(Boolean).pop().replace(/_\d{4}-\d{2}-\d{2}$/, ""),
+        let carNum = null, t, n, a, i, s = window.location.href;
+        if (r) {
+            const params = new URL(s).searchParams, injectedCarNum = normalizeCarNum(params.get("jhsCarNum"));
+            const copyCarNum = normalizeCarNum($('.column-video-info a[data-clipboard-text][title*="番"], .video-detail a[data-clipboard-text][title*="番"]').first().attr("data-clipboard-text")) ||
+                normalizeCarNum($('a[title="複製番號"]').attr("data-clipboard-text"));
+            let panelCarNum = null;
+            $(".column-video-info .panel-block, .video-detail .panel-block").each((function() {
+                const label = $(this).find("strong, .label").first().text().trim();
+                if (panelCarNum || !/(?:番号|番號|^ID)\s*[:：]?/i.test(label)) return;
+                panelCarNum = normalizeCarNum($(this).find("[data-clipboard-text]").first().attr("data-clipboard-text")) ||
+                    normalizeCarNum($(this).find(".value").first().text());
+            }));
+            const fallbackCarNum = normalizeCarNum($("#video_id, .video-id, .video-title strong").first().text());
+            carNum = firstValidCarNum(injectedCarNum, copyCarNum, panelCarNum, fallbackCarNum);
+            t = s.split("?")[0].split("#")[0], n = $(".female").prev().map(((e, t) => $(t).text())).get().join(" "),
+            a = $(".male").prev().map(((e, t) => $(t).text())).get().join(" "),
+            i = $('strong:contains("日期:")').parent(".panel-block").find(".value").text().trim();
+        }
+        l && (t = s.split("?")[0], carNum = normalizeCarNum(t.split("/").filter(Boolean).pop().replace(/_\d{4}-\d{2}-\d{2}$/, "")),
         n = $('span[onmouseover*="star_"] a').map(((e, t) => $(t).text())).get().join(" "),
-        a = "", i = $('span.header:contains("發行日期:")').parent("p").text().trim().replace("發行日期:", "").trim()),
-        {
-            carNum: e,
+        a = "", i = $('span.header:contains("發行日期:")').parent("p").text().trim().replace("發行日期:", "").trim());
+        return assertPageInfoContract({
+            carNum,
             url: t,
             actress: n,
             actors: a,
             publishTime: i
-        };
+        });
     }
     getActressId() {
         const e = o.match(/\/actors\/([^/?]+)/);

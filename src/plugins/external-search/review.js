@@ -1,112 +1,159 @@
 class $e extends X {
     constructor() {
-        super(...arguments), i(this, "floorIndex", 1), i(this, "isInit", !1);
+        super(...arguments), i(this, "floorIndex", 1), i(this, "isInit", !1), i(this, "$panel", null);
     }
     getName() {
         return "ReviewPlugin";
     }
+    async initCss() {
+        return `
+            <style>
+                .jhs-review-panel { min-width:0; }
+                .jhs-panel-header { display:flex; min-height:var(--jhs-control-height); align-items:center; justify-content:space-between; gap:var(--jhs-space-3); margin-bottom:var(--jhs-space-3); }
+                .jhs-panel-header h3 { margin:0; color:var(--jhs-text); font-size:var(--jhs-font-size-xl); }
+                .jhs-panel-toggle { flex:none; }
+                .jhs-review-list { display:grid; }
+                .jhs-review-item { min-width:0; padding:var(--jhs-space-4) 0; border-bottom:1px solid color-mix(in srgb,var(--jhs-border) 55%,transparent); }
+                .jhs-review-item:last-child { border-bottom:0; }
+                .jhs-review-meta { display:flex; flex-wrap:wrap; align-items:center; gap:var(--jhs-space-1) var(--jhs-space-3); color:var(--jhs-text-muted); font-size:14px; }
+                .jhs-review-author { color:var(--jhs-text); font-size:15px; font-weight:600; }
+                .jhs-review-floor { margin-left:auto; color:var(--jhs-text-faint); }
+                .jhs-review-content { margin:var(--jhs-space-3) 0 0; color:var(--jhs-text); font-size:16px; line-height:1.7; overflow-wrap:anywhere; white-space:pre-wrap; }
+                .jhs-review-link { display:inline-flex; align-items:center; gap:var(--jhs-space-1); margin:0 var(--jhs-space-1); padding:2px var(--jhs-space-2); border:0; border-radius:var(--jhs-radius-pill); background:var(--jhs-accent-tint); color:var(--jhs-accent); font:inherit; font-size:var(--jhs-font-size-sm); line-height:1.5; text-decoration:none; vertical-align:baseline; cursor:pointer; }
+                .jhs-review-link-copy { color:var(--jhs-text-muted); }
+                .jhs-panel-state { padding:var(--jhs-space-4) 0; color:var(--jhs-text-muted); text-align:center; }
+                .jhs-panel-footer { display:flex; justify-content:center; padding-top:var(--jhs-space-3); }
+                .jhs-panel-end { color:var(--jhs-text-faint); font-size:var(--jhs-font-size-sm); }
+                @media (max-width:767px) { .jhs-review-floor { width:100%; margin-left:0; } }
+            </style>`;
+    }
     async handle() {
-        if (window.isDetailPage) {
-            if (r) {
-                const e = this.parseMovieId(window.location.href);
-                await this.showReview(e), await this.getBean("RelatedPlugin").showRelated($("#magnets-content"), e);
-            }
-            if (l) {
-                let e = this.getPageInfo().carNum;
-                const t = await (async e => {
-                    let t = `${U}/v2/search`, n = {
-                        "user-agent": "Dart/3.5 (dart:io)",
-                        "accept-language": "zh-TW",
-                        host: "jdforrepam.com",
-                        jdsignature: await O()
-                    }, a = {
-                        q: e,
-                        page: 1,
-                        type: "movie",
-                        limit: 1,
-                        movie_type: "all",
-                        from_recent: "false",
-                        movie_filter_by: "all",
-                        movie_sort_by: "relevance"
-                    };
-                    return (await gmHttp.get(t, a, n)).data.movies;
-                })(e);
-                let n = null;
-                for (let a = 0; a < t.length; a++) {
-                    let i = t[a];
-                    if (i.number.toLowerCase() === e.toLowerCase()) {
-                        n = i.id;
-                        break;
-                    }
-                }
-                if (!n) return;
-                this.showReview(n, $("#sample-waterfall")).then();
-            }
+        if (!window.isDetailPage) return;
+        if (r) {
+            const movieId = this.parseMovieId(window.location.href);
+            await this.showReview(movieId), await this.getBean("RelatedPlugin").showRelated($("#magnets-content"), movieId);
+        }
+        if (l) {
+            const carNumber = this.getPageInfo().carNum;
+            if (!carNumber) return void clog.warn("跳过 JavBus 评论解析：番号不可用");
+            const movies = await (async value => {
+                const url = `${U}/v2/search`, headers = {
+                    "user-agent": "Dart/3.5 (dart:io)",
+                    "accept-language": "zh-TW",
+                    host: "jdforrepam.com",
+                    jdsignature: await O()
+                }, params = {
+                    q: value,
+                    page: 1,
+                    type: "movie",
+                    limit: 1,
+                    movie_type: "all",
+                    from_recent: "false",
+                    movie_filter_by: "all",
+                    movie_sort_by: "relevance"
+                };
+                return (await gmHttp.get(url, params, headers)).data.movies;
+            })(carNumber);
+            const match = movies.find((movie => movie.number.toLowerCase() === carNumber.toLowerCase()));
+            match && this.showReview(match.id, $("#sample-waterfall")).then();
         }
     }
-    async showReview(e, t) {
-        const n = await storageManager.getSetting("enableLoadReview", _), a = t || $("#magnets-content");
-        a.append(`\n            <div style="display: flex; align-items: center; margin: 16px 0; color: #666; font-size: 14px;">\n                <span style="flex: 1; height: 1px; background: linear-gradient(to right, transparent, #999, transparent);"></span>\n                <span style="padding: 0 10px;" data-tip="想要发表评论? 滑上去, 点击上面的按钮-看过">评论区</span>\n                <a id="reviewsFold" style="margin-left: 8px; color: #1890ff; text-decoration: none; display: flex; align-items: center;">\n                    <span class="toggle-text">${n === _ ? "折叠" : "展开"}</span>\n                    <span class="toggle-icon" style="margin-left: 4px;">${n === _ ? "▲" : "▼"}</span>\n                </a>\n                <span style="flex: 1; height: 1px; background: linear-gradient(to right, transparent, #999, transparent);"></span>\n            </div>\n        `),
-        $("#reviewsFold").on("click", (t => {
-            t.preventDefault(), t.stopPropagation();
-            const n = $("#reviewsFold .toggle-text"), a = $("#reviewsFold .toggle-icon"), i = "展开" === n.text();
-            n.text(i ? "折叠" : "展开"), a.text(i ? "▲" : "▼"), i ? ($("#reviewsContainer").show(),
-            $("#reviewsFooter").show(), this.isInit || (this.fetchAndDisplayReviews(e), this.isInit = !0),
-            storageManager.saveSettingItem("enableLoadReview", _)) : ($("#reviewsContainer").hide(),
-            $("#reviewsFooter").hide(), storageManager.saveSettingItem("enableLoadReview", C));
-        })), a.append('<div id="reviewsContainer"></div>'), a.append('<div id="reviewsFooter"></div>'),
-        n === _ && await this.fetchAndDisplayReviews(e);
-    }
-    async fetchAndDisplayReviews(e) {
-        const t = $("#reviewsContainer"), n = $("#reviewsFooter");
-        t.append('<div id="reviewsLoading" style="margin-top:15px;background-color:#ffffff;padding:10px;margin-left: -10px;">获取评论中...</div>');
-        const a = await storageManager.getSetting("reviewCount", 20);
-        let i = null;
-        try {
-            i = await R(e, 1, a);
-        } catch (o) {
-            o.toString().includes("簽名已過期") && show.error("生成签名失败, 请检查系统时间及时区是否正确!"), clog.error("获取评论失败:", o),
-            console.error("获取评论失败:", o);
-        } finally {
-            $("#reviewsLoading").remove();
-        }
-        if (!i) return t.append('\n                <div style="margin-top:15px;background-color:#ffffff;padding:10px;margin-left: -10px;">\n                    获取评论失败\n                    <a id="retryFetchReviews" href="javascript:;" style="margin-left: 10px; color: #1890ff; text-decoration: none;">重试</a>\n                </div>\n            '),
-        void $("#retryFetchReviews").on("click", (async () => {
-            $("#retryFetchReviews").parent().remove(), await this.fetchAndDisplayReviews(e);
+    async showReview(movieId, target) {
+        const enabled = await storageManager.getSetting("enableLoadReview", _), host = target || $("#magnets-content");
+        const panel = $('<section class="jhs-review-panel" data-jhs-panel="reviews"></section>');
+        const header = $('<header class="jhs-panel-header"><h3>评论</h3></header>');
+        const toggle = $('<button type="button" id="reviewsFold" class="jhs-btn jhs-btn--secondary jhs-panel-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>');
+        header.append(toggle), panel.append(header, '<div id="reviewsContainer" class="jhs-review-list"></div>', '<div id="reviewsFooter" class="jhs-panel-footer"></div>'), host.append(panel), this.$panel = panel;
+        this.updateToggle(toggle, enabled === _);
+        toggle.on("click", (event => {
+            event.preventDefault(), event.stopPropagation();
+            const expanded = "展开" === toggle.find(".toggle-text").text();
+            this.updateToggle(toggle, expanded), panel.find("#reviewsContainer, #reviewsFooter").toggle(expanded), expanded && !this.isInit && (this.fetchAndDisplayReviews(movieId),
+            this.isInit = !0), storageManager.saveSettingItem("enableLoadReview", expanded ? _ : C);
         }));
-        if (0 === i.length) return void t.append('<div style="margin-top:15px;background-color:#ffffff;padding:10px;margin-left: -10px;">无评论</div>');
-        const s = await storageManager.getReviewFilterKeywordList();
-        if (this.displayReviews(i, t, s), i.length === a && R(e, 2, a).catch((() => {})), i.length === a) {
-            n.html('\n                <button id="loadMoreReviews" style="width:100%; background-color: #e1f5fe; border:none; padding:10px; margin-top:10px; cursor:pointer; color:#0277bd; font-weight:bold; border-radius:4px;">\n                    加载更多评论\n                </button>\n                <div id="reviewsEnd" style="display:none; text-align:center; padding:10px; color:#666; margin-top:10px;">已加载全部评论</div>\n            ');
-            let i = 1, r = $("#loadMoreReviews");
-            r.on("click", (async () => {
-                let n;
-                r.text("加载中...").prop("disabled", !0), i++;
-                try {
-                    n = await R(e, i, a);
-                } catch (o) {
-                    console.error("加载更多评论失败:", o);
-                } finally {
-                    r.text("加载失败, 请点击重试").prop("disabled", !1);
-                }
-                n && (this.displayReviews(n, t, s), n.length < a ? (r.remove(), $("#reviewsEnd").show()) : r.text("加载更多评论").prop("disabled", !1));
-            }));
-        } else n.html('<div style="text-align:center; padding:10px; color:#666; margin-top:10px;">已加载全部评论</div>');
+        enabled === _ ? (await this.fetchAndDisplayReviews(movieId), this.isInit = !0) : panel.find("#reviewsContainer, #reviewsFooter").hide();
     }
-    displayReviews(e, t, n) {
-        if (!e.length) return;
-        const o = [], c = n.length > 0 ? new RegExp(n.map((e => e.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).join("|")) : null;
-        e.forEach((e => {
-            if (c && c.test(e.content)) return;
-            const a = Array(e.score).fill('<i class="icon-star"></i>').join(""), i = e.content.replace(/ed2k:\/\/\|file\|[^|]+\|\d+\|[a-fA-F0-9]{32}\|\/|magnet:\?[^\s"'<>`\u4e00-\u9fa5，。？！（）【】]+|https?:\/\/[^\s"'<>`\u4e00-\u9fa5，。？！（）【】]+/g, (e => e.startsWith("ed2k://") ? `\n                            <span style="word-break: break-all;background: #e0f2fe;color: #0369a1;">${e}</span>\n\n                        ` : e.startsWith("magnet:") ? `\n                            <a href="${e}" class="a-primary" style="padding:0; word-break: break-all; white-space: pre-wrap;" target="_blank" rel="noopener noreferrer">${e}</a>\n\n                        ` : e.startsWith("http://") || e.startsWith("https://") ? `\n                            <a href="${e}" class="a-primary" style="padding:0; word-break: break-all; white-space: pre-wrap;" target="_blank" rel="noopener noreferrer">${e}</a>\n                        ` : e)), s = `\n                <div class="item columns is-desktop" style="display:block;margin-top:6px;background-color:#ffffff;padding:10px;margin-left: -10px;word-break: break-word;position:relative;">\n                    <span style="position:absolute;top:5px;right:10px;color:#999;font-size:12px;">#${this.floorIndex++}楼</span>\n                    ${e.username} &nbsp;&nbsp; <span class="score-stars">${a}</span> \n                    <span class="time">${utils.formatDate(e.created_at)}</span> \n                    &nbsp;&nbsp; 点赞:${e.likes_count}\n                    <p class="review-content" style="margin-top: 5px;"> ${i} </p>\n                </div>\n            `;
-            o.push(s);
-        })), o.length && t.append(o.join("")), this.rightClickFilter();
+    updateToggle(toggle, expanded) {
+        toggle.attr("aria-expanded", String(expanded)), toggle.find(".toggle-text").text(expanded ? "折叠" : "展开"),
+        toggle.find(".toggle-icon").text(expanded ? "▲" : "▼");
+    }
+    async fetchAndDisplayReviews(movieId) {
+        const container = this.$panel.find("#reviewsContainer"), footer = this.$panel.find("#reviewsFooter");
+        container.empty().append($('<div class="jhs-panel-state"></div>').text("获取评论中...")), footer.empty();
+        const pageSize = await storageManager.getSetting("reviewCount", 20);
+        let reviews;
+        try {
+            reviews = await R(movieId, 1, pageSize);
+        } catch (error) {
+            error.toString().includes("簽名已過期") && show.error("生成签名失败, 请检查系统时间及时区是否正确!"), clog.error("获取评论失败:", error),
+            console.error("获取评论失败:", error);
+            return void this.renderRetry(container, "获取评论失败", (() => this.fetchAndDisplayReviews(movieId)));
+        }
+        container.empty();
+        if (!reviews.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无评论"));
+        const keywords = await storageManager.getReviewFilterKeywordList();
+        this.displayReviews(reviews, container, keywords), reviews.length === pageSize && R(movieId, 2, pageSize).catch((() => {}));
+        reviews.length === pageSize ? this.bindLoadMore(movieId, pageSize, keywords, container, footer) : footer.append($('<div class="jhs-panel-end"></div>').text("已加载全部评论"));
+    }
+    renderRetry(container, message, retry) {
+        container.empty();
+        const state = $('<div class="jhs-panel-state"></div>').append(document.createTextNode(`${message} `));
+        const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry);
+        state.append(button), container.append(state);
+    }
+    bindLoadMore(movieId, pageSize, keywords, container, footer) {
+        const button = $('<button type="button" id="loadMoreReviews" class="jhs-btn jhs-btn--secondary">加载更多评论</button>'), end = $('<div id="reviewsEnd" class="jhs-panel-end">已加载全部评论</div>').hide();
+        footer.empty().append(button, end);
+        let page = 1;
+        button.on("click", (async () => {
+            button.text("加载中...").prop("disabled", !0), page++;
+            try {
+                const reviews = await R(movieId, page, pageSize);
+                this.displayReviews(reviews, container, keywords), reviews.length < pageSize ? (button.remove(), end.show()) : button.text("加载更多评论").prop("disabled", !1);
+            } catch (error) {
+                console.error("加载更多评论失败:", error), button.text("加载失败，请重试").prop("disabled", !1);
+            }
+        }));
+    }
+    displayReviews(reviews, container, keywords) {
+        if (!reviews.length) return;
+        const filter = keywords.length > 0 ? new RegExp(keywords.map((value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).join("|")) : null;
+        reviews.forEach((review => {
+            const content = String(review.content || "");
+            if (filter?.test(content)) return;
+            const item = $('<article class="jhs-review-item"></article>'), meta = $('<div class="jhs-review-meta"></div>'), body = $('<p class="review-content jhs-review-content"></p>');
+            meta.append($("<span></span>").addClass("jhs-review-author").text(review.username || "匿名用户"));
+            const stars = $('<span class="score-stars" aria-label="评分"></span>'), score = Math.max(0, Math.min(5, Number(review.score) || 0));
+            for (let index = 0; index < score; index++) stars.append('<i class="icon-star"></i>');
+            meta.append(stars, $("<time></time>").text(utils.formatDate(review.created_at)), $("<span></span>").text(`点赞：${Number(review.likes_count) || 0}`),
+            $("<span></span>").addClass("jhs-review-floor").text(`#${this.floorIndex++}楼`));
+            this.appendReviewContent(body, content), item.append(meta, body), container.append(item);
+        })), this.rightClickFilter();
+    }
+    appendReviewContent(container, content) {
+        const linkPattern = /ed2k:\/\/\|file\|[^|]+\|\d+\|[a-fA-F0-9]{32}\|\/|magnet:\?[^\s"'<>`\u4e00-\u9fa5，。？！（）【】]+|https?:\/\/[^\s"'<>`\u4e00-\u9fa5，。？！（）【】]+/g;
+        let cursor = 0, match;
+        while ((match = linkPattern.exec(content))) {
+            match.index > cursor && container.append(document.createTextNode(content.slice(cursor, match.index)));
+            this.appendLinkControls(container, match[0]), cursor = match.index + match[0].length;
+        }
+        cursor < content.length && container.append(document.createTextNode(content.slice(cursor)));
+    }
+    appendLinkControls(container, value) {
+        const isEd2k = value.startsWith("ed2k://"), isMagnet = value.startsWith("magnet:"), label = isEd2k ? "ED2K 链接" : isMagnet ? "Magnet 链接" : "打开链接";
+        const open = isEd2k ? $('<button type="button" class="jhs-btn jhs-review-link"></button>').text(label).on("click", (() => utils.copyToClipboard(label, value))) : $("<a></a>").addClass("jhs-review-link").attr({
+            href: value,
+            target: "_blank",
+            rel: "noopener noreferrer"
+        }).text(label);
+        const copy = $('<button type="button" class="jhs-btn jhs-review-link jhs-review-link-copy">复制</button>').on("click", (() => utils.copyToClipboard(label, value)));
+        container.append(open, copy);
     }
     async rightClickFilter() {
-        await storageManager.getSetting("enableTitleSelectFilter", _) === _ && utils.rightClick(document.body, ".review-content", (async e => {
-            const t = window.getSelection().toString();
-            t && (e.preventDefault(), await utils.q(e, `是否将 '${t}' 加入评论区关键词?`, (async () => {
-                await storageManager.saveReviewFilterKeyword(t), show.ok("操作成功, 刷新页面后生效");
+        await storageManager.getSetting("enableTitleSelectFilter", _) === _ && utils.rightClick(document.body, ".review-content", (async event => {
+            const text = window.getSelection().toString();
+            text && (event.preventDefault(), await utils.q(event, `是否将 '${text}' 加入评论区关键词?`, (async () => {
+                await storageManager.saveReviewFilterKeyword(text), show.ok("操作成功, 刷新页面后生效");
             })));
         }));
     }

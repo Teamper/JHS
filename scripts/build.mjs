@@ -8,6 +8,8 @@ const srcPath = join(repoRoot, "src", "main.js");
 const packagePath = join(repoRoot, "package.json");
 const corePaths = [
   "constants.js",
+  "theme.js",
+  "ui-primitives.js",
   "css-injection.js",
   "storage-index.js",
   "storage.js",
@@ -64,6 +66,7 @@ const pluginPaths = [
   "one-two-three/offline.js",
   "stats/stats.js",
   "status/mobile-bottom-bar.js",
+  "status/detail-workspace.js",
   "registry.js"
 ].map((file) => join(repoRoot, "src", "plugins", file));
 const distDir = join(repoRoot, "dist");
@@ -100,7 +103,7 @@ const transformed = await esbuild.transform(entry, {
   legalComments: "none",
   minifySyntax: true,
   minifyWhitespace: true,
-  minifyIdentifiers: false,
+  minifyIdentifiers: true,
   sourcefile: "src/main.js",
   logLevel: "silent"
 });

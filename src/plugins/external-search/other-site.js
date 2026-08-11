@@ -3,9 +3,10 @@ class ve {
         this.queue = Promise.resolve();
     }
     addTask(e) {
-        this.queue = this.queue.then((() => e())).catch((e => {
+        const task = this.queue.then((() => e()));
+        return this.queue = task.catch((e => {
             clog.error("执行异步队列任务失败:", e);
-        }));
+        })), task;
     }
     async waitAllFinished() {
         return this.queue;
@@ -14,9 +15,7 @@ class ve {
 
 class be extends X {
     constructor() {
-        super(...arguments), i(this, "okBackgroundColor", "#7bc73b"), i(this, "errorBackgroundColor", "#de3333"),
-        i(this, "warnBackgroundColor", "#d7a80c"), i(this, "domainErrorBackgroundColor", "#d7780c"),
-        i(this, "siteConfigs", [ {
+        super(...arguments), i(this, "siteConfigs", [ {
             id: "javTrailersBtn",
             getBaseUrl: async () => await this.getJavTrailersUrl(),
             itemSelector: ".videos-list .video-link",
@@ -85,22 +84,41 @@ class be extends X {
         return "OtherSitePlugin";
     }
     async initCss() {
-        return "\n            <style>\n                .site-btn {\n                    position: relative !important;\n                    min-width: 80px;\n                    display: inline-block;\n                    padding: 5px 10px;\n                    color: white !important;\n                    background-color:#938585;\n                    text-decoration: none;\n                    border-radius: 4px;\n                    text-align: center;\n                    margin-bottom: 5px;\n                }\n                .site-btn:hover {\n                    color: white;\n                    transform: translateY(-2px);\n                    box-shadow: 0 2px 5px rgba(0,0,0,0.1);\n                }\n                .site-tag {\n                    position: absolute; \n                    top: -15px; \n                    right: 0; \n                    background-color: #ffc107; \n                    color: #333; \n                    font-size: 12px; \n                    padding: 2px 6px; \n                    border-radius: 4px;\n                }\n            </style>\n        ";
+        return `
+            <style>
+                #otherSiteBox, #settingsArea { margin-top:var(--jhs-space-2); user-select:none; }
+                .jhs-site-list, #siteCheckboxes { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); }
+                .site-btn { position:relative; }
+                .site-btn::before { width:7px; height:7px; border-radius:50%; background:var(--jhs-brand-color,var(--jhs-text-faint)); content:""; }
+                #javTrailersBtn { --jhs-brand-color:#d4a72c; } #123AvBtn { --jhs-brand-color:#e05d44; }
+                #jableBtn { --jhs-brand-color:#c94556; } #avgleBtn { --jhs-brand-color:#4677c8; }
+                #missAvBtn { --jhs-brand-color:#8b5cf6; } #supJavBtn { --jhs-brand-color:#ef6c35; }
+                #javDbBtn { --jhs-brand-color:#2684ff; } #javBusBtn { --jhs-brand-color:#cc3d3d; } #fanzaBtn { --jhs-brand-color:#ea4c89; }
+                .site-btn.is-checking { opacity:.65; pointer-events:none; }
+                .site-btn.is-available { border-color:var(--jhs-status-down-text); background:var(--jhs-status-down-tint); }
+                .site-btn.is-unavailable { border-color:var(--jhs-status-filter-text); background:var(--jhs-status-filter-tint); }
+                .site-btn.is-domain-error { border-color:var(--jhs-status-watch-text); background:var(--jhs-status-watch-tint); }
+                .site-tag { margin-left:var(--jhs-space-1); padding:1px var(--jhs-space-1); border-radius:var(--jhs-radius-pill); background:var(--jhs-surface-2); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
+                .jhs-site-option { display:flex; align-items:center; gap:var(--jhs-space-2); }
+            </style>`;
     }
     async handle() {
-        isDetailPage && this.loadOtherSite(null, null, {
+        isDetailPage && await this.loadOtherSite(null, null, {
             autoDetect: !1
-        }).then();
+        });
     }
     async loadOtherSite(e, t, n = {}) {
         if ("yes" !== await storageManager.getSetting("enableLoadOtherSite", "yes")) return;
         $("#otherSiteBox,#settingsArea").remove();
-        e || (e = this.getPageInfo().carNum);
-        const a = this.getEnabledSites(), i = `\n            <div id="otherSiteBox" class="panel-block" style="${r ? "margin-top:8px;font-size:13px" : "margin-top:10px;font-size:13px"}; user-select: none; ">\n                <div style="display: flex;gap: 5px;flex-wrap: wrap">\n                    ${this.siteConfigs.map((e => {
+        e = normalizeCarNum(e) || this.getPageInfo().carNum;
+        const a = this.getEnabledSites(), i = `\n            <div id="otherSiteBox" class="panel-block">\n                <div class="jhs-site-list">\n                    ${this.siteConfigs.map((e => {
             if (e.sourceCarNum = t, e.condition && !1 === e.condition(e.sourceCarNum)) return "";
-            return `<a target="_blank" class="site-btn" style="${a.includes(e.id) ? "" : "display:none"}" id="${e.id}"><span>${e.id.replace("Btn", "")}</span></a>`;
-        })).join("")}\n                    <a id="detectOtherSiteBtn" class="site-btn" style="background-color:#1677ff"><span>检测外部站点</span></a>\n                    <a id="settingSiteBtn" class="site-btn"><span>设置</span></a>\n                </div>\n            </div>\n            \n            <div id="settingsArea" class="panel-block"  style="display: none; margin-top:10px; margin-bottom: 10px; user-select: none; ">\n                <div id="siteCheckboxes" style="display: flex;gap: 5px;flex-wrap: wrap">\n                </div>\n            </div>\n        `;
-        $(".movie-panel-info").append(i), $(".container .info").append(i), $("#javTrailersBtn").on("click", (async t => {
+            return `<a target="_blank" class="site-btn jhs-btn jhs-btn--secondary ${a.includes(e.id) ? "" : "jhs-is-hidden"}" id="${e.id}"><span>${e.id.replace("Btn", "")}</span></a>`;
+        })).join("")}\n                    <button type="button" id="detectOtherSiteBtn" class="site-btn jhs-btn jhs-btn--primary"><span>检测外部站点</span></button>\n                    <button type="button" id="settingSiteBtn" class="site-btn jhs-btn jhs-btn--secondary"><span>设置</span></button>\n                </div>\n            </div>\n            <div id="settingsArea" class="panel-block jhs-is-hidden"><div id="siteCheckboxes"></div></div>\n        `;
+        $(".movie-panel-info").append(i), $(".container .info").append(i);
+        if (!e) return $("#otherSiteBox .site-btn").removeAttr("href").attr({ "aria-disabled": "true", title: "番号不可用" }),
+        $("#detectOtherSiteBtn").prop("disabled", !0), this.renderSettingsArea(), this.setupEventListeners(), void clog.warn("跳过第三方站点解析：番号不可用");
+        $("#javTrailersBtn").on("click", (async t => {
             t.preventDefault();
             let o = $("#javTrailersBtn").attr("href"), r = o + "?handle=1";
             t && (t.ctrlKey || t.metaKey) && (r = o), utils.openPage(r, e, !1, t);
@@ -112,41 +130,42 @@ class be extends X {
     }
     async prepareSiteLink(e, t) {
         const n = $(`#${t.id}`);
-        if (t.initUrl) return void (n.attr("href", t.initUrl(e)), n.css("backgroundColor", this.warnBackgroundColor),
-        n.attr("title", "点击前往外部搜索页"));
+        if (!(e = normalizeCarNum(e))) return n.removeAttr("href").attr({ "aria-disabled": "true", title: "番号不可用" }), void this.setSiteState(n, "idle");
+        if (t.initUrl) return void (n.attr("href", t.initUrl(e)), this.setSiteState(n, "idle"), n.attr("title", "点击前往外部搜索页"));
         try {
             const a = await t.getBaseUrl(), i = t.searchPath(a, e);
-            n.attr("href", i), n.attr("title", "点击前往外部搜索页；点击检测按钮后才自动检测"), n.css("backgroundColor", this.warnBackgroundColor);
+            n.attr("href", i), n.attr("title", "点击前往外部搜索页；点击检测按钮后才自动检测"), this.setSiteState(n, "idle");
         } catch (a) {
-            n.attr("title", "外部站点地址未配置或不可用"), n.css("backgroundColor", this.domainErrorBackgroundColor);
+            n.attr("title", "外部站点地址未配置或不可用"), this.setSiteState(n, "domain-error");
         }
     }
     async detectOtherSites(e) {
         const t = $("#detectOtherSiteBtn"), n = t.text();
-        return t.text("检测中").css("backgroundColor", "#938585"), await Promise.all(this.siteConfigs.map((async t => {
+        if (!(e = normalizeCarNum(e))) return t.prop("disabled", !0), void clog.warn("跳过第三方站点检测：番号不可用");
+        return t.text("检测中").prop("disabled", !0).addClass("is-checking"), await Promise.all(this.siteConfigs.map((async t => {
             t.condition && !1 === t.condition(t.sourceCarNum) || await this.handleSite(e, t);
-        }))), t.text(n).css("backgroundColor", "#1677ff");
+        }))), t.text(n).prop("disabled", !1).removeClass("is-checking");
+    }
+    setSiteState(e, t) {
+        e.removeClass("is-checking is-available is-unavailable is-domain-error"), "idle" !== t && e.addClass(`is-${t}`);
     }
     async handleSite(e, t) {
         const n = $(`#${t.id}`);
-        n.removeAttr("href").find(".site-tag").remove();
-        if (t.initUrl && (n.attr("href", t.initUrl(e)), n.css("backgroundColor", this.warnBackgroundColor)),
-        t.noHandle && !0 === t.noHandle) {
+        n.removeAttr("href").find(".site-tag").remove(), this.setSiteState(n, "checking");
+        if (t.initUrl && n.attr("href", t.initUrl(e)), t.noHandle && !0 === t.noHandle) {
             const t = "jhs_other_site_dmm", a = (localStorage.getItem(t) ? JSON.parse(localStorage.getItem(t)) : {})[e];
-            a && ("single" === a.type ? (n.attr("href", a.url), n.css("backgroundColor", this.okBackgroundColor)) : "multiple" === a.type && (n.attr("href", a.url),
-            n.append('<span class="site-tag" style="top:-15px">多结果</span>'), n.css("backgroundColor", this.okBackgroundColor)));
+            a ? (n.attr("href", a.url), "multiple" === a.type && n.append('<span class="site-tag">多结果</span>'), this.setSiteState(n, "available")) : this.setSiteState(n, "idle");
         } else try {
-            if (n.attr("href")) return;
+            if (n.attr("href")) return void this.setSiteState(n, "idle");
             if (utils.isHidden(n)) return;
             const a = "jhs_other_site", i = localStorage.getItem(a) ? JSON.parse(localStorage.getItem(a)) : {}, s = e + "_" + t.id.replace("Btn", ""), o = i[s], m = Date.now();
-            if (o && o.time && m - o.time < 864e5) return void ("single" === o.type ? (n.attr("href", o.url), n.css("backgroundColor", this.okBackgroundColor)) : "multiple" === o.type && (n.attr("href", o.url),
-            n.append('<span class="site-tag" style="top:-15px">多结果</span>'), n.css("backgroundColor", this.okBackgroundColor)));
+            if (o && o.time && m - o.time < 864e5) return void (n.attr("href", o.url), "multiple" === o.type && n.append('<span class="site-tag">多结果</span>'), this.setSiteState(n, "available"));
             const r = await t.getBaseUrl(), l = t.searchPath(r, e);
             n.attr("href", l);
             /* 预检查仅用于 UI 展示，实际拦截依赖 gmRequest 内部熔断检查 */
             const _breaker = gmHttp.isDomainCircuitBroken(l);
             if (_breaker) {
-                n.attr("title", `站点已熔断，${_breaker.remaining}秒后重试`), n.css("backgroundColor", this.domainErrorBackgroundColor);
+                n.attr("title", `站点已熔断，${_breaker.remaining}秒后重试`), this.setSiteState(n, "domain-error");
                 return;
             }
             const c = await storageManager.cachedRequest(`other-site:${t.id}:${e}`, 864e5, (() => gmHttp.get(l, null, t.headers, !0))), d = utils.htmlTo$dom(c), h = [];
@@ -160,17 +179,16 @@ class be extends X {
             let g = "", p = null;
             if (1 === h.length) {
                 let e = h[0];
-                n.attr("href", e), n.css("backgroundColor", this.okBackgroundColor), p = {
+                n.attr("href", e), this.setSiteState(n, "available"), p = {
                 type: "single",
                 url: e,
                 time: m
             };
-            } else h.length > 1 ? (n.attr("href", l), g += '<span class="site-tag" style="top:-15px">多结果</span>',
-            n.css("backgroundColor", this.okBackgroundColor), p = {
+            } else h.length > 1 ? (n.attr("href", l), g += '<span class="site-tag">多结果</span>', this.setSiteState(n, "available"), p = {
                 type: "multiple",
                 url: l,
                 time: m
-            }) : (n.attr("href", l), n.attr("title", "未查询到, 点击前往搜索页"), n.css("backgroundColor", this.errorBackgroundColor));
+            }) : (n.attr("href", l), n.attr("title", "未查询到, 点击前往搜索页"), this.setSiteState(n, "unavailable"));
             if (p) {
                 const e = localStorage.getItem(a) ? JSON.parse(localStorage.getItem(a)) : {};
                 e[s] = p, localStorage.setItem(a, JSON.stringify(e));
@@ -178,12 +196,11 @@ class be extends X {
             g && n.append(g);
         } catch (a) {
             const e = String(a), i = t.id.replace("Btn", "");
-            a._circuitBroken ? (n.attr("title", e), n.css("backgroundColor", this.domainErrorBackgroundColor),
-            clog.warn(`检测第三方资源跳过, ${i} 已熔断`)) : e.includes("Just a moment") ? (n.attr("title", "请求失败：Cloudflare 安全检查。"), n.css("backgroundColor", this.warnBackgroundColor),
-            clog.warn(`检测第三方资源失败, ${i} 需Cloudflare安全检查`)) : e.includes("重定向") ? (n.attr("title", "域名失效"),
-            n.css("backgroundColor", this.domainErrorBackgroundColor), clog.warn(`检测第三方资源失败, ${i} 域名被重定向`)) : e.includes("404 Page Not Found") ? (n.attr("title", "未查询到, 点击前往搜索页"),
-            n.css("backgroundColor", this.errorBackgroundColor)) : (console.error(a), n.attr("title", "请求失败。"),
-            n.css("backgroundColor", this.errorBackgroundColor), clog.warn(`检测第三方资源失败, ${i}`));
+            a._circuitBroken ? (n.attr("title", e), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源跳过, ${i} 已熔断`)) :
+            e.includes("Just a moment") ? (n.attr("title", "请求失败：Cloudflare 安全检查。"), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源失败, ${i} 需Cloudflare安全检查`)) :
+            e.includes("重定向") ? (n.attr("title", "域名失效"), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源失败, ${i} 域名被重定向`)) :
+            e.includes("404 Page Not Found") ? (n.attr("title", "未查询到, 点击前往搜索页"), this.setSiteState(n, "unavailable")) :
+            (console.error(a), n.attr("title", "请求失败。"), this.setSiteState(n, "unavailable"), clog.warn(`检测第三方资源失败, ${i}`));
         }
     }
     async getSettingCache() {
@@ -226,24 +243,23 @@ class be extends X {
         const e = this.getEnabledSites(), t = document.getElementById("siteCheckboxes");
         t && (t.innerHTML = this.siteConfigs.map((t => {
             const n = e.includes(t.id);
-            return `\n                <div style="margin-right: 15px; display: flex; align-items: ${r ? "center" : "flex-start"};">\n                    <input type="checkbox" id="checkbox-${t.id}" data-site-id="${t.id}" ${n ? "checked" : ""} style="margin-right: 8px; cursor: pointer;">\n                    <label for="checkbox-${t.id}" style="color: #333; font-weight: 500; cursor: pointer;">${t.id.replace("Btn", "")}</label>\n                </div>\n            `;
+            return `\n                <label class="jhs-site-option" for="checkbox-${t.id}">\n                    <input type="checkbox" id="checkbox-${t.id}" data-site-id="${t.id}" ${n ? "checked" : ""}>\n                    <span>${t.id.replace("Btn", "")}</span>\n                </label>\n            `;
         })).join(""));
     }
     setupEventListeners() {
         const e = document.getElementById("settingsArea");
         document.addEventListener("click", (t => {
             if ("settingSiteBtn" === t.target.id || t.target.closest("#settingSiteBtn")) {
-                const t = "none" === e.style.display || "" === e.style.display;
-                e.style.display = t ? "block" : "none";
+                e.classList.toggle("jhs-is-hidden");
             }
         })), e.addEventListener("change", (t => {
             if ("checkbox" === t.target.type) {
                 const n = t.target.getAttribute("data-site-id");
                 if (t.target.checked) {
-                    $(`#${n}`).show();
+                    $(`#${n}`).removeClass("jhs-is-hidden");
                     const e = this.getPageInfo().carNum, t = this.siteConfigs.find((e => e.id === n));
                     this.prepareSiteLink(e, t).then();
-                } else $(`#${n}`).hide();
+                } else $(`#${n}`).addClass("jhs-is-hidden");
                 const a = Array.from(e.querySelectorAll('input[type="checkbox"]:checked')).map((e => e.getAttribute("data-site-id")));
                 this.saveEnabledSites(a);
             }

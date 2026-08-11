@@ -12,7 +12,7 @@ class he extends X {
         this.handleDetailPage().then(), this.handleStarPage().then();
     }
     async initCss() {
-        return "\n            <style>\n                .info-tag {\n                    background-color: #ecf5ff;\n                    display: inline-block;\n                    height: 32px;\n                    padding: 0 10px;\n                    line-height: 30px;\n                    font-size: 12px;\n                    color: #409eff;\n                    border: 1px solid #d9ecff;\n                    border-radius: 4px;\n                    box-sizing: border-box;\n                    white-space: nowrap;\n                }\n            </style>\n        ";
+        return "\n            <style>\n                .info-tag {\n                    background-color: var(--jhs-status-fav-tint);\n                    display: inline-block;\n                    height: 32px;\n                    padding: 0 10px;\n                    line-height: 30px;\n                    font-size: 12px;\n                    color: var(--jhs-status-fav);\n                    border: 1px solid var(--jhs-status-fav-tint);\n                    border-radius: 4px;\n                    box-sizing: border-box;\n                    white-space: nowrap;\n                }\n            </style>\n        ";
     }
     async handleDetailPage() {
         if ($(".actress-info").length > 0) return;
@@ -28,7 +28,7 @@ class he extends X {
                 console.error("该名称查询失败,尝试其它名称");
             }
             let r = "";
-            r = a ? `\n                    <div class="panel-block actress-info">\n                        <strong>${t}:</strong>\n                        <a href="${a.url}" style="margin-left: 5px" target="_blank">\n                            <span class="info-tag">${a.birthday} ${a.age}</span>\n                            <span class="info-tag">${a.height} ${a.weight}</span>\n                            <span class="info-tag">${a.threeSizeText} ${a.braSize}</span>\n                        </a>\n                    </div>\n                ` : `<div class="panel-block actress-info"><a href="${this.apiUrl + t}" target="_blank"><strong>${t}:</strong></a></div> `,
+            r = a ? `\n                    <div class="panel-block actress-info">\n                        <strong>${t}:</strong>\n                        <a href="${a.url}" target="_blank" class="jhs-layout-9813a0dd">\n                            <span class="info-tag">${a.birthday} ${a.age}</span>\n                            <span class="info-tag">${a.height} ${a.weight}</span>\n                            <span class="info-tag">${a.threeSizeText} ${a.braSize}</span>\n                        </a>\n                    </div>\n                ` : `<div class="panel-block actress-info"><a href="${this.apiUrl + t}" target="_blank"><strong>${t}:</strong></a></div> `,
             i += r;
         }
         $('strong:contains("演員")').parent().after(i), localStorage.setItem(t, JSON.stringify(n));
@@ -58,8 +58,8 @@ class he extends X {
         s && e.forEach((e => {
             i[e] = s;
         }));
-        let o = '<div class="actress-info" style="font-size: 17px; font-weight: normal; margin-top: 5px;">无此相关演员信息</div>';
-        s && (o = `\n                <a class="actress-info" href="${s.url}" target="_blank">\n                    <div style="font-size: 17px; font-weight: normal; margin-top: 5px;">\n                        <div style="display: flex; margin-bottom: 10px;">\n                            <span style="width: 300px;">出生日期: ${s.birthday}</span>\n                            <span style="width: 200px;">年龄: ${s.age}</span>\n                            <span style="width: 200px;">身高: ${s.height}</span>\n                        </div>\n                        <div style="display: flex; margin-bottom: 10px;">\n                            <span style="width: 300px;">体重: ${s.weight}</span>\n                            <span style="width: 200px;">三围: ${s.threeSizeText}</span>\n                            <span style="width: 200px;">罩杯: ${s.braSize}</span>\n                        </div>\n                    </div>\n                </a>\n            `),
+        let o = '<div class="actress-info jhs-layout-c0d4a511">无此相关演员信息</div>';
+        s && (o = `\n                <a class="actress-info" href="${s.url}" target="_blank">\n                    <div class="jhs-layout-c0d4a511">\n                        <div class="jhs-layout-1b3790ef">\n                            <span class="jhs-layout-dd5a75f6">出生日期: ${s.birthday}</span>\n                            <span class="jhs-layout-d4a09a0d">年龄: ${s.age}</span>\n                            <span class="jhs-layout-d4a09a0d">身高: ${s.height}</span>\n                        </div>\n                        <div class="jhs-layout-1b3790ef">\n                            <span class="jhs-layout-dd5a75f6">体重: ${s.weight}</span>\n                            <span class="jhs-layout-d4a09a0d">三围: ${s.threeSizeText}</span>\n                            <span class="jhs-layout-d4a09a0d">罩杯: ${s.braSize}</span>\n                        </div>\n                    </div>\n                </a>\n            `),
         t.parent().append(o), localStorage.setItem(a, JSON.stringify(i));
     }
     async searchInfo(e) {

@@ -2,6 +2,9 @@ class Ve extends X {
     getName() {
         return "ScreenShotPlugin";
     }
+    async initCss() {
+        return `<style>.jhs-screenshot-message{margin-top:50px;color:var(--jhs-text-muted);cursor:auto}.jhs-screenshot-message--bus{margin-top:30px}</style>`;
+    }
     async handle() {
         this.loadScreenShot().then();
     }
@@ -9,8 +12,8 @@ class Ve extends X {
         if (!isDetailPage) return;
         if ("yes" !== await storageManager.getSetting("enableLoadScreenShot", "yes")) return;
         let e = this.getPageInfo().carNum;
-        r && $(".preview-images .tile-item").first().before(' <a class="tile-item screen-container" style="overflow:hidden;max-height: 215px;text-align:center;"><div style="margin-top: 50px;color: #000;cursor: auto">正在加载缩略图</div></a> '),
-        l && $("#sample-waterfall .sample-box:first").after(' <a class="sample-box screen-container" style="overflow:hidden; height: 110px; text-align:center;"><div style="margin-top: 30px;color: #000;cursor: auto">正在加载缩略图</div></a> ');
+        r && $(".preview-images .tile-item").first().before(' <a class="tile-item screen-container jhs-layout-cd9d5db1"><div class="jhs-layout-9db87399">正在加载缩略图</div></a> '),
+        l && $("#sample-waterfall .sample-box:first").after(' <a class="sample-box screen-container jhs-layout-b5c4e4f7"><div class="jhs-layout-3536a853">正在加载缩略图</div></a> ');
         try {
             const t = await this.getScreenshot(e);
             this.addImg("缩略图", t), clog.log("加载缩略图:", t);
@@ -19,6 +22,8 @@ class Ve extends X {
         }
     }
     async getScreenshot(e) {
+        e = normalizeCarNum(e);
+        if (!e) throw clog.warn("跳过缩略图解析：番号不可用"), new Error("缩略图番号不可用");
         const t = localStorage.getItem("jhs_screenShot") ? JSON.parse(localStorage.getItem("jhs_screenShot")) : {};
         if (t[e]) return clog.debug("缓存中存在缩略图:", e, t[e]), t[e];
         let n;
@@ -33,23 +38,33 @@ class Ve extends X {
         n;
     }
     async getJavStoreScreenShot(e) {
-        let t = `https://javstore.net/search/${e}.html`;
-        clog.log("正在解析缩略图:", t);
-        let n = await gmHttp.get(t);
+        const t = `https://javstore.net/search?q=${encodeURIComponent(e)}`;
+        clog.debug("JavStore 搜索地址:", t);
+        let n = await gmHttp.get(t, {}, {}, !1, {ignoreNotFound: !0});
+        if (!n) return clog.debug("JavStore 搜索页未获取:", t), null;
         const a = utils.htmlTo$dom(n);
-        let i = null;
-        if (a.find("#content_news h3 span a").each((function() {
-            if ($(this).attr("title").toLowerCase().includes(e.toLowerCase())) return i = $(this).attr("href"),
-            !1;
-        })), !i) return clog.error("JavStore, 查询番号失败:", t), null;
-        let s = await gmHttp.get(i);
-        const o = utils.htmlTo$dom(s);
-        let r = o.find("a:contains('CLICK HERE')").attr("href") || o.find("img[src*='_s.jpg']").attr("src");
-        return r ? r.replace(".th", "") : (clog.error("JavStore, 解析预览图失败:", t), null);
+        const i = a.find('a[href$="-pn.html"]').filter(((t, n) => $(n).text().trim().toUpperCase().includes(e.toUpperCase()))).map(((e, t) => $(t).attr("href"))).get();
+        if (!i.length) return clog.error("JavStore, 查询番号失败:", t), null;
+        for (const e of i) {
+            const t = new URL(e, "https://javstore.net").href;
+            clog.debug("JavStore 候选详情:", t);
+            const n = await gmHttp.get(t, {}, {}, !1, {ignoreNotFound: !0});
+            if (!n) {
+                clog.debug("JavStore 详情页未获取:", t);
+                continue;
+            }
+            let a = utils.htmlTo$dom(n).find("a").filter(((e, t) => "CLICK HERE!" === $(t).text().trim())).first().attr("href");
+            if (!a) {
+                clog.debug("JavStore 详情页没有 CLICK HERE!:", t);
+                continue;
+            }
+            return a = new URL(a, t).href, a = a.replace(".th", ""), clog.debug("JavStore 预览图:", a), a;
+        }
+        return clog.error("JavStore, 所有候选均无有效预览图:", t), null;
     }
     addImg(e, t) {
-        t && (r && $(".screen-container").html(`<img src="${t}" alt="${e}" loading="lazy" style="width: 100%;">`),
-        l && $(".screen-container").html(`<div class="photo-frame"><img src="${t}" style="height: inherit;width: 100%;" title="${e}" alt="${e}"></div>`),
+        t && (r && $(".screen-container").html(`<img src="${t}" alt="${e}" loading="lazy" class="jhs-layout-cad980f4">`),
+        l && $(".screen-container").html(`<div class="photo-frame"><img src="${t}" title="${e}" alt="${e}" class="jhs-layout-d4a575e8"></div>`),
         $(".screen-container").on("click", (e => {
             e.stopPropagation(), e.preventDefault(), showImageViewer(e.currentTarget);
         })));
@@ -57,9 +72,11 @@ class Ve extends X {
     showErrorFallback(e, t) {
         var n;
         console.error("获取缩略图失败:", null == (n = null == t ? void 0 : t.message) ? void 0 : n.substring(0, 100));
-        let a = l ? "margin-top: 30px" : "margin-top: 50px";
-        $(".screen-container").html(`<div style="${a}; cursor:auto;color:#000;">获取缩略图失败</div><br/><a href='#' class='retry-link'>点击重试</a> 或 <a class="check-link" href='https://javstore.net/search/${e}.html' target='_blank'>前往确认</a>`).off("click", ".retry-link").off("click", ".check-link").on("click", ".retry-link", (async t => {
-            t.stopPropagation(), t.preventDefault(), $(".screen-container").html(`<div style="${a};cursor:auto;color:#000;">正在重新加载...</div>`);
+        const a = `jhs-screenshot-message${l ? " jhs-screenshot-message--bus" : ""}`;
+        if (!(e = normalizeCarNum(e))) return void $(".screen-container").empty().append($("<div></div>").addClass(a).text("无法获取番号，缩略图未加载"));
+        const searchUrl = `https://javstore.net/search?q=${encodeURIComponent(e)}`;
+        $(".screen-container").html(`<div class="${a}">获取缩略图失败</div><br/><a href='#' class='retry-link'>点击重试</a> 或 <a class="check-link" href='${searchUrl}' target='_blank'>前往确认</a>`).off("click", ".retry-link").off("click", ".check-link").on("click", ".retry-link", (async t => {
+            t.stopPropagation(), t.preventDefault(), $(".screen-container").html(`<div class="${a}">正在重新加载...</div>`);
             try {
                 const t = await this.getScreenshot(e);
                 this.addImg("缩略图", t);
@@ -67,7 +84,7 @@ class Ve extends X {
                 this.showErrorFallback(e, n);
             }
         })).on("click", ".check-link", (async t => {
-            t.stopPropagation(), t.preventDefault(), window.open(`https://javstore.net/search/${e}.html`, "_blank");
+            t.stopPropagation(), t.preventDefault(), window.open(searchUrl, "_blank");
         }));
     }
 }

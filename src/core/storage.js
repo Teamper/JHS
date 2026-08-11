@@ -280,7 +280,7 @@ let z = class n {
         const t = await this.getBlacklistCarList(), n = JSON.parse(JSON.stringify(t));
         let a = !1, i = [];
         for (const s of e) {
-            n.find((e => e.carNum === s.carNum)) || (this._saveSingleCar(s, n), clog.log(`屏蔽演员番号: <span style="color: #f40">${escapeHtml(s.names)} ${escapeHtml(s.carNum)}</span>`),
+            n.find((e => e.carNum === s.carNum)) || (this._saveSingleCar(s, n), clog.log(`屏蔽演员番号: <span class="jhs-layout-eeefd8c8">${escapeHtml(s.names)} ${escapeHtml(s.carNum)}</span>`),
             a = !0, i.push(s.carNum));
         }
         a && (await this._setItemAndInvalidate(this.blacklist_car_list_key, n), await this.removeNewVideoList(i),
@@ -310,9 +310,9 @@ let z = class n {
             i = i.replace(d, ""), s = s.map((e => e.replace(d, "")));
             let h = t.find((t => t.starId === e));
             if (h) {
-                h.avatar && h.avatar.includes("https") || o && (clog.log(o), h.avatar = o, clog.log(`<span style="color: #f40">补全女优头像: ${escapeHtml(i)}</span>`),
-                n++), !h.actressType && c && (h.actressType = c, clog.log(`<span style="color: #f40">补全女优类别: ${escapeHtml(i)} ${escapeHtml(c)}</span>`),
-                n++), h.name.includes(d) && (h.name = i, h.allName = s, clog.log(`<span style="color: #f40">更正女优名字: ${escapeHtml(i)} ${escapeHtml(s)}</span>`),
+                h.avatar && h.avatar.includes("https") || o && (clog.log(o), h.avatar = o, clog.log(`<span class="jhs-layout-eeefd8c8">补全女优头像: ${escapeHtml(i)}</span>`),
+                n++), !h.actressType && c && (h.actressType = c, clog.log(`<span class="jhs-layout-eeefd8c8">补全女优类别: ${escapeHtml(i)} ${escapeHtml(c)}</span>`),
+                n++), h.name.includes(d) && (h.name = i, h.allName = s, clog.log(`<span class="jhs-layout-eeefd8c8">更正女优名字: ${escapeHtml(i)} ${escapeHtml(s)}</span>`),
                 n++);
                 continue;
             }
@@ -327,7 +327,7 @@ let z = class n {
                 createDate: g,
                 updateDate: g,
                 actressType: c
-            }), clog.log(`<span style="color: #f40">同步JavDB已收藏的演员: ${escapeHtml(i)}</span>`), n++;
+            }), clog.log(`<span class="jhs-layout-eeefd8c8">同步JavDB已收藏的演员: ${escapeHtml(i)}</span>`), n++;
         }
         return n > 0 ? await this._setItemAndInvalidate(this.favorite_actresses_key, t) : clog.log("信息已记录, 无需要进行同步收藏的演员"),
         n;

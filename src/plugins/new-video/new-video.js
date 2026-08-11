@@ -121,7 +121,61 @@ class pt extends X {
         return "idle";
     }
     async initCss() {
-        return "\n            <style>\n                #actress-card-container {\n                    display: grid;\n                    grid-template-columns: repeat(auto-fill, minmax(243px, 1fr)); /* 响应式3-5列 */\n                    gap: 20px;\n                    padding-bottom: 20px;\n                    padding-right: 10px;\n                    background: #f9f9f9;\n                    border-radius: 5px;\n                    overflow-y: auto;\n                }\n                .actress-card {\n                    background: #fff;\n                    border: 1px solid #e0e0e0;\n                    border-radius: 8px;\n                    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08);\n                    padding: 15px;\n                    text-align: center;\n                    display: flex;\n                    flex-direction: column;\n                    justify-content: space-between;\n                    position: relative;\n                    overflow: hidden;\n                }\n                .actress-card:hover {\n                    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.15);\n                }\n                .actress-card-name {\n                    font-size: 1.2em;\n                    font-weight: bold;\n                    color: #007bff;\n                    margin-top: 10px;\n                }\n                .actress-card-allname {\n                    font-size: 0.9em;\n                    color: #999;\n                    margin-top: 5px;\n                    height: 30px; /* 保证高度一致性 */\n                    overflow: hidden;\n                    white-space: nowrap;      /* 防止文字换行 */\n                    text-overflow: ellipsis;  /* 当文本溢出时，显示省略号 */\n                }\n                .actress-card-avatar {\n                    width: 100px;\n                    height: 100px;\n                    border-radius: 50%;\n                    object-fit: contain;\n                    margin: 0 auto;\n                    border: 4px solid #f0f0f0;\n                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);\n                }\n                \n                .card-tag {\n                    position: absolute;\n                    top: 15px; /* 调整标签距离顶部的距离 */\n                    right: -50px; /* 调整标签距离右侧的距离，负值让它移到外面一点 */\n                    \n                    width: 150px; /* 标签的宽度，影响斜角长度 */\n                    padding: 5px 0; /* 上下内边距 */\n                    text-align: center;\n                    \n                    background-color: #ff4757; /* 标签颜色 */\n                    color: white; /* 文字颜色 */\n                    font-size: 14px;\n                    font-weight: bold;\n                    z-index: 10; /* 确保标签在其他内容之上 */\n                \n                    /* 3. 核心：旋转标签，使其倾斜 */\n                    transform: rotate(45deg); /* 45度斜角 */\n                    \n                    /* 可选：添加一些阴影或边框效果 */\n                    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);\n                }\n                \n                .card-new-count-tag {\n                    position: absolute;\n                    top: 5px;\n                    left: 5px;\n                    text-align: center;\n                    font-size: 14px;\n                    font-weight: bold;\n                    z-index: 10;\n                }\n                \n                #actress-pagination {\n                    padding-top: 10px;\n                    text-align: center;\n                    border-top: 1px solid #ddd;\n                }\n                @media (max-width: 600px) {\n                    .page-number-btn {\n                        display: none !important;\n                    }\n                }\n                \n                \n                .card-btn {\n                    width: 44px;\n                    height: 44px;\n                    border-radius: 50%;\n                    display: flex;\n                    justify-content: center;\n                    align-items: center;\n                    text-decoration: none;\n                    border: none;\n                    cursor: pointer;\n                    background: linear-gradient(145deg, #e0e0e0 0%, #f7f7f7 100%);\n                    box-shadow: 8px 8px 16px rgba(0, 0, 0, 0.08),\n                                -8px -8px 16px rgba(255, 255, 255, 1.0);\n                    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);\n                }\n                \n                .card-btn svg,\n                .card-btn svg path {\n                    transition: fill 0.3s ease;\n                }\n                \n                .card-btn:hover {\n                    box-shadow: inset 5px 5px 10px rgba(0, 0, 0, 0.1),\n                                inset -5px -5px 10px rgba(255, 255, 255, 0.9);\n                    transform: scale(0.97);\n                    background: #e0e0e0;\n                }\n                \n                .btn-check-actress svg path {\n                    fill: #4CAF50;\n                }\n                .btn-check-actress:hover svg path {\n                    fill: #388E3C;\n                }\n                \n                .btn-edit-actress svg path {\n                    fill: #FFC107;\n                }\n                .btn-edit-actress:hover svg path {\n                    fill: #FFB300;\n                }\n                \n                .btn-delete-actress svg path {\n                    fill: #F44336;\n                }\n                .btn-delete-actress:hover svg path {\n                    fill: #D32F2F;\n                }\n                .nv-card {\n                    transition: transform 0.15s ease, box-shadow 0.15s ease;\n                    border-radius: 8px;\n                    overflow: hidden;\n                    background: #fff;\n                    box-shadow: 0 1px 4px rgba(0,0,0,0.08);\n                }\n                .nv-card:hover {\n                    transform: translateY(-3px);\n                    box-shadow: 0 6px 16px rgba(0,0,0,0.15);\n                }\n                .nv-cover-img {\n                    cursor: zoom-in;\n                }\n            </style>\n        ";
+        return `
+            <style>
+                .newVideoToolBox { display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden; padding:var(--jhs-space-3); }
+                .jhs-new-video-toolbar { display:flex; align-items:center; justify-content:space-between; gap:var(--jhs-space-3); margin-bottom:var(--jhs-space-3); }
+                .jhs-new-video-toolbar__actions, .jhs-new-video-toolbar__filters { display:flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-2); }
+                .jhs-new-video-toolbar select { min-width:150px; }
+                #actress-card-container { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr)); gap:var(--jhs-space-3); width:100%; max-width:1680px; margin:0 auto; padding:var(--jhs-space-1); overflow-y:auto; }
+                .actress-card { position:relative; display:flex; flex-direction:column; min-width:0; padding:var(--jhs-space-4); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); }
+                .actress-card.is-paused { background:var(--jhs-surface-2); }
+                .actress-card__badges { display:flex; align-items:center; gap:var(--jhs-space-1); margin-bottom:var(--jhs-space-3); }
+                .actress-card__profile { display:grid; grid-template-columns:64px minmax(0,1fr); align-items:center; gap:var(--jhs-space-3); color:inherit; text-decoration:none; }
+                .actress-card-avatar { width:64px; height:64px; border-radius:50%; object-fit:cover; background:var(--jhs-surface-2); }
+                .actress-card-name { overflow:hidden; color:var(--jhs-text); font-size:var(--jhs-font-size-lg); font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+                .actress-card-allname { overflow:hidden; margin-top:var(--jhs-space-1); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); text-overflow:ellipsis; white-space:nowrap; }
+                .actress-card__meta { display:grid; gap:var(--jhs-space-2); margin:var(--jhs-space-3) 0; }
+                .actress-card__meta-row { display:grid; grid-template-columns:76px minmax(0,1fr); gap:var(--jhs-space-2); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
+                .actress-card__meta-row dt { color:var(--jhs-text-faint); }
+                .actress-card__meta-row dd { overflow:hidden; margin:0; color:var(--jhs-text); text-overflow:ellipsis; white-space:nowrap; }
+                .actress-card__note { min-height:20px; margin-bottom:var(--jhs-space-3); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
+                .actress-card__actions { display:flex; align-items:center; gap:var(--jhs-space-2); margin-top:auto; }
+                .actress-card__actions .btn-check-actress { flex:1; }
+                .actress-card__menu { position:relative; }
+                .actress-card__menu summary { list-style:none; }
+                .actress-card__menu summary::-webkit-details-marker { display:none; }
+                .actress-card__menu-popover { position:absolute; right:0; bottom:calc(100% + var(--jhs-space-1)); z-index:20; min-width:128px; padding:var(--jhs-space-1); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
+                .actress-card__menu-popover button { width:100%; justify-content:flex-start; }
+                .card-tag.is-uncensored { color:var(--jhs-status-down); background:var(--jhs-status-down-tint); }
+                .card-tag.is-censored { color:var(--jhs-status-watch); background:var(--jhs-status-watch-tint); }
+                .card-tag.is-unknown { color:var(--jhs-text-muted); background:var(--jhs-surface-2); }
+                #new-video-list-container { display:none; flex:1; min-height:0; overflow-y:auto; }
+                #new-video-list-footer { display:none; padding:var(--jhs-space-2) 0; border-top:1px solid var(--jhs-border); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
+                .jhs-new-video-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:var(--jhs-space-3); padding:var(--jhs-space-1); }
+                .nv-card__link { display:block; color:inherit; text-decoration:none; }
+                .nv-card__cover { position:relative; width:100%; overflow:hidden; aspect-ratio:3/2; border-radius:var(--jhs-radius-sm); background:var(--jhs-surface-2); }
+                .nv-cover-img { width:100%; height:100%; object-fit:cover; cursor:zoom-in; }
+                .nv-card__empty { display:flex; align-items:center; justify-content:center; height:100%; color:var(--jhs-text-faint); font-size:var(--jhs-font-size-xs); }
+                .nv-card__rating { position:absolute; top:var(--jhs-space-1); right:var(--jhs-space-1); }
+                .nv-card__body { padding:var(--jhs-space-2) var(--jhs-space-1); }
+                .nv-card__title, .nv-card__actress { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+                .nv-card__title { color:var(--jhs-text); font-size:var(--jhs-font-size-sm); font-weight:700; }
+                .nv-card__actress, .nv-card__date { color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
+                .jhs-new-video-pagination { padding:var(--jhs-space-3) 0; border-top:1px solid var(--jhs-border); text-align:center; }
+                .jhs-form-dialog { display:grid; gap:var(--jhs-space-3); padding:var(--jhs-space-4); }
+                .jhs-avatar-editor { display:grid; grid-template-columns:100px minmax(0,1fr); gap:var(--jhs-space-3); align-items:start; }
+                .jhs-avatar-editor__preview { width:100px; height:100px; border:2px solid var(--jhs-border); border-radius:50%; object-fit:cover; }
+                .jhs-avatar-editor__actions { margin-top:var(--jhs-space-2); }
+                .jhs-form-dialog__body, .jhs-form-field { display:grid; gap:var(--jhs-space-1); }
+                .jhs-form-label, .jhs-form-dialog__title { color:var(--jhs-text); font-size:var(--jhs-font-size-sm); font-weight:600; }
+                .jhs-form-dialog :where(.jhs-field,.jhs-select,.jhs-textarea) { width:100%; }
+                .jhs-form-dialog .jhs-textarea { min-height:60px; overflow-y:hidden; }
+                .jhs-option-row { display:flex; align-items:center; gap:var(--jhs-space-2); min-height:36px; }
+                #actress-pagination { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:var(--jhs-space-1); }
+                @media (max-width:767px) { .jhs-new-video-toolbar { align-items:stretch; flex-direction:column; } .jhs-new-video-toolbar select, .jhs-new-video-toolbar .jhs-btn { min-height:44px; } .page-number-btn { display:none !important; } }
+            </style>
+        `;
     }
     async handle() {
         await this.showNewVideoCount();
@@ -143,16 +197,39 @@ class pt extends X {
     }
     async openDialog() {
         const e = this.getBean("TaskPlugin"), t = await storageManager.getSetting(), n = localStorage.getItem(e.lastCheckFavoriteActressTimeKey) || "无", a = t.checkFavoriteActress_IntervalTime, i = localStorage.getItem(e.lastCheckNewVideoTimeKey) || "无", s = t.checkNewVideo_intervalTime;
-        let o = `\n            <div class="newVideoToolBox" style="display: flex; flex-direction: column; height: 100%; overflow: hidden; padding:10px">\n                <div style="margin-bottom: 15px;display: flex; justify-content: space-between;">\n                    <div>\n                        <a class="a-danger" id="checkFavoriteActress" data-tip="上次自动同步时间: ${n}; 检测间隔时间: ${a}小时">${this.actressSvg} &nbsp;&nbsp; 手动同步演员</a>\n                        <a class="a-warning" id="checkNewVideo" data-tip="上次检测时间: ${i}; 检测间隔时间: ${s}小时">${this.newSvg} &nbsp;&nbsp; 手动检测最新作品</a>\n                        <a class="a-info" id="toSetting">${this.settingSvg} &nbsp;&nbsp; 配置</a>\n                        <span id="checkNewVideoMsg"></span>\n                    </div>\n                    <div style="display: flex; align-items: center; flex-wrap:wrap; gap:10px;">\n                        <select id="paramActressType" style="text-align: center; height: 100%; min-width: 150px; border: 1px solid #ddd;">\n                            <option value="all" selected>所有</option>\n                            <option value="uncensored">无码</option>\n                            <option value="censored">有码</option>\n                            <option value="">未知</option>\n                        </select>\n                        <select id="paramSortBy" style="text-align: center; height: 100%; min-width: 150px; border: 1px solid #ddd;">\n                            <option value="default" selected>默认排序</option>\n                            <optgroup label="发行时间">\n                                <option value="lastPublishTime_desc">发行时间 新→旧</option>\n                                <option value="lastPublishTime_asc">发行时间 旧→新</option>\n                            </optgroup>\n                            <optgroup label="检测时间">\n                                <option value="lastCheckTime_desc">检测时间 新→旧</option>\n                                <option value="lastCheckTime_asc">检测时间 旧→新</option>\n                            </optgroup>\n                            <optgroup label="新作品数">\n                                <option value="newVideoCount_desc">新作品数 多→少</option>\n                                <option value="newVideoCount_asc">新作品数 少→多</option>\n                            </optgroup>\n                        </select>\n                        <select id="nvSortBy" style="display:none; text-align:center; height:100%; min-width:150px; border:1px solid #ddd;">\n                            <option value="publishTime_desc" selected>发行时间 新→旧</option>\n                            <option value="publishTime_asc">发行时间 旧→新</option>\n                            <option value="voteCount_desc">评价人数 多→少</option>\n                            <option value="voteCount_asc">评价人数 少→多</option>\n                            <option value="actress_asc">演员名 A→Z</option>\n                            <option value="actress_desc">演员名 Z→A</option>\n                            <option value="carNum_asc">番号 A→Z</option>\n                            <option value="carNum_desc">番号 Z→A</option>\n                        </select>\n                        <a class="a-normal" id="toggleViewMode" style="margin-left: 5px;">新作品列表</a>\n                        <a class="a-normal" id="reLoad">${this.refreshSvg} &nbsp;&nbsp; 刷新</a>\n                    </div>\n\n                </div>\n                <div id="actress-card-container" class="jhs-scrollbar"></div>\n                <div id="new-video-list-container" style="display:none; flex:1; overflow-y:auto;"></div>\n                <div id="new-video-list-footer" style="display:none; padding:8px 0; border-top:1px solid #eee; font-size:13px; color:#666;"></div>\n                <div id="actress-pagination"></div>\n            </div>\n        `;
+        let o = `
+            <div class="newVideoToolBox jhs-ui">
+                <div class="jhs-new-video-toolbar" role="toolbar" aria-label="新作品工作区工具">
+                    <div class="jhs-new-video-toolbar__actions">
+                        <button type="button" class="jhs-btn jhs-btn--secondary" id="checkFavoriteActress" data-tip="上次自动同步时间: ${n}; 检测间隔时间: ${a}小时">${this.actressSvg}<span>手动同步演员</span></button>
+                        <button type="button" class="jhs-btn jhs-btn--secondary" id="checkNewVideo" data-tip="上次检测时间: ${i}; 检测间隔时间: ${s}小时">${this.newSvg}<span>手动检测最新作品</span></button>
+                        <button type="button" class="jhs-btn jhs-btn--ghost" id="toSetting">${this.settingSvg}<span>配置</span></button>
+                        <span id="checkNewVideoMsg" role="status" aria-live="polite"></span>
+                    </div>
+                    <div class="jhs-new-video-toolbar__filters">
+                        <select id="paramActressType" class="jhs-select-source" aria-label="演员类型"><option value="all" selected>所有</option><option value="uncensored">无码</option><option value="censored">有码</option><option value="">未知</option></select>
+                        <select id="paramSortBy" class="jhs-select-source" aria-label="演员排序">
+                            <option value="default" selected>默认排序</option><optgroup label="发行时间"><option value="lastPublishTime_desc">发行时间 新→旧</option><option value="lastPublishTime_asc">发行时间 旧→新</option></optgroup><optgroup label="检测时间"><option value="lastCheckTime_desc">检测时间 新→旧</option><option value="lastCheckTime_asc">检测时间 旧→新</option></optgroup><optgroup label="新作品数"><option value="newVideoCount_desc">新作品数 多→少</option><option value="newVideoCount_asc">新作品数 少→多</option></optgroup>
+                        </select>
+                        <select id="nvSortBy" class="jhs-select-source jhs-is-hidden" aria-label="新作品排序"><option value="publishTime_desc" selected>发行时间 新→旧</option><option value="publishTime_asc">发行时间 旧→新</option><option value="voteCount_desc">评价人数 多→少</option><option value="voteCount_asc">评价人数 少→多</option><option value="actress_asc">演员名 A→Z</option><option value="actress_desc">演员名 Z→A</option><option value="carNum_asc">番号 A→Z</option><option value="carNum_desc">番号 Z→A</option></select>
+                        <button type="button" class="jhs-btn jhs-btn--secondary" id="toggleViewMode">新作品列表</button>
+                        <button type="button" class="jhs-btn jhs-btn--ghost" id="reLoad">${this.refreshSvg}<span>刷新</span></button>
+                    </div>
+                </div>
+                <div id="actress-card-container" class="jhs-scrollbar"></div>
+                <div id="new-video-list-container"></div>
+                <div id="new-video-list-footer"></div>
+                <div id="actress-pagination"></div>
+            </div>`;
         layer.open({
             type: 1,
-            title: '<span style="padding: 0 10px;" data-tip="数据来源: 女优页面首页,含磁链分类">新作品检测</span>',
+            title: '<span class="jhs-dialog-title" data-tip="数据来源: 女优页面首页,含磁链分类">新作品检测</span>',
             content: o,
             scrollbar: !1,
-            area: utils.getResponsiveArea([ "80%", "90%" ]),
+            area: utils.getDialogArea("workspace"),
             anim: -1,
             success: async (e, t) => {
-                this.loadData(), this.bindClick(), utils.setupEscClose(t);
+                JhsSelect.enhance(e), this.loadData(), this.bindClick(), utils.setupEscClose(t);
             }
         });
     }
@@ -163,9 +240,9 @@ class pt extends X {
         })), $("#toSetting").on("click", (e => {
             this.getBean("SettingPlugin").openSettingDialog("task-panel", (() => {
                 $("#setting-checkFavoriteActress").css({
-                    border: "1px solid #f40"
+                    border: "1px solid var(--jhs-status-filter)"
                 }), $("#setting-checkNewVideo").css({
-                    border: "1px solid #f40"
+                    border: "1px solid var(--jhs-status-filter)"
                 });
             }));
         }));
@@ -207,7 +284,7 @@ class pt extends X {
             const t = "list" === this._viewMode;
             $("#actress-card-container").toggle(!t), $("#actress-pagination").toggle(!t),
             $("#new-video-list-container").toggle(t), $("#new-video-list-footer").toggle(t),
-            $("#paramSortBy").toggle(!t), $("#nvSortBy").toggle(t),
+            JhsSelect.setVisible("#paramSortBy", !t), JhsSelect.setVisible("#nvSortBy", t),
             $("#toggleViewMode").text(t ? "演员视图" : "新作品列表"),
             t ? this.renderNewVideoList() : this.loadData();
         }));
@@ -217,12 +294,15 @@ class pt extends X {
         this.renderActressCards().catch(e => {
             clog.error("加载演员卡片失败:", e);
             show.error("加载数据失败");
+            const container = $("#actress-card-container");
+            container.empty().append($('<div class="jhs-state jhs-state--error"></div>').append(document.createTextNode("加载数据失败 "),
+            $('<button type="button" class="jhs-btn jhs-btn--secondary">重试</button>').on("click", (() => this.loadData()))));
         });
     }
     async renderActressCards() {
         const e = $("#actress-card-container");
         if (!e.length) return;
-        e.html('<div style="text-align:center; padding: 40px; color: #999;">加载中...</div>');
+        e.html('<div class="jhs-state jhs-state--loading" role="status">加载中...</div>');
         let t = await storageManager.getFavoriteActressList();
         const n = $("#paramActressType").val();
         "all" !== n && (t = t.filter((e => e.actressType === n)));
@@ -244,31 +324,57 @@ class pt extends X {
             key: "lastPublishTime",
             order: "desc"
         }];
-        const a = utils.genericSort(t, sortMap[sortBy] || defaultSort);
-        const i = a.length, s = Math.ceil(i / this.pageSize), o = (this.currentPage - 1) * this.pageSize, r = o + this.pageSize, l = a.slice(o, r), c = await this.getBean("OtherSitePlugin").getJavDbUrl(), d = this.getBean("TaskPlugin"), h = await storageManager.getSetting("checkNewVideo_ruleTime") || 8760;
-        if (0 === l.length) {
-            e.html('<div style="text-align:center; padding: 40px; color: #999;">暂无数据</div>');
-            return void this.renderPagination(i, s);
+        const sortedActresses = utils.genericSort(t, sortMap[sortBy] || defaultSort);
+        const totalCount = sortedActresses.length, totalPages = Math.ceil(totalCount / this.pageSize), pageStart = (this.currentPage - 1) * this.pageSize, pageEnd = pageStart + this.pageSize;
+        const pageActresses = sortedActresses.slice(pageStart, pageEnd), javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl(), taskPlugin = this.getBean("TaskPlugin"), ruleTime = await storageManager.getSetting("checkNewVideo_ruleTime") || 8760;
+        if (0 === pageActresses.length) {
+            e.html('<div class="jhs-state jhs-state--empty">暂无数据</div>');
+            return void this.renderPagination(totalCount, totalPages);
         }
-        const _escHtml = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
-        const g = l.map((e => {
-            const a = Array.isArray(e.allName) ? e.allName.join("，") : "";
-            const _a = _escHtml(a), _name = _escHtml(e.name || ""), _remark = _escHtml(e.remark || "");
-            const _newCount = this.getPendingNewVideoCount(e, _carSet);
-            const _effectivePublishTime = _newCount > 0 ? (e.lastPublishTime || "") : "";
-            const i = `${c}/actors/${e.starId}?t=d`;
-            let s = !1;
-            _effectivePublishTime && (s = !d.isUnnecessaryCheck(_effectivePublishTime, h));
-            let o = "未知", r = "#9E9E9E";
-            e.actressType === A ? (o = "无码", r = "#4CAF50") : e.actressType === D && (o = "有码",
-            r = "#FF9800");
-            let l = "";
-            return s && (l = "background: linear-gradient(145deg, #e0e0e0 0%, #cabdbd 100%);box-shadow: none"),
-            `\n                <div class="actress-card" data-starId="${e.starId}" style="${s ? "background: #d4cece; " : ""}min-height: 370px;">\n                    <a href="${i}" target="_blank" style="text-decoration: none; color: inherit; display: block; flex-grow: 1;">\n                        <img src="${e.avatar || "https://c0.jdbstatic.com/images/actor_unknow.jpg"}" alt="${_a}" class="actress-card-avatar" loading="lazy">\n                    </a>\n\n                    <div>\n                        <a href="${i}" target="_blank" style="text-decoration: none; color: inherit; display: block; flex-grow: 1;">\n                            <div class="actress-card-name">${_name}</div>\n                        </a>\n                        <div class="actress-card-allname" title="${_a}">${_a}</div>\n                    </div>\n\n                    <div style="font-size: 0.8em; margin-top: 5px;">\n                         <span>上次检测: ${e.lastCheckTime || ""}</span>\n                    </div>\n                    <div style="font-size: 0.8em; margin-top: 5px; min-height: 1.2em;">\n                         <span>${_effectivePublishTime ? "最后发行作品: " + _effectivePublishTime : (_newCount === 0 && e.lastPublishTime ? "已全部标记" : "")}</span>\n                    </div>\n\n                    <div style="font-size: 0.7em; color: #cc4444; margin-top: 5px; min-height: 18px">\n                         <span>${s ? "停更" + h / 24 / 365 + "年以上, 下轮任务不再进行检测" : ""}</span>\n                    </div>\n\n                    <div style="font-size: 0.8em; margin-top: 5px; color: #3765c5; min-height: 10px">\n                         <span>${_remark}</span>\n                    </div>\n\n                    <div style="margin-top: 10px;display: flex; justify-content:center; gap: 10px;">\n                        <a title="编辑" class="card-btn btn-edit-actress" style="${l}" data-starId="${e.starId}">${this.editSvg}</a>\n                        <a title="取消收藏" class="card-btn btn-delete-actress" style="${l}" data-starId="${e.starId}">${this.deleteSvg}</a>\n                        <a title="重新检测该演员" class="card-btn btn-check-actress" style="${l}" data-starId="${e.starId}">${this.checkSvg}</a>\n                    </div>\n\n                    <div class="card-tag" style="background-color:${r}">${o}</div>\n                    <div class="card-new-count-tag" data-tip="最新作品数量: ${_newCount}">${_newCount}</div>\n                </div>\n            `;
+        const escapeCardHtml = value => String(value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+        const cardsHtml = pageActresses.map((actress => {
+            const allNames = Array.isArray(actress.allName) ? actress.allName.join("，") : "";
+            const escapedAllNames = escapeCardHtml(allNames), escapedName = escapeCardHtml(actress.name || ""), escapedRemark = escapeCardHtml(actress.remark || "");
+            const newVideoCount = this.getPendingNewVideoCount(actress, _carSet);
+            const effectivePublishTime = newVideoCount > 0 ? actress.lastPublishTime || "" : "";
+            const profileUrl = `${javDbUrl}/actors/${actress.starId}?t=d`;
+            let isPaused = !1;
+            effectivePublishTime && (isPaused = !taskPlugin.isUnnecessaryCheck(effectivePublishTime, ruleTime));
+            let typeLabel = "未知", typeClass = "is-unknown";
+            actress.actressType === A ? (typeLabel = "无码", typeClass = "is-uncensored") : actress.actressType === D && (typeLabel = "有码", typeClass = "is-censored");
+            const publishText = effectivePublishTime ? effectivePublishTime : 0 === newVideoCount && actress.lastPublishTime ? "已全部标记" : "暂无记录";
+            const noteText = isPaused ? `停更 ${ruleTime / 24 / 365} 年以上，下轮任务不再检测` : escapedRemark || "暂无备注";
+            return `
+                <article class="actress-card ${isPaused ? "is-paused" : ""}" data-starId="${actress.starId}">
+                    <div class="actress-card__badges">
+                        <span class="jhs-badge jhs-badge--soft card-new-count-tag" data-tip="最新作品数量: ${newVideoCount}">${newVideoCount} 新</span>
+                        <span class="jhs-badge card-tag ${typeClass}">${typeLabel}</span>
+                        ${isPaused ? '<span class="jhs-badge jhs-badge--neutral">停更</span>' : ""}
+                    </div>
+                    <a class="actress-card__profile" href="${profileUrl}" target="_blank" rel="noopener noreferrer">
+                        <img src="${actress.avatar || "https://c0.jdbstatic.com/images/actor_unknow.jpg"}" alt="${escapedAllNames}" class="actress-card-avatar" loading="lazy">
+                        <span><span class="actress-card-name">${escapedName}</span><span class="actress-card-allname" title="${escapedAllNames}">${escapedAllNames || "暂无别名"}</span></span>
+                    </a>
+                    <dl class="actress-card__meta">
+                        <div class="actress-card__meta-row"><dt>最近作品</dt><dd title="${publishText}">${publishText}</dd></div>
+                        <div class="actress-card__meta-row"><dt>上次检测</dt><dd>${actress.lastCheckTime || "暂无记录"}</dd></div>
+                    </dl>
+                    <p class="actress-card__note" title="${noteText}">${noteText}</p>
+                    <div class="actress-card__actions">
+                        <button type="button" class="jhs-btn jhs-btn--primary btn-check-actress" data-starId="${actress.starId}">${this.checkSvg}<span>重新检测</span></button>
+                        <button type="button" class="jhs-btn jhs-btn--icon jhs-btn--ghost btn-delete-actress" aria-label="取消收藏 ${escapedName}" title="取消收藏" data-starId="${actress.starId}">${this.deleteSvg}</button>
+                        <details class="actress-card__menu">
+                            <summary class="jhs-btn jhs-btn--icon jhs-btn--ghost" aria-label="更多操作" title="更多操作">•••</summary>
+                            <div class="actress-card__menu-popover" role="menu">
+                                <button type="button" class="jhs-btn jhs-btn--ghost btn-edit-actress" role="menuitem" data-starId="${actress.starId}">${this.editSvg}<span>编辑资料</span></button>
+                            </div>
+                        </details>
+                    </div>
+                </article>`;
         })).join("");
-        e.html(g), $(".btn-delete-actress").off("click").on("click", (e => {
+        e.html(cardsHtml), $(".btn-delete-actress").off("click").on("click", (e => {
             e.preventDefault();
-            const t = $(e.currentTarget).attr("data-starId"), n = a.find((e => e.starId === t));
+            const t = $(e.currentTarget).attr("data-starId"), n = sortedActresses.find((e => e.starId === t));
             utils.q(e, `是否取消收藏 ${n.name}?`, (async () => {
                 let e = `${await this.getBean("OtherSitePlugin").getJavDbUrl()}/actors/${t}/uncollect`;
                 const n = document.querySelector("meta[name=csrf-token]").content, a = await gmHttp.post(e, null, {
@@ -279,19 +385,26 @@ class pt extends X {
             }));
         })), $(".btn-edit-actress").off("click").on("click", (e => {
             e.preventDefault();
-            const t = $(e.currentTarget).attr("data-starId"), n = a.find((e => e.starId === t));
+            const t = $(e.currentTarget).attr("data-starId"), n = sortedActresses.find((e => e.starId === t));
             n ? this.editActress(n) : show.error(`未找到 starId 为 ${t} 的女优记录。`);
         })), $(".btn-check-actress").off("click").on("click", (e => {
-            e.preventDefault(), navigator.locks.request(d.singleTaskKey, {
+            e.preventDefault(), navigator.locks.request(taskPlugin.singleTaskKey, {
                 ifAvailable: !0
             }, (async t => {
                 if (!t) return void show.error("当前有定时任务在后台执行中, 无法发起手动任务");
-                const n = $(e.currentTarget).attr("data-starId"), i = a.find((e => e.starId === n));
-                await d.checkOneNewVideo(i);
+                const n = $(e.currentTarget).attr("data-starId"), i = sortedActresses.find((e => e.starId === n));
+                await taskPlugin.checkOneNewVideo(i);
             })).catch((e => {
                 console.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
             }));
-        })), this.renderPagination(i, s), show.ok("加载完成");
+        })), $(".actress-card__menu").on("keydown", (event => {
+            if ("Escape" !== event.key) return;
+            event.preventDefault();
+            const details = $(event.currentTarget);
+            details.prop("open", !1).find("summary").trigger("focus");
+        })).on("click", "[role='menuitem']", (event => {
+            $(event.currentTarget).closest("details").prop("open", !1);
+        })), this.renderPagination(totalCount, totalPages), show.ok("加载完成");
     }
     async getNewVideoFlatList() {
         const e = await storageManager.getFavoriteActressList(), t = await storageManager.getCarMap(), n = $("#paramActressType").val(), a = [];
@@ -328,9 +441,9 @@ class pt extends X {
                         if (i.length) {
                             i.attr("src", c).on("error", (function() { $(this).hide().next().show(); }));
                         } else {
-                            const e = n.find(".nv-placeholder, div[style*='加载中']");
+                            const e = n.find(".nv-placeholder");
                             if (e.length) {
-                                e.replaceWith(`<img src="${c}" loading="lazy" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"><div style="display:none;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">无封面</div>`);
+                                e.replaceWith(`<img class="nv-cover-img" src="${c}" loading="lazy" onerror="this.classList.add('jhs-is-hidden');this.nextElementSibling.classList.remove('jhs-is-hidden');"><div class="nv-card__empty jhs-is-hidden">无封面</div>`);
                             }
                         }
                         d && n.attr("title", d);
@@ -342,19 +455,21 @@ class pt extends X {
     async renderNewVideoList() {
         const e = $("#new-video-list-container");
         if (!e.length) return;
-        e.html('<div style="text-align:center;padding:40px;color:#999;">加载中...</div>');
+        e.html('<div class="jhs-state jhs-state--loading" role="status">加载中...</div>');
         let t;
         try {
             t = await this.getNewVideoFlatList();
         } catch (n) {
-            return console.error(n), void e.html(`<div style="text-align:center;padding:40px;color:#e74c3c;">加载失败: ${escapeHtml(n.message)}</div>`);
+            return console.error(n), void e.html(`<div class="jhs-state jhs-state--error" role="alert">加载失败: ${escapeHtml(n.message)}</div>`);
         }
-        if (0 === t.length) return e.html('<div style="text-align:center;padding:40px;color:#999;">暂无待鉴定的新作品</div>'),
+        if (0 === t.length) return e.html('<div class="jhs-state jhs-state--empty">暂无待鉴定的新作品</div>'),
         void $("#new-video-list-footer").html("");
         this.nvFlatListCache = t, this.nvCurrentPage = 1, this.nvSortBy = $("#nvSortBy").val() || "publishTime_desc";
         const a = new Set;
         for (const i of t) a.add(i.actressName);
-        $("#new-video-list-footer").html(`<span>共 <b>${t.length}</b> 个待鉴定番号，涉及 <b>${a.size}</b> 位演员</span>\n            <a class="a-normal" id="batchMarkWatched" style="margin-left:15px;">全部标记已看</a>\n            <a class="a-normal" id="batchMarkDownloaded" style="margin-left:8px;">全部标记已下载</a>`);
+        $("#new-video-list-footer").html(`<span>共 <b>${t.length}</b> 个待鉴定番号，涉及 <b>${a.size}</b> 位演员</span>
+            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkWatched">全部标记已看</button>
+            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkDownloaded">全部标记已下载</button>`);
         this.nvRenderPage(), this.loadCoverForItems(t).catch((e => clog.warn("封面加载异常:", e)));
         $("#batchMarkWatched").off("click").on("click", (async () => {
             if (!this.nvFlatListCache || 0 === this.nvFlatListCache.length) return;
@@ -397,32 +512,32 @@ class pt extends X {
         const t = this.nvSortList(e), n = this.nvPageSize, a = (this.nvCurrentPage - 1) * n, i = a + n, s = t.slice(a, i), o = Math.ceil(t.length / n), r = this.getBean("OtherSitePlugin").getJavDbUrl().then((r => {
             const l = $("#new-video-list-container");
             let c = "";
-            c += '<div id="nv-grid" class="jhs-new-video-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;padding:5px;">';
+            c += '<div id="nv-grid" class="jhs-new-video-grid">';
             for (const n of s) {
                 const e = escapeHtml(n.carNum), t = escapeHtml(n.title || n.carNum), a = n.coverUrl ? n.coverUrl.replace("thumbs", "covers") : "", i = n.url || `${r}/search?q=${encodeURIComponent(n.carNum)}`;
                 let o = `番号: ${e}\\n演员: ${escapeHtml(n.actressName)}\\n发行: ${n.publishTime || "未知"}`;
                 n.voteCount && (o += `\\n评价人数: ${n.voteCount}`);
-                const l = n.voteCount ? `<span style="position:absolute;top:4px;right:4px;background:rgba(0,0,0,0.7);color:#fff;font-size:11px;padding:2px 5px;border-radius:3px;">${n.voteCount}人评价</span>` : "";
+                const l = n.voteCount ? `<span class="jhs-badge jhs-badge--neutral nv-card__rating">${n.voteCount}人评价</span>` : "";
                 c += `<div class="nv-card" data-car="${e}" title="${o}">`;
-                c += `<a href="${i}" target="_blank" style="display:block;text-decoration:none;color:inherit;">`;
-                c += `<div style="width:100%;aspect-ratio:3/2;overflow:hidden;border-radius:6px;background:#f0f0f0;position:relative;">`;
-                a ? c += `<img class="nv-cover-img" src="${a}" data-full="${a}" loading="lazy" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">${l}<div style="display:none;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">无封面</div>` : c += `<div class="nv-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;">加载中...</div>`;
+                c += `<a class="nv-card__link" href="${i}" target="_blank" rel="noopener noreferrer">`;
+                c += `<div class="nv-card__cover">`;
+                a ? c += `<img class="nv-cover-img" src="${a}" data-full="${a}" loading="lazy" onerror="this.classList.add('jhs-is-hidden');this.nextElementSibling.classList.remove('jhs-is-hidden');">${l}<div class="nv-card__empty jhs-is-hidden">无封面</div>` : c += `<div class="nv-placeholder nv-card__empty">加载中...</div>`;
                 c += `</div>`;
-                c += `<div style="padding:8px 4px;">`;
-                c += `<div style="font-size:13px;font-weight:bold;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${e}">${e}</div>`;
-                c += `<div style="font-size:12px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(n.actressName)}">${escapeHtml(n.actressName)}</div>`;
-                n.publishTime && (c += `<div style="font-size:11px;color:#999;">${n.publishTime}</div>`);
+                c += `<div class="nv-card__body">`;
+                c += `<div class="nv-card__title" title="${e}">${e}</div>`;
+                c += `<div class="nv-card__actress" title="${escapeHtml(n.actressName)}">${escapeHtml(n.actressName)}</div>`;
+                n.publishTime && (c += `<div class="nv-card__date">${n.publishTime}</div>`);
                 c += `</div></a></div>`;
             }
             c += "</div>";
             if (o > 1) {
-                c += '<div id="nv-pagination-bar" style="padding:12px 0;text-align:center;border-top:1px solid #eee;margin-top:8px;">';
-                this.nvCurrentPage > 1 && (c += `<button class="pagination-btn" data-nvpage="${this.nvCurrentPage - 1}" style="padding:6px 14px;margin:0 3px;background:#f0f0f0;border:1px solid #ddd;border-radius:4px;cursor:pointer;">上一页</button>`);
+                c += '<div id="nv-pagination-bar" class="jhs-new-video-pagination">';
+                this.nvCurrentPage > 1 && (c += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${this.nvCurrentPage - 1}">上一页</button>`);
                 let e = Math.max(1, this.nvCurrentPage - 2), n = Math.min(o, e + 4);
                 n - e < 4 && (e = Math.max(1, n - 4));
-                for (let t = e; t <= n; t++) c += `<button class="pagination-btn" data-nvpage="${t}" style="padding:6px 14px;margin:0 3px;border:1px solid #ddd;border-radius:4px;cursor:pointer;${t === this.nvCurrentPage ? "background:#007bff;color:white;border-color:#007bff;" : "background:#f0f0f0;"}">${t}</button>`;
-                this.nvCurrentPage < o && (c += `<button class="pagination-btn" data-nvpage="${this.nvCurrentPage + 1}" style="padding:6px 14px;margin:0 3px;background:#f0f0f0;border:1px solid #ddd;border-radius:4px;cursor:pointer;">下一页</button>`),
-                c += `<span style="margin-left:15px;color:#666;font-size:13px;">第 ${this.nvCurrentPage}/${o} 页，共 ${t.length} 条</span>`, c += "</div>";
+                for (let t = e; t <= n; t++) c += `<button type="button" class="jhs-btn ${t === this.nvCurrentPage ? "jhs-btn--primary is-current" : "jhs-btn--secondary"} pagination-btn" data-nvpage="${t}" ${t === this.nvCurrentPage ? 'aria-current="page"' : ""}>${t}</button>`;
+                this.nvCurrentPage < o && (c += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${this.nvCurrentPage + 1}">下一页</button>`),
+                c += `<span class="jhs-pagination__summary">第 ${this.nvCurrentPage}/${o} 页，共 ${t.length} 条</span>`, c += "</div>";
             }
             l.html(c), l.find(".pagination-btn").off("click").on("click", (e => {
                 const n = parseInt($(e.currentTarget).data("nvpage"));
@@ -433,14 +548,15 @@ class pt extends X {
         }));
     }
     async editActress(e) {
-        const t = e.name, n = e.avatar, a = e.remark || "", i = Array.isArray(e.allName) ? e.allName.join("，") : "", s = Array.isArray(e.newVideoList) ? e.newVideoList.map((e => "string" == typeof e ? e : e.carNum)).join("，") : "", o = e.starId, r = "width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; min-height: 60px; overflow-y: hidden;", l = e.actressType || "", c = `\n            <div style="padding: 20px;">\n                <div style="margin-bottom: 15px; text-align: center;">\n                    <img id="edit-avatar-preview" src="${n}" alt="Avatar Preview" \n                         style="width: 100px; height: 100px; border-radius: 50%; object-fit: cover; margin-bottom: 10px; border: 2px solid #ddd;">\n                    <div style="text-align: left">\n                        <label style="display: block; margin-bottom: 5px; font-weight: bold;">头像链接:</label>\n                        <input type="text" id="edit-actress-avatar" value="${n}" \n                               style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">\n                       <div style="display: flex; gap: 5px; margin-top: 5px;">\n                            <button type="button" id="search-avatar-btn" \n                                style="flex-grow: 1; padding: 8px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">\n                                搜索头像\n                            </button>\n                            <button type="button" id="select-cdn-btn" \n                                style="width: 100px; padding: 8px; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">\n                                选择 CDN 源\n                            </button>\n                        </div>\n                    </div>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">主名称:</label>\n                    <input type="text" id="edit-actress-name" value="${t}" \n                           style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">所有别名(用逗号隔开):</label>\n                    <textarea id="edit-actress-allname" style="${r}">${i}</textarea>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">演员类别:</label>\n                    <select id="actressType" style="width: 100%; padding: 10px; border: 1px solid #ddd;">\n                        <option value="" ${"" === l ? "selected" : ""}>未知</option>\n                        <option value="censored" ${"censored" === l ? "selected" : ""}>有码</option>\n                        <option value="uncensored" ${"uncensored" === l ? "selected" : ""}>无码</option>\n                    </select>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">最新作品(用逗号隔开):</label>\n                    <textarea id="edit-actress-newvideolist" style="${r}">${s}</textarea>\n                </div>\n                <div style="margin-bottom: 15px;">\n                    <label style="display: block; margin-bottom: 5px; font-weight: bold;">备注:</label>\n                   <textarea id="edit-remark" style="${r}">${a}</textarea>\n                </div>\n            </div>\n        `;
+        const t = e.name, n = e.avatar, a = e.remark || "", i = Array.isArray(e.allName) ? e.allName.join("，") : "", s = Array.isArray(e.newVideoList) ? e.newVideoList.map((e => "string" == typeof e ? e : e.carNum)).join("，") : "", o = e.starId, l = e.actressType || "", c = `\n            <div class="jhs-form-dialog">\n                <div class="jhs-avatar-editor">\n                    <img id="edit-avatar-preview" src="${n}" alt="Avatar Preview" \n                         class="jhs-avatar-editor__preview">\n                    <div class="jhs-form-dialog__body">\n                        <label class="jhs-form-label">头像链接:</label>\n                        <input type="text" id="edit-actress-avatar" value="${n}" \n                               class="jhs-field">\n                       <div class="jhs-toolbar jhs-avatar-editor__actions">\n                            <button type="button" id="search-avatar-btn" \n                                class="jhs-btn jhs-btn--primary">\n                                搜索头像\n                            </button>\n                            <button type="button" id="select-cdn-btn" \n                                class="jhs-btn jhs-btn--secondary">\n                                选择 CDN 源\n                            </button>\n                        </div>\n                    </div>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">主名称:</label>\n                    <input type="text" id="edit-actress-name" value="${t}" \n                           class="jhs-field">\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">所有别名(用逗号隔开):</label>\n                    <textarea id="edit-actress-allname" class="jhs-textarea">${i}</textarea>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">演员类别:</label>\n                    <select id="actressType" class="jhs-select-source">\n                        <option value="" ${"" === l ? "selected" : ""}>未知</option>\n                        <option value="censored" ${"censored" === l ? "selected" : ""}>有码</option>\n                        <option value="uncensored" ${"uncensored" === l ? "selected" : ""}>无码</option>\n                    </select>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">最新作品(用逗号隔开):</label>\n                    <textarea id="edit-actress-newvideolist" class="jhs-textarea">${s}</textarea>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">备注:</label>\n                   <textarea id="edit-remark" class="jhs-textarea">${a}</textarea>\n                </div>\n            </div>\n        `;
         layer.open({
             type: 1,
             title: `编辑女优: ${t} (${o})`,
-            area: utils.getResponsiveArea(["500px", "750px"]),
+            area: utils.getDialogArea("sm"),
             content: c,
             btn: [ "保存", "取消" ],
             success: (e, t) => {
+                JhsSelect.enhance(e);
                 const n = e => {
                     e.css("height", "auto"), e.css("height", e[0].scrollHeight + 15 + "px");
                 };
@@ -459,7 +575,7 @@ class pt extends X {
                     await this.searchAvatar();
                 })), $("#select-cdn-btn").on("click", (async () => {
                     await async function() {
-                        const e = at, t = tt.map(((t, n) => `\n        <div style="margin-bottom: 10px;">\n            <input type="radio" id="cdn-${n}" name="cdn-source" value="${n}" ${n === e ? "checked" : ""} style="margin-right: 10px;">\n            <label for="cdn-${n}">${t.name} ${t.json.includes("jsdelivr") ? "(推荐)" : ""}</label>\n        </div>\n    `)).join(""), n = `\n        <div style="padding: 20px;">\n            <p style="margin-bottom: 15px; font-weight: bold; color: #333;">请选择头像数据源 (当前: ${tt[e].name}):</p>\n            ${t}\n            <p style="margin-top: 20px; color: #555; font-size: 12px;">切换源会清除本地缓存的数据，并在下次搜索时重新加载。</p>\n        </div>\n    `;
+                        const e = at, t = tt.map(((t, n) => `\n        <label class="jhs-option-row" for="cdn-${n}">\n            <input type="radio" id="cdn-${n}" name="cdn-source" value="${n}" ${n === e ? "checked" : ""}>\n            <span>${t.name} ${t.json.includes("jsdelivr") ? "(推荐)" : ""}</span>\n        </label>\n    `)).join(""), n = `\n        <div class="jhs-form-dialog">\n            <p class="jhs-form-dialog__title">请选择头像数据源 (当前: ${tt[e].name}):</p>\n            ${t}\n            <p class="jhs-helper-text">切换源会清除本地缓存的数据，并在下次搜索时重新加载。</p>\n        </div>\n    `;
                         layer.open({
                             type: 1,
                             title: "选择 CDN 源",
@@ -508,17 +624,17 @@ class pt extends X {
         const n = this.currentPage;
         let a = "";
         const i = $("#actress-pagination");
-        if (0 === t) return a = '<span style="color: #666;">共 0 条记录</span>', void i.html(a);
-        n > 1 && t > 5 && (a += '<button class="pagination-btn" data-page="1" style="padding: 8px 12px; margin: 0 5px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">首页</button>'),
-        n > 1 && (a += `<button class="pagination-btn" data-page="${n - 1}" style="padding: 8px 12px; margin: 0 5px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">上一页</button>`);
+        if (0 === t) return a = '<span class="jhs-pagination__summary">共 0 条记录</span>', void i.html(a);
+        n > 1 && t > 5 && (a += '<button class="jhs-btn pagination-btn" data-page="1">首页</button>'),
+        n > 1 && (a += `<button class="jhs-btn pagination-btn" data-page="${n - 1}">上一页</button>`);
         let s = Math.max(1, n - Math.floor(2.5)), o = Math.min(t, s + 5 - 1);
         o - s < 4 && (s = Math.max(1, o - 5 + 1));
         for (let r = s; r <= o; r++) {
-            a += `<button class="pagination-btn page-number-btn ${r === n ? "active" : ""}" data-page="${r}" style="padding: 8px 12px; margin: 0 3px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; ${r === n ? "background: #007bff; color: white; border-color: #007bff;" : ""}">${r}</button>`;
+            a += `<button class="jhs-btn pagination-btn page-number-btn ${r === n ? "active" : ""}" data-page="${r}">${r}</button>`;
         }
-        n < t && (a += `<button class="pagination-btn" data-page="${n + 1}" style="padding: 8px 12px; margin: 0 5px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">下一页</button>`),
-        n < t && t > 5 && (a += `<button class="pagination-btn" data-page="${t}" style="padding: 8px 12px; margin: 0 5px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;">尾页</button>`),
-        a += `<span style="margin-left: 20px; color: #666;">共 ${e} 条记录 (第 ${n}/${t} 页)</span>`,
+        n < t && (a += `<button class="jhs-btn pagination-btn" data-page="${n + 1}">下一页</button>`),
+        n < t && t > 5 && (a += `<button class="jhs-btn pagination-btn" data-page="${t}">尾页</button>`),
+        a += `<span class="jhs-pagination__summary">共 ${e} 条记录 (第 ${n}/${t} 页)</span>`,
         i.html(a), i.find(".pagination-btn").off("click").on("click", (e => {
             if ($(e.currentTarget).is("[disabled]")) return;
             const n = parseInt($(e.currentTarget).data("page"));
@@ -538,7 +654,7 @@ class pt extends X {
             i.close();
         }
         if (0 === s.length) return void show.error(`未找到与 '${a.join("、")}' 相关的头像。请检查名称。`);
-        const o = s.map(((e, t) => `\n        <div id="wrapper-${t}" class="gfriends-image-item-wrapper">\n            <img alt="" src="${e}" data-url="${e}" class="gfriends-selectable-img" data-wrapper-id="wrapper-${t}" >\n            <div class="gfriends-size-tag" data-size-for="wrapper-${t}">...</div> \n        </div>\n    `)).join(""), r = `\n        <style>\n            /* 保持上一个回答的美化样式 */\n            #gfriends-image-list-container { padding: 15px; height: 100%; box-sizing: border-box; background-color: #f8f9fa; }\n            #gfriends-prompt { color: #555; font-weight: 500; border-bottom: 1px solid #eee; padding-bottom: 10px; }\n            #gfriends-image-list { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }\n            .gfriends-image-item-wrapper {\n                width: 160px; height: 225px; /* 增加高度以容纳尺寸标签 */\n                overflow: hidden; border-radius: 6px;\n                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); transition: transform 0.2s ease, box-shadow 0.2s ease;\n                cursor: pointer; position: relative; \n                padding-bottom: 25px; /* 为尺寸标签留出空间 */\n            }\n            .gfriends-selectable-img {\n                width: 100%; height: 200px; /* 固定图片高度 */\n                object-fit: cover; border: 3px solid transparent; \n                border-radius: 6px; transition: border 0.2s ease;\n            }\n            .gfriends-image-item-wrapper:hover {\n                transform: translateY(-4px) scale(1.02);\n                box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);\n            }\n            .gfriends-selectable-img.is-selected {\n                border-color: #ff6347;\n                box-shadow: 0 0 0 3px #ff6347;\n            }\n            /* 新增：尺寸标签样式 */\n            .gfriends-size-tag {\n                position: absolute;\n                bottom: 0; /* 定位到图片容器底部 */\n                left: 0;\n                right: 0;\n                height: 25px;\n                line-height: 25px;\n                text-align: center;\n                background-color: rgba(0, 0, 0, 0.7); /* 半透明背景 */\n                color: #fff;\n                font-size: 11px;\n                font-weight: bold;\n                border-bottom-left-radius: 6px;\n                border-bottom-right-radius: 6px;\n                user-select: none;\n            }\n        </style>\n        \n        <div id="gfriends-image-list-container">\n            <p id="gfriends-prompt" style="text-align: center; font-size: 15px; margin-bottom: 15px;">\n                点击图片即可选择（初始共 ${s.length} 张）\n            </p>\n            <div style="overflow-y: auto; height: calc(100% - 40px);">\n                <div id="gfriends-image-list">\n                    ${o}\n                </div>\n            </div>\n        </div>\n    `;
+        const o = s.map(((e, t) => `\n        <div id="wrapper-${t}" class="gfriends-image-item-wrapper">\n            <img alt="" src="${e}" data-url="${e}" class="gfriends-selectable-img" data-wrapper-id="wrapper-${t}" >\n            <div class="gfriends-size-tag" data-size-for="wrapper-${t}">...</div> \n        </div>\n    `)).join(""), r = `\n        <style>\n            /* 保持上一个回答的美化样式 */\n            #gfriends-image-list-container { padding: 15px; height: 100%; box-sizing: border-box; background-color: var(--jhs-surface-2); }\n            #gfriends-prompt { color: var(--jhs-text-muted); font-weight: 500; border-bottom: 1px solid var(--jhs-surface-2); padding-bottom: 10px; }\n            #gfriends-image-list { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }\n            .gfriends-image-item-wrapper {\n                width: 160px; height: 225px; /* 增加高度以容纳尺寸标签 */\n                overflow: hidden; border-radius: 6px;\n                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); transition: transform 0.2s ease, box-shadow 0.2s ease;\n                cursor: pointer; position: relative; \n                padding-bottom: 25px; /* 为尺寸标签留出空间 */\n            }\n            .gfriends-selectable-img {\n                width: 100%; height: 200px; /* 固定图片高度 */\n                object-fit: cover; border: 3px solid transparent; \n                border-radius: 6px; transition: border 0.2s ease;\n            }\n            .gfriends-image-item-wrapper:hover {\n                transform: translateY(-4px) scale(1.02);\n                box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);\n            }\n            .gfriends-selectable-img.is-selected {\n                border-color: var(--jhs-accent);\n                box-shadow: 0 0 0 3px var(--jhs-accent);\n            }\n            /* 新增：尺寸标签样式 */\n            .gfriends-size-tag {\n                position: absolute;\n                bottom: 0; /* 定位到图片容器底部 */\n                left: 0;\n                right: 0;\n                height: 25px;\n                line-height: 25px;\n                text-align: center;\n                background-color: rgba(0, 0, 0, 0.7); /* 半透明背景 */\n                color: #fff;\n                font-size: 11px;\n                font-weight: bold;\n                border-bottom-left-radius: 6px;\n                border-bottom-right-radius: 6px;\n                user-select: none;\n            }\n        </style>\n        \n        <div id="gfriends-image-list-container">\n            <p id="gfriends-prompt" class="jhs-layout-bd59a2e1">\n                点击图片即可选择（初始共 ${s.length} 张）\n            </p>\n            <div class="jhs-layout-3fefafab">\n                <div id="gfriends-image-list">\n                    ${o}\n                </div>\n            </div>\n        </div>\n    `;
         let l = 0;
         layer.open({
             type: 1,

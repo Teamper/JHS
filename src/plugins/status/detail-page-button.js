@@ -9,7 +9,7 @@ class ye extends X {
         this.hideVideoControls(), window.isDetailPage && this.createMenuBtn();
     }
     async createMenuBtn() {
-        const e = this.getPageInfo(), t = e.carNum, n = `\n            <div class="jhs-detail-btn-row" style="margin: 10px auto; display: flex; justify-content: space-between; align-items: center; flex-wrap:wrap;gap: 20px;">\n                <div style="display: flex; gap: 10px; flex-wrap:wrap;">\n                    <a id="filterBtn" class="menu-btn" style="width: 120px; background-color:${f}; color: white; text-align: center; padding: 8px 0;">\n                        <span>${m}</span>\n                    </a>\n                    <a id="favoriteBtn" class="menu-btn" style="width: 120px; background-color:${w}; color: white; text-align: center; padding: 8px 0;">\n                        <span>${v}</span>\n                    </a>\n                    <a id="hasDownBtn" class="menu-btn" style="width: 120px; background-color:${x}; color: white; text-align: center; padding: 8px 0;">\n                        <span>${y}</span>\n                    </a>\n                    <a id="hasWatchBtn" class="menu-btn" style="width: 120px; background-color:${S}; color: white; text-align: center; padding: 8px 0;">\n                        <span>${k}</span>\n                    </a>\n                </div>\n        \n                <div style="display: flex; gap: 10px; flex-wrap:wrap;">\n                    <a id="enable-magnets-filter" class="menu-btn" style="width: 140px; background-color: #c2bd4c; color: white; text-align: center; padding: 8px 0;">\n                        <span id="magnets-span">关闭磁力过滤</span>\n                    </a>\n                    <a id="magnetSearchBtn" class="menu-btn" style="width: 120px; background: linear-gradient(to right, rgb(245,140,1), rgb(84,161,29)); color: white; text-align: center; padding: 8px 0;">\n                        <span>磁力搜索</span>\n                    </a>\n                    <a id="xunLeiSubtitleBtn" class="menu-btn" style="width: 120px; background: linear-gradient(to left, #375f7c, #2196F3); color: white; text-align: center; padding: 8px 0;">\n                        <span>字幕 (迅雷)</span>\n                    </a>\n                    <a id="search-subtitle-btn" class="menu-btn" style="width: 160px; background: linear-gradient(to bottom, #8d5656, rgb(196,159,91)); color: white; text-align: center; padding: 8px 0;">\n                        <span>字幕 (SubTitleCat)</span>\n                    </a>\n                </div>\n            </div>\n        `;
+        const e = this.getPageInfo(), t = e.carNum, n = `\n            <div class="jhs-detail-btn-row jhs-layout-e2965a97">\n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="filterBtn" class="jhs-btn jhs-btn--filter jhs-layout-44293084">\n                        <span>${m}</span>\n                    </button>\n                    <button type="button" id="favoriteBtn" class="jhs-btn jhs-btn--fav jhs-layout-44293084">\n                        <span>${v}</span>\n                    </button>\n                    <button type="button" id="hasDownBtn" class="jhs-btn jhs-btn--down jhs-layout-44293084">\n                        <span>${y}</span>\n                    </button>\n                    <button type="button" id="hasWatchBtn" class="jhs-btn jhs-btn--watch jhs-layout-44293084">\n                        <span>${k}</span>\n                    </button>\n                </div>\n        \n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="enable-magnets-filter" class="jhs-btn jhs-btn--watch jhs-layout-5f3e3549">\n                        <span id="magnets-span">关闭磁力过滤</span>\n                    </button>\n                    <button type="button" id="magnetSearchBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>磁力搜索</span>\n                    </button>\n                    <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>字幕 (迅雷)</span>\n                    </button>\n                    <button type="button" id="search-subtitle-btn" class="jhs-btn jhs-btn--accent jhs-layout-f43f0d6d">\n                        <span>字幕 (SubTitleCat)</span>\n                    </button>\n                </div>\n            </div>\n        `;
         r && $(".tabs").after(n), l && $("#mag-submit-show").before(n), $("#favoriteBtn").on("click", (() => this.favoriteOne())),
         $("#filterBtn").on("click", (e => this.filterOne(e))), $("#hasDownBtn").on("click", (async () => this.hasDownOne())),
         $("#hasWatchBtn").on("click", (async () => this.hasWatchOne())), $("#magnetSearchBtn").on("click", (() => {
@@ -32,7 +32,12 @@ class ye extends X {
             "关闭磁力过滤" === t.text() ? (a.showAll(), t.text("开启磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", C)) : (a.doFilterMagnet(),
             t.text("关闭磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", _));
         })), $("#search-subtitle-btn").on("click", (e => utils.openPage(`https://subtitlecat.com/index.php?search=${t}`, t, !1, e))),
-        $("#xunLeiSubtitleBtn").on("click", (() => this.searchXunLeiSubtitle(t))), this.showStatus(t).then();
+        $("#xunLeiSubtitleBtn").on("click", (() => this.searchXunLeiSubtitle(t)));
+        if (!t) {
+            $("#filterBtn, #favoriteBtn, #hasDownBtn, #hasWatchBtn, #magnetSearchBtn, #xunLeiSubtitleBtn, #search-subtitle-btn").prop("disabled", !0).attr("title", "番号不可用");
+            return void clog.warn("详情操作不可用：番号不可用");
+        }
+        this.showStatus(t).then();
     }
     async showStatus(e) {
         const t = $("#filterBtn span"), n = $("#favoriteBtn span"), a = $("#hasDownBtn span"), i = $("#hasWatchBtn span");
@@ -58,6 +63,7 @@ class ye extends X {
     async favoriteOne() {
         try {
             let e = this.getPageInfo();
+            if (!e.carNum) return void show.error("番号不可用，无法收藏");
             await storageManager.saveCar({
                 carNum: e.carNum,
                 url: e.url,
@@ -70,6 +76,7 @@ class ye extends X {
     async hasDownOne() {
         try {
             let e = this.getPageInfo();
+            if (!e.carNum) return void show.error("番号不可用，无法标记下载");
             await storageManager.saveCar({
                 carNum: e.carNum,
                 url: e.url,
@@ -82,6 +89,7 @@ class ye extends X {
     async hasWatchOne() {
         try {
             let e = this.getPageInfo();
+            if (!e.carNum) return void show.error("番号不可用，无法标记观看");
             await storageManager.saveCar({
                 carNum: e.carNum,
                 url: e.url,
@@ -98,7 +106,7 @@ class ye extends X {
             n && 0 !== n.length ? layer.open({
                 type: 1,
                 title: "迅雷字幕",
-                content: '\n                    <div style="height: 100%;overflow:hidden;"> \n                        <div id="xunlei-table-container" style="height: 100%;padding-bottom: 20px"></div>\n                    </div>\n                ',
+                content: '\n                    <div class="jhs-layout-8ddc7c91"> \n                        <div id="xunlei-table-container" class="jhs-layout-583c2485"></div>\n                    </div>\n                ',
                 scrollbar: !1,
                 area: utils.getResponsiveArea([ "60%", "70%" ]),
                 anim: -1,
@@ -131,7 +139,7 @@ class ye extends X {
                             formatter: (t, n, a) => {
                                 const i = t.getData();
                                 return a((() => {
-                                    const n = t.getElement().querySelector(".a-primary"), a = t.getElement().querySelector(".a-success");
+                                    const n = t.getElement().querySelector(".subtitle-preview-btn"), a = t.getElement().querySelector(".subtitle-download-btn");
                                     n && n.addEventListener("click", (async t => {
                                         let n = i.url, a = e + "." + i.ext;
                                         this.previewSubtitle(n, a);
@@ -139,7 +147,7 @@ class ye extends X {
                                         let n = i.url, a = e + "." + i.ext, s = await gmHttp.get(n);
                                         utils.download(s, a);
                                     }));
-                                })), '\n                                        <a class="a-primary">预览</a>\n                                        <a class="a-success">下载</a>\n                                    ';
+                                })), '\n                                        <button type="button" class="jhs-btn jhs-btn--secondary subtitle-preview-btn">预览</button>\n                                        <button type="button" class="jhs-btn jhs-btn--primary subtitle-download-btn">下载</button>\n                                    ';
                             }
                         } ],
                         locale: "zh-cn",
@@ -171,6 +179,7 @@ class ye extends X {
     async filterOne(e, t) {
         e && e.preventDefault();
         let n = this.getPageInfo();
+        if (!n.carNum) return void show.error("番号不可用，无法屏蔽");
         t ? (await storageManager.saveCar({
             carNum: n.carNum,
             url: n.url,
@@ -206,7 +215,7 @@ class ye extends X {
             const r = String(s.length).length;
             s.forEach(((e, t) => {
                 const n = String(t + 1).padStart(r, " ");
-                o += `<span style="color:#AAA;">${n}. </span>${e}\n`;
+                o += `<span class="jhs-code-line-number">${n}. </span>${e}\n`;
             }));
             const l = o;
             layer.open({
@@ -214,7 +223,7 @@ class ye extends X {
                 title: i,
                 area: utils.getResponsiveArea([ "80%", "80%" ]),
                 scrollbar: !1,
-                content: `<div style="padding:15px 5px;background:#1E1E1E;color:#FFF;font-family:Consolas,Monaco,monospace;white-space:pre-wrap;overflow:auto;height:100%;">${l}</div>`,
+                content: `<div class="jhs-code-viewer">${l}</div>`,
                 btn: [ "下载", "关闭" ],
                 btn1: function(e, n, i) {
                     return utils.download(a, t), !1;

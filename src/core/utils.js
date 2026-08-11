@@ -46,18 +46,20 @@ class J {
         t.src = e), document.documentElement.appendChild(t);
     }
     openPage(e, t, n, a) {
-        if (n = n ?? !0, a && (a.ctrlKey || a.metaKey)) return void GM_openInTab(e.includes("http") ? e : window.location.origin + e, {
+        n = n ?? !0;
+        const destination = new URL(e, window.location.origin), carNum = normalizeCarNum(t), isMovieDetail = /^\/v\/[^/]+/.test(destination.pathname);
+        isMovieDetail && carNum && destination.searchParams.set("jhsCarNum", carNum);
+        if (a && (a.ctrlKey || a.metaKey)) return void GM_openInTab(destination.href, {
             insert: 0
         });
-        let i = e;
-        e.includes("/actors/") || e.includes("/star/") || (i = e.includes("?") ? `${e}&hideNav=1` : `${e}?hideNav=1`),
+        destination.pathname.includes("/actors/") || destination.pathname.includes("/star/") || destination.searchParams.set("hideNav", "1");
         layer.open({
             type: 2,
             title: t,
-            content: i,
+            content: destination.href,
             scrollbar: !1,
             shadeClose: n,
-            area: this.getResponsiveArea([ "85%", "90%" ]),
+            area: this.getDialogArea("workspace"),
             isOutAnim: !1,
             anim: -1,
             success: (e, t) => {
@@ -226,6 +228,18 @@ class J {
     getResponsiveArea(e) {
         const t = window.innerWidth;
         return this.isMobileMode() ? [ "100%", "90%" ] : t >= 1200 ? e || this.getDefaultArea() : [ "70%", "90%" ];
+    }
+    /** 按用途返回具有固定上限和安全边距的弹窗尺寸。 */
+    getDialogArea(e = "md") {
+        const t = {
+            sm: [ 480, 640 ],
+            md: [ 720, 700 ],
+            lg: [ 1040, 760 ],
+            xl: [ 1320, 860 ],
+            workspace: [ 1440, 960 ]
+        }, n = t[e] || t.md, a = window.innerWidth <= 768 ? 16 : "workspace" === e ? 32 : 64,
+        i = Math.max(320, Math.min(n[0], window.innerWidth - a)), s = Math.max(320, Math.min(n[1], window.innerHeight - a));
+        return [ `${i}px`, `${s}px` ];
     }
     getDefaultArea() {
         return [ "85%", "90%" ];
