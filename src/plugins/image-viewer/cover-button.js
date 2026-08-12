@@ -1,4 +1,4 @@
-class Ue extends X {
+class CoverButtonPlugin extends BasePlugin {
     getName() {
         return "CoverButtonPlugin";
     }

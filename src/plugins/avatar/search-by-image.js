@@ -1,4 +1,4 @@
-class Ee extends X {
+class SearchByImagePlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "siteList", [ {
             name: "Google旧版",

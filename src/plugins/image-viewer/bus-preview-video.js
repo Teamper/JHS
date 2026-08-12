@@ -55,7 +55,7 @@ async function decryptCredential(e) {
     return e && e.startsWith(CREDENTIAL_PREFIX) ? await decryptData(e.slice(CREDENTIAL_PREFIX.length)) : e;
 }
 
-class je extends X {
+class BusPreviewVideoPlugin extends BasePlugin {
     getName() {
         return "BusPreviewVideoPlugin";
     }

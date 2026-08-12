@@ -1,4 +1,4 @@
-class fe extends X {
+class NavBarPlugin extends BasePlugin {
     getName() {
         return "NavBarPlugin";
     }

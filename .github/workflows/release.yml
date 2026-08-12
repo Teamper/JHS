@@ -2,10 +2,7 @@ name: Release
 
 on:
   push:
-    branches:
-      - main
-      - dev
-  workflow_dispatch:
+    tags: ["v*"]
 
 permissions:
   contents: write
@@ -14,108 +11,33 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build userscript
-        run: npm run build
-
-      - name: Validate JS syntax
-        run: npm run check
-
-      - name: Validate release metadata
+      - run: npm ci
+      - run: npm run check
+      - name: Validate immutable release identity
         shell: bash
         run: |
-          grep -q '^// @version' JHS.user.js
-          grep -q '^// @downloadURL' JHS.user.js
-          grep -q '^// @updateURL' JHS.user.js
-
-      - name: Read userscript version
-        id: version
-        shell: bash
-        run: |
-          version="$(awk '/^\/\/ @version/{print $3; exit}' JHS.user.js)"
-          if [[ -z "$version" ]]; then
-            echo "Cannot read // @version from JHS.user.js" >&2
-            exit 1
-          fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
-
-      - name: Extract changelog for this version
-        id: changelog
-        if: github.ref_name == 'main'
-        shell: bash
-        run: |
-          version="${{ steps.version.outputs.version }}"
-          body=$(awk -v ver="$version" '
-            /^## \[/ { if (found) exit; if ($0 ~ "\\[" ver "\\]") found=1; next }
-            found { print }
-          ' CHANGELOG.md)
-          if [[ -z "$body" ]]; then
-            body="Release v$version"
-          fi
-          # Write to file to preserve multiline content
-          echo "$body" > /tmp/release-body.md
-
-      - name: Commit built artifacts
-        shell: bash
-        run: |
-          if ! git diff --quiet -- JHS.user.js dist/JHS.user.js; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add JHS.user.js dist/JHS.user.js
-            git commit -m "Build: update JHS.user.js [skip ci]"
-            git push
-          fi
-
-      - name: Prepare dev artifact
-        if: github.ref_name == 'dev'
-        run: cp JHS.user.js JHS-dev.user.js
-
-      - name: Upload dev artifact
-        if: github.ref_name == 'dev'
-        uses: actions/upload-artifact@v4
-        with:
-          name: JHS-dev-${{ steps.version.outputs.version }}
-          path: JHS-dev.user.js
-
-      - name: Create release tag
-        if: github.ref_name == 'main'
-        shell: bash
-        run: |
-          tag="${{ steps.version.outputs.tag }}"
-          if git ls-remote --tags origin "$tag" | grep -q "refs/tags/$tag$"; then
-            echo "Tag $tag already exists"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git tag "$tag"
-          git push origin "$tag"
-
-      - name: Publish GitHub Release
-        if: github.ref_name == 'main'
+          version="$(node -p "require('./package.json').version")"
+          metadata_version="$(awk '/^\/\/ @version/{print $3; exit}' JHS.user.js)"
+          test "${GITHUB_REF_NAME}" = "v${version}"
+          test "${metadata_version}" = "${version}"
+          grep -q "^## \[${version}\]" CHANGELOG.md
+          git diff --exit-code -- JHS.user.js
+      - name: Reject an existing release
         env:
           GH_TOKEN: ${{ github.token }}
+        run: '! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1'
+      - name: Extract release notes
+        shell: bash
         run: |
-          tag="${{ steps.version.outputs.tag }}"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" JHS.user.js --clobber
-          else
-            gh release create "$tag" JHS.user.js \
-              --title "JHS ${{ steps.version.outputs.version }}" \
-              --notes-file /tmp/release-body.md \
-              --latest
-          fi
+          version="${GITHUB_REF_NAME#v}"
+          awk -v ver="$version" '/^## \[/ { if (found) exit; if ($0 ~ "\\[" ver "\\]") found=1; next } found { print }' CHANGELOG.md > /tmp/release-body.md
+          test -s /tmp/release-body.md
+      - name: Create immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" JHS.user.js --verify-tag --title "JHS ${GITHUB_REF_NAME#v}" --notes-file /tmp/release-body.md --latest

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [6.1.1] - 2026-08-12
+
+### Added
+- 新增集中式 hostname 站点识别、JavStore/JavDB 纯解析边界及固定 HTML fixture，覆盖候选顺序、相对 URL、合法空列表与 Cloudflare challenge。
+- 新增 Bug/Feature Issue 表单、PR 模板、贡献指南和私密安全报告政策。
+
+### Changed
+- 构建改为 esbuild 单入口 IIFE bundle，关闭语法、空白和标识符压缩并保留类名；产物约束改为 Sleazy Fork 的严格小于 2 MB 可读代码门禁。
+- 根目录 `JHS.user.js` 改为正式跟踪产物；CI 仅检查 `main`/PR，Release 仅由不可变 `v*` 标签触发并拒绝覆盖已有版本。
+- 核心管理器、工具类和全部插件类恢复语义名称，保持插件公开名称、注册顺序、存储与 DOM 兼容标识不变。
+- 截图缓存统一到 `StorageManager` 的 7 天 TTL 缓存，并在首次请求时清理旧 `jhs_screenShot` 临时缓存。
+
+### Fixed
+- 站点识别不再根据完整 URL 中宽泛的 `bus` 字符串或页面标题判断，避免查询参数和路径造成误注册。
+- 修复“新作品检测”演员卡片与作品列表容器在桌面窄窗口和移动端出现无意义横向滚动及空白区域的问题，同时保留纵向滚动。
+- 修复 123AV 中文版适配：更新 FC2 列表、搜索、分页和详情解析，收紧 Cloudflare 强特征判断，并仅为 123AV 请求设置 cookie partition。
+
 ## [6.1.0] - 2026-08-11
 
 ### Added
@@ -460,7 +477,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: ../../compare/v6.1.0...HEAD
+[Unreleased]: ../../compare/v6.1.1...HEAD
+[6.1.1]: ../../compare/v6.1.0...v6.1.1
 [6.1.0]: ../../compare/v6.0.0...v6.1.0
 [6.0.0]: ../../compare/v5.0.2...v6.0.0
 [5.0.2]: ../../compare/v5.0.1...v5.0.2

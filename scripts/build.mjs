@@ -7,6 +7,7 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const srcPath = join(repoRoot, "src", "main.js");
 const packagePath = join(repoRoot, "package.json");
 const corePaths = [
+  "site-context.js",
   "constants.js",
   "theme.js",
   "ui-primitives.js",
@@ -69,6 +70,9 @@ const pluginPaths = [
   "status/detail-workspace.js",
   "registry.js"
 ].map((file) => join(repoRoot, "src", "plugins", file));
+const parserPaths = [
+  "third-party-parsers.js"
+].map((file) => join(repoRoot, "src", "parsers", file));
 const distDir = join(repoRoot, "dist");
 const distPath = join(distDir, "JHS.user.js");
 const rootPath = join(repoRoot, "JHS.user.js");
@@ -76,6 +80,7 @@ const rootPath = join(repoRoot, "JHS.user.js");
 const source = await readFile(srcPath, "utf8");
 const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
 const coreSources = await Promise.all(corePaths.map((file) => readFile(file, "utf8")));
+const parserSources = await Promise.all(parserPaths.map((file) => readFile(file, "utf8")));
 const pluginSources = await Promise.all(pluginPaths.map((file) => readFile(file, "utf8")));
 const metadataMatch = source.match(/^\/\/ ==UserScript==[\s\S]*?^\/\/ ==\/UserScript==\r?\n?/m);
 
@@ -87,6 +92,7 @@ const metadata = metadataMatch[0].trimEnd();
 const mainEntry = source.slice(metadataMatch[0].length).trimStart();
 const entry = [
   ...coreSources.map((item) => item.trimEnd()),
+  ...parserSources.map((item) => item.trimEnd()),
   ...pluginSources.map((item) => item.trimEnd()),
   mainEntry.trimEnd()
 ].join("\n\n") + "\n";
@@ -96,19 +102,28 @@ if (packageJson.version !== userscriptVersion) {
   throw new Error(`Version mismatch: package.json ${packageJson.version}, userscript ${userscriptVersion}`);
 }
 
-const transformed = await esbuild.transform(entry, {
-  loader: "js",
+const buildResult = await esbuild.build({
+  stdin: {
+    contents: entry,
+    loader: "js",
+    sourcefile: "src/main.js",
+    resolveDir: repoRoot
+  },
+  bundle: true,
+  format: "iife",
   target: "es2020",
   charset: "utf8",
   legalComments: "none",
-  minifySyntax: true,
-  minifyWhitespace: true,
-  minifyIdentifiers: true,
-  sourcefile: "src/main.js",
+  keepNames: true,
+  minifySyntax: false,
+  minifyWhitespace: false,
+  minifyIdentifiers: false,
+  write: false,
   logLevel: "silent"
 });
 
-const output = `${metadata}\n\n${transformed.code.trimStart()}`;
+const readableBundle = buildResult.outputFiles[0].text.trimStart().split(/\r?\n/).map((line) => line.trimEnd()).join("\n");
+const output = `${metadata}\n\n${readableBundle}`;
 const outputBytes = Buffer.byteLength(output, "utf8");
 
 await mkdir(distDir, { recursive: true });

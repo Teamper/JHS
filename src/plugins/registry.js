@@ -1,33 +1,33 @@
 const DEFAULT_JAVDB_PLUGINS = [
-    Ie, Be, le, de, Ce,
-    xe, Ae, fe, pe, ue,
-    Ee, Ue, Oe, Q, $e,
-    He, ye, ce, ae, ke,
-    he, be, Ze, ze,
-    Re, Ve, Se, Xe, pt,
-    et, StatsPlugin, MobileBottomBarPlugin
+    ListPagePlugin, AutoPagePlugin, Fc2Plugin, FoldCategoryPlugin, ListPageButtonPlugin,
+    HistoryPlugin, SettingPlugin, NavBarPlugin, HitShowPlugin, Top250Plugin,
+    SearchByImagePlugin, CoverButtonPlugin, Fc2By123AvPlugin, DetailPagePlugin, ReviewPlugin,
+    RelatedPlugin, DetailPageButtonPlugin, HighlightMagnetPlugin, PreviewVideoPlugin, FilterTitleKeywordPlugin,
+    ActressInfoPlugin, OtherSitePlugin, TranslatePlugin, WantAndWatchedVideosPlugin,
+    MagnetHubPlugin, ScreenShotPlugin, BlacklistPlugin, FavoriteActressesPlugin, NewVideoPlugin,
+    TaskPlugin, StatsPlugin, MobileBottomBarPlugin
 ];
 
 const DEFAULT_JAVBUS_PLUGINS = [
-    Ie, Ce, Ae,
-    xe, Be, Ee, Fe, Ue,
-    Qe, we, ye, $e,
-    ke, ce, je, Re, Ve,
-    be, Ze, Se, et, StatsPlugin, MobileBottomBarPlugin
+    ListPagePlugin, ListPageButtonPlugin, SettingPlugin,
+    HistoryPlugin, AutoPagePlugin, SearchByImagePlugin, BusNavBarPlugin, CoverButtonPlugin,
+    BusImgPlugin, BusDetailPagePlugin, DetailPageButtonPlugin, ReviewPlugin,
+    FilterTitleKeywordPlugin, HighlightMagnetPlugin, BusPreviewVideoPlugin, MagnetHubPlugin, ScreenShotPlugin,
+    OtherSitePlugin, TranslatePlugin, BlacklistPlugin, TaskPlugin, StatsPlugin, MobileBottomBarPlugin
 ];
 
 const DEFAULT_SHARED_PLUGIN_RULES = [
     {
-        shouldRegister: hostname => r || l || hostname.includes("123pan.com"),
+        shouldRegister: context => context.isJavDB || context.isJavBus || context.is123Pan,
         plugins: [ OneTwoThreeOfflinePlugin ]
     },
     {
-        shouldRegister: hostname => hostname.includes("javtrailers"),
-        plugins: [ oe ]
+        shouldRegister: context => context.isJavTrailers,
+        plugins: [ JavTrailersPlugin ]
     },
     {
-        shouldRegister: hostname => hostname.includes("subtitlecat"),
-        plugins: [ re ]
+        shouldRegister: context => context.isSubtitleCat,
+        plugins: [ SubTitleCatPlugin ]
     }
 ];
 
@@ -35,10 +35,11 @@ function registerPluginGroup(pluginManager, plugins) {
     plugins.forEach((pluginClass => pluginManager.register(pluginClass)));
 }
 
-function registerSitePlugins(pluginManager, hostname = window.location.hostname) {
+function registerSitePlugins(pluginManager, locationLike = window.location) {
+    const context = detectSite(locationLike);
     DEFAULT_SHARED_PLUGIN_RULES.forEach((rule => {
-        rule.shouldRegister(hostname) && registerPluginGroup(pluginManager, rule.plugins);
+        rule.shouldRegister(context) && registerPluginGroup(pluginManager, rule.plugins);
     }));
-    r && registerPluginGroup(pluginManager, DEFAULT_JAVDB_PLUGINS);
-    l && registerPluginGroup(pluginManager, DEFAULT_JAVBUS_PLUGINS);
+    context.isJavDB && registerPluginGroup(pluginManager, DEFAULT_JAVDB_PLUGINS);
+    context.isJavBus && registerPluginGroup(pluginManager, DEFAULT_JAVBUS_PLUGINS);
 }

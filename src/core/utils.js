@@ -1,4 +1,4 @@
-class J {
+class Utils {
     constructor() {
         return i(this, "intervalContainer", {}), i(this, "mimeTypes", {
             txt: "text/plain",
@@ -37,7 +37,7 @@ class J {
                 t.textContent = e.replace(/^\s*<style[^>]*>/i, "").replace(/<\/style>?\s*$/i, ""), n.append(t);
             }
             document.head.append(n);
-        })), i(this, "layerIndexStack", []), J.instance || (J.instance = this), J.instance;
+        })), i(this, "layerIndexStack", []), Utils.instance || (Utils.instance = this), Utils.instance;
     }
     importResource(e) {
         let t;

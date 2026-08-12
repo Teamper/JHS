@@ -24,7 +24,7 @@ function _daysSince(e) {
     } catch (t) { return 999; }
 }
 
-class Re extends X {
+class MagnetHubPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "currentEngine", null), i(this, "searchEngines", [ {
             name: "U9A9",

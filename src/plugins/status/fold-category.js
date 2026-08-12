@@ -1,4 +1,4 @@
-class de extends X {
+class FoldCategoryPlugin extends BasePlugin {
     getName() {
         return "FoldCategoryPlugin";
     }

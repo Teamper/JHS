@@ -1,4 +1,4 @@
-class StatsPlugin extends X {
+class StatsPlugin extends BasePlugin {
     getName() { return "StatsPlugin"; }
     async initCss() {
         return `

@@ -1,5 +1,5 @@
 /** 将 JHS 详情 iframe 重组为高密度五区工作区，直接访问宿主详情页时不生效。 */
-class DetailWorkspacePlugin extends X {
+class DetailWorkspacePlugin extends BasePlugin {
     getName() {
         return "DetailWorkspacePlugin";
     }

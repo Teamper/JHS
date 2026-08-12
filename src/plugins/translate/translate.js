@@ -1,4 +1,4 @@
-class Ze extends X {
+class TranslatePlugin extends BasePlugin {
     getName() {
         return "TranslatePlugin";
     }

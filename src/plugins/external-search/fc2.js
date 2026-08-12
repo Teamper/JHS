@@ -1,4 +1,4 @@
-class le extends X {
+class Fc2Plugin extends BasePlugin {
     getName() {
         return "Fc2Plugin";
     }

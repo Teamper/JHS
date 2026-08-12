@@ -1,4 +1,4 @@
-class oe extends X {
+class JavTrailersPlugin extends BasePlugin {
     getName() {
         return "JavTrailersPlugin";
     }

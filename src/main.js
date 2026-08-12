@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      6.1.0
+// @version      6.1.1
 // @author       JHS Contributors
 // @description  JAV Helper Suite：为 JavDB / JavBus 提供浏览、收藏、筛选、资源检索、数据备份与统计增强。
 // @license      MIT
@@ -67,10 +67,10 @@
 // @updateURL https://raw.githubusercontent.com/Teamper/JHS/main/JHS.user.js
 // ==/UserScript==
 
-const ut = layer.close;
+const originalLayerClose = layer.close;
 
 layer.close = function(e) {
-    const t = ut.call(this, e);
+    const t = originalLayerClose.call(this, e);
     return function(e = 10) {
         setTimeout((() => {
             const e = document.querySelectorAll(".layui-layer-shade").length;
@@ -79,24 +79,24 @@ layer.close = function(e) {
     }(), t;
 };
 
-const ft = layer.open;
+const originalLayerOpen = layer.open;
 
 layer.open = function(e) {
     const t = (e = e || {}).success;
     return e.success = function(e, n) {
         "function" == typeof t && t.call(this, e, n), utils.setupEscClose(n);
-    }, ft.call(this, e);
+    }, originalLayerOpen.call(this, e);
 }, utils.importResource("https://cdn.jsdelivr.net/npm/layui-layer@1.0.9/layer.min.css"),
 utils.importResource("https://cdn.jsdelivr.net/npm/toastify-js@1.12.0/src/toastify.min.css"),
 utils.importResource("https://cdn.jsdelivr.net/npm/viewerjs@1.11.1/dist/viewer.min.css"),
 utils.importResource("https://cdn.jsdelivr.net/npm/tabulator-tables@6.3.1/dist/css/tabulator_semanticui.min.css");
 
 /** 插件注册中心: 按站点注册所有插件, 暴露到 unsafeWindow.pluginManager */
-const vt = function() {
-    const e = new Y;
-    unsafeWindow.pluginManager = e;
-    registerSitePlugins(e);
-    return e;
+const pluginManager = function() {
+    const manager = new PluginManager;
+    unsafeWindow.pluginManager = manager;
+    registerSitePlugins(manager);
+    return manager;
 }();
 
 (async function() {
@@ -120,8 +120,8 @@ const vt = function() {
         await storageManager.merge_tow_car_list_table(),
         await storageManager.setDataVersion(CURRENT_DATA_VERSION));
     })();
-    await Promise.all([ vt.processCss(), e, applyTheme() ]),
+    await Promise.all([ pluginManager.processCss(), e, applyTheme() ]),
     r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie) && show.error("请切换到中文语言下才可正常使用本脚本", {
         duration: -1
-    }), await vt.processPlugins();
+    }), await pluginManager.processPlugins();
 })().catch((e => console.error("[JHS] bootstrap failed:", e)));

@@ -1,4 +1,4 @@
-class OneTwoThreeOfflinePlugin extends X {
+class OneTwoThreeOfflinePlugin extends BasePlugin {
     constructor() {
         super(...arguments), this.tokenKey = "jhs_123pan_author_token", this.tokenMetaKey = "jhs_123pan_author_token_meta",
         this.syncTimer = null, this.syncFallbackMs = 3e5, this.BUTTON_COOLDOWN_MS = 1800;

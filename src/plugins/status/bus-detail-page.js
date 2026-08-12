@@ -1,4 +1,4 @@
-class we extends X {
+class BusDetailPagePlugin extends BasePlugin {
     getName() {
         return "BusDetailPagePlugin";
     }

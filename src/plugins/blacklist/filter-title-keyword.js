@@ -1,4 +1,4 @@
-class ke extends X {
+class FilterTitleKeywordPlugin extends BasePlugin {
     getName() {
         return "FilterTitleKeywordPlugin";
     }

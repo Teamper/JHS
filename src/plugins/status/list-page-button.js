@@ -1,4 +1,4 @@
-class Ce extends X {
+class ListPageButtonPlugin extends BasePlugin {
     getName() {
         return "ListPageButtonPlugin";
     }

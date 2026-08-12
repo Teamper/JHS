@@ -1,6 +1,6 @@
 const me = "jhs_appAuthorization";
 
-class ue extends X {
+class Top250Plugin extends BasePlugin {
     constructor() {
         super(), i(this, "has_cnsub", ""), i(this, "$contentBox", $(".section .container")),
         i(this, "movies", []);

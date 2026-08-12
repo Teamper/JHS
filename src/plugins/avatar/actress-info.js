@@ -1,4 +1,4 @@
-class he extends X {
+class ActressInfoPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "apiUrl", "https://ja.wikipedia.org/wiki/");
     }

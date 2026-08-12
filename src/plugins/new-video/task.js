@@ -1,7 +1,7 @@
-class et extends X {
+class TaskPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "singleTaskKey", "checkNewActressActorFilterCar"),
-        i(this, "taskConfig", null), i(this, "storageQueue", new ve), i(this, "lastCheckFavoriteActressTimeKey", "jhs_time_checkFavoriteActress"),
+        i(this, "taskConfig", null), i(this, "storageQueue", new StorageQueue), i(this, "lastCheckFavoriteActressTimeKey", "jhs_time_checkFavoriteActress"),
         i(this, "lastCheckBlacklistTimeKey", "jhs_time_checkBlacklist"), i(this, "lastCheckNewVideoTimeKey", "jhs_time_checkNewVideo");
     }
     getName() {
@@ -147,28 +147,9 @@ class et extends X {
         clog.log(`正在抓取页面: ${e}`), $("#checkNewVideoMsg").text(`正在解析已收藏的演员: ${e}`);
         let nextUrl = null;
         try {
-            const n = await gmHttp.get(e), a = utils.htmlTo$dom(n);
-            a.find("#actors .actor-box a").each(((e, n) => {
-                const a = $(n), i = a.attr("title"), s = a.attr("href");
-                if (i && s) {
-                    const e = i.split(",").map((e => e.trim())).filter((e => e.length > 0)), n = e[0] || "", o = new URL(s, this.javDbUrl).pathname.split("/").filter((e => e.length > 0));
-                    let r = "";
-                    o.length > 0 && (r = o[o.length - 1]);
-                    let l = D;
-                    const c = a.find("img").attr("src"), d = a.find(".info");
-                    d.length && d.text().trim().includes("無碼") && (l = A), t.push({
-                        starId: r,
-                        name: n,
-                        allName: e,
-                        avatar: c,
-                        actressType: l,
-                        lastCheckTime: null,
-                        lastUpdateTime: null
-                    });
-                }
-            }));
-            const i = a.find(".pagination-next").attr("href");
-            if (i) nextUrl = new URL(i, this.javDbUrl).href;
+            const responseText = await gmHttp.get(e), $page = utils.htmlTo$dom(responseText);
+            const parsedPage = parseJavDbActorList($page, this.javDbUrl);
+            t.push(...parsedPage.actors), nextUrl = parsedPage.nextUrl;
         } catch (n) {
             throw clog.error(`抓取 ${e} 时发生错误，停止本轮同步:`, n), n;
         }
@@ -235,10 +216,12 @@ class et extends X {
     async parsePage(e, site, t, n, a, i) {
         const selector = this.getSelector(site);
         site === I && e.find(".avatar-box").length > 0 && e.find(".avatar-box").parent().remove();
-        const pageTitle = e.find("title").text(), hasChallenge = /Just a moment|Attention Required|Cloudflare/i.test(pageTitle) || e.find("[class*='cf-chl'], #challenge-form").length > 0;
-        const listContainer = e.find(site === I ? `${selector.boxSelector}, #waterfall` : selector.boxSelector).first();
-        if (hasChallenge || !listContainer.length) throw clog.error("新作品检测-解析列表失败"), new Error("新作品检测-解析列表失败");
-        const s = e.find(selector.requestDomItemSelector), o = e.find(selector.nextPageSelector).attr("href");
+        const pageState = parseDetailPage(e, {
+            boxSelector: site === I ? `${selector.boxSelector}, #waterfall` : selector.boxSelector,
+            requestDomItemSelector: selector.requestDomItemSelector
+        });
+        if ("valid" !== pageState.state) throw clog.error("新作品检测-解析列表失败"), new Error("新作品检测-解析列表失败");
+        const s = pageState.items, o = e.find(selector.nextPageSelector).attr("href");
         if (0 === s.length) return await storageManager.updateFavoriteActress({
             starId: t,
             lastCheckTime: utils.getNowStr(),

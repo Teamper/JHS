@@ -1,4 +1,4 @@
-class MobileBottomBarPlugin extends X {
+class MobileBottomBarPlugin extends BasePlugin {
     constructor() {
         super(...arguments);
         this._fabGeneration = 0;

@@ -1,6 +1,6 @@
 {
   "name": "jhs-userscript",
-  "version": "6.1.0",
+  "version": "6.1.1",
   "description": "JAV Helper Suite for JavDB and JavBus",
   "private": true,
   "license": "MIT",
@@ -24,6 +24,8 @@
   },
   "devDependencies": {
     "esbuild": "^0.28.0",
+    "jquery": "^3.7.1",
+    "jsdom": "^26.1.0",
     "vitest": "^4.1.8"
   }
 }

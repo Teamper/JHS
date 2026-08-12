@@ -45,7 +45,7 @@ async function backupDataByWebDav(folderName) {
     o = await encryptData(o);
     let r = loading();
     try {
-        const e = new De(n, a, i);
+        const e = new WebDavClient(n, a, i);
         await e.backup(folderName, s, o), show.ok("备份完成");
     } catch (l) {
         console.error(l), show.error(l.toString());
@@ -64,7 +64,7 @@ async function backupListBtnByWebDav(folderName, openFileListDialogFn) {
     if (!i) return void show.error("请填写webDav密码并保存后, 再试此功能");
     let s = loading();
     try {
-        const e = new De(n, a, i), t = await e.getBackupList(folderName);
+        const e = new WebDavClient(n, a, i), t = await e.getBackupList(folderName);
         openFileListDialogFn(t, e, "WebDav");
     } catch (o) {
         console.error(o), show.error(`发生错误: ${o ? o.message : o}`);

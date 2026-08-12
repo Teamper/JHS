@@ -23,7 +23,7 @@ async function listJavaScriptFiles(dir) {
   return files;
 }
 
-const [theme, primitives, build, injection, magnet, settings, utils, detail, commandbar, newVideo, manager, hitShow, translate, settingStyles, main, packageSource, logger, reviews, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, screenshot, otherSite, builtSource] = await Promise.all([
+const [theme, primitives, build, injection, magnet, settings, utils, detail, commandbar, newVideo, manager, hitShow, translate, settingStyles, main, packageSource, logger, reviews, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, screenshot, parsers, otherSite, builtSource] = await Promise.all([
   readFile(join(srcRoot, "core", "theme.js"), "utf8"),
   readFile(join(srcRoot, "core", "ui-primitives.js"), "utf8"),
   readFile(join(repoRoot, "scripts", "build.mjs"), "utf8"),
@@ -53,12 +53,13 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(srcRoot, "core", "constants.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "image-viewer", "preview-video.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "image-viewer", "screenshot.js"), "utf8"),
+  readFile(join(srcRoot, "parsers", "third-party-parsers.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "external-search", "other-site.js"), "utf8"),
   readFile(join(repoRoot, "JHS.user.js"), "utf8")
 ]);
 
-requireMatch(main, /^\/\/ @version\s+6\.1\.0$/m, "userscript version must remain 6.1.0");
-requireMatch(packageSource, /"version"\s*:\s*"6\.1\.0"/, "package version must remain 6.1.0");
+requireMatch(main, /^\/\/ @version\s+6\.1\.1$/m, "userscript version must remain 6.1.1");
+requireMatch(packageSource, /"version"\s*:\s*"6\.1\.1"/, "package version must remain 6.1.1");
 
 for (const token of [
   "--jhs-space-1", "--jhs-space-6", "--jhs-radius-xs", "--jhs-radius-pill",
@@ -77,7 +78,7 @@ for (const state of [":hover", ":focus-visible", ":disabled", "prefers-reduced-m
 for (const token of ["class JhsSelect", "menuitemradio", "OPTGROUP", "ArrowDown", "ArrowUp", "Home", "End", "Enter", "Escape", "Tab", "setValue", "setVisible", "refresh"])
   requireMatch(primitives, new RegExp(token), `JhsSelect missing ${token}`);
 requireMatch(primitives, /\.jhs-segmented__item[^}]*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*center[^}]*justify-content:\s*center[^}]*line-height:\s*1/, "segmented items must be centered on both axes");
-requireMatch(theme, /\.layui-layer-close[\s\S]*::before[\s\S]*::after/, "layer close control must draw its own themed X");
+requireMatch(theme, /\.layui-layer-close[\s\S]*::before[\s\S]*::after/, "layer close control must draw its own themed BasePlugin");
 
 const themeIndex = build.indexOf('"theme.js"');
 const primitivesIndex = build.indexOf('"ui-primitives.js"');
@@ -175,6 +176,11 @@ forbidMatch(injection, /scale\(1\.04\)|\.masonry \.item:hover/, "JavBus cover ho
 requireMatch(magnet, /class="magnet-copy"[\s\S]*copy-btn[\s\S]*one23-offline-btn/, "resource row must directly contain copy and 123 offline buttons");
 forbidMatch(magnet, /magnet-(?:more|overflow)|more-menu/, "resource row must not hide actions in a more menu");
 requireMatch(newVideo, /repeat\(auto-fit,minmax\(min\(100%,260px\),1fr\)\)/, "new video cards must use the adaptive 260px grid");
+requireMatch(newVideo, /\.newVideoToolBox\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0[^}]*box-sizing:\s*border-box/, "new video workspace must contain its own width");
+requireMatch(newVideo, /#actress-card-container\s*\{[^}]*min-width:\s*0[^}]*box-sizing:\s*border-box[^}]*overflow-x:\s*hidden[^}]*overflow-y:\s*auto/, "actress card container must prevent horizontal overflow without disabling vertical scrolling");
+requireMatch(newVideo, /#new-video-list-container\s*\{[^}]*min-width:\s*0[^}]*overflow-x:\s*hidden[^}]*overflow-y:\s*auto/, "new video list container must prevent horizontal overflow without disabling vertical scrolling");
+requireMatch(newVideo, /\.jhs-new-video-grid\s*\{[^}]*repeat\(auto-fill,minmax\(min\(100%,260px\),1fr\)\)[^}]*width:\s*100%[^}]*min-width:\s*0[^}]*box-sizing:\s*border-box/, "new video list grid must fit narrow containers");
+forbidMatch(newVideo, /\.layui-layer[^}]*overflow-x\s*:\s*hidden/, "new video overflow fixes must not mask the issue at the layui layer");
 requireMatch(newVideo, /actress-card-avatar[\s\S]{0,180}border-radius:\s*50%/, "new video avatars must use a defined round radius");
 requireMatch(newVideo, />重新检测</, "new video card must keep the text primary action");
 requireMatch(newVideo, />重试</, "new video load failure must expose a retry action");
@@ -197,11 +203,11 @@ requireMatch(previewVideo, /跳过 DMM 解析：番号不可用/, "DMM invalid-n
 requireMatch(screenshot, /async getScreenshot\(e\)\s*\{\s*e = normalizeCarNum\(e\)/, "screenshots must validate carNum first");
 requireMatch(screenshot, /无法获取番号，缩略图未加载/, "screenshot invalid-number fallback is missing");
 requireMatch(screenshot, /javstore\.net\/search\?q=\$\{encodeURIComponent\(e\)\}/, "JavStore must use its query search endpoint");
-requireMatch(screenshot, /a\[href\$=["']-pn\.html["']\][\s\S]{0,180}includes\(e\.toUpperCase\(\)\)[\s\S]{0,100}\.map\([\s\S]{0,80}\.get\(\)/,
+requireMatch(parsers, /a\[href\$=["']-pn\.html["']\][\s\S]{0,240}includes\(normalizedCarNum\.toUpperCase\(\)\)[\s\S]{0,180}\.map\([\s\S]{0,120}\.get\(\)/,
   "JavStore must preserve all matching -pn.html results in source order");
-requireMatch(screenshot, /for \(const e of i\)[\s\S]*new URL\(e, "https:\/\/javstore\.net"\)\.href/, "JavStore detail URLs must be checked sequentially and made absolute");
-requireMatch(screenshot, /new URL\(a, t\)\.href[\s\S]{0,100}replace\("\.th", ""\)/, "JavStore preview URLs must be absolute and retain .th compatibility");
-requireMatch(screenshot, /"CLICK HERE!" === \$\(t\)\.text\(\)\.trim\(\)/, "JavStore detail parsing must retain the CLICK HERE! link contract");
+requireMatch(screenshot, /for \(const e of i\)[\s\S]*gmHttp\.get\(t/, "JavStore detail URLs must be checked sequentially");
+requireMatch(parsers, /new URL\(previewHref, detailUrl\)\.href\.replace\("\.th", ""\)/, "JavStore preview URLs must be absolute and retain .th compatibility");
+requireMatch(parsers, /"CLICK HERE!" === \$\(element\)\.text\(\)\.trim\(\)/, "JavStore detail parsing must retain the CLICK HERE! link contract");
 requireMatch(screenshot, /详情页没有 CLICK HERE![\s\S]{0,80}continue/, "JavStore must continue after a candidate without CLICK HERE!");
 forbidMatch(screenshot, /javstore\.net\/search\/|img\[src\*=['"]_s\.jpg/, "legacy JavStore search or detail fallback must not return");
 requireMatch(otherSite, /跳过第三方站点解析：番号不可用/, "external sites must fail fast without a car number");
@@ -211,7 +217,7 @@ for (const field of ["success", "parseFailed", "networkFailed", "skippedStopped"
   requireMatch(task, new RegExp(field), `new video result missing ${field}`);
 requireMatch(task, /parsePage\(e, site,/, "new video parsing must receive an explicit site");
 forbidMatch(task, /includes\(["']javdb["']\)/, "new video parsing must not infer the site from HTML text");
-requireMatch(task, /!listContainer\.length[\s\S]{0,120}throw/, "missing movie containers must fail parsing");
+requireMatch(task, /"valid" !== pageState\.state[\s\S]{0,120}throw/, "missing movie containers must fail parsing");
 requireMatch(task, /0 === s\.length[\s\S]{0,220}newVideoList:\s*\[\]/, "valid empty movie containers must persist an empty result");
 requireMatch(storageQueue, /return this\.queue = task\.catch[\s\S]{0,160}, task/, "storage queue must reject callers and recover its internal chain");
 forbidMatch(highlightMagnet, /#enable-magnets-filter[^\n]{0,100}(?:hide\(|addClass\(["']do-hide)/, "magnet filtering must never hide its toolbar entry");

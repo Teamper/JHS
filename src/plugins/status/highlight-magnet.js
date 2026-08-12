@@ -1,4 +1,4 @@
-class ce extends X {
+class HighlightMagnetPlugin extends BasePlugin {
     async initCss() {
         return `<style>.jhs-magnet-score{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:600;vertical-align:middle;cursor:help}</style>`;
     }

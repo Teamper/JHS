@@ -1,15 +1,19 @@
-class Oe extends X {
+const AV123_REQUEST_OPTIONS = Object.freeze({ cookiePartitionTopLevelSite: "https://123av.com" });
+
+class Fc2By123AvPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "$contentBox", $(".section .container")), i(this, "urlParams", new URLSearchParams(window.location.search)),
-        i(this, "sortVal", this.urlParams.get("sort") || "release_date"), i(this, "currentPage", this.urlParams.get("page") ? parseInt(this.urlParams.get("page")) : 1),
+        i(this, "currentPage", this.urlParams.get("page") ? parseInt(this.urlParams.get("page")) : 1),
         i(this, "maxPage", null), i(this, "keyword", this.urlParams.get("keyword") || null);
     }
     getName() {
         return "Fc2By123AvPlugin";
     }
     async getBaseUrl() {
-        const e = this.getBean("OtherSitePlugin");
-        return await e.getAv123Url() + "/ja";
+        return await this.getBean("OtherSitePlugin").getAv123Url();
+    }
+    request123Av(e, requestOptions = {}) {
+        return gmHttp.get(e, {}, {}, !1, { ...AV123_REQUEST_OPTIONS, ...requestOptions });
     }
     handle() {
         $("#navbar-menu-hero > div > div:nth-child(1) > div > a:nth-child(4)").after('<a class="navbar-item" href="/advanced_search?type=100&released_start=2099-09">123Av-Fc2</a>'),
@@ -24,18 +28,12 @@ class Oe extends X {
             e && (this.keyword = e, utils.setHrefParam("keyword", e), await this.handleQuery());
         })), $("#clear-123av-btn").on("click", (async () => {
             $("#search-123av-keyword").val(""), this.keyword = "", utils.setHrefParam("keyword", ""),
-            $(".page-box").show(), $(".tool-box").show(), await this.handleQuery();
+            $(".page-box").show(), await this.handleQuery();
         })), $(".empty-message").remove(), $("#foldCategoryBtn").remove(), $(".section .container .box").remove(),
-        $("#sort-toggle-btn").remove(), this.$contentBox.append('<div class="tool-box jhs-layout-d2c171b1"></div>'),
+        $("#sort-toggle-btn").remove(),
         this.$contentBox.append('<div class="movie-list h cols-4 vcols-8 jhs-layout-d2c171b1"></div>'),
         this.$contentBox.append('<div class="page-box"></div>');
-        $(".tool-box").append('\n            <div class="button-group">\n                <div class="buttons has-addons" id="conditionBox">\n                    <button type="button" class="jhs-btn jhs-btn--secondary jhs-layout-186f17ef" data-sort="release_date">发布日期</button>\n                    <button type="button" class="jhs-btn jhs-btn--secondary jhs-layout-186f17ef" data-sort="recent_update">最近更新</button>\n                    <button type="button" class="jhs-btn jhs-btn--secondary jhs-layout-186f17ef" data-sort="trending">热门</button>\n                    <button type="button" class="jhs-btn jhs-btn--secondary jhs-layout-186f17ef" data-sort="most_viewed_today">今天最多观看</button>\n                    <button type="button" class="jhs-btn jhs-btn--secondary jhs-layout-186f17ef" data-sort="most_viewed_week">本周最多观看</button>\n                    <button type="button" class="jhs-btn jhs-btn--secondary jhs-layout-186f17ef" data-sort="most_viewed_month">本月最多观看</button>\n                    <button type="button" class="jhs-btn jhs-btn--secondary jhs-layout-186f17ef" data-sort="most_viewed">最多观看</button>\n                    <button type="button" class="jhs-btn jhs-btn--secondary jhs-layout-186f17ef" data-sort="most_favourited">最受欢迎</button>\n                </div>\n            </div>\n        '),
-        $(`#conditionBox button[data-sort="${this.sortVal}"]`).addClass("is-info"), utils.setHrefParam("sort", this.sortVal),
-        utils.setHrefParam("page", this.currentPage), $("#conditionBox").on("click", "button[data-sort]", (e => {
-            let t = $(e.target);
-            this.sortVal = t.data("sort"), utils.setHrefParam("sort", this.sortVal), t.siblings().removeClass("is-info"),
-            t.addClass("is-info"), this.handleQuery();
-        }));
+        utils.setHrefParam("page", this.currentPage);
         $(".page-box").append('\n            <nav class="pagination">\n                <button type="button" class="jhs-btn pagination-previous">上一页</button>\n                <ul class="pagination-list"></ul>\n                <button type="button" class="jhs-btn pagination-next">下一页</button>\n            </nav>\n        '),
         $(document).on("click", ".pagination-link", (e => {
             e.preventDefault(), this.currentPage = parseInt($(e.target).data("page")), utils.setHrefParam("page", this.currentPage),
@@ -64,39 +62,22 @@ class Oe extends X {
     async handleQuery() {
         let e = loading();
         try {
-            let e = [];
-            e = 1 === this.currentPage ? [ 1, 2 ] : [ 2 * this.currentPage - 1, 2 * this.currentPage ],
-            this.keyword && (e = [ 1 ], $(".page-box").hide(), $(".tool-box").hide());
-            const t = await this.getBaseUrl(), n = e.map((e => {
-                let n = `${t}/tags/fc2?sort=${this.sortVal}&page=${e}`;
-                return this.keyword && (n = `${t}/search?keyword=${this.keyword}`), gmHttp.get(n);
-            })), a = await Promise.all(n);
-            let i = [];
-            for (const o of a) {
-                let e = $(o);
-                if (e.find(".box-item").each(((e, n) => {
-                    const a = $(n), s = a.find("img").attr("data-src");
-                    let o = a.find("img").attr("title");
-                    const r = a.find(".detail a"), l = r.attr("href"), c = t + (l.startsWith("/") ? l : "/" + l), d = r.text().trim().replace(o + " - ", "");
-                    o = o.replace("FC2-PPV", "FC2"), i.push({
-                        imgSrc: s,
-                        carNum: o,
-                        href: c,
-                        title: d
-                    });
-                })), !this.maxPage) {
-                    let t, n = e.find(".page-item:not(.disabled)").last();
-                    if (n.find("a.page-link").length) {
-                        let e = n.find("a.page-link").attr("href");
-                        t = parseInt(e.split("page=")[1]);
-                    } else t = parseInt(n.find("span.page-link").text());
-                    this.maxPage = Math.ceil(t / 2), this.renderPagination();
-                }
+            let e = [ 2 * this.currentPage - 1, 2 * this.currentPage ];
+            this.keyword && (e = [ 1 ], $(".page-box").hide());
+            const t = await this.getBaseUrl();
+            const requests = e.map((sourcePage => this.request123Av(this.keyword
+                ? `${t}/cn/search?keyword=${encodeURIComponent(this.keyword)}`
+                : `${t}/cn/makers/fc2?page=${sourcePage}`)));
+            const pages = (await Promise.all(requests)).map((html => utils.htmlTo$dom(html)));
+            const i = merge123AvCards(pages.map(($page => parse123AvCards($page, t))));
+            if (!this.keyword && !this.maxPage && pages.length) {
+                const sourceMaxPage = parse123AvSourceMaxPage(pages[0], t);
+                sourceMaxPage && (this.maxPage = Math.ceil(sourceMaxPage / 2), this.renderPagination());
             }
             if (0 === i.length) {
                 clog.log(i), show.error("无结果");
-                let e = `${t}/dm4/tags/fc2?sort=${this.sortVal}`;
-                this.keyword && (e = `${t}/search?keyword=${this.keyword}`), console.error("获取数据失败!", e);
+                const e = this.keyword ? `${t}/cn/search?keyword=${encodeURIComponent(this.keyword)}` : `${t}/cn/makers/fc2`;
+                console.error("获取数据失败!", e);
             }
             let s = this.markDataListHtml(i);
             $(".movie-list").html(s), await utils.smoothScrollToTop();
@@ -169,7 +150,7 @@ class Oe extends X {
     async loadData(e, t) {
         let n = loading();
         try {
-            const {id: n, publishDate: a, title: i, moviePoster: s} = await this.get123AvVideoInfo(t);
+            const {publishDate: a, title: i} = await this.get123AvVideoInfo(t);
             $(".movie-info-container").html(`\n                    <h3 class="movie-title jhs-layout-761d3add"><strong class="current-title">${escapeHtml(i || "无标题")}</strong></h3>\n                    <div class="movie-meta jhs-layout-761d3add">\n                        <span><strong>番号: </strong>${e || "未知"}</span>\n                        <span><strong>年份: </strong>${a || "未知"}</span>\n                        <span>\n                            <strong>站点: </strong>\n                            <a href="https://fc2ppvdb.com/articles/${e.replace("FC2-", "")}" target="_blank">fc2ppvdb</a>\n                            <a href="https://adult.contents.fc2.com/article/${e.replace("FC2-", "")}/" target="_blank" class="jhs-layout-3fed2a7e">fc2电子市场</a>\n                        </span>\n                    </div>\n                    <div class="movie-actors jhs-layout-761d3add">\n                        <div class="actor-list"><strong>主演: </strong></div>\n                    </div>\n                    <div class="movie-seller jhs-layout-761d3add">\n                        <span><strong>販売者: </strong></span>\n                    </div>\n                    <div class="movie-gallery jhs-layout-761d3add">\n                        <strong>剧照: </strong>\n                        <div class="image-list"></div>\n                    </div>\n                    \n                    <div id="data-publishTime" class="jhs-layout-6b99de8b">${a || ""}</div>\n\n                `),
             this.getImgList(e).then(), this.getActressInfo(e).then(), this.getBean("TranslatePlugin").translate(e, !1).then();
         } catch (a) {
@@ -189,13 +170,8 @@ class Oe extends X {
         }));
     }
     async get123AvVideoInfo(e) {
-        const t = await gmHttp.get(e), n = t.match(/v-scope="Movie\({id:\s*(\d+),/), a = n ? n[1] : null, i = utils.htmlTo$dom(t);
-        return {
-            id: a,
-            publishDate: i.find('span:contains("リリース日:")').next("span").text(),
-            title: i.find("h1").text().trim(),
-            moviePoster: i.find("#player").attr("data-poster")
-        };
+        const t = await this.request123Av(e);
+        return parse123AvVideoInfo(utils.htmlTo$dom(t), e);
     }
     async getActressInfo(e) {
         let t = `https://fc2ppvdb.com/articles/${e.replace("FC2-", "")}`;
@@ -240,7 +216,7 @@ class Oe extends X {
     markDataListHtml(e) {
         let t = "";
         return e.forEach((e => {
-            t += `\n                <div class="item">\n                    <a href="${e.href}" class="box" title="${e.title}">\n                        <div class="cover ">\n                            <img loading="lazy" src="${e.imgSrc.replace("/s360", "")}" alt="">\n                        </div>\n                        <div class="video-title"><strong>${e.carNum}</strong> ${e.title}</div>\n                        <div class="score">\n                        </div>\n                        <div class="meta">\n                        </div>\n                        <div class="tags has-addons">\n                        </div>\n                    </button>\n                </div>\n            `;
+            t += `\n                <div class="item">\n                    <a href="${escapeHtml(e.href)}" class="box" title="${escapeHtml(e.title)}">\n                        <div class="cover ">\n                            <img loading="lazy" src="${escapeHtml(e.imgSrc)}" alt="">\n                        </div>\n                        <div class="video-title"><strong>${escapeHtml(e.carNum)}</strong> ${escapeHtml(e.title)}</div>\n                        <div class="score">\n                        </div>\n                        <div class="meta">\n                        </div>\n                        <div class="tags has-addons">\n                        </div>\n                    </a>\n                </div>\n            `;
         })), t;
     }
 }

@@ -1,4 +1,4 @@
-class Ve extends X {
+class ScreenShotPlugin extends BasePlugin {
     getName() {
         return "ScreenShotPlugin";
     }
@@ -24,18 +24,16 @@ class Ve extends X {
     async getScreenshot(e) {
         e = normalizeCarNum(e);
         if (!e) throw clog.warn("跳过缩略图解析：番号不可用"), new Error("缩略图番号不可用");
-        const t = localStorage.getItem("jhs_screenShot") ? JSON.parse(localStorage.getItem("jhs_screenShot")) : {};
-        if (t[e]) return clog.debug("缓存中存在缩略图:", e, t[e]), t[e];
+        localStorage.removeItem("jhs_screenShot");
         let n;
         try {
-            n = await storageManager.cachedRequest(`screenshot:${e}`, 6048e5, (() => Promise.any([ this.getJavStoreScreenShot(e) ])));
+            n = await storageManager.cachedRequest(`screenshot:${e}`, 6048e5, (() => this.getJavStoreScreenShot(e)));
         } catch (i) {
             throw clog.error("获取缩略图资源失败:", n, i), i;
         }
         if (!n) return this.showErrorFallback(e, null), null;
         const a = n.indexOf("https://");
-        return -1 !== a && (n = n.substring(a)), t[e] = n, clog.log("缩略图获取成功:", n), localStorage.setItem("jhs_screenShot", JSON.stringify(t)),
-        n;
+        return -1 !== a && (n = n.substring(a)), clog.log("缩略图获取成功:", n), n;
     }
     async getJavStoreScreenShot(e) {
         const t = `https://javstore.net/search?q=${encodeURIComponent(e)}`;
@@ -43,22 +41,22 @@ class Ve extends X {
         let n = await gmHttp.get(t, {}, {}, !1, {ignoreNotFound: !0});
         if (!n) return clog.debug("JavStore 搜索页未获取:", t), null;
         const a = utils.htmlTo$dom(n);
-        const i = a.find('a[href$="-pn.html"]').filter(((t, n) => $(n).text().trim().toUpperCase().includes(e.toUpperCase()))).map(((e, t) => $(t).attr("href"))).get();
+        const i = parseJavStoreSearch(a, e);
         if (!i.length) return clog.error("JavStore, 查询番号失败:", t), null;
         for (const e of i) {
-            const t = new URL(e, "https://javstore.net").href;
+            const t = e;
             clog.debug("JavStore 候选详情:", t);
             const n = await gmHttp.get(t, {}, {}, !1, {ignoreNotFound: !0});
             if (!n) {
                 clog.debug("JavStore 详情页未获取:", t);
                 continue;
             }
-            let a = utils.htmlTo$dom(n).find("a").filter(((e, t) => "CLICK HERE!" === $(t).text().trim())).first().attr("href");
+            const a = parseJavStorePreview(utils.htmlTo$dom(n), t);
             if (!a) {
                 clog.debug("JavStore 详情页没有 CLICK HERE!:", t);
                 continue;
             }
-            return a = new URL(a, t).href, a = a.replace(".th", ""), clog.debug("JavStore 预览图:", a), a;
+            return clog.debug("JavStore 预览图:", a), a;
         }
         return clog.error("JavStore, 所有候选均无有效预览图:", t), null;
     }

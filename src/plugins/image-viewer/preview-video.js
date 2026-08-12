@@ -7,7 +7,7 @@ const Z = (e, t) => {
     return e[0];
 }, ee = "jhs_dmm_video";
 
-class te {
+class DmmPreviewParser {
     constructor(e, t = !0) {
         this.carNum = e, this.showErrorMessages = t;
     }
@@ -146,9 +146,9 @@ class te {
     }
 }
 
-const ne = async (e, t = !0) => new te(e, t).fetchVideo();
+const ne = async (e, t = !0) => new DmmPreviewParser(e, t).fetchVideo();
 
-class ae extends X {
+class PreviewVideoPlugin extends BasePlugin {
     getName() {
         return "PreviewVideoPlugin";
     }

@@ -110,7 +110,7 @@ async function gt(e) {
     return Array.from(n);
 }
 
-class pt extends X {
+class NewVideoPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", null), i(this, "nvSortBy", "publishTime_desc");
     }
@@ -123,11 +123,11 @@ class pt extends X {
     async initCss() {
         return `
             <style>
-                .newVideoToolBox { display:flex; flex-direction:column; height:100%; min-height:0; overflow:hidden; padding:var(--jhs-space-3); }
+                .newVideoToolBox { display:flex; flex-direction:column; width:100%; height:100%; min-width:0; min-height:0; box-sizing:border-box; overflow:hidden; padding:var(--jhs-space-3); }
                 .jhs-new-video-toolbar { display:flex; align-items:center; justify-content:space-between; gap:var(--jhs-space-3); margin-bottom:var(--jhs-space-3); }
                 .jhs-new-video-toolbar__actions, .jhs-new-video-toolbar__filters { display:flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-2); }
                 .jhs-new-video-toolbar select { min-width:150px; }
-                #actress-card-container { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr)); gap:var(--jhs-space-3); width:100%; max-width:1680px; margin:0 auto; padding:var(--jhs-space-1); overflow-y:auto; }
+                #actress-card-container { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr)); gap:var(--jhs-space-3); width:100%; min-width:0; max-width:1680px; box-sizing:border-box; margin:0 auto; padding:var(--jhs-space-1); overflow-x:hidden; overflow-y:auto; }
                 .actress-card { position:relative; display:flex; flex-direction:column; min-width:0; padding:var(--jhs-space-4); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); }
                 .actress-card.is-paused { background:var(--jhs-surface-2); }
                 .actress-card__badges { display:flex; align-items:center; gap:var(--jhs-space-1); margin-bottom:var(--jhs-space-3); }
@@ -150,9 +150,9 @@ class pt extends X {
                 .card-tag.is-uncensored { color:var(--jhs-status-down); background:var(--jhs-status-down-tint); }
                 .card-tag.is-censored { color:var(--jhs-status-watch); background:var(--jhs-status-watch-tint); }
                 .card-tag.is-unknown { color:var(--jhs-text-muted); background:var(--jhs-surface-2); }
-                #new-video-list-container { display:none; flex:1; min-height:0; overflow-y:auto; }
+                #new-video-list-container { display:none; flex:1; min-width:0; min-height:0; overflow-x:hidden; overflow-y:auto; }
                 #new-video-list-footer { display:none; padding:var(--jhs-space-2) 0; border-top:1px solid var(--jhs-border); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
-                .jhs-new-video-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:var(--jhs-space-3); padding:var(--jhs-space-1); }
+                .jhs-new-video-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr)); gap:var(--jhs-space-3); width:100%; min-width:0; box-sizing:border-box; padding:var(--jhs-space-1); }
                 .nv-card__link { display:block; color:inherit; text-decoration:none; }
                 .nv-card__cover { position:relative; width:100%; overflow:hidden; aspect-ratio:3/2; border-radius:var(--jhs-radius-sm); background:var(--jhs-surface-2); }
                 .nv-cover-img { width:100%; height:100%; object-fit:cover; cursor:zoom-in; }

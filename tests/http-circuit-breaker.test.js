@@ -259,7 +259,7 @@ describe('Circuit Breaker', () => {
             const status = cbm.getCircuitBreakerStatus();
             expect(status['test.com']).toBeDefined();
             expect(status['test.com'].failCount).toBe(1);
-            // Should be a copy, not a reference
+            // Should OtherSitePlugin a copy, not a reference
             status['test.com'].failCount = 999;
             expect(cbm._circuitBreakers.get('test.com').failCount).toBe(1);
         });

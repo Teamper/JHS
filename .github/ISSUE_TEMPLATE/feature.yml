@@ -1,0 +1,16 @@
+name: 功能建议
+description: 提议兼容现有定位的新能力或改进
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: 使用场景, description: 请说明当前遇到的问题，而不只是描述按钮或实现。 }
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes: { label: 建议方案 }
+    validations: { required: true }
+  - type: textarea
+    id: compatibility
+    attributes: { label: 兼容性影响, description: 涉及的站点、页面类型、设置或数据格式。 }

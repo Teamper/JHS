@@ -1,4 +1,4 @@
-class pe extends X {
+class HitShowPlugin extends BasePlugin {
     constructor() {
         super(), i(this, "$contentBox", $(".section .container"));
     }

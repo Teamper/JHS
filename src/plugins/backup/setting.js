@@ -1,4 +1,4 @@
-class Ae extends X {
+class SettingPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "folderName", "JHS-数据备份"), i(this, "cacheItems", [ {
             key: "jhs_dmm_video",

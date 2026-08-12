@@ -77,7 +77,7 @@ const _e = async (e, t = "ja", n = "zh-CN") => {
     }
 };
 
-class Ie extends X {
+class ListPagePlugin extends BasePlugin {
     async initCss() {
         return `<style>.status-tag{position:absolute;z-index:10;margin-right:5px;padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}</style>`;
     }

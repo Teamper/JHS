@@ -1,4 +1,4 @@
-unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp = new class {
+unsafeWindow.utils = window.utils = new Utils, unsafeWindow.gmHttp = window.gmHttp = new class {
     constructor() {
         this._circuitBreakers = new Map();
         this._domainStats = new Map();
@@ -6,10 +6,15 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
     _getDomain(e) {
         try { return new URL(e).hostname; } catch { return "unknown"; }
     }
-    _isCloudflareChallenge(e) {
+    _isCloudflareChallenge(e, status = 0) {
         if ("string" != typeof e || !e) return !1;
-        const t = e.toLowerCase();
-        return t.includes("just a moment") || t.includes("cf-chl-") || t.includes("challenge-platform");
+        const text = e.toLowerCase();
+        const hasChallengeTitle = /<title[^>]*>\s*just a moment(?:\.\.\.)?\s*<\/title>/i.test(e);
+        const hasChallengeForm = /id=["']challenge-form["']/i.test(e);
+        const hasCfChl = text.includes("cf-chl-") || text.includes("cf_chl_opt");
+        const hasChallengePlatform = text.includes("/cdn-cgi/challenge-platform/") || text.includes("challenge-platform");
+        const blockedStatus = 403 === status || 429 === status || 503 === status;
+        return hasChallengeTitle || hasChallengeForm && (hasCfChl || hasChallengePlatform) || blockedStatus && hasCfChl && hasChallengePlatform;
     }
     _checkCircuitBreaker(e) {
         const t = this._circuitBreakers.get(e);
@@ -98,13 +103,17 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
                 headers: i,
                 timeout: m,
                 data: n,
+                ...(requestOptions.cookiePartitionTopLevelSite ? {
+                    cookiePartition: { topLevelSite: requestOptions.cookiePartitionTopLevelSite }
+                } : {}),
                 onload: e => {
                     try {
                         if (404 === e.status && requestOptions.ignoreNotFound) return void a(null);
-                        if (this._isCloudflareChallenge(e.responseText)) {
+                        if (this._isCloudflareChallenge(e.responseText, e.status)) {
                             this._recordFailure(o);
-                            const n = new Error(`Cloudflare challenge blocked: ${o}`);
-                            return n._cfBlocked = !0, n.status = e.status, void r(n);
+                            const n = new Error(`Cloudflare challenge blocked: ${t}`);
+                            return n._cfBlocked = !0, n.status = e.status, n.requestUrl = t, n.finalUrl = e.finalUrl,
+                            n.cfDiagnostics = { status: e.status, requestUrl: t, finalUrl: e.finalUrl, contentLength: e.responseText?.length || 0 }, void r(n);
                         }
                         if (s && e.finalUrl !== t && r("请求被重定向了,URL是:" + e.finalUrl), e.status >= 200 && e.status < 300) {
                             this._recordSuccess(o);
@@ -142,4 +151,4 @@ unsafeWindow.utils = window.utils = new J, unsafeWindow.gmHttp = window.gmHttp =
         }));
         }, r);
     }
-}, unsafeWindow.storageManager = window.storageManager = new z;
+}, unsafeWindow.storageManager = window.storageManager = new StorageManager;

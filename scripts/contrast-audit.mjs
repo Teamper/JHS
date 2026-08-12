@@ -30,9 +30,9 @@ function ratio(a, b) {
 
 function extractTokens(source) {
   const tokens = {};
-  const re = /--jhs-([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})/g;
+  const tokenPattern = /--jhs-([a-z0-9-]+):\s*(#[0-9a-fA-F]{6})/g;
   let m;
-  while ((m = re.exec(source))) tokens[m[1]] = m[2].toLowerCase();
+  while ((m = tokenPattern.exec(source))) tokens[m[1]] = m[2].toLowerCase();
   return tokens;
 }
 

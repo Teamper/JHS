@@ -9,7 +9,7 @@ JAV 浏览、收藏与信息增强脚本
 [![Version](https://img.shields.io/github/v/release/Teamper/JHS?label=version)](https://github.com/Teamper/JHS/releases/latest)
 [![Userscript](https://img.shields.io/badge/Tampermonkey-userscript-f59e0b)](https://github.com/Teamper/JHS/releases/latest/download/JHS.user.js)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-43853d)](package.json)
-[![License](https://img.shields.io/badge/license-MIT-22c55e)](src/main.js)
+[![License](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
 
 [安装正式版](https://github.com/Teamper/JHS/releases/latest/download/JHS.user.js) · [查看更新记录](CHANGELOG.md) · [反馈问题](https://github.com/Teamper/JHS/issues)
 
@@ -89,6 +89,7 @@ JHS 将作品状态、演员收藏、新作追踪、外部检索、媒体预览�
 src/
 ├─ main.js                 # UserScript 元数据与启动入口
 ├─ core/                   # 存储、HTTP、事件总线、日志和插件框架
+├─ parsers/                # 可独立测试的第三方页面解析边界
 └─ plugins/                # 按业务域拆分的功能插件
    ├─ status/              # 状态、导航、列表与详情页增强
    ├─ blacklist/           # 黑名单与关键词过滤
@@ -117,7 +118,7 @@ src/main.js
       └─ 在浏览器空闲阶段执行后台任务
 ```
 
-插件继承 `BasePlugin`，通过 `getBean("PluginName")` 获取其他插件实例；持久化数据统一由 `StorageManager` 管理。
+插件继承 `BasePlugin`，通过 `getBean("PluginName")` 获取其他插件实例；持久化数据统一由 `StorageManager` 管理。构建器以 `src/main.js` 为唯一发布入口，将 core、parser 与 plugin 模块按显式清单送入 esbuild，输出保留空白和语义类名的 IIFE UserScript。
 
 ## 本地开发
 
@@ -149,7 +150,7 @@ npm run check
 - 源文件 JavaScript 语法检查；
 - 39 个插件、20 个功能范围和 21 项稳定发布检查；
 - 生成产物语法检查；
-- 用户脚本 620 KiB 体积上限。
+- Sleazy Fork 可读代码门禁：构建产物不压缩、不混淆并严格小于 2 MB。
 
 可在浏览器控制台查看启动诊断：
 
@@ -162,8 +163,8 @@ pluginManager.getTimings().sort((a, b) => b.elapsed - a.elapsed)
 
 ## 发布方式
 
-- `main`：正式发布分支。CI 构建产物、创建版本标签并发布 GitHub Release。
-- `dev`：预览分支。CI 构建并上传 `JHS-dev.user.js` artifact。
+- `main`：唯一开发与正式发布分支；每次 push / PR 只运行检查并验证根目录构建产物同步。
+- 正式发布由人工创建 `vX.Y.Z` 标签触发；标签、package、UserScript metadata 和 CHANGELOG 必须一致，已有版本及资产禁止覆盖。
 
 正式版入口始终指向 [latest release](https://github.com/Teamper/JHS/releases/latest)，历史变化见 [CHANGELOG.md](CHANGELOG.md)。
 

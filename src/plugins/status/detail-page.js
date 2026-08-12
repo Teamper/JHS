@@ -1,4 +1,4 @@
-class Q extends X {
+class DetailPagePlugin extends BasePlugin {
     getName() {
         return "DetailPagePlugin";
     }

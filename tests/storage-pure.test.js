@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-// --- Functions under test (extracted from src/core/storage.js class z) ---
+// --- Functions under test (extracted from src/core/storage.js class StorageManager) ---
 
 function stableStringify(e) {
     if (null === e || "object" != typeof e) return JSON.stringify(e);

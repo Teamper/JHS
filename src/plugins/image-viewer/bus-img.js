@@ -1,4 +1,4 @@
-class Qe extends X {
+class BusImgPlugin extends BasePlugin {
     getName() {
         return "BusImgPlugin";
     }

@@ -1,4 +1,4 @@
-class He extends X {
+class RelatedPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "floorIndex", 1), i(this, "isInit", !1), i(this, "$panel", null);
     }

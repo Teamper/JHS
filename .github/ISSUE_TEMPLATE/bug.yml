@@ -1,0 +1,31 @@
+name: Bug 报告
+description: 报告可复现的 JHS 功能异常
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes: { label: JHS 版本, placeholder: "例如 6.1.1" }
+    validations: { required: true }
+  - type: input
+    id: environment
+    attributes: { label: 浏览器与脚本管理器, placeholder: "Chrome 版本 / Tampermonkey 版本" }
+    validations: { required: true }
+  - type: dropdown
+    id: site
+    attributes: { label: 目标站点, options: [JavDB, JavBus 或镜像, 123 云盘, JavTrailers, SubtitleCat, 其他外部资源站] }
+    validations: { required: true }
+  - type: textarea
+    id: reproduce
+    attributes: { label: 页面类型与复现步骤, description: 请避免提交账号、Cookie、Token 或敏感页面完整 URL。 }
+    validations: { required: true }
+  - type: textarea
+    id: logs
+    attributes: { label: 控制台日志, render: shell }
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已确认问题在最新版仍可复现，且日志中不包含凭据或个人信息。
+          required: true

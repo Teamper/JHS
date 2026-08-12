@@ -20,7 +20,7 @@ function loadPluginClasses() {
     clog: { error: vi.fn() },
     i: (target, key, value) => (target[key] = value)
   });
-  const source = `${readFileSync(join(repoRoot, "src/core/plugin-manager.js"), "utf8")}\nglobalThis.TestPluginManager = Y; globalThis.TestBasePlugin = X;`;
+  const source = `${readFileSync(join(repoRoot, "src/core/plugin-manager.js"), "utf8")}\nglobalThis.TestPluginManager = PluginManager; globalThis.TestBasePlugin = BasePlugin;`;
   vm.runInContext(source, context);
   return { PluginManager: context.TestPluginManager, BasePlugin: context.TestBasePlugin, idleCallbacks, insertStyle };
 }
@@ -34,7 +34,7 @@ function loadStorageManager(forage) {
     },
     i: (target, key, value) => (target[key] = value)
   });
-  const source = `${readFileSync(join(repoRoot, "src/core/storage.js"), "utf8")}\nglobalThis.TestStorageManager = z;`;
+  const source = `${readFileSync(join(repoRoot, "src/core/storage.js"), "utf8")}\nglobalThis.TestStorageManager = StorageManager;`;
   vm.runInContext(source, context);
   return new context.TestStorageManager();
 }
@@ -46,25 +46,28 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
     URL,
     gmHttp,
     i: (target, key, value) => (target[key] = value),
-    X: class {},
+    BasePlugin: class {},
     T: "javdb",
     I: "javbus",
-    ve: class { constructor() { this.queue = Promise.resolve(); } },
+    D: "censored",
+    A: "uncensored",
+    StorageQueue: class { constructor() { this.queue = Promise.resolve(); } },
     clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
     show: { info: vi.fn(), error: vi.fn() },
     utils: { ...defaultUtils, ...overrides.utils },
     storageManager: overrides.storageManager || {},
     $: () => ({ text: vi.fn() })
   });
-  const source = `${readFileSync(join(repoRoot, "src/plugins/new-video/task.js"), "utf8")}\nglobalThis.TestTaskPlugin = et;`;
+  const parsers = readFileSync(join(repoRoot, "src/parsers/third-party-parsers.js"), "utf8");
+  const source = `${parsers}\n${readFileSync(join(repoRoot, "src/plugins/new-video/task.js"), "utf8")}\nglobalThis.TestTaskPlugin = TaskPlugin;`;
   vm.runInContext(source, context);
   return new context.TestTaskPlugin();
 }
 
 function loadStorageQueue() {
   const context = vm.createContext({ clog: { error: vi.fn() } });
-  const queueSource = readFileSync(join(repoRoot, "src/plugins/external-search/other-site.js"), "utf8").split("class be")[0];
-  vm.runInContext(`${queueSource}\nglobalThis.TestStorageQueue = ve;`, context);
+  const queueSource = readFileSync(join(repoRoot, "src/plugins/external-search/other-site.js"), "utf8").split("class OtherSitePlugin")[0];
+  vm.runInContext(`${queueSource}\nglobalThis.TestStorageQueue = StorageQueue;`, context);
   return { Queue: context.TestStorageQueue, error: context.clog.error };
 }
 
@@ -88,8 +91,8 @@ function loadHttpManager(requestHandler) {
     console,
     URL,
     URLSearchParams,
-    J: TestUtils,
-    z: TestStorage,
+    Utils: TestUtils,
+    StorageManager: TestStorage,
     clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
     GM_xmlhttpRequest: requestHandler
   };

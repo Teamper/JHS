@@ -10,7 +10,7 @@ e = new WeakSet, t = async function(e, t, n) {
     return await this._setItemAndInvalidate(t, a), a;
 };
 
-let z = class n {
+class StorageManager {
     constructor() {
         var t, s, o;
         if (t = this, (s = e).has(t) ? a("Cannot add the same private member more than once") : s instanceof WeakSet ? s.add(t) : s.set(t, o),
@@ -31,8 +31,8 @@ let z = class n {
         i(this, "cacheBlacklistMap", null),
         i(this, "_pendingReads", new Map()), i(this, "_cacheGenerations", new Map()),
         i(this, "_cacheStats", { hits: 0, misses: 0 }),
-        n.instance) throw new Error("StorageManager已被实例化过了!");
-        n.instance = this;
+        StorageManager.instance) throw new Error("StorageManager已被实例化过了!");
+        StorageManager.instance = this;
     }
     async getDataVersion() { return await this.forage.getItem("data_version") || 0; }
     async setDataVersion(e) { await this.forage.setItem("data_version", e); }
@@ -760,4 +760,4 @@ let z = class n {
         }
         return { status: 0 === i ? "unchanged" : "modified", changes: a };
     }
-};
+}

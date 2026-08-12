@@ -1,4 +1,4 @@
-class Xe extends X {
+class FavoriteActressesPlugin extends BasePlugin {
     getName() {
         return "FavoriteActressesPlugin";
     }

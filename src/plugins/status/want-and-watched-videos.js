@@ -1,4 +1,4 @@
-class ze extends X {
+class WantAndWatchedVideosPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "type", null);
     }

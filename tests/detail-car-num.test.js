@@ -54,7 +54,7 @@ function getPageInfo({ url, javdb = false, javbus = false, copyCarNum = null, fa
         i: (target, key, value) => (target[key] = value)
     });
     const source = readFileSync(join(repoRoot, "src/core/plugin-manager.js"), "utf8");
-    vm.runInContext(`${source}; globalThis.TestBasePlugin = X;`, context);
+    vm.runInContext(`${source}; globalThis.TestBasePlugin = BasePlugin;`, context);
     return context.TestBasePlugin.prototype.getPageInfo.call({});
 }
 
@@ -70,7 +70,7 @@ function loadUtils(url = "https://javdb.example/search?q=ABF-142") {
         i: (target, key, value) => (target[key] = value)
     });
     const source = readFileSync(join(repoRoot, "src/core/utils.js"), "utf8");
-    vm.runInContext(`${source}; globalThis.TestUtils = J;`, context);
+    vm.runInContext(`${source}; globalThis.TestUtils = Utils;`, context);
     return { utils: new context.TestUtils(), layer, openTab };
 }
 
@@ -87,7 +87,7 @@ function loadDmmParser() {
         show: { error: vi.fn() }
     });
     const source = readFileSync(join(repoRoot, "src/plugins/image-viewer/preview-video.js"), "utf8"), start = source.indexOf("const Z ="), end = source.indexOf("const ne =", start);
-    vm.runInContext(`${source.slice(start, end)}; globalThis.TestDmmParser = te;`, context);
+    vm.runInContext(`${source.slice(start, end)}; globalThis.TestDmmParser = DmmPreviewParser;`, context);
     return { Parser: context.TestDmmParser, warn, error, request };
 }
 
@@ -95,19 +95,20 @@ function loadScreenshotPlugin(overrides = {}) {
     const warn = vi.fn(), debug = vi.fn(), error = vi.fn(), cachedRequest = vi.fn(), context = vm.createContext({
         console,
         URL,
-        X: class {},
+        BasePlugin: class {},
         normalizeCarNum: loadCarNumHelpers().normalize,
         clog: { warn, debug, error, log: vi.fn() },
         storageManager: { cachedRequest },
-        localStorage: { getItem: vi.fn(() => null), setItem: vi.fn() },
+        localStorage: { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn() },
         gmHttp: overrides.gmHttp || { get: vi.fn() },
         utils: overrides.utils || { htmlTo$dom: vi.fn() },
         $: overrides.$ || vi.fn(),
         r: true,
         l: false
     });
+    const parserSource = readFileSync(join(repoRoot, "src/parsers/third-party-parsers.js"), "utf8");
     const source = readFileSync(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
-    vm.runInContext(`${source}; globalThis.TestScreenshotPlugin = Ve;`, context);
+    vm.runInContext(`${parserSource}\n${source}; globalThis.TestScreenshotPlugin = ScreenShotPlugin;`, context);
     return { Plugin: context.TestScreenshotPlugin, warn, debug, error, cachedRequest };
 }
 
@@ -257,7 +258,7 @@ describe("source regression contracts", () => {
     it("treats opted-in HTTP 404 responses as neutral results before retry accounting", () => {
         const source = readFileSync(join(repoRoot, "src/core/http.js"), "utf8");
         expect(source).toMatch(/404 === e\.status && requestOptions\.ignoreNotFound[\s\S]{0,80}a\(null\)/);
-        expect(source.indexOf("404 === e.status && requestOptions.ignoreNotFound")).toBeLessThan(source.indexOf("this._isCloudflareChallenge(e.responseText)"));
+        expect(source.indexOf("404 === e.status && requestOptions.ignoreNotFound")).toBeLessThan(source.indexOf("this._isCloudflareChallenge(e.responseText, e.status)"));
     });
 
     it("uses readable non-shadowing variables for actress profile links", () => {

@@ -1,4 +1,4 @@
-class ve {
+class StorageQueue {
     constructor() {
         this.queue = Promise.resolve();
     }
@@ -13,7 +13,7 @@ class ve {
     }
 }
 
-class be extends X {
+class OtherSitePlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "siteConfigs", [ {
             id: "javTrailersBtn",
@@ -24,11 +24,16 @@ class be extends X {
             findCarNumOrTitle: e => e.find("p.card-text").text()
         }, {
             id: "123AvBtn",
-            getBaseUrl: async () => await this.getAv123Url() + "/ja",
-            itemSelector: ".box-item",
-            searchPath: (e, t) => `${e}/search?keyword=${t}`,
-            getDetailPageHref: e => e.find(".detail a").attr("href"),
-            findCarNumOrTitle: e => e.find("img").attr("title")
+            getBaseUrl: async () => `${await this.getAv123Url()}/cn`,
+            itemSelector: ".card",
+            searchPath: (e, t) => `${e}/search?keyword=${encodeURIComponent(t)}`,
+            requestOptions: { cookiePartitionTopLevelSite: "https://123av.com" },
+            getDetailPageHref: (e, t) => {
+                const href = e.find('a.card__link[href*="/cn/v/"]').first().attr("href");
+                return href ? new URL(href, t).href : null;
+            },
+            findCarNumOrTitle: e => e.find(".card__link").first().text(),
+            matches: (text, carNum) => text.replace(/FC2-PPV-/gi, "FC2-").toLowerCase().includes(carNum.toLowerCase())
         }, {
             id: "jableBtn",
             getBaseUrl: async () => await this.getjableUrl(),
@@ -168,10 +173,11 @@ class be extends X {
                 n.attr("title", `站点已熔断，${_breaker.remaining}秒后重试`), this.setSiteState(n, "domain-error");
                 return;
             }
-            const c = await storageManager.cachedRequest(`other-site:${t.id}:${e}`, 864e5, (() => gmHttp.get(l, null, t.headers, !0))), d = utils.htmlTo$dom(c), h = [];
+            const c = await storageManager.cachedRequest(`other-site:${t.id}:${e}`, 864e5, (() => gmHttp.get(l, null, t.headers, !0, t.requestOptions || {}))), d = utils.htmlTo$dom(c), h = [];
             d.find(t.itemSelector).each(((n, a) => {
                 const i = $(a);
-                if (!t.findCarNumOrTitle(i).toLowerCase().includes(e.toLowerCase())) return;
+                const itemText = t.findCarNumOrTitle(i);
+                if (t.matches ? !t.matches(itemText, e) : !itemText.toLowerCase().includes(e.toLowerCase())) return;
                 let s = t.getDetailPageHref(i, r, e);
                 if (!s) throw new Error("解析href失败");
                 s.includes("http") || (s = r + (s.startsWith("/") ? s : "/" + s)), h.push(s);
@@ -197,7 +203,7 @@ class be extends X {
         } catch (a) {
             const e = String(a), i = t.id.replace("Btn", "");
             a._circuitBroken ? (n.attr("title", e), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源跳过, ${i} 已熔断`)) :
-            e.includes("Just a moment") ? (n.attr("title", "请求失败：Cloudflare 安全检查。"), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源失败, ${i} 需Cloudflare安全检查`)) :
+            a?._cfBlocked ? (n.attr("title", "请求失败：Cloudflare 安全检查。"), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源失败, ${i} 需Cloudflare安全检查`)) :
             e.includes("重定向") ? (n.attr("title", "域名失效"), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源失败, ${i} 域名被重定向`)) :
             e.includes("404 Page Not Found") ? (n.attr("title", "未查询到, 点击前往搜索页"), this.setSiteState(n, "unavailable")) :
             (console.error(a), n.attr("title", "请求失败。"), this.setSiteState(n, "unavailable"), clog.warn(`检测第三方资源失败, ${i}`));

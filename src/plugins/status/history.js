@@ -1,4 +1,4 @@
-class xe extends X {
+class HistoryPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "tableObj", null);
     }

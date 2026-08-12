@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-// --- Functions under test (extracted from src/core/utils.js class J) ---
+// --- Functions under test (extracted from src/core/utils.js class Utils) ---
 
 function getNowStr(e = "-", t = ":", n = null) {
     let a;

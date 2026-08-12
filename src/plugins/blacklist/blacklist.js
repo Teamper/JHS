@@ -1,4 +1,4 @@
-class Se extends X {
+class BlacklistPlugin extends BasePlugin {
     getName() {
         return "BlacklistPlugin";
     }

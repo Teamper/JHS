@@ -1,4 +1,4 @@
-class Be extends X {
+class AutoPagePlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "preloadDistance", 500), i(this, "currentPage", this.getInitialPageNumber()),
         i(this, "pageItems", []);

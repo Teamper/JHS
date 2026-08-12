@@ -1,4 +1,4 @@
-class re extends X {
+class SubTitleCatPlugin extends BasePlugin {
     getName() {
         return "SubTitleCatPlugin";
     }

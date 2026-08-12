@@ -1,4 +1,4 @@
-class $e extends X {
+class ReviewPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "floorIndex", 1), i(this, "isInit", !1), i(this, "$panel", null);
     }
