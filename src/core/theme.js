@@ -1,6 +1,28 @@
 /** 设计令牌层 (Design tokens): 全部 --jhs-* 变量, 亮色(:root) + 暗色(:root[data-jhs-theme="dark"])。
  * 在 css-injection.js 最先注入, 供所有后续插件 CSS 通过 var(--jhs-*) 消费。 */
 
+const JHS_Z_INDEX = Object.freeze({
+    content: 10,
+    elevated: 20,
+    localPopover: 30,
+    popover: 100,
+    dropdown: 1e3,
+    fabBackdrop: 1e4,
+    fabMenu: 10001,
+    fab: 10002,
+    debugLow: 12345678,
+    hostNav: 12345679,
+    hostTopbar: 12345689,
+    modal: 12345699,
+    sheetBackdrop: 12345789,
+    sheet: 12345790,
+    loading: 99999999,
+    viewer: 999999990,
+    layer: 999999991,
+    debug: 999999999,
+    tooltip: 9999999999
+});
+
 function buildThemeCss() {
   return `\n<style>\n    :root {\n        /* 字体 */
         --jhs-font: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -37,6 +59,27 @@ function buildThemeCss() {
         --jhs-motion-fast: 120ms;
         --jhs-motion-base: 180ms;
         --jhs-ease: cubic-bezier(.2, 0, 0, 1);
+
+        /* 层级：业务模块只消费语义令牌，不自行发明数值 */
+        --jhs-z-content: ${JHS_Z_INDEX.content};
+        --jhs-z-elevated: ${JHS_Z_INDEX.elevated};
+        --jhs-z-local-popover: ${JHS_Z_INDEX.localPopover};
+        --jhs-z-popover: ${JHS_Z_INDEX.popover};
+        --jhs-z-dropdown: ${JHS_Z_INDEX.dropdown};
+        --jhs-z-fab-backdrop: ${JHS_Z_INDEX.fabBackdrop};
+        --jhs-z-fab-menu: ${JHS_Z_INDEX.fabMenu};
+        --jhs-z-fab: ${JHS_Z_INDEX.fab};
+        --jhs-z-debug-low: ${JHS_Z_INDEX.debugLow};
+        --jhs-z-host-nav: ${JHS_Z_INDEX.hostNav};
+        --jhs-z-host-topbar: ${JHS_Z_INDEX.hostTopbar};
+        --jhs-z-modal: ${JHS_Z_INDEX.modal};
+        --jhs-z-sheet-backdrop: ${JHS_Z_INDEX.sheetBackdrop};
+        --jhs-z-sheet: ${JHS_Z_INDEX.sheet};
+        --jhs-z-loading: ${JHS_Z_INDEX.loading};
+        --jhs-z-viewer: ${JHS_Z_INDEX.viewer};
+        --jhs-z-layer: ${JHS_Z_INDEX.layer};
+        --jhs-z-debug: ${JHS_Z_INDEX.debug};
+        --jhs-z-tooltip: ${JHS_Z_INDEX.tooltip};
 
         /* 主操作色 (中性蓝灰; 状态色仅表达数据语义) */
         --jhs-accent: #3b6ea5;

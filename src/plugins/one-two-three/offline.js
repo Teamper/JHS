@@ -31,7 +31,7 @@ class OneTwoThreeOfflinePlugin extends BasePlugin {
                 token: (t.authorToken || t.token || "").trim(),
                 source: t.authorToken ? "userInfo.authorToken" : "userInfo.token"
             };
-        } catch (t) {}
+        } catch (t) { clog.debug("123 云盘历史用户信息解析失败，继续尝试其他凭证来源", t); }
         const t = document.cookie.split(";");
         for (const n of t) {
             const e = n.indexOf("=");
@@ -97,7 +97,7 @@ class OneTwoThreeOfflinePlugin extends BasePlugin {
     injectJavDbButtons() {
         $("#magnets-content .item").each(((e, t) => {
             const n = $(t), a = n.find("a[href^='magnet:']").first().attr("href") || n.find(".copy-to-clipboard").attr("data-clipboard-text");
-            a && 0 === n.find(".one23-offline-btn").length && n.find(".buttons").first().append(`<button class="jhs-btn button is-info is-small one23-offline-btn" data-magnet="${escapeHtml(a)}" type="button">&nbsp;123离线&nbsp;</button>`);
+            a && 0 === n.find(".one23-offline-btn").length && n.find(".buttons").first().append(`<button class="jhs-btn jhs-btn--secondary one23-offline-btn" data-magnet="${escapeHtml(a)}" type="button">123离线</button>`);
         }));
     }
     injectJavBusButtons() {
@@ -139,10 +139,10 @@ class OneTwoThreeOfflinePlugin extends BasePlugin {
                 publishTime: t.publishTime
             });
             const a = this.getBean("DetailPageButtonPlugin");
-            a && a.showStatus && a.showStatus(t.carNum).then(), window.refresh();
+            a && a.showStatus && await a.showStatus(t.carNum), window.refresh();
             return !0;
         } catch (t) {
-            console.error("123 离线成功后标记已下载失败:", t);
+            clog.error("123 离线成功后标记已下载失败:", t);
             show.error("123 离线已提交，但自动标记已下载失败：" + t);
             return !1;
         }

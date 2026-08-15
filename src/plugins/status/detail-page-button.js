@@ -6,14 +6,14 @@ class DetailPageButtonPlugin extends BasePlugin {
         super(), this.answerCount = 1;
     }
     async handle() {
-        this.hideVideoControls(), window.isDetailPage && this.createMenuBtn();
+        this.hideVideoControls(), window.isDetailPage && await this.createMenuBtn();
     }
     async createMenuBtn() {
         const e = this.getPageInfo(), t = e.carNum, n = `\n            <div class="jhs-detail-btn-row jhs-layout-e2965a97">\n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="filterBtn" class="jhs-btn jhs-btn--filter jhs-layout-44293084">\n                        <span>${m}</span>\n                    </button>\n                    <button type="button" id="favoriteBtn" class="jhs-btn jhs-btn--fav jhs-layout-44293084">\n                        <span>${v}</span>\n                    </button>\n                    <button type="button" id="hasDownBtn" class="jhs-btn jhs-btn--down jhs-layout-44293084">\n                        <span>${y}</span>\n                    </button>\n                    <button type="button" id="hasWatchBtn" class="jhs-btn jhs-btn--watch jhs-layout-44293084">\n                        <span>${k}</span>\n                    </button>\n                </div>\n        \n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="enable-magnets-filter" class="jhs-btn jhs-btn--watch jhs-layout-5f3e3549">\n                        <span id="magnets-span">关闭磁力过滤</span>\n                    </button>\n                    <button type="button" id="magnetSearchBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>磁力搜索</span>\n                    </button>\n                    <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>字幕 (迅雷)</span>\n                    </button>\n                    <button type="button" id="search-subtitle-btn" class="jhs-btn jhs-btn--accent jhs-layout-f43f0d6d">\n                        <span>字幕 (SubTitleCat)</span>\n                    </button>\n                </div>\n            </div>\n        `;
         r && $(".tabs").after(n), l && $("#mag-submit-show").before(n), $("#favoriteBtn").on("click", (() => this.favoriteOne())),
         $("#filterBtn").on("click", (e => this.filterOne(e))), $("#hasDownBtn").on("click", (async () => this.hasDownOne())),
-        $("#hasWatchBtn").on("click", (async () => this.hasWatchOne())), $("#magnetSearchBtn").on("click", (() => {
-            let t = this.getBean("MagnetHubPlugin").createMagnetHub(e.carNum);
+        $("#hasWatchBtn").on("click", (async () => this.hasWatchOne())), $("#magnetSearchBtn").on("click", (async () => {
+            let t = await this.getBean("MagnetHubPlugin").createMagnetHub(e.carNum);
             layer.open({
                 type: 1,
                 title: "磁力搜索 " + e.carNum,
@@ -37,7 +37,7 @@ class DetailPageButtonPlugin extends BasePlugin {
             $("#filterBtn, #favoriteBtn, #hasDownBtn, #hasWatchBtn, #magnetSearchBtn, #xunLeiSubtitleBtn, #search-subtitle-btn").prop("disabled", !0).attr("title", "番号不可用");
             return void clog.warn("详情操作不可用：番号不可用");
         }
-        this.showStatus(t).then();
+        await this.showStatus(t);
     }
     async showStatus(e) {
         const t = $("#filterBtn span"), n = $("#favoriteBtn span"), a = $("#hasDownBtn span"), i = $("#hasWatchBtn span");
@@ -70,8 +70,8 @@ class DetailPageButtonPlugin extends BasePlugin {
                 names: e.actress,
                 actionType: h,
                 publishTime: e.publishTime
-            }), this.showStatus(e.carNum).then(), window.refresh(), utils.closePage();
-        } catch (t) { console.error("收藏操作失败:", t), show.error("操作失败"); }
+            }), await this.showStatus(e.carNum), window.refresh(), utils.closePage();
+        } catch (t) { clog.error("收藏操作失败:", t), show.error("操作失败"); }
     }
     async hasDownOne() {
         try {
@@ -83,8 +83,8 @@ class DetailPageButtonPlugin extends BasePlugin {
                 names: e.actress,
                 actionType: g,
                 publishTime: e.publishTime
-            }), this.showStatus(e.carNum).then(), window.refresh(), utils.closePage();
-        } catch (t) { console.error("标记已下载失败:", t), show.error("操作失败"); }
+            }), await this.showStatus(e.carNum), window.refresh(), utils.closePage();
+        } catch (t) { clog.error("标记已下载失败:", t), show.error("操作失败"); }
     }
     async hasWatchOne() {
         try {
@@ -96,8 +96,8 @@ class DetailPageButtonPlugin extends BasePlugin {
                 names: e.actress,
                 actionType: p,
                 publishTime: e.publishTime
-            }), this.showStatus(e.carNum).then(), window.refresh(), utils.closePage();
-        } catch (t) { console.error("标记已观看失败:", t), show.error("操作失败"); }
+            }), await this.showStatus(e.carNum), window.refresh(), utils.closePage();
+        } catch (t) { clog.error("标记已观看失败:", t), show.error("操作失败"); }
     }
     searchXunLeiSubtitle(e) {
         let t = loading();
@@ -171,7 +171,7 @@ class DetailPageButtonPlugin extends BasePlugin {
                 }
             }) : show.error("迅雷中找不到相关字幕!");
         })).catch((e => {
-            console.error(e), show.error(e);
+            clog.error(e), show.error(e);
         })).finally((() => {
             t.close();
         }));
@@ -186,7 +186,7 @@ class DetailPageButtonPlugin extends BasePlugin {
             names: n.actress,
             actionType: d,
             publishTime: n.publishTime
-        }), this.showStatus(n.carNum).then(), window.refresh(), utils.closePage(), layer.closeAll(),
+        }), await this.showStatus(n.carNum), window.refresh(), utils.closePage(), layer.closeAll(),
         this.answerCount = 1) : utils.q(e, `是否屏蔽${n.carNum}?`, (async () => {
             await storageManager.saveCar({
                 carNum: n.carNum,
@@ -194,7 +194,7 @@ class DetailPageButtonPlugin extends BasePlugin {
                 names: n.actress,
                 actionType: d,
                 publishTime: n.publishTime
-            }), this.showStatus(n.carNum).then(), window.refresh(), utils.closePage();
+            }), await this.showStatus(n.carNum), window.refresh(), utils.closePage();
         }), (() => {
             this.answerCount = 1;
         }));
@@ -205,7 +205,7 @@ class DetailPageButtonPlugin extends BasePlugin {
         }));
     }
     async previewSubtitle(e, t) {
-        if (!e) return void console.error("未提供文件URL");
+        if (!e) return void clog.error("未提供文件URL");
         const n = e.split(".").pop().toLowerCase();
         if ("ass" === n || "srt" === n) try {
             let a = await gmHttp.get(e), i = "字幕预览";
@@ -230,7 +230,7 @@ class DetailPageButtonPlugin extends BasePlugin {
                 }
             });
         } catch (a) {
-            show.error(`预览失败: ${a.message}`), console.error("预览字幕文件出错:", a);
+            show.error(`预览失败: ${a.message}`), clog.error("预览字幕文件出错:", a);
         } else show.error("仅支持预览ASS和SRT字幕文件");
     }
 }

@@ -6,10 +6,10 @@ class ActressInfoPlugin extends BasePlugin {
         return "ActressInfoPlugin";
     }
     async handle() {
-        "yes" === await storageManager.getSetting("enableLoadActressInfo", "yes") && this.loadActressInfo();
+        "yes" === await storageManager.getSetting("enableLoadActressInfo", "yes") && await this.loadActressInfo();
     }
-    loadActressInfo() {
-        this.handleDetailPage().then(), this.handleStarPage().then();
+    async loadActressInfo() {
+        await Promise.all([ this.handleDetailPage(), this.handleStarPage() ]);
     }
     async initCss() {
         return "\n            <style>\n                .info-tag {\n                    background-color: var(--jhs-status-fav-tint);\n                    display: inline-block;\n                    height: 32px;\n                    padding: 0 10px;\n                    line-height: 30px;\n                    font-size: 12px;\n                    color: var(--jhs-status-fav);\n                    border: 1px solid var(--jhs-status-fav-tint);\n                    border-radius: 4px;\n                    box-sizing: border-box;\n                    white-space: nowrap;\n                }\n            </style>\n        ";
@@ -25,7 +25,7 @@ class ActressInfoPlugin extends BasePlugin {
             if (a = n[t], !a) try {
                 a = await this.searchInfo(t), a && (n[t] = a);
             } catch (s) {
-                console.error("该名称查询失败,尝试其它名称");
+                clog.error("该名称查询失败,尝试其它名称");
             }
             let r = "";
             r = a ? `\n                    <div class="panel-block actress-info">\n                        <strong>${t}:</strong>\n                        <a href="${a.url}" target="_blank" class="jhs-layout-9813a0dd">\n                            <span class="info-tag">${a.birthday} ${a.age}</span>\n                            <span class="info-tag">${a.height} ${a.weight}</span>\n                            <span class="info-tag">${a.threeSizeText} ${a.braSize}</span>\n                        </a>\n                    </div>\n                ` : `<div class="panel-block actress-info"><a href="${this.apiUrl + t}" target="_blank"><strong>${t}:</strong></a></div> `,
@@ -51,7 +51,7 @@ class ActressInfoPlugin extends BasePlugin {
             try {
                 s = await this.searchInfo(t);
             } catch (r) {
-                console.error("该名称查询失败,尝试其它名称");
+                clog.error("该名称查询失败,尝试其它名称");
             }
             if (s) break;
         }

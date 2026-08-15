@@ -52,7 +52,7 @@ class PluginManager {
     async _getDisabledPlugins() {
         try {
             const e = await storageManager.getSetting("disabledPlugins", "[]");
-            return JSON.parse(e);
+            return JSON.parse(e).filter((name => ![ "SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin" ].includes(name)));
         } catch (e) { return []; }
     }
     async processCss() {
@@ -73,7 +73,7 @@ class PluginManager {
                 }
                 return { name: e, status: "skipped" };
             } catch (a) {
-                return console.error(`插件 ${e} 加载 CSS 失败`, a),
+                return clog.error(`插件 ${e} 加载 CSS 失败`, a),
                 this._addError(e, "initCss", a), {
                     name: e,
                     status: "rejected",
@@ -101,7 +101,7 @@ class PluginManager {
     }
     _scheduleIdle(e) {
         const t = () => e().catch((e => {
-            console.error("[JHS] 空闲插件执行失败:", e);
+            clog.error("[JHS] 空闲插件执行失败:", e);
         }));
         "function" == typeof requestIdleCallback ? requestIdleCallback(t, { timeout: 1500 }) : setTimeout(t, 100);
     }
@@ -297,7 +297,7 @@ class BasePlugin {
         }
         if (!o) {
             const t = "提取番号信息失败: carNum 为空";
-            throw console.error("Error in getBoxCarInfo:", t, "Box Element:", e.get(0)), show.error(t),
+            throw clog.error("Error in getBoxCarInfo:", t, "Box Element:", e.get(0)), show.error(t),
             new Error(t);
         }
         return {

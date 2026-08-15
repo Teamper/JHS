@@ -79,7 +79,7 @@ const _e = async (e, t = "ja", n = "zh-CN") => {
 
 class ListPagePlugin extends BasePlugin {
     async initCss() {
-        return `<style>.status-tag{position:absolute;z-index:10;margin-right:5px;padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}</style>`;
+        return `<style>.status-tag{position:absolute;z-index:var(--jhs-z-content);margin-right:5px;padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}</style>`;
     }
     constructor() {
         super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0),
@@ -99,10 +99,10 @@ class ListPagePlugin extends BasePlugin {
                 const e = this.getBean("HistoryPlugin");
                 e.tableObj && e.tableObj.setData();
                 const t = this.getBean("NewVideoPlugin");
-                t && (t.showNewVideoCount().then(), t.loadData());
+                t && void Promise.all([ t.showNewVideoCount(), t.loadData() ]).catch((error => clog.error("新作品数据刷新失败", error)));
             } else "cleanCache_filter_actor_actress_car_list" === t ? storageManager._invalidateCache(storageManager.blacklist_car_list_key) : "clean_cacheSettingObj" === t && storageManager._invalidateCache(storageManager.setting_key);
         })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
-        await this.doFilter(), this.createQuickFilter(), this.applyVisibility(), this.bindClick().then(),
+        await this.doFilter(), this.createQuickFilter(), this.applyVisibility(), await this.bindClick(),
         this.rememberTagExpand(), $(this.getSelector().itemSelector + " a").attr("target", "_blank"),
         this.checkDom();
     }
@@ -141,7 +141,7 @@ class ListPagePlugin extends BasePlugin {
     checkDom() {
         if (!window.isListPage) return;
         const e = this.getSelector(), t = document.querySelector(e.boxSelector);
-        if (!t) return void console.error("没有找到容器节点!");
+        if (!t) return void clog.error("没有找到容器节点!");
         let n = null;
         const a = new MutationObserver((() => {
             n && clearTimeout(n), n = setTimeout((async () => {
@@ -237,7 +237,7 @@ class ListPagePlugin extends BasePlugin {
             t.attr("data-jhs-status", q).attr("data-jhs-tip", j).attr("data-jhs-tag-position", P);
             const E = "rightTop" === P ? "right: 0; top:5px;" : "left: 0; top:5px;";
             if (F && (t.find(".status-tag").remove(), N.text)) {
-                const e = $(r ? `<span class="tag is-success status-tag" data-tip="${j}" title="">${N.text}</span>` : `<span class="jhs-badge status-tag" data-tip="${j}" title=""><span class="tag">${N.text}</span></span>`);
+                const e = $(`<span class="jhs-badge ${r ? "jhs-badge--success" : "jhs-badge--neutral"} status-tag" data-tip="${escapeHtml(j)}" title="">${escapeHtml(N.text)}</span>`);
                 e.css({ color: N.on, backgroundColor: N.color, right: "rightTop" === P ? 0 : "auto", left: "rightTop" === P ? "auto" : 0, top: "5px" });
                 e.find(".tag").css("color", N.on);
                 if (r && t.find(".tags").append(e), l) {
@@ -261,10 +261,13 @@ class ListPagePlugin extends BasePlugin {
                     let e = this.parseMovieId(a);
                     this.getBean("Fc2Plugin").openFc2Dialog(e, n, a), this.$currentImage = null;
                 } else utils.openPage(a, n, !0, e), this.$currentImage = null;
-            } catch (t) { console.error("点击图片处理失败:", t); }
+            } catch (t) { clog.error("点击图片处理失败:", t); }
         })), $(e.boxSelector).on("click", ".item video", (async e => {
             const t = e.currentTarget;
-            t.paused ? t.play().catch((e => console.error("播放失败:", e))) : t.pause(), e.preventDefault(),
+            t.paused ? await safePlay(t, {
+                context: "列表视频",
+                notify: !0
+            }) : t.pause(), e.preventDefault(),
             e.stopPropagation();
         })), $(e.boxSelector).on("click", ".item .video-title", (async e => {
             if ($(e.target).closest('[class^="jhs-match-"]').length) return;
@@ -288,9 +291,9 @@ class ListPagePlugin extends BasePlugin {
                             actionType: d,
                             publishTime: i
                         }), window.refresh(), show.ok("操作成功");
-                    } catch (s) { console.error("屏蔽操作失败:", s), show.error("操作失败"); }
+                    } catch (s) { clog.error("屏蔽操作失败:", s), show.error("操作失败"); }
                 }));
-            } catch (t) { console.error("右键菜单处理失败:", t); }
+            } catch (t) { clog.error("右键菜单处理失败:", t); }
         }));
     }
     async parseActressName(e) {
@@ -398,7 +401,7 @@ class ListPagePlugin extends BasePlugin {
                 localStorage.setItem("jhs_translate", JSON.stringify(this.cache));
             }), 500);
         })).catch((e => {
-            console.error("翻译失败:", e);
+            clog.error("翻译失败:", e);
         }));
     }
     async revertTranslation() {

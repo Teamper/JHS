@@ -86,7 +86,7 @@ function loadDmmParser() {
         $: () => ({ attr: vi.fn().mockReturnThis(), css: vi.fn().mockReturnThis(), append: vi.fn().mockReturnThis() }),
         show: { error: vi.fn() }
     });
-    const source = readFileSync(join(repoRoot, "src/plugins/image-viewer/preview-video.js"), "utf8"), start = source.indexOf("const Z ="), end = source.indexOf("const ne =", start);
+    const source = readFileSync(join(repoRoot, "src/plugins/image-viewer/preview-video.js"), "utf8"), start = source.indexOf("const Z ="), end = source.indexOf("async function fetchDmmPreview", start);
     vm.runInContext(`${source.slice(start, end)}; globalThis.TestDmmParser = DmmPreviewParser;`, context);
     return { Parser: context.TestDmmParser, warn, error, request };
 }
@@ -106,9 +106,11 @@ function loadScreenshotPlugin(overrides = {}) {
         r: true,
         l: false
     });
+    context.CACHE_TTL = { screenshot: 6048e5 };
     const parserSource = readFileSync(join(repoRoot, "src/parsers/third-party-parsers.js"), "utf8");
+    const registrySource = readFileSync(join(repoRoot, "src/plugins/image-viewer/screenshot-provider-registry.js"), "utf8");
     const source = readFileSync(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
-    vm.runInContext(`${parserSource}\n${source}; globalThis.TestScreenshotPlugin = ScreenShotPlugin;`, context);
+    vm.runInContext(`${parserSource}\n${registrySource}\n${source}; globalThis.TestScreenshotPlugin = ScreenShotPlugin;`, context);
     return { Plugin: context.TestScreenshotPlugin, warn, debug, error, cachedRequest };
 }
 
@@ -223,10 +225,10 @@ describe("detail car number propagation", () => {
         const links = { filter: (predicate) => (predicate(0, { text: "another title" }), { map: () => ({ get: () => [] }) }) };
         const gmHttp = { get: vi.fn().mockResolvedValue("search-html") };
         const utils = { htmlTo$dom: vi.fn(() => ({ find: vi.fn(() => links) })) };
-        const { Plugin, error } = loadScreenshotPlugin({ gmHttp, utils, $: (element) => ({ text: () => element.text }) });
+        const { Plugin, debug } = loadScreenshotPlugin({ gmHttp, utils, $: (element) => ({ text: () => element.text }) });
         await expect(new Plugin().getJavStoreScreenShot("IPZZ-479")).resolves.toBeNull();
         expect(gmHttp.get).toHaveBeenCalledTimes(1);
-        expect(error).toHaveBeenCalledWith("JavStore, 查询番号失败:", "https://javstore.net/search?q=IPZZ-479");
+        expect(debug).toHaveBeenCalledWith("JavStore, 查询番号无结果:", "https://javstore.net/search?q=IPZZ-479");
     });
 
     it("continues after a candidate 404 and returns the next valid preview", async () => {
@@ -238,6 +240,26 @@ describe("detail car number propagation", () => {
         const { Plugin } = loadScreenshotPlugin({ gmHttp, utils, $: (element) => ({ text: () => element.text, attr: () => element.href }) });
         await expect(new Plugin().getJavStoreScreenShot("IPZZ-479")).resolves.toBe("https://javstore.net/preview.jpg");
         expect(gmHttp.get).toHaveBeenCalledTimes(3);
+    });
+
+    it("upgrades legacy JavStore cache entries and normalizes new cache writes", async () => {
+        const loaded = loadScreenshotPlugin();
+        loaded.cachedRequest.mockResolvedValueOnce({ url: "http://img.javstore.net/legacy.jpg" });
+        await expect(new loaded.Plugin().getCachedProviderScreenshot("javstore", "IPZZ-479", vi.fn())).resolves.toEqual({
+            url: "https://img.javstore.net/legacy.jpg", source: "javstore", detailUrl: null
+        });
+        loaded.cachedRequest.mockImplementationOnce(async (key, ttl, loader) => (await loader()).data);
+        await expect(new loaded.Plugin().getCachedProviderScreenshot("javstore", "IPZZ-480", async () => "http://img2.javstore.net/new.jpg")).resolves.toEqual({
+            url: "https://img2.javstore.net/new.jpg", source: "javstore", detailUrl: null
+        });
+    });
+
+    it("normalizes a legacy JavStore URL again at the image rendering boundary", () => {
+        const html = vi.fn(), container = { html, on: vi.fn().mockReturnThis() };
+        const { Plugin } = loadScreenshotPlugin({ $: vi.fn(() => container) });
+        new Plugin().addImg("缩略图", "http://img.javstore.net/legacy.jpg");
+        expect(html).toHaveBeenCalledWith(expect.stringContaining('src="https://img.javstore.net/legacy.jpg"'));
+        expect(html).not.toHaveBeenCalledWith(expect.stringContaining('src="http://img.javstore.net'));
     });
 });
 

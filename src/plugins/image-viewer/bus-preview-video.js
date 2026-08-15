@@ -60,7 +60,7 @@ class BusPreviewVideoPlugin extends BasePlugin {
         return "BusPreviewVideoPlugin";
     }
     async initCss() {
-        return "\n            /* 弹窗/Modal 样式 */\n            .bus-preview-modal {\n                position: fixed;\n                top: 0;\n                left: 0;\n                width: 100%;\n                height: 100%;\n                background-color: rgba(0, 0, 0, 0.95); \n                /* 关键修改：更新 z-index */\n                z-index: 12345699; \n                display: flex;\n                justify-content: center;\n                align-items: center;\n                opacity: 0; \n                visibility: hidden; \n                transition: opacity 0.2s ease;\n            }\n            .bus-preview-modal.is-open {\n                opacity: 1;\n                visibility: visible;\n            }\n            /* 垂直排列视频和按钮，并居中 */\n            .bus-preview-modal-content {\n                position: relative;\n                max-width: 95%; \n                max-height: 95%;\n                display: flex; \n                flex-direction: column; \n                align-items: center; \n                gap: 15px; \n            }\n            \n            /* 移除 .bus-preview-close-btn 的样式 */\n\n            /* 视频播放器容器 */\n            .video-player-wrapper {\n                /* 关键修改：更新 width 和 max-height */\n                width: 80vw; \n                max-height: 85vh; \n                aspect-ratio: 16 / 9; \n                position: relative; \n                background-color: black; \n                max-width: 100%; \n            }\n            /* 视频元素 */\n            .video-player-wrapper #preview-video {\n                position: absolute; \n                top: 0;\n                left: 0;\n                width: 100%;\n                height: 100%;\n                display: block;\n            }\n\n            /* 画质控制盒 (底部按钮) */\n            .video-control-box {\n                display: flex;\n                flex-direction: row; \n                justify-content: center; \n                flex-wrap: wrap; \n                gap: 10px;\n                padding: 10px 0; \n            }\n\n            /* 按钮样式 (保留) */\n            .video-control-btn {\n                min-width:80px;\n                padding: 6px 12px;\n                background: rgba(255,255,255,0.2);\n                color: white;\n                border: 1px solid rgba(255,255,255,0.5);\n                border-radius: 4px;\n                cursor: pointer;\n                text-align: center;\n                font-size: 14px;\n                transition: background-color 0.2s, border-color 0.2s;\n            }\n            .video-control-btn:hover {\n                background: rgba(255,255,255,0.4);\n            }\n            .video-control-btn.active {\n                background-color: var(--jhs-accent); \n                color: var(--jhs-accent-text-on);\n                font-weight: bold;\n                border: 1px solid var(--jhs-accent);\n            }\n        ";
+        return "\n            .bus-preview-modal { position:fixed; inset:0; z-index:var(--jhs-z-modal); display:flex; align-items:center; justify-content:center; visibility:hidden; opacity:0; background:rgba(0,0,0,.95); transition:opacity var(--jhs-motion-base) var(--jhs-ease); }\n            .bus-preview-modal.is-open { visibility:visible; opacity:1; }\n            .bus-preview-modal-content { position:relative; display:flex; max-width:95%; max-height:95%; flex-direction:column; align-items:center; gap:var(--jhs-space-3); }\n            .video-player-wrapper { position:relative; width:80vw; max-width:100%; max-height:85vh; aspect-ratio:16/9; background:#000; }\n            .video-player-wrapper #preview-video { position:absolute; inset:0; }\n        ";
     }
     initModal() {
         if (0 === $("#bus-preview-modal").length) {
@@ -82,7 +82,7 @@ class BusPreviewVideoPlugin extends BasePlugin {
         this.initModal();
         const e = $("#sample-waterfall .sample-box .photo-frame img:first").attr("src"), t = $(`\n            <button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65">\n                <div class="photo-frame jhs-layout-87db2275">\n                    <img src="${e}" class="video-cover" alt="">\n                    <div class="play-icon jhs-play-overlay">\n                        ▶\n                    </div>\n                </div>\n            </button>`);
         $("#sample-waterfall").prepend(t);
-        "yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes") && ne(this.getPageInfo().carNum, !1).then();
+        "yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes") && fetchDmmPreview(this.getPageInfo().carNum).catch((e => clog.warn("预加载 DMM 失败", e)));
         let n = !1, a = $(".preview-video-container");
         a.on("click", (async e => {
             if (e.preventDefault(), e.stopPropagation(), n) show.info("正在加载中, 勿重复点击"); else {
@@ -98,21 +98,28 @@ class BusPreviewVideoPlugin extends BasePlugin {
     async handleVideo() {
         const e = $("#bus-preview-modal"), t = e.find(".bus-preview-modal-content");
         let n = $("#preview-video");
-        if (n.length > 0) return e.addClass("is-open"), void n[0].play().catch((e => console.warn("尝试播放失败 (可能被浏览器阻止):", e)));
+        if (n.length > 0) return e.addClass("is-open"), void await safePlay(n[0], {
+            context: "JavBus 预览视频",
+            notify: !0
+        });
         let a = this.getPageInfo().carNum;
-        const i = await ne(a);
+        const {sources: i, error: previewError} = await fetchDmmPreview(a);
         i && 0 !== Object.keys(i).length ? (await this.createVideoPlayerAndControls(i, t),
-        n = $("#preview-video"), n.length > 0 ? (e.addClass("is-open"), n[0].play().catch((e => console.warn("尝试播放失败 (可能被浏览器阻止):", e)))) : show.error("视频播放器创建失败。")) : show.error("未找到可用的视频源。");
+        n = $("#preview-video"), n.length > 0 ? (e.addClass("is-open"), await safePlay(n[0], {
+            context: "JavBus 预览视频",
+            notify: !0,
+            message: "REGION_BLOCKED" === previewError?.code ? previewError.message : "当前视频源无法播放"
+        })) : show.error("视频播放器创建失败。")) : show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未找到可用的视频源。");
     }
     async createVideoPlayerAndControls(e, t) {
         let n = await storageManager.getSetting("videoQuality");
         n = Z(Object.keys(e), n);
         let a = e[n];
-        t.html(`\n            <div class="video-player-wrapper">\n                <video id="preview-video" controls playsinline>\n                    <source src="${a}" />\n                </video>\n            </div>\n            <div class="video-control-box">\n                </div>\n        `);
-        const i = $("#preview-video"), s = i.find("source"), o = t.find(".video-control-box");
+        t.html(`\n            <div class="video-player-wrapper">\n                <video id="preview-video" class="jhs-video-player" controls playsinline>\n                    <source src="${a}" />\n                </video>\n            </div>\n            <div class="jhs-video-toolbar jhs-video-quality-list" role="group" aria-label="视频画质">\n                </div>\n        `);
+        const i = $("#preview-video"), s = i.find("source"), o = t.find(".jhs-video-quality-list");
         if (!i.length || !s.length) return;
         const r = i[0], l = localStorage.getItem("jhs_videoMuted");
-        r.muted = !l || "yes" === l, r.addEventListener("volumechange", (function() {
+        r.muted = !l || "yes" === l, i.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (function() {
             localStorage.setItem("jhs_videoMuted", r.muted ? "yes" : "no");
         }));
         let c = "";
@@ -120,20 +127,23 @@ class BusPreviewVideoPlugin extends BasePlugin {
             let a = e[t.quality];
             if (a) {
                 const e = n === t.quality;
-                c += `\n                    <button class="jhs-btn video-control-btn${e ? " active" : ""}" \n                            data-quality="${t.quality}"\n                            data-video-src="${a}">\n                        ${t.text}\n                    </button>\n                `;
+                c += `\n                    <button type="button" class="jhs-btn jhs-video-quality-btn${e ? " active" : ""}" \n                            data-quality="${t.quality}"\n                            data-video-src="${a}"\n                            aria-pressed="${e ? "true" : "false"}">\n                        ${t.text}\n                    </button>\n                `;
             }
         })), o.html(c);
-        const d = o.find(".video-control-btn");
-        o.off("click").on("click", ".video-control-btn", (async e => {
+        const d = o.find(".jhs-video-quality-btn");
+        o.off("click.jhsVideo").on("click.jhsVideo", ".jhs-video-quality-btn", (async e => {
             try {
                 const t = $(e.currentTarget);
                 if (t.hasClass("active")) return;
                 let n = t.attr("data-video-src");
                 s.attr("src", n);
                 const a = r.currentTime;
-                r.load(), r.currentTime = a, await r.play(), d.removeClass("active"), t.addClass("active");
+                r.load(), r.currentTime = a, await safePlay(r, {
+                    context: "JavBus 画质切换",
+                    notify: !0
+                }) && (d.removeClass("active").attr("aria-pressed", "false"), t.addClass("active").attr("aria-pressed", "true"));
             } catch (t) {
-                console.error("切换画质失败:", t);
+                clog.error("切换画质失败:", t);
             }
         }));
     }

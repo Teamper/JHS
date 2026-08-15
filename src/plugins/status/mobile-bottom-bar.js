@@ -18,15 +18,17 @@ class MobileBottomBarPlugin extends BasePlugin {
                 right: 20px;
                 width: 56px;
                 height: 56px;
+                border: 0;
                 border-radius: 50%;
                 background: var(--jhs-status-fav);
                 color: var(--jhs-status-fav-on);
                 font-size: 26px;
+                font-family: inherit;
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 cursor: pointer;
-                z-index: 10002;
+                z-index: var(--jhs-z-fab);
                 box-shadow: var(--jhs-shadow-md);
                 transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1), box-shadow 0.3s;
                 -webkit-tap-highlight-color: transparent;
@@ -50,7 +52,7 @@ class MobileBottomBarPlugin extends BasePlugin {
                 background: rgba(0,0,0,0.25);
                 backdrop-filter: blur(2px);
                 -webkit-backdrop-filter: blur(2px);
-                z-index: 10000;
+                z-index: var(--jhs-z-fab-backdrop);
                 opacity: 0;
                 pointer-events: none;
                 transition: opacity 0.3s;
@@ -65,7 +67,7 @@ class MobileBottomBarPlugin extends BasePlugin {
                 position: fixed;
                 bottom: calc(92px + env(safe-area-inset-bottom, 0px));
                 right: 16px;
-                z-index: 10001;
+                z-index: var(--jhs-z-fab-menu);
                 display: flex;
                 flex-direction: column;
                 gap: 10px;
@@ -104,12 +106,14 @@ class MobileBottomBarPlugin extends BasePlugin {
                 gap: 10px;
                 padding: 10px 16px;
                 background: var(--jhs-surface);
+                border: 1px solid var(--jhs-border);
                 border-radius: 24px;
                 box-shadow: var(--jhs-shadow-md);
                 cursor: pointer;
                 white-space: nowrap;
                 min-height: 44px;
                 font-size: 14px;
+                font-family: inherit;
                 font-weight: 500;
                 color: var(--jhs-text);
                 opacity: 0;
@@ -136,10 +140,6 @@ class MobileBottomBarPlugin extends BasePlugin {
                 border-radius: 50%;
                 flex-shrink: 0;
                 background: var(--jhs-border-strong);
-            }
-
-            @media (min-width: 769px) {
-                #jhs-fab, .jhs-fab-menu, .jhs-fab-backdrop { display: none !important; }
             }
 
             .jhs-page-commandbar {
@@ -186,7 +186,7 @@ class MobileBottomBarPlugin extends BasePlugin {
         const menu = this.createMenu();
         $("body").append(menu);
         // 添加 FAB 按钮
-        const fab = $('<div id="jhs-fab">＋</div>').appendTo("body");
+        const fab = $('<button type="button" id="jhs-fab" class="jhs-btn" aria-label="打开 JHS 工具" aria-controls="jhs-fab-menu" aria-haspopup="menu" aria-expanded="false">＋</button>').appendTo("body");
         this.bindEvents(fab, backdrop);
     }
     async afterPluginsReady() {
@@ -278,59 +278,20 @@ class MobileBottomBarPlugin extends BasePlugin {
             if (basePlugin?.parseMovieId) return basePlugin.parseMovieId(location.href);
             const el = document.querySelector(".header, #video_id, .video-id");
             if (el) return el.textContent.trim();
-        } catch (e) {}
+        } catch (e) { clog.debug("移动端详情番号解析失败，已回退", e); }
         return null;
     }
     createMenu() {
-        const isList = window.isListPage;
-        const isDetail = window.isDetailPage;
-        let items = "";
-
-        if (isList) {
-            const sortMethod = localStorage.getItem("jhs_sortMethod") || "default";
-            const sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
-            items = `
-                <div class="jhs-fab-group">
-                    <div class="jhs-fab-menu-item" data-action="check">待鉴定</div>
-                    <div class="jhs-fab-menu-item" data-action="newVideo">新作品</div>
-                    <div class="jhs-fab-menu-item" data-action="blacklist">黑名单</div>
-                    <div class="jhs-fab-menu-item" data-action="sort">排序: ${sortLabel}</div>
-                </div>
-                <div class="jhs-fab-divider"></div>
-                <div class="jhs-fab-group">
-                    <div class="jhs-fab-menu-item" data-action="setting">设置</div>
-                </div>
-            `;
-        } else if (isDetail) {
-            const statusDefs = [
-                { action: "filter", icon: m, label: "屏蔽", key: "filter" },
-                { action: "fav", icon: v, label: "收藏", key: "fav" },
-                { action: "down", icon: y, label: "已下载", key: "down" },
-                { action: "watch", icon: k, label: "已观看", key: "watch" }
-            ];
-            items = `
-                <div class="jhs-fab-group">
-                    ${statusDefs.map(d => `<div class="jhs-fab-menu-item" data-action="${d.action}" data-label="${d.label}"><span class="jhs-fab-status-dot" data-status-key="${d.key}"></span>${d.icon}</div>`).join("")}
-                </div>
-                <div class="jhs-fab-divider"></div>
-                <div class="jhs-fab-group">
-                    <div class="jhs-fab-menu-item" data-action="magnetFilter">磁力过滤</div>
-                    <div class="jhs-fab-menu-item" data-action="magnet">磁力搜索</div>
-                    <div class="jhs-fab-menu-item" data-action="subtitle">字幕</div>
-                </div>
-                <div class="jhs-fab-divider"></div>
-                <div class="jhs-fab-group">
-                    <div class="jhs-fab-menu-item" data-action="setting">设置</div>
-                </div>
-            `;
-        } else {
-            items = `
-                <div class="jhs-fab-group">
-                    <div class="jhs-fab-menu-item" data-action="setting">设置</div>
-                </div>
-            `;
-        }
-        return $(`<div class="jhs-fab-menu">${items}</div>`);
+        const item = (action, label, attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = content => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
+        let items;
+        if (window.isListPage) {
+            const sortMethod = localStorage.getItem("jhs_sortMethod") || "default", sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
+            items = group(item("check", "待鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort", `排序: ${sortLabel}`)) + divider + group(item("setting", "设置"));
+        } else if (window.isDetailPage) {
+            const statusDefs = [ { action: "filter", icon: m, label: "屏蔽", key: "filter" }, { action: "fav", icon: v, label: "收藏", key: "fav" }, { action: "down", icon: y, label: "已下载", key: "down" }, { action: "watch", icon: k, label: "已观看", key: "watch" } ];
+            items = group(statusDefs.map((definition => item(definition.action, `<span class="jhs-fab-status-dot" data-status-key="${definition.key}"></span>${definition.icon}`, `aria-label="${definition.label}" aria-pressed="false" data-label="${definition.label}"`))).join("")) + divider + group(item("magnetFilter", "磁力过滤") + item("magnet", "磁力搜索") + item("subtitle", "字幕")) + divider + group(item("setting", "设置"));
+        } else items = group(item("setting", "设置"));
+        return $(`<div id="jhs-fab-menu" class="jhs-fab-menu" role="menu" aria-hidden="true">${items}</div>`);
     }
     /** 刷新详情页菜单的状态指示 */
     async refreshDetailStatus() {
@@ -347,42 +308,44 @@ class MobileBottomBarPlugin extends BasePlugin {
                 const key = $(this).data("status-key");
                 const item = $(this).closest(".jhs-fab-menu-item");
                 if (key === activeStatus) {
-                    $(this).css({ background: colors[key] || "var(--jhs-border-strong)" });
+                    $(this).css({ background: colors[key] || "var(--jhs-border-strong)" }), item.attr("aria-pressed", "true");
                 } else {
-                    $(this).css({ background: "var(--jhs-border-strong)" });
+                    $(this).css({ background: "var(--jhs-border-strong)" }), item.attr("aria-pressed", "false");
                 }
             });
-        } catch (e) {}
+        } catch (e) { clog.warn("移动端详情状态刷新失败", e); }
     }
     bindEvents(fab, backdrop) {
         const menu = $(".jhs-fab-menu");
-        const closeMenu = () => {
+        const closeMenu = (returnFocus = !1) => {
             this._fabGeneration++;
-            fab.removeClass("jhs-fab-open");
-            menu.removeClass("jhs-fab-menu-open");
+            fab.removeClass("jhs-fab-open").attr("aria-expanded", "false");
+            menu.removeClass("jhs-fab-menu-open").attr("aria-hidden", "true");
             backdrop.removeClass("jhs-fab-backdrop-visible");
             menu.find(".jhs-fab-menu-item").removeClass("jhs-fab-item-visible");
+            returnFocus && fab.trigger("focus");
         };
         const toggleMenu = () => {
             const isOpen = fab.hasClass("jhs-fab-open");
             if (isOpen) {
                 closeMenu();
             } else {
-                fab.addClass("jhs-fab-open");
-                menu.addClass("jhs-fab-menu-open");
+                fab.addClass("jhs-fab-open").attr("aria-expanded", "true");
+                menu.addClass("jhs-fab-menu-open").attr("aria-hidden", "false");
                 backdrop.addClass("jhs-fab-backdrop-visible");
                 // 刷新排序标签
                 if (window.isListPage) {
                     const sortMethod = localStorage.getItem("jhs_sortMethod") || "default";
                     const sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
-                    menu.find('[data-action="sort"]').html(`排序: ${sortLabel}`);
+                    menu.find('[data-action="sort"]').text(`排序: ${sortLabel}`);
                 }
                 // 刷新详情页状态
-                if (window.isDetailPage) this.refreshDetailStatus();
+                if (window.isDetailPage) void this.refreshDetailStatus().catch((error => clog.warn("移动端详情状态刷新失败", error)));
                 // stagger 动画：依次显示菜单项（generation counter 防竞态）
                 const gen = ++this._fabGeneration;
                 const self = this;
                 const items = menu.find(".jhs-fab-menu-item");
+                items.first().trigger("focus");
                 items.each(function (i) {
                     const el = $(this);
                     setTimeout(() => {
@@ -394,15 +357,23 @@ class MobileBottomBarPlugin extends BasePlugin {
         // FAB 点击切换
         fab.on("click", toggleMenu);
         // 遮罩点击关闭
-        backdrop.on("click", closeMenu);
+        backdrop.on("click", (() => closeMenu(!0)));
+        menu.on("keydown", ".jhs-fab-menu-item", (event => {
+            const items = menu.find(".jhs-fab-menu-item"), index = items.index(event.currentTarget);
+            if ("Escape" === event.key) return event.preventDefault(), closeMenu(!0);
+            if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
+            event.preventDefault();
+            const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+            items.eq(next).trigger("focus");
+        }));
         // 菜单项点击
         menu.on("click", ".jhs-fab-menu-item", (e) => {
             const action = $(e.currentTarget).data("action");
-            this.handleAction(action);
-            closeMenu();
+            closeMenu(!0);
+            void this.handleAction(action).catch((error => clog.error(`移动端操作 ${action || "unknown"} 失败`, error)));
         });
     }
-    handleAction(action) {
+    async handleAction(action) {
         switch (action) {
             // 列表页操作
             case "check":
@@ -419,7 +390,7 @@ class MobileBottomBarPlugin extends BasePlugin {
                 const next = cur === "default" ? "rateCount" : cur === "rateCount" ? "date" : "default";
                 localStorage.setItem("jhs_sortMethod", next);
                 const btnPlugin = this.getBean("ListPageButtonPlugin");
-                btnPlugin?.sortItems?.();
+                await btnPlugin?.sortItems?.();
                 const label = { default: "默认", rateCount: "评价人数", date: "时间" }[next];
                 show.info(`排序: ${label}`);
                 break;
@@ -448,7 +419,7 @@ class MobileBottomBarPlugin extends BasePlugin {
                 break;
             // 通用
             case "setting":
-                this.getBean("SettingPlugin")?.openSettingDialog();
+                await this.getBean("SettingPlugin")?.openQuickSetting();
                 break;
         }
     }

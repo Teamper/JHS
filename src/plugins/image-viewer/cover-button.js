@@ -20,12 +20,12 @@ class CoverButtonPlugin extends BasePlugin {
                 .jhs-card-menu__dot--fav { background:var(--jhs-status-fav); }
                 .jhs-card-menu__dot--filter { background:var(--jhs-status-filter); }
                 .loading { opacity:.7; filter:blur(1px); }
-                .loading-spinner { position:absolute; top:50%; left:50%; width:40px; height:40px; border:3px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; transform:translate(-50%,-50%); animation:spin 1s ease-in-out infinite; z-index:20; }
+                .loading-spinner { position:absolute; top:50%; left:50%; width:40px; height:40px; border:3px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; transform:translate(-50%,-50%); animation:spin 1s ease-in-out infinite; z-index:var(--jhs-z-elevated); }
                 @keyframes spin { to { transform:translate(-50%,-50%) rotate(360deg); } }
             </style>`;
     }
-    handle() {
-        window.isListPage && (this.addSvgBtn(), this.bindClick().then());
+    async handle() {
+        window.isListPage && (this.addSvgBtn(), await this.bindClick());
     }
     /** 构建卡片工具和三个卡片内 popover。 */
     buildToolBox() {
@@ -107,7 +107,7 @@ class CoverButtonPlugin extends BasePlugin {
                 const {carNum: t} = e.findCarNumAndHref(n);
                 let i = n.find("img");
                 if (!i.length) return void show.error("没有找到图片");
-                this.showVideo(a, i, t).then();
+                void this.showVideo(a, i, t).catch((error => clog.error("卡片预览视频打开失败", error)));
             }
         })), $(document).on("click", ".screenSvg", (async t => {
             t.preventDefault();
@@ -119,7 +119,7 @@ class CoverButtonPlugin extends BasePlugin {
                 const s = await this.getBean("ScreenShotPlugin").getScreenshot(i);
                 n.close(), showImageViewer(s);
             } catch (a) {
-                console.error("图片预览出错:", a), show.error("图片预览出错:" + a);
+                clog.error("图片预览出错:", a), show.error("图片预览出错:" + a);
             } finally { n.close(); }
         })), $(document).on("click", ".filterBtn, .favoriteBtn, .hasDownBtn, .hasWatchBtn", (t => {
             t.preventDefault(), t.stopPropagation();
@@ -128,10 +128,10 @@ class CoverButtonPlugin extends BasePlugin {
                     try {
                         let n = await e.parseActressName(s);
                         await storageManager.saveCar({ carNum: i, url: s, names: n, actionType: t, publishTime: o }), window.refresh(), show.ok("操作成功");
-                    } catch (r) { console.error("保存操作失败:", r), show.error("操作失败"); }
+                    } catch (r) { clog.error("保存操作失败:", r), show.error("操作失败"); }
                 };
-                n.hasClass("filterBtn") ? utils.q(t, `是否屏蔽${i}?`, (() => r(d))) : n.hasClass("favoriteBtn") ? r(h).then() : n.hasClass("hasDownBtn") ? r(g).then() : n.hasClass("hasWatchBtn") && r(p).then(), this.closeCardMenus();
-            } catch (t) { console.error("按钮点击处理失败:", t); }
+                n.hasClass("filterBtn") ? utils.q(t, `是否屏蔽${i}?`, (() => r(d))) : n.hasClass("favoriteBtn") ? void r(h) : n.hasClass("hasDownBtn") ? void r(g) : n.hasClass("hasWatchBtn") && void r(p), this.closeCardMenus();
+            } catch (t) { clog.error("按钮点击处理失败:", t); }
         }));
         const t = this.getBean("OtherSitePlugin"), n = await t.getMissAvUrl(), a = await t.getjableUrl(), i = await t.getAvgleUrl(), s = await t.getAv123Url();
         $(this.getSelector().itemSelector).each(((t, o) => {
@@ -139,16 +139,16 @@ class CoverButtonPlugin extends BasePlugin {
             r.find(".site-jable").attr({ href: `${a}/search/${l}/`, target: "_blank", rel: "noopener noreferrer" }),
             r.find(".site-avgle").attr({ href: `${i}/vod/search.html?wd=${l}`, target: "_blank", rel: "noopener noreferrer" }),
             r.find(".site-miss-av").attr({ href: `${n}/search/${l}`, target: "_blank", rel: "noopener noreferrer" }),
-            r.find(".site-123-av").attr({ href: `${s}/ja/search?keyword=${l}`, target: "_blank", rel: "noopener noreferrer" });
+            r.find(".site-123-av").attr({ href: `${s}/cn/search?keyword=${encodeURIComponent(l)}`, target: "_blank", rel: "noopener noreferrer" });
         }));
         $(document).on("click", ".site-jable, .site-avgle, .site-miss-av, .site-123-av", (t => {
             try {
                 t.preventDefault(), t.stopPropagation();
                 const o = $(t.currentTarget), r = o.closest(".item"), {carNum: l} = e.findCarNumAndHref(r);
                 let c = null;
-                o.hasClass("site-jable") ? c = `${a}/search/${l}/` : o.hasClass("site-avgle") ? c = `${i}/vod/search.html?wd=${l}` : o.hasClass("site-miss-av") ? c = `${n}/search/${l}` : o.hasClass("site-123-av") && (c = `${s}/ja/search?keyword=${l}`),
+                o.hasClass("site-jable") ? c = `${a}/search/${l}/` : o.hasClass("site-avgle") ? c = `${i}/vod/search.html?wd=${l}` : o.hasClass("site-miss-av") ? c = `${n}/search/${l}` : o.hasClass("site-123-av") && (c = `${s}/cn/search?keyword=${encodeURIComponent(l)}`),
                 t && (t.ctrlKey || t.metaKey) ? GM_openInTab(c, { insert: 0 }) : window.open(c), this.closeCardMenus();
-            } catch (t) { console.error("站点按钮处理失败:", t); }
+            } catch (t) { clog.error("站点按钮处理失败:", t); }
         })), $(document).on("click", ".titleSvg, .carNumSvg, .downSvg", (t => {
             t.preventDefault(), t.stopPropagation();
             const n = $(t.currentTarget).closest(".item"), {carNum: a, title: i} = e.findCarNumAndHref(n), s = n.find(l ? ".photo-frame img" : ".cover img");
@@ -163,10 +163,13 @@ class CoverButtonPlugin extends BasePlugin {
     async showVideo(e, t, n) {
         const a = `${n}_preview_video`;
         let i = $(`#${a}`);
-        if (i.length > 0) return i.parent().show(), i[0].play(), void t.hide();
+        if (i.length > 0) return i.parent().show(), await safePlay(i[0], {
+            context: "列表卡片预览",
+            notify: !0
+        }), void t.hide();
         t.addClass("loading"), t.after('<div class="loading-spinner"></div>');
-        const s = t.attr("src"), o = await ne(n);
-        if (!o) return show.error("未解析到视频"), void this.showImg(e, t, n);
+        const s = t.attr("src"), {sources: o, error: previewError} = await fetchDmmPreview(n);
+        if (!o) return show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未解析到视频"), void this.showImg(e, t, n);
         let r = await storageManager.getSetting("videoQuality");
         r = Z(Object.keys(o), r);
         let c = o[r], d = `
@@ -176,6 +179,10 @@ class CoverButtonPlugin extends BasePlugin {
         l && (d = `<div><video src="${c}" poster="${s}" id="${a}" controls loop muted playsinline class="jhs-layout-a38a0e50"></video></div>`),
         t.parent().append(d), t.hide(), t.removeClass("loading"), t.next(".loading-spinner").remove(), i = $(`#${a}`);
         let h = i[0];
-        h.load(), h.muted = !1, h.play(), i.trigger("focus");
+        h.load(), h.muted = !1, await safePlay(h, {
+            context: "列表卡片预览",
+            notify: !0,
+            message: "REGION_BLOCKED" === previewError?.code ? previewError.message : "当前视频源无法播放"
+        }), i.trigger("focus");
     }
 }

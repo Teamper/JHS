@@ -15,10 +15,10 @@ class Fc2By123AvPlugin extends BasePlugin {
     request123Av(e, requestOptions = {}) {
         return gmHttp.get(e, {}, {}, !1, { ...AV123_REQUEST_OPTIONS, ...requestOptions });
     }
-    handle() {
+    async handle() {
         $("#navbar-menu-hero > div > div:nth-child(1) > div > a:nth-child(4)").after('<a class="navbar-item" href="/advanced_search?type=100&released_start=2099-09">123Av-Fc2</a>'),
         $('.tabs li:contains("FC2")').after('<li><a href="/advanced_search?type=100&released_start=2099-09"><span>123Av-Fc2</span></a></li>'),
-        o.includes("/advanced_search?type=100") && (this.hookPage(), this.handleQuery().then());
+        o.includes("/advanced_search?type=100") && (this.hookPage(), await this.handleQuery());
     }
     hookPage() {
         let e = $("h2.section-title");
@@ -77,12 +77,12 @@ class Fc2By123AvPlugin extends BasePlugin {
             if (0 === i.length) {
                 clog.log(i), show.error("无结果");
                 const e = this.keyword ? `${t}/cn/search?keyword=${encodeURIComponent(this.keyword)}` : `${t}/cn/makers/fc2`;
-                console.error("获取数据失败!", e);
+                clog.error("获取数据失败!", e);
             }
             let s = this.markDataListHtml(i);
             $(".movie-list").html(s), await utils.smoothScrollToTop();
         } catch (t) {
-            console.error(t);
+            clog.error(t);
         } finally {
             e.close();
         }
@@ -98,10 +98,10 @@ class Fc2By123AvPlugin extends BasePlugin {
             area: utils.getDialogArea("workspace"),
             skin: "movie-detail-layer",
             scrollbar: !1,
-            success: (n, a) => {
+            success: async (n, a) => {
                 organizeJhsOwnedDetailWorkspace($(n).find(".movie-detail-container")), utils.setupEscClose(a), this.loadData(e, t);
                 let i = e.replace("FC2-", "");
-                $("#magnets-content").append(this.getBean("MagnetHubPlugin").createMagnetHub(i)),
+                $("#magnets-content").append(await this.getBean("MagnetHubPlugin").createMagnetHub(i)),
                 $("#favoriteBtn").on("click", (async n => {
                     const a = $("#data-actress").text(), i = $("#data-publishTime").text();
                     await storageManager.saveCar({
@@ -143,7 +143,7 @@ class Fc2By123AvPlugin extends BasePlugin {
                 })), $("#search-subtitle-btn").on("click", (t => utils.openPage(`https://subtitlecat.com/index.php?search=${e}`, e, !1, t))),
                 $("#xunLeiSubtitleBtn").on("click", (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(e)));
                 let s = e.replace("FC2-", "");
-                this.getBean("OtherSitePlugin").loadOtherSite(s, e).then();
+                void this.getBean("OtherSitePlugin").loadOtherSite(s, e).catch((error => clog.error("FC2 外部站点加载失败", error)));
             }
         });
     }
@@ -151,10 +151,11 @@ class Fc2By123AvPlugin extends BasePlugin {
         let n = loading();
         try {
             const {publishDate: a, title: i} = await this.get123AvVideoInfo(t);
-            $(".movie-info-container").html(`\n                    <h3 class="movie-title jhs-layout-761d3add"><strong class="current-title">${escapeHtml(i || "无标题")}</strong></h3>\n                    <div class="movie-meta jhs-layout-761d3add">\n                        <span><strong>番号: </strong>${e || "未知"}</span>\n                        <span><strong>年份: </strong>${a || "未知"}</span>\n                        <span>\n                            <strong>站点: </strong>\n                            <a href="https://fc2ppvdb.com/articles/${e.replace("FC2-", "")}" target="_blank">fc2ppvdb</a>\n                            <a href="https://adult.contents.fc2.com/article/${e.replace("FC2-", "")}/" target="_blank" class="jhs-layout-3fed2a7e">fc2电子市场</a>\n                        </span>\n                    </div>\n                    <div class="movie-actors jhs-layout-761d3add">\n                        <div class="actor-list"><strong>主演: </strong></div>\n                    </div>\n                    <div class="movie-seller jhs-layout-761d3add">\n                        <span><strong>販売者: </strong></span>\n                    </div>\n                    <div class="movie-gallery jhs-layout-761d3add">\n                        <strong>剧照: </strong>\n                        <div class="image-list"></div>\n                    </div>\n                    \n                    <div id="data-publishTime" class="jhs-layout-6b99de8b">${a || ""}</div>\n\n                `),
-            this.getImgList(e).then(), this.getActressInfo(e).then(), this.getBean("TranslatePlugin").translate(e, !1).then();
+            const articleId = encodeURIComponent(String(e || "").replace("FC2-", ""));
+            $(".movie-info-container").html(`\n                    <h3 class="movie-title jhs-layout-761d3add"><strong class="current-title">${escapeHtml(i || "无标题")}</strong></h3>\n                    <div class="movie-meta jhs-layout-761d3add">\n                        <span><strong>番号: </strong>${escapeHtml(e || "未知")}</span>\n                        <span><strong>年份: </strong>${escapeHtml(a || "未知")}</span>\n                        <span><strong>站点: </strong><a href="https://fc2ppvdb.com/articles/${articleId}" target="_blank">fc2ppvdb</a><a href="https://adult.contents.fc2.com/article/${articleId}/" target="_blank" class="jhs-layout-3fed2a7e">fc2电子市场</a></span>\n                    </div>\n                    <div class="movie-actors jhs-layout-761d3add"><div class="actor-list"><strong>主演: </strong></div></div>\n                    <div class="movie-seller jhs-layout-761d3add"><span><strong>卖家: </strong></span></div>\n                    <div class="movie-gallery jhs-layout-761d3add"><strong>剧照: </strong><div class="image-list"></div></div>\n                    <div id="data-publishTime" class="jhs-layout-6b99de8b">${escapeHtml(a || "")}</div>\n                `),
+            await Promise.all([ this.getImgList(e), this.getActressInfo(e), this.getBean("TranslatePlugin").translate(e, !1) ]);
         } catch (a) {
-            console.error(a);
+            clog.error(a);
         } finally {
             n.close();
         }
@@ -162,8 +163,8 @@ class Fc2By123AvPlugin extends BasePlugin {
     handleLongImg(e) {
         utils.loopDetector((() => $(".movie-gallery .image-list").length > 0), (async () => {
             $(".movie-gallery .image-list").prepend(' <a class="tile-item screen-container jhs-layout-e5d57abb"><div class="jhs-layout-9db87399">正在加载缩略图</div></a> ');
-            const t = await this.getBean("ScreenShotPlugin").getScreenshot(e);
-            t && ($(".screen-container").html(`<img src="${t}" alt="" loading="lazy" class="jhs-layout-cad980f4">`),
+            const t = normalizeHttpUrl(await this.getBean("ScreenShotPlugin").getScreenshot(e));
+            t && ($(".screen-container").html(`<img src="${escapeHtml(t)}" alt="" loading="lazy" class="jhs-layout-cad980f4">`),
             $(".screen-container").on("click", (e => {
                 e.stopPropagation(), e.preventDefault(), showImageViewer(e.currentTarget);
             })));
@@ -198,7 +199,8 @@ class Fc2By123AvPlugin extends BasePlugin {
             if (e.length > 0) {
                 const t = $(e[0]);
                 let n = t.text(), a = t.attr("href");
-                $(".movie-seller").html(`<span><strong>販売者: </strong><a href="https://fc2ppvdb.com${escapeHtml(a)}" target="_blank">${escapeHtml(n)}</a></span>`);
+                const sellerUrl = normalizeHttpUrl(a, "https://fc2ppvdb.com");
+                $(".movie-seller").empty().append($("<span></span>").append("卖家: ", sellerUrl ? $("<a></a>").attr({ href: sellerUrl, target: "_blank" }).text(n) : document.createTextNode(n)));
             }
         }
     }
@@ -208,15 +210,17 @@ class Fc2By123AvPlugin extends BasePlugin {
             referer: n
         });
         let i = $(a).find(".items_article_SampleImagesArea img").map((function() {
-            return $(this).attr("src");
-        })).get(), s = "";
-        Array.isArray(i) && i.length > 0 ? s = i.map(((e, t) => `\n                <a href="${e}" data-fancybox="movie-gallery" data-caption="剧照 ${t + 1}">\n                    <img src="${e}" class="movie-image-thumb" loading="lazy" alt=""/>\n                </a>\n            `)).join("") : $(".movie-gallery").html("<h4>剧照: 暂无剧照</h4>"),
+            return normalizeHttpUrl($(this).attr("src"), n);
+        })).get().filter(Boolean), s = "";
+        Array.isArray(i) && i.length > 0 ? s = i.map(((e, t) => `\n                <a href="${escapeHtml(e)}" data-fancybox="movie-gallery" data-caption="剧照 ${t + 1}">\n                    <img src="${escapeHtml(e)}" class="movie-image-thumb" loading="lazy" alt=""/>\n                </a>\n            `)).join("") : $(".movie-gallery").html("<h4>剧照: 暂无剧照</h4>"),
         $(".image-list").html(s), this.handleLongImg(t);
     }
     markDataListHtml(e) {
         let t = "";
         return e.forEach((e => {
-            t += `\n                <div class="item">\n                    <a href="${escapeHtml(e.href)}" class="box" title="${escapeHtml(e.title)}">\n                        <div class="cover ">\n                            <img loading="lazy" src="${escapeHtml(e.imgSrc)}" alt="">\n                        </div>\n                        <div class="video-title"><strong>${escapeHtml(e.carNum)}</strong> ${escapeHtml(e.title)}</div>\n                        <div class="score">\n                        </div>\n                        <div class="meta">\n                        </div>\n                        <div class="tags has-addons">\n                        </div>\n                    </a>\n                </div>\n            `;
+            const href = normalizeHttpUrl(e.href, "https://123av.com"), imageUrl = normalizeHttpUrl(e.imgSrc, "https://123av.com");
+            if (!href) return;
+            t += `\n                <div class="item">\n                    <a href="${escapeHtml(href)}" class="box" title="${escapeHtml(e.title)}">\n                        <div class="cover ">${imageUrl ? `<img loading="lazy" src="${escapeHtml(imageUrl)}" alt="">` : ""}</div>\n                        <div class="video-title"><strong>${escapeHtml(e.carNum)}</strong> ${escapeHtml(e.title)}</div>\n                        <div class="score"></div><div class="meta"></div><div class="jhs-toolbar"></div>\n                    </a>\n                </div>\n            `;
         })), t;
     }
 }

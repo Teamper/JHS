@@ -17,7 +17,7 @@ function getPluginCategories() {
             core:group("core", "基础核心"), list:group("list", "列表页"), detail:group("detail", "详情页"),
             media:group("media", "媒体"), data:group("data", "数据"), network:group("network", "网络")
         },
-        corePlugins: ["SettingPlugin","StatsPlugin"], pluginMeta
+        corePlugins: ["SettingPlugin","StatsPlugin","MobileBottomBarPlugin"], pluginMeta
     };
 }
 
@@ -615,8 +615,22 @@ function injectNetworkPanel() {
     t.append(n);
 }
 
-/** Build the HTML for the hover dropdown quick-settings panel. */
-function buildSimpleSettingHtml() {
+function injectResourceSourcesPanel() {
+    if ($("#resource-sources-panel").length) return;
+    $(".content-panel").last().after(`<div id="resource-sources-panel" class="content-panel">
+      <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>磁力来源</h3><p>聚合多个来源搜索磁力结果，优先级数字越小越靠前。</p></header><div id="builtin-magnet-source-list" class="jhs-resource-card-list"></div><div class="jhs-toolbar"><h4>自定义来源</h4><button type="button" id="add-custom-magnet-source" class="jhs-btn jhs-btn--primary">+ 添加来源</button></div><div id="custom-magnet-source-list" class="jhs-resource-card-list"></div></section>
+      <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>磁力规则</h3><p>使用可视化规则为结果添加标签或过滤低质量内容。</p></header><div class="jhs-toolbar"><h4>标签规则</h4><button type="button" id="add-magnet-tag-rule" class="jhs-btn">+ 新建</button></div><div id="magnet-tag-rule-list" class="jhs-resource-card-list"></div><div class="jhs-toolbar"><h4>过滤规则</h4><button type="button" id="add-magnet-filter-rule" class="jhs-btn">+ 新建</button></div><div id="magnet-filter-rule-list" class="jhs-resource-card-list"></div></section>
+      <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>截图来源</h3><p>自动选择会按优先级依次尝试可用来源。</p></header><div class="jhs-setting-group"><label class="jhs-setting-row"><span>自动选择</span><input type="radio" name="screenshotMode" value="auto"></label><label class="jhs-setting-row"><span>手动选择</span><input type="radio" name="screenshotMode" value="manual"></label></div><div id="screenshot-source-list" class="jhs-resource-card-list"></div></section>
+      <details class="jhs-setting-section jhs-resource-advanced"><summary>高级 · 导入 / 导出配置</summary><p class="jhs-setting-help">高级功能：错误修改可能导致自定义来源不可用，保存前会校验配置。</p><div class="jhs-toolbar"><button type="button" id="export-resource-config" class="jhs-btn">导出资源配置</button><button type="button" id="edit-resource-config" class="jhs-btn">编辑原始 JSON</button><button type="button" id="import-resource-config" class="jhs-btn jhs-btn--primary">校验并导入</button></div><textarea id="advanced-resource-json" class="jhs-textarea" rows="10" aria-label="高级资源配置 JSON"></textarea></details>
+    </div>
+    <div id="cloud-services-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>115</h3><p>状态：<span id="one-one-five-state" class="jhs-badge">未检测</span> <button type="button" id="check-one-one-five-login" class="jhs-btn jhs-btn--ghost">检测登录状态</button></p><small>功能开关在刷新页面后生效。</small></header><label class="jhs-setting-row"><span><strong>115 离线下载</strong><small>在磁力结果旁显示“115离线”。</small></span><input type="checkbox" id="enable115Offline" class="mini-switch"></label><label class="jhs-setting-row"><span><strong>115 文件匹配</strong><small>根据当前番号查找网盘中已存在的视频。</small></span><input type="checkbox" id="enable115Match" class="mini-switch"></label><label class="jhs-setting-row"><span>匹配并发数</span><input type="number" id="oneOneFiveConcurrency" class="jhs-field" min="1" max="10"></label><label class="jhs-setting-row"><span>匹配缓存（分钟）</span><input type="number" id="oneOneFiveCacheMinutes" class="jhs-field" min="1" max="1440"></label></section></div>
+    <div id="data-tools-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>番号列表导入</h3><p>支持换行、空格、逗号分隔番号。必须先解析预览，再确认导入。</p></header><label class="jhs-setting-group"><span>番号</span><textarea id="car-number-import" class="jhs-textarea" rows="8" placeholder="ABC-001&#10;ABC-002&#10;FC2-1234567"></textarea></label><label class="jhs-setting-row"><span>导入为</span><select id="car-number-import-status" class="jhs-select-source"><option value="">请选择</option><option value="favorite">收藏</option><option value="hasDown">已下载</option><option value="hasWatch">已观看</option><option value="filter">屏蔽</option></select></label><div class="jhs-toolbar"><button type="button" id="preview-car-number-import" class="jhs-btn">解析预览</button><button type="button" id="confirm-car-number-import" class="jhs-btn jhs-btn--primary" disabled>确认导入</button></div><div id="car-number-import-preview" class="jhs-card" aria-live="polite"></div></section></div>`);
+    const sidebar = $(".jhs-mobile-sidebar,.setting-sidebar").first();
+    sidebar.append('<button type="button" class="jhs-btn side-menu-item" data-panel="resource-sources-panel" aria-controls="resource-sources-panel">资源来源</button><button type="button" class="jhs-btn side-menu-item" data-panel="cloud-services-panel" aria-controls="cloud-services-panel">云盘服务</button><button type="button" class="jhs-btn side-menu-item" data-panel="data-tools-panel" aria-controls="data-tools-panel">数据工具</button>');
+}
+
+/** Build the shared quick-settings content for desktop and mobile. */
+function buildQuickSettingHtml() {
     const rows = [
         [ "显示全部已鉴定内容", "showAllItem", "快速显示全部已鉴定状态。" ],
         [ "鉴定后立即关闭", "needClosePage", "完成鉴定后关闭当前详情窗口。" ],
@@ -635,7 +649,7 @@ function buildSimpleSettingHtml() {
                 </div>
             </div>
             <footer class="simple-setting__footer">
-                <button type="button" id="moreBtn" class="jhs-btn jhs-btn--ghost">更多设置</button>
+                <button type="button" id="moreBtn" class="jhs-btn jhs-btn--ghost">完整设置 <span aria-hidden="true">›</span></button>
             </footer>
         </div>`;
 }

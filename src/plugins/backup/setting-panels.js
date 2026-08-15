@@ -61,7 +61,7 @@ async function renderSnapshotPanel() {
                                 try {
                                     await storageManager.restoreSnapshot(i.id), show.ok("恢复成功, 页面将刷新"), setTimeout(() => location.reload(), 1e3);
                                 } catch (t) {
-                                    console.error(t), show.error("恢复失败: " + t.message);
+                                    clog.error(t), show.error("恢复失败: " + t.message);
                                 } finally { e.close(); }
                             }));
                         })), a && a.addEventListener("click", (async e => {
@@ -75,7 +75,7 @@ async function renderSnapshotPanel() {
                             utils.q(e, `删除快照「${escapeHtml(i.name)}」?`, (async () => {
                                 try {
                                     await storageManager.deleteSnapshot(i.id), show.ok("已删除"), renderSnapshotPanel();
-                                } catch (t) { console.error(t), show.error("删除失败: " + t.message); }
+                                } catch (t) { clog.error(t), show.error("删除失败: " + t.message); }
                             }));
                         }));
                     })), '<button type="button" class="jhs-btn jhs-btn--primary snap-restore">恢复</button> <button type="button" class="jhs-btn jhs-btn--secondary snap-download">下载</button> <button type="button" class="jhs-btn jhs-btn--danger snap-delete">删除</button>';
@@ -125,7 +125,7 @@ function showDiffPreview(e, t, n = null) {
                 await storageManager.createSnapshot("导入前自动备份", "auto-import"),
                 n ? (await storageManager.importData(n), show.ok("导入成功!"), void setTimeout(() => location.reload(), 1e3)) : t && (await storageManager.importData(t), show.ok("导入成功!"), void setTimeout(() => location.reload(), 1e3));
             } catch (r) {
-                console.error(r), show.error("导入失败: " + r.message);
+                clog.error(r), show.error("导入失败: " + r.message);
             } finally { o.close(); }
         }
     });
@@ -230,7 +230,7 @@ async function renderDataHealthPanel() {
                 </div>
             `);
     } catch (t) {
-        console.error(t), e.text("体检失败: " + t);
+        clog.error(t), e.text("体检失败: " + t);
     }
 }
 

@@ -22,10 +22,10 @@ class WebDavClient {
                 headers: r,
                 data: a,
                 onload: e => {
-                    e.status >= 200 && e.status < 300 ? i(e) : (console.error(e), s(new Error(`请求失败 ${e.status}: ${e.statusText}`)));
+                    e.status >= 200 && e.status < 300 ? i(e) : (clog.error(e), s(new Error(`请求失败 ${e.status}: ${e.statusText}`)));
                 },
                 onerror: e => {
-                    console.error("请求WebDav发生错误:", e), s(new Error("请求WebDav失败, 请检查服务是否启动, 凭证是否正确"));
+                    clog.error("请求WebDav发生错误:", e), s(new Error("请求WebDav失败, 请检查服务是否启动, 凭证是否正确"));
                 }
             });
         }));
@@ -52,7 +52,10 @@ class WebDavClient {
         for (let r = 0; r < s.length; r++) {
             if (0 === r) continue;
             let e = s[r];
-            const i = e.getElementsByTagNameNS("DAV:", "displayname")[0].textContent, l = (null == (t = e.getElementsByTagNameNS("DAV:", "getcontentlength")[0]) ? void 0 : t.textContent) || "0", c = (null == (n = e.getElementsByTagNameNS("DAV:", "creationdate")[0]) ? void 0 : n.textContent) || (null == (a = e.getElementsByTagNameNS("DAV:", "getlastmodified")[0]) ? void 0 : a.textContent) || "";
+            const displayNameNode = e.getElementsByTagNameNS("DAV:", "displayname")[0];
+            const href = e.getElementsByTagNameNS("DAV:", "href")[0]?.textContent || "";
+            const fallbackName = decodeURIComponent(href.replace(/\/$/, "").split("/").pop() || "");
+            const i = displayNameNode?.textContent || fallbackName, l = (null == (t = e.getElementsByTagNameNS("DAV:", "getcontentlength")[0]) ? void 0 : t.textContent) || "0", c = (null == (n = e.getElementsByTagNameNS("DAV:", "creationdate")[0]) ? void 0 : n.textContent) || (null == (a = e.getElementsByTagNameNS("DAV:", "getlastmodified")[0]) ? void 0 : a.textContent) || "";
             "0" !== l && o.push({
                 fileId: i,
                 name: i,

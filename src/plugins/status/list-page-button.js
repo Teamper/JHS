@@ -48,7 +48,7 @@ class ListPageButtonPlugin extends BasePlugin {
     }
     bindEvent() {
         $("#waitCheckBtn").on("click", (e => {
-            this.openWaitCheck(e).then();
+            void this.openWaitCheck(e).catch((error => clog.error("待鉴定列表打开失败", error)));
         })), $("#newVideoBtn").on("click", (e => {
             this.getBean("NewVideoPlugin").openDialog();
         })), $("#blacklistBtn").on("click", (e => {
@@ -69,7 +69,7 @@ class ListPageButtonPlugin extends BasePlugin {
                 try {
                     await e.filterAllVideo(i), window.refresh();
                 } catch (t) {
-                    console.error(t);
+                    clog.error(t);
                 } finally { this.loadObj.close(); }
             }));
         })), $("#favoriteAllVideo").on("click", (async t => {
@@ -78,7 +78,7 @@ class ListPageButtonPlugin extends BasePlugin {
             let i = a.text().trim().split(",")[0];
             utils.q(n, "一键收藏所有可见作品?", (async () => {
                 this.loadObj = loading();
-                try { await e.batchSaveAllVideos(i, h), window.refresh(); } catch (t) { console.error(t); } finally { this.loadObj.close(); }
+                try { await e.batchSaveAllVideos(i, h), window.refresh(); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
             }));
         })), $("#hasDownAllVideo").on("click", (async t => {
             let n = {clientX: t.clientX, clientY: t.clientY + 80}, a = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
@@ -86,7 +86,7 @@ class ListPageButtonPlugin extends BasePlugin {
             let i = a.text().trim().split(",")[0];
             utils.q(n, "一键已下载所有可见作品?", (async () => {
                 this.loadObj = loading();
-                try { await e.batchSaveAllVideos(i, g), window.refresh(); } catch (t) { console.error(t); } finally { this.loadObj.close(); }
+                try { await e.batchSaveAllVideos(i, g), window.refresh(); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
             }));
         }));
     }
@@ -103,7 +103,7 @@ class ListPageButtonPlugin extends BasePlugin {
         menu.on("click", ".jhs-sort-option", (event => {
             const item = $(event.currentTarget), method = item.data("sort-method");
             localStorage.setItem("jhs_sortMethod", method), menu.find(".jhs-sort-option").attr("aria-checked", "false"), item.attr("aria-checked", "true"),
-            $("#jhs-sort-current").text(item.text()), close(!0), this.sortItems().then();
+            $("#jhs-sort-current").text(item.text()), close(!0), void this.sortItems().catch((error => clog.error("列表排序失败", error)));
         })).on("keydown", ".jhs-sort-option", (event => {
             const items = menu.find(".jhs-sort-option"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), close(!0);

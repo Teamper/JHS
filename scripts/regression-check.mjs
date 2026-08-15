@@ -188,6 +188,10 @@ const expectedPlugins = [
   ["new-video/task.js", "TaskPlugin", "TaskPlugin"],
   ["new-video/new-video.js", "NewVideoPlugin", "NewVideoPlugin"],
   ["one-two-three/offline.js", "OneTwoThreeOfflinePlugin", "OneTwoThreeOfflinePlugin"],
+  ["one-one-five/plugins.js", "OneOneFiveOfflinePlugin", "OneOneFiveOfflinePlugin"],
+  ["one-one-five/plugins.js", "OneOneFiveMatchPlugin", "OneOneFiveMatchPlugin"],
+  ["one-one-five/plugins.js", "OneOneFiveRenamePlugin", "OneOneFiveRenamePlugin"],
+  ["status/compat-enhancements.js", "CompatibilityEnhancementsPlugin", "CompatibilityEnhancementsPlugin"],
   ["stats/stats.js", "StatsPlugin", "StatsPlugin"],
   ["status/mobile-bottom-bar.js", "MobileBottomBarPlugin", "MobileBottomBarPlugin"]
 ];
@@ -205,11 +209,11 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractRegistryArray(registry, "DEFAULT_JAVDB_PLUGINS");
 const javbusPlugins = extractRegistryArray(registry, "DEFAULT_JAVBUS_PLUGINS");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,FoldCategoryPlugin,ListPageButtonPlugin,HistoryPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,FilterTitleKeywordPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,WantAndWatchedVideosPlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,FavoriteActressesPlugin,NewVideoPlugin,TaskPlugin,StatsPlugin,MobileBottomBarPlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,FoldCategoryPlugin,ListPageButtonPlugin,HistoryPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,FilterTitleKeywordPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,WantAndWatchedVideosPlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,FavoriteActressesPlugin,NewVideoPlugin,TaskPlugin,StatsPlugin,MobileBottomBarPlugin,OneOneFiveOfflinePlugin,OneOneFiveMatchPlugin,OneOneFiveRenamePlugin,CompatibilityEnhancementsPlugin",
   "JavDB plugin registration order changed"
 );
 assert(
-  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,HistoryPlugin,AutoPagePlugin,SearchByImagePlugin,BusNavBarPlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailPageButtonPlugin,ReviewPlugin,FilterTitleKeywordPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,BlacklistPlugin,TaskPlugin,StatsPlugin,MobileBottomBarPlugin",
+  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,HistoryPlugin,AutoPagePlugin,SearchByImagePlugin,BusNavBarPlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailPageButtonPlugin,ReviewPlugin,FilterTitleKeywordPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,BlacklistPlugin,TaskPlugin,StatsPlugin,MobileBottomBarPlugin,OneOneFiveOfflinePlugin,OneOneFiveMatchPlugin,OneOneFiveRenamePlugin,CompatibilityEnhancementsPlugin",
   "JavBus plugin registration order changed"
 );
 assertIncludes(registry, "context.is123Pan", "shared registry");

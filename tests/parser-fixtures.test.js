@@ -11,7 +11,7 @@ const source = readFileSync(join(import.meta.dirname, "../src/parsers/third-part
 function loadParsers(html) {
     const dom = new JSDOM(html, { url: "https://javdb.com/" }), $ = jquery(dom.window);
     const context = vm.createContext({ URL, $, A: "uncensored", D: "censored", normalizeCarNum: (value) => value?.trim() || null });
-    vm.runInContext(`${source}; globalThis.parsers = { parseJavStoreSearch, parseJavStorePreview, parseJavDbActorList, parseDetailPage, parse123AvCards, merge123AvCards, parse123AvSourceMaxPage, parse123AvVideoInfo };`, context);
+    vm.runInContext(`${source}; globalThis.parsers = { normalizeJavStoreAssetUrl, parseJavStoreSearch, parseJavStorePreview, parseJavDbActorList, parseDetailPage, parse123AvCards, merge123AvCards, parse123AvSourceMaxPage, parse123AvVideoInfo };`, context);
     return { ...context.parsers, $page: $(dom.window.document) };
 }
 
@@ -29,6 +29,21 @@ describe("third-party parser fixtures", () => {
         expect(loaded.parseJavStorePreview(loaded.$page, "https://javstore.net/item-pn.html")).toBe("https://img.javstore.net/preview.jpg");
         loaded = loadParsers(fixture("javstore-detail-without-preview.html"));
         expect(loaded.parseJavStorePreview(loaded.$page, "https://javstore.net/item-pn.html")).toBeNull();
+    });
+
+    it("upgrades only JavStore-owned HTTP previews to HTTPS", () => {
+        let loaded = loadParsers(fixture("javstore-detail-http-preview.html"));
+        expect(loaded.parseJavStorePreview(loaded.$page, "https://javstore.net/item-pn.html")).toBe("https://img2.javstore.net/preview.jpg");
+        loaded = loadParsers('<a href="http://images.example.net/preview.th.jpg">CLICK HERE!</a>');
+        expect(loaded.parseJavStorePreview(loaded.$page, "https://javstore.net/item-pn.html")).toBe("http://images.example.net/preview.jpg");
+    });
+
+    it("normalizes legacy JavStore assets without rewriting unrelated HTTP hosts", () => {
+        const { normalizeJavStoreAssetUrl } = loadParsers("");
+        expect(normalizeJavStoreAssetUrl("http://img.javstore.net/legacy.jpg")).toBe("https://img.javstore.net/legacy.jpg");
+        expect(normalizeJavStoreAssetUrl("http://javstore.net/legacy.jpg")).toBe("https://javstore.net/legacy.jpg");
+        expect(normalizeJavStoreAssetUrl("http://images.example.net/legacy.jpg")).toBe("http://images.example.net/legacy.jpg");
+        expect(normalizeJavStoreAssetUrl("javascript:alert(1)")).toBeNull();
     });
 
     it("parses actor identity, aliases, relative resources and pagination", () => {

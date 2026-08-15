@@ -3,7 +3,7 @@ async function importSettingData(showDiffPreviewFn) {
     try {
         const input = document.createElement("input");
         input.type = "file", input.accept = ".json";
-        const cleanup = () => { try { document.body.removeChild(input); } catch (e) {} };
+        const cleanup = () => input.remove();
         input.onchange = async e => {
             const t = e.target.files[0];
             if (!t) return void cleanup();
@@ -18,10 +18,10 @@ async function importSettingData(showDiffPreviewFn) {
                         const e = await storageManager.exportData(), t = await storageManager.diffData(e, n);
                         a.close(), showDiffPreviewFn(t, n, null);
                     } catch (i) {
-                        a.close(), console.error(i), show.error("差异分析失败: " + i.message);
+                        a.close(), clog.error(i), show.error("差异分析失败: " + i.message);
                     }
                 } catch (t) {
-                    console.error(t), show.error("导入失败：文件内容不是有效的JSON格式 " + t.message);
+                    clog.error(t), show.error("导入失败：文件内容不是有效的JSON格式 " + t.message);
                 }
             }, n.onerror = () => {
                 cleanup(), show.error("读取文件时出错");
@@ -29,7 +29,7 @@ async function importSettingData(showDiffPreviewFn) {
         }, document.body.appendChild(input), input.click();
         setTimeout(cleanup, 3e5);
     } catch (e) {
-        console.error(e), show.error("导入数据时出错: " + e.message);
+        clog.error(e), show.error("导入数据时出错: " + e.message);
     }
 }
 
@@ -48,7 +48,7 @@ async function backupDataByWebDav(folderName) {
         const e = new WebDavClient(n, a, i);
         await e.backup(folderName, s, o), show.ok("备份完成");
     } catch (l) {
-        console.error(l), show.error(l.toString());
+        clog.error(l), show.error(l.toString());
     } finally {
         r.close();
     }
@@ -67,7 +67,7 @@ async function backupListBtnByWebDav(folderName, openFileListDialogFn) {
         const e = new WebDavClient(n, a, i), t = await e.getBackupList(folderName);
         openFileListDialogFn(t, e, "WebDav");
     } catch (o) {
-        console.error(o), show.error(`发生错误: ${o ? o.message : o}`);
+        clog.error(o), show.error(`发生错误: ${o ? o.message : o}`);
     } finally {
         s.close();
     }
@@ -124,7 +124,7 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn) {
                             container.html(renderCards(e));
                             layer.alert("删除成功");
                         } catch (err) {
-                            console.error(err), show.error(`发生错误: ${err ? err.message : err}`);
+                            clog.error(err), show.error(`发生错误: ${err ? err.message : err}`);
                         } finally { load.close(); }
                     });
                 } else if (action === "download") {
@@ -146,7 +146,7 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn) {
                         load.close();
                         showDiffPreviewFn(diff, null, parsed);
                     } catch (err) {
-                        load.close(), console.error(err), show.error("预览失败: " + (err ? err.message : err));
+                        load.close(), clog.error(err), show.error("预览失败: " + (err ? err.message : err));
                     }
                 }
             });
@@ -226,7 +226,7 @@ function openFileListDialog(e, t, n, folderName, showDiffPreviewFn) {
                                         let e = await t.getBackupList(folderName);
                                         i.replaceData(e), layer.alert("删除成功");
                                     } catch (s) {
-                                        console.error(s), show.error(`发生错误: ${s ? s.message : s}`);
+                                        clog.error(s), show.error(`发生错误: ${s ? s.message : s}`);
                                     } finally {
                                         a.close();
                                     }
@@ -249,7 +249,7 @@ function openFileListDialog(e, t, n, folderName, showDiffPreviewFn) {
                                     const n = JSON.parse(e), i = await storageManager.exportData(), s = await storageManager.diffData(i, n);
                                     a.close(), showDiffPreviewFn(s, null, n);
                                 } catch (i) {
-                                    a.close(), console.error(i), show.error("预览失败: " + (i ? i.message : i));
+                                    a.close(), clog.error(i), show.error("预览失败: " + (i ? i.message : i));
                                 }
                             }));
                         })), '\n                                    <button type="button" class="jhs-btn jhs-btn--danger backup-delete">删除</button>\n                                    <button type="button" class="jhs-btn jhs-btn--secondary backup-download">下载</button>\n                                    <button type="button" class="jhs-btn jhs-btn--primary backup-import">导入</button>\n                                ';
@@ -283,6 +283,6 @@ async function exportSettingData() {
         const e = JSON.stringify(await storageManager.exportData()), t = `${utils.getNowStr("_", "_")}.json`;
         utils.download(e, t), show.ok("数据导出成功");
     } catch (t) {
-        console.error(t), show.error("导出数据时出错: " + t.message);
+        clog.error(t), show.error("导出数据时出错: " + t.message);
     }
 }

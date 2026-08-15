@@ -81,7 +81,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     });
 
     it("keeps exactly the selected eight quick settings", () => {
-        const quick = settings.slice(settings.indexOf("function buildSimpleSettingHtml"));
+        const quick = settings.slice(settings.indexOf("function buildQuickSettingHtml"));
         for (const id of [ "showAllItem", "needClosePage", "autoPage", "translateTitle", "hoverBigImg", "enableLoadOtherSite", "enableLoadScreenShot", "enableLoadPreviewVideo" ])
             expect(quick).toContain(`"${id}"`);
         for (const id of [ "showFilterItem", "enableLoadActressInfo", "enableVerticalModel", "containerColumns", "containerWidth" ])
@@ -108,6 +108,44 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(settings).not.toMatch(/helpBtn|\(\?\)|tooltip-icon/);
         expect(settingForms).not.toMatch(/help-container|常见问题|使用说明|helpBtn/);
         expect(settings).toContain('id="moreBtn" class="jhs-btn jhs-btn--ghost"');
+    });
+
+    it("shares quick settings across desktop and mobile without a mobile navbar trigger", () => {
+        const settingPlugin = readFileSync(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8");
+        expect(settingPlugin).toContain("if (utils.isMobileMode()) return;");
+        expect(settingPlugin).toContain("openQuickSetting()");
+        expect(settingPlugin).toContain("buildQuickSettingHtml()");
+        expect(settingPlugin).toContain('id="jhs-quick-setting-sheet"');
+        expect(settingPlugin).toContain('id="jhs-quick-setting-backdrop"');
+        const mobileQuickSetting = settingPlugin.slice(settingPlugin.indexOf("openQuickSetting()"), settingPlugin.indexOf("async openSettingDialog"));
+        expect(mobileQuickSetting).not.toContain("layer.open(");
+        expect(settingPlugin).toMatch(/on\("click", "#setting-btn, #mini-setting-btn"[\s\S]*?\.html\(""\)\.hide\(\)[\s\S]*?openSettingDialog\(\)/);
+        expect(commandbar).toContain('this.getBean("SettingPlugin")?.openQuickSetting()');
+        expect(commandbar).not.toContain('this.getBean("SettingPlugin")?.openSettingDialog()');
+        expect(commandbar).toMatch(/const action = \$\(e\.currentTarget\)\.data\("action"\);\s*closeMenu\(!0\);\s*void this\.handleAction\(action\)\.catch/);
+        expect(commandbar).toContain('id="jhs-fab" class="jhs-btn"');
+        expect(commandbar).toContain('role="menuitem" class="jhs-btn jhs-fab-menu-item"');
+        expect(commandbar).toContain('aria-expanded="false"');
+        expect(commandbar).toMatch(/ArrowDown[\s\S]*ArrowUp[\s\S]*Home[\s\S]*End/);
+        expect(settingPlugin).toMatch(/previousFocus[\s\S]*isConnected/);
+        expect(settingPlugin).toMatch(/"Tab"[\s\S]*shiftKey/);
+        expect(settings).toContain("完整设置");
+    });
+
+    it("binds full-settings layout ranges idempotently after loading the form", () => {
+        expect(settingForms).toContain("bindLayoutRangeEvents();");
+        expect(settingForms).toContain('.off(".jhsSetting")');
+        expect(settingForms).toContain('.on("input.jhsSetting"');
+        expect(settingForms).toContain('.on("change.jhsSetting"');
+        expect(settingForms).toContain('saveSettingItem("containerColumns"');
+        expect(settingForms).toContain('saveSettingItem("containerWidth"');
+        expect(settingForms).toContain("await applyImageMode()");
+        const rangeBinding = settingForms.slice(settingForms.indexOf("function bindLayoutRangeEvents"), settingForms.indexOf("async function initQuickSettingForm"));
+        const columnsInput = rangeBinding.slice(rangeBinding.indexOf('on("input.jhsSetting"'), rangeBinding.indexOf('on("change.jhsSetting"'));
+        expect(columnsInput).not.toContain("saveSettingItem");
+        const quickForm = settingForms.slice(settingForms.indexOf("async function initQuickSettingForm"));
+        expect(quickForm).not.toContain('$("#containerColumns").on("input"');
+        expect(quickForm).not.toContain('$("#containerWidth").on("input"');
     });
 
     it("uses semantic review and related layouts with safe external text", () => {

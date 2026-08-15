@@ -47,37 +47,37 @@ async function loadSettingForm(getBean) {
             "Enter" === t.key && addKeyword(t, e);
         }));
     }));
+    bindLayoutRangeEvents();
 }
 
-/** Initialize the hover quick-settings form with current values and bind event handlers. */
-async function initSimpleSettingForm(getBean, getSelector, openSettingDialogFn) {
+/** Bind the shared layout range controls without accumulating handlers. */
+function bindLayoutRangeEvents() {
+    $("#containerColumns").off(".jhsSetting").on("input.jhsSetting", (() => {
+        const columns = $("#containerColumns").val();
+        $("#showContainerColumns").text(columns);
+        const movieList = document.querySelector(".movie-list"), masonry = document.querySelector(".masonry");
+        movieList && (movieList.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
+        masonry && (masonry.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
+    })).on("change.jhsSetting", (async event => {
+        await storageManager.saveSettingItem("containerColumns", $(event.currentTarget).val()), await applyImageMode();
+    }));
+    $("#containerWidth").off(".jhsSetting").on("input.jhsSetting", (event => {
+        const width = parseInt($(event.target).val()) + 70, widthText = `${width}%`;
+        $("#showContainerWidth").text(widthText);
+        const javdbContainer = document.querySelector("section .container"), javbusContainer = document.querySelector(".container-fluid .row");
+        javdbContainer && (javdbContainer.style.minWidth = widthText);
+        javbusContainer && (javbusContainer.style.minWidth = widthText);
+    })).on("change.jhsSetting", (event => storageManager.saveSettingItem("containerWidth", parseInt($(event.currentTarget).val()) + 70)));
+}
+
+/** Initialize quick settings in either the desktop popover or mobile layer. */
+async function initQuickSettingForm(getBean, getSelector, openSettingDialogFn) {
     let e = await storageManager.getSetting();
-    $("#containerColumns").val(e.containerColumns || 5), $("#showContainerColumns").text(e.containerColumns || 5),
-    $("#containerWidth").val((e.containerWidth || 100) - 70), $("#showContainerWidth").text((e.containerWidth || 100) + "%"),
     $("#needClosePage").prop("checked", !e.needClosePage || e.needClosePage === _),
     $("#autoPage").prop("checked", !e.autoPage || e.autoPage === _), $("#translateTitle").prop("checked", !e.translateTitle || e.translateTitle === _),
     $("#enableLoadActressInfo").prop("checked", !e.enableLoadActressInfo || e.enableLoadActressInfo === _),
     $("#enableLoadOtherSite").prop("checked", !e.enableLoadOtherSite || e.enableLoadOtherSite === _),
-    $("#containerColumns").on("input", (async t => {
-        let n = $("#containerColumns").val();
-        if ($("#showContainerColumns").text(n), r) {
-            document.querySelector(".movie-list").style.gridTemplateColumns = `repeat(${n}, minmax(0, 1fr))`;
-        }
-        if (l) {
-            document.querySelector(".masonry").style.gridTemplateColumns = `repeat(${n}, minmax(0, 1fr))`;
-        }
-        await storageManager.saveSettingItem("containerColumns", n), applyImageMode();
-    })), $("#containerWidth").on("input", (async t => {
-        let n = parseInt($(t.target).val());
-        const a = n + 70 + "%";
-        if ($("#showContainerWidth").text(a), r) {
-            document.querySelector("section .container").style.minWidth = a;
-        }
-        if (l) {
-            document.querySelector(".container-fluid .row").style.minWidth = a;
-        }
-        storageManager.saveSettingItem("containerWidth", n + 70);
-    })), $("#showFilterItem").prop("checked", !!e.showFilterItem && e.showFilterItem === _),
+    $("#showFilterItem").prop("checked", !!e.showFilterItem && e.showFilterItem === _),
     $("#showFilterActorItem").prop("checked", !!e.showFilterActorItem && e.showFilterActorItem === _),
     $("#showFilterKeywordItem").prop("checked", !!e.showFilterKeywordItem && e.showFilterKeywordItem === _),
     $("#showFavoriteItem").prop("checked", !e.showFavoriteItem || e.showFavoriteItem === _),
@@ -132,11 +132,11 @@ async function initSimpleSettingForm(getBean, getSelector, openSettingDialogFn) 
         await storageManager.saveSettingItem("enableLoadActressInfo", n), n === _ ? getBean("ActressInfoPlugin").loadActressInfo() : $(".actress-info").remove();
     })), $("#enableLoadOtherSite").on("change", (async t => {
         const n = $("#enableLoadOtherSite").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("enableLoadOtherSite", n), n === _ ? getBean("OtherSitePlugin").loadOtherSite().then() : $("#otherSiteBox").remove();
+        await storageManager.saveSettingItem("enableLoadOtherSite", n), n === _ ? await getBean("OtherSitePlugin").loadOtherSite() : $("#otherSiteBox").remove();
     })), $("#enableLoadScreenShot").prop("checked", !e.enableLoadScreenShot || e.enableLoadScreenShot === _),
     $("#enableLoadScreenShot").on("change", (async t => {
         const n = $("#enableLoadScreenShot").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("enableLoadScreenShot", n), n === _ ? getBean("ScreenShotPlugin").loadScreenShot().then() : $(".screen-container").remove();
+        await storageManager.saveSettingItem("enableLoadScreenShot", n), n === _ ? await getBean("ScreenShotPlugin").loadScreenShot() : $(".screen-container").remove();
     })), $("#enableLoadPreviewVideo").prop("checked", !e.enableLoadPreviewVideo || e.enableLoadPreviewVideo === _),
     $("#enableLoadPreviewVideo").on("change", (async t => {
         const n = $("#enableLoadPreviewVideo").is(":checked") ? _ : C;
@@ -146,7 +146,7 @@ async function initSimpleSettingForm(getBean, getSelector, openSettingDialogFn) 
         const n = $("#enableVerticalModel").is(":checked") ? _ : C;
         await storageManager.saveSettingItem("enableVerticalModel", n), applyImageMode();
     })), $("#moreBtn").on("click", (() => {
-        $(".simple-setting").html("").hide(), openSettingDialogFn("base-panel");
+        $(".simple-setting, .mini-simple-setting").html("").hide(), openSettingDialogFn("base-panel");
     }));
 }
 

@@ -58,7 +58,7 @@ function loadPreviewClass() {
         set src(value) { this.value = value; }
         get src() { return this.value; }
     }
-    const context = { console, document, Image: FakeImage, utils: { isMobileMode: () => false }, setTimeout, clearTimeout };
+    const context = { console, document, Image: FakeImage, JHS_Z_INDEX: { tooltip: 9999999999 }, utils: { isMobileMode: () => false }, setTimeout, clearTimeout };
     context.window = context;
     context.innerWidth = 800;
     context.innerHeight = 600;

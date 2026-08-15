@@ -110,7 +110,7 @@ function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
                     position: absolute;
                     top: ${isJavDB ? "35px" : "25px"};
                     right: 0;
-                    z-index: 1000;
+                    z-index: var(--jhs-z-dropdown);
                     border: 1px solid var(--jhs-border);
                     border-radius: var(--jhs-radius-sm);
                     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
@@ -121,18 +121,25 @@ function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
                     max-height: min(720px, calc(100vh - 16px));
                 }
                 .simple-setting__panel { display:flex; max-height:inherit; flex-direction:column; }
+                .jhs-quick-setting { color:var(--jhs-text); background:var(--jhs-surface); }
+                .jhs-quick-setting .simple-setting__panel { max-height:min(720px, calc(100vh - 96px)); }
+                .jhs-quick-setting-backdrop { position:fixed; inset:0; z-index:var(--jhs-z-sheet-backdrop); background:rgba(0,0,0,.45); backdrop-filter:blur(2px); }
+                .jhs-quick-setting-sheet { position:fixed; right:0; bottom:0; left:0; z-index:var(--jhs-z-sheet); max-height:calc(100dvh - 16px); border:1px solid var(--jhs-border); border-bottom:0; border-radius:var(--jhs-radius-lg) var(--jhs-radius-lg) 0 0; background:var(--jhs-surface); box-shadow:var(--jhs-shadow-lg); overflow:hidden; }
+                .jhs-quick-setting__header { display:flex; min-height:52px; align-items:center; justify-content:space-between; padding:0 var(--jhs-space-3) 0 var(--jhs-space-4); border-bottom:1px solid var(--jhs-border); }
+                .jhs-quick-setting__header h2 { margin:0; color:var(--jhs-text); font-size:var(--jhs-font-size-lg); }
+                .jhs-quick-setting__close { min-width:40px; padding:0; font-size:24px; }
                 .simple-setting__scroll { min-height:0; padding:var(--jhs-space-2) var(--jhs-space-3); overflow-y:auto; }
                 .simple-setting__footer { display:flex; justify-content:flex-end; gap:var(--jhs-space-2); padding:var(--jhs-space-3); border-top:1px solid var(--jhs-border); }
                 .simple-setting__list { display:grid; }
-                .simple-setting .jhs-setting-row { grid-template-columns:minmax(0,1fr) auto; gap:var(--jhs-space-3); min-height:48px; padding:var(--jhs-space-2) 0; border-bottom:1px solid var(--jhs-border); }
-                .simple-setting .jhs-setting-row:last-child { border-bottom:0; }
-                .simple-setting .jhs-setting-row__control { width:auto; justify-self:end; }
-                .simple-setting .jhs-setting-row__description { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+                .simple-setting .jhs-setting-row, .mini-simple-setting .jhs-setting-row, .jhs-quick-setting .jhs-setting-row { grid-template-columns:minmax(0,1fr) auto; gap:var(--jhs-space-3); min-height:48px; padding:var(--jhs-space-2) 0; border-bottom:1px solid var(--jhs-border); }
+                .simple-setting .jhs-setting-row:last-child, .mini-simple-setting .jhs-setting-row:last-child, .jhs-quick-setting .jhs-setting-row:last-child { border-bottom:0; }
+                .simple-setting .jhs-setting-row__control, .mini-simple-setting .jhs-setting-row__control, .jhs-quick-setting .jhs-setting-row__control { width:auto; justify-self:end; }
+                .simple-setting .jhs-setting-row__description, .mini-simple-setting .jhs-setting-row__description, .jhs-quick-setting .jhs-setting-row__description { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
                 .jhs-setting-nav-item { position:relative; }
                 .jhs-nav-button { padding-right:15px !important; }
                 .jhs-mini-setting-box { position:relative; margin-left:auto; }
                 .jhs-mini-setting-trigger { padding-left:0 !important; padding-right:0 !important; }
-                .jhs-setting-anchor { position:relative; display:flex; flex-grow:1; justify-content:flex-end; z-index:12345679 !important; }
+                .jhs-setting-anchor { position:relative; display:flex; flex-grow:1; justify-content:flex-end; z-index:var(--jhs-z-host-nav) !important; }
                 .jhs-setting-detail-anchor { margin-top:var(--jhs-space-5); }
                 .jhs-more-tools-panel { display:none; }
                 .jhs-backup-cards { padding:0 var(--jhs-space-1); }
@@ -342,6 +349,16 @@ function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
                     margin-top: var(--jhs-space-4);
                 }
 
+                .jhs-resource-card-list { display:grid; gap:var(--jhs-space-3); min-width:0; }
+                .jhs-resource-card { min-width:0; overflow:hidden; }
+                .jhs-resource-card .jhs-setting-row { align-items:flex-start; }
+                .jhs-resource-card small { display:block; margin-top:var(--jhs-space-1); color:var(--jhs-text-muted); overflow-wrap:anywhere; }
+                .jhs-resource-card .jhs-badge { margin-left:var(--jhs-space-2); }
+                .jhs-resource-form, .jhs-resource-form label, .jhs-parser-fields { display:grid; gap:var(--jhs-space-2); min-width:0; }
+                .jhs-resource-form { padding:var(--jhs-space-4); max-height:70vh; overflow-y:auto; overflow-x:hidden; }
+                .jhs-resource-advanced > summary { cursor:pointer; font-weight:600; }
+                #advanced-resource-json { width:100%; box-sizing:border-box; margin-top:var(--jhs-space-3); }
+
                 @media (max-width: 768px) {
                     .jhs-setting-layout {
                         grid-template-columns: minmax(0, 1fr);
@@ -367,6 +384,8 @@ function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
                         grid-template-columns: minmax(0, 1fr);
                     }
                     .jhs-summary-grid, .jhs-health-columns { grid-template-columns:minmax(0,1fr); }
+                    .jhs-resource-card .jhs-setting-row { align-items:stretch; }
+                    .jhs-resource-card .jhs-toolbar { flex-wrap:wrap; }
                 }
 
                 input[type="checkbox"]:disabled {

@@ -55,7 +55,7 @@ class ReviewPlugin extends BasePlugin {
                 return (await gmHttp.get(url, params, headers)).data.movies;
             })(carNumber);
             const match = movies.find((movie => movie.number.toLowerCase() === carNumber.toLowerCase()));
-            match && this.showReview(match.id, $("#sample-waterfall")).then();
+            match && await this.showReview(match.id, $("#sample-waterfall"));
         }
     }
     async showReview(movieId, target) {
@@ -86,7 +86,7 @@ class ReviewPlugin extends BasePlugin {
             reviews = await R(movieId, 1, pageSize);
         } catch (error) {
             error.toString().includes("簽名已過期") && show.error("生成签名失败, 请检查系统时间及时区是否正确!"), clog.error("获取评论失败:", error),
-            console.error("获取评论失败:", error);
+            clog.error("获取评论失败:", error);
             return void this.renderRetry(container, "获取评论失败", (() => this.fetchAndDisplayReviews(movieId)));
         }
         container.empty();
@@ -111,7 +111,7 @@ class ReviewPlugin extends BasePlugin {
                 const reviews = await R(movieId, page, pageSize);
                 this.displayReviews(reviews, container, keywords), reviews.length < pageSize ? (button.remove(), end.show()) : button.text("加载更多评论").prop("disabled", !1);
             } catch (error) {
-                console.error("加载更多评论失败:", error), button.text("加载失败，请重试").prop("disabled", !1);
+                clog.error("加载更多评论失败:", error), button.text("加载失败，请重试").prop("disabled", !1);
             }
         }));
     }

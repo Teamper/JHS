@@ -123,11 +123,11 @@ class Utils {
     rightClick(e, t, n) {
         let a;
         "string" == typeof e ? a = document.querySelector(e) : e instanceof HTMLElement && (a = e),
-        a || (console.warn("rightClick(), 容器无效或未提供，将使用 document.body 进行全局委托。"), a = document.body),
+        a || (clog.warn("rightClick(), 容器无效或未提供，将使用 document.body 进行全局委托。"), a = document.body),
         "string" == typeof t && "" !== t.trim() ? a.addEventListener("contextmenu", (e => {
             const a = e.target.closest(t);
             a && n(e, a);
-        })) : console.error("rightClick(), 必须提供有效的 targetSelector。");
+        })) : clog.error("rightClick(), 必须提供有效的 targetSelector。");
     }
     q(e, t, n, a) {
         let o;
@@ -136,7 +136,7 @@ class Utils {
                 title: "提示",
                 btn: [ "确定", "取消" ],
                 shade: 0,
-                zIndex: 999999991
+                zIndex: JHS_Z_INDEX.layer
             }, (function() {
                 n && n(), layer.close(o);
             }), (function() {
@@ -151,7 +151,7 @@ class Utils {
                 title: "提示",
                 btn: [ "确定", "取消" ],
                 shade: 0,
-                zIndex: 999999991
+                zIndex: JHS_Z_INDEX.layer
             }, (function() {
                 n && n(), layer.close(o);
             }), (function() {
@@ -252,8 +252,25 @@ class Utils {
         const e = storageManager.getSettingSync("mobileMode", "auto");
         return "on" === e || ("off" !== e && (this.isMobile() || window.innerWidth < 768));
     }
-    copyToClipboard(e, t) {
-        navigator.clipboard.writeText(t).then((() => show.info(`${e}已复制到剪切板, ${t}`))).catch((e => console.error("复制失败: ", e)));
+    async copyToClipboard(e, t) {
+        const text = String(t ?? "");
+        let copied = !1;
+        try {
+            if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text), copied = !0; else throw new Error("Clipboard API unavailable");
+        } catch (clipboardError) {
+            const textarea = document.createElement("textarea"), activeElement = document.activeElement;
+            textarea.value = text, textarea.setAttribute("readonly", ""), textarea.style.position = "fixed", textarea.style.opacity = "0",
+            document.body.appendChild(textarea), textarea.select();
+            try {
+                copied = !0 === document.execCommand("copy");
+                if (!copied) throw clipboardError;
+            } catch (fallbackError) {
+                clog.error("复制失败:", fallbackError), show.error("复制失败，请手动复制");
+            } finally {
+                textarea.remove(), activeElement?.focus?.();
+            }
+        }
+        return copied && show.info(`${e}已复制到剪贴板, ${text}`), copied;
     }
     htmlTo$dom(e) {
         const t = new DOMParser;

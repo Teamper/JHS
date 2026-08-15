@@ -10,7 +10,7 @@ class AutoPagePlugin extends BasePlugin {
         return "\n            <style>\n                .jhs-scroll {\n                    text-align: center;\n                    padding-top: 20px;\n                    font-size: 14px;\n                }\n                .jhs-scroll.waterfall-loading { color: var(--jhs-text); }\n                .jhs-scroll.waterfall-error { color: var(--jhs-status-filter); cursor: pointer; }\n                .jhs-scroll.waterfall-no-more { color: var(--jhs-status-down); }\n            </style>\n        ";
     }
     async handle() {
-        this.waterfall().then();
+        await this.waterfall();
     }
     getInitialPageNumber() {
         if (l) {
@@ -26,7 +26,7 @@ class AutoPagePlugin extends BasePlugin {
     async waterfall() {
         if (await this.shouldDisablePaging()) return;
         const e = this.getSelector();
-        if (this.container = document.querySelector(e.boxSelector), !this.container) return void console.error("没有找到容器节点,停止瀑布流!");
+        if (this.container = document.querySelector(e.boxSelector), !this.container) return void clog.error("没有找到容器节点,停止瀑布流!");
         this.loader = document.createElement("div"), this.loader.className = "jhs-scroll",
         this.container.parentNode.insertBefore(this.loader, this.container.nextSibling),
         this.pageItems.push({
@@ -34,7 +34,7 @@ class AutoPagePlugin extends BasePlugin {
             top: 0,
             url: window.location.href
         }), this.loader.addEventListener("click", (() => {
-            this.loader.classList.contains("waterfall-error") && this.loadNextPage().then();
+            this.loader.classList.contains("waterfall-error") && void this.loadNextPage().catch((error => clog.error("瀑布流重试失败", error)));
         })), (() => {
             let t = !1;
             window.addEventListener("scroll", (() => {
@@ -93,11 +93,12 @@ class AutoPagePlugin extends BasePlugin {
     }
     checkLoad() {
         if (!this.loader) return;
-        this.loader.getBoundingClientRect().top < window.innerHeight + this.preloadDistance && this.loadNextPage().then();
+        this.loader.getBoundingClientRect().top < window.innerHeight + this.preloadDistance && void this.loadNextPage().catch((error => clog.error("瀑布流自动加载失败", error)));
     }
     async shouldDisablePaging() {
         if (!window.isListPage) return !0;
-        return await storageManager.getSetting("autoPage", _), [ "search?q", "handlePlayback=1", "handleTop=1", "/want_watch_videos", "/watched_videos", "/advanced_search?type=100" ].some((e => o.includes(e)));
+        const enabled = await storageManager.getSetting("autoPage", _);
+        return enabled !== _ || [ "search?q", "handlePlayback=1", "handleTop=1", "/want_watch_videos", "/watched_videos", "/advanced_search?type=100" ].some((e => o.includes(e)));
     }
     updatePageUrl(e) {
         window.history.replaceState({}, "", e), l && (document.title = document.title.replace(/第\d+頁/, `第${this.currentPage}頁`));

@@ -44,7 +44,7 @@ class RelatedPlugin extends BasePlugin {
         try {
             related = await K(movieId, 1, 20);
         } catch (error) {
-            console.error("获取清单失败:", error);
+            clog.error("获取清单失败:", error);
             return void this.renderRetry(container, (() => this.fetchAndDisplayRelateds(movieId)));
         }
         container.empty();
@@ -66,7 +66,7 @@ class RelatedPlugin extends BasePlugin {
                 const related = await K(movieId, page, 20);
                 this.displayRelateds(related, container), related.length < 20 ? (button.remove(), end.show()) : button.text("加载更多清单").prop("disabled", !1);
             } catch (error) {
-                console.error("加载更多清单失败:", error), button.text("加载失败，请重试").prop("disabled", !1);
+                clog.error("加载更多清单失败:", error), button.text("加载失败，请重试").prop("disabled", !1);
             }
         }));
     }

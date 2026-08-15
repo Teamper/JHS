@@ -24,7 +24,7 @@ const ot = "filetreeStore", rt = "filetree_data", lt = {
             }, n.onsuccess = t => {
                 this.db = t.target.result, e(this.db);
             }, n.onerror = e => {
-                console.error("IndexedDB open error:", e.target.errorCode), t(new Error("Failed to open IndexedDB"));
+                clog.error("IndexedDB open error:", e.target.errorCode), t(new Error("Failed to open IndexedDB"));
             };
         }));
     },
@@ -38,7 +38,7 @@ const ot = "filetreeStore", rt = "filetree_data", lt = {
         return await this.open(), new Promise(((n, a) => {
             const i = this.db.transaction([ ot ], "readwrite").objectStore(ot).put(t, e);
             i.onsuccess = () => n(), i.onerror = e => {
-                console.error("IndexedDB set error:", e.target.errorCode), a(new Error("Failed to write to IndexedDB"));
+                clog.error("IndexedDB set error:", e.target.errorCode), a(new Error("Failed to write to IndexedDB"));
             };
         }));
     }
@@ -76,7 +76,7 @@ async function gt(e) {
             try {
                 e = await lt.get(rt);
             } catch (a) {
-                console.error("读取 IndexedDB 失败:", a);
+                clog.error("读取 IndexedDB 失败:", a);
             }
             if (e && e.Content && (ct = e, dt = ht(e), dt)) return ct;
             show.info("正在载入头像数据源...");
@@ -145,7 +145,7 @@ class NewVideoPlugin extends BasePlugin {
                 .actress-card__menu { position:relative; }
                 .actress-card__menu summary { list-style:none; }
                 .actress-card__menu summary::-webkit-details-marker { display:none; }
-                .actress-card__menu-popover { position:absolute; right:0; bottom:calc(100% + var(--jhs-space-1)); z-index:20; min-width:128px; padding:var(--jhs-space-1); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
+                .actress-card__menu-popover { position:absolute; right:0; bottom:calc(100% + var(--jhs-space-1)); z-index:var(--jhs-z-elevated); min-width:128px; padding:var(--jhs-space-1); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
                 .actress-card__menu-popover button { width:100%; justify-content:flex-start; }
                 .card-tag.is-uncensored { color:var(--jhs-status-down); background:var(--jhs-status-down-tint); }
                 .card-tag.is-censored { color:var(--jhs-status-watch); background:var(--jhs-status-watch-tint); }
@@ -257,7 +257,7 @@ class NewVideoPlugin extends BasePlugin {
                     if (!t) return void show.error("当前有定时任务在后台执行中, 无法发起手动任务");
                     $('a[href*="/users/profile"]').length > 0 ? (await e.checkFavoriteActress(), this.loadData()) : show.error("未登录JavDb, 同步失败");
                 })).catch((e => {
-                    console.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
+                    clog.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
                 }));
             }));
         })), $("#checkNewVideo").on("click", (t => {
@@ -270,7 +270,7 @@ class NewVideoPlugin extends BasePlugin {
                 }, (async t => {
                     t ? await e.checkNewVideo(!0) : show.error("当前有定时任务在后台执行中, 无法发起手动任务");
                 })).catch((e => {
-                    console.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
+                    clog.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
                 }));
             }));
         })), $("#paramActressType").on("change", (e => {
@@ -395,7 +395,7 @@ class NewVideoPlugin extends BasePlugin {
                 const n = $(e.currentTarget).attr("data-starId"), i = sortedActresses.find((e => e.starId === n));
                 await taskPlugin.checkOneNewVideo(i);
             })).catch((e => {
-                console.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
+                clog.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
             }));
         })), $(".actress-card__menu").on("keydown", (event => {
             if ("Escape" !== event.key) return;
@@ -460,7 +460,7 @@ class NewVideoPlugin extends BasePlugin {
         try {
             t = await this.getNewVideoFlatList();
         } catch (n) {
-            return console.error(n), void e.html(`<div class="jhs-state jhs-state--error" role="alert">加载失败: ${escapeHtml(n.message)}</div>`);
+            return clog.error(n), void e.html(`<div class="jhs-state jhs-state--error" role="alert">加载失败: ${escapeHtml(n.message)}</div>`);
         }
         if (0 === t.length) return e.html('<div class="jhs-state jhs-state--empty">暂无待鉴定的新作品</div>'),
         void $("#new-video-list-footer").html("");
@@ -610,7 +610,7 @@ class NewVideoPlugin extends BasePlugin {
                 e.remark = o;
                 try {
                     await storageManager.updateFavoriteActress(e);
-                    this.renderActressCards().then();
+                    await this.renderActressCards();
                     this.showNewVideoCount();
                     show.ok(`女优 ${a} 信息已更新`);
                     layer.close(t);

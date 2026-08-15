@@ -58,8 +58,8 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(repoRoot, "JHS.user.js"), "utf8")
 ]);
 
-requireMatch(main, /^\/\/ @version\s+6\.1\.1$/m, "userscript version must remain 6.1.1");
-requireMatch(packageSource, /"version"\s*:\s*"6\.1\.1"/, "package version must remain 6.1.1");
+requireMatch(main, /^\/\/ @version\s+6\.2\.0$/m, "userscript version must remain 6.2.0");
+requireMatch(packageSource, /"version"\s*:\s*"6\.2\.0"/, "package version must remain 6.2.0");
 
 for (const token of [
   "--jhs-space-1", "--jhs-space-6", "--jhs-radius-xs", "--jhs-radius-pill",
@@ -200,13 +200,23 @@ requireMatch(manager, /return assertPageInfoContract\(\{\s*carNum,\s*url: t,\s*a
 requireMatch(utils, /new URL\(e, window\.location\.origin\)[\s\S]*searchParams\.set\("jhsCarNum", carNum\)/, "detail URLs must carry the known car number");
 requireMatch(previewVideo, /async fetchVideo\(\)\s*\{\s*const carNum = normalizeCarNum\(this\.carNum\)/, "DMM must validate carNum before cache and parsing");
 requireMatch(previewVideo, /跳过 DMM 解析：番号不可用/, "DMM invalid-number warning is missing");
+requireMatch(previewVideo, /<video id="jhs-preview-video"[^>]+controls playsinline/, "JavDB DMM playback must use an isolated JHS video element");
+requireMatch(previewVideo, /nativeVideo\.pause\(\)[\s\S]{0,100}jhs-native-preview-hidden/, "successful DMM playback must pause and hide the JavDB player");
+requireMatch(previewVideo, /dmmVideo\.muted = !muted \|\| "yes" === muted/, "JavDB DMM playback must default to muted autoplay");
+requireMatch(previewVideo, /addClass\("is-active"\)[\s\S]{0,300}高画质预览静音重试[\s\S]{0,300}restoreNativePlayer/, "JavDB DMM playback must be visible and retry muted before native fallback");
+forbidMatch(previewVideo, /nativePreviewSrc|rememberNativeSource|restoreNativeSource|video\.currentSrc/, "JavDB HLS blob sources must never be cached or restored");
+forbidMatch(previewVideo, /\$nativeVideo\.attr\("src"|nativeVideo\.load\(\)/, "JHS must not replace or reload the JavDB HLS media source");
 requireMatch(screenshot, /async getScreenshot\(e\)\s*\{\s*e = normalizeCarNum\(e\)/, "screenshots must validate carNum first");
 requireMatch(screenshot, /无法获取番号，缩略图未加载/, "screenshot invalid-number fallback is missing");
 requireMatch(screenshot, /javstore\.net\/search\?q=\$\{encodeURIComponent\(e\)\}/, "JavStore must use its query search endpoint");
 requireMatch(parsers, /a\[href\$=["']-pn\.html["']\][\s\S]{0,240}includes\(normalizedCarNum\.toUpperCase\(\)\)[\s\S]{0,180}\.map\([\s\S]{0,120}\.get\(\)/,
   "JavStore must preserve all matching -pn.html results in source order");
 requireMatch(screenshot, /for \(const e of i\)[\s\S]*gmHttp\.get\(t/, "JavStore detail URLs must be checked sequentially");
-requireMatch(parsers, /new URL\(previewHref, detailUrl\)\.href\.replace\("\.th", ""\)/, "JavStore preview URLs must be absolute and retain .th compatibility");
+requireMatch(parsers, /normalizeJavStoreAssetUrl\(previewHref, detailUrl\)/, "JavStore preview URLs must be resolved and normalized against the detail page");
+requireMatch(parsers, /"javstore\.net" === hostname \|\| hostname\.endsWith\("\.javstore\.net"\)[\s\S]{0,100}url\.protocol = "https:"/, "JavStore HTTP preview URLs must be upgraded selectively");
+requireMatch(parsers, /previewUrl\.replace\("\.th", ""\)/, "JavStore preview URLs must retain .th compatibility");
+requireMatch(screenshot, /"javstore" === provider \? normalizeJavStoreAssetUrl\(cachedUrl\) : cachedUrl/, "legacy JavStore screenshot cache reads must normalize asset URLs");
+requireMatch(screenshot, /addImg\(e, t\)[\s\S]{0,100}normalizeJavStoreAssetUrl\(t\)/, "screenshot rendering must normalize JavStore asset URLs at the final boundary");
 requireMatch(parsers, /"CLICK HERE!" === \$\(element\)\.text\(\)\.trim\(\)/, "JavStore detail parsing must retain the CLICK HERE! link contract");
 requireMatch(screenshot, /详情页没有 CLICK HERE![\s\S]{0,80}continue/, "JavStore must continue after a candidate without CLICK HERE!");
 forbidMatch(screenshot, /javstore\.net\/search\/|img\[src\*=['"]_s\.jpg/, "legacy JavStore search or detail fallback must not return");
@@ -224,8 +234,18 @@ forbidMatch(highlightMagnet, /#enable-magnets-filter[^\n]{0,100}(?:hide\(|addCla
 requireMatch(highlightMagnet, /removeClass\("do-hide"\)[\s\S]{0,160}未识别到可过滤项/, "magnet filtering must retain a no-match hint");
 requireMatch(highlightMagnet, /showAll\(\)[\s\S]{0,260}removeClass\("do-hide"\)[\s\S]{0,260}\.show\(\)/, "disabling magnet filtering must restore every row");
 requireMatch(detail, /#enable-magnets-filter/, "FC2 detail workspace must collect the magnet filter action");
+requireMatch(commandbar, /<button type="button" id="jhs-fab" class="jhs-btn"/, "mobile FAB must be a native JHS button");
+requireMatch(commandbar, /role="menuitem" class="jhs-btn jhs-fab-menu-item"/, "mobile FAB items must use native menu buttons");
+requireMatch(commandbar, /ArrowDown[\s\S]*ArrowUp[\s\S]*Home[\s\S]*End/, "mobile FAB menu must support keyboard navigation");
+const settingPlugin = await readFile(join(srcRoot, "plugins", "backup", "setting.js"), "utf8");
+requireMatch(settingPlugin, /previousFocus[\s\S]*isConnected[\s\S]*previousFocus\.focus/, "quick settings must restore its opener focus");
+requireMatch(settingPlugin, /"Tab"[\s\S]*focusable[\s\S]*shiftKey/, "quick settings must trap focus in both directions");
 
 const sourceFiles = await listJavaScriptFiles(srcRoot);
+const zIndexBody = theme.match(/const JHS_Z_INDEX = Object\.freeze\(\{([\s\S]*?)\}\);/)?.[1] || "";
+const zIndexKeys = new Set([...zIndexBody.matchAll(/^\s*([A-Za-z][\w]*)\s*:/gm)].map((match => match[1])));
+const toKebab = value => value.replace(/[A-Z]/g, (letter => `-${letter.toLowerCase()}`));
+for (const key of zIndexKeys) requireMatch(theme, new RegExp(`--jhs-z-${toKebab(key)}\\s*:`), `z-index constant ${key} is missing its CSS token`);
 let inlineStyleCount = 0;
 let selectCount = 0;
 for (const file of sourceFiles) {
@@ -246,6 +266,24 @@ for (const file of sourceFiles) {
   if (count > 0) failures.push(`${path} has ${count} forbidden static inline styles`);
   if (path !== "src/core/theme.js") forbidMatch(source, /rotate\(45deg\)|linear-gradient\(145deg/i,
     `${relative(repoRoot, file)} contains a banned ribbon or neumorphic treatment`);
+  if (path !== "src/core/feature-helpers.js") forbidMatch(source, /\.play\s*\(/, `${path} contains a naked media play call`);
+  if (path !== "src/core/utils.js") forbidMatch(source, /navigator\.clipboard|execCommand\s*\(\s*["']copy["']/, `${path} bypasses the clipboard helper`);
+  if (path !== "src/core/logger.js" && path !== "src/main.js") forbidMatch(source, /\bconsole\.(?:log|warn|error)\s*\(/, `${path} bypasses clog`);
+  for (const reference of source.matchAll(/JHS_Z_INDEX\.([A-Za-z][\w]*)/g)) if (!zIndexKeys.has(reference[1])) failures.push(`${path} references unknown z-index token ${reference[1]}`);
+  forbidMatch(source, /\.then\(\s*\)/, `${path} contains an unobserved empty then call`);
+  forbidMatch(source, /catch\s*\([^)]*\)\s*\{\s*\}/, `${path} contains an empty catch block`);
+  if (path !== "src/core/utils.js") forbidMatch(source, /utils\.isMobile\(\)/, `${path} bypasses the mobile-mode setting`);
+  if (path !== "src/core/theme.js") {
+    forbidMatch(source, /z-index\s*:\s*-?\d/i, `${path} contains a numeric z-index`);
+    forbidMatch(source, /\bzIndex\s*:\s*-?\d/i, `${path} contains a numeric zIndex`);
+  }
+  forbidMatch(source, /class\s*=\s*["'][^"']*\bjhs-btn\b[^"']*\s(?:button|is-(?:info|small|primary|success|danger|warning))(?:\s|["'])/i,
+    `${path} mixes JHS and Bulma button classes`);
+  if (["src/plugins/external-search/top250.js", "src/plugins/external-search/hit-show.js", "src/plugins/external-search/fc2.js", "src/plugins/status/list-page.js"].includes(path))
+    forbidMatch(source, /class=["'][^"']*(?:\bbutton\b|\bbuttons\b|\btag\s+is-(?:primary|warning|success|info))/, `${path} contains legacy Bulma controls`);
+  if (["src/plugins/external-search/top250.js", "src/plugins/external-search/hit-show.js"].includes(path))
+    forbidMatch(source, /上一頁|下一頁|人評價/, `${path} contains traditional JHS UI copy`);
+  forbidMatch(source, /id=["']conditionBox["']/, `${path} contains the duplicate Top250 condition id`);
   forbidMatch(source, /menu-btn|main-tab-btn|(?:class|removeClass|addClass|querySelector)[^\n]{0,80}a-(?:normal|primary|success|danger|warning|info)/,
     `${path} contains a forbidden legacy visual button class`);
   forbidMatch(source, /@keyframes\s+(?:elastic|jelly)|(?:menu|popover)[^}]{0,240}right:\s*-\d+px/,

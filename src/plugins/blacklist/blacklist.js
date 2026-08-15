@@ -77,7 +77,7 @@ class BlacklistPlugin extends BasePlugin {
                     }
                 } else show.error("当前有定时任务在后台执行中, 无法发起此操作");
             })).catch((e => {
-                console.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
+                clog.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
             }));
         }));
     }
@@ -133,7 +133,7 @@ class BlacklistPlugin extends BasePlugin {
                         }, (async t => {
                             t ? (await e.loadConfig(), await e.checkBlacklist(!0)) : show.error("当前有定时任务在后台执行中, 无法发起手动任务");
                         })).catch((e => {
-                            console.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
+                            clog.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
                         }));
                     }));
                 }));
@@ -285,7 +285,7 @@ class BlacklistPlugin extends BasePlugin {
                             const t = a.name, n = a.starId;
                             t ? n ? utils.q(e, `是否移除对 ${t} 的屏蔽?`, (async () => {
                                 await storageManager.removeBlacklistCarList(n), await storageManager.deleteBlacklistItem(n),
-                                show.info("操作成功"), this.reloadTable().then();
+                                show.info("操作成功"), await this.reloadTable();
                             })) : show.error("获取starId失败") : show.error("获取名称失败");
                         })), null == (n = e.getElement().querySelector(".keyword-btn")) || n.addEventListener("click", (e => {
                             const t = a.carList.reduce(((e, t) => {
@@ -341,7 +341,7 @@ class BlacklistPlugin extends BasePlugin {
                     publishTime: o
                 }), clog.log("屏蔽演员番号", e, n);
             } catch (i) {
-                console.error(`保存失败 [${n}]:`, i);
+                clog.error(`保存失败 [${n}]:`, i);
             }
         }
         if (a) {
@@ -359,7 +359,7 @@ class BlacklistPlugin extends BasePlugin {
             if (o && a) try {
                 if (await storageManager.getCar(a)) continue;
                 await storageManager.saveCar({carNum: a, url: o, names: e, actionType: t, publishTime: r}), clog.log("批量操作", e, a, t);
-            } catch (s) { console.error(`保存失败 [${a}]:`, s); }
+            } catch (s) { clog.error(`保存失败 [${a}]:`, s); }
         }
         if (a) { show.info("请不要关闭窗口, 正在解析下一页:" + a), await new Promise((e => setTimeout(e, 500)));
             const i = await gmHttp.get(a), s = new DOMParser, o = $(s.parseFromString(i, "text/html"));
@@ -403,7 +403,7 @@ class BlacklistPlugin extends BasePlugin {
         try {
             await storageManager.batchSaveBlacklistCarList(s);
         } catch (r) {
-            clog.error("保存失败:", r), console.error("保存失败:", r);
+            clog.error("保存失败:", r), clog.error("保存失败:", r);
         }
         return {
             nextPageLink: i,

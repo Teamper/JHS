@@ -30,18 +30,13 @@ class BusDetailPagePlugin extends BasePlugin {
             const t = e.nextElementSibling;
             if (t && "SPAN" === t.tagName) {
                 const e = t.textContent.trim(), n = document.createElement("button");
-                n.textContent = "复制", n.style.marginLeft = "10px", n.style.padding = "0 10px", n.style.cursor = "pointer",
-                n.style.border = "1px solid var(--jhs-border)", n.style.borderRadius = "5px", n.style.backgroundColor = "var(--jhs-surface-2)",
-                n.style.fontSize = "12px", n.addEventListener("click", (function(t) {
+                n.type = "button", n.className = "jhs-btn jhs-btn--secondary jhs-copy-car-number", n.textContent = "复制", n.addEventListener("click", (async function(t) {
                     t.preventDefault();
-                    const n = e => {
+                    await utils.copyToClipboard("番号", e) && (() => {
                         this.textContent = "已复制", setTimeout((() => {
                             this.textContent = "复制";
                         }), 1500);
-                    };
-                    navigator.clipboard && navigator.clipboard.writeText && navigator.clipboard.writeText(e).then((() => n())).catch((t => {
-                        console.error("无法通过标准API复制:", t), alert("复制失败，请手动复制: " + e);
-                    }));
+                    })();
                 })), t.parentNode.insertBefore(n, t.nextSibling);
             }
         }

@@ -25,7 +25,7 @@ class FavoriteActressesPlugin extends BasePlugin {
         }));
     }
     async removeActorFromStorage(e) {
-        await storageManager.removeFavoriteActress(e) && clog.log("移除演员成功");
+        await storageManager.removeFavoriteActress(e) && (clog.log("移除演员成功"), document.dispatchEvent(new CustomEvent("actress-state-changed", { detail: { starId: String(e) } })));
     }
     bindEvent() {
         const e = /\/actors\/(\w+)\/(collect|uncollect)/;
@@ -52,7 +52,7 @@ class FavoriteActressesPlugin extends BasePlugin {
                 allName: i,
                 avatar: l
             };
-            1 === await storageManager.addFavoriteActressList([ c ]) ? clog.log(`收藏演员成功: ${r} (ID: ${a})`) : clog.log(`收藏演员失败: ${r} (ID: ${a})`);
+            1 === await storageManager.addFavoriteActressList([ c ]) ? (clog.log(`收藏演员成功: ${r} (ID: ${a})`), document.dispatchEvent(new CustomEvent("actress-state-changed", { detail: { starId: String(a) } }))) : clog.log(`收藏演员失败: ${r} (ID: ${a})`);
         })), $("#button-uncollect-actor").click((async t => {
             const n = $("#button-uncollect-actor").attr("href").match(e), a = n ? n[1] : null;
             a ? await this.removeActorFromStorage(a) : clog.error("无法获取演员ID进行取消收藏操作。");

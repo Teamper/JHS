@@ -12,7 +12,7 @@ class HistoryPlugin extends BasePlugin {
                 #filterBox, #allSelectBox { display:flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-2); margin-bottom:var(--jhs-space-2); }
                 #table-container { flex:1; min-height:0; overflow-x:hidden; }
                 .sub-btns { position:relative; display:inline-block; }
-                .sub-btns-menu { position:absolute; top:calc(100% + var(--jhs-space-1)); right:0; z-index:100; display:none; min-width:156px; padding:var(--jhs-space-1); overflow:hidden; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
+                .sub-btns-menu { position:absolute; top:calc(100% + var(--jhs-space-1)); right:0; z-index:var(--jhs-z-popover); display:none; min-width:156px; padding:var(--jhs-space-1); overflow:hidden; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
                 .sub-btns-menu.show { display:grid !important; gap:var(--jhs-space-1); }
                 .sub-btns-menu .jhs-btn { width:100%; justify-content:flex-start; }
                 .table-link-param { cursor:pointer; }
@@ -106,12 +106,12 @@ class HistoryPlugin extends BasePlugin {
                         names: null,
                         actionType: e
                     }), window.refresh(), await this.reloadTable();
-                } catch (s) { console.error("历史记录操作失败:", s), show.error("操作失败"); }
+                } catch (s) { clog.error("历史记录操作失败:", s), show.error("操作失败"); }
             };
-            t.hasClass("history-filterBtn") ? utils.q(e, `是否屏蔽${a}?`, (() => s(d))) : t.hasClass("history-favoriteBtn") ? s(h).then() : t.hasClass("history-hasDownBtn") ? s(g).then() : t.hasClass("history-hasWatchBtn") ? s(p).then() : t.hasClass("history-deleteBtn") ? this.handleDelete(e, a) : t.hasClass("history-detailBtn") && this.handleClickDetail(e, {
+            t.hasClass("history-filterBtn") ? utils.q(e, `是否屏蔽${a}?`, (() => s(d))) : t.hasClass("history-favoriteBtn") ? void s(h) : t.hasClass("history-hasDownBtn") ? void s(g) : t.hasClass("history-hasWatchBtn") ? void s(p) : t.hasClass("history-deleteBtn") ? this.handleDelete(e, a) : t.hasClass("history-detailBtn") && void this.handleClickDetail(e, {
                 carNum: a,
                 url: i
-            }).then();
+            }).catch((error => clog.error("历史详情打开失败", error)));
         })), $(document).on("click", ".multiple-history-deleteBtn, .multiple-history-filterBtn, .multiple-history-favoriteBtn, .multiple-history-hasDownBtn, .multiple-history-hasWatchBtn", (e => {
             e.preventDefault(), e.stopPropagation();
             const t = $(e.currentTarget);
@@ -130,9 +130,9 @@ class HistoryPlugin extends BasePlugin {
                             e.actionType = i;
                         })), await storageManager.saveCarList(e), show.ok("操作成功");
                     }
-                    this.tableObj.deselectRow(), this.reloadTable().then();
+                    this.tableObj.deselectRow(), await this.reloadTable();
                 } catch (t) {
-                    console.error(t);
+                    clog.error(t);
                 } finally {
                     e.close();
                 }
@@ -383,7 +383,7 @@ class HistoryPlugin extends BasePlugin {
     handleDelete(e, t) {
         utils.q(e, `是否移除${t}?`, (async () => {
             await storageManager.removeCar(t), this.getBean("ListPagePlugin").showCarNumBox(t),
-            this.reloadTable(null).then();
+            await this.reloadTable(null);
         }));
     }
     async handleClickDetail(e, t) {

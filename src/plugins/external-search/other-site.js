@@ -206,7 +206,7 @@ class OtherSitePlugin extends BasePlugin {
             a?._cfBlocked ? (n.attr("title", "请求失败：Cloudflare 安全检查。"), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源失败, ${i} 需Cloudflare安全检查`)) :
             e.includes("重定向") ? (n.attr("title", "域名失效"), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源失败, ${i} 域名被重定向`)) :
             e.includes("404 Page Not Found") ? (n.attr("title", "未查询到, 点击前往搜索页"), this.setSiteState(n, "unavailable")) :
-            (console.error(a), n.attr("title", "请求失败。"), this.setSiteState(n, "unavailable"), clog.warn(`检测第三方资源失败, ${i}`));
+            (clog.error(a), n.attr("title", "请求失败。"), this.setSiteState(n, "unavailable"), clog.warn(`检测第三方资源失败, ${i}`));
         }
     }
     async getSettingCache() {
@@ -239,8 +239,15 @@ class OtherSitePlugin extends BasePlugin {
         return (await this.getSettingCache()).supJavUrl || "https://supjav.com";
     }
     getEnabledSites() {
-        const e = localStorage.getItem("jhs_enabled_sites");
-        return e ? JSON.parse(e) : this.siteConfigs.map((e => e.id));
+        const fallback = this.siteConfigs.map((site => site.id));
+        try {
+            const raw = localStorage.getItem("jhs_enabled_sites");
+            if (!raw) return fallback;
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed.filter((id => fallback.includes(id))) : fallback;
+        } catch (error) {
+            return clog.warn("外部站点配置损坏，已回退默认值", error), fallback;
+        }
     }
     saveEnabledSites(e) {
         localStorage.setItem("jhs_enabled_sites", JSON.stringify(e));
@@ -253,21 +260,20 @@ class OtherSitePlugin extends BasePlugin {
         })).join(""));
     }
     setupEventListeners() {
-        const e = document.getElementById("settingsArea");
-        document.addEventListener("click", (t => {
-            if ("settingSiteBtn" === t.target.id || t.target.closest("#settingSiteBtn")) {
-                e.classList.toggle("jhs-is-hidden");
-            }
-        })), e.addEventListener("change", (t => {
-            if ("checkbox" === t.target.type) {
-                const n = t.target.getAttribute("data-site-id");
-                if (t.target.checked) {
-                    $(`#${n}`).removeClass("jhs-is-hidden");
-                    const e = this.getPageInfo().carNum, t = this.siteConfigs.find((e => e.id === n));
-                    this.prepareSiteLink(e, t).then();
-                } else $(`#${n}`).addClass("jhs-is-hidden");
-                const a = Array.from(e.querySelectorAll('input[type="checkbox"]:checked')).map((e => e.getAttribute("data-site-id")));
-                this.saveEnabledSites(a);
+        const $settingsArea = $("#settingsArea");
+        $("#settingSiteBtn").off("click.jhsOtherSite").on("click.jhsOtherSite", (() => {
+            $settingsArea.toggleClass("jhs-is-hidden");
+        })), $settingsArea.off("change.jhsOtherSite").on("change.jhsOtherSite", 'input[type="checkbox"]', (async event => {
+            const siteId = $(event.currentTarget).attr("data-site-id");
+            try {
+                if (event.currentTarget.checked) {
+                    $(`#${siteId}`).removeClass("jhs-is-hidden");
+                    const carNum = this.getPageInfo().carNum, site = this.siteConfigs.find((item => item.id === siteId));
+                    site && await this.prepareSiteLink(carNum, site);
+                } else $(`#${siteId}`).addClass("jhs-is-hidden");
+                this.saveEnabledSites($settingsArea.find('input[type="checkbox"]:checked').map(((index, input) => $(input).attr("data-site-id"))).get());
+            } catch (error) {
+                clog.warn(`外部站点 ${siteId || "unknown"} 状态更新失败`, error);
             }
         }));
     }

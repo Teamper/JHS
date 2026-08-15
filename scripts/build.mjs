@@ -8,6 +8,8 @@ const srcPath = join(repoRoot, "src", "main.js");
 const packagePath = join(repoRoot, "package.json");
 const corePaths = [
   "site-context.js",
+  "cache-policy.js",
+  "feature-helpers.js",
   "constants.js",
   "theme.js",
   "ui-primitives.js",
@@ -45,6 +47,7 @@ const pluginPaths = [
   "status/auto-page.js",
   "backup/webdav-client.js",
   "backup/setting-styles.js",
+  "backup/resource-settings.js",
   "backup/setting-templates.js",
   "backup/setting-panels.js",
   "backup/setting-forms.js",
@@ -57,7 +60,9 @@ const pluginPaths = [
   "status/want-and-watched-videos.js",
   "image-viewer/cover-button.js",
   "external-search/fc2-by-123av.js",
+  "external-search/magnet-source-registry.js",
   "external-search/magnet-hub.js",
+  "image-viewer/screenshot-provider-registry.js",
   "image-viewer/screenshot.js",
   "favorite/favorite-actresses.js",
   "image-viewer/bus-img.js",
@@ -65,9 +70,12 @@ const pluginPaths = [
   "new-video/task.js",
   "new-video/new-video.js",
   "one-two-three/offline.js",
+  "one-one-five/client.js",
+  "one-one-five/plugins.js",
   "stats/stats.js",
   "status/mobile-bottom-bar.js",
   "status/detail-workspace.js",
+  "status/compat-enhancements.js",
   "registry.js"
 ].map((file) => join(repoRoot, "src", "plugins", file));
 const parserPaths = [

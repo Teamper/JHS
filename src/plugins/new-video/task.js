@@ -62,7 +62,7 @@ class TaskPlugin extends BasePlugin {
                 }
             } else clog.debug("争夺任务锁失败, 跳过执行");
         })).catch((e => {
-            this.isNetworkBlocked(e) ? clog.warn(`后台检测已停止: ${e.message}`) : (console.error("锁任务出现错误:", e),
+            this.isNetworkBlocked(e) ? clog.warn(`后台检测已停止: ${e.message}`) : (clog.error("锁任务出现错误:", e),
             clog.error("锁任务出现错误:", e));
         })).finally((() => {
             setTimeout((() => {
@@ -134,14 +134,14 @@ class TaskPlugin extends BasePlugin {
         })), await this.storageQueue.waitAllFinished();
         const d = utils.getNowStr();
         localStorage.setItem(this.lastCheckBlacklistTimeKey, d), clog.log('<span class="jhs-task-emphasis">-------- END 检测屏蔽黑名单 END --------</span>'),
-        $("#checkBlacklistMsg").text("检测屏蔽黑名单, 结束"), this.getBean("BlacklistPlugin").resetBtnTip().then();
+        $("#checkBlacklistMsg").text("检测屏蔽黑名单, 结束"), await this.getBean("BlacklistPlugin").resetBtnTip();
     }
     async checkFavoriteActress() {
         await this.ensureReady();
         const e = `${this.javDbUrl}/users/collection_actors`, t = [];
         await this.scrapeActorInfo(e, t), clog.log("所有演员信息已收集, 总计数量:", t.length), $("#checkNewVideoMsg").text("同步完成"),
         t.length > 0 && (await storageManager.addFavoriteActressList(t), localStorage.setItem(this.lastCheckFavoriteActressTimeKey, utils.getNowStr()),
-        this.getBean("NewVideoPlugin").resetBtnTip().then());
+        await this.getBean("NewVideoPlugin").resetBtnTip());
     }
     async scrapeActorInfo(e, t) {
         clog.log(`正在抓取页面: ${e}`), $("#checkNewVideoMsg").text(`正在解析已收藏的演员: ${e}`);
@@ -196,7 +196,7 @@ class TaskPlugin extends BasePlugin {
                 }
             } catch (s) {
                 if (this.isNetworkBlocked(s)) throw result.networkFailed++, s;
-                result.networkFailed++, clog.error("检测演员信息发生网络错误:", i, s), console.error("检测演员信息发生网络错误:", i, s);
+                result.networkFailed++, clog.error("检测演员信息发生网络错误:", i, s), clog.error("检测演员信息发生网络错误:", i, s);
             }
             })), await this.storageQueue.waitAllFinished();
         } catch (error) {
@@ -206,7 +206,7 @@ class TaskPlugin extends BasePlugin {
         result.success > 0 && 0 === result.parseFailed + result.networkFailed + result.aborted && localStorage.setItem(this.lastCheckNewVideoTimeKey, utils.getNowStr()),
         clog.log('<span class="jhs-task-emphasis">检测最新作品---结束</span>'), this.renderCheckResult(result);
         const p = this.getBean("NewVideoPlugin");
-        p.loadData(), p.resetBtnTip().then();
+        await p.loadData(), await p.resetBtnTip();
         return result;
     }
     renderCheckResult(result, prefix = "检测结束") {

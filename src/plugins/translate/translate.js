@@ -31,7 +31,7 @@ class TranslatePlugin extends BasePlugin {
             const e = await _e(a, "ja", "zh-CN");
             i.text(e), r[o] = e, localStorage.setItem("jhs_translate", JSON.stringify(r));
         } catch (l) {
-            console.error("翻译失败:", l), i.addClass("is-error").text(`翻译失败: ${l.message || String(l)}`);
+            clog.error("翻译失败:", l), i.addClass("is-error").text(`翻译失败: ${l.message || String(l)}`);
         }
     }
 }

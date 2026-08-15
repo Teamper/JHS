@@ -56,30 +56,35 @@ class HitShowPlugin extends BasePlugin {
                 if ($(`#${e}`).is(":hidden")) continue;
                 const n = localStorage.getItem(t) ? JSON.parse(localStorage.getItem(t)) : {}, i = n[e];
                 if (i) {
-                    const t = "string" == typeof i ? (i.match(/由(\d+)人/) || [ 0, 0 ])[1] : i.watchedCount || 0;
-                    this.appendScoreHtml(e, "string" == typeof i ? i : i.html, Number(t));
+                    const cached = this.normalizeScoreData(i);
+                    this.appendScore(e, cached.score, cached.watchedCount);
                     continue;
                 }
                 for (;!document.hasFocus(); ) await new Promise((e => setTimeout(e, 500)));
                 const s = await V(e);
-                let o = s.score, r = s.watchedCount, l = `\n                        <span class="value">\n                            <span class="score-stars">${this.getStarRating(o)}</span> \n                            &nbsp; ${o}分，由${r}人評價\n                        </span>\n                    `;
-                this.appendScoreHtml(e, l, r), n[e] = { html: l, watchedCount: r }, localStorage.setItem(t, JSON.stringify(n)),
+                const o = Number(s.score), r = Number(s.watchedCount);
+                this.appendScore(e, o, r), n[e] = { score: Number.isFinite(o) ? o : 0, watchedCount: Number.isFinite(r) ? r : 0 }, localStorage.setItem(t, JSON.stringify(n)),
                 await new Promise((e => setTimeout(e, 500)));
             } catch (n) {
                 $(`#${a.id}`).attr("data-jhs-rate-count", "0"), clog.error(`解析评分数据失败 | 编号: ${a.number}\n`, `错误详情: ${n.message}\n`, n.stack ? `调用栈:\n${n.stack}` : "");
             }
     }
-    appendScoreHtml(e, t, n = 0) {
-        $(`#${e}`).attr("data-jhs-rate-count", String(Number(n) || 0));
-        let a = $(`#score_${e}`);
-        a.length && "" === a.html().trim() && a.slideUp(0, (function() {
-            $(this).html(t).slideDown(500);
-        }));
+    normalizeScoreData(value) {
+        const html = "string" == typeof value ? value : String(value?.html || ""), score = Number(value?.score ?? (html.match(/([\d.]+)分/) || [ 0, 0 ])[1]), watchedCount = Number(value?.watchedCount ?? (html.match(/由(\d+)人/) || [ 0, 0 ])[1]);
+        return { score: Number.isFinite(score) ? score : 0, watchedCount: Number.isFinite(watchedCount) ? watchedCount : 0 };
+    }
+    appendScore(e, score, watchedCount = 0) {
+        const safeScore = Math.min(5, Math.max(0, Number(score) || 0)), safeCount = Math.max(0, Number(watchedCount) || 0), card = $(`#${e}`), target = $(`#score_${e}`);
+        card.attr("data-jhs-rate-count", String(safeCount));
+        if (!target.length || "" !== target.text().trim()) return;
+        const value = $('<span class="value"></span>'), stars = $('<span class="score-stars"></span>').html(this.getStarRating(safeScore));
+        value.append(stars, document.createTextNode(`  ${safeScore}分，由${safeCount}人评价`)), target.hide().empty().append(value).slideDown(500);
     }
     markDataListHtml(e) {
         let t = "";
         return e.forEach(((e, index) => {
-            t += `\n                <div class="item" id="${escapeHtml(e.id)}" data-jhs-publish-time="${escapeHtml(e.release_date)}" data-jhs-rate-count="0" data-original-index="${index}">\n                    <a href="/v/${escapeHtml(e.id)}" class="box" title="${escapeHtml(e.origin_title)}">\n                        <div class="cover ">\n                            <img loading="lazy" src="${e.cover_url.replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com")}" alt="">\n                        </div>\n                        <div class="video-title"><strong>${escapeHtml(e.number)}</strong> ${escapeHtml(e.origin_title)}</div>\n                        <div class="score" id="score_${escapeHtml(e.id)}"></div>\n                        <div class="meta">${escapeHtml(e.release_date)}</div>\n                        <div class="tags has-addons">\n                           ${e.has_cnsub ? '<span class="tag is-warning">含中字磁鏈</span>' : e.magnets_count > 0 ? '<span class="tag is-success">含磁鏈</span>' : '<span class="tag is-info">无磁鏈</span>'}\n                           ${e.new_magnets ? '<span class="tag is-info">今日新種</span>' : ""}\n                        </div>\n                    </a>\n                </div>\n            `;
+            const coverUrl = normalizeHttpUrl(String(e.cover_url || "").replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com"));
+            t += `\n                <div class="item" id="${escapeHtml(e.id)}" data-jhs-publish-time="${escapeHtml(e.release_date)}" data-jhs-rate-count="0" data-original-index="${index}">\n                    <a href="/v/${escapeHtml(e.id)}" class="box" title="${escapeHtml(e.origin_title)}">\n                        <div class="cover ">${coverUrl ? `<img loading="lazy" src="${escapeHtml(coverUrl)}" alt="">` : ""}</div>\n                        <div class="video-title"><strong>${escapeHtml(e.number)}</strong> ${escapeHtml(e.origin_title)}</div>\n                        <div class="score" id="score_${escapeHtml(e.id)}"></div>\n                        <div class="meta">${escapeHtml(e.release_date)}</div>\n                        <div class="jhs-toolbar">\n                           ${e.has_cnsub ? '<span class="jhs-badge jhs-badge--watch">含中字磁力</span>' : e.magnets_count > 0 ? '<span class="jhs-badge jhs-badge--success">含磁力</span>' : '<span class="jhs-badge jhs-badge--neutral">无磁力</span>'}\n                           ${e.new_magnets ? '<span class="jhs-badge jhs-badge--accent">今日新增</span>' : ""}\n                        </div>\n                    </a>\n                </div>\n            `;
         })), t;
     }
 }

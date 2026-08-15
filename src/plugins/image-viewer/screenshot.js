@@ -1,4 +1,16 @@
 class ScreenShotPlugin extends BasePlugin {
+    constructor() {
+        super(...arguments), this.providerRegistry = new ScreenshotProviderRegistry();
+    }
+    async initializeProviders() {
+        const settings = await new ResourceSettingsService().getScreenshotSettings(), configured = id => settings.providers.find((provider => provider.id === id)) || {};
+        this.providerRegistry = new ScreenshotProviderRegistry([
+            { id: "javstore", name: "JavStore", priority: 10, getScreenshot: carNum => this.getCachedProviderScreenshot("javstore", carNum, (() => this.getJavStoreScreenShot(carNum))) },
+            { id: "projectjav", name: "ProjectJav", enabled: !1, priority: 20, getScreenshot: async () => null },
+            { id: "18av", name: "18AV", enabled: !1, priority: 30, getScreenshot: async () => null }
+        ].map((provider => ({ ...provider, ...configured(provider.id), enabled: !["projectjav", "18av"].includes(provider.id) && (configured(provider.id).enabled ?? provider.enabled ?? true), getScreenshot: provider.getScreenshot }))));
+        return settings.mode;
+    }
     getName() {
         return "ScreenShotPlugin";
     }
@@ -6,7 +18,7 @@ class ScreenShotPlugin extends BasePlugin {
         return `<style>.jhs-screenshot-message{margin-top:50px;color:var(--jhs-text-muted);cursor:auto}.jhs-screenshot-message--bus{margin-top:30px}</style>`;
     }
     async handle() {
-        this.loadScreenShot().then();
+        await this.loadScreenShot();
     }
     async loadScreenShot() {
         if (!isDetailPage) return;
@@ -14,6 +26,8 @@ class ScreenShotPlugin extends BasePlugin {
         let e = this.getPageInfo().carNum;
         r && $(".preview-images .tile-item").first().before(' <a class="tile-item screen-container jhs-layout-cd9d5db1"><div class="jhs-layout-9db87399">正在加载缩略图</div></a> '),
         l && $("#sample-waterfall .sample-box:first").after(' <a class="sample-box screen-container jhs-layout-b5c4e4f7"><div class="jhs-layout-3536a853">正在加载缩略图</div></a> ');
+        const mode = await this.initializeProviders();
+        if ("manual" === mode) return $(".screen-container").text("请选择截图来源"), void this.renderProviderTabs(e);
         try {
             const t = await this.getScreenshot(e);
             this.addImg("缩略图", t), clog.log("加载缩略图:", t);
@@ -21,19 +35,39 @@ class ScreenShotPlugin extends BasePlugin {
             this.showErrorFallback(e, t);
         }
     }
+    renderProviderTabs(carNum) {
+        const tabs = $('<div class="jhs-screenshot-providers" role="tablist"></div>');
+        this.providerRegistry.providers.forEach((provider => tabs.append($("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary\"></button>").prop("disabled", !provider.enabled).attr("data-provider", provider.id).text(provider.name))));
+        $(".screen-container").before(tabs);
+        tabs.on("click", "button:not(:disabled)", (async event => {
+            const provider = this.providerRegistry.get($(event.currentTarget).data("provider"));
+            $(".screen-container").text(`${provider.name} 加载中…`);
+            try { const result = await provider.getScreenshot(carNum); result?.url ? this.addImg(`${provider.name} 缩略图`, result.url) : $(".screen-container").text(`${provider.name} 无结果`); } catch (error) { $(".screen-container").text(`${provider.name} 请求失败`); clog.error("截图源请求失败", error); }
+        }));
+    }
     async getScreenshot(e) {
         e = normalizeCarNum(e);
         if (!e) throw clog.warn("跳过缩略图解析：番号不可用"), new Error("缩略图番号不可用");
+        await this.initializeProviders();
         localStorage.removeItem("jhs_screenShot");
         let n;
         try {
-            n = await storageManager.cachedRequest(`screenshot:${e}`, 6048e5, (() => this.getJavStoreScreenShot(e)));
+            n = await this.providerRegistry.first(e);
         } catch (i) {
             throw clog.error("获取缩略图资源失败:", n, i), i;
         }
         if (!n) return this.showErrorFallback(e, null), null;
-        const a = n.indexOf("https://");
-        return -1 !== a && (n = n.substring(a)), clog.log("缩略图获取成功:", n), n;
+        let url = n.url, a = url.indexOf("https://");
+        return -1 !== a && (url = url.substring(a)), clog.log(`缩略图获取成功 (${n.source}):`, url), url;
+    }
+    async getCachedProviderScreenshot(provider, carNum, loader) {
+        const value = await storageManager.cachedRequest(`screenshot:${provider}:${carNum}`, CACHE_TTL.screenshot, (async () => {
+            const loadedUrl = await loader(), url = "javstore" === provider ? normalizeJavStoreAssetUrl(loadedUrl) : loadedUrl;
+            return url ? { __jhsCacheTtl: CACHE_TTL.screenshot, data: { url } } : { __jhsCacheTtl: CACHE_TTL.screenshotNegative, data: { miss: !0 } };
+        }));
+        if (!value || value.miss) return null;
+        const cachedUrl = "string" === typeof value ? value : value.url, url = "javstore" === provider ? normalizeJavStoreAssetUrl(cachedUrl) : cachedUrl;
+        return url ? { url, source: provider, detailUrl: null } : null;
     }
     async getJavStoreScreenShot(e) {
         const t = `https://javstore.net/search?q=${encodeURIComponent(e)}`;
@@ -42,7 +76,7 @@ class ScreenShotPlugin extends BasePlugin {
         if (!n) return clog.debug("JavStore 搜索页未获取:", t), null;
         const a = utils.htmlTo$dom(n);
         const i = parseJavStoreSearch(a, e);
-        if (!i.length) return clog.error("JavStore, 查询番号失败:", t), null;
+        if (!i.length) return clog.debug("JavStore, 查询番号无结果:", t), null;
         for (const e of i) {
             const t = e;
             clog.debug("JavStore 候选详情:", t);
@@ -58,18 +92,19 @@ class ScreenShotPlugin extends BasePlugin {
             }
             return clog.debug("JavStore 预览图:", a), a;
         }
-        return clog.error("JavStore, 所有候选均无有效预览图:", t), null;
+        return clog.debug("JavStore, 所有候选均无有效预览图:", t), null;
     }
     addImg(e, t) {
-        t && (r && $(".screen-container").html(`<img src="${t}" alt="${e}" loading="lazy" class="jhs-layout-cad980f4">`),
-        l && $(".screen-container").html(`<div class="photo-frame"><img src="${t}" title="${e}" alt="${e}" class="jhs-layout-d4a575e8"></div>`),
+        const url = normalizeJavStoreAssetUrl(t);
+        url && (r && $(".screen-container").html(`<img src="${url}" alt="${e}" loading="lazy" class="jhs-layout-cad980f4">`),
+        l && $(".screen-container").html(`<div class="photo-frame"><img src="${url}" title="${e}" alt="${e}" class="jhs-layout-d4a575e8"></div>`),
         $(".screen-container").on("click", (e => {
             e.stopPropagation(), e.preventDefault(), showImageViewer(e.currentTarget);
         })));
     }
     showErrorFallback(e, t) {
         var n;
-        console.error("获取缩略图失败:", null == (n = null == t ? void 0 : t.message) ? void 0 : n.substring(0, 100));
+        clog.error("获取缩略图失败:", null == (n = null == t ? void 0 : t.message) ? void 0 : n.substring(0, 100));
         const a = `jhs-screenshot-message${l ? " jhs-screenshot-message--bus" : ""}`;
         if (!(e = normalizeCarNum(e))) return void $(".screen-container").empty().append($("<div></div>").addClass(a).text("无法获取番号，缩略图未加载"));
         const searchUrl = `https://javstore.net/search?q=${encodeURIComponent(e)}`;

@@ -25,7 +25,7 @@ class SearchByImagePlugin extends BasePlugin {
             type: 1,
             title: "以图识图",
             content: '\n            <div class="jhs-layout-769fed37">\n                <div id="upload-area">\n                    <div class="jhs-layout-9e3c853e">\n                        <p>拖拽图片到此处 或 点击按钮选择图片</p>\n                        <p>也可以直接 Ctrl+V 粘贴图片或 图片URL</p>\n                    </div>\n                    <button class="jhs-btn" id="select-image-btn">选择图片</button>\n                    <input type="file" id="image-file" accept="image/*" class="jhs-layout-6b99de8b">\n                </div>\n                \n                <div id="url-input-container" class="jhs-layout-d50e4f09">\n                    <input type="text" id="image-url" placeholder="粘贴图片URL地址..." class="jhs-field">\n                </div>\n                \n                <div id="preview-area" class="jhs-layout-d10a577d">\n                    <img id="preview-image" alt="" src="" class="jhs-image-preview">\n                    <div id="action-btns" class="jhs-layout-06cf30c0">\n                        <button class="jhs-btn" id="handle-btn">搜索图片</button>\n                        <button class="jhs-btn" id="cancel-btn">取消</button>\n                    </div>\n                    \n                    <div id="search-results" class="jhs-layout-c8be1ccb">\n                        <p class="jhs-layout-9ea2322d">请选择识图网站：<button type="button" id="openAll" class="jhs-btn jhs-btn--ghost">全部打开</button></p>\n                        <div class="search-img-site-btns-container" id="search-img-site-btns-container"></div>\n                    </div>\n                </div>\n                \n            </div>\n        ',
-            area: utils.isMobile() ? utils.getResponsiveArea() : [ "40%", "80%" ],
+            area: utils.isMobileMode() ? utils.getResponsiveArea() : [ "40%", "80%" ],
             success: async t => {
                 this.initEventListeners(), e && e();
             },
@@ -129,7 +129,7 @@ class SearchByImagePlugin extends BasePlugin {
             }
             return t;
         } catch (n) {
-            show.error(`搜索失败: ${n.message}`), console.error("搜索失败:", n);
+            show.error(`搜索失败: ${n.message}`), clog.error("搜索失败:", n);
         } finally {
             t.close();
         }

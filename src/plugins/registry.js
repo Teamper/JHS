@@ -6,6 +6,7 @@ const DEFAULT_JAVDB_PLUGINS = [
     ActressInfoPlugin, OtherSitePlugin, TranslatePlugin, WantAndWatchedVideosPlugin,
     MagnetHubPlugin, ScreenShotPlugin, BlacklistPlugin, FavoriteActressesPlugin, NewVideoPlugin,
     TaskPlugin, StatsPlugin, MobileBottomBarPlugin
+    , OneOneFiveOfflinePlugin, OneOneFiveMatchPlugin, OneOneFiveRenamePlugin, CompatibilityEnhancementsPlugin
 ];
 
 const DEFAULT_JAVBUS_PLUGINS = [
@@ -14,6 +15,7 @@ const DEFAULT_JAVBUS_PLUGINS = [
     BusImgPlugin, BusDetailPagePlugin, DetailPageButtonPlugin, ReviewPlugin,
     FilterTitleKeywordPlugin, HighlightMagnetPlugin, BusPreviewVideoPlugin, MagnetHubPlugin, ScreenShotPlugin,
     OtherSitePlugin, TranslatePlugin, BlacklistPlugin, TaskPlugin, StatsPlugin, MobileBottomBarPlugin
+    , OneOneFiveOfflinePlugin, OneOneFiveMatchPlugin, OneOneFiveRenamePlugin, CompatibilityEnhancementsPlugin
 ];
 
 const DEFAULT_SHARED_PLUGIN_RULES = [

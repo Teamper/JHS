@@ -20,7 +20,7 @@ class HighlightMagnetPlugin extends BasePlugin {
             const tip = `分辨率:${score.resolution}/25 字幕:${score.subtitle}/20 做种:${score.seeders}/35 新鲜度:${score.freshness}/15`;
             const badge = $(`<span class="jhs-magnet-score" title="${tip}">${label} ${total}</span>`).css({ color: onColor, backgroundColor: color });
             el.append(badge);
-        } catch (e) {}
+        } catch (e) { clog.debug("磁力评分徽章注入失败，已忽略", e); }
     }
     getQualitySignals(title, hasSubtitleTag = !1) {
         const value = String(title || "").toLowerCase(), resolution = /(?:4k|2160p|1080p|720p)/.exec(value)?.[0] || "", subtitle = hasSubtitleTag || /(?:-c\b|-u(?:c)?\b|chinese|中字|字幕)/.test(value);

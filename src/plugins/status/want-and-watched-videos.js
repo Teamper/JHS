@@ -20,7 +20,7 @@ class WantAndWatchedVideosPlugin extends BasePlugin {
             try {
                 await this.parseMovieList();
             } catch (t) {
-                console.error(t);
+                clog.error(t);
             } finally {
                 e.close();
             }
@@ -45,7 +45,7 @@ class WantAndWatchedVideosPlugin extends BasePlugin {
                     publishTime: s
                 });
             } catch (a) {
-                console.error(`保存失败 [${n}]:`, a);
+                clog.error(`保存失败 [${n}]:`, a);
             }
         }
         n ? (show.info("发现下一页，正在解析:", n), await new Promise((e => setTimeout(e, 1e3))),
@@ -57,7 +57,7 @@ class WantAndWatchedVideosPlugin extends BasePlugin {
                 this.parseMovieList(n);
             },
             error: function(e) {
-                console.error(e), show.error("加载下一页失败:" + e.message);
+                clog.error(e), show.error("加载下一页失败:" + e.message);
             }
         })) : (show.ok("导入结束!"), window.refresh());
     }

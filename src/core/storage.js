@@ -432,11 +432,12 @@ class StorageManager {
         const a = Date.now(), i = await this.getThirdPartyCache(), s = i[e];
         if (s && s.time && a - s.time < (s.ttl || t)) return this._cacheStats.hits++, s.data;
         this._cacheStats.misses++;
-        const o = await n();
+        const loaded = await n(), customTtl = loaded && "object" === typeof loaded && "__jhsCacheTtl" in loaded ? loaded.__jhsCacheTtl : t;
+        const o = loaded && "object" === typeof loaded && "__jhsCacheTtl" in loaded ? loaded.data : loaded;
         if (void 0 === o || null === o) return o;
         return i[e] = {
             time: a,
-            ttl: t,
+            ttl: customTtl,
             data: o
         }, await this.setThirdPartyCache(i), o;
     }

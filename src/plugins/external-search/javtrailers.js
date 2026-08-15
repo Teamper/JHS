@@ -30,18 +30,20 @@ class JavTrailersPlugin extends BasePlugin {
             setTimeout((() => {
                 this.hasBand = !0;
                 let e = document.getElementById("vjs_video_3_html5_api");
-                clog.debug(e), e.play(), e.currentTime = 5, e.addEventListener("timeupdate", (function() {
+                clog.debug(e), safePlay(e, {
+                    context: "JavTrailers 预览"
+                }), e.currentTime = 5, e.addEventListener("timeupdate", (function() {
                     e.currentTime >= 14 && e.currentTime < 16 && (e.currentTime += 2);
                 })), $("#vjs_video_3_html5_api").css({
                     position: "fixed",
                     width: "100vw",
                     height: "100vh",
                     objectFit: "cover",
-                    zIndex: "999999999"
+                    zIndex: String(JHS_Z_INDEX.debug)
                 }), $(".vjs-control-bar").css({
                     position: "fixed",
                     bottom: "20px",
-                    zIndex: "999999999"
+                    zIndex: String(JHS_Z_INDEX.debug)
                 });
             }), 100);
         })), utils.loopDetector((() => $("#vjs_video_3 canvas").length > 0), (() => {
@@ -52,7 +54,7 @@ class JavTrailersPlugin extends BasePlugin {
                 objectFit: "cover",
                 top: "0",
                 right: "0",
-                zIndex: "999999998"
+                zIndex: String(JHS_Z_INDEX.debug - 1)
             });
         })));
     }
