@@ -124,9 +124,11 @@ unsafeWindow.loading = window.loading = function() {
             zIndex: JHS_Z_INDEX.tooltip,
             transition: .2,
             hideDelay: 100,
+            loadedUrlLimit: 128,
             autoAdjustPosition: !0,
             ...config
         };
+        this.config.loadedUrlLimit = Math.max(1, Number(this.config.loadedUrlLimit) || 128);
         this.preview = null;
         this.currentTarget = null;
         this.timer = null;
@@ -218,7 +220,8 @@ unsafeWindow.loading = window.loading = function() {
         target && (!event.relatedTarget || !target.contains(event.relatedTarget)) && this.handleMouseLeave();
     }
     handleDocumentMove(event) {
-        this.findTarget(event) === this.currentTarget && this.handleMouseMove(event);
+        if (!this.currentTarget) return;
+        (event.target === this.currentTarget || this.currentTarget.contains(event.target)) && this.handleMouseMove(event);
     }
     handleMouseEnter(event, delegatedTarget = event.currentTarget) {
         if (this.destroyed || !this.preview) return;
@@ -235,7 +238,7 @@ unsafeWindow.loading = window.loading = function() {
         if (source === this.currentUrl && this.imgElement) return this.showCurrentPreview();
         if (source === this.pendingUrl) return void this.preview.classList.add("active");
         const cached = this.loadedUrls.get(source);
-        if (cached) return void this.commitPreview(source, cached);
+        if (cached) return this.loadedUrls.delete(source), this.loadedUrls.set(source, cached), void this.commitPreview(source, cached);
         const generation = ++this.loadGeneration;
         this.pendingImage && (this.pendingImage.onload = null, this.pendingImage.onerror = null);
         this.pendingUrl = source;
@@ -246,7 +249,9 @@ unsafeWindow.loading = window.loading = function() {
             if (this.destroyed || generation !== this.loadGeneration || !this.preview) return;
             const {width, height} = this.calculateImageSize(image);
             const cachedImage = { width, height };
-            this.loadedUrls.set(source, cachedImage), this.pendingImage = null, this.pendingUrl = null, this.commitPreview(source, cachedImage);
+            this.loadedUrls.set(source, cachedImage);
+            for (;this.loadedUrls.size > this.config.loadedUrlLimit; ) this.loadedUrls.delete(this.loadedUrls.keys().next().value);
+            this.pendingImage = null, this.pendingUrl = null, this.commitPreview(source, cachedImage);
         };
         image.onerror = () => {
             if (this.destroyed || generation !== this.loadGeneration || !this.preview) return;

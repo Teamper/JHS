@@ -991,18 +991,30 @@ function buildUiPrimitivesCss() {
 
 /** 为动态注入的 JHS 控件补齐可访问名称与图标按钮语义。 */
 function initializeUiAccessibility() {
+    const selector = "button.jhs-btn, a.jhs-btn[role='button'], .card-btn, .jhs-icon-btn, [class*='jhs-'] button, [class*='jhs-'] a[role='button']";
     const enhance = (e) => {
-        const t = e.nodeType === Node.ELEMENT_NODE ? [ e ] : [];
-        const n = e.querySelectorAll ? [ ...e.querySelectorAll("button, a[role='button'], .card-btn, .jhs-icon-btn") ] : [];
+        const t = e.nodeType === Node.ELEMENT_NODE && e.matches?.(selector) ? [ e ] : [];
+        const n = e.querySelectorAll ? [ ...e.querySelectorAll(selector) ] : [];
         [ ...t, ...n ].forEach((e => {
-            if (!e.matches?.("button, a[role='button'], .card-btn, .jhs-icon-btn")) return;
             if (e.hasAttribute("aria-label") || e.hasAttribute("aria-labelledby") || e.textContent.trim()) return;
             const t = e.getAttribute("title") || e.getAttribute("data-tip");
             t && e.setAttribute("aria-label", t);
         }));
     };
     enhance(document);
-    new MutationObserver((e => e.forEach((e => e.addedNodes.forEach(enhance))))).observe(document.documentElement, {
+    const pending = new Set;
+    let scheduled = !1;
+    const flush = () => {
+        scheduled = !1;
+        const all = [ ...pending ], roots = all.filter((e => !all.some((t => t !== e && t.contains?.(e)))));
+        pending.clear(), roots.forEach(enhance);
+    };
+    new MutationObserver((records => {
+        records.forEach((record => record.addedNodes.forEach((node => {
+            node.nodeType === Node.ELEMENT_NODE && pending.add(node);
+        }))));
+        pending.size && !scheduled && (scheduled = !0, queueMicrotask(flush));
+    })).observe(document.documentElement, {
         childList: true,
         subtree: true
     });

@@ -1,6 +1,6 @@
 class Utils {
     constructor() {
-        return i(this, "intervalContainer", {}), i(this, "mimeTypes", {
+        return i(this, "intervalContainer", {}), i(this, "waitSequence", 0), i(this, "mimeTypes", {
             txt: "text/plain",
             html: "text/html",
             css: "text/css",
@@ -31,12 +31,8 @@ class Utils {
         }), i(this, "timers", new Map), i(this, "insertStyle", (e => {
             const t = (Array.isArray(e) ? e : [ e ]).filter(Boolean);
             if (0 === t.length) return;
-            const n = document.createDocumentFragment();
-            for (const e of t) {
-                const t = document.createElement("style");
-                t.textContent = e.replace(/^\s*<style[^>]*>/i, "").replace(/<\/style>?\s*$/i, ""), n.append(t);
-            }
-            document.head.append(n);
+            const n = t.map((e => e.replace(/^\s*<style[^>]*>/i, "").replace(/<\/style>?\s*$/i, ""))).filter(Boolean).join("\n"), a = document.createElement("style");
+            n && (a.textContent = n, document.head.append(a));
         })), i(this, "layerIndexStack", []), Utils.instance || (Utils.instance = this), Utils.instance;
     }
     importResource(e) {
@@ -112,13 +108,30 @@ class Utils {
         }));
     }
     loopDetector(e, t, n = 20, a = 1e4, i = !0) {
-        const s = Math.random(), o = (new Date).getTime(), r = e => {
-            clearInterval(this.intervalContainer[s]), e && t && t(), delete this.intervalContainer[s];
+        const s = ++this.waitSequence;
+        let o = null, r = null, l = null, c = !1;
+        const d = () => {
+            o?.disconnect(), clearTimeout(r), clearTimeout(l), clearInterval(this.intervalContainer[s]?.fallback),
+            delete this.intervalContainer[s];
+        }, h = e => {
+            if (c) return;
+            c = !0, d(), e && t && t();
+        }, g = () => {
+            if (c) return;
+            e() && h(!0);
+        }, p = () => {
+            c || (clearTimeout(r), r = setTimeout(g, Math.max(0, n)));
         };
-        this.intervalContainer[s] = setInterval((() => {
-            const t = (new Date).getTime() - o;
-            e() ? r(!0) : t >= a && r(i);
-        }), n);
+        this.intervalContainer[s] = {};
+        if (e()) return void h(!0);
+        if ("function" == typeof MutationObserver && document.documentElement) o = new MutationObserver(p),
+        o.observe(document.documentElement, { childList: !0, subtree: !0, characterData: !0 }); else this.intervalContainer[s].fallback = setInterval(g, Math.max(100, n));
+        l = setTimeout((() => {
+            if (c) return;
+            let t = !1;
+            try { t = e(); } catch (e) { clog.error("DOM 等待条件执行失败", e); }
+            h(t || i);
+        }), Math.max(0, a));
     }
     rightClick(e, t, n) {
         let a;

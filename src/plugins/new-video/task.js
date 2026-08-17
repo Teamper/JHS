@@ -2,7 +2,8 @@ class TaskPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "singleTaskKey", "checkNewActressActorFilterCar"),
         i(this, "taskConfig", null), i(this, "storageQueue", new StorageQueue), i(this, "lastCheckFavoriteActressTimeKey", "jhs_time_checkFavoriteActress"),
-        i(this, "lastCheckBlacklistTimeKey", "jhs_time_checkBlacklist"), i(this, "lastCheckNewVideoTimeKey", "jhs_time_checkNewVideo");
+        i(this, "lastCheckBlacklistTimeKey", "jhs_time_checkBlacklist"), i(this, "lastCheckNewVideoTimeKey", "jhs_time_checkNewVideo"),
+        i(this, "taskTimer", null), i(this, "taskRunning", !1), i(this, "visibilityHandler", null), i(this, "pageHideHandler", null);
     }
     getName() {
         return "TaskPlugin";
@@ -39,7 +40,28 @@ class TaskPlugin extends BasePlugin {
         return utils.getHourDifference(new Date(e), new Date) < t;
     }
     handle() {
-        return this.doTask();
+        if (!window.isListPage) return;
+        this.visibilityHandler || (this.visibilityHandler = () => {
+            document.hidden ? this.clearSchedule() : this.scheduleTask(0);
+        }, this.pageHideHandler = () => this.clearSchedule(), document.addEventListener("visibilitychange", this.visibilityHandler),
+        window.addEventListener("pagehide", this.pageHideHandler));
+        return document.hidden ? void 0 : this.runAndSchedule();
+    }
+    clearSchedule() {
+        this.taskTimer && (clearTimeout(this.taskTimer), this.taskTimer = null);
+    }
+    scheduleTask(e = 3e5) {
+        if (!window.isListPage || document.hidden) return void this.clearSchedule();
+        this.clearSchedule(), this.taskTimer = setTimeout((() => {
+            this.taskTimer = null, void this.runAndSchedule();
+        }), e);
+    }
+    async runAndSchedule() {
+        if (this.taskRunning || !window.isListPage || document.hidden) return;
+        this.taskRunning = !0;
+        try { await this.doTask(); } finally {
+            this.taskRunning = !1, this.scheduleTask();
+        }
     }
     showIsRun() {
         show.info("正在执行检测任务中, 请勿关闭当前窗口", {
@@ -47,12 +69,13 @@ class TaskPlugin extends BasePlugin {
         });
     }
     async doTask() {
-        if (isListPage) return await this.loadConfig(), this.javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl(),
-        navigator.locks.request(this.singleTaskKey, {
+        if (!window.isListPage) return;
+        await this.loadConfig(), this.javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl();
+        return navigator.locks.request(this.singleTaskKey, {
             ifAvailable: !0
         }, (async e => {
             if (e) {
-                if (isListPage && (this.taskConfig.enableCheckBlacklist === _ ? await this.checkBlacklist() : clog.warn("自动检测屏蔽黑名单-禁用"),
+                if (window.isListPage && (this.taskConfig.enableCheckBlacklist === _ ? await this.checkBlacklist() : clog.warn("自动检测屏蔽黑名单-禁用"),
                 !l)) {
                     if (this.taskConfig.enableCheckFavoriteActress === _) {
                         const e = localStorage.getItem(this.lastCheckFavoriteActressTimeKey), t = this.taskConfig.checkFavoriteActress_IntervalTime, n = e && this.isUnnecessaryCheck(e, t), a = $('a[href*="/users/profile"]').length > 0;
@@ -64,10 +87,6 @@ class TaskPlugin extends BasePlugin {
         })).catch((e => {
             this.isNetworkBlocked(e) ? clog.warn(`后台检测已停止: ${e.message}`) : (clog.error("锁任务出现错误:", e),
             clog.error("锁任务出现错误:", e));
-        })).finally((() => {
-            setTimeout((() => {
-                this.doTask();
-            }), 3e5);
         }));
     }
     async loadConfig() {

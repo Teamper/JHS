@@ -19,3 +19,21 @@ function detectSite(locationLike = window.location) {
     const site = isJavDB ? "javdb" : isJavBus ? "javbus" : is123Pan ? "123pan" : isJavTrailers ? "javtrailers" : isSubtitleCat ? "subtitlecat" : "unknown";
     return { site, hostname, isJavDB, isJavBus, is123Pan, isJavTrailers, isSubtitleCat };
 }
+
+/** 识别由 JHS 接管渲染的 JavDB 热播榜页面。 */
+function isHitShowPage(locationLike = window.location) {
+    const locationUrl = normalizeLocation(locationLike);
+    return "/advanced_search" === locationUrl.pathname && "1" === locationUrl.searchParams.get("handlePlayback");
+}
+
+/** 识别保留站点原生列表生命周期的页面。 */
+function isNormalListPage(locationLike = window.location, hasMovieList = null) {
+    const locationUrl = normalizeLocation(locationLike);
+    const hasList = null === hasMovieList ? "undefined" != typeof $ && $(".movie-list").length > 0 : Boolean(hasMovieList);
+    return !isHitShowPage(locationUrl) && (hasList || locationUrl.pathname.includes("advanced_search"));
+}
+
+/** 识别所有具备列表页能力的页面，包括 JHS 热播榜。 */
+function isListPage(locationLike = window.location, hasMovieList = null) {
+    return isHitShowPage(locationLike) || isNormalListPage(locationLike, hasMovieList);
+}

@@ -1,4 +1,26 @@
-import { describe, it, expect } from 'vitest';
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import vm from "node:vm";
+import { afterEach, describe, it, expect, vi } from 'vitest';
+
+function loadUtilsWithObserver() {
+    let observer = null;
+    class FakeMutationObserver {
+        constructor(callback) { this.callback = callback; this.disconnected = false; observer = this; }
+        observe() {}
+        disconnect() { this.disconnected = true; }
+        emit() { this.callback([]); }
+    }
+    const context = vm.createContext({
+        console, URL, document: { documentElement: {} }, MutationObserver: FakeMutationObserver,
+        setTimeout, clearTimeout, setInterval, clearInterval, clog: { error: vi.fn() },
+        i: (target, key, value) => (target[key] = value)
+    });
+    vm.runInContext(`${readFileSync(join(process.cwd(), "src/core/utils.js"), "utf8")};globalThis.TestUtils=Utils;`, context);
+    return { utils: new context.TestUtils(), getObserver: () => observer };
+}
+
+afterEach(() => vi.useRealTimers());
 
 // --- Functions under test (extracted from src/core/utils.js class Utils) ---
 
@@ -254,5 +276,36 @@ describe('genericSort', () => {
         const items = [{ val: 3 }, { val: 1 }];
         genericSort(items, [{ key: 'val' }]);
         expect(items[0].val).toBe(3);
+    });
+});
+
+describe("loopDetector", () => {
+    it("resolves immediately without creating a polling interval", () => {
+        const intervalSpy = vi.spyOn(globalThis, "setInterval"), callback = vi.fn(), { utils, getObserver } = loadUtilsWithObserver();
+        utils.loopDetector(() => true, callback, 1, 1e4, false);
+        expect(callback).toHaveBeenCalledTimes(1);
+        expect(getObserver()).toBeNull();
+        expect(intervalSpy).not.toHaveBeenCalled();
+        intervalSpy.mockRestore();
+    });
+
+    it("reacts to DOM mutation and cleans up its observer", () => {
+        vi.useFakeTimers();
+        let ready = false;
+        const callback = vi.fn(), { utils, getObserver } = loadUtilsWithObserver();
+        utils.loopDetector(() => ready, callback, 20, 1e4, false);
+        ready = true, getObserver().emit(), vi.advanceTimersByTime(20);
+        expect(callback).toHaveBeenCalledTimes(1);
+        expect(getObserver().disconnected).toBe(true);
+        expect(Object.keys(utils.intervalContainer)).toHaveLength(0);
+    });
+
+    it("honors a timeout without invoking a disabled timeout callback", () => {
+        vi.useFakeTimers();
+        const callback = vi.fn(), { utils, getObserver } = loadUtilsWithObserver();
+        utils.loopDetector(() => false, callback, 1, 50, false), vi.advanceTimersByTime(50);
+        expect(callback).not.toHaveBeenCalled();
+        expect(getObserver().disconnected).toBe(true);
+        expect(Object.keys(utils.intervalContainer)).toHaveLength(0);
     });
 });

@@ -61,18 +61,19 @@ class CoverButtonPlugin extends BasePlugin {
                 </div>
             </div>`;
     }
-    async addSvgBtn() {
-        $(this.getSelector().itemSelector).toArray().forEach((element => {
+    async addSvgBtn(items = null) {
+        (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach((element => {
             const item = $(element);
             if (item.find(".tool-box").length || l && item.find(".avatar-box").length) return;
             const host = r ? item.find(".tags").first() : item.find(".photo-info").first();
             host.length && host.append(this.buildToolBox());
-        })), this.enableSvgBtn();
+        })), this.enableSvgBtn(items);
     }
-    async enableSvgBtn() {
+    async enableSvgBtn(items = null) {
         const e = await storageManager.getSetting(), {enableScreenSvg: t = _, enableVideoSvg: n = _, enableHandleSvg: a = _, enableSiteSvg: i = _, enableCopySvg: s = _} = e;
+        const scope = items ? $(items) : $(document);
         [ { selector: ".screenSvg", enabled: t }, { selector: ".videoSvg", enabled: n }, { selector: ".handleSvg", enabled: a }, { selector: ".siteSvg", enabled: i }, { selector: ".copySvg", enabled: s } ].forEach((({selector: e, enabled: t}) => {
-            $(e).toggle(t === _);
+            scope.find(e).toggle(t === _);
         }));
     }
     closeCardMenus(focus = !1) {

@@ -1,6 +1,7 @@
 class OneOneFiveOfflinePlugin extends BasePlugin {
     getName() { return "OneOneFiveOfflinePlugin"; }
     async handle() {
+        if (!window.isDetailPage) return;
         if (!await storageManager.getSetting("enable115Offline", !1)) return;
         const client = new OneOneFiveClient();
         utils.loopDetector((() => $(".magnet-copy,.magnet-links").length > 0), (() => {

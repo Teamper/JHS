@@ -85,25 +85,30 @@ class ListPagePlugin extends BasePlugin {
         super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0),
         i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0),
         i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0),
-        i(this, "currentPageTotalCount", 0), i(this, "cache", localStorage.getItem("jhs_translate") ? JSON.parse(localStorage.getItem("jhs_translate")) : {}),
-        i(this, "writeQueue", Promise.resolve()), i(this, "_debouncedTranslateWrite", null);
+        i(this, "currentPageTotalCount", 0), i(this, "cache", null), i(this, "translationPending", new Map),
+        i(this, "filterContext", null), i(this, "pendingItems", new Set), i(this, "processTimer", null),
+        i(this, "hdImageObserver", null), i(this, "hdEagerRemaining", 12), i(this, "writeQueue", Promise.resolve()),
+        i(this, "_debouncedTranslateWrite", null);
     }
     getName() {
         return "ListPagePlugin";
     }
     async handle() {
+        if (!window.isListPage || isHitShowPage()) return;
         new BroadcastChannel("channel-refresh").addEventListener("message", (async e => {
             let t = e.data.type;
             if ("refresh" === t) {
-                await this.doFilter(), this.applyVisibility();
+                this.filterContext = null, await this.doFilter(), this.applyVisibility();
                 const e = this.getBean("HistoryPlugin");
                 e.tableObj && e.tableObj.setData();
                 const t = this.getBean("NewVideoPlugin");
                 t && void Promise.all([ t.showNewVideoCount(), t.loadData() ]).catch((error => clog.error("新作品数据刷新失败", error)));
-            } else "cleanCache_filter_actor_actress_car_list" === t ? storageManager._invalidateCache(storageManager.blacklist_car_list_key) : "clean_cacheSettingObj" === t && storageManager._invalidateCache(storageManager.setting_key);
+            } else "cleanCache_filter_actor_actress_car_list" === t ? (this.filterContext = null, storageManager._invalidateCache(storageManager.blacklist_car_list_key)) : "clean_cacheSettingObj" === t && (this.filterContext = null,
+            storageManager._invalidateCache(storageManager.setting_key));
         })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
         await this.doFilter(), this.createQuickFilter(), this.applyVisibility(), await this.bindClick(),
         this.rememberTagExpand(), $(this.getSelector().itemSelector + " a").attr("target", "_blank"),
+        $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"),
         this.checkDom();
     }
     createQuickFilter() {
@@ -116,9 +121,9 @@ class ListPagePlugin extends BasePlugin {
             $("#jhs-quick-filter .jhs-segmented__item").removeClass("active").attr("aria-selected", "false"), $(this).addClass("active").attr("aria-selected", "true"), n.activeQuickFilter = t, n.applyQuickFilter(t);
         }));
     }
-    applyVisibility() {
+    applyVisibility(items = null) {
         const e = this.activeQuickFilter || "waitCheck", t = this.getSelector().itemSelector, n = ["filter", "keywordFilter", "actorFilter"];
-        $(t).each((function() {
+        (items ? $(items) : $(t)).each((function() {
             const t = $(this), a = t.attr("data-hide") === "yes", i = t.attr("data-jhs-status") || "waitCheck";
             if (e === "all") { n.includes(i) ? t.hide() : t.show(); return; }
             if (i === e) { t.show(); return; }
@@ -139,25 +144,36 @@ class ListPagePlugin extends BasePlugin {
         }));
     }
     checkDom() {
-        if (!window.isListPage) return;
+        if (!window.isListPage || isHitShowPage()) return;
         const e = this.getSelector(), t = document.querySelector(e.boxSelector);
         if (!t) return void clog.error("没有找到容器节点!");
-        let n = null;
-        const a = new MutationObserver((() => {
-            n && clearTimeout(n), n = setTimeout((async () => {
-                this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), this.applyVisibility(),
-                await this.getBean("ListPageButtonPlugin").sortItems(), this.getBean("CoverButtonPlugin").addSvgBtn(),
-                $(this.getSelector().itemSelector + " a").attr("target", "_blank"), this.getBean("AutoPagePlugin").checkLoad();
-            }), 100);
+        const a = new MutationObserver((records => {
+            for (const record of records) for (const node of record.addedNodes) {
+                if (node.nodeType !== Node.ELEMENT_NODE) continue;
+                node.matches?.(e.itemSelector) && "true" !== node.dataset.jhsProcessed && this.pendingItems.add(node),
+                node.querySelectorAll?.(e.itemSelector).forEach((item => {
+                    "true" !== item.dataset.jhsProcessed && this.pendingItems.add(item);
+                }));
+            }
+            this.pendingItems.size && (this.processTimer && clearTimeout(this.processTimer), this.processTimer = setTimeout((() => {
+                const items = [ ...this.pendingItems ].filter((item => item.isConnected && "true" !== item.dataset.jhsProcessed));
+                this.pendingItems.clear(), this.processTimer = null, items.length && void this.processAddedItems(items).catch((error => clog.error("列表增量处理失败", error)));
+            }), 100));
         }));
         a.observe(t, {
             childList: !0,
             subtree: !1
         });
     }
-    fixBusTitleBox() {
+    async processAddedItems(items) {
+        const selector = this.getSelector(), covers = items.flatMap((item => [ ...item.querySelectorAll(selector.coverImgSelector) ]));
+        this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items), await this.doFilterItems(items), this.applyVisibility(items),
+        await this.getBean("ListPageButtonPlugin").sortItems(), await this.getBean("CoverButtonPlugin").addSvgBtn(items),
+        $(items).find("a").attr("target", "_blank"), items.forEach((item => item.dataset.jhsProcessed = "true")), this.getBean("AutoPagePlugin").checkLoad();
+    }
+    fixBusTitleBox(items = null) {
         if (!l) return;
-        $(this.getSelector().itemSelector).toArray().forEach((e => {
+        (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach((e => {
             var t;
             let n = $(e);
             if (n.find(".avatar-box").length > 0) return;
@@ -178,8 +194,11 @@ class ListPagePlugin extends BasePlugin {
         }));
     }
     async doFilter() {
+        return this.doFilterItems();
+    }
+    async doFilterItems(items = null) {
         if (!window.isListPage) return;
-        let e = $(this.getSelector().itemSelector).toArray();
+        let e = items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray();
         e.length && (await this.filterMovieList(e), l && setTimeout((() => {
             this.getBean("BusImgPlugin").logImageHeightsByRow().catch((e => clog.error("JavBus图片高度修正失败", e)));
         })));
@@ -196,23 +215,43 @@ class ListPagePlugin extends BasePlugin {
     getStatusKey(e) {
         return e === Te.IS_FILTERED ? "filter" : e === Te.IS_FAVORITE ? "favorite" : e === Te.IS_HAS_DOWN ? "hasDown" : e === Te.IS_HAS_WATCH ? "hasWatch" : e === Te.IS_KEYWORD_FILTER ? "keywordFilter" : e === Te.IS_ACTOR_FILTER ? "actorFilter" : e === Te.IS_ACTRESS_FILTER ? "actorFilter" : "waitCheck";
     }
+    async getFilterContext() {
+        if (this.filterContext) return this.filterContext;
+        const [titleKeywords, blacklistMap, blacklistCars, settings, statusMap] = await Promise.all([ storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getStatusMap() ]), actorCarNumToNameMap = new Map, actressCarNumToNameMap = new Map;
+        for (const item of blacklistCars) {
+            const role = blacklistMap.get(item.starId)?.role;
+            if (!role) {
+                clog.error("黑名单数据源丢失演员信息", item);
+                continue;
+            }
+            const target = role === B ? actorCarNumToNameMap : actressCarNumToNameMap;
+            target.has(item.carNum) || target.set(item.carNum, item.names);
+        }
+        return this.filterContext = { titleKeywords, settings, statusMap, actorCarNumToNameMap, actressCarNumToNameMap };
+    }
+    recountStatuses() {
+        this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0,
+        this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0,
+        this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0;
+        const countKeys = { filter: "currentPageFilterCount", favorite: "currentPageFavoriteCount", hasDown: "currentPageHasDownCount", hasWatch: "currentPageHasWatchCount", keywordFilter: "currentPageKeywordFilterCount", actorFilter: "currentPageActorFilterCount", waitCheck: "currentPageWaitCheckCount" };
+        $(this.getSelector().itemSelector).each(((e, item) => {
+            const card = $(item);
+            if (l && card.find(".avatar-box").length > 0) return;
+            const key = countKeys[card.attr("data-jhs-status") || "waitCheck"];
+            key && this[key]++, this.currentPageTotalCount++;
+        }));
+    }
     async translateListItems(e) {
-        for (let t = 0; t < e.length; t++) t > 0 && t % 8 == 0 && await this.yieldListFrame(),
-        await this.translate(e[t]);
+        if (await storageManager.getSetting("translateTitle", _) !== _) return;
+        await mapLimit(e, 3, (async (item, index) => {
+            try { index > 0 && index % 8 == 0 && await this.yieldListFrame(), await this.translate(item); } catch (error) { clog.error("列表标题翻译失败", error); }
+        }));
     }
     async filterMovieList(e) {
         utils.time("累计耗费时间"), utils.time("读取数据耗时");
-        const [n, a, i, s, m] = await Promise.all([ storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getStatusMap() ]), o = utils.time("读取数据耗时");
+        const {titleKeywords: n, settings: s, statusMap: m, actorCarNumToNameMap: f, actressCarNumToNameMap: v} = await this.getFilterContext(), o = utils.time("读取数据耗时");
         utils.time("组装数据耗时");
-        const u = a, {actorCarNumToNameMap: f, actressCarNumToNameMap: v} = i.reduce(((e, t) => {
-            const n = u.get(t.starId)?.role;
-            if (!n) return clog.error("黑名单数据源丢失演员信息", t), e;
-            const a = n === B ? e.actorCarNumToNameMap : e.actressCarNumToNameMap;
-            return a.has(t.carNum) || a.set(t.carNum, t.names), e;
-        }), {
-            actorCarNumToNameMap: new Map,
-            actressCarNumToNameMap: new Map
-        }), b = utils.time("组装数据耗时"), w = (null == s ? void 0 : s.showFilterItem) ?? C, y = (null == s ? void 0 : s.showFilterActorItem) ?? C, x = (null == s ? void 0 : s.showFilterKeywordItem) ?? C, k = (null == s ? void 0 : s.showFavoriteItem) ?? _, S = (null == s ? void 0 : s.showHasDownItem) ?? _, T = (null == s ? void 0 : s.showHasWatchItem) ?? _, I = (null == s ? void 0 : s.showAllItem) ?? C, P = (null == s ? void 0 : s.tagPosition) || "rightTop";
+        const b = utils.time("组装数据耗时"), w = (null == s ? void 0 : s.showFilterItem) ?? C, y = (null == s ? void 0 : s.showFilterActorItem) ?? C, x = (null == s ? void 0 : s.showFilterKeywordItem) ?? C, k = (null == s ? void 0 : s.showFavoriteItem) ?? _, S = (null == s ? void 0 : s.showHasDownItem) ?? _, T = (null == s ? void 0 : s.showHasWatchItem) ?? _, I = (null == s ? void 0 : s.showAllItem) ?? C, P = (null == s ? void 0 : s.tagPosition) || "rightTop";
         const O = n.filter((e => e));
         this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0,
         this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0,
@@ -247,7 +286,7 @@ class ListPagePlugin extends BasePlugin {
             }
             R.push(t);
         }
-        this.translateListItems(R).catch((e => clog.error("列表页翻译任务失败", e)));
+        this.recountStatuses(), void this.translateListItems(R).catch((e => clog.error("列表页翻译任务失败", e)));
         const D = utils.time("处理页面耗时"), A = utils.time("累计耗费时间");
         clog.log(`\n            <table class="countTable jhs-layout-b12542a5">\n                <tr>\n                    <td colspan="2" class="jhs-count-table__cell">${o}</td>\n                    <td colspan="2" class="jhs-count-table__cell">${b}</td>\n                </tr>\n                \n                <tr>\n                    <td colspan="2" class="jhs-count-table__cell">${D}</td>\n                    <td colspan="2" class="jhs-count-table__cell">${A}</td>\n                </tr>\n                <tr>\n                    <td class="jhs-count-table__head">项目</td>\n                    <td class="jhs-count-table__head">数量</td>\n                    <td class="jhs-count-table__head">项目</td>\n                    <td class="jhs-count-table__head">数量</td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽单番号</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageFilterCount}</strong></td>\n                     <td class="jhs-count-table__cell">收藏</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageFavoriteCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽演员</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageActorFilterCount}</strong></td>\n                    <td class="jhs-count-table__cell">已下载</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasDownCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽关键词</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageKeywordFilterCount}</strong></td>\n                    <td class="jhs-count-table__cell">已观看</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasWatchCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">待鉴定</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageWaitCheckCount}</strong></td>\n                    <td class="jhs-count-table__cell"></td>\n                    <td class="jhs-count-table__cell"></td>\n                </tr>\n        \n                <tr>\n                    <td class="jhs-count-table__cell"><strong>总数</strong></td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageTotalCount}</strong></td>\n                </tr>\n            </table>\n        `);
     }
@@ -365,44 +404,52 @@ class ListPagePlugin extends BasePlugin {
     replaceHdImg(e) {
         if (e && "string" == typeof e.jquery && (e = e.toArray()), e || (e = document.querySelectorAll(this.getSelector().coverImgSelector)),
         !e.length) return;
-        const t = Array.from(e), n = t.slice(0, 12), a = t.slice(12);
-        if (n.forEach((e => this._replaceSingleHdImg(e))), a.length && "IntersectionObserver" in window) {
-            const t = new IntersectionObserver((e => {
-                e.forEach((e => {
-                    e.isIntersecting && (this._replaceSingleHdImg(e.target), t.unobserve(e.target));
-                }));
-            }), {
-                rootMargin: "200px"
-            });
-            a.forEach((e => t.observe(e)));
-        } else a.forEach((e => this._replaceSingleHdImg(e)));
+        const t = Array.from(e).filter((e => "true" !== e.dataset.hdReplaced && "true" !== e.dataset.jhsHdObserved));
+        if ("IntersectionObserver" in window && !this.hdImageObserver) this.hdImageObserver = new IntersectionObserver((entries => {
+            entries.forEach((entry => {
+                entry.isIntersecting && (this.hdImageObserver.unobserve(entry.target), delete entry.target.dataset.jhsHdObserved,
+                this._replaceSingleHdImg(entry.target));
+            }));
+        }), { rootMargin: "200px" });
+        for (const image of t) this.hdEagerRemaining > 0 ? (this.hdEagerRemaining--, this._replaceSingleHdImg(image)) : this.hdImageObserver ? (image.dataset.jhsHdObserved = "true",
+        this.hdImageObserver.observe(image)) : this._replaceSingleHdImg(image);
         storageManager.getSetting("hoverBigImg", C).then((e => {
             e === _ && (window.imageHoverPreviewObj ? window.imageHoverPreviewObj.bindEvents() : window.imageHoverPreviewObj = new ImageHoverPreview({
                 selector: this.getSelector().coverImgSelector
             }));
         }));
     }
+    getTranslationCache() {
+        if (this.cache && "object" == typeof this.cache && !Array.isArray(this.cache)) return this.cache;
+        try { this.cache = JSON.parse(localStorage.getItem("jhs_translate") || "{}"); } catch (error) {
+            clog.warn("列表翻译缓存无法解析，已忽略旧缓存", error), this.cache = {};
+        }
+        return this.cache && "object" == typeof this.cache && !Array.isArray(this.cache) ? this.cache : this.cache = {};
+    }
+    scheduleTranslationWrite() {
+        this._debouncedTranslateWrite && clearTimeout(this._debouncedTranslateWrite), this._debouncedTranslateWrite = setTimeout((() => {
+            localStorage.setItem("jhs_translate", JSON.stringify(this.getTranslationCache()));
+        }), 500);
+    }
+    applyTranslatedTitle(e, t, n) {
+        const a = e.find(".video-title");
+        r ? (a.contents().each((function() {
+            3 !== this.nodeType || "" === this.textContent.trim() || this.textContent.includes(n) || (this.textContent = " " + t + " ");
+        })), a.attr("title", t)) : a.text(t), e.attr("data-jhs-translation-key", n);
+    }
     async translate(e) {
-        if (await storageManager.getSetting("translateTitle", _) !== _) return;
         let t, n, a = e.find(".video-title");
         if (r ? (t = a.contents().filter(((e, t) => 3 === t.nodeType && "" !== t.textContent.trim())).text().trim(),
-        n = e.find(".video-title strong").text().trim()) : (t = e.find("img").attr("data-title").trim(),
-        n = e.find("a").attr("href").split("/").filter(Boolean).pop().trim()), this.cache[n]) {
-            let e = this;
-            return a.contents().each((function() {
-                3 === this.nodeType && "" !== this.textContent.trim() && (this.textContent = " " + e.cache[n] + " ");
-            })), void a.attr("title", e.cache[n]);
+        n = e.find(".video-title strong").text().trim()) : (t = (e.find("img").attr("data-title") || "").trim(),
+        n = (e.find("a").attr("href") || "").split("/").filter(Boolean).pop()?.trim()), !t || !n) return;
+        const cache = this.getTranslationCache();
+        if (cache[n]) return void this.applyTranslatedTitle(e, cache[n], n);
+        let pending = this.translationPending.get(n);
+        if (!pending) {
+            pending = _e(t).then((translated => (cache[n] = translated, this.scheduleTranslationWrite(), translated))).finally((() => this.translationPending.delete(n))),
+            this.translationPending.set(n, pending);
         }
-        _e(t).then((e => {
-            r ? (a.contents().each((function() {
-                3 !== this.nodeType || "" === this.textContent.trim() || this.textContent.includes(n) || (this.textContent = " " + e + " ");
-            })), a.attr("title", e)) : a.text(e), this.cache[n] = e, this._debouncedTranslateWrite && clearTimeout(this._debouncedTranslateWrite),
-            this._debouncedTranslateWrite = setTimeout((() => {
-                localStorage.setItem("jhs_translate", JSON.stringify(this.cache));
-            }), 500);
-        })).catch((e => {
-            clog.error("翻译失败:", e);
-        }));
+        this.applyTranslatedTitle(e, await pending, n);
     }
     async revertTranslation() {
         $(this.getSelector().itemSelector).toArray().forEach((e => {

@@ -129,4 +129,18 @@ describe("ImageHoverPreview lifecycle", () => {
         expect(() => pendingLoad()).not.toThrow();
         expect(preview.preview).toBeNull();
     });
+
+    it("skips selector matching for idle mouse movement", () => {
+        const { Preview, document, firstCover } = loadPreviewClass(), preview = new Preview({ selector: ".cover" }), closest = vi.spyOn(firstCover, "closest");
+        document.emit("mousemove", firstCover, 20, 20);
+        expect(closest).not.toHaveBeenCalled();
+        preview.destroy();
+    });
+
+    it("keeps only the most recent loaded image metadata", () => {
+        const { Preview, document, firstCover, createCover, images } = loadPreviewClass(), preview = new Preview({ selector: ".cover", loadedUrlLimit: 2 }), second = createCover("https://example.test/b.jpg"), third = createCover("https://example.test/c.jpg");
+        document.emit("mouseover", firstCover), images[0].onload(), document.emit("mouseover", second), images[1].onload(), document.emit("mouseover", third), images[2].onload();
+        expect([ ...preview.loadedUrls.keys() ]).toEqual([ "https://example.test/b.jpg", "https://example.test/c.jpg" ]);
+        preview.destroy();
+    });
 });

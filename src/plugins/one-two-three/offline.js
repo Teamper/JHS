@@ -91,6 +91,7 @@ class OneTwoThreeOfflinePlugin extends BasePlugin {
         }));
     }
     injectNativeButtons() {
+        if (!window.isDetailPage) return;
         r && utils.loopDetector((() => $("#magnets-content .item").length > 0), (() => this.injectJavDbButtons()));
         l && utils.loopDetector((() => $("#magnet-table td a[href^='magnet:']").length > 0), (() => this.injectJavBusButtons()));
     }

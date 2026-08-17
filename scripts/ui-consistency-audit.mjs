@@ -58,8 +58,8 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(repoRoot, "JHS.user.js"), "utf8")
 ]);
 
-requireMatch(main, /^\/\/ @version\s+6\.2\.0$/m, "userscript version must remain 6.2.0");
-requireMatch(packageSource, /"version"\s*:\s*"6\.2\.0"/, "package version must remain 6.2.0");
+requireMatch(main, /^\/\/ @version\s+6\.2\.1$/m, "userscript version must remain 6.2.1");
+requireMatch(packageSource, /"version"\s*:\s*"6\.2\.1"/, "package version must remain 6.2.1");
 
 for (const token of [
   "--jhs-space-1", "--jhs-space-6", "--jhs-radius-xs", "--jhs-radius-pill",

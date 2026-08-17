@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      6.2.0
+// @version      6.2.1
 // @author       JHS Contributors
 // @description  JAV Helper Suite：为 JavDB / JavBus 提供浏览、收藏、筛选、资源检索、数据备份与统计增强。
 // @license      MIT
@@ -105,10 +105,8 @@ const pluginManager = function() {
     window.isDetailPage = function() {
         let e = window.location.href;
         return r ? e.split("?")[0].includes("/v/") : !!l && $("#magnet-table").length > 0;
-    }(), window.isListPage = function() {
-        let e = window.location.href;
-        return r ? $(".movie-list").length > 0 || e.includes("advanced_search") : !!l && $(".masonry > div .item").length > 0;
-    }(), window.isFc2Page = function() {
+    }(), window.isListPage = r ? isListPage(window.location, $(".movie-list").length > 0) : !!l && $(".masonry > div .item").length > 0,
+    window.isFc2Page = function() {
         let e = window.location.href;
         return e.includes("advanced_search?type=3") || e.includes("advanced_search?type=100");
     }();

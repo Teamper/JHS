@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [6.2.1] - 2026-08-17
+
+### Changed
+- 热播页首屏在列表状态初始化后立即结束加载，评分补全改为四路有限并发、单次缓存读写和失败隔离，仅在评价人数排序时补全后重排。
+- 普通列表页改为增量处理自动翻页新增卡片，复用筛选上下文和高清图观察器，并将翻译限制为三路并发、在途去重及批量缓存写入。
+- DOM 条件等待由 1–20 ms 轮询改为 MutationObserver 驱动；插件样式合并为单个节点，可访问性扫描仅处理 JHS 控件。
+- 列表排序预先提取排序键，悬浮预览空闲移动不再匹配选择器，图片尺寸缓存限制为最近 128 项。
+
+### Fixed
+- 修复页面识别函数与后台任务列表标志同名，导致详情页可能启动检测任务的问题；后台检测现在仅在可见列表页运行并保留跨标签页锁。
+- 修复 123 云盘、115 与 JavBus 设置入口在不适用页面持续等待不存在 DOM 的问题。
+- 修复自动翻页、排序移动和状态刷新可能触发重复全量扫描、重复翻译和重复控件增强的问题。
+
 ## [6.2.0] - 2026-08-12
 
 ### Added
@@ -518,7 +531,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 增加 `escapeHtml()` 修复多处 XSS 风险。
 - 加密存储敏感凭据。
 
-[Unreleased]: ../../compare/v6.2.0...HEAD
+[Unreleased]: ../../compare/v6.2.1...HEAD
+[6.2.1]: ../../compare/v6.2.0...v6.2.1
 [6.2.0]: ../../compare/v6.1.1...v6.2.0
 [6.1.1]: ../../compare/v6.1.0...v6.1.1
 [6.1.0]: ../../compare/v6.0.0...v6.1.0

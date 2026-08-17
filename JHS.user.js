@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      6.2.0
+// @version      6.2.1
 // @author       JHS Contributors
 // @description  JAV Helper Suite：为 JavDB / JavBus 提供浏览、收藏、筛选、资源检索、数据备份与统计增强。
 // @license      MIT
@@ -96,6 +96,21 @@
     return { site, hostname, isJavDB, isJavBus, is123Pan, isJavTrailers, isSubtitleCat };
   }
   __name(detectSite, "detectSite");
+  function isHitShowPage(locationLike = window.location) {
+    const locationUrl = normalizeLocation(locationLike);
+    return "/advanced_search" === locationUrl.pathname && "1" === locationUrl.searchParams.get("handlePlayback");
+  }
+  __name(isHitShowPage, "isHitShowPage");
+  function isNormalListPage(locationLike = window.location, hasMovieList = null) {
+    const locationUrl = normalizeLocation(locationLike);
+    const hasList = null === hasMovieList ? "undefined" != typeof $ && $(".movie-list").length > 0 : Boolean(hasMovieList);
+    return !isHitShowPage(locationUrl) && (hasList || locationUrl.pathname.includes("advanced_search"));
+  }
+  __name(isNormalListPage, "isNormalListPage");
+  function isListPage(locationLike = window.location, hasMovieList = null) {
+    return isHitShowPage(locationLike) || isNormalListPage(locationLike, hasMovieList);
+  }
+  __name(isListPage, "isListPage");
   var HOUR = 60 * 60 * 1e3;
   var DAY = 24 * HOUR;
   var CACHE_TTL = Object.freeze({ magnet: 6 * HOUR, screenshot: 7 * DAY, screenshotNegative: 12 * HOUR, match115: HOUR, externalDetail: DAY });
@@ -1706,18 +1721,30 @@
   }
   __name(buildUiPrimitivesCss, "buildUiPrimitivesCss");
   function initializeUiAccessibility() {
+    const selector = "button.jhs-btn, a.jhs-btn[role='button'], .card-btn, .jhs-icon-btn, [class*='jhs-'] button, [class*='jhs-'] a[role='button']";
     const enhance = /* @__PURE__ */ __name((e2) => {
-      const t2 = e2.nodeType === Node.ELEMENT_NODE ? [e2] : [];
-      const n2 = e2.querySelectorAll ? [...e2.querySelectorAll("button, a[role='button'], .card-btn, .jhs-icon-btn")] : [];
+      const t2 = e2.nodeType === Node.ELEMENT_NODE && e2.matches?.(selector) ? [e2] : [];
+      const n2 = e2.querySelectorAll ? [...e2.querySelectorAll(selector)] : [];
       [...t2, ...n2].forEach(((e3) => {
-        if (!e3.matches?.("button, a[role='button'], .card-btn, .jhs-icon-btn")) return;
         if (e3.hasAttribute("aria-label") || e3.hasAttribute("aria-labelledby") || e3.textContent.trim()) return;
         const t3 = e3.getAttribute("title") || e3.getAttribute("data-tip");
         t3 && e3.setAttribute("aria-label", t3);
       }));
     }, "enhance");
     enhance(document);
-    new MutationObserver(((e2) => e2.forEach(((e3) => e3.addedNodes.forEach(enhance))))).observe(document.documentElement, {
+    const pending = /* @__PURE__ */ new Set();
+    let scheduled = false;
+    const flush = /* @__PURE__ */ __name(() => {
+      scheduled = false;
+      const all = [...pending], roots = all.filter(((e2) => !all.some(((t2) => t2 !== e2 && t2.contains?.(e2)))));
+      pending.clear(), roots.forEach(enhance);
+    }, "flush");
+    new MutationObserver(((records) => {
+      records.forEach(((record) => record.addedNodes.forEach(((node) => {
+        node.nodeType === Node.ELEMENT_NODE && pending.add(node);
+      }))));
+      pending.size && !scheduled && (scheduled = true, queueMicrotask(flush));
+    })).observe(document.documentElement, {
       childList: true,
       subtree: true
     });
@@ -2754,7 +2781,7 @@
   }, "q");
   var _Utils = class _Utils {
     constructor() {
-      return i(this, "intervalContainer", {}), i(this, "mimeTypes", {
+      return i(this, "intervalContainer", {}), i(this, "waitSequence", 0), i(this, "mimeTypes", {
         txt: "text/plain",
         html: "text/html",
         css: "text/css",
@@ -2785,12 +2812,8 @@
       }), i(this, "timers", /* @__PURE__ */ new Map()), i(this, "insertStyle", ((e2) => {
         const t2 = (Array.isArray(e2) ? e2 : [e2]).filter(Boolean);
         if (0 === t2.length) return;
-        const n2 = document.createDocumentFragment();
-        for (const e3 of t2) {
-          const t3 = document.createElement("style");
-          t3.textContent = e3.replace(/^\s*<style[^>]*>/i, "").replace(/<\/style>?\s*$/i, ""), n2.append(t3);
-        }
-        document.head.append(n2);
+        const n2 = t2.map(((e3) => e3.replace(/^\s*<style[^>]*>/i, "").replace(/<\/style>?\s*$/i, ""))).filter(Boolean).join("\n"), a2 = document.createElement("style");
+        n2 && (a2.textContent = n2, document.head.append(a2));
       })), i(this, "layerIndexStack", []), _Utils.instance || (_Utils.instance = this), _Utils.instance;
     }
     importResource(e2) {
@@ -2863,13 +2886,33 @@
       }));
     }
     loopDetector(e2, t2, n2 = 20, a2 = 1e4, i2 = true) {
-      const s2 = Math.random(), o2 = (/* @__PURE__ */ new Date()).getTime(), r2 = /* @__PURE__ */ __name((e3) => {
-        clearInterval(this.intervalContainer[s2]), e3 && t2 && t2(), delete this.intervalContainer[s2];
-      }, "r");
-      this.intervalContainer[s2] = setInterval((() => {
-        const t3 = (/* @__PURE__ */ new Date()).getTime() - o2;
-        e2() ? r2(true) : t3 >= a2 && r2(i2);
-      }), n2);
+      const s2 = ++this.waitSequence;
+      let o2 = null, r2 = null, l2 = null, c2 = false;
+      const d2 = /* @__PURE__ */ __name(() => {
+        o2?.disconnect(), clearTimeout(r2), clearTimeout(l2), clearInterval(this.intervalContainer[s2]?.fallback), delete this.intervalContainer[s2];
+      }, "d"), h2 = /* @__PURE__ */ __name((e3) => {
+        if (c2) return;
+        c2 = true, d2(), e3 && t2 && t2();
+      }, "h"), g2 = /* @__PURE__ */ __name(() => {
+        if (c2) return;
+        e2() && h2(true);
+      }, "g"), p2 = /* @__PURE__ */ __name(() => {
+        c2 || (clearTimeout(r2), r2 = setTimeout(g2, Math.max(0, n2)));
+      }, "p");
+      this.intervalContainer[s2] = {};
+      if (e2()) return void h2(true);
+      if ("function" == typeof MutationObserver && document.documentElement) o2 = new MutationObserver(p2), o2.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+      else this.intervalContainer[s2].fallback = setInterval(g2, Math.max(100, n2));
+      l2 = setTimeout((() => {
+        if (c2) return;
+        let t3 = false;
+        try {
+          t3 = e2();
+        } catch (e3) {
+          clog.error("DOM 等待条件执行失败", e3);
+        }
+        h2(t3 || i2);
+      }), Math.max(0, a2));
     }
     rightClick(e2, t2, n2) {
       let a2;
@@ -3385,9 +3428,11 @@
         zIndex: JHS_Z_INDEX.tooltip,
         transition: 0.2,
         hideDelay: 100,
+        loadedUrlLimit: 128,
         autoAdjustPosition: true,
         ...config
       };
+      this.config.loadedUrlLimit = Math.max(1, Number(this.config.loadedUrlLimit) || 128);
       this.preview = null;
       this.currentTarget = null;
       this.timer = null;
@@ -3478,7 +3523,8 @@
       target && (!event.relatedTarget || !target.contains(event.relatedTarget)) && this.handleMouseLeave();
     }
     handleDocumentMove(event) {
-      this.findTarget(event) === this.currentTarget && this.handleMouseMove(event);
+      if (!this.currentTarget) return;
+      (event.target === this.currentTarget || this.currentTarget.contains(event.target)) && this.handleMouseMove(event);
     }
     handleMouseEnter(event, delegatedTarget = event.currentTarget) {
       if (this.destroyed || !this.preview) return;
@@ -3495,7 +3541,7 @@
       if (source === this.currentUrl && this.imgElement) return this.showCurrentPreview();
       if (source === this.pendingUrl) return void this.preview.classList.add("active");
       const cached = this.loadedUrls.get(source);
-      if (cached) return void this.commitPreview(source, cached);
+      if (cached) return this.loadedUrls.delete(source), this.loadedUrls.set(source, cached), void this.commitPreview(source, cached);
       const generation = ++this.loadGeneration;
       this.pendingImage && (this.pendingImage.onload = null, this.pendingImage.onerror = null);
       this.pendingUrl = source;
@@ -3506,7 +3552,9 @@
         if (this.destroyed || generation !== this.loadGeneration || !this.preview) return;
         const { width, height } = this.calculateImageSize(image);
         const cachedImage = { width, height };
-        this.loadedUrls.set(source, cachedImage), this.pendingImage = null, this.pendingUrl = null, this.commitPreview(source, cachedImage);
+        this.loadedUrls.set(source, cachedImage);
+        for (; this.loadedUrls.size > this.config.loadedUrlLimit; ) this.loadedUrls.delete(this.loadedUrls.keys().next().value);
+        this.pendingImage = null, this.pendingUrl = null, this.commitPreview(source, cachedImage);
       };
       image.onerror = () => {
         if (this.destroyed || generation !== this.loadGeneration || !this.preview) return;
@@ -4118,6 +4166,7 @@
       this._readyMs = 0;
       this._idlePending = 0;
       this._idleCompleted = 0;
+      this._disabledPluginsPromise = null;
     }
     register(e2) {
       if ("function" != typeof e2) throw new Error("插件必须是一个类");
@@ -4166,12 +4215,14 @@
       };
     }
     async _getDisabledPlugins() {
-      try {
-        const e2 = await storageManager.getSetting("disabledPlugins", "[]");
-        return JSON.parse(e2).filter(((name) => !["SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin"].includes(name)));
-      } catch (e2) {
-        return [];
-      }
+      return this._disabledPluginsPromise || (this._disabledPluginsPromise = (async () => {
+        try {
+          const e2 = await storageManager.getSetting("disabledPlugins", "[]");
+          return new Set(JSON.parse(e2).filter(((name) => !["SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin"].includes(name))));
+        } catch (e2) {
+          return /* @__PURE__ */ new Set();
+        }
+      })());
     }
     async processCss() {
       const a2 = performance.now();
@@ -4179,7 +4230,7 @@
       const m2 = utils.isMobileMode();
       const s2 = await Promise.all(Array.from(this.plugins).map((async ([e2, n2]) => {
         try {
-          if (t2.includes(e2)) return { name: e2, status: "disabled" };
+          if (t2.has(e2)) return { name: e2, status: "disabled" };
           if (m2 && "function" == typeof n2.shouldSkipOnMobile && n2.shouldSkipOnMobile()) return { name: e2, status: "skipped" };
           if ("function" == typeof n2.initCss) {
             const t3 = await n2.initCss();
@@ -4235,7 +4286,7 @@
       for (const [s3, o2] of this.plugins) {
         const r2 = "function" == typeof o2.getStartupMode && "idle" === o2.getStartupMode() ? "idle" : "immediate";
         const l2 = { name: s3, elapsed: 0, status: "pending", startupMode: r2 };
-        if (e2.includes(s3)) l2.status = "disabled", i2.push(l2);
+        if (e2.has(s3)) l2.status = "disabled", i2.push(l2);
         else if (t2 && "function" == typeof o2.shouldSkipOnMobile && o2.shouldSkipOnMobile()) l2.status = "skipped-mobile", i2.push(l2);
         else {
           const e3 = { name: s3, plugin: o2, mode: r2, timing: l2, startedAt: 0 };
@@ -5432,7 +5483,7 @@
   var ActressInfoPlugin = _ActressInfoPlugin;
   var _HitShowPlugin = class _HitShowPlugin extends BasePlugin {
     constructor() {
-      super(), i(this, "$contentBox", $(".section .container"));
+      super(), i(this, "$contentBox", $(".section .container")), i(this, "loadGeneration", 0);
     }
     getName() {
       return "HitShowPlugin";
@@ -5447,27 +5498,47 @@
     }
     hookPage() {
       let e2 = $("h2.section-title");
-      e2.contents().first().replaceWith("热播"), e2.addClass("jhs-hitshow-title"), e2.parent(".jhs-hitshow-heading").length || e2.wrap('<header class="jhs-hitshow-heading"></header>'), $(".empty-message").remove(), $(".section .container .box").remove(), this.$contentBox.append('<div class="movie-list h cols-4 vcols-8 jhs-hitshow-list"></div>');
+      e2.contents().first().replaceWith("热播"), e2.addClass("jhs-hitshow-title"), e2.parent(".jhs-hitshow-heading").length || e2.wrap('<header class="jhs-hitshow-heading"></header>'), $(".empty-message").remove(), $(".section .container .box").remove(), $(".movie-list.jhs-hitshow-list").remove(), this.$contentBox.append('<div class="movie-list h cols-4 vcols-8 jhs-hitshow-list"></div>');
     }
     async handlePlayback() {
-      if (!window.location.href.includes("handlePlayback=1")) return;
-      let e2 = new URLSearchParams(window.location.search).get("period");
-      this.hookPage(), this.toolBar(e2);
-      let t2 = $(".movie-list");
-      t2.html("");
-      let n2 = loading();
-      let a2 = false;
-      for (let s2 = 1; s2 <= 3 && !a2; s2++) try {
-        const n3 = await W(e2);
-        let i2 = this.markDataListHtml(n3);
-        t2.html(i2), await this.loadScore(n3), await this.getBean("ListPageButtonPlugin").sortItems(), a2 = true;
-      } catch (i2) {
-        s2 < 3 ? (clog.error(`获取热播数据失败 (第 ${s2} 次重试)`, i2), await new Promise(((e3) => setTimeout(e3, 1e3)))) : clog.error("所有重试尝试均失败，无法获取数据。", i2);
+      if (!isHitShowPage()) return;
+      const period = new URLSearchParams(window.location.search).get("period"), generation = ++this.loadGeneration;
+      this.hookPage(), this.toolBar(period);
+      const loadingObj = loading();
+      let loadingClosed = false;
+      try {
+        const movies = await this.fetchPlaybackWithRetry(period);
+        if (generation !== this.loadGeneration) return;
+        $(".movie-list").html(this.markDataListHtml(movies));
+        await this.initializeRenderedList();
+        await this.getBean("ListPageButtonPlugin").sortItems();
+        loadingObj.close(), loadingClosed = true;
+        void this.loadScore(movies, generation).then((async () => {
+          if (generation === this.loadGeneration && "rateCount" === localStorage.getItem("jhs_sortMethod")) await this.getBean("ListPageButtonPlugin").sortItems();
+        })).catch(((error) => clog.error("热播评分补全失败", error)));
+      } catch (error) {
+        clog.error("所有重试尝试均失败，无法获取数据。", error);
       } finally {
-        (a2 || 3 === s2) && n2.close();
+        loadingClosed || loadingObj.close();
       }
     }
+    async fetchPlaybackWithRetry(period) {
+      let lastError;
+      for (let attempt = 1; attempt <= 3; attempt++) try {
+        return await W(period);
+      } catch (error) {
+        lastError = error;
+        if (attempt < 3) clog.error(`获取热播数据失败 (第 ${attempt} 次重试)`, error), await new Promise(((resolve) => setTimeout(resolve, 1e3)));
+      }
+      throw lastError;
+    }
+    async initializeRenderedList() {
+      const listPage = this.getBean("ListPagePlugin");
+      listPage.replaceHdImg(), await listPage.doFilter(), listPage.applyVisibility();
+      $(listPage.getSelector().itemSelector + " a").attr("target", "_blank"), this.getBean("CoverButtonPlugin").addSvgBtn();
+    }
     toolBar(e2) {
+      $("#jhs-hitshow-period").remove();
       let t2 = `
             <nav id="jhs-hitshow-period" class="jhs-segmented" role="tablist" aria-label="热播周期">
                 <a role="tab" class="jhs-segmented__item ${"daily" === e2 ? "active" : ""}" aria-selected="${"daily" === e2 ? "true" : "false"}" tabindex="${"daily" === e2 ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=daily">日榜</a>
@@ -5484,28 +5555,41 @@
       for (let a2 = 0; a2 < 5 - n2; a2++) t2 += '<i class="icon-star gray"></i>';
       return t2;
     }
-    async loadScore(e2) {
-      if (0 === e2.length) return;
-      let t2 = "jhs_score_info";
-      for (const a2 of e2) try {
-        const e3 = a2.id;
-        if (!$(`#score_${e3}`).length) continue;
-        if ($(`#${e3}`).is(":hidden")) continue;
-        const n2 = localStorage.getItem(t2) ? JSON.parse(localStorage.getItem(t2)) : {}, i2 = n2[e3];
-        if (i2) {
-          const cached = this.normalizeScoreData(i2);
-          this.appendScore(e3, cached.score, cached.watchedCount);
-          continue;
+    async loadScore(movies, generation = this.loadGeneration) {
+      if (0 === movies.length) return;
+      const cacheKey = "jhs_score_info";
+      let cache = {};
+      try {
+        cache = JSON.parse(localStorage.getItem(cacheKey) || "{}");
+      } catch (error) {
+        clog.warn("评分缓存解析失败，将重新建立缓存", error);
+      }
+      const queue = [...movies], workers = Array.from({ length: Math.min(4, queue.length) }, (() => this.scoreWorker(queue, cache, generation)));
+      await Promise.all(workers), localStorage.setItem(cacheKey, JSON.stringify(cache));
+    }
+    async scoreWorker(queue, cache, generation) {
+      for (; ; ) {
+        const movie = queue.shift();
+        if (!movie) return;
+        try {
+          if (generation !== this.loadGeneration) return;
+          const id = movie.id;
+          if (!$(`#score_${id}`).length || $(`#${id}`).is(":hidden")) continue;
+          if (cache[id]) {
+            const cached = this.normalizeScoreData(cache[id]);
+            this.appendScore(id, cached.score, cached.watchedCount);
+            continue;
+          }
+          const result = await V(id);
+          if (generation !== this.loadGeneration) return;
+          const score = Number(result.score), watchedCount = Number(result.watchedCount);
+          this.appendScore(id, score, watchedCount), cache[id] = { score: Number.isFinite(score) ? score : 0, watchedCount: Number.isFinite(watchedCount) ? watchedCount : 0 };
+        } catch (error) {
+          $(`#${movie.id}`).attr("data-jhs-rate-count", "0"), clog.error(`解析评分数据失败 | 编号: ${movie.number}
+`, `错误详情: ${error.message}
+`, error.stack ? `调用栈:
+${error.stack}` : "");
         }
-        for (; !document.hasFocus(); ) await new Promise(((e4) => setTimeout(e4, 500)));
-        const s2 = await V(e3);
-        const o2 = Number(s2.score), r2 = Number(s2.watchedCount);
-        this.appendScore(e3, o2, r2), n2[e3] = { score: Number.isFinite(o2) ? o2 : 0, watchedCount: Number.isFinite(r2) ? r2 : 0 }, localStorage.setItem(t2, JSON.stringify(n2)), await new Promise(((e4) => setTimeout(e4, 500)));
-      } catch (n2) {
-        $(`#${a2.id}`).attr("data-jhs-rate-count", "0"), clog.error(`解析评分数据失败 | 编号: ${a2.number}
-`, `错误详情: ${n2.message}
-`, n2.stack ? `调用栈:
-${n2.stack}` : "");
       }
     }
     normalizeScoreData(value) {
@@ -7671,36 +7755,24 @@ ${n2.stack}` : "");
       h2.each((function(e3) {
         $(this).attr("data-original-index") || $(this).attr("data-original-index", e3);
       }));
-      const n2 = d2, a2 = h2;
-      if ("default" === t2) a2.sort((function(e3, t3) {
-        return $(e3).data("original-index") - $(t3).data("original-index");
-      })).appendTo(n2);
-      else {
-        const e3 = a2.get();
-        e3.sort((function(e4, n3) {
-          if ("rateCount" === t2) {
-            const t3 = /* @__PURE__ */ __name((e5) => {
-              const n4 = Number($(e5).attr("data-jhs-rate-count"));
-              if (Number.isFinite(n4)) return n4;
-              const t4 = $(e5).find(".score .value").text().match(/由(\d+)人/);
-              return t4 ? parseFloat(t4[1]) : 0;
-            }, "t");
-            return t3(n3) - t3(e4);
-          }
-          {
-            const t3 = /* @__PURE__ */ __name((e5) => {
-              const t4 = $(e5).attr("data-jhs-publish-time") || $(e5).find(".meta").text().trim() || $(e5).find("date").filter((function() {
-                return /^\d{4}-\d{1,2}-\d{1,2}$/.test($(this).text().trim());
-              })).first().text().trim();
-              return new Date(t4);
-            }, "t");
-            return t3(n3) - t3(e4);
-          }
-        })), n2.empty().append(e3);
-      }
+      const items = h2.get().map(((element, index) => {
+        const card = $(element), originalIndex = Number(card.attr("data-original-index")) || 0;
+        if ("default" === t2) return { element, key: originalIndex, originalIndex, index };
+        if ("rateCount" === t2) {
+          const explicit = Number(card.attr("data-jhs-rate-count")), match = card.find(".score .value").text().match(/由(\d+)人/);
+          return { element, key: Number.isFinite(explicit) ? explicit : match ? Number(match[1]) : 0, originalIndex, index };
+        }
+        const value = card.attr("data-jhs-publish-time") || card.find(".meta").text().trim() || card.find("date").filter((function() {
+          return /^\d{4}-\d{1,2}-\d{1,2}$/.test($(this).text().trim());
+        })).first().text().trim(), timestamp = Date.parse(value);
+        return { element, key: Number.isFinite(timestamp) ? timestamp : 0, originalIndex, index };
+      }));
+      items.sort(((e3, n2) => "default" === t2 ? e3.key - n2.key : n2.key - e3.key || e3.originalIndex - n2.originalIndex || e3.index - n2.index));
+      const sortedElements = items.map(((item) => item.element));
+      "default" === t2 ? $(sortedElements).appendTo(d2) : d2.empty().append(sortedElements);
     }
     isHitShowPage() {
-      return o.includes("/advanced_search") && new URLSearchParams(window.location.search).get("handlePlayback") === "1";
+      return isHitShowPage(window.location);
     }
     async openWaitCheck() {
       let e2 = this.getSelector();
@@ -7808,22 +7880,23 @@ ${n2.stack}` : "");
       return `<style>.status-tag{position:absolute;z-index:var(--jhs-z-content);margin-right:5px;padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}</style>`;
     }
     constructor() {
-      super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0), i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0), i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0), i(this, "currentPageTotalCount", 0), i(this, "cache", localStorage.getItem("jhs_translate") ? JSON.parse(localStorage.getItem("jhs_translate")) : {}), i(this, "writeQueue", Promise.resolve()), i(this, "_debouncedTranslateWrite", null);
+      super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0), i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0), i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0), i(this, "currentPageTotalCount", 0), i(this, "cache", null), i(this, "translationPending", /* @__PURE__ */ new Map()), i(this, "filterContext", null), i(this, "pendingItems", /* @__PURE__ */ new Set()), i(this, "processTimer", null), i(this, "hdImageObserver", null), i(this, "hdEagerRemaining", 12), i(this, "writeQueue", Promise.resolve()), i(this, "_debouncedTranslateWrite", null);
     }
     getName() {
       return "ListPagePlugin";
     }
     async handle() {
+      if (!window.isListPage || isHitShowPage()) return;
       new BroadcastChannel("channel-refresh").addEventListener("message", (async (e2) => {
         let t2 = e2.data.type;
         if ("refresh" === t2) {
-          await this.doFilter(), this.applyVisibility();
+          this.filterContext = null, await this.doFilter(), this.applyVisibility();
           const e3 = this.getBean("HistoryPlugin");
           e3.tableObj && e3.tableObj.setData();
           const t3 = this.getBean("NewVideoPlugin");
           t3 && void Promise.all([t3.showNewVideoCount(), t3.loadData()]).catch(((error) => clog.error("新作品数据刷新失败", error)));
-        } else "cleanCache_filter_actor_actress_car_list" === t2 ? storageManager._invalidateCache(storageManager.blacklist_car_list_key) : "clean_cacheSettingObj" === t2 && storageManager._invalidateCache(storageManager.setting_key);
-      })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), this.createQuickFilter(), this.applyVisibility(), await this.bindClick(), this.rememberTagExpand(), $(this.getSelector().itemSelector + " a").attr("target", "_blank"), this.checkDom();
+        } else "cleanCache_filter_actor_actress_car_list" === t2 ? (this.filterContext = null, storageManager._invalidateCache(storageManager.blacklist_car_list_key)) : "clean_cacheSettingObj" === t2 && (this.filterContext = null, storageManager._invalidateCache(storageManager.setting_key));
+      })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), this.createQuickFilter(), this.applyVisibility(), await this.bindClick(), this.rememberTagExpand(), $(this.getSelector().itemSelector + " a").attr("target", "_blank"), $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.checkDom();
     }
     createQuickFilter() {
       if ($("#jhs-quick-filter").length) return;
@@ -7835,9 +7908,9 @@ ${n2.stack}` : "");
         $("#jhs-quick-filter .jhs-segmented__item").removeClass("active").attr("aria-selected", "false"), $(this).addClass("active").attr("aria-selected", "true"), n2.activeQuickFilter = t3, n2.applyQuickFilter(t3);
       }));
     }
-    applyVisibility() {
+    applyVisibility(items = null) {
       const e2 = this.activeQuickFilter || "waitCheck", t2 = this.getSelector().itemSelector, n2 = ["filter", "keywordFilter", "actorFilter"];
-      $(t2).each((function() {
+      (items ? $(items) : $(t2)).each((function() {
         const t3 = $(this), a2 = t3.attr("data-hide") === "yes", i2 = t3.attr("data-jhs-status") || "waitCheck";
         if (e2 === "all") {
           n2.includes(i2) ? t3.hide() : t3.show();
@@ -7864,23 +7937,33 @@ ${n2.stack}` : "");
       }));
     }
     checkDom() {
-      if (!window.isListPage) return;
+      if (!window.isListPage || isHitShowPage()) return;
       const e2 = this.getSelector(), t2 = document.querySelector(e2.boxSelector);
       if (!t2) return void clog.error("没有找到容器节点!");
-      let n2 = null;
-      const a2 = new MutationObserver((() => {
-        n2 && clearTimeout(n2), n2 = setTimeout((async () => {
-          this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), this.applyVisibility(), await this.getBean("ListPageButtonPlugin").sortItems(), this.getBean("CoverButtonPlugin").addSvgBtn(), $(this.getSelector().itemSelector + " a").attr("target", "_blank"), this.getBean("AutoPagePlugin").checkLoad();
-        }), 100);
+      const a2 = new MutationObserver(((records) => {
+        for (const record of records) for (const node of record.addedNodes) {
+          if (node.nodeType !== Node.ELEMENT_NODE) continue;
+          node.matches?.(e2.itemSelector) && "true" !== node.dataset.jhsProcessed && this.pendingItems.add(node), node.querySelectorAll?.(e2.itemSelector).forEach(((item) => {
+            "true" !== item.dataset.jhsProcessed && this.pendingItems.add(item);
+          }));
+        }
+        this.pendingItems.size && (this.processTimer && clearTimeout(this.processTimer), this.processTimer = setTimeout((() => {
+          const items = [...this.pendingItems].filter(((item) => item.isConnected && "true" !== item.dataset.jhsProcessed));
+          this.pendingItems.clear(), this.processTimer = null, items.length && void this.processAddedItems(items).catch(((error) => clog.error("列表增量处理失败", error)));
+        }), 100));
       }));
       a2.observe(t2, {
         childList: true,
         subtree: false
       });
     }
-    fixBusTitleBox() {
+    async processAddedItems(items) {
+      const selector = this.getSelector(), covers = items.flatMap(((item) => [...item.querySelectorAll(selector.coverImgSelector)]));
+      this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items), await this.doFilterItems(items), this.applyVisibility(items), await this.getBean("ListPageButtonPlugin").sortItems(), await this.getBean("CoverButtonPlugin").addSvgBtn(items), $(items).find("a").attr("target", "_blank"), items.forEach(((item) => item.dataset.jhsProcessed = "true")), this.getBean("AutoPagePlugin").checkLoad();
+    }
+    fixBusTitleBox(items = null) {
       if (!l) return;
-      $(this.getSelector().itemSelector).toArray().forEach(((e2) => {
+      (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach(((e2) => {
         var t2;
         let n2 = $(e2);
         if (n2.find(".avatar-box").length > 0) return;
@@ -7900,8 +7983,11 @@ ${n2.stack}` : "");
       }));
     }
     async doFilter() {
+      return this.doFilterItems();
+    }
+    async doFilterItems(items = null) {
       if (!window.isListPage) return;
-      let e2 = $(this.getSelector().itemSelector).toArray();
+      let e2 = items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray();
       e2.length && (await this.filterMovieList(e2), l && setTimeout((() => {
         this.getBean("BusImgPlugin").logImageHeightsByRow().catch(((e3) => clog.error("JavBus图片高度修正失败", e3)));
       })));
@@ -7918,22 +8004,45 @@ ${n2.stack}` : "");
     getStatusKey(e2) {
       return e2 === Te.IS_FILTERED ? "filter" : e2 === Te.IS_FAVORITE ? "favorite" : e2 === Te.IS_HAS_DOWN ? "hasDown" : e2 === Te.IS_HAS_WATCH ? "hasWatch" : e2 === Te.IS_KEYWORD_FILTER ? "keywordFilter" : e2 === Te.IS_ACTOR_FILTER ? "actorFilter" : e2 === Te.IS_ACTRESS_FILTER ? "actorFilter" : "waitCheck";
     }
+    async getFilterContext() {
+      if (this.filterContext) return this.filterContext;
+      const [titleKeywords, blacklistMap, blacklistCars, settings, statusMap] = await Promise.all([storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getStatusMap()]), actorCarNumToNameMap = /* @__PURE__ */ new Map(), actressCarNumToNameMap = /* @__PURE__ */ new Map();
+      for (const item of blacklistCars) {
+        const role = blacklistMap.get(item.starId)?.role;
+        if (!role) {
+          clog.error("黑名单数据源丢失演员信息", item);
+          continue;
+        }
+        const target = role === B ? actorCarNumToNameMap : actressCarNumToNameMap;
+        target.has(item.carNum) || target.set(item.carNum, item.names);
+      }
+      return this.filterContext = { titleKeywords, settings, statusMap, actorCarNumToNameMap, actressCarNumToNameMap };
+    }
+    recountStatuses() {
+      this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0, this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0, this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0;
+      const countKeys = { filter: "currentPageFilterCount", favorite: "currentPageFavoriteCount", hasDown: "currentPageHasDownCount", hasWatch: "currentPageHasWatchCount", keywordFilter: "currentPageKeywordFilterCount", actorFilter: "currentPageActorFilterCount", waitCheck: "currentPageWaitCheckCount" };
+      $(this.getSelector().itemSelector).each(((e2, item) => {
+        const card = $(item);
+        if (l && card.find(".avatar-box").length > 0) return;
+        const key = countKeys[card.attr("data-jhs-status") || "waitCheck"];
+        key && this[key]++, this.currentPageTotalCount++;
+      }));
+    }
     async translateListItems(e2) {
-      for (let t2 = 0; t2 < e2.length; t2++) t2 > 0 && t2 % 8 == 0 && await this.yieldListFrame(), await this.translate(e2[t2]);
+      if (await storageManager.getSetting("translateTitle", _) !== _) return;
+      await mapLimit(e2, 3, (async (item, index) => {
+        try {
+          index > 0 && index % 8 == 0 && await this.yieldListFrame(), await this.translate(item);
+        } catch (error) {
+          clog.error("列表标题翻译失败", error);
+        }
+      }));
     }
     async filterMovieList(e2) {
       utils.time("累计耗费时间"), utils.time("读取数据耗时");
-      const [n2, a2, i2, s2, m2] = await Promise.all([storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getStatusMap()]), o2 = utils.time("读取数据耗时");
+      const { titleKeywords: n2, settings: s2, statusMap: m2, actorCarNumToNameMap: f, actressCarNumToNameMap: v2 } = await this.getFilterContext(), o2 = utils.time("读取数据耗时");
       utils.time("组装数据耗时");
-      const u2 = a2, { actorCarNumToNameMap: f, actressCarNumToNameMap: v2 } = i2.reduce(((e3, t2) => {
-        const n3 = u2.get(t2.starId)?.role;
-        if (!n3) return clog.error("黑名单数据源丢失演员信息", t2), e3;
-        const a3 = n3 === B ? e3.actorCarNumToNameMap : e3.actressCarNumToNameMap;
-        return a3.has(t2.carNum) || a3.set(t2.carNum, t2.names), e3;
-      }), {
-        actorCarNumToNameMap: /* @__PURE__ */ new Map(),
-        actressCarNumToNameMap: /* @__PURE__ */ new Map()
-      }), b2 = utils.time("组装数据耗时"), w = (null == s2 ? void 0 : s2.showFilterItem) ?? C, y2 = (null == s2 ? void 0 : s2.showFilterActorItem) ?? C, x = (null == s2 ? void 0 : s2.showFilterKeywordItem) ?? C, k2 = (null == s2 ? void 0 : s2.showFavoriteItem) ?? _, S = (null == s2 ? void 0 : s2.showHasDownItem) ?? _, T2 = (null == s2 ? void 0 : s2.showHasWatchItem) ?? _, I2 = (null == s2 ? void 0 : s2.showAllItem) ?? C, P2 = (null == s2 ? void 0 : s2.tagPosition) || "rightTop";
+      const b2 = utils.time("组装数据耗时"), w = (null == s2 ? void 0 : s2.showFilterItem) ?? C, y2 = (null == s2 ? void 0 : s2.showFilterActorItem) ?? C, x = (null == s2 ? void 0 : s2.showFilterKeywordItem) ?? C, k2 = (null == s2 ? void 0 : s2.showFavoriteItem) ?? _, S = (null == s2 ? void 0 : s2.showHasDownItem) ?? _, T2 = (null == s2 ? void 0 : s2.showHasWatchItem) ?? _, I2 = (null == s2 ? void 0 : s2.showAllItem) ?? C, P2 = (null == s2 ? void 0 : s2.tagPosition) || "rightTop";
       const O2 = n2.filter(((e3) => e3));
       this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0, this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0, this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时");
       const R2 = [];
@@ -7941,14 +8050,14 @@ ${n2.stack}` : "");
         n3 > 0 && n3 % 12 == 0 && await this.yieldListFrame();
         let t2 = $(e2[n3]);
         if (l && t2.find(".avatar-box").length > 0) continue;
-        const { carNum: a3, title: i3 } = this.findCarNumAndHref(t2), { filter: s3, favorite: o3, hasDown: d2, hasWatch: h2 } = m2, g2 = o3.has(a3), p2 = d2.has(a3), u3 = h2.has(a3), b3 = s3.has(a3), B2 = f.has(a3), D3 = v2.has(a3), A3 = B2 || D3, L2 = this.findMatchedTitleKeyword(O2, i3, a3), M2 = !!L2;
+        const { carNum: a2, title: i2 } = this.findCarNumAndHref(t2), { filter: s3, favorite: o3, hasDown: d2, hasWatch: h2 } = m2, g2 = o3.has(a2), p2 = d2.has(a2), u2 = h2.has(a2), b3 = s3.has(a2), B2 = f.has(a2), D3 = v2.has(a2), A3 = B2 || D3, L2 = this.findMatchedTitleKeyword(O2, i2, a2), M2 = !!L2;
         if (!c) {
-          let e3 = k2 === C && g2 || S === C && p2 || T2 === C && u3 || w === C && b3 && !(g2 || p2 || u3) || y2 === C && A3 || x === C && M2;
+          let e3 = k2 === C && g2 || S === C && p2 || T2 === C && u2 || w === C && b3 && !(g2 || p2 || u2) || y2 === C && A3 || x === C && M2;
           const n4 = t2.attr("data-hide") === _;
           I2 === _ && (e3 = false), e3 && !n4 ? t2.hide().attr("data-hide", _) : !e3 && n4 && t2.show().removeAttr("data-hide");
         }
         let N2 = Te.IS_WAIT_CHECK, j2 = null;
-        b3 ? N2 = Te.IS_FILTERED : g2 ? N2 = Te.IS_FAVORITE : p2 ? N2 = Te.IS_HAS_DOWN : u3 ? N2 = Te.IS_HAS_WATCH : M2 ? (N2 = Te.IS_KEYWORD_FILTER, j2 = L2 || "未知") : B2 ? (N2 = Te.IS_ACTOR_FILTER, j2 = f.get(a3) || "") : D3 && (N2 = Te.IS_ACTRESS_FILTER, j2 = v2.get(a3) || ""), j2 || (j2 = N2.reasonType), N2.isCounted && this[N2.countKey]++, this.currentPageTotalCount++;
+        b3 ? N2 = Te.IS_FILTERED : g2 ? N2 = Te.IS_FAVORITE : p2 ? N2 = Te.IS_HAS_DOWN : u2 ? N2 = Te.IS_HAS_WATCH : M2 ? (N2 = Te.IS_KEYWORD_FILTER, j2 = L2 || "未知") : B2 ? (N2 = Te.IS_ACTOR_FILTER, j2 = f.get(a2) || "") : D3 && (N2 = Te.IS_ACTRESS_FILTER, j2 = v2.get(a2) || ""), j2 || (j2 = N2.reasonType), N2.isCounted && this[N2.countKey]++, this.currentPageTotalCount++;
         const q2 = this.getStatusKey(N2), F2 = t2.attr("data-jhs-status") !== q2 || t2.attr("data-jhs-tip") !== j2 || t2.attr("data-jhs-tag-position") !== P2;
         t2.attr("data-jhs-status", q2).attr("data-jhs-tip", j2).attr("data-jhs-tag-position", P2);
         const E2 = "rightTop" === P2 ? "right: 0; top:5px;" : "left: 0; top:5px;";
@@ -7963,7 +8072,7 @@ ${n2.stack}` : "");
         }
         R2.push(t2);
       }
-      this.translateListItems(R2).catch(((e3) => clog.error("列表页翻译任务失败", e3)));
+      this.recountStatuses(), void this.translateListItems(R2).catch(((e3) => clog.error("列表页翻译任务失败", e3)));
       const D2 = utils.time("处理页面耗时"), A2 = utils.time("累计耗费时间");
       clog.log(`
             <table class="countTable jhs-layout-b12542a5">
@@ -8132,41 +8241,49 @@ ${n2.stack}` : "");
     }
     replaceHdImg(e2) {
       if (e2 && "string" == typeof e2.jquery && (e2 = e2.toArray()), e2 || (e2 = document.querySelectorAll(this.getSelector().coverImgSelector)), !e2.length) return;
-      const t2 = Array.from(e2), n2 = t2.slice(0, 12), a2 = t2.slice(12);
-      if (n2.forEach(((e3) => this._replaceSingleHdImg(e3))), a2.length && "IntersectionObserver" in window) {
-        const t3 = new IntersectionObserver(((e3) => {
-          e3.forEach(((e4) => {
-            e4.isIntersecting && (this._replaceSingleHdImg(e4.target), t3.unobserve(e4.target));
-          }));
-        }), {
-          rootMargin: "200px"
-        });
-        a2.forEach(((e3) => t3.observe(e3)));
-      } else a2.forEach(((e3) => this._replaceSingleHdImg(e3)));
+      const t2 = Array.from(e2).filter(((e3) => "true" !== e3.dataset.hdReplaced && "true" !== e3.dataset.jhsHdObserved));
+      if ("IntersectionObserver" in window && !this.hdImageObserver) this.hdImageObserver = new IntersectionObserver(((entries) => {
+        entries.forEach(((entry) => {
+          entry.isIntersecting && (this.hdImageObserver.unobserve(entry.target), delete entry.target.dataset.jhsHdObserved, this._replaceSingleHdImg(entry.target));
+        }));
+      }), { rootMargin: "200px" });
+      for (const image of t2) this.hdEagerRemaining > 0 ? (this.hdEagerRemaining--, this._replaceSingleHdImg(image)) : this.hdImageObserver ? (image.dataset.jhsHdObserved = "true", this.hdImageObserver.observe(image)) : this._replaceSingleHdImg(image);
       storageManager.getSetting("hoverBigImg", C).then(((e3) => {
         e3 === _ && (window.imageHoverPreviewObj ? window.imageHoverPreviewObj.bindEvents() : window.imageHoverPreviewObj = new ImageHoverPreview({
           selector: this.getSelector().coverImgSelector
         }));
       }));
     }
-    async translate(e2) {
-      if (await storageManager.getSetting("translateTitle", _) !== _) return;
-      let t2, n2, a2 = e2.find(".video-title");
-      if (r ? (t2 = a2.contents().filter(((e3, t3) => 3 === t3.nodeType && "" !== t3.textContent.trim())).text().trim(), n2 = e2.find(".video-title strong").text().trim()) : (t2 = e2.find("img").attr("data-title").trim(), n2 = e2.find("a").attr("href").split("/").filter(Boolean).pop().trim()), this.cache[n2]) {
-        let e3 = this;
-        return a2.contents().each((function() {
-          3 === this.nodeType && "" !== this.textContent.trim() && (this.textContent = " " + e3.cache[n2] + " ");
-        })), void a2.attr("title", e3.cache[n2]);
+    getTranslationCache() {
+      if (this.cache && "object" == typeof this.cache && !Array.isArray(this.cache)) return this.cache;
+      try {
+        this.cache = JSON.parse(localStorage.getItem("jhs_translate") || "{}");
+      } catch (error) {
+        clog.warn("列表翻译缓存无法解析，已忽略旧缓存", error), this.cache = {};
       }
-      _e(t2).then(((e3) => {
-        r ? (a2.contents().each((function() {
-          3 !== this.nodeType || "" === this.textContent.trim() || this.textContent.includes(n2) || (this.textContent = " " + e3 + " ");
-        })), a2.attr("title", e3)) : a2.text(e3), this.cache[n2] = e3, this._debouncedTranslateWrite && clearTimeout(this._debouncedTranslateWrite), this._debouncedTranslateWrite = setTimeout((() => {
-          localStorage.setItem("jhs_translate", JSON.stringify(this.cache));
-        }), 500);
-      })).catch(((e3) => {
-        clog.error("翻译失败:", e3);
-      }));
+      return this.cache && "object" == typeof this.cache && !Array.isArray(this.cache) ? this.cache : this.cache = {};
+    }
+    scheduleTranslationWrite() {
+      this._debouncedTranslateWrite && clearTimeout(this._debouncedTranslateWrite), this._debouncedTranslateWrite = setTimeout((() => {
+        localStorage.setItem("jhs_translate", JSON.stringify(this.getTranslationCache()));
+      }), 500);
+    }
+    applyTranslatedTitle(e2, t2, n2) {
+      const a2 = e2.find(".video-title");
+      r ? (a2.contents().each((function() {
+        3 !== this.nodeType || "" === this.textContent.trim() || this.textContent.includes(n2) || (this.textContent = " " + t2 + " ");
+      })), a2.attr("title", t2)) : a2.text(t2), e2.attr("data-jhs-translation-key", n2);
+    }
+    async translate(e2) {
+      let t2, n2, a2 = e2.find(".video-title");
+      if (r ? (t2 = a2.contents().filter(((e3, t3) => 3 === t3.nodeType && "" !== t3.textContent.trim())).text().trim(), n2 = e2.find(".video-title strong").text().trim()) : (t2 = (e2.find("img").attr("data-title") || "").trim(), n2 = (e2.find("a").attr("href") || "").split("/").filter(Boolean).pop()?.trim()), !t2 || !n2) return;
+      const cache = this.getTranslationCache();
+      if (cache[n2]) return void this.applyTranslatedTitle(e2, cache[n2], n2);
+      let pending = this.translationPending.get(n2);
+      if (!pending) {
+        pending = _e(t2).then(((translated) => (cache[n2] = translated, this.scheduleTranslationWrite(), translated))).finally((() => this.translationPending.delete(n2))), this.translationPending.set(n2, pending);
+      }
+      this.applyTranslatedTitle(e2, await pending, n2);
     }
     async revertTranslation() {
       $(this.getSelector().itemSelector).toArray().forEach(((e2) => {
@@ -10409,9 +10526,9 @@ ${n2.stack}` : "");
           $(".miniHistoryBtnBox").before('\n                    <div class="navbar-item mini-setting-box jhs-mini-setting-box">\n                        <button type="button" id="mini-setting-btn" class="jhs-btn navbar-link nav-btn jhs-nav-btn jhs-mini-setting-trigger">\n                            设置\n                        </button>\n                        <div class="mini-simple-setting"></div>\n                    </div>\n                '), e2();
         })), $(window).resize(e2);
       }
-      l && (utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
+      l && (isDetailPage ? $("h3").before('\n                    <div class="container-fluid jhs-setting-detail-anchor">\n                        <div id="top-right-box" class="jhs-setting-anchor">\n                            <div class="setting-box">\n                                <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                    <span>设置</span>\n                                </button>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ') : window.isListPage && utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
         $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" class="jhs-setting-anchor">\n                        <div class="setting-box">\n                            <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                <span>设置</span>\n                            </button>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
-      }), 1, 1e4, false), isDetailPage && $("h3").before('\n                    <div class="container-fluid jhs-setting-detail-anchor">\n                        <div id="top-right-box" class="jhs-setting-anchor">\n                            <div class="setting-box">\n                                <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                    <span>设置</span>\n                                </button>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ')), $(".main-nav, .container-fluid").on("click", "#setting-btn, #mini-setting-btn", (() => {
+      }), 1, 1e4, false)), $(".main-nav, .container-fluid").on("click", "#setting-btn, #mini-setting-btn", (() => {
         $(".simple-setting, .mini-simple-setting").html("").hide(), clog.lowZIndex(), void this.openSettingDialog().catch(((error) => clog.error("设置中心打开失败", error)));
       })), $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (async () => {
         $(".simple-setting").html(buildQuickSettingHtml()).show();
@@ -11336,18 +11453,19 @@ ${n2.stack}` : "");
                 </div>
             </div>`;
     }
-    async addSvgBtn() {
-      $(this.getSelector().itemSelector).toArray().forEach(((element) => {
+    async addSvgBtn(items = null) {
+      (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach(((element) => {
         const item = $(element);
         if (item.find(".tool-box").length || l && item.find(".avatar-box").length) return;
         const host = r ? item.find(".tags").first() : item.find(".photo-info").first();
         host.length && host.append(this.buildToolBox());
-      })), this.enableSvgBtn();
+      })), this.enableSvgBtn(items);
     }
-    async enableSvgBtn() {
+    async enableSvgBtn(items = null) {
       const e2 = await storageManager.getSetting(), { enableScreenSvg: t2 = _, enableVideoSvg: n2 = _, enableHandleSvg: a2 = _, enableSiteSvg: i2 = _, enableCopySvg: s2 = _ } = e2;
+      const scope = items ? $(items) : $(document);
       [{ selector: ".screenSvg", enabled: t2 }, { selector: ".videoSvg", enabled: n2 }, { selector: ".handleSvg", enabled: a2 }, { selector: ".siteSvg", enabled: i2 }, { selector: ".copySvg", enabled: s2 }].forEach((({ selector: e3, enabled: t3 }) => {
-        $(e3).toggle(t3 === _);
+        scope.find(e3).toggle(t3 === _);
       }));
     }
     closeCardMenus(focus = false) {
@@ -12398,7 +12516,7 @@ ${n2.stack}` : "");
   var TranslatePlugin = _TranslatePlugin;
   var _TaskPlugin = class _TaskPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "singleTaskKey", "checkNewActressActorFilterCar"), i(this, "taskConfig", null), i(this, "storageQueue", new StorageQueue()), i(this, "lastCheckFavoriteActressTimeKey", "jhs_time_checkFavoriteActress"), i(this, "lastCheckBlacklistTimeKey", "jhs_time_checkBlacklist"), i(this, "lastCheckNewVideoTimeKey", "jhs_time_checkNewVideo");
+      super(...arguments), i(this, "singleTaskKey", "checkNewActressActorFilterCar"), i(this, "taskConfig", null), i(this, "storageQueue", new StorageQueue()), i(this, "lastCheckFavoriteActressTimeKey", "jhs_time_checkFavoriteActress"), i(this, "lastCheckBlacklistTimeKey", "jhs_time_checkBlacklist"), i(this, "lastCheckNewVideoTimeKey", "jhs_time_checkNewVideo"), i(this, "taskTimer", null), i(this, "taskRunning", false), i(this, "visibilityHandler", null), i(this, "pageHideHandler", null);
     }
     getName() {
       return "TaskPlugin";
@@ -12435,7 +12553,29 @@ ${n2.stack}` : "");
       return utils.getHourDifference(new Date(e2), /* @__PURE__ */ new Date()) < t2;
     }
     handle() {
-      return this.doTask();
+      if (!window.isListPage) return;
+      this.visibilityHandler || (this.visibilityHandler = () => {
+        document.hidden ? this.clearSchedule() : this.scheduleTask(0);
+      }, this.pageHideHandler = () => this.clearSchedule(), document.addEventListener("visibilitychange", this.visibilityHandler), window.addEventListener("pagehide", this.pageHideHandler));
+      return document.hidden ? void 0 : this.runAndSchedule();
+    }
+    clearSchedule() {
+      this.taskTimer && (clearTimeout(this.taskTimer), this.taskTimer = null);
+    }
+    scheduleTask(e2 = 3e5) {
+      if (!window.isListPage || document.hidden) return void this.clearSchedule();
+      this.clearSchedule(), this.taskTimer = setTimeout((() => {
+        this.taskTimer = null, void this.runAndSchedule();
+      }), e2);
+    }
+    async runAndSchedule() {
+      if (this.taskRunning || !window.isListPage || document.hidden) return;
+      this.taskRunning = true;
+      try {
+        await this.doTask();
+      } finally {
+        this.taskRunning = false, this.scheduleTask();
+      }
     }
     showIsRun() {
       show.info("正在执行检测任务中, 请勿关闭当前窗口", {
@@ -12443,11 +12583,13 @@ ${n2.stack}` : "");
       });
     }
     async doTask() {
-      if (isListPage) return await this.loadConfig(), this.javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl(), navigator.locks.request(this.singleTaskKey, {
+      if (!window.isListPage) return;
+      await this.loadConfig(), this.javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl();
+      return navigator.locks.request(this.singleTaskKey, {
         ifAvailable: true
       }, (async (e2) => {
         if (e2) {
-          if (isListPage && (this.taskConfig.enableCheckBlacklist === _ ? await this.checkBlacklist() : clog.warn("自动检测屏蔽黑名单-禁用"), !l)) {
+          if (window.isListPage && (this.taskConfig.enableCheckBlacklist === _ ? await this.checkBlacklist() : clog.warn("自动检测屏蔽黑名单-禁用"), !l)) {
             if (this.taskConfig.enableCheckFavoriteActress === _) {
               const e3 = localStorage.getItem(this.lastCheckFavoriteActressTimeKey), t2 = this.taskConfig.checkFavoriteActress_IntervalTime, n2 = e3 && this.isUnnecessaryCheck(e3, t2), a2 = $('a[href*="/users/profile"]').length > 0;
               n2 && clog.debug(`检测同步演员, 上次检测时间: ${e3} 检测间隔时间: ${t2}小时 未到时间`), !n2 && a2 && await this.checkFavoriteActress();
@@ -12457,10 +12599,6 @@ ${n2.stack}` : "");
         } else clog.debug("争夺任务锁失败, 跳过执行");
       })).catch(((e2) => {
         this.isNetworkBlocked(e2) ? clog.warn(`后台检测已停止: ${e2.message}`) : (clog.error("锁任务出现错误:", e2), clog.error("锁任务出现错误:", e2));
-      })).finally((() => {
-        setTimeout((() => {
-          this.doTask();
-        }), 3e5);
       }));
     }
     async loadConfig() {
@@ -13570,6 +13708,7 @@ ${n2.stack}` : "");
       }));
     }
     injectNativeButtons() {
+      if (!window.isDetailPage) return;
       r && utils.loopDetector((() => $("#magnets-content .item").length > 0), (() => this.injectJavDbButtons()));
       l && utils.loopDetector((() => $("#magnet-table td a[href^='magnet:']").length > 0), (() => this.injectJavBusButtons()));
     }
@@ -13760,6 +13899,7 @@ ${n2.stack}` : "");
       return "OneOneFiveOfflinePlugin";
     }
     async handle() {
+      if (!window.isDetailPage) return;
       if (!await storageManager.getSetting("enable115Offline", false)) return;
       const client = new OneOneFiveClient();
       utils.loopDetector((() => $(".magnet-copy,.magnet-links").length > 0), (() => {
@@ -14792,10 +14932,7 @@ ${n2.stack}` : "");
     window.isDetailPage = (function() {
       let e3 = window.location.href;
       return r ? e3.split("?")[0].includes("/v/") : !!l && $("#magnet-table").length > 0;
-    })(), window.isListPage = (function() {
-      let e3 = window.location.href;
-      return r ? $(".movie-list").length > 0 || e3.includes("advanced_search") : !!l && $(".masonry > div .item").length > 0;
-    })(), window.isFc2Page = (function() {
+    })(), window.isListPage = r ? isListPage(window.location, $(".movie-list").length > 0) : !!l && $(".masonry > div .item").length > 0, window.isFc2Page = (function() {
       let e3 = window.location.href;
       return e3.includes("advanced_search?type=3") || e3.includes("advanced_search?type=100");
     })();

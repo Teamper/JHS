@@ -62,8 +62,10 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(commandbar).not.toMatch(/\[ "#addBlacklistBtn", "#filterAllVideo"/);
     });
 
-    it("awaits hot-ranking scores and stores stable sorting data", () => {
-        expect(hitShow).toContain("await this.loadScore(n)");
+    it("loads hot-ranking scores in the background with bounded concurrency and stable sorting data", () => {
+        expect(hitShow).toContain("void this.loadScore(movies, generation)");
+        expect(hitShow).toContain("Math.min(4, queue.length)");
+        expect(hitShow).not.toContain("document.hasFocus()");
         expect(hitShow).toContain("data-jhs-rate-count");
         expect(hitShow).toContain("data-jhs-publish-time");
         expect(hitShow).toContain('id="jhs-hitshow-period"');

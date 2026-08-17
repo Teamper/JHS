@@ -1,6 +1,6 @@
 class HitShowPlugin extends BasePlugin {
     constructor() {
-        super(), i(this, "$contentBox", $(".section .container"));
+        super(), i(this, "$contentBox", $(".section .container")), i(this, "loadGeneration", 0);
     }
     getName() {
         return "HitShowPlugin";
@@ -16,27 +16,47 @@ class HitShowPlugin extends BasePlugin {
     hookPage() {
         let e = $("h2.section-title");
         e.contents().first().replaceWith("热播"), e.addClass("jhs-hitshow-title"), e.parent(".jhs-hitshow-heading").length || e.wrap('<header class="jhs-hitshow-heading"></header>'), $(".empty-message").remove(),
-        $(".section .container .box").remove(), this.$contentBox.append('<div class="movie-list h cols-4 vcols-8 jhs-hitshow-list"></div>');
+        $(".section .container .box").remove(), $(".movie-list.jhs-hitshow-list").remove(), this.$contentBox.append('<div class="movie-list h cols-4 vcols-8 jhs-hitshow-list"></div>');
     }
     async handlePlayback() {
-        if (!window.location.href.includes("handlePlayback=1")) return;
-        let e = new URLSearchParams(window.location.search).get("period");
-        this.hookPage(), this.toolBar(e);
-        let t = $(".movie-list");
-        t.html("");
-        let n = loading();
-        let a = !1;
-        for (let s = 1; s <= 3 && !a; s++) try {
-            const n = await W(e);
-            let i = this.markDataListHtml(n);
-            t.html(i), await this.loadScore(n), await this.getBean("ListPageButtonPlugin").sortItems(), a = !0;
-        } catch (i) {
-            s < 3 ? (clog.error(`获取热播数据失败 (第 ${s} 次重试)`, i), await new Promise((e => setTimeout(e, 1e3)))) : clog.error("所有重试尝试均失败，无法获取数据。", i);
+        if (!isHitShowPage()) return;
+        const period = new URLSearchParams(window.location.search).get("period"), generation = ++this.loadGeneration;
+        this.hookPage(), this.toolBar(period);
+        const loadingObj = loading();
+        let loadingClosed = !1;
+        try {
+            const movies = await this.fetchPlaybackWithRetry(period);
+            if (generation !== this.loadGeneration) return;
+            $(".movie-list").html(this.markDataListHtml(movies));
+            await this.initializeRenderedList();
+            await this.getBean("ListPageButtonPlugin").sortItems();
+            loadingObj.close(), loadingClosed = !0;
+            void this.loadScore(movies, generation).then((async () => {
+                if (generation === this.loadGeneration && "rateCount" === localStorage.getItem("jhs_sortMethod")) await this.getBean("ListPageButtonPlugin").sortItems();
+            })).catch((error => clog.error("热播评分补全失败", error)));
+        } catch (error) {
+            clog.error("所有重试尝试均失败，无法获取数据。", error);
         } finally {
-            (a || 3 === s) && n.close();
+            loadingClosed || loadingObj.close();
         }
     }
+    async fetchPlaybackWithRetry(period) {
+        let lastError;
+        for (let attempt = 1; attempt <= 3; attempt++) try {
+            return await W(period);
+        } catch (error) {
+            lastError = error;
+            if (attempt < 3) clog.error(`获取热播数据失败 (第 ${attempt} 次重试)`, error), await new Promise((resolve => setTimeout(resolve, 1e3)));
+        }
+        throw lastError;
+    }
+    async initializeRenderedList() {
+        const listPage = this.getBean("ListPagePlugin");
+        listPage.replaceHdImg(), await listPage.doFilter(), listPage.applyVisibility();
+        $(listPage.getSelector().itemSelector + " a").attr("target", "_blank"), this.getBean("CoverButtonPlugin").addSvgBtn();
+    }
     toolBar(e) {
+        $("#jhs-hitshow-period").remove();
         let t = `\n            <nav id="jhs-hitshow-period" class="jhs-segmented" role="tablist" aria-label="热播周期">\n                <a role="tab" class="jhs-segmented__item ${"daily" === e ? "active" : ""}" aria-selected="${"daily" === e ? "true" : "false"}" tabindex="${"daily" === e ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=daily">日榜</a>\n                <a role="tab" class="jhs-segmented__item ${"weekly" === e ? "active" : ""}" aria-selected="${"weekly" === e ? "true" : "false"}" tabindex="${"weekly" === e ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=weekly">周榜</a>\n                <a role="tab" class="jhs-segmented__item ${"monthly" === e ? "active" : ""}" aria-selected="${"monthly" === e ? "true" : "false"}" tabindex="${"monthly" === e ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=monthly">月榜</a>\n            </nav>\n        `;
         $(".jhs-hitshow-heading").append(t);
     }
@@ -47,27 +67,35 @@ class HitShowPlugin extends BasePlugin {
         for (let a = 0; a < 5 - n; a++) t += '<i class="icon-star gray"></i>';
         return t;
     }
-    async loadScore(e) {
-        if (0 === e.length) return;
-        let t = "jhs_score_info";
-        for (const a of e) try {
-                const e = a.id;
-                if (!$(`#score_${e}`).length) continue;
-                if ($(`#${e}`).is(":hidden")) continue;
-                const n = localStorage.getItem(t) ? JSON.parse(localStorage.getItem(t)) : {}, i = n[e];
-                if (i) {
-                    const cached = this.normalizeScoreData(i);
-                    this.appendScore(e, cached.score, cached.watchedCount);
+    async loadScore(movies, generation = this.loadGeneration) {
+        if (0 === movies.length) return;
+        const cacheKey = "jhs_score_info";
+        let cache = {};
+        try { cache = JSON.parse(localStorage.getItem(cacheKey) || "{}"); } catch (error) { clog.warn("评分缓存解析失败，将重新建立缓存", error); }
+        const queue = [ ...movies ], workers = Array.from({ length: Math.min(4, queue.length) }, (() => this.scoreWorker(queue, cache, generation)));
+        await Promise.all(workers), localStorage.setItem(cacheKey, JSON.stringify(cache));
+    }
+    async scoreWorker(queue, cache, generation) {
+        for (;;) {
+            const movie = queue.shift();
+            if (!movie) return;
+            try {
+                if (generation !== this.loadGeneration) return;
+                const id = movie.id;
+                if (!$(`#score_${id}`).length || $(`#${id}`).is(":hidden")) continue;
+                if (cache[id]) {
+                    const cached = this.normalizeScoreData(cache[id]);
+                    this.appendScore(id, cached.score, cached.watchedCount);
                     continue;
                 }
-                for (;!document.hasFocus(); ) await new Promise((e => setTimeout(e, 500)));
-                const s = await V(e);
-                const o = Number(s.score), r = Number(s.watchedCount);
-                this.appendScore(e, o, r), n[e] = { score: Number.isFinite(o) ? o : 0, watchedCount: Number.isFinite(r) ? r : 0 }, localStorage.setItem(t, JSON.stringify(n)),
-                await new Promise((e => setTimeout(e, 500)));
-            } catch (n) {
-                $(`#${a.id}`).attr("data-jhs-rate-count", "0"), clog.error(`解析评分数据失败 | 编号: ${a.number}\n`, `错误详情: ${n.message}\n`, n.stack ? `调用栈:\n${n.stack}` : "");
+                const result = await V(id);
+                if (generation !== this.loadGeneration) return;
+                const score = Number(result.score), watchedCount = Number(result.watchedCount);
+                this.appendScore(id, score, watchedCount), cache[id] = { score: Number.isFinite(score) ? score : 0, watchedCount: Number.isFinite(watchedCount) ? watchedCount : 0 };
+            } catch (error) {
+                $(`#${movie.id}`).attr("data-jhs-rate-count", "0"), clog.error(`解析评分数据失败 | 编号: ${movie.number}\n`, `错误详情: ${error.message}\n`, error.stack ? `调用栈:\n${error.stack}` : "");
             }
+        }
     }
     normalizeScoreData(value) {
         const html = "string" == typeof value ? value : String(value?.html || ""), score = Number(value?.score ?? (html.match(/([\d.]+)分/) || [ 0, 0 ])[1]), watchedCount = Number(value?.watchedCount ?? (html.match(/由(\d+)人/) || [ 0, 0 ])[1]);

@@ -127,33 +127,22 @@ class ListPageButtonPlugin extends BasePlugin {
         h.each((function(e) {
             $(this).attr("data-original-index") || $(this).attr("data-original-index", e);
         }));
-        const n = d, a = h;
-        if ("default" === t) a.sort((function(e, t) {
-            return $(e).data("original-index") - $(t).data("original-index");
-        })).appendTo(n); else {
-            const e = a.get();
-            e.sort((function(e, n) {
-                if ("rateCount" === t) {
-                    const t = e => {
-                        const n = Number($(e).attr("data-jhs-rate-count"));
-                        if (Number.isFinite(n)) return n;
-                        const t = $(e).find(".score .value").text().match(/由(\d+)人/);
-                        return t ? parseFloat(t[1]) : 0;
-                    };
-                    return t(n) - t(e);
-                }
-                {
-                    const t = e => {
-                        const t = $(e).attr("data-jhs-publish-time") || $(e).find(".meta").text().trim() || $(e).find("date").filter((function() { return /^\d{4}-\d{1,2}-\d{1,2}$/.test($(this).text().trim()); })).first().text().trim();
-                        return new Date(t);
-                    };
-                    return t(n) - t(e);
-                }
-            })), n.empty().append(e);
-        }
+        const items = h.get().map(((element, index) => {
+            const card = $(element), originalIndex = Number(card.attr("data-original-index")) || 0;
+            if ("default" === t) return { element, key: originalIndex, originalIndex, index };
+            if ("rateCount" === t) {
+                const explicit = Number(card.attr("data-jhs-rate-count")), match = card.find(".score .value").text().match(/由(\d+)人/);
+                return { element, key: Number.isFinite(explicit) ? explicit : match ? Number(match[1]) : 0, originalIndex, index };
+            }
+            const value = card.attr("data-jhs-publish-time") || card.find(".meta").text().trim() || card.find("date").filter((function() { return /^\d{4}-\d{1,2}-\d{1,2}$/.test($(this).text().trim()); })).first().text().trim(), timestamp = Date.parse(value);
+            return { element, key: Number.isFinite(timestamp) ? timestamp : 0, originalIndex, index };
+        }));
+        items.sort(((e, n) => "default" === t ? e.key - n.key : n.key - e.key || e.originalIndex - n.originalIndex || e.index - n.index));
+        const sortedElements = items.map((item => item.element));
+        "default" === t ? $(sortedElements).appendTo(d) : d.empty().append(sortedElements);
     }
     isHitShowPage() {
-        return o.includes("/advanced_search") && new URLSearchParams(window.location.search).get("handlePlayback") === "1";
+        return isHitShowPage(window.location);
     }
     async openWaitCheck() {
         let e = this.getSelector();

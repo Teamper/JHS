@@ -10,6 +10,7 @@ class PluginManager {
         this._readyMs = 0;
         this._idlePending = 0;
         this._idleCompleted = 0;
+        this._disabledPluginsPromise = null;
     }
     register(e) {
         if ("function" != typeof e) throw new Error("插件必须是一个类");
@@ -50,10 +51,10 @@ class PluginManager {
         };
     }
     async _getDisabledPlugins() {
-        try {
+        return this._disabledPluginsPromise || (this._disabledPluginsPromise = (async () => { try {
             const e = await storageManager.getSetting("disabledPlugins", "[]");
-            return JSON.parse(e).filter((name => ![ "SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin" ].includes(name)));
-        } catch (e) { return []; }
+            return new Set(JSON.parse(e).filter((name => ![ "SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin" ].includes(name))));
+        } catch (e) { return new Set; } })());
     }
     async processCss() {
         const a = performance.now();
@@ -61,7 +62,7 @@ class PluginManager {
         const m = utils.isMobileMode();
         const s = await Promise.all(Array.from(this.plugins).map((async ([e, n]) => {
             try {
-                if (t.includes(e)) return { name: e, status: "disabled" };
+                if (t.has(e)) return { name: e, status: "disabled" };
                 if (m && "function" == typeof n.shouldSkipOnMobile && n.shouldSkipOnMobile()) return { name: e, status: "skipped" };
                 if ("function" == typeof n.initCss) {
                     const t = await n.initCss();
@@ -118,7 +119,7 @@ class PluginManager {
         for (const [s, o] of this.plugins) {
             const r = "function" == typeof o.getStartupMode && "idle" === o.getStartupMode() ? "idle" : "immediate";
             const l = { name: s, elapsed: 0, status: "pending", startupMode: r };
-            if (e.includes(s)) l.status = "disabled", i.push(l); else if (t && "function" == typeof o.shouldSkipOnMobile && o.shouldSkipOnMobile()) l.status = "skipped-mobile",
+            if (e.has(s)) l.status = "disabled", i.push(l); else if (t && "function" == typeof o.shouldSkipOnMobile && o.shouldSkipOnMobile()) l.status = "skipped-mobile",
             i.push(l); else {
                 const e = { name: s, plugin: o, mode: r, timing: l, startedAt: 0 };
                 "idle" === r ? (l.status = "pending-idle", a.push(e)) : n.push(e), i.push(l);
