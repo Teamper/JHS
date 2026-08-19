@@ -7107,6 +7107,11 @@ ${error.stack}` : "");
       }).text(label);
       const copy = $('<button type="button" class="jhs-btn jhs-review-link jhs-review-link-copy">复制</button>').on("click", (() => utils.copyToClipboard(label, value)));
       container.append(open, copy);
+      if (isMagnet) {
+        const offlineButtons = [$('<button type="button" class="jhs-review-link one23-offline-btn">123离线</button>').attr("data-magnet", value)];
+        if (storageManager.getSettingSync("enable115Offline", false)) offlineButtons.push($('<button type="button" class="jhs-review-link one115-offline-btn">115离线</button>').attr("data-magnet", value));
+        container.append(...offlineButtons);
+      }
     }
     async rightClickFilter() {
       await storageManager.getSetting("enableTitleSelectFilter", _) === _ && utils.rightClick(document.body, ".review-content", (async (event) => {
@@ -9050,10 +9055,10 @@ ${error.stack}` : "");
       await this.saveArray("screenshotProviders", value.providers);
     }
     async getCloudSettings() {
-      return { enable115Offline: Boolean(await this.storage.getSetting("enable115Offline", false)), enable115Match: Boolean(await this.storage.getSetting("enable115Match", false)), concurrency: Number(await this.storage.getSetting("oneOneFiveConcurrency", 4)), cacheMinutes: Number(await this.storage.getSetting("oneOneFiveCacheMinutes", 60)) };
+      return { enable115Offline: Boolean(await this.storage.getSetting("enable115Offline", false)), enable115Match: Boolean(await this.storage.getSetting("enable115Match", false)), concurrency: Number(await this.storage.getSetting("oneOneFiveConcurrency", 4)), cacheMinutes: Number(await this.storage.getSetting("oneOneFiveCacheMinutes", 60)), redirect115Login: Boolean(await this.storage.getSetting("redirect115Login", false)) };
     }
     async saveCloudSettings(value) {
-      for (const [key, item] of Object.entries({ enable115Offline: value.enable115Offline, enable115Match: value.enable115Match, oneOneFiveConcurrency: value.concurrency, oneOneFiveCacheMinutes: value.cacheMinutes })) await this.storage.saveSettingItem(key, item);
+      for (const [key, item] of Object.entries({ enable115Offline: value.enable115Offline, enable115Match: value.enable115Match, oneOneFiveConcurrency: value.concurrency, oneOneFiveCacheMinutes: value.cacheMinutes, redirect115Login: value.redirect115Login })) await this.storage.saveSettingItem(key, item);
     }
     async exportConfig() {
       return { customMagnetSources: await this.getMagnetSources(), magnetTagRules: await this.getMagnetTagRules(), magnetFilterRules: await this.getMagnetFilterRules(), magnetBuiltInSources: await this.getBuiltInSources(), screenshot: await this.getScreenshotSettings() };
@@ -9748,7 +9753,7 @@ ${error.stack}` : "");
       <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>截图来源</h3><p>自动选择会按优先级依次尝试可用来源。</p></header><div class="jhs-setting-group"><label class="jhs-setting-row"><span>自动选择</span><input type="radio" name="screenshotMode" value="auto"></label><label class="jhs-setting-row"><span>手动选择</span><input type="radio" name="screenshotMode" value="manual"></label></div><div id="screenshot-source-list" class="jhs-resource-card-list"></div></section>
       <details class="jhs-setting-section jhs-resource-advanced"><summary>高级 · 导入 / 导出配置</summary><p class="jhs-setting-help">高级功能：错误修改可能导致自定义来源不可用，保存前会校验配置。</p><div class="jhs-toolbar"><button type="button" id="export-resource-config" class="jhs-btn">导出资源配置</button><button type="button" id="edit-resource-config" class="jhs-btn">编辑原始 JSON</button><button type="button" id="import-resource-config" class="jhs-btn jhs-btn--primary">校验并导入</button></div><textarea id="advanced-resource-json" class="jhs-textarea" rows="10" aria-label="高级资源配置 JSON"></textarea></details>
     </div>
-    <div id="cloud-services-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>115</h3><p>状态：<span id="one-one-five-state" class="jhs-badge">未检测</span> <button type="button" id="check-one-one-five-login" class="jhs-btn jhs-btn--ghost">检测登录状态</button></p><small>功能开关在刷新页面后生效。</small></header><label class="jhs-setting-row"><span><strong>115 离线下载</strong><small>在磁力结果旁显示“115离线”。</small></span><input type="checkbox" id="enable115Offline" class="mini-switch"></label><label class="jhs-setting-row"><span><strong>115 文件匹配</strong><small>根据当前番号查找网盘中已存在的视频。</small></span><input type="checkbox" id="enable115Match" class="mini-switch"></label><label class="jhs-setting-row"><span>匹配并发数</span><input type="number" id="oneOneFiveConcurrency" class="jhs-field" min="1" max="10"></label><label class="jhs-setting-row"><span>匹配缓存（分钟）</span><input type="number" id="oneOneFiveCacheMinutes" class="jhs-field" min="1" max="1440"></label></section></div>
+    <div id="cloud-services-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>115</h3><p>状态：<span id="one-one-five-state" class="jhs-badge">未检测</span> <button type="button" id="check-one-one-five-login" class="jhs-btn jhs-btn--ghost">检测登录状态</button></p><small>功能开关在刷新页面后生效。</small></header><label class="jhs-setting-row"><span><strong>115 离线下载</strong><small>在磁力结果旁显示“115离线”。</small></span><input type="checkbox" id="enable115Offline" class="mini-switch"></label><label class="jhs-setting-row"><span><strong>115 文件匹配</strong><small>根据当前番号查找网盘中已存在的视频。</small></span><input type="checkbox" id="enable115Match" class="mini-switch"></label><label class="jhs-setting-row"><span>匹配并发数</span><input type="number" id="oneOneFiveConcurrency" class="jhs-field" min="1" max="10"></label><label class="jhs-setting-row"><span>匹配缓存（分钟）</span><input type="number" id="oneOneFiveCacheMinutes" class="jhs-field" min="1" max="1440"></label><label class="jhs-setting-row"><span><strong>未登录时跳转 115 登录页</strong><small>点击“115离线”提示未登录时，自动打开 115 登录页。</small></span><input type="checkbox" id="redirect115Login" class="mini-switch"></label></section></div>
     <div id="data-tools-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>番号列表导入</h3><p>支持换行、空格、逗号分隔番号。必须先解析预览，再确认导入。</p></header><label class="jhs-setting-group"><span>番号</span><textarea id="car-number-import" class="jhs-textarea" rows="8" placeholder="ABC-001&#10;ABC-002&#10;FC2-1234567"></textarea></label><label class="jhs-setting-row"><span>导入为</span><select id="car-number-import-status" class="jhs-select-source"><option value="">请选择</option><option value="favorite">收藏</option><option value="hasDown">已下载</option><option value="hasWatch">已观看</option><option value="filter">屏蔽</option></select></label><div class="jhs-toolbar"><button type="button" id="preview-car-number-import" class="jhs-btn">解析预览</button><button type="button" id="confirm-car-number-import" class="jhs-btn jhs-btn--primary" disabled>确认导入</button></div><div id="car-number-import-preview" class="jhs-card" aria-live="polite"></div></section></div>`);
     const sidebar = $(".jhs-mobile-sidebar,.setting-sidebar").first();
     sidebar.append('<button type="button" class="jhs-btn side-menu-item" data-panel="resource-sources-panel" aria-controls="resource-sources-panel">资源来源</button><button type="button" class="jhs-btn side-menu-item" data-panel="cloud-services-panel" aria-controls="cloud-services-panel">云盘服务</button><button type="button" class="jhs-btn side-menu-item" data-panel="data-tools-panel" aria-controls="data-tools-panel">数据工具</button>');
@@ -10729,6 +10734,7 @@ ${error.stack}` : "");
       $("#enable115Match").prop("checked", cloud.enable115Match);
       $("#oneOneFiveConcurrency").val(cloud.concurrency);
       $("#oneOneFiveCacheMinutes").val(cloud.cacheMinutes);
+      $("#redirect115Login").prop("checked", cloud.redirect115Login);
       if (cloud.enable115Offline || cloud.enable115Match) this.checkOneOneFiveLogin();
       $("#cloud-services-panel input").off("change.jhsResource").on("change.jhsResource", (() => this.saveCloudSettings()));
       $("#resource-sources-panel").off("change.jhsResource", 'input[name="screenshotMode"]').on("change.jhsResource", 'input[name="screenshotMode"]', ((event) => {
@@ -10858,7 +10864,7 @@ ${error.stack}` : "");
       }, "yes") });
     }
     async saveCloudSettings() {
-      await this.resourceSettings.saveCloudSettings({ enable115Offline: $("#enable115Offline").is(":checked"), enable115Match: $("#enable115Match").is(":checked"), concurrency: Number($("#oneOneFiveConcurrency").val()), cacheMinutes: Number($("#oneOneFiveCacheMinutes").val()) });
+      await this.resourceSettings.saveCloudSettings({ enable115Offline: $("#enable115Offline").is(":checked"), enable115Match: $("#enable115Match").is(":checked"), concurrency: Number($("#oneOneFiveConcurrency").val()), cacheMinutes: Number($("#oneOneFiveCacheMinutes").val()), redirect115Login: $("#redirect115Login").is(":checked") });
     }
     async checkOneOneFiveLogin() {
       const badge = $("#one-one-five-state").text("检测中");
@@ -13859,9 +13865,19 @@ ${error.stack}` : "");
     }
     async addOffline(magnet, folderId = "") {
       if (!/^magnet:/i.test(magnet) && !/^ed2k:/i.test(magnet)) throw new TypeError("Unsupported offline URL");
-      const info = await this.getOfflineInfo();
+      // 登录检测与设置页「115 登录检测」完全一致：复用 checkLogin()（webapi.115.com/offine/downpath）
+      if (!await this.checkLogin()) throw new ProviderError("115", "LOGIN_REQUIRED", "115 未登录", { cause: "checkLogin 返回未登录" });
+      let info = {};
+      try {
+        const raw = await this.getOfflineInfo();
+        if (raw && "object" == typeof raw) info = raw;
+      } catch {
+      }
       const body = new URLSearchParams({ url: magnet, wp_path_id: folderId, uid: String(info.uid || ""), sign: info.sign || "", time: String(info.time || "") }).toString();
-      return this.http.gmRequest("POST", "https://115.com/web/lixian/?ct=lixian&ac=add_task_url", body, {}, { "Content-Type": "application/x-www-form-urlencoded" });
+      const result = await this.http.gmRequest("POST", "https://115.com/web/lixian/?ct=lixian&ac=add_task_url", body, {}, { "Content-Type": "application/x-www-form-urlencoded" });
+      if (!result || "object" != typeof result) throw new ProviderError("115", "LOGIN_REQUIRED", "115 未登录", { cause: "add_task_url 未返回 JSON" });
+      if (result.state !== true) throw new Error(result.error || result.msg || "添加离线任务失败");
+      return result;
     }
     async rename(fileId, newName) {
       const body = new URLSearchParams({ fid: fileId, file_name: newName }).toString();
@@ -13902,6 +13918,7 @@ ${error.stack}` : "");
       if (!window.isDetailPage) return;
       if (!await storageManager.getSetting("enable115Offline", false)) return;
       const client = new OneOneFiveClient();
+      this.injectNativeButtons();
       utils.loopDetector((() => $(".magnet-copy,.magnet-links").length > 0), (() => {
         $(".magnet-copy").each(((index, element) => {
           const box = $(element);
@@ -13909,7 +13926,7 @@ ${error.stack}` : "");
         }));
       }), 1, 1e4, false);
       $(document).off("click.jhs115", ".one115-offline-btn").on("click.jhs115", ".one115-offline-btn", (async (event) => {
-        const magnet = $(event.currentTarget).siblings("[data-magnet]").first().data("magnet") || $(event.currentTarget).closest(".magnet-result").find('a[href^="magnet:"]').attr("href");
+        const magnet = $(event.currentTarget).attr("data-magnet") || $(event.currentTarget).siblings("[data-magnet]").first().data("magnet") || $(event.currentTarget).closest(".magnet-result").find('a[href^="magnet:"]').attr("href");
         if (!magnet) return show.error("未找到磁力链接");
         try {
           await client.addOffline(magnet);
@@ -13921,8 +13938,33 @@ ${error.stack}` : "");
           }));
         } catch (error) {
           clog.error("115 离线失败", error);
-          show.error(error.message);
+          if (error instanceof ProviderError && "LOGIN_REQUIRED" === error.code && await storageManager.getSetting("redirect115Login", false)) {
+            show.error("115 未登录，正在打开登录页…");
+            GM_openInTab("https://115.com/", { active: true });
+          } else {
+            show.error(error.message);
+          }
         }
+      }));
+    }
+    async initCss() {
+      return "\n            <style>\n                .one115-offline-btn {\n                    background-color: var(--jhs-accent) !important;\n                    color: var(--jhs-accent-text-on) !important;\n                    border-color: var(--jhs-accent) !important;\n                }\n                .one115-offline-btn.loading {\n                    opacity: 0.65;\n                    cursor: wait;\n                }\n                .one115-native-btn {\n                    margin-left: 6px;\n                    padding: 3px 8px;\n                    border-radius: 3px;\n                    border: 1px solid var(--jhs-accent);\n                    background: var(--jhs-accent);\n                    color: var(--jhs-accent-text-on) !important;\n                    cursor: pointer;\n                    font-size: 12px;\n                    line-height: 1.2;\n                }\n            </style>\n        ";
+    }
+    injectNativeButtons() {
+      if (!window.isDetailPage) return;
+      utils.loopDetector((() => $("#magnets-content .item").length > 0), (() => this.injectJavDbButtons()), 20, 1e4, false);
+      utils.loopDetector((() => $("#magnet-table td a[href^='magnet:']").length > 0), (() => this.injectJavBusButtons()), 20, 1e4, false);
+    }
+    injectJavDbButtons() {
+      $("#magnets-content .item").each(((e2, t2) => {
+        const n2 = $(t2), a2 = n2.find("a[href^='magnet:']").first().attr("href") || n2.find(".copy-to-clipboard").attr("data-clipboard-text");
+        a2 && 0 === n2.find(".one115-offline-btn").length && n2.find(".buttons").first().append(`<button class="jhs-btn jhs-btn--secondary one115-offline-btn" data-magnet="${escapeHtml(a2)}" type="button">115离线</button>`);
+      }));
+    }
+    injectJavBusButtons() {
+      $("#magnet-table td a[href^='magnet:']").each(((e2, t2) => {
+        const n2 = $(t2), a2 = n2.attr("href");
+        a2 && 0 === n2.siblings(".one115-offline-btn").length && n2.after(`<button class="jhs-btn one115-native-btn one115-offline-btn" data-magnet="${escapeHtml(a2)}" type="button">115离线</button>`);
       }));
     }
   };
