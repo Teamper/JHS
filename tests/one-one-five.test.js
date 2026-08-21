@@ -28,4 +28,25 @@ describe("115 domain", () => {
         expect(source).toContain('getSetting("enable115Match", !1)');
         expect(source).not.toContain("gmHttp");
     });
+    it("classifies addOffline errors", () => {
+        const api = load115();
+        const client = new api.OneOneFiveClient();
+        expect(client.classifyAddOfflineError("用户未登录")).toBe("LOGIN_REQUIRED");
+        expect(client.classifyAddOfflineError("任务已存在")).toBe("TASK_EXISTS");
+        expect(client.classifyAddOfflineError("任务创建失败")).toBe("ADD_TASK_FAILED");
+    });
+    it("throws TASK_EXISTS when addOffline reports duplicate", async () => {
+        const gmRequest = vi.fn().mockResolvedValue({ state: !1, error_msg: "该任务已存在" });
+        const get = vi.fn().mockResolvedValue({ sign: "s", time: "t", uid: 1 });
+        const api = load115({ get, gmRequest });
+        const client = new api.OneOneFiveClient({ get, gmRequest });
+        await expect(client.addOffline("magnet:?xt=urn:btih:abc")).rejects.toMatchObject({ code: "TASK_EXISTS" });
+    });
+    it("throws LOGIN_REQUIRED when addOffline reports not logged in", async () => {
+        const gmRequest = vi.fn().mockResolvedValue({ state: !1, error_msg: "请先登录" });
+        const get = vi.fn().mockResolvedValue({ sign: "s", time: "t", uid: 1 });
+        const api = load115({ get, gmRequest });
+        const client = new api.OneOneFiveClient({ get, gmRequest });
+        await expect(client.addOffline("magnet:?xt=urn:btih:abc")).rejects.toMatchObject({ code: "LOGIN_REQUIRED" });
+    });
 });

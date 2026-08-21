@@ -1,17 +1,88 @@
 class OneOneFiveOfflinePlugin extends BasePlugin {
+    constructor() {
+        super(...arguments), this.BUTTON_COOLDOWN_MS = 2e3;
+    }
     getName() { return "OneOneFiveOfflinePlugin"; }
+    async initCss() {
+        return "\n            <style>\n                .one115-offline-btn {\n                    background-color: var(--jhs-accent) !important;\n                    color: var(--jhs-accent-text-on) !important;\n                    border-color: var(--jhs-accent) !important;\n                }\n                .one115-offline-btn.loading {\n                    cursor: wait;\n                }\n                .one115-native-btn {\n                    margin-left: 6px;\n                    padding: 3px 8px;\n                    border-radius: 3px;\n                    border: 1px solid var(--jhs-accent);\n                    background: var(--jhs-accent);\n                    color: var(--jhs-accent-text-on) !important;\n                    cursor: pointer;\n                    font-size: 12px;\n                    line-height: 1.2;\n                }\n            </style>\n        ";
+    }
     async handle() {
-        if (!window.isDetailPage) return;
         if (!await storageManager.getSetting("enable115Offline", !1)) return;
-        const client = new OneOneFiveClient();
-        utils.loopDetector((() => $(".magnet-copy,.magnet-links").length > 0), (() => {
-            $(".magnet-copy").each(((index, element) => { const box = $(element); box.find(".one115-offline-btn").length || box.append('<button type="button" class="jhs-btn magnet-hub-btn one115-offline-btn">115离线</button>'); }));
-        }), 1, 1e4, !1);
+        (r || l) && (this.bindSubmit(), this.injectNativeButtons());
+    }
+    bindSubmit() {
         $(document).off("click.jhs115", ".one115-offline-btn").on("click.jhs115", ".one115-offline-btn", (async event => {
-            const magnet = $(event.currentTarget).siblings("[data-magnet]").first().data("magnet") || $(event.currentTarget).closest(".magnet-result").find('a[href^="magnet:"]').attr("href");
+            event.preventDefault(), event.stopPropagation();
+            const button = $(event.currentTarget);
+            const magnet = button.attr("data-magnet") || button.siblings("[data-magnet]").first().data("magnet") || button.closest(".magnet-result, .item, td").find('a[href^="magnet:"]').first().attr("href");
             if (!magnet) return show.error("未找到磁力链接");
-            try { await client.addOffline(magnet); show.ok("115 离线任务已创建"); utils.q(event, "是否将该作品标记为已下载？", (async () => { const info = this.getPageInfo(); await storageManager.saveCar({ ...info, actionType: g }); show.ok("已标记为已下载"); })); } catch (error) { clog.error("115 离线失败", error); show.error(error.message); }
+            await this.submitMagnet(event, magnet, button);
         }));
+    }
+    injectNativeButtons() {
+        if (!window.isDetailPage) return;
+        r && utils.loopDetector((() => $("#magnets-content .item").length > 0), (() => this.injectJavDbButtons()));
+        l && utils.loopDetector((() => $("#magnet-table td a[href^='magnet:']").length > 0), (() => this.injectJavBusButtons()));
+    }
+    injectJavDbButtons() {
+        $("#magnets-content .item").each(((index, element) => {
+            const item = $(element);
+            const magnet = item.find("a[href^='magnet:']").first().attr("href") || item.find(".copy-to-clipboard").attr("data-clipboard-text");
+            magnet && 0 === item.find(".one115-offline-btn").length && item.find(".buttons").first().append(`<button class="jhs-btn jhs-btn--secondary one115-offline-btn" data-magnet="${escapeHtml(magnet)}" type="button">115离线</button>`);
+        }));
+    }
+    injectJavBusButtons() {
+        $("#magnet-table td a[href^='magnet:']").each(((index, element) => {
+            const link = $(element);
+            const magnet = link.attr("href");
+            magnet && 0 === link.siblings(".one115-offline-btn").length && link.after(`<button class="jhs-btn one115-native-btn one115-offline-btn" data-magnet="${escapeHtml(magnet)}" type="button">115离线</button>`);
+        }));
+    }
+    async submitMagnet(event, magnet, button) {
+        if (button.hasClass("loading")) return;
+        const originalText = button.text();
+        try {
+            button.addClass("loading").prop("disabled", !0).text("提交中");
+            await new OneOneFiveClient().addOffline(magnet);
+            show.ok("115 离线任务已创建");
+            button.text("已提交");
+            utils.q(event, "是否将该作品标记为已下载？", (async () => {
+                const marked = await this.markCurrentVideoAsHasDown(button);
+                marked && button.text("已标记");
+            }));
+        } catch (error) {
+            clog.error("115 离线失败", error);
+            if ("LOGIN_REQUIRED" === error.code) {
+                if (await storageManager.getSetting("enable115LoginRedirect", !1)) {
+                    window.open("https://115.com");
+                    show.info("已打开 115 登录页面，登录后请返回当前页面重试");
+                } else show.error((error.message || "115 未登录") + "，请先登录 https://115.com");
+            } else if ("TASK_EXISTS" === error.code) utils.q(event, "该任务已在 115 离线列表中，是否前往查看？", (() => window.open("https://115.com/?tab=offline&mode=wangpan"))); else show.error(error.message || "115 离线失败");
+            button.text(originalText);
+        } finally {
+            setTimeout((() => button.removeClass("loading").prop("disabled", !1)), this.BUTTON_COOLDOWN_MS);
+        }
+    }
+    async markCurrentVideoAsHasDown(button) {
+        try {
+            const info = this.getOfflineVideoInfo(button);
+            if (!info || !info.carNum || !info.url) return !1;
+            const existing = await storageManager.getCar(info.carNum);
+            if (existing && existing.status === g) return !1;
+            await storageManager.saveCar({ carNum: info.carNum, url: info.url, names: info.actress || info.names || "", actionType: g, publishTime: info.publishTime });
+            const detailButtonPlugin = this.getBean("DetailPageButtonPlugin");
+            detailButtonPlugin && detailButtonPlugin.showStatus && await detailButtonPlugin.showStatus(info.carNum), window.refresh();
+            return !0;
+        } catch (error) {
+            clog.error("115 离线成功后标记已下载失败:", error);
+            show.error("115 离线已提交，但自动标记已下载失败：" + error);
+            return !1;
+        }
+    }
+    getOfflineVideoInfo(button) {
+        if (window.isDetailPage) return this.getPageInfo();
+        const item = button && button.closest ? button.closest(".item") : $();
+        return item && item.length ? this.getBean("ListPagePlugin").findCarNumAndHref(item) : this.getPageInfo();
     }
 }
 class OneOneFiveMatchPlugin extends BasePlugin {

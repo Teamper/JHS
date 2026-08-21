@@ -11,7 +11,7 @@ class CompatibilityEnhancementsPlugin extends BasePlugin {
         if (!(await storageManager.getCarList()).some((item => item.carNum === carNum))) return;
         const button = $('<button type="button" class="jhs-btn jhs-btn--danger jhs-remove-car">移除记录</button>');
         $(".jhs-detail-btn-row,.movie-info-container,.container .info").first().append(button);
-        button.on("click", (event => utils.q(event, `确定移除 ${carNum} 的鉴定记录？`, (async () => { await storageManager.removeCar(carNum); button.remove(); this.getBean("ListPagePlugin")?.showCarNumBox?.(carNum); show.ok("鉴定记录已移除"); }))));
+        button.on("click", (event => utils.q(event, `确定移除 ${carNum} 的鉴定记录？`, (async () => { await storageManager.removeCar(carNum); window.refresh(); button.remove(); this.getBean("ListPagePlugin")?.showCarNumBox?.(carNum); show.ok("鉴定记录已移除"); }))));
     }
     async decorateActresses() {
         const favorites = new Set((await storageManager.getFavoriteActressList()).map((item => String(item.starId))));

@@ -143,13 +143,14 @@ class MagnetHubPlugin extends BasePlugin {
         const service = new ResourceSettingsService(), [tags, filters] = await Promise.all([service.getMagnetTagRules(), service.getMagnetFilterRules()]);
         return results.map((result => applyMagnetRules(result, tags, filters.filter((rule => (rule.target || "title") === "title")), filters.filter((rule => rule.target === "file"))))).filter((result => !result.hidden));
     }
-    displayResults(e, t, n) {
+    async displayResults(e, t, n) {
         function a(e) {
             const t = e.text();
             e.addClass("copied").text("已复制"), setTimeout((() => {
                 e.removeClass("copied").text(t);
             }), 2e3);
         }
+        const enable115Offline = await storageManager.getSetting("enable115Offline", !1);
         e.empty(), 0 !== t.length ? (t.forEach((e => { const base = this.calcMagnetScore(e); e._score = { ...base, total: Math.max(0, Math.min(100, base.total + (e.customTagWeight || 0) + (e.filterPenalty || 0))) }; })),
         t.sort(((e, t) => t._score.total - e._score.total)),
         t.forEach((t => {
@@ -157,7 +158,10 @@ class MagnetHubPlugin extends BasePlugin {
             const safeTitle = escapeHtml(t.title), safeMagnet = escapeHtml(t.magnet), safeSize = escapeHtml(String(t.size || "未知")), safeDate = escapeHtml(String(t.date || "未知"));
             const item = $(`\n                <div class="magnet-result">\n                    <div class="magnet-title">\n                        <span class="magnet-score" title="${i}">${a} ${n}</span>\n                        <a href="${safeMagnet}">${safeTitle}</a>\n                    </div>\n                    <div class="magnet-info">\n                        <span>大小: ${safeSize}</span>\n                        <span>做种: ${t.seeders || "—"}</span>\n                        <span>日期: ${safeDate}</span>\n                    </div>\n                    <div class="magnet-copy">\n                        <button type="button" class="jhs-btn magnet-hub-btn copy-btn" data-magnet="${safeMagnet}">复制链接</button>\n                    </div>\n                </div>\n            `);
             t.tags?.length && item.find(".magnet-info").after($("<div></div>").addClass("magnet-tags").append(t.tags.map((tag => $("<span></span>").addClass("jhs-badge").text(tag)))));
-            item.find(".magnet-copy").append(`<button type="button" class="jhs-btn magnet-hub-btn one23-offline-btn" data-magnet="${safeMagnet}">123离线</button>`), item.appendTo(e);
+            const copyBox = item.find(".magnet-copy");
+            copyBox.append(`<button type="button" class="jhs-btn magnet-hub-btn one23-offline-btn" data-magnet="${safeMagnet}">123离线</button>`);
+            enable115Offline && copyBox.append(`<button type="button" class="jhs-btn magnet-hub-btn one115-offline-btn" data-magnet="${safeMagnet}">115离线</button>`);
+            item.appendTo(e);
         })), e.on("click", ".copy-btn", (async function() {
             const e = $(this), t = e.data("magnet");
             await utils.copyToClipboard("磁力链接", t) && a(e);
