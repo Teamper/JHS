@@ -77,7 +77,7 @@ class BlacklistPlugin extends BasePlugin {
                     }
                 } else show.error("当前有定时任务在后台执行中, 无法发起此操作");
             })).catch((e => {
-                clog.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
+                clog.error("锁任务出现错误:", e);
             }));
         }));
     }
@@ -133,13 +133,13 @@ class BlacklistPlugin extends BasePlugin {
                         }, (async t => {
                             t ? (await e.loadConfig(), await e.checkBlacklist(!0)) : show.error("当前有定时任务在后台执行中, 无法发起手动任务");
                         })).catch((e => {
-                            clog.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
+                            clog.error("锁任务出现错误:", e);
                         }));
                     }));
                 }));
             },
-            end: () => {
-                this.tableObj && (this.tableObj.destroy(), this.tableObj = null), window.refresh();
+            end: async () => {
+                this.tableObj && (this.tableObj.destroy(), this.tableObj = null), await jhsEventBus.emit("blacklist-rules-changed");
             }
         });
     }
@@ -332,14 +332,7 @@ class BlacklistPlugin extends BasePlugin {
         for (const s of n) {
             const t = $(s), {carNum: n, url: a, publishTime: o} = this.getBean("ListPagePlugin").findCarNumAndHref(t);
             if (a && n) try {
-                if (await storageManager.getCar(n)) continue;
-                await storageManager.saveCar({
-                    carNum: n,
-                    url: a,
-                    names: e,
-                    actionType: d,
-                    publishTime: o
-                }), clog.log("屏蔽演员番号", e, n);
+                await stateService.patch(n, { blocked: !0 }, { type: "actor-page-block", record: { carNum: n, url: a, names: e, publishTime: o } }), clog.log("屏蔽演员番号", e, n);
             } catch (i) {
                 clog.error(`保存失败 [${n}]:`, i);
             }
@@ -348,7 +341,7 @@ class BlacklistPlugin extends BasePlugin {
             show.info("请不要关闭窗口, 正在解析下一页:" + a), await new Promise((e => setTimeout(e, 500)));
             const t = await gmHttp.get(a), n = new DOMParser, i = $(n.parseFromString(t, "text/html"));
             await this.filterAllVideo(e, i);
-        } else show.ok("执行结束!"), window.refresh();
+        } else show.ok("执行结束!");
     }
     async batchSaveAllVideos(e, t) {
         let n, a;
@@ -357,14 +350,14 @@ class BlacklistPlugin extends BasePlugin {
         for (const i of n) {
             const n = $(i), {carNum: a, url: o, publishTime: r} = this.getBean("ListPagePlugin").findCarNumAndHref(n);
             if (o && a) try {
-                if (await storageManager.getCar(a)) continue;
-                await storageManager.saveCar({carNum: a, url: o, names: e, actionType: t, publishTime: r}), clog.log("批量操作", e, a, t);
+                const flag = legacyActionToFlag(t);
+                flag && await stateService.patch(a, { [flag]: !0 }, { type: "actor-page-batch-state", record: { carNum: a, url: o, names: e, publishTime: r } }), clog.log("批量操作", e, a, t);
             } catch (s) { clog.error(`保存失败 [${a}]:`, s); }
         }
         if (a) { show.info("请不要关闭窗口, 正在解析下一页:" + a), await new Promise((e => setTimeout(e, 500)));
             const i = await gmHttp.get(a), s = new DOMParser, o = $(s.parseFromString(i, "text/html"));
             await this.batchSaveAllVideos(e, t); }
-        else show.ok("执行结束!"), window.refresh();
+        else show.ok("执行结束!");
     }
     async filterActorVideo(e, t, n) {
         let {nextPageLink: a} = await this.parseAndSaveFilterInfo(n, e, t);
@@ -375,7 +368,7 @@ class BlacklistPlugin extends BasePlugin {
             const i = await gmHttp.get(a);
             n = utils.htmlTo$dom(i);
             await this.filterActorVideo(e, t, n);
-        } else show.ok("执行结束!"), window.refresh();
+        } else show.ok("执行结束!");
     }
     async parseAndSaveFilterInfo(e, t, n) {
         let a, i;
@@ -403,7 +396,7 @@ class BlacklistPlugin extends BasePlugin {
         try {
             await storageManager.batchSaveBlacklistCarList(s);
         } catch (r) {
-            clog.error("保存失败:", r), clog.error("保存失败:", r);
+            clog.error("保存失败:", r);
         }
         return {
             nextPageLink: i,

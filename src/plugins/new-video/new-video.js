@@ -110,9 +110,28 @@ async function gt(e) {
     return Array.from(n);
 }
 
+function aggregateNewVideoRecords(actresses, carMap, decisions, now = Date.now()) {
+    const grouped = new Map;
+    for (const actress of actresses) {
+        if (!Array.isArray(actress.newVideoList)) continue;
+        for (const raw of actress.newVideoList) {
+            const item = "object" == typeof raw ? raw : {}, carNum = normalizeCarNum("string" == typeof raw ? raw : raw.carNum);
+            if (!carNum) continue;
+            const existing = grouped.get(carNum) || { carNum, coverUrl: "", title: "", publishTime: "", actresses: [], starIds: [], categories: new Set, score: 0, voteCount: 0, url: "", isVr: !1 };
+            existing.coverUrl ||= item.coverUrl || "", existing.title ||= item.title || "", existing.publishTime = [ existing.publishTime, item.publishTime || "" ].sort().at(-1), existing.score = Math.max(existing.score, Number(item.score) || 0), existing.voteCount = Math.max(existing.voteCount, Number(item.voteCount) || 0), existing.url ||= item.url || "";
+            existing.isVr ||= !0 === item.isVr || /(^|[^A-Z])VR([^A-Z]|$)/i.test(`${item.title || ""} ${(item.tags || []).join?.(" ") || ""} ${(item.categories || []).join?.(" ") || ""}`);
+            actress.name && !existing.actresses.includes(actress.name) && existing.actresses.push(actress.name), actress.starId && !existing.starIds.includes(actress.starId) && existing.starIds.push(actress.starId), actress.actressType && existing.categories.add(actress.actressType), grouped.set(carNum, existing);
+        }
+    }
+    return [ ...grouped.values() ].map((item => {
+        const record = carMap.get(item.carNum), flags = normalizeStateFlags(record?.stateFlags), decision = decisions[item.carNum] || null, decisionState = !decision ? "pending" : "snoozed" === decision.action && decision.until && Date.parse(decision.until) <= now ? "pending" : decision.action;
+        return { ...item, actressName: item.actresses.join("、"), starId: item.starIds[0] || "", categories: [ ...item.categories ], flags, decision, decisionState };
+    }));
+}
+
 class NewVideoPlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", null), i(this, "nvSortBy", "publishTime_desc");
+        super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", null), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {});
     }
     getName() {
         return "NewVideoPlugin";
@@ -181,11 +200,21 @@ class NewVideoPlugin extends BasePlugin {
         await this.showNewVideoCount();
     }
     getPendingNewVideoCount(e, t) {
-        return Array.isArray(e?.newVideoList) ? e.newVideoList.filter((e => { const n = "string" == typeof e ? e : e.carNum; return !t.has(n); })).length : 0;
+        return Array.isArray(e?.newVideoList) ? new Set(e.newVideoList.map((item => normalizeCarNum("string" == typeof item ? item : item.carNum))).filter((carNum => carNum && !t.has(carNum) && !this.isDecisionHidden(carNum)))).size : 0;
+    }
+    isDecisionHidden(carNum) {
+        const decision = this.nvDecisionsCache[normalizeCarNum(carNum)];
+        if (!decision) return !1;
+        return "ignored" === decision.action || "snoozed" === decision.action && (!decision.until || Date.parse(decision.until) > Date.now());
     }
     async getPendingNewVideoTotal() {
-        const e = await storageManager.getCarMap();
-        return (await storageManager.getFavoriteActressList()).reduce(((t, n) => t + this.getPendingNewVideoCount(n, e)), 0);
+        const e = await storageManager.getCarMap(), keys = new Set;
+        this.nvDecisionsCache = await stateService.getNewVideoDecisions();
+        (await storageManager.getFavoriteActressList()).forEach((actress => Array.isArray(actress.newVideoList) && actress.newVideoList.forEach((item => {
+            const carNum = normalizeCarNum("string" == typeof item ? item : item.carNum);
+            carNum && !e.has(carNum) && !this.isDecisionHidden(carNum) && keys.add(carNum);
+        }))));
+        return keys.size;
     }
     async showNewVideoCount() {
         const e = await this.getPendingNewVideoTotal();
@@ -209,7 +238,10 @@ class NewVideoPlugin extends BasePlugin {
                     </div>
                     <div class="jhs-new-video-toolbar__filters">
                         <select id="paramActressType" class="jhs-select-source" aria-label="演员类型"><option value="all" selected>所有</option><option value="uncensored">无码</option><option value="censored">有码</option><option value="">未知</option></select>
-                        <select id="nvCategoryFilter" class="jhs-select-source jhs-is-hidden" aria-label="新作品类别"><option value="all" selected>所有</option><option value="uncensored">无码</option><option value="censored">有码</option><option value="">未知</option><option value="vr">VR</option></select>
+                        <input id="nvSearch" class="jhs-field jhs-is-hidden" type="search" placeholder="搜索番号、标题或演员" aria-label="搜索新作品">
+                        <select id="nvCategoryFilter" class="jhs-select-source jhs-is-hidden" aria-label="新作品类别"><option value="all" selected>所有类别</option><option value="uncensored">无码</option><option value="censored">有码</option><option value="unknown">未知</option><option value="vr">VR</option></select>
+                        <select id="nvStateFilter" class="jhs-select-source jhs-is-hidden" aria-label="作品状态"><option value="all">所有状态</option><option value="pending" selected>待处理</option><option value="favorite">已收藏</option><option value="downloaded">已下载</option><option value="watched">已观看</option><option value="blocked">已屏蔽</option></select>
+                        <select id="nvDecisionFilter" class="jhs-select-source jhs-is-hidden" aria-label="新作决策"><option value="pending" selected>待处理</option><option value="ignored">已忽略</option><option value="snoozed">已暂缓</option><option value="all">所有决策</option></select>
                         <select id="paramSortBy" class="jhs-select-source" aria-label="演员排序">
                             <option value="default" selected>默认排序</option><optgroup label="发行时间"><option value="lastPublishTime_desc">发行时间 新→旧</option><option value="lastPublishTime_asc">发行时间 旧→新</option></optgroup><optgroup label="检测时间"><option value="lastCheckTime_desc">检测时间 新→旧</option><option value="lastCheckTime_asc">检测时间 旧→新</option></optgroup><optgroup label="新作品数"><option value="newVideoCount_desc">新作品数 多→少</option><option value="newVideoCount_asc">新作品数 少→多</option></optgroup>
                         </select>
@@ -245,8 +277,7 @@ class NewVideoPlugin extends BasePlugin {
             try {
                 const enabled = await storageManager.getSetting("autoRemoveNewVideoMarkAfterBrowse", C);
                 if (enabled !== _) return;
-                await storageManager.removeNewVideoList([ t ]), "list" === this._viewMode && await this.renderNewVideoList(),
-                window.refresh();
+                await stateService.removeFromNewVideoList([ t ], "browse"), "list" === this._viewMode && await this.renderNewVideoList();
             } catch (n) {
                 clog.error("移除新作品标记失败:", n);
             }
@@ -270,7 +301,7 @@ class NewVideoPlugin extends BasePlugin {
                     if (!t) return void show.error("当前有定时任务在后台执行中, 无法发起手动任务");
                     $('a[href*="/users/profile"]').length > 0 ? (await e.checkFavoriteActress(), this.loadData()) : show.error("未登录JavDb, 同步失败");
                 })).catch((e => {
-                    clog.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
+                    clog.error("锁任务出现错误:", e);
                 }));
             }));
         })), $("#checkNewVideo").on("click", (t => {
@@ -283,7 +314,7 @@ class NewVideoPlugin extends BasePlugin {
                 }, (async t => {
                     t ? await e.checkNewVideo(!0) : show.error("当前有定时任务在后台执行中, 无法发起手动任务");
                 })).catch((e => {
-                    clog.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
+                    clog.error("锁任务出现错误:", e);
                 }));
             }));
         })), $("#paramActressType").on("change", (e => {
@@ -292,7 +323,9 @@ class NewVideoPlugin extends BasePlugin {
             this.loadData();
         })), $("#nvSortBy").on("change", (e => {
             this.nvSortBy = $("#nvSortBy").val(), this.nvCurrentPage = 1, this.nvRenderPage();
-        })), $("#nvCategoryFilter").on("change", (e => {
+        })), $("#nvCategoryFilter,#nvStateFilter,#nvDecisionFilter").on("change", (e => {
+            "list" === this._viewMode && this.renderNewVideoList();
+        })), $("#nvSearch").on("input", (() => {
             "list" === this._viewMode && this.renderNewVideoList();
         })), $("#toggleViewMode").on("click", (e => {
             this._viewMode = "list" === this._viewMode ? "card" : "list";
@@ -300,7 +333,7 @@ class NewVideoPlugin extends BasePlugin {
             $("#actress-card-container").toggle(!t), $("#actress-pagination").toggle(!t),
             $("#new-video-list-container").toggle(t), $("#new-video-list-footer").toggle(t),
             JhsSelect.setVisible("#paramSortBy", !t), JhsSelect.setVisible("#nvSortBy", t),
-            JhsSelect.setVisible("#paramActressType", !t), JhsSelect.setVisible("#nvCategoryFilter", t),
+            JhsSelect.setVisible("#paramActressType", !t), JhsSelect.setVisible("#nvCategoryFilter", t), JhsSelect.setVisible("#nvStateFilter", t), JhsSelect.setVisible("#nvDecisionFilter", t), $("#nvSearch").toggleClass("jhs-is-hidden", !t),
             $("#toggleViewMode").text(t ? "演员视图" : "新作品列表"),
             t ? this.renderNewVideoList() : this.loadData();
         }));
@@ -323,6 +356,7 @@ class NewVideoPlugin extends BasePlugin {
         const n = $("#paramActressType").val();
         "all" !== n && (t = t.filter((e => e.actressType === n)));
         const _carSet = await storageManager.getCarMap();
+        this.nvDecisionsCache = await stateService.getNewVideoDecisions();
         const _newVideoCount = e => this.getPendingNewVideoCount(e, _carSet);
         const sortBy = $("#paramSortBy").val();
         const sortMap = {
@@ -411,7 +445,7 @@ class NewVideoPlugin extends BasePlugin {
                 const n = $(e.currentTarget).attr("data-starId"), i = sortedActresses.find((e => e.starId === n));
                 await taskPlugin.checkOneNewVideo(i);
             })).catch((e => {
-                clog.error("锁任务出现错误:", e), clog.error("锁任务出现错误:", e);
+                clog.error("锁任务出现错误:", e);
             }));
         })), $(".actress-card__menu").on("keydown", (event => {
             if ("Escape" !== event.key) return;
@@ -423,19 +457,15 @@ class NewVideoPlugin extends BasePlugin {
         })), this.renderPagination(totalCount, totalPages), show.ok("加载完成");
     }
     async getNewVideoFlatList() {
-        const e = await storageManager.getFavoriteActressList(), t = await storageManager.getCarMap(), n = $("#nvCategoryFilter").val(), a = [];
-        for (const i of e) {
-            if ("all" !== n && "vr" !== n && i.actressType !== n) continue;
-            if (!Array.isArray(i.newVideoList)) continue;
-            for (const e of i.newVideoList) {
-                const o = "string" == typeof e ? e : e.carNum;
-                if (t.has(o)) continue;
-                if ("vr" === n && !/VR/i.test(o)) continue;
-                const s = "object" == typeof e ? e : {};
-                a.push({ carNum: o, coverUrl: s.coverUrl || "", title: s.title || "", publishTime: s.publishTime || "", actressName: i.name || "", starId: i.starId || "", score: s.score || 0, voteCount: s.voteCount || 0, url: s.url || "" });
-            }
-        }
-        return a.sort(((e, t) => (t.publishTime || "").localeCompare(e.publishTime || ""))), a;
+        const actresses = await storageManager.getFavoriteActressList(), carMap = await storageManager.getCarMap(), category = $("#nvCategoryFilter").val() || "all", stateFilter = $("#nvStateFilter").val() || "pending", decisionFilter = $("#nvDecisionFilter").val() || "pending", query = String($("#nvSearch").val() || "").trim().toUpperCase();
+        this.nvDecisionsCache = await stateService.getNewVideoDecisions();
+        return aggregateNewVideoRecords(actresses, carMap, this.nvDecisionsCache).filter((item => {
+            const categoryMatch = "all" === category || "vr" === category ? "all" === category || item.isVr : "unknown" === category ? 0 === item.categories.length : item.categories.includes(category);
+            const stateMatch = "all" === stateFilter || "pending" === stateFilter ? "all" === stateFilter || !hasAnyState(item.flags) : !!item.flags[stateFilter];
+            const decisionMatch = "all" === decisionFilter || item.decisionState === decisionFilter;
+            const searchMatch = !query || `${item.carNum} ${item.title} ${item.actressName}`.toUpperCase().includes(query);
+            return categoryMatch && stateMatch && decisionMatch && searchMatch;
+        })).sort(((left, right) => (right.publishTime || "").localeCompare(left.publishTime || "")));
     }
     async loadCoverForItems(e) {
         const t = await this.getBean("OtherSitePlugin").getJavDbUrl(), n = {};
@@ -484,23 +514,24 @@ class NewVideoPlugin extends BasePlugin {
         this.nvFlatListCache = t, this.nvCurrentPage = 1, this.nvSortBy = $("#nvSortBy").val() || "publishTime_desc";
         const a = new Set;
         for (const i of t) a.add(i.actressName);
-        $("#new-video-list-footer").html(`<span>共 <b>${t.length}</b> 个待鉴定番号，涉及 <b>${a.size}</b> 位演员</span>
-            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkWatched">全部标记已看</button>
-            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkDownloaded">全部标记已下载</button>`);
+        this.nvSelected.clear(), $("#new-video-list-footer").html(`<span>共 <b>${t.length}</b> 个番号，涉及 <b>${a.size}</b> 位演员；已选择 <b id="nvSelectedCount">0</b> 个</span>
+            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkFavorite">选择项收藏</button>
+            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkWatched">选择项标记已看</button>
+            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkDownloaded">选择项标记已下载</button>
+            <button type="button" class="jhs-btn jhs-btn--ghost" id="batchIgnore">选择项忽略</button>
+            <button type="button" class="jhs-btn jhs-btn--ghost" id="batchSnooze">选择项暂缓 7 天</button>
+            <button type="button" class="jhs-btn jhs-btn--ghost" id="batchRestore">恢复选择项</button>
+            <button type="button" class="jhs-btn jhs-btn--danger" id="batchRemoveFromNewVideo">从新作列表移除</button>`);
         this.nvRenderPage(), this.loadCoverForItems(t).catch((e => clog.warn("封面加载异常:", e)));
-        $("#batchMarkWatched").off("click").on("click", (async () => {
-            if (!this.nvFlatListCache || 0 === this.nvFlatListCache.length) return;
-            utils.q({ clientX: 0, clientY: 0 }, `确认将 ${this.nvFlatListCache.length} 个番号全部标记为已看?`, (async () => {
-                const e = this.nvFlatListCache.map((e => ({ carNum: e.carNum, url: `/search?q=${encodeURIComponent(e.carNum)}`, names: e.actressName, actionType: p })));
-                try { await storageManager.saveCarList(e), show.ok(`已标记 ${e.length} 个`), this.renderNewVideoList(), this.showNewVideoCount(); } catch (n) { show.error("标记失败: " + n.message); }
-            }));
-        })), $("#batchMarkDownloaded").off("click").on("click", (async () => {
-            if (!this.nvFlatListCache || 0 === this.nvFlatListCache.length) return;
-            utils.q({ clientX: 0, clientY: 0 }, `确认将 ${this.nvFlatListCache.length} 个番号全部标记为已下载?`, (async () => {
-                const e = this.nvFlatListCache.map((e => ({ carNum: e.carNum, url: `/search?q=${encodeURIComponent(e.carNum)}`, names: e.actressName, actionType: g })));
-                try { await storageManager.saveCarList(e), show.ok(`已标记 ${e.length} 个`), this.renderNewVideoList(), this.showNewVideoCount(); } catch (n) { show.error("标记失败: " + n.message); }
-            }));
-        }));
+        const selectedItems = () => this.nvFlatListCache.filter((item => this.nvSelected.has(item.carNum))), ensureSelected = () => selectedItems().length ? selectedItems() : (show.info("请先选择作品"), []), patchSelected = async (flag) => {
+            const items = ensureSelected(); if (!items.length) return;
+            await stateService.patch(items.map((item => item.carNum)), { [flag]: !0 }, { type: "new-video-batch-state", records: items.map((item => ({ carNum: item.carNum, url: item.url || `/search?q=${encodeURIComponent(item.carNum)}`, names: item.actressName, publishTime: item.publishTime }))) }), show.ok(`已处理 ${items.length} 个番号`), await this.renderNewVideoList(), await this.showNewVideoCount();
+        };
+        $("#batchMarkFavorite").on("click", (() => patchSelected("favorite"))), $("#batchMarkWatched").on("click", (() => patchSelected("watched"))), $("#batchMarkDownloaded").on("click", (() => patchSelected("downloaded"))),
+        $("#batchIgnore").on("click", (async () => { const items = ensureSelected(); items.length && (await stateService.setNewVideoDecision(items.map((item => item.carNum)), "ignored"), await this.renderNewVideoList(), await this.showNewVideoCount()); })),
+        $("#batchSnooze").on("click", (async () => { const items = ensureSelected(); items.length && (await stateService.setNewVideoDecision(items.map((item => item.carNum)), "snoozed", new Date(Date.now() + 7 * 864e5).toISOString()), await this.renderNewVideoList(), await this.showNewVideoCount()); })),
+        $("#batchRestore").on("click", (async () => { const items = ensureSelected(); items.length && (await stateService.setNewVideoDecision(items.map((item => item.carNum)), null), await this.renderNewVideoList(), await this.showNewVideoCount()); })),
+        $("#batchRemoveFromNewVideo").on("click", (event => { const items = ensureSelected(); items.length && utils.q(event, `确认将 ${items.length} 个作品从新作列表移除？<br>不会删除作品状态记录。`, (async () => { await stateService.removeFromNewVideoList(items.map((item => item.carNum)), "manual"), await this.renderNewVideoList(), await this.showNewVideoCount(); })); }));
     }
     nvSortList(e) {
         const t = this.nvSortBy || "publishTime_desc", [n, a] = t.split("_");
@@ -535,7 +566,7 @@ class NewVideoPlugin extends BasePlugin {
                 let o = `番号: ${e}\\n演员: ${escapeHtml(n.actressName)}\\n发行: ${n.publishTime || "未知"}`;
                 n.voteCount && (o += `\\n评价人数: ${n.voteCount}`);
                 const l = n.voteCount ? `<span class="jhs-badge jhs-badge--neutral nv-card__rating">${n.voteCount}人评价</span>` : "";
-                c += `<div class="nv-card" data-car="${e}" title="${o}">`;
+                c += `<div class="nv-card" data-car="${e}" title="${o}"><label class="jhs-option-row"><input type="checkbox" class="nv-select" value="${e}" ${this.nvSelected.has(n.carNum) ? "checked" : ""}><span>选择</span></label>`;
                 c += `<a class="nv-card__link" href="${i}" target="_blank" rel="noopener noreferrer">`;
                 c += `<div class="nv-card__cover">`;
                 a ? c += `<img class="nv-cover-img" src="${a}" data-full="${a}" loading="lazy" onerror="this.classList.add('jhs-is-hidden');this.nextElementSibling.classList.remove('jhs-is-hidden');">${l}<div class="nv-card__empty jhs-is-hidden">无封面</div>` : c += `<div class="nv-placeholder nv-card__empty">加载中...</div>`;
@@ -544,7 +575,7 @@ class NewVideoPlugin extends BasePlugin {
                 c += `<div class="nv-card__title" title="${e}">${e}</div>`;
                 c += `<div class="nv-card__actress" title="${escapeHtml(n.actressName)}">${escapeHtml(n.actressName)}</div>`;
                 n.publishTime && (c += `<div class="nv-card__date">${n.publishTime}</div>`);
-                c += `</div></a></div>`;
+                n.decisionState && "pending" !== n.decisionState && (c += `<span class="jhs-badge jhs-badge--neutral">${"ignored" === n.decisionState ? "已忽略" : "已暂缓"}</span>`), c += `</div></a></div>`;
             }
             c += "</div>";
             if (o > 1) {
@@ -556,7 +587,7 @@ class NewVideoPlugin extends BasePlugin {
                 this.nvCurrentPage < o && (c += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${this.nvCurrentPage + 1}">下一页</button>`),
                 c += `<span class="jhs-pagination__summary">第 ${this.nvCurrentPage}/${o} 页，共 ${t.length} 条</span>`, c += "</div>";
             }
-            l.html(c), l.find(".pagination-btn").off("click").on("click", (e => {
+            l.html(c), l.find(".nv-select").on("change", (event => { const carNum = normalizeCarNum(event.currentTarget.value); event.currentTarget.checked ? this.nvSelected.add(carNum) : this.nvSelected.delete(carNum), $("#nvSelectedCount").text(this.nvSelected.size); })), l.find(".pagination-btn").off("click").on("click", (e => {
                 const n = parseInt($(e.currentTarget).data("nvpage"));
                 n >= 1 && n <= o && n !== this.nvCurrentPage && (this.nvCurrentPage = n, this.nvRenderPage(), l.scrollTop(0));
             })), window.imageHoverPreviewObj ? window.imageHoverPreviewObj.bindEvents() : window.imageHoverPreviewObj = new ImageHoverPreview({

@@ -146,6 +146,7 @@ class MobileBottomBarPlugin extends BasePlugin {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
+                overflow: visible;
                 gap: var(--jhs-space-3);
                 width: 100%;
                 margin: var(--jhs-space-3) 0;
@@ -159,17 +160,22 @@ class MobileBottomBarPlugin extends BasePlugin {
                 min-width: 0;
                 white-space: nowrap;
             }
-            .jhs-commandbar__left { flex: 1 1 auto; }
-            .jhs-commandbar__right { flex: 0 0 auto; }
-            .jhs-commandbar__filters {
-                overflow-x: auto;
-            }
+            .jhs-commandbar__left { flex: 1 1 auto; overflow:visible; }
+            .jhs-commandbar__right { flex: 0 0 auto; overflow:visible; }
+            .jhs-commandbar__filters { overflow:visible; }
             .jhs-commandbar__batch, .jhs-commandbar__more, .jhs-sort-control { position:relative; }
             .jhs-commandbar__menu { min-width:220px; }
             .jhs-commandbar__menu .jhs-btn, .jhs-sort-menu .jhs-btn { width:100%; justify-content:flex-start; }
             .jhs-commandbar__sort-label { color:var(--jhs-text-muted); font-size:14px; }
+            .jhs-mobile-filter-menu { display:none; min-width:220px; padding:var(--jhs-space-2); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
+            .jhs-fab-menu.jhs-fab-filter-open > .jhs-fab-group, .jhs-fab-menu.jhs-fab-filter-open > .jhs-fab-divider { display:none; }
+            .jhs-fab-menu.jhs-fab-filter-open > .jhs-mobile-filter-menu { display:grid; gap:var(--jhs-space-1); }
+            .jhs-mobile-filter-menu .jhs-btn { width:100%; justify-content:flex-start; }
             @media (max-width: 1023px) {
-                .jhs-page-commandbar { overflow-x: auto; }
+                .jhs-page-commandbar { flex-wrap:wrap; overflow:visible; }
+                .jhs-commandbar__left, .jhs-commandbar__right { flex-wrap:wrap; overflow:visible; }
+                .jhs-commandbar__left { flex-basis:100%; }
+                .jhs-commandbar__right { margin-left:auto; }
             }
             @media (max-width: 768px) {
                 .jhs-page-commandbar { display: none; }
@@ -177,8 +183,6 @@ class MobileBottomBarPlugin extends BasePlugin {
         `;
     }
     async handle() {
-        const detailWorkspace = new DetailWorkspacePlugin;
-        detailWorkspace.pluginManager = this.pluginManager, H(await detailWorkspace.initCss()), await detailWorkspace.handle();
         if (!utils.isMobileMode()) return;
         // 添加遮罩
         const backdrop = $('<div class="jhs-fab-backdrop"></div>').appendTo("body");
@@ -216,14 +220,8 @@ class MobileBottomBarPlugin extends BasePlugin {
             item.length && item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(more.find(".jhs-commandbar__menu"));
         }));
         more.find(".jhs-commandbar__menu").children().length && left.append(more);
-        const filterButtons = $("#jhs-quick-filter .jhs-segmented__item");
-        if (filterButtons.length) {
-            const filters = $('<div class="jhs-commandbar__filters jhs-segmented" role="tablist" aria-label="状态筛选"></div>');
-            filterButtons.each((function() {
-                $(this).attr({ class: `jhs-segmented__item${$(this).hasClass("active") ? " active" : ""}`, role: "tab", "aria-selected": $(this).hasClass("active") ? "true" : "false", tabindex: $(this).hasClass("active") ? "0" : "-1" }).detach().appendTo(filters);
-            })), left.append(filters);
-        }
-        $("#jhs-quick-filter").remove();
+        const quickFilter = $("#jhs-quick-filter").first();
+        quickFilter.length && left.append($('<div class="jhs-commandbar__filters"></div>').append(quickFilter.detach()));
         const contextItem = $("#addBlacklistBtn").first();
         contextItem.length && contextItem.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo($('<div class="jhs-commandbar__context"></div>').appendTo(right));
         const sort = $(".jhs-sort-control").first();
@@ -259,17 +257,7 @@ class MobileBottomBarPlugin extends BasePlugin {
         $(document).off("click.jhsCommandbar").on("click.jhsCommandbar", (event => {
             $(event.target).closest(".jhs-commandbar__more, .jhs-commandbar__batch").length || (commandbar.find(".jhs-commandbar__menu").removeClass("is-open"), commandbar.find(".jhs-commandbar__menu-toggle").attr("aria-expanded", "false"));
         }));
-        const listPlugin = this.getBean("ListPagePlugin");
-        commandbar.find(".jhs-commandbar__filters").on("click", "[role='tab']", (function() {
-            $(this).siblings().removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), $(this).addClass("active").attr({ "aria-selected": "true", tabindex: "0" });
-            const filter = $(this).data("jhs-filter");
-            listPlugin.activeQuickFilter = filter, listPlugin.applyQuickFilter(filter);
-        })).on("keydown", "[role='tab']", (e => {
-            if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(e.key)) return;
-            e.preventDefault();
-            const tabs = commandbar.find("[role='tab']"), index = tabs.index(e.currentTarget), next = "Home" === e.key ? 0 : "End" === e.key ? tabs.length - 1 : "ArrowRight" === e.key ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
-            tabs.eq(next).trigger("click").trigger("focus");
-        }));
+        this.getBean("ListPagePlugin")?.syncQuickFilterUi();
     }
     /** 获取详情页番号 */
     getCarNum() {
@@ -285,8 +273,9 @@ class MobileBottomBarPlugin extends BasePlugin {
         const item = (action, label, attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = content => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
         let items;
         if (window.isListPage) {
-            const sortMethod = localStorage.getItem("jhs_sortMethod") || "default", sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
-            items = group(item("check", "待鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort", `排序: ${sortLabel}`)) + divider + group(item("setting", "设置"));
+            const sortMethod = localStorage.getItem("jhs_sortMethod") || "default", sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod], activeFilter = normalizeQuickFilterKey(this.getBean("ListPagePlugin")?.activeQuickFilter),
+                filterOptions = [ ...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS ].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join("");
+            items = group(item("check", "开始鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort", `排序: ${sortLabel}`) + item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"')) + divider + group(item("setting", "设置")) + `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div>`;
         } else if (window.isDetailPage) {
             const statusDefs = [ { action: "filter", icon: m, label: "屏蔽", key: "filter" }, { action: "fav", icon: v, label: "收藏", key: "fav" }, { action: "down", icon: y, label: "已下载", key: "down" }, { action: "watch", icon: k, label: "已观看", key: "watch" } ];
             items = group(statusDefs.map((definition => item(definition.action, `<span class="jhs-fab-status-dot" data-status-key="${definition.key}"></span>${definition.icon}`, `aria-label="${definition.label}" aria-pressed="false" data-label="${definition.label}"`))).join("")) + divider + group(item("magnetFilter", "磁力过滤") + item("magnet", "磁力搜索") + item("subtitle", "字幕")) + divider + group(item("setting", "设置"));
@@ -301,13 +290,13 @@ class MobileBottomBarPlugin extends BasePlugin {
             const car = await storageManager.getCar(carNum);
             const menu = $(".jhs-fab-menu");
             const colors = { filter: "var(--jhs-status-filter)", fav: "var(--jhs-status-fav)", down: "var(--jhs-status-down)", watch: "var(--jhs-status-watch)" };
-            const activeKey = { [d]: "filter", [h]: "fav", [g]: "down", [p]: "watch" };
-            let activeStatus = null;
-            if (car?.status && activeKey[car.status]) activeStatus = activeKey[car.status];
+            const flags = normalizeStateFlags(car?.stateFlags), activeKeys = new Set([
+                flags.blocked && "filter", flags.favorite && "fav", flags.downloaded && "down", flags.watched && "watch"
+            ].filter(Boolean));
             menu.find(".jhs-fab-status-dot").each(function () {
                 const key = $(this).data("status-key");
                 const item = $(this).closest(".jhs-fab-menu-item");
-                if (key === activeStatus) {
+                if (activeKeys.has(key)) {
                     $(this).css({ background: colors[key] || "var(--jhs-border-strong)" }), item.attr("aria-pressed", "true");
                 } else {
                     $(this).css({ background: "var(--jhs-border-strong)" }), item.attr("aria-pressed", "false");
@@ -316,9 +305,12 @@ class MobileBottomBarPlugin extends BasePlugin {
         } catch (e) { clog.warn("移动端详情状态刷新失败", e); }
     }
     bindEvents(fab, backdrop) {
-        const menu = $(".jhs-fab-menu");
+        const menu = $(".jhs-fab-menu"), filterMenu = menu.find(".jhs-mobile-filter-menu"), filterTrigger = menu.find('[data-action="quickFilter"]'), closeFilterMenu = (returnFocus = !1) => {
+            menu.removeClass("jhs-fab-filter-open"), filterTrigger.attr("aria-expanded", "false"), returnFocus && filterTrigger.trigger("focus");
+        };
         const closeMenu = (returnFocus = !1) => {
             this._fabGeneration++;
+            closeFilterMenu();
             fab.removeClass("jhs-fab-open").attr("aria-expanded", "false");
             menu.removeClass("jhs-fab-menu-open").attr("aria-hidden", "true");
             backdrop.removeClass("jhs-fab-backdrop-visible");
@@ -338,6 +330,7 @@ class MobileBottomBarPlugin extends BasePlugin {
                     const sortMethod = localStorage.getItem("jhs_sortMethod") || "default";
                     const sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
                     menu.find('[data-action="sort"]').text(`排序: ${sortLabel}`);
+                    this.getBean("ListPagePlugin")?.syncQuickFilterUi();
                 }
                 // 刷新详情页状态
                 if (window.isDetailPage) void this.refreshDetailStatus().catch((error => clog.warn("移动端详情状态刷新失败", error)));
@@ -366,9 +359,24 @@ class MobileBottomBarPlugin extends BasePlugin {
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
         }));
+        filterMenu.on("keydown", ".jhs-mobile-filter-option", (event => {
+            const items = filterMenu.find(".jhs-mobile-filter-option"), index = items.index(event.currentTarget);
+            if ("Escape" === event.key) return event.preventDefault(), closeFilterMenu(!0);
+            if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
+            event.preventDefault();
+            const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+            items.eq(next).trigger("focus");
+        })).on("click", ".jhs-mobile-filter-option", (event => {
+            event.stopPropagation(), this.getBean("ListPagePlugin").setQuickFilter($(event.currentTarget).data("jhs-filter")), closeMenu(!0);
+        }));
         // 菜单项点击
         menu.on("click", ".jhs-fab-menu-item", (e) => {
             const action = $(e.currentTarget).data("action");
+            if ("quickFilter" === action) {
+                e.stopPropagation(), menu.addClass("jhs-fab-filter-open"), filterTrigger.attr("aria-expanded", "true");
+                const selected = filterMenu.find('[aria-checked="true"]');
+                return void (selected.length ? selected.first() : filterMenu.find(".jhs-mobile-filter-option").first()).trigger("focus");
+            }
             closeMenu(!0);
             void this.handleAction(action).catch((error => clog.error(`移动端操作 ${action || "unknown"} 失败`, error)));
         });
@@ -377,7 +385,7 @@ class MobileBottomBarPlugin extends BasePlugin {
         switch (action) {
             // 列表页操作
             case "check":
-                $("#waitCheckBtn").length && $("#waitCheckBtn").click();
+                await this.getBean("ListPageButtonPlugin")?.openWaitCheck?.();
                 break;
             case "newVideo":
                 this.getBean("NewVideoPlugin")?.openDialog();

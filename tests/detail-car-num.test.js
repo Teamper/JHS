@@ -118,6 +118,9 @@ describe("detail car number propagation", () => {
     it("normalizes invalid values and keeps candidate priority", () => {
         const { normalize, first } = loadCarNumHelpers();
         expect(normalize(" ABF-142 ")).toBe("ABF-142");
+        expect(normalize("ipx_001")).toBe("IPX-001");
+        expect(normalize("ABC123")).toBe("ABC-123");
+        expect(normalize("UNLISTED123")).toBe("UNLISTED123");
         expect(normalize("undefined")).toBeNull();
         expect(normalize(null)).toBeNull();
         expect(first(" ", "ABF-142", "IPX-001")).toBe("ABF-142");
@@ -159,11 +162,19 @@ describe("detail car number propagation", () => {
         const { utils, layer, openTab } = loadUtils();
         utils.openPage("/v/movie-id", "ABF 142", true, { ctrlKey: true });
         const opened = new URL(openTab.mock.calls[0][0]);
-        expect(opened.searchParams.get("jhsCarNum")).toBe("ABF 142");
+        expect(opened.searchParams.get("jhsCarNum")).toBe("ABF-142");
         expect(opened.searchParams.has("hideNav")).toBe(false);
         utils.openPage("https://subtitle.example/search?q=ABF-142", "ABF-142", true, {});
         const external = new URL(layer.open.mock.calls[0][0].content);
         expect(external.searchParams.has("jhsCarNum")).toBe(false);
+    });
+
+    it("opens an explicit new tab or middle-click without manufacturing mouse events", () => {
+        const { utils, layer, openTab } = loadUtils();
+        utils.openPage("/v/movie-id", "ABF-142", true, { newTab: true });
+        utils.openPage("/v/movie-id", "ABF-142", true, { event: { button: 1 } });
+        expect(openTab).toHaveBeenCalledTimes(2);
+        expect(layer.open).not.toHaveBeenCalled();
     });
 
     it("skips DMM locally when the car number is unavailable", async () => {

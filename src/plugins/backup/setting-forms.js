@@ -2,7 +2,7 @@
 async function loadSettingForm(getBean) {
     let e = await storageManager.getSetting();
     $("#videoQuality").val(e.videoQuality), $("#reviewCount").val(e.reviewCount || 20),
-    $("#tagPosition").val(e.tagPosition || "rightTop"), $("#defaultQuickFilterTab").val(e.defaultQuickFilterTab || "waitCheck"), $("#needClosePageBasic").prop("checked", !e.needClosePage || e.needClosePage === _), $("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e.autoRemoveNewVideoMarkAfterBrowse && e.autoRemoveNewVideoMarkAfterBrowse === _), $("#waitCheckCount").val(e.waitCheckCount || 5),
+    $("#tagPosition").val(e.tagPosition || "rightTop"), $("#defaultQuickFilterTab").val(normalizeQuickFilterKey(e.defaultQuickFilterTab)), $("#needClosePageBasic").prop("checked", !e.needClosePage || e.needClosePage === _), $("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e.autoRemoveNewVideoMarkAfterBrowse && e.autoRemoveNewVideoMarkAfterBrowse === _), $("#waitCheckCount").val(e.waitCheckCount || 5),
     $("#checkConcurrencyCount").val(e.checkConcurrencyCount || 2), $("#checkRequestSleep").val(e.checkRequestSleep || 100),
     $("#enableCheckBlacklist").val(e.enableCheckBlacklist || _), $("#checkBlacklist_intervalTime").val(e.checkBlacklist_intervalTime || 12),
     $("#checkBlacklist_ruleTime").val(e.checkBlacklist_ruleTime || 8760), $("#enableCheckFavoriteActress").val(e.enableCheckFavoriteActress || _),
@@ -24,9 +24,6 @@ async function loadSettingForm(getBean) {
     $("#enableHandleSvg").prop("checked", !e.enableHandleSvg || e.enableHandleSvg === _),
     $("#enableSiteSvg").prop("checked", !e.enableSiteSvg || e.enableSiteSvg === _),
     $("#enableCopySvg").prop("checked", !e.enableCopySvg || e.enableCopySvg === _),
-    $("#showFilterItem").prop("checked", !!e.showFilterItem && e.showFilterItem === _),
-    $("#showFilterActorItem").prop("checked", !!e.showFilterActorItem && e.showFilterActorItem === _),
-    $("#showFilterKeywordItem").prop("checked", !!e.showFilterKeywordItem && e.showFilterKeywordItem === _),
     $("#showFavoriteItem").prop("checked", !e.showFavoriteItem || e.showFavoriteItem === _),
     $("#showHasDownItem").prop("checked", !e.showHasDownItem || e.showHasDownItem === _),
     $("#showHasWatchItem").prop("checked", !e.showHasWatchItem || e.showHasWatchItem === _),
@@ -77,41 +74,29 @@ async function initQuickSettingForm(getBean, getSelector, openSettingDialogFn) {
     $("#autoPage").prop("checked", !e.autoPage || e.autoPage === _), $("#translateTitle").prop("checked", !e.translateTitle || e.translateTitle === _),
     $("#enableLoadActressInfo").prop("checked", !e.enableLoadActressInfo || e.enableLoadActressInfo === _),
     $("#enableLoadOtherSite").prop("checked", !e.enableLoadOtherSite || e.enableLoadOtherSite === _),
-    $("#showFilterItem").prop("checked", !!e.showFilterItem && e.showFilterItem === _),
-    $("#showFilterActorItem").prop("checked", !!e.showFilterActorItem && e.showFilterActorItem === _),
-    $("#showFilterKeywordItem").prop("checked", !!e.showFilterKeywordItem && e.showFilterKeywordItem === _),
     $("#showFavoriteItem").prop("checked", !e.showFavoriteItem || e.showFavoriteItem === _),
     $("#showHasDownItem").prop("checked", !e.showHasDownItem || e.showHasDownItem === _),
     $("#showHasWatchItem").prop("checked", !e.showHasWatchItem || e.showHasWatchItem === _),
-    $("#showFilterItem").on("change", (async t => {
-        let n = $("#showFilterItem").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("showFilterItem", n), window.refresh();
-    })), $("#showFilterActorItem").on("change", (async t => {
-        let n = $("#showFilterActorItem").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("showFilterActorItem", n), window.refresh();
-    })), $("#showFilterKeywordItem").on("change", (async t => {
-        let n = $("#showFilterKeywordItem").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("showFilterKeywordItem", n), window.refresh();
-    })), $("#showFavoriteItem").on("change", (async t => {
+    $("#showFavoriteItem").on("change", (async t => {
         let n = $("#showFavoriteItem").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("showFavoriteItem", n), window.refresh();
+        await storageManager.saveSettingItem("showFavoriteItem", n), await jhsEventBus.emit("filter-rules-changed", { setting: "showFavoriteItem" });
     })), $("#showHasDownItem").on("change", (async t => {
         let n = $("#showHasDownItem").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("showHasDownItem", n), window.refresh();
+        await storageManager.saveSettingItem("showHasDownItem", n), await jhsEventBus.emit("filter-rules-changed", { setting: "showHasDownItem" });
     })), $("#showHasWatchItem").on("change", (async t => {
         let n = $("#showHasWatchItem").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("showHasWatchItem", n), window.refresh();
+        await storageManager.saveSettingItem("showHasWatchItem", n), await jhsEventBus.emit("filter-rules-changed", { setting: "showHasWatchItem" });
     }));
-    const t = $("#showFilterItem, #showFilterActorItem, #showFilterKeywordItem, #showFavoriteItem, #showHasDownItem, #showHasWatchItem"), n = () => {
+    const t = $("#showFavoriteItem, #showHasDownItem, #showHasWatchItem"), n = () => {
         const e = $("#showAllItem").is(":checked");
         t.prop("disabled", e), e ? t.attr("data-tip", "请先关闭显示所有才可点击") : t.removeAttr("data-tip");
     };
     $("#showAllItem").prop("checked", !!e.showAllItem && e.showAllItem === _), $("#showAllItem").on("change", (async t => {
         let a = $("#showAllItem").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("showAllItem", a), n(), window.refresh();
+        await storageManager.saveSettingItem("showAllItem", a), n(), await jhsEventBus.emit("filter-rules-changed", { setting: "showAllItem" });
     })), n(), $("#needClosePage").on("change", (async t => {
         await storageManager.saveSettingItem("needClosePage", $("#needClosePage").is(":checked") ? _ : C),
-        window.refresh();
+        await jhsEventBus.emit("filter-rules-changed");
     })), $("#autoPage").on("change", (async t => {
         const n = $("#autoPage").is(":checked") ? _ : C;
         await storageManager.saveSettingItem("autoPage", n), $("#sort-toggle-btn").prop("disabled", n === _).attr("title", n === _ ? "瀑布流模式仅支持默认排序" : "选择列表排序方式");
@@ -154,7 +139,7 @@ async function initQuickSettingForm(getBean, getSelector, openSettingDialogFn) {
 async function saveSettingForm(getBean) {
     let e = await storageManager.getSetting();
     e.videoQuality = $("#videoQuality").val(), e.reviewCount = $("#reviewCount").val(),
-    e.tagPosition = $("#tagPosition").val(), e.defaultQuickFilterTab = $("#defaultQuickFilterTab").val(), e.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e.waitCheckCount = $("#waitCheckCount").val(), e.highlightedTagNumber = $("#highlightedTagNumber").val(),
+    e.tagPosition = $("#tagPosition").val(), e.defaultQuickFilterTab = normalizeQuickFilterKey($("#defaultQuickFilterTab").val()), e.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e.waitCheckCount = $("#waitCheckCount").val(), e.highlightedTagNumber = $("#highlightedTagNumber").val(),
     e.highlightedTagColor = $("#highlightedTagColor").val(), e.checkConcurrencyCount = $("#checkConcurrencyCount").val(),
     e.checkRequestSleep = $("#checkRequestSleep").val(), e.enableCheckBlacklist = $("#enableCheckBlacklist").val(),
     e.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(),
@@ -176,8 +161,7 @@ async function saveSettingForm(getBean) {
     e.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C,
     e.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C,
     e.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C,
-    e.showFilterItem = $("#showFilterItem").is(":checked") ? _ : C, e.showFilterActorItem = $("#showFilterActorItem").is(":checked") ? _ : C,
-    e.showFilterKeywordItem = $("#showFilterKeywordItem").is(":checked") ? _ : C, e.showFavoriteItem = $("#showFavoriteItem").is(":checked") ? _ : C,
+    e.showFavoriteItem = $("#showFavoriteItem").is(":checked") ? _ : C,
     e.showHasDownItem = $("#showHasDownItem").is(":checked") ? _ : C, e.showHasWatchItem = $("#showHasWatchItem").is(":checked") ? _ : C,
     e.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C,
     e.containerColumns = Number($("#containerColumns").val()) || 5, e.containerWidth = Number($("#containerWidth").val()) + 70 || 100,
@@ -191,7 +175,7 @@ async function saveSettingForm(getBean) {
     $("#filterKeywordContainer .keyword-label").toArray().forEach((e => {
         let t = $(e).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
         n.push(t);
-    })), await storageManager.saveTitleFilterKeyword(n), show.ok("保存成功"), window.refresh();
+    })), await storageManager.saveTitleFilterKeyword(n), show.ok("保存成功"), await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" });
     const a = getBean("NewVideoPlugin");
     a && a.resetBtnTip(), getBean("BlacklistPlugin").resetBtnTip(), getBean("BlacklistPlugin").reloadTable();
 }

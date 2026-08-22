@@ -19,23 +19,20 @@ describe("dialog preset sizing", () => {
 
 describe("detail workspace adapters", () => {
     const source = readFileSync(join(process.cwd(), "src/plugins/status/detail-workspace.js"), "utf8");
-    it("only rearranges hideNav detail iframes", () => expect(source).toMatch(/get\("hideNav"\)/));
-    it("keeps separate JavDB and JavBus critical selectors", () => {
-        expect(source).toContain(".column-video-cover");
-        expect(source).toContain(".column-video-info");
-        expect(source).toContain(".screencap");
-        expect(source).toContain(".info");
+    it("keeps the protected JavDB controller and resource root as an adapter boundary", () => {
+        expect(source).toContain('[data-controller="magnet-sort"]');
+        expect(source).toContain('controller.find("#magnets-content")');
+        expect(source).toContain("#magnet-table");
     });
-    it("declares all five workspace regions", () => {
-        for (const name of [ "summary", "gallery", "resources", "related", "reviews" ]) expect(source).toContain(`this.section("${name}"`);
+    it("declares only JHS-owned host slots", () => {
+        for (const name of [ "summary-actions", "related", "reviews" ]) expect(source).toContain(`data-jhs-slot="${name}"`);
     });
-    it("routes semantic panels into one header and scopes mutation observation", () => {
-        expect(source).toContain("data-jhs-section-actions");
-        expect(source).toContain("movePanelToSection");
-        expect(source).toContain("observer.observe(adapter.root[0]");
+    it("adopts owned panels once and observes only resource lifecycle changes", () => {
+        expect(source).toContain("adoptExistingOwnedPanels(root)");
+        expect(source).toContain("observer.observe(adapter.observeRoot[0]");
+        expect(source).toContain('jhsEventBus.emit("magnet-items-updated"');
         expect(source).not.toContain("observer.observe(document.body");
-        expect(source).not.toContain('$("#reviewsFold").parent()');
-        expect(source).not.toContain('$("#relatedFold").parent()');
+        for (const legacy of [ "routeSections", "moveToSection", "movePanelToSection" ]) expect(source).not.toContain(legacy);
     });
 });
 
@@ -62,6 +59,18 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(commandbar).toMatch(/#addBlacklistBtn[\s\S]*jhs-commandbar__context/);
         expect(commandbar).toMatch(/\[ "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo" \]/);
         expect(commandbar).not.toMatch(/\[ "#addBlacklistBtn", "#filterAllVideo"/);
+        expect(commandbar).toContain('quickFilter.detach()');
+        expect(commandbar).toContain("jhs-mobile-filter-menu");
+        expect(commandbar).toContain('item("quickFilter"');
+        expect(commandbar).toContain('item("check", "开始鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort"');
+        expect(commandbar).toContain('+ item("quickFilter"');
+        expect(commandbar).toContain('+ divider + group(item("setting", "设置"))');
+        expect(commandbar).toContain('await this.getBean("ListPageButtonPlugin")?.openWaitCheck?.()');
+        expect(commandbar).not.toContain('$("#waitCheckBtn").click()');
+        expect(commandbar).not.toMatch(/\.jhs-commandbar__filters\s*\{[^}]*overflow-x\s*:\s*auto/);
+        expect(commandbar).not.toMatch(/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*overflow-x\s*:\s*auto/);
+        expect(commandbar).toMatch(/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*flex-wrap:\s*wrap[^}]*overflow:\s*visible/);
+        expect(commandbar).toMatch(/@media \(max-width:\s*768px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*display:\s*none/);
     });
 
     it("loads hot-ranking scores in the background with bounded concurrency and stable sorting data", () => {
@@ -90,6 +99,15 @@ describe("list toolbar and UI cleanup contracts", () => {
             expect(quick).toContain(`"${id}"`);
         for (const id of [ "showFilterItem", "enableLoadActressInfo", "enableVerticalModel", "containerColumns", "containerWidth" ])
             expect(quick).not.toContain(`id="${id}"`);
+    });
+
+    it("removes retired hard-hidden visibility settings from every UI and form path", () => {
+        for (const id of [ "showFilterItem", "showFilterActorItem", "showFilterKeywordItem" ]) {
+            expect(settings).not.toContain(id);
+            expect(settingForms).not.toContain(id);
+        }
+        expect(settingForms).toContain("normalizeQuickFilterKey(e.defaultQuickFilterTab)");
+        expect(settingForms).toContain('normalizeQuickFilterKey($("#defaultQuickFilterTab").val())');
     });
 
     it("renders product labels while retaining internal plugin names as a tooltip", () => {
@@ -126,7 +144,7 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(settingPlugin).toMatch(/on\("click", "#setting-btn, #mini-setting-btn"[\s\S]*?\.html\(""\)\.hide\(\)[\s\S]*?openSettingDialog\(\)/);
         expect(commandbar).toContain('this.getBean("SettingPlugin")?.openQuickSetting()');
         expect(commandbar).not.toContain('this.getBean("SettingPlugin")?.openSettingDialog()');
-        expect(commandbar).toMatch(/const action = \$\(e\.currentTarget\)\.data\("action"\);\s*closeMenu\(!0\);\s*void this\.handleAction\(action\)\.catch/);
+        expect(commandbar).toMatch(/const action = \$\(e\.currentTarget\)\.data\("action"\);[\s\S]*"quickFilter" === action[\s\S]*closeMenu\(!0\);\s*void this\.handleAction\(action\)\.catch/);
         expect(commandbar).toContain('id="jhs-fab" class="jhs-btn"');
         expect(commandbar).toContain('role="menuitem" class="jhs-btn jhs-fab-menu-item"');
         expect(commandbar).toContain('aria-expanded="false"');
@@ -167,17 +185,19 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(related).toContain("jhs-related-heading");
     });
 
-    it("routes ED2K only to 115 and rejects non-Magnet 123 submissions", () => {
-        expect(reviews).toContain('isMagnet && actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn one23-offline-btn"');
-        const submitMagnet = oneTwoThreeOffline.slice(oneTwoThreeOffline.indexOf("async submitMagnet"), oneTwoThreeOffline.indexOf("async markCurrentVideoAsHasDown"));
-        expect(submitMagnet).toContain('if (!/^magnet:/i.test(e)) return void show.error("123 云盘当前仅支持 Magnet 离线")');
-        expect(submitMagnet.indexOf("/^magnet:/i.test(e)")).toBeLessThan(submitMagnet.indexOf("this.getStoredToken()"));
+    it("keeps 123 as an auth/API provider without legacy submission UI", () => {
+        expect(reviews).toContain('jhs-review-offline-btn jhs-offline-btn');
+        expect(oneTwoThreeOffline).toContain("startTokenSync()");
+        expect(oneTwoThreeOffline).toContain("async resolveMagnet");
+        expect(oneTwoThreeOffline).toContain("async submitTask");
+        expect(oneTwoThreeOffline).not.toContain("async submitMagnet");
+        expect(oneTwoThreeOffline).not.toContain("markCurrentVideoAsHasDown");
     });
 
-    it("preserves the empty new-video category as the unknown filter", () => {
+    it("uses an explicit unknown category without conflating it with all", () => {
         const flatList = newVideo.slice(newVideo.indexOf("async getNewVideoFlatList"), newVideo.indexOf("async loadCoverForItems"));
-        expect(flatList).toContain('n = $("#nvCategoryFilter").val()');
-        expect(flatList).not.toContain('$("#nvCategoryFilter").val() || "all"');
+        expect(flatList).toContain('category = $("#nvCategoryFilter").val() || "all"');
+        expect(flatList).toContain('"unknown" === category ? 0 === item.categories.length');
     });
 
     it("uses semantic keyboard popovers and stable sort storage", () => {

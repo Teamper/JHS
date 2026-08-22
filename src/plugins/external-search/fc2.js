@@ -30,45 +30,9 @@ class Fc2Plugin extends BasePlugin {
             skin: "movie-detail-layer",
             scrollbar: !1,
             success: (i, s) => {
-                organizeJhsOwnedDetailWorkspace($(i).find(".movie-detail-container")), void this.loadData(e, t).catch((error => clog.error("FC2 详情加载失败", error))), $("#favoriteBtn").on("click", (async e => {
-                    const a = $("#data-actress").text(), i = $("#data-releaseDate").text();
-                    await storageManager.saveCar({
-                        carNum: t,
-                        url: n,
-                        names: a,
-                        actionType: h,
-                        publishTime: i
-                    }), window.refresh(), layer.closeAll();
-                })), $("#filterBtn").on("click", (e => {
-                    utils.q(e, `是否屏蔽${t}?`, (async () => {
-                        const e = $("#data-actress").text(), a = $("#data-releaseDate").text();
-                        await storageManager.saveCar({
-                            carNum: t,
-                            url: n,
-                            names: e,
-                            actionType: d,
-                            publishTime: a
-                        }), window.refresh(), layer.closeAll(), window.location.href.includes("collection_codes?movieId") && utils.closePage();
-                    }));
-                })), $("#hasDownBtn").on("click", (async e => {
-                    const a = $("#data-actress").text(), i = $("#data-releaseDate").text();
-                    await storageManager.saveCar({
-                        carNum: t,
-                        url: n,
-                        names: a,
-                        actionType: g,
-                        publishTime: i
-                    }), window.refresh(), layer.closeAll();
-                })), $("#hasWatchBtn").on("click", (async e => {
-                    const a = $("#data-actress").text(), i = $("#data-releaseDate").text();
-                    await storageManager.saveCar({
-                        carNum: t,
-                        url: n,
-                        names: a,
-                        actionType: p,
-                        publishTime: i
-                    }), window.refresh(), layer.closeAll();
-                })), $("#search-subtitle-btn").on("click", (e => utils.openPage(`https://subtitlecat.com/index.php?search=${t}`, t, !1, e))),
+                const root = $(i), detailRoot = root.find(".movie-detail-container");
+                organizeJhsOwnedDetailWorkspace(detailRoot), detailStateController.bind({ root: i, layerIndex: s, carNum: t, activityType: "fc2-state", getRecord: () => ({ carNum: t, url: n, names: root.find("#data-actress").text(), publishTime: root.find("#data-releaseDate").text() }) }),
+                void this.loadData(e, t).catch((error => clog.error("FC2 详情加载失败", error))), root.find("#search-subtitle-btn").on("click", (e => utils.openPage(`https://subtitlecat.com/index.php?search=${t}`, t, !1, e))),
                 $("#xunLeiSubtitleBtn").on("click", (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(t))),
                 $("#magnetSearchBtn").on("click", (async () => {
                     let e = await this.getBean("MagnetHubPlugin").createMagnetHub(t);
@@ -133,16 +97,16 @@ class Fc2Plugin extends BasePlugin {
                     continue;
                 }
                 const magnet = `magnet:?xt=urn:btih:${hash}`, size = Number(item.size), filesCount = Number(item.files_count);
-                html += `\n                    <div class="item columns is-desktop ${index % 2 === 0 ? "odd" : ""}"><div class="magnet-name column is-four-fifths"><a href="${magnet}" title="右键点击并选择“复制链接地址”"><span class="name">${escapeHtml(item.name || "")}</span><br><span class="meta">${Number.isFinite(size) ? (size / 1024).toFixed(2) : "0.00"}GB, ${Number.isFinite(filesCount) ? filesCount : 0}个文件</span><br><div class="jhs-toolbar">${item.hd ? '<span class="jhs-badge jhs-badge--accent">高清</span>' : ""}${item.cnsub ? '<span class="jhs-badge jhs-badge--watch">字幕</span>' : ""}</div></a></div><div class="jhs-toolbar column"><button class="jhs-btn jhs-btn--secondary copy-to-clipboard" data-clipboard-text="${magnet}" type="button">复制</button></div><div class="date column"><span class="time">${escapeHtml(item.created_at || "")}</span></div></div>`;
+                html += `\n                    <div class="item columns is-desktop ${index % 2 === 0 ? "odd" : ""}"><div class="magnet-name column is-four-fifths"><a href="${magnet}" title="右键点击并选择“复制链接地址”"><span class="name">${escapeHtml(item.name || "")}</span><br><span class="meta">${Number.isFinite(size) ? (size / 1024).toFixed(2) : "0.00"}GB, ${Number.isFinite(filesCount) ? filesCount : 0}个文件</span><br><div class="jhs-toolbar">${item.hd ? '<span class="jhs-badge jhs-badge--accent">高清</span>' : ""}${item.cnsub ? '<span class="jhs-badge jhs-badge--watch">字幕</span>' : ""}</div></a></div><div class="jhs-toolbar column"><button class="jhs-btn jhs-btn--secondary copy-to-clipboard" data-clipboard-text="${magnet}" type="button">复制</button><button class="jhs-btn jhs-btn--secondary jhs-offline-btn" data-resource="${magnet}" data-jhs-offline-owner="fc2" type="button">离线</button></div><div class="date column"><span class="time">${escapeHtml(item.created_at || "")}</span></div></div>`;
             }
             $("#magnets-content").html(html || '<span class="no-data">暂无磁力信息</span>');
         } catch (error) {
             throw clog.error(error), $("#magnets-content").html(`<div class="movie-error">加载失败: ${escapeHtml(error.message)}</div>`), error;
         }
     }
-    async openFc2Page(e, t, n) {
+    async openFc2Page(e, t, n, navigation = { newTab: !0 }) {
         const a = this.getBean("OtherSitePlugin");
         let i = await a.getJavDbUrl();
-        window.open(`${i}/users/collection_codes?movieId=${e}&carNum=${t}&url=${n}`);
+        utils.openPage(`${i}/users/collection_codes?movieId=${e}&carNum=${encodeURIComponent(t)}&url=${encodeURIComponent(n)}`, t, !0, navigation);
     }
 }

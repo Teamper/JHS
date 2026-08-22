@@ -73,13 +73,23 @@ const o = window.location.href, siteContext = detectSite(window.location), r = s
 
 function escapeHtml(e) { const t = document.createElement("span"); return t.textContent = e, t.innerHTML; }
 
-const CURRENT_DATA_VERSION = 1;
+const CURRENT_DATA_VERSION = 2;
 
 /** 规范化内部番号输入，无效值统一返回 null。 */
 function normalizeCarNum(value) {
     if ("string" != typeof value) return null;
-    const carNum = value.trim();
-    return carNum && ![ "undefined", "null" ].includes(carNum.toLowerCase()) ? carNum : null;
+    let carNum = value.trim();
+    if (!carNum || [ "undefined", "null" ].includes(carNum.toLowerCase())) return null;
+    carNum = carNum.normalize("NFKC").replace(/[‐‑‒–—―﹘﹣－]/g, "-").replace(/[\s_]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").toUpperCase();
+    return carNum ? tryCanonicalizeSimpleCarNum(carNum) : null;
+}
+
+const SIMPLE_CAR_PREFIXES = new Set([ "ABC", "ABP", "ADN", "ATID", "BF", "CAWD", "DLDSS", "DVAJ", "FSDSS", "HEYZO", "HMN", "IPX", "IPZZ", "JUQ", "JUL", "JUX", "MEYD", "MIAA", "MIDE", "MIDV", "MIMK", "MIRD", "NIMA", "PRED", "RBD", "SDDE", "SONE", "SSIS", "SSNI", "STARS", "URE", "VEC", "WAAA", "WANZ", "XVSR" ]);
+
+/** 仅对明确白名单内的简单番号补充分隔符。 */
+function tryCanonicalizeSimpleCarNum(value) {
+    const match = String(value || "").match(/^([A-Z]{2,8})(\d{2,7})$/);
+    return match && SIMPLE_CAR_PREFIXES.has(match[1]) ? `${match[1]}-${match[2]}` : value;
 }
 
 /** 按调用方给定的可靠性顺序选择第一个有效番号。 */

@@ -61,8 +61,8 @@ function diffData(e, t) {
 
 function getSettingSync(key, defaultVal, cacheSettingObj) {
     if (!cacheSettingObj) return defaultVal;
+    if (!Object.prototype.hasOwnProperty.call(cacheSettingObj, key)) return defaultVal;
     const n = cacheSettingObj[key];
-    if (void 0 === n || null === n) return defaultVal;
     if ("string" == typeof n) {
         if ("true" === n.toLowerCase()) return true;
         if ("false" === n.toLowerCase()) return false;
@@ -252,7 +252,11 @@ describe('getSettingSync', () => {
         expect(getSettingSync('name', '', { name: 'hello' })).toBe('hello');
     });
 
-    it('should return null values as default', () => {
-        expect(getSettingSync('key', 'default', { key: null })).toBe('default');
+    it('should preserve false, zero, empty string and null values', () => {
+        expect(getSettingSync('flag', true, { flag: false })).toBe(false);
+        expect(getSettingSync('count', 10, { count: 0 })).toBe(0);
+        expect(getSettingSync('text', 'default', { text: '' })).toBe('');
+        expect(getSettingSync('key', 'default', { key: null })).toBeNull();
+        expect(getSettingSync('count', 10, { count: '0' })).toBe(0);
     });
 });

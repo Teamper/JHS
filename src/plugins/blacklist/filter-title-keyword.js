@@ -15,7 +15,7 @@ class FilterTitleKeywordPlugin extends BasePlugin {
                     clientY: e.clientY + 80
                 };
                 utils.q(n, `是否屏蔽标题关键词 ${t}?`, (async () => {
-                    await storageManager.saveTitleFilterKeyword(t), window.refresh(), utils.closePage();
+                    await storageManager.saveTitleFilterKeyword(t), await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" }), utils.closePage();
                 }));
             }
         }));

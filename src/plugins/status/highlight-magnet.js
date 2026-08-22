@@ -1,4 +1,9 @@
 class HighlightMagnetPlugin extends BasePlugin {
+    async handle() {
+        window.isDetailPage && jhsEventBus.on("magnet-items-updated", (() => {
+            void storageManager.getSetting("enableMagnetsFilter", _).then((enabled => enabled === _ ? this.doFilterMagnet() : this.showAll()));
+        }));
+    }
     async initCss() {
         return `<style>.jhs-magnet-score{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:600;vertical-align:middle;cursor:help}</style>`;
     }
@@ -44,7 +49,7 @@ class HighlightMagnetPlugin extends BasePlugin {
         })), n && $("#magnets-content .magnet-row").not(".high-quality").hide(), this.updateFilterHint(n);
     }
     handleBus() {
-        l && isDetailPage && utils.loopDetector((() => $("#magnet-table td a").length > 0), (() => {
+        if (l && isDetailPage) {
             const e = $("#magnet-table tr");
             let n = !1;
             e.each(((e, a) => {
@@ -59,7 +64,7 @@ class HighlightMagnetPlugin extends BasePlugin {
                 const n = $(t);
                 n.hasClass("high-quality") || n.hide();
             })), this.updateFilterHint(n);
-        }));
+        }
     }
     showAll() {
         $("#enable-magnets-filter").removeClass("do-hide").removeAttr("data-tip");

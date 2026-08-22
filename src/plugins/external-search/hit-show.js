@@ -52,8 +52,8 @@ class HitShowPlugin extends BasePlugin {
     }
     async initializeRenderedList() {
         const listPage = this.getBean("ListPagePlugin");
-        listPage.replaceHdImg(), await listPage.doFilter(), listPage.applyVisibility();
-        $(listPage.getSelector().itemSelector + " a").attr("target", "_blank"), this.getBean("CoverButtonPlugin").addSvgBtn();
+        listPage.replaceHdImg(), await listPage.doFilter(), listPage.applyVisibility(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector);
+        this.getBean("CoverButtonPlugin").addSvgBtn();
     }
     toolBar(e) {
         $("#jhs-hitshow-period").remove();

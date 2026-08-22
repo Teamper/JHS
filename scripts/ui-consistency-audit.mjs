@@ -58,8 +58,8 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(repoRoot, "JHS.user.js"), "utf8")
 ]);
 
-requireMatch(main, /^\/\/ @version\s+6\.3\.0$/m, "userscript version must remain 6.3.0");
-requireMatch(packageSource, /"version"\s*:\s*"6\.3\.0"/, "package version must remain 6.3.0");
+requireMatch(main, /^\/\/ @version\s+6\.4\.0$/m, "userscript version must be frozen at 6.4.0");
+requireMatch(packageSource, /"version"\s*:\s*"6\.4\.0"/, "package version must be frozen at 6.4.0");
 
 for (const token of [
   "--jhs-space-1", "--jhs-space-6", "--jhs-radius-xs", "--jhs-radius-pill",
@@ -106,13 +106,19 @@ requireMatch(utils, /getResponsiveArea\(e\)/, "legacy responsive dialog API must
 
 for (const section of ["summary", "gallery", "resources", "related", "reviews"])
   requireMatch(detail, new RegExp(`data-jhs-section=\\"\\$\\{name\\}\\"|section\\(\\"${section}\\"`), `detail workspace missing ${section}`);
-requireMatch(detail, /get\("hideNav"\)/, "detail workspace must be limited to JHS iframe navigation");
+requireMatch(detail, /if \(!window\.isDetailPage\) return/, "detail workspace must be limited to detail pages");
 requireMatch(commandbar, /id="jhs-page-commandbar"/, "page command bar is missing");
 if ((commandbar.match(/id="jhs-page-commandbar"/g) || []).length !== 1) failures.push("page command bar must have one source template");
 requireMatch(commandbar, /ArrowDown.*ArrowUp.*Home.*End/s, "batch menu missing keyboard navigation");
 requireMatch(manager, /afterPluginsReady/, "plugin manager missing afterPluginsReady lifecycle");
 requireMatch(commandbar, /afterPluginsReady\(\)[\s\S]*buildCommandBar/, "command bar must assemble after plugins are ready");
-requireMatch(commandbar, /if \(filterButtons\.length\)[\s\S]{0,180}jhs-commandbar__filters/, "command bar must create the filter slot only when filters exist");
+requireMatch(commandbar, /quickFilter\.length[\s\S]{0,180}jhs-commandbar__filters/, "command bar must move the complete quick-filter control when present");
+requireMatch(commandbar, /jhs-mobile-filter-menu[\s\S]*jhs-mobile-filter-option/, "mobile list filtering must remain available outside the hidden command bar");
+forbidMatch(commandbar, /\.jhs-commandbar__filters\s*\{[^}]*overflow-x\s*:\s*auto/, "command bar filters must not clip popovers");
+forbidMatch(commandbar, /@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*overflow-x\s*:\s*auto/, "tablet command bar must wrap instead of scroll");
+requireMatch(commandbar, /@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*flex-wrap:\s*wrap[^}]*overflow:\s*visible/, "tablet command bar must wrap with visible popovers");
+requireMatch(commandbar, /@media \(max-width:\s*768px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*display:\s*none/, "mobile command bar must stay hidden");
+forbidMatch(commandbar, /\$\("#waitCheckBtn"\)\.click\(\)/, "mobile identification must call its business API directly");
 requireMatch(commandbar, /\[ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" \]/, "command bar must expose exactly the three primary entries");
 requireMatch(commandbar, /\[ "#statsBtn", "#blacklistBtn" \][\s\S]*jhs-commandbar__menu/, "statistics and blacklist must be grouped in more menu");
 requireMatch(commandbar, /#addBlacklistBtn[\s\S]*jhs-commandbar__context/, "actor context action must remain directly visible");
@@ -147,7 +153,11 @@ forbidMatch(logger, /\.image-hover-preview\s*\{[^}]*display:\s*none/, "image pre
 forbidMatch(logger, /boundElements/, "image preview must not retain rendered elements");
 requireMatch(logger, /this\.placement = this\.choosePlacement/, "image preview must lock one viewport placement per hover");
 forbidMatch(detail, /observer\.observe\(document\.body/, "detail workspace must not observe the entire document body");
-requireMatch(detail, /data-jhs-section-actions/, "detail workspace headers must expose an action slot");
+requireMatch(detail, /controller\.find\("#magnets-content"\)/, "JavDB resource adapter must preserve the magnet controller boundary");
+requireMatch(detail, /data-jhs-slot="summary-actions"[\s\S]*data-jhs-slot="reviews"[\s\S]*data-jhs-slot="related"/, "host workspace must expose summary actions and reviews-before-related post-resource slots");
+requireMatch(detail, /observer\.observe\(adapter\.observeRoot\[0\]/, "detail resource lifecycle must stay scoped to the resource observe root");
+forbidMatch(detail, /\.jhs-detail-host-workspace\s*\{[^}]*display\s*:\s*flex|data-jhs-host-region[^}]*order\s*:/, "host details must not be converted to an ordered flex layout");
+forbidMatch(detail, /routeSections|moveToSection|movePanelToSection/, "detail workspace must not continuously remount panels");
 for (const [source, label] of [[reviews, "reviews"], [related, "related lists"]]) {
   forbidMatch(source, /item columns is-desktop|jhs-layout-[a-f0-9]{8}/, `${label} must not reuse host or migration layout classes`);
 }
@@ -157,7 +167,7 @@ requireMatch(reviews, /font-size:15px[\s\S]*font-weight:600/, "review author mus
 requireMatch(reviews, /jhs-review-content[^}]*font-size:16px[^}]*line-height:1\.7/, "review body readability contract is missing");
 forbidMatch(reviews, /jhs-review-content[^}]*max-width/, "review body must use the full available width");
 requireMatch(related, /jhs-related-heading[\s\S]*jhs-related-meta/, "related lists must use one-column heading and metadata structure");
-requireMatch(detail, /normalizeHostActions\(adapter\.info\)/, "detail workspace must scope host action normalization to the info container");
+requireMatch(detail, /normalizeHostActions\(root\.find\("\.video-meta-panel"\)\.first\(\)\)/, "JavDB host action normalization must stay scoped to its info container");
 requireMatch(detail, /jhs-detail-host-action/, "detail workspace host action appearance class is missing");
 
 requireMatch(listButtons, /role="menuitemradio"/, "sort control must use menuitemradio options");
@@ -173,7 +183,7 @@ forbidMatch(coverButtons, /elastic|jelly|right:\s*-/, "card menus must not use b
 requireMatch(injection, /\.movie-list \.item \.cover img[\s\S]*transform:none!important[\s\S]*transition:none!important/, "JavDB cover reset is missing");
 forbidMatch(injection, /scale\(1\.04\)|\.masonry \.item:hover/, "JavBus cover hover effects must remain removed");
 
-requireMatch(magnet, /class="magnet-copy"[\s\S]*copy-btn[\s\S]*one23-offline-btn/, "resource row must directly contain copy and 123 offline buttons");
+requireMatch(magnet, /class="magnet-copy"[\s\S]*copy-btn[\s\S]*jhs-offline-btn/, "resource row must directly contain copy and unified offline buttons");
 forbidMatch(magnet, /magnet-(?:more|overflow)|more-menu/, "resource row must not hide actions in a more menu");
 requireMatch(newVideo, /repeat\(auto-fit,minmax\(min\(100%,260px\),1fr\)\)/, "new video cards must use the adaptive 260px grid");
 requireMatch(newVideo, /\.newVideoToolBox\s*\{[^}]*width:\s*100%[^}]*min-width:\s*0[^}]*box-sizing:\s*border-box/, "new video workspace must contain its own width");
@@ -234,6 +244,7 @@ forbidMatch(highlightMagnet, /#enable-magnets-filter[^\n]{0,100}(?:hide\(|addCla
 requireMatch(highlightMagnet, /removeClass\("do-hide"\)[\s\S]{0,160}未识别到可过滤项/, "magnet filtering must retain a no-match hint");
 requireMatch(highlightMagnet, /showAll\(\)[\s\S]{0,260}removeClass\("do-hide"\)[\s\S]{0,260}\.show\(\)/, "disabling magnet filtering must restore every row");
 requireMatch(detail, /#enable-magnets-filter/, "FC2 detail workspace must collect the magnet filter action");
+requireMatch(detail, /container\.append\(summary, gallery, resources, reviews, related\)/, "FC2 workspace must place reviews before related lists");
 requireMatch(commandbar, /<button type="button" id="jhs-fab" class="jhs-btn"/, "mobile FAB must be a native JHS button");
 requireMatch(commandbar, /role="menuitem" class="jhs-btn jhs-fab-menu-item"/, "mobile FAB items must use native menu buttons");
 requireMatch(commandbar, /ArrowDown[\s\S]*ArrowUp[\s\S]*Home[\s\S]*End/, "mobile FAB menu must support keyboard navigation");

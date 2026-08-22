@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      6.3.0
+// @version      6.4.0
 // @author       JHS Contributors
 // @description  JAV Helper Suite：为 JavDB / JavBus 提供浏览、收藏、筛选、资源检索、数据备份与统计增强。
 // @license      MIT
@@ -111,17 +111,12 @@ const pluginManager = function() {
         return e.includes("advanced_search?type=3") || e.includes("advanced_search?type=100");
     }();
     const e = (async () => {
-        const e = await storageManager.getDataVersion();
-        e < CURRENT_DATA_VERSION && (await storageManager.merge_table_name(),
-        await storageManager.clean_no_url_blacklist(),
-        await storageManager.async_merge_other(),
-        await storageManager.merge_blacklist(),
-        await storageManager.merge_favoriteActress(),
-        await storageManager.merge_tow_car_list_table(),
-        await storageManager.setDataVersion(CURRENT_DATA_VERSION));
+        await runDataMigrations(storageManager), await stateService.recoverPendingTransaction();
     })();
-    await Promise.all([ pluginManager.processCss(), e, applyTheme() ]),
+    await e, await Promise.all([ pluginManager.processCss(), applyTheme() ]),
     r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie) && show.error("请切换到中文语言下才可正常使用本脚本", {
         duration: -1
     }), await pluginManager.processPlugins();
-})().catch((e => console.error("[JHS] bootstrap failed:", e)));
+})().catch((e => {
+    console.error("[JHS] bootstrap failed:", e), show.error(e?.message || "JHS 启动失败", { duration: -1 });
+}));

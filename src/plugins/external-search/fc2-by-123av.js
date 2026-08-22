@@ -99,48 +99,11 @@ class Fc2By123AvPlugin extends BasePlugin {
             skin: "movie-detail-layer",
             scrollbar: !1,
             success: async (n, a) => {
-                organizeJhsOwnedDetailWorkspace($(n).find(".movie-detail-container")), utils.setupEscClose(a), this.loadData(e, t);
+                const root = $(n), detailRoot = root.find(".movie-detail-container");
+                organizeJhsOwnedDetailWorkspace(detailRoot), detailStateController.bind({ root: n, layerIndex: a, carNum: e, activityType: "fc2-state", getRecord: () => ({ carNum: e, url: t, names: root.find("#data-actress").text(), publishTime: root.find("#data-publishTime").text() }) }), utils.setupEscClose(a), this.loadData(e, t);
                 let i = e.replace("FC2-", "");
                 $("#magnets-content").append(await this.getBean("MagnetHubPlugin").createMagnetHub(i)),
-                $("#favoriteBtn").on("click", (async n => {
-                    const a = $("#data-actress").text(), i = $("#data-publishTime").text();
-                    await storageManager.saveCar({
-                        carNum: e,
-                        url: t,
-                        names: a,
-                        actionType: h,
-                        publishTime: i
-                    }), window.refresh(), layer.closeAll();
-                })), $("#filterBtn").on("click", (n => {
-                    utils.q(n, `是否屏蔽${e}?`, (async () => {
-                        const n = $("#data-actress").text(), a = $("#data-publishTime").text();
-                        await storageManager.saveCar({
-                            carNum: e,
-                            url: t,
-                            names: n,
-                            actionType: d,
-                            publishTime: a
-                        }), window.refresh(), layer.closeAll(), window.location.href.includes("collection_codes?movieId") && utils.closePage();
-                    }));
-                })), $("#hasDownBtn").on("click", (async n => {
-                    const a = $("#data-actress").text(), i = $("#data-publishTime").text();
-                    await storageManager.saveCar({
-                        carNum: e,
-                        url: t,
-                        names: a,
-                        actionType: g,
-                        publishTime: i
-                    }), window.refresh(), layer.closeAll();
-                })), $("#hasWatchBtn").on("click", (async n => {
-                    const a = $("#data-actress").text(), i = $("#data-publishTime").text();
-                    await storageManager.saveCar({
-                        carNum: e,
-                        url: t,
-                        names: a,
-                        actionType: p,
-                        publishTime: i
-                    }), window.refresh(), layer.closeAll();
-                })), $("#search-subtitle-btn").on("click", (t => utils.openPage(`https://subtitlecat.com/index.php?search=${e}`, e, !1, t))),
+                root.find("#search-subtitle-btn").on("click", (t => utils.openPage(`https://subtitlecat.com/index.php?search=${e}`, e, !1, t))),
                 $("#xunLeiSubtitleBtn").on("click", (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(e)));
                 let s = e.replace("FC2-", "");
                 void this.getBean("OtherSitePlugin").loadOtherSite(s, e).catch((error => clog.error("FC2 外部站点加载失败", error)));

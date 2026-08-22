@@ -105,7 +105,7 @@ class StorageManager {
         return this.cacheStatusMap;
     }
     async getCar(e) {
-        return (await this.getCarMap()).get(e);
+        return (await this.getCarMap()).get(normalizeCarNum(e));
     }
     _saveSingleCar(e, t) {
         let {carNum: n, url: a, names: i, actionType: s, publishTime: o, starId: r} = e;
@@ -158,53 +158,47 @@ class StorageManager {
         }
     }
     async saveCar(e) {
-        const t = await this.getCarList();
-        this._saveSingleCar(e, t), await this._setItemAndInvalidate(this.car_list_key, t), await this.removeNewVideoList([ e.carNum ]);
+        const carNum = normalizeCarNum(e.carNum), flag = legacyActionToFlag(e.actionType);
+        if (!carNum) throw show.error("番号为空!"), new Error("番号为空!");
+        if (!e.url) throw show.error("url为空!"), new Error("url为空!");
+        if (!flag) throw show.error("actionType错误, 请联系作者更正: " + e.actionType), new Error("actionType错误, 请联系作者更正: " + e.actionType);
+        const existing = await this.getCar(carNum);
+        if (normalizeStateFlags(existing?.stateFlags)[flag]) {
+            const messages = { blocked: "已在屏蔽列表中", favorite: "已在收藏列表中", downloaded: "已标记为已下载", watched: "已标记为已观看" }, message = `${carNum} ${messages[flag]}`;
+            throw show.error(message), new Error(message);
+        }
+        return stateService.patch(carNum, { [flag]: !0 }, { type: "legacy-save", record: { ...e, carNum } });
     }
     async updateCarInfo(e) {
         let {carNum: t, url: n, names: a, actionType: i, publishTime: s, remark: o} = e;
         if (!t) throw show.error("番号为空!"), new Error("番号为空!");
         if (!n) throw show.error("url为空!"), new Error("url为空!");
         a && (a = a.trim());
-        const r = await this.getCarList();
-        let l = r.find((e => e.carNum === t));
+        t = normalizeCarNum(t);
+        const l = await this.getCar(t);
         if (!l) {
             const e = "数据不存在: " + t;
             throw show.error(e), new Error(e);
         }
-        switch (l.names = a, l.url = n, l.remark = o, l.updateDate = utils.getNowStr(),
-        i) {
-          case d:
-            l.status = d;
-            break;
-
-          case h:
-            l.status = h;
-            break;
-
-          case g:
-            l.status = g;
-            break;
-
-          case p:
-            l.status = p;
-            break;
-
-          default:
-            const e = "actionType错误, 请联系作者更正: " + i;
-            throw show.error(e), new Error(e);
-        }
-        await this._setItemAndInvalidate(this.car_list_key, r), await this.removeNewVideoList([ t ]);
+        const flag = legacyActionToFlag(i);
+        if (!flag) { const e = "actionType错误, 请联系作者更正: " + i; throw show.error(e), new Error(e); }
+        return stateService.patch(t, { [flag]: !0 }, { type: "legacy-update", record: { carNum: t, names: a, url: n, remark: o, publishTime: s } });
     }
     async saveCarList(e) {
         if (!e || !Array.isArray(e) || 0 === e.length) throw show.error("记录列表为空!"), new Error("记录列表为空!");
-        const t = await this.getCarList();
-        for (const a of e) try {
-            this._saveSingleCar(a, t);
-        } catch (n) {
-            throw n;
+        const existing = await this.getCarMap(), seen = new Set, groups = new Map;
+        for (const item of e) {
+            const carNum = normalizeCarNum(item.carNum), flag = legacyActionToFlag(item.actionType);
+            if (!carNum) throw show.error("番号为空!"), new Error("番号为空!");
+            if (!item.url) throw show.error("url为空!"), new Error("url为空!");
+            if (!flag) throw new Error("actionType错误, 请联系作者更正: " + item.actionType);
+            const duplicateKey = `${carNum}:${flag}`;
+            if (seen.has(duplicateKey) || normalizeStateFlags(existing.get(carNum)?.stateFlags)[flag]) throw new Error(`${carNum} 状态已存在`);
+            seen.add(duplicateKey);
+            const group = groups.get(flag) || [];
+            group.push({ ...item, carNum }), groups.set(flag, group);
         }
-        await this._setItemAndInvalidate(this.car_list_key, t), await this.removeNewVideoList(e.map((e => e.carNum)));
+        for (const [flag, records] of groups) await stateService.patch(records.map((item => item.carNum)), { [flag]: !0 }, { type: "legacy-batch-save", records });
     }
     async removeNewVideoList(e) {
         return this.withActressLock(async () => {
@@ -224,13 +218,12 @@ class StorageManager {
         });
     }
     async removeCar(e) {
-        const t = await this.getCarList(), n = t.length, a = t.filter((t => t.carNum !== e));
-        return a.length === n ? (show.error(`${e} 不存在`), !1) : (await this._setItemAndInvalidate(this.car_list_key, a),
-        !0);
+        const result = await stateService.remove(e);
+        return result.changed.length ? !0 : (show.error(`${e} 不存在`), !1);
     }
     async batchRemoveCars(e) {
-        const t = await this.getCarList(), n = t.length, a = new Set(e), i = t.filter((e => !a.has(e.carNum))), s = n - i.length;
-        return 0 !== s && (await this._setItemAndInvalidate(this.car_list_key, i), s);
+        const result = await stateService.remove(e);
+        return result.changed.length || !1;
     }
     async getBlacklist() {
         return this._readCached("cacheBlacklist", this.blacklist_key, []);
@@ -379,13 +372,15 @@ class StorageManager {
     async getSetting(e = null, t) {
         let n = await this._readCached("cacheSettingObj", this.setting_key, {});
         if (null === e) return n;
+        if (!Object.prototype.hasOwnProperty.call(n, e)) return t;
         const a = n[e];
-        return a ? "true" === a || "false" === a ? "true" === a.toLowerCase() : "string" != typeof a || "" === a.trim() || isNaN(Number(a)) ? a : Number(a) : t;
+        return "true" === a || "false" === a ? "true" === a.toLowerCase() : "string" != typeof a || "" === a.trim() || isNaN(Number(a)) ? a : Number(a);
     }
     getSettingSync(e, t) {
         if (!this.cacheSettingObj) return t;
+        if (!Object.prototype.hasOwnProperty.call(this.cacheSettingObj, e)) return t;
         const n = this.cacheSettingObj[e];
-        return n ? "true" === n || "false" === n ? "true" === n.toLowerCase() : "string" != typeof n || "" === n.trim() || isNaN(Number(n)) ? n : Number(n) : t;
+        return "true" === n || "false" === n ? "true" === n.toLowerCase() : "string" != typeof n || "" === n.trim() || isNaN(Number(n)) ? n : Number(n);
     }
     async saveSetting(e) {
         e ? (await this._setItemAndInvalidate(this.setting_key, e), window.clean_cacheSettingObj()) : show.error("设置对象为空");
@@ -398,26 +393,27 @@ class StorageManager {
         }), window.clean_cacheSettingObj();
     }
     async importData(e) {
-        const VALID_KEYS = new Set(["car_list", "filter_keyword_title", "filter_keyword_review", "setting", "blacklist", "blacklist_car_list", "third_party_ttl_cache", "favorite_actresses", "highlighted_tags"]);
-        const t = [];
-        for (const n in e) {
-            if (!VALID_KEYS.has(n)) { clog.warn(`[导入] 跳过未知数据键: ${n}`); continue; }
-            t.push(this._setItemAndInvalidate(n, e[n]));
+        validatePortableData(e);
+        await hasPortableUserData(this) && await this.createSnapshot("导入前自动备份", "auto-import");
+        const validKeys = new Set([ ...PORTABLE_DATA_KEYS, "data_version" ]), writes = [];
+        for (const key in e) {
+            if (!validKeys.has(key)) { clog.warn(`[导入] 跳过未知数据键: ${key}`); continue; }
+            writes.push("data_version" === key ? this.setDataVersion(e[key]) : this._setItemAndInvalidate(key, e[key]));
         }
-        await Promise.all(t);
-        const n = [];
-        await this.forage.iterate(((t, a) => {
-            a in e || n.push(this.forage.removeItem(a));
-        }));
-        await Promise.all(n);
-        this._invalidateCache();
+        await Promise.all(writes), this._invalidateCache(), await runDataMigrations(this), await window.stateService?.recoverPendingTransaction();
+    }
+    async exportPortableData() {
+        const data = { data_version: await this.getDataVersion() };
+        for (const key of PORTABLE_DATA_KEYS) {
+            const value = await this.forage.getItem(key);
+            null != value && (data[key] = value);
+        }
+        return data;
     }
     async exportData() {
-        const e = {};
-        if (await this.forage.iterate(((t, n) => {
-            e[n] = t;
-        })), 0 === Object.keys(e).length) throw new Error("没有可导出的数据");
-        return e;
+        const data = await this.exportPortableData();
+        if (Object.keys(data).length <= 1) throw new Error("没有可导出的数据");
+        return data;
     }
     async getThirdPartyCache() {
         return await this.forage.getItem(this.third_party_cache_key) || {};
@@ -427,6 +423,10 @@ class StorageManager {
     }
     async clearThirdPartyCache() {
         await this.forage.removeItem(this.third_party_cache_key);
+    }
+    async deleteCachedRequest(key) {
+        const cache = await this.getThirdPartyCache();
+        Object.prototype.hasOwnProperty.call(cache, key) && (delete cache[key], await this.setThirdPartyCache(cache));
     }
     async cachedRequest(e, t, n) {
         const a = Date.now(), i = await this.getThirdPartyCache(), s = i[e];
@@ -666,14 +666,15 @@ class StorageManager {
                 source: t,
                 time: utils.getNowStr(),
                 itemCount: i,
-                data: a
+                data: a,
+                kind: "snapshot"
             };
             n.push(s), n.length > 10 && n.splice(0, n.length - 10);
             return await this._saveSnapshots(n), clog.log(`创建快照: ${s.name} (${t})`), s;
         });
     }
     async getSnapshotList() {
-        return (await this._getSnapshots()).map((e => ({ id: e.id, name: e.name, source: e.source, time: e.time, itemCount: e.itemCount })));
+        return (await this._getSnapshots()).map((e => ({ id: e.id, name: e.name, source: e.source, time: e.time, itemCount: e.itemCount, kind: e.kind || "snapshot", targetDataVersion: e.targetDataVersion, appVersion: e.appVersion })));
     }
     async getSnapshot(e) {
         return (await this._getSnapshots()).find((t => t.id === e)) || null;
@@ -689,7 +690,6 @@ class StorageManager {
         const t = await this.getSnapshot(e);
         if (!t) throw new Error("快照不存在: " + e);
         if (!t.data || "object" != typeof t.data) throw new Error("快照数据损坏");
-        await this.createSnapshot("恢复前自动备份", "auto-restore");
         const n = { ...t.data };
         for (const a of this._snapshotMetaKeys()) delete n[a];
         await this.importData(n);

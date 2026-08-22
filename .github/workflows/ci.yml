@@ -5,15 +5,38 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  check:
+  node20:
+    name: Node 20 compatibility
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run test
+      - run: npm run build
+      - name: Verify tracked userscript is current
+        run: git diff --exit-code -- JHS.user.js
+
+  check:
+    name: Node 22 full check
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.push_release.outputs.should_release || steps.manual_release.outputs.should_release }}
+      version: ${{ steps.push_release.outputs.version || steps.manual_release.outputs.version }}
+      tag: ${{ steps.push_release.outputs.tag || steps.manual_release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -22,3 +45,73 @@ jobs:
       - run: npm run check
       - name: Verify tracked userscript is current
         run: git diff --exit-code -- JHS.user.js
+      - name: Validate pull request version direction
+        if: github.event_name == 'pull_request'
+        run: node scripts/release-contract.mjs --base-ref "${{ github.event.pull_request.base.sha }}"
+      - name: Detect main version release
+        id: push_release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: node scripts/release-contract.mjs --base-ref "${{ github.event.before }}" --github-output "$GITHUB_OUTPUT"
+      - name: Select recovery release
+        id: manual_release
+        if: github.event_name == 'workflow_dispatch'
+        run: node scripts/release-contract.mjs --force-release --github-output "$GITHUB_OUTPUT"
+
+  release:
+    name: Publish immutable release
+    needs: [node20, check]
+    if: needs.check.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: jhs-release
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Revalidate release identity and extract notes
+        if: github.event_name == 'push'
+        run: node scripts/release-contract.mjs --base-ref "${{ github.event.before }}" --notes-file /tmp/release-body.md
+      - name: Revalidate recovery identity and extract notes
+        if: github.event_name == 'workflow_dispatch'
+        run: node scripts/release-contract.mjs --force-release --notes-file /tmp/release-body.md
+      - name: Validate immutable tag and release state
+        id: release_state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.check.outputs.tag }}
+        shell: bash
+        run: |
+          git fetch --force --tags origin
+          if git rev-parse --verify --quiet "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            test "$(git rev-list -n 1 "${RELEASE_TAG}")" = "${GITHUB_SHA}"
+            echo "create_tag=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "create_tag=true" >> "${GITHUB_OUTPUT}"
+          fi
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_TAG} already exists and cannot be overwritten" >&2
+            exit 1
+          fi
+      - name: Create annotated release tag
+        if: steps.release_state.outputs.create_tag == 'true'
+        env:
+          RELEASE_TAG: ${{ needs.check.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${RELEASE_TAG}" "${GITHUB_SHA}" -m "JHS v${RELEASE_VERSION}"
+          git push origin "refs/tags/${RELEASE_TAG}"
+      - name: Create immutable GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.check.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.check.outputs.version }}
+        run: gh release create "${RELEASE_TAG}" JHS.user.js --verify-tag --title "JHS ${RELEASE_VERSION}" --notes-file /tmp/release-body.md --latest

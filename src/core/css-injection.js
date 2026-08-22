@@ -55,10 +55,6 @@ const F = `
     .tabulator-cell { height:auto!important; }
     .tabulator .tabulator-cell { white-space:normal!important; text-overflow:clip!important; }
     .tabulator-tableholder { overflow-x:hidden!important; }
-    ${function() {
-        const e = [ ".jhs-scrollbar", ".content-panel", ".tabulator-tableholder", ".has-navbar-fixed-top", ".layui-layer-content" ], t = (e, t) => e.map((e => `${e}${t}`)).join(","), n = "::-webkit-scrollbar-track", a = "::-webkit-scrollbar-thumb", i = "::-webkit-scrollbar-thumb:hover";
-        return `${t(e, "::-webkit-scrollbar")}{width:6px;height:6px}${t(e, n)}{background:var(--jhs-surface-2);border-radius:10px}${t(e, a)}{background:var(--jhs-border-strong);border-radius:10px}${t(e, i)}{background:var(--jhs-text-faint)}`;
-    }()}
 </style>`;
 
 H(buildThemeCss());

@@ -3,7 +3,7 @@ class DetailPageButtonPlugin extends BasePlugin {
         return "DetailPageButtonPlugin";
     }
     constructor() {
-        super(), this.answerCount = 1;
+        super(), this.answerCount = 1, this.stateBinding = null;
     }
     async handle() {
         this.hideVideoControls(), window.isDetailPage && (await this.createMenuBtn(), await this.autoRemoveNewVideoMark());
@@ -14,14 +14,13 @@ class DetailPageButtonPlugin extends BasePlugin {
             if (e !== _) return;
             const t = this.getPageInfo();
             if (!t.carNum) return;
-            await storageManager.removeNewVideoList([ t.carNum ]), window.refresh();
+            await stateService.removeFromNewVideoList([ t.carNum ], "browse");
         } catch (e) { clog.error("自动移除新作品标记失败:", e); }
     }
     async createMenuBtn() {
         const e = this.getPageInfo(), t = e.carNum, n = `\n            <div class="jhs-detail-btn-row jhs-layout-e2965a97">\n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="filterBtn" class="jhs-btn jhs-btn--filter jhs-layout-44293084">\n                        <span>${m}</span>\n                    </button>\n                    <button type="button" id="favoriteBtn" class="jhs-btn jhs-btn--fav jhs-layout-44293084">\n                        <span>${v}</span>\n                    </button>\n                    <button type="button" id="hasDownBtn" class="jhs-btn jhs-btn--down jhs-layout-44293084">\n                        <span>${y}</span>\n                    </button>\n                    <button type="button" id="hasWatchBtn" class="jhs-btn jhs-btn--watch jhs-layout-44293084">\n                        <span>${k}</span>\n                    </button>\n                </div>\n        \n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="enable-magnets-filter" class="jhs-btn jhs-btn--watch jhs-layout-5f3e3549">\n                        <span id="magnets-span">关闭磁力过滤</span>\n                    </button>\n                    <button type="button" id="magnetSearchBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>磁力搜索</span>\n                    </button>\n                    <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>字幕 (迅雷)</span>\n                    </button>\n                    <button type="button" id="search-subtitle-btn" class="jhs-btn jhs-btn--accent jhs-layout-f43f0d6d">\n                        <span>字幕 (SubTitleCat)</span>\n                    </button>\n                </div>\n            </div>\n        `;
-        r && $(".tabs").after(n), l && $("#mag-submit-show").before(n), $("#favoriteBtn").on("click", (() => this.favoriteOne())),
-        $("#filterBtn").on("click", (e => this.filterOne(e))), $("#hasDownBtn").on("click", (async () => this.hasDownOne())),
-        $("#hasWatchBtn").on("click", (async () => this.hasWatchOne())), $("#magnetSearchBtn").on("click", (async () => {
+        const workspaceSlot = this.getBean("DetailWorkspacePlugin")?.getSlot("summary-actions");
+        workspaceSlot?.length ? workspaceSlot.append(n) : r ? $(".tabs").after(n) : l && $("#mag-submit-show").before(n), $("#magnetSearchBtn").on("click", (async () => {
             let t = await this.getBean("MagnetHubPlugin").createMagnetHub(e.carNum);
             layer.open({
                 type: 1,
@@ -46,67 +45,28 @@ class DetailPageButtonPlugin extends BasePlugin {
             $("#filterBtn, #favoriteBtn, #hasDownBtn, #hasWatchBtn, #magnetSearchBtn, #xunLeiSubtitleBtn, #search-subtitle-btn").prop("disabled", !0).attr("title", "番号不可用");
             return void clog.warn("详情操作不可用：番号不可用");
         }
-        await this.showStatus(t);
+        this.stateBinding = detailStateController.bind({ root: document, carNum: t, activityType: "detail-state", getRecord: () => this.getStateRecord() });
     }
     async showStatus(e) {
-        const t = $("#filterBtn span"), n = $("#favoriteBtn span"), a = $("#hasDownBtn span"), i = $("#hasWatchBtn span");
-        t.text(m), n.text(v), a.text(y), i.text(k);
-        const o = await storageManager.getCar(e);
-        if (o) switch (o.status) {
-          case d:
-            t.text(u);
-            break;
-
-          case h:
-            n.text(b);
-            break;
-
-          case g:
-            a.text("已标记下载");
-            break;
-
-          case p:
-            i.text("已标记观看");
-        }
+        return detailStateController.render({ root: document, carNum: e });
     }
-    async favoriteOne() {
-        try {
-            let e = this.getPageInfo();
-            if (!e.carNum) return void show.error("番号不可用，无法收藏");
-            await storageManager.saveCar({
-                carNum: e.carNum,
-                url: e.url,
-                names: e.actress,
-                actionType: h,
-                publishTime: e.publishTime
-            }), await this.showStatus(e.carNum), window.refresh(), utils.closePage();
-        } catch (t) { clog.error("收藏操作失败:", t), show.error("操作失败"); }
+    getStateRecord() {
+        const info = this.getPageInfo();
+        return { carNum: info.carNum, url: info.url, names: info.actress, publishTime: info.publishTime };
     }
-    async hasDownOne() {
-        try {
-            let e = this.getPageInfo();
-            if (!e.carNum) return void show.error("番号不可用，无法标记下载");
-            await storageManager.saveCar({
-                carNum: e.carNum,
-                url: e.url,
-                names: e.actress,
-                actionType: g,
-                publishTime: e.publishTime
-            }), await this.showStatus(e.carNum), window.refresh(), utils.closePage();
-        } catch (t) { clog.error("标记已下载失败:", t), show.error("操作失败"); }
+    getStateBinding() {
+        if (this.stateBinding) return this.stateBinding;
+        const info = this.getPageInfo();
+        return this.stateBinding = { root: document, layerIndex: null, carNum: normalizeCarNum(info.carNum), getRecord: () => this.getStateRecord(), activityType: "detail-state", selectors: {} };
     }
-    async hasWatchOne() {
-        try {
-            let e = this.getPageInfo();
-            if (!e.carNum) return void show.error("番号不可用，无法标记观看");
-            await storageManager.saveCar({
-                carNum: e.carNum,
-                url: e.url,
-                names: e.actress,
-                actionType: p,
-                publishTime: e.publishTime
-            }), await this.showStatus(e.carNum), window.refresh(), utils.closePage();
-        } catch (t) { clog.error("标记已观看失败:", t), show.error("操作失败"); }
+    async favoriteOne(event) {
+        return detailStateController.requestToggle(this.getStateBinding(), "favorite", event);
+    }
+    async hasDownOne(event) {
+        return detailStateController.requestToggle(this.getStateBinding(), "downloaded", event);
+    }
+    async hasWatchOne(event) {
+        return detailStateController.requestToggle(this.getStateBinding(), "watched", event);
     }
     searchXunLeiSubtitle(e) {
         let t = loading();
@@ -187,26 +147,7 @@ class DetailPageButtonPlugin extends BasePlugin {
     }
     async filterOne(e, t) {
         e && e.preventDefault();
-        let n = this.getPageInfo();
-        if (!n.carNum) return void show.error("番号不可用，无法屏蔽");
-        t ? (await storageManager.saveCar({
-            carNum: n.carNum,
-            url: n.url,
-            names: n.actress,
-            actionType: d,
-            publishTime: n.publishTime
-        }), await this.showStatus(n.carNum), window.refresh(), utils.closePage(), layer.closeAll(),
-        this.answerCount = 1) : utils.q(e, `是否屏蔽${n.carNum}?`, (async () => {
-            await storageManager.saveCar({
-                carNum: n.carNum,
-                url: n.url,
-                names: n.actress,
-                actionType: d,
-                publishTime: n.publishTime
-            }), await this.showStatus(n.carNum), window.refresh(), utils.closePage();
-        }), (() => {
-            this.answerCount = 1;
-        }));
+        return detailStateController.requestToggle(this.getStateBinding(), "blocked", e);
     }
     hideVideoControls() {
         $(document).on("mouseenter", "#preview-video", (function() {

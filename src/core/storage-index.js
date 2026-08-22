@@ -3,7 +3,7 @@ function createIndexedMap(items, key) {
     return new Map(items.filter((item => item && item[key])).map((item => [ item[key], item ])));
 }
 
-/** 为番号状态构建运行时 Set 索引。 */
+/** 为番号组合状态构建运行时 Set 索引。 */
 function createStatusMap(items) {
     const statusMap = {
         [d]: new Set,
@@ -12,7 +12,10 @@ function createStatusMap(items) {
         [p]: new Set
     };
     items.forEach((item => {
-        item && Object.prototype.hasOwnProperty.call(statusMap, item.status) && statusMap[item.status].add(item.carNum);
+        if (!item?.carNum) return;
+        const flags = normalizeStateFlags(item.stateFlags);
+        flags.blocked && statusMap[d].add(item.carNum), flags.favorite && statusMap[h].add(item.carNum),
+        flags.downloaded && statusMap[g].add(item.carNum), flags.watched && statusMap[p].add(item.carNum);
     }));
     return statusMap;
 }

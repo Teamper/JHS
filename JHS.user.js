@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      6.3.0
+// @version      6.4.0
 // @author       JHS Contributors
 // @description  JAV Helper Suite：为 JavDB / JavBus 提供浏览、收藏、筛选、资源检索、数据备份与统计增强。
 // @license      MIT
@@ -287,13 +287,21 @@
     return t2.textContent = e2, t2.innerHTML;
   }
   __name(escapeHtml, "escapeHtml");
-  var CURRENT_DATA_VERSION = 1;
+  var CURRENT_DATA_VERSION = 2;
   function normalizeCarNum(value) {
     if ("string" != typeof value) return null;
-    const carNum = value.trim();
-    return carNum && !["undefined", "null"].includes(carNum.toLowerCase()) ? carNum : null;
+    let carNum = value.trim();
+    if (!carNum || ["undefined", "null"].includes(carNum.toLowerCase())) return null;
+    carNum = carNum.normalize("NFKC").replace(/[‐‑‒–—―﹘﹣－]/g, "-").replace(/[\s_]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").toUpperCase();
+    return carNum ? tryCanonicalizeSimpleCarNum(carNum) : null;
   }
   __name(normalizeCarNum, "normalizeCarNum");
+  var SIMPLE_CAR_PREFIXES = /* @__PURE__ */ new Set(["ABC", "ABP", "ADN", "ATID", "BF", "CAWD", "DLDSS", "DVAJ", "FSDSS", "HEYZO", "HMN", "IPX", "IPZZ", "JUQ", "JUL", "JUX", "MEYD", "MIAA", "MIDE", "MIDV", "MIMK", "MIRD", "NIMA", "PRED", "RBD", "SDDE", "SONE", "SSIS", "SSNI", "STARS", "URE", "VEC", "WAAA", "WANZ", "XVSR"]);
+  function tryCanonicalizeSimpleCarNum(value) {
+    const match = String(value || "").match(/^([A-Z]{2,8})(\d{2,7})$/);
+    return match && SIMPLE_CAR_PREFIXES.has(match[1]) ? `${match[1]}-${match[2]}` : value;
+  }
+  __name(tryCanonicalizeSimpleCarNum, "tryCanonicalizeSimpleCarNum");
   function firstValidCarNum(...candidates) {
     for (const candidate of candidates) {
       const carNum = normalizeCarNum(candidate);
@@ -578,6 +586,7 @@
     .jhs-scrollbar::-webkit-scrollbar,
     .content-panel::-webkit-scrollbar,
     .tabulator-tableholder::-webkit-scrollbar,
+    .has-navbar-fixed-top::-webkit-scrollbar,
     .layui-layer-content::-webkit-scrollbar {
         width: 6px;
         height: 6px;
@@ -585,6 +594,7 @@
     .jhs-scrollbar::-webkit-scrollbar-track,
     .content-panel::-webkit-scrollbar-track,
     .tabulator-tableholder::-webkit-scrollbar-track,
+    .has-navbar-fixed-top::-webkit-scrollbar-track,
     .layui-layer-content::-webkit-scrollbar-track {
         background: var(--jhs-surface-2);
         border-radius: 10px;
@@ -592,6 +602,7 @@
     .jhs-scrollbar::-webkit-scrollbar-thumb,
     .content-panel::-webkit-scrollbar-thumb,
     .tabulator-tableholder::-webkit-scrollbar-thumb,
+    .has-navbar-fixed-top::-webkit-scrollbar-thumb,
     .layui-layer-content::-webkit-scrollbar-thumb {
         background: var(--jhs-border-strong);
         border-radius: 10px;
@@ -599,6 +610,7 @@
     .jhs-scrollbar::-webkit-scrollbar-thumb:hover,
     .content-panel::-webkit-scrollbar-thumb:hover,
     .tabulator-tableholder::-webkit-scrollbar-thumb:hover,
+    .has-navbar-fixed-top::-webkit-scrollbar-thumb:hover,
     .layui-layer-content::-webkit-scrollbar-thumb:hover {
         background: var(--jhs-text-faint);
     }
@@ -1772,7 +1784,7 @@
     static setValue(select, value, emit = false) {
       const instance = _JhsSelect.get(select);
       if (!instance) return;
-      instance.source.val(value), instance.refresh(), emit && instance.source.trigger("change");
+      instance.source.val(value), emit ? instance.emitChange() : instance.refresh();
     }
     static refresh(select) {
       _JhsSelect.get(select)?.refresh();
@@ -1839,7 +1851,13 @@
     }
     choose(item) {
       if (item.prop("disabled")) return;
-      this.source.val(item.attr("data-value")).trigger("change"), this.close(true);
+      this.source.val(item.attr("data-value")), this.emitChange(), this.close(true);
+    }
+    /** 派发一次真实原生 change，同时兼容宿主与 jQuery 监听器。 */
+    emitChange() {
+      this.source[0]?.dispatchEvent(new Event("change", {
+        bubbles: true
+      }));
     }
     refresh() {
       const selected = this.source.find("option:selected").first(), value = this.source.val();
@@ -1902,10 +1920,6 @@
     .tabulator-cell { height:auto!important; }
     .tabulator .tabulator-cell { white-space:normal!important; text-overflow:clip!important; }
     .tabulator-tableholder { overflow-x:hidden!important; }
-    ${(function() {
-    const e2 = [".jhs-scrollbar", ".content-panel", ".tabulator-tableholder", ".has-navbar-fixed-top", ".layui-layer-content"], t2 = /* @__PURE__ */ __name((e3, t3) => e3.map(((e4) => `${e4}${t3}`)).join(","), "t"), n2 = "::-webkit-scrollbar-track", a2 = "::-webkit-scrollbar-thumb", i2 = "::-webkit-scrollbar-thumb:hover";
-    return `${t2(e2, "::-webkit-scrollbar")}{width:6px;height:6px}${t2(e2, n2)}{background:var(--jhs-surface-2);border-radius:10px}${t2(e2, a2)}{background:var(--jhs-border-strong);border-radius:10px}${t2(e2, i2)}{background:var(--jhs-text-faint)}`;
-  })()}
 </style>`;
   H(buildThemeCss());
   l && H(N), r && H(E);
@@ -1924,7 +1938,9 @@
       [p]: /* @__PURE__ */ new Set()
     };
     items.forEach(((item) => {
-      item && Object.prototype.hasOwnProperty.call(statusMap, item.status) && statusMap[item.status].add(item.carNum);
+      if (!item?.carNum) return;
+      const flags = normalizeStateFlags(item.stateFlags);
+      flags.blocked && statusMap[d].add(item.carNum), flags.favorite && statusMap[h].add(item.carNum), flags.downloaded && statusMap[g].add(item.carNum), flags.watched && statusMap[p].add(item.carNum);
     }));
     return statusMap;
   }
@@ -1957,6 +1973,67 @@
     };
   }
   __name(dedupeByKey, "dedupeByKey");
+  var STATE_FLAG_NAMES = Object.freeze(["favorite", "downloaded", "watched", "blocked"]);
+  var LEGACY_STATUS_TO_FLAG = Object.freeze({ [h]: "favorite", [g]: "downloaded", [p]: "watched", [d]: "blocked" });
+  function createEmptyStateFlags() {
+    return { favorite: false, downloaded: false, watched: false, blocked: false };
+  }
+  __name(createEmptyStateFlags, "createEmptyStateFlags");
+  function stateFlagsFromLegacyStatus(status) {
+    const flags = createEmptyStateFlags(), flag = LEGACY_STATUS_TO_FLAG[status];
+    return flag && (flags[flag] = true), flags;
+  }
+  __name(stateFlagsFromLegacyStatus, "stateFlagsFromLegacyStatus");
+  function normalizeStateFlags(flags) {
+    const normalized = createEmptyStateFlags();
+    return STATE_FLAG_NAMES.forEach(((name) => normalized[name] = true === flags?.[name])), normalized;
+  }
+  __name(normalizeStateFlags, "normalizeStateFlags");
+  function projectLegacyStatus(flags) {
+    const normalized = normalizeStateFlags(flags);
+    return normalized.blocked ? d : normalized.watched ? p : normalized.downloaded ? g : normalized.favorite ? h : "";
+  }
+  __name(projectLegacyStatus, "projectLegacyStatus");
+  function syncLegacyStatus(record) {
+    return record.stateFlags = normalizeStateFlags(record.stateFlags), record.status = projectLegacyStatus(record.stateFlags), record;
+  }
+  __name(syncLegacyStatus, "syncLegacyStatus");
+  function hasAnyState(flags) {
+    const normalized = normalizeStateFlags(flags);
+    return STATE_FLAG_NAMES.some(((name) => normalized[name]));
+  }
+  __name(hasAnyState, "hasAnyState");
+  function legacyActionToFlag(actionType) {
+    return LEGACY_STATUS_TO_FLAG[actionType] || null;
+  }
+  __name(legacyActionToFlag, "legacyActionToFlag");
+  function mergeCanonicalCarRecords(records) {
+    const groups = /* @__PURE__ */ new Map(), collisions = [], unknownStatuses = [];
+    records.filter(Boolean).forEach(((record) => {
+      const original = record.carNum, carNum = normalizeCarNum(original);
+      if (!carNum) return;
+      const item = { ...record, carNum, stateFlags: record.stateFlags ? normalizeStateFlags(record.stateFlags) : stateFlagsFromLegacyStatus(record.status) };
+      record.stateFlags || !record.status || LEGACY_STATUS_TO_FLAG[record.status] || unknownStatuses.push({ carNum, status: record.status });
+      const group = groups.get(carNum) || [];
+      group.push({ original, item }), groups.set(carNum, group);
+    }));
+    const list = [];
+    for (const [carNum, group] of groups) {
+      const sorted = group.map(((entry) => entry.item)).sort(((left, right) => String(left.updateDate || "").localeCompare(String(right.updateDate || ""))));
+      const merged = {}, flags = createEmptyStateFlags();
+      sorted.forEach(((record) => {
+        Object.entries(record).forEach((([key, value]) => null != value && "" !== value && "stateFlags" !== key && "status" !== key && (merged[key] = value)));
+        STATE_FLAG_NAMES.forEach(((name) => flags[name] = flags[name] || record.stateFlags[name]));
+      }));
+      const createDates = sorted.map(((item) => item.createDate)).filter(Boolean).sort(), updateDates = sorted.map(((item) => item.updateDate)).filter(Boolean).sort();
+      createDates.length && (merged.createDate = createDates[0]), updateDates.length && (merged.updateDate = updateDates.at(-1));
+      merged.carNum = carNum, merged.stateFlags = flags, syncLegacyStatus(merged), list.push(merged);
+      const originals = [...new Set(group.map(((entry) => entry.original)).filter(Boolean))];
+      originals.length > 1 && collisions.push({ carNum, originals, count: group.length });
+    }
+    return { list, collisions, unknownStatuses };
+  }
+  __name(mergeCanonicalCarRecords, "mergeCanonicalCarRecords");
   e = /* @__PURE__ */ new WeakSet(), t = /* @__PURE__ */ __name(async function(e2, t2, n2) {
     let a2;
     if (Array.isArray(e2)) a2 = [...e2];
@@ -2059,7 +2136,7 @@
       return this.cacheStatusMap;
     }
     async getCar(e2) {
-      return (await this.getCarMap()).get(e2);
+      return (await this.getCarMap()).get(normalizeCarNum(e2));
     }
     _saveSingleCar(e2, t2) {
       let { carNum: n2, url: a2, names: i2, actionType: s2, publishTime: o2, starId: r2 } = e2;
@@ -2115,48 +2192,50 @@
       }
     }
     async saveCar(e2) {
-      const t2 = await this.getCarList();
-      this._saveSingleCar(e2, t2), await this._setItemAndInvalidate(this.car_list_key, t2), await this.removeNewVideoList([e2.carNum]);
+      const carNum = normalizeCarNum(e2.carNum), flag = legacyActionToFlag(e2.actionType);
+      if (!carNum) throw show.error("番号为空!"), new Error("番号为空!");
+      if (!e2.url) throw show.error("url为空!"), new Error("url为空!");
+      if (!flag) throw show.error("actionType错误, 请联系作者更正: " + e2.actionType), new Error("actionType错误, 请联系作者更正: " + e2.actionType);
+      const existing = await this.getCar(carNum);
+      if (normalizeStateFlags(existing?.stateFlags)[flag]) {
+        const messages = { blocked: "已在屏蔽列表中", favorite: "已在收藏列表中", downloaded: "已标记为已下载", watched: "已标记为已观看" }, message = `${carNum} ${messages[flag]}`;
+        throw show.error(message), new Error(message);
+      }
+      return stateService.patch(carNum, { [flag]: true }, { type: "legacy-save", record: { ...e2, carNum } });
     }
     async updateCarInfo(e2) {
       let { carNum: t2, url: n2, names: a2, actionType: i2, publishTime: s2, remark: o2 } = e2;
       if (!t2) throw show.error("番号为空!"), new Error("番号为空!");
       if (!n2) throw show.error("url为空!"), new Error("url为空!");
       a2 && (a2 = a2.trim());
-      const r2 = await this.getCarList();
-      let l2 = r2.find(((e3) => e3.carNum === t2));
+      t2 = normalizeCarNum(t2);
+      const l2 = await this.getCar(t2);
       if (!l2) {
         const e3 = "数据不存在: " + t2;
         throw show.error(e3), new Error(e3);
       }
-      switch (l2.names = a2, l2.url = n2, l2.remark = o2, l2.updateDate = utils.getNowStr(), i2) {
-        case d:
-          l2.status = d;
-          break;
-        case h:
-          l2.status = h;
-          break;
-        case g:
-          l2.status = g;
-          break;
-        case p:
-          l2.status = p;
-          break;
-        default:
-          const e3 = "actionType错误, 请联系作者更正: " + i2;
-          throw show.error(e3), new Error(e3);
+      const flag = legacyActionToFlag(i2);
+      if (!flag) {
+        const e3 = "actionType错误, 请联系作者更正: " + i2;
+        throw show.error(e3), new Error(e3);
       }
-      await this._setItemAndInvalidate(this.car_list_key, r2), await this.removeNewVideoList([t2]);
+      return stateService.patch(t2, { [flag]: true }, { type: "legacy-update", record: { carNum: t2, names: a2, url: n2, remark: o2, publishTime: s2 } });
     }
     async saveCarList(e2) {
       if (!e2 || !Array.isArray(e2) || 0 === e2.length) throw show.error("记录列表为空!"), new Error("记录列表为空!");
-      const t2 = await this.getCarList();
-      for (const a2 of e2) try {
-        this._saveSingleCar(a2, t2);
-      } catch (n2) {
-        throw n2;
+      const existing = await this.getCarMap(), seen = /* @__PURE__ */ new Set(), groups = /* @__PURE__ */ new Map();
+      for (const item of e2) {
+        const carNum = normalizeCarNum(item.carNum), flag = legacyActionToFlag(item.actionType);
+        if (!carNum) throw show.error("番号为空!"), new Error("番号为空!");
+        if (!item.url) throw show.error("url为空!"), new Error("url为空!");
+        if (!flag) throw new Error("actionType错误, 请联系作者更正: " + item.actionType);
+        const duplicateKey = `${carNum}:${flag}`;
+        if (seen.has(duplicateKey) || normalizeStateFlags(existing.get(carNum)?.stateFlags)[flag]) throw new Error(`${carNum} 状态已存在`);
+        seen.add(duplicateKey);
+        const group = groups.get(flag) || [];
+        group.push({ ...item, carNum }), groups.set(flag, group);
       }
-      await this._setItemAndInvalidate(this.car_list_key, t2), await this.removeNewVideoList(e2.map(((e3) => e3.carNum)));
+      for (const [flag, records] of groups) await stateService.patch(records.map(((item) => item.carNum)), { [flag]: true }, { type: "legacy-batch-save", records });
     }
     async removeNewVideoList(e2) {
       return this.withActressLock(async () => {
@@ -2176,12 +2255,12 @@
       });
     }
     async removeCar(e2) {
-      const t2 = await this.getCarList(), n2 = t2.length, a2 = t2.filter(((t3) => t3.carNum !== e2));
-      return a2.length === n2 ? (show.error(`${e2} 不存在`), false) : (await this._setItemAndInvalidate(this.car_list_key, a2), true);
+      const result = await stateService.remove(e2);
+      return result.changed.length ? true : (show.error(`${e2} 不存在`), false);
     }
     async batchRemoveCars(e2) {
-      const t2 = await this.getCarList(), n2 = t2.length, a2 = new Set(e2), i2 = t2.filter(((e3) => !a2.has(e3.carNum))), s2 = n2 - i2.length;
-      return 0 !== s2 && (await this._setItemAndInvalidate(this.car_list_key, i2), s2);
+      const result = await stateService.remove(e2);
+      return result.changed.length || false;
     }
     async getBlacklist() {
       return this._readCached("cacheBlacklist", this.blacklist_key, []);
@@ -2323,13 +2402,15 @@
     async getSetting(e2 = null, t2) {
       let n2 = await this._readCached("cacheSettingObj", this.setting_key, {});
       if (null === e2) return n2;
+      if (!Object.prototype.hasOwnProperty.call(n2, e2)) return t2;
       const a2 = n2[e2];
-      return a2 ? "true" === a2 || "false" === a2 ? "true" === a2.toLowerCase() : "string" != typeof a2 || "" === a2.trim() || isNaN(Number(a2)) ? a2 : Number(a2) : t2;
+      return "true" === a2 || "false" === a2 ? "true" === a2.toLowerCase() : "string" != typeof a2 || "" === a2.trim() || isNaN(Number(a2)) ? a2 : Number(a2);
     }
     getSettingSync(e2, t2) {
       if (!this.cacheSettingObj) return t2;
+      if (!Object.prototype.hasOwnProperty.call(this.cacheSettingObj, e2)) return t2;
       const n2 = this.cacheSettingObj[e2];
-      return n2 ? "true" === n2 || "false" === n2 ? "true" === n2.toLowerCase() : "string" != typeof n2 || "" === n2.trim() || isNaN(Number(n2)) ? n2 : Number(n2) : t2;
+      return "true" === n2 || "false" === n2 ? "true" === n2.toLowerCase() : "string" != typeof n2 || "" === n2.trim() || isNaN(Number(n2)) ? n2 : Number(n2);
     }
     async saveSetting(e2) {
       e2 ? (await this._setItemAndInvalidate(this.setting_key, e2), window.clean_cacheSettingObj()) : show.error("设置对象为空");
@@ -2342,29 +2423,30 @@
       }), window.clean_cacheSettingObj();
     }
     async importData(e2) {
-      const VALID_KEYS = /* @__PURE__ */ new Set(["car_list", "filter_keyword_title", "filter_keyword_review", "setting", "blacklist", "blacklist_car_list", "third_party_ttl_cache", "favorite_actresses", "highlighted_tags"]);
-      const t2 = [];
-      for (const n3 in e2) {
-        if (!VALID_KEYS.has(n3)) {
-          clog.warn(`[导入] 跳过未知数据键: ${n3}`);
+      validatePortableData(e2);
+      await hasPortableUserData(this) && await this.createSnapshot("导入前自动备份", "auto-import");
+      const validKeys = /* @__PURE__ */ new Set([...PORTABLE_DATA_KEYS, "data_version"]), writes = [];
+      for (const key in e2) {
+        if (!validKeys.has(key)) {
+          clog.warn(`[导入] 跳过未知数据键: ${key}`);
           continue;
         }
-        t2.push(this._setItemAndInvalidate(n3, e2[n3]));
+        writes.push("data_version" === key ? this.setDataVersion(e2[key]) : this._setItemAndInvalidate(key, e2[key]));
       }
-      await Promise.all(t2);
-      const n2 = [];
-      await this.forage.iterate(((t3, a2) => {
-        a2 in e2 || n2.push(this.forage.removeItem(a2));
-      }));
-      await Promise.all(n2);
-      this._invalidateCache();
+      await Promise.all(writes), this._invalidateCache(), await runDataMigrations(this), await window.stateService?.recoverPendingTransaction();
+    }
+    async exportPortableData() {
+      const data = { data_version: await this.getDataVersion() };
+      for (const key of PORTABLE_DATA_KEYS) {
+        const value = await this.forage.getItem(key);
+        null != value && (data[key] = value);
+      }
+      return data;
     }
     async exportData() {
-      const e2 = {};
-      if (await this.forage.iterate(((t2, n2) => {
-        e2[n2] = t2;
-      })), 0 === Object.keys(e2).length) throw new Error("没有可导出的数据");
-      return e2;
+      const data = await this.exportPortableData();
+      if (Object.keys(data).length <= 1) throw new Error("没有可导出的数据");
+      return data;
     }
     async getThirdPartyCache() {
       return await this.forage.getItem(this.third_party_cache_key) || {};
@@ -2374,6 +2456,10 @@
     }
     async clearThirdPartyCache() {
       await this.forage.removeItem(this.third_party_cache_key);
+    }
+    async deleteCachedRequest(key) {
+      const cache = await this.getThirdPartyCache();
+      Object.prototype.hasOwnProperty.call(cache, key) && (delete cache[key], await this.setThirdPartyCache(cache));
     }
     async cachedRequest(e2, t2, n2) {
       const a2 = Date.now(), i2 = await this.getThirdPartyCache(), s2 = i2[e2];
@@ -2601,14 +2687,15 @@
           source: t2,
           time: utils.getNowStr(),
           itemCount: i2,
-          data: a2
+          data: a2,
+          kind: "snapshot"
         };
         n2.push(s2), n2.length > 10 && n2.splice(0, n2.length - 10);
         return await this._saveSnapshots(n2), clog.log(`创建快照: ${s2.name} (${t2})`), s2;
       });
     }
     async getSnapshotList() {
-      return (await this._getSnapshots()).map(((e2) => ({ id: e2.id, name: e2.name, source: e2.source, time: e2.time, itemCount: e2.itemCount })));
+      return (await this._getSnapshots()).map(((e2) => ({ id: e2.id, name: e2.name, source: e2.source, time: e2.time, itemCount: e2.itemCount, kind: e2.kind || "snapshot", targetDataVersion: e2.targetDataVersion, appVersion: e2.appVersion })));
     }
     async getSnapshot(e2) {
       return (await this._getSnapshots()).find(((t2) => t2.id === e2)) || null;
@@ -2624,7 +2711,6 @@
       const t2 = await this.getSnapshot(e2);
       if (!t2) throw new Error("快照不存在: " + e2);
       if (!t2.data || "object" != typeof t2.data) throw new Error("快照数据损坏");
-      await this.createSnapshot("恢复前自动备份", "auto-restore");
       const n2 = { ...t2.data };
       for (const a2 of this._snapshotMetaKeys()) delete n2[a2];
       await this.importData(n2);
@@ -2694,6 +2780,82 @@
   };
   __name(_StorageManager, "StorageManager");
   var StorageManager = _StorageManager;
+  var PORTABLE_DATA_KEYS = Object.freeze(["car_list", "filter_keyword_title", "filter_keyword_review", "setting", "blacklist", "blacklist_car_list", "third_party_ttl_cache", "favorite_actresses", "highlighted_tags", "activity_log", "offline_history", "new_video_decisions"]);
+  var PORTABLE_ARRAY_KEYS = /* @__PURE__ */ new Set(["car_list", "filter_keyword_title", "filter_keyword_review", "blacklist", "blacklist_car_list", "favorite_actresses", "highlighted_tags", "offline_history"]);
+  var PORTABLE_OBJECT_KEYS = /* @__PURE__ */ new Set(["setting", "third_party_ttl_cache", "activity_log", "new_video_decisions"]);
+  function validatePortableData(data) {
+    if (!data || "object" != typeof data || Array.isArray(data)) throw new TypeError("备份数据格式无效");
+    const version = Number(data.data_version || 0);
+    if (!Number.isInteger(version) || version < 0) throw new TypeError("备份数据版本无效");
+    if (version > CURRENT_DATA_VERSION) throw new Error("数据来自更新版本的 JHS，当前版本无法安全读取");
+    for (const key of PORTABLE_ARRAY_KEYS) if (null != data[key] && !Array.isArray(data[key])) throw new TypeError(`备份字段 ${key} 必须为数组`);
+    for (const key of PORTABLE_OBJECT_KEYS) if (null != data[key] && ("object" != typeof data[key] || Array.isArray(data[key]))) throw new TypeError(`备份字段 ${key} 必须为对象`);
+    return version;
+  }
+  __name(validatePortableData, "validatePortableData");
+  async function hasPortableUserData(storage) {
+    for (const key of PORTABLE_DATA_KEYS) {
+      const value = await storage.forage.getItem(key);
+      if (Array.isArray(value) ? value.length : value && "object" == typeof value ? Object.keys(value).length : null != value) return true;
+    }
+    return false;
+  }
+  __name(hasPortableUserData, "hasPortableUserData");
+  async function ensureV2MigrationSnapshot(storage) {
+    if (!await hasPortableUserData(storage)) return null;
+    const snapshots = await storage._getSnapshots(), existing = snapshots.find(((item) => "migration-snapshot" === item.kind && 2 === item.targetDataVersion));
+    if (existing) return existing;
+    const data = await storage.exportPortableData(), snapshot = {
+      id: "migration_v2_" + Date.now(),
+      name: "6.4.0-migration-backup",
+      source: "migration",
+      kind: "migration-snapshot",
+      targetDataVersion: 2,
+      appVersion: "6.4.0",
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      time: utils.getNowStr(),
+      itemCount: Object.values(data).reduce(((sum, value) => sum + (Array.isArray(value) ? value.length : value && "object" == typeof value ? 1 : 0)), 0),
+      data
+    };
+    return snapshots.push(snapshot), snapshots.length > 10 && snapshots.splice(0, snapshots.length - 10), await storage._saveSnapshots(snapshots), snapshot;
+  }
+  __name(ensureV2MigrationSnapshot, "ensureV2MigrationSnapshot");
+  async function migrateLegacyStorage(storage) {
+    await storage.merge_table_name(), await storage.clean_no_url_blacklist(), await storage.async_merge_other(), await storage.merge_blacklist(), await storage.merge_favoriteActress(), await storage.merge_tow_car_list_table();
+  }
+  __name(migrateLegacyStorage, "migrateLegacyStorage");
+  async function migrateStateFlags(storage) {
+    await ensureV2MigrationSnapshot(storage);
+    const cars = await storage.forage.getItem(storage.car_list_key) || [], result = mergeCanonicalCarRecords(cars);
+    await storage._setItemAndInvalidate(storage.car_list_key, result.list);
+    const actresses = await storage.forage.getItem(storage.favorite_actresses_key) || [];
+    const migratedActresses = actresses.map(((actress) => {
+      if (!Array.isArray(actress.newVideoList)) return actress;
+      const newVideoList = actress.newVideoList.map(((item) => "string" == typeof item ? normalizeCarNum(item) : {
+        ...item,
+        carNum: normalizeCarNum(item.carNum)
+      })).filter(((item) => "string" == typeof item ? item : item.carNum));
+      return { ...actress, newVideoList };
+    }));
+    await storage._setItemAndInvalidate(storage.favorite_actresses_key, migratedActresses);
+    const warnings = await storage.forage.getItem("data_health_warnings") || [];
+    result.collisions.length && warnings.push({ type: "canonical-collision", createdAt: (/* @__PURE__ */ new Date()).toISOString(), items: result.collisions });
+    result.unknownStatuses.length && warnings.push({ type: "unknown-legacy-status", createdAt: (/* @__PURE__ */ new Date()).toISOString(), items: result.unknownStatuses });
+    warnings.length && await storage.forage.setItem("data_health_warnings", warnings);
+  }
+  __name(migrateStateFlags, "migrateStateFlags");
+  var DATA_MIGRATIONS = Object.freeze({ 1: migrateLegacyStorage, 2: migrateStateFlags });
+  async function runDataMigrations(storage) {
+    let version = await storage.getDataVersion();
+    if (version > CURRENT_DATA_VERSION) throw new Error("数据来自更新版本的 JHS，当前版本无法安全读取");
+    for (let target = version + 1; target <= CURRENT_DATA_VERSION; target++) {
+      const migration = DATA_MIGRATIONS[target];
+      if (!migration) throw new Error(`缺少数据迁移: ${target - 1} → ${target}`);
+      await migration(storage), await storage.setDataVersion(target), version = target;
+    }
+    return version;
+  }
+  __name(runDataMigrations, "runDataMigrations");
   var U = "https://jdforrepam.com/api";
   function O() {
     const e2 = "jhs_review_ts", t2 = "jhs_review_sign", n2 = Math.floor(Date.now() / 1e3);
@@ -2822,9 +2984,10 @@
     }
     openPage(e2, t2, n2, a2) {
       n2 = n2 ?? true;
+      const navigation = a2 && (Object.prototype.hasOwnProperty.call(a2, "event") || Object.prototype.hasOwnProperty.call(a2, "newTab")) ? a2 : { event: a2 }, event = navigation.event;
       const destination = new URL(e2, window.location.origin), carNum = normalizeCarNum(t2), isMovieDetail = /^\/v\/[^/]+/.test(destination.pathname);
       isMovieDetail && carNum && destination.searchParams.set("jhsCarNum", carNum);
-      if (a2 && (a2.ctrlKey || a2.metaKey)) return void GM_openInTab(destination.href, {
+      if (navigation.newTab || event && (event.ctrlKey || event.metaKey || 1 === event.button)) return void GM_openInTab(destination.href, {
         insert: 0
       });
       destination.pathname.includes("/actors/") || destination.pathname.includes("/star/") || destination.searchParams.set("hideNav", "1");
@@ -2872,18 +3035,22 @@
         clog.error("iframe监听失败 (跨域或未加载完毕):", i2);
       }
     }
-    closePage() {
-      storageManager.getSetting("needClosePage", "yes").then(((e2) => {
-        if ("yes" !== e2) return;
-        parent.document.documentElement.style.overflow = "auto";
-        [".layui-layer-shade", ".layui-layer-move", ".layui-layer"].forEach((function(e3) {
-          const t2 = parent.document.querySelectorAll(e3);
-          if (t2.length > 0) {
-            const e4 = t2.length > 1 ? t2[t2.length - 1] : t2[0];
-            e4.parentNode.removeChild(e4);
-          }
-        })), window.close();
-      }));
+    async closePage(options = {}) {
+      if ("yes" !== await storageManager.getSetting("needClosePage", "yes")) return false;
+      const root = options?.root, parseIndex = /* @__PURE__ */ __name((element) => {
+        const id = element?.id || "", match = /^layui-layer(\d+)$/.exec(id);
+        return match ? Number(match[1]) : null;
+      }, "parseIndex");
+      let layerIndex = Number.isInteger(options?.layerIndex) ? options.layerIndex : null;
+      if (null === layerIndex && root) {
+        const element = root.jquery ? root[0] : root.nodeType ? root : null, layerElement = element?.matches?.(".layui-layer") ? element : element?.closest?.(".layui-layer");
+        layerIndex = parseIndex(layerElement);
+      }
+      if (null === layerIndex && window.frameElement) layerIndex = parseIndex(window.frameElement.closest?.(".layui-layer"));
+      const ownerWindow = window.parent && window.parent !== window ? window.parent : window, ownerLayer = ownerWindow.layer || globalThis.layer;
+      if (null !== layerIndex && "function" == typeof ownerLayer?.close) return ownerLayer.close(layerIndex), true;
+      if (window.opener && !window.opener.closed) return window.close(), true;
+      return false;
     }
     loopDetector(e2, t2, n2 = 20, a2 = 1e4, i2 = true) {
       const s2 = ++this.waitSequence;
@@ -3295,22 +3462,360 @@
       }, r2);
     }
   }(), unsafeWindow.storageManager = window.storageManager = new StorageManager();
-  var G = new BroadcastChannel("channel-refresh");
-  window.refresh = function() {
-    G.postMessage({
-      type: "refresh"
-    });
+  var _JhsEventBus = class _JhsEventBus {
+    constructor(channelName = "channel-refresh") {
+      this.originId = globalThis.crypto?.randomUUID?.() || `tab_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      this.listeners = /* @__PURE__ */ new Map(), this.seen = /* @__PURE__ */ new Set(), this.channel = new BroadcastChannel(channelName);
+      this.channel.addEventListener("message", ((event) => this._receive(event.data)));
+    }
+    on(type, handler) {
+      const handlers = this.listeners.get(type) || /* @__PURE__ */ new Set();
+      return handlers.add(handler), this.listeners.set(type, handlers), () => handlers.delete(handler);
+    }
+    async _dispatch(event) {
+      for (const handler of [...this.listeners.get(event.type) || []]) await handler(event.payload, event);
+    }
+    _remember(eventId) {
+      this.seen.add(eventId), this.seen.size > 256 && this.seen.delete(this.seen.values().next().value);
+    }
+    async emit(type, payload = {}, options = {}) {
+      const event = { eventId: globalThis.crypto?.randomUUID?.() || `event_${Date.now()}_${Math.random().toString(36).slice(2)}`, originId: this.originId, type, payload, timestamp: Date.now() };
+      this._remember(event.eventId), await this._dispatch(event), false !== options.broadcast && this.channel.postMessage(event);
+      return event;
+    }
+    async _receive(event) {
+      if (!event || event.originId === this.originId || event.eventId && this.seen.has(event.eventId)) return;
+      if (!event.eventId) {
+        const legacyType = "refresh" === event.type ? "legacy-refresh" : event.type;
+        return this._dispatch({ ...event, type: legacyType, payload: event.payload || {}, eventId: `legacy_${Date.now()}_${Math.random()}`, originId: "legacy", timestamp: Date.now() });
+      }
+      this._remember(event.eventId), await this._dispatch(event);
+    }
   };
-  window.cleanCache_filter_actor_actress_car_list = function() {
-    G.postMessage({
-      type: "cleanCache_filter_actor_actress_car_list"
-    });
+  __name(_JhsEventBus, "JhsEventBus");
+  var JhsEventBus = _JhsEventBus;
+  var jhsEventBus = unsafeWindow.jhsEventBus = window.jhsEventBus = new JhsEventBus();
+  var G = jhsEventBus.channel;
+  window.refresh = () => jhsEventBus.emit("legacy-refresh");
+  window.cleanCache_filter_actor_actress_car_list = () => jhsEventBus.emit("blacklist-rules-changed");
+  window.clean_cacheSettingObj = () => jhsEventBus.emit("settings-changed");
+  var ACTIVITY_SOFT_LIMIT = 1e3;
+  var ACTIVITY_HARD_LIMIT = 1e4;
+  var ACTIVITY_RETENTION_MS = 30 * 864e5;
+  function cloneStateValue(value) {
+    return null == value ? value : JSON.parse(JSON.stringify(value));
+  }
+  __name(cloneStateValue, "cloneStateValue");
+  function stableStateValue(value) {
+    if (null === value || "object" != typeof value) return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(stableStateValue).join(",")}]`;
+    return `{${Object.keys(value).sort().map(((key) => `${JSON.stringify(key)}:${stableStateValue(value[key])}`)).join(",")}}`;
+  }
+  __name(stableStateValue, "stableStateValue");
+  function getStatePath(value, path) {
+    return path.split(".").reduce(((current, key) => current?.[key]), value);
+  }
+  __name(getStatePath, "getStatePath");
+  function setStatePath(value, path, next) {
+    const keys = path.split("."), last = keys.pop(), target = keys.reduce(((current, key) => current[key] || (current[key] = {})), value);
+    void 0 === next ? delete target[last] : target[last] = cloneStateValue(next);
+  }
+  __name(setStatePath, "setStatePath");
+  function captureNewVideoEffect(actresses, decisions, carNum) {
+    const key = normalizeCarNum(carNum), actressItems = [];
+    actresses.forEach(((actress, actressIndex) => (actress.newVideoList || []).forEach(((item, itemIndex) => {
+      normalizeCarNum("string" == typeof item ? item : item.carNum) === key && actressItems.push({ actressIndex, itemIndex, item: cloneStateValue(item) });
+    }))));
+    return { actressItems, decision: cloneStateValue(decisions[key] || null) };
+  }
+  __name(captureNewVideoEffect, "captureNewVideoEffect");
+  function canRestoreNewVideoEffect(actresses, decisions, carNum, effect) {
+    const key = normalizeCarNum(carNum);
+    if (stableStateValue(decisions[key] || null) !== stableStateValue(null)) return false;
+    return effect.actressItems.every(((entry) => !(actresses[entry.actressIndex]?.newVideoList || []).some(((item) => normalizeCarNum("string" == typeof item ? item : item.carNum) === key))));
+  }
+  __name(canRestoreNewVideoEffect, "canRestoreNewVideoEffect");
+  function restoreNewVideoEffect(actresses, decisions, carNum, effect) {
+    effect.actressItems.forEach(((entry) => {
+      const actress = actresses[entry.actressIndex];
+      if (!actress) return;
+      const list = [...actress.newVideoList || []], index = Math.min(entry.itemIndex, list.length);
+      list.splice(index, 0, cloneStateValue(entry.item)), actress.newVideoList = list;
+    }));
+    effect.decision ? decisions[normalizeCarNum(carNum)] = cloneStateValue(effect.decision) : delete decisions[normalizeCarNum(carNum)];
+  }
+  __name(restoreNewVideoEffect, "restoreNewVideoEffect");
+  function pruneActivityLog(log, now = Date.now()) {
+    const result = { entries: Array.isArray(log?.entries) ? log.entries : [], trackingStartedAt: log?.trackingStartedAt || new Date(now).toISOString(), coverageStart: log?.coverageStart || null, truncatedAt: log?.truncatedAt || null };
+    const cutoff = now - ACTIVITY_RETENTION_MS, recent = [], older = [];
+    result.entries.forEach(((entry) => (Date.parse(entry.createdAt) >= cutoff || "pending" === entry.commitState ? recent : older).push(entry)));
+    older.sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)))), recent.sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt))));
+    const olderAllowance = Math.max(0, ACTIVITY_SOFT_LIMIT - recent.length);
+    result.entries = [...older.slice(-olderAllowance), ...recent].sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt))));
+    if (result.entries.length > ACTIVITY_HARD_LIMIT) {
+      const pending = result.entries.filter(((entry) => "pending" === entry.commitState)), committed = result.entries.filter(((entry) => "pending" !== entry.commitState));
+      const committedAllowance = Math.max(0, ACTIVITY_HARD_LIMIT - pending.length);
+      result.entries = [...committedAllowance ? committed.slice(-committedAllowance) : [], ...pending].sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt))));
+      result.truncatedAt = new Date(now).toISOString(), result.coverageStart = result.entries[0]?.createdAt || result.truncatedAt;
+    }
+    return result;
+  }
+  __name(pruneActivityLog, "pruneActivityLog");
+  var _StateService = class _StateService {
+    constructor(storage, eventBus) {
+      this.storage = storage, this.eventBus = eventBus, this._queue = Promise.resolve(), this._recovering = false;
+    }
+    _withLock(callback) {
+      if (globalThis.navigator?.locks?.request) return navigator.locks.request("jhs_state_mutation", callback);
+      const run = this._queue.then(callback, callback);
+      return this._queue = run.catch((() => {
+      })), run;
+    }
+    async getActivityLog() {
+      return pruneActivityLog(await this.storage.forage.getItem("activity_log"));
+    }
+    async getOfflineHistory() {
+      return await this.storage.forage.getItem("offline_history") || [];
+    }
+    async appendOfflineHistory(record) {
+      const history = await this.getOfflineHistory(), item = { id: record.id || globalThis.crypto?.randomUUID?.() || `offline_${Date.now()}`, createdAt: record.createdAt || (/* @__PURE__ */ new Date()).toISOString(), ...record, carNum: normalizeCarNum(record.carNum) };
+      history.push(item), history.length > 1e3 && history.splice(0, history.length - 1e3), await this.storage.forage.setItem("offline_history", history), await this.eventBus.emit("offline-history-changed", { ids: [item.id] });
+      return item;
+    }
+    async removeOfflineHistory(ids) {
+      const keys = new Set(Array.isArray(ids) ? ids : [ids]), history = await this.getOfflineHistory(), next = history.filter(((item) => !keys.has(item.id)));
+      if (next.length === history.length) return false;
+      return await this.storage.forage.setItem("offline_history", next), await this.eventBus.emit("offline-history-changed", { ids: [...keys], removed: true }), true;
+    }
+    async getNewVideoDecisions() {
+      return await this.storage.forage.getItem("new_video_decisions") || {};
+    }
+    async _readDomains() {
+      const [carList, actresses, decisions, activity] = await Promise.all([this.storage.forage.getItem(this.storage.car_list_key), this.storage.forage.getItem(this.storage.favorite_actresses_key), this.storage.forage.getItem("new_video_decisions"), this.storage.forage.getItem("activity_log")]);
+      return { carList: carList || [], actresses: actresses || [], decisions: decisions || {}, activity: pruneActivityLog(activity) };
+    }
+    _removeHandledNewVideos(actresses, decisions, carNums) {
+      const keys = new Set(carNums.map(normalizeCarNum).filter(Boolean)), nextDecisions = { ...decisions };
+      keys.forEach(((key) => delete nextDecisions[key]));
+      const nextActresses = actresses.map(((actress) => {
+        if (!Array.isArray(actress.newVideoList)) return actress;
+        const newVideoList = actress.newVideoList.filter(((item) => !keys.has(normalizeCarNum("string" == typeof item ? item : item.carNum))));
+        if (newVideoList.length === actress.newVideoList.length) return actress;
+        const next = { ...actress, newVideoList };
+        return 0 === newVideoList.length && next.lastPublishTime && (next.lastPublishTime = null), next;
+      }));
+      return { actresses: nextActresses, decisions: nextDecisions };
+    }
+    async _writeActivity(log) {
+      await this.storage.forage.setItem("activity_log", pruneActivityLog(log));
+    }
+    async _commit(domains, next, activity) {
+      const pendingActivity = cloneStateValue(activity), pendingLog = { ...domains.activity, entries: [...domains.activity.entries, pendingActivity] };
+      const journal = { id: activity.id, state: "prepared", createdAt: activity.createdAt, before: cloneStateValue(domains), after: cloneStateValue({ ...next, activity: pendingLog }) };
+      await this.storage.forage.setItem("mutation_journal", journal);
+      try {
+        await this.storage._setItemAndInvalidate(this.storage.car_list_key, next.carList), await this._writeActivity(pendingLog), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, next.actresses), await this.storage.forage.setItem("new_video_decisions", next.decisions);
+        activity.commitState = "committed", pendingLog.entries = pendingLog.entries.map(((entry) => entry.id === activity.id ? activity : entry)), await this._writeActivity(pendingLog);
+        await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+      } catch (error) {
+        await this._recoverJournal(journal);
+        throw error;
+      }
+    }
+    async _recoverJournal(journal) {
+      const log = await this.getActivityLog(), activity = log.entries.find(((entry) => entry.id === journal.id));
+      if ("committed" === activity?.commitState) {
+        await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.after.carList), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.after.actresses), await this.storage.forage.setItem("new_video_decisions", journal.after.decisions);
+      } else {
+        const current = await this._readDomains(), keys = ["carList", "actresses", "decisions"];
+        const conflict = keys.some(((key) => {
+          const value = stableStateValue(current[key]);
+          return value !== stableStateValue(journal.before[key]) && value !== stableStateValue(journal.after[key]);
+        }));
+        if (conflict) throw new Error("检测到未完成状态事务且数据已发生冲突，请先运行数据健康检查");
+        await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.before.carList), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.before.actresses), await this.storage.forage.setItem("new_video_decisions", journal.before.decisions);
+        journal.before.activity ? await this._writeActivity(journal.before.activity) : (log.entries = log.entries.filter(((entry) => entry.id !== journal.id)), await this._writeActivity(log));
+      }
+      await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+    }
+    async _recoverWithoutLock() {
+      const journal = await this.storage.forage.getItem("mutation_journal");
+      return journal ? (await this._recoverJournal(journal), true) : false;
+    }
+    async recoverPendingTransaction() {
+      return this._withLock((() => this._recoverWithoutLock()));
+    }
+    async patch(carNums, patch, options = {}) {
+      const keys = [...new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean))];
+      if (!keys.length) throw new Error("番号为空");
+      const invalidFlag = Object.keys(patch).find(((key) => !STATE_FLAG_NAMES.includes(key) || "boolean" != typeof patch[key]));
+      if (invalidFlag) throw new TypeError(`无效状态字段: ${invalidFlag}`);
+      return this._withLock((() => this._patchWithoutLock(keys, patch, options)));
+    }
+    async _patchWithoutLock(keys, patch, options) {
+      await this._recoverWithoutLock();
+      const domains = await this._readDomains(), map = new Map(domains.carList.map(((record) => [normalizeCarNum(record.carNum), record]))), changes = [], handled = [];
+      const records = Array.isArray(options.records) ? new Map(options.records.map(((record) => [normalizeCarNum(record.carNum), record]))) : /* @__PURE__ */ new Map();
+      keys.forEach(((carNum) => {
+        const existing = map.get(carNum), metadata = records.get(carNum) || options.record || {}, now = utils.getNowStr(), before = existing ? cloneStateValue(existing) : null;
+        const record = existing ? { ...existing, stateFlags: normalizeStateFlags(existing.stateFlags) } : { carNum, url: metadata.url || window.location.href, names: metadata.names || "", createDate: now, stateFlags: createEmptyStateFlags() };
+        const fields = [];
+        ["url", "names", "publishTime", "starId", "remark"].forEach(((field) => {
+          if (!Object.prototype.hasOwnProperty.call(metadata, field) || null == metadata[field] || !options.replaceMetadata && "" === metadata[field] || record[field] === metadata[field]) return;
+          record[field] = metadata[field], fields.push(field);
+        }));
+        STATE_FLAG_NAMES.forEach(((flag) => Object.prototype.hasOwnProperty.call(patch, flag) && record.stateFlags[flag] !== patch[flag] && (patch[flag] && handled.push(carNum), record.stateFlags[flag] = patch[flag], fields.push(`stateFlags.${flag}`))));
+        if (!fields.length && existing) return;
+        record.updateDate = now, syncLegacyStatus(record), map.set(carNum, record), changes.push({ carNum, operation: existing ? "patch" : "create", fields, before, after: cloneStateValue(record), undoState: "pending" });
+      }));
+      if (!changes.length) return { changed: [], transactionId: null };
+      changes.forEach(((change) => handled.includes(change.carNum) && (change.newVideoEffect = captureNewVideoEffect(domains.actresses, domains.decisions, change.carNum))));
+      const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, handled), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: options.type || "state-patch", commitState: "pending", changes, createdAt: (/* @__PURE__ */ new Date()).toISOString(), undoAttemptedAt: null };
+      await this._commit(domains, { carList: [...map.values()], ...effects }, activity), await this.eventBus.emit("car-state-changed", { carNums: changes.map(((change) => change.carNum)), transactionId: activity.id }), handled.length && await this.eventBus.emit("new-video-changed", { carNums: [...new Set(handled)], reason: "state-handled" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+      return { changed: changes.map(((change) => change.carNum)), transactionId: activity.id };
+    }
+    async toggle(carNum, flag, options = {}) {
+      if (!STATE_FLAG_NAMES.includes(flag)) throw new TypeError(`无效状态字段: ${flag}`);
+      const key = normalizeCarNum(carNum);
+      if (!key) throw new Error("番号为空");
+      return this._withLock(async () => {
+        await this._recoverWithoutLock();
+        const record = await this.storage.getCar(key), flags = normalizeStateFlags(record?.stateFlags);
+        return this._patchWithoutLock([key], { [flag]: !flags[flag] }, options);
+      });
+    }
+    async remove(carNums) {
+      const keys = new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean));
+      return this._withLock(async () => {
+        await this._recoverWithoutLock();
+        const domains = await this._readDomains(), changes = domains.carList.filter(((record) => keys.has(normalizeCarNum(record.carNum)))).map(((record) => ({ carNum: normalizeCarNum(record.carNum), operation: "delete", fields: ["record"], before: cloneStateValue(record), after: null, undoState: "pending" })));
+        if (!changes.length) return { changed: [], transactionId: null };
+        const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "record-delete", commitState: "pending", changes, createdAt: (/* @__PURE__ */ new Date()).toISOString(), undoAttemptedAt: null };
+        await this._commit(domains, { carList: domains.carList.filter(((record) => !keys.has(normalizeCarNum(record.carNum)))), actresses: domains.actresses, decisions: domains.decisions }, activity), await this.eventBus.emit("car-records-removed", { carNums: changes.map(((change) => change.carNum)), transactionId: activity.id }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+        return { changed: changes.map(((change) => change.carNum)), transactionId: activity.id };
+      });
+    }
+    async setNewVideoDecision(carNums, action, until = null) {
+      if (!["ignored", "snoozed", null].includes(action)) throw new TypeError("无效新作决策");
+      const keys = [...new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean))];
+      return this._withLock(async () => {
+        await this._recoverWithoutLock();
+        const domains = await this._readDomains(), decisions = { ...domains.decisions }, now = (/* @__PURE__ */ new Date()).toISOString(), changes = [];
+        keys.forEach(((carNum) => {
+          const before = cloneStateValue(decisions[carNum] || null), after = action ? { action, until: "snoozed" === action ? until : null, createdAt: before?.createdAt || now, updatedAt: now } : null;
+          stableStateValue(before) === stableStateValue(after) || (after ? decisions[carNum] = after : delete decisions[carNum], changes.push({ carNum, operation: "new-video-decision", fields: ["decision"], before, after, undoState: "pending" }));
+        }));
+        if (!changes.length) return { changed: [], transactionId: null };
+        const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-decision", commitState: "pending", changes, createdAt: now, undoAttemptedAt: null };
+        await this._commit(domains, { carList: domains.carList, actresses: domains.actresses, decisions }, activity), await this.eventBus.emit("new-video-changed", { carNums: keys, reason: action || "decision-restored" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+        return { changed: keys, transactionId: activity.id };
+      });
+    }
+    async removeFromNewVideoList(carNums, reason = "manual") {
+      const keys = [...new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean))];
+      return this._withLock(async () => {
+        await this._recoverWithoutLock();
+        const domains = await this._readDomains(), effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, keys), changed = stableStateValue(effects.actresses) !== stableStateValue(domains.actresses) || stableStateValue(effects.decisions) !== stableStateValue(domains.decisions);
+        if (!changed) return { changed: [], transactionId: null };
+        const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-remove", commitState: "pending", changes: keys.map(((carNum) => ({ carNum, operation: "new-video-remove", fields: ["newVideoList", "decision"], before: null, after: { removed: true, reason }, newVideoEffect: captureNewVideoEffect(domains.actresses, domains.decisions, carNum), undoState: "pending" }))), createdAt: (/* @__PURE__ */ new Date()).toISOString(), undoAttemptedAt: null };
+        await this._commit(domains, { carList: domains.carList, ...effects }, activity), await this.eventBus.emit("new-video-changed", { carNums: keys, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+        return { changed: keys, transactionId: activity.id };
+      });
+    }
+    async undoTransaction(transactionId) {
+      return this._withLock(async () => {
+        await this._recoverWithoutLock();
+        const domains = await this._readDomains(), transaction = domains.activity.entries.find(((entry) => entry.id === transactionId && "committed" === entry.commitState));
+        if (!transaction) throw new Error("操作记录不存在或尚未提交");
+        const carMap = new Map(domains.carList.map(((record) => [normalizeCarNum(record.carNum), cloneStateValue(record)]))), decisions = { ...domains.decisions }, actresses = cloneStateValue(domains.actresses), reverted = [], conflicts = [];
+        for (const change of transaction.changes) {
+          if ("reverted" === change.undoState) continue;
+          const current = carMap.get(change.carNum);
+          if (change.newVideoEffect && !canRestoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect)) {
+            change.undoState = "conflict", conflicts.push(change.carNum);
+            continue;
+          }
+          if ("delete" === change.operation) {
+            current ? (change.undoState = "conflict", conflicts.push(change.carNum)) : (carMap.set(change.carNum, cloneStateValue(change.before)), change.undoState = "reverted", reverted.push(change.carNum));
+            continue;
+          }
+          if ("new-video-decision" === change.operation) {
+            const currentDecision = decisions[change.carNum] || null;
+            stableStateValue(currentDecision) !== stableStateValue(change.after) ? (change.undoState = "conflict", conflicts.push(change.carNum)) : (change.before ? decisions[change.carNum] = cloneStateValue(change.before) : delete decisions[change.carNum], change.undoState = "reverted", reverted.push(change.carNum));
+            continue;
+          }
+          if ("new-video-remove" === change.operation) {
+            restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), change.undoState = "reverted", reverted.push(change.carNum);
+            continue;
+          }
+          if (!["patch", "create"].includes(change.operation) || !current || change.fields.some(((field) => stableStateValue(getStatePath(current, field)) !== stableStateValue(getStatePath(change.after, field))))) {
+            change.undoState = "conflict", conflicts.push(change.carNum);
+            continue;
+          }
+          if ("create" === change.operation && !change.before) carMap.delete(change.carNum);
+          else change.fields.forEach(((field) => setStatePath(current, field, getStatePath(change.before, field)))), syncLegacyStatus(current), carMap.set(change.carNum, current);
+          change.newVideoEffect && restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), change.undoState = "reverted", reverted.push(change.carNum);
+        }
+        transaction.undoAttemptedAt = (/* @__PURE__ */ new Date()).toISOString();
+        const log = pruneActivityLog(domains.activity), nextCars = [...carMap.values()], journal = { id: `undo_${transactionId}`, state: "prepared", createdAt: transaction.undoAttemptedAt, before: cloneStateValue(domains), after: cloneStateValue({ carList: nextCars, actresses, decisions, activity: log }) };
+        await this.storage.forage.setItem("mutation_journal", journal), await this.storage._setItemAndInvalidate(this.storage.car_list_key, nextCars), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, actresses), await this.storage.forage.setItem("new_video_decisions", decisions), await this._writeActivity(log), await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+        reverted.length && await this.eventBus.emit("car-state-changed", { carNums: reverted, undoOf: transactionId }), await this.eventBus.emit("activity-log-changed", { transactionId, undo: true });
+        return { reverted, conflicts };
+      });
+    }
   };
-  window.clean_cacheSettingObj = function() {
-    G.postMessage({
-      type: "clean_cacheSettingObj"
-    });
+  __name(_StateService, "StateService");
+  var StateService = _StateService;
+  var stateService = unsafeWindow.stateService = window.stateService = new StateService(storageManager, jhsEventBus);
+  var DETAIL_STATE_BUTTONS = {
+    blocked: { selector: "#filterBtn", inactive: /* @__PURE__ */ __name(() => m, "inactive"), active: /* @__PURE__ */ __name(() => u, "active") },
+    favorite: { selector: "#favoriteBtn", inactive: /* @__PURE__ */ __name(() => v, "inactive"), active: /* @__PURE__ */ __name(() => b, "active") },
+    downloaded: { selector: "#hasDownBtn", inactive: /* @__PURE__ */ __name(() => y, "inactive"), active: /* @__PURE__ */ __name(() => "已标记下载", "active") },
+    watched: { selector: "#hasWatchBtn", inactive: /* @__PURE__ */ __name(() => k, "inactive"), active: /* @__PURE__ */ __name(() => "已标记观看", "active") }
   };
+  var _DetailStateController = class _DetailStateController {
+    bind({ root = document, layerIndex = null, carNum, getRecord, activityType = "detail-state", selectors = {} }) {
+      const config = { root, layerIndex, carNum: normalizeCarNum(carNum), getRecord, activityType, selectors };
+      for (const [flag, definition] of Object.entries(DETAIL_STATE_BUTTONS)) {
+        const selector = selectors[flag] || definition.selector;
+        $(root).find(selector).off("click.jhsDetailState").on("click.jhsDetailState", ((event) => {
+          event.preventDefault(), event.stopPropagation(), void this.requestToggle(config, flag, event);
+        }));
+      }
+      void this.render(config);
+      return config;
+    }
+    async requestToggle(config, flag, event = null) {
+      if (!config.carNum) return void show.error("番号不可用，无法更新状态");
+      const current = await storageManager.getCar(config.carNum), flags = normalizeStateFlags(current?.stateFlags);
+      if ("blocked" === flag && !flags.blocked) return void utils.q(event, `是否屏蔽${config.carNum}?`, (() => this.toggle(config, flag, event)));
+      return this.toggle(config, flag, event);
+    }
+    async toggle(config, flag, event = null) {
+      const selector = config.selectors[flag] || DETAIL_STATE_BUTTONS[flag].selector, button = event?.currentTarget ? $(event.currentTarget) : $(config.root).find(selector);
+      if (button.prop("disabled")) return;
+      button.prop("disabled", true).attr("aria-busy", "true");
+      try {
+        const record = "function" == typeof config.getRecord ? await config.getRecord() : config.getRecord || { carNum: config.carNum };
+        await stateService.toggle(config.carNum, flag, { type: config.activityType, record }), await this.render(config), await utils.closePage({ layerIndex: config.layerIndex, root: config.root });
+      } catch (error) {
+        clog.error("详情状态更新失败", error), show.error("操作失败");
+      } finally {
+        button[0]?.isConnected && button.prop("disabled", false).removeAttr("aria-busy");
+      }
+    }
+    async render({ root = document, carNum, selectors = {} }) {
+      const record = await storageManager.getCar(normalizeCarNum(carNum)), flags = normalizeStateFlags(record?.stateFlags);
+      for (const [flag, definition] of Object.entries(DETAIL_STATE_BUTTONS)) {
+        const button = $(root).find(selectors[flag] || definition.selector), active = !!flags[flag];
+        button.attr("aria-pressed", String(active)).find("span").first().text(active ? definition.active() : definition.inactive());
+      }
+      return flags;
+    }
+  };
+  __name(_DetailStateController, "DetailStateController");
+  var DetailStateController = _DetailStateController;
+  var detailStateController = new DetailStateController();
   document.head.insertAdjacentHTML("beforeend", '\n        <style>\n            .loading-container {\n                position: fixed;\n                top: 0;\n                left: 0;\n                width: 100%;\n                height: 100%;\n                display: flex;\n                justify-content: center;\n                align-items: center;\n                background-color: rgba(0, 0, 0, 0.1);\n                z-index: var(--jhs-z-loading);\n            }\n    \n            .loading-animation {\n                position: relative;\n                width: 60px;\n                height: 12px;\n                background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);\n                border-radius: 6px;\n                animation: loading-animate 1.8s ease-in-out infinite;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before,\n            .loading-animation:after {\n                position: absolute;\n                display: block;\n                content: "";\n                animation: loading-animate 1.8s ease-in-out infinite;\n                height: 12px;\n                border-radius: 6px;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before {\n                top: -20px;\n                left: 10px;\n                width: 40px;\n                background: linear-gradient(90deg, #ff758c 0%, #ff7eb3 100%);\n            }\n    \n            .loading-animation:after {\n                bottom: -20px;\n                width: 35px;\n                background: linear-gradient(90deg, #ff9a9e 0%, #fad0c4 100%);\n            }\n    \n            @keyframes loading-animate {\n                0% {\n                    transform: translateX(40px);\n                }\n                50% {\n                    transform: translateX(-30px);\n                }\n                100% {\n                    transform: translateX(40px);\n                }\n            }\n        </style>\n    ');
   unsafeWindow.loading = window.loading = function() {
     const e2 = document.createElement("div");
@@ -5080,45 +5585,8 @@
         skin: "movie-detail-layer",
         scrollbar: false,
         success: /* @__PURE__ */ __name((i3, s2) => {
-          organizeJhsOwnedDetailWorkspace($(i3).find(".movie-detail-container")), void this.loadData(e2, t2).catch(((error) => clog.error("FC2 详情加载失败", error))), $("#favoriteBtn").on("click", (async (e3) => {
-            const a3 = $("#data-actress").text(), i4 = $("#data-releaseDate").text();
-            await storageManager.saveCar({
-              carNum: t2,
-              url: n2,
-              names: a3,
-              actionType: h,
-              publishTime: i4
-            }), window.refresh(), layer.closeAll();
-          })), $("#filterBtn").on("click", ((e3) => {
-            utils.q(e3, `是否屏蔽${t2}?`, (async () => {
-              const e4 = $("#data-actress").text(), a3 = $("#data-releaseDate").text();
-              await storageManager.saveCar({
-                carNum: t2,
-                url: n2,
-                names: e4,
-                actionType: d,
-                publishTime: a3
-              }), window.refresh(), layer.closeAll(), window.location.href.includes("collection_codes?movieId") && utils.closePage();
-            }));
-          })), $("#hasDownBtn").on("click", (async (e3) => {
-            const a3 = $("#data-actress").text(), i4 = $("#data-releaseDate").text();
-            await storageManager.saveCar({
-              carNum: t2,
-              url: n2,
-              names: a3,
-              actionType: g,
-              publishTime: i4
-            }), window.refresh(), layer.closeAll();
-          })), $("#hasWatchBtn").on("click", (async (e3) => {
-            const a3 = $("#data-actress").text(), i4 = $("#data-releaseDate").text();
-            await storageManager.saveCar({
-              carNum: t2,
-              url: n2,
-              names: a3,
-              actionType: p,
-              publishTime: i4
-            }), window.refresh(), layer.closeAll();
-          })), $("#search-subtitle-btn").on("click", ((e3) => utils.openPage(`https://subtitlecat.com/index.php?search=${t2}`, t2, false, e3))), $("#xunLeiSubtitleBtn").on("click", (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(t2))), $("#magnetSearchBtn").on("click", (async () => {
+          const root = $(i3), detailRoot = root.find(".movie-detail-container");
+          organizeJhsOwnedDetailWorkspace(detailRoot), detailStateController.bind({ root: i3, layerIndex: s2, carNum: t2, activityType: "fc2-state", getRecord: /* @__PURE__ */ __name(() => ({ carNum: t2, url: n2, names: root.find("#data-actress").text(), publishTime: root.find("#data-releaseDate").text() }), "getRecord") }), void this.loadData(e2, t2).catch(((error) => clog.error("FC2 详情加载失败", error))), root.find("#search-subtitle-btn").on("click", ((e3) => utils.openPage(`https://subtitlecat.com/index.php?search=${t2}`, t2, false, e3))), $("#xunLeiSubtitleBtn").on("click", (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(t2))), $("#magnetSearchBtn").on("click", (async () => {
             let e3 = await this.getBean("MagnetHubPlugin").createMagnetHub(t2);
             layer.open({
               type: 1,
@@ -5192,22 +5660,27 @@
           }
           const magnet = `magnet:?xt=urn:btih:${hash}`, size = Number(item.size), filesCount = Number(item.files_count);
           html += `
-                    <div class="item columns is-desktop ${index % 2 === 0 ? "odd" : ""}"><div class="magnet-name column is-four-fifths"><a href="${magnet}" title="右键点击并选择“复制链接地址”"><span class="name">${escapeHtml(item.name || "")}</span><br><span class="meta">${Number.isFinite(size) ? (size / 1024).toFixed(2) : "0.00"}GB, ${Number.isFinite(filesCount) ? filesCount : 0}个文件</span><br><div class="jhs-toolbar">${item.hd ? '<span class="jhs-badge jhs-badge--accent">高清</span>' : ""}${item.cnsub ? '<span class="jhs-badge jhs-badge--watch">字幕</span>' : ""}</div></a></div><div class="jhs-toolbar column"><button class="jhs-btn jhs-btn--secondary copy-to-clipboard" data-clipboard-text="${magnet}" type="button">复制</button></div><div class="date column"><span class="time">${escapeHtml(item.created_at || "")}</span></div></div>`;
+                    <div class="item columns is-desktop ${index % 2 === 0 ? "odd" : ""}"><div class="magnet-name column is-four-fifths"><a href="${magnet}" title="右键点击并选择“复制链接地址”"><span class="name">${escapeHtml(item.name || "")}</span><br><span class="meta">${Number.isFinite(size) ? (size / 1024).toFixed(2) : "0.00"}GB, ${Number.isFinite(filesCount) ? filesCount : 0}个文件</span><br><div class="jhs-toolbar">${item.hd ? '<span class="jhs-badge jhs-badge--accent">高清</span>' : ""}${item.cnsub ? '<span class="jhs-badge jhs-badge--watch">字幕</span>' : ""}</div></a></div><div class="jhs-toolbar column"><button class="jhs-btn jhs-btn--secondary copy-to-clipboard" data-clipboard-text="${magnet}" type="button">复制</button><button class="jhs-btn jhs-btn--secondary jhs-offline-btn" data-resource="${magnet}" data-jhs-offline-owner="fc2" type="button">离线</button></div><div class="date column"><span class="time">${escapeHtml(item.created_at || "")}</span></div></div>`;
         }
         $("#magnets-content").html(html || '<span class="no-data">暂无磁力信息</span>');
       } catch (error) {
         throw clog.error(error), $("#magnets-content").html(`<div class="movie-error">加载失败: ${escapeHtml(error.message)}</div>`), error;
       }
     }
-    async openFc2Page(e2, t2, n2) {
+    async openFc2Page(e2, t2, n2, navigation = { newTab: true }) {
       const a2 = this.getBean("OtherSitePlugin");
       let i2 = await a2.getJavDbUrl();
-      window.open(`${i2}/users/collection_codes?movieId=${e2}&carNum=${t2}&url=${n2}`);
+      utils.openPage(`${i2}/users/collection_codes?movieId=${e2}&carNum=${encodeURIComponent(t2)}&url=${encodeURIComponent(n2)}`, t2, true, navigation);
     }
   };
   __name(_Fc2Plugin, "Fc2Plugin");
   var Fc2Plugin = _Fc2Plugin;
   var _HighlightMagnetPlugin = class _HighlightMagnetPlugin extends BasePlugin {
+    async handle() {
+      window.isDetailPage && jhsEventBus.on("magnet-items-updated", (() => {
+        void storageManager.getSetting("enableMagnetsFilter", _).then(((enabled) => enabled === _ ? this.doFilterMagnet() : this.showAll()));
+      }));
+    }
     async initCss() {
       return `<style>.jhs-magnet-score{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:600;vertical-align:middle;cursor:help}</style>`;
     }
@@ -5254,7 +5727,7 @@
       })), n2 && $("#magnets-content .magnet-row").not(".high-quality").hide(), this.updateFilterHint(n2);
     }
     handleBus() {
-      l && isDetailPage && utils.loopDetector((() => $("#magnet-table td a").length > 0), (() => {
+      if (l && isDetailPage) {
         const e2 = $("#magnet-table tr");
         let n2 = false;
         e2.each(((e3, a2) => {
@@ -5268,7 +5741,7 @@
           const n3 = $(t2);
           n3.hasClass("high-quality") || n3.hide();
         })), this.updateFilterHint(n2);
-      }));
+      }
     }
     showAll() {
       $("#enable-magnets-filter").removeClass("do-hide").removeAttr("data-tip");
@@ -5534,8 +6007,8 @@
     }
     async initializeRenderedList() {
       const listPage = this.getBean("ListPagePlugin");
-      listPage.replaceHdImg(), await listPage.doFilter(), listPage.applyVisibility();
-      $(listPage.getSelector().itemSelector + " a").attr("target", "_blank"), this.getBean("CoverButtonPlugin").addSvgBtn();
+      listPage.replaceHdImg(), await listPage.doFilter(), listPage.applyVisibility(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector);
+      this.getBean("CoverButtonPlugin").addSvgBtn();
     }
     toolBar(e2) {
       $("#jhs-hitshow-period").remove();
@@ -5693,7 +6166,7 @@ ${error.stack}` : "");
           this.movies = t3;
           const n3 = t3.filter(((e4) => "1" === this.has_cnsub ? e4.has_cnsub : "0" !== this.has_cnsub || !e4.has_cnsub)), a3 = this.getBean("HitShowPlugin");
           let r3 = a3.markDataListHtml(n3);
-          i2.html(r3), await a3.loadScore(n3), o2 = true;
+          i2.html(r3), await a3.initializeRenderedList(), await a3.loadScore(n3), o2 = true;
         } else clog.error(e3), i2.html(`<h3>${escapeHtml(l3)}</h3>`), show.error(l3), "JWTVerificationError" === c2 && (await localStorage.removeItem(me), await this.checkLogin(null, new URLSearchParams(window.location.search))), o2 = true;
       } catch (r2) {
         l2 < 3 ? (clog.error(`获取Top数据失败 (第 ${l2} 次重试):`, r2), await new Promise(((e3) => setTimeout(e3, 1e3)))) : (clog.error("所有重试尝试均失败，无法获取Top数据。", r2), i2.html("<h3>无法加载数据，请稍后再试。</h3>"));
@@ -5709,14 +6182,14 @@ ${error.stack}` : "");
       for (let year = (/* @__PURE__ */ new Date()).getFullYear(); year >= 2008; year--) years += `<a class="jhs-segmented__item jhs-layout-186f17ef ${t2 === String(year) ? "active" : ""}" aria-current="${t2 === String(year) ? "page" : "false"}" href="/advanced_search?handleTop=1&handleType=year&type_value=${year}&has_cnsub=${this.has_cnsub}">${year}</a>`;
       const typeLink = /* @__PURE__ */ __name((value, label, type = "video_type") => `<a class="jhs-segmented__item jhs-layout-186f17ef ${value === ("all" === value ? e2 : t2) ? "active" : ""}" aria-current="${value === ("all" === value ? e2 : t2) ? "page" : "false"}" href="/advanced_search?handleTop=1&handleType=${type}&type_value=${"all" === value ? "" : value}&has_cnsub=${this.has_cnsub}">${label}</a>`, "typeLink");
       const html = `<div class="jhs-top250-filters"><nav class="jhs-segmented jhs-layout-701bf0f9" aria-label="类型条件">${typeLink("all", "全部", "all")}${typeLink("0", "有码")}${typeLink("1", "无码")}${typeLink("2", "欧美")}${typeLink("3", "Fc2")}<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-2335597e ${"1" === this.has_cnsub ? "active" : ""}" aria-pressed="${"1" === this.has_cnsub}" data-cnsub-value="1">含中字磁力</button><button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-186f17ef ${"0" === this.has_cnsub ? "active" : ""}" aria-pressed="${"0" === this.has_cnsub}" data-cnsub-value="0">无字幕</button><button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-186f17ef" aria-pressed="false" data-cnsub-value="">重置</button></nav><nav class="jhs-segmented" aria-label="年份条件">${years}</nav></div>`;
-      this.$contentBox.append(html), $("button[data-cnsub-value]").on("click", ((event) => {
+      this.$contentBox.append(html), $("button[data-cnsub-value]").on("click", (async (event) => {
         const value = $(event.currentTarget).data("cnsub-value");
         this.has_cnsub = value.toString(), $("button[data-cnsub-value]").removeClass("active").attr("aria-pressed", "false"), $(event.currentTarget).addClass("active").attr("aria-pressed", "true"), $(".jhs-top250-filters a").each(((index, element) => {
           const link = $(element), url = new URL(link.attr("href"), window.location.origin);
           url.searchParams.set("has_cnsub", value), link.attr("href", url.toString());
         }));
         const movies = this.movies.filter(((movie) => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), hitShow = this.getBean("HitShowPlugin");
-        $(".movie-list").html(hitShow.markDataListHtml(movies)), void hitShow.loadScore(movies).catch(((error) => clog.error("Top250 评分加载失败", error)));
+        $(".movie-list").html(hitShow.markDataListHtml(movies)), await hitShow.initializeRenderedList(), void hitShow.loadScore(movies).catch(((error) => clog.error("Top250 评分加载失败", error)));
       }));
     }
     async checkLogin(e2, t2) {
@@ -6200,7 +6673,7 @@ ${error.stack}` : "");
       return "DetailPageButtonPlugin";
     }
     constructor() {
-      super(), this.answerCount = 1;
+      super(), this.answerCount = 1, this.stateBinding = null;
     }
     async handle() {
       this.hideVideoControls(), window.isDetailPage && (await this.createMenuBtn(), await this.autoRemoveNewVideoMark());
@@ -6211,7 +6684,7 @@ ${error.stack}` : "");
         if (e2 !== _) return;
         const t2 = this.getPageInfo();
         if (!t2.carNum) return;
-        await storageManager.removeNewVideoList([t2.carNum]), window.refresh();
+        await stateService.removeFromNewVideoList([t2.carNum], "browse");
       } catch (e2) {
         clog.error("自动移除新作品标记失败:", e2);
       }
@@ -6250,7 +6723,8 @@ ${error.stack}` : "");
                 </div>
             </div>
         `;
-      r && $(".tabs").after(n2), l && $("#mag-submit-show").before(n2), $("#favoriteBtn").on("click", (() => this.favoriteOne())), $("#filterBtn").on("click", ((e3) => this.filterOne(e3))), $("#hasDownBtn").on("click", (async () => this.hasDownOne())), $("#hasWatchBtn").on("click", (async () => this.hasWatchOne())), $("#magnetSearchBtn").on("click", (async () => {
+      const workspaceSlot = this.getBean("DetailWorkspacePlugin")?.getSlot("summary-actions");
+      workspaceSlot?.length ? workspaceSlot.append(n2) : r ? $(".tabs").after(n2) : l && $("#mag-submit-show").before(n2), $("#magnetSearchBtn").on("click", (async () => {
         let t3 = await this.getBean("MagnetHubPlugin").createMagnetHub(e2.carNum);
         layer.open({
           type: 1,
@@ -6272,70 +6746,28 @@ ${error.stack}` : "");
         $("#filterBtn, #favoriteBtn, #hasDownBtn, #hasWatchBtn, #magnetSearchBtn, #xunLeiSubtitleBtn, #search-subtitle-btn").prop("disabled", true).attr("title", "番号不可用");
         return void clog.warn("详情操作不可用：番号不可用");
       }
-      await this.showStatus(t2);
+      this.stateBinding = detailStateController.bind({ root: document, carNum: t2, activityType: "detail-state", getRecord: /* @__PURE__ */ __name(() => this.getStateRecord(), "getRecord") });
     }
     async showStatus(e2) {
-      const t2 = $("#filterBtn span"), n2 = $("#favoriteBtn span"), a2 = $("#hasDownBtn span"), i2 = $("#hasWatchBtn span");
-      t2.text(m), n2.text(v), a2.text(y), i2.text(k);
-      const o2 = await storageManager.getCar(e2);
-      if (o2) switch (o2.status) {
-        case d:
-          t2.text(u);
-          break;
-        case h:
-          n2.text(b);
-          break;
-        case g:
-          a2.text("已标记下载");
-          break;
-        case p:
-          i2.text("已标记观看");
-      }
+      return detailStateController.render({ root: document, carNum: e2 });
     }
-    async favoriteOne() {
-      try {
-        let e2 = this.getPageInfo();
-        if (!e2.carNum) return void show.error("番号不可用，无法收藏");
-        await storageManager.saveCar({
-          carNum: e2.carNum,
-          url: e2.url,
-          names: e2.actress,
-          actionType: h,
-          publishTime: e2.publishTime
-        }), await this.showStatus(e2.carNum), window.refresh(), utils.closePage();
-      } catch (t2) {
-        clog.error("收藏操作失败:", t2), show.error("操作失败");
-      }
+    getStateRecord() {
+      const info = this.getPageInfo();
+      return { carNum: info.carNum, url: info.url, names: info.actress, publishTime: info.publishTime };
     }
-    async hasDownOne() {
-      try {
-        let e2 = this.getPageInfo();
-        if (!e2.carNum) return void show.error("番号不可用，无法标记下载");
-        await storageManager.saveCar({
-          carNum: e2.carNum,
-          url: e2.url,
-          names: e2.actress,
-          actionType: g,
-          publishTime: e2.publishTime
-        }), await this.showStatus(e2.carNum), window.refresh(), utils.closePage();
-      } catch (t2) {
-        clog.error("标记已下载失败:", t2), show.error("操作失败");
-      }
+    getStateBinding() {
+      if (this.stateBinding) return this.stateBinding;
+      const info = this.getPageInfo();
+      return this.stateBinding = { root: document, layerIndex: null, carNum: normalizeCarNum(info.carNum), getRecord: /* @__PURE__ */ __name(() => this.getStateRecord(), "getRecord"), activityType: "detail-state", selectors: {} };
     }
-    async hasWatchOne() {
-      try {
-        let e2 = this.getPageInfo();
-        if (!e2.carNum) return void show.error("番号不可用，无法标记观看");
-        await storageManager.saveCar({
-          carNum: e2.carNum,
-          url: e2.url,
-          names: e2.actress,
-          actionType: p,
-          publishTime: e2.publishTime
-        }), await this.showStatus(e2.carNum), window.refresh(), utils.closePage();
-      } catch (t2) {
-        clog.error("标记已观看失败:", t2), show.error("操作失败");
-      }
+    async favoriteOne(event) {
+      return detailStateController.requestToggle(this.getStateBinding(), "favorite", event);
+    }
+    async hasDownOne(event) {
+      return detailStateController.requestToggle(this.getStateBinding(), "downloaded", event);
+    }
+    async hasWatchOne(event) {
+      return detailStateController.requestToggle(this.getStateBinding(), "watched", event);
     }
     searchXunLeiSubtitle(e2) {
       let t2 = loading();
@@ -6416,25 +6848,7 @@ ${error.stack}` : "");
     }
     async filterOne(e2, t2) {
       e2 && e2.preventDefault();
-      let n2 = this.getPageInfo();
-      if (!n2.carNum) return void show.error("番号不可用，无法屏蔽");
-      t2 ? (await storageManager.saveCar({
-        carNum: n2.carNum,
-        url: n2.url,
-        names: n2.actress,
-        actionType: d,
-        publishTime: n2.publishTime
-      }), await this.showStatus(n2.carNum), window.refresh(), utils.closePage(), layer.closeAll(), this.answerCount = 1) : utils.q(e2, `是否屏蔽${n2.carNum}?`, (async () => {
-        await storageManager.saveCar({
-          carNum: n2.carNum,
-          url: n2.url,
-          names: n2.actress,
-          actionType: d,
-          publishTime: n2.publishTime
-        }), await this.showStatus(n2.carNum), window.refresh(), utils.closePage();
-      }), (() => {
-        this.answerCount = 1;
-      }));
+      return detailStateController.requestToggle(this.getStateBinding(), "blocked", e2);
     }
     hideVideoControls() {
       $(document).on("mouseenter", "#preview-video", (function() {
@@ -6477,7 +6891,7 @@ ${error.stack}` : "");
   var DetailPageButtonPlugin = _DetailPageButtonPlugin;
   var _HistoryPlugin = class _HistoryPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "tableObj", null);
+      super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null);
     }
     getName() {
       return "HistoryPlugin";
@@ -6505,7 +6919,7 @@ ${error.stack}` : "");
     async handle() {
       r && ($(".navbar-end").prepend('<div class="navbar-item has-sub-btns is-hoverable historyBtnBox">\n                    <button type="button" id="historyBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>'), $(".navbar-search").css("margin-left", "0").before('\n                <div class="navbar-item miniHistoryBtnBox">\n                    <button type="button" id="miniHistoryBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>\n            '), this.handleResize(), $(window).resize((() => {
         this.handleResize();
-      })), $("#historyBtn,#miniHistoryBtn").on("click", ((e2) => this.openHistory()))), l && await this.createBusButton(), this.bindClick();
+      })), $("#historyBtn,#miniHistoryBtn").on("click", ((e2) => this.openHistory()))), l && await this.createBusButton();
     }
     async createBusButton() {
       const ready = await new Promise(((resolve) => {
@@ -6533,14 +6947,15 @@ ${error.stack}` : "");
                 </div>
                 <div id="allSelectBox" class="jhs-layout-66253c00">
                     <button type="button" class="jhs-btn jhs-btn--dark multiple-history-deleteBtn jhs-layout-7daea5fa"> <span>移除</span> </button>
-                    <button type="button" class="jhs-btn jhs-btn--watch multiple-history-hasWatchBtn jhs-layout-2e003268">${k}</button>
-                    <button type="button" class="jhs-btn jhs-btn--down multiple-history-hasDownBtn jhs-layout-2e003268">${y}</button>
-                    <button type="button" class="jhs-btn jhs-btn--fav multiple-history-favoriteBtn jhs-layout-2e003268">${v}</button>
-                    <button type="button" class="jhs-btn jhs-btn--filter multiple-history-filterBtn jhs-layout-2e003268">${m}</button>
+                    <button type="button" class="jhs-btn jhs-btn--watch multiple-history-hasWatchBtn jhs-layout-2e003268">标记观看</button>
+                    <button type="button" class="jhs-btn jhs-btn--down multiple-history-hasDownBtn jhs-layout-2e003268">标记下载</button>
+                    <button type="button" class="jhs-btn jhs-btn--fav multiple-history-favoriteBtn jhs-layout-2e003268">标记收藏</button>
+                    <button type="button" class="jhs-btn jhs-btn--filter multiple-history-filterBtn jhs-layout-2e003268">标记屏蔽</button>
                 </div>
                 <div id="table-container" class="jhs-layout-81eaab28"></div>
             </div>
         `;
+      e2 = e2.replace('<div id="filterBox"', '<div id="historyViewTabs" class="jhs-segmented" role="tablist"><button type="button" class="jhs-btn jhs-segmented__item active" data-history-view="state">作品状态</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="activity">操作记录</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="offline">离线任务</button></div><div id="filterBox"');
       layer.open({
         type: 1,
         title: "鉴定记录",
@@ -6550,9 +6965,10 @@ ${error.stack}` : "");
         area: utils.getDialogArea("xl"),
         anim: -1,
         success: /* @__PURE__ */ __name(async (e3) => {
-          JhsSelect.enhance(e3);
-          await this.loadTableData(), $(".layui-layer-content").on("click", "#clearSearchbtn", (async (e4) => {
-            $("#searchCarNum").val(""), JhsSelect.setValue("#dataType", "all"), await this.reloadTable(), $("#allSelectBox").hide();
+          const root = $(e3);
+          this.historyRoot = root, JhsSelect.enhance(root);
+          await this.loadTableData(), root.on("click.jhsHistory", "#clearSearchbtn", (async (e4) => {
+            root.find("#searchCarNum").val(""), JhsSelect.setValue(root.find("#dataType"), "all"), await this.reloadTable(), root.find("#allSelectBox").hide();
           })).on("focusout keydown", "#searchCarNum", (async (e4) => {
             if ("focusout" === e4.type || "Enter" === e4.key) {
               if ("Enter" === e4.key && e4.preventDefault(), "keydown" === e4.type && "Enter" !== e4.key) return;
@@ -6560,55 +6976,91 @@ ${error.stack}` : "");
             }
           })).on("click", ".table-link-param", (async (e4) => {
             let t2 = $(e4.currentTarget);
-            $("#searchCarNum").val(t2.text()), await this.reloadTable();
+            root.find("#searchCarNum").val(t2.text()), await this.reloadTable();
           })).on("change", "#dataType", (async () => {
             await this.reloadTable();
-          }));
+          })).on("click", "[data-history-view]", (async (event) => {
+            const view = $(event.currentTarget).data("history-view");
+            root.find("[data-history-view]").removeClass("active"), $(event.currentTarget).addClass("active"), await this.showHistoryView(view);
+          })).on("click", ".jhs-undo-activity", (async (event) => {
+            const result = await stateService.undoTransaction($(event.currentTarget).data("transaction"));
+            show.info(`撤销完成：${result.reverted.length} 项成功，${result.conflicts.length} 项冲突`), await this.renderActivityHistory();
+          })).on("click", ".jhs-copy-offline", (async (event) => {
+            await utils.copyToClipboard("离线资源", $(event.currentTarget).data("resource"));
+          })).on("click", ".jhs-retry-offline", (async (event) => {
+            const id = $(event.currentTarget).data("id"), item = (await stateService.getOfflineHistory()).find(((entry) => entry.id === id));
+            item && await this.getBean("UnifiedOfflinePlugin").submitResource(event, item.resource, $(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: true, preferredProviderId: item.providerId }), await this.renderOfflineHistory();
+          })).on("click", ".jhs-open-offline", (async (event) => {
+            const id = $(event.currentTarget).data("id"), item = (await stateService.getOfflineHistory()).find(((entry) => entry.id === id)), provider = this.getBean("UnifiedOfflinePlugin").registry.providers.get(item?.providerId), url = provider?.openUrl?.();
+            url && window.open(url, "_blank", "noopener,noreferrer");
+          })).on("click", ".jhs-delete-offline", (async (event) => {
+            await stateService.removeOfflineHistory($(event.currentTarget).data("id")), await this.renderOfflineHistory();
+          })), this.bindHistoryActions(root);
         }, "success"),
         end: /* @__PURE__ */ __name(() => {
-          this.tableObj && (this.tableObj.destroy(), this.tableObj = null), window.refresh();
+          this.historyRoot?.off(".jhsHistory"), this.historyRoot = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null);
         }, "end")
       });
+    }
+    async showHistoryView(view) {
+      const stateView = "state" === view;
+      this.historyRoot?.find("#filterBox,#allSelectBox").toggle(stateView), this.tableObj?.destroy(), this.tableObj = null;
+      return stateView ? this.loadTableData() : "activity" === view ? this.renderActivityHistory() : this.renderOfflineHistory();
+    }
+    async renderActivityHistory() {
+      const log = await stateService.getActivityLog(), host = this.historyRoot.find("#table-container").empty();
+      if (!log.entries.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无操作记录</div>');
+      log.entries.slice().reverse().forEach(((entry) => {
+        const reverted = entry.changes.filter(((change) => "reverted" === change.undoState)).length, conflicts = entry.changes.filter(((change) => "conflict" === change.undoState)).length;
+        host.append($('<article class="jhs-card"></article>').append($("<strong></strong>").text(`${entry.type} · ${entry.changes.length} 项`), $("<p></p>").text(`${new Date(entry.createdAt).toLocaleString()} · 已撤销 ${reverted} · 冲突 ${conflicts}`), $("<p></p>").text(entry.changes.map(((change) => change.carNum)).join("、")), $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-undo-activity">撤销可恢复项</button>').attr("data-transaction", entry.id).prop("disabled", "committed" !== entry.commitState || reverted === entry.changes.length)));
+      }));
+    }
+    async renderOfflineHistory() {
+      const history = await stateService.getOfflineHistory(), host = this.historyRoot.find("#table-container").empty();
+      if (!history.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无离线任务</div>');
+      history.slice().reverse().forEach(((item) => {
+        const actions = $('<div class="jhs-toolbar"></div>').append($('<button type="button" class="jhs-btn jhs-copy-offline">复制资源</button>').attr("data-resource", item.resource), $('<button type="button" class="jhs-btn jhs-retry-offline">重试</button>').attr("data-id", item.id), $('<button type="button" class="jhs-btn jhs-open-offline">打开服务</button>').attr("data-id", item.id), $('<button type="button" class="jhs-btn jhs-btn--danger jhs-delete-offline">移除记录</button>').attr("data-id", item.id));
+        host.append($('<article class="jhs-card"></article>').append($("<strong></strong>").text(`${item.providerName || item.providerId} · ${item.status}`), $("<p></p>").text(`${item.carNum || "未关联番号"} · ${new Date(item.createdAt).toLocaleString()}${item.retryOf ? ` · 重试自 ${item.retryOf}` : ""}`), $("<p></p>").text(item.errorMessage || item.resource), actions));
+      }));
     }
     async reloadTable() {
       this.tableObj.deselectRow(), this.tableObj.setPage(1);
     }
-    bindClick() {
-      document.addEventListener("click", (function(e2) {
+    bindHistoryActions(root) {
+      root.on("click.jhsHistory", (function(e2) {
         if (e2.target.closest(".sub-btns-toggle")) {
           const button = e2.target.closest(".sub-btns-toggle"), t2 = button.closest(".sub-btns").querySelector(".sub-btns-menu");
-          document.querySelectorAll(".sub-btns-menu.show").forEach(((e3) => {
+          root.find(".sub-btns-menu.show").each(((index, e3) => {
             e3 !== t2 && (e3.classList.remove("show"), e3.previousElementSibling?.setAttribute("aria-expanded", "false"));
           })), t2.classList.toggle("show"), button.setAttribute("aria-expanded", String(t2.classList.contains("show")));
-        } else document.querySelectorAll(".sub-btns-menu.show").forEach(((e3) => {
+        } else root.find(".sub-btns-menu.show").each(((index, e3) => {
           e3.classList.remove("show"), e3.previousElementSibling?.setAttribute("aria-expanded", "false");
         }));
-      })), $(document).on("keydown", ".sub-btns", ((e2) => {
+      })), root.on("keydown.jhsHistory", ".sub-btns", ((e2) => {
         const menu = $(e2.currentTarget).find(".sub-btns-menu"), items = menu.find('[role="menuitem"]'), current = items.index(document.activeElement);
         if ("Escape" === e2.key) return e2.preventDefault(), menu.removeClass("show"), $(e2.currentTarget).find(".sub-btns-toggle").attr("aria-expanded", "false").trigger("focus");
         if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e2.key) || !menu.hasClass("show")) return;
         e2.preventDefault();
         const next = "Home" === e2.key ? 0 : "End" === e2.key ? items.length - 1 : "ArrowDown" === e2.key ? (current + 1 + items.length) % items.length : (current - 1 + items.length) % items.length;
         items.eq(next).trigger("focus");
-      })), $(document).on("click", ".history-deleteBtn, .history-filterBtn, .history-favoriteBtn, .history-hasDownBtn, .history-hasWatchBtn, .history-detailBtn", ((e2) => {
+      })), root.on("click.jhsHistory", ".history-deleteBtn, .history-filterBtn, .history-favoriteBtn, .history-hasDownBtn, .history-hasWatchBtn, .history-detailBtn", ((e2) => {
         e2.preventDefault(), e2.stopPropagation();
-        const t2 = $(e2.currentTarget), n2 = t2.closest(".action-btns"), a2 = n2.attr("data-car-num"), i2 = n2.attr("data-href"), s2 = /* @__PURE__ */ __name(async (e3) => {
+        const t2 = $(e2.currentTarget), n2 = t2.closest(".action-btns"), a2 = n2.attr("data-car-num"), i2 = n2.attr("data-href"), s2 = /* @__PURE__ */ __name(async (actionType) => {
           try {
-            await storageManager.saveCar({
-              carNum: a2,
-              url: i2,
-              names: null,
-              actionType: e3
-            }), window.refresh(), await this.reloadTable();
+            const flag = legacyActionToFlag(actionType);
+            await stateService.toggle(a2, flag, { type: "history-state", record: { carNum: a2, url: i2 } }), await this.reloadTable();
           } catch (s3) {
             clog.error("历史记录操作失败:", s3), show.error("操作失败");
           }
         }, "s");
-        t2.hasClass("history-filterBtn") ? utils.q(e2, `是否屏蔽${a2}?`, (() => s2(d))) : t2.hasClass("history-favoriteBtn") ? void s2(h) : t2.hasClass("history-hasDownBtn") ? void s2(g) : t2.hasClass("history-hasWatchBtn") ? void s2(p) : t2.hasClass("history-deleteBtn") ? this.handleDelete(e2, a2) : t2.hasClass("history-detailBtn") && void this.handleClickDetail(e2, {
+        if (t2.hasClass("history-filterBtn")) {
+          const record = this.tableObj?.getRow(a2)?.getData(), isBlocked = normalizeStateFlags(record?.stateFlags).blocked;
+          isBlocked ? void s2(d) : utils.q(e2, `是否屏蔽${a2}?`, (() => s2(d)));
+        } else t2.hasClass("history-favoriteBtn") ? void s2(h) : t2.hasClass("history-hasDownBtn") ? void s2(g) : t2.hasClass("history-hasWatchBtn") ? void s2(p) : t2.hasClass("history-deleteBtn") ? this.handleDelete(e2, a2) : t2.hasClass("history-detailBtn") && void this.handleClickDetail(e2, {
           carNum: a2,
           url: i2
         }).catch(((error) => clog.error("历史详情打开失败", error)));
-      })), $(document).on("click", ".multiple-history-deleteBtn, .multiple-history-filterBtn, .multiple-history-favoriteBtn, .multiple-history-hasDownBtn, .multiple-history-hasWatchBtn", ((e2) => {
+      })), root.on("click.jhsHistory", ".multiple-history-deleteBtn, .multiple-history-filterBtn, .multiple-history-favoriteBtn, .multiple-history-hasDownBtn, .multiple-history-hasWatchBtn", ((e2) => {
         e2.preventDefault(), e2.stopPropagation();
         const t2 = $(e2.currentTarget);
         let n2 = this.tableObj.getSelectedData(), a2 = "", i2 = "";
@@ -6616,13 +7068,11 @@ ${error.stack}` : "");
           let e3 = loading();
           try {
             if ("delete" === i2) {
-              const e4 = n2.map(((e5) => e5.carNum)), t3 = await storageManager.batchRemoveCars(e4);
-              window.refresh(), t3 > 0 ? show.ok(`已成功删除 ${t3} 个番号`) : false === t3 && show.error("提供的番号中没有一个存在于列表中。");
+              const e4 = n2.map(((e5) => e5.carNum)), t3 = await stateService.remove(e4);
+              t3.changed.length > 0 ? show.ok(`已成功删除 ${t3.changed.length} 个番号`) : show.error("提供的番号中没有一个存在于列表中。");
             } else {
-              const e4 = JSON.parse(JSON.stringify(n2));
-              e4.forEach(((e5) => {
-                e5.actionType = i2;
-              })), await storageManager.saveCarList(e4), window.refresh(), show.ok("操作成功");
+              const flag = legacyActionToFlag(i2);
+              await stateService.patch(n2.map(((item) => item.carNum)), { [flag]: true }, { type: "history-batch-state", records: n2 }), show.ok("操作成功");
             }
             this.tableObj.deselectRow(), await this.reloadTable();
           } catch (t3) {
@@ -6636,26 +7086,13 @@ ${error.stack}` : "");
     async getDataList(e2, t2, n2) {
       let a2 = await storageManager.getCarList();
       this.allCount = a2.length, this.filterCount = 0, this.favoriteCount = 0, this.hasDownCount = 0, this.hasWatchCount = 0, this.waitCheckCount = 0, a2.forEach(((e3) => {
-        switch (e3.status) {
-          case d:
-            this.filterCount++;
-            break;
-          case h:
-            this.favoriteCount++;
-            break;
-          case g:
-            this.hasDownCount++;
-            break;
-          case p:
-            this.hasWatchCount++;
-            break;
-          default:
-            this.waitCheckCount++;
-        }
-      })), $('#dataType option[value="all"]').text(`所有 (${this.allCount})`), $('#dataType option[value="waitCheck"]').text(`待鉴定 (${this.waitCheckCount})`), $('#dataType option[value="filter"]').text(`${u} (${this.filterCount})`), $('#dataType option[value="favorite"]').text(`${b} (${this.favoriteCount})`), $('#dataType option[value="hasDown"]').text(`${y} (${this.hasDownCount})`), $('#dataType option[value="hasWatch"]').text(`${k} (${this.hasWatchCount})`);
-      const i2 = $("#dataType").val();
-      let s2 = "all" === i2 ? a2 : "waitCheck" === i2 ? a2.filter(((e3) => "" === e3.status || !e3.status)) : a2.filter(((e3) => e3.status === i2));
-      const o2 = $("#searchCarNum").val().trim();
+        const flags = normalizeStateFlags(e3.stateFlags);
+        flags.blocked && this.filterCount++, flags.favorite && this.favoriteCount++, flags.downloaded && this.hasDownCount++, flags.watched && this.hasWatchCount++, hasAnyState(flags) || this.waitCheckCount++;
+      })), this.historyRoot.find('#dataType option[value="all"]').text(`所有 (${this.allCount})`), this.historyRoot.find('#dataType option[value="waitCheck"]').text(`待鉴定 (${this.waitCheckCount})`), this.historyRoot.find('#dataType option[value="filter"]').text(`${u} (${this.filterCount})`), this.historyRoot.find('#dataType option[value="favorite"]').text(`${b} (${this.favoriteCount})`), this.historyRoot.find('#dataType option[value="hasDown"]').text(`${y} (${this.hasDownCount})`), this.historyRoot.find('#dataType option[value="hasWatch"]').text(`${k} (${this.hasWatchCount})`);
+      const i2 = this.historyRoot.find("#dataType").val();
+      const flagByFilter = { filter: "blocked", favorite: "favorite", hasDown: "downloaded", hasWatch: "watched" };
+      let s2 = "all" === i2 ? a2 : "waitCheck" === i2 ? a2.filter(((e3) => !hasAnyState(e3.stateFlags))) : a2.filter(((e3) => normalizeStateFlags(e3.stateFlags)[flagByFilter[i2]]));
+      const o2 = this.historyRoot.find("#searchCarNum").val().trim();
       if (o2) {
         let e3 = o2.toLowerCase().replace("-c", "").replace("-uc", "").replace("-4k", "");
         s2 = s2.filter(((t3) => {
@@ -6679,7 +7116,7 @@ ${error.stack}` : "");
       };
     }
     async loadTableData() {
-      this.tableObj = new Tabulator("#table-container", {
+      this.tableObj = new Tabulator(this.historyRoot.find("#table-container").get(0), {
         layout: "fitColumns",
         placeholder: "暂无数据",
         virtualDom: true,
@@ -6771,31 +7208,14 @@ ${error.stack}` : "");
           }, "formatter")
         }, {
           title: "状态",
-          field: "status",
-          width: 100,
-          sorter: "string",
+          field: "stateFlags",
+          width: 220,
+          sorter: false,
           responsive: 1,
           headerSort: false,
           formatter: /* @__PURE__ */ __name((e2, t2, n2) => {
-            const a2 = e2.getData().status;
-            let i2 = "neutral", s2 = "";
-            switch (a2) {
-              case "filter":
-                i2 = "filter", s2 = m;
-                break;
-              case "favorite":
-                i2 = "fav", s2 = v;
-                break;
-              case "hasDown":
-                i2 = "down", s2 = y;
-                break;
-              case "hasWatch":
-                i2 = "watch", s2 = k;
-                break;
-              default:
-                s2 = a2;
-            }
-            return `<span class="jhs-badge jhs-badge--soft jhs-badge--${i2}">${s2 || "待鉴定"}</span>`;
+            const flags = normalizeStateFlags(e2.getData().stateFlags), badges = [[flags.blocked, "filter", u], [flags.favorite, "fav", b], [flags.downloaded, "down", y], [flags.watched, "watch", k]].filter(((item) => item[0])).map(((item) => `<span class="jhs-badge jhs-badge--soft jhs-badge--${item[1]}">${item[2]}</span>`));
+            return badges.join(" ") || '<span class="jhs-badge jhs-badge--neutral">待鉴定</span>';
           }, "formatter")
         }, {
           title: "备注",
@@ -6856,16 +7276,15 @@ ${error.stack}` : "");
           }
         }
       }), this.tableObj.on("rowSelectionChanged", ((e2, t2, n2, a2) => {
-        const i2 = $("#allSelectBox"), s2 = $("#filterBox");
+        const i2 = this.historyRoot.find("#allSelectBox"), s2 = this.historyRoot.find("#filterBox");
         e2 && e2.length > 0 ? (s2.hide(), i2.show()) : (s2.show(), i2.hide());
       })), this.tableObj.on("rowDblClick", (function(e2, t2) {
         t2.toggleSelect();
-      })), this.tableObj.on("tableBuilt", (async () => {
       }));
     }
     handleDelete(e2, t2) {
       utils.q(e2, `是否移除${t2}?`, (async () => {
-        await storageManager.removeCar(t2), window.refresh(), this.getBean("ListPagePlugin").showCarNumBox(t2), await this.reloadTable(null);
+        await stateService.remove(t2), this.getBean("ListPagePlugin").showCarNumBox(t2), await this.reloadTable(null);
       }));
     }
     async handleClickDetail(e2, t2) {
@@ -6886,20 +7305,8 @@ ${error.stack}` : "");
       }
     }
     async editRecord(e2) {
-      const t2 = e2.carNum, n2 = e2.names || "", a2 = e2.url || "", i2 = e2.status, s2 = e2.remark || "", l2 = [{
-        value: d,
-        text: m
-      }, {
-        value: h,
-        text: v
-      }, {
-        value: g,
-        text: y
-      }, {
-        value: p,
-        text: k
-      }];
-      clog.debug(l2);
+      const t2 = e2.carNum, n2 = e2.names || "", a2 = e2.url || "", flags = normalizeStateFlags(e2.stateFlags), s2 = e2.remark || "";
+      let editRoot = $();
       const c2 = `
             <div class="jhs-layout-8cddc29a">
                 <div class="jhs-layout-da303dcf">
@@ -6910,20 +7317,16 @@ ${error.stack}` : "");
                     <label class="jhs-layout-27f87d75">演员 (用空格隔开):</label>
                     <textarea id="edit-names" class="jhs-textarea jhs-history-edit-field">${n2}</textarea>
                 </div>
-                <div class="jhs-layout-da303dcf">
-                    <label class="jhs-layout-27f87d75">状态:</label>
-                    <select id="edit-status" class="jhs-select-source">
-                        <option value="" ${"" === i2 ? "selected" : ""}>-- 请选择 --</option>
-                        ${l2.map(((e3) => `
-                            <option value="${e3.value}" ${i2 === e3.value ? "selected" : ""}>${e3.text}</option>
-                        `)).join("")}
-                    </select>
-                </div>
+                <fieldset class="jhs-layout-da303dcf"><legend class="jhs-layout-27f87d75">状态:</legend>
+                    <label class="jhs-option-row">收藏 <input type="checkbox" id="edit-favorite" class="mini-switch" ${flags.favorite ? "checked" : ""}></label>
+                    <label class="jhs-option-row">已下载 <input type="checkbox" id="edit-downloaded" class="mini-switch" ${flags.downloaded ? "checked" : ""}></label>
+                    <label class="jhs-option-row">已观看 <input type="checkbox" id="edit-watched" class="mini-switch" ${flags.watched ? "checked" : ""}></label>
+                    <label class="jhs-option-row">屏蔽 <input type="checkbox" id="edit-blocked" class="mini-switch" ${flags.blocked ? "checked" : ""}></label>
+                </fieldset>
                 <div class="jhs-layout-da303dcf">
                     <label class="jhs-layout-27f87d75">链接:</label>
                     <input type="text" id="edit-url" value="${a2}" class="jhs-field jhs-history-edit-field">
                 </div>
-
                 <div class="jhs-layout-da303dcf">
                     <label class="jhs-layout-27f87d75">备注:</label>
                     <textarea id="edit-remark" class="jhs-textarea jhs-history-edit-field">${s2}</textarea>
@@ -6937,29 +7340,30 @@ ${error.stack}` : "");
         content: c2,
         btn: ["保存", "取消"],
         success: /* @__PURE__ */ __name((e3, t3) => {
-          JhsSelect.enhance(e3);
+          editRoot = $(e3);
           const n3 = /* @__PURE__ */ __name((e4) => {
             e4.css("height", "auto"), e4.css("height", e4[0].scrollHeight + 15 + "px");
-          }, "n"), a3 = $("#edit-names");
+          }, "n"), a3 = editRoot.find("#edit-names");
           a3.on("input", (function() {
             n3($(this));
           })), n3(a3);
-          const i3 = $("#edit-remark");
-          i3.on("input", (function() {
+          const i2 = editRoot.find("#edit-remark");
+          i2.on("input", (function() {
             n3($(this));
-          })), n3(i3);
+          })), n3(i2);
         }, "success"),
         yes: /* @__PURE__ */ __name(async (t3) => {
-          const n3 = $("#edit-names").val().trim(), a3 = $("#edit-status").val(), i3 = $("#edit-url").val().trim(), s3 = $("#edit-remark").val().trim();
-          if (!a3) return show.error("请选择状态"), false;
-          const o2 = {
-            ...e2,
-            names: n3,
-            actionType: a3,
-            url: i3,
-            remark: s3
+          const n3 = editRoot.find("#edit-names").val().trim(), i2 = editRoot.find("#edit-url").val().trim(), s3 = editRoot.find("#edit-remark").val().trim(), nextFlags = {
+            favorite: editRoot.find("#edit-favorite").prop("checked"),
+            downloaded: editRoot.find("#edit-downloaded").prop("checked"),
+            watched: editRoot.find("#edit-watched").prop("checked"),
+            blocked: editRoot.find("#edit-blocked").prop("checked")
           };
-          await storageManager.updateCarInfo(o2), this.tableObj.setData(), layer.close(t3);
+          const save = /* @__PURE__ */ __name(async () => {
+            await stateService.patch(e2.carNum, nextFlags, { type: "history-edit", replaceMetadata: true, record: { ...e2, names: n3, url: i2, remark: s3 } }), this.tableObj.setData(), layer.close(t3);
+          }, "save");
+          if (!flags.blocked && nextFlags.blocked) return utils.q(null, `是否屏蔽${e2.carNum}?`, (() => void save())), false;
+          await save();
         }, "yes")
       });
     }
@@ -6967,9 +7371,6 @@ ${error.stack}` : "");
   __name(_HistoryPlugin, "HistoryPlugin");
   var HistoryPlugin = _HistoryPlugin;
   var _ReviewPlugin = class _ReviewPlugin extends BasePlugin {
-    constructor() {
-      super(...arguments), i(this, "floorIndex", 1), i(this, "isInit", false), i(this, "$panel", null);
-    }
     getName() {
       return "ReviewPlugin";
     }
@@ -6990,6 +7391,7 @@ ${error.stack}` : "");
                 .jhs-review-link { display:inline-flex; align-items:center; gap:var(--jhs-space-1); margin:0 var(--jhs-space-1); padding:2px var(--jhs-space-2); border:0; border-radius:var(--jhs-radius-pill); background:var(--jhs-accent-tint); color:var(--jhs-accent); font:inherit; font-size:var(--jhs-font-size-sm); line-height:1.5; text-decoration:none; vertical-align:baseline; cursor:pointer; }
                 .jhs-review-link-copy { color:var(--jhs-text-muted); }
                 .jhs-review-link-wrap { display:flex; align-items:center; justify-content:space-between; gap:var(--jhs-space-2); width:100%; margin:var(--jhs-space-1) 0; }
+                .jhs-review-inline-controls { display:inline-flex; align-items:center; gap:var(--jhs-space-1); margin:0 var(--jhs-space-1); }
                 .jhs-review-link-main { display:inline-flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-1); }
                 .jhs-review-link-actions { display:inline-flex; align-items:center; gap:var(--jhs-space-1); margin-left:auto; flex-shrink:0; }
                 .jhs-review-offline-btn { background:var(--jhs-accent) !important; color:var(--jhs-accent-text-on) !important; }
@@ -7003,7 +7405,8 @@ ${error.stack}` : "");
       if (!window.isDetailPage) return;
       if (r) {
         const movieId = this.parseMovieId(window.location.href);
-        await this.showReview(movieId), await this.getBean("RelatedPlugin").showRelated($("#magnets-content"), movieId);
+        const workspace = this.getBean("DetailWorkspacePlugin");
+        await Promise.all([this.showReview(movieId, workspace?.getSlot("reviews")), this.getBean("RelatedPlugin").showRelated(workspace?.getSlot("related"), movieId)]);
       }
       if (l) {
         const carNumber = this.getPageInfo().carNum;
@@ -7027,28 +7430,34 @@ ${error.stack}` : "");
           return (await gmHttp.get(url, params, headers)).data.movies;
         })(carNumber);
         const match = movies.find(((movie) => movie.number.toLowerCase() === carNumber.toLowerCase()));
-        match && await this.showReview(match.id, $("#sample-waterfall"));
+        match && await this.showReview(match.id, this.getBean("DetailWorkspacePlugin")?.getSlot("reviews"));
       }
     }
     async showReview(movieId, target) {
-      const enabled = await storageManager.getSetting("enableLoadReview", _), host = target || $("#magnets-content");
-      const panel = $('<section class="jhs-review-panel" data-jhs-panel="reviews"></section>');
+      const enabled = await storageManager.getSetting("enableLoadReview", _), host = target?.length ? target : this.getBean("DetailWorkspacePlugin")?.getSlot("reviews") || $("#magnets-content");
+      const existing = host.children('[data-jhs-panel="reviews"]').filter(((_2, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
+      if (existing.length) return existing;
+      const panel = $('<section class="jhs-review-panel" data-jhs-panel="reviews"></section>').attr("data-jhs-movie-id", String(movieId));
       const header = $('<header class="jhs-panel-header"><h3>评论</h3></header>');
-      const toggle = $('<button type="button" id="reviewsFold" class="jhs-btn jhs-btn--secondary jhs-panel-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>');
-      header.append(toggle), panel.append(header, '<div id="reviewsContainer" class="jhs-review-list"></div>', '<div id="reviewsFooter" class="jhs-panel-footer"></div>'), host.append(panel), this.$panel = panel;
+      const toggle = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-panel-toggle jhs-review-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>');
+      const state = { movieId, panel, floorIndex: 1, loaded: false, loading: false, page: 1 };
+      header.append(toggle), panel.append(header, '<div class="jhs-review-list jhs-review-container"></div>', '<div class="jhs-panel-footer jhs-review-footer"></div>'), host.append(panel), this.bindRightClickFilter();
       this.updateToggle(toggle, enabled === _);
       toggle.on("click", ((event) => {
         event.preventDefault(), event.stopPropagation();
         const expanded = "展开" === toggle.find(".toggle-text").text();
-        this.updateToggle(toggle, expanded), panel.find("#reviewsContainer, #reviewsFooter").toggle(expanded), expanded && !this.isInit && (this.fetchAndDisplayReviews(movieId), this.isInit = true), storageManager.saveSettingItem("enableLoadReview", expanded ? _ : C);
+        this.updateToggle(toggle, expanded), panel.find(".jhs-review-container, .jhs-review-footer").toggle(expanded), expanded && !state.loaded && !state.loading && void this.fetchAndDisplayReviews(state), storageManager.saveSettingItem("enableLoadReview", expanded ? _ : C);
       }));
-      enabled === _ ? (await this.fetchAndDisplayReviews(movieId), this.isInit = true) : panel.find("#reviewsContainer, #reviewsFooter").hide();
+      enabled === _ ? await this.fetchAndDisplayReviews(state) : panel.find(".jhs-review-container, .jhs-review-footer").hide();
+      return panel;
     }
     updateToggle(toggle, expanded) {
       toggle.attr("aria-expanded", String(expanded)), toggle.find(".toggle-text").text(expanded ? "折叠" : "展开"), toggle.find(".toggle-icon").text(expanded ? "▲" : "▼");
     }
-    async fetchAndDisplayReviews(movieId) {
-      const container = this.$panel.find("#reviewsContainer"), footer = this.$panel.find("#reviewsFooter");
+    async fetchAndDisplayReviews(state) {
+      if (state.loading) return;
+      state.loading = true;
+      const { movieId, panel } = state, container = panel.find(".jhs-review-container"), footer = panel.find(".jhs-review-footer");
       container.empty().append($('<div class="jhs-panel-state"></div>').text("获取评论中...")), footer.empty();
       const pageSize = await storageManager.getSetting("reviewCount", 20);
       let reviews;
@@ -7056,14 +7465,16 @@ ${error.stack}` : "");
         reviews = await R(movieId, 1, pageSize);
       } catch (error) {
         error.toString().includes("簽名已過期") && show.error("生成签名失败, 请检查系统时间及时区是否正确!"), clog.error("获取评论失败:", error), clog.error("获取评论失败:", error);
-        return void this.renderRetry(container, "获取评论失败", (() => this.fetchAndDisplayReviews(movieId)));
+        state.loading = false;
+        return void this.renderRetry(container, "获取评论失败", (() => this.fetchAndDisplayReviews(state)));
       }
+      state.loading = false, state.loaded = true;
       container.empty();
       if (!reviews.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无评论"));
       const keywords = await storageManager.getReviewFilterKeywordList();
-      await this.displayReviews(reviews, container, keywords), reviews.length === pageSize && R(movieId, 2, pageSize).catch((() => {
+      await this.displayReviews(state, reviews, container, keywords), reviews.length === pageSize && R(movieId, 2, pageSize).catch((() => {
       }));
-      reviews.length === pageSize ? this.bindLoadMore(movieId, pageSize, keywords, container, footer) : footer.append($('<div class="jhs-panel-end"></div>').text("已加载全部评论"));
+      reviews.length === pageSize ? this.bindLoadMore(state, pageSize, keywords, container, footer) : footer.append($('<div class="jhs-panel-end"></div>').text("已加载全部评论"));
     }
     renderRetry(container, message, retry) {
       container.empty();
@@ -7071,21 +7482,20 @@ ${error.stack}` : "");
       const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry);
       state.append(button), container.append(state);
     }
-    bindLoadMore(movieId, pageSize, keywords, container, footer) {
-      const button = $('<button type="button" id="loadMoreReviews" class="jhs-btn jhs-btn--secondary">加载更多评论</button>'), end = $('<div id="reviewsEnd" class="jhs-panel-end">已加载全部评论</div>').hide();
+    bindLoadMore(state, pageSize, keywords, container, footer) {
+      const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-review-load-more">加载更多评论</button>'), end = $('<div class="jhs-panel-end jhs-review-end">已加载全部评论</div>').hide();
       footer.empty().append(button, end);
-      let page = 1;
       button.on("click", (async () => {
-        button.text("加载中...").prop("disabled", true), page++;
+        button.text("加载中...").prop("disabled", true), state.page++;
         try {
-          const reviews = await R(movieId, page, pageSize);
-          await this.displayReviews(reviews, container, keywords), reviews.length < pageSize ? (button.remove(), end.show()) : button.text("加载更多评论").prop("disabled", false);
+          const reviews = await R(state.movieId, state.page, pageSize);
+          await this.displayReviews(state, reviews, container, keywords), reviews.length < pageSize ? (button.remove(), end.show()) : button.text("加载更多评论").prop("disabled", false);
         } catch (error) {
           clog.error("加载更多评论失败:", error), button.text("加载失败，请重试").prop("disabled", false);
         }
       }));
     }
-    async displayReviews(reviews, container, keywords) {
+    async displayReviews(state, reviews, container, keywords) {
       if (!reviews.length) return;
       const filter = keywords.length > 0 ? new RegExp(keywords.map(((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).join("|")) : null;
       for (const review of reviews) {
@@ -7099,25 +7509,23 @@ ${error.stack}` : "");
           stars,
           $("<time></time>").text(utils.formatDate(review.created_at)),
           $("<span></span>").text(`点赞：${Number(review.likes_count) || 0}`),
-          $("<span></span>").addClass("jhs-review-floor").text(`#${this.floorIndex++}楼`)
+          $("<span></span>").addClass("jhs-review-floor").text(`#${state.floorIndex++}楼`)
         );
         await this.appendReviewContent(body, content), item.append(meta, body), container.append(item);
       }
-      this.rightClickFilter();
     }
-    async appendReviewContent(container, content) {
+    appendReviewContent(container, content) {
       const linkPattern = /ed2k:\/\/\|file\|[^|]+\|\d+\|[a-fA-F0-9]{32}\|\/|magnet:\?[^\s"'<>`,;\u4e00-\u9fa5，。？！（）【】]+|https?:\/\/[^\s"'<>`,;\u4e00-\u9fa5，。？！（）【】]+/g;
-      const enable115Offline = await storageManager.getSetting("enable115Offline", false);
       let cursor = 0, match;
       while (match = linkPattern.exec(content)) {
         match.index > cursor && container.append(document.createTextNode(content.slice(cursor, match.index)));
-        await this.appendLinkControls(container, match[0], enable115Offline), cursor = match.index + match[0].length;
+        this.appendLinkControls(container, match[0]), cursor = match.index + match[0].length;
       }
       cursor < content.length && container.append(document.createTextNode(content.slice(cursor)));
     }
-    async appendLinkControls(container, value, enable115Offline) {
+    appendLinkControls(container, value) {
       const isEd2k = value.startsWith("ed2k://"), isMagnet = value.startsWith("magnet:"), label = isEd2k ? "ED2K 链接" : isMagnet ? "Magnet 链接" : "打开链接";
-      const wrapper = $('<span class="jhs-review-link-wrap"></span>');
+      const isResource = isMagnet || isEd2k, wrapper = $(isResource ? '<span class="jhs-review-link-wrap"></span>' : '<span class="jhs-review-inline-controls"></span>');
       const main = $('<span class="jhs-review-link-main"></span>');
       const open = isEd2k ? $('<button type="button" class="jhs-btn jhs-review-link"></button>').text(label).on("click", (() => utils.copyToClipboard(label, value))) : $("<a></a>").addClass("jhs-review-link").attr({
         href: value,
@@ -7126,16 +7534,16 @@ ${error.stack}` : "");
       }).text(label);
       const copy = $('<button type="button" class="jhs-btn jhs-review-link jhs-review-link-copy">复制</button>').on("click", (() => utils.copyToClipboard(label, value)));
       main.append(open, copy), wrapper.append(main);
-      if (isMagnet || isEd2k) {
+      if (isResource) {
         const actions = $('<span class="jhs-review-link-actions"></span>');
-        enable115Offline && actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn one115-offline-btn" data-magnet="${escapeHtml(value)}">115离线</button>`);
-        isMagnet && actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn one23-offline-btn" data-magnet="${escapeHtml(value)}">123离线</button>`);
+        actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn jhs-offline-btn" data-resource="${escapeHtml(value)}">离线</button>`);
         wrapper.append(actions);
       }
       container.append(wrapper);
     }
-    async rightClickFilter() {
-      await storageManager.getSetting("enableTitleSelectFilter", _) === _ && utils.rightClick(document.body, ".review-content", (async (event) => {
+    bindRightClickFilter() {
+      $(document).off("contextmenu.jhsReviewFilter", ".review-content").on("contextmenu.jhsReviewFilter", ".review-content", (async (event) => {
+        if (await storageManager.getSetting("enableTitleSelectFilter", _) !== _) return;
         const text = window.getSelection().toString();
         text && (event.preventDefault(), await utils.q(event, `是否将 '${text}' 加入评论区关键词?`, (async () => {
           await storageManager.saveReviewFilterKeyword(text), show.ok("操作成功, 刷新页面后生效");
@@ -7162,7 +7570,7 @@ ${error.stack}` : "");
             clientY: e3.clientY + 80
           };
           utils.q(n2, `是否屏蔽标题关键词 ${t2}?`, (async () => {
-            await storageManager.saveTitleFilterKeyword(t2), window.refresh(), utils.closePage();
+            await storageManager.saveTitleFilterKeyword(t2), await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" }), utils.closePage();
           }));
         }
       }));
@@ -7247,7 +7655,7 @@ ${error.stack}` : "");
             }
           } else show.error("当前有定时任务在后台执行中, 无法发起此操作");
         })).catch(((e4) => {
-          clog.error("锁任务出现错误:", e4), clog.error("锁任务出现错误:", e4);
+          clog.error("锁任务出现错误:", e4);
         }));
       }));
     }
@@ -7332,13 +7740,13 @@ ${error.stack}` : "");
               }, (async (t5) => {
                 t5 ? (await e2.loadConfig(), await e2.checkBlacklist(true)) : show.error("当前有定时任务在后台执行中, 无法发起手动任务");
               })).catch(((e3) => {
-                clog.error("锁任务出现错误:", e3), clog.error("锁任务出现错误:", e3);
+                clog.error("锁任务出现错误:", e3);
               }));
             }));
           }));
         }, "success"),
-        end: /* @__PURE__ */ __name(() => {
-          this.tableObj && (this.tableObj.destroy(), this.tableObj = null), window.refresh();
+        end: /* @__PURE__ */ __name(async () => {
+          this.tableObj && (this.tableObj.destroy(), this.tableObj = null), await jhsEventBus.emit("blacklist-rules-changed");
         }, "end")
       });
     }
@@ -7528,14 +7936,7 @@ ${error.stack}` : "");
       for (const s2 of n2) {
         const t3 = $(s2), { carNum: n3, url: a3, publishTime: o2 } = this.getBean("ListPagePlugin").findCarNumAndHref(t3);
         if (a3 && n3) try {
-          if (await storageManager.getCar(n3)) continue;
-          await storageManager.saveCar({
-            carNum: n3,
-            url: a3,
-            names: e2,
-            actionType: d,
-            publishTime: o2
-          }), clog.log("屏蔽演员番号", e2, n3);
+          await stateService.patch(n3, { blocked: true }, { type: "actor-page-block", record: { carNum: n3, url: a3, names: e2, publishTime: o2 } }), clog.log("屏蔽演员番号", e2, n3);
         } catch (i2) {
           clog.error(`保存失败 [${n3}]:`, i2);
         }
@@ -7544,7 +7945,7 @@ ${error.stack}` : "");
         show.info("请不要关闭窗口, 正在解析下一页:" + a2), await new Promise(((e3) => setTimeout(e3, 500)));
         const t3 = await gmHttp.get(a2), n3 = new DOMParser(), i2 = $(n3.parseFromString(t3, "text/html"));
         await this.filterAllVideo(e2, i2);
-      } else show.ok("执行结束!"), window.refresh();
+      } else show.ok("执行结束!");
     }
     async batchSaveAllVideos(e2, t2) {
       let n2, a2;
@@ -7553,8 +7954,8 @@ ${error.stack}` : "");
       for (const i2 of n2) {
         const n3 = $(i2), { carNum: a3, url: o2, publishTime: r2 } = this.getBean("ListPagePlugin").findCarNumAndHref(n3);
         if (o2 && a3) try {
-          if (await storageManager.getCar(a3)) continue;
-          await storageManager.saveCar({ carNum: a3, url: o2, names: e2, actionType: t2, publishTime: r2 }), clog.log("批量操作", e2, a3, t2);
+          const flag = legacyActionToFlag(t2);
+          flag && await stateService.patch(a3, { [flag]: true }, { type: "actor-page-batch-state", record: { carNum: a3, url: o2, names: e2, publishTime: r2 } }), clog.log("批量操作", e2, a3, t2);
         } catch (s2) {
           clog.error(`保存失败 [${a3}]:`, s2);
         }
@@ -7563,7 +7964,7 @@ ${error.stack}` : "");
         show.info("请不要关闭窗口, 正在解析下一页:" + a2), await new Promise(((e3) => setTimeout(e3, 500)));
         const i2 = await gmHttp.get(a2), s2 = new DOMParser(), o2 = $(s2.parseFromString(i2, "text/html"));
         await this.batchSaveAllVideos(e2, t2);
-      } else show.ok("执行结束!"), window.refresh();
+      } else show.ok("执行结束!");
     }
     async filterActorVideo(e2, t2, n2) {
       let { nextPageLink: a2 } = await this.parseAndSaveFilterInfo(n2, e2, t2);
@@ -7574,7 +7975,7 @@ ${error.stack}` : "");
         const i2 = await gmHttp.get(a2);
         n3 = utils.htmlTo$dom(i2);
         await this.filterActorVideo(e2, t2, n3);
-      } else show.ok("执行结束!"), window.refresh();
+      } else show.ok("执行结束!");
     }
     async parseAndSaveFilterInfo(e2, t2, n2) {
       let a2, i2;
@@ -7601,7 +8002,7 @@ ${error.stack}` : "");
       try {
         await storageManager.batchSaveBlacklistCarList(s2);
       } catch (r2) {
-        clog.error("保存失败:", r2), clog.error("保存失败:", r2);
+        clog.error("保存失败:", r2);
       }
       return {
         nextPageLink: i2,
@@ -7681,6 +8082,9 @@ ${error.stack}` : "");
                 </div>
             `);
       }
+      $("#waitCheckBtn > span").text("开始鉴定");
+      const newVideoCount = $("#newVideoCount").detach(), newVideoLabel = $("#newVideoBtn > span");
+      newVideoLabel.length && newVideoLabel.empty().append(document.createTextNode("新作品 ("), newVideoCount, document.createTextNode(")"));
     }
     /** 构建与原排序值兼容的 JHS 菜单。 */
     sortMenuHtml(method, title = "选择列表排序方式") {
@@ -7708,7 +8112,7 @@ ${error.stack}` : "");
         utils.q(n2, "一键屏蔽视频列表?", (async () => {
           this.loadObj = loading();
           try {
-            await e2.filterAllVideo(i2), window.refresh();
+            await e2.filterAllVideo(i2);
           } catch (t3) {
             clog.error(t3);
           } finally {
@@ -7722,7 +8126,7 @@ ${error.stack}` : "");
         utils.q(n2, "一键收藏所有可见作品?", (async () => {
           this.loadObj = loading();
           try {
-            await e2.batchSaveAllVideos(i2, h), window.refresh();
+            await e2.batchSaveAllVideos(i2, h);
           } catch (t3) {
             clog.error(t3);
           } finally {
@@ -7736,7 +8140,7 @@ ${error.stack}` : "");
         utils.q(n2, "一键已下载所有可见作品?", (async () => {
           this.loadObj = loading();
           try {
-            await e2.batchSaveAllVideos(i2, g), window.refresh();
+            await e2.batchSaveAllVideos(i2, g);
           } catch (t3) {
             clog.error(t3);
           } finally {
@@ -7802,22 +8206,16 @@ ${error.stack}` : "");
     }
     async openWaitCheck() {
       let e2 = this.getSelector();
-      const t2 = await storageManager.getSetting("waitCheckCount", 5), n2 = [u, b, y, k];
+      const t2 = await storageManager.getSetting("waitCheckCount", 5);
       let a2 = 0;
-      $(`${e2.itemSelector}:visible`).each(((e3, i2) => {
-        if (a2 >= t2) return false;
-        const s2 = $(i2);
-        if (n2.some(((e4) => s2.find(`span.tag:contains('${e4}')`).length > 0))) return;
-        const { carNum: o2, aHref: r2 } = this.getBean("ListPagePlugin").findCarNumAndHref(s2);
-        if (o2.includes("FC2-")) {
-          const e4 = this.parseMovieId(r2);
-          this.getBean("Fc2Plugin").openFc2Page(e4, o2, r2);
-        } else {
-          let e4 = r2 + (r2.includes("?") ? "&autoPlay=1" : "?autoPlay=1");
-          window.open(e4);
-        }
-        a2++;
-      })), 0 === a2 && show.info("没有需鉴定的视频");
+      const listPage = this.getBean("ListPagePlugin");
+      for (const element of $(e2.itemSelector).toArray()) {
+        if (a2 >= t2) break;
+        const item = $(element), flags = normalizeStateFlags(JSON.parse(item.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(item.attr("data-jhs-visibility") || "{}");
+        if (hasAnyState(flags) || isHardHidden(flags, visibilityReasons)) continue;
+        await listPage.openMovieDetail(item, { autoplay: true, newTab: false }), a2++;
+      }
+      0 === a2 && show.info("没有需鉴定的视频");
     }
   };
   __name(_ListPageButtonPlugin, "ListPageButtonPlugin");
@@ -7901,56 +8299,141 @@ ${error.stack}` : "");
       countKey: "currentPageWaitCheckCount"
     }
   };
+  var QUICK_FILTER_LABELS = Object.freeze({
+    all: "全部",
+    waitCheck: "待鉴定",
+    favorite: "收藏",
+    hasDown: "下载",
+    hasWatch: "已看",
+    blockedItems: "屏蔽项",
+    favoriteUndownloaded: "收藏未下载",
+    favoriteUnwatched: "收藏未观看",
+    downloadedUnwatched: "下载未观看",
+    recent7d: "最近 7 天"
+  });
+  var PRIMARY_QUICK_FILTERS = Object.freeze(["all", "waitCheck", "favorite", "hasDown", "hasWatch"]);
+  var SECONDARY_QUICK_FILTERS = Object.freeze(["blockedItems", "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d"]);
+  var VALID_QUICK_FILTERS = /* @__PURE__ */ new Set([...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS]);
+  function normalizeQuickFilterKey(value) {
+    if ("filter" === value) return "blockedItems";
+    return VALID_QUICK_FILTERS.has(value) ? value : "waitCheck";
+  }
+  __name(normalizeQuickFilterKey, "normalizeQuickFilterKey");
+  function isHardHidden(flags, visibilityReasons = {}) {
+    return Boolean(flags.blocked || visibilityReasons.keyword || visibilityReasons.actorBlacklist || visibilityReasons.actressBlacklist);
+  }
+  __name(isHardHidden, "isHardHidden");
+  function matchesQuickFilter(filter, flags, { visibilityReasons = {}, recent = false } = {}) {
+    const normalizedFilter = normalizeQuickFilterKey(filter), hardHidden = isHardHidden(flags, visibilityReasons);
+    if ("blockedItems" === normalizedFilter) return hardHidden;
+    if (hardHidden) return false;
+    if ("all" === normalizedFilter) return true;
+    if ("waitCheck" === normalizedFilter) return !hasAnyState(flags);
+    if ("favorite" === normalizedFilter) return !!flags.favorite;
+    if ("hasDown" === normalizedFilter) return !!flags.downloaded;
+    if ("hasWatch" === normalizedFilter) return !!flags.watched;
+    if ("favoriteUndownloaded" === normalizedFilter) return !!flags.favorite && !flags.downloaded;
+    if ("favoriteUnwatched" === normalizedFilter) return !!flags.favorite && !flags.watched;
+    if ("downloadedUnwatched" === normalizedFilter) return !!flags.downloaded && !flags.watched;
+    return "recent7d" === normalizedFilter && recent;
+  }
+  __name(matchesQuickFilter, "matchesQuickFilter");
+  function shouldHideInDefaultView(flags, settings) {
+    if (settings.showAllItem === _) return false;
+    const activeVisibility = [[flags.favorite, settings.showFavoriteItem ?? _], [flags.downloaded, settings.showHasDownItem ?? _], [flags.watched, settings.showHasWatchItem ?? _]].filter(((entry) => entry[0]));
+    return activeVisibility.length > 0 && activeVisibility.every(((entry) => entry[1] !== _));
+  }
+  __name(shouldHideInDefaultView, "shouldHideInDefaultView");
+  function shouldShowItem({ filter, flags, visibilityReasons, settingHidden, recent }) {
+    const normalizedFilter = normalizeQuickFilterKey(filter);
+    if (!matchesQuickFilter(normalizedFilter, flags, { visibilityReasons, recent })) return false;
+    return "all" !== normalizedFilter || !settingHidden;
+  }
+  __name(shouldShowItem, "shouldShowItem");
   var _ListPagePlugin = class _ListPagePlugin extends BasePlugin {
     async initCss() {
-      return `<style>.status-tag{position:absolute;z-index:var(--jhs-z-content);margin-right:5px;padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}</style>`;
+      return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}</style>`;
     }
     constructor() {
-      super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0), i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0), i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0), i(this, "currentPageTotalCount", 0), i(this, "cache", null), i(this, "translationPending", /* @__PURE__ */ new Map()), i(this, "filterContext", null), i(this, "pendingItems", /* @__PURE__ */ new Set()), i(this, "processTimer", null), i(this, "hdImageObserver", null), i(this, "hdEagerRemaining", 12), i(this, "writeQueue", Promise.resolve()), i(this, "_debouncedTranslateWrite", null);
+      super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0), i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0), i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0), i(this, "currentPageTotalCount", 0), i(this, "cache", null), i(this, "translationPending", /* @__PURE__ */ new Map()), i(this, "filterContext", null), i(this, "pendingItems", /* @__PURE__ */ new Set()), i(this, "processTimer", null), i(this, "hdImageObserver", null), i(this, "hdEagerRemaining", 12), i(this, "writeQueue", Promise.resolve()), i(this, "_debouncedTranslateWrite", null), i(this, "itemIndex", /* @__PURE__ */ new Map()), i(this, "recountFrame", null);
     }
     getName() {
       return "ListPagePlugin";
     }
     async handle() {
       if (!window.isListPage || isHitShowPage()) return;
-      new BroadcastChannel("channel-refresh").addEventListener("message", (async (e2) => {
-        let t2 = e2.data.type;
-        if ("refresh" === t2) {
-          this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
-          const e3 = this.getBean("HistoryPlugin");
-          e3.tableObj && e3.tableObj.setData();
-          const t3 = this.getBean("NewVideoPlugin");
-          t3 && void Promise.all([t3.showNewVideoCount(), t3.loadData()]).catch(((error) => clog.error("新作品数据刷新失败", error)));
-        } else "cleanCache_filter_actor_actress_car_list" === t2 ? (this.filterContext = null, storageManager._invalidateCache(storageManager.blacklist_car_list_key)) : "clean_cacheSettingObj" === t2 && (this.filterContext = null, storageManager._invalidateCache(storageManager.setting_key));
-      })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(), this.rememberTagExpand(), $(this.getSelector().itemSelector + " a").attr("target", "_blank"), $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.checkDom();
+      const refreshAll = /* @__PURE__ */ __name(async () => {
+        this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
+        const e2 = this.getBean("HistoryPlugin");
+        e2.tableObj && e2.tableObj.setData();
+        const t2 = this.getBean("NewVideoPlugin");
+        t2 && void Promise.all([t2.showNewVideoCount(), t2.loadData()]).catch(((error) => clog.error("新作品数据刷新失败", error)));
+      }, "refreshAll");
+      jhsEventBus.on("legacy-refresh", refreshAll), jhsEventBus.on("blacklist-rules-changed", refreshAll), jhsEventBus.on("filter-rules-changed", refreshAll), jhsEventBus.on("settings-changed", refreshAll), jhsEventBus.on("car-state-changed", (async (payload) => {
+        this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key);
+        const items = this.getIndexedItems(payload.carNums || []);
+        items.length && (await this.doFilterItems(items), this.applyVisibility(items));
+        const history = this.getBean("HistoryPlugin");
+        history.tableObj && history.tableObj.setData();
+      })), jhsEventBus.on("new-video-changed", (() => {
+        const plugin = this.getBean("NewVideoPlugin");
+        plugin && void Promise.all([plugin.showNewVideoCount(), plugin.loadData()]).catch(((error) => clog.error("新作品数据刷新失败", error)));
+      })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(), this.rememberTagExpand(), $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await jhsEventBus.emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: false }), this.checkDom();
     }
     async createQuickFilter() {
       if ($("#jhs-quick-filter").length) return;
-      const e2 = this.getSelector(), t2 = '\n            <div id="jhs-quick-filter" class="jhs-segmented" role="tablist" aria-label="状态筛选">\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="all">全部</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="waitCheck">待鉴定</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="favorite">已收藏</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="hasDown">已下载</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="hasWatch">已观看</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="filter">已屏蔽</button>\n            </div>';
+      const e2 = this.getSelector(), primaryHtml = PRIMARY_QUICK_FILTERS.map(((filter) => `<button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""), secondaryHtml = SECONDARY_QUICK_FILTERS.map(((filter, index) => `${1 === index ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-filter-option" aria-checked="false" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""), t2 = `<div id="jhs-quick-filter" class="jhs-quick-filter">
+                <div class="jhs-quick-filter__primary jhs-segmented" role="tablist" aria-label="状态筛选">${primaryHtml}</div>
+                <div class="jhs-quick-filter__more">
+                    <button type="button" class="jhs-btn jhs-btn--secondary jhs-quick-filter__toggle" aria-haspopup="menu" aria-expanded="false"><span class="jhs-quick-filter__label">更多筛选</span> ▾</button>
+                    <div class="jhs-popover jhs-commandbar__menu jhs-quick-filter__menu" role="menu" aria-label="更多筛选">${secondaryHtml}</div>
+                </div>
+            </div>`;
       r ? $(e2.boxSelector).before(t2) : l && $(".masonry").before(t2);
-      const n2 = this, a2 = await storageManager.getSetting("defaultQuickFilterTab", "waitCheck"), i2 = ["all", "waitCheck", "favorite", "hasDown", "hasWatch", "filter"].includes(a2) ? a2 : "waitCheck";
-      this.activeQuickFilter = i2, this.applyQuickFilter(i2), $(`#jhs-quick-filter .jhs-segmented__item[data-jhs-filter="${i2}"]`).addClass("active").attr("aria-selected", "true"), $("#jhs-quick-filter .jhs-segmented__item").not(`[data-jhs-filter="${i2}"]`).removeClass("active").attr("aria-selected", "false"), $("#jhs-quick-filter").on("click", ".jhs-segmented__item", (function() {
-        const t3 = $(this).data("jhs-filter");
-        $("#jhs-quick-filter .jhs-segmented__item").removeClass("active").attr("aria-selected", "false"), $(this).addClass("active").attr("aria-selected", "true"), n2.activeQuickFilter = t3, n2.applyQuickFilter(t3);
+      const root = $("#jhs-quick-filter"), toggle = root.find(".jhs-quick-filter__toggle"), menu = root.find(".jhs-quick-filter__menu"), closeMenu = /* @__PURE__ */ __name((restoreFocus = false) => {
+        menu.removeClass("is-open"), toggle.attr("aria-expanded", "false"), restoreFocus && toggle.trigger("focus");
+      }, "closeMenu");
+      root.on("click", ".jhs-segmented__item", ((event) => this.setQuickFilter($(event.currentTarget).data("jhs-filter")))).on("keydown", ".jhs-segmented__item", ((event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const tabs = root.find(".jhs-segmented__item"), index = tabs.index(event.currentTarget), next = "Home" === event.key ? 0 : "End" === event.key ? tabs.length - 1 : "ArrowRight" === event.key ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
+        tabs.eq(next).trigger("click").trigger("focus");
+      })).on("click", ".jhs-filter-option", ((event) => {
+        this.setQuickFilter($(event.currentTarget).data("jhs-filter")), closeMenu(true);
+      })).on("keydown", ".jhs-filter-option", ((event) => {
+        const items = menu.find(".jhs-filter-option"), index = items.index(event.currentTarget);
+        if ("Escape" === event.key) return event.preventDefault(), closeMenu(true);
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+        items.eq(next).trigger("focus");
       }));
+      toggle.on("click", ((event) => {
+        event.preventDefault(), event.stopPropagation();
+        const open = !menu.hasClass("is-open");
+        menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && (menu.find('[aria-checked="true"]').first().length ? menu.find('[aria-checked="true"]').first() : menu.find(".jhs-filter-option").first()).trigger("focus");
+      })), $(document).off("click.jhsQuickFilter").on("click.jhsQuickFilter", ((event) => {
+        $(event.target).closest(root).length || closeMenu();
+      }));
+      this.setQuickFilter(await storageManager.getSetting("defaultQuickFilterTab", "waitCheck"));
     }
     applyVisibility(items = null) {
-      const e2 = this.activeQuickFilter || "waitCheck", t2 = this.getSelector().itemSelector, n2 = ["filter", "keywordFilter", "actorFilter"];
+      const e2 = this.activeQuickFilter || "waitCheck", t2 = this.getSelector().itemSelector;
       (items ? $(items) : $(t2)).each((function() {
-        const t3 = $(this), a2 = t3.attr("data-hide") === "yes", i2 = t3.attr("data-jhs-status") || "waitCheck";
-        if (e2 === "all") {
-          n2.includes(i2) || a2 ? t3.hide() : t3.show();
-          return;
-        }
-        if (i2 === e2) {
-          t3.show();
-          return;
-        }
-        a2 || i2 !== e2 ? t3.hide() : t3.show();
+        const t3 = $(this), flags = normalizeStateFlags(JSON.parse(t3.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(t3.attr("data-jhs-visibility") || "{}"), settingHidden = "yes" === t3.attr("data-jhs-setting-hide"), recent = "yes" === t3.attr("data-jhs-recent");
+        shouldShowItem({ filter: e2, flags, visibilityReasons, settingHidden, recent }) ? t3.show() : t3.hide();
       }));
     }
-    applyQuickFilter(e2) {
-      this.activeQuickFilter = e2, this.applyVisibility();
+    setQuickFilter(filter, { syncUi = true } = {}) {
+      this.activeQuickFilter = normalizeQuickFilterKey(filter), this.applyVisibility(), syncUi && this.syncQuickFilterUi();
+    }
+    syncQuickFilterUi() {
+      const filter = normalizeQuickFilterKey(this.activeQuickFilter), isPrimary = PRIMARY_QUICK_FILTERS.includes(filter), root = $("#jhs-quick-filter"), tabs = root.find(".jhs-segmented__item"), options = root.find(".jhs-filter-option");
+      tabs.removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" });
+      isPrimary ? tabs.filter(`[data-jhs-filter="${filter}"]`).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }) : tabs.first().attr("tabindex", "0");
+      options.attr("aria-checked", "false").filter(`[data-jhs-filter="${filter}"]`).attr("aria-checked", "true");
+      root.find(".jhs-quick-filter__label").text(isPrimary ? "更多筛选" : `筛选：${QUICK_FILTER_LABELS[filter]}`);
+      $(".jhs-mobile-filter-label").text(`筛选：${QUICK_FILTER_LABELS[filter]}`), $(".jhs-mobile-filter-option").attr("aria-checked", "false").filter(`[data-jhs-filter="${filter}"]`).attr("aria-checked", "true");
     }
     rememberTagExpand() {
       if (!window.location.href.includes("actors")) return;
@@ -7967,11 +8450,14 @@ ${error.stack}` : "");
       const e2 = this.getSelector(), t2 = document.querySelector(e2.boxSelector);
       if (!t2) return void clog.error("没有找到容器节点!");
       const a2 = new MutationObserver(((records) => {
-        for (const record of records) for (const node of record.addedNodes) {
-          if (node.nodeType !== Node.ELEMENT_NODE) continue;
-          node.matches?.(e2.itemSelector) && "true" !== node.dataset.jhsProcessed && this.pendingItems.add(node), node.querySelectorAll?.(e2.itemSelector).forEach(((item) => {
-            "true" !== item.dataset.jhsProcessed && this.pendingItems.add(item);
-          }));
+        for (const record of records) {
+          this.removeIndexedItems(record.removedNodes);
+          for (const node of record.addedNodes) {
+            if (node.nodeType !== Node.ELEMENT_NODE) continue;
+            node.matches?.(e2.itemSelector) && "true" !== node.dataset.jhsProcessed && this.pendingItems.add(node), node.querySelectorAll?.(e2.itemSelector).forEach(((item) => {
+              "true" !== item.dataset.jhsProcessed && this.pendingItems.add(item);
+            }));
+          }
         }
         this.pendingItems.size && (this.processTimer && clearTimeout(this.processTimer), this.processTimer = setTimeout((() => {
           const items = [...this.pendingItems].filter(((item) => item.isConnected && "true" !== item.dataset.jhsProcessed));
@@ -7985,7 +8471,42 @@ ${error.stack}` : "");
     }
     async processAddedItems(items) {
       const selector = this.getSelector(), covers = items.flatMap(((item) => [...item.querySelectorAll(selector.coverImgSelector)]));
-      this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items), await this.doFilterItems(items), this.applyVisibility(items), await this.getBean("ListPageButtonPlugin").sortItems(), await this.getBean("CoverButtonPlugin").addSvgBtn(items), $(items).find("a").attr("target", "_blank"), items.forEach(((item) => item.dataset.jhsProcessed = "true")), this.getBean("AutoPagePlugin").checkLoad();
+      this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items), await this.doFilterItems(items), this.applyVisibility(items), await this.getBean("ListPageButtonPlugin").sortItems(), await this.getBean("CoverButtonPlugin").addSvgBtn(items), items.forEach(((item) => item.dataset.jhsProcessed = "true")), this.indexItems(items), await jhsEventBus.emit("list-items-added", { items }, { broadcast: false }), this.getBean("AutoPagePlugin").checkLoad();
+    }
+    rebuildItemIndex() {
+      this.itemIndex.clear(), this.indexItems($(this.getSelector().itemSelector).toArray());
+    }
+    indexItems(items) {
+      items.forEach(((item) => {
+        try {
+          const key = normalizeCarNum(this.findCarNumAndHref($(item)).carNum);
+          if (!key) return;
+          const indexed = this.itemIndex.get(key) || /* @__PURE__ */ new Set();
+          indexed.add(item), this.itemIndex.set(key, indexed);
+        } catch (error) {
+          clog.debug("列表项索引跳过无效卡片", error);
+        }
+      }));
+    }
+    removeIndexedItems(nodes) {
+      const removed = /* @__PURE__ */ new Set();
+      Array.from(nodes || []).forEach(((node) => {
+        node.nodeType === Node.ELEMENT_NODE && (removed.add(node), node.querySelectorAll?.(this.getSelector().itemSelector).forEach(((item) => removed.add(item))));
+      }));
+      if (!removed.size) return;
+      this.itemIndex.forEach(((items, key) => {
+        items.forEach(((item) => {
+          removed.has(item) && items.delete(item);
+        })), items.size || this.itemIndex.delete(key);
+      }));
+    }
+    getIndexedItems(carNums) {
+      const result = /* @__PURE__ */ new Set();
+      carNums.map(normalizeCarNum).forEach(((key) => {
+        const items = this.itemIndex.get(key);
+        items?.forEach(((item) => item.isConnected ? result.add(item) : items.delete(item))), items && !items.size && this.itemIndex.delete(key);
+      }));
+      return [...result];
     }
     fixBusTitleBox(items = null) {
       if (!l) return;
@@ -8027,31 +8548,45 @@ ${error.stack}` : "");
       for (const a2 of e2) if (t2.includes(a2) || n2.startsWith(a2)) return a2;
       return null;
     }
-    getStatusKey(e2) {
-      return e2 === Te.IS_FILTERED ? "filter" : e2 === Te.IS_FAVORITE ? "favorite" : e2 === Te.IS_HAS_DOWN ? "hasDown" : e2 === Te.IS_HAS_WATCH ? "hasWatch" : e2 === Te.IS_KEYWORD_FILTER ? "keywordFilter" : e2 === Te.IS_ACTOR_FILTER ? "actorFilter" : e2 === Te.IS_ACTRESS_FILTER ? "actorFilter" : "waitCheck";
-    }
     async getFilterContext() {
       if (this.filterContext) return this.filterContext;
-      const [titleKeywords, blacklistMap, blacklistCars, settings, statusMap] = await Promise.all([storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getStatusMap()]), actorCarNumToNameMap = /* @__PURE__ */ new Map(), actressCarNumToNameMap = /* @__PURE__ */ new Map();
+      const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), stateService.getActivityLog()]), actorCarNumToNameMap = /* @__PURE__ */ new Map(), actressCarNumToNameMap = /* @__PURE__ */ new Map(), recentCarNums = /* @__PURE__ */ new Set();
+      const cutoff = Date.now() - 7 * 864e5;
+      activity.entries.filter(((entry) => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)).forEach(((entry) => entry.changes.filter(((change) => "reverted" !== change.undoState && change.fields?.some(((field) => field.startsWith("stateFlags."))))).forEach(((change) => recentCarNums.add(change.carNum)))));
       for (const item of blacklistCars) {
         const role = blacklistMap.get(item.starId)?.role;
         if (!role) {
           clog.error("黑名单数据源丢失演员信息", item);
           continue;
         }
-        const target = role === B ? actorCarNumToNameMap : actressCarNumToNameMap;
-        target.has(item.carNum) || target.set(item.carNum, item.names);
+        const target = role === B ? actorCarNumToNameMap : actressCarNumToNameMap, carNum = normalizeCarNum(item.carNum);
+        target.has(carNum) || target.set(carNum, item.names);
       }
-      return this.filterContext = { titleKeywords, settings, statusMap, actorCarNumToNameMap, actressCarNumToNameMap };
+      return this.filterContext = { titleKeywords, settings, carMap, recentCarNums, actorCarNumToNameMap, actressCarNumToNameMap };
     }
-    recountStatuses() {
-      this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0, this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0, this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0;
-      const countKeys = { filter: "currentPageFilterCount", favorite: "currentPageFavoriteCount", hasDown: "currentPageHasDownCount", hasWatch: "currentPageHasWatchCount", keywordFilter: "currentPageKeywordFilterCount", actorFilter: "currentPageActorFilterCount", waitCheck: "currentPageWaitCheckCount" };
+    collectCurrentPageSummary() {
+      const summary = { total: 0, pending: 0, blockedItems: 0, favorite: 0, downloaded: 0, watched: 0, debug: { manualBlocked: 0, keywordBlocked: 0, actorBlocked: 0, actressBlocked: 0 } };
       $(this.getSelector().itemSelector).each(((e2, item) => {
         const card = $(item);
         if (l && card.find(".avatar-box").length > 0) return;
-        const key = countKeys[card.attr("data-jhs-status") || "waitCheck"];
-        key && this[key]++, this.currentPageTotalCount++;
+        const flags = normalizeStateFlags(JSON.parse(card.attr("data-jhs-flags") || "{}")), reasons = JSON.parse(card.attr("data-jhs-visibility") || "{}"), hardHidden = isHardHidden(flags, reasons);
+        summary.total++, flags.favorite && summary.favorite++, flags.downloaded && summary.downloaded++, flags.watched && summary.watched++, hardHidden && summary.blockedItems++, !hasAnyState(flags) && !hardHidden && summary.pending++, flags.blocked && summary.debug.manualBlocked++, reasons.keyword && summary.debug.keywordBlocked++, reasons.actorBlacklist && summary.debug.actorBlocked++, reasons.actressBlacklist && summary.debug.actressBlocked++;
+      }));
+      return summary;
+    }
+    getCurrentPageSummary() {
+      return this.collectCurrentPageSummary();
+    }
+    recountStatuses() {
+      const summary = this.collectCurrentPageSummary();
+      this.currentPageFilterCount = summary.debug.manualBlocked, this.currentPageFavoriteCount = summary.favorite, this.currentPageHasDownCount = summary.downloaded, this.currentPageHasWatchCount = summary.watched, this.currentPageKeywordFilterCount = summary.debug.keywordBlocked, this.currentPageActorFilterCount = summary.debug.actorBlocked + summary.debug.actressBlocked, this.currentPageWaitCheckCount = summary.pending, this.currentPageTotalCount = summary.total;
+      return summary;
+    }
+    scheduleRecount() {
+      if (this.recountFrame) return;
+      const schedule = window.requestAnimationFrame || ((callback) => setTimeout(callback, 0));
+      this.recountFrame = schedule((() => {
+        this.recountFrame = null, this.recountStatuses();
       }));
     }
     async translateListItems(e2) {
@@ -8066,9 +8601,9 @@ ${error.stack}` : "");
     }
     async filterMovieList(e2) {
       utils.time("累计耗费时间"), utils.time("读取数据耗时");
-      const { titleKeywords: n2, settings: s2, statusMap: m2, actorCarNumToNameMap: f, actressCarNumToNameMap: v2 } = await this.getFilterContext(), o2 = utils.time("读取数据耗时");
+      const { titleKeywords: n2, settings: s2, carMap: m2, recentCarNums: recent, actorCarNumToNameMap: f, actressCarNumToNameMap: v2 } = await this.getFilterContext(), o2 = utils.time("读取数据耗时");
       utils.time("组装数据耗时");
-      const b2 = utils.time("组装数据耗时"), w = (null == s2 ? void 0 : s2.showFilterItem) ?? C, y2 = (null == s2 ? void 0 : s2.showFilterActorItem) ?? C, x = (null == s2 ? void 0 : s2.showFilterKeywordItem) ?? C, k2 = (null == s2 ? void 0 : s2.showFavoriteItem) ?? _, S = (null == s2 ? void 0 : s2.showHasDownItem) ?? _, T2 = (null == s2 ? void 0 : s2.showHasWatchItem) ?? _, I2 = (null == s2 ? void 0 : s2.showAllItem) ?? C, P2 = (null == s2 ? void 0 : s2.tagPosition) || "rightTop";
+      const b2 = utils.time("组装数据耗时"), k2 = (null == s2 ? void 0 : s2.showFavoriteItem) ?? _, S = (null == s2 ? void 0 : s2.showHasDownItem) ?? _, T2 = (null == s2 ? void 0 : s2.showHasWatchItem) ?? _, I2 = (null == s2 ? void 0 : s2.showAllItem) ?? C, P2 = (null == s2 ? void 0 : s2.tagPosition) || "rightTop";
       const O2 = n2.filter(((e3) => e3));
       this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0, this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0, this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时");
       const R2 = [];
@@ -8076,29 +8611,37 @@ ${error.stack}` : "");
         n3 > 0 && n3 % 12 == 0 && await this.yieldListFrame();
         let t2 = $(e2[n3]);
         if (l && t2.find(".avatar-box").length > 0) continue;
-        const { carNum: a2, title: i2 } = this.findCarNumAndHref(t2), { filter: s3, favorite: o3, hasDown: d2, hasWatch: h2 } = m2, g2 = o3.has(a2), p2 = d2.has(a2), u2 = h2.has(a2), b3 = s3.has(a2), B2 = f.has(a2), D3 = v2.has(a2), A3 = B2 || D3, L2 = this.findMatchedTitleKeyword(O2, i2, a2), M2 = !!L2;
-        if (!c) {
-          let e3 = k2 === C && g2 || S === C && p2 || T2 === C && u2 || w === C && b3 && !(g2 || p2 || u2) || y2 === C && A3 || x === C && M2;
-          const n4 = t2.attr("data-hide") === _;
-          I2 === _ && (e3 = false), e3 && !n4 ? t2.hide().attr("data-hide", _) : !e3 && n4 && t2.show().removeAttr("data-hide");
-        }
-        let N2 = Te.IS_WAIT_CHECK, j2 = null;
-        b3 ? N2 = Te.IS_FILTERED : g2 ? N2 = Te.IS_FAVORITE : p2 ? N2 = Te.IS_HAS_DOWN : u2 ? N2 = Te.IS_HAS_WATCH : M2 ? (N2 = Te.IS_KEYWORD_FILTER, j2 = L2 || "未知") : B2 ? (N2 = Te.IS_ACTOR_FILTER, j2 = f.get(a2) || "") : D3 && (N2 = Te.IS_ACTRESS_FILTER, j2 = v2.get(a2) || ""), j2 || (j2 = N2.reasonType), N2.isCounted && this[N2.countKey]++, this.currentPageTotalCount++;
-        const q2 = this.getStatusKey(N2), F2 = t2.attr("data-jhs-status") !== q2 || t2.attr("data-jhs-tip") !== j2 || t2.attr("data-jhs-tag-position") !== P2;
-        t2.attr("data-jhs-status", q2).attr("data-jhs-tip", j2).attr("data-jhs-tag-position", P2);
-        const E2 = "rightTop" === P2 ? "right: 0; top:5px;" : "left: 0; top:5px;";
-        if (F2 && (t2.find(".status-tag").remove(), N2.text)) {
-          const e3 = $(`<span class="jhs-badge ${r ? "jhs-badge--success" : "jhs-badge--neutral"} status-tag" data-tip="${escapeHtml(j2)}" title="">${escapeHtml(N2.text)}</span>`);
-          e3.css({ color: N2.on, backgroundColor: N2.color, right: "rightTop" === P2 ? 0 : "auto", left: "rightTop" === P2 ? "auto" : 0, top: "5px" });
-          e3.find(".tag").css("color", N2.on);
-          if (r && t2.find(".tags").append(e3), l) {
-            const n4 = t2.find(".item-tag");
-            n4.length ? n4.append(e3) : t2.find(".photo-info > span > div").append(e3);
+        const { carNum: a2, title: i2 } = this.findCarNumAndHref(t2), record = m2.get(a2), flags = normalizeStateFlags(record?.stateFlags), actorFiltered = f.has(a2), actressFiltered = v2.has(a2), keyword = this.findMatchedTitleKeyword(O2, i2, a2), visibilityReasons = { keyword: !!keyword, actorBlacklist: actorFiltered, actressBlacklist: actressFiltered };
+        const hardHidden = isHardHidden(flags, visibilityReasons), settingHidden = shouldHideInDefaultView(flags, { showAllItem: I2, showFavoriteItem: k2, showHasDownItem: S, showHasWatchItem: T2 });
+        t2.attr("data-jhs-flags", JSON.stringify(flags)).attr("data-jhs-visibility", JSON.stringify(visibilityReasons)).attr("data-jhs-setting-hide", settingHidden ? _ : C).attr("data-jhs-recent", recent.has(a2) ? _ : C).attr("data-jhs-tag-position", P2);
+        const signature = JSON.stringify({ flags, visibilityReasons, P: P2 });
+        if (t2.attr("data-jhs-state-signature") !== signature) {
+          t2.attr("data-jhs-state-signature", signature), t2.find(".jhs-status-tags").remove();
+          const badgeDefs = [
+            [flags.blocked, Te.IS_FILTERED, "单番号屏蔽"],
+            [flags.favorite, Te.IS_FAVORITE, ""],
+            [flags.downloaded, Te.IS_HAS_DOWN, ""],
+            [flags.watched, Te.IS_HAS_WATCH, ""],
+            [visibilityReasons.keyword, Te.IS_KEYWORD_FILTER, keyword || "未知"],
+            [visibilityReasons.actorBlacklist, Te.IS_ACTOR_FILTER, f.get(a2) || ""],
+            [visibilityReasons.actressBlacklist, Te.IS_ACTRESS_FILTER, v2.get(a2) || ""]
+          ].filter(((item) => item[0]));
+          if (badgeDefs.length) {
+            const box = $(`<span class="jhs-status-tags ${"rightTop" === P2 ? "jhs-status-tags--right" : "jhs-status-tags--left"}"></span>`);
+            badgeDefs.forEach((([, definition, tip]) => {
+              const badge = $(`<span class="jhs-badge ${r ? "jhs-badge--success" : "jhs-badge--neutral"} status-tag" data-tip="${escapeHtml(tip)}" title="">${escapeHtml(definition.text)}</span>`);
+              badge.css({ color: definition.on, backgroundColor: definition.color }), box.append(badge);
+            }));
+            if (r) t2.find(".tags").append(box);
+            else if (l) {
+              const host = t2.find(".item-tag");
+              host.length ? host.append(box) : t2.find(".photo-info > span > div").append(box);
+            }
           }
         }
-        R2.push(t2);
+        hardHidden || R2.push(t2);
       }
-      this.recountStatuses(), void this.translateListItems(R2).catch(((e3) => clog.error("列表页翻译任务失败", e3)));
+      this.scheduleRecount(), void this.translateListItems(R2).catch(((e3) => clog.error("列表页翻译任务失败", e3)));
       const D2 = utils.time("处理页面耗时"), A2 = utils.time("累计耗费时间");
       clog.log(`
             <table class="countTable jhs-layout-b12542a5">
@@ -8155,31 +8698,12 @@ ${error.stack}` : "");
     }
     async bindClick() {
       let e2 = this.getSelector();
-      $(e2.boxSelector).on("click", ".item img", (async (e3) => {
-        try {
-          if (e3.preventDefault(), e3.stopPropagation(), $(e3.target).closest("div.meta-buttons").length) return;
-          const t2 = $(e3.target).closest(".item"), { carNum: n2, aHref: a2 } = this.findCarNumAndHref(t2);
-          if (n2.includes("FC2-")) {
-            let e4 = this.parseMovieId(a2);
-            this.getBean("Fc2Plugin").openFc2Dialog(e4, n2, a2), this.$currentImage = null;
-          } else utils.openPage(a2, n2, true, e3), this.$currentImage = null;
-        } catch (t2) {
-          clog.error("点击图片处理失败:", t2);
-        }
-      })), $(e2.boxSelector).on("click", ".item video", (async (e3) => {
+      this.bindMovieDetailNavigation(e2.boxSelector), $(e2.boxSelector).on("click", ".item video", (async (e3) => {
         const t2 = e3.currentTarget;
         t2.paused ? await safePlay(t2, {
           context: "列表视频",
           notify: true
         }) : t2.pause(), e3.preventDefault(), e3.stopPropagation();
-      })), $(e2.boxSelector).on("click", ".item .video-title", (async (e3) => {
-        if ($(e3.target).closest('[class^="jhs-match-"]').length) return;
-        const t2 = $(e3.currentTarget).closest(".item"), { carNum: n2, aHref: a2 } = this.findCarNumAndHref(t2);
-        if (n2.includes("FC2-")) {
-          e3.preventDefault();
-          let t3 = this.parseMovieId(a2);
-          this.getBean("Fc2Plugin").openFc2Dialog(t3, n2, a2);
-        }
       })), $(e2.boxSelector).on("contextmenu", ".item img, .item video", (async (e3) => {
         try {
           e3.preventDefault();
@@ -8187,13 +8711,7 @@ ${error.stack}` : "");
           let s2 = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10"), o2 = "";
           s2.length && (o2 = s2.text().trim().split(",")[0].replace("(無碼)", "")), utils.q(e3, `是否屏蔽番号 ${n2}?`, (async () => {
             try {
-              o2 || (o2 = await this.parseActressName(a2)), await storageManager.saveCar({
-                carNum: n2,
-                url: a2,
-                names: o2,
-                actionType: d,
-                publishTime: i2
-              }), window.refresh(), show.ok("操作成功");
+              o2 || (o2 = await this.parseActressName(a2)), await stateService.patch(n2, { blocked: true }, { record: { carNum: n2, url: a2, names: o2, publishTime: i2 } }), show.ok("操作成功");
             } catch (s3) {
               clog.error("屏蔽操作失败:", s3), show.error("操作失败");
             }
@@ -8201,6 +8719,28 @@ ${error.stack}` : "");
         } catch (t2) {
           clog.error("右键菜单处理失败:", t2);
         }
+      }));
+    }
+    /** 从任意列表卡片进入统一详情导航。 */
+    async openMovieDetail(item, { event = null, autoplay = false, newTab = false } = {}) {
+      const card = item?.jquery ? item : $(item), { carNum, aHref } = this.findCarNumAndHref(card);
+      if (!carNum || !aHref) return;
+      const shouldOpenTab = newTab || !!event && (event.ctrlKey || event.metaKey || 1 === event.button);
+      if (carNum.includes("FC2-")) {
+        const movieId = this.parseMovieId(aHref);
+        return shouldOpenTab ? this.getBean("Fc2Plugin").openFc2Page(movieId, carNum, aHref, { event, newTab: true }) : this.getBean("Fc2Plugin").openFc2Dialog(movieId, carNum, aHref);
+      }
+      const destination = new URL(aHref, window.location.origin);
+      autoplay && destination.searchParams.set("autoPlay", "1"), utils.openPage(destination.href, carNum, true, { event, newTab: shouldOpenTab }), this.$currentImage = null;
+    }
+    /** 为宿主与合成列表统一绑定左键、修饰键和中键导航。 */
+    bindMovieDetailNavigation(container) {
+      const root = $(container), selector = ".item img, .item .video-title";
+      root.off("click.jhsMovieDetail auxclick.jhsMovieDetail", selector).on("click.jhsMovieDetail auxclick.jhsMovieDetail", selector, ((event) => {
+        if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
+        if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
+        event.preventDefault(), event.stopPropagation();
+        void this.openMovieDetail($(event.currentTarget).closest(".item"), { event }).catch(((error) => clog.error("打开影片详情失败", error)));
       }));
     }
     async parseActressName(e2) {
@@ -8230,7 +8770,7 @@ ${error.stack}` : "");
         throw show.error(e3), new Error(e3);
       }
       return {
-        carNum: a2,
+        carNum: normalizeCarNum(a2),
         aHref: r2,
         url: r2,
         title: i2,
@@ -9076,10 +9616,10 @@ ${error.stack}` : "");
       await this.saveArray("screenshotProviders", value.providers);
     }
     async getCloudSettings() {
-      return { enable115Offline: Boolean(await this.storage.getSetting("enable115Offline", false)), enable115Match: Boolean(await this.storage.getSetting("enable115Match", false)), enable115LoginRedirect: Boolean(await this.storage.getSetting("enable115LoginRedirect", false)), concurrency: Number(await this.storage.getSetting("oneOneFiveConcurrency", 4)), cacheMinutes: Number(await this.storage.getSetting("oneOneFiveCacheMinutes", 60)) };
+      return { enable123Offline: Boolean(await this.storage.getSetting("enable123Offline", true)), enable115Offline: Boolean(await this.storage.getSetting("enable115Offline", false)), enable115Match: Boolean(await this.storage.getSetting("enable115Match", false)), enable115LoginRedirect: Boolean(await this.storage.getSetting("enable115LoginRedirect", false)), providerMode: await this.storage.getSetting("offlineProviderMode", "ask"), concurrency: Number(await this.storage.getSetting("oneOneFiveConcurrency", 4)), cacheMinutes: Number(await this.storage.getSetting("oneOneFiveCacheMinutes", 60)) };
     }
     async saveCloudSettings(value) {
-      for (const [key, item] of Object.entries({ enable115Offline: value.enable115Offline, enable115Match: value.enable115Match, enable115LoginRedirect: value.enable115LoginRedirect, oneOneFiveConcurrency: value.concurrency, oneOneFiveCacheMinutes: value.cacheMinutes })) await this.storage.saveSettingItem(key, item);
+      for (const [key, item] of Object.entries({ enable123Offline: value.enable123Offline, enable115Offline: value.enable115Offline, enable115Match: value.enable115Match, enable115LoginRedirect: value.enable115LoginRedirect, offlineProviderMode: value.providerMode || "ask", oneOneFiveConcurrency: value.concurrency, oneOneFiveCacheMinutes: value.cacheMinutes })) await this.storage.saveSettingItem(key, item);
     }
     async exportConfig() {
       return { customMagnetSources: await this.getMagnetSources(), magnetTagRules: await this.getMagnetTagRules(), magnetFilterRules: await this.getMagnetFilterRules(), magnetBuiltInSources: await this.getBuiltInSources(), screenshot: await this.getScreenshotSettings() };
@@ -9261,7 +9801,7 @@ ${error.stack}` : "");
                         <div id="base-panel" class="content-panel ${"base-panel" === activePanel ? "active" : ""}" role="region">
                             <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>基础配置</h3><p>配置列表显示、媒体加载、网络和主题。</p></header><div class="jhs-setting-group">
                             <div class="jhs-setting-row">
-                                <span class="setting-label">打开待鉴定窗口数:</span>
+                                <span class="setting-label">每次开始鉴定数量:</span>
                                 <div class="form-content">
                                     <input type="number" id="waitCheckCount" class="jhs-field" min="1" max="20">
                                 </div>
@@ -9283,10 +9823,10 @@ ${error.stack}` : "");
                                     <select id="defaultQuickFilterTab" class="jhs-select-source">
                                         <option value="all">全部</option>
                                         <option value="waitCheck">待鉴定</option>
-                                        <option value="favorite">已收藏</option>
-                                        <option value="hasDown">已下载</option>
-                                        <option value="hasWatch">已观看</option>
-                                        <option value="filter">已屏蔽</option>
+                                        <option value="favorite">收藏</option>
+                                        <option value="hasDown">下载</option>
+                                        <option value="hasWatch">已看</option>
+                                        <option value="blockedItems">屏蔽项</option>
                                     </select>
                                 </div>
                             </div>
@@ -9475,12 +10015,9 @@ ${error.stack}` : "");
                                     </select>
                                 </div>
                             </div>
-                            <div class="jhs-setting-row" data-description="分别控制各类已鉴定内容是否继续显示。">
+                            <div class="jhs-setting-row" data-description="控制普通状态内容是否继续显示在全部视图中。">
                                 <span class="setting-label">列表状态显示</span>
                                 <div class="form-content jhs-setting-toggle-grid">
-                                    <label><input type="checkbox" id="showFilterItem" class="mini-switch"><span>屏蔽单番号</span></label>
-                                    <label><input type="checkbox" id="showFilterActorItem" class="mini-switch"><span>屏蔽演员</span></label>
-                                    <label><input type="checkbox" id="showFilterKeywordItem" class="mini-switch"><span>屏蔽关键词</span></label>
                                     <label><input type="checkbox" id="showFavoriteItem" class="mini-switch"><span>收藏</span></label>
                                     <label><input type="checkbox" id="showHasDownItem" class="mini-switch"><span>已下载</span></label>
                                     <label><input type="checkbox" id="showHasWatchItem" class="mini-switch"><span>已观看</span></label>
@@ -9802,7 +10339,7 @@ ${error.stack}` : "");
       <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>截图来源</h3><p>自动选择会按优先级依次尝试可用来源。</p></header><div class="jhs-setting-group"><label class="jhs-setting-row"><span>自动选择</span><input type="radio" name="screenshotMode" value="auto"></label><label class="jhs-setting-row"><span>手动选择</span><input type="radio" name="screenshotMode" value="manual"></label></div><div id="screenshot-source-list" class="jhs-resource-card-list"></div></section>
       <details class="jhs-setting-section jhs-resource-advanced"><summary>高级 · 导入 / 导出配置</summary><p class="jhs-setting-help">高级功能：错误修改可能导致自定义来源不可用，保存前会校验配置。</p><div class="jhs-toolbar"><button type="button" id="export-resource-config" class="jhs-btn">导出资源配置</button><button type="button" id="edit-resource-config" class="jhs-btn">编辑原始 JSON</button><button type="button" id="import-resource-config" class="jhs-btn jhs-btn--primary">校验并导入</button></div><textarea id="advanced-resource-json" class="jhs-textarea" rows="10" aria-label="高级资源配置 JSON"></textarea></details>
     </div>
-    <div id="cloud-services-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>115</h3><p>状态：<span id="one-one-five-state" class="jhs-badge">未检测</span> <button type="button" id="check-one-one-five-login" class="jhs-btn jhs-btn--ghost">检测登录状态</button></p><small>功能开关在刷新页面后生效。</small></header><label class="jhs-setting-row"><span><strong>115 离线下载</strong><small>在磁力结果旁显示“115离线”。</small></span><input type="checkbox" id="enable115Offline" class="mini-switch"></label><label class="jhs-setting-row"><span><strong>115 文件匹配</strong><small>根据当前番号查找网盘中已存在的视频。</small></span><input type="checkbox" id="enable115Match" class="mini-switch"></label><label class="jhs-setting-row"><span><strong>未登录时自动跳转登录</strong><small>点击“115离线”检测到未登录时自动打开 115 登录页。</small></span><input type="checkbox" id="enable115LoginRedirect" class="mini-switch"></label><label class="jhs-setting-row"><span>匹配并发数</span><input type="number" id="oneOneFiveConcurrency" class="jhs-field" min="1" max="10"></label><label class="jhs-setting-row"><span>匹配缓存（分钟）</span><input type="number" id="oneOneFiveCacheMinutes" class="jhs-field" min="1" max="1440"></label></section></div>
+    <div id="cloud-services-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>统一离线服务</h3><p>115 状态：<span id="one-one-five-state" class="jhs-badge">未知</span> <button type="button" id="check-one-one-five-login" class="jhs-btn jhs-btn--ghost">检测登录状态</button></p><small>服务不可用时会在提交前显示原因。</small></header><label class="jhs-setting-row"><span><strong>123 云盘离线</strong><small>支持 Magnet，需要先在 123 云盘页面同步授权。</small></span><input type="checkbox" id="enable123Offline" class="mini-switch"></label><label class="jhs-setting-row"><span><strong>115 离线下载</strong><small>支持 Magnet 与 ED2K。</small></span><input type="checkbox" id="enable115Offline" class="mini-switch"></label><label class="jhs-setting-row"><span>默认服务</span><select id="offlineProviderMode" class="jhs-select-source"><option value="ask">每次询问</option><option value="123">优先 123</option><option value="115">优先 115</option></select></label><label class="jhs-setting-row"><span><strong>115 文件匹配</strong><small>根据当前番号查找网盘中已存在的视频。</small></span><input type="checkbox" id="enable115Match" class="mini-switch"></label><label class="jhs-setting-row"><span><strong>未登录时提供登录入口</strong><small>提交失败时显示 115 登录地址。</small></span><input type="checkbox" id="enable115LoginRedirect" class="mini-switch"></label><label class="jhs-setting-row"><span>匹配并发数</span><input type="number" id="oneOneFiveConcurrency" class="jhs-field" min="1" max="10"></label><label class="jhs-setting-row"><span>匹配缓存（分钟）</span><input type="number" id="oneOneFiveCacheMinutes" class="jhs-field" min="1" max="1440"></label></section></div>
     <div id="data-tools-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>番号列表导入</h3><p>支持换行、空格、逗号分隔番号。必须先解析预览，再确认导入。</p></header><label class="jhs-setting-group"><span>番号</span><textarea id="car-number-import" class="jhs-textarea" rows="8" placeholder="ABC-001&#10;ABC-002&#10;FC2-1234567"></textarea></label><label class="jhs-setting-row"><span>导入为</span><select id="car-number-import-status" class="jhs-select-source"><option value="">请选择</option><option value="favorite">收藏</option><option value="hasDown">已下载</option><option value="hasWatch">已观看</option><option value="filter">屏蔽</option></select></label><div class="jhs-toolbar"><button type="button" id="preview-car-number-import" class="jhs-btn">解析预览</button><button type="button" id="confirm-car-number-import" class="jhs-btn jhs-btn--primary" disabled>确认导入</button></div><div id="car-number-import-preview" class="jhs-card" aria-live="polite"></div></section></div>`);
     const sidebar = $(".jhs-mobile-sidebar,.setting-sidebar").first();
     sidebar.append('<button type="button" class="jhs-btn side-menu-item" data-panel="resource-sources-panel" aria-controls="resource-sources-panel">资源来源</button><button type="button" class="jhs-btn side-menu-item" data-panel="cloud-services-panel" aria-controls="cloud-services-panel">云盘服务</button><button type="button" class="jhs-btn side-menu-item" data-panel="data-tools-panel" aria-controls="data-tools-panel">数据工具</button>');
@@ -10084,9 +10621,9 @@ ${error.stack}` : "");
   __name(repairDataHealthWithBackup, "repairDataHealthWithBackup");
   async function loadSettingForm(getBean) {
     let e2 = await storageManager.getSetting();
-    $("#videoQuality").val(e2.videoQuality), $("#reviewCount").val(e2.reviewCount || 20), $("#tagPosition").val(e2.tagPosition || "rightTop"), $("#defaultQuickFilterTab").val(e2.defaultQuickFilterTab || "waitCheck"), $("#needClosePageBasic").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e2.autoRemoveNewVideoMarkAfterBrowse && e2.autoRemoveNewVideoMarkAfterBrowse === _), $("#waitCheckCount").val(e2.waitCheckCount || 5), $("#checkConcurrencyCount").val(e2.checkConcurrencyCount || 2), $("#checkRequestSleep").val(e2.checkRequestSleep || 100), $("#enableCheckBlacklist").val(e2.enableCheckBlacklist || _), $("#checkBlacklist_intervalTime").val(e2.checkBlacklist_intervalTime || 12), $("#checkBlacklist_ruleTime").val(e2.checkBlacklist_ruleTime || 8760), $("#enableCheckFavoriteActress").val(e2.enableCheckFavoriteActress || _), $("#checkFavoriteActress_IntervalTime").val(e2.checkFavoriteActress_IntervalTime || 24), $("#enableCheckNewVideo").val(e2.enableCheckNewVideo || _), $("#checkNewVideo_intervalTime").val(e2.checkNewVideo_intervalTime || 12), $("#checkNewVideo_ruleTime").val(e2.checkNewVideo_ruleTime || 8760);
+    $("#videoQuality").val(e2.videoQuality), $("#reviewCount").val(e2.reviewCount || 20), $("#tagPosition").val(e2.tagPosition || "rightTop"), $("#defaultQuickFilterTab").val(normalizeQuickFilterKey(e2.defaultQuickFilterTab)), $("#needClosePageBasic").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e2.autoRemoveNewVideoMarkAfterBrowse && e2.autoRemoveNewVideoMarkAfterBrowse === _), $("#waitCheckCount").val(e2.waitCheckCount || 5), $("#checkConcurrencyCount").val(e2.checkConcurrencyCount || 2), $("#checkRequestSleep").val(e2.checkRequestSleep || 100), $("#enableCheckBlacklist").val(e2.enableCheckBlacklist || _), $("#checkBlacklist_intervalTime").val(e2.checkBlacklist_intervalTime || 12), $("#checkBlacklist_ruleTime").val(e2.checkBlacklist_ruleTime || 8760), $("#enableCheckFavoriteActress").val(e2.enableCheckFavoriteActress || _), $("#checkFavoriteActress_IntervalTime").val(e2.checkFavoriteActress_IntervalTime || 24), $("#enableCheckNewVideo").val(e2.enableCheckNewVideo || _), $("#checkNewVideo_intervalTime").val(e2.checkNewVideo_intervalTime || 12), $("#checkNewVideo_ruleTime").val(e2.checkNewVideo_ruleTime || 8760);
     const t2 = e2.highlightedTagNumber || 1, n2 = e2.highlightedTagColor || "#ce2222";
-    $("#highlightedTagNumber").val(e2.highlightedTagNumber || 1), $("#highlightedTagColor").val(e2.highlightedTagColor || "#ce2222"), $("#highlightedTagLabel").css("border", `${t2}px solid ${n2}`), $("#enableClog").val(e2.enableClog || _), $("#clogMsgCount").val(e2.clogMsgCount || 2e3), $("#mobileMode").val(e2.mobileMode || "auto"), $("#themeMode").val(e2.themeMode || "light"), $("#httpTimeout").val(e2.httpTimeout || 5e3), $("#httpRetryCount").val(e2.httpRetryCount || 3), $("#webDavUrl").val(e2.webDavUrl || ""), $("#webDavUsername").val(e2.webDavUsername || ""), $("#webDavPassword").val(await decryptCredential(e2.webDavPassword) || ""), $("#enableTitleSelectFilter").prop("checked", !e2.enableTitleSelectFilter || e2.enableTitleSelectFilter === _), $("#enableFavoriteActresses").prop("checked", !e2.enableFavoriteActresses || e2.enableFavoriteActresses === _), $("#enableSaveActressCarInfo").prop("checked", !!e2.enableSaveActressCarInfo && e2.enableSaveActressCarInfo === _), $("#enableScreenSvg").prop("checked", !e2.enableScreenSvg || e2.enableScreenSvg === _), $("#enableVideoSvg").prop("checked", !e2.enableVideoSvg || e2.enableVideoSvg === _), $("#enableHandleSvg").prop("checked", !e2.enableHandleSvg || e2.enableHandleSvg === _), $("#enableSiteSvg").prop("checked", !e2.enableSiteSvg || e2.enableSiteSvg === _), $("#enableCopySvg").prop("checked", !e2.enableCopySvg || e2.enableCopySvg === _), $("#showFilterItem").prop("checked", !!e2.showFilterItem && e2.showFilterItem === _), $("#showFilterActorItem").prop("checked", !!e2.showFilterActorItem && e2.showFilterActorItem === _), $("#showFilterKeywordItem").prop("checked", !!e2.showFilterKeywordItem && e2.showFilterKeywordItem === _), $("#showFavoriteItem").prop("checked", !e2.showFavoriteItem || e2.showFavoriteItem === _), $("#showHasDownItem").prop("checked", !e2.showHasDownItem || e2.showHasDownItem === _), $("#showHasWatchItem").prop("checked", !e2.showHasWatchItem || e2.showHasWatchItem === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableVerticalModel").prop("checked", !!e2.enableVerticalModel && e2.enableVerticalModel === _), $("#containerColumns").val(e2.containerColumns || 5), $("#showContainerColumns").text(e2.containerColumns || 5), $("#containerWidth").val((e2.containerWidth || 100) - 70), $("#showContainerWidth").text((e2.containerWidth || 100) + "%");
+    $("#highlightedTagNumber").val(e2.highlightedTagNumber || 1), $("#highlightedTagColor").val(e2.highlightedTagColor || "#ce2222"), $("#highlightedTagLabel").css("border", `${t2}px solid ${n2}`), $("#enableClog").val(e2.enableClog || _), $("#clogMsgCount").val(e2.clogMsgCount || 2e3), $("#mobileMode").val(e2.mobileMode || "auto"), $("#themeMode").val(e2.themeMode || "light"), $("#httpTimeout").val(e2.httpTimeout || 5e3), $("#httpRetryCount").val(e2.httpRetryCount || 3), $("#webDavUrl").val(e2.webDavUrl || ""), $("#webDavUsername").val(e2.webDavUsername || ""), $("#webDavPassword").val(await decryptCredential(e2.webDavPassword) || ""), $("#enableTitleSelectFilter").prop("checked", !e2.enableTitleSelectFilter || e2.enableTitleSelectFilter === _), $("#enableFavoriteActresses").prop("checked", !e2.enableFavoriteActresses || e2.enableFavoriteActresses === _), $("#enableSaveActressCarInfo").prop("checked", !!e2.enableSaveActressCarInfo && e2.enableSaveActressCarInfo === _), $("#enableScreenSvg").prop("checked", !e2.enableScreenSvg || e2.enableScreenSvg === _), $("#enableVideoSvg").prop("checked", !e2.enableVideoSvg || e2.enableVideoSvg === _), $("#enableHandleSvg").prop("checked", !e2.enableHandleSvg || e2.enableHandleSvg === _), $("#enableSiteSvg").prop("checked", !e2.enableSiteSvg || e2.enableSiteSvg === _), $("#enableCopySvg").prop("checked", !e2.enableCopySvg || e2.enableCopySvg === _), $("#showFavoriteItem").prop("checked", !e2.showFavoriteItem || e2.showFavoriteItem === _), $("#showHasDownItem").prop("checked", !e2.showHasDownItem || e2.showHasDownItem === _), $("#showHasWatchItem").prop("checked", !e2.showHasWatchItem || e2.showHasWatchItem === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableVerticalModel").prop("checked", !!e2.enableVerticalModel && e2.enableVerticalModel === _), $("#containerColumns").val(e2.containerColumns || 5), $("#showContainerColumns").text(e2.containerColumns || 5), $("#containerWidth").val((e2.containerWidth || 100) - 70), $("#showContainerWidth").text((e2.containerWidth || 100) + "%");
     const a2 = getBean("OtherSitePlugin"), i2 = await a2.getMissAvUrl(), s2 = await a2.getjableUrl(), o2 = await a2.getAvgleUrl(), r2 = await a2.getJavTrailersUrl(), l2 = await a2.getAv123Url(), c2 = await a2.getJavDbUrl(), d2 = await a2.getJavBusUrl(), h2 = await a2.getSupJavUrl();
     $("#missAvUrl").val(i2), $("#jableUrl").val(s2), $("#avgleUrl").val(o2), $("#javTrailersUrl").val(r2), $("#av123Url").val(l2), $("#javDbUrl").val(c2), $("#javBusUrl").val(d2), $("#supJavUrl").val(h2);
     let g2 = await storageManager.getReviewFilterKeywordList(), p2 = await storageManager.getTitleFilterKeyword();
@@ -10123,34 +10660,25 @@ ${error.stack}` : "");
   __name(bindLayoutRangeEvents, "bindLayoutRangeEvents");
   async function initQuickSettingForm(getBean, getSelector, openSettingDialogFn) {
     let e2 = await storageManager.getSetting();
-    $("#needClosePage").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoPage").prop("checked", !e2.autoPage || e2.autoPage === _), $("#translateTitle").prop("checked", !e2.translateTitle || e2.translateTitle === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableLoadOtherSite").prop("checked", !e2.enableLoadOtherSite || e2.enableLoadOtherSite === _), $("#showFilterItem").prop("checked", !!e2.showFilterItem && e2.showFilterItem === _), $("#showFilterActorItem").prop("checked", !!e2.showFilterActorItem && e2.showFilterActorItem === _), $("#showFilterKeywordItem").prop("checked", !!e2.showFilterKeywordItem && e2.showFilterKeywordItem === _), $("#showFavoriteItem").prop("checked", !e2.showFavoriteItem || e2.showFavoriteItem === _), $("#showHasDownItem").prop("checked", !e2.showHasDownItem || e2.showHasDownItem === _), $("#showHasWatchItem").prop("checked", !e2.showHasWatchItem || e2.showHasWatchItem === _), $("#showFilterItem").on("change", (async (t3) => {
-      let n3 = $("#showFilterItem").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("showFilterItem", n3), window.refresh();
-    })), $("#showFilterActorItem").on("change", (async (t3) => {
-      let n3 = $("#showFilterActorItem").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("showFilterActorItem", n3), window.refresh();
-    })), $("#showFilterKeywordItem").on("change", (async (t3) => {
-      let n3 = $("#showFilterKeywordItem").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("showFilterKeywordItem", n3), window.refresh();
-    })), $("#showFavoriteItem").on("change", (async (t3) => {
+    $("#needClosePage").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoPage").prop("checked", !e2.autoPage || e2.autoPage === _), $("#translateTitle").prop("checked", !e2.translateTitle || e2.translateTitle === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableLoadOtherSite").prop("checked", !e2.enableLoadOtherSite || e2.enableLoadOtherSite === _), $("#showFavoriteItem").prop("checked", !e2.showFavoriteItem || e2.showFavoriteItem === _), $("#showHasDownItem").prop("checked", !e2.showHasDownItem || e2.showHasDownItem === _), $("#showHasWatchItem").prop("checked", !e2.showHasWatchItem || e2.showHasWatchItem === _), $("#showFavoriteItem").on("change", (async (t3) => {
       let n3 = $("#showFavoriteItem").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("showFavoriteItem", n3), window.refresh();
+      await storageManager.saveSettingItem("showFavoriteItem", n3), await jhsEventBus.emit("filter-rules-changed", { setting: "showFavoriteItem" });
     })), $("#showHasDownItem").on("change", (async (t3) => {
       let n3 = $("#showHasDownItem").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("showHasDownItem", n3), window.refresh();
+      await storageManager.saveSettingItem("showHasDownItem", n3), await jhsEventBus.emit("filter-rules-changed", { setting: "showHasDownItem" });
     })), $("#showHasWatchItem").on("change", (async (t3) => {
       let n3 = $("#showHasWatchItem").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("showHasWatchItem", n3), window.refresh();
+      await storageManager.saveSettingItem("showHasWatchItem", n3), await jhsEventBus.emit("filter-rules-changed", { setting: "showHasWatchItem" });
     }));
-    const t2 = $("#showFilterItem, #showFilterActorItem, #showFilterKeywordItem, #showFavoriteItem, #showHasDownItem, #showHasWatchItem"), n2 = /* @__PURE__ */ __name(() => {
+    const t2 = $("#showFavoriteItem, #showHasDownItem, #showHasWatchItem"), n2 = /* @__PURE__ */ __name(() => {
       const e3 = $("#showAllItem").is(":checked");
       t2.prop("disabled", e3), e3 ? t2.attr("data-tip", "请先关闭显示所有才可点击") : t2.removeAttr("data-tip");
     }, "n");
     $("#showAllItem").prop("checked", !!e2.showAllItem && e2.showAllItem === _), $("#showAllItem").on("change", (async (t3) => {
       let a2 = $("#showAllItem").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("showAllItem", a2), n2(), window.refresh();
+      await storageManager.saveSettingItem("showAllItem", a2), n2(), await jhsEventBus.emit("filter-rules-changed", { setting: "showAllItem" });
     })), n2(), $("#needClosePage").on("change", (async (t3) => {
-      await storageManager.saveSettingItem("needClosePage", $("#needClosePage").is(":checked") ? _ : C), window.refresh();
+      await storageManager.saveSettingItem("needClosePage", $("#needClosePage").is(":checked") ? _ : C), await jhsEventBus.emit("filter-rules-changed");
     })), $("#autoPage").on("change", (async (t3) => {
       const n3 = $("#autoPage").is(":checked") ? _ : C;
       await storageManager.saveSettingItem("autoPage", n3), $("#sort-toggle-btn").prop("disabled", n3 === _).attr("title", n3 === _ ? "瀑布流模式仅支持默认排序" : "选择列表排序方式");
@@ -10184,7 +10712,7 @@ ${error.stack}` : "");
   __name(initQuickSettingForm, "initQuickSettingForm");
   async function saveSettingForm(getBean) {
     let e2 = await storageManager.getSetting();
-    e2.videoQuality = $("#videoQuality").val(), e2.reviewCount = $("#reviewCount").val(), e2.tagPosition = $("#tagPosition").val(), e2.defaultQuickFilterTab = $("#defaultQuickFilterTab").val(), e2.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e2.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e2.waitCheckCount = $("#waitCheckCount").val(), e2.highlightedTagNumber = $("#highlightedTagNumber").val(), e2.highlightedTagColor = $("#highlightedTagColor").val(), e2.checkConcurrencyCount = $("#checkConcurrencyCount").val(), e2.checkRequestSleep = $("#checkRequestSleep").val(), e2.enableCheckBlacklist = $("#enableCheckBlacklist").val(), e2.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e2.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(), e2.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e2.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(), e2.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e2.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(), e2.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e2.httpTimeout = Number($("#httpTimeout").val()) || 5e3, e2.httpRetryCount = Number($("#httpRetryCount").val()) || 3, e2.circuitBreakerThreshold = Number($("#circuitBreakerThreshold").val()) || 3, e2.circuitBreakerCooldown = Number($("#circuitBreakerCooldownSec").val()) * 1e3, e2.enableClog = $("#enableClog").val(), e2.enableClog === _ ? clog.show() : clog.hide(), e2.clogMsgCount = $("#clogMsgCount").val(), e2.mobileMode = $("#mobileMode").val(), e2.themeMode = $("#themeMode").val(), e2.webDavUrl = $("#webDavUrl").val(), e2.webDavUsername = $("#webDavUsername").val(), e2.webDavPassword = await encryptCredential($("#webDavPassword").val()), e2.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""), e2.jableUrl = $("#jableUrl").val().replace(/\/$/, ""), e2.avgleUrl = $("#avgleUrl").val().replace(/\/$/, ""), e2.javTrailersUrl = $("#javTrailersUrl").val().replace(/\/$/, ""), e2.av123Url = $("#av123Url").val().replace(/\/$/, ""), e2.javDbUrl = $("#javDbUrl").val().replace(/\/$/, ""), e2.javBusUrl = $("#javBusUrl").val().replace(/\/$/, ""), e2.supJavUrl = $("#supJavUrl").val().replace(/\/$/, ""), e2.enableTitleSelectFilter = $("#enableTitleSelectFilter").is(":checked") ? _ : C, e2.enableFavoriteActresses = $("#enableFavoriteActresses").is(":checked") ? _ : C, e2.enableSaveActressCarInfo = $("#enableSaveActressCarInfo").is(":checked") ? _ : C, e2.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e2.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C, e2.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e2.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C, e2.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C, e2.showFilterItem = $("#showFilterItem").is(":checked") ? _ : C, e2.showFilterActorItem = $("#showFilterActorItem").is(":checked") ? _ : C, e2.showFilterKeywordItem = $("#showFilterKeywordItem").is(":checked") ? _ : C, e2.showFavoriteItem = $("#showFavoriteItem").is(":checked") ? _ : C, e2.showHasDownItem = $("#showHasDownItem").is(":checked") ? _ : C, e2.showHasWatchItem = $("#showHasWatchItem").is(":checked") ? _ : C, e2.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e2.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C, e2.containerColumns = Number($("#containerColumns").val()) || 5, e2.containerWidth = Number($("#containerWidth").val()) + 70 || 100, await storageManager.saveSetting(e2);
+    e2.videoQuality = $("#videoQuality").val(), e2.reviewCount = $("#reviewCount").val(), e2.tagPosition = $("#tagPosition").val(), e2.defaultQuickFilterTab = normalizeQuickFilterKey($("#defaultQuickFilterTab").val()), e2.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e2.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e2.waitCheckCount = $("#waitCheckCount").val(), e2.highlightedTagNumber = $("#highlightedTagNumber").val(), e2.highlightedTagColor = $("#highlightedTagColor").val(), e2.checkConcurrencyCount = $("#checkConcurrencyCount").val(), e2.checkRequestSleep = $("#checkRequestSleep").val(), e2.enableCheckBlacklist = $("#enableCheckBlacklist").val(), e2.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e2.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(), e2.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e2.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(), e2.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e2.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(), e2.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e2.httpTimeout = Number($("#httpTimeout").val()) || 5e3, e2.httpRetryCount = Number($("#httpRetryCount").val()) || 3, e2.circuitBreakerThreshold = Number($("#circuitBreakerThreshold").val()) || 3, e2.circuitBreakerCooldown = Number($("#circuitBreakerCooldownSec").val()) * 1e3, e2.enableClog = $("#enableClog").val(), e2.enableClog === _ ? clog.show() : clog.hide(), e2.clogMsgCount = $("#clogMsgCount").val(), e2.mobileMode = $("#mobileMode").val(), e2.themeMode = $("#themeMode").val(), e2.webDavUrl = $("#webDavUrl").val(), e2.webDavUsername = $("#webDavUsername").val(), e2.webDavPassword = await encryptCredential($("#webDavPassword").val()), e2.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""), e2.jableUrl = $("#jableUrl").val().replace(/\/$/, ""), e2.avgleUrl = $("#avgleUrl").val().replace(/\/$/, ""), e2.javTrailersUrl = $("#javTrailersUrl").val().replace(/\/$/, ""), e2.av123Url = $("#av123Url").val().replace(/\/$/, ""), e2.javDbUrl = $("#javDbUrl").val().replace(/\/$/, ""), e2.javBusUrl = $("#javBusUrl").val().replace(/\/$/, ""), e2.supJavUrl = $("#supJavUrl").val().replace(/\/$/, ""), e2.enableTitleSelectFilter = $("#enableTitleSelectFilter").is(":checked") ? _ : C, e2.enableFavoriteActresses = $("#enableFavoriteActresses").is(":checked") ? _ : C, e2.enableSaveActressCarInfo = $("#enableSaveActressCarInfo").is(":checked") ? _ : C, e2.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e2.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C, e2.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e2.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C, e2.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C, e2.showFavoriteItem = $("#showFavoriteItem").is(":checked") ? _ : C, e2.showHasDownItem = $("#showHasDownItem").is(":checked") ? _ : C, e2.showHasWatchItem = $("#showHasWatchItem").is(":checked") ? _ : C, e2.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e2.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C, e2.containerColumns = Number($("#containerColumns").val()) || 5, e2.containerWidth = Number($("#containerWidth").val()) + 70 || 100, await storageManager.saveSetting(e2);
     let t2 = [];
     $("#reviewKeywordContainer .keyword-label").toArray().forEach(((e3) => {
       let n3 = $(e3).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
@@ -10194,7 +10722,7 @@ ${error.stack}` : "");
     $("#filterKeywordContainer .keyword-label").toArray().forEach(((e3) => {
       let t3 = $(e3).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
       n2.push(t3);
-    })), await storageManager.saveTitleFilterKeyword(n2), show.ok("保存成功"), window.refresh();
+    })), await storageManager.saveTitleFilterKeyword(n2), show.ok("保存成功"), await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" });
     const a2 = getBean("NewVideoPlugin");
     a2 && a2.resetBtnTip(), getBean("BlacklistPlugin").resetBtnTip(), getBean("BlacklistPlugin").reloadTable();
   }
@@ -10779,13 +11307,14 @@ ${error.stack}` : "");
         return false === source.implemented ? { ...merged, enabled: false } : merged;
       })) } };
       this.renderResourceSettings();
+      $("#enable123Offline").prop("checked", cloud.enable123Offline);
       $("#enable115Offline").prop("checked", cloud.enable115Offline);
+      $("#offlineProviderMode").val(cloud.providerMode);
       $("#enable115Match").prop("checked", cloud.enable115Match);
       $("#enable115LoginRedirect").prop("checked", cloud.enable115LoginRedirect);
       $("#oneOneFiveConcurrency").val(cloud.concurrency);
       $("#oneOneFiveCacheMinutes").val(cloud.cacheMinutes);
-      if (cloud.enable115Offline || cloud.enable115Match) this.checkOneOneFiveLogin();
-      $("#cloud-services-panel input").off("change.jhsResource").on("change.jhsResource", (() => this.saveCloudSettings()));
+      $("#cloud-services-panel").off("change.jhsResource", "input, select").on("change.jhsResource", "input, select", (() => void this.saveCloudSettings()));
       $("#resource-sources-panel").off("change.jhsResource", 'input[name="screenshotMode"]').on("change.jhsResource", 'input[name="screenshotMode"]', ((event) => {
         this.resourceState.screenshot.mode = event.currentTarget.value;
         this.resourceSettings.saveScreenshotSettings(this.resourceState.screenshot);
@@ -10913,7 +11442,7 @@ ${error.stack}` : "");
       }, "yes") });
     }
     async saveCloudSettings() {
-      await this.resourceSettings.saveCloudSettings({ enable115Offline: $("#enable115Offline").is(":checked"), enable115Match: $("#enable115Match").is(":checked"), enable115LoginRedirect: $("#enable115LoginRedirect").is(":checked"), concurrency: Number($("#oneOneFiveConcurrency").val()), cacheMinutes: Number($("#oneOneFiveCacheMinutes").val()) });
+      await this.resourceSettings.saveCloudSettings({ enable123Offline: $("#enable123Offline").is(":checked"), enable115Offline: $("#enable115Offline").is(":checked"), providerMode: $("#offlineProviderMode").val(), enable115Match: $("#enable115Match").is(":checked"), enable115LoginRedirect: $("#enable115LoginRedirect").is(":checked"), concurrency: Number($("#oneOneFiveConcurrency").val()), cacheMinutes: Number($("#oneOneFiveCacheMinutes").val()) });
     }
     async checkOneOneFiveLogin() {
       const badge = $("#one-one-five-state").text("检测中");
@@ -10947,13 +11476,17 @@ ${error.stack}` : "");
       if (!this.pendingCarImport) return show.info("请先解析预览");
       const pending = this.pendingCarImport;
       utils.q(event, `确认导入 ${pending.values.length} 条记录？`, (async () => {
-        const existing = new Map((await storageManager.getCarList()).map(((item) => [item.carNum, item]))), summary = { added: 0, updated: 0, failed: 0 };
-        for (const carNum of pending.values) try {
-          await storageManager.saveCar({ ...existing.get(carNum) || {}, carNum, url: existing.get(carNum)?.url || buildFallbackCarUrl(carNum), names: existing.get(carNum)?.names || "", actionType: pending.actionType, publishTime: existing.get(carNum)?.publishTime || "" });
-          existing.has(carNum) ? summary.updated++ : summary.added++;
-        } catch (error) {
-          summary.failed++;
-          clog.warn(`番号 ${carNum} 导入失败`, error);
+        const existing = new Map((await storageManager.getCarList()).map(((item) => [normalizeCarNum(item.carNum), item]))), summary = { added: 0, updated: 0, failed: 0 }, flag = legacyActionToFlag(pending.actionType);
+        for (const rawCarNum of pending.values) {
+          const carNum = normalizeCarNum(rawCarNum);
+          try {
+            const current = existing.get(carNum);
+            await stateService.patch(carNum, { [flag]: true }, { type: "manual-car-number-import", record: { carNum, url: current?.url || buildFallbackCarUrl(carNum), names: current?.names || "", publishTime: current?.publishTime || "" } });
+            current ? summary.updated++ : summary.added++;
+          } catch (error) {
+            summary.failed++;
+            clog.warn(`番号 ${carNum} 导入失败`, error);
+          }
         }
         this.pendingCarImport = null;
         $("#confirm-car-number-import").prop("disabled", true);
@@ -11296,9 +11829,6 @@ ${error.stack}` : "");
   __name(_BusNavBarPlugin, "BusNavBarPlugin");
   var BusNavBarPlugin = _BusNavBarPlugin;
   var _RelatedPlugin = class _RelatedPlugin extends BasePlugin {
-    constructor() {
-      super(...arguments), i(this, "floorIndex", 1), i(this, "isInit", false), i(this, "$panel", null);
-    }
     getName() {
       return "RelatedPlugin";
     }
@@ -11317,61 +11847,67 @@ ${error.stack}` : "");
             </style>`;
     }
     async showRelated(target, movieId) {
-      const enabled = await storageManager.getSetting("enableLoadRelated", C), host = target;
+      const enabled = await storageManager.getSetting("enableLoadRelated", C), host = target?.length ? target : this.getBean("DetailWorkspacePlugin")?.getSlot("related");
       if (!movieId) return void show.error("未传入movieId");
-      const panel = $('<section class="jhs-related-panel" data-jhs-panel="related"></section>'), header = $('<header class="jhs-panel-header"><h3>相关清单</h3></header>'), toggle = $('<button type="button" id="relatedFold" class="jhs-btn jhs-btn--secondary jhs-panel-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>');
-      header.append(toggle), panel.append(header, '<div id="relatedContainer" class="jhs-related-list"></div>', '<div id="relatedFooter" class="jhs-panel-footer"></div>'), host.append(panel), this.$panel = panel;
+      const existing = host.children('[data-jhs-panel="related"]').filter(((_2, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
+      if (existing.length) return existing;
+      const panel = $('<section class="jhs-related-panel" data-jhs-panel="related"></section>').attr("data-jhs-movie-id", String(movieId)), header = $('<header class="jhs-panel-header"><h3>相关清单</h3></header>'), toggle = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-panel-toggle jhs-related-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>'), state = { movieId, panel, floorIndex: 1, loaded: false, loading: false, page: 1 };
+      header.append(toggle), panel.append(header, '<div class="jhs-related-list jhs-related-container"></div>', '<div class="jhs-panel-footer jhs-related-footer"></div>'), host.append(panel);
       this.updateToggle(toggle, enabled === _);
       toggle.on("click", ((event) => {
         event.preventDefault(), event.stopPropagation();
         const expanded = "展开" === toggle.find(".toggle-text").text();
-        this.updateToggle(toggle, expanded), panel.find("#relatedContainer, #relatedFooter").toggle(expanded), expanded && !this.isInit && (this.fetchAndDisplayRelateds(movieId), this.isInit = true), storageManager.saveSettingItem("enableLoadRelated", expanded ? _ : C);
+        this.updateToggle(toggle, expanded), panel.find(".jhs-related-container, .jhs-related-footer").toggle(expanded), expanded && !state.loaded && !state.loading && void this.fetchAndDisplayRelateds(state), storageManager.saveSettingItem("enableLoadRelated", expanded ? _ : C);
       }));
-      enabled === _ ? (await this.fetchAndDisplayRelateds(movieId), this.isInit = true) : panel.find("#relatedContainer, #relatedFooter").hide();
+      enabled === _ ? await this.fetchAndDisplayRelateds(state) : panel.find(".jhs-related-container, .jhs-related-footer").hide();
+      return panel;
     }
     updateToggle(toggle, expanded) {
       toggle.attr("aria-expanded", String(expanded)), toggle.find(".toggle-text").text(expanded ? "折叠" : "展开"), toggle.find(".toggle-icon").text(expanded ? "▲" : "▼");
     }
-    async fetchAndDisplayRelateds(movieId) {
-      const container = this.$panel.find("#relatedContainer"), footer = this.$panel.find("#relatedFooter");
+    async fetchAndDisplayRelateds(state) {
+      if (state.loading) return;
+      state.loading = true;
+      const { movieId, panel } = state, container = panel.find(".jhs-related-container"), footer = panel.find(".jhs-related-footer");
       container.empty().append($('<div class="jhs-panel-state"></div>').text("获取清单中...")), footer.empty();
       let related;
       try {
         related = await K(movieId, 1, 20);
       } catch (error) {
         clog.error("获取清单失败:", error);
-        return void this.renderRetry(container, (() => this.fetchAndDisplayRelateds(movieId)));
+        state.loading = false;
+        return void this.renderRetry(container, (() => this.fetchAndDisplayRelateds(state)));
       }
+      state.loading = false, state.loaded = true;
       container.empty();
       if (!related.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无清单"));
-      this.displayRelateds(related, container), 20 === related.length ? this.bindLoadMore(movieId, container, footer) : footer.append($('<div class="jhs-panel-end"></div>').text("已加载全部清单"));
+      this.displayRelateds(state, related, container), 20 === related.length ? this.bindLoadMore(state, container, footer) : footer.append($('<div class="jhs-panel-end"></div>').text("已加载全部清单"));
     }
     renderRetry(container, retry) {
       container.empty();
       const state = $('<div class="jhs-panel-state"></div>').append(document.createTextNode("获取清单失败 "));
       state.append($('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry)), container.append(state);
     }
-    bindLoadMore(movieId, container, footer) {
-      const button = $('<button type="button" id="loadMoreRelateds" class="jhs-btn jhs-btn--secondary">加载更多清单</button>'), end = $('<div id="relatedEnd" class="jhs-panel-end">已加载全部清单</div>').hide();
+    bindLoadMore(state, container, footer) {
+      const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-related-load-more">加载更多清单</button>'), end = $('<div class="jhs-panel-end jhs-related-end">已加载全部清单</div>').hide();
       footer.empty().append(button, end);
-      let page = 1;
       button.on("click", (async () => {
-        button.text("加载中...").prop("disabled", true), page++;
+        button.text("加载中...").prop("disabled", true), state.page++;
         try {
-          const related = await K(movieId, page, 20);
-          this.displayRelateds(related, container), related.length < 20 ? (button.remove(), end.show()) : button.text("加载更多清单").prop("disabled", false);
+          const related = await K(state.movieId, state.page, 20);
+          this.displayRelateds(state, related, container), related.length < 20 ? (button.remove(), end.show()) : button.text("加载更多清单").prop("disabled", false);
         } catch (error) {
           clog.error("加载更多清单失败:", error), button.text("加载失败，请重试").prop("disabled", false);
         }
       }));
     }
-    displayRelateds(related, container) {
+    displayRelateds(state, related, container) {
       related.forEach(((item) => {
         const row = $('<article class="jhs-related-item"></article>'), title = $("<a></a>").addClass("jhs-related-title").attr({
           href: `/lists/${encodeURIComponent(item.relatedId)}`,
           target: "_blank",
           rel: "noopener noreferrer"
-        }).text(item.name || "未命名清单"), heading = $('<div class="jhs-related-heading"></div>').append($("<span></span>").addClass("jhs-related-index").text(`#${this.floorIndex++}`), title), meta = $('<div class="jhs-related-meta"></div>'), time = $('<time class="jhs-related-time"></time>').text(`创建时间：${item.createTime || "未知"}`);
+        }).text(item.name || "未命名清单"), heading = $('<div class="jhs-related-heading"></div>').append($("<span></span>").addClass("jhs-related-index").text(`#${state.floorIndex++}`), title), meta = $('<div class="jhs-related-meta"></div>'), time = $('<time class="jhs-related-time"></time>').text(`创建时间：${item.createTime || "未知"}`);
         meta.append(
           $("<span></span>").text(`视频：${Number(item.movieCount) || 0}`),
           $("<span></span>").text(`收藏：${Number(item.collectionCount) || 0}`),
@@ -11385,62 +11921,47 @@ ${error.stack}` : "");
   var RelatedPlugin = _RelatedPlugin;
   var _WantAndWatchedVideosPlugin = class _WantAndWatchedVideosPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "type", null);
+      super(...arguments), i(this, "flag", null);
     }
     getName() {
       return "WantAndWatchedVideosPlugin";
     }
     async handle() {
       window.location.href.includes("/want_watch_videos") && ($("h3").append('<button type="button" class="jhs-btn jhs-btn--primary jhs-layout-481ed7e7" id="wantWatchBtn">导入至 JHS</button>'), $("#wantWatchBtn").on("click", ((e2) => {
-        this.type = h, this.importWantWatchVideos(e2, "是否将 想看的影片 导入到 JHS-收藏?");
+        this.flag = "favorite", this.importWantWatchVideos(e2, "是否将想看的影片导入到 JHS 收藏？");
       }))), window.location.href.includes("/watched_videos") && ($("h3").append('<button type="button" class="jhs-btn jhs-btn--primary jhs-layout-481ed7e7" id="wantWatchBtn">导入至 JHS</button>'), $("#wantWatchBtn").on("click", ((e2) => {
-        this.type = g, this.importWantWatchVideos(e2, "是否将 看过的影片 导入到 JHS-已下载?");
+        this.flag = "watched", this.importWantWatchVideos(e2, "是否将看过的影片导入到 JHS 已观看？");
       })));
     }
     importWantWatchVideos(e2, t2) {
       utils.q(null, `${t2} <br/> <span class="jhs-task-emphasis">执行此功能前请记得备份数据</span>`, (async () => {
         let e3 = loading();
         try {
-          await this.parseMovieList();
+          const result = await this.parseMovieList();
+          show.ok(`导入完成：成功 ${result.imported}，失败 ${result.failed}，共 ${result.pages} 页`);
         } catch (t3) {
-          clog.error(t3);
+          clog.error(t3), show.error(`导入失败：${t3.message || t3}`);
         } finally {
           e3.close();
         }
       }));
     }
-    async parseMovieList(e2) {
+    async parseMovieList(e2 = null, result = { imported: 0, failed: 0, pages: 0 }) {
       let t2, n2;
       e2 ? (t2 = e2.find(this.getSelector().itemSelector), n2 = e2.find(".pagination-next").attr("href")) : (t2 = $(this.getSelector().itemSelector), n2 = $(".pagination-next").attr("href"));
+      result.pages++, show.info(`正在导入第 ${result.pages} 页`);
       for (const i2 of t2) {
         const e3 = $(i2), t3 = e3.find("a").attr("href"), n3 = e3.find(".video-title strong").text().trim(), s2 = e3.find(".meta").text().trim();
         if (t3 && n3) try {
-          if (await storageManager.getCar(n3)) {
-            show.info(`${n3} 已存在, 跳过`);
-            continue;
-          }
-          await storageManager.saveCar({
-            carNum: n3,
-            url: t3,
-            names: null,
-            actionType: this.type,
-            publishTime: s2
-          });
+          this.flag && await stateService.patch(n3, { [this.flag]: true }, { type: "javdb-list-import", record: { carNum: n3, url: t3, names: "", publishTime: s2 } }), result.imported++;
         } catch (a2) {
-          clog.error(`保存失败 [${n3}]:`, a2);
+          result.failed++, clog.error(`保存失败 [${n3}]:`, a2);
         }
       }
-      n2 ? (show.info("发现下一页，正在解析:", n2), await new Promise(((e3) => setTimeout(e3, 1e3))), $.ajax({
-        url: n2,
-        method: "GET",
-        success: /* @__PURE__ */ __name((e3) => {
-          const t3 = new DOMParser(), n3 = $(t3.parseFromString(e3, "text/html"));
-          this.parseMovieList(n3);
-        }, "success"),
-        error: /* @__PURE__ */ __name(function(e3) {
-          clog.error(e3), show.error("加载下一页失败:" + e3.message);
-        }, "error")
-      })) : (show.ok("导入结束!"), window.refresh());
+      if (!n2) return result;
+      await utils.sleep(1e3);
+      const html = await gmHttp.get(new URL(n2, window.location.href).href), nextPage = utils.htmlTo$dom(html);
+      return this.parseMovieList(nextPage, result);
     }
   };
   __name(_WantAndWatchedVideosPlugin, "WantAndWatchedVideosPlugin");
@@ -11577,7 +12098,9 @@ ${error.stack}` : "");
           const n3 = $(t3.currentTarget), a3 = n3.closest(".item"), { carNum: i3, url: s3, publishTime: o2 } = e2.findCarNumAndHref(a3), r2 = /* @__PURE__ */ __name(async (t4) => {
             try {
               let n4 = await e2.parseActressName(s3);
-              await storageManager.saveCar({ carNum: i3, url: s3, names: n4, actionType: t4, publishTime: o2 }), window.refresh(), show.ok("操作成功");
+              const flag = legacyActionToFlag(t4);
+              if (!flag) throw new Error("不支持的状态操作");
+              await stateService.patch(i3, { [flag]: true }, { type: "list-card-state", record: { carNum: i3, url: s3, names: n4, publishTime: o2 } }), show.ok("操作成功");
             } catch (r3) {
               clog.error("保存操作失败:", r3), show.error("操作失败");
             }
@@ -11758,47 +12281,10 @@ ${error.stack}` : "");
         skin: "movie-detail-layer",
         scrollbar: false,
         success: /* @__PURE__ */ __name(async (n3, a3) => {
-          organizeJhsOwnedDetailWorkspace($(n3).find(".movie-detail-container")), utils.setupEscClose(a3), this.loadData(e2, t2);
+          const root = $(n3), detailRoot = root.find(".movie-detail-container");
+          organizeJhsOwnedDetailWorkspace(detailRoot), detailStateController.bind({ root: n3, layerIndex: a3, carNum: e2, activityType: "fc2-state", getRecord: /* @__PURE__ */ __name(() => ({ carNum: e2, url: t2, names: root.find("#data-actress").text(), publishTime: root.find("#data-publishTime").text() }), "getRecord") }), utils.setupEscClose(a3), this.loadData(e2, t2);
           let i2 = e2.replace("FC2-", "");
-          $("#magnets-content").append(await this.getBean("MagnetHubPlugin").createMagnetHub(i2)), $("#favoriteBtn").on("click", (async (n4) => {
-            const a4 = $("#data-actress").text(), i3 = $("#data-publishTime").text();
-            await storageManager.saveCar({
-              carNum: e2,
-              url: t2,
-              names: a4,
-              actionType: h,
-              publishTime: i3
-            }), window.refresh(), layer.closeAll();
-          })), $("#filterBtn").on("click", ((n4) => {
-            utils.q(n4, `是否屏蔽${e2}?`, (async () => {
-              const n5 = $("#data-actress").text(), a4 = $("#data-publishTime").text();
-              await storageManager.saveCar({
-                carNum: e2,
-                url: t2,
-                names: n5,
-                actionType: d,
-                publishTime: a4
-              }), window.refresh(), layer.closeAll(), window.location.href.includes("collection_codes?movieId") && utils.closePage();
-            }));
-          })), $("#hasDownBtn").on("click", (async (n4) => {
-            const a4 = $("#data-actress").text(), i3 = $("#data-publishTime").text();
-            await storageManager.saveCar({
-              carNum: e2,
-              url: t2,
-              names: a4,
-              actionType: g,
-              publishTime: i3
-            }), window.refresh(), layer.closeAll();
-          })), $("#hasWatchBtn").on("click", (async (n4) => {
-            const a4 = $("#data-actress").text(), i3 = $("#data-publishTime").text();
-            await storageManager.saveCar({
-              carNum: e2,
-              url: t2,
-              names: a4,
-              actionType: p,
-              publishTime: i3
-            }), window.refresh(), layer.closeAll();
-          })), $("#search-subtitle-btn").on("click", ((t3) => utils.openPage(`https://subtitlecat.com/index.php?search=${e2}`, e2, false, t3))), $("#xunLeiSubtitleBtn").on("click", (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(e2)));
+          $("#magnets-content").append(await this.getBean("MagnetHubPlugin").createMagnetHub(i2)), root.find("#search-subtitle-btn").on("click", ((t3) => utils.openPage(`https://subtitlecat.com/index.php?search=${e2}`, e2, false, t3))), $("#xunLeiSubtitleBtn").on("click", (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(e2)));
           let s2 = e2.replace("FC2-", "");
           void this.getBean("OtherSitePlugin").loadOtherSite(s2, e2).catch(((error) => clog.error("FC2 外部站点加载失败", error)));
         }, "success")
@@ -12192,7 +12678,6 @@ ${error.stack}` : "");
         }), 2e3);
       }
       __name(a2, "a");
-      const enable115Offline = await storageManager.getSetting("enable115Offline", false);
       e2.empty(), 0 !== t2.length ? (t2.forEach(((e3) => {
         const base = this.calcMagnetScore(e3);
         e3._score = { ...base, total: Math.max(0, Math.min(100, base.total + (e3.customTagWeight || 0) + (e3.filterPenalty || 0))) };
@@ -12217,8 +12702,7 @@ ${error.stack}` : "");
             `);
         t3.tags?.length && item.find(".magnet-info").after($("<div></div>").addClass("magnet-tags").append(t3.tags.map(((tag) => $("<span></span>").addClass("jhs-badge").text(tag)))));
         const copyBox = item.find(".magnet-copy");
-        copyBox.append(`<button type="button" class="jhs-btn magnet-hub-btn one23-offline-btn" data-magnet="${safeMagnet}">123离线</button>`);
-        enable115Offline && copyBox.append(`<button type="button" class="jhs-btn magnet-hub-btn one115-offline-btn" data-magnet="${safeMagnet}">115离线</button>`);
+        copyBox.append(`<button type="button" class="jhs-btn magnet-hub-btn jhs-offline-btn" data-resource="${safeMagnet}">离线</button>`);
         item.appendTo(e2);
       })), e2.on("click", ".copy-btn", (async function() {
         const e3 = $(this), t3 = e3.data("magnet");
@@ -12657,7 +13141,7 @@ ${error.stack}` : "");
           }
         } else clog.debug("争夺任务锁失败, 跳过执行");
       })).catch(((e2) => {
-        this.isNetworkBlocked(e2) ? clog.warn(`后台检测已停止: ${e2.message}`) : (clog.error("锁任务出现错误:", e2), clog.error("锁任务出现错误:", e2));
+        this.isNetworkBlocked(e2) ? clog.warn(`后台检测已停止: ${e2.message}`) : clog.error("锁任务出现错误:", e2);
       }));
     }
     async loadConfig() {
@@ -12781,7 +13265,7 @@ ${error.stack}` : "");
             }
           } catch (s3) {
             if (this.isNetworkBlocked(s3)) throw result.networkFailed++, s3;
-            result.networkFailed++, clog.error("检测演员信息发生网络错误:", i3, s3), clog.error("检测演员信息发生网络错误:", i3, s3);
+            result.networkFailed++, clog.error("检测演员信息发生网络错误:", i3, s3);
           }
         })), await this.storageQueue.waitAllFinished();
       } catch (error) {
@@ -12974,9 +13458,28 @@ ${error.stack}` : "");
     return Array.from(n2);
   }
   __name(gt, "gt");
+  function aggregateNewVideoRecords(actresses, carMap, decisions, now = Date.now()) {
+    const grouped = /* @__PURE__ */ new Map();
+    for (const actress of actresses) {
+      if (!Array.isArray(actress.newVideoList)) continue;
+      for (const raw of actress.newVideoList) {
+        const item = "object" == typeof raw ? raw : {}, carNum = normalizeCarNum("string" == typeof raw ? raw : raw.carNum);
+        if (!carNum) continue;
+        const existing = grouped.get(carNum) || { carNum, coverUrl: "", title: "", publishTime: "", actresses: [], starIds: [], categories: /* @__PURE__ */ new Set(), score: 0, voteCount: 0, url: "", isVr: false };
+        existing.coverUrl || (existing.coverUrl = item.coverUrl || ""), existing.title || (existing.title = item.title || ""), existing.publishTime = [existing.publishTime, item.publishTime || ""].sort().at(-1), existing.score = Math.max(existing.score, Number(item.score) || 0), existing.voteCount = Math.max(existing.voteCount, Number(item.voteCount) || 0), existing.url || (existing.url = item.url || "");
+        existing.isVr || (existing.isVr = true === item.isVr || /(^|[^A-Z])VR([^A-Z]|$)/i.test(`${item.title || ""} ${(item.tags || []).join?.(" ") || ""} ${(item.categories || []).join?.(" ") || ""}`));
+        actress.name && !existing.actresses.includes(actress.name) && existing.actresses.push(actress.name), actress.starId && !existing.starIds.includes(actress.starId) && existing.starIds.push(actress.starId), actress.actressType && existing.categories.add(actress.actressType), grouped.set(carNum, existing);
+      }
+    }
+    return [...grouped.values()].map(((item) => {
+      const record = carMap.get(item.carNum), flags = normalizeStateFlags(record?.stateFlags), decision = decisions[item.carNum] || null, decisionState = !decision ? "pending" : "snoozed" === decision.action && decision.until && Date.parse(decision.until) <= now ? "pending" : decision.action;
+      return { ...item, actressName: item.actresses.join("、"), starId: item.starIds[0] || "", categories: [...item.categories], flags, decision, decisionState };
+    }));
+  }
+  __name(aggregateNewVideoRecords, "aggregateNewVideoRecords");
   var _NewVideoPlugin = class _NewVideoPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", null), i(this, "nvSortBy", "publishTime_desc");
+      super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", null), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", /* @__PURE__ */ new Set()), i(this, "nvDecisionsCache", {});
     }
     getName() {
       return "NewVideoPlugin";
@@ -13045,14 +13548,21 @@ ${error.stack}` : "");
       await this.showNewVideoCount();
     }
     getPendingNewVideoCount(e2, t2) {
-      return Array.isArray(e2?.newVideoList) ? e2.newVideoList.filter(((e3) => {
-        const n2 = "string" == typeof e3 ? e3 : e3.carNum;
-        return !t2.has(n2);
-      })).length : 0;
+      return Array.isArray(e2?.newVideoList) ? new Set(e2.newVideoList.map(((item) => normalizeCarNum("string" == typeof item ? item : item.carNum))).filter(((carNum) => carNum && !t2.has(carNum) && !this.isDecisionHidden(carNum)))).size : 0;
+    }
+    isDecisionHidden(carNum) {
+      const decision = this.nvDecisionsCache[normalizeCarNum(carNum)];
+      if (!decision) return false;
+      return "ignored" === decision.action || "snoozed" === decision.action && (!decision.until || Date.parse(decision.until) > Date.now());
     }
     async getPendingNewVideoTotal() {
-      const e2 = await storageManager.getCarMap();
-      return (await storageManager.getFavoriteActressList()).reduce(((t2, n2) => t2 + this.getPendingNewVideoCount(n2, e2)), 0);
+      const e2 = await storageManager.getCarMap(), keys = /* @__PURE__ */ new Set();
+      this.nvDecisionsCache = await stateService.getNewVideoDecisions();
+      (await storageManager.getFavoriteActressList()).forEach(((actress) => Array.isArray(actress.newVideoList) && actress.newVideoList.forEach(((item) => {
+        const carNum = normalizeCarNum("string" == typeof item ? item : item.carNum);
+        carNum && !e2.has(carNum) && !this.isDecisionHidden(carNum) && keys.add(carNum);
+      }))));
+      return keys.size;
     }
     async showNewVideoCount() {
       const e2 = await this.getPendingNewVideoTotal();
@@ -13076,7 +13586,10 @@ ${error.stack}` : "");
                     </div>
                     <div class="jhs-new-video-toolbar__filters">
                         <select id="paramActressType" class="jhs-select-source" aria-label="演员类型"><option value="all" selected>所有</option><option value="uncensored">无码</option><option value="censored">有码</option><option value="">未知</option></select>
-                        <select id="nvCategoryFilter" class="jhs-select-source jhs-is-hidden" aria-label="新作品类别"><option value="all" selected>所有</option><option value="uncensored">无码</option><option value="censored">有码</option><option value="">未知</option><option value="vr">VR</option></select>
+                        <input id="nvSearch" class="jhs-field jhs-is-hidden" type="search" placeholder="搜索番号、标题或演员" aria-label="搜索新作品">
+                        <select id="nvCategoryFilter" class="jhs-select-source jhs-is-hidden" aria-label="新作品类别"><option value="all" selected>所有类别</option><option value="uncensored">无码</option><option value="censored">有码</option><option value="unknown">未知</option><option value="vr">VR</option></select>
+                        <select id="nvStateFilter" class="jhs-select-source jhs-is-hidden" aria-label="作品状态"><option value="all">所有状态</option><option value="pending" selected>待处理</option><option value="favorite">已收藏</option><option value="downloaded">已下载</option><option value="watched">已观看</option><option value="blocked">已屏蔽</option></select>
+                        <select id="nvDecisionFilter" class="jhs-select-source jhs-is-hidden" aria-label="新作决策"><option value="pending" selected>待处理</option><option value="ignored">已忽略</option><option value="snoozed">已暂缓</option><option value="all">所有决策</option></select>
                         <select id="paramSortBy" class="jhs-select-source" aria-label="演员排序">
                             <option value="default" selected>默认排序</option><optgroup label="发行时间"><option value="lastPublishTime_desc">发行时间 新→旧</option><option value="lastPublishTime_asc">发行时间 旧→新</option></optgroup><optgroup label="检测时间"><option value="lastCheckTime_desc">检测时间 新→旧</option><option value="lastCheckTime_asc">检测时间 旧→新</option></optgroup><optgroup label="新作品数"><option value="newVideoCount_desc">新作品数 多→少</option><option value="newVideoCount_asc">新作品数 少→多</option></optgroup>
                         </select>
@@ -13112,7 +13625,7 @@ ${error.stack}` : "");
         try {
           const enabled = await storageManager.getSetting("autoRemoveNewVideoMarkAfterBrowse", C);
           if (enabled !== _) return;
-          await storageManager.removeNewVideoList([t2]), "list" === this._viewMode && await this.renderNewVideoList(), window.refresh();
+          await stateService.removeFromNewVideoList([t2], "browse"), "list" === this._viewMode && await this.renderNewVideoList();
         } catch (n2) {
           clog.error("移除新作品标记失败:", n2);
         }
@@ -13136,7 +13649,7 @@ ${error.stack}` : "");
             if (!t3) return void show.error("当前有定时任务在后台执行中, 无法发起手动任务");
             $('a[href*="/users/profile"]').length > 0 ? (await e2.checkFavoriteActress(), this.loadData()) : show.error("未登录JavDb, 同步失败");
           })).catch(((e3) => {
-            clog.error("锁任务出现错误:", e3), clog.error("锁任务出现错误:", e3);
+            clog.error("锁任务出现错误:", e3);
           }));
         }));
       })), $("#checkNewVideo").on("click", ((t2) => {
@@ -13149,7 +13662,7 @@ ${error.stack}` : "");
           }, (async (t3) => {
             t3 ? await e2.checkNewVideo(true) : show.error("当前有定时任务在后台执行中, 无法发起手动任务");
           })).catch(((e3) => {
-            clog.error("锁任务出现错误:", e3), clog.error("锁任务出现错误:", e3);
+            clog.error("锁任务出现错误:", e3);
           }));
         }));
       })), $("#paramActressType").on("change", ((e3) => {
@@ -13158,12 +13671,14 @@ ${error.stack}` : "");
         this.loadData();
       })), $("#nvSortBy").on("change", ((e3) => {
         this.nvSortBy = $("#nvSortBy").val(), this.nvCurrentPage = 1, this.nvRenderPage();
-      })), $("#nvCategoryFilter").on("change", ((e3) => {
+      })), $("#nvCategoryFilter,#nvStateFilter,#nvDecisionFilter").on("change", ((e3) => {
+        "list" === this._viewMode && this.renderNewVideoList();
+      })), $("#nvSearch").on("input", (() => {
         "list" === this._viewMode && this.renderNewVideoList();
       })), $("#toggleViewMode").on("click", ((e3) => {
         this._viewMode = "list" === this._viewMode ? "card" : "list";
         const t2 = "list" === this._viewMode;
-        $("#actress-card-container").toggle(!t2), $("#actress-pagination").toggle(!t2), $("#new-video-list-container").toggle(t2), $("#new-video-list-footer").toggle(t2), JhsSelect.setVisible("#paramSortBy", !t2), JhsSelect.setVisible("#nvSortBy", t2), JhsSelect.setVisible("#paramActressType", !t2), JhsSelect.setVisible("#nvCategoryFilter", t2), $("#toggleViewMode").text(t2 ? "演员视图" : "新作品列表"), t2 ? this.renderNewVideoList() : this.loadData();
+        $("#actress-card-container").toggle(!t2), $("#actress-pagination").toggle(!t2), $("#new-video-list-container").toggle(t2), $("#new-video-list-footer").toggle(t2), JhsSelect.setVisible("#paramSortBy", !t2), JhsSelect.setVisible("#nvSortBy", t2), JhsSelect.setVisible("#paramActressType", !t2), JhsSelect.setVisible("#nvCategoryFilter", t2), JhsSelect.setVisible("#nvStateFilter", t2), JhsSelect.setVisible("#nvDecisionFilter", t2), $("#nvSearch").toggleClass("jhs-is-hidden", !t2), $("#toggleViewMode").text(t2 ? "演员视图" : "新作品列表"), t2 ? this.renderNewVideoList() : this.loadData();
       }));
     }
     loadData() {
@@ -13186,6 +13701,7 @@ ${error.stack}` : "");
       const n2 = $("#paramActressType").val();
       "all" !== n2 && (t2 = t2.filter(((e3) => e3.actressType === n2)));
       const _carSet = await storageManager.getCarMap();
+      this.nvDecisionsCache = await stateService.getNewVideoDecisions();
       const _newVideoCount = /* @__PURE__ */ __name((e3) => this.getPendingNewVideoCount(e3, _carSet), "_newVideoCount");
       const sortBy = $("#paramSortBy").val();
       const sortMap = {
@@ -13273,7 +13789,7 @@ ${error.stack}` : "");
           const n3 = $(e3.currentTarget).attr("data-starId"), i2 = sortedActresses.find(((e4) => e4.starId === n3));
           await taskPlugin.checkOneNewVideo(i2);
         })).catch(((e4) => {
-          clog.error("锁任务出现错误:", e4), clog.error("锁任务出现错误:", e4);
+          clog.error("锁任务出现错误:", e4);
         }));
       })), $(".actress-card__menu").on("keydown", ((event) => {
         if ("Escape" !== event.key) return;
@@ -13285,19 +13801,15 @@ ${error.stack}` : "");
       })), this.renderPagination(totalCount, totalPages), show.ok("加载完成");
     }
     async getNewVideoFlatList() {
-      const e2 = await storageManager.getFavoriteActressList(), t2 = await storageManager.getCarMap(), n2 = $("#nvCategoryFilter").val(), a2 = [];
-      for (const i2 of e2) {
-        if ("all" !== n2 && "vr" !== n2 && i2.actressType !== n2) continue;
-        if (!Array.isArray(i2.newVideoList)) continue;
-        for (const e3 of i2.newVideoList) {
-          const o2 = "string" == typeof e3 ? e3 : e3.carNum;
-          if (t2.has(o2)) continue;
-          if ("vr" === n2 && !/VR/i.test(o2)) continue;
-          const s2 = "object" == typeof e3 ? e3 : {};
-          a2.push({ carNum: o2, coverUrl: s2.coverUrl || "", title: s2.title || "", publishTime: s2.publishTime || "", actressName: i2.name || "", starId: i2.starId || "", score: s2.score || 0, voteCount: s2.voteCount || 0, url: s2.url || "" });
-        }
-      }
-      return a2.sort(((e3, t3) => (t3.publishTime || "").localeCompare(e3.publishTime || ""))), a2;
+      const actresses = await storageManager.getFavoriteActressList(), carMap = await storageManager.getCarMap(), category = $("#nvCategoryFilter").val() || "all", stateFilter = $("#nvStateFilter").val() || "pending", decisionFilter = $("#nvDecisionFilter").val() || "pending", query = String($("#nvSearch").val() || "").trim().toUpperCase();
+      this.nvDecisionsCache = await stateService.getNewVideoDecisions();
+      return aggregateNewVideoRecords(actresses, carMap, this.nvDecisionsCache).filter(((item) => {
+        const categoryMatch = "all" === category || "vr" === category ? "all" === category || item.isVr : "unknown" === category ? 0 === item.categories.length : item.categories.includes(category);
+        const stateMatch = "all" === stateFilter || "pending" === stateFilter ? "all" === stateFilter || !hasAnyState(item.flags) : !!item.flags[stateFilter];
+        const decisionMatch = "all" === decisionFilter || item.decisionState === decisionFilter;
+        const searchMatch = !query || `${item.carNum} ${item.title} ${item.actressName}`.toUpperCase().includes(query);
+        return categoryMatch && stateMatch && decisionMatch && searchMatch;
+      })).sort(((left, right) => (right.publishTime || "").localeCompare(left.publishTime || "")));
     }
     async loadCoverForItems(e2) {
       const t2 = await this.getBean("OtherSitePlugin").getJavDbUrl(), n2 = {};
@@ -13349,29 +13861,33 @@ ${error.stack}` : "");
       this.nvFlatListCache = t2, this.nvCurrentPage = 1, this.nvSortBy = $("#nvSortBy").val() || "publishTime_desc";
       const a2 = /* @__PURE__ */ new Set();
       for (const i2 of t2) a2.add(i2.actressName);
-      $("#new-video-list-footer").html(`<span>共 <b>${t2.length}</b> 个待鉴定番号，涉及 <b>${a2.size}</b> 位演员</span>
-            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkWatched">全部标记已看</button>
-            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkDownloaded">全部标记已下载</button>`);
+      this.nvSelected.clear(), $("#new-video-list-footer").html(`<span>共 <b>${t2.length}</b> 个番号，涉及 <b>${a2.size}</b> 位演员；已选择 <b id="nvSelectedCount">0</b> 个</span>
+            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkFavorite">选择项收藏</button>
+            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkWatched">选择项标记已看</button>
+            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkDownloaded">选择项标记已下载</button>
+            <button type="button" class="jhs-btn jhs-btn--ghost" id="batchIgnore">选择项忽略</button>
+            <button type="button" class="jhs-btn jhs-btn--ghost" id="batchSnooze">选择项暂缓 7 天</button>
+            <button type="button" class="jhs-btn jhs-btn--ghost" id="batchRestore">恢复选择项</button>
+            <button type="button" class="jhs-btn jhs-btn--danger" id="batchRemoveFromNewVideo">从新作列表移除</button>`);
       this.nvRenderPage(), this.loadCoverForItems(t2).catch(((e3) => clog.warn("封面加载异常:", e3)));
-      $("#batchMarkWatched").off("click").on("click", (async () => {
-        if (!this.nvFlatListCache || 0 === this.nvFlatListCache.length) return;
-        utils.q({ clientX: 0, clientY: 0 }, `确认将 ${this.nvFlatListCache.length} 个番号全部标记为已看?`, (async () => {
-          const e3 = this.nvFlatListCache.map(((e4) => ({ carNum: e4.carNum, url: `/search?q=${encodeURIComponent(e4.carNum)}`, names: e4.actressName, actionType: p })));
-          try {
-            await storageManager.saveCarList(e3), show.ok(`已标记 ${e3.length} 个`), this.renderNewVideoList(), this.showNewVideoCount();
-          } catch (n2) {
-            show.error("标记失败: " + n2.message);
-          }
-        }));
-      })), $("#batchMarkDownloaded").off("click").on("click", (async () => {
-        if (!this.nvFlatListCache || 0 === this.nvFlatListCache.length) return;
-        utils.q({ clientX: 0, clientY: 0 }, `确认将 ${this.nvFlatListCache.length} 个番号全部标记为已下载?`, (async () => {
-          const e3 = this.nvFlatListCache.map(((e4) => ({ carNum: e4.carNum, url: `/search?q=${encodeURIComponent(e4.carNum)}`, names: e4.actressName, actionType: g })));
-          try {
-            await storageManager.saveCarList(e3), show.ok(`已标记 ${e3.length} 个`), this.renderNewVideoList(), this.showNewVideoCount();
-          } catch (n2) {
-            show.error("标记失败: " + n2.message);
-          }
+      const selectedItems = /* @__PURE__ */ __name(() => this.nvFlatListCache.filter(((item) => this.nvSelected.has(item.carNum))), "selectedItems"), ensureSelected = /* @__PURE__ */ __name(() => selectedItems().length ? selectedItems() : (show.info("请先选择作品"), []), "ensureSelected"), patchSelected = /* @__PURE__ */ __name(async (flag) => {
+        const items = ensureSelected();
+        if (!items.length) return;
+        await stateService.patch(items.map(((item) => item.carNum)), { [flag]: true }, { type: "new-video-batch-state", records: items.map(((item) => ({ carNum: item.carNum, url: item.url || `/search?q=${encodeURIComponent(item.carNum)}`, names: item.actressName, publishTime: item.publishTime }))) }), show.ok(`已处理 ${items.length} 个番号`), await this.renderNewVideoList(), await this.showNewVideoCount();
+      }, "patchSelected");
+      $("#batchMarkFavorite").on("click", (() => patchSelected("favorite"))), $("#batchMarkWatched").on("click", (() => patchSelected("watched"))), $("#batchMarkDownloaded").on("click", (() => patchSelected("downloaded"))), $("#batchIgnore").on("click", (async () => {
+        const items = ensureSelected();
+        items.length && (await stateService.setNewVideoDecision(items.map(((item) => item.carNum)), "ignored"), await this.renderNewVideoList(), await this.showNewVideoCount());
+      })), $("#batchSnooze").on("click", (async () => {
+        const items = ensureSelected();
+        items.length && (await stateService.setNewVideoDecision(items.map(((item) => item.carNum)), "snoozed", new Date(Date.now() + 7 * 864e5).toISOString()), await this.renderNewVideoList(), await this.showNewVideoCount());
+      })), $("#batchRestore").on("click", (async () => {
+        const items = ensureSelected();
+        items.length && (await stateService.setNewVideoDecision(items.map(((item) => item.carNum)), null), await this.renderNewVideoList(), await this.showNewVideoCount());
+      })), $("#batchRemoveFromNewVideo").on("click", ((event) => {
+        const items = ensureSelected();
+        items.length && utils.q(event, `确认将 ${items.length} 个作品从新作列表移除？<br>不会删除作品状态记录。`, (async () => {
+          await stateService.removeFromNewVideoList(items.map(((item) => item.carNum)), "manual"), await this.renderNewVideoList(), await this.showNewVideoCount();
         }));
       }));
     }
@@ -13408,7 +13924,7 @@ ${error.stack}` : "");
           let o3 = `番号: ${e3}\\n演员: ${escapeHtml(n3.actressName)}\\n发行: ${n3.publishTime || "未知"}`;
           n3.voteCount && (o3 += `\\n评价人数: ${n3.voteCount}`);
           const l3 = n3.voteCount ? `<span class="jhs-badge jhs-badge--neutral nv-card__rating">${n3.voteCount}人评价</span>` : "";
-          c2 += `<div class="nv-card" data-car="${e3}" title="${o3}">`;
+          c2 += `<div class="nv-card" data-car="${e3}" title="${o3}"><label class="jhs-option-row"><input type="checkbox" class="nv-select" value="${e3}" ${this.nvSelected.has(n3.carNum) ? "checked" : ""}><span>选择</span></label>`;
           c2 += `<a class="nv-card__link" href="${i3}" target="_blank" rel="noopener noreferrer">`;
           c2 += `<div class="nv-card__cover">`;
           a3 ? c2 += `<img class="nv-cover-img" src="${a3}" data-full="${a3}" loading="lazy" onerror="this.classList.add('jhs-is-hidden');this.nextElementSibling.classList.remove('jhs-is-hidden');">${l3}<div class="nv-card__empty jhs-is-hidden">无封面</div>` : c2 += `<div class="nv-placeholder nv-card__empty">加载中...</div>`;
@@ -13417,7 +13933,7 @@ ${error.stack}` : "");
           c2 += `<div class="nv-card__title" title="${e3}">${e3}</div>`;
           c2 += `<div class="nv-card__actress" title="${escapeHtml(n3.actressName)}">${escapeHtml(n3.actressName)}</div>`;
           n3.publishTime && (c2 += `<div class="nv-card__date">${n3.publishTime}</div>`);
-          c2 += `</div></a></div>`;
+          n3.decisionState && "pending" !== n3.decisionState && (c2 += `<span class="jhs-badge jhs-badge--neutral">${"ignored" === n3.decisionState ? "已忽略" : "已暂缓"}</span>`), c2 += `</div></a></div>`;
         }
         c2 += "</div>";
         if (o2 > 1) {
@@ -13428,7 +13944,10 @@ ${error.stack}` : "");
           for (let t3 = e3; t3 <= n3; t3++) c2 += `<button type="button" class="jhs-btn ${t3 === this.nvCurrentPage ? "jhs-btn--primary is-current" : "jhs-btn--secondary"} pagination-btn" data-nvpage="${t3}" ${t3 === this.nvCurrentPage ? 'aria-current="page"' : ""}>${t3}</button>`;
           this.nvCurrentPage < o2 && (c2 += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${this.nvCurrentPage + 1}">下一页</button>`), c2 += `<span class="jhs-pagination__summary">第 ${this.nvCurrentPage}/${o2} 页，共 ${t2.length} 条</span>`, c2 += "</div>";
         }
-        l2.html(c2), l2.find(".pagination-btn").off("click").on("click", ((e3) => {
+        l2.html(c2), l2.find(".nv-select").on("change", ((event) => {
+          const carNum = normalizeCarNum(event.currentTarget.value);
+          event.currentTarget.checked ? this.nvSelected.add(carNum) : this.nvSelected.delete(carNum), $("#nvSelectedCount").text(this.nvSelected.size);
+        })), l2.find(".pagination-btn").off("click").on("click", ((e3) => {
           const n3 = parseInt($(e3.currentTarget).data("nvpage"));
           n3 >= 1 && n3 <= o2 && n3 !== this.nvCurrentPage && (this.nvCurrentPage = n3, this.nvRenderPage(), l2.scrollTop(0));
         })), window.imageHoverPreviewObj ? window.imageHoverPreviewObj.bindEvents() : window.imageHoverPreviewObj = new ImageHoverPreview({
@@ -13690,16 +14209,13 @@ ${error.stack}` : "");
   var NewVideoPlugin = _NewVideoPlugin;
   var _OneTwoThreeOfflinePlugin = class _OneTwoThreeOfflinePlugin extends BasePlugin {
     constructor() {
-      super(...arguments), this.tokenKey = "jhs_123pan_author_token", this.tokenMetaKey = "jhs_123pan_author_token_meta", this.syncTimer = null, this.syncFallbackMs = 3e5, this.BUTTON_COOLDOWN_MS = 1800;
+      super(...arguments), this.tokenKey = "jhs_123pan_author_token", this.tokenMetaKey = "jhs_123pan_author_token_meta", this.syncTimer = null, this.syncFallbackMs = 3e5;
     }
     getName() {
       return "OneTwoThreeOfflinePlugin";
     }
-    async initCss() {
-      return "\n            <style>\n                .one23-offline-btn {\n                    background-color: var(--jhs-accent) !important;\n                    color: var(--jhs-accent-text-on) !important;\n                    border-color: var(--jhs-accent) !important;\n                }\n                .one23-offline-btn.loading {\n                    opacity: 0.65;\n                    cursor: wait;\n                }\n                .one23-native-btn {\n                    margin-left: 6px;\n                    padding: 3px 8px;\n                    border-radius: 3px;\n                    border: 1px solid var(--jhs-accent);\n                    background: var(--jhs-accent);\n                    color: var(--jhs-accent-text-on) !important;\n                    cursor: pointer;\n                    font-size: 12px;\n                    line-height: 1.2;\n                }\n            </style>\n        ";
-    }
     async handle() {
-      "yun.123pan.com" === window.location.hostname ? this.startTokenSync() : (r || l) && (this.bindSubmit(), this.injectNativeButtons());
+      "yun.123pan.com" === window.location.hostname && this.startTokenSync();
     }
     startTokenSync() {
       this.syncTokenOnce(), this.syncTimer && clearInterval(this.syncTimer), this.syncTimer = setInterval((() => this.syncTokenOnce()), this.syncFallbackMs);
@@ -13762,87 +14278,10 @@ ${error.stack}` : "");
       const msg = e2 instanceof Error ? e2.message : "object" == typeof e2 && e2 ? e2.message || "" : String(e2 || "");
       return "TOKEN_EXPIRED" === e2 || "TOKEN_EXPIRED" === msg || msg.toLowerCase().includes("token is expired");
     }
-    getTokenMetaText() {
-      const e2 = GM_getValue(this.tokenMetaKey, null);
-      return e2 && e2.source && e2.updatedAt ? `（来源：${e2.source}，更新：${new Date(e2.updatedAt).toLocaleString()}）` : "";
-    }
     assertApiResult(e2, t2) {
       if (0 === e2.code) return;
       const n2 = e2.message || e2.msg || t2 || "请求失败";
       throw /token is expired/i.test(n2) ? "TOKEN_EXPIRED" : n2;
-    }
-    handleTokenExpired() {
-      this.clearStoredToken("expired"), show.error("123 云盘授权已过期，请登录或刷新 yun.123pan.com 后再提交");
-    }
-    bindSubmit() {
-      $(document).off("click.one23", ".one23-offline-btn").on("click.one23", ".one23-offline-btn", ((e2) => {
-        e2.preventDefault(), e2.stopPropagation();
-        const t2 = $(e2.currentTarget), n2 = t2.attr("data-magnet");
-        n2 && this.submitMagnet(n2, t2);
-      }));
-    }
-    injectNativeButtons() {
-      if (!window.isDetailPage) return;
-      r && utils.loopDetector((() => $("#magnets-content .item").length > 0), (() => this.injectJavDbButtons()));
-      l && utils.loopDetector((() => $("#magnet-table td a[href^='magnet:']").length > 0), (() => this.injectJavBusButtons()));
-    }
-    injectJavDbButtons() {
-      $("#magnets-content .item").each(((e2, t2) => {
-        const n2 = $(t2), a2 = n2.find("a[href^='magnet:']").first().attr("href") || n2.find(".copy-to-clipboard").attr("data-clipboard-text");
-        a2 && 0 === n2.find(".one23-offline-btn").length && n2.find(".buttons").first().append(`<button class="jhs-btn jhs-btn--secondary one23-offline-btn" data-magnet="${escapeHtml(a2)}" type="button">123离线</button>`);
-      }));
-    }
-    injectJavBusButtons() {
-      $("#magnet-table td a[href^='magnet:']").each(((e2, t2) => {
-        const n2 = $(t2), a2 = n2.attr("href");
-        a2 && 0 === n2.siblings(".one23-offline-btn").length && n2.after(`<button class="jhs-btn one23-native-btn one23-offline-btn" data-magnet="${escapeHtml(a2)}" type="button">123离线</button>`);
-      }));
-    }
-    async submitMagnet(e2, t2) {
-      if (!/^magnet:/i.test(e2)) return void show.error("123 云盘当前仅支持 Magnet 离线");
-      const n2 = this.getStoredToken();
-      if (!n2) return void show.error("请先登录或刷新 yun.123pan.com，等待授权自动同步后再提交离线任务");
-      if (t2.hasClass("loading")) return;
-      const a2 = t2.text();
-      try {
-        t2.addClass("loading").prop("disabled", true).text("提交中");
-        const i2 = await this.resolveMagnet(e2, n2), s2 = await this.submitTask(i2, n2);
-        const o2 = await this.markCurrentVideoAsHasDown(t2);
-        show.info(`已提交 123 离线：${s2.fileCount} 个文件 / ${this.formatSize(s2.totalSize)}${o2 ? "，已标记为已下载" : ""}`), t2.text("已提交");
-      } catch (i2) {
-        this.isTokenExpiredError(i2) ? this.handleTokenExpired() : show.error("123 离线提交失败：" + i2 + this.getTokenMetaText()), t2.text(a2);
-      } finally {
-        setTimeout((() => t2.removeClass("loading").prop("disabled", false).text(a2)), this.BUTTON_COOLDOWN_MS);
-      }
-    }
-    /** 离线任务提交成功后，复用 JHS 影片状态存储标记为已下载。 */
-    async markCurrentVideoAsHasDown(e2) {
-      try {
-        const t2 = this.getOfflineVideoInfo(e2);
-        if (!t2 || !t2.carNum || !t2.url) return false;
-        const n2 = await storageManager.getCar(t2.carNum);
-        if (n2 && n2.status === g) return false;
-        await storageManager.saveCar({
-          carNum: t2.carNum,
-          url: t2.url,
-          names: t2.actress || t2.names || "",
-          actionType: g,
-          publishTime: t2.publishTime
-        });
-        const a2 = this.getBean("DetailPageButtonPlugin");
-        a2 && a2.showStatus && await a2.showStatus(t2.carNum), window.refresh();
-        return true;
-      } catch (t2) {
-        clog.error("123 离线成功后标记已下载失败:", t2);
-        show.error("123 离线已提交，但自动标记已下载失败：" + t2);
-        return false;
-      }
-    }
-    /** 从详情页或按钮所在列表项提取当前影片信息。 */
-    getOfflineVideoInfo(e2) {
-      if (window.isDetailPage) return this.getPageInfo();
-      const t2 = e2 && e2.closest ? e2.closest(".item") : $();
-      return t2 && t2.length ? this.getBean("ListPagePlugin").findCarNumAndHref(t2) : this.getPageInfo();
     }
     /* 依赖 gmRequest 在非 2xx 时 reject 对象上附加 status 属性 */
     async resolveMagnet(e2, t2) {
@@ -13876,13 +14315,6 @@ ${error.stack}` : "");
         if (i2 && 401 === i2.status) throw "TOKEN_EXPIRED";
         throw this.isTokenExpiredError(i2) ? "TOKEN_EXPIRED" : i2.message ? "响应解析失败: " + i2.message : String(i2);
       }
-    }
-    formatSize(e2) {
-      if (!e2) return "0B";
-      const t2 = ["B", "KB", "MB", "GB", "TB"];
-      let n2 = 0, a2 = e2;
-      for (; a2 >= 1024 && n2 < t2.length - 1; ) a2 /= 1024, n2++;
-      return `${a2.toFixed(n2 ? 2 : 0)}${t2[n2]}`;
     }
     /** CRC32-IEEE (poly 0xEDB88320) — 与 Go crc32.ChecksumIEEE 一致 */
     _crc32(e2) {
@@ -13989,105 +14421,16 @@ ${error.stack}` : "");
     return `${base.slice(0, options.maxLength || 180)}${extension}`;
   }
   __name(preview115Rename, "preview115Rename");
-  var _OneOneFiveOfflinePlugin = class _OneOneFiveOfflinePlugin extends BasePlugin {
-    constructor() {
-      super(...arguments), this.BUTTON_COOLDOWN_MS = 2e3;
-    }
-    getName() {
-      return "OneOneFiveOfflinePlugin";
-    }
-    async initCss() {
-      return "\n            <style>\n                .one115-offline-btn {\n                    background-color: var(--jhs-accent) !important;\n                    color: var(--jhs-accent-text-on) !important;\n                    border-color: var(--jhs-accent) !important;\n                }\n                .one115-offline-btn.loading {\n                    cursor: wait;\n                }\n                .one115-native-btn {\n                    margin-left: 6px;\n                    padding: 3px 8px;\n                    border-radius: 3px;\n                    border: 1px solid var(--jhs-accent);\n                    background: var(--jhs-accent);\n                    color: var(--jhs-accent-text-on) !important;\n                    cursor: pointer;\n                    font-size: 12px;\n                    line-height: 1.2;\n                }\n            </style>\n        ";
-    }
-    async handle() {
-      if (!await storageManager.getSetting("enable115Offline", false)) return;
-      (r || l) && (this.bindSubmit(), this.injectNativeButtons());
-    }
-    bindSubmit() {
-      $(document).off("click.jhs115", ".one115-offline-btn").on("click.jhs115", ".one115-offline-btn", (async (event) => {
-        event.preventDefault(), event.stopPropagation();
-        const button = $(event.currentTarget);
-        const magnet = button.attr("data-magnet") || button.siblings("[data-magnet]").first().data("magnet") || button.closest(".magnet-result, .item, td").find('a[href^="magnet:"]').first().attr("href");
-        if (!magnet) return show.error("未找到磁力链接");
-        await this.submitMagnet(event, magnet, button);
-      }));
-    }
-    injectNativeButtons() {
-      if (!window.isDetailPage) return;
-      r && utils.loopDetector((() => $("#magnets-content .item").length > 0), (() => this.injectJavDbButtons()));
-      l && utils.loopDetector((() => $("#magnet-table td a[href^='magnet:']").length > 0), (() => this.injectJavBusButtons()));
-    }
-    injectJavDbButtons() {
-      $("#magnets-content .item").each(((index, element) => {
-        const item = $(element);
-        const magnet = item.find("a[href^='magnet:']").first().attr("href") || item.find(".copy-to-clipboard").attr("data-clipboard-text");
-        magnet && 0 === item.find(".one115-offline-btn").length && item.find(".buttons").first().append(`<button class="jhs-btn jhs-btn--secondary one115-offline-btn" data-magnet="${escapeHtml(magnet)}" type="button">115离线</button>`);
-      }));
-    }
-    injectJavBusButtons() {
-      $("#magnet-table td a[href^='magnet:']").each(((index, element) => {
-        const link = $(element);
-        const magnet = link.attr("href");
-        magnet && 0 === link.siblings(".one115-offline-btn").length && link.after(`<button class="jhs-btn one115-native-btn one115-offline-btn" data-magnet="${escapeHtml(magnet)}" type="button">115离线</button>`);
-      }));
-    }
-    async submitMagnet(event, magnet, button) {
-      if (button.hasClass("loading")) return;
-      const originalText = button.text();
-      try {
-        button.addClass("loading").prop("disabled", true).text("提交中");
-        await new OneOneFiveClient().addOffline(magnet);
-        show.ok("115 离线任务已创建");
-        button.text("已提交");
-        utils.q(event, "是否将该作品标记为已下载？", (async () => {
-          const marked = await this.markCurrentVideoAsHasDown(button);
-          marked && button.text("已标记");
-        }));
-      } catch (error) {
-        clog.error("115 离线失败", error);
-        if ("LOGIN_REQUIRED" === error.code) {
-          if (await storageManager.getSetting("enable115LoginRedirect", false)) {
-            window.open("https://115.com");
-            show.info("已打开 115 登录页面，登录后请返回当前页面重试");
-          } else show.error((error.message || "115 未登录") + "，请先登录 https://115.com");
-        } else if ("TASK_EXISTS" === error.code) utils.q(event, "该任务已在 115 离线列表中，是否前往查看？", (() => window.open("https://115.com/?tab=offline&mode=wangpan")));
-        else show.error(error.message || "115 离线失败");
-        button.text(originalText);
-      } finally {
-        setTimeout((() => button.removeClass("loading").prop("disabled", false)), this.BUTTON_COOLDOWN_MS);
-      }
-    }
-    async markCurrentVideoAsHasDown(button) {
-      try {
-        const info = this.getOfflineVideoInfo(button);
-        if (!info || !info.carNum || !info.url) return false;
-        const existing = await storageManager.getCar(info.carNum);
-        if (existing && existing.status === g) return false;
-        await storageManager.saveCar({ carNum: info.carNum, url: info.url, names: info.actress || info.names || "", actionType: g, publishTime: info.publishTime });
-        const detailButtonPlugin = this.getBean("DetailPageButtonPlugin");
-        detailButtonPlugin && detailButtonPlugin.showStatus && await detailButtonPlugin.showStatus(info.carNum), window.refresh();
-        return true;
-      } catch (error) {
-        clog.error("115 离线成功后标记已下载失败:", error);
-        show.error("115 离线已提交，但自动标记已下载失败：" + error);
-        return false;
-      }
-    }
-    getOfflineVideoInfo(button) {
-      if (window.isDetailPage) return this.getPageInfo();
-      const item = button && button.closest ? button.closest(".item") : $();
-      return item && item.length ? this.getBean("ListPagePlugin").findCarNumAndHref(item) : this.getPageInfo();
-    }
-  };
-  __name(_OneOneFiveOfflinePlugin, "OneOneFiveOfflinePlugin");
-  var OneOneFiveOfflinePlugin = _OneOneFiveOfflinePlugin;
   var _OneOneFiveMatchPlugin = class _OneOneFiveMatchPlugin extends BasePlugin {
+    constructor() {
+      super(), this.observer = null, this.unsubscribeItems = null, this.pendingCards = /* @__PURE__ */ new Set(), this.flushTimer = null, this.client = new OneOneFiveClient(), this.concurrency = 4, this.cacheMinutes = 60;
+    }
     getName() {
       return "OneOneFiveMatchPlugin";
     }
     async handle() {
       if (!await storageManager.getSetting("enable115Match", false)) return;
-      if (!isDetailPage) return this.matchListPage();
+      if (!isDetailPage) return this.setupListMatching();
       const carNum = this.getPageInfo().carNum, keyword = normalize115Keyword(carNum);
       if (!keyword) return;
       const host = $(".movie-panel-info,.container .info").first();
@@ -14109,29 +14452,47 @@ ${error.stack}` : "");
         clog.error("115 匹配失败", error);
       }
     }
-    async matchListPage() {
-      const cards = $(".movie-list .item,.masonry .item").get().filter(((element) => {
-        const rect = element.getBoundingClientRect();
-        return rect.bottom >= 0 && rect.top <= window.innerHeight;
-      })), client = new OneOneFiveClient(), concurrency = Math.max(1, Math.min(10, Number(await storageManager.getSetting("oneOneFiveConcurrency", 4)) || 4)), cacheMinutes = Math.max(1, Number(await storageManager.getSetting("oneOneFiveCacheMinutes", 60)) || 60);
-      await mapLimit(cards, concurrency, (async (element) => {
-        try {
-          const card = $(element), carNum = normalizeCarNum(card.find(".video-title strong").first().text());
-          if (!carNum) return;
-          const matches = await storageManager.cachedRequest(`115match:${carNum}`, cacheMinutes * 6e4, (() => client.search(normalize115Keyword(carNum))));
-          const badge = $('<button type="button" class="jhs-btn jhs-btn--ghost jhs-115-list-match"></button>').text(matches.length ? `匹配${matches.length}个` : "未匹配").data("matches", matches);
-          card.find(".video-title").first().prepend(badge);
-          badge.on("click", (() => {
-            if (1 === matches.length) return window.open(build115PlayUrl(matches[0]), "_blank");
-            const links = matches.map(((match) => `<a href="${escapeHtml(build115PlayUrl(match))}" target="_blank">${escapeHtml(match.name)}</a>`)).join("<br>");
-            layer.open({ type: 1, title: `${carNum} 115匹配`, content: `<div class="jhs-dialog-content">${links || "未匹配"}</div>`, area: utils.getResponsiveArea(["560px", "auto"]) });
-          }));
-        } catch (error) {
-          const card = $(element);
-          card.find(".video-title").first().prepend($('<button type="button" class="jhs-btn jhs-btn--ghost">失败·重试</button>').one("click", (() => this.matchListPage())));
-          clog.warn("115 单卡匹配失败", error);
-        }
+    async setupListMatching() {
+      this.concurrency = Math.max(1, Math.min(10, Number(await storageManager.getSetting("oneOneFiveConcurrency", 4)) || 4)), this.cacheMinutes = Math.max(1, Number(await storageManager.getSetting("oneOneFiveCacheMinutes", 60)) || 60);
+      this.observer = new IntersectionObserver(((entries) => {
+        entries.forEach(((entry) => entry.isIntersecting && (this.observer.unobserve(entry.target), this.pendingCards.add(entry.target))));
+        this.pendingCards.size && this.scheduleFlush();
+      }), { rootMargin: "200px" });
+      this.registerCards($(".movie-list .item,.masonry .item").get()), this.unsubscribeItems = jhsEventBus.on("list-items-added", ((payload) => this.registerCards(payload.items || [])));
+    }
+    registerCards(cards) {
+      cards.forEach(((card) => {
+        "true" !== card.dataset.jhs115Observed && "matched" !== card.dataset.jhs115State && (card.dataset.jhs115Observed = "true", this.observer.observe(card));
       }));
+    }
+    scheduleFlush() {
+      this.flushTimer || (this.flushTimer = setTimeout((async () => {
+        const cards = [...this.pendingCards];
+        this.pendingCards.clear(), this.flushTimer = null, await mapLimit(cards, this.concurrency, ((card) => this.matchCard(card)));
+      }), 50));
+    }
+    async matchCard(element, force = false) {
+      const card = $(element), carNum = normalizeCarNum(card.find(".video-title strong").first().text());
+      if (!carNum || "pending" === element.dataset.jhs115State && !force) return;
+      const cacheKey = `115match:${carNum}`;
+      try {
+        element.dataset.jhs115State = "pending", force && await storageManager.deleteCachedRequest(cacheKey);
+        const matches = await storageManager.cachedRequest(cacheKey, this.cacheMinutes * 6e4, (() => this.client.search(normalize115Keyword(carNum))));
+        card.find(".jhs-115-list-match").remove();
+        const badge = $('<button type="button" class="jhs-btn jhs-btn--ghost jhs-115-list-match"></button>').text(matches.length ? `匹配${matches.length}个` : "未匹配").data("matches", matches);
+        card.find(".video-title").first().prepend(badge), element.dataset.jhs115State = "matched";
+        badge.on("click", (() => {
+          if (!matches.length) return this.matchCard(element, true);
+          if (1 === matches.length) return window.open(build115PlayUrl(matches[0]), "_blank");
+          const links = matches.map(((match) => `<a href="${escapeHtml(build115PlayUrl(match))}" target="_blank">${escapeHtml(match.name)}</a>`)).join("<br>");
+          layer.open({ type: 1, title: `${carNum} 115匹配`, content: `<div class="jhs-dialog-content">${links}</div>`, area: utils.getResponsiveArea(["560px", "auto"]) });
+        }));
+      } catch (error) {
+        element.dataset.jhs115State = "failed", card.find(".jhs-115-list-match").remove(), card.find(".video-title").first().prepend($('<button type="button" class="jhs-btn jhs-btn--ghost jhs-115-list-match">失败·重试</button>').one("click", (() => this.matchCard(element, true)))), clog.warn("115 单卡匹配失败", error);
+      }
+    }
+    destroy() {
+      this.unsubscribeItems?.(), this.observer?.disconnect(), this.flushTimer && clearTimeout(this.flushTimer), this.pendingCards.clear();
     }
     renameWithPreview(event, match, carNum) {
       const nextName = preview115Rename(match.name, carNum, { uppercase: true, keepSuffix: true });
@@ -14143,13 +14504,125 @@ ${error.stack}` : "");
   };
   __name(_OneOneFiveMatchPlugin, "OneOneFiveMatchPlugin");
   var OneOneFiveMatchPlugin = _OneOneFiveMatchPlugin;
-  var _OneOneFiveRenamePlugin = class _OneOneFiveRenamePlugin extends BasePlugin {
-    getName() {
-      return "OneOneFiveRenamePlugin";
+  var _OfflineProviderRegistry = class _OfflineProviderRegistry {
+    constructor() {
+      this.providers = /* @__PURE__ */ new Map(), this.availabilityCache = /* @__PURE__ */ new Map(), this.positiveTtl = 3e5, this.negativeTtl = 2e4;
+    }
+    register(provider) {
+      if (!provider?.id || !Array.isArray(provider.capabilities) || "function" != typeof provider.submit || "function" != typeof provider.getAvailability) throw new TypeError("Invalid offline provider");
+      return this.providers.set(provider.id, provider), provider;
+    }
+    async getCandidates(resource, { force = false } = {}) {
+      const type = /^ed2k:/i.test(resource) ? "ed2k" : /^magnet:/i.test(resource) ? "magnet" : "unknown", candidates = [];
+      for (const provider of this.providers.values()) {
+        if (!provider.capabilities.includes(type) || !await provider.isEnabled()) continue;
+        const availability = await this.getAvailability(provider, force);
+        ["ready", "unknown"].includes(availability.authState) && candidates.push({ provider, availability });
+      }
+      return candidates;
+    }
+    async getAvailability(provider, force = false) {
+      const cached = this.availabilityCache.get(provider.id);
+      const ttl = ["ready", "unknown"].includes(cached?.value?.authState) ? this.positiveTtl : this.negativeTtl;
+      if (!force && cached && Date.now() - cached.time < ttl) return cached.value;
+      const value = await provider.getAvailability({ force });
+      return this.availabilityCache.set(provider.id, { time: Date.now(), value }), value;
+    }
+    updateAvailability(id, value) {
+      this.availabilityCache.set(id, { time: Date.now(), value });
     }
   };
-  __name(_OneOneFiveRenamePlugin, "OneOneFiveRenamePlugin");
-  var OneOneFiveRenamePlugin = _OneOneFiveRenamePlugin;
+  __name(_OfflineProviderRegistry, "OfflineProviderRegistry");
+  var OfflineProviderRegistry = _OfflineProviderRegistry;
+  var _UnifiedOfflinePlugin = class _UnifiedOfflinePlugin extends BasePlugin {
+    constructor() {
+      super(), this.registry = new OfflineProviderRegistry(), this.BUTTON_COOLDOWN_MS = 1800;
+    }
+    getName() {
+      return "UnifiedOfflinePlugin";
+    }
+    async initCss() {
+      return "<style>.jhs-offline-btn.loading{cursor:wait;opacity:.65}.jhs-offline-native{margin-left:6px;padding:3px 8px}</style>";
+    }
+    async handle() {
+      if (!(r || l)) return;
+      this.registerProviders(), this.bindSubmit(), window.isDetailPage && (this.injectNativeButtons(), jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
+    }
+    registerProviders() {
+      const one23 = this.getBean("OneTwoThreeOfflinePlugin");
+      one23 && this.registry.register({ id: "123", name: "123 云盘", capabilities: ["magnet"], retryPolicy: { automaticAttempts: 0 }, isEnabled: /* @__PURE__ */ __name(() => storageManager.getSetting("enable123Offline", true), "isEnabled"), getAvailability: /* @__PURE__ */ __name(async () => one23.getStoredToken() ? { available: true, authState: "ready", reason: "授权已同步" } : { available: false, authState: "token-missing", reason: "尚未同步 123 授权" }, "getAvailability"), submit: /* @__PURE__ */ __name(async (resource) => {
+        const token = one23.getStoredToken();
+        if (!token) throw Object.assign(new Error("尚未同步 123 授权"), { code: "TOKEN_MISSING" });
+        const resolved = await one23.resolveMagnet(resource, token);
+        return one23.submitTask(resolved, token);
+      }, "submit"), openUrl: /* @__PURE__ */ __name(() => "https://yun.123pan.com", "openUrl") });
+      this.registry.register({ id: "115", name: "115", capabilities: ["magnet", "ed2k"], retryPolicy: { automaticAttempts: 0 }, isEnabled: /* @__PURE__ */ __name(() => storageManager.getSetting("enable115Offline", false), "isEnabled"), getAvailability: /* @__PURE__ */ __name(async () => ({ available: true, authState: "unknown", reason: "提交时确认登录状态" }), "getAvailability"), submit: /* @__PURE__ */ __name((resource) => new OneOneFiveClient().addOffline(resource), "submit"), openUrl: /* @__PURE__ */ __name(() => "https://115.com", "openUrl") });
+      window.offlineProviderRegistry = this.registry;
+    }
+    bindSubmit() {
+      $(document).off("click.jhsUnifiedOffline", ".jhs-offline-btn").on("click.jhsUnifiedOffline", ".jhs-offline-btn", (async (event) => {
+        event.preventDefault(), event.stopPropagation();
+        const button = $(event.currentTarget), resource = button.attr("data-resource") || button.attr("data-magnet") || button.closest(".magnet-result,.item,td").find('a[href^="magnet:"],a[href^="ed2k:"]').first().attr("href");
+        resource ? await this.submitResource(event, resource, button) : show.error("未找到可提交资源");
+      }));
+    }
+    injectNativeButtons() {
+      const adapter = getDetailResourceAdapter();
+      if (!adapter) return;
+      adapter.rows().forEach(((row) => {
+        const resource = adapter.getResource(row), target = adapter.getActionTarget(row);
+        if (!resource || !target?.length || $(row).closest(".magnet-container,.jhs-review-panel,.movie-detail-container").length) return;
+        const owner = `native-${adapter.site}`;
+        let button = $(row).find(`.jhs-offline-btn[data-jhs-offline-owner="${owner}"]`).first();
+        $(row).find(`.jhs-offline-btn[data-jhs-offline-owner="${owner}"]`).not(button).remove();
+        button.length || (button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn jhs-offline-native">离线</button>').attr("data-jhs-offline-owner", owner)), button.attr("data-resource", resource), target.append(button);
+      }));
+    }
+    async chooseCandidate(event, candidates) {
+      if (1 === candidates.length) return candidates[0];
+      const mode = await storageManager.getSetting("offlineProviderMode", "ask"), preferred = candidates.find(((candidate) => candidate.provider.id === mode));
+      if (preferred) return preferred;
+      return new Promise(((resolve) => {
+        const content = $('<div class="jhs-form-dialog"><p>选择离线服务</p><div class="jhs-toolbar"></div></div>'), toolbar = content.find(".jhs-toolbar");
+        candidates.forEach(((candidate) => toolbar.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').text(`${candidate.provider.name} · ${"ready" === candidate.availability.authState ? "已就绪" : "状态未知"}`).on("click", (() => {
+          layer.close(index), resolve(candidate);
+        })))));
+        const index = layer.open({ type: 1, title: "选择离线服务", content, area: utils.getDialogArea("sm"), cancel: /* @__PURE__ */ __name(() => resolve(null), "cancel") });
+      }));
+    }
+    getVideoInfo(button) {
+      if (window.isDetailPage) return this.getPageInfo();
+      const item = button?.closest?.(".item");
+      return item?.length ? this.getBean("ListPagePlugin").findCarNumAndHref(item) : this.getPageInfo();
+    }
+    async submitResource(event, resource, button = $(), context = null, retryOf = null, options = {}) {
+      if (button.hasClass("loading")) return;
+      const candidates = await this.registry.getCandidates(resource, { force: !!options.forceAvailabilityRefresh });
+      if (!candidates.length) return void show.error("没有已启用且支持该资源的离线服务，请检查授权与设置");
+      const selected = candidates.find(((candidate) => candidate.provider.id === options.preferredProviderId)) || await this.chooseCandidate(event, candidates);
+      if (!selected) return;
+      const info = context || this.getVideoInfo(button), original = button.text(), restoreButton = /* @__PURE__ */ __name(() => {
+        if (!button[0]?.isConnected) return;
+        button.removeClass("loading").prop("disabled", false).removeAttr("aria-busy").text(original);
+      }, "restoreButton");
+      let submitted = false;
+      try {
+        button.addClass("loading").prop("disabled", true).attr("aria-busy", "true").text("提交中"), await selected.provider.submit(resource, info), this.registry.updateAvailability(selected.provider.id, { available: true, authState: "ready", reason: "最近提交成功" });
+        await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "submitted", retryOf }), submitted = true, button.text("已提交"), show.ok(`${selected.provider.name} 离线任务已创建`), utils.q(event, "是否将该作品标记为已下载？", (async () => {
+          info?.carNum && await stateService.patch(info.carNum, { downloaded: true }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } });
+        }));
+      } catch (error) {
+        const code = error?.code || ("TOKEN_EXPIRED" === error ? "TOKEN_EXPIRED" : "SUBMIT_FAILED");
+        ["LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING"].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: false, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: error.message || String(error) });
+        restoreButton();
+        submitted || await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "failed", errorCode: code, errorMessage: error?.message || String(error), retryOf }), show.error(`${selected.provider.name} 离线失败：${error?.message || error}`);
+      } finally {
+        submitted ? setTimeout(restoreButton, this.BUTTON_COOLDOWN_MS) : restoreButton();
+      }
+    }
+  };
+  __name(_UnifiedOfflinePlugin, "UnifiedOfflinePlugin");
+  var UnifiedOfflinePlugin = _UnifiedOfflinePlugin;
   var _StatsPlugin = class _StatsPlugin extends BasePlugin {
     getName() {
       return "StatsPlugin";
@@ -14159,7 +14632,8 @@ ${error.stack}` : "");
             <style>
                 .jhs-stats { height:100%; padding:var(--jhs-space-4); overflow:auto; }
                 .jhs-stats__metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border-top:1px solid var(--jhs-border); border-left:1px solid var(--jhs-border); }
-                .jhs-stats__metric { display:grid; gap:var(--jhs-space-1); padding:var(--jhs-space-4); border-right:1px solid var(--jhs-border); border-bottom:1px solid var(--jhs-border); background:var(--jhs-surface); }
+                .jhs-stats__metric { display:grid; gap:var(--jhs-space-1); padding:var(--jhs-space-4); border:0; border-right:1px solid var(--jhs-border); border-bottom:1px solid var(--jhs-border); background:var(--jhs-surface); text-align:left; }
+                button.jhs-stats__metric { cursor:pointer; }
                 .jhs-stats__metric strong { color:var(--jhs-text); font-size:28px; line-height:1; }
                 .jhs-stats__metric span { color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
                 .jhs-stats__group { margin-top:var(--jhs-space-5); }
@@ -14181,31 +14655,64 @@ ${error.stack}` : "");
       $("#newVideoBtn").after(e2), $("#statsBtn").on("click", (() => this.openDialog()));
     }
     async openDialog() {
-      const cars = await storageManager.getCarList(), actresses = await storageManager.getFavoriteActressList(), blacklist = await storageManager.getBlacklist(), total = cars.length, statusMap = await storageManager.getStatusMap();
-      const counts = { filter: statusMap[d].size, favorite: statusMap[h].size, hasDown: statusMap[g].size, hasWatch: statusMap[p].size };
-      const actressCounts = {};
+      const cars = await storageManager.getCarList(), actresses = await storageManager.getFavoriteActressList(), blacklist = await storageManager.getBlacklist(), activity = await stateService.getActivityLog(), total = cars.length;
+      const counts = { manualBlocked: 0, favorite: 0, hasDown: 0, hasWatch: 0, pending: 0 };
       cars.forEach(((car) => {
-        car.names && car.names.split(" ").forEach(((name) => {
-          name && (actressCounts[name] = (actressCounts[name] || 0) + 1);
+        const flags = normalizeStateFlags(car.stateFlags);
+        flags.blocked && counts.manualBlocked++, flags.favorite && counts.favorite++, flags.downloaded && counts.hasDown++, flags.watched && counts.hasWatch++, hasAnyState(flags) || counts.pending++;
+      }));
+      const actressCounts = /* @__PURE__ */ new Map();
+      cars.forEach(((car) => {
+        const names = String(car.names || "").split(/[\s,，、]+/).filter(Boolean);
+        if (car.starId) {
+          const key = `id:${car.starId}`, current = actressCounts.get(key) || { starId: car.starId, name: names[0] || car.starId, count: 0 };
+          current.count++, actressCounts.set(key, current);
+        } else names.forEach(((name) => {
+          const key = `name:${name}`, current = actressCounts.get(key) || { starId: "", name, count: 0 };
+          current.count++, actressCounts.set(key, current);
         }));
       }));
-      const topActresses = Object.entries(actressCounts).sort(((left, right) => right[1] - left[1])).slice(0, 10), topValue = topActresses[0]?.[1] || 1;
-      const pending = total - counts.filter - counts.favorite - counts.hasDown - counts.hasWatch, carMap = await storageManager.getCarMap(), counter = this.getBean("NewVideoPlugin");
-      let newVideos = 0;
-      actresses.forEach(((actress) => {
-        counter && (newVideos += counter.getPendingNewVideoCount(actress, carMap));
-      }));
-      const metrics = [["总记录", total], ["已收藏", counts.favorite], ["已下载", counts.hasDown], ["已观看", counts.hasWatch], ["已屏蔽", counts.filter], ["待鉴定", pending], ["收藏演员", actresses.length], ["黑名单演员", blacklist.length], ["新作品待看", newVideos]];
-      const statusRows = [["已收藏", counts.favorite, "var(--jhs-status-fav)"], ["已下载", counts.hasDown, "var(--jhs-status-down)"], ["已观看", counts.hasWatch, "var(--jhs-status-watch)"], ["已屏蔽", counts.filter, "var(--jhs-status-filter)"], ["待鉴定", pending, "var(--jhs-border-strong)"]];
-      const row = /* @__PURE__ */ __name((label, value, max, color) => `<div class="jhs-stats__row"><span class="jhs-stats__label" title="${escapeHtml(label)}">${escapeHtml(label)}</span><span class="jhs-stats__track"><span class="jhs-stats__bar" data-width="${max ? Math.round(value / max * 100) : 0}" data-color="${color}"></span></span><span class="jhs-stats__value">${value}${max === total && total ? ` (${Math.round(value / total * 100)}%)` : ""}</span></div>`, "row");
+      const topActresses = [...actressCounts.values()].sort(((left, right) => right.count - left.count || left.name.localeCompare(right.name))).slice(0, 10), topValue = topActresses[0]?.count || 1, javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl();
+      const pending = counts.pending, counter = this.getBean("NewVideoPlugin"), newVideos = counter ? await counter.getPendingNewVideoTotal() : 0, pageSummary = this.getBean("ListPagePlugin").getCurrentPageSummary();
+      const metrics = [
+        { label: "总记录", value: total, action: null },
+        { label: "收藏", value: counts.favorite, action: null },
+        { label: "下载", value: counts.hasDown, action: null },
+        { label: "已看", value: counts.hasWatch, action: null },
+        { label: "手动屏蔽", value: counts.manualBlocked, action: null },
+        { label: "未鉴定", value: pending, action: null },
+        { label: "收藏演员", value: actresses.length, action: null },
+        { label: "黑名单演员", value: blacklist.length, action: null },
+        { label: "新作品待处理", value: newVideos, action: "new-video" }
+      ];
+      const statusRows = [["收藏", counts.favorite, "var(--jhs-status-fav)"], ["下载", counts.hasDown, "var(--jhs-status-down)"], ["已看", counts.hasWatch, "var(--jhs-status-watch)"], ["手动屏蔽", counts.manualBlocked, "var(--jhs-status-filter)"], ["未鉴定", pending, "var(--jhs-border-strong)"]];
+      const row = /* @__PURE__ */ __name((label, value, max, color, href = "") => `<div class="jhs-stats__row">${href ? `<a class="jhs-stats__label" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(label)}">${escapeHtml(label)}</a>` : `<span class="jhs-stats__label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`}<span class="jhs-stats__track"><span class="jhs-stats__bar" data-width="${max ? Math.round(value / max * 100) : 0}" data-color="${color}"></span></span><span class="jhs-stats__value">${value}${max === total && total ? ` (${Math.round(value / total * 100)}%)` : ""}</span></div>`, "row");
+      const trend = /* @__PURE__ */ __name((days) => {
+        const cutoff = Date.now() - days * 864e5, result = { identified: 0, downloaded: 0, watched: 0 };
+        activity.entries.filter(((entry) => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)).forEach(((entry) => entry.changes.filter(((change) => "reverted" !== change.undoState)).forEach(((change) => {
+          const before = normalizeStateFlags(change.before?.stateFlags), after = normalizeStateFlags(change.after?.stateFlags);
+          !hasAnyState(before) && hasAnyState(after) && result.identified++, !before.downloaded && after.downloaded && result.downloaded++, !before.watched && after.watched && result.watched++;
+        }))));
+        return result;
+      }, "trend"), trend7 = trend(7), trend30 = trend(30);
+      const coverageNote = activity.coverageStart ? `活动记录仅覆盖自 ${escapeHtml(activity.coverageStart)} 起` : "仅统计 6.4.0 及之后产生的操作记录";
+      const renderMetric = /* @__PURE__ */ __name((metric) => metric.action ? `<button type="button" class="jhs-btn jhs-stats__metric" data-action="${metric.action}"${metric.filter ? ` data-filter="${metric.filter}"` : ""}><strong>${metric.value}</strong><span>${metric.label}</span></button>` : `<div class="jhs-stats__metric"><strong>${metric.value}</strong><span>${metric.label}</span></div>`, "renderMetric");
       const dialogHtml = `<div class="jhs-stats jhs-scrollbar jhs-ui">
-            <div class="jhs-stats__metrics">${metrics.map(((metric) => `<div class="jhs-stats__metric"><strong>${metric[1]}</strong><span>${metric[0]}</span></div>`)).join("")}</div>
+            <section class="jhs-stats__group"><h3>全库概览</h3><div class="jhs-stats__metrics">${metrics.map(renderMetric).join("")}</div></section>
+            <section class="jhs-stats__group"><h3>当前页面</h3><div class="jhs-stats__metrics">${renderMetric({ label: "屏蔽项", value: pageSummary.blockedItems, action: "filter", filter: "blockedItems" })}</div></section>
             <section class="jhs-stats__group"><h3>状态分布</h3><div class="jhs-stats__rows">${statusRows.map(((item) => row(item[0], item[1], total, item[2]))).join("")}</div></section>
-            ${topActresses.length ? `<section class="jhs-stats__group"><h3>Top 10 演员</h3><div class="jhs-stats__rows">${topActresses.map(((item) => row(item[0], item[1], topValue, "var(--jhs-accent)"))).join("")}</div></section>` : ""}
+            <section class="jhs-stats__group"><h3>活动趋势</h3><p class="jhs-helper-text">${coverageNote}</p><div class="jhs-stats__metrics"><div class="jhs-stats__metric"><strong>${trend7.identified}</strong><span>近 7 天新增鉴定</span></div><div class="jhs-stats__metric"><strong>${trend7.downloaded}</strong><span>近 7 天标记下载</span></div><div class="jhs-stats__metric"><strong>${trend7.watched}</strong><span>近 7 天标记观看</span></div><div class="jhs-stats__metric"><strong>${trend30.identified}</strong><span>近 30 天新增鉴定</span></div><div class="jhs-stats__metric"><strong>${trend30.downloaded}</strong><span>近 30 天标记下载</span></div><div class="jhs-stats__metric"><strong>${trend30.watched}</strong><span>近 30 天标记观看</span></div></div></section>
+            ${topActresses.length ? `<section class="jhs-stats__group"><h3>Top 10 演员</h3><div class="jhs-stats__rows">${topActresses.map(((item) => row(item.name, item.count, topValue, "var(--jhs-accent)", new URL(item.starId ? `/actors/${encodeURIComponent(item.starId)}` : `/search?q=${encodeURIComponent(item.name)}`, javDbUrl).href))).join("")}</div></section>` : ""}
         </div>`;
-      layer.open({ type: 1, title: "收藏统计", content: dialogHtml, scrollbar: false, area: utils.getDialogArea("lg"), anim: -1, success: /* @__PURE__ */ __name((layerElement, layerIndex) => {
+      layer.open({ type: 1, title: "统计", content: dialogHtml, scrollbar: false, area: utils.getDialogArea("lg"), anim: -1, success: /* @__PURE__ */ __name((layerElement, layerIndex) => {
         $(layerElement).find(".jhs-stats__bar").each((function() {
           $(this).css({ "--jhs-value": `${$(this).data("width")}%`, "--jhs-bar": $(this).data("color") });
+        }));
+        $(layerElement).find("button.jhs-stats__metric[data-action]").on("click", ((event) => {
+          const metric = $(event.currentTarget), action = metric.data("action");
+          layer.close(layerIndex);
+          if ("new-video" === action) return this.getBean("NewVideoPlugin").openDialog();
+          if ("filter" === action) this.getBean("ListPagePlugin").setQuickFilter(metric.data("filter"));
         }));
         utils.setupEscClose(layerIndex);
       }, "success") });
@@ -14361,6 +14868,7 @@ ${error.stack}` : "");
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
+                overflow: visible;
                 gap: var(--jhs-space-3);
                 width: 100%;
                 margin: var(--jhs-space-3) 0;
@@ -14374,17 +14882,22 @@ ${error.stack}` : "");
                 min-width: 0;
                 white-space: nowrap;
             }
-            .jhs-commandbar__left { flex: 1 1 auto; }
-            .jhs-commandbar__right { flex: 0 0 auto; }
-            .jhs-commandbar__filters {
-                overflow-x: auto;
-            }
+            .jhs-commandbar__left { flex: 1 1 auto; overflow:visible; }
+            .jhs-commandbar__right { flex: 0 0 auto; overflow:visible; }
+            .jhs-commandbar__filters { overflow:visible; }
             .jhs-commandbar__batch, .jhs-commandbar__more, .jhs-sort-control { position:relative; }
             .jhs-commandbar__menu { min-width:220px; }
             .jhs-commandbar__menu .jhs-btn, .jhs-sort-menu .jhs-btn { width:100%; justify-content:flex-start; }
             .jhs-commandbar__sort-label { color:var(--jhs-text-muted); font-size:14px; }
+            .jhs-mobile-filter-menu { display:none; min-width:220px; padding:var(--jhs-space-2); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
+            .jhs-fab-menu.jhs-fab-filter-open > .jhs-fab-group, .jhs-fab-menu.jhs-fab-filter-open > .jhs-fab-divider { display:none; }
+            .jhs-fab-menu.jhs-fab-filter-open > .jhs-mobile-filter-menu { display:grid; gap:var(--jhs-space-1); }
+            .jhs-mobile-filter-menu .jhs-btn { width:100%; justify-content:flex-start; }
             @media (max-width: 1023px) {
-                .jhs-page-commandbar { overflow-x: auto; }
+                .jhs-page-commandbar { flex-wrap:wrap; overflow:visible; }
+                .jhs-commandbar__left, .jhs-commandbar__right { flex-wrap:wrap; overflow:visible; }
+                .jhs-commandbar__left { flex-basis:100%; }
+                .jhs-commandbar__right { margin-left:auto; }
             }
             @media (max-width: 768px) {
                 .jhs-page-commandbar { display: none; }
@@ -14392,8 +14905,6 @@ ${error.stack}` : "");
         `;
     }
     async handle() {
-      const detailWorkspace = new DetailWorkspacePlugin();
-      detailWorkspace.pluginManager = this.pluginManager, H(await detailWorkspace.initCss()), await detailWorkspace.handle();
       if (!utils.isMobileMode()) return;
       const backdrop = $('<div class="jhs-fab-backdrop"></div>').appendTo("body");
       const menu = this.createMenu();
@@ -14428,14 +14939,8 @@ ${error.stack}` : "");
         item.length && item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(more.find(".jhs-commandbar__menu"));
       }));
       more.find(".jhs-commandbar__menu").children().length && left.append(more);
-      const filterButtons = $("#jhs-quick-filter .jhs-segmented__item");
-      if (filterButtons.length) {
-        const filters = $('<div class="jhs-commandbar__filters jhs-segmented" role="tablist" aria-label="状态筛选"></div>');
-        filterButtons.each((function() {
-          $(this).attr({ class: `jhs-segmented__item${$(this).hasClass("active") ? " active" : ""}`, role: "tab", "aria-selected": $(this).hasClass("active") ? "true" : "false", tabindex: $(this).hasClass("active") ? "0" : "-1" }).detach().appendTo(filters);
-        })), left.append(filters);
-      }
-      $("#jhs-quick-filter").remove();
+      const quickFilter = $("#jhs-quick-filter").first();
+      quickFilter.length && left.append($('<div class="jhs-commandbar__filters"></div>').append(quickFilter.detach()));
       const contextItem = $("#addBlacklistBtn").first();
       contextItem.length && contextItem.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo($('<div class="jhs-commandbar__context"></div>').appendTo(right));
       const sort = $(".jhs-sort-control").first();
@@ -14472,17 +14977,7 @@ ${error.stack}` : "");
       $(document).off("click.jhsCommandbar").on("click.jhsCommandbar", ((event) => {
         $(event.target).closest(".jhs-commandbar__more, .jhs-commandbar__batch").length || (commandbar.find(".jhs-commandbar__menu").removeClass("is-open"), commandbar.find(".jhs-commandbar__menu-toggle").attr("aria-expanded", "false"));
       }));
-      const listPlugin = this.getBean("ListPagePlugin");
-      commandbar.find(".jhs-commandbar__filters").on("click", "[role='tab']", (function() {
-        $(this).siblings().removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), $(this).addClass("active").attr({ "aria-selected": "true", tabindex: "0" });
-        const filter = $(this).data("jhs-filter");
-        listPlugin.activeQuickFilter = filter, listPlugin.applyQuickFilter(filter);
-      })).on("keydown", "[role='tab']", ((e2) => {
-        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e2.key)) return;
-        e2.preventDefault();
-        const tabs = commandbar.find("[role='tab']"), index = tabs.index(e2.currentTarget), next = "Home" === e2.key ? 0 : "End" === e2.key ? tabs.length - 1 : "ArrowRight" === e2.key ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
-        tabs.eq(next).trigger("click").trigger("focus");
-      }));
+      this.getBean("ListPagePlugin")?.syncQuickFilterUi();
     }
     /** 获取详情页番号 */
     getCarNum() {
@@ -14500,8 +14995,8 @@ ${error.stack}` : "");
       const item = /* @__PURE__ */ __name((action, label, attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, "item"), group = /* @__PURE__ */ __name((content) => `<div class="jhs-fab-group">${content}</div>`, "group"), divider = '<div class="jhs-fab-divider" role="separator"></div>';
       let items;
       if (window.isListPage) {
-        const sortMethod = localStorage.getItem("jhs_sortMethod") || "default", sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
-        items = group(item("check", "待鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort", `排序: ${sortLabel}`)) + divider + group(item("setting", "设置"));
+        const sortMethod = localStorage.getItem("jhs_sortMethod") || "default", sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod], activeFilter = normalizeQuickFilterKey(this.getBean("ListPagePlugin")?.activeQuickFilter), filterOptions = [...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join("");
+        items = group(item("check", "开始鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort", `排序: ${sortLabel}`) + item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"')) + divider + group(item("setting", "设置")) + `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div>`;
       } else if (window.isDetailPage) {
         const statusDefs = [{ action: "filter", icon: m, label: "屏蔽", key: "filter" }, { action: "fav", icon: v, label: "收藏", key: "fav" }, { action: "down", icon: y, label: "已下载", key: "down" }, { action: "watch", icon: k, label: "已观看", key: "watch" }];
         items = group(statusDefs.map(((definition) => item(definition.action, `<span class="jhs-fab-status-dot" data-status-key="${definition.key}"></span>${definition.icon}`, `aria-label="${definition.label}" aria-pressed="false" data-label="${definition.label}"`))).join("")) + divider + group(item("magnetFilter", "磁力过滤") + item("magnet", "磁力搜索") + item("subtitle", "字幕")) + divider + group(item("setting", "设置"));
@@ -14516,13 +15011,16 @@ ${error.stack}` : "");
         const car = await storageManager.getCar(carNum);
         const menu = $(".jhs-fab-menu");
         const colors = { filter: "var(--jhs-status-filter)", fav: "var(--jhs-status-fav)", down: "var(--jhs-status-down)", watch: "var(--jhs-status-watch)" };
-        const activeKey = { [d]: "filter", [h]: "fav", [g]: "down", [p]: "watch" };
-        let activeStatus = null;
-        if (car?.status && activeKey[car.status]) activeStatus = activeKey[car.status];
+        const flags = normalizeStateFlags(car?.stateFlags), activeKeys = new Set([
+          flags.blocked && "filter",
+          flags.favorite && "fav",
+          flags.downloaded && "down",
+          flags.watched && "watch"
+        ].filter(Boolean));
         menu.find(".jhs-fab-status-dot").each(function() {
           const key = $(this).data("status-key");
           const item = $(this).closest(".jhs-fab-menu-item");
-          if (key === activeStatus) {
+          if (activeKeys.has(key)) {
             $(this).css({ background: colors[key] || "var(--jhs-border-strong)" }), item.attr("aria-pressed", "true");
           } else {
             $(this).css({ background: "var(--jhs-border-strong)" }), item.attr("aria-pressed", "false");
@@ -14533,9 +15031,12 @@ ${error.stack}` : "");
       }
     }
     bindEvents(fab, backdrop) {
-      const menu = $(".jhs-fab-menu");
+      const menu = $(".jhs-fab-menu"), filterMenu = menu.find(".jhs-mobile-filter-menu"), filterTrigger = menu.find('[data-action="quickFilter"]'), closeFilterMenu = /* @__PURE__ */ __name((returnFocus = false) => {
+        menu.removeClass("jhs-fab-filter-open"), filterTrigger.attr("aria-expanded", "false"), returnFocus && filterTrigger.trigger("focus");
+      }, "closeFilterMenu");
       const closeMenu = /* @__PURE__ */ __name((returnFocus = false) => {
         this._fabGeneration++;
+        closeFilterMenu();
         fab.removeClass("jhs-fab-open").attr("aria-expanded", "false");
         menu.removeClass("jhs-fab-menu-open").attr("aria-hidden", "true");
         backdrop.removeClass("jhs-fab-backdrop-visible");
@@ -14554,6 +15055,7 @@ ${error.stack}` : "");
             const sortMethod = localStorage.getItem("jhs_sortMethod") || "default";
             const sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
             menu.find('[data-action="sort"]').text(`排序: ${sortLabel}`);
+            this.getBean("ListPagePlugin")?.syncQuickFilterUi();
           }
           if (window.isDetailPage) void this.refreshDetailStatus().catch(((error) => clog.warn("移动端详情状态刷新失败", error)));
           const gen = ++this._fabGeneration;
@@ -14578,8 +15080,23 @@ ${error.stack}` : "");
         const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
         items.eq(next).trigger("focus");
       }));
+      filterMenu.on("keydown", ".jhs-mobile-filter-option", ((event) => {
+        const items = filterMenu.find(".jhs-mobile-filter-option"), index = items.index(event.currentTarget);
+        if ("Escape" === event.key) return event.preventDefault(), closeFilterMenu(true);
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+        items.eq(next).trigger("focus");
+      })).on("click", ".jhs-mobile-filter-option", ((event) => {
+        event.stopPropagation(), this.getBean("ListPagePlugin").setQuickFilter($(event.currentTarget).data("jhs-filter")), closeMenu(true);
+      }));
       menu.on("click", ".jhs-fab-menu-item", (e2) => {
         const action = $(e2.currentTarget).data("action");
+        if ("quickFilter" === action) {
+          e2.stopPropagation(), menu.addClass("jhs-fab-filter-open"), filterTrigger.attr("aria-expanded", "true");
+          const selected = filterMenu.find('[aria-checked="true"]');
+          return void (selected.length ? selected.first() : filterMenu.find(".jhs-mobile-filter-option").first()).trigger("focus");
+        }
         closeMenu(true);
         void this.handleAction(action).catch(((error) => clog.error(`移动端操作 ${action || "unknown"} 失败`, error)));
       });
@@ -14588,7 +15105,7 @@ ${error.stack}` : "");
       switch (action) {
         // 列表页操作
         case "check":
-          $("#waitCheckBtn").length && $("#waitCheckBtn").click();
+          await this.getBean("ListPageButtonPlugin")?.openWaitCheck?.();
           break;
         case "newVideo":
           this.getBean("NewVideoPlugin")?.openDialog();
@@ -14637,237 +15154,214 @@ ${error.stack}` : "");
   };
   __name(_MobileBottomBarPlugin, "MobileBottomBarPlugin");
   var MobileBottomBarPlugin = _MobileBottomBarPlugin;
+  function getDetailResourceAdapter() {
+    if (!window.isDetailPage) return null;
+    if (r) {
+      const hostRoot = $(".video-detail").first(), controller = hostRoot.find('[data-controller="magnet-sort"]').first(), resourceRoot = controller.find("#magnets-content").first();
+      if (!hostRoot.length || !controller.length || !resourceRoot.length) return null;
+      const resourceRegion = controller.closest(hostRoot.children()).first();
+      return {
+        site: "javdb",
+        hostRoot,
+        controller,
+        observeRoot: controller,
+        resourceRoot,
+        resourceRegion,
+        rows: /* @__PURE__ */ __name(() => resourceRoot.children(".item").toArray(), "rows"),
+        sortSelect: controller.find('select[data-action*="magnet-sort#sort"]').first(),
+        getResource(row) {
+          const item = $(row);
+          return item.find('.copy-to-clipboard[data-clipboard-text^="magnet:"]').first().attr("data-clipboard-text") || item.find('.magnet-name a[href^="magnet:"]').first().attr("href") || "";
+        },
+        getActionTarget: /* @__PURE__ */ __name((row) => $(row).children(".buttons").first(), "getActionTarget")
+      };
+    }
+    if (l) {
+      const hostRoot = $(".container").filter(((_2, element) => $(element).find("#magnet-table").length > 0)).first(), resourceRoot = hostRoot.find("#magnet-table").first();
+      if (!hostRoot.length || !resourceRoot.length) return null;
+      const resourceRegion = resourceRoot.closest(hostRoot.children()).first(), observeRoot = resourceRoot.parent();
+      return {
+        site: "javbus",
+        hostRoot,
+        controller: resourceRoot,
+        observeRoot,
+        resourceRoot,
+        resourceRegion,
+        rows: /* @__PURE__ */ __name(() => resourceRoot.find("tr").filter(((_2, row) => $(row).find('td a[href^="magnet:"],td a[href^="ed2k:"]').length > 0)).toArray(), "rows"),
+        sortSelect: $(),
+        getResource: /* @__PURE__ */ __name((row) => $(row).find('td a[href^="magnet:"],td a[href^="ed2k:"]').first().attr("href") || "", "getResource"),
+        getActionTarget(row) {
+          const item = $(row), stableActions = item.find(".buttons,.actions,.btn-group").filter(((_2, element) => $(element).closest("td").length > 0)).last();
+          if (stableActions.length) return stableActions;
+          const resourceCell = item.find('td:has(a[href^="magnet:"]),td:has(a[href^="ed2k:"])').first();
+          let actions = resourceCell.children(".jhs-offline-actions").first();
+          return actions.length || (actions = $('<span class="jhs-offline-actions"></span>').appendTo(resourceCell)), actions;
+        }
+      };
+    }
+    return null;
+  }
+  __name(getDetailResourceAdapter, "getDetailResourceAdapter");
   var _DetailWorkspacePlugin = class _DetailWorkspacePlugin extends BasePlugin {
+    constructor() {
+      super(), this.hostRoot = null, this.resourceObserver = null, this.scheduledResourceFrame = null;
+    }
     getName() {
       return "DetailWorkspacePlugin";
     }
     async initCss() {
-      return `
-            <style>
-                .jhs-detail-workspace { display:grid; width:min(100%,1440px); margin:0 auto; padding:var(--jhs-space-4); color:var(--jhs-text); background:var(--jhs-surface); }
-                .jhs-detail-workspace.movie-detail-container { height:100%; margin:0; overflow-y:auto; }
-                .jhs-detail-workspace__section { min-width:0; padding:var(--jhs-space-5) 0; border-top:1px solid var(--jhs-border); }
-                .jhs-detail-workspace__section:first-child { padding-top:0; border-top:0; }
-                .jhs-detail-workspace__section:not(.has-content) { display:none; }
-                .jhs-detail-workspace__header { display:flex; min-height:var(--jhs-control-height); align-items:center; justify-content:space-between; gap:var(--jhs-space-3); margin-bottom:var(--jhs-space-3); }
-                .jhs-detail-workspace__header h2 { margin:0; color:var(--jhs-text); font-size:var(--jhs-font-size-xl); font-weight:700; }
-                .jhs-detail-workspace__actions { display:flex; align-items:center; gap:var(--jhs-space-2); }
-                .jhs-detail-workspace__content { min-width:0; }
-                .jhs-detail-summary { display:grid; grid-template-columns:minmax(220px,280px) minmax(0,1fr); align-items:start; gap:var(--jhs-space-5); }
-                .jhs-detail-summary__media, .jhs-detail-summary__info { min-width:0; }
-                .jhs-detail-summary__media img { width:100%; height:auto; border-radius:var(--jhs-radius-md); }
-                .jhs-detail-title { display:-webkit-box; overflow:hidden; margin:0 0 var(--jhs-space-2); color:var(--jhs-text); font-size:clamp(20px,2vw,24px); line-height:1.3; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
-                .jhs-detail-summary__info .translated-title { margin:0 0 var(--jhs-space-3); color:var(--jhs-text); font-size:clamp(16px,1.5vw,18px); font-weight:500; line-height:1.5; }
-                .jhs-detail-summary__actions { grid-column:1/-1; }
-                .jhs-detail-host-action { display:inline-flex!important; min-height:var(--jhs-control-height)!important; align-items:center!important; justify-content:center!important; padding:0 var(--jhs-space-3)!important; border:1px solid var(--jhs-border)!important; border-radius:var(--jhs-radius-sm)!important; background:var(--jhs-surface)!important; color:var(--jhs-text)!important; box-shadow:none!important; font:inherit!important; font-size:var(--jhs-font-size-sm)!important; font-weight:600!important; line-height:1!important; text-decoration:none!important; }
-                .jhs-detail-host-action:hover { border-color:var(--jhs-accent)!important; background:var(--jhs-surface-2)!important; color:var(--jhs-accent)!important; }
-                .jhs-detail-workspace .jhs-detail-btn-row { margin:0 !important; }
-                .jhs-detail-workspace [data-jhs-section-content="gallery"] .tile-images,
-                .jhs-detail-workspace [data-jhs-section-content="gallery"] #sample-waterfall,
-                .jhs-detail-workspace [data-jhs-section-content="gallery"] .movie-gallery,
-                .jhs-detail-workspace [data-jhs-section-content="resources"] #magnets-content,
-                .jhs-detail-workspace [data-jhs-section-content="resources"] #magnet-table { margin:0; }
-                .jhs-detail-workspace [data-jhs-section-content="resources"] :is(#magnets-content,#magnet-table,.video-panel) { border-radius:var(--jhs-radius-sm); }
-                .jhs-detail-source--reflowed { display:none !important; }
-                @media (max-width:767px) {
-                    .jhs-detail-workspace { padding:var(--jhs-space-3); }
-                    .jhs-detail-workspace__section { padding:var(--jhs-space-4) 0; }
-                    .jhs-detail-summary { grid-template-columns:1fr; }
-                    .jhs-detail-summary__media { width:min(100%,360px); margin:0 auto; }
-                    .jhs-detail-summary__actions { grid-column:auto; }
-                }
-            </style>`;
+      return `<style>
+            .jhs-detail-workspace { display:grid; width:min(100%,1440px); min-width:0; margin:0 auto; padding:var(--jhs-space-6); gap:var(--jhs-space-5); box-sizing:border-box; background:var(--jhs-bg); color:var(--jhs-text); }
+            .jhs-detail-workspace__section { display:none; min-width:0; overflow:hidden; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); }
+            .jhs-detail-workspace__section.has-content { display:block; }
+            .jhs-detail-workspace__header { padding:var(--jhs-space-4) var(--jhs-space-5); border-bottom:1px solid var(--jhs-border); background:var(--jhs-surface-2); }
+            .jhs-detail-workspace__header h2 { margin:0; color:var(--jhs-text); font-size:var(--jhs-font-size-lg); }
+            .jhs-detail-workspace__content { min-width:0; padding:var(--jhs-space-5); }
+            .jhs-detail-workspace__content:empty { display:none; }
+            .jhs-detail-workspace .jhs-detail-btn-row { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); margin-top:var(--jhs-space-4); }
+            .jhs-detail-workspace [data-jhs-section="gallery"] .jhs-detail-workspace__content { overflow-x:auto; }
+            .jhs-detail-host-workspace { color:var(--jhs-text); }
+            .jhs-detail-owned-slot { min-width:0; padding:var(--jhs-space-5) 0; border-top:1px solid var(--jhs-border); }
+            .jhs-detail-owned-slot:empty { display:none; }
+            .jhs-detail-owned-slot--summary-actions { padding:var(--jhs-space-3) 0 var(--jhs-space-5); border-top:0; }
+            .jhs-detail-post-resource { min-width:0; }
+            .jhs-detail-host-workspace .jhs-detail-btn-row { margin:0!important; }
+            .jhs-detail-host-action { display:inline-flex!important; min-height:var(--jhs-control-height)!important; align-items:center!important; justify-content:center!important; padding:0 var(--jhs-space-3)!important; border:1px solid var(--jhs-border)!important; border-radius:var(--jhs-radius-sm)!important; background:var(--jhs-surface)!important; color:var(--jhs-text)!important; box-shadow:none!important; font:inherit!important; font-size:var(--jhs-font-size-sm)!important; font-weight:600!important; line-height:1!important; text-decoration:none!important; }
+            .jhs-detail-host-action:hover { border-color:var(--jhs-accent)!important; background:var(--jhs-surface-2)!important; color:var(--jhs-accent)!important; }
+            .jhs-offline-actions { display:inline-flex; align-items:center; gap:var(--jhs-space-2); margin-left:var(--jhs-space-2); vertical-align:middle; }
+            @media (max-width:767px) { .jhs-detail-owned-slot { padding:var(--jhs-space-4) 0; } }
+        </style>`;
     }
     async handle() {
-      if (!window.isDetailPage || "1" !== new URLSearchParams(window.location.search).get("hideNav")) return;
-      utils.loopDetector((() => !!this.getAdapter()), (() => this.buildWorkspace()), 40, 2500, true);
+      if (!window.isDetailPage) return;
+      utils.loopDetector((() => !!this.getHostAdapter()), (() => this.ensureWorkspace()), 40, 2500, true);
     }
-    getAdapter() {
+    getHostAdapter() {
       if (r) {
-        const root = $(".video-detail").first(), cover = root.find(".column-video-cover").first(), info = root.find(".column-video-info").first();
-        return root.length && cover.length && info.length ? {
-          site: "javdb",
-          root,
-          cover,
-          info,
-          title: $()
-        } : null;
+        const root = $(".video-detail").first();
+        return root.length ? { site: "javdb", root } : null;
       }
       if (l) {
-        const cover = $(".screencap").first(), info = $(".info").first(), root = cover.closest(".container");
-        const title = root.find("h3").first();
-        return root.length && cover.length && info.length ? {
-          site: "javbus",
-          root,
-          cover,
-          info,
-          title
-        } : null;
+        const root = $(".container").filter(((_2, element) => $(element).find("#magnet-table,.screencap,.info").length > 0)).first();
+        return root.length ? { site: "javbus", root } : null;
       }
       return null;
     }
-    buildWorkspace() {
-      if ($("#jhs-detail-workspace").length) return;
-      const adapter = this.getAdapter();
-      if (!adapter) {
-        clog.warn("详情工作区未启用：关键宿主节点缺失，已保留原页面布局");
-        return;
+    ensureWorkspace() {
+      const adapter = this.getHostAdapter();
+      if (!adapter) return $();
+      const root = adapter.root;
+      if (!root.attr("data-jhs-workspace-ready")) {
+        root.attr({ "data-jhs-workspace-ready": "true", "data-jhs-workspace-site": adapter.site }).addClass("jhs-detail-host-workspace jhs-ui");
+        if ("javdb" === adapter.site) {
+          root.children("h2,.video-meta-panel").attr("data-jhs-host-region", "summary");
+          root.children(".columns").filter(((_2, element) => $(element).find(".tile-images,.preview-images").length > 0)).attr("data-jhs-host-region", "gallery");
+          root.children(".columns").filter(((_2, element) => $(element).find("#magnets-content").length > 0)).attr("data-jhs-host-region", "resources");
+          this.normalizeHostActions(root.find(".video-meta-panel").first());
+        } else {
+          root.children("h3,.row.movie").attr("data-jhs-host-region", "summary");
+          root.children().filter(((_2, element) => $(element).is("#mag-submit-show,#mag-submit") || $(element).find("#magnet-table").length > 0)).attr("data-jhs-host-region", "resources");
+          root.children().filter(((_2, element) => $(element).is("#sample-waterfall") || $(element).find("#sample-waterfall").length > 0)).attr("data-jhs-host-region", "gallery");
+          this.normalizeHostActions(root.find(".info").first());
+        }
+        this.ensureOwnedSlots(root), this.adoptExistingOwnedPanels(root);
       }
-      const workspace = $(`
-            <main id="jhs-detail-workspace" class="jhs-detail-workspace jhs-ui" data-site="${adapter.site}">
-                ${this.section("summary", "影片概览")}
-                ${this.section("gallery", "预览与剧照")}
-                ${this.section("resources", "资源")}
-                ${this.section("related", "相关清单")}
-                ${this.section("reviews", "评论")}
-            </main>`);
-      const summary = workspace.find('[data-jhs-section-content="summary"]');
-      const summaryGrid = $('<div class="jhs-detail-summary"><div class="jhs-detail-summary__media"></div><div class="jhs-detail-summary__info"></div><div class="jhs-detail-summary__actions"></div></div>');
-      summary.append(summaryGrid);
-      adapter.title.length && summaryGrid.find(".jhs-detail-summary__info").append(adapter.title);
-      summaryGrid.find(".jhs-detail-summary__media").append(adapter.cover);
-      summaryGrid.find(".jhs-detail-summary__info").append(adapter.info);
-      this.normalizeHostActions(adapter.info);
-      const titleNode = adapter.title.length ? adapter.title : summaryGrid.find(".origin-title, .current-title, h3").first();
-      titleNode.addClass("jhs-detail-title");
-      workspace.find('[data-jhs-section="summary"]').addClass("has-content");
-      adapter.site === "javdb" ? workspace.insertBefore(adapter.root) : adapter.root.prepend(workspace);
-      this.routeSections(workspace, adapter.root);
-      adapter.site === "javdb" && adapter.root.addClass("jhs-detail-source--reflowed");
-      let scheduledFrame = null;
-      const observer = new MutationObserver((() => {
-        if (scheduledFrame) return;
-        scheduledFrame = requestAnimationFrame((() => {
-          scheduledFrame = null;
-          if (!workspace[0]?.isConnected) return void observer.disconnect();
-          this.routeSections(workspace, adapter.root);
-        }));
-      }));
-      adapter.root[0] && observer.observe(adapter.root[0], {
-        childList: true,
-        subtree: true
-      });
+      this.hostRoot = root, this.ensureOwnedSlots(root), this.placeOwnedSlots(), this.bindResourceLifecycle();
+      return root;
     }
-    /** 仅统一工作区内已知宿主操作的外观，不替换节点或事件。 */
+    getSlot(name) {
+      return this.ensureWorkspace().find(`[data-jhs-slot="${name}"]`).first();
+    }
+    ensureOwnedSlots(root = this.hostRoot) {
+      if (!root?.length) return;
+      root.children('[data-jhs-slot="summary-actions"]').length || root.append('<div class="jhs-detail-owned-slot jhs-detail-owned-slot--summary-actions" data-jhs-slot="summary-actions"></div>');
+      let group = root.children('[data-jhs-slot-group="post-resource"]').first();
+      group.length || (group = $('<div class="jhs-detail-post-resource" data-jhs-slot-group="post-resource"></div>').appendTo(root));
+      group.children('[data-jhs-slot="reviews"]').length || group.append('<section class="jhs-detail-owned-slot jhs-detail-owned-slot--reviews" data-jhs-slot="reviews"></section>');
+      group.children('[data-jhs-slot="related"]').length || group.append('<section class="jhs-detail-owned-slot jhs-detail-owned-slot--related" data-jhs-slot="related"></section>');
+    }
+    /** 只移动 JHS 自有插槽，将其固定在稳定宿主锚点旁。 */
+    placeOwnedSlots() {
+      const root = this.hostRoot, resource = getDetailResourceAdapter();
+      if (!root?.length) return;
+      this.ensureOwnedSlots(root);
+      const summaryActions = root.children('[data-jhs-slot="summary-actions"]').first(), postResource = root.children('[data-jhs-slot-group="post-resource"]').first();
+      const summaryRegion = "javdb" === root.attr("data-jhs-workspace-site") ? root.children(".video-meta-panel").first() : root.children(".row.movie").first();
+      summaryRegion.length && summaryActions.insertAfter(summaryRegion);
+      resource?.resourceRegion?.length && postResource.insertAfter(resource.resourceRegion);
+    }
+    adoptExistingOwnedPanels(root) {
+      [[".jhs-detail-btn-row", "summary-actions"], [".jhs-related-panel", "related"], [".jhs-review-panel", "reviews"]].forEach((([selector, slot]) => {
+        const target = root.find(`[data-jhs-slot="${slot}"]`).first();
+        root.find(selector).filter(((_2, element) => !$(element).closest("[data-jhs-slot]").length)).each(((_2, element) => target.append(element)));
+      }));
+    }
     normalizeHostActions(info) {
       const labels = /* @__PURE__ */ new Set(["想看", "看过", "看過", "存入清单", "存入清單", "下载", "下載", "订正", "訂正"]);
       info.find("a, button").filter((function() {
         return !$(this).is(".jhs-btn, [id^='jhs-']") && labels.has($(this).text().replace(/\s+/g, " ").trim());
       })).addClass("jhs-detail-host-action");
     }
-    section(name, title) {
-      return `<section class="jhs-detail-workspace__section" data-jhs-section="${name}" aria-labelledby="jhs-detail-${name}-title"><header class="jhs-detail-workspace__header"><h2 id="jhs-detail-${name}-title">${title}</h2><div class="jhs-detail-workspace__actions" data-jhs-section-actions="${name}"></div></header><div class="jhs-detail-workspace__content" data-jhs-section-content="${name}"></div></section>`;
+    isJhsOnlyMutation(record) {
+      if ($(record.target).closest(".jhs-offline-actions,.jhs-select-control,.jhs-magnet-score").length) return true;
+      const nodes = [...record.addedNodes, ...record.removedNodes].filter(((node) => node.nodeType === Node.ELEMENT_NODE));
+      return nodes.length > 0 && nodes.every(((node) => node.matches?.(".jhs-offline-btn,.jhs-offline-actions,.jhs-magnet-score,.jhs-select-control") || node.closest?.(".jhs-offline-actions,.jhs-select-control")));
     }
-    routeSections(workspace, sourceRoot) {
-      this.moveToSection(workspace, "gallery", [".tile-images", ".preview-images", "#sample-waterfall", ".movie-gallery"]);
-      this.moveToSection(workspace, "resources", [".jhs-detail-btn-row", "#magnets-content", "#magnet-table", "#mag-submit-show", ".movie-panel-info"]);
-      this.movePanelToSection(workspace, "related", ".jhs-related-panel");
-      this.movePanelToSection(workspace, "reviews", ".jhs-review-panel");
-      this.moveToSection(workspace, "related", ["#related-content"]);
-      this.moveToSection(workspace, "reviews", ["#reviews-content"]);
-      const actions = workspace.find(".jhs-detail-summary__actions"), buttonRow = workspace.find('[data-jhs-section-content="resources"] > .jhs-detail-btn-row').first();
-      buttonRow.length && actions.append(buttonRow);
-      actions.children().length && workspace.find('[data-jhs-section="summary"]').addClass("has-content");
-      sourceRoot.find(".jhs-detail-source--reflowed").removeClass("jhs-detail-source--reflowed");
-    }
-    movePanelToSection(workspace, name, selector) {
-      const target = workspace.find(`[data-jhs-section-content="${name}"]`), actionTarget = workspace.find(`[data-jhs-section-actions="${name}"]`), section = workspace.find(`[data-jhs-section="${name}"]`);
-      $(selector).each((function() {
-        const panel = $(this);
-        if (panel.closest(".layui-layer").length || panel.closest(target).length) return;
-        const toggle = panel.find(".jhs-panel-toggle").first().detach();
-        toggle.length && actionTarget.empty().append(toggle);
-        panel.find(".jhs-panel-header").remove();
-        target.append(panel);
+    bindResourceLifecycle() {
+      const adapter = getDetailResourceAdapter();
+      if (!adapter) return;
+      if (this.resourceObserver && this.resourceObserver.root === adapter.observeRoot[0]) return void this.scheduleResourceUpdate();
+      this.resourceObserver?.disconnect?.();
+      const observer = new MutationObserver(((records) => {
+        records.every(((record) => this.isJhsOnlyMutation(record))) || this.scheduleResourceUpdate();
       }));
-      target.children().length && section.addClass("has-content");
+      observer.root = adapter.observeRoot[0], observer.observe(adapter.observeRoot[0], { childList: true, subtree: true }), this.resourceObserver = observer, adapter.sortSelect.length && adapter.sortSelect.addClass("jhs-select-source") && JhsSelect.enhance(adapter.controller), this.scheduleResourceUpdate();
     }
-    moveToSection(workspace, name, selectors) {
-      const target = workspace.find(`[data-jhs-section-content="${name}"]`), section = workspace.find(`[data-jhs-section="${name}"]`);
-      selectors.forEach(((selector) => {
-        $(selector).each((function() {
-          const node = $(this);
-          node.closest(".layui-layer").length || node.closest(workspace).length || target.append(node);
-        }));
+    scheduleResourceUpdate() {
+      if (this.scheduledResourceFrame) return;
+      const schedule = window.requestAnimationFrame || ((callback) => setTimeout(callback));
+      this.scheduledResourceFrame = schedule((() => {
+        this.scheduledResourceFrame = null;
+        const adapter = getDetailResourceAdapter();
+        if (!adapter) return;
+        this.placeOwnedSlots();
+        adapter.sortSelect.length && (adapter.sortSelect.addClass("jhs-select-source"), JhsSelect.enhance(adapter.controller), JhsSelect.refresh(adapter.sortSelect));
+        void jhsEventBus.emit("magnet-items-updated", { site: adapter.site, resourceRoot: adapter.resourceRoot[0], rows: adapter.rows() }, { broadcast: false });
       }));
-      target.children().length && section.addClass("has-content");
     }
   };
   __name(_DetailWorkspacePlugin, "DetailWorkspacePlugin");
   var DetailWorkspacePlugin = _DetailWorkspacePlugin;
-  function adoptOwnedDetailPanels(container, sections) {
-    let scheduledFrame = null;
-    const route = /* @__PURE__ */ __name(() => {
-      for (const [name, selector] of Object.entries(sections)) {
-        const section = container.find(`[data-jhs-section="${name}"]`), content = section.find(`[data-jhs-section-content="${name}"]`), actions = section.find(`[data-jhs-section-actions="${name}"]`), panel = content.find(selector).first();
-        if (!panel.length) continue;
-        const toggle = panel.find(".jhs-panel-toggle").first().detach();
-        toggle.length && actions.empty().append(toggle);
-        panel.find(".jhs-panel-header").remove();
-        section.addClass("has-content");
-      }
-    }, "route");
-    route();
-    const observer = new MutationObserver((() => {
-      if (scheduledFrame) return;
-      scheduledFrame = requestAnimationFrame((() => {
-        scheduledFrame = null;
-        if (!container[0]?.isConnected) return void observer.disconnect();
-        route();
-      }));
-    }));
-    container[0] && observer.observe(container[0], {
-      childList: true,
-      subtree: true
-    });
-  }
-  __name(adoptOwnedDetailPanels, "adoptOwnedDetailPanels");
   function organizeJhsOwnedDetailWorkspace(container) {
     if (!container?.length || container.attr("data-jhs-organized")) return;
     const children = container.children().detach();
     container.attr("data-jhs-organized", "true").addClass("jhs-detail-workspace jhs-ui").attr("data-site", "fc2").empty();
-    const section = /* @__PURE__ */ __name((name, title, hasContent = false) => $(`<section class="jhs-detail-workspace__section ${hasContent ? "has-content" : ""}" data-jhs-section="${name}"><header class="jhs-detail-workspace__header"><h2>${title}</h2><div class="jhs-detail-workspace__actions" data-jhs-section-actions="${name}"></div></header><div class="jhs-detail-workspace__content" data-jhs-section-content="${name}"></div></section>`), "section");
-    const summary = section("summary", "影片概览", true), gallery = section("gallery", "预览与剧照"), resources = section("resources", "资源", true), related = section("related", "相关清单", true), reviews = section("reviews", "评论", true);
-    container.append(summary, gallery, resources, related, reviews);
-    const summaryContent = summary.find('[data-jhs-section-content="summary"]'), resourceContent = resources.find('[data-jhs-section-content="resources"]');
-    const info = children.filter(".movie-info-container"), actionSelector = "#filterBtn, #favoriteBtn, #hasDownBtn, #hasWatchBtn, #enable-magnets-filter, #search-subtitle-btn, #xunLeiSubtitleBtn, #magnetSearchBtn", actionButtons = children.find(actionSelector).addBack(actionSelector);
+    const section = /* @__PURE__ */ __name((name, title, hasContent = false) => $(`<section class="jhs-detail-workspace__section ${hasContent ? "has-content" : ""}" data-jhs-section="${name}"><header class="jhs-detail-workspace__header"><h2>${title}</h2></header><div class="jhs-detail-workspace__content" data-jhs-slot="${name}"></div></section>`), "section");
+    const summary = section("summary", "影片概览", true), gallery = section("gallery", "预览与剧照"), resources = section("resources", "资源", true), reviews = section("reviews", "评论", true), related = section("related", "相关清单", true);
+    container.append(summary, gallery, resources, reviews, related);
+    const summaryContent = summary.find('[data-jhs-slot="summary"]'), resourceContent = resources.find('[data-jhs-slot="resources"]'), info = children.filter(".movie-info-container"), actionSelector = "#filterBtn, #favoriteBtn, #hasDownBtn, #hasWatchBtn, #enable-magnets-filter, #search-subtitle-btn, #xunLeiSubtitleBtn, #magnetSearchBtn", actionButtons = children.find(actionSelector).addBack(actionSelector);
     summaryContent.append(info), info.find(".origin-title, .current-title, .movie-title, h3").first().addClass("jhs-detail-title");
     if (actionButtons.length) {
       const toolbar = $('<div class="jhs-detail-btn-row" role="toolbar" aria-label="影片状态操作"></div>');
       actionButtons.each((function() {
         toolbar.append($(this).removeAttr("style").addClass("jhs-btn"));
-      }));
-      summaryContent.append(toolbar);
+      })), summaryContent.append(toolbar);
     }
-    resourceContent.append(children.filter(".movie-panel-info, .video-panel"));
-    resourceContent.find("#magnets-content").length || resourceContent.append(children.filter("#magnets-content"));
-    related.find('[data-jhs-section-content="related"]').append(children.filter("#related-content"));
-    reviews.find('[data-jhs-section-content="reviews"]').append(children.filter("#reviews-content"));
-    container.append(children.filter("#data-actress").removeAttr("style").addClass("jhs-is-hidden"));
-    const moveGallery = /* @__PURE__ */ __name(() => {
-      const movieGallery = info.find(".movie-gallery").first();
-      if (!movieGallery.length) return false;
-      gallery.find('[data-jhs-section-content="gallery"]').append(movieGallery), gallery.addClass("has-content");
-      return true;
-    }, "moveGallery");
-    if (!moveGallery() && info[0]) {
-      const galleryObserver = new MutationObserver((() => {
-        moveGallery() && galleryObserver.disconnect();
-      }));
-      galleryObserver.observe(info[0], {
-        childList: true,
-        subtree: true
-      });
-    }
-    adoptOwnedDetailPanels(container, {
-      related: ".jhs-related-panel",
-      reviews: ".jhs-review-panel"
-    });
+    resourceContent.append(children.filter(".movie-panel-info, .video-panel")), resourceContent.find("#magnets-content").length || resourceContent.append(children.filter("#magnets-content"));
+    related.find('[data-jhs-slot="related"]').append(children.filter("#related-content")), reviews.find('[data-jhs-slot="reviews"]').append(children.filter("#reviews-content")), container.append(children.filter("#data-actress").removeAttr("style").addClass("jhs-is-hidden"));
+    const movieGallery = info.find(".movie-gallery").first();
+    movieGallery.length && (gallery.find('[data-jhs-slot="gallery"]').append(movieGallery), gallery.addClass("has-content"));
   }
   __name(organizeJhsOwnedDetailWorkspace, "organizeJhsOwnedDetailWorkspace");
   var _CompatibilityEnhancementsPlugin = class _CompatibilityEnhancementsPlugin extends BasePlugin {
     getName() {
       return "CompatibilityEnhancementsPlugin";
+    }
+    async initCss() {
+      if (!siteContext.isJavDB) return "";
+      return `<style>
+            .sda-content { display:none!important; }
+        </style>`;
     }
     async handle() {
       await this.decorateActresses();
@@ -14885,8 +15379,7 @@ ${error.stack}` : "");
       const button = $('<button type="button" class="jhs-btn jhs-btn--danger jhs-remove-car">移除记录</button>');
       $(".jhs-detail-btn-row,.movie-info-container,.container .info").first().append(button);
       button.on("click", ((event) => utils.q(event, `确定移除 ${carNum} 的鉴定记录？`, (async () => {
-        await storageManager.removeCar(carNum);
-        window.refresh();
+        await stateService.remove(carNum);
         button.remove();
         this.getBean("ListPagePlugin")?.showCarNumBox?.(carNum);
         show.ok("鉴定记录已移除");
@@ -14980,6 +15473,7 @@ ${error.stack}` : "");
     CoverButtonPlugin,
     Fc2By123AvPlugin,
     DetailPagePlugin,
+    DetailWorkspacePlugin,
     ReviewPlugin,
     RelatedPlugin,
     DetailPageButtonPlugin,
@@ -14998,9 +15492,8 @@ ${error.stack}` : "");
     TaskPlugin,
     StatsPlugin,
     MobileBottomBarPlugin,
-    OneOneFiveOfflinePlugin,
     OneOneFiveMatchPlugin,
-    OneOneFiveRenamePlugin,
+    UnifiedOfflinePlugin,
     CompatibilityEnhancementsPlugin
   ];
   var DEFAULT_JAVBUS_PLUGINS = [
@@ -15014,6 +15507,7 @@ ${error.stack}` : "");
     CoverButtonPlugin,
     BusImgPlugin,
     BusDetailPagePlugin,
+    DetailWorkspacePlugin,
     DetailPageButtonPlugin,
     ReviewPlugin,
     FilterTitleKeywordPlugin,
@@ -15027,9 +15521,8 @@ ${error.stack}` : "");
     TaskPlugin,
     StatsPlugin,
     MobileBottomBarPlugin,
-    OneOneFiveOfflinePlugin,
     OneOneFiveMatchPlugin,
-    OneOneFiveRenamePlugin,
+    UnifiedOfflinePlugin,
     CompatibilityEnhancementsPlugin
   ];
   var DEFAULT_SHARED_PLUGIN_RULES = [
@@ -15091,11 +15584,12 @@ ${error.stack}` : "");
       return e3.includes("advanced_search?type=3") || e3.includes("advanced_search?type=100");
     })();
     const e2 = (async () => {
-      const e3 = await storageManager.getDataVersion();
-      e3 < CURRENT_DATA_VERSION && (await storageManager.merge_table_name(), await storageManager.clean_no_url_blacklist(), await storageManager.async_merge_other(), await storageManager.merge_blacklist(), await storageManager.merge_favoriteActress(), await storageManager.merge_tow_car_list_table(), await storageManager.setDataVersion(CURRENT_DATA_VERSION));
+      await runDataMigrations(storageManager), await stateService.recoverPendingTransaction();
     })();
-    await Promise.all([pluginManager.processCss(), e2, applyTheme()]), r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie) && show.error("请切换到中文语言下才可正常使用本脚本", {
+    await e2, await Promise.all([pluginManager.processCss(), applyTheme()]), r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie) && show.error("请切换到中文语言下才可正常使用本脚本", {
       duration: -1
     }), await pluginManager.processPlugins();
-  })().catch(((e2) => console.error("[JHS] bootstrap failed:", e2)));
+  })().catch(((e2) => {
+    console.error("[JHS] bootstrap failed:", e2), show.error(e2?.message || "JHS 启动失败", { duration: -1 });
+  }));
 })();

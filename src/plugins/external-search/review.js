@@ -1,7 +1,4 @@
 class ReviewPlugin extends BasePlugin {
-    constructor() {
-        super(...arguments), i(this, "floorIndex", 1), i(this, "isInit", !1), i(this, "$panel", null);
-    }
     getName() {
         return "ReviewPlugin";
     }
@@ -22,6 +19,7 @@ class ReviewPlugin extends BasePlugin {
                 .jhs-review-link { display:inline-flex; align-items:center; gap:var(--jhs-space-1); margin:0 var(--jhs-space-1); padding:2px var(--jhs-space-2); border:0; border-radius:var(--jhs-radius-pill); background:var(--jhs-accent-tint); color:var(--jhs-accent); font:inherit; font-size:var(--jhs-font-size-sm); line-height:1.5; text-decoration:none; vertical-align:baseline; cursor:pointer; }
                 .jhs-review-link-copy { color:var(--jhs-text-muted); }
                 .jhs-review-link-wrap { display:flex; align-items:center; justify-content:space-between; gap:var(--jhs-space-2); width:100%; margin:var(--jhs-space-1) 0; }
+                .jhs-review-inline-controls { display:inline-flex; align-items:center; gap:var(--jhs-space-1); margin:0 var(--jhs-space-1); }
                 .jhs-review-link-main { display:inline-flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-1); }
                 .jhs-review-link-actions { display:inline-flex; align-items:center; gap:var(--jhs-space-1); margin-left:auto; flex-shrink:0; }
                 .jhs-review-offline-btn { background:var(--jhs-accent) !important; color:var(--jhs-accent-text-on) !important; }
@@ -35,7 +33,8 @@ class ReviewPlugin extends BasePlugin {
         if (!window.isDetailPage) return;
         if (r) {
             const movieId = this.parseMovieId(window.location.href);
-            await this.showReview(movieId), await this.getBean("RelatedPlugin").showRelated($("#magnets-content"), movieId);
+            const workspace = this.getBean("DetailWorkspacePlugin");
+            await Promise.all([ this.showReview(movieId, workspace?.getSlot("reviews")), this.getBean("RelatedPlugin").showRelated(workspace?.getSlot("related"), movieId) ]);
         }
         if (l) {
             const carNumber = this.getPageInfo().carNum;
@@ -59,30 +58,35 @@ class ReviewPlugin extends BasePlugin {
                 return (await gmHttp.get(url, params, headers)).data.movies;
             })(carNumber);
             const match = movies.find((movie => movie.number.toLowerCase() === carNumber.toLowerCase()));
-            match && await this.showReview(match.id, $("#sample-waterfall"));
+            match && await this.showReview(match.id, this.getBean("DetailWorkspacePlugin")?.getSlot("reviews"));
         }
     }
     async showReview(movieId, target) {
-        const enabled = await storageManager.getSetting("enableLoadReview", _), host = target || $("#magnets-content");
-        const panel = $('<section class="jhs-review-panel" data-jhs-panel="reviews"></section>');
+        const enabled = await storageManager.getSetting("enableLoadReview", _), host = target?.length ? target : this.getBean("DetailWorkspacePlugin")?.getSlot("reviews") || $("#magnets-content");
+        const existing = host.children('[data-jhs-panel="reviews"]').filter(((_, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
+        if (existing.length) return existing;
+        const panel = $('<section class="jhs-review-panel" data-jhs-panel="reviews"></section>').attr("data-jhs-movie-id", String(movieId));
         const header = $('<header class="jhs-panel-header"><h3>评论</h3></header>');
-        const toggle = $('<button type="button" id="reviewsFold" class="jhs-btn jhs-btn--secondary jhs-panel-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>');
-        header.append(toggle), panel.append(header, '<div id="reviewsContainer" class="jhs-review-list"></div>', '<div id="reviewsFooter" class="jhs-panel-footer"></div>'), host.append(panel), this.$panel = panel;
+        const toggle = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-panel-toggle jhs-review-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>');
+        const state = { movieId, panel, floorIndex: 1, loaded: !1, loading: !1, page: 1 };
+        header.append(toggle), panel.append(header, '<div class="jhs-review-list jhs-review-container"></div>', '<div class="jhs-panel-footer jhs-review-footer"></div>'), host.append(panel), this.bindRightClickFilter();
         this.updateToggle(toggle, enabled === _);
         toggle.on("click", (event => {
             event.preventDefault(), event.stopPropagation();
             const expanded = "展开" === toggle.find(".toggle-text").text();
-            this.updateToggle(toggle, expanded), panel.find("#reviewsContainer, #reviewsFooter").toggle(expanded), expanded && !this.isInit && (this.fetchAndDisplayReviews(movieId),
-            this.isInit = !0), storageManager.saveSettingItem("enableLoadReview", expanded ? _ : C);
+            this.updateToggle(toggle, expanded), panel.find(".jhs-review-container, .jhs-review-footer").toggle(expanded), expanded && !state.loaded && !state.loading && void this.fetchAndDisplayReviews(state), storageManager.saveSettingItem("enableLoadReview", expanded ? _ : C);
         }));
-        enabled === _ ? (await this.fetchAndDisplayReviews(movieId), this.isInit = !0) : panel.find("#reviewsContainer, #reviewsFooter").hide();
+        enabled === _ ? await this.fetchAndDisplayReviews(state) : panel.find(".jhs-review-container, .jhs-review-footer").hide();
+        return panel;
     }
     updateToggle(toggle, expanded) {
         toggle.attr("aria-expanded", String(expanded)), toggle.find(".toggle-text").text(expanded ? "折叠" : "展开"),
         toggle.find(".toggle-icon").text(expanded ? "▲" : "▼");
     }
-    async fetchAndDisplayReviews(movieId) {
-        const container = this.$panel.find("#reviewsContainer"), footer = this.$panel.find("#reviewsFooter");
+    async fetchAndDisplayReviews(state) {
+        if (state.loading) return;
+        state.loading = !0;
+        const { movieId, panel } = state, container = panel.find(".jhs-review-container"), footer = panel.find(".jhs-review-footer");
         container.empty().append($('<div class="jhs-panel-state"></div>').text("获取评论中...")), footer.empty();
         const pageSize = await storageManager.getSetting("reviewCount", 20);
         let reviews;
@@ -91,13 +95,15 @@ class ReviewPlugin extends BasePlugin {
         } catch (error) {
             error.toString().includes("簽名已過期") && show.error("生成签名失败, 请检查系统时间及时区是否正确!"), clog.error("获取评论失败:", error),
             clog.error("获取评论失败:", error);
-            return void this.renderRetry(container, "获取评论失败", (() => this.fetchAndDisplayReviews(movieId)));
+            state.loading = !1;
+            return void this.renderRetry(container, "获取评论失败", (() => this.fetchAndDisplayReviews(state)));
         }
+        state.loading = !1, state.loaded = !0;
         container.empty();
         if (!reviews.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无评论"));
         const keywords = await storageManager.getReviewFilterKeywordList();
-        await this.displayReviews(reviews, container, keywords), reviews.length === pageSize && R(movieId, 2, pageSize).catch((() => {}));
-        reviews.length === pageSize ? this.bindLoadMore(movieId, pageSize, keywords, container, footer) : footer.append($('<div class="jhs-panel-end"></div>').text("已加载全部评论"));
+        await this.displayReviews(state, reviews, container, keywords), reviews.length === pageSize && R(movieId, 2, pageSize).catch((() => {}));
+        reviews.length === pageSize ? this.bindLoadMore(state, pageSize, keywords, container, footer) : footer.append($('<div class="jhs-panel-end"></div>').text("已加载全部评论"));
     }
     renderRetry(container, message, retry) {
         container.empty();
@@ -105,21 +111,20 @@ class ReviewPlugin extends BasePlugin {
         const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry);
         state.append(button), container.append(state);
     }
-    bindLoadMore(movieId, pageSize, keywords, container, footer) {
-        const button = $('<button type="button" id="loadMoreReviews" class="jhs-btn jhs-btn--secondary">加载更多评论</button>'), end = $('<div id="reviewsEnd" class="jhs-panel-end">已加载全部评论</div>').hide();
+    bindLoadMore(state, pageSize, keywords, container, footer) {
+        const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-review-load-more">加载更多评论</button>'), end = $('<div class="jhs-panel-end jhs-review-end">已加载全部评论</div>').hide();
         footer.empty().append(button, end);
-        let page = 1;
         button.on("click", (async () => {
-            button.text("加载中...").prop("disabled", !0), page++;
+            button.text("加载中...").prop("disabled", !0), state.page++;
             try {
-                const reviews = await R(movieId, page, pageSize);
-                await this.displayReviews(reviews, container, keywords), reviews.length < pageSize ? (button.remove(), end.show()) : button.text("加载更多评论").prop("disabled", !1);
+                const reviews = await R(state.movieId, state.page, pageSize);
+                await this.displayReviews(state, reviews, container, keywords), reviews.length < pageSize ? (button.remove(), end.show()) : button.text("加载更多评论").prop("disabled", !1);
             } catch (error) {
                 clog.error("加载更多评论失败:", error), button.text("加载失败，请重试").prop("disabled", !1);
             }
         }));
     }
-    async displayReviews(reviews, container, keywords) {
+    async displayReviews(state, reviews, container, keywords) {
         if (!reviews.length) return;
         const filter = keywords.length > 0 ? new RegExp(keywords.map((value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).join("|")) : null;
         for (const review of reviews) {
@@ -130,24 +135,22 @@ class ReviewPlugin extends BasePlugin {
             const stars = $('<span class="score-stars" aria-label="评分"></span>'), score = Math.max(0, Math.min(5, Number(review.score) || 0));
             for (let index = 0; index < score; index++) stars.append('<i class="icon-star"></i>');
             meta.append(stars, $("<time></time>").text(utils.formatDate(review.created_at)), $("<span></span>").text(`点赞：${Number(review.likes_count) || 0}`),
-            $("<span></span>").addClass("jhs-review-floor").text(`#${this.floorIndex++}楼`));
+            $("<span></span>").addClass("jhs-review-floor").text(`#${state.floorIndex++}楼`));
             await this.appendReviewContent(body, content), item.append(meta, body), container.append(item);
         }
-        this.rightClickFilter();
     }
-    async appendReviewContent(container, content) {
+    appendReviewContent(container, content) {
         const linkPattern = /ed2k:\/\/\|file\|[^|]+\|\d+\|[a-fA-F0-9]{32}\|\/|magnet:\?[^\s"'<>`,;\u4e00-\u9fa5，。？！（）【】]+|https?:\/\/[^\s"'<>`,;\u4e00-\u9fa5，。？！（）【】]+/g;
-        const enable115Offline = await storageManager.getSetting("enable115Offline", !1);
         let cursor = 0, match;
         while ((match = linkPattern.exec(content))) {
             match.index > cursor && container.append(document.createTextNode(content.slice(cursor, match.index)));
-            await this.appendLinkControls(container, match[0], enable115Offline), cursor = match.index + match[0].length;
+            this.appendLinkControls(container, match[0]), cursor = match.index + match[0].length;
         }
         cursor < content.length && container.append(document.createTextNode(content.slice(cursor)));
     }
-    async appendLinkControls(container, value, enable115Offline) {
+    appendLinkControls(container, value) {
         const isEd2k = value.startsWith("ed2k://"), isMagnet = value.startsWith("magnet:"), label = isEd2k ? "ED2K 链接" : isMagnet ? "Magnet 链接" : "打开链接";
-        const wrapper = $('<span class="jhs-review-link-wrap"></span>');
+        const isResource = isMagnet || isEd2k, wrapper = $(isResource ? '<span class="jhs-review-link-wrap"></span>' : '<span class="jhs-review-inline-controls"></span>');
         const main = $('<span class="jhs-review-link-main"></span>');
         const open = isEd2k ? $('<button type="button" class="jhs-btn jhs-review-link"></button>').text(label).on("click", (() => utils.copyToClipboard(label, value))) : $("<a></a>").addClass("jhs-review-link").attr({
             href: value,
@@ -156,16 +159,16 @@ class ReviewPlugin extends BasePlugin {
         }).text(label);
         const copy = $('<button type="button" class="jhs-btn jhs-review-link jhs-review-link-copy">复制</button>').on("click", (() => utils.copyToClipboard(label, value)));
         main.append(open, copy), wrapper.append(main);
-        if (isMagnet || isEd2k) {
+        if (isResource) {
             const actions = $('<span class="jhs-review-link-actions"></span>');
-            enable115Offline && actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn one115-offline-btn" data-magnet="${escapeHtml(value)}">115离线</button>`);
-            isMagnet && actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn one23-offline-btn" data-magnet="${escapeHtml(value)}">123离线</button>`);
+            actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn jhs-offline-btn" data-resource="${escapeHtml(value)}">离线</button>`);
             wrapper.append(actions);
         }
         container.append(wrapper);
     }
-    async rightClickFilter() {
-        await storageManager.getSetting("enableTitleSelectFilter", _) === _ && utils.rightClick(document.body, ".review-content", (async event => {
+    bindRightClickFilter() {
+        $(document).off("contextmenu.jhsReviewFilter", ".review-content").on("contextmenu.jhsReviewFilter", ".review-content", (async event => {
+            if (await storageManager.getSetting("enableTitleSelectFilter", _) !== _) return;
             const text = window.getSelection().toString();
             text && (event.preventDefault(), await utils.q(event, `是否将 '${text}' 加入评论区关键词?`, (async () => {
                 await storageManager.saveReviewFilterKeyword(text), show.ok("操作成功, 刷新页面后生效");

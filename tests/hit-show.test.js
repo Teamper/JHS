@@ -10,7 +10,7 @@ function loadHitShow({ movies = [], fetchScore = vi.fn(), cache = {}, sortMethod
     const $ = jqueryFactory(dom.window), storage = new Map([["jhs_score_info", JSON.stringify(cache)], ["jhs_sortMethod", sortMethod]]);
     $.expr.pseudos.hidden = element => "none" === element.style.display;
     const loadingClose = vi.fn(), sortItems = vi.fn().mockResolvedValue(), listPage = {
-        replaceHdImg: vi.fn(), doFilter: vi.fn().mockResolvedValue(), applyVisibility: vi.fn(), getSelector: () => ({ itemSelector: ".movie-list .item" })
+        replaceHdImg: vi.fn(), doFilter: vi.fn().mockResolvedValue(), applyVisibility: vi.fn(), bindMovieDetailNavigation: vi.fn(), getSelector: () => ({ itemSelector: ".movie-list .item" })
     }, coverButton = { addSvgBtn: vi.fn() };
     const context = vm.createContext({
         BasePlugin: class { getBean(name) { return { ListPagePlugin: listPage, ListPageButtonPlugin: { sortItems }, CoverButtonPlugin: coverButton }[name]; } },
@@ -75,5 +75,12 @@ describe("HitShowPlugin lifecycle", () => {
             await plugin.handlePlayback();
             await vi.waitFor(() => expect(sortItems).toHaveBeenCalledTimes(expected));
         }
+    });
+
+    it("binds the shared detail navigation instead of forcing new tabs", async () => {
+        const { plugin, listPage } = loadHitShow({ movies: [movie("a")] });
+        await plugin.handlePlayback();
+        expect(listPage.bindMovieDetailNavigation).toHaveBeenCalledOnce();
+        expect(plugin.markDataListHtml([movie("a")])).not.toContain('target="_blank"');
     });
 });

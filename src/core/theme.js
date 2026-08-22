@@ -257,6 +257,7 @@ function buildThemeCss() {
     .jhs-scrollbar::-webkit-scrollbar,
     .content-panel::-webkit-scrollbar,
     .tabulator-tableholder::-webkit-scrollbar,
+    .has-navbar-fixed-top::-webkit-scrollbar,
     .layui-layer-content::-webkit-scrollbar {
         width: 6px;
         height: 6px;
@@ -264,6 +265,7 @@ function buildThemeCss() {
     .jhs-scrollbar::-webkit-scrollbar-track,
     .content-panel::-webkit-scrollbar-track,
     .tabulator-tableholder::-webkit-scrollbar-track,
+    .has-navbar-fixed-top::-webkit-scrollbar-track,
     .layui-layer-content::-webkit-scrollbar-track {
         background: var(--jhs-surface-2);
         border-radius: 10px;
@@ -271,6 +273,7 @@ function buildThemeCss() {
     .jhs-scrollbar::-webkit-scrollbar-thumb,
     .content-panel::-webkit-scrollbar-thumb,
     .tabulator-tableholder::-webkit-scrollbar-thumb,
+    .has-navbar-fixed-top::-webkit-scrollbar-thumb,
     .layui-layer-content::-webkit-scrollbar-thumb {
         background: var(--jhs-border-strong);
         border-radius: 10px;
@@ -278,6 +281,7 @@ function buildThemeCss() {
     .jhs-scrollbar::-webkit-scrollbar-thumb:hover,
     .content-panel::-webkit-scrollbar-thumb:hover,
     .tabulator-tableholder::-webkit-scrollbar-thumb:hover,
+    .has-navbar-fixed-top::-webkit-scrollbar-thumb:hover,
     .layui-layer-content::-webkit-scrollbar-thumb:hover {
         background: var(--jhs-text-faint);
     }

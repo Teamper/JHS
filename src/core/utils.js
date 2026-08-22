@@ -43,9 +43,10 @@ class Utils {
     }
     openPage(e, t, n, a) {
         n = n ?? !0;
+        const navigation = a && (Object.prototype.hasOwnProperty.call(a, "event") || Object.prototype.hasOwnProperty.call(a, "newTab")) ? a : { event: a }, event = navigation.event;
         const destination = new URL(e, window.location.origin), carNum = normalizeCarNum(t), isMovieDetail = /^\/v\/[^/]+/.test(destination.pathname);
         isMovieDetail && carNum && destination.searchParams.set("jhsCarNum", carNum);
-        if (a && (a.ctrlKey || a.metaKey)) return void GM_openInTab(destination.href, {
+        if (navigation.newTab || event && (event.ctrlKey || event.metaKey || 1 === event.button)) return void GM_openInTab(destination.href, {
             insert: 0
         });
         destination.pathname.includes("/actors/") || destination.pathname.includes("/star/") || destination.searchParams.set("hideNav", "1");
@@ -94,18 +95,22 @@ class Utils {
             clog.error("iframe监听失败 (跨域或未加载完毕):", i);
         }
     }
-    closePage() {
-        storageManager.getSetting("needClosePage", "yes").then((e => {
-            if ("yes" !== e) return;
-            parent.document.documentElement.style.overflow = "auto";
-            [ ".layui-layer-shade", ".layui-layer-move", ".layui-layer" ].forEach((function(e) {
-                const t = parent.document.querySelectorAll(e);
-                if (t.length > 0) {
-                    const e = t.length > 1 ? t[t.length - 1] : t[0];
-                    e.parentNode.removeChild(e);
-                }
-            })), window.close();
-        }));
+    async closePage(options = {}) {
+        if ("yes" !== await storageManager.getSetting("needClosePage", "yes")) return !1;
+        const root = options?.root, parseIndex = element => {
+            const id = element?.id || "", match = /^layui-layer(\d+)$/.exec(id);
+            return match ? Number(match[1]) : null;
+        };
+        let layerIndex = Number.isInteger(options?.layerIndex) ? options.layerIndex : null;
+        if (null === layerIndex && root) {
+            const element = root.jquery ? root[0] : root.nodeType ? root : null, layerElement = element?.matches?.(".layui-layer") ? element : element?.closest?.(".layui-layer");
+            layerIndex = parseIndex(layerElement);
+        }
+        if (null === layerIndex && window.frameElement) layerIndex = parseIndex(window.frameElement.closest?.(".layui-layer"));
+        const ownerWindow = window.parent && window.parent !== window ? window.parent : window, ownerLayer = ownerWindow.layer || globalThis.layer;
+        if (null !== layerIndex && "function" == typeof ownerLayer?.close) return ownerLayer.close(layerIndex), !0;
+        if (window.opener && !window.opener.closed) return window.close(), !0;
+        return !1;
     }
     loopDetector(e, t, n = 20, a = 1e4, i = !0) {
         const s = ++this.waitSequence;

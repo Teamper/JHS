@@ -85,8 +85,7 @@ class TaskPlugin extends BasePlugin {
                 }
             } else clog.debug("争夺任务锁失败, 跳过执行");
         })).catch((e => {
-            this.isNetworkBlocked(e) ? clog.warn(`后台检测已停止: ${e.message}`) : (clog.error("锁任务出现错误:", e),
-            clog.error("锁任务出现错误:", e));
+            this.isNetworkBlocked(e) ? clog.warn(`后台检测已停止: ${e.message}`) : clog.error("锁任务出现错误:", e);
         }));
     }
     async loadConfig() {
@@ -215,7 +214,7 @@ class TaskPlugin extends BasePlugin {
                 }
             } catch (s) {
                 if (this.isNetworkBlocked(s)) throw result.networkFailed++, s;
-                result.networkFailed++, clog.error("检测演员信息发生网络错误:", i, s), clog.error("检测演员信息发生网络错误:", i, s);
+                result.networkFailed++, clog.error("检测演员信息发生网络错误:", i, s);
             }
             })), await this.storageQueue.waitAllFinished();
         } catch (error) {

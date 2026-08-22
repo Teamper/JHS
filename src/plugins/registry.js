@@ -1,21 +1,21 @@
 const DEFAULT_JAVDB_PLUGINS = [
     ListPagePlugin, AutoPagePlugin, Fc2Plugin, FoldCategoryPlugin, ListPageButtonPlugin,
     HistoryPlugin, SettingPlugin, NavBarPlugin, HitShowPlugin, Top250Plugin,
-    SearchByImagePlugin, CoverButtonPlugin, Fc2By123AvPlugin, DetailPagePlugin, ReviewPlugin,
+    SearchByImagePlugin, CoverButtonPlugin, Fc2By123AvPlugin, DetailPagePlugin, DetailWorkspacePlugin, ReviewPlugin,
     RelatedPlugin, DetailPageButtonPlugin, HighlightMagnetPlugin, PreviewVideoPlugin, FilterTitleKeywordPlugin,
     ActressInfoPlugin, OtherSitePlugin, TranslatePlugin, WantAndWatchedVideosPlugin,
     MagnetHubPlugin, ScreenShotPlugin, BlacklistPlugin, FavoriteActressesPlugin, NewVideoPlugin,
     TaskPlugin, StatsPlugin, MobileBottomBarPlugin
-    , OneOneFiveOfflinePlugin, OneOneFiveMatchPlugin, OneOneFiveRenamePlugin, CompatibilityEnhancementsPlugin
+    , OneOneFiveMatchPlugin, UnifiedOfflinePlugin, CompatibilityEnhancementsPlugin
 ];
 
 const DEFAULT_JAVBUS_PLUGINS = [
     ListPagePlugin, ListPageButtonPlugin, SettingPlugin,
     HistoryPlugin, AutoPagePlugin, SearchByImagePlugin, BusNavBarPlugin, CoverButtonPlugin,
-    BusImgPlugin, BusDetailPagePlugin, DetailPageButtonPlugin, ReviewPlugin,
+    BusImgPlugin, BusDetailPagePlugin, DetailWorkspacePlugin, DetailPageButtonPlugin, ReviewPlugin,
     FilterTitleKeywordPlugin, HighlightMagnetPlugin, BusPreviewVideoPlugin, MagnetHubPlugin, ScreenShotPlugin,
     OtherSitePlugin, TranslatePlugin, BlacklistPlugin, TaskPlugin, StatsPlugin, MobileBottomBarPlugin
-    , OneOneFiveOfflinePlugin, OneOneFiveMatchPlugin, OneOneFiveRenamePlugin, CompatibilityEnhancementsPlugin
+    , OneOneFiveMatchPlugin, UnifiedOfflinePlugin, CompatibilityEnhancementsPlugin
 ];
 
 const DEFAULT_SHARED_PLUGIN_RULES = [

@@ -24,8 +24,10 @@ describe("115 domain", () => {
     });
     it("keeps disabled plugins request-free", () => {
         const source = readFileSync(join(import.meta.dirname, "../src/plugins/one-one-five/plugins.js"), "utf8");
-        expect(source).toContain('getSetting("enable115Offline", !1)');
         expect(source).toContain('getSetting("enable115Match", !1)');
+        expect(source).toContain("return this.setupListMatching()");
+        expect(source).toContain('jhsEventBus.on("list-items-added"');
+        expect(source).not.toContain("new MutationObserver");
         expect(source).not.toContain("gmHttp");
     });
     it("classifies addOffline errors", () => {

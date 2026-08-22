@@ -40,6 +40,9 @@ class ListPageButtonPlugin extends BasePlugin {
             const a = localStorage.getItem("jhs_sortMethod") || "default";
             $(".masonry").parent().prepend(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e ? `    \n                        <button type="button" id="addBlacklistBtn" class="jhs-btn ${n}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${t}</span></button>\n                        <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></button>\n                        <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="一键收藏当前页面所有作品"><span>一键收藏所有作品</span></button>\n                        <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="一键标记当前页面所有作品为已下载"><span>一键已下载所有作品</span></button>\n                    ` : '<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>'}\n                    ${this.sortMenuHtml(a)}\n                </div>\n            `);
         }
+        $("#waitCheckBtn > span").text("开始鉴定");
+        const newVideoCount = $("#newVideoCount").detach(), newVideoLabel = $("#newVideoBtn > span");
+        newVideoLabel.length && newVideoLabel.empty().append(document.createTextNode("新作品 ("), newVideoCount, document.createTextNode(")"));
     }
     /** 构建与原排序值兼容的 JHS 菜单。 */
     sortMenuHtml(method, title = "选择列表排序方式") {
@@ -67,7 +70,7 @@ class ListPageButtonPlugin extends BasePlugin {
             utils.q(n, "一键屏蔽视频列表?", (async () => {
                 this.loadObj = loading();
                 try {
-                    await e.filterAllVideo(i), window.refresh();
+                    await e.filterAllVideo(i);
                 } catch (t) {
                     clog.error(t);
                 } finally { this.loadObj.close(); }
@@ -78,7 +81,7 @@ class ListPageButtonPlugin extends BasePlugin {
             let i = a.text().trim().split(",")[0];
             utils.q(n, "一键收藏所有可见作品?", (async () => {
                 this.loadObj = loading();
-                try { await e.batchSaveAllVideos(i, h), window.refresh(); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
+                try { await e.batchSaveAllVideos(i, h); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
             }));
         })), $("#hasDownAllVideo").on("click", (async t => {
             let n = {clientX: t.clientX, clientY: t.clientY + 80}, a = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
@@ -86,7 +89,7 @@ class ListPageButtonPlugin extends BasePlugin {
             let i = a.text().trim().split(",")[0];
             utils.q(n, "一键已下载所有可见作品?", (async () => {
                 this.loadObj = loading();
-                try { await e.batchSaveAllVideos(i, g), window.refresh(); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
+                try { await e.batchSaveAllVideos(i, g); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
             }));
         }));
     }
@@ -146,21 +149,15 @@ class ListPageButtonPlugin extends BasePlugin {
     }
     async openWaitCheck() {
         let e = this.getSelector();
-        const t = await storageManager.getSetting("waitCheckCount", 5), n = [ u, b, y, k ];
+        const t = await storageManager.getSetting("waitCheckCount", 5);
         let a = 0;
-        $(`${e.itemSelector}:visible`).each(((e, i) => {
-            if (a >= t) return !1;
-            const s = $(i);
-            if (n.some((e => s.find(`span.tag:contains('${e}')`).length > 0))) return;
-            const {carNum: o, aHref: r} = this.getBean("ListPagePlugin").findCarNumAndHref(s);
-            if (o.includes("FC2-")) {
-                const e = this.parseMovieId(r);
-                this.getBean("Fc2Plugin").openFc2Page(e, o, r);
-            } else {
-                let e = r + (r.includes("?") ? "&autoPlay=1" : "?autoPlay=1");
-                window.open(e);
-            }
-            a++;
-        })), 0 === a && show.info("没有需鉴定的视频");
+        const listPage = this.getBean("ListPagePlugin");
+        for (const element of $(e.itemSelector).toArray()) {
+            if (a >= t) break;
+            const item = $(element), flags = normalizeStateFlags(JSON.parse(item.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(item.attr("data-jhs-visibility") || "{}");
+            if (hasAnyState(flags) || isHardHidden(flags, visibilityReasons)) continue;
+            await listPage.openMovieDetail(item, { autoplay: !0, newTab: !1 }), a++;
+        }
+        0 === a && show.info("没有需鉴定的视频");
     }
 }

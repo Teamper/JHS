@@ -1046,7 +1046,7 @@ class JhsSelect {
     static setValue(select, value, emit = !1) {
         const instance = JhsSelect.get(select);
         if (!instance) return;
-        instance.source.val(value), instance.refresh(), emit && instance.source.trigger("change");
+        instance.source.val(value), emit ? instance.emitChange() : instance.refresh();
     }
     static refresh(select) {
         JhsSelect.get(select)?.refresh();
@@ -1113,7 +1113,13 @@ class JhsSelect {
     }
     choose(item) {
         if (item.prop("disabled")) return;
-        this.source.val(item.attr("data-value")).trigger("change"), this.close(!0);
+        this.source.val(item.attr("data-value")), this.emitChange(), this.close(!0);
+    }
+    /** 派发一次真实原生 change，同时兼容宿主与 jQuery 监听器。 */
+    emitChange() {
+        this.source[0]?.dispatchEvent(new Event("change", {
+            bubbles: !0
+        }));
     }
     refresh() {
         const selected = this.source.find("option:selected").first(), value = this.source.val();

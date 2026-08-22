@@ -62,7 +62,7 @@ class Top250Plugin extends BasePlugin {
                 this.movies = t;
                 const n = t.filter((e => "1" === this.has_cnsub ? e.has_cnsub : "0" !== this.has_cnsub || !e.has_cnsub)), a = this.getBean("HitShowPlugin");
                 let r = a.markDataListHtml(n);
-                i.html(r), await a.loadScore(n), o = !0;
+                i.html(r), await a.initializeRenderedList(), await a.loadScore(n), o = !0;
             } else clog.error(e), i.html(`<h3>${escapeHtml(l)}</h3>`), show.error(l), "JWTVerificationError" === c && (await localStorage.removeItem(me),
             await this.checkLogin(null, new URLSearchParams(window.location.search))), o = !0;
         } catch (r) {
@@ -79,7 +79,7 @@ class Top250Plugin extends BasePlugin {
         for (let year = (new Date).getFullYear(); year >= 2008; year--) years += `<a class="jhs-segmented__item jhs-layout-186f17ef ${t === String(year) ? "active" : ""}" aria-current="${t === String(year) ? "page" : "false"}" href="/advanced_search?handleTop=1&handleType=year&type_value=${year}&has_cnsub=${this.has_cnsub}">${year}</a>`;
         const typeLink = (value, label, type = "video_type") => `<a class="jhs-segmented__item jhs-layout-186f17ef ${value === ("all" === value ? e : t) ? "active" : ""}" aria-current="${value === ("all" === value ? e : t) ? "page" : "false"}" href="/advanced_search?handleTop=1&handleType=${type}&type_value=${"all" === value ? "" : value}&has_cnsub=${this.has_cnsub}">${label}</a>`;
         const html = `<div class="jhs-top250-filters"><nav class="jhs-segmented jhs-layout-701bf0f9" aria-label="类型条件">${typeLink("all", "全部", "all")}${typeLink("0", "有码")}${typeLink("1", "无码")}${typeLink("2", "欧美")}${typeLink("3", "Fc2")}<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-2335597e ${"1" === this.has_cnsub ? "active" : ""}" aria-pressed="${"1" === this.has_cnsub}" data-cnsub-value="1">含中字磁力</button><button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-186f17ef ${"0" === this.has_cnsub ? "active" : ""}" aria-pressed="${"0" === this.has_cnsub}" data-cnsub-value="0">无字幕</button><button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-186f17ef" aria-pressed="false" data-cnsub-value="">重置</button></nav><nav class="jhs-segmented" aria-label="年份条件">${years}</nav></div>`;
-        this.$contentBox.append(html), $("button[data-cnsub-value]").on("click", (event => {
+        this.$contentBox.append(html), $("button[data-cnsub-value]").on("click", (async event => {
             const value = $(event.currentTarget).data("cnsub-value");
             this.has_cnsub = value.toString(), $("button[data-cnsub-value]").removeClass("active").attr("aria-pressed", "false"),
             $(event.currentTarget).addClass("active").attr("aria-pressed", "true"), $(".jhs-top250-filters a").each(((index, element) => {
@@ -87,7 +87,7 @@ class Top250Plugin extends BasePlugin {
                 url.searchParams.set("has_cnsub", value), link.attr("href", url.toString());
             }));
             const movies = this.movies.filter((movie => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), hitShow = this.getBean("HitShowPlugin");
-            $(".movie-list").html(hitShow.markDataListHtml(movies)), void hitShow.loadScore(movies).catch((error => clog.error("Top250 评分加载失败", error)));
+            $(".movie-list").html(hitShow.markDataListHtml(movies)), await hitShow.initializeRenderedList(), void hitShow.loadScore(movies).catch((error => clog.error("Top250 评分加载失败", error)));
         }));
     }
     async checkLogin(e, t) {

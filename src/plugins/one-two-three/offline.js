@@ -1,16 +1,13 @@
 class OneTwoThreeOfflinePlugin extends BasePlugin {
     constructor() {
         super(...arguments), this.tokenKey = "jhs_123pan_author_token", this.tokenMetaKey = "jhs_123pan_author_token_meta",
-        this.syncTimer = null, this.syncFallbackMs = 3e5, this.BUTTON_COOLDOWN_MS = 1800;
+        this.syncTimer = null, this.syncFallbackMs = 3e5;
     }
     getName() {
         return "OneTwoThreeOfflinePlugin";
     }
-    async initCss() {
-        return "\n            <style>\n                .one23-offline-btn {\n                    background-color: var(--jhs-accent) !important;\n                    color: var(--jhs-accent-text-on) !important;\n                    border-color: var(--jhs-accent) !important;\n                }\n                .one23-offline-btn.loading {\n                    opacity: 0.65;\n                    cursor: wait;\n                }\n                .one23-native-btn {\n                    margin-left: 6px;\n                    padding: 3px 8px;\n                    border-radius: 3px;\n                    border: 1px solid var(--jhs-accent);\n                    background: var(--jhs-accent);\n                    color: var(--jhs-accent-text-on) !important;\n                    cursor: pointer;\n                    font-size: 12px;\n                    line-height: 1.2;\n                }\n            </style>\n        ";
-    }
     async handle() {
-        "yun.123pan.com" === window.location.hostname ? this.startTokenSync() : (r || l) && (this.bindSubmit(), this.injectNativeButtons());
+        "yun.123pan.com" === window.location.hostname && this.startTokenSync();
     }
     startTokenSync() {
         this.syncTokenOnce(), this.syncTimer && clearInterval(this.syncTimer), this.syncTimer = setInterval((() => this.syncTokenOnce()), this.syncFallbackMs);
@@ -71,89 +68,10 @@ class OneTwoThreeOfflinePlugin extends BasePlugin {
         const msg = e instanceof Error ? e.message : "object" == typeof e && e ? e.message || "" : String(e || "");
         return "TOKEN_EXPIRED" === e || "TOKEN_EXPIRED" === msg || msg.toLowerCase().includes("token is expired");
     }
-    getTokenMetaText() {
-        const e = GM_getValue(this.tokenMetaKey, null);
-        return e && e.source && e.updatedAt ? `（来源：${e.source}，更新：${new Date(e.updatedAt).toLocaleString()}）` : "";
-    }
     assertApiResult(e, t) {
         if (0 === e.code) return;
         const n = e.message || e.msg || t || "请求失败";
         throw /token is expired/i.test(n) ? "TOKEN_EXPIRED" : n;
-    }
-    handleTokenExpired() {
-        this.clearStoredToken("expired"), show.error("123 云盘授权已过期，请登录或刷新 yun.123pan.com 后再提交");
-    }
-    bindSubmit() {
-        $(document).off("click.one23", ".one23-offline-btn").on("click.one23", ".one23-offline-btn", (e => {
-            e.preventDefault(), e.stopPropagation();
-            const t = $(e.currentTarget), n = t.attr("data-magnet");
-            n && this.submitMagnet(n, t);
-        }));
-    }
-    injectNativeButtons() {
-        if (!window.isDetailPage) return;
-        r && utils.loopDetector((() => $("#magnets-content .item").length > 0), (() => this.injectJavDbButtons()));
-        l && utils.loopDetector((() => $("#magnet-table td a[href^='magnet:']").length > 0), (() => this.injectJavBusButtons()));
-    }
-    injectJavDbButtons() {
-        $("#magnets-content .item").each(((e, t) => {
-            const n = $(t), a = n.find("a[href^='magnet:']").first().attr("href") || n.find(".copy-to-clipboard").attr("data-clipboard-text");
-            a && 0 === n.find(".one23-offline-btn").length && n.find(".buttons").first().append(`<button class="jhs-btn jhs-btn--secondary one23-offline-btn" data-magnet="${escapeHtml(a)}" type="button">123离线</button>`);
-        }));
-    }
-    injectJavBusButtons() {
-        $("#magnet-table td a[href^='magnet:']").each(((e, t) => {
-            const n = $(t), a = n.attr("href");
-            a && 0 === n.siblings(".one23-offline-btn").length && n.after(`<button class="jhs-btn one23-native-btn one23-offline-btn" data-magnet="${escapeHtml(a)}" type="button">123离线</button>`);
-        }));
-    }
-    async submitMagnet(e, t) {
-        if (!/^magnet:/i.test(e)) return void show.error("123 云盘当前仅支持 Magnet 离线");
-        const n = this.getStoredToken();
-        if (!n) return void show.error("请先登录或刷新 yun.123pan.com，等待授权自动同步后再提交离线任务");
-        if (t.hasClass("loading")) return;
-        const a = t.text();
-        try {
-            t.addClass("loading").prop("disabled", !0).text("提交中");
-            const i = await this.resolveMagnet(e, n), s = await this.submitTask(i, n);
-            const o = await this.markCurrentVideoAsHasDown(t);
-            show.info(`已提交 123 离线：${s.fileCount} 个文件 / ${this.formatSize(s.totalSize)}${o ? "，已标记为已下载" : ""}`),
-            t.text("已提交");
-        } catch (i) {
-            this.isTokenExpiredError(i) ? this.handleTokenExpired() : show.error("123 离线提交失败：" + i + this.getTokenMetaText()),
-            t.text(a);
-        } finally {
-            setTimeout((() => t.removeClass("loading").prop("disabled", !1).text(a)), this.BUTTON_COOLDOWN_MS);
-        }
-    }
-    /** 离线任务提交成功后，复用 JHS 影片状态存储标记为已下载。 */
-    async markCurrentVideoAsHasDown(e) {
-        try {
-            const t = this.getOfflineVideoInfo(e);
-            if (!t || !t.carNum || !t.url) return !1;
-            const n = await storageManager.getCar(t.carNum);
-            if (n && n.status === g) return !1;
-            await storageManager.saveCar({
-                carNum: t.carNum,
-                url: t.url,
-                names: t.actress || t.names || "",
-                actionType: g,
-                publishTime: t.publishTime
-            });
-            const a = this.getBean("DetailPageButtonPlugin");
-            a && a.showStatus && await a.showStatus(t.carNum), window.refresh();
-            return !0;
-        } catch (t) {
-            clog.error("123 离线成功后标记已下载失败:", t);
-            show.error("123 离线已提交，但自动标记已下载失败：" + t);
-            return !1;
-        }
-    }
-    /** 从详情页或按钮所在列表项提取当前影片信息。 */
-    getOfflineVideoInfo(e) {
-        if (window.isDetailPage) return this.getPageInfo();
-        const t = e && e.closest ? e.closest(".item") : $();
-        return t && t.length ? this.getBean("ListPagePlugin").findCarNumAndHref(t) : this.getPageInfo();
     }
     /* 依赖 gmRequest 在非 2xx 时 reject 对象上附加 status 属性 */
     async resolveMagnet(e, t) {
@@ -187,13 +105,6 @@ class OneTwoThreeOfflinePlugin extends BasePlugin {
             if (i && 401 === i.status) throw "TOKEN_EXPIRED";
             throw this.isTokenExpiredError(i) ? "TOKEN_EXPIRED" : i.message ? "响应解析失败: " + i.message : String(i);
         }
-    }
-    formatSize(e) {
-        if (!e) return "0B";
-        const t = [ "B", "KB", "MB", "GB", "TB" ];
-        let n = 0, a = e;
-        for (;a >= 1024 && n < t.length - 1; ) a /= 1024, n++;
-        return `${a.toFixed(n ? 2 : 0)}${t[n]}`;
     }
     /** CRC32-IEEE (poly 0xEDB88320) — 与 Go crc32.ChecksumIEEE 一致 */
     _crc32(e) {

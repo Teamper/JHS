@@ -5,7 +5,8 @@ class StatsPlugin extends BasePlugin {
             <style>
                 .jhs-stats { height:100%; padding:var(--jhs-space-4); overflow:auto; }
                 .jhs-stats__metrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border-top:1px solid var(--jhs-border); border-left:1px solid var(--jhs-border); }
-                .jhs-stats__metric { display:grid; gap:var(--jhs-space-1); padding:var(--jhs-space-4); border-right:1px solid var(--jhs-border); border-bottom:1px solid var(--jhs-border); background:var(--jhs-surface); }
+                .jhs-stats__metric { display:grid; gap:var(--jhs-space-1); padding:var(--jhs-space-4); border:0; border-right:1px solid var(--jhs-border); border-bottom:1px solid var(--jhs-border); background:var(--jhs-surface); text-align:left; }
+                button.jhs-stats__metric { cursor:pointer; }
                 .jhs-stats__metric strong { color:var(--jhs-text); font-size:28px; line-height:1; }
                 .jhs-stats__metric span { color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
                 .jhs-stats__group { margin-top:var(--jhs-space-5); }
@@ -25,24 +26,52 @@ class StatsPlugin extends BasePlugin {
         $("#newVideoBtn").after(e), $("#statsBtn").on("click", (() => this.openDialog()));
     }
     async openDialog() {
-        const cars = await storageManager.getCarList(), actresses = await storageManager.getFavoriteActressList(), blacklist = await storageManager.getBlacklist(), total = cars.length, statusMap = await storageManager.getStatusMap();
-        const counts = { filter: statusMap[d].size, favorite: statusMap[h].size, hasDown: statusMap[g].size, hasWatch: statusMap[p].size };
-        const actressCounts = {};
-        cars.forEach((car => { car.names && car.names.split(" ").forEach((name => { name && (actressCounts[name] = (actressCounts[name] || 0) + 1); })); }));
-        const topActresses = Object.entries(actressCounts).sort(((left, right) => right[1] - left[1])).slice(0, 10), topValue = topActresses[0]?.[1] || 1;
-        const pending = total - counts.filter - counts.favorite - counts.hasDown - counts.hasWatch, carMap = await storageManager.getCarMap(), counter = this.getBean("NewVideoPlugin");
-        let newVideos = 0;
-        actresses.forEach((actress => { counter && (newVideos += counter.getPendingNewVideoCount(actress, carMap)); }));
-        const metrics = [ [ "总记录", total ], [ "已收藏", counts.favorite ], [ "已下载", counts.hasDown ], [ "已观看", counts.hasWatch ], [ "已屏蔽", counts.filter ], [ "待鉴定", pending ], [ "收藏演员", actresses.length ], [ "黑名单演员", blacklist.length ], [ "新作品待看", newVideos ] ];
-        const statusRows = [ [ "已收藏", counts.favorite, "var(--jhs-status-fav)" ], [ "已下载", counts.hasDown, "var(--jhs-status-down)" ], [ "已观看", counts.hasWatch, "var(--jhs-status-watch)" ], [ "已屏蔽", counts.filter, "var(--jhs-status-filter)" ], [ "待鉴定", pending, "var(--jhs-border-strong)" ] ];
-        const row = (label, value, max, color) => `<div class="jhs-stats__row"><span class="jhs-stats__label" title="${escapeHtml(label)}">${escapeHtml(label)}</span><span class="jhs-stats__track"><span class="jhs-stats__bar" data-width="${max ? Math.round(value / max * 100) : 0}" data-color="${color}"></span></span><span class="jhs-stats__value">${value}${max === total && total ? ` (${Math.round(value / total * 100)}%)` : ""}</span></div>`;
+        const cars = await storageManager.getCarList(), actresses = await storageManager.getFavoriteActressList(), blacklist = await storageManager.getBlacklist(), activity = await stateService.getActivityLog(), total = cars.length;
+        const counts = { manualBlocked: 0, favorite: 0, hasDown: 0, hasWatch: 0, pending: 0 };
+        cars.forEach((car => { const flags = normalizeStateFlags(car.stateFlags); flags.blocked && counts.manualBlocked++, flags.favorite && counts.favorite++, flags.downloaded && counts.hasDown++, flags.watched && counts.hasWatch++, hasAnyState(flags) || counts.pending++; }));
+        const actressCounts = new Map;
+        cars.forEach((car => {
+            const names = String(car.names || "").split(/[\s,，、]+/).filter(Boolean);
+            if (car.starId) {
+                const key = `id:${car.starId}`, current = actressCounts.get(key) || { starId: car.starId, name: names[0] || car.starId, count: 0 };
+                current.count++, actressCounts.set(key, current);
+            } else names.forEach((name => { const key = `name:${name}`, current = actressCounts.get(key) || { starId: "", name, count: 0 }; current.count++, actressCounts.set(key, current); }));
+        }));
+        const topActresses = [ ...actressCounts.values() ].sort(((left, right) => right.count - left.count || left.name.localeCompare(right.name))).slice(0, 10), topValue = topActresses[0]?.count || 1, javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl();
+        const pending = counts.pending, counter = this.getBean("NewVideoPlugin"), newVideos = counter ? await counter.getPendingNewVideoTotal() : 0, pageSummary = this.getBean("ListPagePlugin").getCurrentPageSummary();
+        const metrics = [
+            { label: "总记录", value: total, action: null },
+            { label: "收藏", value: counts.favorite, action: null },
+            { label: "下载", value: counts.hasDown, action: null },
+            { label: "已看", value: counts.hasWatch, action: null },
+            { label: "手动屏蔽", value: counts.manualBlocked, action: null },
+            { label: "未鉴定", value: pending, action: null },
+            { label: "收藏演员", value: actresses.length, action: null },
+            { label: "黑名单演员", value: blacklist.length, action: null },
+            { label: "新作品待处理", value: newVideos, action: "new-video" }
+        ];
+        const statusRows = [ [ "收藏", counts.favorite, "var(--jhs-status-fav)" ], [ "下载", counts.hasDown, "var(--jhs-status-down)" ], [ "已看", counts.hasWatch, "var(--jhs-status-watch)" ], [ "手动屏蔽", counts.manualBlocked, "var(--jhs-status-filter)" ], [ "未鉴定", pending, "var(--jhs-border-strong)" ] ];
+        const row = (label, value, max, color, href = "") => `<div class="jhs-stats__row">${href ? `<a class="jhs-stats__label" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(label)}">${escapeHtml(label)}</a>` : `<span class="jhs-stats__label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`}<span class="jhs-stats__track"><span class="jhs-stats__bar" data-width="${max ? Math.round(value / max * 100) : 0}" data-color="${color}"></span></span><span class="jhs-stats__value">${value}${max === total && total ? ` (${Math.round(value / total * 100)}%)` : ""}</span></div>`;
+        const trend = days => { const cutoff = Date.now() - days * 864e5, result = { identified: 0, downloaded: 0, watched: 0 }; activity.entries.filter((entry => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)).forEach((entry => entry.changes.filter((change => "reverted" !== change.undoState)).forEach((change => { const before = normalizeStateFlags(change.before?.stateFlags), after = normalizeStateFlags(change.after?.stateFlags); !hasAnyState(before) && hasAnyState(after) && result.identified++, !before.downloaded && after.downloaded && result.downloaded++, !before.watched && after.watched && result.watched++; })))); return result; }, trend7 = trend(7), trend30 = trend(30);
+        const coverageNote = activity.coverageStart ? `活动记录仅覆盖自 ${escapeHtml(activity.coverageStart)} 起` : "仅统计 6.4.0 及之后产生的操作记录";
+        const renderMetric = metric => metric.action
+            ? `<button type="button" class="jhs-btn jhs-stats__metric" data-action="${metric.action}"${metric.filter ? ` data-filter="${metric.filter}"` : ""}><strong>${metric.value}</strong><span>${metric.label}</span></button>`
+            : `<div class="jhs-stats__metric"><strong>${metric.value}</strong><span>${metric.label}</span></div>`;
         const dialogHtml = `<div class="jhs-stats jhs-scrollbar jhs-ui">
-            <div class="jhs-stats__metrics">${metrics.map((metric => `<div class="jhs-stats__metric"><strong>${metric[1]}</strong><span>${metric[0]}</span></div>`)).join("")}</div>
+            <section class="jhs-stats__group"><h3>全库概览</h3><div class="jhs-stats__metrics">${metrics.map(renderMetric).join("")}</div></section>
+            <section class="jhs-stats__group"><h3>当前页面</h3><div class="jhs-stats__metrics">${renderMetric({ label: "屏蔽项", value: pageSummary.blockedItems, action: "filter", filter: "blockedItems" })}</div></section>
             <section class="jhs-stats__group"><h3>状态分布</h3><div class="jhs-stats__rows">${statusRows.map((item => row(item[0], item[1], total, item[2]))).join("")}</div></section>
-            ${topActresses.length ? `<section class="jhs-stats__group"><h3>Top 10 演员</h3><div class="jhs-stats__rows">${topActresses.map((item => row(item[0], item[1], topValue, "var(--jhs-accent)"))).join("")}</div></section>` : ""}
+            <section class="jhs-stats__group"><h3>活动趋势</h3><p class="jhs-helper-text">${coverageNote}</p><div class="jhs-stats__metrics"><div class="jhs-stats__metric"><strong>${trend7.identified}</strong><span>近 7 天新增鉴定</span></div><div class="jhs-stats__metric"><strong>${trend7.downloaded}</strong><span>近 7 天标记下载</span></div><div class="jhs-stats__metric"><strong>${trend7.watched}</strong><span>近 7 天标记观看</span></div><div class="jhs-stats__metric"><strong>${trend30.identified}</strong><span>近 30 天新增鉴定</span></div><div class="jhs-stats__metric"><strong>${trend30.downloaded}</strong><span>近 30 天标记下载</span></div><div class="jhs-stats__metric"><strong>${trend30.watched}</strong><span>近 30 天标记观看</span></div></div></section>
+            ${topActresses.length ? `<section class="jhs-stats__group"><h3>Top 10 演员</h3><div class="jhs-stats__rows">${topActresses.map((item => row(item.name, item.count, topValue, "var(--jhs-accent)", new URL(item.starId ? `/actors/${encodeURIComponent(item.starId)}` : `/search?q=${encodeURIComponent(item.name)}`, javDbUrl).href))).join("")}</div></section>` : ""}
         </div>`;
-        layer.open({ type: 1, title: "收藏统计", content: dialogHtml, scrollbar: !1, area: utils.getDialogArea("lg"), anim: -1, success: (layerElement, layerIndex) => {
+        layer.open({ type: 1, title: "统计", content: dialogHtml, scrollbar: !1, area: utils.getDialogArea("lg"), anim: -1, success: (layerElement, layerIndex) => {
             $(layerElement).find(".jhs-stats__bar").each((function() { $(this).css({ "--jhs-value": `${$(this).data("width")}%`, "--jhs-bar": $(this).data("color") }); }));
+            $(layerElement).find("button.jhs-stats__metric[data-action]").on("click", (event => {
+                const metric = $(event.currentTarget), action = metric.data("action");
+                layer.close(layerIndex);
+                if ("new-video" === action) return this.getBean("NewVideoPlugin").openDialog();
+                if ("filter" === action) this.getBean("ListPagePlugin").setQuickFilter(metric.data("filter"));
+            }));
             utils.setupEscClose(layerIndex);
         } });
     }

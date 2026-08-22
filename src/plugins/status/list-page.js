@@ -77,9 +77,55 @@ const _e = async (e, t = "ja", n = "zh-CN") => {
     }
 };
 
+const QUICK_FILTER_LABELS = Object.freeze({
+    all: "全部", waitCheck: "待鉴定", favorite: "收藏", hasDown: "下载", hasWatch: "已看",
+    blockedItems: "屏蔽项", favoriteUndownloaded: "收藏未下载", favoriteUnwatched: "收藏未观看",
+    downloadedUnwatched: "下载未观看", recent7d: "最近 7 天"
+}), PRIMARY_QUICK_FILTERS = Object.freeze([ "all", "waitCheck", "favorite", "hasDown", "hasWatch" ]),
+SECONDARY_QUICK_FILTERS = Object.freeze([ "blockedItems", "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d" ]),
+VALID_QUICK_FILTERS = new Set([ ...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS ]);
+
+/** 将旧筛选键收敛为当前唯一业务键。 */
+function normalizeQuickFilterKey(value) {
+    if ("filter" === value) return "blockedItems";
+    return VALID_QUICK_FILTERS.has(value) ? value : "waitCheck";
+}
+
+/** 判断列表卡片是否因状态或规则被硬屏蔽。 */
+function isHardHidden(flags, visibilityReasons = {}) {
+    return Boolean(flags.blocked || visibilityReasons.keyword || visibilityReasons.actorBlacklist || visibilityReasons.actressBlacklist);
+}
+
+function matchesQuickFilter(filter, flags, { visibilityReasons = {}, recent = !1 } = {}) {
+    const normalizedFilter = normalizeQuickFilterKey(filter), hardHidden = isHardHidden(flags, visibilityReasons);
+    if ("blockedItems" === normalizedFilter) return hardHidden;
+    if (hardHidden) return !1;
+    if ("all" === normalizedFilter) return !0;
+    if ("waitCheck" === normalizedFilter) return !hasAnyState(flags);
+    if ("favorite" === normalizedFilter) return !!flags.favorite;
+    if ("hasDown" === normalizedFilter) return !!flags.downloaded;
+    if ("hasWatch" === normalizedFilter) return !!flags.watched;
+    if ("favoriteUndownloaded" === normalizedFilter) return !!flags.favorite && !flags.downloaded;
+    if ("favoriteUnwatched" === normalizedFilter) return !!flags.favorite && !flags.watched;
+    if ("downloadedUnwatched" === normalizedFilter) return !!flags.downloaded && !flags.watched;
+    return "recent7d" === normalizedFilter && recent;
+}
+
+function shouldHideInDefaultView(flags, settings) {
+    if (settings.showAllItem === _) return !1;
+    const activeVisibility = [ [ flags.favorite, settings.showFavoriteItem ?? _ ], [ flags.downloaded, settings.showHasDownItem ?? _ ], [ flags.watched, settings.showHasWatchItem ?? _ ] ].filter((entry => entry[0]));
+    return activeVisibility.length > 0 && activeVisibility.every((entry => entry[1] !== _));
+}
+
+function shouldShowItem({ filter, flags, visibilityReasons, settingHidden, recent }) {
+    const normalizedFilter = normalizeQuickFilterKey(filter);
+    if (!matchesQuickFilter(normalizedFilter, flags, { visibilityReasons, recent })) return !1;
+    return "all" !== normalizedFilter || !settingHidden;
+}
+
 class ListPagePlugin extends BasePlugin {
     async initCss() {
-        return `<style>.status-tag{position:absolute;z-index:var(--jhs-z-content);margin-right:5px;padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}</style>`;
+        return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}</style>`;
     }
     constructor() {
         super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0),
@@ -88,51 +134,93 @@ class ListPagePlugin extends BasePlugin {
         i(this, "currentPageTotalCount", 0), i(this, "cache", null), i(this, "translationPending", new Map),
         i(this, "filterContext", null), i(this, "pendingItems", new Set), i(this, "processTimer", null),
         i(this, "hdImageObserver", null), i(this, "hdEagerRemaining", 12), i(this, "writeQueue", Promise.resolve()),
-        i(this, "_debouncedTranslateWrite", null);
+        i(this, "_debouncedTranslateWrite", null), i(this, "itemIndex", new Map), i(this, "recountFrame", null);
     }
     getName() {
         return "ListPagePlugin";
     }
     async handle() {
         if (!window.isListPage || isHitShowPage()) return;
-        new BroadcastChannel("channel-refresh").addEventListener("message", (async e => {
-            let t = e.data.type;
-            if ("refresh" === t) {
+        const refreshAll = async () => {
                 this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
                 const e = this.getBean("HistoryPlugin");
                 e.tableObj && e.tableObj.setData();
                 const t = this.getBean("NewVideoPlugin");
                 t && void Promise.all([ t.showNewVideoCount(), t.loadData() ]).catch((error => clog.error("新作品数据刷新失败", error)));
-            } else "cleanCache_filter_actor_actress_car_list" === t ? (this.filterContext = null, storageManager._invalidateCache(storageManager.blacklist_car_list_key)) : "clean_cacheSettingObj" === t && (this.filterContext = null,
-            storageManager._invalidateCache(storageManager.setting_key));
+        };
+        jhsEventBus.on("legacy-refresh", refreshAll), jhsEventBus.on("blacklist-rules-changed", refreshAll), jhsEventBus.on("filter-rules-changed", refreshAll), jhsEventBus.on("settings-changed", refreshAll),
+        jhsEventBus.on("car-state-changed", (async payload => {
+            this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key);
+            const items = this.getIndexedItems(payload.carNums || []);
+            items.length && (await this.doFilterItems(items), this.applyVisibility(items));
+            const history = this.getBean("HistoryPlugin");
+            history.tableObj && history.tableObj.setData();
+        })), jhsEventBus.on("new-video-changed", (() => {
+            const plugin = this.getBean("NewVideoPlugin");
+            plugin && void Promise.all([ plugin.showNewVideoCount(), plugin.loadData() ]).catch((error => clog.error("新作品数据刷新失败", error)));
         })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
         await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(),
-        this.rememberTagExpand(), $(this.getSelector().itemSelector + " a").attr("target", "_blank"),
-        $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"),
+        this.rememberTagExpand(),
+        $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await jhsEventBus.emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: !1 }),
         this.checkDom();
     }
     async createQuickFilter() {
         if ($("#jhs-quick-filter").length) return;
-        const e = this.getSelector(), t = '\n            <div id="jhs-quick-filter" class="jhs-segmented" role="tablist" aria-label="状态筛选">\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="all">全部</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="waitCheck">待鉴定</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="favorite">已收藏</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="hasDown">已下载</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="hasWatch">已观看</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="filter">已屏蔽</button>\n            </div>';
+        const e = this.getSelector(), primaryHtml = PRIMARY_QUICK_FILTERS.map((filter => `<button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""),
+            secondaryHtml = SECONDARY_QUICK_FILTERS.map(((filter, index) => `${1 === index ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-filter-option" aria-checked="false" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""),
+            t = `<div id="jhs-quick-filter" class="jhs-quick-filter">
+                <div class="jhs-quick-filter__primary jhs-segmented" role="tablist" aria-label="状态筛选">${primaryHtml}</div>
+                <div class="jhs-quick-filter__more">
+                    <button type="button" class="jhs-btn jhs-btn--secondary jhs-quick-filter__toggle" aria-haspopup="menu" aria-expanded="false"><span class="jhs-quick-filter__label">更多筛选</span> ▾</button>
+                    <div class="jhs-popover jhs-commandbar__menu jhs-quick-filter__menu" role="menu" aria-label="更多筛选">${secondaryHtml}</div>
+                </div>
+            </div>`;
         r ? $(e.boxSelector).before(t) : l && $(".masonry").before(t);
-        const n = this, a = await storageManager.getSetting("defaultQuickFilterTab", "waitCheck"),
-            i = [ "all", "waitCheck", "favorite", "hasDown", "hasWatch", "filter" ].includes(a) ? a : "waitCheck";
-        this.activeQuickFilter = i, this.applyQuickFilter(i), $(`#jhs-quick-filter .jhs-segmented__item[data-jhs-filter="${i}"]`).addClass("active").attr("aria-selected", "true"), $("#jhs-quick-filter .jhs-segmented__item").not(`[data-jhs-filter="${i}"]`).removeClass("active").attr("aria-selected", "false"), $("#jhs-quick-filter").on("click", ".jhs-segmented__item", (function() {
-            const t = $(this).data("jhs-filter");
-            $("#jhs-quick-filter .jhs-segmented__item").removeClass("active").attr("aria-selected", "false"), $(this).addClass("active").attr("aria-selected", "true"), n.activeQuickFilter = t, n.applyQuickFilter(t);
+        const root = $("#jhs-quick-filter"), toggle = root.find(".jhs-quick-filter__toggle"), menu = root.find(".jhs-quick-filter__menu"), closeMenu = (restoreFocus = !1) => {
+            menu.removeClass("is-open"), toggle.attr("aria-expanded", "false"), restoreFocus && toggle.trigger("focus");
+        };
+        root.on("click", ".jhs-segmented__item", (event => this.setQuickFilter($(event.currentTarget).data("jhs-filter"))))
+            .on("keydown", ".jhs-segmented__item", (event => {
+                if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(event.key)) return;
+                event.preventDefault();
+                const tabs = root.find(".jhs-segmented__item"), index = tabs.index(event.currentTarget), next = "Home" === event.key ? 0 : "End" === event.key ? tabs.length - 1 : "ArrowRight" === event.key ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
+                tabs.eq(next).trigger("click").trigger("focus");
+            })).on("click", ".jhs-filter-option", (event => {
+                this.setQuickFilter($(event.currentTarget).data("jhs-filter")), closeMenu(!0);
+            })).on("keydown", ".jhs-filter-option", (event => {
+                const items = menu.find(".jhs-filter-option"), index = items.index(event.currentTarget);
+                if ("Escape" === event.key) return event.preventDefault(), closeMenu(!0);
+                if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
+                event.preventDefault();
+                const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+                items.eq(next).trigger("focus");
+            }));
+        toggle.on("click", (event => {
+            event.preventDefault(), event.stopPropagation();
+            const open = !menu.hasClass("is-open");
+            menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && (menu.find('[aria-checked="true"]').first().length ? menu.find('[aria-checked="true"]').first() : menu.find(".jhs-filter-option").first()).trigger("focus");
+        })), $(document).off("click.jhsQuickFilter").on("click.jhsQuickFilter", (event => {
+            $(event.target).closest(root).length || closeMenu();
         }));
+        this.setQuickFilter(await storageManager.getSetting("defaultQuickFilterTab", "waitCheck"));
     }
     applyVisibility(items = null) {
-        const e = this.activeQuickFilter || "waitCheck", t = this.getSelector().itemSelector, n = ["filter", "keywordFilter", "actorFilter"];
+        const e = this.activeQuickFilter || "waitCheck", t = this.getSelector().itemSelector;
         (items ? $(items) : $(t)).each((function() {
-            const t = $(this), a = t.attr("data-hide") === "yes", i = t.attr("data-jhs-status") || "waitCheck";
-            if (e === "all") { n.includes(i) || a ? t.hide() : t.show(); return; }
-            if (i === e) { t.show(); return; }
-            a || (i !== e) ? t.hide() : t.show();
+            const t = $(this), flags = normalizeStateFlags(JSON.parse(t.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(t.attr("data-jhs-visibility") || "{}"), settingHidden = "yes" === t.attr("data-jhs-setting-hide"), recent = "yes" === t.attr("data-jhs-recent");
+            shouldShowItem({ filter: e, flags, visibilityReasons, settingHidden, recent }) ? t.show() : t.hide();
         }));
     }
-    applyQuickFilter(e) {
-        this.activeQuickFilter = e, this.applyVisibility();
+    setQuickFilter(filter, { syncUi = !0 } = {}) {
+        this.activeQuickFilter = normalizeQuickFilterKey(filter), this.applyVisibility(), syncUi && this.syncQuickFilterUi();
+    }
+    syncQuickFilterUi() {
+        const filter = normalizeQuickFilterKey(this.activeQuickFilter), isPrimary = PRIMARY_QUICK_FILTERS.includes(filter), root = $("#jhs-quick-filter"), tabs = root.find(".jhs-segmented__item"), options = root.find(".jhs-filter-option");
+        tabs.removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" });
+        isPrimary ? tabs.filter(`[data-jhs-filter="${filter}"]`).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }) : tabs.first().attr("tabindex", "0");
+        options.attr("aria-checked", "false").filter(`[data-jhs-filter="${filter}"]`).attr("aria-checked", "true");
+        root.find(".jhs-quick-filter__label").text(isPrimary ? "更多筛选" : `筛选：${QUICK_FILTER_LABELS[filter]}`);
+        $(".jhs-mobile-filter-label").text(`筛选：${QUICK_FILTER_LABELS[filter]}`), $(".jhs-mobile-filter-option").attr("aria-checked", "false").filter(`[data-jhs-filter="${filter}"]`).attr("aria-checked", "true");
     }
     rememberTagExpand() {
         if (!window.location.href.includes("actors")) return;
@@ -149,12 +237,15 @@ class ListPagePlugin extends BasePlugin {
         const e = this.getSelector(), t = document.querySelector(e.boxSelector);
         if (!t) return void clog.error("没有找到容器节点!");
         const a = new MutationObserver((records => {
-            for (const record of records) for (const node of record.addedNodes) {
+            for (const record of records) {
+                this.removeIndexedItems(record.removedNodes);
+                for (const node of record.addedNodes) {
                 if (node.nodeType !== Node.ELEMENT_NODE) continue;
                 node.matches?.(e.itemSelector) && "true" !== node.dataset.jhsProcessed && this.pendingItems.add(node),
                 node.querySelectorAll?.(e.itemSelector).forEach((item => {
                     "true" !== item.dataset.jhsProcessed && this.pendingItems.add(item);
                 }));
+                }
             }
             this.pendingItems.size && (this.processTimer && clearTimeout(this.processTimer), this.processTimer = setTimeout((() => {
                 const items = [ ...this.pendingItems ].filter((item => item.isConnected && "true" !== item.dataset.jhsProcessed));
@@ -170,7 +261,40 @@ class ListPagePlugin extends BasePlugin {
         const selector = this.getSelector(), covers = items.flatMap((item => [ ...item.querySelectorAll(selector.coverImgSelector) ]));
         this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items), await this.doFilterItems(items), this.applyVisibility(items),
         await this.getBean("ListPageButtonPlugin").sortItems(), await this.getBean("CoverButtonPlugin").addSvgBtn(items),
-        $(items).find("a").attr("target", "_blank"), items.forEach((item => item.dataset.jhsProcessed = "true")), this.getBean("AutoPagePlugin").checkLoad();
+        items.forEach((item => item.dataset.jhsProcessed = "true")), this.indexItems(items), await jhsEventBus.emit("list-items-added", { items }, { broadcast: !1 }), this.getBean("AutoPagePlugin").checkLoad();
+    }
+    rebuildItemIndex() {
+        this.itemIndex.clear(), this.indexItems($(this.getSelector().itemSelector).toArray());
+    }
+    indexItems(items) {
+        items.forEach((item => {
+            try {
+                const key = normalizeCarNum(this.findCarNumAndHref($(item)).carNum);
+                if (!key) return;
+                const indexed = this.itemIndex.get(key) || new Set;
+                indexed.add(item), this.itemIndex.set(key, indexed);
+            } catch (error) {
+                clog.debug("列表项索引跳过无效卡片", error);
+            }
+        }));
+    }
+    removeIndexedItems(nodes) {
+        const removed = new Set;
+        Array.from(nodes || []).forEach((node => {
+            node.nodeType === Node.ELEMENT_NODE && (removed.add(node), node.querySelectorAll?.(this.getSelector().itemSelector).forEach((item => removed.add(item))));
+        }));
+        if (!removed.size) return;
+        this.itemIndex.forEach(((items, key) => {
+            items.forEach((item => { removed.has(item) && items.delete(item); })), items.size || this.itemIndex.delete(key);
+        }));
+    }
+    getIndexedItems(carNums) {
+        const result = new Set;
+        carNums.map(normalizeCarNum).forEach((key => {
+            const items = this.itemIndex.get(key);
+            items?.forEach((item => item.isConnected ? result.add(item) : items.delete(item))), items && !items.size && this.itemIndex.delete(key);
+        }));
+        return [ ...result ];
     }
     fixBusTitleBox(items = null) {
         if (!l) return;
@@ -213,33 +337,49 @@ class ListPagePlugin extends BasePlugin {
         for (const a of e) if (t.includes(a) || n.startsWith(a)) return a;
         return null;
     }
-    getStatusKey(e) {
-        return e === Te.IS_FILTERED ? "filter" : e === Te.IS_FAVORITE ? "favorite" : e === Te.IS_HAS_DOWN ? "hasDown" : e === Te.IS_HAS_WATCH ? "hasWatch" : e === Te.IS_KEYWORD_FILTER ? "keywordFilter" : e === Te.IS_ACTOR_FILTER ? "actorFilter" : e === Te.IS_ACTRESS_FILTER ? "actorFilter" : "waitCheck";
-    }
     async getFilterContext() {
         if (this.filterContext) return this.filterContext;
-        const [titleKeywords, blacklistMap, blacklistCars, settings, statusMap] = await Promise.all([ storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getStatusMap() ]), actorCarNumToNameMap = new Map, actressCarNumToNameMap = new Map;
+        const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([ storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), stateService.getActivityLog() ]), actorCarNumToNameMap = new Map, actressCarNumToNameMap = new Map, recentCarNums = new Set;
+        const cutoff = Date.now() - 7 * 864e5;
+        activity.entries.filter((entry => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)).forEach((entry => entry.changes.filter((change => "reverted" !== change.undoState && change.fields?.some((field => field.startsWith("stateFlags."))))).forEach((change => recentCarNums.add(change.carNum)))));
         for (const item of blacklistCars) {
             const role = blacklistMap.get(item.starId)?.role;
             if (!role) {
                 clog.error("黑名单数据源丢失演员信息", item);
                 continue;
             }
-            const target = role === B ? actorCarNumToNameMap : actressCarNumToNameMap;
-            target.has(item.carNum) || target.set(item.carNum, item.names);
+            const target = role === B ? actorCarNumToNameMap : actressCarNumToNameMap, carNum = normalizeCarNum(item.carNum);
+            target.has(carNum) || target.set(carNum, item.names);
         }
-        return this.filterContext = { titleKeywords, settings, statusMap, actorCarNumToNameMap, actressCarNumToNameMap };
+        return this.filterContext = { titleKeywords, settings, carMap, recentCarNums, actorCarNumToNameMap, actressCarNumToNameMap };
     }
-    recountStatuses() {
-        this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0,
-        this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0,
-        this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0;
-        const countKeys = { filter: "currentPageFilterCount", favorite: "currentPageFavoriteCount", hasDown: "currentPageHasDownCount", hasWatch: "currentPageHasWatchCount", keywordFilter: "currentPageKeywordFilterCount", actorFilter: "currentPageActorFilterCount", waitCheck: "currentPageWaitCheckCount" };
+    collectCurrentPageSummary() {
+        const summary = { total: 0, pending: 0, blockedItems: 0, favorite: 0, downloaded: 0, watched: 0, debug: { manualBlocked: 0, keywordBlocked: 0, actorBlocked: 0, actressBlocked: 0 } };
         $(this.getSelector().itemSelector).each(((e, item) => {
             const card = $(item);
             if (l && card.find(".avatar-box").length > 0) return;
-            const key = countKeys[card.attr("data-jhs-status") || "waitCheck"];
-            key && this[key]++, this.currentPageTotalCount++;
+            const flags = normalizeStateFlags(JSON.parse(card.attr("data-jhs-flags") || "{}")), reasons = JSON.parse(card.attr("data-jhs-visibility") || "{}"), hardHidden = isHardHidden(flags, reasons);
+            summary.total++, flags.favorite && summary.favorite++, flags.downloaded && summary.downloaded++, flags.watched && summary.watched++, hardHidden && summary.blockedItems++,
+            !hasAnyState(flags) && !hardHidden && summary.pending++, flags.blocked && summary.debug.manualBlocked++, reasons.keyword && summary.debug.keywordBlocked++, reasons.actorBlacklist && summary.debug.actorBlocked++, reasons.actressBlacklist && summary.debug.actressBlocked++;
+        }));
+        return summary;
+    }
+    getCurrentPageSummary() {
+        return this.collectCurrentPageSummary();
+    }
+    recountStatuses() {
+        const summary = this.collectCurrentPageSummary();
+        this.currentPageFilterCount = summary.debug.manualBlocked, this.currentPageFavoriteCount = summary.favorite, this.currentPageHasDownCount = summary.downloaded,
+        this.currentPageHasWatchCount = summary.watched, this.currentPageKeywordFilterCount = summary.debug.keywordBlocked,
+        this.currentPageActorFilterCount = summary.debug.actorBlocked + summary.debug.actressBlocked, this.currentPageWaitCheckCount = summary.pending,
+        this.currentPageTotalCount = summary.total;
+        return summary;
+    }
+    scheduleRecount() {
+        if (this.recountFrame) return;
+        const schedule = window.requestAnimationFrame || (callback => setTimeout(callback, 0));
+        this.recountFrame = schedule((() => {
+            this.recountFrame = null, this.recountStatuses();
         }));
     }
     async translateListItems(e) {
@@ -250,9 +390,9 @@ class ListPagePlugin extends BasePlugin {
     }
     async filterMovieList(e) {
         utils.time("累计耗费时间"), utils.time("读取数据耗时");
-        const {titleKeywords: n, settings: s, statusMap: m, actorCarNumToNameMap: f, actressCarNumToNameMap: v} = await this.getFilterContext(), o = utils.time("读取数据耗时");
+        const {titleKeywords: n, settings: s, carMap: m, recentCarNums: recent, actorCarNumToNameMap: f, actressCarNumToNameMap: v} = await this.getFilterContext(), o = utils.time("读取数据耗时");
         utils.time("组装数据耗时");
-        const b = utils.time("组装数据耗时"), w = (null == s ? void 0 : s.showFilterItem) ?? C, y = (null == s ? void 0 : s.showFilterActorItem) ?? C, x = (null == s ? void 0 : s.showFilterKeywordItem) ?? C, k = (null == s ? void 0 : s.showFavoriteItem) ?? _, S = (null == s ? void 0 : s.showHasDownItem) ?? _, T = (null == s ? void 0 : s.showHasWatchItem) ?? _, I = (null == s ? void 0 : s.showAllItem) ?? C, P = (null == s ? void 0 : s.tagPosition) || "rightTop";
+        const b = utils.time("组装数据耗时"), k = (null == s ? void 0 : s.showFavoriteItem) ?? _, S = (null == s ? void 0 : s.showHasDownItem) ?? _, T = (null == s ? void 0 : s.showHasWatchItem) ?? _, I = (null == s ? void 0 : s.showAllItem) ?? C, P = (null == s ? void 0 : s.tagPosition) || "rightTop";
         const O = n.filter((e => e));
         this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0,
         this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0,
@@ -262,61 +402,40 @@ class ListPagePlugin extends BasePlugin {
             n > 0 && n % 12 == 0 && await this.yieldListFrame();
             let t = $(e[n]);
             if (l && t.find(".avatar-box").length > 0) continue;
-            const {carNum: a, title: i} = this.findCarNumAndHref(t), {filter: s, favorite: o, hasDown: d, hasWatch: h} = m, g = o.has(a), p = d.has(a), u = h.has(a), b = s.has(a), B = f.has(a), D = v.has(a), A = B || D, L = this.findMatchedTitleKeyword(O, i, a), M = !!L;
-            if (!c) {
-                let e = k === C && g || S === C && p || T === C && u || w === C && b && !(g || p || u) || y === C && A || x === C && M;
-                const n = t.attr("data-hide") === _;
-                I === _ && (e = !1), e && !n ? t.hide().attr("data-hide", _) : !e && n && t.show().removeAttr("data-hide");
-            }
-            let N = Te.IS_WAIT_CHECK, j = null;
-            b ? N = Te.IS_FILTERED : g ? N = Te.IS_FAVORITE : p ? N = Te.IS_HAS_DOWN : u ? N = Te.IS_HAS_WATCH : M ? (N = Te.IS_KEYWORD_FILTER,
-            j = L || "未知") : B ? (N = Te.IS_ACTOR_FILTER, j = f.get(a) || "") : D && (N = Te.IS_ACTRESS_FILTER,
-            j = v.get(a) || ""), j || (j = N.reasonType), N.isCounted && this[N.countKey]++,
-            this.currentPageTotalCount++;
-            const q = this.getStatusKey(N), F = t.attr("data-jhs-status") !== q || t.attr("data-jhs-tip") !== j || t.attr("data-jhs-tag-position") !== P;
-            t.attr("data-jhs-status", q).attr("data-jhs-tip", j).attr("data-jhs-tag-position", P);
-            const E = "rightTop" === P ? "right: 0; top:5px;" : "left: 0; top:5px;";
-            if (F && (t.find(".status-tag").remove(), N.text)) {
-                const e = $(`<span class="jhs-badge ${r ? "jhs-badge--success" : "jhs-badge--neutral"} status-tag" data-tip="${escapeHtml(j)}" title="">${escapeHtml(N.text)}</span>`);
-                e.css({ color: N.on, backgroundColor: N.color, right: "rightTop" === P ? 0 : "auto", left: "rightTop" === P ? "auto" : 0, top: "5px" });
-                e.find(".tag").css("color", N.on);
-                if (r && t.find(".tags").append(e), l) {
-                    const n = t.find(".item-tag");
-                    n.length ? n.append(e) : t.find(".photo-info > span > div").append(e);
+            const {carNum: a, title: i} = this.findCarNumAndHref(t), record = m.get(a), flags = normalizeStateFlags(record?.stateFlags), actorFiltered = f.has(a), actressFiltered = v.has(a), keyword = this.findMatchedTitleKeyword(O, i, a), visibilityReasons = { keyword: !!keyword, actorBlacklist: actorFiltered, actressBlacklist: actressFiltered };
+            const hardHidden = isHardHidden(flags, visibilityReasons), settingHidden = shouldHideInDefaultView(flags, { showAllItem: I, showFavoriteItem: k, showHasDownItem: S, showHasWatchItem: T });
+            t.attr("data-jhs-flags", JSON.stringify(flags)).attr("data-jhs-visibility", JSON.stringify(visibilityReasons)).attr("data-jhs-setting-hide", settingHidden ? _ : C).attr("data-jhs-recent", recent.has(a) ? _ : C).attr("data-jhs-tag-position", P);
+            const signature = JSON.stringify({ flags, visibilityReasons, P });
+            if (t.attr("data-jhs-state-signature") !== signature) {
+                t.attr("data-jhs-state-signature", signature), t.find(".jhs-status-tags").remove();
+                const badgeDefs = [
+                    [ flags.blocked, Te.IS_FILTERED, "单番号屏蔽" ], [ flags.favorite, Te.IS_FAVORITE, "" ], [ flags.downloaded, Te.IS_HAS_DOWN, "" ], [ flags.watched, Te.IS_HAS_WATCH, "" ],
+                    [ visibilityReasons.keyword, Te.IS_KEYWORD_FILTER, keyword || "未知" ], [ visibilityReasons.actorBlacklist, Te.IS_ACTOR_FILTER, f.get(a) || "" ], [ visibilityReasons.actressBlacklist, Te.IS_ACTRESS_FILTER, v.get(a) || "" ]
+                ].filter((item => item[0]));
+                if (badgeDefs.length) {
+                    const box = $(`<span class="jhs-status-tags ${"rightTop" === P ? "jhs-status-tags--right" : "jhs-status-tags--left"}"></span>`);
+                    badgeDefs.forEach((([, definition, tip]) => {
+                        const badge = $(`<span class="jhs-badge ${r ? "jhs-badge--success" : "jhs-badge--neutral"} status-tag" data-tip="${escapeHtml(tip)}" title="">${escapeHtml(definition.text)}</span>`);
+                        badge.css({ color: definition.on, backgroundColor: definition.color }), box.append(badge);
+                    }));
+                    if (r) t.find(".tags").append(box); else if (l) { const host = t.find(".item-tag"); host.length ? host.append(box) : t.find(".photo-info > span > div").append(box); }
                 }
             }
-            R.push(t);
+            hardHidden || R.push(t);
         }
-        this.recountStatuses(), void this.translateListItems(R).catch((e => clog.error("列表页翻译任务失败", e)));
+        this.scheduleRecount(), void this.translateListItems(R).catch((e => clog.error("列表页翻译任务失败", e)));
         const D = utils.time("处理页面耗时"), A = utils.time("累计耗费时间");
         clog.log(`\n            <table class="countTable jhs-layout-b12542a5">\n                <tr>\n                    <td colspan="2" class="jhs-count-table__cell">${o}</td>\n                    <td colspan="2" class="jhs-count-table__cell">${b}</td>\n                </tr>\n                \n                <tr>\n                    <td colspan="2" class="jhs-count-table__cell">${D}</td>\n                    <td colspan="2" class="jhs-count-table__cell">${A}</td>\n                </tr>\n                <tr>\n                    <td class="jhs-count-table__head">项目</td>\n                    <td class="jhs-count-table__head">数量</td>\n                    <td class="jhs-count-table__head">项目</td>\n                    <td class="jhs-count-table__head">数量</td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽单番号</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageFilterCount}</strong></td>\n                     <td class="jhs-count-table__cell">收藏</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageFavoriteCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽演员</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageActorFilterCount}</strong></td>\n                    <td class="jhs-count-table__cell">已下载</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasDownCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽关键词</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageKeywordFilterCount}</strong></td>\n                    <td class="jhs-count-table__cell">已观看</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasWatchCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">待鉴定</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageWaitCheckCount}</strong></td>\n                    <td class="jhs-count-table__cell"></td>\n                    <td class="jhs-count-table__cell"></td>\n                </tr>\n        \n                <tr>\n                    <td class="jhs-count-table__cell"><strong>总数</strong></td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageTotalCount}</strong></td>\n                </tr>\n            </table>\n        `);
     }
     async bindClick() {
         let e = this.getSelector();
-        $(e.boxSelector).on("click", ".item img", (async e => {
-            try {
-                if (e.preventDefault(), e.stopPropagation(), $(e.target).closest("div.meta-buttons").length) return;
-                const t = $(e.target).closest(".item"), {carNum: n, aHref: a} = this.findCarNumAndHref(t);
-                if (n.includes("FC2-")) {
-                    let e = this.parseMovieId(a);
-                    this.getBean("Fc2Plugin").openFc2Dialog(e, n, a), this.$currentImage = null;
-                } else utils.openPage(a, n, !0, e), this.$currentImage = null;
-            } catch (t) { clog.error("点击图片处理失败:", t); }
-        })), $(e.boxSelector).on("click", ".item video", (async e => {
+        this.bindMovieDetailNavigation(e.boxSelector), $(e.boxSelector).on("click", ".item video", (async e => {
             const t = e.currentTarget;
             t.paused ? await safePlay(t, {
                 context: "列表视频",
                 notify: !0
             }) : t.pause(), e.preventDefault(),
             e.stopPropagation();
-        })), $(e.boxSelector).on("click", ".item .video-title", (async e => {
-            if ($(e.target).closest('[class^="jhs-match-"]').length) return;
-            const t = $(e.currentTarget).closest(".item"), {carNum: n, aHref: a} = this.findCarNumAndHref(t);
-            if (n.includes("FC2-")) {
-                e.preventDefault();
-                let t = this.parseMovieId(a);
-                this.getBean("Fc2Plugin").openFc2Dialog(t, n, a);
-            }
         })), $(e.boxSelector).on("contextmenu", ".item img, .item video", (async e => {
             try {
                 e.preventDefault();
@@ -324,16 +443,32 @@ class ListPagePlugin extends BasePlugin {
                 let s = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10"), o = "";
                 s.length && (o = s.text().trim().split(",")[0].replace("(無碼)", "")), utils.q(e, `是否屏蔽番号 ${n}?`, (async () => {
                     try {
-                        o || (o = await this.parseActressName(a)), await storageManager.saveCar({
-                            carNum: n,
-                            url: a,
-                            names: o,
-                            actionType: d,
-                            publishTime: i
-                        }), window.refresh(), show.ok("操作成功");
+                        o || (o = await this.parseActressName(a)), await stateService.patch(n, { blocked: !0 }, { record: { carNum: n, url: a, names: o, publishTime: i } }), show.ok("操作成功");
                     } catch (s) { clog.error("屏蔽操作失败:", s), show.error("操作失败"); }
                 }));
             } catch (t) { clog.error("右键菜单处理失败:", t); }
+        }));
+    }
+    /** 从任意列表卡片进入统一详情导航。 */
+    async openMovieDetail(item, { event = null, autoplay = !1, newTab = !1 } = {}) {
+        const card = item?.jquery ? item : $(item), {carNum, aHref} = this.findCarNumAndHref(card);
+        if (!carNum || !aHref) return;
+        const shouldOpenTab = newTab || !!event && (event.ctrlKey || event.metaKey || 1 === event.button);
+        if (carNum.includes("FC2-")) {
+            const movieId = this.parseMovieId(aHref);
+            return shouldOpenTab ? this.getBean("Fc2Plugin").openFc2Page(movieId, carNum, aHref, { event, newTab: !0 }) : this.getBean("Fc2Plugin").openFc2Dialog(movieId, carNum, aHref);
+        }
+        const destination = new URL(aHref, window.location.origin);
+        autoplay && destination.searchParams.set("autoPlay", "1"), utils.openPage(destination.href, carNum, !0, { event, newTab: shouldOpenTab }), this.$currentImage = null;
+    }
+    /** 为宿主与合成列表统一绑定左键、修饰键和中键导航。 */
+    bindMovieDetailNavigation(container) {
+        const root = $(container), selector = ".item img, .item .video-title";
+        root.off("click.jhsMovieDetail auxclick.jhsMovieDetail", selector).on("click.jhsMovieDetail auxclick.jhsMovieDetail", selector, (event => {
+            if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
+            if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
+            event.preventDefault(), event.stopPropagation();
+            void this.openMovieDetail($(event.currentTarget).closest(".item"), { event }).catch((error => clog.error("打开影片详情失败", error)));
         }));
     }
     async parseActressName(e) {
@@ -365,7 +500,7 @@ class ListPagePlugin extends BasePlugin {
             throw show.error(e), new Error(e);
         }
         return {
-            carNum: a,
+            carNum: normalizeCarNum(a),
             aHref: r,
             url: r,
             title: i,

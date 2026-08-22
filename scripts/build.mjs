@@ -15,11 +15,15 @@ const corePaths = [
   "ui-primitives.js",
   "css-injection.js",
   "storage-index.js",
+  "state-model.js",
   "storage.js",
+  "migration.js",
   "javdb-api.js",
   "utils.js",
   "http.js",
   "event-bus.js",
+  "state-service.js",
+  "detail-state-controller.js",
   "logger.js",
   "plugin-manager.js"
 ].map((file) => join(repoRoot, "src", "core", file));
@@ -72,6 +76,7 @@ const pluginPaths = [
   "one-two-three/offline.js",
   "one-one-five/client.js",
   "one-one-five/plugins.js",
+  "offline/unified-offline.js",
   "stats/stats.js",
   "status/mobile-bottom-bar.js",
   "status/detail-workspace.js",

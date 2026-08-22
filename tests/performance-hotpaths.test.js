@@ -45,7 +45,9 @@ function loadListObserver() {
         IntersectionObserver: undefined, localStorage: dom.window.localStorage, URLSearchParams, fetch, $, BasePlugin,
         r: true, l: false, c: false, _: "yes", C: "no", B: "actor", u: "屏蔽", b: "收藏", y: "下载", k: "观看",
         storageManager, utils: {}, clog: { error: vi.fn(), warn: vi.fn(), log: vi.fn(), debug: vi.fn() }, show: { error: vi.fn() },
-        isHitShowPage: () => false, mapLimit, i: (target, key, value) => (target[key] = value), setTimeout, clearTimeout
+        isHitShowPage: () => false, mapLimit, i: (target, key, value) => (target[key] = value), setTimeout, clearTimeout,
+        normalizeStateFlags: flags => Object.fromEntries([ "favorite", "downloaded", "watched", "blocked" ].map((key => [ key, !0 === flags?.[key] ]))),
+        hasAnyState: flags => [ "favorite", "downloaded", "watched", "blocked" ].some((key => !0 === flags?.[key]))
     });
     vm.runInContext(`${readFileSync(join(repoRoot, "src/plugins/status/list-page.js"), "utf8")};globalThis.TestListPagePlugin=ListPagePlugin;`, context);
     return { dom, plugin: new context.TestListPagePlugin(), $, fetch, mapLimit, storageManager, clog: context.clog };
@@ -122,6 +124,42 @@ describe("list mutation hot path", () => {
         dom.window.localStorage.setItem("jhs_translate", "{");
         expect(plugin.getTranslationCache()).toEqual({});
         expect(clog.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it("collects one current-page summary with hard-hidden union and debug reasons", () => {
+        const { plugin, dom } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
+        container.innerHTML = `
+            <div class="item" data-jhs-flags='{}' data-jhs-visibility='{}'></div>
+            <div class="item" data-jhs-flags='{"blocked":true}' data-jhs-visibility='{"keyword":true,"actorBlacklist":true}'></div>
+            <div class="item" data-jhs-flags='{"favorite":true}' data-jhs-visibility='{"actressBlacklist":true}'></div>
+            <div class="item" data-jhs-flags='{"downloaded":true,"watched":true}' data-jhs-visibility='{}'></div>`;
+        expect(plugin.getCurrentPageSummary()).toEqual({
+            total: 4, pending: 1, blockedItems: 2, favorite: 1, downloaded: 1, watched: 1,
+            debug: { manualBlocked: 1, keywordBlocked: 1, actorBlocked: 1, actressBlocked: 1 }
+        });
+        const collect = vi.spyOn(plugin, "collectCurrentPageSummary");
+        plugin.recountStatuses();
+        expect(collect).toHaveBeenCalledOnce();
+        expect(plugin).not.toHaveProperty("currentPageBlockedItemCount");
+        expect(plugin.currentPageWaitCheckCount).toBe(1);
+    });
+
+    it("projects setQuickFilter to desktop and mobile controls", async () => {
+        const { plugin, dom, $ } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
+        container.innerHTML = `<div class="item" data-jhs-flags='{"favorite":true}' data-jhs-visibility='{}' data-jhs-setting-hide="yes"></div><div class="item" data-jhs-flags='{}' data-jhs-visibility='{"keyword":true}'></div>`;
+        await plugin.createQuickFilter();
+        $("body").append('<span class="jhs-mobile-filter-label"></span><button class="jhs-mobile-filter-option" data-jhs-filter="blockedItems" aria-checked="false"></button>');
+        plugin.setQuickFilter("blockedItems");
+        expect(plugin.activeQuickFilter).toBe("blockedItems");
+        expect($(".item").filter(((_, item) => "none" !== $(item).css("display"))).length).toBe(1);
+        expect($(".jhs-quick-filter__label").text()).toBe("筛选：屏蔽项");
+        expect($(".jhs-segmented__item.active").length).toBe(0);
+        expect($(".jhs-mobile-filter-label").text()).toBe("筛选：屏蔽项");
+        expect($(".jhs-mobile-filter-option").attr("aria-checked")).toBe("true");
+        plugin.setQuickFilter("favorite");
+        expect($(".item").filter(((_, item) => "none" !== $(item).css("display"))).length).toBe(1);
+        expect($(".jhs-segmented__item[data-jhs-filter='favorite']").attr("aria-selected")).toBe("true");
+        expect($(".jhs-quick-filter__label").text()).toBe("更多筛选");
     });
 });
 
