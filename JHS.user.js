@@ -7129,7 +7129,7 @@ ${error.stack}` : "");
       if (isMagnet || isEd2k) {
         const actions = $('<span class="jhs-review-link-actions"></span>');
         enable115Offline && actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn one115-offline-btn" data-magnet="${escapeHtml(value)}">115离线</button>`);
-        actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn one23-offline-btn" data-magnet="${escapeHtml(value)}">123离线</button>`);
+        isMagnet && actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn one23-offline-btn" data-magnet="${escapeHtml(value)}">123离线</button>`);
         wrapper.append(actions);
       }
       container.append(wrapper);
@@ -13799,6 +13799,7 @@ ${error.stack}` : "");
       }));
     }
     async submitMagnet(e2, t2) {
+      if (!/^magnet:/i.test(e2)) return void show.error("123 云盘当前仅支持 Magnet 离线");
       const n2 = this.getStoredToken();
       if (!n2) return void show.error("请先登录或刷新 yun.123pan.com，等待授权自动同步后再提交离线任务");
       if (t2.hasClass("loading")) return;

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+### Fixed
+
+- 限制 123 离线入口仅处理 Magnet 链接，避免将 ED2K 链接提交到不支持的解析接口。
+
 ## [6.3.0](../../compare/v6.2.1...v6.3.0) - 2026-08-22
 
 ### Changed

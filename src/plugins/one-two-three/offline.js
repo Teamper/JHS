@@ -108,6 +108,7 @@ class OneTwoThreeOfflinePlugin extends BasePlugin {
         }));
     }
     async submitMagnet(e, t) {
+        if (!/^magnet:/i.test(e)) return void show.error("123 云盘当前仅支持 Magnet 离线");
         const n = this.getStoredToken();
         if (!n) return void show.error("请先登录或刷新 yun.123pan.com，等待授权自动同步后再提交离线任务");
         if (t.hasClass("loading")) return;

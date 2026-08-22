@@ -159,7 +159,7 @@ class ReviewPlugin extends BasePlugin {
         if (isMagnet || isEd2k) {
             const actions = $('<span class="jhs-review-link-actions"></span>');
             enable115Offline && actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn one115-offline-btn" data-magnet="${escapeHtml(value)}">115离线</button>`);
-            actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn one23-offline-btn" data-magnet="${escapeHtml(value)}">123离线</button>`);
+            isMagnet && actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn one23-offline-btn" data-magnet="${escapeHtml(value)}">123离线</button>`);
             wrapper.append(actions);
         }
         container.append(wrapper);
