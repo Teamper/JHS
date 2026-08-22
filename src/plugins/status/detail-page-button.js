@@ -6,7 +6,16 @@ class DetailPageButtonPlugin extends BasePlugin {
         super(), this.answerCount = 1;
     }
     async handle() {
-        this.hideVideoControls(), window.isDetailPage && await this.createMenuBtn();
+        this.hideVideoControls(), window.isDetailPage && (await this.createMenuBtn(), await this.autoRemoveNewVideoMark());
+    }
+    async autoRemoveNewVideoMark() {
+        try {
+            const e = await storageManager.getSetting("autoRemoveNewVideoMarkAfterBrowse", C);
+            if (e !== _) return;
+            const t = this.getPageInfo();
+            if (!t.carNum) return;
+            await storageManager.removeNewVideoList([ t.carNum ]), window.refresh();
+        } catch (e) { clog.error("自动移除新作品标记失败:", e); }
     }
     async createMenuBtn() {
         const e = this.getPageInfo(), t = e.carNum, n = `\n            <div class="jhs-detail-btn-row jhs-layout-e2965a97">\n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="filterBtn" class="jhs-btn jhs-btn--filter jhs-layout-44293084">\n                        <span>${m}</span>\n                    </button>\n                    <button type="button" id="favoriteBtn" class="jhs-btn jhs-btn--fav jhs-layout-44293084">\n                        <span>${v}</span>\n                    </button>\n                    <button type="button" id="hasDownBtn" class="jhs-btn jhs-btn--down jhs-layout-44293084">\n                        <span>${y}</span>\n                    </button>\n                    <button type="button" id="hasWatchBtn" class="jhs-btn jhs-btn--watch jhs-layout-44293084">\n                        <span>${k}</span>\n                    </button>\n                </div>\n        \n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="enable-magnets-filter" class="jhs-btn jhs-btn--watch jhs-layout-5f3e3549">\n                        <span id="magnets-span">关闭磁力过滤</span>\n                    </button>\n                    <button type="button" id="magnetSearchBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>磁力搜索</span>\n                    </button>\n                    <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>字幕 (迅雷)</span>\n                    </button>\n                    <button type="button" id="search-subtitle-btn" class="jhs-btn jhs-btn--accent jhs-layout-f43f0d6d">\n                        <span>字幕 (SubTitleCat)</span>\n                    </button>\n                </div>\n            </div>\n        `;

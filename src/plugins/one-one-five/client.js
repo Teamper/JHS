@@ -11,8 +11,22 @@ class OneOneFiveClient {
     async addOffline(magnet, folderId = "") {
         if (!/^magnet:/i.test(magnet) && !/^ed2k:/i.test(magnet)) throw new TypeError("Unsupported offline URL");
         const info = await this.getOfflineInfo();
+        if (!info || !info.sign) throw new ProviderError("115", "LOGIN_REQUIRED", "115 未登录或离线空间信息获取失败");
         const body = new URLSearchParams({ url: magnet, wp_path_id: folderId, uid: String(info.uid || ""), sign: info.sign || "", time: String(info.time || "") }).toString();
-        return this.http.gmRequest("POST", "https://115.com/web/lixian/?ct=lixian&ac=add_task_url", body, {}, { "Content-Type": "application/x-www-form-urlencoded" });
+        const result = await this.http.gmRequest("POST", "https://115.com/web/lixian/?ct=lixian&ac=add_task_url", body, {}, { "Content-Type": "application/x-www-form-urlencoded" });
+        const parsed = "string" == typeof result ? (() => { try { return JSON.parse(result); } catch { return { state: !1, error_msg: /login|登录|sign in|未授权|授权|expire|expired|token|cookie/i.test(result) ? "115 未登录" : "115 返回异常响应" }; } })() : result;
+        if (!parsed || parsed.state === !1) {
+            const message = String(parsed?.error_msg || parsed?.error || parsed?.msg || "");
+            const code = this.classifyAddOfflineError(message);
+            throw new ProviderError("115", code, message || "115 离线任务创建失败", { response: parsed });
+        }
+        return parsed;
+    }
+    classifyAddOfflineError(message) {
+        const text = String(message).toLowerCase();
+        if (/未登录|请登录|登录|login|sign|授权|过期|token|cookie|uid|身份|auth|expire|needlogin|need login/i.test(text)) return "LOGIN_REQUIRED";
+        if (/已存在|重复|exists|duplicate|already|same|conflict|exist/i.test(text)) return "TASK_EXISTS";
+        return "ADD_TASK_FAILED";
     }
     async rename(fileId, newName) {
         const body = new URLSearchParams({ fid: fileId, file_name: newName }).toString();

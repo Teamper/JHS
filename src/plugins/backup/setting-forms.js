@@ -2,7 +2,7 @@
 async function loadSettingForm(getBean) {
     let e = await storageManager.getSetting();
     $("#videoQuality").val(e.videoQuality), $("#reviewCount").val(e.reviewCount || 20),
-    $("#tagPosition").val(e.tagPosition || "rightTop"), $("#waitCheckCount").val(e.waitCheckCount || 5),
+    $("#tagPosition").val(e.tagPosition || "rightTop"), $("#defaultQuickFilterTab").val(e.defaultQuickFilterTab || "waitCheck"), $("#needClosePageBasic").prop("checked", !e.needClosePage || e.needClosePage === _), $("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e.autoRemoveNewVideoMarkAfterBrowse && e.autoRemoveNewVideoMarkAfterBrowse === _), $("#waitCheckCount").val(e.waitCheckCount || 5),
     $("#checkConcurrencyCount").val(e.checkConcurrencyCount || 2), $("#checkRequestSleep").val(e.checkRequestSleep || 100),
     $("#enableCheckBlacklist").val(e.enableCheckBlacklist || _), $("#checkBlacklist_intervalTime").val(e.checkBlacklist_intervalTime || 12),
     $("#checkBlacklist_ruleTime").val(e.checkBlacklist_ruleTime || 8760), $("#enableCheckFavoriteActress").val(e.enableCheckFavoriteActress || _),
@@ -154,7 +154,7 @@ async function initQuickSettingForm(getBean, getSelector, openSettingDialogFn) {
 async function saveSettingForm(getBean) {
     let e = await storageManager.getSetting();
     e.videoQuality = $("#videoQuality").val(), e.reviewCount = $("#reviewCount").val(),
-    e.tagPosition = $("#tagPosition").val(), e.waitCheckCount = $("#waitCheckCount").val(), e.highlightedTagNumber = $("#highlightedTagNumber").val(),
+    e.tagPosition = $("#tagPosition").val(), e.defaultQuickFilterTab = $("#defaultQuickFilterTab").val(), e.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e.waitCheckCount = $("#waitCheckCount").val(), e.highlightedTagNumber = $("#highlightedTagNumber").val(),
     e.highlightedTagColor = $("#highlightedTagColor").val(), e.checkConcurrencyCount = $("#checkConcurrencyCount").val(),
     e.checkRequestSleep = $("#checkRequestSleep").val(), e.enableCheckBlacklist = $("#enableCheckBlacklist").val(),
     e.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(),

@@ -21,6 +21,10 @@ class ReviewPlugin extends BasePlugin {
                 .jhs-review-content { margin:var(--jhs-space-3) 0 0; color:var(--jhs-text); font-size:16px; line-height:1.7; overflow-wrap:anywhere; white-space:pre-wrap; }
                 .jhs-review-link { display:inline-flex; align-items:center; gap:var(--jhs-space-1); margin:0 var(--jhs-space-1); padding:2px var(--jhs-space-2); border:0; border-radius:var(--jhs-radius-pill); background:var(--jhs-accent-tint); color:var(--jhs-accent); font:inherit; font-size:var(--jhs-font-size-sm); line-height:1.5; text-decoration:none; vertical-align:baseline; cursor:pointer; }
                 .jhs-review-link-copy { color:var(--jhs-text-muted); }
+                .jhs-review-link-wrap { display:flex; align-items:center; justify-content:space-between; gap:var(--jhs-space-2); width:100%; margin:var(--jhs-space-1) 0; }
+                .jhs-review-link-main { display:inline-flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-1); }
+                .jhs-review-link-actions { display:inline-flex; align-items:center; gap:var(--jhs-space-1); margin-left:auto; flex-shrink:0; }
+                .jhs-review-offline-btn { background:var(--jhs-accent) !important; color:var(--jhs-accent-text-on) !important; }
                 .jhs-panel-state { padding:var(--jhs-space-4) 0; color:var(--jhs-text-muted); text-align:center; }
                 .jhs-panel-footer { display:flex; justify-content:center; padding-top:var(--jhs-space-3); }
                 .jhs-panel-end { color:var(--jhs-text-faint); font-size:var(--jhs-font-size-sm); }
@@ -92,7 +96,7 @@ class ReviewPlugin extends BasePlugin {
         container.empty();
         if (!reviews.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无评论"));
         const keywords = await storageManager.getReviewFilterKeywordList();
-        this.displayReviews(reviews, container, keywords), reviews.length === pageSize && R(movieId, 2, pageSize).catch((() => {}));
+        await this.displayReviews(reviews, container, keywords), reviews.length === pageSize && R(movieId, 2, pageSize).catch((() => {}));
         reviews.length === pageSize ? this.bindLoadMore(movieId, pageSize, keywords, container, footer) : footer.append($('<div class="jhs-panel-end"></div>').text("已加载全部评论"));
     }
     renderRetry(container, message, retry) {
@@ -109,45 +113,56 @@ class ReviewPlugin extends BasePlugin {
             button.text("加载中...").prop("disabled", !0), page++;
             try {
                 const reviews = await R(movieId, page, pageSize);
-                this.displayReviews(reviews, container, keywords), reviews.length < pageSize ? (button.remove(), end.show()) : button.text("加载更多评论").prop("disabled", !1);
+                await this.displayReviews(reviews, container, keywords), reviews.length < pageSize ? (button.remove(), end.show()) : button.text("加载更多评论").prop("disabled", !1);
             } catch (error) {
                 clog.error("加载更多评论失败:", error), button.text("加载失败，请重试").prop("disabled", !1);
             }
         }));
     }
-    displayReviews(reviews, container, keywords) {
+    async displayReviews(reviews, container, keywords) {
         if (!reviews.length) return;
         const filter = keywords.length > 0 ? new RegExp(keywords.map((value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).join("|")) : null;
-        reviews.forEach((review => {
+        for (const review of reviews) {
             const content = String(review.content || "");
-            if (filter?.test(content)) return;
-            const item = $('<article class="jhs-review-item"></article>'), meta = $('<div class="jhs-review-meta"></div>'), body = $('<p class="review-content jhs-review-content"></p>');
+            if (filter?.test(content)) continue;
+            const item = $('<article class="jhs-review-item"></article>'), meta = $('<div class="jhs-review-meta"></div>'), body = $('<div class="review-content jhs-review-content"></div>');
             meta.append($("<span></span>").addClass("jhs-review-author").text(review.username || "匿名用户"));
             const stars = $('<span class="score-stars" aria-label="评分"></span>'), score = Math.max(0, Math.min(5, Number(review.score) || 0));
             for (let index = 0; index < score; index++) stars.append('<i class="icon-star"></i>');
             meta.append(stars, $("<time></time>").text(utils.formatDate(review.created_at)), $("<span></span>").text(`点赞：${Number(review.likes_count) || 0}`),
             $("<span></span>").addClass("jhs-review-floor").text(`#${this.floorIndex++}楼`));
-            this.appendReviewContent(body, content), item.append(meta, body), container.append(item);
-        })), this.rightClickFilter();
+            await this.appendReviewContent(body, content), item.append(meta, body), container.append(item);
+        }
+        this.rightClickFilter();
     }
-    appendReviewContent(container, content) {
-        const linkPattern = /ed2k:\/\/\|file\|[^|]+\|\d+\|[a-fA-F0-9]{32}\|\/|magnet:\?[^\s"'<>`\u4e00-\u9fa5，。？！（）【】]+|https?:\/\/[^\s"'<>`\u4e00-\u9fa5，。？！（）【】]+/g;
+    async appendReviewContent(container, content) {
+        const linkPattern = /ed2k:\/\/\|file\|[^|]+\|\d+\|[a-fA-F0-9]{32}\|\/|magnet:\?[^\s"'<>`,;\u4e00-\u9fa5，。？！（）【】]+|https?:\/\/[^\s"'<>`,;\u4e00-\u9fa5，。？！（）【】]+/g;
+        const enable115Offline = await storageManager.getSetting("enable115Offline", !1);
         let cursor = 0, match;
         while ((match = linkPattern.exec(content))) {
             match.index > cursor && container.append(document.createTextNode(content.slice(cursor, match.index)));
-            this.appendLinkControls(container, match[0]), cursor = match.index + match[0].length;
+            await this.appendLinkControls(container, match[0], enable115Offline), cursor = match.index + match[0].length;
         }
         cursor < content.length && container.append(document.createTextNode(content.slice(cursor)));
     }
-    appendLinkControls(container, value) {
+    async appendLinkControls(container, value, enable115Offline) {
         const isEd2k = value.startsWith("ed2k://"), isMagnet = value.startsWith("magnet:"), label = isEd2k ? "ED2K 链接" : isMagnet ? "Magnet 链接" : "打开链接";
+        const wrapper = $('<span class="jhs-review-link-wrap"></span>');
+        const main = $('<span class="jhs-review-link-main"></span>');
         const open = isEd2k ? $('<button type="button" class="jhs-btn jhs-review-link"></button>').text(label).on("click", (() => utils.copyToClipboard(label, value))) : $("<a></a>").addClass("jhs-review-link").attr({
             href: value,
             target: "_blank",
             rel: "noopener noreferrer"
         }).text(label);
         const copy = $('<button type="button" class="jhs-btn jhs-review-link jhs-review-link-copy">复制</button>').on("click", (() => utils.copyToClipboard(label, value)));
-        container.append(open, copy);
+        main.append(open, copy), wrapper.append(main);
+        if (isMagnet || isEd2k) {
+            const actions = $('<span class="jhs-review-link-actions"></span>');
+            enable115Offline && actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn one115-offline-btn" data-magnet="${escapeHtml(value)}">115离线</button>`);
+            isMagnet && actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn one23-offline-btn" data-magnet="${escapeHtml(value)}">123离线</button>`);
+            wrapper.append(actions);
+        }
+        container.append(wrapper);
     }
     async rightClickFilter() {
         await storageManager.getSetting("enableTitleSelectFilter", _) === _ && utils.rightClick(document.body, ".review-content", (async event => {

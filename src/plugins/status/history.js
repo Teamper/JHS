@@ -123,12 +123,12 @@ class HistoryPlugin extends BasePlugin {
                 try {
                     if ("delete" === i) {
                         const e = n.map((e => e.carNum)), t = await storageManager.batchRemoveCars(e);
-                        t > 0 ? show.ok(`已成功删除 ${t} 个番号`) : !1 === t && show.error("提供的番号中没有一个存在于列表中。");
+                        window.refresh(), t > 0 ? show.ok(`已成功删除 ${t} 个番号`) : !1 === t && show.error("提供的番号中没有一个存在于列表中。");
                     } else {
                         const e = JSON.parse(JSON.stringify(n));
                         e.forEach((e => {
                             e.actionType = i;
-                        })), await storageManager.saveCarList(e), show.ok("操作成功");
+                        })), await storageManager.saveCarList(e), window.refresh(), show.ok("操作成功");
                     }
                     this.tableObj.deselectRow(), await this.reloadTable();
                 } catch (t) {
@@ -382,7 +382,7 @@ class HistoryPlugin extends BasePlugin {
     }
     handleDelete(e, t) {
         utils.q(e, `是否移除${t}?`, (async () => {
-            await storageManager.removeCar(t), this.getBean("ListPagePlugin").showCarNumBox(t),
+            await storageManager.removeCar(t), window.refresh(), this.getBean("ListPagePlugin").showCarNumBox(t),
             await this.reloadTable(null);
         }));
     }

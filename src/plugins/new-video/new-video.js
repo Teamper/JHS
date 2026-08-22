@@ -196,6 +196,7 @@ class NewVideoPlugin extends BasePlugin {
         $("#checkFavoriteActress").attr("data-tip", `上次自动同步时间: ${n}; 检测间隔时间: ${a}小时`), $("#checkNewVideo").attr("data-tip", `上次检测时间: ${i}; 检测间隔时间: ${s}小时`);
     }
     async openDialog() {
+        this._viewMode = "card", this.nvFlatListCache = null, this.nvCurrentPage = 1;
         const e = this.getBean("TaskPlugin"), t = await storageManager.getSetting(), n = localStorage.getItem(e.lastCheckFavoriteActressTimeKey) || "无", a = t.checkFavoriteActress_IntervalTime, i = localStorage.getItem(e.lastCheckNewVideoTimeKey) || "无", s = t.checkNewVideo_intervalTime;
         let o = `
             <div class="newVideoToolBox jhs-ui">
@@ -208,6 +209,7 @@ class NewVideoPlugin extends BasePlugin {
                     </div>
                     <div class="jhs-new-video-toolbar__filters">
                         <select id="paramActressType" class="jhs-select-source" aria-label="演员类型"><option value="all" selected>所有</option><option value="uncensored">无码</option><option value="censored">有码</option><option value="">未知</option></select>
+                        <select id="nvCategoryFilter" class="jhs-select-source jhs-is-hidden" aria-label="新作品类别"><option value="all" selected>所有</option><option value="uncensored">无码</option><option value="censored">有码</option><option value="">未知</option><option value="vr">VR</option></select>
                         <select id="paramSortBy" class="jhs-select-source" aria-label="演员排序">
                             <option value="default" selected>默认排序</option><optgroup label="发行时间"><option value="lastPublishTime_desc">发行时间 新→旧</option><option value="lastPublishTime_asc">发行时间 旧→新</option></optgroup><optgroup label="检测时间"><option value="lastCheckTime_desc">检测时间 新→旧</option><option value="lastCheckTime_asc">检测时间 旧→新</option></optgroup><optgroup label="新作品数"><option value="newVideoCount_desc">新作品数 多→少</option><option value="newVideoCount_asc">新作品数 少→多</option></optgroup>
                         </select>
@@ -237,6 +239,17 @@ class NewVideoPlugin extends BasePlugin {
         const e = this.getBean("TaskPlugin");
         $("#reLoad").on("click", (e => {
             this.loadData(), $("#checkNewVideoMsg").text("");
+        })), $("#new-video-list-container").on("click", ".nv-card__link", (async e => {
+            const t = $(e.currentTarget).closest(".nv-card").attr("data-car");
+            if (!t) return;
+            try {
+                const enabled = await storageManager.getSetting("autoRemoveNewVideoMarkAfterBrowse", C);
+                if (enabled !== _) return;
+                await storageManager.removeNewVideoList([ t ]), "list" === this._viewMode && await this.renderNewVideoList(),
+                window.refresh();
+            } catch (n) {
+                clog.error("移除新作品标记失败:", n);
+            }
         })), $("#toSetting").on("click", (e => {
             this.getBean("SettingPlugin").openSettingDialog("task-panel", (() => {
                 $("#setting-checkFavoriteActress").css({
@@ -279,12 +292,15 @@ class NewVideoPlugin extends BasePlugin {
             this.loadData();
         })), $("#nvSortBy").on("change", (e => {
             this.nvSortBy = $("#nvSortBy").val(), this.nvCurrentPage = 1, this.nvRenderPage();
+        })), $("#nvCategoryFilter").on("change", (e => {
+            "list" === this._viewMode && this.renderNewVideoList();
         })), $("#toggleViewMode").on("click", (e => {
             this._viewMode = "list" === this._viewMode ? "card" : "list";
             const t = "list" === this._viewMode;
             $("#actress-card-container").toggle(!t), $("#actress-pagination").toggle(!t),
             $("#new-video-list-container").toggle(t), $("#new-video-list-footer").toggle(t),
             JhsSelect.setVisible("#paramSortBy", !t), JhsSelect.setVisible("#nvSortBy", t),
+            JhsSelect.setVisible("#paramActressType", !t), JhsSelect.setVisible("#nvCategoryFilter", t),
             $("#toggleViewMode").text(t ? "演员视图" : "新作品列表"),
             t ? this.renderNewVideoList() : this.loadData();
         }));
@@ -407,15 +423,16 @@ class NewVideoPlugin extends BasePlugin {
         })), this.renderPagination(totalCount, totalPages), show.ok("加载完成");
     }
     async getNewVideoFlatList() {
-        const e = await storageManager.getFavoriteActressList(), t = await storageManager.getCarMap(), n = $("#paramActressType").val(), a = [];
+        const e = await storageManager.getFavoriteActressList(), t = await storageManager.getCarMap(), n = $("#nvCategoryFilter").val(), a = [];
         for (const i of e) {
-            if ("all" !== n && i.actressType !== n) continue;
+            if ("all" !== n && "vr" !== n && i.actressType !== n) continue;
             if (!Array.isArray(i.newVideoList)) continue;
             for (const e of i.newVideoList) {
-                const n = "string" == typeof e ? e : e.carNum;
-                if (t.has(n)) continue;
+                const o = "string" == typeof e ? e : e.carNum;
+                if (t.has(o)) continue;
+                if ("vr" === n && !/VR/i.test(o)) continue;
                 const s = "object" == typeof e ? e : {};
-                a.push({ carNum: n, coverUrl: s.coverUrl || "", title: s.title || "", publishTime: s.publishTime || "", actressName: i.name || "", starId: i.starId || "", score: s.score || 0, voteCount: s.voteCount || 0, url: s.url || "" });
+                a.push({ carNum: o, coverUrl: s.coverUrl || "", title: s.title || "", publishTime: s.publishTime || "", actressName: i.name || "", starId: i.starId || "", score: s.score || 0, voteCount: s.voteCount || 0, url: s.url || "" });
             }
         }
         return a.sort(((e, t) => (t.publishTime || "").localeCompare(e.publishTime || ""))), a;

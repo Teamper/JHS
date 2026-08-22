@@ -98,7 +98,7 @@ class ListPagePlugin extends BasePlugin {
         new BroadcastChannel("channel-refresh").addEventListener("message", (async e => {
             let t = e.data.type;
             if ("refresh" === t) {
-                this.filterContext = null, await this.doFilter(), this.applyVisibility();
+                this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
                 const e = this.getBean("HistoryPlugin");
                 e.tableObj && e.tableObj.setData();
                 const t = this.getBean("NewVideoPlugin");
@@ -106,17 +106,18 @@ class ListPagePlugin extends BasePlugin {
             } else "cleanCache_filter_actor_actress_car_list" === t ? (this.filterContext = null, storageManager._invalidateCache(storageManager.blacklist_car_list_key)) : "clean_cacheSettingObj" === t && (this.filterContext = null,
             storageManager._invalidateCache(storageManager.setting_key));
         })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
-        await this.doFilter(), this.createQuickFilter(), this.applyVisibility(), await this.bindClick(),
+        await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(),
         this.rememberTagExpand(), $(this.getSelector().itemSelector + " a").attr("target", "_blank"),
         $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"),
         this.checkDom();
     }
-    createQuickFilter() {
+    async createQuickFilter() {
         if ($("#jhs-quick-filter").length) return;
-        const e = this.getSelector(), t = '\n            <div id="jhs-quick-filter" class="jhs-segmented" role="tablist" aria-label="状态筛选">\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="all">全部</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item active" aria-selected="true" data-jhs-filter="waitCheck">待鉴定</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="favorite">已收藏</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="hasDown">已下载</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="hasWatch">已观看</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="filter">已屏蔽</button>\n            </div>';
+        const e = this.getSelector(), t = '\n            <div id="jhs-quick-filter" class="jhs-segmented" role="tablist" aria-label="状态筛选">\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="all">全部</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="waitCheck">待鉴定</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="favorite">已收藏</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="hasDown">已下载</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="hasWatch">已观看</button>\n                <button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" data-jhs-filter="filter">已屏蔽</button>\n            </div>';
         r ? $(e.boxSelector).before(t) : l && $(".masonry").before(t);
-        const n = this;
-        this.activeQuickFilter = "waitCheck", this.applyQuickFilter("waitCheck"), $("#jhs-quick-filter").on("click", ".jhs-segmented__item", (function() {
+        const n = this, a = await storageManager.getSetting("defaultQuickFilterTab", "waitCheck"),
+            i = [ "all", "waitCheck", "favorite", "hasDown", "hasWatch", "filter" ].includes(a) ? a : "waitCheck";
+        this.activeQuickFilter = i, this.applyQuickFilter(i), $(`#jhs-quick-filter .jhs-segmented__item[data-jhs-filter="${i}"]`).addClass("active").attr("aria-selected", "true"), $("#jhs-quick-filter .jhs-segmented__item").not(`[data-jhs-filter="${i}"]`).removeClass("active").attr("aria-selected", "false"), $("#jhs-quick-filter").on("click", ".jhs-segmented__item", (function() {
             const t = $(this).data("jhs-filter");
             $("#jhs-quick-filter .jhs-segmented__item").removeClass("active").attr("aria-selected", "false"), $(this).addClass("active").attr("aria-selected", "true"), n.activeQuickFilter = t, n.applyQuickFilter(t);
         }));
@@ -125,7 +126,7 @@ class ListPagePlugin extends BasePlugin {
         const e = this.activeQuickFilter || "waitCheck", t = this.getSelector().itemSelector, n = ["filter", "keywordFilter", "actorFilter"];
         (items ? $(items) : $(t)).each((function() {
             const t = $(this), a = t.attr("data-hide") === "yes", i = t.attr("data-jhs-status") || "waitCheck";
-            if (e === "all") { n.includes(i) ? t.hide() : t.show(); return; }
+            if (e === "all") { n.includes(i) || a ? t.hide() : t.show(); return; }
             if (i === e) { t.show(); return; }
             a || (i !== e) ? t.hide() : t.show();
         }));
