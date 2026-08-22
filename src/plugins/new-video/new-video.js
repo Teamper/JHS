@@ -423,7 +423,7 @@ class NewVideoPlugin extends BasePlugin {
         })), this.renderPagination(totalCount, totalPages), show.ok("加载完成");
     }
     async getNewVideoFlatList() {
-        const e = await storageManager.getFavoriteActressList(), t = await storageManager.getCarMap(), n = $("#nvCategoryFilter").val() || "all", a = [];
+        const e = await storageManager.getFavoriteActressList(), t = await storageManager.getCarMap(), n = $("#nvCategoryFilter").val(), a = [];
         for (const i of e) {
             if ("all" !== n && "vr" !== n && i.actressType !== n) continue;
             if (!Array.isArray(i.newVideoList)) continue;

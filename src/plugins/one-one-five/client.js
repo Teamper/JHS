@@ -24,7 +24,7 @@ class OneOneFiveClient {
     }
     classifyAddOfflineError(message) {
         const text = String(message).toLowerCase();
-        if (/未登录|请登录|登录|login|sign|授权|过期|invalid|token|cookie|uid|身份|auth|expire|needlogin|need login/i.test(text)) return "LOGIN_REQUIRED";
+        if (/未登录|请登录|登录|login|sign|授权|过期|token|cookie|uid|身份|auth|expire|needlogin|need login/i.test(text)) return "LOGIN_REQUIRED";
         if (/已存在|重复|exists|duplicate|already|same|conflict|exist/i.test(text)) return "TASK_EXISTS";
         return "ADD_TASK_FAILED";
     }

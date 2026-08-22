@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
-### Fixed
-
-- 限制 123 离线入口仅处理 Magnet 链接，避免将 ED2K 链接提交到不支持的解析接口。
-
 ## [6.3.0](../../compare/v6.2.1...v6.3.0) - 2026-08-22
 
 ### Changed
@@ -25,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### Fixed
 
+- 修复新作品列表“未知”类别筛选失效、115 无效链接被误判为未登录，以及 123 离线错误接收 ED2K 链接的问题。
 - 修复设置列表状态显示中关闭’已下载 已观看 收藏‘标签后全部选项卡内仍显示对应鉴定标签资源的问题。
 - 修复移除鉴定记录后该番号鉴定标签未变更，且未移出对应已鉴定选项卡的问题。
 - 修复资源鉴定后，列表页没有实时显示鉴定标签且未从待鉴定选项卡内移除该资源并同步将该资源显示在相应鉴定标签的选项卡内的问题。

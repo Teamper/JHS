@@ -48,6 +48,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     const pluginPanels = readFileSync(join(process.cwd(), "src/plugins/backup/setting-panels.js"), "utf8");
     const reviews = readFileSync(join(process.cwd(), "src/plugins/external-search/review.js"), "utf8");
     const oneTwoThreeOffline = readFileSync(join(process.cwd(), "src/plugins/one-two-three/offline.js"), "utf8");
+    const newVideo = readFileSync(join(process.cwd(), "src/plugins/new-video/new-video.js"), "utf8");
     const related = readFileSync(join(process.cwd(), "src/plugins/external-search/related.js"), "utf8");
     const settingForms = readFileSync(join(process.cwd(), "src/plugins/backup/setting-forms.js"), "utf8");
     const listButtons = readFileSync(join(process.cwd(), "src/plugins/status/list-page-button.js"), "utf8");
@@ -171,6 +172,12 @@ describe("list toolbar and UI cleanup contracts", () => {
         const submitMagnet = oneTwoThreeOffline.slice(oneTwoThreeOffline.indexOf("async submitMagnet"), oneTwoThreeOffline.indexOf("async markCurrentVideoAsHasDown"));
         expect(submitMagnet).toContain('if (!/^magnet:/i.test(e)) return void show.error("123 云盘当前仅支持 Magnet 离线")');
         expect(submitMagnet.indexOf("/^magnet:/i.test(e)")).toBeLessThan(submitMagnet.indexOf("this.getStoredToken()"));
+    });
+
+    it("preserves the empty new-video category as the unknown filter", () => {
+        const flatList = newVideo.slice(newVideo.indexOf("async getNewVideoFlatList"), newVideo.indexOf("async loadCoverForItems"));
+        expect(flatList).toContain('n = $("#nvCategoryFilter").val()');
+        expect(flatList).not.toContain('$("#nvCategoryFilter").val() || "all"');
     });
 
     it("uses semantic keyboard popovers and stable sort storage", () => {

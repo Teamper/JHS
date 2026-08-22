@@ -13285,7 +13285,7 @@ ${error.stack}` : "");
       })), this.renderPagination(totalCount, totalPages), show.ok("加载完成");
     }
     async getNewVideoFlatList() {
-      const e2 = await storageManager.getFavoriteActressList(), t2 = await storageManager.getCarMap(), n2 = $("#nvCategoryFilter").val() || "all", a2 = [];
+      const e2 = await storageManager.getFavoriteActressList(), t2 = await storageManager.getCarMap(), n2 = $("#nvCategoryFilter").val(), a2 = [];
       for (const i2 of e2) {
         if ("all" !== n2 && "vr" !== n2 && i2.actressType !== n2) continue;
         if (!Array.isArray(i2.newVideoList)) continue;
@@ -13954,7 +13954,7 @@ ${error.stack}` : "");
     }
     classifyAddOfflineError(message) {
       const text = String(message).toLowerCase();
-      if (/未登录|请登录|登录|login|sign|授权|过期|invalid|token|cookie|uid|身份|auth|expire|needlogin|need login/i.test(text)) return "LOGIN_REQUIRED";
+      if (/未登录|请登录|登录|login|sign|授权|过期|token|cookie|uid|身份|auth|expire|needlogin|need login/i.test(text)) return "LOGIN_REQUIRED";
       if (/已存在|重复|exists|duplicate|already|same|conflict|exist/i.test(text)) return "TASK_EXISTS";
       return "ADD_TASK_FAILED";
     }

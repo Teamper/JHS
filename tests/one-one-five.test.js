@@ -32,6 +32,8 @@ describe("115 domain", () => {
         const api = load115();
         const client = new api.OneOneFiveClient();
         expect(client.classifyAddOfflineError("用户未登录")).toBe("LOGIN_REQUIRED");
+        expect(client.classifyAddOfflineError("invalid token")).toBe("LOGIN_REQUIRED");
+        expect(client.classifyAddOfflineError("invalid url")).toBe("ADD_TASK_FAILED");
         expect(client.classifyAddOfflineError("任务已存在")).toBe("TASK_EXISTS");
         expect(client.classifyAddOfflineError("任务创建失败")).toBe("ADD_TASK_FAILED");
     });
