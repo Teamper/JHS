@@ -243,9 +243,13 @@ class NewVideoPlugin extends BasePlugin {
             const t = $(e.currentTarget).closest(".nv-card").attr("data-car");
             if (!t) return;
             try {
+                const enabled = await storageManager.getSetting("autoRemoveNewVideoMarkAfterBrowse", C);
+                if (enabled !== _) return;
                 await storageManager.removeNewVideoList([ t ]), "list" === this._viewMode && await this.renderNewVideoList(),
                 window.refresh();
-            } catch (n) { clog.error("移除新作品标记失败:", n); }
+            } catch (n) {
+                clog.error("移除新作品标记失败:", n);
+            }
         })), $("#toSetting").on("click", (e => {
             this.getBean("SettingPlugin").openSettingDialog("task-panel", (() => {
                 $("#setting-checkFavoriteActress").css({

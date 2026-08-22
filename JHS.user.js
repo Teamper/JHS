@@ -13110,6 +13110,8 @@ ${error.stack}` : "");
         const t2 = $(e3.currentTarget).closest(".nv-card").attr("data-car");
         if (!t2) return;
         try {
+          const enabled = await storageManager.getSetting("autoRemoveNewVideoMarkAfterBrowse", C);
+          if (enabled !== _) return;
           await storageManager.removeNewVideoList([t2]), "list" === this._viewMode && await this.renderNewVideoList(), window.refresh();
         } catch (n2) {
           clog.error("移除新作品标记失败:", n2);
