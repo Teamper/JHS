@@ -49,11 +49,24 @@ describe("third-party parser fixtures", () => {
     it("parses actor identity, aliases, relative resources and pagination", () => {
         const { parseJavDbActorList, $page } = loadParsers(fixture("javdb-actor-list.html"));
         const parsed = parseJavDbActorList($page, "https://javdb.com/users/collection_actors");
+        expect(parsed.state).toBe("valid");
+        expect(parsed.isEmpty).toBe(false);
         expect(JSON.parse(JSON.stringify(parsed.actors))).toEqual([{
             starId: "actor-1", name: "演员甲", allName: ["演员甲", "别名甲"], avatar: "/actor.jpg",
             actressType: "uncensored", lastCheckTime: null, lastUpdateTime: null
         }]);
         expect(parsed.nextUrl).toBe("https://javdb.com/users/collection_actors?page=2");
+    });
+
+    it("distinguishes valid empty, challenge, login and malformed actor collection pages", () => {
+        let loaded = loadParsers(fixture("javdb-empty-actor-list.html"));
+        expect(loaded.parseJavDbActorList(loaded.$page, "https://javdb.com/users/collection_actors")).toMatchObject({ state: "valid", isEmpty: true, actors: [] });
+        loaded = loadParsers(fixture("cloudflare-challenge.html"));
+        expect(loaded.parseJavDbActorList(loaded.$page, "https://javdb.com/users/collection_actors").state).toBe("challenge");
+        loaded = loadParsers(fixture("javdb-login.html"));
+        expect(loaded.parseJavDbActorList(loaded.$page, "https://javdb.com/users/collection_actors").state).toBe("invalid");
+        loaded = loadParsers(fixture("javdb-malformed-actor-list.html"));
+        expect(loaded.parseJavDbActorList(loaded.$page, "https://javdb.com/users/collection_actors").state).toBe("invalid");
     });
 
     it("distinguishes normal, valid empty and challenge pages", () => {

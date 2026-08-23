@@ -6,6 +6,50 @@ async function mapLimit(items, concurrency = 4, mapper) {
     return results;
 }
 
+/** 读取数值配置，保留合法的 0 并按范围回退默认值。 */
+function parseNumberSetting(value, fallback, { min = -Infinity, max = Infinity } = {}) {
+    if (null == value || "" === String(value).trim()) return fallback;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= min && number <= max ? number : fallback;
+}
+
+/** 将旧日期字符串或毫秒时间戳统一解析为 Unix 毫秒。 */
+function parseTaskTimestamp(value) {
+    if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : null;
+    if ("number" == typeof value) return Number.isFinite(value) && value >= 0 ? value : null;
+    if ("string" != typeof value) return null;
+    const text = value.trim();
+    if (!text) return null;
+    if (/^\d{13,16}$/.test(text)) {
+        const timestamp = Number(text);
+        return Number.isFinite(timestamp) ? timestamp : null;
+    }
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/);
+    if (match) {
+        const parts = match.slice(1).map(Number), date = new Date(parts[0], parts[1] - 1, parts[2], parts[3], parts[4], parts[5]);
+        return date.getFullYear() === parts[0] && date.getMonth() === parts[1] - 1 && date.getDate() === parts[2]
+            && date.getHours() === parts[3] && date.getMinutes() === parts[4] && date.getSeconds() === parts[5] ? date.getTime() : null;
+    }
+    const timestamp = new Date(text).getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+/** 判断最近发行时间是否已超出停更规则窗口。 */
+function shouldSkipStopped(lastPublishTime, ruleHours, now = Date.now()) {
+    const hours = parseNumberSetting(ruleHours, 0, { min: 0 }), publishedAt = parseTaskTimestamp(lastPublishTime), nowAt = parseTaskTimestamp(now);
+    return hours > 0 && null != publishedAt && null != nowAt && nowAt >= publishedAt && nowAt - publishedAt >= 36e5 * hours;
+}
+
+/** 从一组发行日期中选择真实时间最大的原始值。 */
+function selectLatestPublishTime(values) {
+    let latestValue = null, latestAt = -Infinity;
+    for (const value of values) {
+        const timestamp = parseTaskTimestamp(value);
+        null != timestamp && timestamp > latestAt && (latestAt = timestamp, latestValue = value);
+    }
+    return latestValue;
+}
+
 function normalizeDmmCid(carNum) {
     const compact = (normalizeCarNum(carNum) || "").replace(/[-_\s]/g, "").toLowerCase();
     if (!compact) return [];

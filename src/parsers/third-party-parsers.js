@@ -31,25 +31,33 @@ function parseJavStorePreview($detailPage, detailUrl) {
 
 /** 解析 JavDB 收藏演员列表，并返回分页地址。 */
 function parseJavDbActorList($page, baseUrl) {
-    const actors = [];
-    $page.find("#actors .actor-box a").each(((index, element) => {
-        const $actor = $(element), title = $actor.attr("title"), href = $actor.attr("href");
-        if (!title || !href) return;
-        const allName = title.split(",").map((name => name.trim())).filter(Boolean);
-        const actorUrl = new URL(href, baseUrl);
-        const starId = actorUrl.pathname.split("/").filter(Boolean).pop() || "";
-        actors.push({
-            starId,
-            name: allName[0] || "",
-            allName,
-            avatar: $actor.find("img").attr("src"),
-            actressType: $actor.find(".info").text().trim().includes("無碼") ? A : D,
-            lastCheckTime: null,
-            lastUpdateTime: null
-        });
-    }));
-    const nextHref = $page.find(".pagination-next").attr("href");
-    return { actors, nextUrl: nextHref ? new URL(nextHref, baseUrl).href : null };
+    const challengeText = $page.find("title, body").text();
+    if (/Just a moment|cf-chl-|Cloudflare/i.test(challengeText)) return { state: "challenge", isEmpty: !1, actors: [], nextUrl: null };
+    const container = $page.find("#actors").first();
+    if (!container.length) return { state: "invalid", isEmpty: !1, actors: [], nextUrl: null };
+    const actors = [], boxes = container.find(".actor-box").toArray();
+    try {
+        for (const box of boxes) {
+            const $actor = $(box).find("a").first(), title = $actor.attr("title"), href = $actor.attr("href");
+            if (!title || !href) throw new Error("演员卡缺少身份字段");
+            const allName = title.split(",").map((name => name.trim())).filter(Boolean), actorUrl = new URL(href, baseUrl);
+            const starId = actorUrl.pathname.split("/").filter(Boolean).pop() || "";
+            if (!starId || !allName.length) throw new Error("演员卡身份字段无效");
+            actors.push({
+                starId,
+                name: allName[0],
+                allName,
+                avatar: $actor.find("img").attr("src"),
+                actressType: $actor.find(".info").text().trim().includes("無碼") ? A : D,
+                lastCheckTime: null,
+                lastUpdateTime: null
+            });
+        }
+        const nextHref = $page.find(".pagination-next").attr("href"), nextUrl = nextHref ? new URL(nextHref, baseUrl).href : null;
+        return { state: "valid", isEmpty: 0 === boxes.length, actors, nextUrl };
+    } catch (error) {
+        return { state: "invalid", isEmpty: !1, actors: [], nextUrl: null };
+    }
 }
 
 /** 区分正常页面、合法空列表和第三方拦截页。 */

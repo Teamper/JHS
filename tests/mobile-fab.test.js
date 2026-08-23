@@ -26,10 +26,12 @@ function loadMobilePlugin() {
 }
 
 describe("mobile list FAB", () => {
-    it("keeps six list actions and projects all ten quick filters", () => {
+    it("projects list actions, ten quick filters and a radio-style sort submenu", () => {
         const { plugin } = loadMobilePlugin(), menu = plugin.createMenu();
-        expect(menu.find(".jhs-fab-menu-item")).toHaveLength(6);
+        expect(menu.find(".jhs-fab-menu-item")).toHaveLength(7);
         expect(menu.find(".jhs-mobile-filter-option")).toHaveLength(10);
+        expect(menu.find('.jhs-mobile-sort-option[role="menuitemradio"]')).toHaveLength(3);
+        expect(menu.find('.jhs-mobile-sort-option[aria-checked="true"]')).toHaveLength(1);
         expect(menu.find('[data-action="quickFilter"]')).toHaveLength(1);
     });
 

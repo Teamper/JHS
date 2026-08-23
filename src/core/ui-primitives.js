@@ -528,6 +528,9 @@ function buildUiPrimitivesCss() {
         background: var(--jhs-status-filter-tint);
         color: var(--jhs-status-filter-text);
     }
+    .jhs-state__content { display:grid; gap:var(--jhs-space-1); justify-items:center; }
+    .jhs-state__title { margin:0; color:inherit; font-size:var(--jhs-font-size-md); font-weight:700; }
+    .jhs-state__description { margin:0; color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
     .jhs-is-hidden { display: none !important; }
     .jhs-dialog-title { padding: 0 var(--jhs-space-2); }
     .jhs-pagination__summary { margin-left: var(--jhs-space-3); color: var(--jhs-text-muted); font-size: var(--jhs-font-size-sm); }
@@ -987,6 +990,14 @@ function buildUiPrimitivesCss() {
         }
     }
 </style>`;
+}
+
+/** 在现有容器内渲染安全的 loading、empty 或 error 状态。 */
+function renderStateView(container, { type = "empty", title = "", description = "", actionLabel = "", onAction = null } = {}) {
+    const root = container?.jquery ? container : $(container), state = $('<div class="jhs-state"></div>').addClass(`jhs-state--${type}`).attr("role", "error" === type ? "alert" : "status"), content = $('<div class="jhs-state__content"></div>');
+    title && content.append($('<p class="jhs-state__title"></p>').text(title)), description && content.append($('<p class="jhs-state__description"></p>').text(description));
+    if (actionLabel && "function" == typeof onAction) content.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').text(actionLabel).on("click", onAction));
+    return state.append(content), root.empty().append(state), state;
 }
 
 /** 为动态注入的 JHS 控件补齐可访问名称与图标按钮语义。 */

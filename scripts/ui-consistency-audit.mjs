@@ -58,8 +58,8 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(repoRoot, "JHS.user.js"), "utf8")
 ]);
 
-requireMatch(main, /^\/\/ @version\s+6\.4\.0$/m, "userscript version must be frozen at 6.4.0");
-requireMatch(packageSource, /"version"\s*:\s*"6\.4\.0"/, "package version must be frozen at 6.4.0");
+requireMatch(main, /^\/\/ @version\s+6\.4\.1$/m, "userscript version must be frozen at 6.4.1");
+requireMatch(packageSource, /"version"\s*:\s*"6\.4\.1"/, "package version must be frozen at 6.4.1");
 
 for (const token of [
   "--jhs-space-1", "--jhs-space-6", "--jhs-radius-xs", "--jhs-radius-pill",
@@ -193,13 +193,13 @@ requireMatch(newVideo, /\.jhs-new-video-grid\s*\{[^}]*repeat\(auto-fill,minmax\(
 forbidMatch(newVideo, /\.layui-layer[^}]*overflow-x\s*:\s*hidden/, "new video overflow fixes must not mask the issue at the layui layer");
 requireMatch(newVideo, /actress-card-avatar[\s\S]{0,180}border-radius:\s*50%/, "new video avatars must use a defined round radius");
 requireMatch(newVideo, />重新检测</, "new video card must keep the text primary action");
-requireMatch(newVideo, />重试</, "new video load failure must expose a retry action");
-requireMatch(newVideo, /const profileUrl = `\$\{javDbUrl\}\/actors\/\$\{actress\.starId\}\?t=d`/, "actress profile URL must use the initialized JavDB URL");
-requireMatch(newVideo, /const noteText = isPaused/, "actress note text must not shadow the JavDB URL");
+requireMatch(newVideo, /type:\s*"error"[\s\S]{0,240}actionLabel:\s*"重试"/, "new video load failure must expose a retry action");
+requireMatch(newVideo, /const profileUrl = normalizeHttpUrl\(`\/actors\/\$\{encodeURIComponent\(starId\)\}\?t=d`, javDbUrl\)/, "actress profile URL must normalize the initialized JavDB URL and encode the actor ID");
+requireMatch(newVideo, /noteText = isPaused/, "actress note text must not shadow the JavDB URL");
 const builtCardStart = builtSource.indexOf("async renderActressCards()");
 const builtCardEnd = builtSource.indexOf("async getNewVideoFlatList()", builtCardStart);
 const builtCardSource = builtCardStart >= 0 && builtCardEnd > builtCardStart ? builtSource.slice(builtCardStart, builtCardEnd) : "";
-requireMatch(builtCardSource, /\/actors\/\$\{\w+\.starId\}\?t=d/, "built actress cards are missing their JavDB profile URL");
+requireMatch(builtCardSource, /normalizeHttpUrl\(`\/actors\/\$\{encodeURIComponent\(\w+\)\}\?t=d`,\s*\w+\)/, "built actress cards are missing their normalized JavDB profile URL");
 forbidMatch(builtCardSource, /\w+=`\$\{(\w+)\}\/actors\/\$\{\w+\.starId\}\?t=d`[\s\S]{0,1000}\b(?:const|let)\b[^;]*\b\1=/,
   "built actress cards read a shadowed variable before initialization");
 requireMatch(constants, /function normalizeCarNum[\s\S]*\[ "undefined", "null" \]/, "shared car number normalization is missing");

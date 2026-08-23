@@ -314,6 +314,19 @@ class Utils {
     sleep(e = 1e3) {
         return new Promise((t => setTimeout(t, e)));
     }
+    /** 创建可取消的尾沿防抖函数。 */
+    debounce(callback, wait = 200) {
+        let timer = null;
+        const debounced = function(...args) {
+            const context = this;
+            clearTimeout(timer), timer = setTimeout((() => {
+                timer = null, callback.apply(context, args);
+            }), Math.max(0, wait));
+        };
+        return debounced.cancel = () => {
+            clearTimeout(timer), timer = null;
+        }, debounced;
+    }
     genericSort(e, t, n = !0) {
         if (!Array.isArray(e) || 0 === e.length) return [];
         if (!Array.isArray(t) || 0 === t.length) return [ ...e ];

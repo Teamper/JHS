@@ -80,11 +80,11 @@ class UnifiedOfflinePlugin extends BasePlugin {
         if (!selected) return;
         const info = context || this.getVideoInfo(button), original = button.text(), restoreButton = () => {
             if (!button[0]?.isConnected) return;
-            button.removeClass("loading").prop("disabled", !1).removeAttr("aria-busy").text(original);
+            button.removeClass("loading").removeAttr("aria-busy aria-disabled").text(original);
         };
         let submitted = !1;
         try {
-            button.addClass("loading").prop("disabled", !0).attr("aria-busy", "true").text("提交中"), await selected.provider.submit(resource, info), this.registry.updateAvailability(selected.provider.id, { available: !0, authState: "ready", reason: "最近提交成功" });
+            button.addClass("loading").attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中"), await selected.provider.submit(resource, info), this.registry.updateAvailability(selected.provider.id, { available: !0, authState: "ready", reason: "最近提交成功" });
             await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "submitted", retryOf }), submitted = !0,
             button.text("已提交"), show.ok(`${selected.provider.name} 离线任务已创建`), utils.q(event, "是否将该作品标记为已下载？", (async () => { info?.carNum && await stateService.patch(info.carNum, { downloaded: !0 }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } }); }));
         } catch (error) {

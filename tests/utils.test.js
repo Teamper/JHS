@@ -309,3 +309,17 @@ describe("loopDetector", () => {
         expect(Object.keys(utils.intervalContainer)).toHaveLength(0);
     });
 });
+
+describe("debounce", () => {
+    it("coalesces rapid calls and supports lifecycle cancellation", () => {
+        vi.useFakeTimers();
+        const { utils } = loadUtilsWithObserver(), callback = vi.fn(), debounced = utils.debounce(callback, 200);
+        debounced("first"), debounced("last"), vi.advanceTimersByTime(199);
+        expect(callback).not.toHaveBeenCalled();
+        vi.advanceTimersByTime(1);
+        expect(callback).toHaveBeenCalledOnce();
+        expect(callback).toHaveBeenLastCalledWith("last");
+        debounced("cancelled"), debounced.cancel(), vi.advanceTimersByTime(200);
+        expect(callback).toHaveBeenCalledOnce();
+    });
+});

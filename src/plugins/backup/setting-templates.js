@@ -338,6 +338,8 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                         <div id="task-panel" class="content-panel ${"task-panel" === activePanel ? "active" : ""}" role="region">
                             <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>定时任务</h3><p>配置黑名单、演员同步和新作品检测。</p></header><div class="jhs-setting-group">
 
+                            <div id="setting-task-status-list" aria-live="polite"></div>
+
                             <div class="jhs-setting-row">
                                 <span class="setting-label">请求并发数量:</span>
                                 <div class="form-content">

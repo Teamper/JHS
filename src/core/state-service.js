@@ -98,8 +98,7 @@ class StateService {
             if (!Array.isArray(actress.newVideoList)) return actress;
             const newVideoList = actress.newVideoList.filter((item => !keys.has(normalizeCarNum("string" == typeof item ? item : item.carNum))));
             if (newVideoList.length === actress.newVideoList.length) return actress;
-            const next = { ...actress, newVideoList };
-            return 0 === newVideoList.length && next.lastPublishTime && (next.lastPublishTime = null), next;
+            return { ...actress, newVideoList };
         }));
         return { actresses: nextActresses, decisions: nextDecisions };
     }
@@ -206,19 +205,23 @@ class StateService {
             }));
             if (!changes.length) return { changed: [], transactionId: null };
             const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-decision", commitState: "pending", changes, createdAt: now, undoAttemptedAt: null };
-            await this._commit(domains, { carList: domains.carList, actresses: domains.actresses, decisions }, activity), await this.eventBus.emit("new-video-changed", { carNums: keys, reason: action || "decision-restored" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
-            return { changed: keys, transactionId: activity.id };
+            const changed = changes.map((change => change.carNum));
+            await this._commit(domains, { carList: domains.carList, actresses: domains.actresses, decisions }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason: action || "decision-restored" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+            return { changed, transactionId: activity.id };
         });
     }
     async removeFromNewVideoList(carNums, reason = "manual") {
         const keys = [ ...new Set((Array.isArray(carNums) ? carNums : [ carNums ]).map(normalizeCarNum).filter(Boolean)) ];
         return this._withLock(async () => {
             await this._recoverWithoutLock();
-            const domains = await this._readDomains(), effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, keys), changed = stableStateValue(effects.actresses) !== stableStateValue(domains.actresses) || stableStateValue(effects.decisions) !== stableStateValue(domains.decisions);
-            if (!changed) return { changed: [], transactionId: null };
-            const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-remove", commitState: "pending", changes: keys.map((carNum => ({ carNum, operation: "new-video-remove", fields: [ "newVideoList", "decision" ], before: null, after: { removed: !0, reason }, newVideoEffect: captureNewVideoEffect(domains.actresses, domains.decisions, carNum), undoState: "pending" }))), createdAt: new Date().toISOString(), undoAttemptedAt: null };
-            await this._commit(domains, { carList: domains.carList, ...effects }, activity), await this.eventBus.emit("new-video-changed", { carNums: keys, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
-            return { changed: keys, transactionId: activity.id };
+            const domains = await this._readDomains(), changed = keys.filter((carNum => {
+                const effect = captureNewVideoEffect(domains.actresses, domains.decisions, carNum);
+                return effect.actressItems.length > 0 || !!effect.decision;
+            }));
+            if (!changed.length) return { changed: [], transactionId: null };
+            const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, changed), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-remove", commitState: "pending", changes: changed.map((carNum => ({ carNum, operation: "new-video-remove", fields: [ "newVideoList", "decision" ], before: null, after: { removed: !0, reason }, newVideoEffect: captureNewVideoEffect(domains.actresses, domains.decisions, carNum), undoState: "pending" }))), createdAt: new Date().toISOString(), undoAttemptedAt: null };
+            await this._commit(domains, { carList: domains.carList, ...effects }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+            return { changed, transactionId: activity.id };
         });
     }
     async undoTransaction(transactionId) {

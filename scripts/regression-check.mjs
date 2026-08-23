@@ -222,8 +222,9 @@ assert(/@media \(max-width:\s*768px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*disp
 assert(!listPageButton.includes(":visible") && !listPageButton.includes("span.tag:contains"), "start identification must use card data across the full list");
 assert(!listPageSource.includes("currentPageBlockedItemCount"), "unused blocked-item counter must stay removed");
 assert((newVideoTaskSource.match(/锁任务出现错误:/g) || []).length === 1, "background lock failures must be logged once");
-assertIncludes(unifiedOffline, '.attr("aria-busy", "true").text("提交中")', "offline submitting button state");
-assertIncludes(unifiedOffline, '.removeAttr("aria-busy").text(original)', "offline idle button restoration");
+assertIncludes(unifiedOffline, '.attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中")', "focusable offline submitting button state");
+assertIncludes(unifiedOffline, '.removeAttr("aria-busy aria-disabled").text(original)', "offline idle button restoration");
+assert(!unifiedOffline.includes('.prop("disabled", !0)'), "offline submission must preserve button focus");
 assertIncludes(unifiedOffline, "submitted ? setTimeout(restoreButton, this.BUTTON_COOLDOWN_MS) : restoreButton()", "offline success cooldown and immediate failure restoration");
 for (const removedSetting of [ "showFilterItem", "showFilterActorItem", "showFilterKeywordItem" ])
   assert(!listPageSource.includes(removedSetting) && !settingFormsSource.includes(removedSetting) && !settingTemplatesSource.includes(removedSetting), `retired visibility setting returned: ${removedSetting}`);

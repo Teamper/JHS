@@ -202,19 +202,18 @@ class StorageManager {
     }
     async removeNewVideoList(e) {
         return this.withActressLock(async () => {
-            const t = await this.getFavoriteActressList();
-            let n = !1;
+            const targets = new Set((Array.isArray(e) ? e : [ e ]).map(normalizeCarNum).filter(Boolean));
+            const t = await this.getFavoriteActressList(), changed = new Set;
             const a = t.map((t => {
                 if (!t.newVideoList || !Array.isArray(t.newVideoList)) return t;
                 const a = t.newVideoList.filter((t => {
-                    const a = "string" == typeof t ? t : t.carNum, i = e.includes(a);
-                    return i && (clog.log("移除关联女优新作品", t.name, a), n = !0), !i;
+                    const a = normalizeCarNum("string" == typeof t ? t : t.carNum), i = targets.has(a);
+                    return i && (clog.log("移除关联女优新作品", t.name, a), changed.add(a)), !i;
                 }));
-                const result = { ...t, newVideoList: a };
-                if (a.length === 0 && t.lastPublishTime) result.lastPublishTime = null;
-                return result;
+                return { ...t, newVideoList: a };
             }));
-            n && await this._setItemAndInvalidate(this.favorite_actresses_key, a);
+            changed.size && await this._setItemAndInvalidate(this.favorite_actresses_key, a);
+            return { changed: [ ...changed ] };
         });
     }
     async removeCar(e) {
@@ -276,8 +275,16 @@ class StorageManager {
             n.find((e => e.carNum === s.carNum)) || (this._saveSingleCar(s, n), clog.log(`屏蔽演员番号: <span class="jhs-layout-eeefd8c8">${escapeHtml(s.names)} ${escapeHtml(s.carNum)}</span>`),
             a = !0, i.push(s.carNum));
         }
-        a && (await this._setItemAndInvalidate(this.blacklist_car_list_key, n), await this.removeNewVideoList(i),
-        window.cleanCache_filter_actor_actress_car_list());
+        if (a) {
+            await this._setItemAndInvalidate(this.blacklist_car_list_key, n);
+            const result = await this.removeNewVideoList(i);
+            result.changed.length && await window.jhsEventBus?.emit?.("new-video-changed", {
+                reason: "blacklist-car-removed",
+                carNums: result.changed
+            });
+            await window.cleanCache_filter_actor_actress_car_list();
+        }
+        return { changed: i.map(normalizeCarNum).filter(Boolean) };
     }
     async removeBlacklistCarList(e) {
         const t = await this.getBlacklistCarList(), n = t.filter((t => t.starId !== e));
@@ -383,14 +390,14 @@ class StorageManager {
         return "true" === n || "false" === n ? "true" === n.toLowerCase() : "string" != typeof n || "" === n.trim() || isNaN(Number(n)) ? n : Number(n);
     }
     async saveSetting(e) {
-        e ? (await this._setItemAndInvalidate(this.setting_key, e), window.clean_cacheSettingObj()) : show.error("设置对象为空");
+        e ? (await this._setItemAndInvalidate(this.setting_key, e), await window.clean_cacheSettingObj()) : show.error("设置对象为空");
     }
     async saveSettingItem(e, t) {
         if (!e) return void show.error("key 不能为空");
         await navigator.locks.request("jhs_setting_lock", async () => {
             let n = await this.getSetting();
             n[e] = t, await this.saveSetting(n);
-        }), window.clean_cacheSettingObj();
+        });
     }
     async importData(e) {
         validatePortableData(e);
@@ -531,7 +538,7 @@ class StorageManager {
             return n.length !== t.newVideoList.length && (t = {
                 ...t,
                 newVideoList: n
-            }, 0 === n.length && t.lastPublishTime && (t.lastPublishTime = null), e++), t;
+            }, e++), t;
         })), await this._setItemAndInvalidate(this.car_list_key, t), await this._setItemAndInvalidate(this.favorite_actresses_key, n),
         await this._setItemAndInvalidate(this.blacklist_key, a), await this._setItemAndInvalidate(this.blacklist_car_list_key, i);
         return {

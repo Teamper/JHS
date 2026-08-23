@@ -32,13 +32,14 @@ describe("StateService durable transactions", () => {
     it("commits car state, activity, new-video removal and decision cleanup once", async () => {
         const { service, data, eventBus } = createHarness({
             car_list: [],
-            favorite_actresses: [{ starId: "a", newVideoList: [{ carNum: "abc-123", title: "A" }] }],
+            favorite_actresses: [{ starId: "a", lastPublishTime: "2026-08-20", newVideoList: [{ carNum: "abc-123", title: "A" }] }],
             new_video_decisions: { "ABC-123": { action: "snoozed" } }
         });
         const first = await service.patch("abc_123", { favorite: true }, { record: { names: "Actor" } });
         expect(first.changed).toEqual(["ABC-123"]);
         expect(data.get("car_list")[0]).toMatchObject({ carNum: "ABC-123", status: "favorite", stateFlags: { favorite: true } });
         expect(data.get("favorite_actresses")[0].newVideoList).toEqual([]);
+        expect(data.get("favorite_actresses")[0].lastPublishTime).toBe("2026-08-20");
         expect(data.get("new_video_decisions")).toEqual({});
         expect(data.get("activity_log").entries).toHaveLength(1);
         expect(data.has("mutation_journal")).toBe(false);

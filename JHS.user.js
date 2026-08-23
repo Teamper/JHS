@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         JHS
 // @namespace    https://sleazyfork.org/zh-CN/scripts/578503-jhs-ya
-// @version      6.4.0
+// @version      6.4.1
 // @author       JHS Contributors
 // @description  JAV Helper Suite：为 JavDB / JavBus 提供浏览、收藏、筛选、资源检索、数据备份与统计增强。
 // @license      MIT
@@ -140,6 +140,45 @@
     return results;
   }
   __name(mapLimit, "mapLimit");
+  function parseNumberSetting(value, fallback, { min = -Infinity, max = Infinity } = {}) {
+    if (null == value || "" === String(value).trim()) return fallback;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= min && number <= max ? number : fallback;
+  }
+  __name(parseNumberSetting, "parseNumberSetting");
+  function parseTaskTimestamp(value) {
+    if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : null;
+    if ("number" == typeof value) return Number.isFinite(value) && value >= 0 ? value : null;
+    if ("string" != typeof value) return null;
+    const text = value.trim();
+    if (!text) return null;
+    if (/^\d{13,16}$/.test(text)) {
+      const timestamp2 = Number(text);
+      return Number.isFinite(timestamp2) ? timestamp2 : null;
+    }
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})$/);
+    if (match) {
+      const parts = match.slice(1).map(Number), date = new Date(parts[0], parts[1] - 1, parts[2], parts[3], parts[4], parts[5]);
+      return date.getFullYear() === parts[0] && date.getMonth() === parts[1] - 1 && date.getDate() === parts[2] && date.getHours() === parts[3] && date.getMinutes() === parts[4] && date.getSeconds() === parts[5] ? date.getTime() : null;
+    }
+    const timestamp = new Date(text).getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+  __name(parseTaskTimestamp, "parseTaskTimestamp");
+  function shouldSkipStopped(lastPublishTime, ruleHours, now = Date.now()) {
+    const hours = parseNumberSetting(ruleHours, 0, { min: 0 }), publishedAt = parseTaskTimestamp(lastPublishTime), nowAt = parseTaskTimestamp(now);
+    return hours > 0 && null != publishedAt && null != nowAt && nowAt >= publishedAt && nowAt - publishedAt >= 36e5 * hours;
+  }
+  __name(shouldSkipStopped, "shouldSkipStopped");
+  function selectLatestPublishTime(values) {
+    let latestValue = null, latestAt = -Infinity;
+    for (const value of values) {
+      const timestamp = parseTaskTimestamp(value);
+      null != timestamp && timestamp > latestAt && (latestAt = timestamp, latestValue = value);
+    }
+    return latestValue;
+  }
+  __name(selectLatestPublishTime, "selectLatestPublishTime");
   function normalizeHttpUrl(value, baseUrl = window.location.href) {
     if (!value) return null;
     try {
@@ -1269,6 +1308,9 @@
         background: var(--jhs-status-filter-tint);
         color: var(--jhs-status-filter-text);
     }
+    .jhs-state__content { display:grid; gap:var(--jhs-space-1); justify-items:center; }
+    .jhs-state__title { margin:0; color:inherit; font-size:var(--jhs-font-size-md); font-weight:700; }
+    .jhs-state__description { margin:0; color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
     .jhs-is-hidden { display: none !important; }
     .jhs-dialog-title { padding: 0 var(--jhs-space-2); }
     .jhs-pagination__summary { margin-left: var(--jhs-space-3); color: var(--jhs-text-muted); font-size: var(--jhs-font-size-sm); }
@@ -1732,6 +1774,13 @@
 </style>`;
   }
   __name(buildUiPrimitivesCss, "buildUiPrimitivesCss");
+  function renderStateView(container, { type = "empty", title = "", description = "", actionLabel = "", onAction = null } = {}) {
+    const root = container?.jquery ? container : $(container), state = $('<div class="jhs-state"></div>').addClass(`jhs-state--${type}`).attr("role", "error" === type ? "alert" : "status"), content = $('<div class="jhs-state__content"></div>');
+    title && content.append($('<p class="jhs-state__title"></p>').text(title)), description && content.append($('<p class="jhs-state__description"></p>').text(description));
+    if (actionLabel && "function" == typeof onAction) content.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').text(actionLabel).on("click", onAction));
+    return state.append(content), root.empty().append(state), state;
+  }
+  __name(renderStateView, "renderStateView");
   function initializeUiAccessibility() {
     const selector = "button.jhs-btn, a.jhs-btn[role='button'], .card-btn, .jhs-icon-btn, [class*='jhs-'] button, [class*='jhs-'] a[role='button']";
     const enhance = /* @__PURE__ */ __name((e2) => {
@@ -2239,19 +2288,18 @@
     }
     async removeNewVideoList(e2) {
       return this.withActressLock(async () => {
-        const t2 = await this.getFavoriteActressList();
-        let n2 = false;
+        const targets = new Set((Array.isArray(e2) ? e2 : [e2]).map(normalizeCarNum).filter(Boolean));
+        const t2 = await this.getFavoriteActressList(), changed = /* @__PURE__ */ new Set();
         const a2 = t2.map(((t3) => {
           if (!t3.newVideoList || !Array.isArray(t3.newVideoList)) return t3;
           const a3 = t3.newVideoList.filter(((t4) => {
-            const a4 = "string" == typeof t4 ? t4 : t4.carNum, i2 = e2.includes(a4);
-            return i2 && (clog.log("移除关联女优新作品", t4.name, a4), n2 = true), !i2;
+            const a4 = normalizeCarNum("string" == typeof t4 ? t4 : t4.carNum), i2 = targets.has(a4);
+            return i2 && (clog.log("移除关联女优新作品", t4.name, a4), changed.add(a4)), !i2;
           }));
-          const result = { ...t3, newVideoList: a3 };
-          if (a3.length === 0 && t3.lastPublishTime) result.lastPublishTime = null;
-          return result;
+          return { ...t3, newVideoList: a3 };
         }));
-        n2 && await this._setItemAndInvalidate(this.favorite_actresses_key, a2);
+        changed.size && await this._setItemAndInvalidate(this.favorite_actresses_key, a2);
+        return { changed: [...changed] };
       });
     }
     async removeCar(e2) {
@@ -2312,7 +2360,16 @@
       for (const s2 of e2) {
         n2.find(((e3) => e3.carNum === s2.carNum)) || (this._saveSingleCar(s2, n2), clog.log(`屏蔽演员番号: <span class="jhs-layout-eeefd8c8">${escapeHtml(s2.names)} ${escapeHtml(s2.carNum)}</span>`), a2 = true, i2.push(s2.carNum));
       }
-      a2 && (await this._setItemAndInvalidate(this.blacklist_car_list_key, n2), await this.removeNewVideoList(i2), window.cleanCache_filter_actor_actress_car_list());
+      if (a2) {
+        await this._setItemAndInvalidate(this.blacklist_car_list_key, n2);
+        const result = await this.removeNewVideoList(i2);
+        result.changed.length && await window.jhsEventBus?.emit?.("new-video-changed", {
+          reason: "blacklist-car-removed",
+          carNums: result.changed
+        });
+        await window.cleanCache_filter_actor_actress_car_list();
+      }
+      return { changed: i2.map(normalizeCarNum).filter(Boolean) };
     }
     async removeBlacklistCarList(e2) {
       const t2 = await this.getBlacklistCarList(), n2 = t2.filter(((t3) => t3.starId !== e2));
@@ -2413,14 +2470,14 @@
       return "true" === n2 || "false" === n2 ? "true" === n2.toLowerCase() : "string" != typeof n2 || "" === n2.trim() || isNaN(Number(n2)) ? n2 : Number(n2);
     }
     async saveSetting(e2) {
-      e2 ? (await this._setItemAndInvalidate(this.setting_key, e2), window.clean_cacheSettingObj()) : show.error("设置对象为空");
+      e2 ? (await this._setItemAndInvalidate(this.setting_key, e2), await window.clean_cacheSettingObj()) : show.error("设置对象为空");
     }
     async saveSettingItem(e2, t2) {
       if (!e2) return void show.error("key 不能为空");
       await navigator.locks.request("jhs_setting_lock", async () => {
         let n2 = await this.getSetting();
         n2[e2] = t2, await this.saveSetting(n2);
-      }), window.clean_cacheSettingObj();
+      });
     }
     async importData(e2) {
       validatePortableData(e2);
@@ -2564,7 +2621,7 @@
         return n3.length !== t3.newVideoList.length && (t3 = {
           ...t3,
           newVideoList: n3
-        }, 0 === n3.length && t3.lastPublishTime && (t3.lastPublishTime = null), e2++), t3;
+        }, e2++), t3;
       })), await this._setItemAndInvalidate(this.car_list_key, t2), await this._setItemAndInvalidate(this.favorite_actresses_key, n2), await this._setItemAndInvalidate(this.blacklist_key, a2), await this._setItemAndInvalidate(this.blacklist_car_list_key, i2);
       return {
         fixedGroups: e2,
@@ -3255,6 +3312,19 @@
     sleep(e2 = 1e3) {
       return new Promise(((t2) => setTimeout(t2, e2)));
     }
+    /** 创建可取消的尾沿防抖函数。 */
+    debounce(callback, wait = 200) {
+      let timer = null;
+      const debounced = /* @__PURE__ */ __name(function(...args) {
+        const context = this;
+        clearTimeout(timer), timer = setTimeout((() => {
+          timer = null, callback.apply(context, args);
+        }), Math.max(0, wait));
+      }, "debounced");
+      return debounced.cancel = () => {
+        clearTimeout(timer), timer = null;
+      }, debounced;
+    }
     genericSort(e2, t2, n2 = true) {
       if (!Array.isArray(e2) || 0 === e2.length) return [];
       if (!Array.isArray(t2) || 0 === t2.length) return [...e2];
@@ -3601,8 +3671,7 @@
         if (!Array.isArray(actress.newVideoList)) return actress;
         const newVideoList = actress.newVideoList.filter(((item) => !keys.has(normalizeCarNum("string" == typeof item ? item : item.carNum))));
         if (newVideoList.length === actress.newVideoList.length) return actress;
-        const next = { ...actress, newVideoList };
-        return 0 === newVideoList.length && next.lastPublishTime && (next.lastPublishTime = null), next;
+        return { ...actress, newVideoList };
       }));
       return { actresses: nextActresses, decisions: nextDecisions };
     }
@@ -3707,19 +3776,23 @@
         }));
         if (!changes.length) return { changed: [], transactionId: null };
         const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-decision", commitState: "pending", changes, createdAt: now, undoAttemptedAt: null };
-        await this._commit(domains, { carList: domains.carList, actresses: domains.actresses, decisions }, activity), await this.eventBus.emit("new-video-changed", { carNums: keys, reason: action || "decision-restored" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
-        return { changed: keys, transactionId: activity.id };
+        const changed = changes.map(((change) => change.carNum));
+        await this._commit(domains, { carList: domains.carList, actresses: domains.actresses, decisions }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason: action || "decision-restored" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+        return { changed, transactionId: activity.id };
       });
     }
     async removeFromNewVideoList(carNums, reason = "manual") {
       const keys = [...new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean))];
       return this._withLock(async () => {
         await this._recoverWithoutLock();
-        const domains = await this._readDomains(), effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, keys), changed = stableStateValue(effects.actresses) !== stableStateValue(domains.actresses) || stableStateValue(effects.decisions) !== stableStateValue(domains.decisions);
-        if (!changed) return { changed: [], transactionId: null };
-        const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-remove", commitState: "pending", changes: keys.map(((carNum) => ({ carNum, operation: "new-video-remove", fields: ["newVideoList", "decision"], before: null, after: { removed: true, reason }, newVideoEffect: captureNewVideoEffect(domains.actresses, domains.decisions, carNum), undoState: "pending" }))), createdAt: (/* @__PURE__ */ new Date()).toISOString(), undoAttemptedAt: null };
-        await this._commit(domains, { carList: domains.carList, ...effects }, activity), await this.eventBus.emit("new-video-changed", { carNums: keys, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
-        return { changed: keys, transactionId: activity.id };
+        const domains = await this._readDomains(), changed = keys.filter(((carNum) => {
+          const effect = captureNewVideoEffect(domains.actresses, domains.decisions, carNum);
+          return effect.actressItems.length > 0 || !!effect.decision;
+        }));
+        if (!changed.length) return { changed: [], transactionId: null };
+        const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, changed), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-remove", commitState: "pending", changes: changed.map(((carNum) => ({ carNum, operation: "new-video-remove", fields: ["newVideoList", "decision"], before: null, after: { removed: true, reason }, newVideoEffect: captureNewVideoEffect(domains.actresses, domains.decisions, carNum), undoState: "pending" }))), createdAt: (/* @__PURE__ */ new Date()).toISOString(), undoAttemptedAt: null };
+        await this._commit(domains, { carList: domains.carList, ...effects }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+        return { changed, transactionId: activity.id };
       });
     }
     async undoTransaction(transactionId) {
@@ -4387,6 +4460,17 @@
             }
         </style>
     `);
+    document.head.insertAdjacentHTML("beforeend", `<style>
+        .console-logger-container { font-family:inherit; }
+        .console-logger-toggle { border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md) var(--jhs-radius-md) 0 0; box-shadow:var(--jhs-shadow-sm); transition:background-color var(--jhs-motion-fast) ease; }
+        .console-logger-toggle::after { transition:transform var(--jhs-motion-fast) ease; }
+        .console-logger-window { border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md) 0 var(--jhs-radius-md) var(--jhs-radius-md); box-shadow:var(--jhs-shadow-lg); transition:width var(--jhs-motion-fast) ease,height var(--jhs-motion-fast) ease,opacity var(--jhs-motion-fast) ease,transform var(--jhs-motion-fast) ease; }
+        .console-logger-window.maximized { border-radius:var(--jhs-radius-md) 0 0 var(--jhs-radius-md); }
+        .console-logger-controls button,.console-logger-filter,.console-logger-scroll-to-bottom,.console-logger-entry { border-radius:var(--jhs-radius-sm); }
+        .console-logger-controls button,.console-logger-scroll-to-bottom { transition:background-color var(--jhs-motion-fast) ease; }
+        .console-logger-filter { transition:background-color var(--jhs-motion-fast) ease,border-color var(--jhs-motion-fast) ease; }
+        @media (prefers-reduced-motion:reduce) { .console-logger-toggle,.console-logger-toggle::after,.console-logger-window,.console-logger-controls button,.console-logger-filter,.console-logger-scroll-to-bottom { transition:none; } }
+    </style>`);
     const e2 = {
       base: {
         label: "信息",
@@ -4426,7 +4510,7 @@
         this.createContainer(), this.bindEvents(), this.checkInitialMaximizeState(), this.checkInitialCollapseState();
       }
       createContainer() {
-        this.container = document.createElement("div"), this.container.className = "console-logger-container", this.container.style.display = "none", this.toggleBtn = document.createElement("div"), this.toggleBtn.className = "console-logger-toggle collapsed", this.container.appendChild(this.toggleBtn), this.window = document.createElement("div"), this.window.className = "console-logger-window collapsed";
+        this.container = document.createElement("div"), this.container.className = "console-logger-container jhs-ui", this.container.style.display = "none", this.toggleBtn = document.createElement("button"), this.toggleBtn.type = "button", this.toggleBtn.setAttribute("aria-label", "展开或收起运行日志"), this.toggleBtn.className = "console-logger-toggle collapsed", this.container.appendChild(this.toggleBtn), window.matchMedia?.("(max-width: 768px)").matches && (this.toggleBtn.hidden = true, this.toggleBtn.style.display = "none"), this.window = document.createElement("div"), this.window.className = "console-logger-window collapsed";
         const t3 = document.createElement("div");
         t3.className = "console-logger-header";
         const n3 = document.createElement("div");
@@ -4435,8 +4519,8 @@
         a3.className = "console-logger-controls", this.maximizeBtn = document.createElement("button"), this.maximizeBtn.textContent = "", this.maximizeBtn.classList.add("console-logger-maximize-toggle"), a3.appendChild(this.maximizeBtn);
         const i3 = document.createElement("button");
         i3.textContent = "清空", i3.addEventListener("click", (() => this.clear())), a3.appendChild(i3), t3.appendChild(n3), t3.appendChild(a3), this.filtersContainer = document.createElement("div"), this.filtersContainer.className = "console-logger-filters", this.filterButtonGroup = document.createElement("div"), this.filterButtonGroup.className = "console-logger-filter-group", this.filtersContainer.appendChild(this.filterButtonGroup), this.scrollToBottomBtn = document.createElement("button"), this.scrollToBottomBtn.className = "console-logger-scroll-to-bottom", this.scrollToBottomBtn.textContent = "到底部", this.filtersContainer.appendChild(this.scrollToBottomBtn), this.content = document.createElement("div"), this.content.className = "console-logger-content jhs-scrollbar", this.window.appendChild(t3), this.window.appendChild(this.filtersContainer), this.window.appendChild(this.content), this.container.appendChild(this.window), document.body.appendChild(this.container), Object.keys(e2).forEach(((t4) => {
-          const n4 = document.createElement("div");
-          n4.className = "console-logger-filter", t4 === this.currentFilter && n4.classList.add("active"), n4.textContent = e2[t4].label, n4.dataset.type = t4, n4.addEventListener("click", (() => this.setFilter(t4))), this.filterButtonGroup.appendChild(n4);
+          const n4 = document.createElement("button");
+          n4.type = "button", n4.className = "jhs-btn console-logger-filter", t4 === this.currentFilter && n4.classList.add("active"), n4.textContent = e2[t4].label, n4.dataset.type = t4, n4.addEventListener("click", (() => this.setFilter(t4))), this.filterButtonGroup.appendChild(n4);
         }));
       }
       bindEvents() {
@@ -4573,6 +4657,24 @@
       clear() {
         this.logs = [], this.content.innerHTML = "";
       }
+      openDialog() {
+        if (!this.tryInitialize() || !this.window || "undefined" == typeof layer) return;
+        const host = document.createElement("div"), originalParent = this.window.parentNode, originalStyle = this.window.getAttribute("style");
+        host.className = "jhs-ui jhs-logger-dialog", host.style.height = "100%", this.window.classList.remove("collapsed", "maximized"), Object.assign(this.window.style, { width: "100%", height: "100%", border: "0", borderRadius: "0", boxShadow: "none" }), this.reRenderAllLogs();
+        layer.open({
+          type: 1,
+          title: "JHS 运行日志",
+          content: host.outerHTML,
+          area: utils.getDialogArea("md"),
+          anim: -1,
+          success: /* @__PURE__ */ __name((layerElement) => {
+            $(layerElement).find(".jhs-logger-dialog")[0]?.appendChild(this.window), this.content.scrollTop = this.content.scrollHeight;
+          }, "success"),
+          end: /* @__PURE__ */ __name(() => {
+            originalParent?.appendChild(this.window), null == originalStyle ? this.window.removeAttribute("style") : this.window.setAttribute("style", originalStyle), this.window.classList.add("collapsed"), this.toggleBtn.classList.add("collapsed");
+          }, "end")
+        });
+      }
       show() {
         (this.isInitialized && this.container || this.tryInitialize() && this.container) && (this.container.style.display = "", this.reRenderAllLogs());
       }
@@ -4589,7 +4691,7 @@
     __name(_o, "o");
     let o2 = _o;
     try {
-      unsafeWindow.parent.clog && "function" == typeof unsafeWindow.parent.clog.log ? window.clog = unsafeWindow.clog = unsafeWindow.parent.clog : window.clog = unsafeWindow.clog = new o2();
+      unsafeWindow.parent !== unsafeWindow && unsafeWindow.parent.clog && "function" == typeof unsafeWindow.parent.clog.log ? window.clog = unsafeWindow.clog = unsafeWindow.parent.clog : window.clog = unsafeWindow.clog = new o2();
     } catch (r2) {
       console.error("创建日志控制台出现异常", r2), window.clog = unsafeWindow.clog = new o2();
     }
@@ -5018,25 +5120,33 @@
   }
   __name(parseJavStorePreview, "parseJavStorePreview");
   function parseJavDbActorList($page, baseUrl) {
-    const actors = [];
-    $page.find("#actors .actor-box a").each(((index, element) => {
-      const $actor = $(element), title = $actor.attr("title"), href = $actor.attr("href");
-      if (!title || !href) return;
-      const allName = title.split(",").map(((name) => name.trim())).filter(Boolean);
-      const actorUrl = new URL(href, baseUrl);
-      const starId = actorUrl.pathname.split("/").filter(Boolean).pop() || "";
-      actors.push({
-        starId,
-        name: allName[0] || "",
-        allName,
-        avatar: $actor.find("img").attr("src"),
-        actressType: $actor.find(".info").text().trim().includes("無碼") ? A : D,
-        lastCheckTime: null,
-        lastUpdateTime: null
-      });
-    }));
-    const nextHref = $page.find(".pagination-next").attr("href");
-    return { actors, nextUrl: nextHref ? new URL(nextHref, baseUrl).href : null };
+    const challengeText = $page.find("title, body").text();
+    if (/Just a moment|cf-chl-|Cloudflare/i.test(challengeText)) return { state: "challenge", isEmpty: false, actors: [], nextUrl: null };
+    const container = $page.find("#actors").first();
+    if (!container.length) return { state: "invalid", isEmpty: false, actors: [], nextUrl: null };
+    const actors = [], boxes = container.find(".actor-box").toArray();
+    try {
+      for (const box of boxes) {
+        const $actor = $(box).find("a").first(), title = $actor.attr("title"), href = $actor.attr("href");
+        if (!title || !href) throw new Error("演员卡缺少身份字段");
+        const allName = title.split(",").map(((name) => name.trim())).filter(Boolean), actorUrl = new URL(href, baseUrl);
+        const starId = actorUrl.pathname.split("/").filter(Boolean).pop() || "";
+        if (!starId || !allName.length) throw new Error("演员卡身份字段无效");
+        actors.push({
+          starId,
+          name: allName[0],
+          allName,
+          avatar: $actor.find("img").attr("src"),
+          actressType: $actor.find(".info").text().trim().includes("無碼") ? A : D,
+          lastCheckTime: null,
+          lastUpdateTime: null
+        });
+      }
+      const nextHref = $page.find(".pagination-next").attr("href"), nextUrl = nextHref ? new URL(nextHref, baseUrl).href : null;
+      return { state: "valid", isEmpty: 0 === boxes.length, actors, nextUrl };
+    } catch (error) {
+      return { state: "invalid", isEmpty: false, actors: [], nextUrl: null };
+    }
   }
   __name(parseJavDbActorList, "parseJavDbActorList");
   function parseDetailPage($page, selectors) {
@@ -7579,6 +7689,9 @@ ${error.stack}` : "");
   __name(_FilterTitleKeywordPlugin, "FilterTitleKeywordPlugin");
   var FilterTitleKeywordPlugin = _FilterTitleKeywordPlugin;
   var _BlacklistPlugin = class _BlacklistPlugin extends BasePlugin {
+    constructor() {
+      super(...arguments), i(this, "blacklistSearchDebounced", null), i(this, "taskStatusUnsubscribe", null);
+    }
     getName() {
       return "BlacklistPlugin";
     }
@@ -7589,6 +7702,9 @@ ${error.stack}` : "");
             .jhs-blacklist-toolbar__group { display:flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-2); }
             .jhs-blacklist-layout #table-container { flex:1; min-height:0; }
             .jhs-table-counter-note { margin-left:var(--jhs-space-2); }
+            .jhs-blacklist-task-status { margin-bottom:var(--jhs-space-2); padding:var(--jhs-space-2) var(--jhs-space-3); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); background:var(--jhs-surface-2); }
+            .jhs-blacklist-task-status .jhs-task-status__name { color:var(--jhs-text); font-weight:700; }
+            .jhs-blacklist-task-status .jhs-task-status__meta { display:block; margin-top:var(--jhs-space-1); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
         </style>`;
     }
     async addBlacklist(e2) {
@@ -7633,7 +7749,7 @@ ${error.stack}` : "");
                 role: d2,
                 movieType: h2,
                 url: g2
-              }), await this.filterActorVideo(r2, s2);
+              }), await this.filterActorVideo(r2, s2, null, l ? I : T);
               const e5 = show.ok(`屏蔽结束,是否跳转到最后一页: ${this.lastPageLink}`, {
                 duration: -1,
                 close: true,
@@ -7661,7 +7777,7 @@ ${error.stack}` : "");
     }
     async resetBtnTip() {
       const e2 = this.getBean("TaskPlugin"), t2 = localStorage.getItem(e2.lastCheckBlacklistTimeKey) || "无", n2 = await storageManager.getSetting("checkBlacklist_intervalTime", 12);
-      this.checkBlacklist_ruleTime = await storageManager.getSetting("checkBlacklist_ruleTime", 8760), $("#checkBlacklistBtn").attr("data-tip", `上次检测时间: ${t2}; 检测间隔时间: ${n2}小时`);
+      this.checkBlacklist_ruleTime = await storageManager.getSetting("checkBlacklist_ruleTime", 8760), $("#checkBlacklistBtn").attr("data-tip", `上次整批检测: ${t2}; 检测间隔时间: ${n2}小时`);
     }
     async openBlacklistDialog() {
       const e2 = this.getBean("TaskPlugin"), t2 = await storageManager.getSetting();
@@ -7669,8 +7785,8 @@ ${error.stack}` : "");
             <div class="jhs-layout-7cb3f981">
                  <div class="jhs-layout-da5a4919">
                     <div class="jhs-layout-31a824a2">
-                        <button type="button" id="checkBlacklistBtn" class="jhs-btn jhs-btn--danger" data-tip="上次检测时间: ${localStorage.getItem(e2.lastCheckBlacklistTimeKey) || "无"}; 检测间隔时间: ${t2.checkBlacklist_intervalTime}小时">${this.blacklistSvg} &nbsp;手动检测黑名单</button>
-                        <button type="button" class="jhs-btn jhs-btn--secondary" id="toSetting">${this.settingSvg} &nbsp;&nbsp; 配置</button>
+                        <button type="button" id="checkBlacklistBtn" class="jhs-btn jhs-btn--secondary" data-tip="上次整批检测: ${localStorage.getItem(e2.lastCheckBlacklistTimeKey) || "无"}; 检测间隔时间: ${t2.checkBlacklist_intervalTime}小时">${this.blacklistSvg}<span>手动检测黑名单</span></button>
+                        <button type="button" class="jhs-btn jhs-btn--ghost" id="toSetting">${this.settingSvg}<span>配置</span></button>
                     </div>
                     <div class="jhs-layout-31a824a2">
                         <select id="dataType" class="jhs-select-source">
@@ -7679,16 +7795,16 @@ ${error.stack}` : "");
                             <option value="actress">女演员</option>
                         </select>
                         <select id="statusType" class="jhs-select-source">
-                            <option value="" selected>--检测状态--</option>
-                            <option value="normal">正常检测</option>
-                            <option value="stop">停止检测</option>
+                            <option value="" selected>全部状态</option>
+                            <option value="normal">继续检测</option>
+                            <option value="stop">停更跳过</option>
                         </select>
                         <select id="urlType" data-tip="在演员页屏蔽时,是否选择了分类" class="jhs-select-source${r ? "" : " jhs-is-hidden"}">
                             <option value="" selected>--屏蔽类型--</option>
                             <option value="hasT">按所选分类屏蔽</option>
                             <option value="noT">未筛选分类</option>
                         </select>
-                        <input id="searchValue" type="text" placeholder="搜索演员" class="jhs-field">
+                        <input id="searchValue" type="search" placeholder="搜索名称、别名或 ID" class="jhs-field">
                         <button type="button" id="cleanQueryBtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>
                     </div>
 
@@ -7706,19 +7822,13 @@ ${error.stack}` : "");
         success: /* @__PURE__ */ __name(async (t3) => {
           const dialog = $(t3).find(".layui-layer-content > div").first().addClass("jhs-blacklist-layout").removeAttr("style"), toolbar = dialog.children("div").first().addClass("jhs-blacklist-toolbar").removeAttr("style");
           toolbar.children("div").addClass("jhs-blacklist-toolbar__group").removeAttr("style"), toolbar.find("select,input,a").removeAttr("style"), dialog.find("#table-container").removeAttr("style");
-          JhsSelect.enhance(t3);
-          await this.loadTableData(), $(".layui-layer-content").on("click", "#cleanQueryBtn", (async (e3) => {
-            $("#searchValue").val(""), JhsSelect.setValue("#dataType", ""), JhsSelect.setValue("#statusType", ""), await this.reloadTable();
-          })).on("focusout keydown", "#searchValue", (async (e3) => {
-            if ("focusout" === e3.type || "Enter" === e3.key) {
-              if ("Enter" === e3.key && e3.preventDefault(), "keydown" === e3.type && "Enter" !== e3.key) return;
-              JhsSelect.setValue("#dataType", ""), await this.reloadTable();
-            }
-          })).on("change", "#dataType", (async () => {
-            $("#searchValue").val(""), await this.reloadTable();
-          })).on("change", "#statusType", (async () => {
-            await this.reloadTable();
-          })).on("change", "#urlType", (async () => {
+          dialog.find("#table-container").before('<div id="blacklist-task-status" class="jhs-task-status jhs-blacklist-task-status" aria-live="polite"></div>'), JhsSelect.enhance(t3);
+          this.renderTaskStatus(), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.renderTaskStatus()));
+          await this.loadTableData();
+          const content = $(t3).find(".layui-layer-content"), search = content.find("#searchValue");
+          this.blacklistSearchDebounced = utils.debounce((() => void this.reloadTable()), 200), content.on("click", "#cleanQueryBtn", (async () => {
+            search.val(""), JhsSelect.setValue("#dataType", "", false), JhsSelect.setValue("#statusType", "", false), JhsSelect.setValue("#urlType", "", false), await this.reloadTable();
+          })).on("input", "#searchValue", this.blacklistSearchDebounced).on("change", "#dataType,#statusType,#urlType", (async () => {
             await this.reloadTable();
           })).on("click", "#toSetting", (() => {
             this.getBean("SettingPlugin").openSettingDialog("task-panel", (() => {
@@ -7730,25 +7840,28 @@ ${error.stack}` : "");
             e3.preventDefault();
             const t4 = $(e3.currentTarget), n3 = t4.attr("data-url"), a2 = t4.attr("data-name");
             utils.openPage(n3, a2, true, e3);
-          })).on("click", "#checkBlacklistBtn", ((t4) => {
-            utils.q({
-              clientX: t4.clientX,
-              clientY: t4.clientY + 20
-            }, "是否手动检测黑名单?", (() => {
-              navigator.locks.request(e2.singleTaskKey, {
-                ifAvailable: true
-              }, (async (t5) => {
-                t5 ? (await e2.loadConfig(), await e2.checkBlacklist(true)) : show.error("当前有定时任务在后台执行中, 无法发起手动任务");
-              })).catch(((e3) => {
-                clog.error("锁任务出现错误:", e3);
-              }));
+          })).on("click", "#checkBlacklistBtn", ((event) => {
+            const button = $(event.currentTarget), label = button.find("span").last(), previous = label.text();
+            if (button.attr("aria-busy") === "true") return;
+            button.attr("aria-busy", "true").prop("disabled", true), label.text("检测中…"), navigator.locks.request(e2.singleTaskKey, { ifAvailable: true }, (async (lock) => {
+              lock ? await e2.checkBlacklist(true) : show.error("后台任务正在运行，请稍后再试");
+            })).catch(((error) => {
+              clog.error("锁任务出现错误:", error), e2.isNetworkBlocked(error) && show.error(error.message || "任务执行失败");
+            })).finally((() => {
+              button.removeAttr("aria-busy").prop("disabled", false), label.text(previous);
             }));
           }));
         }, "success"),
         end: /* @__PURE__ */ __name(async () => {
-          this.tableObj && (this.tableObj.destroy(), this.tableObj = null), await jhsEventBus.emit("blacklist-rules-changed");
+          this.blacklistSearchDebounced?.cancel?.(), this.blacklistSearchDebounced = null, this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null), await jhsEventBus.emit("blacklist-rules-changed");
         }, "end")
       });
+    }
+    renderTaskStatus() {
+      const container = $("#blacklist-task-status");
+      if (!container.length) return;
+      const snapshot = this.getBean("TaskPlugin").getTaskStatusSnapshot("blacklist"), labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = /* @__PURE__ */ __name((value) => value ? new Date(value).toLocaleString() : "无", "format");
+      container.empty().append($('<span class="jhs-task-status__name"></span>').text(`黑名单：${labels[snapshot.state]}`), $('<span class="jhs-task-status__meta"></span>').text(`上次完成 ${format(snapshot.completedAt)}；下次检查 ${snapshot.nextAt ? format(snapshot.nextAt) : "立即"}`));
     }
     async reloadTable() {
       if (!this.tableObj) return;
@@ -7756,21 +7869,24 @@ ${error.stack}` : "");
       this.tableObj.setData(e2);
     }
     async getTableData() {
-      const e2 = this.getBean("TaskPlugin"), t2 = await storageManager.getBlacklist(), n2 = await storageManager.getBlacklistCarList(), a2 = $("#searchValue").val(), i2 = $("#statusType").val(), s2 = $("#dataType"), o2 = s2.val(), r2 = $("#urlType").val(), l2 = t2.length;
+      const e2 = this.getBean("TaskPlugin"), t2 = await storageManager.getBlacklist(), n2 = await storageManager.getBlacklistCarList(), a2 = String($("#searchValue").val() || "").trim().toLocaleLowerCase(), i2 = $("#statusType").val(), s2 = $("#dataType"), o2 = s2.val(), r2 = $("#urlType").val(), l2 = t2.length;
       let c2 = 0, d2 = 0;
       const h2 = t2.map(((t3) => {
         t3.role === B ? c2++ : t3.role === P && d2++;
         let n3 = false;
-        return t3.lastPublishTime && (n3 = !e2.isUnnecessaryCheck(t3.lastPublishTime, this.checkBlacklist_ruleTime)), {
+        return n3 = shouldSkipStopped(t3.lastPublishTime, this.checkBlacklist_ruleTime), {
           ...t3,
           isUnCheck: n3
         };
-      })).filter(((e3) => !(a2 && !e3.name.includes(a2)) && (("normal" !== i2 || !e3.isUnCheck) && (!("stop" === i2 && !e3.isUnCheck) && (o2 ? e3.role === o2 : !("hasT" === r2 && !e3.url.includes("t=")) && ("noT" !== r2 || !e3.url.includes("t=")))))));
+      })).filter(((item) => {
+        const aliases = Array.isArray(item.allName) ? item.allName.join(" ") : item.allName || "", searchable = `${item.name || ""} ${aliases} ${item.starId || ""}`.toLocaleLowerCase(), searchMatch = !a2 || searchable.includes(a2), statusMatch = !i2 || "normal" === i2 && !item.isUnCheck || "stop" === i2 && item.isUnCheck, roleMatch = !o2 || item.role === o2, hasCategory = item.url.includes("t="), urlMatch = !r2 || "hasT" === r2 && hasCategory || "noT" === r2 && !hasCategory;
+        return searchMatch && statusMatch && roleMatch && urlMatch;
+      }));
       s2.html(`
             <option value="">所有 (${l2})</option>
             <option value="actor">男演员 (${c2})</option>
             <option value="actress">女演员 (${d2})</option>
-        `), JhsSelect.setValue(s2, o2);
+        `), JhsSelect.setValue(s2, o2, false);
       const g2 = /* @__PURE__ */ new Map();
       for (const m2 of n2) {
         const e3 = m2.starId;
@@ -7787,17 +7903,18 @@ ${error.stack}` : "");
       return this.currentCarCount = p2.reduce(((e3, t3) => e3 + (t3.count || 0)), 0), p2;
     }
     async loadTableData() {
-      this.checkBlacklist_ruleTime = await storageManager.getSetting("checkBlacklist_ruleTime") || 8760;
-      const e2 = await this.getTableData();
+      this.checkBlacklist_ruleTime = parseNumberSetting(await storageManager.getSetting("checkBlacklist_ruleTime"), 8760, { min: 0 });
+      const e2 = await this.getTableData(), placeholder = document.createElement("div");
+      renderStateView(placeholder, { type: "empty", title: "没有符合当前筛选条件的黑名单记录" });
       this.tableObj = new Tabulator("#table-container", {
         layout: "fitColumns",
-        placeholder: "暂无数据",
+        placeholder,
         virtualDom: true,
         data: e2,
         pagination: true,
         paginationMode: "local",
         paginationSize: 20,
-        paginationSizeSelector: [20, 50, 100, 1e3, 99999],
+        paginationSizeSelector: [20, 50, 100, 1e3, true],
         paginationCounter: /* @__PURE__ */ __name((e3, t2, n2, a2, i2) => `演员: ${a2} &nbsp;&nbsp;&nbsp;番号总数: ${this.currentCarCount}  <span id="checkBlacklistMsg" class="jhs-table-counter-note"></span>`, "paginationCounter"),
         responsiveLayout: "collapse",
         responsiveLayoutCollapse: true,
@@ -7814,8 +7931,9 @@ ${error.stack}` : "");
           responsive: 0,
           headerSort: false,
           formatter: /* @__PURE__ */ __name((e3, t2, n2) => {
-            const a2 = e3.getData();
-            return `<a class="open-url" data-url="${a2.url}" href="${a2.url}" data-name="${a2.name}" target="_blank">${a2.name}</a>`;
+            const a2 = e3.getData(), url = normalizeHttpUrl(a2.url), link = document.createElement("a");
+            link.className = "open-url", link.textContent = String(a2.name || ""), link.dataset.name = String(a2.name || "");
+            return url ? (link.href = url, link.dataset.url = url, link.target = "_blank", link.rel = "noopener noreferrer") : (link.href = "#", link.setAttribute("aria-disabled", "true")), link;
           }, "formatter")
         }, {
           title: "性别角色",
@@ -7875,8 +7993,8 @@ ${error.stack}` : "");
           width: 120,
           responsive: 1,
           formatter: /* @__PURE__ */ __name((e3, t2, n2) => {
-            let a2 = "", i2 = "正常检测";
-            return e3.getData().isUnCheck && (a2 = `停更${this.checkBlacklist_ruleTime / 24 / 365}年以上, 下轮任务不再进行检测`, i2 = "停止检测"), `<span class="jhs-badge ${a2 ? "jhs-badge--filter" : "jhs-badge--neutral"}" data-tip="${a2}">${i2}</span>`;
+            let a2 = "", i2 = "继续检测";
+            return e3.getData().isUnCheck && (a2 = `停更${this.checkBlacklist_ruleTime / 24 / 365}年以上, 下轮任务不再进行检测`, i2 = "停更跳过"), `<span class="jhs-badge ${a2 ? "jhs-badge--filter" : "jhs-badge--neutral"}" data-tip="${a2}">${i2}</span>`;
           }, "formatter")
         }, {
           title: "操作",
@@ -7923,14 +8041,14 @@ ${error.stack}` : "");
               prev_title: "上一页",
               next: "下一页",
               next_title: "下一页",
-              all: "所有",
+              all: "全部",
               page_size: "每页行数"
             }
           }
         }
       });
     }
-    async filterAllVideo(e2, t2) {
+    async filterAllVideo(e2, t2, page = 1, processed = 0) {
       let n2, a2;
       if (t2 ? (l && t2.find(".avatar-box").length > 0 && t2.find(".avatar-box").parent().remove(), n2 = t2.find(this.getSelector().requestDomItemSelector), a2 = t2.find(this.getSelector().nextPageSelector).attr("href")) : (n2 = $(this.getSelector().itemSelector), a2 = $(this.getSelector().nextPageSelector).attr("href")), a2 && 0 === n2.length) throw show.error("解析列表失败"), new Error("解析列表失败");
       for (const s2 of n2) {
@@ -7941,15 +8059,16 @@ ${error.stack}` : "");
           clog.error(`保存失败 [${n3}]:`, i2);
         }
       }
+      processed += n2.length, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
       if (a2) {
-        show.info("请不要关闭窗口, 正在解析下一页:" + a2), await new Promise(((e3) => setTimeout(e3, 500)));
+        clog.log("正在请求下一页内容:", a2), await new Promise(((e3) => setTimeout(e3, 500)));
         const t3 = await gmHttp.get(a2), n3 = new DOMParser(), i2 = $(n3.parseFromString(t3, "text/html"));
-        await this.filterAllVideo(e2, i2);
-      } else show.ok("执行结束!");
+        await this.filterAllVideo(e2, i2, page + 1, processed);
+      } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
     }
-    async batchSaveAllVideos(e2, t2) {
+    async batchSaveAllVideos(e2, t2, pageDom = null, page = 1, processed = 0) {
       let n2, a2;
-      n2 = $(this.getSelector().itemSelector), a2 = $(this.getSelector().nextPageSelector).attr("href");
+      pageDom ? (n2 = pageDom.find(this.getSelector().requestDomItemSelector), a2 = pageDom.find(this.getSelector().nextPageSelector).attr("href")) : (n2 = $(this.getSelector().itemSelector), a2 = $(this.getSelector().nextPageSelector).attr("href"));
       if (a2 && 0 === n2.length) throw show.error("解析列表失败"), new Error("解析列表失败");
       for (const i2 of n2) {
         const n3 = $(i2), { carNum: a3, url: o2, publishTime: r2 } = this.getBean("ListPagePlugin").findCarNumAndHref(n3);
@@ -7960,53 +8079,52 @@ ${error.stack}` : "");
           clog.error(`保存失败 [${a3}]:`, s2);
         }
       }
+      processed += n2.length, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
       if (a2) {
-        show.info("请不要关闭窗口, 正在解析下一页:" + a2), await new Promise(((e3) => setTimeout(e3, 500)));
+        clog.log("正在请求下一页内容:", a2), await new Promise(((e3) => setTimeout(e3, 500)));
         const i2 = await gmHttp.get(a2), s2 = new DOMParser(), o2 = $(s2.parseFromString(i2, "text/html"));
-        await this.batchSaveAllVideos(e2, t2);
-      } else show.ok("执行结束!");
+        await this.batchSaveAllVideos(e2, t2, o2, page + 1, processed);
+      } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
     }
-    async filterActorVideo(e2, t2, n2) {
-      let { nextPageLink: a2 } = await this.parseAndSaveFilterInfo(n2, e2, t2);
+    async filterActorVideo(e2, t2, n2, site = l ? I : T, page = 1, processed = 0) {
+      let { nextPageLink: a2, recordCount } = await this.parseAndSaveFilterInfo(n2, e2, t2, site);
+      processed += recordCount, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已屏蔽 ${processed} 个番号`);
       if (this.nextPageLink = a2, a2) {
         let n3;
-        this.lastPageLink = a2, show.info("请不要关闭窗口, 正在解析下一页:" + a2);
+        this.lastPageLink = a2;
         clog.log("正在请求下一页内容:", a2);
         const i2 = await gmHttp.get(a2);
         n3 = utils.htmlTo$dom(i2);
-        await this.filterActorVideo(e2, t2, n3);
-      } else show.ok("执行结束!");
+        await this.filterActorVideo(e2, t2, n3, site, page + 1, processed);
+      } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 新增 ${processed} 个番号`);
     }
-    async parseAndSaveFilterInfo(e2, t2, n2) {
-      let a2, i2;
-      if (e2) {
-        let t3 = false, n3 = T;
-        e2.text().includes(I) && (t3 = true, n3 = I), t3 && e2.find(".avatar-box").length > 0 && e2.find(".avatar-box").parent().remove(), a2 = e2.find(this.getSelector(n3).requestDomItemSelector), i2 = e2.find(this.getSelector(n3).nextPageSelector).attr("href");
-      } else a2 = $(this.getSelector().itemSelector), i2 = $(this.getSelector().nextPageSelector).attr("href");
-      if (i2 && 0 === a2.length) return {
-        nextPageLink: null,
-        lastPublishTime: null
-      };
-      let s2 = [], o2 = null;
-      for (const l2 of a2) {
-        const e3 = $(l2), { carNum: a3, url: i3, publishTime: r2 } = this.getBean("ListPagePlugin").findCarNumAndHref(e3);
-        o2 || (o2 = r2), i3 && a3 && s2.push({
-          carNum: a3,
-          url: i3,
+    async parseAndSaveFilterInfo(e2, t2, n2, site) {
+      if (![T, I].includes(site)) throw new Error(`未知黑名单来源站点: ${site}`);
+      const page = e2 || $(document), selector = this.getSelector(site);
+      site === I && page.find(".avatar-box").length > 0 && page.find(".avatar-box").parent().remove();
+      const pageState = parseDetailPage(page, {
+        boxSelector: site === I ? `${selector.boxSelector}, #waterfall` : selector.boxSelector,
+        requestDomItemSelector: e2 ? selector.requestDomItemSelector : selector.itemSelector
+      }), nextPageLink = page.find(selector.nextPageSelector).attr("href");
+      if ("valid" !== pageState.state) throw new Error(`黑名单作品页面无效: ${pageState.state}`);
+      if (pageState.isEmpty && nextPageLink) throw new Error("黑名单作品空页面包含下一页");
+      const records = [], publishTimes = [];
+      for (const item of pageState.items) {
+        const element = $(item), { carNum, url, publishTime } = this.getBean("ListPagePlugin").findCarNumAndHref(element);
+        publishTime && publishTimes.push(publishTime), url && carNum && records.push({
+          carNum,
+          url,
           names: t2,
           actionType: d,
           starId: n2,
-          publishTime: r2
+          publishTime
         });
       }
-      try {
-        await storageManager.batchSaveBlacklistCarList(s2);
-      } catch (r2) {
-        clog.error("保存失败:", r2);
-      }
+      await storageManager.batchSaveBlacklistCarList(records);
       return {
-        nextPageLink: i2,
-        lastPublishTime: o2
+        nextPageLink,
+        lastPublishTime: selectLatestPublishTime(publishTimes),
+        recordCount: records.length
       };
     }
   };
@@ -8366,8 +8484,6 @@ ${error.stack}` : "");
         this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
         const e2 = this.getBean("HistoryPlugin");
         e2.tableObj && e2.tableObj.setData();
-        const t2 = this.getBean("NewVideoPlugin");
-        t2 && void Promise.all([t2.showNewVideoCount(), t2.loadData()]).catch(((error) => clog.error("新作品数据刷新失败", error)));
       }, "refreshAll");
       jhsEventBus.on("legacy-refresh", refreshAll), jhsEventBus.on("blacklist-rules-changed", refreshAll), jhsEventBus.on("filter-rules-changed", refreshAll), jhsEventBus.on("settings-changed", refreshAll), jhsEventBus.on("car-state-changed", (async (payload) => {
         this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key);
@@ -8375,9 +8491,6 @@ ${error.stack}` : "");
         items.length && (await this.doFilterItems(items), this.applyVisibility(items));
         const history = this.getBean("HistoryPlugin");
         history.tableObj && history.tableObj.setData();
-      })), jhsEventBus.on("new-video-changed", (() => {
-        const plugin = this.getBean("NewVideoPlugin");
-        plugin && void Promise.all([plugin.showNewVideoCount(), plugin.loadData()]).catch(((error) => clog.error("新作品数据刷新失败", error)));
       })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(), this.rememberTagExpand(), $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await jhsEventBus.emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: false }), this.checkDom();
     }
     async createQuickFilter() {
@@ -10033,6 +10146,8 @@ ${error.stack}` : "");
                         <div id="task-panel" class="content-panel ${"task-panel" === activePanel ? "active" : ""}" role="region">
                             <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>定时任务</h3><p>配置黑名单、演员同步和新作品检测。</p></header><div class="jhs-setting-group">
 
+                            <div id="setting-task-status-list" aria-live="polite"></div>
+
                             <div class="jhs-setting-row">
                                 <span class="setting-label">请求并发数量:</span>
                                 <div class="form-content">
@@ -10621,7 +10736,7 @@ ${error.stack}` : "");
   __name(repairDataHealthWithBackup, "repairDataHealthWithBackup");
   async function loadSettingForm(getBean) {
     let e2 = await storageManager.getSetting();
-    $("#videoQuality").val(e2.videoQuality), $("#reviewCount").val(e2.reviewCount || 20), $("#tagPosition").val(e2.tagPosition || "rightTop"), $("#defaultQuickFilterTab").val(normalizeQuickFilterKey(e2.defaultQuickFilterTab)), $("#needClosePageBasic").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e2.autoRemoveNewVideoMarkAfterBrowse && e2.autoRemoveNewVideoMarkAfterBrowse === _), $("#waitCheckCount").val(e2.waitCheckCount || 5), $("#checkConcurrencyCount").val(e2.checkConcurrencyCount || 2), $("#checkRequestSleep").val(e2.checkRequestSleep || 100), $("#enableCheckBlacklist").val(e2.enableCheckBlacklist || _), $("#checkBlacklist_intervalTime").val(e2.checkBlacklist_intervalTime || 12), $("#checkBlacklist_ruleTime").val(e2.checkBlacklist_ruleTime || 8760), $("#enableCheckFavoriteActress").val(e2.enableCheckFavoriteActress || _), $("#checkFavoriteActress_IntervalTime").val(e2.checkFavoriteActress_IntervalTime || 24), $("#enableCheckNewVideo").val(e2.enableCheckNewVideo || _), $("#checkNewVideo_intervalTime").val(e2.checkNewVideo_intervalTime || 12), $("#checkNewVideo_ruleTime").val(e2.checkNewVideo_ruleTime || 8760);
+    $("#videoQuality").val(e2.videoQuality), $("#reviewCount").val(e2.reviewCount || 20), $("#tagPosition").val(e2.tagPosition || "rightTop"), $("#defaultQuickFilterTab").val(normalizeQuickFilterKey(e2.defaultQuickFilterTab)), $("#needClosePageBasic").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e2.autoRemoveNewVideoMarkAfterBrowse && e2.autoRemoveNewVideoMarkAfterBrowse === _), $("#waitCheckCount").val(e2.waitCheckCount || 5), $("#checkConcurrencyCount").val(parseNumberSetting(e2.checkConcurrencyCount, 2, { min: 2, max: 5 })), $("#checkRequestSleep").val(parseNumberSetting(e2.checkRequestSleep, 100, { min: 0, max: 3e3 })), $("#enableCheckBlacklist").val(e2.enableCheckBlacklist || _), $("#checkBlacklist_intervalTime").val(e2.checkBlacklist_intervalTime || 12), $("#checkBlacklist_ruleTime").val(parseNumberSetting(e2.checkBlacklist_ruleTime, 8760, { min: 0 })), $("#enableCheckFavoriteActress").val(e2.enableCheckFavoriteActress || _), $("#checkFavoriteActress_IntervalTime").val(e2.checkFavoriteActress_IntervalTime || 24), $("#enableCheckNewVideo").val(e2.enableCheckNewVideo || _), $("#checkNewVideo_intervalTime").val(e2.checkNewVideo_intervalTime || 12), $("#checkNewVideo_ruleTime").val(parseNumberSetting(e2.checkNewVideo_ruleTime, 8760, { min: 0 }));
     const t2 = e2.highlightedTagNumber || 1, n2 = e2.highlightedTagColor || "#ce2222";
     $("#highlightedTagNumber").val(e2.highlightedTagNumber || 1), $("#highlightedTagColor").val(e2.highlightedTagColor || "#ce2222"), $("#highlightedTagLabel").css("border", `${t2}px solid ${n2}`), $("#enableClog").val(e2.enableClog || _), $("#clogMsgCount").val(e2.clogMsgCount || 2e3), $("#mobileMode").val(e2.mobileMode || "auto"), $("#themeMode").val(e2.themeMode || "light"), $("#httpTimeout").val(e2.httpTimeout || 5e3), $("#httpRetryCount").val(e2.httpRetryCount || 3), $("#webDavUrl").val(e2.webDavUrl || ""), $("#webDavUsername").val(e2.webDavUsername || ""), $("#webDavPassword").val(await decryptCredential(e2.webDavPassword) || ""), $("#enableTitleSelectFilter").prop("checked", !e2.enableTitleSelectFilter || e2.enableTitleSelectFilter === _), $("#enableFavoriteActresses").prop("checked", !e2.enableFavoriteActresses || e2.enableFavoriteActresses === _), $("#enableSaveActressCarInfo").prop("checked", !!e2.enableSaveActressCarInfo && e2.enableSaveActressCarInfo === _), $("#enableScreenSvg").prop("checked", !e2.enableScreenSvg || e2.enableScreenSvg === _), $("#enableVideoSvg").prop("checked", !e2.enableVideoSvg || e2.enableVideoSvg === _), $("#enableHandleSvg").prop("checked", !e2.enableHandleSvg || e2.enableHandleSvg === _), $("#enableSiteSvg").prop("checked", !e2.enableSiteSvg || e2.enableSiteSvg === _), $("#enableCopySvg").prop("checked", !e2.enableCopySvg || e2.enableCopySvg === _), $("#showFavoriteItem").prop("checked", !e2.showFavoriteItem || e2.showFavoriteItem === _), $("#showHasDownItem").prop("checked", !e2.showHasDownItem || e2.showHasDownItem === _), $("#showHasWatchItem").prop("checked", !e2.showHasWatchItem || e2.showHasWatchItem === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableVerticalModel").prop("checked", !!e2.enableVerticalModel && e2.enableVerticalModel === _), $("#containerColumns").val(e2.containerColumns || 5), $("#showContainerColumns").text(e2.containerColumns || 5), $("#containerWidth").val((e2.containerWidth || 100) - 70), $("#showContainerWidth").text((e2.containerWidth || 100) + "%");
     const a2 = getBean("OtherSitePlugin"), i2 = await a2.getMissAvUrl(), s2 = await a2.getjableUrl(), o2 = await a2.getAvgleUrl(), r2 = await a2.getJavTrailersUrl(), l2 = await a2.getAv123Url(), c2 = await a2.getJavDbUrl(), d2 = await a2.getJavBusUrl(), h2 = await a2.getSupJavUrl();
@@ -11047,7 +11162,7 @@ ${error.stack}` : "");
   __name(exportSettingData, "exportSettingData");
   var _SettingPlugin = class _SettingPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService()), i(this, "pendingCarImport", null), i(this, "cacheItems", [{
+      super(...arguments), i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService()), i(this, "pendingCarImport", null), i(this, "taskStatusUnsubscribe", null), i(this, "cacheItems", [{
         key: "jhs_dmm_video",
         text: "预览视频缓存",
         title: "预览视频缓存"
@@ -11176,15 +11291,28 @@ ${error.stack}` : "");
         area: utils.getDialogArea("lg"),
         scrollbar: false,
         success: /* @__PURE__ */ __name(async (e3, n2) => {
-          $(e3).find(".layui-layer-content").css("position", "relative"), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), injectResourceSourcesPanel(), await loadSettingForm(this.getBean.bind(this)), await this.loadResourceSettings(), JhsSelect.enhance(e3), this.bindClick(), $(".side-menu-item.active").attr("aria-current", "page"), utils.setupEscClose(n2), t2 && t2();
+          $(e3).find(".layui-layer-content").css("position", "relative"), this.renderTaskStatuses(), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), injectResourceSourcesPanel(), await loadSettingForm(this.getBean.bind(this)), await this.loadResourceSettings(), JhsSelect.enhance(e3), this.bindClick(), $(".side-menu-item.active").attr("aria-current", "page"), utils.setupEscClose(n2), t2 && t2();
+          this.renderTaskStatuses(), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.renderTaskStatuses()));
           if (utils.isMobileMode()) {
             this.collapseAdvancedTabs();
           }
         }, "success"),
         end: /* @__PURE__ */ __name(() => {
+          this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null;
           this.getBean("CoverButtonPlugin").enableSvgBtn();
         }, "end")
       });
+    }
+    renderTaskStatuses() {
+      const container = $("#setting-task-status-list");
+      if (!container.length) return;
+      const taskPlugin = this.getBean("TaskPlugin");
+      if (!taskPlugin?.getTaskStatusSnapshot) return void container.empty();
+      const names = { blacklist: "黑名单", favoriteActress: "演员同步", newVideo: "新作品" }, labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = /* @__PURE__ */ __name((value) => value ? new Date(value).toLocaleString() : "无", "format");
+      container.empty(), ["blacklist", "favoriteActress", "newVideo"].forEach(((name) => {
+        const snapshot = taskPlugin.getTaskStatusSnapshot(name), row = $('<div class="jhs-setting-row jhs-task-setting-status"></div>');
+        row.append($('<span class="setting-label"></span>').text(`${names[name]}：${labels[snapshot.state]}`)), row.append($('<span class="form-content jhs-helper-text"></span>').text(`上次完成 ${format(snapshot.completedAt)}；下次检查 ${snapshot.nextAt ? format(snapshot.nextAt) : "立即"}`)), container.append(row);
+      }));
     }
     collapseAdvancedTabs() {
       const advancedPanels = [
@@ -12581,7 +12709,18 @@ ${error.stack}` : "");
       return "MagnetHubPlugin";
     }
     async initCss() {
-      return "\n            <style>\n                .magnet-container {\n                    margin: 20px auto;\n                    width: 100%;\n                    font-family: Arial, sans-serif;\n                }\n                .magnet-tabs {\n                    display: flex;\n                    border-bottom: 1px solid var(--jhs-border);\n                    margin-bottom: 15px;\n                    justify-content: space-between;\n                }\n                .magnet-tab {\n                    padding: 5px 12px;\n                    cursor: pointer;\n                    border: 1px solid transparent;\n                    border-bottom: none;\n                    margin-right: 5px;\n                    background: var(--jhs-surface-2);\n                    border-radius: 5px 5px 0 0;\n                }\n                .magnet-tab.active {\n                    background: var(--jhs-surface);\n                    border-color: var(--jhs-border);\n                    border-bottom: 1px solid var(--jhs-surface);\n                    margin-bottom: -1px;\n                    font-weight: bold;\n                }\n                .magnet-tab:hover:not(.active) {\n                    background: var(--jhs-border);\n                }\n                \n                .magnet-results {\n                    min-height: 200px;\n                }\n                .magnet-result {\n                    padding: 15px;\n                    border-bottom: 1px solid var(--jhs-surface-2);\n                    position: relative; \n                }\n                .magnet-result:hover {\n                    background-color: var(--jhs-surface-2);\n                }\n                .magnet-title {\n                    font-weight: bold;\n                    margin-bottom: 5px;\n                    white-space: nowrap;\n                    overflow: hidden; \n                    text-overflow: ellipsis;\n                    padding-right: 80px; \n                }\n                .magnet-info {\n                    display: flex;\n                    justify-content: space-between;\n                    font-size: 12px;\n                    color: var(--jhs-text-muted);\n                    margin-bottom: 5px;\n                }\n                .magnet-loading {\n                    text-align: center;\n                    padding: 20px;\n                }\n                .magnet-error {\n                    color: var(--jhs-status-filter-text);\n                    padding: 10px;\n                }\n                \n                .magnet-copy {\n                    position: absolute;\n                    right: 15px;\n                    top: 12px;\n                }\n                .magnet-hub-btn {\n                    background-color: var(--jhs-surface-2);\n                    color: var(--jhs-text-muted);\n                    border: 1px solid var(--jhs-border-strong);\n                    padding: 3px 8px;\n                    border-radius: 3px;\n                    cursor: pointer;\n                    font-size: 12px;\n                    transition: all 0.2s;\n                    margin-left: 10px;\n                }\n                .magnet-hub-btn:hover {\n                    background-color: var(--jhs-border);\n                    border-color: var(--jhs-border);\n                }\n                .magnet-hub-btn.copied {\n                    background-color: var(--jhs-status-down);\n                    color: var(--jhs-status-down-on);\n                    border-color: var(--jhs-status-down);\n                }\n            </style>\n        ";
+      return `<style>
+            .magnet-container { width:100%; margin:var(--jhs-space-4) auto; }
+            .magnet-tabs { display:flex; justify-content:space-between; margin-bottom:var(--jhs-space-3); border-bottom:1px solid var(--jhs-border); }
+            .magnet-results { min-height:200px; }
+            .magnet-result { position:relative; padding:var(--jhs-space-3); border-bottom:1px solid var(--jhs-border); }
+            .magnet-result:hover { background:var(--jhs-surface-hover); }
+            .magnet-title { overflow:hidden; margin-bottom:var(--jhs-space-1); padding-right:80px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+            .magnet-info { display:flex; justify-content:space-between; margin-bottom:var(--jhs-space-1); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
+            .magnet-loading { padding:var(--jhs-space-4); text-align:center; }
+            .magnet-error { padding:var(--jhs-space-2); color:var(--jhs-danger); }
+            .magnet-copy { position:absolute; top:var(--jhs-space-2); right:var(--jhs-space-3); }
+        </style>`;
     }
     async createMagnetHub(e2) {
       await this.initializeSources();
@@ -12702,7 +12841,8 @@ ${error.stack}` : "");
             `);
         t3.tags?.length && item.find(".magnet-info").after($("<div></div>").addClass("magnet-tags").append(t3.tags.map(((tag) => $("<span></span>").addClass("jhs-badge").text(tag)))));
         const copyBox = item.find(".magnet-copy");
-        copyBox.append(`<button type="button" class="jhs-btn magnet-hub-btn jhs-offline-btn" data-resource="${safeMagnet}">离线</button>`);
+        item.find(".copy-btn").removeClass("magnet-hub-btn").addClass("jhs-btn--secondary");
+        copyBox.append(`<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn" data-resource="${safeMagnet}">离线</button>`);
         item.appendTo(e2);
       })), e2.on("click", ".copy-btn", (async function() {
         const e3 = $(this), t3 = e3.data("magnet");
@@ -13059,7 +13199,7 @@ ${error.stack}` : "");
   var TranslatePlugin = _TranslatePlugin;
   var _TaskPlugin = class _TaskPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "singleTaskKey", "checkNewActressActorFilterCar"), i(this, "taskConfig", null), i(this, "storageQueue", new StorageQueue()), i(this, "lastCheckFavoriteActressTimeKey", "jhs_time_checkFavoriteActress"), i(this, "lastCheckBlacklistTimeKey", "jhs_time_checkBlacklist"), i(this, "lastCheckNewVideoTimeKey", "jhs_time_checkNewVideo"), i(this, "taskTimer", null), i(this, "taskRunning", false), i(this, "visibilityHandler", null), i(this, "pageHideHandler", null);
+      super(...arguments), i(this, "singleTaskKey", "checkNewActressActorFilterCar"), i(this, "taskConfig", null), i(this, "storageQueue", new StorageQueue()), i(this, "lastCheckFavoriteActressTimeKey", "jhs_time_checkFavoriteActress"), i(this, "lastCheckBlacklistTimeKey", "jhs_time_checkBlacklist"), i(this, "lastCheckNewVideoTimeKey", "jhs_time_checkNewVideo"), i(this, "lastCheckFavoriteActressAttemptKey", "jhs_time_checkFavoriteActress_attempt"), i(this, "lastCheckFavoriteActressNextKey", "jhs_time_checkFavoriteActress_next"), i(this, "lastCheckBlacklistAttemptKey", "jhs_time_checkBlacklist_attempt"), i(this, "lastCheckBlacklistNextKey", "jhs_time_checkBlacklist_next"), i(this, "lastCheckNewVideoAttemptKey", "jhs_time_checkNewVideo_attempt"), i(this, "lastCheckNewVideoNextKey", "jhs_time_checkNewVideo_next"), i(this, "taskTimer", null), i(this, "taskRunning", false), i(this, "visibilityHandler", null), i(this, "pageHideHandler", null), i(this, "settingsHandler", null), i(this, "taskConfigDirty", false), i(this, "configLoadPromise", null), i(this, "configLoadQueued", false), i(this, "configRefreshPromise", null), i(this, "configRefreshQueued", false), i(this, "activeTasks", /* @__PURE__ */ new Set());
     }
     getName() {
       return "TaskPlugin";
@@ -13068,7 +13208,6 @@ ${error.stack}` : "");
       return "idle";
     }
     async limitConcurrency(e2, t2, n2, a2) {
-      this.showIsRun();
       let i2 = 0, s2 = false;
       const o2 = Math.max(1, Math.min(t2, e2.length)), r2 = Array.from({ length: o2 }, (async () => {
         for (; !s2; ) {
@@ -13090,16 +13229,129 @@ ${error.stack}` : "");
     isNetworkBlocked(e2) {
       return true === e2?._cfBlocked || true === e2?._circuitBroken;
     }
+    createTaskResult(extra = {}) {
+      return { attempted: false, completed: false, fatal: false, success: 0, networkFailed: 0, parseFailed: 0, aborted: 0, skippedInterval: 0, skippedStopped: 0, ...extra };
+    }
+    async runBackgroundTask(name, runner) {
+      try {
+        return await runner();
+      } catch (error) {
+        if (this.isNetworkBlocked(error)) throw error;
+        return clog.error(`${name}执行失败，继续后续后台任务`, error), this.createTaskResult({ attempted: true, error });
+      }
+    }
     isUnnecessaryCheck(e2, t2) {
       if (!t2) throw new Error("未传入checkIntervalTime");
       t2 = parseInt(t2);
       return utils.getHourDifference(new Date(e2), /* @__PURE__ */ new Date()) < t2;
+    }
+    getTaskSchedule(name) {
+      const schedules = {
+        blacklist: { completedKey: this.lastCheckBlacklistTimeKey, attemptKey: this.lastCheckBlacklistAttemptKey, nextKey: this.lastCheckBlacklistNextKey, intervalSetting: "checkBlacklist_intervalTime", defaultInterval: 12 },
+        favoriteActress: { completedKey: this.lastCheckFavoriteActressTimeKey, attemptKey: this.lastCheckFavoriteActressAttemptKey, nextKey: this.lastCheckFavoriteActressNextKey, intervalSetting: "checkFavoriteActress_IntervalTime", defaultInterval: 24 },
+        newVideo: { completedKey: this.lastCheckNewVideoTimeKey, attemptKey: this.lastCheckNewVideoAttemptKey, nextKey: this.lastCheckNewVideoNextKey, intervalSetting: "checkNewVideo_intervalTime", defaultInterval: 12 }
+      };
+      if (!schedules[name]) throw new Error(`未知任务调度: ${name}`);
+      return schedules[name];
+    }
+    getTaskScheduleState(name) {
+      const schedule = this.getTaskSchedule(name), completed = parseTaskTimestamp(localStorage.getItem(schedule.completedKey)), attempt = parseTaskTimestamp(localStorage.getItem(schedule.attemptKey));
+      return { ...schedule, completed, attempt, pending: null != attempt && (null == completed || attempt > completed) };
+    }
+    /** 返回当前标签页可证明的任务状态，不写入调度数据。 */
+    getTaskStatusSnapshot(name) {
+      const state = this.getTaskScheduleState(name), storedNext = parseTaskTimestamp(localStorage.getItem(state.nextKey));
+      const nextAt = null == storedNext ? state.pending && null != state.attempt ? state.attempt + 3e5 : 0 : storedNext, now = Date.now();
+      let status = "idle";
+      if (this.activeTasks.has(name)) status = "running";
+      else if (state.pending && now < nextAt) status = "pending";
+      else if (null == storedNext || now >= nextAt) status = "due";
+      return { name, state: status, completedAt: state.completed, attemptAt: state.attempt, nextAt, isPending: state.pending, pendingUntil: state.pending ? nextAt : null };
+    }
+    async emitTaskStatus(name, phase) {
+      try {
+        await globalThis.jhsEventBus?.emit?.("task-status-changed", { taskName: name, phase }, { broadcast: false });
+      } catch (error) {
+        clog.error(`任务状态通知失败: ${name}/${phase}`, error);
+      }
+    }
+    async emitNewVideoChanged(reason, carNums = []) {
+      try {
+        await globalThis.jhsEventBus?.emit?.("new-video-changed", { reason, carNums: carNums.map(normalizeCarNum).filter(Boolean) });
+      } catch (error) {
+        clog.error("新作品状态通知失败", error);
+      }
+    }
+    async withActiveTask(name, runner) {
+      this.activeTasks.add(name);
+      try {
+        await this.emitTaskStatus(name, "started");
+        return await runner();
+      } finally {
+        this.activeTasks.delete(name), await this.emitTaskStatus(name, "finished");
+      }
+    }
+    async getLatestTaskInterval(name) {
+      const schedule = this.getTaskSchedule(name);
+      storageManager._invalidateCache?.(storageManager.setting_key);
+      return parseNumberSetting(await storageManager.getSetting(schedule.intervalSetting, schedule.defaultInterval), schedule.defaultInterval, { min: Number.EPSILON });
+    }
+    async shouldStartTask(name, force = false) {
+      if (force) return true;
+      const schedule = this.getTaskSchedule(name), interval = await this.getLatestTaskInterval(name);
+      const completed = parseTaskTimestamp(localStorage.getItem(schedule.completedKey)), attempt = parseTaskTimestamp(localStorage.getItem(schedule.attemptKey));
+      let next = parseTaskTimestamp(localStorage.getItem(schedule.nextKey));
+      if (null == next) {
+        const pending = null != attempt && (null == completed || attempt > completed);
+        next = pending ? attempt + 3e5 : null == completed ? 0 : completed + 36e5 * interval;
+        localStorage.setItem(schedule.nextKey, String(next));
+      }
+      return Date.now() >= next;
+    }
+    beginTaskAttempt(name) {
+      const schedule = this.getTaskSchedule(name), completed = parseTaskTimestamp(localStorage.getItem(schedule.completedKey));
+      const now = Math.floor(Date.now() / 1e3) * 1e3, attempt = null == completed ? now : Math.max(now, completed + 1e3);
+      localStorage.setItem(schedule.attemptKey, String(attempt)), localStorage.setItem(schedule.nextKey, String(attempt + 3e5));
+      return attempt;
+    }
+    async finalizeTask(name, completed) {
+      const schedule = this.getTaskSchedule(name);
+      if (!completed) return localStorage.setItem(schedule.nextKey, String(Date.now() + 3e5));
+      const attempt = parseTaskTimestamp(localStorage.getItem(schedule.attemptKey)) || 0, completedAt = Math.max(Math.floor(Date.now() / 1e3) * 1e3, attempt), interval = await this.getLatestTaskInterval(name);
+      localStorage.setItem(schedule.completedKey, utils.getNowStr("-", ":", completedAt)), localStorage.setItem(schedule.nextKey, String(completedAt + 36e5 * interval));
+    }
+    async recalculateSchedules() {
+      await this.loadConfig();
+      for (const [name, interval] of [["blacklist", this.taskConfig.checkBlacklist_intervalTime], ["favoriteActress", this.taskConfig.checkFavoriteActress_IntervalTime], ["newVideo", this.taskConfig.checkNewVideo_intervalTime]]) {
+        const state = this.getTaskScheduleState(name);
+        if (state.pending) continue;
+        localStorage.setItem(state.nextKey, String(null == state.completed ? Date.now() : state.completed + 36e5 * interval));
+      }
+    }
+    async invalidateConfig(recalculate = false) {
+      this.taskConfigDirty = true;
+      if (!recalculate) return;
+      if (this.configRefreshPromise) return this.configRefreshQueued = true, this.configRefreshPromise;
+      return this.configRefreshPromise = (async () => {
+        do {
+          this.configRefreshQueued = false, await this.recalculateSchedules();
+        } while (this.configRefreshQueued);
+      })().finally((() => {
+        this.configRefreshPromise = null;
+      })), this.configRefreshPromise;
     }
     handle() {
       if (!window.isListPage) return;
       this.visibilityHandler || (this.visibilityHandler = () => {
         document.hidden ? this.clearSchedule() : this.scheduleTask(0);
       }, this.pageHideHandler = () => this.clearSchedule(), document.addEventListener("visibilitychange", this.visibilityHandler), window.addEventListener("pagehide", this.pageHideHandler));
+      this.settingsHandler || (this.settingsHandler = async () => {
+        try {
+          storageManager._invalidateCache?.(storageManager.setting_key), await this.invalidateConfig(true), this.scheduleTask(0);
+        } catch (error) {
+          clog.error("任务设置刷新失败", error);
+        }
+      }, globalThis.jhsEventBus?.on?.("settings-changed", this.settingsHandler));
       return document.hidden ? void 0 : this.runAndSchedule();
     }
     clearSchedule() {
@@ -13120,11 +13372,6 @@ ${error.stack}` : "");
         this.taskRunning = false, this.scheduleTask();
       }
     }
-    showIsRun() {
-      show.info("正在执行检测任务中, 请勿关闭当前窗口", {
-        duration: 3e3
-      });
-    }
     async doTask() {
       if (!window.isListPage) return;
       await this.loadConfig(), this.javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl();
@@ -13132,12 +13379,11 @@ ${error.stack}` : "");
         ifAvailable: true
       }, (async (e2) => {
         if (e2) {
-          if (window.isListPage && (this.taskConfig.enableCheckBlacklist === _ ? await this.checkBlacklist() : clog.warn("自动检测屏蔽黑名单-禁用"), !l)) {
+          if (window.isListPage && (this.taskConfig.enableCheckBlacklist === _ ? await this.runBackgroundTask("黑名单整批检测", (() => this.checkBlacklist())) : clog.warn("自动检测屏蔽黑名单-禁用"), !l)) {
             if (this.taskConfig.enableCheckFavoriteActress === _) {
-              const e3 = localStorage.getItem(this.lastCheckFavoriteActressTimeKey), t2 = this.taskConfig.checkFavoriteActress_IntervalTime, n2 = e3 && this.isUnnecessaryCheck(e3, t2), a2 = $('a[href*="/users/profile"]').length > 0;
-              n2 && clog.debug(`检测同步演员, 上次检测时间: ${e3} 检测间隔时间: ${t2}小时 未到时间`), !n2 && a2 && await this.checkFavoriteActress();
+              $('a[href*="/users/profile"]').length > 0 ? await this.runBackgroundTask("演员收藏同步", (() => this.checkFavoriteActress())) : clog.debug("未登录 JavDB，跳过自动同步演员");
             } else clog.warn("自动同步已收藏的演员-禁用");
-            this.taskConfig.enableCheckNewVideo === _ ? await this.checkNewVideo() : clog.warn("自动检测已收藏演员的最新作品-禁用");
+            this.taskConfig.enableCheckNewVideo === _ ? await this.runBackgroundTask("新作品整批检测", (() => this.checkNewVideo())) : clog.warn("自动检测已收藏演员的最新作品-禁用");
           }
         } else clog.debug("争夺任务锁失败, 跳过执行");
       })).catch(((e2) => {
@@ -13145,140 +13391,233 @@ ${error.stack}` : "");
       }));
     }
     async loadConfig() {
-      const e2 = await storageManager.getSetting();
-      this.taskConfig = {
-        checkConcurrencyCount: e2.checkConcurrencyCount ? Number(e2.checkConcurrencyCount) : 2,
-        checkRequestSleep: e2.checkRequestSleep ? Number(e2.checkRequestSleep) : 100,
-        enableCheckBlacklist: e2.enableCheckBlacklist || _,
-        checkBlacklist_intervalTime: e2.checkBlacklist_intervalTime ? Number(e2.checkBlacklist_intervalTime) : 12,
-        checkBlacklist_ruleTime: e2.checkBlacklist_ruleTime ? Number(e2.checkBlacklist_ruleTime) : 8760,
-        enableCheckFavoriteActress: e2.enableCheckFavoriteActress || _,
-        checkFavoriteActress_IntervalTime: e2.checkFavoriteActress_IntervalTime ? Number(e2.checkFavoriteActress_IntervalTime) : 24,
-        enableCheckNewVideo: e2.enableCheckNewVideo || _,
-        checkNewVideo_intervalTime: e2.checkNewVideo_intervalTime ? Number(e2.checkNewVideo_intervalTime) : 12,
-        checkNewVideo_ruleTime: e2.checkNewVideo_ruleTime ? Number(e2.checkNewVideo_ruleTime) : 8760
-      };
+      if (this.configLoadPromise) return this.configLoadQueued = true, this.configLoadPromise;
+      return this.configLoadPromise = (async () => {
+        do {
+          this.configLoadQueued = false;
+          const e2 = await storageManager.getSetting(), nextConfig = {
+            checkConcurrencyCount: parseNumberSetting(e2.checkConcurrencyCount, 2, { min: 2, max: 5 }),
+            checkRequestSleep: parseNumberSetting(e2.checkRequestSleep, 100, { min: 0, max: 3e3 }),
+            enableCheckBlacklist: e2.enableCheckBlacklist || _,
+            checkBlacklist_intervalTime: parseNumberSetting(e2.checkBlacklist_intervalTime, 12, { min: Number.EPSILON }),
+            checkBlacklist_ruleTime: parseNumberSetting(e2.checkBlacklist_ruleTime, 8760, { min: 0 }),
+            enableCheckFavoriteActress: e2.enableCheckFavoriteActress || _,
+            checkFavoriteActress_IntervalTime: parseNumberSetting(e2.checkFavoriteActress_IntervalTime, 24, { min: Number.EPSILON }),
+            enableCheckNewVideo: e2.enableCheckNewVideo || _,
+            checkNewVideo_intervalTime: parseNumberSetting(e2.checkNewVideo_intervalTime, 12, { min: Number.EPSILON }),
+            checkNewVideo_ruleTime: parseNumberSetting(e2.checkNewVideo_ruleTime, 8760, { min: 0 })
+          };
+          this.taskConfig = nextConfig, this.taskConfigDirty = false;
+        } while (this.configLoadQueued || this.taskConfigDirty);
+        return this.taskConfig;
+      })().finally((() => {
+        this.configLoadPromise = null;
+      })), this.configLoadPromise;
     }
     /** 确保所有任务入口均已具备配置和站点地址。 */
     async ensureReady() {
-      this.taskConfig || await this.loadConfig(), this.javDbUrl || (this.javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl());
+      (!this.taskConfig || this.taskConfigDirty) && await this.loadConfig(), this.javDbUrl || (this.javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl());
       if (!this.javDbUrl) throw new Error("JavDB 地址未配置");
     }
-    async checkBlacklist(e2) {
-      await this.ensureReady();
-      let t2 = await storageManager.getBlacklist();
-      if (0 === t2.length) return;
-      t2 = t2.sort(((e3, t3) => e3.createTime < t3.createTime ? 1 : e3.createTime > t3.createTime ? -1 : 0));
-      const n2 = this.taskConfig.checkConcurrencyCount, a2 = this.taskConfig.checkRequestSleep, i2 = this.taskConfig.checkBlacklist_intervalTime, s2 = this.taskConfig.checkBlacklist_ruleTime, o2 = localStorage.getItem(this.lastCheckBlacklistTimeKey);
-      if (!e2 && o2 && this.isUnnecessaryCheck(o2, i2)) return void clog.debug(`检测黑名单, 上次检测时间: ${o2} 检测间隔时间: ${i2}小时 未到时间`);
-      const r2 = [], l2 = [];
-      for (const h2 of t2) {
-        let t3 = h2.name, n3 = h2.checkTime, a3 = h2.lastPublishTime, o3 = h2.url;
-        if (new URL(window.location.href).hostname === new URL(o3).hostname) {
-          if (e2 || !n3 || !this.isUnnecessaryCheck(n3, i2)) if (!a3 || 0 === s2 || this.isUnnecessaryCheck(a3, s2)) r2.push(h2);
-          else {
-            let e3 = `检测黑名单: ${t3} ${a3} 停更超过${s2 / 24 / 365}年,跳过检测`;
-            l2.push(e3), $("#checkBlacklistMsg").text(e3);
-          }
-        } else clog.log("黑名单地址非同域名,跳过", o3);
-      }
-      if (0 === r2.length) return;
-      l2.forEach(((e3) => {
-        clog.log(e3);
-      })), clog.log(`<span class="jhs-task-emphasis">检测屏蔽黑名单, 总任务数: ${r2.length}, 并发限制:${n2}, 请求间隔时间:${a2}ms</span>`);
-      const c2 = this.getBean("BlacklistPlugin");
-      await this.limitConcurrency(r2, n2, a2, (async (e3) => {
-        let { starId: t3, name: n3, url: a3 } = e3;
-        try {
-          clog.log("正在检屏黑名单演员:", n3, a3), $("#checkBlacklistMsg").text(`正在检屏黑名单演员: ${n3} ${a3}`);
-          const e4 = await gmHttp.get(a3), i3 = utils.htmlTo$dom(e4);
-          await this.storageQueue.addTask((async () => {
-            let { lastPublishTime: e5 } = await c2.parseAndSaveFilterInfo(i3, n3, t3);
-            await storageManager.updateBlacklistItem({
-              starId: t3,
-              name: n3,
-              checkTime: utils.getNowStr(),
-              lastPublishTime: e5
-            });
-          }));
-        } catch (i3) {
-          if (this.isNetworkBlocked(i3)) throw i3;
-          $("#checkBlacklistMsg").text(`检测屏蔽演员信息, 发生错误: ${a3}`), clog.error("检测屏蔽演员信息, 发生错误:", a3, i3), show.error("检测屏蔽演员信息, 发生错误:" + i3, "bottom", "right");
-        }
-      })), await this.storageQueue.waitAllFinished();
-      const d2 = utils.getNowStr();
-      localStorage.setItem(this.lastCheckBlacklistTimeKey, d2), clog.log('<span class="jhs-task-emphasis">-------- END 检测屏蔽黑名单 END --------</span>'), $("#checkBlacklistMsg").text("检测屏蔽黑名单, 结束"), await this.getBean("BlacklistPlugin").resetBtnTip();
-    }
-    async checkFavoriteActress() {
-      await this.ensureReady();
-      const e2 = `${this.javDbUrl}/users/collection_actors`, t2 = [];
-      await this.scrapeActorInfo(e2, t2), clog.log("所有演员信息已收集, 总计数量:", t2.length), $("#checkNewVideoMsg").text("同步完成"), t2.length > 0 && (await storageManager.addFavoriteActressList(t2), localStorage.setItem(this.lastCheckFavoriteActressTimeKey, utils.getNowStr()), await this.getBean("NewVideoPlugin").resetBtnTip());
-    }
-    async scrapeActorInfo(e2, t2) {
-      clog.log(`正在抓取页面: ${e2}`), $("#checkNewVideoMsg").text(`正在解析已收藏的演员: ${e2}`);
-      let nextUrl = null;
+    async resolveBlacklistSite(url) {
       try {
-        const responseText = await gmHttp.get(e2), $page = utils.htmlTo$dom(responseText);
-        const parsedPage = parseJavDbActorList($page, this.javDbUrl);
-        t2.push(...parsedPage.actors), nextUrl = parsedPage.nextUrl;
-      } catch (n2) {
-        throw clog.error(`抓取 ${e2} 时发生错误，停止本轮同步:`, n2), n2;
-      }
-      if (nextUrl) await this.scrapeActorInfo(nextUrl, t2);
-    }
-    async checkNewVideo(e2) {
-      await this.ensureReady();
-      const result = { success: 0, parseFailed: 0, networkFailed: 0, skippedStopped: 0, skippedInterval: 0, aborted: 0 }, t2 = await storageManager.getFavoriteActressList();
-      if (!t2.length) return this.renderCheckResult(result, "没有需要检测的演员（当前收藏为空）"), result;
-      const n2 = utils.genericSort(t2, [{
-        key: /* @__PURE__ */ __name((e3) => {
-          var t3;
-          return (null == (t3 = e3.newVideoList) ? void 0 : t3.length) ?? 0;
-        }, "key"),
-        order: "desc"
-      }, {
-        key: "lastPublishTime",
-        order: "desc"
-      }]), a2 = this.taskConfig.checkConcurrencyCount, i2 = this.taskConfig.checkRequestSleep, s2 = this.taskConfig.checkNewVideo_intervalTime, o2 = this.taskConfig.checkNewVideo_ruleTime, r2 = localStorage.getItem(this.lastCheckNewVideoTimeKey);
-      if (!e2 && r2 && this.isUnnecessaryCheck(r2, s2)) return result.skippedInterval = t2.length, clog.debug(`检测新作品, 上次检测时间: ${r2} 检测间隔时间: ${s2}小时 未到时间`), this.renderCheckResult(result, "检测间隔未到"), result;
-      const l2 = [], c2 = [];
-      for (const m2 of n2) {
-        const { lastCheckTime: t3, lastPublishTime: n3, name: a3 } = m2;
-        !e2 && t3 && this.isUnnecessaryCheck(t3, s2) ? result.skippedInterval++ : !n3 || 0 === o2 || this.isUnnecessaryCheck(n3, o2) ? l2.push(m2) : (result.skippedStopped++, c2.push(`检测新作品: ${a3} ${n3} 停更超过${o2 / 24 / 365}年,跳过检测`));
-      }
-      if (0 === l2.length) return this.renderCheckResult(result, "没有需要检测的演员"), result;
-      c2.forEach(((e3) => {
-        clog.log(e3);
-      })), clog.log(`<span class="jhs-task-emphasis">检测最新作品, 总任务数: ${l2.length}, 并发限制:${a2}, 请求间隔时间:${i2}ms</span>`);
-      const d2 = await storageManager.getTitleFilterKeyword(), h2 = await storageManager.getBlacklistCarList(), g2 = new Set(h2.map(((e3) => e3.carNum)));
-      try {
-        await this.limitConcurrency(l2, a2, i2, (async (e3) => {
-          const { lastCheckTime: t3, name: n3, starId: a3 } = e3;
-          let i3 = `${this.javDbUrl}/actors/${a3}?t=d`;
+        const target = new URL(url), otherSite = this.getBean("OtherSitePlugin"), [javDbUrl, javBusUrl] = await Promise.all([otherSite?.getJavDbUrl?.(), otherSite?.getJavBusUrl?.()]);
+        for (const [configuredUrl, site2] of [[javDbUrl, T], [javBusUrl, I]]) {
           try {
-            clog.log("正在检测最新作品, 演员:", n3, i3), $("#checkNewVideoMsg").text(`正在检测最新作品, 演员: ${n3}`);
-            const e4 = await gmHttp.get(i3), t4 = utils.htmlTo$dom(e4);
-            try {
-              await this.storageQueue.addTask((async () => this.parsePage(t4, T, a3, n3, d2, g2))), result.success++;
-            } catch (e5) {
-              result.parseFailed++, clog.error("解析或保存演员作品失败:", i3, e5);
-            }
-          } catch (s3) {
-            if (this.isNetworkBlocked(s3)) throw result.networkFailed++, s3;
-            result.networkFailed++, clog.error("检测演员信息发生网络错误:", i3, s3);
+            if (configuredUrl && target.hostname === new URL(configuredUrl).hostname) return site2;
+          } catch (error) {
+            clog.warn(`忽略无效的站点配置: ${configuredUrl}`, error);
           }
-        })), await this.storageQueue.waitAllFinished();
+        }
+        const { site } = detectSite(url);
+        return [T, I].includes(site) ? site : null;
       } catch (error) {
-        if (!this.isNetworkBlocked(error)) throw error;
-        result.aborted = Math.max(0, l2.length - result.success - result.parseFailed - result.networkFailed), clog.warn(`网络阻断，本轮停止，未执行 ${result.aborted}`);
+        return null;
       }
-      result.success > 0 && 0 === result.parseFailed + result.networkFailed + result.aborted && localStorage.setItem(this.lastCheckNewVideoTimeKey, utils.getNowStr()), clog.log('<span class="jhs-task-emphasis">检测最新作品---结束</span>'), this.renderCheckResult(result);
-      const p2 = this.getBean("NewVideoPlugin");
-      await p2.loadData(), await p2.resetBtnTip();
-      return result;
+    }
+    async checkBlacklist(force = false) {
+      await this.ensureReady();
+      const result = this.createTaskResult({ skippedHost: 0 });
+      if (!await this.shouldStartTask("blacklist", force)) return clog.debug("检测黑名单未到整批执行时间"), result;
+      this.beginTaskAttempt("blacklist"), result.attempted = true;
+      return this.withActiveTask("blacklist", async () => {
+        let blockedError = null, finalized = false;
+        try {
+          let items = await storageManager.getBlacklist();
+          items = items.sort(((left, right) => left.createTime < right.createTime ? 1 : left.createTime > right.createTime ? -1 : 0));
+          const concurrency = this.taskConfig.checkConcurrencyCount, sleep = this.taskConfig.checkRequestSleep, interval = this.taskConfig.checkBlacklist_intervalTime, rule = this.taskConfig.checkBlacklist_ruleTime;
+          const eligible = [], currentHostname = new URL(window.location.href).hostname;
+          for (const item of items) {
+            let itemUrl;
+            try {
+              itemUrl = new URL(item.url);
+            } catch (error) {
+              result.parseFailed++, clog.error("黑名单地址无效:", item.url, error);
+              continue;
+            }
+            if (currentHostname !== itemUrl.hostname) {
+              result.skippedHost++;
+              continue;
+            }
+            if (!force && item.checkTime && this.isUnnecessaryCheck(item.checkTime, interval)) result.skippedInterval++;
+            else if (shouldSkipStopped(item.lastPublishTime, rule)) result.skippedStopped++;
+            else {
+              const site = await this.resolveBlacklistSite(itemUrl.href);
+              site ? eligible.push({ item, site }) : (result.parseFailed++, clog.error(`不支持的黑名单来源站点: ${itemUrl.hostname}`));
+            }
+          }
+          clog.log(`<span class="jhs-task-emphasis">检测屏蔽黑名单, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
+          const blacklistPlugin = this.getBean("BlacklistPlugin");
+          try {
+            await this.limitConcurrency(eligible, concurrency, sleep, (async (entry) => {
+              const { item, site } = entry;
+              const { starId, name, url } = item;
+              let responseText;
+              try {
+                clog.log("正在检屏黑名单演员:", name, url), $("#checkBlacklistMsg").text(`正在检屏黑名单演员: ${name} ${url}`), responseText = await gmHttp.get(url);
+              } catch (error) {
+                result.networkFailed++;
+                if (this.isNetworkBlocked(error)) throw error;
+                return void clog.error("检测屏蔽演员网络错误:", url, error);
+              }
+              try {
+                const page = utils.htmlTo$dom(responseText);
+                await this.storageQueue.addTask((async () => {
+                  const parsed = await blacklistPlugin.parseAndSaveFilterInfo(page, name, starId, site);
+                  await storageManager.updateBlacklistItem({ starId, name, checkTime: utils.getNowStr(), lastPublishTime: parsed.lastPublishTime });
+                })), result.success++;
+              } catch (error) {
+                result.parseFailed++, clog.error("解析或保存黑名单演员失败:", url, error);
+              }
+            })), await this.storageQueue.waitAllFinished();
+          } catch (error) {
+            if (!this.isNetworkBlocked(error)) throw error;
+            blockedError = error, result.aborted = Math.max(0, eligible.length - result.success - result.parseFailed - result.networkFailed);
+          }
+          const completed = 0 === result.parseFailed + result.networkFailed + result.aborted;
+          result.completed = completed, result.fatal = !!blockedError, await this.finalizeTask("blacklist", completed), finalized = true, this.renderBlacklistResult(result, completed);
+          try {
+            await this.getBean("BlacklistPlugin").resetBtnTip();
+          } catch (error) {
+            clog.error("刷新黑名单检测提示失败", error);
+          }
+          if (blockedError) throw blockedError;
+          return result;
+        } catch (error) {
+          finalized || await this.finalizeTask("blacklist", false), result.completed = false, result.fatal = this.isNetworkBlocked(error);
+          if (result.fatal) throw error;
+          return result.parseFailed++, clog.error("黑名单整批检测失败", error), result;
+        }
+      });
+    }
+    renderBlacklistResult(result, completed) {
+      const retry = completed ? "" : "，5 分钟后补偿未完成项", message = `黑名单整批检测：成功 ${result.success}，解析/存储失败 ${result.parseFailed}，网络失败 ${result.networkFailed}，停更跳过 ${result.skippedStopped}，间隔跳过 ${result.skippedInterval}，异站跳过 ${result.skippedHost}${result.aborted ? `，未执行 ${result.aborted}` : ""}${retry}`;
+      $("#checkBlacklistMsg").text(message), clog.log(message);
+    }
+    async checkFavoriteActress(force = false) {
+      await this.ensureReady();
+      const result = this.createTaskResult({ pages: 0, actorCount: 0 });
+      if (!await this.shouldStartTask("favoriteActress", force)) return clog.debug("同步收藏演员未到整批执行时间"), result;
+      this.beginTaskAttempt("favoriteActress"), result.attempted = true;
+      return this.withActiveTask("favoriteActress", async () => {
+        try {
+          const actors = [], sync = await this.scrapeActorInfo(`${this.javDbUrl}/users/collection_actors`, actors);
+          actors.length > 0 && await storageManager.addFavoriteActressList(actors), result.success = actors.length, result.actorCount = actors.length, result.pages = sync.pages;
+          await this.finalizeTask("favoriteActress", true), result.completed = true, clog.log("所有演员信息已收集, 总计数量:", actors.length), $("#checkNewVideoMsg").text(`完整同步完成：演员 ${actors.length}，页面 ${sync.pages}`);
+          actors.length > 0 && await this.emitNewVideoChanged("favorite-actress-sync");
+          return result;
+        } catch (error) {
+          result.completed = false, error?._taskNetwork ? result.networkFailed++ : result.parseFailed++, result.fatal = this.isNetworkBlocked(error), await this.finalizeTask("favoriteActress", false), $("#checkNewVideoMsg").text("演员同步失败，5 分钟后重试整轮"), clog.error("同步收藏演员失败", error);
+          if (result.fatal) throw error;
+          return result;
+        }
+      });
+    }
+    async scrapeActorInfo(startUrl, target = []) {
+      const expected = new URL("/users/collection_actors", this.javDbUrl), visitedUrls = /* @__PURE__ */ new Set();
+      let currentUrl = new URL(startUrl, this.javDbUrl), pages = 0;
+      for (; currentUrl; ) {
+        try {
+          if (currentUrl.origin !== expected.origin || currentUrl.pathname !== expected.pathname) throw new Error(`收藏演员分页地址越界: ${currentUrl.href}`);
+          if (visitedUrls.has(currentUrl.href)) throw new Error(`收藏演员分页循环: ${currentUrl.href}`);
+          if (pages >= 200) throw new Error("收藏演员分页超过 200 页");
+          visitedUrls.add(currentUrl.href), pages++, clog.log(`正在抓取页面: ${currentUrl.href}`), $("#checkNewVideoMsg").text(`正在解析已收藏的演员: ${currentUrl.href}`);
+          let responseText;
+          try {
+            responseText = await gmHttp.get(currentUrl.href);
+          } catch (error) {
+            throw error._taskNetwork = true, error;
+          }
+          const page = utils.htmlTo$dom(responseText), parsed = parseJavDbActorList(page, currentUrl.href);
+          if ("valid" !== parsed.state) throw Object.assign(new Error(`收藏演员页面无效: ${parsed.state}`), { _taskParse: true });
+          if (parsed.isEmpty && parsed.nextUrl) throw Object.assign(new Error("收藏演员空页面包含下一页"), { _taskParse: true });
+          target.push(...parsed.actors), currentUrl = parsed.nextUrl ? new URL(parsed.nextUrl, currentUrl.href) : null;
+        } catch (error) {
+          error._taskNetwork || Object.prototype.hasOwnProperty.call(error, "_taskParse") || (error._taskParse = true);
+          throw clog.error(`抓取 ${currentUrl?.href || startUrl} 时发生错误，停止本轮同步:`, error), error;
+        }
+      }
+      return { actors: target, pages };
+    }
+    async checkNewVideo(force = false) {
+      await this.ensureReady();
+      const result = this.createTaskResult();
+      if (!await this.shouldStartTask("newVideo", force)) return clog.debug("检测新作品未到整批执行时间"), result;
+      this.beginTaskAttempt("newVideo"), result.attempted = true;
+      return this.withActiveTask("newVideo", async () => {
+        let blockedError = null, finalized = false;
+        try {
+          const actresses = await storageManager.getFavoriteActressList(), sorted = utils.genericSort(actresses, [{
+            key: /* @__PURE__ */ __name((actress) => actress.newVideoList?.length ?? 0, "key"),
+            order: "desc"
+          }, {
+            key: "lastPublishTime",
+            order: "desc"
+          }]), concurrency = this.taskConfig.checkConcurrencyCount, sleep = this.taskConfig.checkRequestSleep, interval = this.taskConfig.checkNewVideo_intervalTime, rule = this.taskConfig.checkNewVideo_ruleTime;
+          const eligible = [];
+          for (const actress of sorted) {
+            if (!force && actress.lastCheckTime && this.isUnnecessaryCheck(actress.lastCheckTime, interval)) result.skippedInterval++;
+            else if (shouldSkipStopped(actress.lastPublishTime, rule)) result.skippedStopped++;
+            else eligible.push(actress);
+          }
+          clog.log(`<span class="jhs-task-emphasis">检测最新作品, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
+          if (eligible.length > 0) {
+            const titleKeywords = await storageManager.getTitleFilterKeyword(), blacklistCars = await storageManager.getBlacklistCarList(), blacklistSet = new Set(blacklistCars.map(((item) => item.carNum)));
+            try {
+              await this.limitConcurrency(eligible, concurrency, sleep, (async (actress) => {
+                const { name, starId } = actress, url = `${this.javDbUrl}/actors/${starId}?t=d`;
+                try {
+                  clog.log("正在检测最新作品, 演员:", name, url), $("#checkNewVideoMsg").text(`正在检测最新作品, 演员: ${name}`);
+                  const responseText = await gmHttp.get(url), page = utils.htmlTo$dom(responseText);
+                  try {
+                    await this.storageQueue.addTask((async () => this.parsePage(page, T, starId, name, titleKeywords, blacklistSet))), result.success++;
+                  } catch (error) {
+                    result.parseFailed++, clog.error("解析或保存演员作品失败:", url, error);
+                  }
+                } catch (error) {
+                  if (this.isNetworkBlocked(error)) throw result.networkFailed++, error;
+                  result.networkFailed++, clog.error("检测演员信息发生网络错误:", url, error);
+                }
+              })), await this.storageQueue.waitAllFinished();
+            } catch (error) {
+              if (!this.isNetworkBlocked(error)) throw error;
+              blockedError = error, result.fatal = true, result.aborted = Math.max(0, eligible.length - result.success - result.parseFailed - result.networkFailed), clog.warn(`网络阻断，本轮停止，未执行 ${result.aborted}`);
+            }
+          }
+          const completed = 0 === result.parseFailed + result.networkFailed + result.aborted;
+          result.completed = completed, await this.finalizeTask("newVideo", completed), finalized = true, clog.log('<span class="jhs-task-emphasis">检测最新作品---结束</span>'), this.renderCheckResult(result, completed ? actresses.length ? "整批检测结束" : "收藏为空，整批检测完成" : "整批检测未完成，5 分钟后补偿未完成项");
+          result.success > 0 && await this.emitNewVideoChanged("task-completed");
+          if (blockedError) throw blockedError;
+          return result;
+        } catch (error) {
+          finalized || await this.finalizeTask("newVideo", false), result.completed = false, result.fatal = this.isNetworkBlocked(error);
+          if (result.fatal) throw error;
+          return result.parseFailed++, this.renderCheckResult(result, "整批检测失败，5 分钟后补偿"), clog.error("新作品整批检测失败", error), result;
+        }
+      });
     }
     renderCheckResult(result, prefix = "检测结束") {
-      const message = `${prefix}：成功 ${result.success}，解析失败 ${result.parseFailed}，网络失败 ${result.networkFailed}，停更跳过 ${result.skippedStopped}，间隔跳过 ${result.skippedInterval}${result.aborted ? `，未执行 ${result.aborted}` : ""}`;
+      const message = `${prefix}：成功 ${result.success}，解析/存储失败 ${result.parseFailed}，网络失败 ${result.networkFailed}，停更跳过 ${result.skippedStopped}，间隔跳过 ${result.skippedInterval}${result.aborted ? `，未执行 ${result.aborted}` : ""}`;
       $("#checkNewVideoMsg").text(message), clog.log(message);
     }
     async parsePage(e2, site, t2, n2, a2, i2) {
@@ -13290,16 +13629,19 @@ ${error.stack}` : "");
       });
       if ("valid" !== pageState.state) throw clog.error("新作品检测-解析列表失败"), new Error("新作品检测-解析列表失败");
       const s2 = pageState.items, o2 = e2.find(selector.nextPageSelector).attr("href");
+      if (0 === s2.length && o2) throw new Error("新作品检测-空列表包含下一页");
       if (0 === s2.length) return await storageManager.updateFavoriteActress({
         starId: t2,
         lastCheckTime: utils.getNowStr(),
         newVideoList: []
       }), 0;
-      let c2 = [], d2 = null;
+      let c2 = [];
+      const publishTimes = [];
       for (const m2 of s2) {
         const e3 = $(m2), { carNum: s3, url: o3, title: r2, publishTime: l2 } = this.getBean("ListPagePlugin").findCarNumAndHref(e3);
+        l2 && publishTimes.push(l2);
         if (!s3) continue;
-        a2.find(((e4) => r2.includes(e4) || s3.includes(e4))) || (i2.has(s3) || (d2 || (d2 = l2), (() => {
+        a2.find(((e4) => r2.includes(e4) || s3.includes(e4))) || (i2.has(s3) || (() => {
           let coverUrl = e3.find("img").attr("src") || "";
           if (coverUrl && !coverUrl.startsWith("http")) {
             coverUrl = coverUrl.startsWith("/") ? this.javDbUrl + coverUrl : this.javDbUrl + "/" + coverUrl;
@@ -13319,9 +13661,9 @@ ${error.stack}` : "");
             voteCount = parseInt(voteText.replace(/[^\d]/g, "")) || 0;
           }
           c2.push({ carNum: s3, coverUrl, title: r2 || "", publishTime: l2 || "", score, voteCount, url });
-        })()));
+        })());
       }
-      const h2 = await storageManager.getCarMap(), p2 = c2.filter(((e3) => !h2.has(e3.carNum)));
+      const d2 = selectLatestPublishTime(publishTimes), h2 = await storageManager.getCarMap(), p2 = c2.filter(((e3) => !h2.has(e3.carNum)));
       p2.length > 0 && clog.log(`<span class="jhs-task-emphasis">检测出新作品, ${n2}, 共${p2.length}部</span>`), await storageManager.updateFavoriteActress({
         starId: t2,
         lastCheckTime: utils.getNowStr(),
@@ -13339,7 +13681,7 @@ ${error.stack}` : "");
         clog.log("正在检测最新作品, 演员:", s2, r2), l2.text(`正在检测最新作品, 演员: ${s2}`);
         const e3 = await gmHttp.get(r2), n3 = utils.htmlTo$dom(e3);
         await this.parsePage(n3, T, o2, s2, t2, a2), clog.log('<span class="jhs-task-emphasis">检测最新作品---结束</span>'), l2.text("检测完毕");
-        this.getBean("NewVideoPlugin").loadData();
+        await this.emitNewVideoChanged("single-actress-check");
       } catch (c2) {
         clog.error("检测屏蔽演员信息, 发生错误:", r2, c2), show.error("检测屏蔽演员信息, 发生错误:" + c2, "bottom", "right"), l2.text(`检测屏蔽演员信息, 发生错误: ${r2}`);
       }
@@ -13479,7 +13821,7 @@ ${error.stack}` : "");
   __name(aggregateNewVideoRecords, "aggregateNewVideoRecords");
   var _NewVideoPlugin = class _NewVideoPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", null), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", /* @__PURE__ */ new Set()), i(this, "nvDecisionsCache", {});
+      super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", /* @__PURE__ */ new Map()), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", /* @__PURE__ */ new Map()), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", /* @__PURE__ */ new Set()), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", /* @__PURE__ */ new Map()), i(this, "nvActorCoverRequests", /* @__PURE__ */ new Map()), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", false), i(this, "nvWorkspaceMounted", false), i(this, "nvEventUnsubscribe", null), i(this, "taskStatusUnsubscribe", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760);
     }
     getName() {
       return "NewVideoPlugin";
@@ -13519,6 +13861,17 @@ ${error.stack}` : "");
                 .card-tag.is-unknown { color:var(--jhs-text-muted); background:var(--jhs-surface-2); }
                 #new-video-list-container { display:none; flex:1; min-width:0; min-height:0; overflow-x:hidden; overflow-y:auto; }
                 #new-video-list-footer { display:none; padding:var(--jhs-space-2) 0; border-top:1px solid var(--jhs-border); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
+                .jhs-new-video-view { flex:0 0 auto; }
+                .jhs-new-video-batch { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:var(--jhs-space-2); width:100%; }
+                .jhs-new-video-batch__actions { display:flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-2); }
+                .jhs-new-video-batch__more { position:relative; }
+                .jhs-new-video-batch__more summary { list-style:none; }
+                .jhs-new-video-batch__more summary::-webkit-details-marker { display:none; }
+                .jhs-new-video-batch__menu { top:auto; bottom:calc(100% + var(--jhs-space-1)); }
+                .jhs-task-status-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:var(--jhs-space-2); margin-bottom:var(--jhs-space-3); }
+                .jhs-task-status { padding:var(--jhs-space-2) var(--jhs-space-3); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); background:var(--jhs-surface-2); }
+                .jhs-task-status__name { color:var(--jhs-text); font-weight:700; }
+                .jhs-task-status__meta { display:block; margin-top:var(--jhs-space-1); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
                 .jhs-new-video-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr)); gap:var(--jhs-space-3); width:100%; min-width:0; box-sizing:border-box; padding:var(--jhs-space-1); }
                 .nv-card__link { display:block; color:inherit; text-decoration:none; }
                 .nv-card__cover { position:relative; width:100%; overflow:hidden; aspect-ratio:3/2; border-radius:var(--jhs-radius-sm); background:var(--jhs-surface-2); }
@@ -13534,18 +13887,50 @@ ${error.stack}` : "");
                 .jhs-avatar-editor { display:grid; grid-template-columns:100px minmax(0,1fr); gap:var(--jhs-space-3); align-items:start; }
                 .jhs-avatar-editor__preview { width:100px; height:100px; border:2px solid var(--jhs-border); border-radius:50%; object-fit:cover; }
                 .jhs-avatar-editor__actions { margin-top:var(--jhs-space-2); }
+                #gfriends-image-list-container { height:100%; box-sizing:border-box; padding:var(--jhs-space-4); background:var(--jhs-surface-2); }
+                #gfriends-prompt { margin:0 0 var(--jhs-space-3); padding-bottom:var(--jhs-space-2); border-bottom:1px solid var(--jhs-border); color:var(--jhs-text-muted); font-weight:600; }
+                #gfriends-image-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(144px,1fr)); gap:var(--jhs-space-3); }
+                .gfriends-image-item-wrapper { display:grid; grid-template-rows:200px auto; min-height:44px; overflow:hidden; padding:0; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); color:var(--jhs-text); cursor:pointer; }
+                .gfriends-image-item-wrapper:hover { border-color:var(--jhs-border-strong); background:var(--jhs-surface-hover); }
+                .gfriends-image-item-wrapper:focus-visible { outline:2px solid var(--jhs-focus); outline-offset:2px; }
+                .gfriends-image-item-wrapper[aria-pressed="true"] { border-color:var(--jhs-accent); box-shadow:0 0 0 2px var(--jhs-accent-tint); }
+                .gfriends-selectable-img { width:100%; height:200px; object-fit:cover; }
+                .gfriends-size-tag { min-height:28px; padding:var(--jhs-space-1) var(--jhs-space-2); border-top:1px solid var(--jhs-border); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); line-height:20px; text-align:center; }
                 .jhs-form-dialog__body, .jhs-form-field { display:grid; gap:var(--jhs-space-1); }
                 .jhs-form-label, .jhs-form-dialog__title { color:var(--jhs-text); font-size:var(--jhs-font-size-sm); font-weight:600; }
                 .jhs-form-dialog :where(.jhs-field,.jhs-select,.jhs-textarea) { width:100%; }
                 .jhs-form-dialog .jhs-textarea { min-height:60px; overflow-y:hidden; }
                 .jhs-option-row { display:flex; align-items:center; gap:var(--jhs-space-2); min-height:36px; }
                 #actress-pagination { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:var(--jhs-space-1); }
-                @media (max-width:767px) { .jhs-new-video-toolbar { align-items:stretch; flex-direction:column; } .jhs-new-video-toolbar select, .jhs-new-video-toolbar .jhs-btn { min-height:44px; } .page-number-btn { display:none !important; } }
+                @media (max-width:767px) { .jhs-new-video-toolbar { align-items:stretch; flex-direction:column; } .jhs-new-video-toolbar select, .jhs-new-video-toolbar .jhs-btn { min-height:44px; } .jhs-task-status-list { grid-template-columns:1fr; } .page-number-btn { display:none !important; } }
+                @media (prefers-reduced-motion:reduce) { .gfriends-image-item-wrapper { transition:none; } }
             </style>
         `;
     }
     async handle() {
+      this.nvEventUnsubscribe || (this.nvEventUnsubscribe = jhsEventBus.on("new-video-changed", (() => this.scheduleWorkspaceReload())));
+      this.taskStatusUnsubscribe || (this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.isWorkspaceMounted() && this.renderTaskStatuses())));
       await this.showNewVideoCount();
+    }
+    isWorkspaceMounted() {
+      return this.nvWorkspaceMounted && $(".newVideoToolBox").length > 0;
+    }
+    scheduleWorkspaceReload() {
+      this.nvWorkspaceReloadDirty = true;
+      this.nvInvalidationTimer || (this.nvInvalidationTimer = setTimeout((() => {
+        this.nvInvalidationTimer = null, void this.flushWorkspaceReload();
+      }), 0));
+    }
+    async flushWorkspaceReload() {
+      if (this.nvWorkspaceReloadPromise) return this.nvWorkspaceReloadPromise;
+      return this.nvWorkspaceReloadPromise = (async () => {
+        do {
+          this.nvWorkspaceReloadDirty = false, await this.showNewVideoCount();
+          this.isWorkspaceMounted() && await this.reloadNewVideoWorkspaceData({ preservePage: true });
+        } while (this.nvWorkspaceReloadDirty);
+      })().catch(((error) => clog.error("新作品数据刷新失败", error))).finally((() => {
+        this.nvWorkspaceReloadPromise = null;
+      })), this.nvWorkspaceReloadPromise;
     }
     getPendingNewVideoCount(e2, t2) {
       return Array.isArray(e2?.newVideoList) ? new Set(e2.newVideoList.map(((item) => normalizeCarNum("string" == typeof item ? item : item.carNum))).filter(((carNum) => carNum && !t2.has(carNum) && !this.isDecisionHidden(carNum)))).size : 0;
@@ -13570,17 +13955,17 @@ ${error.stack}` : "");
     }
     async resetBtnTip() {
       const e2 = this.getBean("TaskPlugin"), t2 = await storageManager.getSetting(), n2 = localStorage.getItem(e2.lastCheckFavoriteActressTimeKey) || "无", a2 = t2.checkFavoriteActress_IntervalTime, i2 = localStorage.getItem(e2.lastCheckNewVideoTimeKey) || "无", s2 = t2.checkNewVideo_intervalTime;
-      $("#checkFavoriteActress").attr("data-tip", `上次自动同步时间: ${n2}; 检测间隔时间: ${a2}小时`), $("#checkNewVideo").attr("data-tip", `上次检测时间: ${i2}; 检测间隔时间: ${s2}小时`);
+      $("#checkFavoriteActress").attr("data-tip", `上次完整同步: ${n2}; 检测间隔时间: ${a2}小时`), $("#checkNewVideo").attr("data-tip", `上次整批检测: ${i2}; 检测间隔时间: ${s2}小时`);
     }
     async openDialog() {
-      this._viewMode = "card", this.nvFlatListCache = null, this.nvCurrentPage = 1;
+      this.cleanupNewVideoWorkspace(), this._viewMode = "list" === localStorage.getItem("jhs_newVideoViewMode") ? "list" : "actress", this.currentPage = 1, this.nvCurrentPage = 1, this.nvSelected = /* @__PURE__ */ new Set(), this.nvCoverCache = /* @__PURE__ */ new Map(), this.nvActorCoverRequests = /* @__PURE__ */ new Map(), this.nvRenderGeneration++;
       const e2 = this.getBean("TaskPlugin"), t2 = await storageManager.getSetting(), n2 = localStorage.getItem(e2.lastCheckFavoriteActressTimeKey) || "无", a2 = t2.checkFavoriteActress_IntervalTime, i2 = localStorage.getItem(e2.lastCheckNewVideoTimeKey) || "无", s2 = t2.checkNewVideo_intervalTime;
       let o2 = `
             <div class="newVideoToolBox jhs-ui">
                 <div class="jhs-new-video-toolbar" role="toolbar" aria-label="新作品工作区工具">
                     <div class="jhs-new-video-toolbar__actions">
-                        <button type="button" class="jhs-btn jhs-btn--secondary" id="checkFavoriteActress" data-tip="上次自动同步时间: ${n2}; 检测间隔时间: ${a2}小时">${this.actressSvg}<span>手动同步演员</span></button>
-                        <button type="button" class="jhs-btn jhs-btn--secondary" id="checkNewVideo" data-tip="上次检测时间: ${i2}; 检测间隔时间: ${s2}小时">${this.newSvg}<span>手动检测最新作品</span></button>
+                        <button type="button" class="jhs-btn jhs-btn--secondary" id="checkFavoriteActress" data-tip="上次完整同步: ${n2}; 检测间隔时间: ${a2}小时">${this.actressSvg}<span>手动同步演员</span></button>
+                        <button type="button" class="jhs-btn jhs-btn--secondary" id="checkNewVideo" data-tip="上次整批检测: ${i2}; 检测间隔时间: ${s2}小时">${this.newSvg}<span>手动检测最新作品</span></button>
                         <button type="button" class="jhs-btn jhs-btn--ghost" id="toSetting">${this.settingSvg}<span>配置</span></button>
                         <span id="checkNewVideoMsg" role="status" aria-live="polite"></span>
                     </div>
@@ -13594,10 +13979,14 @@ ${error.stack}` : "");
                             <option value="default" selected>默认排序</option><optgroup label="发行时间"><option value="lastPublishTime_desc">发行时间 新→旧</option><option value="lastPublishTime_asc">发行时间 旧→新</option></optgroup><optgroup label="检测时间"><option value="lastCheckTime_desc">检测时间 新→旧</option><option value="lastCheckTime_asc">检测时间 旧→新</option></optgroup><optgroup label="新作品数"><option value="newVideoCount_desc">新作品数 多→少</option><option value="newVideoCount_asc">新作品数 少→多</option></optgroup>
                         </select>
                         <select id="nvSortBy" class="jhs-select-source jhs-is-hidden" aria-label="新作品排序"><option value="publishTime_desc" selected>发行时间 新→旧</option><option value="publishTime_asc">发行时间 旧→新</option><option value="voteCount_desc">评价人数 多→少</option><option value="voteCount_asc">评价人数 少→多</option><option value="actress_asc">演员名 A→Z</option><option value="actress_desc">演员名 Z→A</option><option value="carNum_asc">番号 A→Z</option><option value="carNum_desc">番号 Z→A</option></select>
-                        <button type="button" class="jhs-btn jhs-btn--secondary" id="toggleViewMode">新作品列表</button>
+                        <div class="jhs-segmented jhs-new-video-view" role="tablist" aria-label="新作品视图">
+                            <button type="button" class="jhs-btn jhs-segmented__item" id="nvViewActress" role="tab" aria-controls="actress-card-container" data-view="actress">演员视图</button>
+                            <button type="button" class="jhs-btn jhs-segmented__item" id="nvViewList" role="tab" aria-controls="new-video-list-container" data-view="list">新作品</button>
+                        </div>
                         <button type="button" class="jhs-btn jhs-btn--ghost" id="reLoad">${this.refreshSvg}<span>刷新</span></button>
                     </div>
                 </div>
+                <div id="jhs-task-status-list" class="jhs-task-status-list" aria-live="polite"></div>
                 <div id="actress-card-container" class="jhs-scrollbar"></div>
                 <div id="new-video-list-container"></div>
                 <div id="new-video-list-footer"></div>
@@ -13611,25 +14000,29 @@ ${error.stack}` : "");
         area: utils.getDialogArea("workspace"),
         anim: -1,
         success: /* @__PURE__ */ __name(async (e3, t3) => {
-          JhsSelect.enhance(e3), this.loadData(), this.bindClick(), utils.setupEscClose(t3);
-        }, "success")
+          this.nvWorkspaceMounted = true, JhsSelect.enhance(e3), this.bindClick(), this.applyViewMode(), this.renderTaskStatuses(), await this.reloadNewVideoWorkspaceData(), utils.setupEscClose(t3);
+        }, "success"),
+        end: /* @__PURE__ */ __name(() => this.cleanupNewVideoWorkspace(), "end")
       });
     }
+    cleanupNewVideoWorkspace() {
+      this.nvSearchDebounced?.cancel?.(), this.nvSearchDebounced = null, this.nvWorkspaceMounted = false, this.nvRenderGeneration++, this.nvSelected.clear(), this.nvCoverCache = /* @__PURE__ */ new Map(), this.nvActorCoverRequests = /* @__PURE__ */ new Map(), this.nvAllItemsMap.clear(), this.nvFlatListCache = [], this.nvActressesCache = [], this.nvCarMapCache = /* @__PURE__ */ new Map(), this.nvDecisionsCache = {}, this.nvCurrentPageItems = [];
+    }
     bindClick() {
-      const e2 = this.getBean("TaskPlugin");
-      $("#reLoad").on("click", ((e3) => {
-        this.loadData(), $("#checkNewVideoMsg").text("");
-      })), $("#new-video-list-container").on("click", ".nv-card__link", (async (e3) => {
-        const t2 = $(e3.currentTarget).closest(".nv-card").attr("data-car");
+      const taskPlugin = this.getBean("TaskPlugin");
+      $("#reLoad").on("click", (() => {
+        void this.reloadNewVideoWorkspaceData(), $("#checkNewVideoMsg").text("");
+      })), $("#new-video-list-container").on("click", ".nv-card__link", (async (e2) => {
+        const t2 = $(e2.currentTarget).closest(".nv-card").attr("data-car");
         if (!t2) return;
         try {
           const enabled = await storageManager.getSetting("autoRemoveNewVideoMarkAfterBrowse", C);
           if (enabled !== _) return;
-          await stateService.removeFromNewVideoList([t2], "browse"), "list" === this._viewMode && await this.renderNewVideoList();
+          await stateService.removeFromNewVideoList([t2], "browse");
         } catch (n2) {
           clog.error("移除新作品标记失败:", n2);
         }
-      })), $("#toSetting").on("click", ((e3) => {
+      })), $("#toSetting").on("click", ((e2) => {
         this.getBean("SettingPlugin").openSettingDialog("task-panel", (() => {
           $("#setting-checkFavoriteActress").css({
             border: "1px solid var(--jhs-status-filter)"
@@ -13638,70 +14031,98 @@ ${error.stack}` : "");
           });
         }));
       }));
-      $("#checkFavoriteActress").on("click", ((t2) => {
-        utils.q({
-          clientX: t2.clientX,
-          clientY: t2.clientY + 20
-        }, "是否手动同步演员?", (() => {
-          navigator.locks.request(e2.singleTaskKey, {
-            ifAvailable: true
-          }, (async (t3) => {
-            if (!t3) return void show.error("当前有定时任务在后台执行中, 无法发起手动任务");
-            $('a[href*="/users/profile"]').length > 0 ? (await e2.checkFavoriteActress(), this.loadData()) : show.error("未登录JavDb, 同步失败");
-          })).catch(((e3) => {
-            clog.error("锁任务出现错误:", e3);
-          }));
+      $("#checkFavoriteActress").on("click", ((event) => {
+        void this.runManualTask($(event.currentTarget), "同步中…", (async () => {
+          if (!$('a[href*="/users/profile"]').length) return void show.error("未登录 JavDB，同步失败");
+          await taskPlugin.checkFavoriteActress(true);
         }));
-      })), $("#checkNewVideo").on("click", ((t2) => {
-        utils.q({
-          clientX: t2.clientX,
-          clientY: t2.clientY + 20
-        }, "是否手动检测最新作品?", (() => {
-          navigator.locks.request(e2.singleTaskKey, {
-            ifAvailable: true
-          }, (async (t3) => {
-            t3 ? await e2.checkNewVideo(true) : show.error("当前有定时任务在后台执行中, 无法发起手动任务");
-          })).catch(((e3) => {
-            clog.error("锁任务出现错误:", e3);
-          }));
+      })), $("#checkNewVideo").on("click", ((event) => {
+        void this.runManualTask($(event.currentTarget), "检测中…", (() => taskPlugin.checkNewVideo(true)));
+      })), $("#paramActressType").on("change", ((e2) => {
+        this.currentPage = 1, this.nvRenderGeneration++, "actress" === this._viewMode && this.renderActressCards();
+      })), $("#paramSortBy").on("change", ((e2) => {
+        this.currentPage = 1, this.nvRenderGeneration++, "actress" === this._viewMode && this.renderActressCards();
+      })), $("#nvSortBy").on("change", ((e2) => {
+        this.nvSortBy = $("#nvSortBy").val(), this.nvCurrentPage = 1, this.nvRenderGeneration++, this.renderNewVideoList();
+      })), $("#nvCategoryFilter,#nvStateFilter,#nvDecisionFilter").on("change", ((e2) => {
+        this.nvCurrentPage = 1, this.nvRenderGeneration++, "list" === this._viewMode && this.renderNewVideoList();
+      })), this.nvSearchDebounced = utils.debounce((() => {
+        this.nvCurrentPage = 1, this.nvRenderGeneration++, "list" === this._viewMode && this.renderNewVideoList();
+      }), 200), $("#nvSearch").on("input", this.nvSearchDebounced), $(".jhs-new-video-view").on("click", '[role="tab"]', ((event) => {
+        this.setViewMode($(event.currentTarget).data("view"));
+      })).on("keydown", '[role="tab"]', ((event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const tabs = $(event.delegateTarget).find('[role="tab"]'), index = tabs.index(event.currentTarget), next = "Home" === event.key ? 0 : "End" === event.key ? tabs.length - 1 : "ArrowRight" === event.key ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
+        tabs.eq(next).trigger("click").trigger("focus");
+      })), this.bindBatchActions();
+    }
+    async runManualTask(button, busyLabel, runner) {
+      if (button.attr("aria-busy") === "true") return;
+      const label = button.find("span").last(), previous = label.text();
+      button.attr("aria-busy", "true").prop("disabled", true), label.text(busyLabel);
+      try {
+        await navigator.locks.request(this.getBean("TaskPlugin").singleTaskKey, { ifAvailable: true }, (async (lock) => {
+          if (!lock) return void show.error("后台任务正在运行，请稍后再试");
+          await runner();
         }));
-      })), $("#paramActressType").on("change", ((e3) => {
-        "list" === this._viewMode ? this.renderNewVideoList() : this.loadData();
-      })), $("#paramSortBy").on("change", ((e3) => {
-        this.loadData();
-      })), $("#nvSortBy").on("change", ((e3) => {
-        this.nvSortBy = $("#nvSortBy").val(), this.nvCurrentPage = 1, this.nvRenderPage();
-      })), $("#nvCategoryFilter,#nvStateFilter,#nvDecisionFilter").on("change", ((e3) => {
-        "list" === this._viewMode && this.renderNewVideoList();
-      })), $("#nvSearch").on("input", (() => {
-        "list" === this._viewMode && this.renderNewVideoList();
-      })), $("#toggleViewMode").on("click", ((e3) => {
-        this._viewMode = "list" === this._viewMode ? "card" : "list";
-        const t2 = "list" === this._viewMode;
-        $("#actress-card-container").toggle(!t2), $("#actress-pagination").toggle(!t2), $("#new-video-list-container").toggle(t2), $("#new-video-list-footer").toggle(t2), JhsSelect.setVisible("#paramSortBy", !t2), JhsSelect.setVisible("#nvSortBy", t2), JhsSelect.setVisible("#paramActressType", !t2), JhsSelect.setVisible("#nvCategoryFilter", t2), JhsSelect.setVisible("#nvStateFilter", t2), JhsSelect.setVisible("#nvDecisionFilter", t2), $("#nvSearch").toggleClass("jhs-is-hidden", !t2), $("#toggleViewMode").text(t2 ? "演员视图" : "新作品列表"), t2 ? this.renderNewVideoList() : this.loadData();
+      } catch (error) {
+        clog.error("手动任务执行失败", error), this.getBean("TaskPlugin").isNetworkBlocked(error) && show.error(error.message || "任务执行失败");
+      } finally {
+        button.removeAttr("aria-busy").prop("disabled", false), label.text(previous), this.renderTaskStatuses();
+      }
+    }
+    setViewMode(mode) {
+      if (!["actress", "list"].includes(mode) || mode === this._viewMode) return;
+      this._viewMode = mode, localStorage.setItem("jhs_newVideoViewMode", mode), "list" === mode ? this.nvCurrentPage = 1 : this.currentPage = 1, this.nvRenderGeneration++, this.applyViewMode(), this.renderCurrentView();
+    }
+    applyViewMode() {
+      const list = "list" === this._viewMode;
+      $("#actress-card-container").toggle(!list), $("#actress-pagination").toggle(!list), $("#new-video-list-container").toggle(list), $("#new-video-list-footer").toggle(list), JhsSelect.setVisible("#paramSortBy", !list), JhsSelect.setVisible("#nvSortBy", list), JhsSelect.setVisible("#paramActressType", !list), JhsSelect.setVisible("#nvCategoryFilter", list), JhsSelect.setVisible("#nvStateFilter", list), JhsSelect.setVisible("#nvDecisionFilter", list), $("#nvSearch").toggleClass("jhs-is-hidden", !list), $(".jhs-new-video-view [role='tab']").each(((index, tab) => {
+        const active = $(tab).data("view") === this._viewMode;
+        $(tab).attr({ "aria-selected": String(active), tabindex: active ? "0" : "-1" }).toggleClass("active", active);
       }));
+    }
+    renderCurrentView() {
+      return "list" === this._viewMode ? this.renderNewVideoList() : this.renderActressCards();
     }
     loadData() {
       this.currentPage = 1;
-      this.renderActressCards().catch((e2) => {
-        clog.error("加载演员卡片失败:", e2);
-        show.error("加载数据失败");
-        const container = $("#actress-card-container");
-        container.empty().append($('<div class="jhs-state jhs-state--error"></div>').append(
-          document.createTextNode("加载数据失败 "),
-          $('<button type="button" class="jhs-btn jhs-btn--secondary">重试</button>').on("click", (() => this.loadData()))
-        ));
-      });
+      return this.reloadNewVideoWorkspaceData();
+    }
+    async reloadNewVideoWorkspaceData({ preservePage = false } = {}) {
+      if (!this.isWorkspaceMounted()) return;
+      const generation = ++this.nvRenderGeneration, container = "list" === this._viewMode ? $("#new-video-list-container") : $("#actress-card-container");
+      renderStateView(container, { type: "loading", title: "加载中" });
+      try {
+        const [actresses, carMap, decisions, javDbUrl, ruleTime] = await Promise.all([storageManager.getFavoriteActressList(), storageManager.getCarMap(), stateService.getNewVideoDecisions(), this.getBean("OtherSitePlugin").getJavDbUrl(), storageManager.getSetting("checkNewVideo_ruleTime", 8760)]);
+        if (!this.isWorkspaceMounted() || generation !== this.nvRenderGeneration) return;
+        this.nvActressesCache = actresses, this.nvCarMapCache = carMap, this.nvDecisionsCache = decisions, this.nvJavDbUrl = javDbUrl, this.nvRuleTime = parseNumberSetting(ruleTime, 8760, { min: 0 });
+        const items = aggregateNewVideoRecords(actresses, carMap, decisions), nextMap = /* @__PURE__ */ new Map();
+        items.forEach(((item) => nextMap.set(normalizeCarNum(item.carNum), { ...item, carNum: normalizeCarNum(item.carNum) }))), this.nvAllItemsMap = nextMap;
+        for (const carNum of [...this.nvSelected]) nextMap.has(carNum) || this.nvSelected.delete(carNum);
+        preservePage || (this.currentPage = 1, this.nvCurrentPage = 1), await this.renderCurrentView(), this.renderTaskStatuses();
+      } catch (error) {
+        if (generation !== this.nvRenderGeneration || !this.isWorkspaceMounted()) return;
+        clog.error("加载新作品工作区失败", error), renderStateView(container, { type: "error", title: "加载失败", description: error.message || String(error), actionLabel: "重试", onAction: /* @__PURE__ */ __name(() => this.reloadNewVideoWorkspaceData({ preservePage: true }), "onAction") });
+      }
+    }
+    renderTaskStatuses() {
+      const container = $("#jhs-task-status-list");
+      if (!container.length) return;
+      const taskPlugin = this.getBean("TaskPlugin"), names = { favoriteActress: "演员同步", newVideo: "新作品", blacklist: "黑名单" }, labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = /* @__PURE__ */ __name((value) => value ? new Date(value).toLocaleString() : "无", "format");
+      container.empty(), ["favoriteActress", "newVideo", "blacklist"].forEach(((name) => {
+        const snapshot = taskPlugin.getTaskStatusSnapshot(name), item = $('<div class="jhs-task-status"></div>');
+        item.append($('<span class="jhs-task-status__name"></span>').text(`${names[name]}：${labels[snapshot.state]}`)), item.append($('<span class="jhs-task-status__meta"></span>').text(`上次完成 ${format(snapshot.completedAt)}；下次检查 ${snapshot.nextAt ? format(snapshot.nextAt) : "立即"}`)), container.append(item);
+      }));
     }
     async renderActressCards() {
       const e2 = $("#actress-card-container");
       if (!e2.length) return;
-      e2.html('<div class="jhs-state jhs-state--loading" role="status">加载中...</div>');
-      let t2 = await storageManager.getFavoriteActressList();
+      let t2 = [...this.nvActressesCache];
       const n2 = $("#paramActressType").val();
       "all" !== n2 && (t2 = t2.filter(((e3) => e3.actressType === n2)));
-      const _carSet = await storageManager.getCarMap();
-      this.nvDecisionsCache = await stateService.getNewVideoDecisions();
+      const _carSet = this.nvCarMapCache;
       const _newVideoCount = /* @__PURE__ */ __name((e3) => this.getPendingNewVideoCount(e3, _carSet), "_newVideoCount");
       const sortBy = $("#paramSortBy").val();
       const sortMap = {
@@ -13721,53 +14142,31 @@ ${error.stack}` : "");
       }];
       const sortedActresses = utils.genericSort(t2, sortMap[sortBy] || defaultSort);
       const totalCount = sortedActresses.length, totalPages = Math.ceil(totalCount / this.pageSize), pageStart = (this.currentPage - 1) * this.pageSize, pageEnd = pageStart + this.pageSize;
-      const pageActresses = sortedActresses.slice(pageStart, pageEnd), javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl(), taskPlugin = this.getBean("TaskPlugin"), ruleTime = await storageManager.getSetting("checkNewVideo_ruleTime") || 8760;
+      totalPages > 0 && this.currentPage > totalPages && (this.currentPage = totalPages);
+      const safePageStart = (this.currentPage - 1) * this.pageSize, pageActresses = sortedActresses.slice(safePageStart, safePageStart + this.pageSize), javDbUrl = this.nvJavDbUrl, taskPlugin = this.getBean("TaskPlugin"), ruleTime = this.nvRuleTime;
       if (0 === pageActresses.length) {
-        e2.html('<div class="jhs-state jhs-state--empty">暂无数据</div>');
+        renderStateView(e2, { type: "empty", title: this.nvActressesCache.length ? "没有符合当前筛选条件的演员" : "暂无收藏演员" });
         return void this.renderPagination(totalCount, totalPages);
       }
-      const escapeCardHtml = /* @__PURE__ */ __name((value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"), "escapeCardHtml");
-      const cardsHtml = pageActresses.map(((actress) => {
+      const cards = pageActresses.map(((actress) => {
         const allNames = Array.isArray(actress.allName) ? actress.allName.join("，") : "";
-        const escapedAllNames = escapeCardHtml(allNames), escapedName = escapeCardHtml(actress.name || ""), escapedRemark = escapeCardHtml(actress.remark || "");
-        const newVideoCount = this.getPendingNewVideoCount(actress, _carSet);
-        const effectivePublishTime = newVideoCount > 0 ? actress.lastPublishTime || "" : "";
-        const profileUrl = `${javDbUrl}/actors/${actress.starId}?t=d`;
-        let isPaused = false;
-        effectivePublishTime && (isPaused = !taskPlugin.isUnnecessaryCheck(effectivePublishTime, ruleTime));
+        const name = String(actress.name || ""), remark = String(actress.remark || ""), starId = String(actress.starId || "");
+        const newVideoCount = this.getPendingNewVideoCount(actress, _carSet), latestPublishTime = actress.lastPublishTime || "";
+        const profileUrl = normalizeHttpUrl(`/actors/${encodeURIComponent(starId)}?t=d`, javDbUrl), avatarUrl = normalizeHttpUrl(actress.avatar, javDbUrl) || "https://c0.jdbstatic.com/images/actor_unknow.jpg";
+        const isPaused = shouldSkipStopped(latestPublishTime, ruleTime);
         let typeLabel = "未知", typeClass = "is-unknown";
         actress.actressType === A ? (typeLabel = "无码", typeClass = "is-uncensored") : actress.actressType === D && (typeLabel = "有码", typeClass = "is-censored");
-        const publishText = effectivePublishTime ? effectivePublishTime : 0 === newVideoCount && actress.lastPublishTime ? "已全部标记" : "暂无记录";
-        const noteText = isPaused ? `停更 ${ruleTime / 24 / 365} 年以上，下轮任务不再检测` : escapedRemark || "暂无备注";
-        return `
-                <article class="actress-card ${isPaused ? "is-paused" : ""}" data-starId="${actress.starId}">
-                    <div class="actress-card__badges">
-                        <span class="jhs-badge jhs-badge--soft card-new-count-tag" data-tip="最新作品数量: ${newVideoCount}">${newVideoCount} 新</span>
-                        <span class="jhs-badge card-tag ${typeClass}">${typeLabel}</span>
-                        ${isPaused ? '<span class="jhs-badge jhs-badge--neutral">停更</span>' : ""}
-                    </div>
-                    <a class="actress-card__profile" href="${profileUrl}" target="_blank" rel="noopener noreferrer">
-                        <img src="${actress.avatar || "https://c0.jdbstatic.com/images/actor_unknow.jpg"}" alt="${escapedAllNames}" class="actress-card-avatar" loading="lazy">
-                        <span><span class="actress-card-name">${escapedName}</span><span class="actress-card-allname" title="${escapedAllNames}">${escapedAllNames || "暂无别名"}</span></span>
-                    </a>
-                    <dl class="actress-card__meta">
-                        <div class="actress-card__meta-row"><dt>最近作品</dt><dd title="${publishText}">${publishText}</dd></div>
-                        <div class="actress-card__meta-row"><dt>上次检测</dt><dd>${actress.lastCheckTime || "暂无记录"}</dd></div>
-                    </dl>
-                    <p class="actress-card__note" title="${noteText}">${noteText}</p>
-                    <div class="actress-card__actions">
-                        <button type="button" class="jhs-btn jhs-btn--primary btn-check-actress" data-starId="${actress.starId}">${this.checkSvg}<span>重新检测</span></button>
-                        <button type="button" class="jhs-btn jhs-btn--icon jhs-btn--ghost btn-delete-actress" aria-label="取消收藏 ${escapedName}" title="取消收藏" data-starId="${actress.starId}">${this.deleteSvg}</button>
-                        <details class="actress-card__menu">
-                            <summary class="jhs-btn jhs-btn--icon jhs-btn--ghost" aria-label="更多操作" title="更多操作">•••</summary>
-                            <div class="actress-card__menu-popover" role="menu">
-                                <button type="button" class="jhs-btn jhs-btn--ghost btn-edit-actress" role="menuitem" data-starId="${actress.starId}">${this.editSvg}<span>编辑资料</span></button>
-                            </div>
-                        </details>
-                    </div>
-                </article>`;
-      })).join("");
-      e2.html(cardsHtml), $(".btn-delete-actress").off("click").on("click", ((e3) => {
+        const publishText = String(latestPublishTime || "暂无记录"), noteText = isPaused ? `停更 ${ruleTime / 24 / 365} 年以上，下轮任务不再检测` : remark || "暂无备注";
+        const card = $('<article class="actress-card"></article>').toggleClass("is-paused", isPaused).attr("data-starId", starId), badges = $('<div class="actress-card__badges"></div>');
+        badges.append($('<span class="jhs-badge jhs-badge--soft card-new-count-tag"></span>').attr("data-tip", `最新作品数量: ${newVideoCount}`).text(`${newVideoCount} 新`), $('<span class="jhs-badge card-tag"></span>').addClass(typeClass).text(typeLabel)), isPaused && badges.append('<span class="jhs-badge jhs-badge--neutral">停更</span>');
+        const profile = $('<a class="actress-card__profile" target="_blank" rel="noopener noreferrer"></a>').attr("href", profileUrl || "#"), identity = $("<span></span>").append($('<span class="actress-card-name"></span>').text(name), $('<span class="actress-card-allname"></span>').attr("title", allNames).text(allNames || "暂无别名"));
+        profile.append($('<img class="actress-card-avatar" loading="lazy">').attr({ src: avatarUrl, alt: allNames }), identity);
+        const meta = $('<dl class="actress-card__meta"></dl>').append($('<div class="actress-card__meta-row"><dt>最近作品</dt></div>').append($("<dd></dd>").attr("title", publishText).text(publishText)), $('<div class="actress-card__meta-row"><dt>上次检测</dt></div>').append($("<dd></dd>").text(String(actress.lastCheckTime || "暂无记录")))), actions = $('<div class="actress-card__actions"></div>');
+        const check = $('<button type="button" class="jhs-btn jhs-btn--secondary btn-check-actress"><span>重新检测</span></button>').attr("data-starId", starId).prepend(this.checkSvg), remove = $('<button type="button" class="jhs-btn jhs-btn--icon jhs-btn--ghost btn-delete-actress" title="取消收藏"></button>').attr({ "aria-label": `取消收藏 ${name}`, "data-starId": starId }).append(this.deleteSvg), edit = $('<button type="button" class="jhs-btn jhs-btn--ghost btn-edit-actress" role="menuitem"><span>编辑资料</span></button>').attr("data-starId", starId).prepend(this.editSvg);
+        actions.append(check, remove, $('<details class="actress-card__menu"><summary class="jhs-btn jhs-btn--icon jhs-btn--ghost" aria-label="更多操作" title="更多操作">•••</summary><div class="actress-card__menu-popover" role="menu"></div></details>').find(".actress-card__menu-popover").append(edit).end());
+        return card.append(badges, profile, meta, $('<p class="actress-card__note"></p>').attr("title", noteText).text(noteText), actions)[0];
+      }));
+      e2.empty().append(cards), $(".btn-delete-actress").off("click").on("click", ((e3) => {
         e3.preventDefault();
         const t3 = $(e3.currentTarget).attr("data-starId"), n3 = sortedActresses.find(((e4) => e4.starId === t3));
         utils.q(e3, `是否取消收藏 ${n3.name}?`, (async () => {
@@ -13775,22 +14174,16 @@ ${error.stack}` : "");
           const n4 = document.querySelector("meta[name=csrf-token]").content, a2 = await gmHttp.post(e4, null, {
             "x-csrf-token": n4
           });
-          a2.includes("removeClass") ? (await storageManager.removeFavoriteActress(t3), this.loadData(), this.showNewVideoCount()) : (show.error("移除失败"), clog.error("移除失败,返回值:", a2));
+          a2.includes("removeClass") ? (await storageManager.removeFavoriteActress(t3), await jhsEventBus.emit("new-video-changed", { reason: "favorite-actress-removed" })) : (show.error("移除失败"), clog.error("移除失败,返回值:", a2));
         }));
       })), $(".btn-edit-actress").off("click").on("click", ((e3) => {
         e3.preventDefault();
         const t3 = $(e3.currentTarget).attr("data-starId"), n3 = sortedActresses.find(((e4) => e4.starId === t3));
         n3 ? this.editActress(n3) : show.error(`未找到 starId 为 ${t3} 的女优记录。`);
       })), $(".btn-check-actress").off("click").on("click", ((e3) => {
-        e3.preventDefault(), navigator.locks.request(taskPlugin.singleTaskKey, {
-          ifAvailable: true
-        }, (async (t3) => {
-          if (!t3) return void show.error("当前有定时任务在后台执行中, 无法发起手动任务");
-          const n3 = $(e3.currentTarget).attr("data-starId"), i2 = sortedActresses.find(((e4) => e4.starId === n3));
-          await taskPlugin.checkOneNewVideo(i2);
-        })).catch(((e4) => {
-          clog.error("锁任务出现错误:", e4);
-        }));
+        e3.preventDefault();
+        const button = $(e3.currentTarget), starId = button.attr("data-starId"), actress = sortedActresses.find(((item) => item.starId === starId));
+        void this.runManualTask(button, "检测中…", (() => taskPlugin.checkOneNewVideo(actress)));
       })), $(".actress-card__menu").on("keydown", ((event) => {
         if ("Escape" !== event.key) return;
         event.preventDefault();
@@ -13798,12 +14191,11 @@ ${error.stack}` : "");
         details.prop("open", false).find("summary").trigger("focus");
       })).on("click", "[role='menuitem']", ((event) => {
         $(event.currentTarget).closest("details").prop("open", false);
-      })), this.renderPagination(totalCount, totalPages), show.ok("加载完成");
+      })), this.renderPagination(totalCount, totalPages);
     }
     async getNewVideoFlatList() {
-      const actresses = await storageManager.getFavoriteActressList(), carMap = await storageManager.getCarMap(), category = $("#nvCategoryFilter").val() || "all", stateFilter = $("#nvStateFilter").val() || "pending", decisionFilter = $("#nvDecisionFilter").val() || "pending", query = String($("#nvSearch").val() || "").trim().toUpperCase();
-      this.nvDecisionsCache = await stateService.getNewVideoDecisions();
-      return aggregateNewVideoRecords(actresses, carMap, this.nvDecisionsCache).filter(((item) => {
+      const category = $("#nvCategoryFilter").val() || "all", stateFilter = $("#nvStateFilter").val() || "pending", decisionFilter = $("#nvDecisionFilter").val() || "pending", query = String($("#nvSearch").val() || "").trim().toUpperCase();
+      return [...this.nvAllItemsMap.values()].filter(((item) => {
         const categoryMatch = "all" === category || "vr" === category ? "all" === category || item.isVr : "unknown" === category ? 0 === item.categories.length : item.categories.includes(category);
         const stateMatch = "all" === stateFilter || "pending" === stateFilter ? "all" === stateFilter || !hasAnyState(item.flags) : !!item.flags[stateFilter];
         const decisionMatch = "all" === decisionFilter || item.decisionState === decisionFilter;
@@ -13811,85 +14203,105 @@ ${error.stack}` : "");
         return categoryMatch && stateMatch && decisionMatch && searchMatch;
       })).sort(((left, right) => (right.publishTime || "").localeCompare(left.publishTime || "")));
     }
-    async loadCoverForItems(e2) {
-      const t2 = await this.getBean("OtherSitePlugin").getJavDbUrl(), n2 = {};
-      for (const a2 of e2) {
-        if (n2[a2.starId]) continue;
-        if (e2.every(((e3) => e3.starId !== a2.starId || e3.coverUrl))) continue;
-        n2[a2.starId] = true;
+    getActorCoverRequest(starId, requestMap) {
+      const existing = requestMap.get(starId);
+      if (existing) return existing;
+      const request = gmHttp.get(`${this.nvJavDbUrl}/actors/${starId}?t=d`).then(((html) => {
+        const page = utils.htmlTo$dom(html), covers = /* @__PURE__ */ new Map();
+        page.find(".movie-list .item").each(((index, element) => {
+          const item = $(element), rawCarNum = item.find(".video-title strong").text().trim(), carNum = normalizeCarNum(rawCarNum), rawCover = item.find("img").attr("src") || "";
+          if (!carNum || !rawCover) return;
+          const coverUrl = new URL(rawCover, this.nvJavDbUrl).href.replace("thumbs", "covers"), title = item.find(".video-title").text().replace(rawCarNum, "").trim();
+          covers.set(carNum, { coverUrl, title });
+        }));
+        return covers;
+      })).finally((() => {
+        requestMap.get(starId) === request && requestMap.delete(starId);
+      }));
+      return requestMap.set(starId, request), request;
+    }
+    async loadCoverForItems(items, generation = this.nvRenderGeneration) {
+      return this.hydrateVisibleCovers(items, generation);
+    }
+    async hydrateVisibleCovers(items, generation) {
+      const coverCache = this.nvCoverCache, requestMap = this.nvActorCoverRequests, starIds = [...new Set(items.filter(((item) => !item.coverUrl && !coverCache.has(normalizeCarNum(item.carNum)) && item.starId)).map(((item) => item.starId)))];
+      await mapLimit(starIds, 3, (async (starId) => {
         try {
-          const i2 = await gmHttp.get(`${t2}/actors/${a2.starId}?t=d`), s2 = utils.htmlTo$dom(i2);
-          s2.find(".movie-list .item").each(((e3, n3) => {
-            const i3 = $(n3), o2 = i3.find(".video-title strong").text().trim(), r2 = i3.find("img").attr("src") || "";
-            if (!o2 || !r2) return;
-            let l2 = r2;
-            if (!l2.startsWith("http")) {
-              l2 = l2.startsWith("/") ? t2 + l2 : t2 + "/" + l2;
-            }
-            const c2 = l2.replace("thumbs", "covers"), d2 = i3.find(".video-title").text().replace(o2, "").trim();
-            $(`.nv-card[data-car="${o2}"]`).each(((e4, t3) => {
-              const n4 = $(t3), i4 = n4.find("img");
-              if (i4.length) {
-                i4.attr("src", c2).on("error", (function() {
-                  $(this).hide().next().show();
-                }));
-              } else {
-                const e5 = n4.find(".nv-placeholder");
-                if (e5.length) {
-                  e5.replaceWith(`<img class="nv-cover-img" src="${c2}" loading="lazy" onerror="this.classList.add('jhs-is-hidden');this.nextElementSibling.classList.remove('jhs-is-hidden');"><div class="nv-card__empty jhs-is-hidden">无封面</div>`);
-                }
-              }
-              d2 && n4.attr("title", d2);
+          const covers = await this.getActorCoverRequest(starId, requestMap);
+          if (generation !== this.nvRenderGeneration || coverCache !== this.nvCoverCache || !this.isWorkspaceMounted()) return;
+          covers.forEach(((value, carNum) => {
+            coverCache.set(normalizeCarNum(carNum), value.coverUrl);
+            const card = $(".nv-card").filter(((_2, element) => normalizeCarNum($(element).attr("data-car")) === normalizeCarNum(carNum)));
+            if (!card.length) return;
+            const image = $('<img class="nv-cover-img" loading="lazy">').attr({ src: value.coverUrl, "data-full": value.coverUrl }).on("error", (function() {
+              $(this).addClass("jhs-is-hidden").siblings(".nv-card__empty").removeClass("jhs-is-hidden");
             }));
+            card.find(".nv-placeholder").replaceWith(image), card.find(".nv-card__empty").addClass("jhs-is-hidden"), value.title && card.attr("title", value.title);
           }));
-        } catch (i2) {
-          clog.warn("获取演员封面失败:", a2.actressName, i2);
+          window.imageHoverPreviewObj?.bindEvents?.();
+        } catch (error) {
+          clog.warn(`获取演员封面失败: ${starId}`, error);
         }
-      }
+      }));
     }
     async renderNewVideoList() {
-      const e2 = $("#new-video-list-container");
-      if (!e2.length) return;
-      e2.html('<div class="jhs-state jhs-state--loading" role="status">加载中...</div>');
-      let t2;
-      try {
-        t2 = await this.getNewVideoFlatList();
-      } catch (n2) {
-        return clog.error(n2), void e2.html(`<div class="jhs-state jhs-state--error" role="alert">加载失败: ${escapeHtml(n2.message)}</div>`);
+      const container = $("#new-video-list-container"), generation = this.nvRenderGeneration;
+      if (!container.length) return;
+      const items = await this.getNewVideoFlatList();
+      if (generation !== this.nvRenderGeneration || !this.isWorkspaceMounted()) return;
+      this.nvFlatListCache = items, this.nvSortBy = $("#nvSortBy").val() || this.nvSortBy;
+      const totalPages = Math.ceil(items.length / this.nvPageSize);
+      this.nvCurrentPage = totalPages ? Math.min(this.nvCurrentPage, totalPages) : 1;
+      if (!items.length) {
+        const query = String($("#nvSearch").val() || "").trim(), filtered = ["nvCategoryFilter", "nvStateFilter", "nvDecisionFilter"].some(((id) => $("#" + id).val() !== ("nvCategoryFilter" === id ? "all" : "pending")));
+        if (!this.nvAllItemsMap.size) renderStateView(container, { type: "empty", title: "暂无新作品记录" });
+        else if (query) renderStateView(container, { type: "empty", title: `没有找到“${query}”的作品`, actionLabel: "清除搜索", onAction: /* @__PURE__ */ __name(() => {
+          $("#nvSearch").val(""), this.nvCurrentPage = 1, this.nvRenderGeneration++, this.renderNewVideoList();
+        }, "onAction") });
+        else if (filtered) renderStateView(container, { type: "empty", title: "没有符合当前筛选条件的作品", actionLabel: "清除筛选", onAction: /* @__PURE__ */ __name(() => {
+          JhsSelect.setValue("#nvCategoryFilter", "all", false), JhsSelect.setValue("#nvStateFilter", "pending", false), JhsSelect.setValue("#nvDecisionFilter", "pending", false), this.nvCurrentPage = 1, this.nvRenderGeneration++, this.renderNewVideoList();
+        }, "onAction") });
+        else renderStateView(container, { type: "empty", title: "暂无待处理的新作品" });
+        return void this.renderBatchBar();
       }
-      if (0 === t2.length) return e2.html('<div class="jhs-state jhs-state--empty">暂无待鉴定的新作品</div>'), void $("#new-video-list-footer").html("");
-      this.nvFlatListCache = t2, this.nvCurrentPage = 1, this.nvSortBy = $("#nvSortBy").val() || "publishTime_desc";
-      const a2 = /* @__PURE__ */ new Set();
-      for (const i2 of t2) a2.add(i2.actressName);
-      this.nvSelected.clear(), $("#new-video-list-footer").html(`<span>共 <b>${t2.length}</b> 个番号，涉及 <b>${a2.size}</b> 位演员；已选择 <b id="nvSelectedCount">0</b> 个</span>
-            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkFavorite">选择项收藏</button>
-            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkWatched">选择项标记已看</button>
-            <button type="button" class="jhs-btn jhs-btn--soft" id="batchMarkDownloaded">选择项标记已下载</button>
-            <button type="button" class="jhs-btn jhs-btn--ghost" id="batchIgnore">选择项忽略</button>
-            <button type="button" class="jhs-btn jhs-btn--ghost" id="batchSnooze">选择项暂缓 7 天</button>
-            <button type="button" class="jhs-btn jhs-btn--ghost" id="batchRestore">恢复选择项</button>
-            <button type="button" class="jhs-btn jhs-btn--danger" id="batchRemoveFromNewVideo">从新作列表移除</button>`);
-      this.nvRenderPage(), this.loadCoverForItems(t2).catch(((e3) => clog.warn("封面加载异常:", e3)));
-      const selectedItems = /* @__PURE__ */ __name(() => this.nvFlatListCache.filter(((item) => this.nvSelected.has(item.carNum))), "selectedItems"), ensureSelected = /* @__PURE__ */ __name(() => selectedItems().length ? selectedItems() : (show.info("请先选择作品"), []), "ensureSelected"), patchSelected = /* @__PURE__ */ __name(async (flag) => {
-        const items = ensureSelected();
-        if (!items.length) return;
-        await stateService.patch(items.map(((item) => item.carNum)), { [flag]: true }, { type: "new-video-batch-state", records: items.map(((item) => ({ carNum: item.carNum, url: item.url || `/search?q=${encodeURIComponent(item.carNum)}`, names: item.actressName, publishTime: item.publishTime }))) }), show.ok(`已处理 ${items.length} 个番号`), await this.renderNewVideoList(), await this.showNewVideoCount();
-      }, "patchSelected");
-      $("#batchMarkFavorite").on("click", (() => patchSelected("favorite"))), $("#batchMarkWatched").on("click", (() => patchSelected("watched"))), $("#batchMarkDownloaded").on("click", (() => patchSelected("downloaded"))), $("#batchIgnore").on("click", (async () => {
-        const items = ensureSelected();
-        items.length && (await stateService.setNewVideoDecision(items.map(((item) => item.carNum)), "ignored"), await this.renderNewVideoList(), await this.showNewVideoCount());
-      })), $("#batchSnooze").on("click", (async () => {
-        const items = ensureSelected();
-        items.length && (await stateService.setNewVideoDecision(items.map(((item) => item.carNum)), "snoozed", new Date(Date.now() + 7 * 864e5).toISOString()), await this.renderNewVideoList(), await this.showNewVideoCount());
-      })), $("#batchRestore").on("click", (async () => {
-        const items = ensureSelected();
-        items.length && (await stateService.setNewVideoDecision(items.map(((item) => item.carNum)), null), await this.renderNewVideoList(), await this.showNewVideoCount());
-      })), $("#batchRemoveFromNewVideo").on("click", ((event) => {
-        const items = ensureSelected();
-        items.length && utils.q(event, `确认将 ${items.length} 个作品从新作列表移除？<br>不会删除作品状态记录。`, (async () => {
-          await stateService.removeFromNewVideoList(items.map(((item) => item.carNum)), "manual"), await this.renderNewVideoList(), await this.showNewVideoCount();
-        }));
+      this.nvRenderPage(generation), this.renderBatchBar();
+    }
+    selectedItems() {
+      return [...this.nvSelected].map(((carNum) => this.nvAllItemsMap.get(normalizeCarNum(carNum)))).filter(Boolean);
+    }
+    applyProcessedSelection(result) {
+      (result?.changed || []).map(normalizeCarNum).filter(Boolean).forEach(((carNum) => this.nvSelected.delete(carNum))), this.renderBatchBar();
+    }
+    async runBatchMutation(mutate, successLabel) {
+      const items = this.selectedItems();
+      if (!items.length) return void show.info("请先选择作品");
+      try {
+        const result = await mutate(items);
+        this.applyProcessedSelection(result), result?.changed?.length ? show.ok(`${successLabel} ${result.changed.length} 个番号`) : show.info("没有需要更新的项目");
+      } catch (error) {
+        clog.error("批量操作失败", error), show.error(`批量操作失败: ${error.message || error}`);
+      }
+    }
+    bindBatchActions() {
+      const footer = $("#new-video-list-footer");
+      footer.off(".jhsNvBatch").on("click.jhsNvBatch", "#nvSelectPage", (() => {
+        (this.nvCurrentPageItems || []).forEach(((item) => this.nvSelected.add(normalizeCarNum(item.carNum)))), $("#new-video-list-container .nv-select").prop("checked", true), this.renderBatchBar();
+      })).on("click.jhsNvBatch", "#nvClearSelection", (() => {
+        this.nvSelected.clear(), $("#new-video-list-container .nv-select").prop("checked", false), this.renderBatchBar();
+      })).on("click.jhsNvBatch", "#batchMarkFavorite,#batchMarkWatched,#batchMarkDownloaded", ((event) => {
+        const flag = { batchMarkFavorite: "favorite", batchMarkWatched: "watched", batchMarkDownloaded: "downloaded" }[event.currentTarget.id];
+        void this.runBatchMutation(((items) => stateService.patch(items.map(((item) => item.carNum)), { [flag]: true }, { type: "new-video-batch-state", records: items.map(((item) => ({ carNum: item.carNum, url: item.url || `/search?q=${encodeURIComponent(item.carNum)}`, names: item.actressName, publishTime: item.publishTime }))) })), "已处理");
+      })).on("click.jhsNvBatch", "#batchIgnore", (() => void this.runBatchMutation(((items) => stateService.setNewVideoDecision(items.map(((item) => item.carNum)), "ignored")), "已忽略"))).on("click.jhsNvBatch", "#batchSnooze", (() => void this.runBatchMutation(((items) => stateService.setNewVideoDecision(items.map(((item) => item.carNum)), "snoozed", new Date(Date.now() + 7 * 864e5).toISOString())), "已暂缓"))).on("click.jhsNvBatch", "#batchRestore", (() => void this.runBatchMutation(((items) => stateService.setNewVideoDecision(items.map(((item) => item.carNum)), null)), "已恢复"))).on("click.jhsNvBatch", "#batchRemoveFromNewVideo", ((event) => {
+        const items = this.selectedItems();
+        items.length && utils.q(event, `确认将 ${items.length} 个作品从新作列表移除？<br>不会删除作品状态记录。`, (() => void this.runBatchMutation(((selected) => stateService.removeFromNewVideoList(selected.map(((item) => item.carNum)), "manual")), "已移除")));
       }));
+    }
+    renderBatchBar() {
+      const footer = $("#new-video-list-footer");
+      if (!footer.length) return;
+      const actresses = new Set(this.nvFlatListCache.flatMap(((item) => item.actresses || [item.actressName])).filter(Boolean)), selected = this.nvSelected.size, visibleSelected = this.nvFlatListCache.filter(((item) => this.nvSelected.has(normalizeCarNum(item.carNum)))).length;
+      if (!selected) return void footer.html(`<div class="jhs-new-video-batch"><span>共 <b>${this.nvFlatListCache.length}</b> 个番号，涉及 <b>${actresses.size}</b> 位演员</span><button type="button" class="jhs-btn jhs-btn--secondary" id="nvSelectPage">全选当前页</button></div>`);
+      footer.html(`<div class="jhs-new-video-batch"><span>已选择 <b>${selected}</b> 项${visibleSelected !== selected ? `，当前结果中 ${visibleSelected} 项` : ""}</span><div class="jhs-new-video-batch__actions"><button type="button" class="jhs-btn jhs-btn--secondary" id="batchMarkFavorite">收藏</button><button type="button" class="jhs-btn jhs-btn--secondary" id="batchMarkWatched">已看</button><button type="button" class="jhs-btn jhs-btn--secondary" id="batchMarkDownloaded">已下载</button><details class="jhs-new-video-batch__more"><summary class="jhs-btn jhs-btn--ghost">更多 ▾</summary><div class="jhs-popover jhs-new-video-batch__menu is-open" role="menu"><button type="button" class="jhs-btn jhs-btn--ghost" role="menuitem" id="batchIgnore">忽略</button><button type="button" class="jhs-btn jhs-btn--ghost" role="menuitem" id="batchSnooze">暂缓 7 天</button><button type="button" class="jhs-btn jhs-btn--ghost" role="menuitem" id="batchRestore">恢复</button><button type="button" class="jhs-btn jhs-btn--danger" role="menuitem" id="batchRemoveFromNewVideo">从新作列表移除</button></div></details><button type="button" class="jhs-btn jhs-btn--ghost" id="nvClearSelection">取消选择</button></div></div>`);
     }
     nvSortList(e2) {
       const t2 = this.nvSortBy || "publishTime_desc", [n2, a2] = t2.split("_");
@@ -13912,63 +14324,66 @@ ${error.stack}` : "");
         return "desc" === a2 ? -i2 : i2;
       }));
     }
-    nvRenderPage() {
+    nvRenderPage(generation = this.nvRenderGeneration) {
       const e2 = this.nvFlatListCache;
       if (!e2 || 0 === e2.length) return;
-      const t2 = this.nvSortList(e2), n2 = this.nvPageSize, a2 = (this.nvCurrentPage - 1) * n2, i2 = a2 + n2, s2 = t2.slice(a2, i2), o2 = Math.ceil(t2.length / n2), r2 = this.getBean("OtherSitePlugin").getJavDbUrl().then(((r3) => {
-        const l2 = $("#new-video-list-container");
-        let c2 = "";
-        c2 += '<div id="nv-grid" class="jhs-new-video-grid">';
-        for (const n3 of s2) {
-          const e3 = escapeHtml(n3.carNum), t3 = escapeHtml(n3.title || n3.carNum), a3 = n3.coverUrl ? n3.coverUrl.replace("thumbs", "covers") : "", i3 = n3.url || `${r3}/search?q=${encodeURIComponent(n3.carNum)}`;
-          let o3 = `番号: ${e3}\\n演员: ${escapeHtml(n3.actressName)}\\n发行: ${n3.publishTime || "未知"}`;
-          n3.voteCount && (o3 += `\\n评价人数: ${n3.voteCount}`);
-          const l3 = n3.voteCount ? `<span class="jhs-badge jhs-badge--neutral nv-card__rating">${n3.voteCount}人评价</span>` : "";
-          c2 += `<div class="nv-card" data-car="${e3}" title="${o3}"><label class="jhs-option-row"><input type="checkbox" class="nv-select" value="${e3}" ${this.nvSelected.has(n3.carNum) ? "checked" : ""}><span>选择</span></label>`;
-          c2 += `<a class="nv-card__link" href="${i3}" target="_blank" rel="noopener noreferrer">`;
-          c2 += `<div class="nv-card__cover">`;
-          a3 ? c2 += `<img class="nv-cover-img" src="${a3}" data-full="${a3}" loading="lazy" onerror="this.classList.add('jhs-is-hidden');this.nextElementSibling.classList.remove('jhs-is-hidden');">${l3}<div class="nv-card__empty jhs-is-hidden">无封面</div>` : c2 += `<div class="nv-placeholder nv-card__empty">加载中...</div>`;
-          c2 += `</div>`;
-          c2 += `<div class="nv-card__body">`;
-          c2 += `<div class="nv-card__title" title="${e3}">${e3}</div>`;
-          c2 += `<div class="nv-card__actress" title="${escapeHtml(n3.actressName)}">${escapeHtml(n3.actressName)}</div>`;
-          n3.publishTime && (c2 += `<div class="nv-card__date">${n3.publishTime}</div>`);
-          n3.decisionState && "pending" !== n3.decisionState && (c2 += `<span class="jhs-badge jhs-badge--neutral">${"ignored" === n3.decisionState ? "已忽略" : "已暂缓"}</span>`), c2 += `</div></a></div>`;
-        }
-        c2 += "</div>";
-        if (o2 > 1) {
-          c2 += '<div id="nv-pagination-bar" class="jhs-new-video-pagination">';
-          this.nvCurrentPage > 1 && (c2 += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${this.nvCurrentPage - 1}">上一页</button>`);
-          let e3 = Math.max(1, this.nvCurrentPage - 2), n3 = Math.min(o2, e3 + 4);
-          n3 - e3 < 4 && (e3 = Math.max(1, n3 - 4));
-          for (let t3 = e3; t3 <= n3; t3++) c2 += `<button type="button" class="jhs-btn ${t3 === this.nvCurrentPage ? "jhs-btn--primary is-current" : "jhs-btn--secondary"} pagination-btn" data-nvpage="${t3}" ${t3 === this.nvCurrentPage ? 'aria-current="page"' : ""}>${t3}</button>`;
-          this.nvCurrentPage < o2 && (c2 += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${this.nvCurrentPage + 1}">下一页</button>`), c2 += `<span class="jhs-pagination__summary">第 ${this.nvCurrentPage}/${o2} 页，共 ${t2.length} 条</span>`, c2 += "</div>";
-        }
-        l2.html(c2), l2.find(".nv-select").on("change", ((event) => {
-          const carNum = normalizeCarNum(event.currentTarget.value);
-          event.currentTarget.checked ? this.nvSelected.add(carNum) : this.nvSelected.delete(carNum), $("#nvSelectedCount").text(this.nvSelected.size);
-        })), l2.find(".pagination-btn").off("click").on("click", ((e3) => {
-          const n3 = parseInt($(e3.currentTarget).data("nvpage"));
-          n3 >= 1 && n3 <= o2 && n3 !== this.nvCurrentPage && (this.nvCurrentPage = n3, this.nvRenderPage(), l2.scrollTop(0));
-        })), window.imageHoverPreviewObj ? window.imageHoverPreviewObj.bindEvents() : window.imageHoverPreviewObj = new ImageHoverPreview({
-          selector: ".nv-cover-img",
-          dataAttribute: "data-full"
-        });
-      }));
+      const t2 = this.nvSortList(e2), n2 = this.nvPageSize, a2 = (this.nvCurrentPage - 1) * n2, i2 = a2 + n2, s2 = t2.slice(a2, i2), o2 = Math.ceil(t2.length / n2), r2 = this.nvJavDbUrl;
+      this.nvCurrentPageItems = s2;
+      if (generation !== this.nvRenderGeneration) return;
+      const l2 = $("#new-video-list-container");
+      let c2 = "";
+      c2 += '<div id="nv-grid" class="jhs-new-video-grid">';
+      for (const n3 of s2) {
+        const key = normalizeCarNum(n3.carNum), e3 = escapeHtml(key), t3 = escapeHtml(n3.title || key), cachedCover = this.nvCoverCache.get(key), a3 = escapeHtml((cachedCover || n3.coverUrl || "").replace("thumbs", "covers")), i3 = escapeHtml(n3.url || `${r2}/search?q=${encodeURIComponent(key)}`);
+        let o3 = `番号: ${e3}\\n演员: ${escapeHtml(n3.actressName)}\\n发行: ${n3.publishTime || "未知"}`;
+        n3.voteCount && (o3 += `\\n评价人数: ${n3.voteCount}`);
+        const l3 = n3.voteCount ? `<span class="jhs-badge jhs-badge--neutral nv-card__rating">${n3.voteCount}人评价</span>` : "";
+        c2 += `<div class="nv-card" data-car="${e3}" title="${o3}"><label class="jhs-option-row"><input type="checkbox" class="nv-select" value="${e3}" ${this.nvSelected.has(key) ? "checked" : ""}><span>选择</span></label>`;
+        c2 += `<a class="nv-card__link" href="${i3}" target="_blank" rel="noopener noreferrer">`;
+        c2 += `<div class="nv-card__cover">`;
+        a3 ? c2 += `<img class="nv-cover-img" src="${a3}" data-full="${a3}" loading="lazy" onerror="this.classList.add('jhs-is-hidden');this.nextElementSibling.classList.remove('jhs-is-hidden');">${l3}<div class="nv-card__empty jhs-is-hidden">无封面</div>` : c2 += `<div class="nv-placeholder nv-card__empty">加载中...</div>`;
+        c2 += `</div>`;
+        c2 += `<div class="nv-card__body">`;
+        c2 += `<div class="nv-card__title" title="${e3}">${e3}</div>`;
+        c2 += `<div class="nv-card__actress" title="${escapeHtml(n3.actressName)}">${escapeHtml(n3.actressName)}</div>`;
+        n3.publishTime && (c2 += `<div class="nv-card__date">${n3.publishTime}</div>`);
+        n3.decisionState && "pending" !== n3.decisionState && (c2 += `<span class="jhs-badge jhs-badge--neutral">${"ignored" === n3.decisionState ? "已忽略" : "已暂缓"}</span>`), c2 += `</div></a></div>`;
+      }
+      c2 += "</div>";
+      if (o2 > 1) {
+        c2 += '<div id="nv-pagination-bar" class="jhs-new-video-pagination">';
+        this.nvCurrentPage > 1 && (c2 += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${this.nvCurrentPage - 1}">上一页</button>`);
+        let e3 = Math.max(1, this.nvCurrentPage - 2), n3 = Math.min(o2, e3 + 4);
+        n3 - e3 < 4 && (e3 = Math.max(1, n3 - 4));
+        for (let t3 = e3; t3 <= n3; t3++) c2 += `<button type="button" class="jhs-btn jhs-btn--secondary ${t3 === this.nvCurrentPage ? "is-current" : ""} pagination-btn" data-nvpage="${t3}" ${t3 === this.nvCurrentPage ? 'aria-current="page"' : ""}>${t3}</button>`;
+        this.nvCurrentPage < o2 && (c2 += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${this.nvCurrentPage + 1}">下一页</button>`), c2 += `<span class="jhs-pagination__summary">第 ${this.nvCurrentPage}/${o2} 页，共 ${t2.length} 条</span>`, c2 += "</div>";
+      }
+      l2.html(c2), l2.find(".nv-cover-img").on("error", (function() {
+        $(this).addClass("jhs-is-hidden").siblings(".nv-card__empty").removeClass("jhs-is-hidden");
+      })), l2.find(".nv-select").on("change", ((event) => {
+        const carNum = normalizeCarNum(event.currentTarget.value);
+        event.currentTarget.checked ? this.nvSelected.add(carNum) : this.nvSelected.delete(carNum), this.renderBatchBar();
+      })), l2.find(".pagination-btn").off("click").on("click", ((e3) => {
+        const n3 = parseInt($(e3.currentTarget).data("nvpage"));
+        n3 >= 1 && n3 <= o2 && n3 !== this.nvCurrentPage && (this.nvCurrentPage = n3, this.nvRenderGeneration++, this.nvRenderPage(this.nvRenderGeneration), this.renderBatchBar(), l2.scrollTop(0));
+      })), window.imageHoverPreviewObj ? window.imageHoverPreviewObj.bindEvents() : window.imageHoverPreviewObj = new ImageHoverPreview({
+        selector: ".nv-cover-img",
+        dataAttribute: "data-full"
+      }), void this.hydrateVisibleCovers(s2, generation);
     }
     async editActress(e2) {
-      const t2 = e2.name, n2 = e2.avatar, a2 = e2.remark || "", i2 = Array.isArray(e2.allName) ? e2.allName.join("，") : "", s2 = Array.isArray(e2.newVideoList) ? e2.newVideoList.map(((e3) => "string" == typeof e3 ? e3 : e3.carNum)).join("，") : "", o2 = e2.starId, l2 = e2.actressType || "", c2 = `
+      const t2 = String(e2.name || ""), n2 = normalizeHttpUrl(e2.avatar, this.nvJavDbUrl) || "", a2 = String(e2.remark || ""), i2 = Array.isArray(e2.allName) ? e2.allName.join("，") : "", s2 = Array.isArray(e2.newVideoList) ? e2.newVideoList.map(((e3) => "string" == typeof e3 ? e3 : e3.carNum)).join("，") : "", o2 = String(e2.starId || ""), l2 = e2.actressType || "", safe = /* @__PURE__ */ __name((value) => escapeHtml(String(value || "")), "safe"), c2 = `
             <div class="jhs-form-dialog">
                 <div class="jhs-avatar-editor">
-                    <img id="edit-avatar-preview" src="${n2}" alt="Avatar Preview"
+                    <img id="edit-avatar-preview" src="${safe(n2)}" alt="Avatar Preview"
                          class="jhs-avatar-editor__preview">
                     <div class="jhs-form-dialog__body">
                         <label class="jhs-form-label">头像链接:</label>
-                        <input type="text" id="edit-actress-avatar" value="${n2}"
+                        <input type="text" id="edit-actress-avatar" value="${safe(n2)}"
                                class="jhs-field">
                        <div class="jhs-toolbar jhs-avatar-editor__actions">
                             <button type="button" id="search-avatar-btn"
-                                class="jhs-btn jhs-btn--primary">
+                                class="jhs-btn jhs-btn--secondary">
                                 搜索头像
                             </button>
                             <button type="button" id="select-cdn-btn"
@@ -13980,12 +14395,12 @@ ${error.stack}` : "");
                 </div>
                 <div class="jhs-form-field">
                     <label class="jhs-form-label">主名称:</label>
-                    <input type="text" id="edit-actress-name" value="${t2}"
+                    <input type="text" id="edit-actress-name" value="${safe(t2)}"
                            class="jhs-field">
                 </div>
                 <div class="jhs-form-field">
                     <label class="jhs-form-label">所有别名(用逗号隔开):</label>
-                    <textarea id="edit-actress-allname" class="jhs-textarea">${i2}</textarea>
+                    <textarea id="edit-actress-allname" class="jhs-textarea">${safe(i2)}</textarea>
                 </div>
                 <div class="jhs-form-field">
                     <label class="jhs-form-label">演员类别:</label>
@@ -13997,17 +14412,17 @@ ${error.stack}` : "");
                 </div>
                 <div class="jhs-form-field">
                     <label class="jhs-form-label">最新作品(用逗号隔开):</label>
-                    <textarea id="edit-actress-newvideolist" class="jhs-textarea">${s2}</textarea>
+                    <textarea id="edit-actress-newvideolist" class="jhs-textarea">${safe(s2)}</textarea>
                 </div>
                 <div class="jhs-form-field">
                     <label class="jhs-form-label">备注:</label>
-                   <textarea id="edit-remark" class="jhs-textarea">${a2}</textarea>
+                   <textarea id="edit-remark" class="jhs-textarea">${safe(a2)}</textarea>
                 </div>
             </div>
         `;
       layer.open({
         type: 1,
-        title: `编辑女优: ${t2} (${o2})`,
+        title: `编辑女优: ${safe(t2)} (${safe(o2)})`,
         area: utils.getDialogArea("sm"),
         content: c2,
         btn: ["保存", "取消"],
@@ -14075,8 +14490,7 @@ ${error.stack}` : "");
           e2.avatar = n3, e2.name = a3, e2.allName = l3, e2.newVideoList = c3, e2.actressType = r2, e2.remark = o3;
           try {
             await storageManager.updateFavoriteActress(e2);
-            await this.renderActressCards();
-            this.showNewVideoCount();
+            await jhsEventBus.emit("new-video-changed", { reason: "favorite-actress-edited" });
             show.ok(`女优 ${a3} 信息已更新`);
             layer.close(t3);
           } catch (err) {
@@ -14090,13 +14504,13 @@ ${error.stack}` : "");
       let a2 = "";
       const i2 = $("#actress-pagination");
       if (0 === t2) return a2 = '<span class="jhs-pagination__summary">共 0 条记录</span>', void i2.html(a2);
-      n2 > 1 && t2 > 5 && (a2 += '<button class="jhs-btn pagination-btn" data-page="1">首页</button>'), n2 > 1 && (a2 += `<button class="jhs-btn pagination-btn" data-page="${n2 - 1}">上一页</button>`);
+      n2 > 1 && t2 > 5 && (a2 += '<button type="button" class="jhs-btn pagination-btn" data-page="1">首页</button>'), n2 > 1 && (a2 += `<button type="button" class="jhs-btn pagination-btn" data-page="${n2 - 1}">上一页</button>`);
       let s2 = Math.max(1, n2 - Math.floor(2.5)), o2 = Math.min(t2, s2 + 5 - 1);
       o2 - s2 < 4 && (s2 = Math.max(1, o2 - 5 + 1));
       for (let r2 = s2; r2 <= o2; r2++) {
-        a2 += `<button class="jhs-btn pagination-btn page-number-btn ${r2 === n2 ? "active" : ""}" data-page="${r2}">${r2}</button>`;
+        a2 += `<button type="button" class="jhs-btn pagination-btn page-number-btn ${r2 === n2 ? "active" : ""}" data-page="${r2}" ${r2 === n2 ? 'aria-current="page"' : ""}>${r2}</button>`;
       }
-      n2 < t2 && (a2 += `<button class="jhs-btn pagination-btn" data-page="${n2 + 1}">下一页</button>`), n2 < t2 && t2 > 5 && (a2 += `<button class="jhs-btn pagination-btn" data-page="${t2}">尾页</button>`), a2 += `<span class="jhs-pagination__summary">共 ${e2} 条记录 (第 ${n2}/${t2} 页)</span>`, i2.html(a2), i2.find(".pagination-btn").off("click").on("click", ((e3) => {
+      n2 < t2 && (a2 += `<button type="button" class="jhs-btn pagination-btn" data-page="${n2 + 1}">下一页</button>`), n2 < t2 && t2 > 5 && (a2 += `<button type="button" class="jhs-btn pagination-btn" data-page="${t2}">尾页</button>`), a2 += `<span class="jhs-pagination__summary">共 ${e2} 条记录 (第 ${n2}/${t2} 页)</span>`, i2.html(a2), i2.find(".pagination-btn").off("click").on("click", ((e3) => {
         if ($(e3.currentTarget).is("[disabled]")) return;
         const n3 = parseInt($(e3.currentTarget).data("page"));
         n3 >= 1 && n3 <= t2 && n3 !== this.currentPage && (this.currentPage = n3, this.renderActressCards());
@@ -14115,89 +14529,34 @@ ${error.stack}` : "");
         i2.close();
       }
       if (0 === s2.length) return void show.error(`未找到与 '${a2.join("、")}' 相关的头像。请检查名称。`);
-      const o2 = s2.map(((e3, t3) => `
-        <div id="wrapper-${t3}" class="gfriends-image-item-wrapper">
-            <img alt="" src="${e3}" data-url="${e3}" class="gfriends-selectable-img" data-wrapper-id="wrapper-${t3}" >
-            <div class="gfriends-size-tag" data-size-for="wrapper-${t3}">...</div>
-        </div>
-    `)).join(""), r2 = `
-        <style>
-            /* 保持上一个回答的美化样式 */
-            #gfriends-image-list-container { padding: 15px; height: 100%; box-sizing: border-box; background-color: var(--jhs-surface-2); }
-            #gfriends-prompt { color: var(--jhs-text-muted); font-weight: 500; border-bottom: 1px solid var(--jhs-surface-2); padding-bottom: 10px; }
-            #gfriends-image-list { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }
-            .gfriends-image-item-wrapper {
-                width: 160px; height: 225px; /* 增加高度以容纳尺寸标签 */
-                overflow: hidden; border-radius: 6px;
-                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); transition: transform 0.2s ease, box-shadow 0.2s ease;
-                cursor: pointer; position: relative;
-                padding-bottom: 25px; /* 为尺寸标签留出空间 */
-            }
-            .gfriends-selectable-img {
-                width: 100%; height: 200px; /* 固定图片高度 */
-                object-fit: cover; border: 3px solid transparent;
-                border-radius: 6px; transition: border 0.2s ease;
-            }
-            .gfriends-image-item-wrapper:hover {
-                transform: translateY(-4px) scale(1.02);
-                box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
-            }
-            .gfriends-selectable-img.is-selected {
-                border-color: var(--jhs-accent);
-                box-shadow: 0 0 0 3px var(--jhs-accent);
-            }
-            /* 新增：尺寸标签样式 */
-            .gfriends-size-tag {
-                position: absolute;
-                bottom: 0; /* 定位到图片容器底部 */
-                left: 0;
-                right: 0;
-                height: 25px;
-                line-height: 25px;
-                text-align: center;
-                background-color: rgba(0, 0, 0, 0.7); /* 半透明背景 */
-                color: #fff;
-                font-size: 11px;
-                font-weight: bold;
-                border-bottom-left-radius: 6px;
-                border-bottom-right-radius: 6px;
-                user-select: none;
-            }
-        </style>
-
-        <div id="gfriends-image-list-container">
-            <p id="gfriends-prompt" class="jhs-layout-bd59a2e1">
-                点击图片即可选择（初始共 ${s2.length} 张）
-            </p>
-            <div class="jhs-layout-3fefafab">
-                <div id="gfriends-image-list">
-                    ${o2}
-                </div>
-            </div>
-        </div>
-    `;
+      const r2 = $('<div id="gfriends-image-list-container"><p id="gfriends-prompt"></p><div id="gfriends-image-list" role="group" aria-label="头像候选"></div></div>');
+      r2.find("#gfriends-prompt").text(`点击图片即可选择（初始共 ${s2.length} 张）`);
+      const avatarList = r2.find("#gfriends-image-list");
+      s2.forEach(((url, index) => {
+        const candidate = $('<button type="button" class="jhs-btn gfriends-image-item-wrapper" aria-pressed="false"></button>').attr({ "data-url": url, "aria-label": `选择第 ${index + 1} 张头像` });
+        candidate.append($('<img class="gfriends-selectable-img" alt="">').attr("src", url)), candidate.append($('<span class="gfriends-size-tag">载入中</span>')), avatarList.append(candidate);
+      }));
       let l2 = 0;
       layer.open({
         type: 1,
         title: `选择女优头像 (${s2.length} 张)`,
         area: utils.getResponsiveArea(["900px", "85%"]),
-        content: r2,
+        content: r2[0],
         btn: ["关闭"],
         success: /* @__PURE__ */ __name((e3, t3) => {
-          const n3 = $(e3), a3 = n3.find(".gfriends-selectable-img"), i3 = n3.find("#gfriends-prompt");
+          const n3 = $(e3), a3 = n3.find(".gfriends-selectable-img"), i3 = n3.find("#gfriends-prompt"), candidates = n3.find(".gfriends-image-item-wrapper");
           a3.each((function() {
-            const e4 = $(this), a4 = e4.data("wrapper-id"), o3 = n3.find(`#${a4}`), r3 = n3.find(`.gfriends-size-tag[data-size-for="${a4}"]`);
-            e4.on("load", (function() {
-              const e5 = this.naturalWidth, t4 = this.naturalHeight;
-              r3.text(`${e5} x ${t4}`);
-            })), e4.on("error", (function() {
-              o3.remove(), l2++;
-              const e5 = s2.length - l2;
-              i3.text(`点击图片即可选择（已移除 ${l2} 张错误图片，剩余 ${e5} 张）`), 0 === e5 && (show.error("所有搜索到的头像链接均已失效，无法选择。"), layer.close(t3));
-            })), this.complete && (this.naturalWidth > 0 ? e4.trigger("load") : e4.trigger("error"));
-          })), a3.on("click", (function() {
-            const e4 = $(this), n4 = e4.data("url");
-            $("#edit-actress-avatar").val(n4), $("#edit-avatar-preview").attr("src", n4), a3.removeClass("is-selected"), e4.addClass("is-selected"), setTimeout((() => {
+            const image = $(this), wrapper = image.closest(".gfriends-image-item-wrapper"), size = wrapper.find(".gfriends-size-tag");
+            image.on("load", (function() {
+              size.text(`${this.naturalWidth} x ${this.naturalHeight}`);
+            })), image.on("error", (function() {
+              wrapper.remove(), l2++;
+              const e4 = s2.length - l2;
+              i3.text(`点击图片即可选择（已移除 ${l2} 张错误图片，剩余 ${e4} 张）`), 0 === e4 && (show.error("所有搜索到的头像链接均已失效，无法选择。"), layer.close(t3));
+            })), this.complete && (this.naturalWidth > 0 ? image.trigger("load") : image.trigger("error"));
+          })), candidates.on("click", (function() {
+            const candidate = $(this), url = candidate.attr("data-url");
+            $("#edit-actress-avatar").val(url), $("#edit-avatar-preview").attr("src", url), candidates.attr("aria-pressed", "false"), candidate.attr("aria-pressed", "true"), setTimeout((() => {
               layer.close(t3);
             }), 150);
           })), utils.setupEscClose(t3);
@@ -14603,11 +14962,11 @@ ${error.stack}` : "");
       if (!selected) return;
       const info = context || this.getVideoInfo(button), original = button.text(), restoreButton = /* @__PURE__ */ __name(() => {
         if (!button[0]?.isConnected) return;
-        button.removeClass("loading").prop("disabled", false).removeAttr("aria-busy").text(original);
+        button.removeClass("loading").removeAttr("aria-busy aria-disabled").text(original);
       }, "restoreButton");
       let submitted = false;
       try {
-        button.addClass("loading").prop("disabled", true).attr("aria-busy", "true").text("提交中"), await selected.provider.submit(resource, info), this.registry.updateAvailability(selected.provider.id, { available: true, authState: "ready", reason: "最近提交成功" });
+        button.addClass("loading").attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中"), await selected.provider.submit(resource, info), this.registry.updateAvailability(selected.provider.id, { available: true, authState: "ready", reason: "最近提交成功" });
         await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "submitted", retryOf }), submitted = true, button.text("已提交"), show.ok(`${selected.provider.name} 离线任务已创建`), utils.q(event, "是否将该作品标记为已下载？", (async () => {
           info?.carNum && await stateService.patch(info.carNum, { downloaded: true }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } });
         }));
@@ -14742,8 +15101,8 @@ ${error.stack}` : "");
                 height: 56px;
                 border: 0;
                 border-radius: 50%;
-                background: var(--jhs-status-fav);
-                color: var(--jhs-status-fav-on);
+                background: var(--jhs-accent);
+                color: var(--jhs-accent-text-on);
                 font-size: 26px;
                 font-family: inherit;
                 display: flex;
@@ -14762,8 +15121,8 @@ ${error.stack}` : "");
             }
             #jhs-fab.jhs-fab-open {
                 transform: rotate(135deg);
-                background: var(--jhs-status-filter);
-                color: var(--jhs-status-filter-on);
+                background: var(--jhs-accent-hover);
+                color: var(--jhs-accent-text-on);
                 box-shadow: var(--jhs-shadow-md);
             }
 
@@ -14889,10 +15248,10 @@ ${error.stack}` : "");
             .jhs-commandbar__menu { min-width:220px; }
             .jhs-commandbar__menu .jhs-btn, .jhs-sort-menu .jhs-btn { width:100%; justify-content:flex-start; }
             .jhs-commandbar__sort-label { color:var(--jhs-text-muted); font-size:14px; }
-            .jhs-mobile-filter-menu { display:none; min-width:220px; padding:var(--jhs-space-2); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
-            .jhs-fab-menu.jhs-fab-filter-open > .jhs-fab-group, .jhs-fab-menu.jhs-fab-filter-open > .jhs-fab-divider { display:none; }
-            .jhs-fab-menu.jhs-fab-filter-open > .jhs-mobile-filter-menu { display:grid; gap:var(--jhs-space-1); }
-            .jhs-mobile-filter-menu .jhs-btn { width:100%; justify-content:flex-start; }
+            .jhs-mobile-filter-menu, .jhs-mobile-sort-menu { display:none; min-width:220px; padding:var(--jhs-space-2); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
+            .jhs-fab-menu:is(.jhs-fab-filter-open,.jhs-fab-sort-open) > .jhs-fab-group, .jhs-fab-menu:is(.jhs-fab-filter-open,.jhs-fab-sort-open) > .jhs-fab-divider { display:none; }
+            .jhs-fab-menu.jhs-fab-filter-open > .jhs-mobile-filter-menu, .jhs-fab-menu.jhs-fab-sort-open > .jhs-mobile-sort-menu { display:grid; gap:var(--jhs-space-1); }
+            .jhs-mobile-filter-menu .jhs-btn, .jhs-mobile-sort-menu .jhs-btn { width:100%; justify-content:flex-start; }
             @media (max-width: 1023px) {
                 .jhs-page-commandbar { flex-wrap:wrap; overflow:visible; }
                 .jhs-commandbar__left, .jhs-commandbar__right { flex-wrap:wrap; overflow:visible; }
@@ -14933,7 +15292,7 @@ ${error.stack}` : "");
         item.length && item.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo(primary);
       }));
       primary.children().length && left.append(primary);
-      const more = $('<div class="jhs-commandbar__more"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-expanded="false">更多</button><div class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
+      const more = $('<div class="jhs-commandbar__more"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-more-menu" aria-expanded="false">更多</button><div id="jhs-commandbar-more-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
       ["#statsBtn", "#blacklistBtn"].forEach(((selector) => {
         const item = $(selector).first();
         item.length && item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(more.find(".jhs-commandbar__menu"));
@@ -14948,7 +15307,7 @@ ${error.stack}` : "");
         const view = $('<label class="jhs-commandbar__view"><span class="jhs-commandbar__sort-label">排序</span></label>');
         sort.detach().appendTo(view), right.append(view);
       }
-      const batch = $('<div class="jhs-commandbar__batch"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-expanded="false">批量操作</button><div class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
+      const batch = $('<div class="jhs-commandbar__batch"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-batch-menu" aria-expanded="false">批量操作</button><div id="jhs-commandbar-batch-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
       ["#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo"].forEach(((selector) => {
         const item = $(selector).first();
         item.length && item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batch.find(".jhs-commandbar__menu"));
@@ -14966,12 +15325,13 @@ ${error.stack}` : "");
         })), menu.on("keydown", "[role='menuitem']", ((event) => {
           const items = menu.find("[role='menuitem']"), index = items.index(event.currentTarget);
           if ("Escape" === event.key) return event.preventDefault(), menu.removeClass("is-open"), toggle.attr("aria-expanded", "false").trigger("focus");
+          if ("Tab" === event.key) return menu.removeClass("is-open"), void toggle.attr("aria-expanded", "false");
           if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
           event.preventDefault();
           const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
           items.eq(next).trigger("focus");
         })).on("click", "[role='menuitem']", (() => {
-          menu.removeClass("is-open"), toggle.attr("aria-expanded", "false");
+          menu.removeClass("is-open"), toggle.attr("aria-expanded", "false").trigger("focus");
         }));
       }));
       $(document).off("click.jhsCommandbar").on("click.jhsCommandbar", ((event) => {
@@ -14995,12 +15355,12 @@ ${error.stack}` : "");
       const item = /* @__PURE__ */ __name((action, label, attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, "item"), group = /* @__PURE__ */ __name((content) => `<div class="jhs-fab-group">${content}</div>`, "group"), divider = '<div class="jhs-fab-divider" role="separator"></div>';
       let items;
       if (window.isListPage) {
-        const sortMethod = localStorage.getItem("jhs_sortMethod") || "default", sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod], activeFilter = normalizeQuickFilterKey(this.getBean("ListPagePlugin")?.activeQuickFilter), filterOptions = [...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join("");
-        items = group(item("check", "开始鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort", `排序: ${sortLabel}`) + item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"')) + divider + group(item("setting", "设置")) + `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div>`;
+        const sortMethod = localStorage.getItem("jhs_sortMethod") || "default", sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getBean("ListPagePlugin")?.activeQuickFilter), filterOptions = [...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""), sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
+        items = group(item("check", "开始鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort", `排序: ${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') + item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"')) + divider + group(item("logger", "运行日志") + item("setting", "设置")) + `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div><div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>`;
       } else if (window.isDetailPage) {
         const statusDefs = [{ action: "filter", icon: m, label: "屏蔽", key: "filter" }, { action: "fav", icon: v, label: "收藏", key: "fav" }, { action: "down", icon: y, label: "已下载", key: "down" }, { action: "watch", icon: k, label: "已观看", key: "watch" }];
-        items = group(statusDefs.map(((definition) => item(definition.action, `<span class="jhs-fab-status-dot" data-status-key="${definition.key}"></span>${definition.icon}`, `aria-label="${definition.label}" aria-pressed="false" data-label="${definition.label}"`))).join("")) + divider + group(item("magnetFilter", "磁力过滤") + item("magnet", "磁力搜索") + item("subtitle", "字幕")) + divider + group(item("setting", "设置"));
-      } else items = group(item("setting", "设置"));
+        items = group(statusDefs.map(((definition) => item(definition.action, `<span class="jhs-fab-status-dot" data-status-key="${definition.key}"></span>${definition.icon}`, `aria-label="${definition.label}" aria-pressed="false" data-label="${definition.label}"`))).join("")) + divider + group(item("magnetFilter", "磁力过滤") + item("magnet", "磁力搜索") + item("subtitle", "字幕")) + divider + group(item("logger", "运行日志") + item("setting", "设置"));
+      } else items = group(item("logger", "运行日志") + item("setting", "设置"));
       return $(`<div id="jhs-fab-menu" class="jhs-fab-menu" role="menu" aria-hidden="true">${items}</div>`);
     }
     /** 刷新详情页菜单的状态指示 */
@@ -15031,12 +15391,14 @@ ${error.stack}` : "");
       }
     }
     bindEvents(fab, backdrop) {
-      const menu = $(".jhs-fab-menu"), filterMenu = menu.find(".jhs-mobile-filter-menu"), filterTrigger = menu.find('[data-action="quickFilter"]'), closeFilterMenu = /* @__PURE__ */ __name((returnFocus = false) => {
+      const menu = $(".jhs-fab-menu"), filterMenu = menu.find(".jhs-mobile-filter-menu"), sortMenu = menu.find(".jhs-mobile-sort-menu"), filterTrigger = menu.find('[data-action="quickFilter"]'), sortTrigger = menu.find('[data-action="sort"]'), closeFilterMenu = /* @__PURE__ */ __name((returnFocus = false) => {
         menu.removeClass("jhs-fab-filter-open"), filterTrigger.attr("aria-expanded", "false"), returnFocus && filterTrigger.trigger("focus");
-      }, "closeFilterMenu");
+      }, "closeFilterMenu"), closeSortMenu = /* @__PURE__ */ __name((returnFocus = false) => {
+        menu.removeClass("jhs-fab-sort-open"), sortTrigger.attr("aria-expanded", "false"), returnFocus && sortTrigger.trigger("focus");
+      }, "closeSortMenu");
       const closeMenu = /* @__PURE__ */ __name((returnFocus = false) => {
         this._fabGeneration++;
-        closeFilterMenu();
+        closeFilterMenu(), closeSortMenu();
         fab.removeClass("jhs-fab-open").attr("aria-expanded", "false");
         menu.removeClass("jhs-fab-menu-open").attr("aria-hidden", "true");
         backdrop.removeClass("jhs-fab-backdrop-visible");
@@ -15090,12 +15452,29 @@ ${error.stack}` : "");
       })).on("click", ".jhs-mobile-filter-option", ((event) => {
         event.stopPropagation(), this.getBean("ListPagePlugin").setQuickFilter($(event.currentTarget).data("jhs-filter")), closeMenu(true);
       }));
+      sortMenu.on("keydown", ".jhs-mobile-sort-option", ((event) => {
+        const items = sortMenu.find(".jhs-mobile-sort-option"), index = items.index(event.currentTarget);
+        if ("Escape" === event.key) return event.preventDefault(), closeSortMenu(true);
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+        items.eq(next).trigger("focus");
+      })).on("click", ".jhs-mobile-sort-option", ((event) => {
+        event.stopPropagation();
+        const value = $(event.currentTarget).data("jhs-sort");
+        localStorage.setItem("jhs_sortMethod", value), sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true"), void this.getBean("ListPageButtonPlugin")?.sortItems?.(), closeMenu(true);
+      }));
       menu.on("click", ".jhs-fab-menu-item", (e2) => {
         const action = $(e2.currentTarget).data("action");
         if ("quickFilter" === action) {
           e2.stopPropagation(), menu.addClass("jhs-fab-filter-open"), filterTrigger.attr("aria-expanded", "true");
           const selected = filterMenu.find('[aria-checked="true"]');
           return void (selected.length ? selected.first() : filterMenu.find(".jhs-mobile-filter-option").first()).trigger("focus");
+        }
+        if ("sort" === action) {
+          e2.stopPropagation(), menu.addClass("jhs-fab-sort-open"), sortTrigger.attr("aria-expanded", "true");
+          const selected = sortMenu.find('[aria-checked="true"]');
+          return void (selected.length ? selected.first() : sortMenu.find(".jhs-mobile-sort-option").first()).trigger("focus");
         }
         closeMenu(true);
         void this.handleAction(action).catch(((error) => clog.error(`移动端操作 ${action || "unknown"} 失败`, error)));
@@ -15113,16 +15492,8 @@ ${error.stack}` : "");
         case "blacklist":
           this.getBean("BlacklistPlugin")?.openBlacklistDialog();
           break;
-        case "sort": {
-          const cur = localStorage.getItem("jhs_sortMethod") || "default";
-          const next = cur === "default" ? "rateCount" : cur === "rateCount" ? "date" : "default";
-          localStorage.setItem("jhs_sortMethod", next);
-          const btnPlugin = this.getBean("ListPageButtonPlugin");
-          await btnPlugin?.sortItems?.();
-          const label = { default: "默认", rateCount: "评价人数", date: "时间" }[next];
-          show.info(`排序: ${label}`);
+        case "sort":
           break;
-        }
         // 详情页操作
         case "filter":
           $("#filterBtn").length && $("#filterBtn").click();
@@ -15148,6 +15519,9 @@ ${error.stack}` : "");
         // 通用
         case "setting":
           await this.getBean("SettingPlugin")?.openQuickSetting();
+          break;
+        case "logger":
+          clog.openDialog?.();
           break;
       }
     }

@@ -61,7 +61,7 @@ describe("offline provider registry", () => {
 });
 
 describe("unified offline button state", () => {
-    it("keeps success feedback disabled and then restores the original idle state", async () => {
+    it("keeps focusable success feedback busy and then restores the original idle state", async () => {
         vi.useFakeTimers();
         try {
             let resolveSubmit;
@@ -70,13 +70,15 @@ describe("unified offline button state", () => {
             const pending = plugin.submitResource({}, "magnet:?xt=ok", button, { carNum: "ABC-1" });
             while (!submit.mock.calls.length) await Promise.resolve();
             expect(button.text()).toBe("提交中");
-            expect(button.prop("disabled")).toBe(true);
+            expect(button.prop("disabled")).toBe(false);
             expect(button.attr("aria-busy")).toBe("true");
+            expect(button.attr("aria-disabled")).toBe("true");
 
             resolveSubmit();
             await pending;
             expect(button.text()).toBe("已提交");
-            expect(button.prop("disabled")).toBe(true);
+            expect(button.prop("disabled")).toBe(false);
+            expect(button.attr("aria-disabled")).toBe("true");
             expect(history).toHaveBeenCalledOnce();
             expect(history.mock.calls[0][0].status).toBe("submitted");
 
@@ -85,6 +87,7 @@ describe("unified offline button state", () => {
             expect(button.prop("disabled")).toBe(false);
             expect(button.hasClass("loading")).toBe(false);
             expect(button.attr("aria-busy")).toBeUndefined();
+            expect(button.attr("aria-disabled")).toBeUndefined();
         } finally { vi.useRealTimers(); }
     });
 

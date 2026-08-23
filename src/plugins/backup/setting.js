@@ -1,6 +1,6 @@
 class SettingPlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService()), i(this, "pendingCarImport", null), i(this, "cacheItems", [ {
+        super(...arguments), i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService()), i(this, "pendingCarImport", null), i(this, "taskStatusUnsubscribe", null), i(this, "cacheItems", [ {
             key: "jhs_dmm_video",
             text: "预览视频缓存",
             title: "预览视频缓存"
@@ -126,16 +126,29 @@ class SettingPlugin extends BasePlugin {
             area: utils.getDialogArea("lg"),
             scrollbar: !1,
             success: async (e, n) => {
-                $(e).find(".layui-layer-content").css("position", "relative"), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), injectResourceSourcesPanel(), await loadSettingForm(this.getBean.bind(this)), await this.loadResourceSettings(),
+                $(e).find(".layui-layer-content").css("position", "relative"), this.renderTaskStatuses(), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), injectResourceSourcesPanel(), await loadSettingForm(this.getBean.bind(this)), await this.loadResourceSettings(),
                 JhsSelect.enhance(e), this.bindClick(), $(".side-menu-item.active").attr("aria-current", "page"), utils.setupEscClose(n), t && t();
+                this.renderTaskStatuses(), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.renderTaskStatuses()));
                 if (utils.isMobileMode()) {
                     this.collapseAdvancedTabs();
                 }
             },
             end: () => {
+                this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null;
                 this.getBean("CoverButtonPlugin").enableSvgBtn();
             }
         });
+    }
+    renderTaskStatuses() {
+        const container = $("#setting-task-status-list");
+        if (!container.length) return;
+        const taskPlugin = this.getBean("TaskPlugin");
+        if (!taskPlugin?.getTaskStatusSnapshot) return void container.empty();
+        const names = { blacklist: "黑名单", favoriteActress: "演员同步", newVideo: "新作品" }, labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = value => value ? new Date(value).toLocaleString() : "无";
+        container.empty(), [ "blacklist", "favoriteActress", "newVideo" ].forEach((name => {
+            const snapshot = taskPlugin.getTaskStatusSnapshot(name), row = $('<div class="jhs-setting-row jhs-task-setting-status"></div>');
+            row.append($("<span class=\"setting-label\"></span>").text(`${names[name]}：${labels[snapshot.state]}`)), row.append($("<span class=\"form-content jhs-helper-text\"></span>").text(`上次完成 ${format(snapshot.completedAt)}；下次检查 ${snapshot.nextAt ? format(snapshot.nextAt) : "立即"}`)), container.append(row);
+        }));
     }
     collapseAdvancedTabs() {
         const advancedPanels = [

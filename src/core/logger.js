@@ -359,6 +359,17 @@ unsafeWindow.loading = window.loading = function() {
     }
 }, async function() {
     document.head.insertAdjacentHTML("beforeend", "\n        <style>\n            .console-logger-container {\n                position: fixed;\n                bottom: 0;\n                right: 0;\n                z-index: var(--jhs-z-loading);\n                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n                display: flex;\n                flex-direction: column; \n                align-items: flex-end;\n                width: fit-content;\n            }\n\n            .console-logger-toggle {\n                width: 40px;\n                height: 30px;\n                background: var(--jhs-accent);\n                border-radius: 120px 10px 0 0;\n                display: flex;\n                align-items: center;\n                justify-content: center;\n                cursor: pointer;\n                box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);\n                transition: all 0.3s ease;\n                color: var(--jhs-accent-text-on);\n                font-size: 16px;\n            }\n\n            .console-logger-toggle:hover {\n                background: var(--jhs-accent-hover);\n            }\n\n            .console-logger-toggle::after {\n                content: '▼';\n                transition: transform 0.3s ease;\n            }\n\n            .console-logger-toggle.collapsed::after {\n                content: '▲';\n            }\n\n            .console-logger-window {\n                width: 400px;\n                height: 400px;\n                background: var(--jhs-surface);\n                border-radius: 10px 0 10px 10px;\n                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);\n                display: flex;\n                flex-direction: column;\n                overflow: hidden;\n                transform: translateY(0);\n                opacity: 1;\n                /* 简化过渡属性 */\n                transition: width 0.3s ease, height 0.3s ease, opacity 0.3s ease, transform 0.3s ease;\n            }\n\n            .console-logger-window.maximized {\n                width: 600px !important;\n                height: 85vh !important;\n                border-radius: 10px 0 0 10px; /* 调整圆角以匹配右下角 */\n            }\n\n            .console-logger-window.collapsed {\n                height: 0 !important;\n                min-height: 0 !important; \n                opacity: 0;\n            }\n\n            .console-logger-header {\n                background: var(--jhs-accent);\n                color: var(--jhs-accent-text-on);\n                padding: 12px 15px;\n                display: flex;\n                justify-content: space-between;\n                align-items: center;\n                flex-shrink: 0;\n            }\n\n            .console-logger-title {\n                font-weight: 600;\n                font-size: 16px;\n            }\n\n            .console-logger-controls {\n                display: flex;\n                gap: 10px;\n            }\n\n            .console-logger-controls button {\n                background: transparent;\n                border: 1px solid rgba(255, 255, 255, 0.3);\n                padding: 5px 10px;\n                font-size: 12px;\n                color: var(--jhs-accent-text-on);\n                border-radius: 4px;\n                cursor: pointer;\n                transition: background 0.3s;\n            }\n\n            .console-logger-controls button:hover {\n                background: rgba(255, 255, 255, 0.1);\n            }\n\n            /* 新增的按钮样式 */\n            .console-logger-maximize-toggle {\n                line-height: 1;\n                font-size: 14px !important; /* 使箭头看起来更大 */\n                padding: 5px 8px !important;\n            }\n            .console-logger-maximize-toggle::before {\n                content: '⇱'; /* Unicode symbol for maximized */\n            }\n            .console-logger-maximize-toggle.active::before {\n                content: '⇲'; /* Unicode symbol for minimized */\n            }\n\n\n            .console-logger-filters {\n                display: flex;\n                align-items: center;\n                gap: 5px;\n                padding: 10px;\n                background: var(--jhs-surface-2);\n                border-bottom: 1px solid var(--jhs-border);\n                flex-shrink: 0;\n                overflow-x: hidden; \n            }\n\n            /* 新增: 过滤器按钮组的容器，负责滚动 */\n            .console-logger-filter-group {\n                display: flex;\n                gap: 5px;\n                overflow-x: auto; /* 允许过滤器按钮滚动 */\n                flex-grow: 1; /* 占据剩余空间 */\n                padding-right: 10px; /* 避免滚动条影响按钮 */\n            }\n\n            .console-logger-filter {\n                padding: 5px 10px;\n                font-size: 12px;\n                border-radius: 15px;\n                background: var(--jhs-input-bg);\n                color: var(--jhs-text-muted);\n                border: 1px solid var(--jhs-border);\n                cursor: pointer;\n                transition: all 0.3s;\n                white-space: nowrap;\n                flex-shrink: 0; /* 确保不被压缩 */\n            }\n\n            .console-logger-filter.active {\n                background: var(--jhs-accent);\n                color: var(--jhs-accent-text-on);\n                border-color: var(--jhs-accent);\n            }\n\n            /* 新增: 滚动到底部按钮的样式 (位于 filtersContainer 内部右侧) */\n            .console-logger-scroll-to-bottom {\n                background: var(--jhs-accent);\n                border: none;\n                padding: 5px 10px;\n                font-size: 12px;\n                color: var(--jhs-accent-text-on);\n                border-radius: 4px;\n                cursor: pointer;\n                transition: background 0.3s;\n                line-height: 1;\n                height: fit-content;\n                white-space: nowrap;\n                margin-left: auto; /* 将按钮推到最右侧 */\n                flex-shrink: 0; /* 确保不被压缩 */\n            }\n\n            .console-logger-scroll-to-bottom:hover {\n                background: var(--jhs-accent-hover);\n            }\n\n\n            .console-logger-content {\n                flex: 1;\n                overflow-y: auto;\n                padding: 10px;\n                background: var(--jhs-surface);\n                word-wrap: break-word;\n                text-align: left;\n            }\n\n            .console-logger-entry {\n                padding: 8px 10px;\n                margin-bottom: 3px;\n                border-radius: 4px;\n                font-size: 12px;\n                line-height: 1.4;\n                /*animation: consoleFadeIn 0.3s ease;*/\n                border-left: 3px solid transparent;\n            }\n\n            @keyframes consoleFadeIn {\n                from { opacity: 0; transform: translateY(5px); }\n                to { opacity: 1; transform: translateY(0); }\n            }\n\n            .console-logger-timestamp {\n                color: var(--jhs-text-muted);\n                font-size: 11px;\n                margin-right: 2px;\n            }\n\n            @media (max-width: 768px) {\n                .console-logger-container {\n                    right: 10px;\n                    bottom: 10px;\n                }\n\n                .console-logger-window {\n                    width: calc(100vw - 20px);\n                    height: 300px;\n                }\n            }\n            \n            .console-logger-message[data-type=\"json\"] {\n                white-space: pre-wrap; \n            }\n        </style>\n    ");
+    document.head.insertAdjacentHTML("beforeend", `<style>
+        .console-logger-container { font-family:inherit; }
+        .console-logger-toggle { border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md) var(--jhs-radius-md) 0 0; box-shadow:var(--jhs-shadow-sm); transition:background-color var(--jhs-motion-fast) ease; }
+        .console-logger-toggle::after { transition:transform var(--jhs-motion-fast) ease; }
+        .console-logger-window { border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md) 0 var(--jhs-radius-md) var(--jhs-radius-md); box-shadow:var(--jhs-shadow-lg); transition:width var(--jhs-motion-fast) ease,height var(--jhs-motion-fast) ease,opacity var(--jhs-motion-fast) ease,transform var(--jhs-motion-fast) ease; }
+        .console-logger-window.maximized { border-radius:var(--jhs-radius-md) 0 0 var(--jhs-radius-md); }
+        .console-logger-controls button,.console-logger-filter,.console-logger-scroll-to-bottom,.console-logger-entry { border-radius:var(--jhs-radius-sm); }
+        .console-logger-controls button,.console-logger-scroll-to-bottom { transition:background-color var(--jhs-motion-fast) ease; }
+        .console-logger-filter { transition:background-color var(--jhs-motion-fast) ease,border-color var(--jhs-motion-fast) ease; }
+        @media (prefers-reduced-motion:reduce) { .console-logger-toggle,.console-logger-toggle::after,.console-logger-window,.console-logger-controls button,.console-logger-filter,.console-logger-scroll-to-bottom { transition:none; } }
+    </style>`);
     const e = {
         base: {
             label: "信息",
@@ -400,9 +411,10 @@ unsafeWindow.loading = window.loading = function() {
             this.createContainer(), this.bindEvents(), this.checkInitialMaximizeState(), this.checkInitialCollapseState();
         }
         createContainer() {
-            this.container = document.createElement("div"), this.container.className = "console-logger-container",
-            this.container.style.display = "none", this.toggleBtn = document.createElement("div"),
+            this.container = document.createElement("div"), this.container.className = "console-logger-container jhs-ui",
+            this.container.style.display = "none", this.toggleBtn = document.createElement("button"), this.toggleBtn.type = "button", this.toggleBtn.setAttribute("aria-label", "展开或收起运行日志"),
             this.toggleBtn.className = "console-logger-toggle collapsed", this.container.appendChild(this.toggleBtn),
+            window.matchMedia?.("(max-width: 768px)").matches && (this.toggleBtn.hidden = !0, this.toggleBtn.style.display = "none"),
             this.window = document.createElement("div"), this.window.className = "console-logger-window collapsed";
             const t = document.createElement("div");
             t.className = "console-logger-header";
@@ -423,8 +435,8 @@ unsafeWindow.loading = window.loading = function() {
             this.window.appendChild(t), this.window.appendChild(this.filtersContainer), this.window.appendChild(this.content),
             this.container.appendChild(this.window), document.body.appendChild(this.container),
             Object.keys(e).forEach((t => {
-                const n = document.createElement("div");
-                n.className = "console-logger-filter", t === this.currentFilter && n.classList.add("active"),
+                const n = document.createElement("button");
+                n.type = "button", n.className = "jhs-btn console-logger-filter", t === this.currentFilter && n.classList.add("active"),
                 n.textContent = e[t].label, n.dataset.type = t, n.addEventListener("click", (() => this.setFilter(t))),
                 this.filterButtonGroup.appendChild(n);
             }));
@@ -564,6 +576,24 @@ unsafeWindow.loading = window.loading = function() {
         clear() {
             this.logs = [], this.content.innerHTML = "";
         }
+        openDialog() {
+            if (!this.tryInitialize() || !this.window || "undefined" == typeof layer) return;
+            const host = document.createElement("div"), originalParent = this.window.parentNode, originalStyle = this.window.getAttribute("style");
+            host.className = "jhs-ui jhs-logger-dialog", host.style.height = "100%", this.window.classList.remove("collapsed", "maximized"), Object.assign(this.window.style, { width: "100%", height: "100%", border: "0", borderRadius: "0", boxShadow: "none" }), this.reRenderAllLogs();
+            layer.open({
+                type: 1,
+                title: "JHS 运行日志",
+                content: host.outerHTML,
+                area: utils.getDialogArea("md"),
+                anim: -1,
+                success: layerElement => {
+                    $(layerElement).find(".jhs-logger-dialog")[0]?.appendChild(this.window), this.content.scrollTop = this.content.scrollHeight;
+                },
+                end: () => {
+                    originalParent?.appendChild(this.window), null == originalStyle ? this.window.removeAttribute("style") : this.window.setAttribute("style", originalStyle), this.window.classList.add("collapsed"), this.toggleBtn.classList.add("collapsed");
+                }
+            });
+        }
         show() {
             (this.isInitialized && this.container || this.tryInitialize() && this.container) && (this.container.style.display = "",
             this.reRenderAllLogs());
@@ -579,7 +609,7 @@ unsafeWindow.loading = window.loading = function() {
         }
     }
     try {
-        unsafeWindow.parent.clog && "function" == typeof unsafeWindow.parent.clog.log ? window.clog = unsafeWindow.clog = unsafeWindow.parent.clog : window.clog = unsafeWindow.clog = new o;
+        unsafeWindow.parent !== unsafeWindow && unsafeWindow.parent.clog && "function" == typeof unsafeWindow.parent.clog.log ? window.clog = unsafeWindow.clog = unsafeWindow.parent.clog : window.clog = unsafeWindow.clog = new o;
     } catch (r) {
         console.error("创建日志控制台出现异常", r), window.clog = unsafeWindow.clog = new o;
     }

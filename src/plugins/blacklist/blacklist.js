@@ -1,4 +1,7 @@
 class BlacklistPlugin extends BasePlugin {
+    constructor() {
+        super(...arguments), i(this, "blacklistSearchDebounced", null), i(this, "taskStatusUnsubscribe", null);
+    }
     getName() {
         return "BlacklistPlugin";
     }
@@ -9,6 +12,9 @@ class BlacklistPlugin extends BasePlugin {
             .jhs-blacklist-toolbar__group { display:flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-2); }
             .jhs-blacklist-layout #table-container { flex:1; min-height:0; }
             .jhs-table-counter-note { margin-left:var(--jhs-space-2); }
+            .jhs-blacklist-task-status { margin-bottom:var(--jhs-space-2); padding:var(--jhs-space-2) var(--jhs-space-3); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); background:var(--jhs-surface-2); }
+            .jhs-blacklist-task-status .jhs-task-status__name { color:var(--jhs-text); font-weight:700; }
+            .jhs-blacklist-task-status .jhs-task-status__meta { display:block; margin-top:var(--jhs-space-1); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
         </style>`;
     }
     async addBlacklist(e) {
@@ -55,7 +61,7 @@ class BlacklistPlugin extends BasePlugin {
                             role: d,
                             movieType: h,
                             url: g
-                        }), await this.filterActorVideo(r, s);
+                        }), await this.filterActorVideo(r, s, null, l ? I : T);
                         const e = show.ok(`屏蔽结束,是否跳转到最后一页: ${this.lastPageLink}`, {
                             duration: -1,
                             close: !0,
@@ -84,11 +90,11 @@ class BlacklistPlugin extends BasePlugin {
     async resetBtnTip() {
         const e = this.getBean("TaskPlugin"), t = localStorage.getItem(e.lastCheckBlacklistTimeKey) || "无", n = await storageManager.getSetting("checkBlacklist_intervalTime", 12);
         this.checkBlacklist_ruleTime = await storageManager.getSetting("checkBlacklist_ruleTime", 8760),
-        $("#checkBlacklistBtn").attr("data-tip", `上次检测时间: ${t}; 检测间隔时间: ${n}小时`);
+        $("#checkBlacklistBtn").attr("data-tip", `上次整批检测: ${t}; 检测间隔时间: ${n}小时`);
     }
     async openBlacklistDialog() {
         const e = this.getBean("TaskPlugin"), t = await storageManager.getSetting();
-        let n = `\n            <div class="jhs-layout-7cb3f981"> \n                 <div class="jhs-layout-da5a4919">\n                    <div class="jhs-layout-31a824a2">\n                        <button type="button" id="checkBlacklistBtn" class="jhs-btn jhs-btn--danger" data-tip="上次检测时间: ${localStorage.getItem(e.lastCheckBlacklistTimeKey) || "无"}; 检测间隔时间: ${t.checkBlacklist_intervalTime}小时">${this.blacklistSvg} &nbsp;手动检测黑名单</button>\n                        <button type="button" class="jhs-btn jhs-btn--secondary" id="toSetting">${this.settingSvg} &nbsp;&nbsp; 配置</button>\n                    </div>\n                    <div class="jhs-layout-31a824a2">\n                        <select id="dataType" class="jhs-select-source">\n                            <option value="" selected>所有</option>\n                            <option value="actor">男演员</option>\n                            <option value="actress">女演员</option>\n                        </select>\n                        <select id="statusType" class="jhs-select-source">\n                            <option value="" selected>--检测状态--</option>\n                            <option value="normal">正常检测</option>\n                            <option value="stop">停止检测</option>\n                        </select>\n                        <select id="urlType" data-tip="在演员页屏蔽时,是否选择了分类" class="jhs-select-source${r ? "" : " jhs-is-hidden"}">\n                            <option value="" selected>--屏蔽类型--</option>\n                            <option value="hasT">按所选分类屏蔽</option>\n                            <option value="noT">未筛选分类</option>\n                        </select>\n                        <input id="searchValue" type="text" placeholder="搜索演员" class="jhs-field">\n                        <button type="button" id="cleanQueryBtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                    </div>\n\n                </div>\n                <div id="table-container" class="jhs-layout-d44e70c7"></div>\n            </div>\n        `;
+        let n = `\n            <div class="jhs-layout-7cb3f981"> \n                 <div class="jhs-layout-da5a4919">\n                    <div class="jhs-layout-31a824a2">\n                        <button type="button" id="checkBlacklistBtn" class="jhs-btn jhs-btn--secondary" data-tip="上次整批检测: ${localStorage.getItem(e.lastCheckBlacklistTimeKey) || "无"}; 检测间隔时间: ${t.checkBlacklist_intervalTime}小时">${this.blacklistSvg}<span>手动检测黑名单</span></button>\n                        <button type="button" class="jhs-btn jhs-btn--ghost" id="toSetting">${this.settingSvg}<span>配置</span></button>\n                    </div>\n                    <div class="jhs-layout-31a824a2">\n                        <select id="dataType" class="jhs-select-source">\n                            <option value="" selected>所有</option>\n                            <option value="actor">男演员</option>\n                            <option value="actress">女演员</option>\n                        </select>\n                        <select id="statusType" class="jhs-select-source">\n                            <option value="" selected>全部状态</option>\n                            <option value="normal">继续检测</option>\n                            <option value="stop">停更跳过</option>\n                        </select>\n                        <select id="urlType" data-tip="在演员页屏蔽时,是否选择了分类" class="jhs-select-source${r ? "" : " jhs-is-hidden"}">\n                            <option value="" selected>--屏蔽类型--</option>\n                            <option value="hasT">按所选分类屏蔽</option>\n                            <option value="noT">未筛选分类</option>\n                        </select>\n                        <input id="searchValue" type="search" placeholder="搜索名称、别名或 ID" class="jhs-field">\n                        <button type="button" id="cleanQueryBtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                    </div>\n\n                </div>\n                <div id="table-container" class="jhs-layout-d44e70c7"></div>\n            </div>\n        `;
         layer.open({
             type: 1,
             title: "演员黑名单",
@@ -99,19 +105,13 @@ class BlacklistPlugin extends BasePlugin {
             success: async t => {
                 const dialog = $(t).find(".layui-layer-content > div").first().addClass("jhs-blacklist-layout").removeAttr("style"), toolbar = dialog.children("div").first().addClass("jhs-blacklist-toolbar").removeAttr("style");
                 toolbar.children("div").addClass("jhs-blacklist-toolbar__group").removeAttr("style"), toolbar.find("select,input,a").removeAttr("style"), dialog.find("#table-container").removeAttr("style");
-                JhsSelect.enhance(t);
-                await this.loadTableData(), $(".layui-layer-content").on("click", "#cleanQueryBtn", (async e => {
-                    $("#searchValue").val(""), JhsSelect.setValue("#dataType", ""), JhsSelect.setValue("#statusType", ""), await this.reloadTable();
-                })).on("focusout keydown", "#searchValue", (async e => {
-                    if ("focusout" === e.type || "Enter" === e.key) {
-                        if ("Enter" === e.key && e.preventDefault(), "keydown" === e.type && "Enter" !== e.key) return;
-                        JhsSelect.setValue("#dataType", ""), await this.reloadTable();
-                    }
-                })).on("change", "#dataType", (async () => {
-                    $("#searchValue").val(""), await this.reloadTable();
-                })).on("change", "#statusType", (async () => {
-                    await this.reloadTable();
-                })).on("change", "#urlType", (async () => {
+                dialog.find("#table-container").before('<div id="blacklist-task-status" class="jhs-task-status jhs-blacklist-task-status" aria-live="polite"></div>'), JhsSelect.enhance(t);
+                this.renderTaskStatus(), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.renderTaskStatus()));
+                await this.loadTableData();
+                const content = $(t).find(".layui-layer-content"), search = content.find("#searchValue");
+                this.blacklistSearchDebounced = utils.debounce((() => void this.reloadTable()), 200), content.on("click", "#cleanQueryBtn", (async () => {
+                    search.val(""), JhsSelect.setValue("#dataType", "", !1), JhsSelect.setValue("#statusType", "", !1), JhsSelect.setValue("#urlType", "", !1), await this.reloadTable();
+                })).on("input", "#searchValue", this.blacklistSearchDebounced).on("change", "#dataType,#statusType,#urlType", (async () => {
                     await this.reloadTable();
                 })).on("click", "#toSetting", (() => {
                     this.getBean("SettingPlugin").openSettingDialog("task-panel", (() => {
@@ -123,25 +123,28 @@ class BlacklistPlugin extends BasePlugin {
                     e.preventDefault();
                     const t = $(e.currentTarget), n = t.attr("data-url"), a = t.attr("data-name");
                     utils.openPage(n, a, !0, e);
-                })).on("click", "#checkBlacklistBtn", (t => {
-                    utils.q({
-                        clientX: t.clientX,
-                        clientY: t.clientY + 20
-                    }, "是否手动检测黑名单?", (() => {
-                        navigator.locks.request(e.singleTaskKey, {
-                            ifAvailable: !0
-                        }, (async t => {
-                            t ? (await e.loadConfig(), await e.checkBlacklist(!0)) : show.error("当前有定时任务在后台执行中, 无法发起手动任务");
-                        })).catch((e => {
-                            clog.error("锁任务出现错误:", e);
-                        }));
+                })).on("click", "#checkBlacklistBtn", (event => {
+                    const button = $(event.currentTarget), label = button.find("span").last(), previous = label.text();
+                    if (button.attr("aria-busy") === "true") return;
+                    button.attr("aria-busy", "true").prop("disabled", !0), label.text("检测中…"), navigator.locks.request(e.singleTaskKey, { ifAvailable: !0 }, (async lock => {
+                        lock ? await e.checkBlacklist(!0) : show.error("后台任务正在运行，请稍后再试");
+                    })).catch((error => {
+                        clog.error("锁任务出现错误:", error), e.isNetworkBlocked(error) && show.error(error.message || "任务执行失败");
+                    })).finally((() => {
+                        button.removeAttr("aria-busy").prop("disabled", !1), label.text(previous);
                     }));
                 }));
             },
             end: async () => {
-                this.tableObj && (this.tableObj.destroy(), this.tableObj = null), await jhsEventBus.emit("blacklist-rules-changed");
+                this.blacklistSearchDebounced?.cancel?.(), this.blacklistSearchDebounced = null, this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null), await jhsEventBus.emit("blacklist-rules-changed");
             }
         });
+    }
+    renderTaskStatus() {
+        const container = $("#blacklist-task-status");
+        if (!container.length) return;
+        const snapshot = this.getBean("TaskPlugin").getTaskStatusSnapshot("blacklist"), labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = value => value ? new Date(value).toLocaleString() : "无";
+        container.empty().append($("<span class=\"jhs-task-status__name\"></span>").text(`黑名单：${labels[snapshot.state]}`), $("<span class=\"jhs-task-status__meta\"></span>").text(`上次完成 ${format(snapshot.completedAt)}；下次检查 ${snapshot.nextAt ? format(snapshot.nextAt) : "立即"}`));
     }
     async reloadTable() {
         if (!this.tableObj) return;
@@ -149,19 +152,22 @@ class BlacklistPlugin extends BasePlugin {
         this.tableObj.setData(e);
     }
     async getTableData() {
-        const e = this.getBean("TaskPlugin"), t = await storageManager.getBlacklist(), n = await storageManager.getBlacklistCarList(), a = $("#searchValue").val(), i = $("#statusType").val(), s = $("#dataType"), o = s.val(), r = $("#urlType").val(), l = t.length;
+        const e = this.getBean("TaskPlugin"), t = await storageManager.getBlacklist(), n = await storageManager.getBlacklistCarList(), a = String($("#searchValue").val() || "").trim().toLocaleLowerCase(), i = $("#statusType").val(), s = $("#dataType"), o = s.val(), r = $("#urlType").val(), l = t.length;
         let c = 0, d = 0;
         const h = t.map((t => {
             t.role === B ? c++ : t.role === P && d++;
             let n = !1;
-            return t.lastPublishTime && (n = !e.isUnnecessaryCheck(t.lastPublishTime, this.checkBlacklist_ruleTime)),
+            return n = shouldSkipStopped(t.lastPublishTime, this.checkBlacklist_ruleTime),
             {
                 ...t,
                 isUnCheck: n
             };
-        })).filter((e => !(a && !e.name.includes(a)) && (("normal" !== i || !e.isUnCheck) && (!("stop" === i && !e.isUnCheck) && (o ? e.role === o : !("hasT" === r && !e.url.includes("t=")) && ("noT" !== r || !e.url.includes("t=")))))));
+        })).filter((item => {
+            const aliases = Array.isArray(item.allName) ? item.allName.join(" ") : item.allName || "", searchable = `${item.name || ""} ${aliases} ${item.starId || ""}`.toLocaleLowerCase(), searchMatch = !a || searchable.includes(a), statusMatch = !i || "normal" === i && !item.isUnCheck || "stop" === i && item.isUnCheck, roleMatch = !o || item.role === o, hasCategory = item.url.includes("t="), urlMatch = !r || "hasT" === r && hasCategory || "noT" === r && !hasCategory;
+            return searchMatch && statusMatch && roleMatch && urlMatch;
+        }));
         s.html(`\n            <option value="">所有 (${l})</option>\n            <option value="actor">男演员 (${c})</option>\n            <option value="actress">女演员 (${d})</option>\n        `),
-        JhsSelect.setValue(s, o);
+        JhsSelect.setValue(s, o, !1);
         const g = new Map;
         for (const m of n) {
             const e = m.starId;
@@ -178,17 +184,18 @@ class BlacklistPlugin extends BasePlugin {
         return this.currentCarCount = p.reduce(((e, t) => e + (t.count || 0)), 0), p;
     }
     async loadTableData() {
-        this.checkBlacklist_ruleTime = await storageManager.getSetting("checkBlacklist_ruleTime") || 8760;
-        const e = await this.getTableData();
+        this.checkBlacklist_ruleTime = parseNumberSetting(await storageManager.getSetting("checkBlacklist_ruleTime"), 8760, { min: 0 });
+        const e = await this.getTableData(), placeholder = document.createElement("div");
+        renderStateView(placeholder, { type: "empty", title: "没有符合当前筛选条件的黑名单记录" });
         this.tableObj = new Tabulator("#table-container", {
             layout: "fitColumns",
-            placeholder: "暂无数据",
+            placeholder,
             virtualDom: !0,
             data: e,
             pagination: !0,
             paginationMode: "local",
             paginationSize: 20,
-            paginationSizeSelector: [ 20, 50, 100, 1e3, 99999 ],
+            paginationSizeSelector: [ 20, 50, 100, 1e3, !0 ],
             paginationCounter: (e, t, n, a, i) => `演员: ${a} &nbsp;&nbsp;&nbsp;番号总数: ${this.currentCarCount}  <span id="checkBlacklistMsg" class="jhs-table-counter-note"></span>`,
             responsiveLayout: "collapse",
             responsiveLayoutCollapse: !0,
@@ -205,8 +212,9 @@ class BlacklistPlugin extends BasePlugin {
                 responsive: 0,
                 headerSort: !1,
                 formatter: (e, t, n) => {
-                    const a = e.getData();
-                    return `<a class="open-url" data-url="${a.url}" href="${a.url}" data-name="${a.name}" target="_blank">${a.name}</a>`;
+                    const a = e.getData(), url = normalizeHttpUrl(a.url), link = document.createElement("a");
+                    link.className = "open-url", link.textContent = String(a.name || ""), link.dataset.name = String(a.name || "");
+                    return url ? (link.href = url, link.dataset.url = url, link.target = "_blank", link.rel = "noopener noreferrer") : (link.href = "#", link.setAttribute("aria-disabled", "true")), link;
                 }
             }, {
                 title: "性别角色",
@@ -266,9 +274,9 @@ class BlacklistPlugin extends BasePlugin {
                 width: 120,
                 responsive: 1,
                 formatter: (e, t, n) => {
-                    let a = "", i = "正常检测";
+                    let a = "", i = "继续检测";
                     return e.getData().isUnCheck && (a = `停更${this.checkBlacklist_ruleTime / 24 / 365}年以上, 下轮任务不再进行检测`,
-                    i = "停止检测"), `<span class="jhs-badge ${a ? "jhs-badge--filter" : "jhs-badge--neutral"}" data-tip="${a}">${i}</span>`;
+                    i = "停更跳过"), `<span class="jhs-badge ${a ? "jhs-badge--filter" : "jhs-badge--neutral"}" data-tip="${a}">${i}</span>`;
                 }
             }, {
                 title: "操作",
@@ -316,14 +324,14 @@ class BlacklistPlugin extends BasePlugin {
                         prev_title: "上一页",
                         next: "下一页",
                         next_title: "下一页",
-                        all: "所有",
+                        all: "全部",
                         page_size: "每页行数"
                     }
                 }
             }
         });
     }
-    async filterAllVideo(e, t) {
+    async filterAllVideo(e, t, page = 1, processed = 0) {
         let n, a;
         if (t ? (l && t.find(".avatar-box").length > 0 && t.find(".avatar-box").parent().remove(),
         n = t.find(this.getSelector().requestDomItemSelector), a = t.find(this.getSelector().nextPageSelector).attr("href")) : (n = $(this.getSelector().itemSelector),
@@ -337,15 +345,16 @@ class BlacklistPlugin extends BasePlugin {
                 clog.error(`保存失败 [${n}]:`, i);
             }
         }
+        processed += n.length, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
         if (a) {
-            show.info("请不要关闭窗口, 正在解析下一页:" + a), await new Promise((e => setTimeout(e, 500)));
+            clog.log("正在请求下一页内容:", a), await new Promise((e => setTimeout(e, 500)));
             const t = await gmHttp.get(a), n = new DOMParser, i = $(n.parseFromString(t, "text/html"));
-            await this.filterAllVideo(e, i);
-        } else show.ok("执行结束!");
+            await this.filterAllVideo(e, i, page + 1, processed);
+        } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
     }
-    async batchSaveAllVideos(e, t) {
+    async batchSaveAllVideos(e, t, pageDom = null, page = 1, processed = 0) {
         let n, a;
-        n = $(this.getSelector().itemSelector), a = $(this.getSelector().nextPageSelector).attr("href");
+        pageDom ? (n = pageDom.find(this.getSelector().requestDomItemSelector), a = pageDom.find(this.getSelector().nextPageSelector).attr("href")) : (n = $(this.getSelector().itemSelector), a = $(this.getSelector().nextPageSelector).attr("href"));
         if (a && 0 === n.length) throw show.error("解析列表失败"), new Error("解析列表失败");
         for (const i of n) {
             const n = $(i), {carNum: a, url: o, publishTime: r} = this.getBean("ListPagePlugin").findCarNumAndHref(n);
@@ -354,53 +363,51 @@ class BlacklistPlugin extends BasePlugin {
                 flag && await stateService.patch(a, { [flag]: !0 }, { type: "actor-page-batch-state", record: { carNum: a, url: o, names: e, publishTime: r } }), clog.log("批量操作", e, a, t);
             } catch (s) { clog.error(`保存失败 [${a}]:`, s); }
         }
-        if (a) { show.info("请不要关闭窗口, 正在解析下一页:" + a), await new Promise((e => setTimeout(e, 500)));
+        processed += n.length, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
+        if (a) { clog.log("正在请求下一页内容:", a), await new Promise((e => setTimeout(e, 500)));
             const i = await gmHttp.get(a), s = new DOMParser, o = $(s.parseFromString(i, "text/html"));
-            await this.batchSaveAllVideos(e, t); }
-        else show.ok("执行结束!");
+            await this.batchSaveAllVideos(e, t, o, page + 1, processed); }
+        else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
     }
-    async filterActorVideo(e, t, n) {
-        let {nextPageLink: a} = await this.parseAndSaveFilterInfo(n, e, t);
+    async filterActorVideo(e, t, n, site = l ? I : T, page = 1, processed = 0) {
+        let {nextPageLink: a, recordCount} = await this.parseAndSaveFilterInfo(n, e, t, site);
+        processed += recordCount, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已屏蔽 ${processed} 个番号`);
         if (this.nextPageLink = a, a) {
             let n;
-            this.lastPageLink = a, show.info("请不要关闭窗口, 正在解析下一页:" + a);
+            this.lastPageLink = a;
             clog.log("正在请求下一页内容:", a);
             const i = await gmHttp.get(a);
             n = utils.htmlTo$dom(i);
-            await this.filterActorVideo(e, t, n);
-        } else show.ok("执行结束!");
+            await this.filterActorVideo(e, t, n, site, page + 1, processed);
+        } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 新增 ${processed} 个番号`);
     }
-    async parseAndSaveFilterInfo(e, t, n) {
-        let a, i;
-        if (e) {
-            let t = !1, n = T;
-            e.text().includes(I) && (t = !0, n = I), t && e.find(".avatar-box").length > 0 && e.find(".avatar-box").parent().remove(),
-            a = e.find(this.getSelector(n).requestDomItemSelector), i = e.find(this.getSelector(n).nextPageSelector).attr("href");
-        } else a = $(this.getSelector().itemSelector), i = $(this.getSelector().nextPageSelector).attr("href");
-        if (i && 0 === a.length) return {
-            nextPageLink: null,
-            lastPublishTime: null
-        };
-        let s = [], o = null;
-        for (const l of a) {
-            const e = $(l), {carNum: a, url: i, publishTime: r} = this.getBean("ListPagePlugin").findCarNumAndHref(e);
-            o || (o = r), i && a && s.push({
-                carNum: a,
-                url: i,
+    async parseAndSaveFilterInfo(e, t, n, site) {
+        if (![ T, I ].includes(site)) throw new Error(`未知黑名单来源站点: ${site}`);
+        const page = e || $(document), selector = this.getSelector(site);
+        site === I && page.find(".avatar-box").length > 0 && page.find(".avatar-box").parent().remove();
+        const pageState = parseDetailPage(page, {
+            boxSelector: site === I ? `${selector.boxSelector}, #waterfall` : selector.boxSelector,
+            requestDomItemSelector: e ? selector.requestDomItemSelector : selector.itemSelector
+        }), nextPageLink = page.find(selector.nextPageSelector).attr("href");
+        if ("valid" !== pageState.state) throw new Error(`黑名单作品页面无效: ${pageState.state}`);
+        if (pageState.isEmpty && nextPageLink) throw new Error("黑名单作品空页面包含下一页");
+        const records = [], publishTimes = [];
+        for (const item of pageState.items) {
+            const element = $(item), {carNum, url, publishTime} = this.getBean("ListPagePlugin").findCarNumAndHref(element);
+            publishTime && publishTimes.push(publishTime), url && carNum && records.push({
+                carNum,
+                url,
                 names: t,
                 actionType: d,
                 starId: n,
-                publishTime: r
+                publishTime
             });
         }
-        try {
-            await storageManager.batchSaveBlacklistCarList(s);
-        } catch (r) {
-            clog.error("保存失败:", r);
-        }
+        await storageManager.batchSaveBlacklistCarList(records);
         return {
-            nextPageLink: i,
-            lastPublishTime: o
+            nextPageLink,
+            lastPublishTime: selectLatestPublishTime(publishTimes),
+            recordCount: records.length
         };
     }
 }

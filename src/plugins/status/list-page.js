@@ -145,8 +145,6 @@ class ListPagePlugin extends BasePlugin {
                 this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
                 const e = this.getBean("HistoryPlugin");
                 e.tableObj && e.tableObj.setData();
-                const t = this.getBean("NewVideoPlugin");
-                t && void Promise.all([ t.showNewVideoCount(), t.loadData() ]).catch((error => clog.error("新作品数据刷新失败", error)));
         };
         jhsEventBus.on("legacy-refresh", refreshAll), jhsEventBus.on("blacklist-rules-changed", refreshAll), jhsEventBus.on("filter-rules-changed", refreshAll), jhsEventBus.on("settings-changed", refreshAll),
         jhsEventBus.on("car-state-changed", (async payload => {
@@ -155,9 +153,6 @@ class ListPagePlugin extends BasePlugin {
             items.length && (await this.doFilterItems(items), this.applyVisibility(items));
             const history = this.getBean("HistoryPlugin");
             history.tableObj && history.tableObj.setData();
-        })), jhsEventBus.on("new-video-changed", (() => {
-            const plugin = this.getBean("NewVideoPlugin");
-            plugin && void Promise.all([ plugin.showNewVideoCount(), plugin.loadData() ]).catch((error => clog.error("新作品数据刷新失败", error)));
         })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
         await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(),
         this.rememberTagExpand(),

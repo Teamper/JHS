@@ -6,10 +6,24 @@ import { describe, expect, it } from "vitest";
 const warnings = [], notices = [];
 const context = vm.createContext({ URL, window: { location: { href: "https://javdb.com/" } }, encodeURIComponent, normalizeCarNum: value => typeof value === "string" && value.trim() && !["null", "undefined"].includes(value.trim().toLowerCase()) ? value.trim() : null, escapeHtml: value => value, clog: { warn: (...args) => warnings.push(args), debug: () => {} }, show: { error: message => notices.push(message) } });
 const source = readFileSync(join(import.meta.dirname, "../src/core/feature-helpers.js"), "utf8");
-vm.runInContext(`${source};globalThis.api={mapLimit,normalizeDmmCid,normalizeHttpUrl,normalizeBtihHash,resolveHighResCover,parseCarNumberText,buildFallbackCarUrl,linkCommentImageReferences,safePlay}`, context);
+vm.runInContext(`${source};globalThis.api={mapLimit,parseNumberSetting,parseTaskTimestamp,shouldSkipStopped,selectLatestPublishTime,normalizeDmmCid,normalizeHttpUrl,normalizeBtihHash,resolveHighResCover,parseCarNumberText,buildFallbackCarUrl,linkCommentImageReferences,safePlay}`, context);
 const api = context.api;
 
 describe("feature helpers", () => {
+    it("parses task settings and timestamps without losing zero or downgrade compatibility", () => {
+        expect(api.parseNumberSetting("0", 8760, { min: 0 })).toBe(0);
+        expect(api.parseNumberSetting("0", 12, { min: Number.EPSILON })).toBe(12);
+        expect(api.parseTaskTimestamp("2026-08-23 13:20:00")).toBe(new Date(2026, 7, 23, 13, 20, 0).getTime());
+        expect(api.parseTaskTimestamp(String(1787462400000))).toBe(1787462400000);
+        expect(api.parseTaskTimestamp("invalid")).toBeNull();
+    });
+    it("shares stopped detection and selects the maximum valid publication date", () => {
+        const now = new Date("2026-08-23T00:00:00Z").getTime();
+        expect(api.shouldSkipStopped("2020-01-01", 0, now)).toBe(false);
+        expect(api.shouldSkipStopped("2020-01-01", 8760, now)).toBe(true);
+        expect(api.shouldSkipStopped("invalid", 8760, now)).toBe(false);
+        expect(api.selectLatestPublishTime(["2026-08-01", "invalid", "2026-09-03", "2026-08-20"])).toBe("2026-09-03");
+    });
     it("limits concurrency while preserving order", async () => {
         let active = 0, max = 0;
         const result = await api.mapLimit([1, 2, 3, 4, 5], 2, async value => { active++; max = Math.max(max, active); await Promise.resolve(); active--; return value * 2; });
