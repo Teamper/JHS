@@ -1,7 +1,7 @@
 import { escapeHtml, i } from "../../core/constants.js";
 import { O, U, q } from "../../core/javdb-api.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { encryptData } from "../../core/credential-crypto.js";
+import { hasStoredEncryptedCredential, removeStoredEncryptedCredential, storeEncryptedCredential } from "../../core/credential-crypto.js";
 
 const me = "jhs_appAuthorization";
 
@@ -68,7 +68,7 @@ export class Top250Plugin extends BasePlugin {
                 const n = t.filter((e => "1" === this.has_cnsub ? e.has_cnsub : "0" !== this.has_cnsub || !e.has_cnsub)), a = this.getDependency("HitShowPlugin");
                 let r = a.markDataListHtml(n);
                 i.html(r), await a.initializeRenderedList(), await a.loadScore(n), o = !0;
-            } else clog.error(e), i.html(`<h3>${escapeHtml(l)}</h3>`), show.error(l), "JWTVerificationError" === c && (await localStorage.removeItem(me),
+            } else clog.error(e), i.html(`<h3>${escapeHtml(l)}</h3>`), show.error(l), "JWTVerificationError" === c && (removeStoredEncryptedCredential(me),
             await this.checkLogin(null, new URLSearchParams(window.location.search))), o = !0;
         } catch (r) {
             l < 3 ? (clog.error(`获取Top数据失败 (第 ${l} 次重试):`, r), await new Promise((e => setTimeout(e, 1e3)))) : (clog.error("所有重试尝试均失败，无法获取Top数据。", r),
@@ -96,7 +96,7 @@ export class Top250Plugin extends BasePlugin {
         }));
     }
     async checkLogin(e, t) {
-        if (!localStorage.getItem(me)) return show.error("该类别依赖移动端接口，请先完成登录"), void this.openLoginDialog();
+        if (!hasStoredEncryptedCredential(me)) return show.error("该类别依赖移动端接口，请先完成登录"), void this.openLoginDialog();
         let n = "all", a = "", i = t.get("t") || "";
         /^y\d+$/.test(i) ? (n = "year", a = i.substring(1)) : "" !== i && (n = "video_type",
         a = i);
@@ -107,7 +107,6 @@ export class Top250Plugin extends BasePlugin {
     }
     openLoginDialog({ onSuccess = null } = {}) {
         const dialog = this.getRuntimeService("dialog");
-        const layer = { close: index => dialog.close(index) };
         dialog.open({
             type: 1,
             title: "JavDB",
@@ -134,7 +133,7 @@ export class Top250Plugin extends BasePlugin {
                             if (1 !== n) throw clog.error("登录失败", e), new Error(e.message);
                             {
                                 let n = e.data.token;
-                                await localStorage.setItem(me, await encryptData(n)), show.ok("登录成功"), layer.close(t), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
+                                await storeEncryptedCredential(me, n), show.ok("登录成功"), dialog.close(t), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
                             }
                         }
                     })).catch((e => {

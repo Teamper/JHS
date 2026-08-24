@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { decryptCredential, decryptData, encryptCredential, encryptData } from "../src/core/credential-crypto.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { decryptCredential, decryptData, encryptCredential, encryptData, hasStoredEncryptedCredential, removeStoredEncryptedCredential, storeEncryptedCredential } from "../src/core/credential-crypto.js";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("credential crypto", () => {
     it("round-trips encrypted data without exposing plaintext", async () => {
@@ -14,5 +16,21 @@ describe("credential crypto", () => {
         await expect(encryptCredential(encrypted)).resolves.toBe(encrypted);
         await expect(decryptCredential(encrypted)).resolves.toBe("token");
         await expect(decryptCredential("legacy-token")).resolves.toBe("legacy-token");
+    });
+
+    it("keeps encrypted local credential storage behind the crypto boundary", async () => {
+        const values = new Map();
+        vi.stubGlobal("localStorage", {
+            getItem: key => values.get(key) ?? null,
+            setItem: (key, value) => values.set(key, value),
+            removeItem: key => values.delete(key),
+        });
+        expect(hasStoredEncryptedCredential("auth")).toBe(false);
+        await storeEncryptedCredential("auth", "secret-token");
+        expect(hasStoredEncryptedCredential("auth")).toBe(true);
+        expect(values.get("auth")).not.toContain("secret-token");
+        await expect(decryptData(values.get("auth"))).resolves.toBe("secret-token");
+        removeStoredEncryptedCredential("auth");
+        expect(hasStoredEncryptedCredential("auth")).toBe(false);
     });
 });

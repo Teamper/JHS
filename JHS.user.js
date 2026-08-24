@@ -4684,6 +4684,18 @@
     return value && value.startsWith(CREDENTIAL_PREFIX) ? decryptData(value.slice(CREDENTIAL_PREFIX.length)) : value;
   }
   __name(decryptCredential, "decryptCredential");
+  function hasStoredEncryptedCredential(key) {
+    return Boolean(localStorage.getItem(key));
+  }
+  __name(hasStoredEncryptedCredential, "hasStoredEncryptedCredential");
+  async function storeEncryptedCredential(key, value) {
+    localStorage.setItem(key, await encryptData(value));
+  }
+  __name(storeEncryptedCredential, "storeEncryptedCredential");
+  function removeStoredEncryptedCredential(key) {
+    localStorage.removeItem(key);
+  }
+  __name(removeStoredEncryptedCredential, "removeStoredEncryptedCredential");
 
   // src/ui/table/create-jhs-table.js
   function createJhsTable(TabulatorRuntime, target, options) {
@@ -10319,7 +10331,7 @@ ${error.stack}` : "");
           const n3 = t3.filter(((e4) => "1" === this.has_cnsub ? e4.has_cnsub : "0" !== this.has_cnsub || !e4.has_cnsub)), a3 = this.getDependency("HitShowPlugin");
           let r3 = a3.markDataListHtml(n3);
           i2.html(r3), await a3.initializeRenderedList(), await a3.loadScore(n3), o2 = true;
-        } else clog.error(e3), i2.html(`<h3>${escapeHtml(l3)}</h3>`), show.error(l3), "JWTVerificationError" === c2 && (await localStorage.removeItem(me), await this.checkLogin(null, new URLSearchParams(window.location.search))), o2 = true;
+        } else clog.error(e3), i2.html(`<h3>${escapeHtml(l3)}</h3>`), show.error(l3), "JWTVerificationError" === c2 && (removeStoredEncryptedCredential(me), await this.checkLogin(null, new URLSearchParams(window.location.search))), o2 = true;
       } catch (r2) {
         l2 < 3 ? (clog.error(`获取Top数据失败 (第 ${l2} 次重试):`, r2), await new Promise(((e3) => setTimeout(e3, 1e3)))) : (clog.error("所有重试尝试均失败，无法获取Top数据。", r2), i2.html("<h3>无法加载数据，请稍后再试。</h3>"));
       } finally {
@@ -10345,7 +10357,7 @@ ${error.stack}` : "");
       }));
     }
     async checkLogin(e2, t2) {
-      if (!localStorage.getItem(me)) return show.error("该类别依赖移动端接口，请先完成登录"), void this.openLoginDialog();
+      if (!hasStoredEncryptedCredential(me)) return show.error("该类别依赖移动端接口，请先完成登录"), void this.openLoginDialog();
       let n2 = "all", a2 = "", i2 = t2.get("t") || "";
       /^y\d+$/.test(i2) ? (n2 = "year", a2 = i2.substring(1)) : "" !== i2 && (n2 = "video_type", a2 = i2);
       let s2 = `/advanced_search?handleTop=1&handleType=${n2}&type_value=${a2}`;
@@ -10355,7 +10367,6 @@ ${error.stack}` : "");
     }
     openLoginDialog({ onSuccess = null } = {}) {
       const dialog = this.getRuntimeService("dialog");
-      const layer2 = { close: /* @__PURE__ */ __name((index) => dialog.close(index), "close") };
       dialog.open({
         type: 1,
         title: "JavDB",
@@ -10408,7 +10419,7 @@ ${error.stack}` : "");
                 if (1 !== n3) throw clog.error("登录失败", e4), new Error(e4.message);
                 {
                   let n4 = e4.data.token;
-                  await localStorage.setItem(me, await encryptData(n4)), show.ok("登录成功"), layer2.close(t2), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
+                  await storeEncryptedCredential(me, n4), show.ok("登录成功"), dialog.close(t2), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
                 }
               }
             })).catch(((e4) => {

@@ -44,3 +44,12 @@ export async function decryptData(value) {
 export async function encryptCredential(value) { return value && !value.startsWith(CREDENTIAL_PREFIX) ? CREDENTIAL_PREFIX + await encryptData(value) : value; }
 /** @param {string} value */
 export async function decryptCredential(value) { return value && value.startsWith(CREDENTIAL_PREFIX) ? decryptData(value.slice(CREDENTIAL_PREFIX.length)) : value; }
+
+/** @param {string} key */
+export function hasStoredEncryptedCredential(key) { return Boolean(localStorage.getItem(key)); }
+
+/** @param {string} key @param {string} value */
+export async function storeEncryptedCredential(key, value) { localStorage.setItem(key, await encryptData(value)); }
+
+/** @param {string} key */
+export function removeStoredEncryptedCredential(key) { localStorage.removeItem(key); }
