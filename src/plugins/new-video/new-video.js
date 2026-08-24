@@ -6,113 +6,7 @@ import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
 import { stateService } from "../../core/state-service.js";
 import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
 
-const tt = [ {
-    name: "jsDelivr (全球CDN)",
-    json: "https://cdn.jsdelivr.net/gh/gfriends/gfriends/Filetree.json",
-    base: "https://cdn.jsdelivr.net/gh/gfriends/gfriends/Content/"
-}, {
-    name: "GitHub Raw (备用)",
-    json: "https://raw.githubusercontent.com/gfriends/gfriends/master/Filetree.json",
-    base: "https://raw.githubusercontent.com/gfriends/gfriends/master/Content/"
-} ], nt = "jhs_img_cdn_index";
-
-let at = 0, it = tt[0].json, st = tt[0].base;
-
-const ot = "filetreeStore", rt = "filetree_data", lt = {
-    db: null,
-    async open() {
-        return this.db ? this.db : new Promise(((e, t) => {
-            const n = indexedDB.open("GfriendsAvatarDB", 1);
-            n.onupgradeneeded = e => {
-                this.db = e.target.result, this.db.objectStoreNames.contains(ot) || this.db.createObjectStore(ot);
-            }, n.onsuccess = t => {
-                this.db = t.target.result, e(this.db);
-            }, n.onerror = e => {
-                clog.error("IndexedDB open error:", e.target.errorCode), t(new Error("Failed to open IndexedDB"));
-            };
-        }));
-    },
-    async get(e) {
-        return await this.open(), new Promise((t => {
-            const n = this.db.transaction([ ot ], "readonly").objectStore(ot).get(e);
-            n.onsuccess = () => t(n.result), n.onerror = () => t(null);
-        }));
-    },
-    async set(e, t) {
-        return await this.open(), new Promise(((n, a) => {
-            const i = this.db.transaction([ ot ], "readwrite").objectStore(ot).put(t, e);
-            i.onsuccess = () => n(), i.onerror = e => {
-                clog.error("IndexedDB set error:", e.target.errorCode), a(new Error("Failed to write to IndexedDB"));
-            };
-        }));
-    }
-};
-
-let ct = null, dt = null;
-
-function ht(e) {
-    if (!e || !e.Content) return null;
-    const t = {}, n = e.Content;
-    for (const a in n) {
-        const e = encodeURIComponent(a);
-        for (const i in n[a]) {
-            let s = i.replace(/\.jpg$/i, "").split("-")[0];
-            s.startsWith("AI-Fix-") && (s = s.substring(7));
-            const o = s.toLowerCase().trim();
-            if (o.length > 0) {
-                const s = n[a][i], r = s.indexOf("?");
-                let l, c = "";
-                r > -1 ? (l = encodeURIComponent(s.substring(0, r)), c = s.substring(r)) : l = encodeURIComponent(s);
-                const d = `${st}${e}/${l}${c}`;
-                t[o] || (t[o] = []), t[o].includes(d) || t[o].push(d);
-            }
-        }
-    }
-    return t;
-}
-
-async function gt(e) {
-    let t = loading();
-    try {
-        await async function() {
-            if (ct && dt) return ct;
-            let e = null;
-            try {
-                e = await lt.get(rt);
-            } catch (a) {
-                clog.error("读取 IndexedDB 失败:", a);
-            }
-            if (e && e.Content && (ct = e, dt = ht(e), dt)) return ct;
-            show.info("正在载入头像数据源...");
-            const t = await fetch(it);
-            if (!t.ok) throw new Error(`请求头像源失败: ${t.status}`);
-            const n = await t.json();
-            if (n && n.Content) {
-                ct = n, dt = ht(n);
-                try {
-                    await lt.set(rt, n), clog.debug("载入头像数据源并写入缓存成功!");
-                } catch (a) {
-                    clog.error(a), show.error("头像数据源写入缓存失败，可能磁盘已满或其他权限问题。");
-                }
-                return ct;
-            }
-            clog.error(n);
-            throw new Error("解析头像数据源失败");
-        }();
-    } catch (i) {
-        return show.error(i), [];
-    } finally {
-        t.close();
-    }
-    if (!dt) return [];
-    const n = new Set, a = e.map((e => e.toLowerCase().trim())).filter((e => e.length > 0));
-    if (0 === a.length) return [];
-    for (const s of a) {
-        const e = dt[s];
-        e && e.forEach((e => n.add(e)));
-    }
-    return Array.from(n);
-}
+const AVATAR_SOURCE_INDEX_KEY = "jhs_img_cdn_index";
 
 function aggregateNewVideoRecords(actresses, carMap, decisions, now = Date.now()) {
     const grouped = new Map;
@@ -135,7 +29,7 @@ function aggregateNewVideoRecords(actresses, carMap, decisions, now = Date.now()
 
 export class NewVideoPlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", new Map), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", new Map), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", new Map), i(this, "nvActorCoverRequests", new Map), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", !1), i(this, "nvWorkspaceMounted", !1), i(this, "nvEventUnsubscribe", null), i(this, "taskStatusUnsubscribe", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760);
+        super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", new Map), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", new Map), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", new Map), i(this, "nvActorCoverRequests", new Map), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", !1), i(this, "nvWorkspaceMounted", !1), i(this, "nvEventUnsubscribe", null), i(this, "taskStatusUnsubscribe", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0);
     }
     getName() {
         return "NewVideoPlugin";
@@ -228,8 +122,9 @@ export class NewVideoPlugin extends BasePlugin {
         await this.showNewVideoCount();
     }
     initializeLocalState() {
-        const value = parseInt(this.getRuntimeService("storage").getLocal(nt) || "0", 10);
-        at = Number.isInteger(value) && value >= 0 && value < tt.length ? value : 0, it = tt[at].json, st = tt[at].base;
+        this.avatarSources = this.getRuntimeService("actressInfo").getAvatarSources();
+        const value = parseInt(this.getRuntimeService("storage").getLocal(AVATAR_SOURCE_INDEX_KEY) || "0", 10);
+        this.avatarSourceIndex = Number.isInteger(value) && value >= 0 && value < this.avatarSources.length ? value : 0;
     }
     isWorkspaceMounted() {
         return this.nvWorkspaceMounted && $(".newVideoToolBox").length > 0;
@@ -473,7 +368,7 @@ export class NewVideoPlugin extends BasePlugin {
             const allNames = Array.isArray(actress.allName) ? actress.allName.join("，") : "";
             const name = String(actress.name || ""), remark = String(actress.remark || ""), starId = String(actress.starId || "");
             const newVideoCount = this.getPendingNewVideoCount(actress, _carSet), latestPublishTime = actress.lastPublishTime || "";
-            const profileUrl = normalizeHttpUrl(`/actors/${encodeURIComponent(starId)}?t=d`, javDbUrl), avatarUrl = normalizeHttpUrl(actress.avatar, javDbUrl) || "https://c0.jdbstatic.com/images/actor_unknow.jpg";
+            const profileUrl = normalizeHttpUrl(`/actors/${encodeURIComponent(starId)}?t=d`, javDbUrl), avatarUrl = normalizeHttpUrl(actress.avatar, javDbUrl) || this.getRuntimeService("actressInfo").placeholderUrl("javdb");
             const isPaused = shouldSkipStopped(latestPublishTime, ruleTime);
             let typeLabel = "未知", typeClass = "is-unknown";
             actress.actressType === A ? (typeLabel = "无码", typeClass = "is-uncensored") : actress.actressType === D && (typeLabel = "有码", typeClass = "is-censored");
@@ -707,7 +602,7 @@ export class NewVideoPlugin extends BasePlugin {
                     await this.searchAvatar();
                 })), $("#select-cdn-btn").on("click", (async () => {
                     await (async () => {
-                        const e = at, t = tt.map(((t, n) => `\n        <label class="jhs-option-row" for="cdn-${n}">\n            <input type="radio" id="cdn-${n}" name="cdn-source" value="${n}" ${n === e ? "checked" : ""}>\n            <span>${t.name} ${t.json.includes("jsdelivr") ? "(推荐)" : ""}</span>\n        </label>\n    `)).join(""), n = `\n        <div class="jhs-form-dialog">\n            <p class="jhs-form-dialog__title">请选择头像数据源 (当前: ${tt[e].name}):</p>\n            ${t}\n            <p class="jhs-helper-text">切换源会清除本地缓存的数据，并在下次搜索时重新加载。</p>\n        </div>\n    `;
+                        const e = this.avatarSourceIndex, t = this.avatarSources.map(((t, n) => `\n        <label class="jhs-option-row" for="cdn-${n}">\n            <input type="radio" id="cdn-${n}" name="cdn-source" value="${n}" ${n === e ? "checked" : ""}>\n            <span>${t.name} ${t.recommended ? "(推荐)" : ""}</span>\n        </label>\n    `)).join(""), n = `\n        <div class="jhs-form-dialog">\n            <p class="jhs-form-dialog__title">请选择头像数据源 (当前: ${this.avatarSources[e]?.name || "无可用来源"}):</p>\n            ${t}\n            <p class="jhs-helper-text">切换后将在下次搜索时使用所选来源。</p>\n        </div>\n    `;
                         dialog.open({
                             type: 1,
                             title: "选择 CDN 源",
@@ -719,15 +614,9 @@ export class NewVideoPlugin extends BasePlugin {
                             },
                             yes: async e => {
                                 const t = $('input[name="cdn-source"]:checked').val(), n = parseInt(t, 10);
-                                if (n !== at) {
-                                    at = n, this.getRuntimeService("storage").setLocal(nt, n.toString()), it = tt[n].json, st = tt[n].base,
-                                    ct = null, dt = null;
-                                    try {
-                                        await lt.set(rt, null);
-                                    } catch (a) {
-                                        clog.error("清除 IndexedDB 缓存失败:", a);
-                                    }
-                                    show.ok(`CDN 源已切换为: ${tt[n].name}`), dialog.close(e);
+                                if (n !== this.avatarSourceIndex && this.avatarSources[n]) {
+                                    this.avatarSourceIndex = n, this.getRuntimeService("storage").setLocal(AVATAR_SOURCE_INDEX_KEY, n.toString()),
+                                    show.ok(`CDN 源已切换为: ${this.avatarSources[n].name}`), dialog.close(e);
                                 } else dialog.close(e);
                             }
                         });
@@ -779,7 +668,8 @@ export class NewVideoPlugin extends BasePlugin {
         const i = loading("正在搜索头像...");
         let s = [];
         try {
-            s = await gt(a);
+            const source = this.avatarSources[this.avatarSourceIndex], scope = await this.getRuntimeService("scope")();
+            s = source ? await this.getRuntimeService("actressInfo").searchAvatars(a, source.id, { scope }) : [];
         } catch (c) {
             return void show.error(`头像数据加载或搜索失败: ${c.message || c}`);
         } finally {

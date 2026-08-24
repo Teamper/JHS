@@ -28,6 +28,7 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
     };
     return Object.freeze({
         contracts: ["MovieRef", "MovieDetail", "Actor", "Magnet", "Review", "RelatedList", "AccountSession"],
+        actorPlaceholderUrl: () => "https://c0.jdbstatic.com/images/actor_unknow.jpg",
         /** @param {{username: string, password: string}} credentials @param {{scope?: any}} [options] */
         async login(credentials, options = {}) {
             const url = new URL("/api/v1/sessions", API_ORIGIN);
@@ -148,8 +149,8 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
 }
 
 export default defineIntegration({
-    id: "javdb", trustClass: "builtin-public", hosts: ["javdb.com", "jdforrepam.com"],
-    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup", "actor.movies", "actor.collection", "actor.uncollect", "account.login"],
+    id: "javdb", trustClass: "builtin-public", hosts: ["javdb.com", "jdforrepam.com", "c0.jdbstatic.com"],
+    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup", "actor.movies", "actor.collection", "actor.uncollect", "actor.avatar-placeholder", "account.login"],
     requires: [SERVICE.http, PORT.javdbHost],
     createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http], hostAdapter: dependencies[PORT.javdbHost] }),
     createAdapter: (/** @type {any} */ client) => createJavDbAdapter(client.http, createJavDbSignature, client.hostAdapter), createHostAdapter: null,

@@ -11370,116 +11370,7 @@ ${error.stack}` : "");
   var ScreenShotPlugin = _ScreenShotPlugin;
 
   // src/plugins/new-video/new-video.js
-  var tt = [{
-    name: "jsDelivr (全球CDN)",
-    json: "https://cdn.jsdelivr.net/gh/gfriends/gfriends/Filetree.json",
-    base: "https://cdn.jsdelivr.net/gh/gfriends/gfriends/Content/"
-  }, {
-    name: "GitHub Raw (备用)",
-    json: "https://raw.githubusercontent.com/gfriends/gfriends/master/Filetree.json",
-    base: "https://raw.githubusercontent.com/gfriends/gfriends/master/Content/"
-  }];
-  var nt = "jhs_img_cdn_index";
-  var at = 0;
-  var it = tt[0].json;
-  var st = tt[0].base;
-  var ot = "filetreeStore";
-  var rt = "filetree_data";
-  var lt = {
-    db: null,
-    async open() {
-      return this.db ? this.db : new Promise(((e2, t2) => {
-        const n2 = indexedDB.open("GfriendsAvatarDB", 1);
-        n2.onupgradeneeded = (e3) => {
-          this.db = e3.target.result, this.db.objectStoreNames.contains(ot) || this.db.createObjectStore(ot);
-        }, n2.onsuccess = (t3) => {
-          this.db = t3.target.result, e2(this.db);
-        }, n2.onerror = (e3) => {
-          clog.error("IndexedDB open error:", e3.target.errorCode), t2(new Error("Failed to open IndexedDB"));
-        };
-      }));
-    },
-    async get(e2) {
-      return await this.open(), new Promise(((t2) => {
-        const n2 = this.db.transaction([ot], "readonly").objectStore(ot).get(e2);
-        n2.onsuccess = () => t2(n2.result), n2.onerror = () => t2(null);
-      }));
-    },
-    async set(e2, t2) {
-      return await this.open(), new Promise(((n2, a2) => {
-        const i2 = this.db.transaction([ot], "readwrite").objectStore(ot).put(t2, e2);
-        i2.onsuccess = () => n2(), i2.onerror = (e3) => {
-          clog.error("IndexedDB set error:", e3.target.errorCode), a2(new Error("Failed to write to IndexedDB"));
-        };
-      }));
-    }
-  };
-  var ct = null;
-  var dt = null;
-  function ht(e2) {
-    if (!e2 || !e2.Content) return null;
-    const t2 = {}, n2 = e2.Content;
-    for (const a2 in n2) {
-      const e3 = encodeURIComponent(a2);
-      for (const i2 in n2[a2]) {
-        let s2 = i2.replace(/\.jpg$/i, "").split("-")[0];
-        s2.startsWith("AI-Fix-") && (s2 = s2.substring(7));
-        const o2 = s2.toLowerCase().trim();
-        if (o2.length > 0) {
-          const s3 = n2[a2][i2], r2 = s3.indexOf("?");
-          let l2, c2 = "";
-          r2 > -1 ? (l2 = encodeURIComponent(s3.substring(0, r2)), c2 = s3.substring(r2)) : l2 = encodeURIComponent(s3);
-          const d2 = `${st}${e3}/${l2}${c2}`;
-          t2[o2] || (t2[o2] = []), t2[o2].includes(d2) || t2[o2].push(d2);
-        }
-      }
-    }
-    return t2;
-  }
-  __name(ht, "ht");
-  async function gt(e2) {
-    let t2 = loading();
-    try {
-      await (async function() {
-        if (ct && dt) return ct;
-        let e3 = null;
-        try {
-          e3 = await lt.get(rt);
-        } catch (a3) {
-          clog.error("读取 IndexedDB 失败:", a3);
-        }
-        if (e3 && e3.Content && (ct = e3, dt = ht(e3), dt)) return ct;
-        show.info("正在载入头像数据源...");
-        const t3 = await fetch(it);
-        if (!t3.ok) throw new Error(`请求头像源失败: ${t3.status}`);
-        const n3 = await t3.json();
-        if (n3 && n3.Content) {
-          ct = n3, dt = ht(n3);
-          try {
-            await lt.set(rt, n3), clog.debug("载入头像数据源并写入缓存成功!");
-          } catch (a3) {
-            clog.error(a3), show.error("头像数据源写入缓存失败，可能磁盘已满或其他权限问题。");
-          }
-          return ct;
-        }
-        clog.error(n3);
-        throw new Error("解析头像数据源失败");
-      })();
-    } catch (i2) {
-      return show.error(i2), [];
-    } finally {
-      t2.close();
-    }
-    if (!dt) return [];
-    const n2 = /* @__PURE__ */ new Set(), a2 = e2.map(((e3) => e3.toLowerCase().trim())).filter(((e3) => e3.length > 0));
-    if (0 === a2.length) return [];
-    for (const s2 of a2) {
-      const e3 = dt[s2];
-      e3 && e3.forEach(((e4) => n2.add(e4)));
-    }
-    return Array.from(n2);
-  }
-  __name(gt, "gt");
+  var AVATAR_SOURCE_INDEX_KEY = "jhs_img_cdn_index";
   function aggregateNewVideoRecords(actresses, carMap, decisions, now = Date.now()) {
     const grouped = /* @__PURE__ */ new Map();
     for (const actress of actresses) {
@@ -11501,7 +11392,7 @@ ${error.stack}` : "");
   __name(aggregateNewVideoRecords, "aggregateNewVideoRecords");
   var _NewVideoPlugin = class _NewVideoPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", /* @__PURE__ */ new Map()), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", /* @__PURE__ */ new Map()), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", /* @__PURE__ */ new Set()), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", /* @__PURE__ */ new Map()), i(this, "nvActorCoverRequests", /* @__PURE__ */ new Map()), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", false), i(this, "nvWorkspaceMounted", false), i(this, "nvEventUnsubscribe", null), i(this, "taskStatusUnsubscribe", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760);
+      super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", /* @__PURE__ */ new Map()), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", /* @__PURE__ */ new Map()), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", /* @__PURE__ */ new Set()), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", /* @__PURE__ */ new Map()), i(this, "nvActorCoverRequests", /* @__PURE__ */ new Map()), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", false), i(this, "nvWorkspaceMounted", false), i(this, "nvEventUnsubscribe", null), i(this, "taskStatusUnsubscribe", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0);
     }
     getName() {
       return "NewVideoPlugin";
@@ -11594,8 +11485,9 @@ ${error.stack}` : "");
       await this.showNewVideoCount();
     }
     initializeLocalState() {
-      const value = parseInt(this.getRuntimeService("storage").getLocal(nt) || "0", 10);
-      at = Number.isInteger(value) && value >= 0 && value < tt.length ? value : 0, it = tt[at].json, st = tt[at].base;
+      this.avatarSources = this.getRuntimeService("actressInfo").getAvatarSources();
+      const value = parseInt(this.getRuntimeService("storage").getLocal(AVATAR_SOURCE_INDEX_KEY) || "0", 10);
+      this.avatarSourceIndex = Number.isInteger(value) && value >= 0 && value < this.avatarSources.length ? value : 0;
     }
     isWorkspaceMounted() {
       return this.nvWorkspaceMounted && $(".newVideoToolBox").length > 0;
@@ -11838,7 +11730,7 @@ ${error.stack}` : "");
         const allNames = Array.isArray(actress.allName) ? actress.allName.join("，") : "";
         const name = String(actress.name || ""), remark = String(actress.remark || ""), starId = String(actress.starId || "");
         const newVideoCount = this.getPendingNewVideoCount(actress, _carSet), latestPublishTime = actress.lastPublishTime || "";
-        const profileUrl = normalizeHttpUrl(`/actors/${encodeURIComponent(starId)}?t=d`, javDbUrl), avatarUrl = normalizeHttpUrl(actress.avatar, javDbUrl) || "https://c0.jdbstatic.com/images/actor_unknow.jpg";
+        const profileUrl = normalizeHttpUrl(`/actors/${encodeURIComponent(starId)}?t=d`, javDbUrl), avatarUrl = normalizeHttpUrl(actress.avatar, javDbUrl) || this.getRuntimeService("actressInfo").placeholderUrl("javdb");
         const isPaused = shouldSkipStopped(latestPublishTime, ruleTime);
         let typeLabel = "未知", typeClass = "is-unknown";
         actress.actressType === A ? (typeLabel = "无码", typeClass = "is-uncensored") : actress.actressType === D && (typeLabel = "有码", typeClass = "is-censored");
@@ -12126,16 +12018,16 @@ ${error.stack}` : "");
             await this.searchAvatar();
           })), $("#select-cdn-btn").on("click", (async () => {
             await (async () => {
-              const e4 = at, t4 = tt.map(((t5, n5) => `
+              const e4 = this.avatarSourceIndex, t4 = this.avatarSources.map(((t5, n5) => `
         <label class="jhs-option-row" for="cdn-${n5}">
             <input type="radio" id="cdn-${n5}" name="cdn-source" value="${n5}" ${n5 === e4 ? "checked" : ""}>
-            <span>${t5.name} ${t5.json.includes("jsdelivr") ? "(推荐)" : ""}</span>
+            <span>${t5.name} ${t5.recommended ? "(推荐)" : ""}</span>
         </label>
     `)).join(""), n4 = `
         <div class="jhs-form-dialog">
-            <p class="jhs-form-dialog__title">请选择头像数据源 (当前: ${tt[e4].name}):</p>
+            <p class="jhs-form-dialog__title">请选择头像数据源 (当前: ${this.avatarSources[e4]?.name || "无可用来源"}):</p>
             ${t4}
-            <p class="jhs-helper-text">切换源会清除本地缓存的数据，并在下次搜索时重新加载。</p>
+            <p class="jhs-helper-text">切换后将在下次搜索时使用所选来源。</p>
         </div>
     `;
               dialog.open({
@@ -12149,14 +12041,8 @@ ${error.stack}` : "");
                 }, "success"),
                 yes: /* @__PURE__ */ __name(async (e5) => {
                   const t5 = $('input[name="cdn-source"]:checked').val(), n5 = parseInt(t5, 10);
-                  if (n5 !== at) {
-                    at = n5, this.getRuntimeService("storage").setLocal(nt, n5.toString()), it = tt[n5].json, st = tt[n5].base, ct = null, dt = null;
-                    try {
-                      await lt.set(rt, null);
-                    } catch (a4) {
-                      clog.error("清除 IndexedDB 缓存失败:", a4);
-                    }
-                    show.ok(`CDN 源已切换为: ${tt[n5].name}`), dialog.close(e5);
+                  if (n5 !== this.avatarSourceIndex && this.avatarSources[n5]) {
+                    this.avatarSourceIndex = n5, this.getRuntimeService("storage").setLocal(AVATAR_SOURCE_INDEX_KEY, n5.toString()), show.ok(`CDN 源已切换为: ${this.avatarSources[n5].name}`), dialog.close(e5);
                   } else dialog.close(e5);
                 }, "yes")
               });
@@ -12203,7 +12089,8 @@ ${error.stack}` : "");
       const i2 = loading("正在搜索头像...");
       let s2 = [];
       try {
-        s2 = await gt(a2);
+        const source = this.avatarSources[this.avatarSourceIndex], scope = await this.getRuntimeService("scope")();
+        s2 = source ? await this.getRuntimeService("actressInfo").searchAvatars(a2, source.id, { scope }) : [];
       } catch (c2) {
         return void show.error(`头像数据加载或搜索失败: ${c2.message || c2}`);
       } finally {
@@ -15727,6 +15614,23 @@ ${error.stack}` : "");
       if (typeof adapter?.uncollectActor !== "function") throw new TypeError(`Actor uncollect is unavailable: ${providerId}`);
       return adapter.uncollectActor(actorRef, options);
     }
+    getAvatarSources() {
+      return Object.freeze(this.integrations.list("person.avatar-search").flatMap((manifest2) => {
+        const adapter = this.integrations.getAdapter(manifest2.id);
+        return typeof adapter?.getSources === "function" ? adapter.getSources() : [];
+      }));
+    }
+    async searchAvatars(names, sourceId, options = {}) {
+      for (const manifest2 of this.integrations.list("person.avatar-search")) {
+        const adapter = this.integrations.getAdapter(manifest2.id);
+        if (adapter?.getSources?.().some((source) => source.id === sourceId)) return adapter.searchAvatars(names, { ...options, sourceId });
+      }
+      return [];
+    }
+    placeholderUrl(providerId) {
+      const adapter = this.integrations.getAdapter(providerId);
+      return typeof adapter?.actorPlaceholderUrl === "function" ? adapter.actorPlaceholderUrl() : "";
+    }
   };
   __name(_ActressInfoService, "ActressInfoService");
   var ActressInfoService = _ActressInfoService;
@@ -17555,8 +17459,71 @@ ${error.stack}` : "");
     quality: "silver"
   });
 
-  // src/integrations/host-list/manifest.js
+  // src/integrations/gfriends/manifest.js
+  var SOURCES = Object.freeze([
+    Object.freeze({ id: "jsdelivr", name: "jsDelivr (全球CDN)", catalogUrl: "https://cdn.jsdelivr.net/gh/gfriends/gfriends/Filetree.json", contentBaseUrl: "https://cdn.jsdelivr.net/gh/gfriends/gfriends/Content/", recommended: true }),
+    Object.freeze({ id: "github-raw", name: "GitHub Raw (备用)", catalogUrl: "https://raw.githubusercontent.com/gfriends/gfriends/master/Filetree.json", contentBaseUrl: "https://raw.githubusercontent.com/gfriends/gfriends/master/Content/", recommended: false })
+  ]);
+  function parseGfriendsCatalog(payload, contentBaseUrl) {
+    const content = payload?.Content;
+    if (!content || typeof content !== "object" || Array.isArray(content)) throw new JhsError("INVALID_RESPONSE", "头像数据源缺少 Content", { source: "gfriends" });
+    const index = /* @__PURE__ */ new Map();
+    for (const [folder, entries] of Object.entries(content)) {
+      if (!entries || typeof entries !== "object" || Array.isArray(entries)) continue;
+      for (const [filename, rawPath] of Object.entries(entries)) {
+        if (typeof rawPath !== "string") continue;
+        let key = filename.replace(/\.jpg$/i, "").split("-")[0];
+        if (key.startsWith("AI-Fix-")) key = key.slice(7);
+        key = key.toLowerCase().trim();
+        if (!key) continue;
+        const queryIndex = rawPath.indexOf("?"), path = queryIndex >= 0 ? rawPath.slice(0, queryIndex) : rawPath, query = queryIndex >= 0 ? rawPath.slice(queryIndex) : "";
+        const url = `${contentBaseUrl}${encodeURIComponent(folder)}/${encodeURIComponent(path)}${query}`;
+        const values = index.get(key) || [];
+        if (!values.includes(url)) values.push(url);
+        index.set(key, values);
+      }
+    }
+    return index;
+  }
+  __name(parseGfriendsCatalog, "parseGfriendsCatalog");
+  function createGfriendsAdapter(http) {
+    return Object.freeze({
+      contracts: ["ActorAvatar"],
+      getSources: /* @__PURE__ */ __name(() => Object.freeze(SOURCES.map((source) => Object.freeze({ id: source.id, name: source.name, recommended: source.recommended }))), "getSources"),
+      async searchAvatars(names, options = {}) {
+        const source = SOURCES.find((item) => item.id === (options.sourceId || SOURCES[0].id));
+        if (!source) throw new JhsError("UNSUPPORTED", `未知头像数据源：${options.sourceId}`, { source: "gfriends" });
+        const response = await http.request({
+          providerId: `gfriends:${source.id}`,
+          method: "GET",
+          url: source.catalogUrl,
+          responseType: "json",
+          cacheScope: "public",
+          ttlMs: 6048e5,
+          urlPolicy: { trustClass: "builtin-public", hosts: [new URL(source.catalogUrl).hostname] }
+        }, options.scope);
+        const index = parseGfriendsCatalog(response.data, source.contentBaseUrl), results = /* @__PURE__ */ new Set();
+        names.map((name) => String(name).toLowerCase().trim()).filter(Boolean).forEach((name) => index.get(name)?.forEach((url) => results.add(url)));
+        return Object.freeze([...results]);
+      }
+    });
+  }
+  __name(createGfriendsAdapter, "createGfriendsAdapter");
   var manifest_default7 = defineIntegration({
+    id: "gfriends",
+    trustClass: "builtin-public",
+    hosts: ["cdn.jsdelivr.net", "raw.githubusercontent.com"],
+    capabilities: ["person.avatar-search"],
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createGfriendsAdapter(client.http), "createAdapter"),
+    createHostAdapter: null,
+    cachePolicy: { "person.avatar-search": "public-7d" },
+    quality: "silver"
+  });
+
+  // src/integrations/host-list/manifest.js
+  var manifest_default8 = defineIntegration({
     id: "host-list",
     trustClass: "builtin-public",
     hosts: ["javdb.com", "javbus.com"],
@@ -17625,7 +17592,7 @@ ${error.stack}` : "");
     });
   }
   __name(createImageSearchAdapter, "createImageSearchAdapter");
-  var manifest_default8 = defineIntegration({
+  var manifest_default9 = defineIntegration({
     id: "image-search",
     trustClass: "builtin-public",
     hosts: ["imgur.com", "google.com", "yandex.ru"],
@@ -17676,6 +17643,7 @@ ${error.stack}` : "");
     }, "request");
     return Object.freeze({
       contracts: ["MovieRef", "MovieDetail", "Actor", "Magnet", "Review", "RelatedList", "AccountSession"],
+      actorPlaceholderUrl: /* @__PURE__ */ __name(() => "https://c0.jdbstatic.com/images/actor_unknow.jpg", "actorPlaceholderUrl"),
       async login(credentials, options = {}) {
         const url = new URL("/api/v1/sessions", API_ORIGIN);
         Object.entries({
@@ -17835,11 +17803,11 @@ ${error.stack}` : "");
     });
   }
   __name(createJavDbAdapter, "createJavDbAdapter");
-  var manifest_default9 = defineIntegration({
+  var manifest_default10 = defineIntegration({
     id: "javdb",
     trustClass: "builtin-public",
-    hosts: ["javdb.com", "jdforrepam.com"],
-    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup", "actor.movies", "actor.collection", "actor.uncollect", "account.login"],
+    hosts: ["javdb.com", "jdforrepam.com", "c0.jdbstatic.com"],
+    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup", "actor.movies", "actor.collection", "actor.uncollect", "actor.avatar-placeholder", "account.login"],
     requires: [SERVICE.http, PORT.javdbHost],
     createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http], hostAdapter: dependencies[PORT.javdbHost] }), "createClient"),
     createAdapter: /* @__PURE__ */ __name((client) => createJavDbAdapter(client.http, createJavDbSignature, client.hostAdapter), "createAdapter"),
@@ -17907,7 +17875,7 @@ ${error.stack}` : "");
     });
   }
   __name(createJavBusAdapter, "createJavBusAdapter");
-  var manifest_default10 = defineIntegration({
+  var manifest_default11 = defineIntegration({
     id: "javbus",
     trustClass: "builtin-public",
     hosts: ["javbus.com"],
@@ -17955,7 +17923,7 @@ ${error.stack}` : "");
     });
   }
   __name(createJavStoreAdapter, "createJavStoreAdapter");
-  var manifest_default11 = defineIntegration({
+  var manifest_default12 = defineIntegration({
     id: "javstore",
     trustClass: "builtin-public",
     hosts: ["javstore.net"],
@@ -17969,7 +17937,7 @@ ${error.stack}` : "");
   });
 
   // src/integrations/javtrailers/manifest.js
-  var manifest_default12 = defineIntegration({ id: "javtrailers", trustClass: "builtin-public", hosts: ["javtrailers.com"], capabilities: ["movie.preview"], requires: [PORT.http, SERVICE.urlPolicy], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "javtrailers" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MoviePreview"] }), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
+  var manifest_default13 = defineIntegration({ id: "javtrailers", trustClass: "builtin-public", hosts: ["javtrailers.com"], capabilities: ["movie.preview"], requires: [PORT.http, SERVICE.urlPolicy], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "javtrailers" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MoviePreview"] }), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
 
   // src/integrations/one115/manifest.js
   var HOME_URL = "https://115.com";
@@ -18054,7 +18022,7 @@ ${error.stack}` : "");
     });
   }
   __name(createOne115Adapter, "createOne115Adapter");
-  var manifest_default13 = defineIntegration({
+  var manifest_default14 = defineIntegration({
     id: "one115",
     trustClass: "builtin-public",
     hosts: ["115.com"],
@@ -18155,7 +18123,7 @@ ${error.stack}` : "");
     });
   }
   __name(createPan123Adapter, "createPan123Adapter");
-  var manifest_default14 = defineIntegration({
+  var manifest_default15 = defineIntegration({
     id: "pan123",
     trustClass: "builtin-public",
     hosts: ["123pan.com"],
@@ -18182,10 +18150,10 @@ ${error.stack}` : "");
     });
   }
   __name(createSubtitleCatAdapter, "createSubtitleCatAdapter");
-  var manifest_default15 = defineIntegration({ id: "subtitlecat", trustClass: "builtin-public", hosts: ["subtitlecat.com"], capabilities: ["subtitle.search"], requires: [], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "subtitlecat" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => createSubtitleCatAdapter(), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
+  var manifest_default16 = defineIntegration({ id: "subtitlecat", trustClass: "builtin-public", hosts: ["subtitlecat.com"], capabilities: ["subtitle.search"], requires: [], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "subtitlecat" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => createSubtitleCatAdapter(), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
 
   // src/integrations/torrent-sources/manifest.js
-  var SOURCES = Object.freeze([
+  var SOURCES2 = Object.freeze([
     Object.freeze({ id: "u9a9", name: "U9A9", type: "网页来源", domain: "u9a9.com", baseUrl: "https://u9a9.com", priority: 20, enabled: true, searchPath: /* @__PURE__ */ __name((keyword) => `/?type=2&search=${encodeURIComponent(keyword)}`, "searchPath") }),
     Object.freeze({ id: "u3c3", name: "U3C3", type: "网页来源", domain: "u3c3.com", baseUrl: "https://u3c3.com", priority: 30, enabled: true, searchPath: /* @__PURE__ */ __name((keyword) => `/?search2=a8lr16lo&search=${encodeURIComponent(keyword)}`, "searchPath") }),
     Object.freeze({ id: "sukebei", name: "Sukebei", type: "网页来源", domain: "sukebei.nyaa.si", baseUrl: "https://sukebei.nyaa.si", priority: 40, enabled: true, searchPath: /* @__PURE__ */ __name((keyword) => `/?f=0&c=0_0&q=${encodeURIComponent(keyword)}`, "searchPath") }),
@@ -18236,10 +18204,10 @@ ${error.stack}` : "");
   }
   __name(parseBtsowSource, "parseBtsowSource");
   function createTorrentSourcesAdapter(http) {
-    const find = /* @__PURE__ */ __name((id) => SOURCES.find((source) => source.id === id), "find");
+    const find = /* @__PURE__ */ __name((id) => SOURCES2.find((source) => source.id === id), "find");
     return Object.freeze({
       contracts: ["Magnet", "MagnetSource"],
-      getSources: /* @__PURE__ */ __name(() => Object.freeze(SOURCES.map((source) => Object.freeze({ id: source.id, name: source.name, type: source.type, domain: source.domain, baseUrl: source.baseUrl, priority: source.priority, enabled: source.enabled }))), "getSources"),
+      getSources: /* @__PURE__ */ __name(() => Object.freeze(SOURCES2.map((source) => Object.freeze({ id: source.id, name: source.name, type: source.type, domain: source.domain, baseUrl: source.baseUrl, priority: source.priority, enabled: source.enabled }))), "getSources"),
       targetUrl(sourceId, keyword, options = {}) {
         const source = find(sourceId);
         if (!source) throw new JhsError("UNSUPPORTED", `未知磁力来源：${sourceId}`, { source: "torrent-sources" });
@@ -18262,7 +18230,7 @@ ${error.stack}` : "");
     });
   }
   __name(createTorrentSourcesAdapter, "createTorrentSourcesAdapter");
-  var manifest_default16 = defineIntegration({
+  var manifest_default17 = defineIntegration({
     id: "torrent-sources",
     trustClass: "builtin-public",
     hosts: ["u9a9.com", "u3c3.com", "sukebei.nyaa.si", "btsow.lol"],
@@ -18328,7 +18296,7 @@ ${error.stack}` : "");
     });
   }
   __name(createWikipediaAdapter, "createWikipediaAdapter");
-  var manifest_default17 = defineIntegration({
+  var manifest_default18 = defineIntegration({
     id: "wikipedia",
     trustClass: "builtin-public",
     hosts: ["ja.wikipedia.org"],
@@ -18396,7 +18364,7 @@ ${error.stack}` : "");
     });
   }
   __name(createXunleiAdapter, "createXunleiAdapter");
-  var manifest_default18 = defineIntegration({
+  var manifest_default19 = defineIntegration({
     id: "xunlei",
     trustClass: "builtin-public",
     hosts: XUNLEI_HOSTS,
@@ -18410,7 +18378,7 @@ ${error.stack}` : "");
   });
 
   // src/app/integration-catalog.js
-  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default7, manifest_default8, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13, manifest_default14, manifest_default15, manifest_default16, manifest_default17, manifest_default18]);
+  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default7, manifest_default6, manifest_default8, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13, manifest_default14, manifest_default15, manifest_default16, manifest_default17, manifest_default18, manifest_default19]);
 
   // src/app/bootstrap.js
   function patchLayerRuntime(layerRuntime) {

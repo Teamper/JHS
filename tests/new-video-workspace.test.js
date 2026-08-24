@@ -26,7 +26,11 @@ function createHarness() {
         OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com") },
         TaskPlugin: { getTaskStatusSnapshot: vi.fn(() => ({ state: "idle", completedAt: null, nextAt: null })) }
     };
-    class BasePlugin { getBean(name) { return beans[name]; } }
+    const runtimeServices = {
+        actressInfo: { placeholderUrl: vi.fn(() => "https://c0.jdbstatic.com/images/actor_unknow.jpg"), getAvatarSources: vi.fn(() => []) },
+        storage: { getLocal: vi.fn(() => null), setLocal: vi.fn() },
+    };
+    class BasePlugin { getBean(name) { return beans[name]; } getRuntimeService(name) { return runtimeServices[name]; } }
     class ImageHoverPreview { bindEvents() {} }
     const renderStateView = (container, options) => (container.empty().append($("<div></div>").text(options.title || "")), container);
     const context = vm.createContext({
@@ -53,7 +57,7 @@ function createHarness() {
     vm.runInContext(`${source.slice(start)};globalThis.TestPlugin=NewVideoPlugin`, context);
     const plugin = new context.TestPlugin;
     plugin.nvWorkspaceMounted = true, plugin._viewMode = "list";
-    return { plugin, $, actresses, storageManager, stateService, beans };
+    return { plugin, $, actresses, storageManager, stateService, beans, runtimeServices };
 }
 
 afterEach(() => vi.useRealTimers());

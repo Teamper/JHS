@@ -261,7 +261,8 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(newVideo).toContain("initializeLocalState()");
         expect(newVideo).toContain('getLocal("jhs_newVideoViewMode")');
         expect(newVideo).toContain('setLocal("jhs_newVideoViewMode", mode)');
-        expect(newVideo).toContain('setLocal(nt, n.toString())');
+        expect(newVideo).toContain('setLocal(AVATAR_SOURCE_INDEX_KEY, n.toString())');
+        expect(newVideo).toContain('getRuntimeService("actressInfo").searchAvatars');
     });
 
     it("uses semantic keyboard popovers and stable sort storage", () => {

@@ -52,4 +52,23 @@ export class ActressInfoService {
         if (typeof adapter?.uncollectActor !== "function") throw new TypeError(`Actor uncollect is unavailable: ${providerId}`);
         return adapter.uncollectActor(actorRef, options);
     }
+    getAvatarSources() {
+        return Object.freeze(this.integrations.list("person.avatar-search").flatMap((manifest) => {
+            const adapter = this.integrations.getAdapter(manifest.id);
+            return typeof adapter?.getSources === "function" ? adapter.getSources() : [];
+        }));
+    }
+    /** @param {string[]} names @param {string} sourceId @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async searchAvatars(names, sourceId, options = {}) {
+        for (const manifest of this.integrations.list("person.avatar-search")) {
+            const adapter = this.integrations.getAdapter(manifest.id);
+            if (adapter?.getSources?.().some((/** @type {{id: string}} */ source) => source.id === sourceId)) return adapter.searchAvatars(names, { ...options, sourceId });
+        }
+        return [];
+    }
+    /** @param {string} providerId */
+    placeholderUrl(providerId) {
+        const adapter = this.integrations.getAdapter(providerId);
+        return typeof adapter?.actorPlaceholderUrl === "function" ? adapter.actorPlaceholderUrl() : "";
+    }
 }
