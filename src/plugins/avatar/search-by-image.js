@@ -67,13 +67,13 @@ export class SearchByImagePlugin extends BasePlugin {
                     try {
                         const t = await this.searchByImage(e);
                         s.hide(), d.show(), h.empty();
-                        const n = "jhs_selectedSites", a = JSON.parse(localStorage.getItem(n) || "{}");
+                        const storage = this.getRuntimeService("storage"), n = "jhs_selectedSites", a = JSON.parse(storage.getLocal(n) || "{}");
                         this.siteList.forEach((e => {
                             const n = e.url.replace("{占位符}", encodeURIComponent(t)), i = !1 !== a[e.name];
                             h.append(`\n                        <a href="${n}" class="search-img-site-btn" target="_blank" title="${e.name}">\n                        <input type="checkbox" \n                               class="site-checkbox jhs-layout-8896c95d" \n                               data-site-name="${e.name}" \n                              \n                               ${i ? "checked" : ""}>\n                            <img src="${e.ico}" alt="${e.name}">\n                            <span>${e.name}</span>\n                        </a>\n                    `);
                         })), h.on("change", ".site-checkbox", (function() {
                             const e = $(this).data("site-name");
-                            a[e] = $(this).is(":checked"), localStorage.setItem(n, JSON.stringify(a));
+                            a[e] = $(this).is(":checked"), storage.setLocal(n, JSON.stringify(a));
                         })), h.show();
                     } finally {
                         this.isUploading = !1;

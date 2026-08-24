@@ -62,7 +62,7 @@ export class MagnetHubPlugin extends BasePlugin {
         await this.initializeSources();
         e = e.replace("FC2-", "");
         const root = options.root ? $(options.root) : $(document), engines = [ ...this.searchEngines ];
-        const t = $('<div class="magnet-container jhs-ui"></div>'), n = $('<div class="magnet-tabs"></div>'), a = "jhs_magnetHub_selectedEngine", i = localStorage.getItem(a);
+        const storage = this.getRuntimeService("storage"), t = $('<div class="magnet-container jhs-ui"></div>'), n = $('<div class="magnet-tabs"></div>'), a = "jhs_magnetHub_selectedEngine", i = storage.getLocal(a);
         const o = $('<div class="magnet-tabs__options" role="tablist" aria-label="磁力来源"></div>');
         let currentEngine = engines.find((engine => engine.id === i)) || engines[0] || null;
         if (!currentEngine) return t.append($('<div class="magnet-error"></div>').text("暂无可用磁力来源，请前往设置启用来源"));
@@ -75,7 +75,7 @@ export class MagnetHubPlugin extends BasePlugin {
         return t.append(r), t.on("click", ".magnet-tab", (n => {
             const i = $(n.target).data("engine");
             currentEngine = engines.find((e => e.id === i)), t.find('[data-jhs-role="magnet-target"]').attr("href", currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e))).toggle("all" !== currentEngine.id),
-            localStorage.setItem(a, i), t.find(".magnet-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), $(n.target).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }),
+            storage.setLocal(a, i), t.find(".magnet-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), $(n.target).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }),
             this.searchEngine(r, currentEngine, e, root);
         })), t.on("keydown", ".magnet-tab", (e => {
             if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(e.key)) return;

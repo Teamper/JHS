@@ -4106,7 +4106,7 @@
             try {
               const t3 = await this.searchByImage(e3);
               s2.hide(), d2.show(), h2.empty();
-              const n3 = "jhs_selectedSites", a3 = JSON.parse(localStorage.getItem(n3) || "{}");
+              const storage = this.getRuntimeService("storage"), n3 = "jhs_selectedSites", a3 = JSON.parse(storage.getLocal(n3) || "{}");
               this.siteList.forEach(((e4) => {
                 const n4 = e4.url.replace("{占位符}", encodeURIComponent(t3)), i3 = false !== a3[e4.name];
                 h2.append(`
@@ -4122,7 +4122,7 @@
                     `);
               })), h2.on("change", ".site-checkbox", (function() {
                 const e4 = $(this).data("site-name");
-                a3[e4] = $(this).is(":checked"), localStorage.setItem(n3, JSON.stringify(a3));
+                a3[e4] = $(this).is(":checked"), storage.setLocal(n3, JSON.stringify(a3));
               })), h2.show();
             } finally {
               this.isUploading = false;
@@ -5710,10 +5710,10 @@
       if (!window.location.href.includes("actors")) return;
       const e2 = $(".tag-expand");
       if (0 === e2.length) return;
-      const t2 = "jhs_tag_expand", n2 = "true" === localStorage.getItem(t2), a2 = $(".actor-tags .content");
+      const storage = this.getRuntimeService("storage"), t2 = "jhs_tag_expand", n2 = "true" === storage.getLocal(t2), a2 = $(".actor-tags .content");
       n2 && a2.hasClass("collapse") && e2[0].click(), e2.on("click", (function() {
         const e3 = !$(".actor-tags .content").hasClass("collapse");
-        clog.debug("触发"), localStorage.setItem(t2, e3.toString());
+        clog.debug("触发"), storage.setLocal(t2, e3.toString());
       }));
     }
     checkDom(scope = null) {
@@ -9746,7 +9746,7 @@ ${error.stack}` : "");
       await this.initializeSources();
       e2 = e2.replace("FC2-", "");
       const root = options.root ? $(options.root) : $(document), engines = [...this.searchEngines];
-      const t2 = $('<div class="magnet-container jhs-ui"></div>'), n2 = $('<div class="magnet-tabs"></div>'), a2 = "jhs_magnetHub_selectedEngine", i2 = localStorage.getItem(a2);
+      const storage = this.getRuntimeService("storage"), t2 = $('<div class="magnet-container jhs-ui"></div>'), n2 = $('<div class="magnet-tabs"></div>'), a2 = "jhs_magnetHub_selectedEngine", i2 = storage.getLocal(a2);
       const o2 = $('<div class="magnet-tabs__options" role="tablist" aria-label="磁力来源"></div>');
       let currentEngine = engines.find(((engine) => engine.id === i2)) || engines[0] || null;
       if (!currentEngine) return t2.append($('<div class="magnet-error"></div>').text("暂无可用磁力来源，请前往设置启用来源"));
@@ -9756,7 +9756,7 @@ ${error.stack}` : "");
       const r2 = $('<div class="magnet-results"></div>');
       return t2.append(r2), t2.on("click", ".magnet-tab", ((n3) => {
         const i3 = $(n3.target).data("engine");
-        currentEngine = engines.find(((e3) => e3.id === i3)), t2.find('[data-jhs-role="magnet-target"]').attr("href", currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e2))).toggle("all" !== currentEngine.id), localStorage.setItem(a2, i3), t2.find(".magnet-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), $(n3.target).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }), this.searchEngine(r2, currentEngine, e2, root);
+        currentEngine = engines.find(((e3) => e3.id === i3)), t2.find('[data-jhs-role="magnet-target"]').attr("href", currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e2))).toggle("all" !== currentEngine.id), storage.setLocal(a2, i3), t2.find(".magnet-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), $(n3.target).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }), this.searchEngine(r2, currentEngine, e2, root);
       })), t2.on("keydown", ".magnet-tab", ((e3) => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e3.key)) return;
         e3.preventDefault();
@@ -15508,7 +15508,7 @@ ${error.stack}` : "");
   // src/plugins/registry.js
   var manifest = /* @__PURE__ */ __name((id, featureId, plugin, sites, order, requires = []) => defineContribution({ id, featureId, legacyPluginId: plugin.name, plugin, sites, order, requires }), "manifest");
   var legacyContributionManifests = Object.freeze([
-    manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [SERVICE.translation, SERVICE.http]),
+    manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [SERVICE.translation, SERVICE.http, SERVICE.storage]),
     manifest("list.auto-page", "list", AutoPagePlugin, ["javdb", "javbus"], { javdb: 2, javbus: 5 }, [SERVICE.http]),
     manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related]),
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
@@ -15518,7 +15518,7 @@ ${error.stack}` : "");
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [SERVICE.dialog]),
-    manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog]),
+    manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog, SERVICE.storage]),
     manifest("detail.state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }),
     manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [SERVICE.movie, SERVICE.translation, SERVICE.settings]),
     manifest("detail.native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }),
@@ -15533,7 +15533,7 @@ ${error.stack}` : "");
     manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie]),
     manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings]),
     manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }, [SERVICE.http]),
-    manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }),
+    manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage]),
     manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot]),
     manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [SERVICE.dialog]),
     manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }),
@@ -15607,7 +15607,7 @@ ${error.stack}` : "");
   var PORT_METHODS = Object.freeze({
     navigation: ["open", "assign", "replace"],
     http: ["request"],
-    storage: ["get", "set", "remove"],
+    storage: ["get", "set", "remove", "getLocal", "setLocal", "removeLocal"],
     dialog: ["open", "close", "confirm", "alert"],
     style: ["register", "remove"]
   });
@@ -15654,8 +15654,9 @@ ${error.stack}` : "");
 
   // src/platform/userscript/indexeddb-storage-adapter.js
   var _IndexedDbStorageAdapter = class _IndexedDbStorageAdapter {
-    constructor(forage) {
+    constructor(forage, localStore) {
       this.forage = forage;
+      this.localStore = localStore;
     }
     get(key) {
       return this.forage.getItem(key);
@@ -15665,6 +15666,15 @@ ${error.stack}` : "");
     }
     async remove(key) {
       await this.forage.removeItem(key);
+    }
+    getLocal(key) {
+      return this.localStore.getItem(key);
+    }
+    setLocal(key, value) {
+      this.localStore.setItem(key, value);
+    }
+    removeLocal(key) {
+      this.localStore.removeItem(key);
     }
   };
   __name(_IndexedDbStorageAdapter, "IndexedDbStorageAdapter");
@@ -16436,6 +16446,15 @@ ${error.stack}` : "");
     remove(key) {
       return this.port.remove(key);
     }
+    getLocal(key) {
+      return this.port.getLocal(key);
+    }
+    setLocal(key, value) {
+      return this.port.setLocal(key, value);
+    }
+    removeLocal(key) {
+      return this.port.removeLocal(key);
+    }
   };
   __name(_StorageService, "StorageService");
   var StorageService = _StorageService;
@@ -16801,7 +16820,7 @@ ${error.stack}` : "");
     const container = new DependencyContainer(diagnostics);
     const navigationPort = new BrowserNavigationAdapter();
     const httpPort = new UserscriptHttpAdapter(runtime.gmRequest);
-    const storagePort = new IndexedDbStorageAdapter(runtime.storageForage);
+    const storagePort = new IndexedDbStorageAdapter(runtime.storageForage, runtime.localStorage);
     const dialogPort = new LayerDialogAdapter(runtime.layer);
     const stylePort = new BrowserStyleAdapter();
     const urlPolicy = new ExternalUrlPolicy({ localOrigins: runtime.localOrigins });
@@ -17688,6 +17707,7 @@ ${error.stack}` : "");
       const context = createAppContext({
         gmRequest: globalThis.GM_xmlhttpRequest,
         storageForage: storageManager2.forage,
+        localStorage: globalThis.localStorage,
         layer: vendors.layer,
         hostAdapter,
         site: siteContext2.site,

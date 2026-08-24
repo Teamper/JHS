@@ -217,10 +217,10 @@ export class ListPagePlugin extends BasePlugin {
         if (!window.location.href.includes("actors")) return;
         const e = $(".tag-expand");
         if (0 === e.length) return;
-        const t = "jhs_tag_expand", n = "true" === localStorage.getItem(t), a = $(".actor-tags .content");
+        const storage = this.getRuntimeService("storage"), t = "jhs_tag_expand", n = "true" === storage.getLocal(t), a = $(".actor-tags .content");
         n && a.hasClass("collapse") && e[0].click(), e.on("click", (function() {
             const e = !$(".actor-tags .content").hasClass("collapse");
-            clog.debug("触发"), localStorage.setItem(t, e.toString());
+            clog.debug("触发"), storage.setLocal(t, e.toString());
         }));
     }
     checkDom(scope = null) {

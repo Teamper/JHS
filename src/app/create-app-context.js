@@ -33,14 +33,14 @@ import { IntegrationRegistry } from "./integration-registry.js";
 import { SettingsRegistry } from "./settings-registry.js";
 import { LifecycleScope } from "../core/lifecycle-scope.js";
 
-/** @param {{gmRequest: (options: Record<string, any>) => any, storageForage: any, layer: any, hostAdapter?: any, disabled?: string[], site?: string, route?: string, localOrigins?: string[]}} runtime */
+/** @param {{gmRequest: (options: Record<string, any>) => any, storageForage: any, localStorage: Storage, layer: any, hostAdapter?: any, disabled?: string[], site?: string, route?: string, localOrigins?: string[]}} runtime */
 export function createAppContext(runtime) {
     const diagnostics = new DiagnosticsService();
     const rootScope = new LifecycleScope("app:root", { onChange: (snapshot) => diagnostics.updateScope(snapshot) });
     const container = new DependencyContainer(diagnostics);
     const navigationPort = new BrowserNavigationAdapter();
     const httpPort = new UserscriptHttpAdapter(runtime.gmRequest);
-    const storagePort = new IndexedDbStorageAdapter(runtime.storageForage);
+    const storagePort = new IndexedDbStorageAdapter(runtime.storageForage, runtime.localStorage);
     const dialogPort = new LayerDialogAdapter(runtime.layer);
     const stylePort = new BrowserStyleAdapter();
     const urlPolicy = new ExternalUrlPolicy({ localOrigins: runtime.localOrigins });
