@@ -1719,7 +1719,9 @@
   var _JhsSelect = class _JhsSelect {
     constructor(select) {
       this.source = $(select);
-      if (!this.source.length || _JhsSelect.instances.has(this.source[0])) return _JhsSelect.instances.get(this.source[0]);
+      if (!this.source.length) return;
+      const existing = _JhsSelect.instances.get(this.source[0]);
+      if (existing) return existing;
       const initiallyHidden = this.source.hasClass("jhs-is-hidden") || "none" === this.source[0].style.display;
       this.control = $('<div class="jhs-select-control"></div>');
       this.trigger = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-select-trigger" aria-haspopup="menu" aria-expanded="false"><span class="jhs-select-value"></span></button>');

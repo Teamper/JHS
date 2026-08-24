@@ -1,3 +1,5 @@
+// @ts-check
+
 /** JHS 原生 UI 组件基座：现代桌面工具风格，不依赖宿主站点或第三方框架。 */
 export function buildUiPrimitivesCss() {
     return `
@@ -995,7 +997,11 @@ export function buildUiPrimitivesCss() {
 </style>`;
 }
 
-/** 在现有容器内渲染安全的 loading、empty 或 error 状态。 */
+/**
+ * 在现有容器内渲染安全的 loading、empty 或 error 状态。
+ * @param {any} container
+ * @param {{ type?: string, title?: string, description?: string, actionLabel?: string, onAction?: (() => unknown) | null }} [options]
+ */
 export function renderStateView(container, { type = "empty", title = "", description = "", actionLabel = "", onAction = null } = {}) {
     const root = container?.jquery ? container : $(container), state = $('<div class="jhs-state"></div>').addClass(`jhs-state--${type}`).attr("role", "error" === type ? "alert" : "status"), content = $('<div class="jhs-state__content"></div>');
     title && content.append($('<p class="jhs-state__title"></p>').text(title)), description && content.append($('<p class="jhs-state__description"></p>').text(description));
@@ -1008,7 +1014,7 @@ export function renderStateView(container, { type = "empty", title = "", descrip
 export function initializeUiAccessibility(lifecycleScope) {
     if (!lifecycleScope || "function" != typeof lifecycleScope.observe) throw new TypeError("UI accessibility requires an app LifecycleScope");
     const selector = "button.jhs-btn, a.jhs-btn[role='button'], .card-btn, .jhs-icon-btn, [class*='jhs-'] button, [class*='jhs-'] a[role='button']";
-    const enhance = (e) => {
+    const enhance = (/** @type {any} */ e) => {
         const t = e.nodeType === Node.ELEMENT_NODE && e.matches?.(selector) ? [ e ] : [];
         const n = e.querySelectorAll ? [ ...e.querySelectorAll(selector) ] : [];
         [ ...t, ...n ].forEach((e => {
@@ -1038,10 +1044,14 @@ export function initializeUiAccessibility(lifecycleScope) {
 
 /** 以隐藏原生 select 为值源的统一 JHS 选择器。 */
 export class JhsSelect {
+    /** @type {WeakMap<object, JhsSelect>} */
     static instances = new WeakMap;
+    /** @param {any} select */
     constructor(select) {
         this.source = $(select);
-        if (!this.source.length || JhsSelect.instances.has(this.source[0])) return JhsSelect.instances.get(this.source[0]);
+        if (!this.source.length) return;
+        const existing = JhsSelect.instances.get(this.source[0]);
+        if (existing) return existing;
         const initiallyHidden = this.source.hasClass("jhs-is-hidden") || "none" === this.source[0].style.display;
         this.control = $('<div class="jhs-select-control"></div>');
         this.trigger = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-select-trigger" aria-haspopup="menu" aria-expanded="false"><span class="jhs-select-value"></span></button>');
@@ -1050,59 +1060,66 @@ export class JhsSelect {
         this.source.addClass("jhs-select-source-native").attr({ "aria-hidden": "true", tabindex: "-1" }), initiallyHidden && this.control.addClass("jhs-is-hidden"),
         JhsSelect.instances.set(this.source[0], this), this.render(), this.bind(), this.refresh();
     }
+    /** @param {any} [root] */
     static enhance(root = document) {
         const scope = $(root), selects = scope.is("select.jhs-select-source") ? scope : scope.find("select.jhs-select-source");
-        selects.each(((_, select) => new JhsSelect(select)));
+        selects.each(((/** @type {number} */ _, /** @type {HTMLSelectElement} */ select) => new JhsSelect(select)));
         return selects;
     }
+    /** @param {any} select */
     static get(select) {
         const element = $(select)[0];
         return element ? JhsSelect.instances.get(element) || new JhsSelect(element) : null;
     }
+    /** @param {any} select @param {any} value @param {boolean} [emit] */
     static setValue(select, value, emit = !1) {
         const instance = JhsSelect.get(select);
         if (!instance) return;
         instance.source.val(value), emit ? instance.emitChange() : instance.refresh();
     }
+    /** @param {any} select */
     static refresh(select) {
         JhsSelect.get(select)?.refresh();
     }
+    /** @param {any} [root] */
     static refreshAll(root = document) {
-        JhsSelect.enhance(root), $(root).find("select.jhs-select-source").each(((_, select) => JhsSelect.refresh(select)));
+        JhsSelect.enhance(root), $(root).find("select.jhs-select-source").each(((/** @type {number} */ _, /** @type {HTMLSelectElement} */ select) => JhsSelect.refresh(select)));
     }
+    /** @param {any} select @param {boolean} visible */
     static setVisible(select, visible) {
         const instance = JhsSelect.get(select);
         instance?.control.toggleClass("jhs-is-hidden", !visible);
     }
+    /** @param {JhsSelect | null} [except] */
     static closeAll(except = null) {
-        $(".jhs-select-control.is-open").each(((_, control) => {
+        $(".jhs-select-control.is-open").each(((/** @type {number} */ _, /** @type {HTMLElement} */ control) => {
             const source = $(control).children("select.jhs-select-source")[0], instance = source && JhsSelect.instances.get(source);
             instance && instance !== except && instance.close();
         }));
     }
     render() {
         this.menu.empty();
-        const appendOption = (option, target) => {
+        const appendOption = (/** @type {HTMLOptionElement} */ option, /** @type {any} */ target) => {
             const button = $('<button type="button" class="jhs-btn jhs-btn--ghost jhs-select-option" role="menuitemradio" tabindex="-1"></button>');
             button.attr({ "data-value": option.value, "aria-checked": option.selected ? "true" : "false" }).prop("disabled", option.disabled).text(option.text), target.append(button);
         };
-        this.source.children().each(((_, child) => {
+        this.source.children().each(((/** @type {number} */ _, /** @type {HTMLOptionElement | HTMLOptGroupElement} */ child) => {
             if ("OPTGROUP" === child.tagName) {
                 const group = $('<div class="jhs-select-group" role="group"></div>').attr("aria-label", child.label), label = $('<div class="jhs-select-group__label"></div>').text(child.label);
-                group.append(label), $(child).children("option").each(((_, option) => appendOption(option, group))), this.menu.append(group);
-            } else "OPTION" === child.tagName && appendOption(child, this.menu);
+                group.append(label), $(child).children("option").each(((/** @type {number} */ _, /** @type {HTMLOptionElement} */ option) => appendOption(option, group))), this.menu.append(group);
+            } else "OPTION" === child.tagName && appendOption(/** @type {HTMLOptionElement} */ (child), this.menu);
         }));
     }
     bind() {
-        this.trigger.on("click", (event => {
+        this.trigger.on("click", ((/** @type {any} */ event) => {
             event.preventDefault(), event.stopPropagation(), this.source.prop("disabled") || (this.control.hasClass("is-open") ? this.close() : this.open());
-        })).on("keydown", (event => {
+        })).on("keydown", ((/** @type {any} */ event) => {
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault(), this.open("ArrowUp" === event.key || "End" === event.key ? "last" : "selected");
         }));
-        this.menu.on("click", ".jhs-select-option", (event => {
+        this.menu.on("click", ".jhs-select-option", ((/** @type {any} */ event) => {
             event.preventDefault(), this.choose($(event.currentTarget));
-        })).on("keydown", ".jhs-select-option", (event => {
+        })).on("keydown", ".jhs-select-option", ((/** @type {any} */ event) => {
             const items = this.options(), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), this.close(!0);
             if ("Tab" === event.key) return void this.close();
@@ -1112,7 +1129,7 @@ export class JhsSelect {
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
         }));
-        this.source.on("change.jhsSelect", (() => this.refresh())), $(document).on("click.jhsSelect", (event => {
+        this.source.on("change.jhsSelect", (() => this.refresh())), $(document).on("click.jhsSelect", ((/** @type {any} */ event) => {
             $(event.target).closest(this.control).length || this.close();
         }));
     }
@@ -1127,6 +1144,7 @@ export class JhsSelect {
     close(focus = !1) {
         this.control.removeClass("is-open"), this.menu.removeClass("is-open"), this.trigger.attr("aria-expanded", "false"), focus && this.trigger.trigger("focus");
     }
+    /** @param {any} item */
     choose(item) {
         if (item.prop("disabled")) return;
         this.source.val(item.attr("data-value")), this.emitChange(), this.close(!0);
@@ -1140,6 +1158,6 @@ export class JhsSelect {
     refresh() {
         const selected = this.source.find("option:selected").first(), value = this.source.val();
         this.trigger.find(".jhs-select-value").text(selected.text()), this.trigger.prop("disabled", this.source.prop("disabled")),
-        this.menu.find(".jhs-select-option").attr("aria-checked", "false").filter(((_, item) => $(item).attr("data-value") === String(value ?? ""))).attr("aria-checked", "true");
+        this.menu.find(".jhs-select-option").attr("aria-checked", "false").filter(((/** @type {number} */ _, /** @type {HTMLElement} */ item) => $(item).attr("data-value") === String(value ?? ""))).attr("aria-checked", "true");
     }
 }

@@ -37,7 +37,7 @@
     "src/core/state-service.d.ts",
     "src/core/storage-index.js",
     "src/core/theme.js",
-    "src/core/ui-primitives.d.ts",
+    "src/core/ui-primitives.js",
     "src/features/**/*.js",
     "src/integrations/**/*.js",
     "src/platform/**/*.js",
