@@ -1,3 +1,5 @@
+// @ts-check
+
 import { C, _ } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 
@@ -6,7 +8,8 @@ export class BusImgPlugin extends BasePlugin {
         return "BusImgPlugin";
     }
     handle() {}
-    async getVisibleImageItems(e, t) {
+    async getVisibleImageItems(/** @type {string} */ e, /** @type {string} */ t) {
+        /** @type {Array<{element: Element, imgElement: HTMLImageElement, height: number}>} */
         let n = [];
         const a = document.querySelectorAll(e);
         for (const i of a) {
@@ -28,6 +31,7 @@ export class BusImgPlugin extends BasePlugin {
         if (await storageManager.getSetting("enableVerticalModel", C) === _) return;
         const e = this.getSelector().itemSelector, t = await storageManager.getSetting("containerColumns", 5), n = await this.getVisibleImageItems(e, "img");
         if (0 === n.length) return;
+        /** @type {Array<Array<{element: Element, imgElement: HTMLImageElement, height: number}>>} */
         const a = [];
         for (let i = 0; i < n.length; i++) {
             const e = Math.floor(i / t);

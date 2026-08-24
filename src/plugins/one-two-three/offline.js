@@ -1,3 +1,5 @@
+// @ts-check
+
 import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class OneTwoThreeOfflinePlugin extends BasePlugin {
@@ -12,6 +14,7 @@ export class OneTwoThreeOfflinePlugin extends BasePlugin {
         if ("yun.123pan.com" !== window.location.hostname) return;
         this.startTokenSync(await this.getRuntimeService("scope")());
     }
+    /** @param {any} scope */
     startTokenSync(scope) {
         this.syncTokenOnce(), this.syncTimer && clearInterval(this.syncTimer), this.syncTimer = setInterval((() => this.syncTokenOnce()), this.syncFallbackMs);
         const e = () => this.syncTokenOnce();
@@ -62,7 +65,7 @@ export class OneTwoThreeOfflinePlugin extends BasePlugin {
     getStoredToken() {
         return this.getRuntimeService("storage").getValue(this.tokenKey, "");
     }
-    clearStoredToken(e) {
+    clearStoredToken(/** @type {string} */ e) {
         const storage = this.getRuntimeService("storage");
         storage.setValue(this.tokenKey, ""), storage.setValue(this.tokenMetaKey, {
             source: "cleared",

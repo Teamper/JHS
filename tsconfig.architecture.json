@@ -26,6 +26,7 @@
     "src/core/magnet-quality.js",
     "src/core/migration.js",
     "src/core/movie-identity.js",
+    "src/core/plugin-manager.d.ts",
     "src/core/selection-model.js",
     "src/core/site-context.js",
     "src/core/state-model.js",
@@ -36,11 +37,24 @@
     "src/platform/**/*.js",
     "src/services/**/*.js",
     "src/ui/**/*.js",
+    "src/plugins/avatar/actress-info.js",
     "src/plugins/backup/resource-settings.js",
+    "src/plugins/blacklist/filter-title-keyword.js",
     "src/plugins/dependency-map.js",
     "src/plugins/external-search/magnet-source-registry.js",
+    "src/plugins/external-search/related.js",
+    "src/plugins/external-search/review.js",
+    "src/plugins/image-viewer/bus-img.js",
     "src/plugins/image-viewer/screenshot-provider-registry.js",
-    "src/plugins/one-one-five/client.js"
+    "src/plugins/external-search/javtrailers.js",
+    "src/plugins/one-one-five/client.js",
+    "src/plugins/one-two-three/offline.js",
+    "src/plugins/status/bus-nav-bar.js",
+    "src/plugins/status/bus-detail-page.js",
+    "src/plugins/status/detail-page.js",
+    "src/plugins/status/highlight-magnet.js",
+    "src/plugins/subtitle/subtitle-cat.js",
+    "src/plugins/translate/translate.js"
   ],
   "exclude": ["src/app/bootstrap.js"]
 }

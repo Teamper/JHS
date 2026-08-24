@@ -4323,7 +4323,8 @@
     }
     async handleStarPage() {
       if ($(".actress-info").length > 0) return;
-      const names = [], title = $(".actor-section-name");
+      const names = [];
+      const title = $(".actor-section-name");
       if (title.length) title.text().trim().split(",").forEach(((name) => names.push(name.trim())));
       const meta = $(".section-meta:not(:contains('影片'))");
       if (meta.length) meta.text().trim().split(",").forEach(((name) => names.push(name.trim())));
@@ -8307,7 +8308,7 @@
       if (await storageManager.getSetting("enableTitleSelectFilter", _) !== _) return;
       const host = $(root), selector = r ? ".title strong, .current-title" : l ? "h3" : ".current-title, .origin-title, .jhs-detail-title";
       host.off("contextmenu.jhsTitleFilter", selector).on("contextmenu.jhsTitleFilter", selector, ((e2) => {
-        const t2 = window.getSelection().toString();
+        const t2 = window.getSelection()?.toString() || "";
         if (t2) {
           e2.preventDefault();
           let n2 = {
@@ -8315,7 +8316,7 @@
             clientY: e2.clientY + 80
           };
           utils.q(n2, `是否屏蔽标题关键词 ${t2}?`, (async () => {
-            await storageManager.saveTitleFilterKeyword(t2), await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" }), utils.closePage({ root: host, layerIndex });
+            await storageManager.saveTitleFilterKeyword(t2), await jhsEventBus?.emit("filter-rules-changed", { scope: "title-keyword" }), utils.closePage({ root: host, layerIndex });
           }));
         }
       }));
@@ -9631,6 +9632,7 @@ ${error.stack}` : "");
           if (scope.signal.aborted) return;
           this.hasBand = true;
           let e2 = document.getElementById("vjs_video_3_html5_api");
+          if (!e2) return;
           clog.debug(e2), safePlay(e2, {
             context: "JavTrailers 预览"
           }), e2.currentTime = 5, scope.listen(e2, "timeupdate", (function() {
@@ -13180,11 +13182,11 @@ ${error.stack}` : "");
           t2.css("position", "initial"), t2.insertBefore(t2.parent());
         }
       }
-      $(".genre a").each((function() {
-        const e2 = $(this).attr("href");
+      $(".genre a").each(((_index, element) => {
+        const node = $(element), e2 = node.attr("href");
         if (!e2) return;
         try {
-          ["http:", "https:"].includes(new URL(e2, window.location.href).protocol) && $(this).attr("target", "_blank");
+          ["http:", "https:"].includes(new URL(e2, window.location.href).protocol) && node.attr("target", "_blank");
         } catch {
         }
       })), this.addCopyCarNumBtn();
@@ -13207,7 +13209,7 @@ ${error.stack}` : "");
                 this.textContent = "复制";
               }), 1500);
             })();
-          })), t3.parentNode.insertBefore(n2, t3.nextSibling);
+          })), t3.parentNode?.insertBefore(n2, t3.nextSibling);
         }
       }
     }
@@ -13575,11 +13577,11 @@ ${error.stack}` : "");
       super();
     }
     handle() {
-      window.isDetailPage && $(".video-meta-panel a").each((function() {
-        const e2 = $(this).attr("href");
+      isDetailPage && $(".video-meta-panel a").each(((_index, element) => {
+        const node = $(element), e2 = node.attr("href");
         if (!e2) return;
         try {
-          ["http:", "https:"].includes(new URL(e2, window.location.href).protocol) && $(this).attr("target", "_blank");
+          ["http:", "https:"].includes(new URL(e2, window.location.href).protocol) && node.attr("target", "_blank");
         } catch {
         }
       }));
@@ -13694,9 +13696,10 @@ ${error.stack}` : "");
     async handle() {
       if (!window.isDetailPage) return;
       const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
-      scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => {
+      scope.addCleanup(jhsEventBus?.on("magnet-items-updated", (() => {
         (settings.snapshot().enableMagnetsFilter ?? _) === _ ? this.doFilterMagnet() : this.showAll();
-      })));
+      })) || (() => {
+      }));
     }
     async initCss() {
       return `<style>.jhs-magnet-score{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:600;vertical-align:middle;cursor:help}</style>`;
@@ -13707,7 +13710,8 @@ ${error.stack}` : "");
     doFilterMagnet() {
       const boundary = this.getRuntimeService("host")?.getDetailResourceBoundary?.();
       if (!boundary) return void this.updateFilterHint(false);
-      const rows = boundary.rows(), validRows = [];
+      const rows = boundary.rows();
+      const validRows = [];
       let hasMatch = false;
       rows.forEach(((row) => {
         const titleTarget = boundary.getTitleTarget(row);
@@ -15189,12 +15193,12 @@ ${error.stack}` : "");
     }
     handle() {
       $(".t-banner-inner").hide(), $("#navbar").hide();
-      let e2 = new URLSearchParams(window.location.search).get("search").toLowerCase(), t2 = $(".sub-table tr td a").toArray(), n2 = 0;
+      let e2 = (new URLSearchParams(window.location.search).get("search") || "").toLowerCase(), t2 = $(".sub-table tr td a").toArray(), n2 = 0;
       t2.forEach(((t3) => {
         let a3 = $(t3);
         a3.text().toLowerCase().includes(e2) ? n2++ : a3.parent().parent().hide();
       })), 0 === n2 && show.error("该番号无字幕!");
-      const a2 = $(".sec-title"), i2 = a2.html().replace(/^\d+/, n2);
+      const a2 = $(".sec-title"), i2 = String(a2.html() || "").replace(/^\d+/, String(n2));
       a2.html(i2);
     }
   };
@@ -15216,7 +15220,7 @@ ${error.stack}` : "");
       if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) !== _) return;
       l && (t2 = false);
       const scope = await this.getRuntimeService("scope")();
-      await renderTranslatedTitle({ root: options.root, carNum: e2, translation: this.getRuntimeService("translation"), scope });
+      await renderTranslatedTitle({ root: options.root, carNum: e2 ?? void 0, translation: this.getRuntimeService("translation"), scope });
     }
   };
   __name(_TranslatePlugin, "TranslatePlugin");

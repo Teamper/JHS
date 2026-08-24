@@ -1,3 +1,5 @@
+// @ts-check
+
 import { safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { JHS_Z_INDEX } from "../../core/theme.js";
@@ -19,27 +21,28 @@ export class JavTrailersPlugin extends BasePlugin {
         }
         let t = $(".videos-list .video-link").toArray();
         if (t.length) {
-            const n = e.split("?")[0].split("search/")[1].toLowerCase(), a = t.find((e => $(e).find(".vid-title").text().toLowerCase().includes(n)));
+            const n = e.split("?")[0].split("search/")[1].toLowerCase(), a = t.find(((/** @type {Element} */ e) => $(e).find(".vid-title").text().toLowerCase().includes(n)));
             if (a) return void (window.location.href = $(a).attr("href") + window.location.search);
         }
         const scope = await this.getRuntimeService("scope")();
         this.handlePlayJavTrailers(scope), this.bindPlaybackControls(scope);
     }
-    bindPlaybackControls(scope) {
+    bindPlaybackControls(/** @type {any} */ scope) {
         const container = $("#videoPlayerContainer"), replay = () => this.handlePlayJavTrailers(scope);
         container.off("click.jhsJavTrailers").on("click.jhsJavTrailers", replay), scope.addCleanup((() => container.off("click.jhsJavTrailers", replay))), scope.listen(window, "message", (() => {
-            let t = document.getElementById("vjs_video_3_html5_api");
+            let t = /** @type {HTMLVideoElement | null} */ (document.getElementById("vjs_video_3_html5_api"));
             t && (t.currentTime += 5);
         }));
     }
-    handlePlayJavTrailers(scope) {
+    handlePlayJavTrailers(/** @type {any} */ scope) {
         if (this.hasBand || scope.signal.aborted) return;
         const playerWait = utils.loopDetector((() => 0 !== $("#vjs_video_3_html5_api").length), (() => {
             if (scope.signal.aborted) return;
             scope.ownTimeout(setTimeout((() => {
                 if (scope.signal.aborted) return;
                 this.hasBand = !0;
-                let e = document.getElementById("vjs_video_3_html5_api");
+                let e = /** @type {HTMLVideoElement | null} */ (document.getElementById("vjs_video_3_html5_api"));
+                if (!e) return;
                 clog.debug(e), safePlay(e, {
                     context: "JavTrailers 预览"
                 }), e.currentTime = 5, scope.listen(e, "timeupdate", (function() {

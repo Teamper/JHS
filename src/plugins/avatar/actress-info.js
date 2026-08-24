@@ -1,3 +1,5 @@
+// @ts-check
+
 import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class ActressInfoPlugin extends BasePlugin {
@@ -11,9 +13,9 @@ export class ActressInfoPlugin extends BasePlugin {
     }
     async handleDetailPage() {
         if ($(".actress-info").length > 0) return;
-        const names = $(".female").prev().map(((index, item) => $(item).text().trim())).get();
+        const names = $(".female").prev().map(((/** @type {number} */ index, /** @type {Element} */ item) => $(item).text().trim())).get();
         if (!names.length) return;
-        const blocks = [];
+        /** @type {any[]} */ const blocks = [];
         for (const name of names) {
             let info = null;
             try { info = await this.searchInfo(name); } catch { clog.error("该名称查询失败,尝试其它名称"); }
@@ -37,10 +39,11 @@ export class ActressInfoPlugin extends BasePlugin {
     }
     async handleStarPage() {
         if ($(".actress-info").length > 0) return;
-        const names = [], title = $(".actor-section-name");
-        if (title.length) title.text().trim().split(",").forEach((name => names.push(name.trim())));
+        /** @type {string[]} */ const names = [];
+        const title = $(".actor-section-name");
+        if (title.length) title.text().trim().split(",").forEach(((/** @type {string} */ name) => names.push(name.trim())));
         const meta = $(".section-meta:not(:contains('影片'))");
-        if (meta.length) meta.text().trim().split(",").forEach((name => names.push(name.trim())));
+        if (meta.length) meta.text().trim().split(",").forEach(((/** @type {string} */ name) => names.push(name.trim())));
         if (!names.length) return;
         let info = null;
         for (const name of names) {
@@ -58,7 +61,7 @@ export class ActressInfoPlugin extends BasePlugin {
         const result = info ? $("<a></a>").addClass("actress-info").attr({ href: info.url, target: "_blank", rel: "noopener noreferrer" }).append(body) : body.addClass("actress-info");
         title.parent().append(result);
     }
-    async searchInfo(name) {
+    async searchInfo(/** @type {string} */ name) {
         const scope = await this.getRuntimeService("scope")();
         return this.getRuntimeService("actressInfo").lookup(name, { scope });
     }

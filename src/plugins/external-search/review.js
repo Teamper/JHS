@@ -1,3 +1,5 @@
+// @ts-check
+
 import { l, r } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { ReviewPanel } from "../../ui/detail/review-panel.js";
@@ -47,11 +49,11 @@ export class ReviewPlugin extends BasePlugin {
             movieRef?.movieId && await this.showReview(movieRef.movieId, this.getHostedSlot("reviews"));
         }
     }
-    getHostedSlot(name) {
+    getHostedSlot(/** @type {string} */ name) {
         const element = this.getRuntimeService("host").locateDetailSlots()[name];
         return element ? $(element) : $();
     }
-    async showReview(movieId, target, options = {}) {
+    async showReview(/** @type {string} */ movieId, /** @type {any} */ target, /** @type {Record<string, unknown>} */ options = {}) {
         const panel = new ReviewPanel({ review: this.getRuntimeService("review"), settings: this.getRuntimeService("settings"), storage: this.getRuntimeService("storage"), scope: () => this.getRuntimeService("scope")() });
         return panel.show(movieId, target?.length ? target : this.getHostedSlot("reviews"), options);
     }

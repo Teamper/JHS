@@ -1,3 +1,5 @@
+// @ts-check
+
 import { _ } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
@@ -7,9 +9,9 @@ export class HighlightMagnetPlugin extends BasePlugin {
     async handle() {
         if (!window.isDetailPage) return;
         const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
-        scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => {
+        scope.addCleanup(jhsEventBus?.on("magnet-items-updated", (() => {
             (settings.snapshot().enableMagnetsFilter ?? _) === _ ? this.doFilterMagnet() : this.showAll();
-        })));
+        })) || (() => {}));
     }
     async initCss() {
         return `<style>.jhs-magnet-score{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:600;vertical-align:middle;cursor:help}</style>`;
@@ -20,9 +22,10 @@ export class HighlightMagnetPlugin extends BasePlugin {
     doFilterMagnet() {
         const boundary = this.getRuntimeService("host")?.getDetailResourceBoundary?.();
         if (!boundary) return void this.updateFilterHint(!1);
-        const rows = boundary.rows(), validRows = [];
+        const rows = boundary.rows();
+        /** @type {any[]} */ const validRows = [];
         let hasMatch = !1;
-        rows.forEach((row => {
+        rows.forEach(((/** @type {any} */ row) => {
             const titleTarget = boundary.getTitleTarget(row);
             if (!titleTarget) return;
             const target = $(titleTarget), title = target.text().toLowerCase(), signals = this.getQualitySignals(title, boundary.hasSubtitleTag(row));
@@ -32,7 +35,7 @@ export class HighlightMagnetPlugin extends BasePlugin {
         hasMatch && validRows.forEach((row => $(row).hasClass("high-quality") || $(row).hide())), this.updateFilterHint(hasMatch);
     }
     /** 给磁力行注入评分徽章（幂等：已有则跳过） */
-    injectScoreBadge(el, title) {
+    injectScoreBadge(/** @type {any} */ el, /** @type {string} */ title) {
         try {
             if (el.find(".jhs-magnet-score").length > 0) return;
             const score = calcMagnetScore({ title: title || "", seeders: 0 });
@@ -45,14 +48,14 @@ export class HighlightMagnetPlugin extends BasePlugin {
             el.append(badge);
         } catch (e) { clog.debug("磁力评分徽章注入失败，已忽略", e); }
     }
-    getQualitySignals(title, hasSubtitleTag = !1) {
+    getQualitySignals(/** @type {string} */ title, /** @type {boolean} */ hasSubtitleTag = !1) {
         return getMagnetQualitySignals(title, hasSubtitleTag);
     }
-    updateFilterHint(hasMatch) {
+    updateFilterHint(/** @type {boolean} */ hasMatch) {
         $("#enable-magnets-filter").removeClass("do-hide").attr("data-tip", hasMatch ? "仅显示识别到的高质量或字幕磁力" : "未识别到可过滤项，当前未隐藏磁力");
     }
     showAll() {
         $("#enable-magnets-filter").removeClass("do-hide").removeAttr("data-tip");
-        this.getRuntimeService("host")?.getDetailResourceBoundary?.()?.rows().forEach((row => $(row).show()));
+        this.getRuntimeService("host")?.getDetailResourceBoundary?.()?.rows().forEach(((/** @type {any} */ row) => $(row).show()));
     }
 }

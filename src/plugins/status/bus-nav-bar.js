@@ -1,3 +1,5 @@
+// @ts-check
+
 import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class BusNavBarPlugin extends BasePlugin {

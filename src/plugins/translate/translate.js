@@ -1,3 +1,5 @@
+// @ts-check
+
 import { _, l } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { renderTranslatedTitle } from "../../ui/translation/title-translation.js";
@@ -12,10 +14,11 @@ export class TranslatePlugin extends BasePlugin {
     handle() {
         isDetailPage && this.translate();
     }
+    /** @param {string | null} [e] @param {boolean} [t] @param {{root?: ParentNode}} [options] */
     async translate(e, t = !0, options = {}) {
         if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) !== _) return;
         l && (t = !1);
         const scope = await this.getRuntimeService("scope")();
-        await renderTranslatedTitle({ root: options.root, carNum: e, translation: this.getRuntimeService("translation"), scope });
+        await renderTranslatedTitle({ root: options.root, carNum: e ?? undefined, translation: this.getRuntimeService("translation"), scope });
     }
 }

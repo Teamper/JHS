@@ -1,3 +1,5 @@
+// @ts-check
+
 import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class DetailPagePlugin extends BasePlugin {
@@ -8,10 +10,10 @@ export class DetailPagePlugin extends BasePlugin {
         super();
     }
     handle() {
-        window.isDetailPage && ($(".video-meta-panel a").each((function() {
-            const e = $(this).attr("href");
+        isDetailPage && ($(".video-meta-panel a").each(((/** @type {number} */ _index, /** @type {HTMLAnchorElement} */ element) => {
+            const node = $(element), e = node.attr("href");
             if (!e) return;
-            try { ["http:", "https:"].includes(new URL(e, window.location.href).protocol) && $(this).attr("target", "_blank"); } catch {}
+            try { ["http:", "https:"].includes(new URL(e, window.location.href).protocol) && node.attr("target", "_blank"); } catch {}
         })));
     }
 }

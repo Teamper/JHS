@@ -11,3 +11,8 @@ declare const gmHttp: any;
 declare const md5: (value: string) => string;
 declare const isDetailPage: boolean;
 declare const isListPage: boolean;
+
+interface Window {
+    isDetailPage: boolean;
+    isListPage: boolean;
+}
