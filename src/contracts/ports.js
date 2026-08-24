@@ -13,6 +13,6 @@ export const PORT_METHODS = Object.freeze({
     navigation: ["open", "assign", "replace"],
     http: ["request"],
     storage: ["get", "set", "remove"],
-    dialog: ["open", "close"],
+    dialog: ["open", "close", "confirm", "alert"],
     style: ["register", "remove"],
 });

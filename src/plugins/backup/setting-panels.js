@@ -93,7 +93,7 @@ export async function renderSnapshotPanel() {
 }
 
 /** Show a data diff preview dialog before importing data. */
-export function showDiffPreview(e, t, n = null) {
+export function showDiffPreview(e, t, n = null, dialog) {
     const a = e.summary, i = [];
     for (const [s, o] of Object.entries(e.stores)) {
         if ("unchanged" === o.status) continue;
@@ -117,7 +117,7 @@ export function showDiffPreview(e, t, n = null) {
     }
     s += '<div class="jhs-warning-note">导入将覆盖当前数据，建议先创建快照备份</div>';
     s += '</div>';
-    const r = layer.open({
+    const r = dialog.open({
         type: 1,
         title: "数据差异预览",
         content: s,
@@ -125,7 +125,7 @@ export function showDiffPreview(e, t, n = null) {
         btn: ["确认导入", "取消"],
         anim: -1,
         yes: async s => {
-            layer.close(s);
+            dialog.close(s);
             let o = loading();
             try {
                 await storageManager.createSnapshot("导入前自动备份", "auto-import"),

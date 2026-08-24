@@ -4774,7 +4774,7 @@
     }
   }
   __name(backupListBtnByWebDav, "backupListBtnByWebDav");
-  function openFileListDialogMobile(e2, t2, n2, folderName, showDiffPreviewFn) {
+  function openFileListDialogMobile(e2, t2, n2, folderName, showDiffPreviewFn, dialog) {
     const formatSize = /* @__PURE__ */ __name((size) => {
       const units = ["B", "KB", "MB", "GB", "TB", "PB"];
       let i2 = 0, s2 = size;
@@ -4798,7 +4798,7 @@
             `).join("");
     }, "renderCards");
     const containerId = "jhs-backup-card-list";
-    layer.open({
+    dialog.open({
       type: 1,
       title: n2 + "备份文件",
       content: `<div id="${containerId}" class="jhs-backup-cards">${renderCards(e2)}</div>`,
@@ -4813,18 +4813,18 @@
           const file = e2[idx];
           if (!file) return;
           if (action === "delete") {
-            layer.confirm(`是否删除 ${file.name} ?`, {
+            dialog.confirm(`是否删除 ${file.name} ?`, {
               icon: 3,
               title: "提示",
               btn: ["确定", "取消"]
             }, async (confirmIdx) => {
-              layer.close(confirmIdx);
+              dialog.close(confirmIdx);
               let load = loading();
               try {
                 await t2.deleteFile(file.fileId);
                 e2 = await t2.getBackupList(folderName);
                 container.html(renderCards(e2));
-                layer.alert("删除成功");
+                dialog.alert("删除成功");
               } catch (err) {
                 clog.error(err), show.error(`发生错误: ${err ? err.message : err}`);
               } finally {
@@ -4860,12 +4860,12 @@
     });
   }
   __name(openFileListDialogMobile, "openFileListDialogMobile");
-  function openFileListDialog(e2, t2, n2, folderName, showDiffPreviewFn) {
+  function openFileListDialog(e2, t2, n2, folderName, showDiffPreviewFn, dialog) {
     if (utils.isMobileMode()) {
-      openFileListDialogMobile(e2, t2, n2, folderName, showDiffPreviewFn);
+      openFileListDialogMobile(e2, t2, n2, folderName, showDiffPreviewFn, dialog);
       return;
     }
-    layer.open({
+    dialog.open({
       type: 1,
       title: n2 + "备份文件",
       content: '\n                <div class="jhs-table-dialog"> \n                    <div id="table-container" class="jhs-table-dialog__content"></div>\n                </div>\n            ',
@@ -4920,17 +4920,17 @@
               return s2((() => {
                 const a4 = e3.getElement().querySelector(".backup-delete"), s3 = e3.getElement().querySelector(".backup-download"), r2 = e3.getElement().querySelector(".backup-import");
                 a4 && a4.addEventListener("click", ((e4) => {
-                  layer.confirm(`是否删除 ${o2.name} ?`, {
+                  dialog.confirm(`是否删除 ${o2.name} ?`, {
                     icon: 3,
                     title: "提示",
                     btn: ["确定", "取消"]
                   }, (async (e5) => {
-                    layer.close(e5);
+                    dialog.close(e5);
                     let a5 = loading();
                     try {
                       await t2.deleteFile(o2.fileId);
                       let e6 = await t2.getBackupList(folderName);
-                      i2.replaceData(e6), layer.alert("删除成功");
+                      i2.replaceData(e6), dialog.alert("删除成功");
                     } catch (s4) {
                       clog.error(s4), show.error(`发生错误: ${s4 ? s4.message : s4}`);
                     } finally {
@@ -7040,7 +7040,7 @@
     });
   }
   __name(renderSnapshotPanel, "renderSnapshotPanel");
-  function showDiffPreview(e2, t2, n2 = null) {
+  function showDiffPreview(e2, t2, n2 = null, dialog) {
     const a2 = e2.summary, i2 = [];
     for (const [s3, o2] of Object.entries(e2.stores)) {
       if ("unchanged" === o2.status) continue;
@@ -7064,7 +7064,7 @@
     }
     s2 += '<div class="jhs-warning-note">导入将覆盖当前数据，建议先创建快照备份</div>';
     s2 += "</div>";
-    const r2 = layer.open({
+    const r2 = dialog.open({
       type: 1,
       title: "数据差异预览",
       content: s2,
@@ -7072,7 +7072,7 @@
       btn: ["确认导入", "取消"],
       anim: -1,
       yes: /* @__PURE__ */ __name(async (s3) => {
-        layer.close(s3);
+        dialog.close(s3);
         let o2 = loading();
         try {
           await storageManager.createSnapshot("导入前自动备份", "auto-import"), n2 ? (await storageManager.importData(n2), show.ok("导入成功!"), void setTimeout(() => location.reload(), 1e3)) : t2 && (await storageManager.importData(t2), show.ok("导入成功!"), void setTimeout(() => location.reload(), 1e3));
@@ -7427,7 +7427,7 @@
     async openSettingDialog(e2 = "backup-panel", t2) {
       const a2 = this.getDependency("CoverButtonPlugin");
       const s2 = buildSettingDialogHtml(e2, this.cacheItems, a2);
-      layer.open({
+      this.getRuntimeService("dialog").open({
         type: 1,
         title: "设置",
         content: s2,
@@ -7521,12 +7521,12 @@
       });
     }
     bindClick() {
-      const settingPlugin = this, webdav = this.getRuntimeService("webdav");
+      const settingPlugin = this, webdav = this.getRuntimeService("webdav"), dialog = this.getRuntimeService("dialog"), previewDiff = /* @__PURE__ */ __name((diff, imported, restored = null) => showDiffPreview(diff, imported, restored, dialog), "previewDiff");
       $(".side-menu-item").on("click", (function() {
         $(".side-menu-item").removeClass("active").attr("aria-current", "false"), $(this).addClass("active").attr("aria-current", "page"), $(".content-panel").hide();
         const e3 = $(this).data("panel");
         $("#" + e3).show(), "cache-panel" === e3 ? ($("#saveBtn").hide(), $("#clean-all").removeClass("jhs-is-hidden")) : ($("#saveBtn").show(), $("#clean-all").addClass("jhs-is-hidden")), "health-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderDataHealthPanel()), "plugin-mgmt-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderPluginMgmtPanel(settingPlugin.getRuntimeService("diagnostics"))), "snapshot-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderSnapshotPanel()), "network-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderNetworkPanel());
-      })), $("#importBtn").on("click", ((e3) => importSettingData(showDiffPreview))), $("#exportBtn").on("click", ((e3) => exportSettingData())), $("#preview-car-number-import").on("click", (() => this.previewCarNumbers())), $("#confirm-car-number-import").on("click", (async (e3) => this.confirmCarNumbers(e3))), $("#webdavBackupBtn").on("click", ((e3) => backupDataByWebDav(this.folderName, webdav))), $("#webdavBackupListBtn").on("click", ((e3) => backupListBtnByWebDav(this.folderName, (files, client, label) => openFileListDialog(files, client, label, this.folderName, showDiffPreview), webdav))), $("#saveBtn").on("click", (() => saveSettingForm(this.getFormDependencies()))), $("#runHealthCheckBtn").on("click", (() => renderDataHealthPanel())), $("#repairHealthBtn").on("click", ((e3) => {
+      })), $("#importBtn").on("click", ((e3) => importSettingData(previewDiff))), $("#exportBtn").on("click", ((e3) => exportSettingData())), $("#preview-car-number-import").on("click", (() => this.previewCarNumbers())), $("#confirm-car-number-import").on("click", (async (e3) => this.confirmCarNumbers(e3))), $("#webdavBackupBtn").on("click", ((e3) => backupDataByWebDav(this.folderName, webdav))), $("#webdavBackupListBtn").on("click", ((e3) => backupListBtnByWebDav(this.folderName, (files, client, label) => openFileListDialog(files, client, label, this.folderName, previewDiff, dialog), webdav))), $("#saveBtn").on("click", (() => saveSettingForm(this.getFormDependencies()))), $("#runHealthCheckBtn").on("click", (() => renderDataHealthPanel())), $("#repairHealthBtn").on("click", ((e3) => {
         utils.q(e3, "修复前会自动下载备份，是否继续?", (() => repairDataHealthWithBackup()));
       })), $("#pm-clear-log").on("click", (() => {
         this.getRuntimeService("diagnostics").clearErrors(), $("#plugin-error-log").text("无错误记录"), show.ok("错误日志已清空");
@@ -7660,7 +7660,7 @@
       }));
     }
     openSourceDialog(existing = null) {
-      const fields = ["rowSelector", "titleSelector", "magnetSelector", "sizeSelector", "dateSelector", "seedersSelector", "leechersSelector", "resultsPath", "titlePath", "magnetPath", "hashPath", "sizePath", "datePath", "seedersPath"];
+      const dialog = this.getRuntimeService("dialog"), fields = ["rowSelector", "titleSelector", "magnetSelector", "sizeSelector", "dateSelector", "seedersSelector", "leechersSelector", "resultsPath", "titlePath", "magnetPath", "hashPath", "sizePath", "datePath", "seedersPath"];
       const content = $(`<div class="jhs-setting-section jhs-resource-form"><label>名称<input name="name" class="jhs-field"></label><label>启用<input name="enabled" type="checkbox" class="mini-switch"></label><label>优先级<input name="priority" type="number" class="jhs-field" min="1"></label><label>搜索地址模板<input name="searchUrlTemplate" class="jhs-field"></label><label>原网页地址模板<input name="targetUrlTemplate" class="jhs-field"></label><label>解析类型<select name="parserType" class="jhs-select-source"><option value="magnet-links">自动寻找磁力链接</option><option value="torrent-table">表格/列表页面</option><option value="json">JSON API</option></select></label><div class="jhs-parser-fields"></div></div>`);
       const renderFields = /* @__PURE__ */ __name(() => {
         const type = content.find('[name="parserType"]').val(), names = "torrent-table" === type ? fields.slice(0, 7) : "json" === type ? fields.slice(7) : [];
@@ -7671,42 +7671,35 @@
         const input = content.find(`[name="${key}"]`);
         "checkbox" === input.attr("type") ? input.prop("checked", value) : input.val(value);
       });
-      content.on("change", '[name="parserType"]', renderFields);
-      renderFields();
-      content.appendTo("body").hide();
-      layer.open({ type: 1, title: existing ? "编辑自定义磁力源" : "添加自定义磁力源", content, area: utils.getDialogArea("md"), btn: ["保存", "取消"], success: /* @__PURE__ */ __name(() => content.show(), "success"), end: /* @__PURE__ */ __name(() => content.remove(), "end"), yes: /* @__PURE__ */ __name(async (index) => {
+      content.on("change", '[name="parserType"]', renderFields), renderFields(), content.appendTo("body").hide();
+      dialog.open({ type: 1, title: existing ? "编辑自定义磁力源" : "添加自定义磁力源", content, area: utils.getDialogArea("md"), btn: ["保存", "取消"], success: /* @__PURE__ */ __name(() => content.show(), "success"), end: /* @__PURE__ */ __name(() => content.remove(), "end"), yes: /* @__PURE__ */ __name(async (index) => {
         const form = Object.fromEntries(content.find("input,select").map(((i2, element) => [element.name, "checkbox" === element.type ? element.checked : element.value])).get());
         try {
-          const source = buildCustomMagnetSource(form, existing);
-          const target = existing ? this.resourceState.custom.findIndex(((item) => item.id === existing.id)) : -1;
+          const source = buildCustomMagnetSource(form, existing), target = existing ? this.resourceState.custom.findIndex(((item) => item.id === existing.id)) : -1;
           target >= 0 ? this.resourceState.custom.splice(target, 1, source) : this.resourceState.custom.push(source);
-          await this.resourceSettings.saveMagnetSources(this.resourceState.custom);
-          layer.close(index);
-          this.renderResourceSettings();
+          await this.resourceSettings.saveMagnetSources(this.resourceState.custom), dialog.close(index), this.renderResourceSettings();
         } catch (error) {
           show.error(error.message);
         }
       }, "yes") });
     }
     openRuleDialog(kind, existing = null) {
-      const isTag = "tag" === kind, content = $(`<div class="jhs-setting-section"><label>名称<input name="name" class="jhs-field"></label>${isTag ? "" : '<label>匹配范围<select name="target" class="jhs-select-source"><option value="title">标题</option><option value="file">文件名</option></select></label>'}<label>匹配方式<select name="type" class="jhs-select-source"><option value="contains">包含</option><option value="regex">正则</option></select></label><label>匹配内容<input name="pattern" class="jhs-field"></label>${isTag ? '<label>权重<input name="weight" type="number" class="jhs-field"></label>' : '<label>动作<select name="action" class="jhs-select-source"><option value="hide">隐藏</option><option value="penalty">降权</option></select></label><label>降权分数<input name="penalty" type="number" class="jhs-field"></label>'}<label>启用<input name="enabled" type="checkbox" class="mini-switch"></label></div>`);
+      const dialog = this.getRuntimeService("dialog"), isTag = "tag" === kind;
+      const content = $(`<div class="jhs-setting-section"><label>名称<input name="name" class="jhs-field"></label>${isTag ? "" : '<label>匹配范围<select name="target" class="jhs-select-source"><option value="title">标题</option><option value="file">文件名</option></select></label>'}<label>匹配方式<select name="type" class="jhs-select-source"><option value="contains">包含</option><option value="regex">正则</option></select></label><label>匹配内容<input name="pattern" class="jhs-field"></label>${isTag ? '<label>权重<input name="weight" type="number" class="jhs-field"></label>' : '<label>动作<select name="action" class="jhs-select-source"><option value="hide">隐藏</option><option value="penalty">降权</option></select></label><label>降权分数<input name="penalty" type="number" class="jhs-field"></label>'}<label>启用<input name="enabled" type="checkbox" class="mini-switch"></label></div>`);
       Object.entries(existing || { enabled: true, type: "contains", weight: 0, action: "hide", penalty: -20 }).forEach(([key, value]) => {
         const input = content.find(`[name="${key}"]`);
         "checkbox" === input.attr("type") ? input.prop("checked", value) : input.val(value);
       });
       content.appendTo("body").hide();
-      layer.open({ type: 1, title: `${existing ? "编辑" : "新建"}${isTag ? "标签" : "过滤"}规则`, content, area: utils.getDialogArea("sm"), btn: ["保存", "取消"], success: /* @__PURE__ */ __name(() => content.show(), "success"), end: /* @__PURE__ */ __name(() => content.remove(), "end"), yes: /* @__PURE__ */ __name(async (index) => {
+      dialog.open({ type: 1, title: `${existing ? "编辑" : "新建"}${isTag ? "标签" : "过滤"}规则`, content, area: utils.getDialogArea("sm"), btn: ["保存", "取消"], success: /* @__PURE__ */ __name(() => content.show(), "success"), end: /* @__PURE__ */ __name(() => content.remove(), "end"), yes: /* @__PURE__ */ __name(async (index) => {
         const rule = Object.fromEntries(content.find("input,select").map(((i2, element) => [element.name, "checkbox" === element.type ? element.checked : element.value])).get());
-        rule.id = existing?.id || `rule-${Date.now()}`;
-        rule.weight = Number(rule.weight);
-        rule.penalty = Number(rule.penalty);
+        rule.id = existing?.id || `rule-${Date.now()}`, rule.weight = Number(rule.weight), rule.penalty = Number(rule.penalty);
         try {
           validateRule(rule);
           const key = isTag ? "tags" : "filters", target = existing ? this.resourceState[key].findIndex(((item) => item.id === existing.id)) : -1;
           target >= 0 ? this.resourceState[key].splice(target, 1, rule) : this.resourceState[key].push(rule);
           await (isTag ? this.resourceSettings.saveMagnetTagRules(this.resourceState[key]) : this.resourceSettings.saveMagnetFilterRules(this.resourceState[key]));
-          layer.close(index);
-          this.renderRules(kind);
+          dialog.close(index), this.renderRules(kind);
         } catch (error) {
           show.error(error.message);
         }
@@ -15492,7 +15485,7 @@ ${error.stack}` : "");
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog]),
-    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [SERVICE.diagnostics, SERVICE.webdav]),
+    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [SERVICE.dialog]),
@@ -15585,7 +15578,7 @@ ${error.stack}` : "");
     navigation: ["open", "assign", "replace"],
     http: ["request"],
     storage: ["get", "set", "remove"],
-    dialog: ["open", "close"],
+    dialog: ["open", "close", "confirm", "alert"],
     style: ["register", "remove"]
   });
 
@@ -15657,6 +15650,12 @@ ${error.stack}` : "");
     }
     close(id) {
       this.layer.close(id);
+    }
+    confirm(message, options, yes) {
+      return this.layer.confirm(message, options, yes);
+    }
+    alert(message, options) {
+      return this.layer.alert(message, options);
     }
   };
   __name(_LayerDialogAdapter, "LayerDialogAdapter");
@@ -15882,6 +15881,12 @@ ${error.stack}` : "");
     }
     close(id) {
       return this.port.close(id);
+    }
+    confirm(message, options, yes) {
+      return this.port.confirm(message, options, yes);
+    }
+    alert(message, options) {
+      return this.port.alert(message, options);
     }
   };
   __name(_DialogService, "DialogService");

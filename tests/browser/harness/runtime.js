@@ -82,6 +82,7 @@ export async function injectUserscriptRuntime(page, options = {}) {
       },
       closeAll() { [...mountedLayers.keys()].forEach((id) => this.close(id)); },
       confirm(_message, options, yes) { const id = this.open(options); yes?.(id); return id; },
+      alert(message, options = {}) { return this.open({ ...options, content: String(message) }); },
       msg() {}
     };
   }, browserVersion);

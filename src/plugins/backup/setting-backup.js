@@ -78,7 +78,7 @@ export async function backupListBtnByWebDav(folderName, openFileListDialogFn, we
 }
 
 /** Mobile-specific backup file list dialog using card-based UI. */
-function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn) {
+function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog) {
     const formatSize = (size) => {
         const units = ["B", "KB", "MB", "GB", "TB", "PB"];
         let i = 0, s = size;
@@ -102,7 +102,7 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn) {
             `).join("");
     };
     const containerId = "jhs-backup-card-list";
-    layer.open({
+    dialog.open({
         type: 1,
         title: n + "备份文件",
         content: `<div id="${containerId}" class="jhs-backup-cards">${renderCards(e)}</div>`,
@@ -117,16 +117,16 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn) {
                 const file = e[idx];
                 if (!file) return;
                 if (action === "delete") {
-                    layer.confirm(`是否删除 ${file.name} ?`, {
+                    dialog.confirm(`是否删除 ${file.name} ?`, {
                         icon: 3, title: "提示", btn: ["确定", "取消"]
                     }, async (confirmIdx) => {
-                        layer.close(confirmIdx);
+                        dialog.close(confirmIdx);
                         let load = loading();
                         try {
                             await t.deleteFile(file.fileId);
                             e = await t.getBackupList(folderName);
                             container.html(renderCards(e));
-                            layer.alert("删除成功");
+                            dialog.alert("删除成功");
                         } catch (err) {
                             clog.error(err), show.error(`发生错误: ${err ? err.message : err}`);
                         } finally { load.close(); }
@@ -159,12 +159,12 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn) {
 }
 
 /** Desktop backup file list dialog using Tabulator table. */
-export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn) {
+export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialog) {
     if (utils.isMobileMode()) {
-        openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn);
+        openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog);
         return;
     }
-    layer.open({
+    dialog.open({
         type: 1,
         title: n + "备份文件",
         content: '\n                <div class="jhs-table-dialog"> \n                    <div id="table-container" class="jhs-table-dialog__content"></div>\n                </div>\n            ',
@@ -219,17 +219,17 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn) {
                         return s((() => {
                             const a = e.getElement().querySelector(".backup-delete"), s = e.getElement().querySelector(".backup-download"), r = e.getElement().querySelector(".backup-import");
                             a && a.addEventListener("click", (e => {
-                                layer.confirm(`是否删除 ${o.name} ?`, {
+                                dialog.confirm(`是否删除 ${o.name} ?`, {
                                     icon: 3,
                                     title: "提示",
                                     btn: [ "确定", "取消" ]
                                 }, (async e => {
-                                    layer.close(e);
+                                    dialog.close(e);
                                     let a = loading();
                                     try {
                                         await t.deleteFile(o.fileId);
                                         let e = await t.getBackupList(folderName);
-                                        i.replaceData(e), layer.alert("删除成功");
+                                        i.replaceData(e), dialog.alert("删除成功");
                                     } catch (s) {
                                         clog.error(s), show.error(`发生错误: ${s ? s.message : s}`);
                                     } finally {
