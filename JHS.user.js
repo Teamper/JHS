@@ -7891,16 +7891,16 @@
       }));
     }
     async resetBtnTip() {
-      const e2 = this.getDependency("TaskPlugin"), t2 = localStorage.getItem(e2.lastCheckBlacklistTimeKey) || "无", n2 = await storageManager.getSetting("checkBlacklist_intervalTime", 12);
+      const e2 = this.getDependency("TaskPlugin"), t2 = this.getRuntimeService("storage").getLocal(e2.lastCheckBlacklistTimeKey) || "无", n2 = await storageManager.getSetting("checkBlacklist_intervalTime", 12);
       this.checkBlacklist_ruleTime = await storageManager.getSetting("checkBlacklist_ruleTime", 8760), $("#checkBlacklistBtn").attr("data-tip", `上次整批检测: ${t2}; 检测间隔时间: ${n2}小时`);
     }
     async openBlacklistDialog() {
-      const e2 = this.getDependency("TaskPlugin"), t2 = await storageManager.getSetting();
+      const e2 = this.getDependency("TaskPlugin"), t2 = await storageManager.getSetting(), lastCheck = this.getRuntimeService("storage").getLocal(e2.lastCheckBlacklistTimeKey) || "无";
       let n2 = `
             <div class="jhs-layout-7cb3f981">
                  <div class="jhs-layout-da5a4919">
                     <div class="jhs-layout-31a824a2">
-                        <button type="button" id="checkBlacklistBtn" class="jhs-btn jhs-btn--secondary" data-tip="上次整批检测: ${localStorage.getItem(e2.lastCheckBlacklistTimeKey) || "无"}; 检测间隔时间: ${t2.checkBlacklist_intervalTime}小时">${this.blacklistSvg}<span>手动检测黑名单</span></button>
+                        <button type="button" id="checkBlacklistBtn" class="jhs-btn jhs-btn--secondary" data-tip="上次整批检测: ${lastCheck}; 检测间隔时间: ${t2.checkBlacklist_intervalTime}小时">${this.blacklistSvg}<span>手动检测黑名单</span></button>
                         <button type="button" class="jhs-btn jhs-btn--ghost" id="toSetting">${this.settingSvg}<span>配置</span></button>
                     </div>
                     <div class="jhs-layout-31a824a2">
@@ -8177,7 +8177,7 @@
       processed += n2.length, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
       if (a2) {
         clog.log("正在请求下一页内容:", a2), await new Promise(((e3) => setTimeout(e3, 500)));
-        const t3 = await gmHttp.get(a2), n3 = new DOMParser(), i2 = $(n3.parseFromString(t3, "text/html"));
+        const scope = await this.getRuntimeService("scope")(), t3 = await requestHostPage(this.getRuntimeService("http"), a2, scope), n3 = new DOMParser(), i2 = $(n3.parseFromString(t3, "text/html"));
         await this.filterAllVideo(e2, i2, page + 1, processed);
       } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
     }
@@ -8197,7 +8197,7 @@
       processed += n2.length, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
       if (a2) {
         clog.log("正在请求下一页内容:", a2), await new Promise(((e3) => setTimeout(e3, 500)));
-        const i2 = await gmHttp.get(a2), s2 = new DOMParser(), o2 = $(s2.parseFromString(i2, "text/html"));
+        const scope = await this.getRuntimeService("scope")(), i2 = await requestHostPage(this.getRuntimeService("http"), a2, scope), s2 = new DOMParser(), o2 = $(s2.parseFromString(i2, "text/html"));
         await this.batchSaveAllVideos(e2, t2, o2, page + 1, processed);
       } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
     }
@@ -8208,7 +8208,7 @@
         let n3;
         this.lastPageLink = a2;
         clog.log("正在请求下一页内容:", a2);
-        const i2 = await gmHttp.get(a2);
+        const scope = await this.getRuntimeService("scope")(), i2 = await requestHostPage(this.getRuntimeService("http"), a2, scope);
         n3 = utils.htmlTo$dom(i2);
         await this.filterActorVideo(e2, t2, n3, site, page + 1, processed);
       } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 新增 ${processed} 个番号`);
@@ -15535,7 +15535,7 @@ ${error.stack}` : "");
     manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }, [SERVICE.http]),
     manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage]),
     manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot]),
-    manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [SERVICE.dialog]),
+    manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [SERVICE.dialog, SERVICE.storage, SERVICE.http]),
     manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }),
     manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog]),
     manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }),

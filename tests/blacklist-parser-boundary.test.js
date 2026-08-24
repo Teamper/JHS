@@ -16,10 +16,11 @@ function loadBlacklist(html, save = vi.fn(async () => {}), pageUrl = "https://ja
             ? { boxSelector: ".masonry", itemSelector: ".masonry .item", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" }
             : { boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }; }
         getBean() { return null; }
+        getRuntimeService(name) { return "scope" === name ? () => ({}) : {}; }
     }
     const context = vm.createContext({
         console, URL, Date, window: dom.window, document: dom.window.document, $, BasePlugin, storageManager: { batchSaveBlacklistCarList: save },
-        T: "javdb", I: "javbus", d: "filter", r: true, l: false, o: "", _: "yes", gmHttp, clog: { error: vi.fn(), log: vi.fn() }, show: { info: vi.fn(), ok: vi.fn() }, utils: { htmlTo$dom: source => $(new JSDOM(source, { url: pageUrl }).window.document) }, i: (target, key, value) => target[key] = value,
+        T: "javdb", I: "javbus", d: "filter", r: true, l: false, o: "", _: "yes", requestHostPage: (_http, url) => gmHttp.get(String(url)), clog: { error: vi.fn(), log: vi.fn() }, show: { info: vi.fn(), ok: vi.fn() }, utils: { htmlTo$dom: source => $(new JSDOM(source, { url: pageUrl }).window.document) }, i: (target, key, value) => target[key] = value,
         readListItem: element => ({ carNum: element.attr("data-car"), url: element.attr("data-url"), publishTime: element.attr("data-date") })
     });
     const source = [ "src/core/feature-helpers.js", "src/integrations/host-list/parser.js", "src/plugins/blacklist/blacklist.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n");
@@ -32,6 +33,7 @@ describe("blacklist parser boundaries", () => {
         const source = readTestFile(join(repoRoot, "src/plugins/blacklist/blacklist.js"), "utf8");
         expect(source).not.toContain("上次检测时间");
         expect(source.match(/上次整批检测/g)).toHaveLength(2);
+        expect(source).not.toMatch(/\b(?:gmHttp|localStorage)\s*\./);
     });
 
     it("rejects challenge, missing containers and empty pages with pagination", async () => {
@@ -72,6 +74,7 @@ describe("blacklist parser boundaries", () => {
             .mockResolvedValueOnce({ nextPageLink: "https://www.javbus.com/star/a/2" })
             .mockResolvedValueOnce({ nextPageLink: null });
         await loaded.plugin.filterActorVideo("A", "a", loaded.$page, "javbus");
+        expect(loaded.gmHttp.get).toHaveBeenCalledWith("https://www.javbus.com/star/a/2");
         expect(loaded.plugin.parseAndSaveFilterInfo).toHaveBeenNthCalledWith(1, loaded.$page, "A", "a", "javbus");
         expect(loaded.plugin.parseAndSaveFilterInfo).toHaveBeenNthCalledWith(2, expect.anything(), "A", "a", "javbus");
     });

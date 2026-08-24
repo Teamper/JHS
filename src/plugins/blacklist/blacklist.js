@@ -1,6 +1,7 @@
 import { A, B, D, I, P, T, d, i, l, o, r } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { normalizeHttpUrl, parseNumberSetting, selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
+import { requestHostPage } from "../../core/host-page-request.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
@@ -99,13 +100,13 @@ export class BlacklistPlugin extends BasePlugin {
         }));
     }
     async resetBtnTip() {
-        const e = this.getDependency("TaskPlugin"), t = localStorage.getItem(e.lastCheckBlacklistTimeKey) || "无", n = await storageManager.getSetting("checkBlacklist_intervalTime", 12);
+        const e = this.getDependency("TaskPlugin"), t = this.getRuntimeService("storage").getLocal(e.lastCheckBlacklistTimeKey) || "无", n = await storageManager.getSetting("checkBlacklist_intervalTime", 12);
         this.checkBlacklist_ruleTime = await storageManager.getSetting("checkBlacklist_ruleTime", 8760),
         $("#checkBlacklistBtn").attr("data-tip", `上次整批检测: ${t}; 检测间隔时间: ${n}小时`);
     }
     async openBlacklistDialog() {
-        const e = this.getDependency("TaskPlugin"), t = await storageManager.getSetting();
-        let n = `\n            <div class="jhs-layout-7cb3f981"> \n                 <div class="jhs-layout-da5a4919">\n                    <div class="jhs-layout-31a824a2">\n                        <button type="button" id="checkBlacklistBtn" class="jhs-btn jhs-btn--secondary" data-tip="上次整批检测: ${localStorage.getItem(e.lastCheckBlacklistTimeKey) || "无"}; 检测间隔时间: ${t.checkBlacklist_intervalTime}小时">${this.blacklistSvg}<span>手动检测黑名单</span></button>\n                        <button type="button" class="jhs-btn jhs-btn--ghost" id="toSetting">${this.settingSvg}<span>配置</span></button>\n                    </div>\n                    <div class="jhs-layout-31a824a2">\n                        <select id="dataType" class="jhs-select-source">\n                            <option value="" selected>所有</option>\n                            <option value="actor">男演员</option>\n                            <option value="actress">女演员</option>\n                        </select>\n                        <select id="statusType" class="jhs-select-source">\n                            <option value="" selected>全部状态</option>\n                            <option value="normal">继续检测</option>\n                            <option value="stop">停更跳过</option>\n                        </select>\n                        <select id="urlType" data-tip="在演员页屏蔽时,是否选择了分类" class="jhs-select-source${r ? "" : " jhs-is-hidden"}">\n                            <option value="" selected>--屏蔽类型--</option>\n                            <option value="hasT">按所选分类屏蔽</option>\n                            <option value="noT">未筛选分类</option>\n                        </select>\n                        <input id="searchValue" type="search" placeholder="搜索名称、别名或 ID" class="jhs-field">\n                        <button type="button" id="cleanQueryBtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                    </div>\n\n                </div>\n                <div id="table-container" class="jhs-layout-d44e70c7"></div>\n            </div>\n        `;
+        const e = this.getDependency("TaskPlugin"), t = await storageManager.getSetting(), lastCheck = this.getRuntimeService("storage").getLocal(e.lastCheckBlacklistTimeKey) || "无";
+        let n = `\n            <div class="jhs-layout-7cb3f981"> \n                 <div class="jhs-layout-da5a4919">\n                    <div class="jhs-layout-31a824a2">\n                        <button type="button" id="checkBlacklistBtn" class="jhs-btn jhs-btn--secondary" data-tip="上次整批检测: ${lastCheck}; 检测间隔时间: ${t.checkBlacklist_intervalTime}小时">${this.blacklistSvg}<span>手动检测黑名单</span></button>\n                        <button type="button" class="jhs-btn jhs-btn--ghost" id="toSetting">${this.settingSvg}<span>配置</span></button>\n                    </div>\n                    <div class="jhs-layout-31a824a2">\n                        <select id="dataType" class="jhs-select-source">\n                            <option value="" selected>所有</option>\n                            <option value="actor">男演员</option>\n                            <option value="actress">女演员</option>\n                        </select>\n                        <select id="statusType" class="jhs-select-source">\n                            <option value="" selected>全部状态</option>\n                            <option value="normal">继续检测</option>\n                            <option value="stop">停更跳过</option>\n                        </select>\n                        <select id="urlType" data-tip="在演员页屏蔽时,是否选择了分类" class="jhs-select-source${r ? "" : " jhs-is-hidden"}">\n                            <option value="" selected>--屏蔽类型--</option>\n                            <option value="hasT">按所选分类屏蔽</option>\n                            <option value="noT">未筛选分类</option>\n                        </select>\n                        <input id="searchValue" type="search" placeholder="搜索名称、别名或 ID" class="jhs-field">\n                        <button type="button" id="cleanQueryBtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                    </div>\n\n                </div>\n                <div id="table-container" class="jhs-layout-d44e70c7"></div>\n            </div>\n        `;
         this.getRuntimeService("dialog").open({
             type: 1,
             title: "演员黑名单",
@@ -359,7 +360,7 @@ export class BlacklistPlugin extends BasePlugin {
         processed += n.length, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
         if (a) {
             clog.log("正在请求下一页内容:", a), await new Promise((e => setTimeout(e, 500)));
-            const t = await gmHttp.get(a), n = new DOMParser, i = $(n.parseFromString(t, "text/html"));
+            const scope = await this.getRuntimeService("scope")(), t = await requestHostPage(this.getRuntimeService("http"), a, scope), n = new DOMParser, i = $(n.parseFromString(t, "text/html"));
             await this.filterAllVideo(e, i, page + 1, processed);
         } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
     }
@@ -376,7 +377,7 @@ export class BlacklistPlugin extends BasePlugin {
         }
         processed += n.length, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
         if (a) { clog.log("正在请求下一页内容:", a), await new Promise((e => setTimeout(e, 500)));
-            const i = await gmHttp.get(a), s = new DOMParser, o = $(s.parseFromString(i, "text/html"));
+            const scope = await this.getRuntimeService("scope")(), i = await requestHostPage(this.getRuntimeService("http"), a, scope), s = new DOMParser, o = $(s.parseFromString(i, "text/html"));
             await this.batchSaveAllVideos(e, t, o, page + 1, processed); }
         else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
     }
@@ -387,7 +388,7 @@ export class BlacklistPlugin extends BasePlugin {
             let n;
             this.lastPageLink = a;
             clog.log("正在请求下一页内容:", a);
-            const i = await gmHttp.get(a);
+            const scope = await this.getRuntimeService("scope")(), i = await requestHostPage(this.getRuntimeService("http"), a, scope);
             n = utils.htmlTo$dom(i);
             await this.filterActorVideo(e, t, n, site, page + 1, processed);
         } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 新增 ${processed} 个番号`);
