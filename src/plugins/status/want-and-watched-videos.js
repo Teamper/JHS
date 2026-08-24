@@ -1,4 +1,5 @@
 import { i } from "../../core/constants.js";
+import { requestHostPage } from "../../core/host-page-request.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { stateService } from "../../core/state-service.js";
 
@@ -46,7 +47,8 @@ export class WantAndWatchedVideosPlugin extends BasePlugin {
         }
         if (!n) return result;
         await utils.sleep(1e3);
-        const html = await gmHttp.get(new URL(n, window.location.href).href), nextPage = utils.htmlTo$dom(html);
+        const scope = await this.getRuntimeService("scope")();
+        const html = await requestHostPage(this.getRuntimeService("http"), new URL(n, window.location.href), scope), nextPage = utils.htmlTo$dom(html);
         return this.parseMovieList(nextPage, result);
     }
 }

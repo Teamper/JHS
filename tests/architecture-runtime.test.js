@@ -51,7 +51,7 @@ describe("v6.5 architecture runtime contracts", () => {
         const { registerSitePlugins } = await import("../src/plugins/registry.js");
         const createRuntime = (site, disabled = []) => {
             const diagnostics = new DiagnosticsService();
-            const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.settings, {}).register(SERVICE.storage, {}).register(SERVICE.cache, {});
+            const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.settings, {}).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {});
             const runtime = new FeatureRuntime({ container, commands: new CommandRegistry(), diagnostics, disabled, site, route: "list" });
             featureManifests.forEach((manifest) => runtime.register(manifest));
             return runtime;

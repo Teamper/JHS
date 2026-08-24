@@ -30,6 +30,7 @@ export class ExternalUrlPolicy {
         try { url = input instanceof URL ? input : new URL(input); }
         catch (cause) { throw new JhsError("INVALID_URL", "外部地址无效", { source: "ExternalUrlPolicy", cause }); }
         if (!new Set(["http:", "https:"]).has(url.protocol)) throw new JhsError("INVALID_URL", "仅允许 HTTP/HTTPS 地址", { source: "ExternalUrlPolicy" });
+        if (policy.expectedOrigin && url.origin !== new URL(policy.expectedOrigin).origin) throw new JhsError("INVALID_URL", "地址离开已声明的精确 origin", { source: "ExternalUrlPolicy" });
         if (policy.trustClass === "builtin-public") {
             if (url.protocol !== "https:" || !(policy.hosts ?? []).some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))) {
                 throw new JhsError("INVALID_URL", "地址不在 Integration manifest 允许范围", { source: "ExternalUrlPolicy" });

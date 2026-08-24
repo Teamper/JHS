@@ -5452,6 +5452,21 @@
   }
   __name(applyImageMode, "applyImageMode");
 
+  // src/core/host-page-request.js
+  async function requestHostPage(http, input, scope) {
+    const url = new URL(input, window.location.href);
+    const response = await http.request({
+      providerId: "host-page",
+      method: "GET",
+      url: url.href,
+      responseType: "text",
+      cacheScope: "none",
+      urlPolicy: { trustClass: "builtin-public", hosts: [window.location.hostname], expectedOrigin: window.location.origin }
+    }, scope);
+    return String(response.data ?? response.responseText ?? "");
+  }
+  __name(requestHostPage, "requestHostPage");
+
   // src/core/movie-identity.js
   var SIMPLE_CAR_PREFIXES2 = /* @__PURE__ */ new Set(["ABC", "ABP", "ADN", "ATID", "BF", "CAWD", "DLDSS", "DVAJ", "FSDSS", "HEYZO", "HMN", "IPX", "IPZZ", "JUQ", "JUL", "JUX", "MEYD", "MIAA", "MIDE", "MIDV", "MIMK", "MIRD", "NIMA", "PRED", "RBD", "SDDE", "SONE", "SSIS", "SSNI", "STARS", "URE", "VEC", "WAAA", "WANZ", "XVSR"]);
   function normalizeMovieCarNum(value) {
@@ -6002,7 +6017,8 @@
       let t2 = null;
       if (await storageManager.getSetting("enableSaveActressCarInfo", C) === _) {
         clog.debug("鉴定补录演员信息-已启用, 开始解析详情页"), clog.debug("开始解析演员详情页", e2);
-        const n2 = await gmHttp.get(e2), a2 = utils.htmlTo$dom(n2);
+        const scope = await this.getRuntimeService("scope")();
+        const n2 = await requestHostPage(this.getRuntimeService("http"), e2, scope), a2 = utils.htmlTo$dom(n2);
         r ? t2 = a2.find(".female").prev().map(((e3, t3) => $(t3).text())).get().join(" ") : l && (t2 = a2.find('span[onmouseover*="star_"] a').map(((e3, t3) => $(t3).text())).get().join(" ")), clog.debug("解析到名称:", t2);
       }
       return t2;
@@ -13368,7 +13384,8 @@ ${error.stack}` : "");
       this.isLoading = true, this.setState("waterfall-loading", "加载中...");
       const t2 = this.getSelector();
       try {
-        const i2 = await gmHttp.get(this.nextUrl);
+        const scope = await this.getRuntimeService("scope")();
+        const i2 = await requestHostPage(this.getRuntimeService("http"), this.nextUrl, scope);
         clog.log("请求下一页内容:", this.nextUrl);
         const s2 = utils.htmlTo$dom(i2);
         l && s2.find(".avatar-box").length > 0 && s2.find(".avatar-box").parent().remove();
@@ -15440,7 +15457,8 @@ ${error.stack}` : "");
       }
       if (!n2) return result;
       await utils.sleep(1e3);
-      const html = await gmHttp.get(new URL(n2, window.location.href).href), nextPage = utils.htmlTo$dom(html);
+      const scope = await this.getRuntimeService("scope")();
+      const html = await requestHostPage(this.getRuntimeService("http"), new URL(n2, window.location.href), scope), nextPage = utils.htmlTo$dom(html);
       return this.parseMovieList(nextPage, result);
     }
   };
@@ -15490,8 +15508,8 @@ ${error.stack}` : "");
   // src/plugins/registry.js
   var manifest = /* @__PURE__ */ __name((id, featureId, plugin, sites, order, requires = []) => defineContribution({ id, featureId, legacyPluginId: plugin.name, plugin, sites, order, requires }), "manifest");
   var legacyContributionManifests = Object.freeze([
-    manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [SERVICE.translation]),
-    manifest("list.auto-page", "list", AutoPagePlugin, ["javdb", "javbus"], { javdb: 2, javbus: 5 }),
+    manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [SERVICE.translation, SERVICE.http]),
+    manifest("list.auto-page", "list", AutoPagePlugin, ["javdb", "javbus"], { javdb: 2, javbus: 5 }, [SERVICE.http]),
     manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related]),
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
@@ -15514,7 +15532,7 @@ ${error.stack}` : "");
     manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo]),
     manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie]),
     manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings]),
-    manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }),
+    manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }, [SERVICE.http]),
     manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }),
     manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot]),
     manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [SERVICE.dialog]),
@@ -15549,6 +15567,7 @@ ${error.stack}` : "");
         [SERVICE.magnet, "magnet"],
         [SERVICE.settings, "settings"],
         [SERVICE.cache, "cache"],
+        [SERVICE.http, "http"],
         [SERVICE.actressInfo, "actressInfo"],
         [SERVICE.screenshot, "screenshot"],
         [SERVICE.translation, "translation"],
@@ -15934,6 +15953,7 @@ ${error.stack}` : "");
         throw new JhsError("INVALID_URL", "外部地址无效", { source: "ExternalUrlPolicy", cause });
       }
       if (!(/* @__PURE__ */ new Set(["http:", "https:"])).has(url.protocol)) throw new JhsError("INVALID_URL", "仅允许 HTTP/HTTPS 地址", { source: "ExternalUrlPolicy" });
+      if (policy.expectedOrigin && url.origin !== new URL(policy.expectedOrigin).origin) throw new JhsError("INVALID_URL", "地址离开已声明的精确 origin", { source: "ExternalUrlPolicy" });
       if (policy.trustClass === "builtin-public") {
         if (url.protocol !== "https:" || !(policy.hosts ?? []).some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))) {
           throw new JhsError("INVALID_URL", "地址不在 Integration manifest 允许范围", { source: "ExternalUrlPolicy" });

@@ -38,6 +38,13 @@ describe("HTTP, URL and settings contracts", () => {
         await expect(service.request({ providerId: "example", url: "https://api.example.test/data", urlPolicy: { trustClass: "builtin-public", hosts: ["api.example.test"] }, cacheScope: "none" })).rejects.toMatchObject({ code: "INVALID_URL" });
     });
 
+    it("can constrain builtin requests and redirects to an exact origin", () => {
+        const policy = new ExternalUrlPolicy(), contract = { trustClass: "builtin-public", hosts: ["example.test"], expectedOrigin: "https://example.test" };
+        expect(policy.assertAllowed("https://example.test/page", contract).pathname).toBe("/page");
+        expect(() => policy.assertAllowed("https://api.example.test/page", contract)).toThrow(/精确 origin/);
+        expect(() => policy.assertFinalUrl("https://api.example.test/page", contract)).toThrow(/精确 origin/);
+    });
+
     it("permits user-local only for an explicitly authorized exact origin", () => {
         const policy = new ExternalUrlPolicy({ localOrigins: ["http://192.168.1.10:5244"] });
         expect(policy.assertAllowed("http://192.168.1.10:5244/dav", { trustClass: "user-local", expectedOrigin: "http://192.168.1.10:5244" }).pathname).toBe("/dav");

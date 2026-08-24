@@ -11,7 +11,7 @@ function loadImporter(html = '<div class="movie-list"><div class="item"><a href=
     responses.forEach((response => get.mockResolvedValueOnce(response)));
     const context = vm.createContext({
         document: dom.window.document, window: dom.window, DOMParser: dom.window.DOMParser, $,
-        BasePlugin: class { getSelector() { return { itemSelector: ".movie-list .item" }; } }, stateService: { patch }, gmHttp: { get }, utils: { q: vi.fn(), sleep: vi.fn(), htmlTo$dom: value => jqueryFactory(dom.window)(new dom.window.DOMParser().parseFromString(value, "text/html")) }, show: { info: vi.fn(), ok: vi.fn(), error: vi.fn() }, clog: { error: vi.fn() }, loading: () => ({ close() {} }), i: (target, key, value) => (target[key] = value), setTimeout, URL
+        BasePlugin: class { getSelector() { return { itemSelector: ".movie-list .item" }; } getRuntimeService(name) { return "scope" === name ? () => ({}) : {}; } }, stateService: { patch }, requestHostPage: (_http, url) => get(String(url)), utils: { q: vi.fn(), sleep: vi.fn(), htmlTo$dom: value => jqueryFactory(dom.window)(new dom.window.DOMParser().parseFromString(value, "text/html")) }, show: { info: vi.fn(), ok: vi.fn(), error: vi.fn() }, clog: { error: vi.fn() }, loading: () => ({ close() {} }), i: (target, key, value) => (target[key] = value), setTimeout, URL
     });
     vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/status/want-and-watched-videos.js"), "utf8")};globalThis.Importer=WantAndWatchedVideosPlugin`, context);
     return { plugin: new context.Importer, patch, get };

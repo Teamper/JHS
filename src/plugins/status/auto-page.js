@@ -1,4 +1,5 @@
 import { C, _, i, l, o, r } from "../../core/constants.js";
+import { requestHostPage } from "../../core/host-page-request.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class AutoPagePlugin extends BasePlugin {
@@ -58,7 +59,8 @@ export class AutoPagePlugin extends BasePlugin {
         this.isLoading = !0, this.setState("waterfall-loading", "加载中...");
         const t = this.getSelector();
         try {
-            const i = await gmHttp.get(this.nextUrl);
+            const scope = await this.getRuntimeService("scope")();
+            const i = await requestHostPage(this.getRuntimeService("http"), this.nextUrl, scope);
             clog.log("请求下一页内容:", this.nextUrl);
             const s = utils.htmlTo$dom(i);
             l && s.find(".avatar-box").length > 0 && s.find(".avatar-box").parent().remove();

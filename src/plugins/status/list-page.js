@@ -1,6 +1,7 @@
 import { B, C, _, b, escapeHtml, i, k, l, normalizeCarNum, o, r, u, y } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { mapLimit, safePlay } from "../../core/feature-helpers.js";
+import { requestHostPage } from "../../core/host-page-request.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { isHitShowPage } from "../../core/site-context.js";
@@ -466,7 +467,8 @@ export class ListPagePlugin extends BasePlugin {
         let t = null;
         if (await storageManager.getSetting("enableSaveActressCarInfo", C) === _) {
             clog.debug("鉴定补录演员信息-已启用, 开始解析详情页"), clog.debug("开始解析演员详情页", e);
-            const n = await gmHttp.get(e), a = utils.htmlTo$dom(n);
+            const scope = await this.getRuntimeService("scope")();
+            const n = await requestHostPage(this.getRuntimeService("http"), e, scope), a = utils.htmlTo$dom(n);
             r ? t = a.find(".female").prev().map(((e, t) => $(t).text())).get().join(" ") : l && (t = a.find('span[onmouseover*="star_"] a').map(((e, t) => $(t).text())).get().join(" ")),
             clog.debug("解析到名称:", t);
         }
