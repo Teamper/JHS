@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [6.5.0](../../compare/v6.4.1...v6.5.0) - 2026-08-25
+
 ### Changed
 
 - Utils、Storage、GM HTTP 与 StateService 的 legacy 实例改由 Bootstrap Composition Root 在 Vendor/GM 运行时验证后统一创建；Feature 通过 manifest 显式声明 `SERVICE.state`，不再直接导入模块级状态单例。
@@ -18,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - TaskPlugin 与 ListPagePlugin 真实运行时进入 strict checkJs，明确调度状态/结果、配置刷新、网络分页、列表增量索引、筛选视图和媒体导航边界；生产源码类型覆盖率提升至 95.5%，RC 最低覆盖门禁上调至 95%。
 - RC checkJs 剩余文件改为精确 allowlist，仅允许登记 compatibility/vendor glue、原因与清理版本；新增、移动或已消除但未移除的豁免都会失败。
 - 固化 11 个 Feature 的 kind、站点、启动方式、Contribution owner 与 List/Detail/compact 验证矩阵。
+- UI consistency audit 的版本契约改为校验稳定 SemVer 与 package/metadata 一致性，RC Freeze 后不再错误锁死 6.4.1。
 - Detail 的 legacy Contribution 改为一插件一 ID；封面状态按钮、详情状态按钮、JavDB 预览以及 JavBus 原生详情/图片/预览现在保持各自独立的旧版禁用语义。
 - SubtitleCat Contribution 统一归属 `external-bridge`，并兼容开发期 `detail.subtitle`；FeatureRuntime 注册时拒绝跨 Feature 重复 Contribution owner。
 - Transitional PluginManager 的不可禁用属性改由 system Feature manifest 下发，删除 Settings、Stats 与移动工具栏的名称硬编码保护名单。

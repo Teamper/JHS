@@ -62,8 +62,10 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(repoRoot, "JHS.user.js"), "utf8")
 ]);
 
-requireMatch(main, /^\/\/ @version\s+6\.4\.1$/m, "userscript version must be frozen at 6.4.1");
-requireMatch(packageSource, /"version"\s*:\s*"6\.4\.1"/, "package version must be frozen at 6.4.1");
+const packageVersion = JSON.parse(packageSource).version;
+const userscriptVersion = main.match(/^\/\/ @version\s+(\S+)$/m)?.[1];
+if (!/^\d+\.\d+\.\d+$/.test(packageVersion)) failures.push("package version must be a stable semantic version");
+if (userscriptVersion !== packageVersion) failures.push("userscript and package versions must match");
 
 for (const token of [
   "--jhs-space-1", "--jhs-space-6", "--jhs-radius-xs", "--jhs-radius-pill",
