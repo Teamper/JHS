@@ -5,6 +5,7 @@ import vm from "node:vm";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
+import { StatsRepository } from "../src/features/stats/stats-repository.js";
 
 function loadStatsPlugin() {
     const dom = new JSDOM("<body></body>", { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
@@ -13,7 +14,11 @@ function loadStatsPlugin() {
     const beans = { ListPagePlugin: listPage, NewVideoPlugin: newVideo, OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com") } };
     class BasePlugin {
         getBean(name) { return beans[name]; }
-        getRuntimeService() { return { exportSnapshot: () => ({ activeFeatures: ["list"], errors: [] }) }; }
+        getRuntimeService(name) {
+            if (name === "diagnostics") return { exportSnapshot: () => ({ activeFeatures: ["list"], errors: [] }) };
+            if (name === "dialog") return { open: layer.open, close: layer.close };
+            return null;
+        }
     }
     const layer = {
         close: vi.fn(),
@@ -24,7 +29,7 @@ function loadStatsPlugin() {
         })
     };
     const context = vm.createContext({
-        window: dom.window, document: dom.window.document, $, BasePlugin, layer, URL,
+        window: dom.window, document: dom.window.document, $, BasePlugin, StatsRepository, layer, URL,
         storageManager: {
             getCarList: vi.fn(async () => [ { stateFlags: { blocked: true } }, { stateFlags: { favorite: true, downloaded: true, watched: true } }, { stateFlags: {} } ]),
             getFavoriteActressList: vi.fn(async () => [ {} ]), getBlacklist: vi.fn(async () => [ {}, {} ])

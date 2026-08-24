@@ -2,8 +2,13 @@ import { escapeHtml } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
 import { stateService } from "../../core/state-service.js";
+import { StatsRepository } from "../../features/stats/stats-repository.js";
 
 export class StatsPlugin extends BasePlugin {
+    constructor() {
+        super(...arguments);
+        this.statsRepository = new StatsRepository({ storage: storageManager, state: stateService });
+    }
     getName() { return "StatsPlugin"; }
     async initCss() {
         return `
@@ -32,7 +37,7 @@ export class StatsPlugin extends BasePlugin {
     }
     async openDialog() {
         const diagnostics = this.getRuntimeService("diagnostics").exportSnapshot();
-        const cars = await storageManager.getCarList(), actresses = await storageManager.getFavoriteActressList(), blacklist = await storageManager.getBlacklist(), activity = await stateService.getActivityLog(), total = cars.length;
+        const { cars, actresses, blacklist, activity } = await this.statsRepository.loadLibrarySnapshot(), total = cars.length;
         const counts = { manualBlocked: 0, favorite: 0, hasDown: 0, hasWatch: 0, pending: 0 };
         cars.forEach((car => { const flags = normalizeStateFlags(car.stateFlags); flags.blocked && counts.manualBlocked++, flags.favorite && counts.favorite++, flags.downloaded && counts.hasDown++, flags.watched && counts.hasWatch++, hasAnyState(flags) || counts.pending++; }));
         const actressCounts = new Map;
@@ -72,11 +77,12 @@ export class StatsPlugin extends BasePlugin {
             <section class="jhs-stats__group"><h3>活动趋势</h3><p class="jhs-helper-text">${coverageNote}</p><div class="jhs-stats__metrics"><div class="jhs-stats__metric"><strong>${trend7.identified}</strong><span>近 7 天新增鉴定</span></div><div class="jhs-stats__metric"><strong>${trend7.downloaded}</strong><span>近 7 天标记下载</span></div><div class="jhs-stats__metric"><strong>${trend7.watched}</strong><span>近 7 天标记观看</span></div><div class="jhs-stats__metric"><strong>${trend30.identified}</strong><span>近 30 天新增鉴定</span></div><div class="jhs-stats__metric"><strong>${trend30.downloaded}</strong><span>近 30 天标记下载</span></div><div class="jhs-stats__metric"><strong>${trend30.watched}</strong><span>近 30 天标记观看</span></div></div></section>
             ${topActresses.length ? `<section class="jhs-stats__group"><h3>Top 10 演员</h3><div class="jhs-stats__rows">${topActresses.map((item => row(item.name, item.count, topValue, "var(--jhs-accent)", new URL(item.starId ? `/actors/${encodeURIComponent(item.starId)}` : `/search?q=${encodeURIComponent(item.name)}`, javDbUrl).href))).join("")}</div></section>` : ""}
         </div>`;
-        layer.open({ type: 1, title: "统计", content: dialogHtml, scrollbar: !1, area: utils.getDialogArea("lg"), anim: -1, success: (layerElement, layerIndex) => {
+        const dialog = this.getRuntimeService("dialog");
+        dialog.open({ type: 1, title: "统计", content: dialogHtml, scrollbar: !1, area: utils.getDialogArea("lg"), anim: -1, success: (layerElement, layerIndex) => {
             $(layerElement).find(".jhs-stats__bar").each((function() { $(this).css({ "--jhs-value": `${$(this).data("width")}%`, "--jhs-bar": $(this).data("color") }); }));
             $(layerElement).find("button.jhs-stats__metric[data-action]").on("click", (event => {
                 const metric = $(event.currentTarget), action = metric.data("action");
-                layer.close(layerIndex);
+                dialog.close(layerIndex);
                 if ("new-video" === action) return this.getDependency("NewVideoPlugin").openDialog();
                 if ("filter" === action) this.getDependency("ListPagePlugin").setQuickFilter(metric.data("filter"));
             }));
