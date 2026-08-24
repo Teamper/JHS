@@ -65,15 +65,14 @@ describe("6.2.0 audit remediation", () => {
         expect($("#settingsArea").hasClass("jhs-is-hidden")).toBe(false);
     });
 
-    it("pins OtherSite checks to built-in or configured exact origins", () => {
+    it("loads external-site definitions through MovieIdentityService", async () => {
         const { Class } = loadClass("src/plugins/external-search/other-site.js", "OtherSitePlugin", { normalizeCarNum: value => value });
         const plugin = new Class();
-        expect(plugin.getSiteUrlPolicy({ id: "javBusBtn" }, "https://www.javbus.com/ABC-123")).toEqual({
-            trustClass: "builtin-public", hosts: ["javbus.com"], expectedOrigin: "https://www.javbus.com",
-        });
-        expect(plugin.getSiteUrlPolicy({ id: "javBusBtn" }, "https://mirror.example/ABC-123")).toEqual({
-            trustClass: "custom-public", expectedOrigin: "https://mirror.example",
-        });
+        plugin.getSettingCache = vi.fn(async () => ({ javBusUrl: "configured" }));
+        const externalSites = vi.fn(() => [{ id: "javBusBtn", baseUrl: "normalized" }]);
+        plugin.getRuntimeService = () => ({ externalSites });
+        await expect(plugin.getSiteConfigs()).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: "javBusBtn", baseUrl: "normalized" })]));
+        expect(externalSites).toHaveBeenCalledWith({ javBusUrl: "configured" });
     });
 
     it("keeps all JHS UI layout decisions on mobileMode", () => {

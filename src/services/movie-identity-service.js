@@ -105,4 +105,19 @@ export class MovieIdentityService {
             return typeof adapter?.matchesUrl === "function" && adapter.matchesUrl(url);
         } catch { return false; }
     }
+    /** @param {Record<string, any>} [settings] */
+    externalSites(settings = {}) {
+        const manifest = (this.integrations?.list("movie.external-sites") ?? [])[0], adapter = manifest && this.integrations?.getAdapter(manifest.id);
+        return typeof adapter?.getSites === "function" ? adapter.getSites(settings) : [];
+    }
+    /** @param {string} siteId @param {string} carNum @param {{settings?: Record<string, any>, scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async searchExternalSite(siteId, carNum, options = {}) {
+        const manifest = (this.integrations?.list("movie.external-sites") ?? [])[0], adapter = manifest && this.integrations?.getAdapter(manifest.id);
+        if (typeof adapter?.searchSite !== "function") return Object.freeze({ searchUrl: "", matches: Object.freeze([]) });
+        return adapter.searchSite(siteId, carNum, options);
+    }
+    externalNavigationLinks() {
+        const manifest = (this.integrations?.list("navigation.external") ?? [])[0], adapter = manifest && this.integrations?.getAdapter(manifest.id);
+        return typeof adapter?.getNavigationLinks === "function" ? adapter.getNavigationLinks() : [];
+    }
 }

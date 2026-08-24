@@ -57,4 +57,14 @@ describe("MovieIdentityService", () => {
             { providerId: "fc2ppvdb", url: "fc2ppvdb:FC2-1" }, { providerId: "fc2content", url: "fc2content:FC2-1" },
         ]);
     });
+
+    it("routes external-site catalogs, searches and navigation links through one Integration", async () => {
+        const adapter = { getSites: vi.fn(() => [{ id: "javDbBtn" }]), searchSite: vi.fn(async () => ({ matches: ["movie"] })), getNavigationLinks: vi.fn(() => [{ id: "link" }]) };
+        const integrations = { list: vi.fn(() => [{ id: "external-sites" }]), getAdapter: vi.fn(() => adapter) };
+        const service = new MovieIdentityService(integrations);
+        expect(service.externalSites({ javDbUrl: "configured" })).toEqual([{ id: "javDbBtn" }]);
+        await expect(service.searchExternalSite("javDbBtn", "ABC-123", { scope: "scope" })).resolves.toEqual({ matches: ["movie"] });
+        expect(adapter.searchSite).toHaveBeenCalledWith("javDbBtn", "ABC-123", { scope: "scope" });
+        expect(service.externalNavigationLinks()).toEqual([{ id: "link" }]);
+    });
 });

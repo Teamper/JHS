@@ -18,79 +18,18 @@ export class StorageQueue {
 
 export class OtherSitePlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "siteConfigs", [ {
-            id: "javTrailersBtn",
-            getBaseUrl: async () => await this.getJavTrailersUrl(),
-            itemSelector: ".videos-list .video-link",
-            searchPath: (e, t) => `${e}/search/${t}`,
-            getDetailPageHref: e => e.attr("href"),
-            findCarNumOrTitle: e => e.find("p.card-text").text()
-        }, {
-            id: "123AvBtn",
-            providerId: "av123"
-        }, {
-            id: "jableBtn",
-            getBaseUrl: async () => await this.getjableUrl(),
-            itemSelector: "#list_videos_videos_list_search_result .detail .title a",
-            searchPath: (e, t) => `${e}/search/${t}/`,
-            getDetailPageHref: e => e.attr("href"),
-            findCarNumOrTitle: e => e.text()
-        }, {
-            id: "avgleBtn",
-            getBaseUrl: async () => await this.getAvgleUrl(),
-            itemSelector: ".text-secondary",
-            searchPath: (e, t) => `${e}/vod/search.html?wd=${t}`,
-            getDetailPageHref: e => e.attr("href"),
-            findCarNumOrTitle: e => e.text()
-        }, {
-            id: "missAvBtn",
-            getBaseUrl: async () => await this.getMissAvUrl(),
-            itemSelector: ".text-secondary",
-            searchPath: (e, t) => `${e}/search/${t}`,
-            getDetailPageHref: e => e.attr("href"),
-            findCarNumOrTitle: e => e.text()
-        }, {
-            id: "supJavBtn",
-            getBaseUrl: async () => await this.getSupJavUrl(),
-            itemSelector: ".posts post",
-            searchPath: (e, t) => `${e}/?s=${t}`,
-            getDetailPageHref: (e, t, n) => e.attr("href"),
-            findCarNumOrTitle: e => e.attr("title")
-        }, {
-            id: "javDbBtn",
-            getBaseUrl: async () => await this.getJavDbUrl(),
-            itemSelector: ".movie-list .item",
-            searchPath: (e, t) => `${e}/search?q=${t}`,
-            getDetailPageHref: e => e.find("a").attr("href"),
-            findCarNumOrTitle: e => e.find(".video-title").text(),
-            condition: e => l
-        }, {
-            id: "javBusBtn",
-            getBaseUrl: async () => await this.getJavBusUrl(),
-            itemSelector: ".container h3",
-            searchPath: (e, t) => `${e}/${t}`,
-            getDetailPageHref: (e, t, n) => `${t}/${n}`,
-            findCarNumOrTitle: e => e.text(),
-            condition: e => r && e && !e.includes("FC2")
-        }, {
-            id: "fanzaBtn",
-            noHandle: !0,
-            initUrl: e => `https://www.dmm.co.jp/search/=/searchstr=${e}`,
-            condition: e => e && !e.includes("FC2")
-        } ]), i(this, "settingCache", null), i(this, "lastFetchTime", 0), i(this, "CACHE_DURATION", 1e4);
+        super(...arguments), i(this, "siteConfigs", [
+            { id: "javTrailersBtn" }, { id: "123AvBtn", providerId: "av123" }, { id: "jableBtn" }, { id: "avgleBtn" }, { id: "missAvBtn" }, { id: "supJavBtn" },
+            { id: "javDbBtn", condition: () => l }, { id: "javBusBtn", condition: e => r && e && !e.includes("FC2") },
+            { id: "fanzaBtn", providerId: "dmm", noHandle: !0, condition: e => e && !e.includes("FC2") },
+        ]), i(this, "settingCache", null), i(this, "lastFetchTime", 0), i(this, "CACHE_DURATION", 1e4);
     }
     getName() {
         return "OtherSitePlugin";
     }
-    /** 返回外部站点检测使用的精确 origin 信任策略。 */
-    getSiteUrlPolicy(config, url) {
-        const target = new URL(url), builtinHosts = {
-            javTrailersBtn: "javtrailers.com", jableBtn: "jable.tv", avgleBtn: "jav.rs", missAvBtn: "missav.live",
-            supJavBtn: "supjav.com", javDbBtn: "javdb.com", javBusBtn: "javbus.com",
-        }, builtinHost = builtinHosts[config.id], isBuiltin = builtinHost && (target.hostname === builtinHost || target.hostname.endsWith(`.${builtinHost}`));
-        return isBuiltin
-            ? { trustClass: "builtin-public", hosts: [builtinHost], expectedOrigin: target.origin }
-            : { trustClass: "custom-public", expectedOrigin: target.origin };
+    async getSiteConfigs() {
+        const settings = await this.getSettingCache(), definitions = this.getRuntimeService("movie").externalSites(settings);
+        return this.siteConfigs.map((config) => ({ ...(definitions.find((item) => item.id === config.id) || {}), ...config }));
     }
     async initCss() {
         return `
@@ -122,7 +61,7 @@ export class OtherSitePlugin extends BasePlugin {
         if (!target.length || n.isActive && !n.isActive()) return;
         root.find("#otherSiteBox,#settingsArea,[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
         e = normalizeCarNum(e) || this.getPageInfo().carNum;
-        const enabled = this.getEnabledSites(), configs = this.siteConfigs.map((config => ({ ...config, sourceCarNum: t }))), view = { root, target, configs, carNum: e, isActive: "function" === typeof n.isActive ? n.isActive : () => !0 };
+        const enabled = this.getEnabledSites(), configs = (await this.getSiteConfigs()).map((config => ({ ...config, sourceCarNum: t }))), view = { root, target, configs, carNum: e, isActive: "function" === typeof n.isActive ? n.isActive : () => !0 };
         const box = $('<div class="panel-block" data-jhs-other-site-box><div class="jhs-site-list"></div></div>'), list = box.find(".jhs-site-list"), settings = $('<div class="panel-block jhs-is-hidden" data-jhs-other-site-settings><div data-jhs-role="site-checkboxes"></div></div>');
         configs.forEach((config => {
             if (config.condition && !1 === config.condition(config.sourceCarNum)) return;
@@ -145,14 +84,12 @@ export class OtherSitePlugin extends BasePlugin {
     async prepareSiteLink(e, t, view = { root: $(document), isActive: () => !0 }) {
         const n = view.root.find(`[data-jhs-site-id="${t.id}"],#${t.id}`).first();
         if (!(e = normalizeCarNum(e))) return n.removeAttr("href").attr({ "aria-disabled": "true", title: "番号不可用" }), void this.setSiteState(n, "idle");
-        if (t.initUrl) return void (n.attr("href", t.initUrl(e)), this.setSiteState(n, "idle"), n.attr("title", "点击前往外部搜索页"));
         if (t.providerId) {
             const url = this.getRuntimeService("movie").searchUrl(t.providerId, { carNum: e });
             return void (url ? (n.attr("href", url), n.attr("title", "点击前往外部搜索页"), this.setSiteState(n, "idle")) : (n.attr("title", "外部站点地址不可用"), this.setSiteState(n, "domain-error")));
         }
         try {
-            const a = await t.getBaseUrl(), i = t.searchPath(a, e);
-            view.isActive() && (n.attr("href", i), n.attr("title", "点击前往外部搜索页；点击检测按钮后才自动检测"), this.setSiteState(n, "idle"));
+            view.isActive() && (n.attr("href", t.searchUrl(e)), n.attr("title", "点击前往外部搜索页；点击检测按钮后才自动检测"), this.setSiteState(n, "idle"));
         } catch (a) {
             view.isActive() && (n.attr("title", "外部站点地址未配置或不可用"), this.setSiteState(n, "domain-error"));
         }
@@ -170,7 +107,8 @@ export class OtherSitePlugin extends BasePlugin {
     async handleSite(e, t, view = { root: $(document), isActive: () => !0 }) {
         const n = view.root.find(`[data-jhs-site-id="${t.id}"],#${t.id}`).first();
         n.removeAttr("href").find(".site-tag").remove(), this.setSiteState(n, "checking");
-        if (t.initUrl && n.attr("href", t.initUrl(e)), t.noHandle && !0 === t.noHandle) {
+        if (t.noHandle && !0 === t.noHandle) {
+            n.attr("href", this.getRuntimeService("movie").searchUrl(t.providerId, { carNum: e }) || "");
             const t = "jhs_other_site_dmm", raw = this.getRuntimeService("storage").getLocal(t), a = (raw ? JSON.parse(raw) : {})[e];
             a ? (n.attr("href", a.url), "multiple" === a.type && n.append('<span class="site-tag">多结果</span>'), this.setSiteState(n, "available")) : this.setSiteState(n, "idle");
         } else if (t.providerId) try {
@@ -188,22 +126,10 @@ export class OtherSitePlugin extends BasePlugin {
             if (utils.isHidden(n)) return;
             const a = "jhs_other_site", storage = this.getRuntimeService("storage"), raw = storage.getLocal(a), i = raw ? JSON.parse(raw) : {}, s = e + "_" + t.id.replace("Btn", ""), o = i[s], m = Date.now();
             if (o && o.time && m - o.time < 864e5) return void (n.attr("href", o.url), "multiple" === o.type && n.append('<span class="site-tag">多结果</span>'), this.setSiteState(n, "available"));
-            const r = await t.getBaseUrl(), l = t.searchPath(r, e);
+            const scope = await this.getRuntimeService("scope")(), result = await this.getRuntimeService("movie").searchExternalSite(t.id, e, { settings: await this.getSettingCache(), scope }), l = result.searchUrl;
             n.attr("href", l);
-            const scope = await this.getRuntimeService("scope")(), response = await this.getRuntimeService("http").request({
-                providerId: `other-site:${t.id}`, method: "GET", url: l, headers: t.headers, responseType: "text",
-                cacheScope: "public", ttlMs: 864e5, requestOptions: t.requestOptions || {}, urlPolicy: this.getSiteUrlPolicy(t, l),
-            }, scope), c = response.data;
             if (!view.isActive()) return;
-            const d = utils.htmlTo$dom(c), h = [];
-            d.find(t.itemSelector).each(((n, a) => {
-                const i = $(a);
-                const itemText = t.findCarNumOrTitle(i);
-                if (t.matches ? !t.matches(itemText, e) : !itemText.toLowerCase().includes(e.toLowerCase())) return;
-                let s = t.getDetailPageHref(i, r, e);
-                if (!s) throw new Error("解析href失败");
-                s.includes("http") || (s = r + (s.startsWith("/") ? s : "/" + s)), h.push(s);
-            }));
+            const h = result.matches;
             let g = "", p = null;
             if (1 === h.length) {
                 let e = h[0];
@@ -237,25 +163,29 @@ export class OtherSitePlugin extends BasePlugin {
         this.lastFetchTime = e), this.settingCache;
     }
     async getMissAvUrl() {
-        return (await this.getSettingCache()).missAvUrl || "https://missav.live";
+        return (await this.getSiteConfigs()).find((site) => site.id === "missAvBtn")?.baseUrl || "";
     }
     async getjableUrl() {
-        return (await this.getSettingCache()).jableUrl || "https://jable.tv";
+        return (await this.getSiteConfigs()).find((site) => site.id === "jableBtn")?.baseUrl || "";
     }
     async getAvgleUrl() {
-        return (await this.getSettingCache()).avgleUrl || "https://jav.rs";
+        return (await this.getSiteConfigs()).find((site) => site.id === "avgleBtn")?.baseUrl || "";
     }
     async getJavTrailersUrl() {
-        return (await this.getSettingCache()).javTrailersUrl || "https://javtrailers.com";
+        return (await this.getSiteConfigs()).find((site) => site.id === "javTrailersBtn")?.baseUrl || "";
+    }
+    async getAv123Url() {
+        const url = this.getRuntimeService("movie").searchUrl("av123", { carNum: "" });
+        try { return url ? new URL(url).origin : ""; } catch { return ""; }
     }
     async getJavDbUrl() {
-        return (await this.getSettingCache()).javDbUrl || "https://javdb.com";
+        return (await this.getSiteConfigs()).find((site) => site.id === "javDbBtn")?.baseUrl || "";
     }
     async getJavBusUrl() {
-        return (await this.getSettingCache()).javBusUrl || "https://www.javbus.com";
+        return (await this.getSiteConfigs()).find((site) => site.id === "javBusBtn")?.baseUrl || "";
     }
     async getSupJavUrl() {
-        return (await this.getSettingCache()).supJavUrl || "https://supjav.com";
+        return (await this.getSiteConfigs()).find((site) => site.id === "supJavBtn")?.baseUrl || "";
     }
     getEnabledSites() {
         const fallback = this.siteConfigs.map((site => site.id));

@@ -10,7 +10,8 @@ export class DetailPagePlugin extends BasePlugin {
     handle() {
         window.isDetailPage && ($(".video-meta-panel a").each((function() {
             const e = $(this).attr("href");
-            e && (e.startsWith("http://") || e.startsWith("https://") || e.startsWith("/")) && $(this).attr("target", "_blank");
+            if (!e) return;
+            try { ["http:", "https:"].includes(new URL(e, window.location.href).protocol) && $(this).attr("target", "_blank"); } catch {}
         })));
     }
 }

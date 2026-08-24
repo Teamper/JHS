@@ -58,8 +58,11 @@ export class NavBarPlugin extends BasePlugin {
         }));
     }
     margeNav() {
-        $('a[href*="/feedbacks/new"]').remove(), $('a[href*="theporndude.com"]').remove(),
-        $('a.navbar-link[href="/makers"]').parent().after('\n            <div class="navbar-item has-dropdown is-hoverable">\n                <a class="navbar-link">其它</a>\n                <div class="navbar-dropdown is-boxed">\n                  <a class="navbar-item" href="/feedbacks/new" target="_blank" >反饋</a>\n                  <a class="navbar-item" rel="nofollow noopener" target="_blank" href="https://theporndude.com/zh">ThePornDude</a>\n                </div>\n              </div>\n        ');
+        $('a[href*="/feedbacks/new"]').remove(), $('a[href*="theporndude.com"]').remove();
+        const dropdown = $('<div class="navbar-item has-dropdown is-hoverable"><a class="navbar-link">其它</a><div class="navbar-dropdown is-boxed"></div></div>'), links = dropdown.find(".navbar-dropdown");
+        links.append($('<a class="navbar-item" href="/feedbacks/new" target="_blank">反饋</a>'));
+        this.getRuntimeService("movie").externalNavigationLinks().forEach((item => links.append($("<a></a>").addClass("navbar-item").attr({ href: item.url, rel: "nofollow noopener", target: "_blank" }).text(item.label))));
+        $('a.navbar-link[href="/makers"]').parent().after(dropdown);
     }
     toggleOtherNavItem() {
         let e = $("#search-box"), t = $("#search-bar-container");

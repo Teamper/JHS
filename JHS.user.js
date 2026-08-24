@@ -9931,81 +9931,24 @@ ${error.stack}` : "");
   var StorageQueue = _StorageQueue;
   var _OtherSitePlugin = class _OtherSitePlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "siteConfigs", [{
-        id: "javTrailersBtn",
-        getBaseUrl: /* @__PURE__ */ __name(async () => await this.getJavTrailersUrl(), "getBaseUrl"),
-        itemSelector: ".videos-list .video-link",
-        searchPath: /* @__PURE__ */ __name((e2, t2) => `${e2}/search/${t2}`, "searchPath"),
-        getDetailPageHref: /* @__PURE__ */ __name((e2) => e2.attr("href"), "getDetailPageHref"),
-        findCarNumOrTitle: /* @__PURE__ */ __name((e2) => e2.find("p.card-text").text(), "findCarNumOrTitle")
-      }, {
-        id: "123AvBtn",
-        providerId: "av123"
-      }, {
-        id: "jableBtn",
-        getBaseUrl: /* @__PURE__ */ __name(async () => await this.getjableUrl(), "getBaseUrl"),
-        itemSelector: "#list_videos_videos_list_search_result .detail .title a",
-        searchPath: /* @__PURE__ */ __name((e2, t2) => `${e2}/search/${t2}/`, "searchPath"),
-        getDetailPageHref: /* @__PURE__ */ __name((e2) => e2.attr("href"), "getDetailPageHref"),
-        findCarNumOrTitle: /* @__PURE__ */ __name((e2) => e2.text(), "findCarNumOrTitle")
-      }, {
-        id: "avgleBtn",
-        getBaseUrl: /* @__PURE__ */ __name(async () => await this.getAvgleUrl(), "getBaseUrl"),
-        itemSelector: ".text-secondary",
-        searchPath: /* @__PURE__ */ __name((e2, t2) => `${e2}/vod/search.html?wd=${t2}`, "searchPath"),
-        getDetailPageHref: /* @__PURE__ */ __name((e2) => e2.attr("href"), "getDetailPageHref"),
-        findCarNumOrTitle: /* @__PURE__ */ __name((e2) => e2.text(), "findCarNumOrTitle")
-      }, {
-        id: "missAvBtn",
-        getBaseUrl: /* @__PURE__ */ __name(async () => await this.getMissAvUrl(), "getBaseUrl"),
-        itemSelector: ".text-secondary",
-        searchPath: /* @__PURE__ */ __name((e2, t2) => `${e2}/search/${t2}`, "searchPath"),
-        getDetailPageHref: /* @__PURE__ */ __name((e2) => e2.attr("href"), "getDetailPageHref"),
-        findCarNumOrTitle: /* @__PURE__ */ __name((e2) => e2.text(), "findCarNumOrTitle")
-      }, {
-        id: "supJavBtn",
-        getBaseUrl: /* @__PURE__ */ __name(async () => await this.getSupJavUrl(), "getBaseUrl"),
-        itemSelector: ".posts post",
-        searchPath: /* @__PURE__ */ __name((e2, t2) => `${e2}/?s=${t2}`, "searchPath"),
-        getDetailPageHref: /* @__PURE__ */ __name((e2, t2, n2) => e2.attr("href"), "getDetailPageHref"),
-        findCarNumOrTitle: /* @__PURE__ */ __name((e2) => e2.attr("title"), "findCarNumOrTitle")
-      }, {
-        id: "javDbBtn",
-        getBaseUrl: /* @__PURE__ */ __name(async () => await this.getJavDbUrl(), "getBaseUrl"),
-        itemSelector: ".movie-list .item",
-        searchPath: /* @__PURE__ */ __name((e2, t2) => `${e2}/search?q=${t2}`, "searchPath"),
-        getDetailPageHref: /* @__PURE__ */ __name((e2) => e2.find("a").attr("href"), "getDetailPageHref"),
-        findCarNumOrTitle: /* @__PURE__ */ __name((e2) => e2.find(".video-title").text(), "findCarNumOrTitle"),
-        condition: /* @__PURE__ */ __name((e2) => l, "condition")
-      }, {
-        id: "javBusBtn",
-        getBaseUrl: /* @__PURE__ */ __name(async () => await this.getJavBusUrl(), "getBaseUrl"),
-        itemSelector: ".container h3",
-        searchPath: /* @__PURE__ */ __name((e2, t2) => `${e2}/${t2}`, "searchPath"),
-        getDetailPageHref: /* @__PURE__ */ __name((e2, t2, n2) => `${t2}/${n2}`, "getDetailPageHref"),
-        findCarNumOrTitle: /* @__PURE__ */ __name((e2) => e2.text(), "findCarNumOrTitle"),
-        condition: /* @__PURE__ */ __name((e2) => r && e2 && !e2.includes("FC2"), "condition")
-      }, {
-        id: "fanzaBtn",
-        noHandle: true,
-        initUrl: /* @__PURE__ */ __name((e2) => `https://www.dmm.co.jp/search/=/searchstr=${e2}`, "initUrl"),
-        condition: /* @__PURE__ */ __name((e2) => e2 && !e2.includes("FC2"), "condition")
-      }]), i(this, "settingCache", null), i(this, "lastFetchTime", 0), i(this, "CACHE_DURATION", 1e4);
+      super(...arguments), i(this, "siteConfigs", [
+        { id: "javTrailersBtn" },
+        { id: "123AvBtn", providerId: "av123" },
+        { id: "jableBtn" },
+        { id: "avgleBtn" },
+        { id: "missAvBtn" },
+        { id: "supJavBtn" },
+        { id: "javDbBtn", condition: /* @__PURE__ */ __name(() => l, "condition") },
+        { id: "javBusBtn", condition: /* @__PURE__ */ __name((e2) => r && e2 && !e2.includes("FC2"), "condition") },
+        { id: "fanzaBtn", providerId: "dmm", noHandle: true, condition: /* @__PURE__ */ __name((e2) => e2 && !e2.includes("FC2"), "condition") }
+      ]), i(this, "settingCache", null), i(this, "lastFetchTime", 0), i(this, "CACHE_DURATION", 1e4);
     }
     getName() {
       return "OtherSitePlugin";
     }
-    getSiteUrlPolicy(config, url) {
-      const target = new URL(url), builtinHosts = {
-        javTrailersBtn: "javtrailers.com",
-        jableBtn: "jable.tv",
-        avgleBtn: "jav.rs",
-        missAvBtn: "missav.live",
-        supJavBtn: "supjav.com",
-        javDbBtn: "javdb.com",
-        javBusBtn: "javbus.com"
-      }, builtinHost = builtinHosts[config.id], isBuiltin = builtinHost && (target.hostname === builtinHost || target.hostname.endsWith(`.${builtinHost}`));
-      return isBuiltin ? { trustClass: "builtin-public", hosts: [builtinHost], expectedOrigin: target.origin } : { trustClass: "custom-public", expectedOrigin: target.origin };
+    async getSiteConfigs() {
+      const settings = await this.getSettingCache(), definitions = this.getRuntimeService("movie").externalSites(settings);
+      return this.siteConfigs.map((config) => ({ ...definitions.find((item) => item.id === config.id) || {}, ...config }));
     }
     async initCss() {
       return `
@@ -10037,7 +9980,7 @@ ${error.stack}` : "");
       if (!target.length || n2.isActive && !n2.isActive()) return;
       root.find("#otherSiteBox,#settingsArea,[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
       e2 = normalizeCarNum(e2) || this.getPageInfo().carNum;
-      const enabled = this.getEnabledSites(), configs = this.siteConfigs.map(((config) => ({ ...config, sourceCarNum: t2 }))), view = { root, target, configs, carNum: e2, isActive: "function" === typeof n2.isActive ? n2.isActive : () => true };
+      const enabled = this.getEnabledSites(), configs = (await this.getSiteConfigs()).map(((config) => ({ ...config, sourceCarNum: t2 }))), view = { root, target, configs, carNum: e2, isActive: "function" === typeof n2.isActive ? n2.isActive : () => true };
       const box = $('<div class="panel-block" data-jhs-other-site-box><div class="jhs-site-list"></div></div>'), list = box.find(".jhs-site-list"), settings = $('<div class="panel-block jhs-is-hidden" data-jhs-other-site-settings><div data-jhs-role="site-checkboxes"></div></div>');
       configs.forEach(((config) => {
         if (config.condition && false === config.condition(config.sourceCarNum)) return;
@@ -10060,14 +10003,12 @@ ${error.stack}` : "");
     async prepareSiteLink(e2, t2, view = { root: $(document), isActive: /* @__PURE__ */ __name(() => true, "isActive") }) {
       const n2 = view.root.find(`[data-jhs-site-id="${t2.id}"],#${t2.id}`).first();
       if (!(e2 = normalizeCarNum(e2))) return n2.removeAttr("href").attr({ "aria-disabled": "true", title: "番号不可用" }), void this.setSiteState(n2, "idle");
-      if (t2.initUrl) return void (n2.attr("href", t2.initUrl(e2)), this.setSiteState(n2, "idle"), n2.attr("title", "点击前往外部搜索页"));
       if (t2.providerId) {
         const url = this.getRuntimeService("movie").searchUrl(t2.providerId, { carNum: e2 });
         return void (url ? (n2.attr("href", url), n2.attr("title", "点击前往外部搜索页"), this.setSiteState(n2, "idle")) : (n2.attr("title", "外部站点地址不可用"), this.setSiteState(n2, "domain-error")));
       }
       try {
-        const a2 = await t2.getBaseUrl(), i2 = t2.searchPath(a2, e2);
-        view.isActive() && (n2.attr("href", i2), n2.attr("title", "点击前往外部搜索页；点击检测按钮后才自动检测"), this.setSiteState(n2, "idle"));
+        view.isActive() && (n2.attr("href", t2.searchUrl(e2)), n2.attr("title", "点击前往外部搜索页；点击检测按钮后才自动检测"), this.setSiteState(n2, "idle"));
       } catch (a2) {
         view.isActive() && (n2.attr("title", "外部站点地址未配置或不可用"), this.setSiteState(n2, "domain-error"));
       }
@@ -10085,7 +10026,8 @@ ${error.stack}` : "");
     async handleSite(e2, t2, view = { root: $(document), isActive: /* @__PURE__ */ __name(() => true, "isActive") }) {
       const n2 = view.root.find(`[data-jhs-site-id="${t2.id}"],#${t2.id}`).first();
       n2.removeAttr("href").find(".site-tag").remove(), this.setSiteState(n2, "checking");
-      if (t2.initUrl && n2.attr("href", t2.initUrl(e2)), t2.noHandle && true === t2.noHandle) {
+      if (t2.noHandle && true === t2.noHandle) {
+        n2.attr("href", this.getRuntimeService("movie").searchUrl(t3.providerId, { carNum: e2 }) || "");
         const t3 = "jhs_other_site_dmm", raw = this.getRuntimeService("storage").getLocal(t3), a2 = (raw ? JSON.parse(raw) : {})[e2];
         a2 ? (n2.attr("href", a2.url), "multiple" === a2.type && n2.append('<span class="site-tag">多结果</span>'), this.setSiteState(n2, "available")) : this.setSiteState(n2, "idle");
       } else if (t2.providerId) try {
@@ -10104,29 +10046,10 @@ ${error.stack}` : "");
         if (utils.isHidden(n2)) return;
         const a2 = "jhs_other_site", storage = this.getRuntimeService("storage"), raw = storage.getLocal(a2), i2 = raw ? JSON.parse(raw) : {}, s2 = e2 + "_" + t2.id.replace("Btn", ""), o2 = i2[s2], m2 = Date.now();
         if (o2 && o2.time && m2 - o2.time < 864e5) return void (n2.attr("href", o2.url), "multiple" === o2.type && n2.append('<span class="site-tag">多结果</span>'), this.setSiteState(n2, "available"));
-        const r2 = await t2.getBaseUrl(), l2 = t2.searchPath(r2, e2);
+        const scope = await this.getRuntimeService("scope")(), result = await this.getRuntimeService("movie").searchExternalSite(t2.id, e2, { settings: await this.getSettingCache(), scope }), l2 = result.searchUrl;
         n2.attr("href", l2);
-        const scope = await this.getRuntimeService("scope")(), response = await this.getRuntimeService("http").request({
-          providerId: `other-site:${t2.id}`,
-          method: "GET",
-          url: l2,
-          headers: t2.headers,
-          responseType: "text",
-          cacheScope: "public",
-          ttlMs: 864e5,
-          requestOptions: t2.requestOptions || {},
-          urlPolicy: this.getSiteUrlPolicy(t2, l2)
-        }, scope), c2 = response.data;
         if (!view.isActive()) return;
-        const d2 = utils.htmlTo$dom(c2), h2 = [];
-        d2.find(t2.itemSelector).each(((n3, a3) => {
-          const i3 = $(a3);
-          const itemText = t2.findCarNumOrTitle(i3);
-          if (t2.matches ? !t2.matches(itemText, e2) : !itemText.toLowerCase().includes(e2.toLowerCase())) return;
-          let s3 = t2.getDetailPageHref(i3, r2, e2);
-          if (!s3) throw new Error("解析href失败");
-          s3.includes("http") || (s3 = r2 + (s3.startsWith("/") ? s3 : "/" + s3)), h2.push(s3);
-        }));
+        const h2 = result.matches;
         let g2 = "", p2 = null;
         if (1 === h2.length) {
           let e3 = h2[0];
@@ -10155,25 +10078,33 @@ ${error.stack}` : "");
       return (!this.settingCache || e2 - this.lastFetchTime > this.CACHE_DURATION) && (this.settingCache = await storageManager.getSetting(), this.lastFetchTime = e2), this.settingCache;
     }
     async getMissAvUrl() {
-      return (await this.getSettingCache()).missAvUrl || "https://missav.live";
+      return (await this.getSiteConfigs()).find((site) => site.id === "missAvBtn")?.baseUrl || "";
     }
     async getjableUrl() {
-      return (await this.getSettingCache()).jableUrl || "https://jable.tv";
+      return (await this.getSiteConfigs()).find((site) => site.id === "jableBtn")?.baseUrl || "";
     }
     async getAvgleUrl() {
-      return (await this.getSettingCache()).avgleUrl || "https://jav.rs";
+      return (await this.getSiteConfigs()).find((site) => site.id === "avgleBtn")?.baseUrl || "";
     }
     async getJavTrailersUrl() {
-      return (await this.getSettingCache()).javTrailersUrl || "https://javtrailers.com";
+      return (await this.getSiteConfigs()).find((site) => site.id === "javTrailersBtn")?.baseUrl || "";
+    }
+    async getAv123Url() {
+      const url = this.getRuntimeService("movie").searchUrl("av123", { carNum: "" });
+      try {
+        return url ? new URL(url).origin : "";
+      } catch {
+        return "";
+      }
     }
     async getJavDbUrl() {
-      return (await this.getSettingCache()).javDbUrl || "https://javdb.com";
+      return (await this.getSiteConfigs()).find((site) => site.id === "javDbBtn")?.baseUrl || "";
     }
     async getJavBusUrl() {
-      return (await this.getSettingCache()).javBusUrl || "https://www.javbus.com";
+      return (await this.getSiteConfigs()).find((site) => site.id === "javBusBtn")?.baseUrl || "";
     }
     async getSupJavUrl() {
-      return (await this.getSettingCache()).supJavUrl || "https://supjav.com";
+      return (await this.getSiteConfigs()).find((site) => site.id === "supJavBtn")?.baseUrl || "";
     }
     getEnabledSites() {
       const fallback = this.siteConfigs.map(((site) => site.id));
@@ -13241,7 +13172,11 @@ ${error.stack}` : "");
       }
       $(".genre a").each((function() {
         const e2 = $(this).attr("href");
-        e2 && (e2.startsWith("http://") || e2.startsWith("https://") || e2.startsWith("/")) && $(this).attr("target", "_blank");
+        if (!e2) return;
+        try {
+          ["http:", "https:"].includes(new URL(e2, window.location.href).protocol) && $(this).attr("target", "_blank");
+        } catch {
+        }
       })), this.addCopyCarNumBtn();
     }
     addCopyCarNumBtn() {
@@ -13632,7 +13567,11 @@ ${error.stack}` : "");
     handle() {
       window.isDetailPage && $(".video-meta-panel a").each((function() {
         const e2 = $(this).attr("href");
-        e2 && (e2.startsWith("http://") || e2.startsWith("https://") || e2.startsWith("/")) && $(this).attr("target", "_blank");
+        if (!e2) return;
+        try {
+          ["http:", "https:"].includes(new URL(e2, window.location.href).protocol) && $(this).attr("target", "_blank");
+        } catch {
+        }
       }));
     }
   };
@@ -15169,7 +15108,11 @@ ${error.stack}` : "");
       }));
     }
     margeNav() {
-      $('a[href*="/feedbacks/new"]').remove(), $('a[href*="theporndude.com"]').remove(), $('a.navbar-link[href="/makers"]').parent().after('\n            <div class="navbar-item has-dropdown is-hoverable">\n                <a class="navbar-link">其它</a>\n                <div class="navbar-dropdown is-boxed">\n                  <a class="navbar-item" href="/feedbacks/new" target="_blank" >反饋</a>\n                  <a class="navbar-item" rel="nofollow noopener" target="_blank" href="https://theporndude.com/zh">ThePornDude</a>\n                </div>\n              </div>\n        ');
+      $('a[href*="/feedbacks/new"]').remove(), $('a[href*="theporndude.com"]').remove();
+      const dropdown = $('<div class="navbar-item has-dropdown is-hoverable"><a class="navbar-link">其它</a><div class="navbar-dropdown is-boxed"></div></div>'), links = dropdown.find(".navbar-dropdown");
+      links.append($('<a class="navbar-item" href="/feedbacks/new" target="_blank">反饋</a>'));
+      this.getRuntimeService("movie").externalNavigationLinks().forEach(((item) => links.append($("<a></a>").addClass("navbar-item").attr({ href: item.url, rel: "nofollow noopener", target: "_blank" }).text(item.label))));
+      $('a.navbar-link[href="/makers"]').parent().after(dropdown);
     }
     toggleOtherNavItem() {
       let e2 = $("#search-box"), t2 = $("#search-bar-container");
@@ -15279,7 +15222,7 @@ ${error.stack}` : "");
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog]),
     manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.offline, SERVICE.magnet]),
-    manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }),
+    manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }, [SERVICE.movie]),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account]),
     manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch]),
@@ -15294,7 +15237,7 @@ ${error.stack}` : "");
     manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie]),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
     manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo]),
-    manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie, SERVICE.storage, SERVICE.http]),
+    manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie, SERVICE.storage]),
     manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings]),
     manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }, [SERVICE.http]),
     manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage, SERVICE.http, SERVICE.magnet]),
@@ -16246,6 +16189,19 @@ ${error.stack}` : "");
       } catch {
         return false;
       }
+    }
+    externalSites(settings = {}) {
+      const manifest2 = (this.integrations?.list("movie.external-sites") ?? [])[0], adapter = manifest2 && this.integrations?.getAdapter(manifest2.id);
+      return typeof adapter?.getSites === "function" ? adapter.getSites(settings) : [];
+    }
+    async searchExternalSite(siteId, carNum, options = {}) {
+      const manifest2 = (this.integrations?.list("movie.external-sites") ?? [])[0], adapter = manifest2 && this.integrations?.getAdapter(manifest2.id);
+      if (typeof adapter?.searchSite !== "function") return Object.freeze({ searchUrl: "", matches: Object.freeze([]) });
+      return adapter.searchSite(siteId, carNum, options);
+    }
+    externalNavigationLinks() {
+      const manifest2 = (this.integrations?.list("navigation.external") ?? [])[0], adapter = manifest2 && this.integrations?.getAdapter(manifest2.id);
+      return typeof adapter?.getNavigationLinks === "function" ? adapter.getNavigationLinks() : [];
     }
   };
   __name(_MovieIdentityService, "MovieIdentityService");
@@ -17279,6 +17235,69 @@ ${error.stack}` : "");
     quality: "silver"
   });
 
+  // src/integrations/external-sites/manifest.js
+  var SITES = Object.freeze([
+    Object.freeze({ id: "javTrailersBtn", name: "javTrailers", settingKey: "javTrailersUrl", defaultBaseUrl: "https://javtrailers.com", itemSelector: ".videos-list .video-link", textSelector: "p.card-text", hrefSelector: null, searchPath: /* @__PURE__ */ __name((value) => `/search/${value}`, "searchPath") }),
+    Object.freeze({ id: "jableBtn", name: "jable", settingKey: "jableUrl", defaultBaseUrl: "https://jable.tv", itemSelector: "#list_videos_videos_list_search_result .detail .title a", textSelector: null, hrefSelector: null, searchPath: /* @__PURE__ */ __name((value) => `/search/${value}/`, "searchPath") }),
+    Object.freeze({ id: "avgleBtn", name: "avgle", settingKey: "avgleUrl", defaultBaseUrl: "https://jav.rs", itemSelector: ".text-secondary", textSelector: null, hrefSelector: null, searchPath: /* @__PURE__ */ __name((value) => `/vod/search.html?wd=${value}`, "searchPath") }),
+    Object.freeze({ id: "missAvBtn", name: "missAv", settingKey: "missAvUrl", defaultBaseUrl: "https://missav.live", itemSelector: ".text-secondary", textSelector: null, hrefSelector: null, searchPath: /* @__PURE__ */ __name((value) => `/search/${value}`, "searchPath") }),
+    Object.freeze({ id: "supJavBtn", name: "supJav", settingKey: "supJavUrl", defaultBaseUrl: "https://supjav.com", itemSelector: ".posts post", textSelector: null, hrefSelector: null, titleAttribute: true, searchPath: /* @__PURE__ */ __name((value) => `/?s=${value}`, "searchPath") }),
+    Object.freeze({ id: "javDbBtn", name: "javDb", settingKey: "javDbUrl", defaultBaseUrl: "https://javdb.com", itemSelector: ".movie-list .item", textSelector: ".video-title", hrefSelector: "a", searchPath: /* @__PURE__ */ __name((value) => `/search?q=${value}`, "searchPath") }),
+    Object.freeze({ id: "javBusBtn", name: "javBus", settingKey: "javBusUrl", defaultBaseUrl: "https://www.javbus.com", itemSelector: ".container h3", textSelector: null, hrefSelector: null, directDetail: true, searchPath: /* @__PURE__ */ __name((value) => `/${value}`, "searchPath") })
+  ]);
+  function siteDefinition(site, settings) {
+    const baseUrl = new URL(settings[site.settingKey] || site.defaultBaseUrl).origin;
+    return Object.freeze({ id: site.id, name: site.name, baseUrl, searchUrl: /* @__PURE__ */ __name((carNum) => new URL(site.searchPath(encodeURIComponent(carNum)), `${baseUrl}/`).href, "searchUrl") });
+  }
+  __name(siteDefinition, "siteDefinition");
+  function parseExternalSiteResults(html, site, carNum, baseUrl) {
+    if (typeof html !== "string") throw new JhsError("INVALID_RESPONSE", "外部站点响应不是 HTML", { source: site.id });
+    const document2 = new DOMParser().parseFromString(html, "text/html"), results = [];
+    for (const element of document2.querySelectorAll(site.itemSelector)) {
+      const textNode = site.textSelector ? element.querySelector(site.textSelector) : element;
+      const text = site.titleAttribute ? element.getAttribute("title") || "" : textNode?.textContent?.trim() || "";
+      if (!text.toLowerCase().includes(carNum.toLowerCase())) continue;
+      if (site.directDetail) results.push(new URL(`/${encodeURIComponent(carNum)}`, `${baseUrl}/`).href);
+      else {
+        const hrefNode = site.hrefSelector ? element.querySelector(site.hrefSelector) : element, href = hrefNode?.getAttribute("href");
+        if (!href) throw new JhsError("PARSE_ERROR", "外部站点结果缺少链接", { source: site.id });
+        results.push(new URL(href, `${baseUrl}/`).href);
+      }
+    }
+    return Object.freeze([...new Set(results)]);
+  }
+  __name(parseExternalSiteResults, "parseExternalSiteResults");
+  function createExternalSitesAdapter(http) {
+    return Object.freeze({
+      contracts: ["ExternalSiteResult"],
+      getSites(settings = {}) {
+        return Object.freeze(SITES.map((site) => siteDefinition(site, settings)));
+      },
+      getNavigationLinks: /* @__PURE__ */ __name(() => Object.freeze([Object.freeze({ id: "theporndude", label: "ThePornDude", url: "https://theporndude.com/zh" })]), "getNavigationLinks"),
+      async searchSite(siteId, carNum, options = {}) {
+        const site = SITES.find((item) => item.id === siteId);
+        if (!site) throw new JhsError("UNSUPPORTED", `未知外部站点：${siteId}`, { source: "external-sites" });
+        const definition = siteDefinition(site, options.settings || {}), url = definition.searchUrl(carNum), target = new URL(url), builtinHost = new URL(site.defaultBaseUrl).hostname.replace(/^www\./, "");
+        const urlPolicy = target.hostname === builtinHost || target.hostname.endsWith(`.${builtinHost}`) ? { trustClass: "builtin-public", hosts: [builtinHost], expectedOrigin: target.origin } : { trustClass: "custom-public", expectedOrigin: target.origin };
+        const response = await http.request({ providerId: `external-site:${siteId}`, method: "GET", url, responseType: "text", cacheScope: "public", ttlMs: 864e5, urlPolicy }, options.scope);
+        return Object.freeze({ searchUrl: url, matches: parseExternalSiteResults(response.data, site, carNum, definition.baseUrl) });
+      }
+    });
+  }
+  __name(createExternalSitesAdapter, "createExternalSitesAdapter");
+  var manifest_default4 = defineIntegration({
+    id: "external-sites",
+    trustClass: "builtin-public",
+    hosts: ["javtrailers.com", "jable.tv", "jav.rs", "missav.live", "supjav.com", "javdb.com", "javbus.com", "theporndude.com"],
+    capabilities: ["movie.external-sites", "navigation.external"],
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createExternalSitesAdapter(client.http), "createAdapter"),
+    createHostAdapter: null,
+    cachePolicy: { "movie.external-sites": "public-1d", "navigation.external": "none" },
+    quality: "silver"
+  });
+
   // src/integrations/fc2ppvdb/parser.js
   function resolveDocument4(page) {
     if (typeof page === "string") return new DOMParser().parseFromString(page, "text/html");
@@ -17343,7 +17362,7 @@ ${error.stack}` : "");
     });
   }
   __name(createFc2PpvDbAdapter, "createFc2PpvDbAdapter");
-  var manifest_default4 = defineIntegration({
+  var manifest_default5 = defineIntegration({
     id: "fc2ppvdb",
     trustClass: "builtin-public",
     hosts: ["fc2ppvdb.com"],
@@ -17394,7 +17413,7 @@ ${error.stack}` : "");
     });
   }
   __name(createFc2ContentAdapter, "createFc2ContentAdapter");
-  var manifest_default5 = defineIntegration({
+  var manifest_default6 = defineIntegration({
     id: "fc2content",
     trustClass: "builtin-public",
     hosts: ["adult.contents.fc2.com"],
@@ -17446,7 +17465,7 @@ ${error.stack}` : "");
     });
   }
   __name(createGoogleTranslateAdapter, "createGoogleTranslateAdapter");
-  var manifest_default6 = defineIntegration({
+  var manifest_default7 = defineIntegration({
     id: "google-translate",
     trustClass: "builtin-public",
     hosts: ["translate-pa.googleapis.com"],
@@ -17509,7 +17528,7 @@ ${error.stack}` : "");
     });
   }
   __name(createGfriendsAdapter, "createGfriendsAdapter");
-  var manifest_default7 = defineIntegration({
+  var manifest_default8 = defineIntegration({
     id: "gfriends",
     trustClass: "builtin-public",
     hosts: ["cdn.jsdelivr.net", "raw.githubusercontent.com"],
@@ -17523,7 +17542,7 @@ ${error.stack}` : "");
   });
 
   // src/integrations/host-list/manifest.js
-  var manifest_default8 = defineIntegration({
+  var manifest_default9 = defineIntegration({
     id: "host-list",
     trustClass: "builtin-public",
     hosts: ["javdb.com", "javbus.com"],
@@ -17592,7 +17611,7 @@ ${error.stack}` : "");
     });
   }
   __name(createImageSearchAdapter, "createImageSearchAdapter");
-  var manifest_default9 = defineIntegration({
+  var manifest_default10 = defineIntegration({
     id: "image-search",
     trustClass: "builtin-public",
     hosts: ["imgur.com", "google.com", "yandex.ru"],
@@ -17803,7 +17822,7 @@ ${error.stack}` : "");
     });
   }
   __name(createJavDbAdapter, "createJavDbAdapter");
-  var manifest_default10 = defineIntegration({
+  var manifest_default11 = defineIntegration({
     id: "javdb",
     trustClass: "builtin-public",
     hosts: ["javdb.com", "jdforrepam.com", "c0.jdbstatic.com"],
@@ -17875,7 +17894,7 @@ ${error.stack}` : "");
     });
   }
   __name(createJavBusAdapter, "createJavBusAdapter");
-  var manifest_default11 = defineIntegration({
+  var manifest_default12 = defineIntegration({
     id: "javbus",
     trustClass: "builtin-public",
     hosts: ["javbus.com"],
@@ -17923,7 +17942,7 @@ ${error.stack}` : "");
     });
   }
   __name(createJavStoreAdapter, "createJavStoreAdapter");
-  var manifest_default12 = defineIntegration({
+  var manifest_default13 = defineIntegration({
     id: "javstore",
     trustClass: "builtin-public",
     hosts: ["javstore.net"],
@@ -17937,7 +17956,7 @@ ${error.stack}` : "");
   });
 
   // src/integrations/javtrailers/manifest.js
-  var manifest_default13 = defineIntegration({ id: "javtrailers", trustClass: "builtin-public", hosts: ["javtrailers.com"], capabilities: ["movie.preview"], requires: [PORT.http, SERVICE.urlPolicy], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "javtrailers" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MoviePreview"] }), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
+  var manifest_default14 = defineIntegration({ id: "javtrailers", trustClass: "builtin-public", hosts: ["javtrailers.com"], capabilities: ["movie.preview"], requires: [PORT.http, SERVICE.urlPolicy], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "javtrailers" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MoviePreview"] }), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
 
   // src/integrations/one115/manifest.js
   var HOME_URL = "https://115.com";
@@ -18022,7 +18041,7 @@ ${error.stack}` : "");
     });
   }
   __name(createOne115Adapter, "createOne115Adapter");
-  var manifest_default14 = defineIntegration({
+  var manifest_default15 = defineIntegration({
     id: "one115",
     trustClass: "builtin-public",
     hosts: ["115.com"],
@@ -18123,7 +18142,7 @@ ${error.stack}` : "");
     });
   }
   __name(createPan123Adapter, "createPan123Adapter");
-  var manifest_default15 = defineIntegration({
+  var manifest_default16 = defineIntegration({
     id: "pan123",
     trustClass: "builtin-public",
     hosts: ["123pan.com"],
@@ -18150,7 +18169,7 @@ ${error.stack}` : "");
     });
   }
   __name(createSubtitleCatAdapter, "createSubtitleCatAdapter");
-  var manifest_default16 = defineIntegration({ id: "subtitlecat", trustClass: "builtin-public", hosts: ["subtitlecat.com"], capabilities: ["subtitle.search"], requires: [], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "subtitlecat" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => createSubtitleCatAdapter(), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
+  var manifest_default17 = defineIntegration({ id: "subtitlecat", trustClass: "builtin-public", hosts: ["subtitlecat.com"], capabilities: ["subtitle.search"], requires: [], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "subtitlecat" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => createSubtitleCatAdapter(), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
 
   // src/integrations/torrent-sources/manifest.js
   var SOURCES2 = Object.freeze([
@@ -18230,7 +18249,7 @@ ${error.stack}` : "");
     });
   }
   __name(createTorrentSourcesAdapter, "createTorrentSourcesAdapter");
-  var manifest_default17 = defineIntegration({
+  var manifest_default18 = defineIntegration({
     id: "torrent-sources",
     trustClass: "builtin-public",
     hosts: ["u9a9.com", "u3c3.com", "sukebei.nyaa.si", "btsow.lol"],
@@ -18296,7 +18315,7 @@ ${error.stack}` : "");
     });
   }
   __name(createWikipediaAdapter, "createWikipediaAdapter");
-  var manifest_default18 = defineIntegration({
+  var manifest_default19 = defineIntegration({
     id: "wikipedia",
     trustClass: "builtin-public",
     hosts: ["ja.wikipedia.org"],
@@ -18364,7 +18383,7 @@ ${error.stack}` : "");
     });
   }
   __name(createXunleiAdapter, "createXunleiAdapter");
-  var manifest_default19 = defineIntegration({
+  var manifest_default20 = defineIntegration({
     id: "xunlei",
     trustClass: "builtin-public",
     hosts: XUNLEI_HOSTS,
@@ -18378,7 +18397,7 @@ ${error.stack}` : "");
   });
 
   // src/app/integration-catalog.js
-  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default7, manifest_default6, manifest_default8, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13, manifest_default14, manifest_default15, manifest_default16, manifest_default17, manifest_default18, manifest_default19]);
+  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default8, manifest_default7, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13, manifest_default14, manifest_default15, manifest_default16, manifest_default17, manifest_default18, manifest_default19, manifest_default20]);
 
   // src/app/bootstrap.js
   function patchLayerRuntime(layerRuntime) {

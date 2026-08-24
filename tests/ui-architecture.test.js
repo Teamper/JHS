@@ -215,9 +215,9 @@ describe("list toolbar and UI cleanup contracts", () => {
     it("keeps external-site compatibility caches behind StorageService", () => {
         expect(otherSite).not.toContain("localStorage.");
         expect(otherSite).not.toContain("gmHttp");
-        expect(otherSite).toContain('getRuntimeService("http").request');
-        expect(otherSite).toContain('trustClass: "custom-public"');
-        expect(otherSite).toContain('trustClass: "builtin-public"');
+        expect(otherSite).not.toContain('getRuntimeService("http")');
+        expect(otherSite).toContain('getRuntimeService("movie").searchExternalSite');
+        expect(otherSite).toContain('getRuntimeService("movie").externalSites');
         expect(otherSite).toContain('getLocal("jhs_enabled_sites")');
         expect(otherSite).toContain('setLocal("jhs_enabled_sites"');
         expect(otherSite).toContain("const latestRaw = storage.getLocal(a)");
