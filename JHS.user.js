@@ -2650,8 +2650,8 @@
           return t3._circuitBroken = true, Promise.reject(t3);
         }
         "half-open" === u2.state && (u2.probing = true);
-        return new Promise(((a3, r3) => {
-          GM_xmlhttpRequest({
+        return new Promise((a3, r3) => {
+          globalThis.GM_xmlhttpRequest({
             method: e2,
             url: t2,
             headers: i2,
@@ -2702,7 +2702,7 @@
               this._recordFailure(o2), r3(new Error("请求超时: " + t2));
             }, "ontimeout")
           });
-        }));
+        });
       }, r2);
     }
   };
