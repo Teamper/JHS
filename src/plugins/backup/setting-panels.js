@@ -1,17 +1,26 @@
+// @ts-check
+
 import { escapeHtml } from "../../core/constants.js";
 import { disabledIdForPlugin, parseDisabledPlugins } from "../../core/legacy-plugin-contributions.js";
 import { getPluginCategories } from "./setting-templates.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 
+/** @typedef {any} DiagnosticsHandle */
+/** @typedef {any} DialogHandle */
+/** @typedef {{ state?: string, cooldownMs?: number, openTime?: number, failCount?: number }} CircuitBreakerRecord */
+/** @typedef {{ count: number, errors: number, lastUsed?: number }} DomainStatsRecord */
+/** @typedef {{ message: string, count: number }} HealthIssue */
+
 /** Render the network/external requests panel: circuit breaker status, domain stats. */
+/** @param {DiagnosticsHandle} diagnostics */
 export async function renderNetworkPanel(diagnostics) {
-    const network = diagnostics.getNetworkDiagnostics(), e = network.circuitBreakers, t = network.domainStats, n = await storageManager.getSetting("circuitBreakerThreshold", 3), a = await storageManager.getSetting("circuitBreakerCooldown", 6e4);
+    const network = diagnostics.getNetworkDiagnostics(), e = /** @type {Record<string, CircuitBreakerRecord>} */ (network.circuitBreakers), t = /** @type {Record<string, DomainStatsRecord>} */ (network.domainStats), n = await storageManager.getSetting("circuitBreakerThreshold", 3), a = await storageManager.getSetting("circuitBreakerCooldown", 6e4);
     $("#circuitBreakerThreshold").val(n), $("#circuitBreakerCooldownSec").val(Math.round(a / 1e3));
     const i = Object.entries(e);
     if (i.length) {
         let t = '<table class="jhs-data-table"><tr><th>域名</th><th class="is-center">状态</th><th class="is-center">失败次数</th><th class="is-center">操作</th></tr>';
         for (const [n, a] of i) {
-            const i = "open" === a.state ? "熔断" : "half-open" === a.state ? "半开" : "正常", s = "open" === a.state ? `剩余${Math.ceil((a.cooldownMs - (Date.now() - a.openTime)) / 1e3)}秒` : "";
+            const i = "open" === a.state ? "熔断" : "half-open" === a.state ? "半开" : "正常", s = "open" === a.state ? `剩余${Math.ceil((Number(a.cooldownMs) - (Date.now() - Number(a.openTime))) / 1e3)}秒` : "";
             t += `<tr><td>${escapeHtml(n)}</td><td class="is-center">${i} ${s}</td><td class="is-center">${Number(a.failCount) || 0}</td><td class="is-center"><button type="button" class="jhs-btn jhs-btn--danger reset-breaker" data-domain="${escapeHtml(n)}">重置</button></td></tr>`;
         }
         t += '</table>', $("#site-health-table").html(t);
@@ -25,7 +34,7 @@ export async function renderNetworkPanel(diagnostics) {
         }
         e += '</table>', e += `<p class="jhs-caption">共 ${s.length} 个域名</p>`, $("#domain-stats-table").html(e);
     } else $("#domain-stats-table").html('<p class="jhs-empty-note">暂无统计数据</p>');
-    $(".reset-breaker").off("click").on("click", (e => {
+    $(".reset-breaker").off("click").on("click", ((/** @type {MouseEvent} */ e) => {
         const t = $(e.target).data("domain");
         diagnostics.resetCircuitBreaker(t), show.ok(`已重置 ${t} 的熔断状态`), renderNetworkPanel(diagnostics);
     })), $("#resetAllBreakersBtn").off("click").on("click", (() => {
@@ -45,7 +54,7 @@ export async function renderSnapshotPanel() {
     };
     if (0 === e.length) return void $("#snapshot-list").html('<div class="jhs-empty-note">暂无快照，点击上方按钮创建</div>');
     $("#snapshot-list").find(".tabulator").length && $("#snapshot-list").empty();
-    const n = createJhsTable(Tabulator, "#snapshot-list", {
+    const n = createJhsTable((/** @type {any} */ (globalThis)).Tabulator, "#snapshot-list", {
         pagination: !1,
         layout: "fitColumns",
         placeholder: "暂无数据",
@@ -53,35 +62,35 @@ export async function renderSnapshotPanel() {
         columnDefaults: { headerHozAlign: "center", hozAlign: "center" },
         columns: [
             { title: "名称", field: "name", width: 200, headerSort: !1 },
-            { title: "来源", field: "source", width: 100, headerSort: !1, formatter: e => t[e.getValue()] || e.getValue() },
+            { title: "来源", field: "source", width: 100, headerSort: !1, formatter: (/** @type {any} */ e) => t[/** @type {keyof typeof t} */ (e.getValue())] || e.getValue() },
             { title: "时间", field: "time", width: 170, headerSort: !1 },
             { title: "数据量", field: "itemCount", width: 80, headerSort: !1 },
             {
-                title: "操作", minWidth: 220, headerSort: !1, formatter: (e, t, a) => {
+                title: "操作", minWidth: 220, headerSort: !1, formatter: (/** @type {any} */ e, /** @type {any} */ t, /** @type {(callback: () => void) => void} */ a) => {
                     const i = e.getData();
                     return a((() => {
                         const t = e.getElement().querySelector(".snap-restore"), a = e.getElement().querySelector(".snap-download"), s = e.getElement().querySelector(".snap-delete");
-                        t && t.addEventListener("click", (async e => {
+                        t && t.addEventListener("click", (async (/** @type {MouseEvent} */ e) => {
                             utils.q(e, `恢复到快照「${escapeHtml(i.name)}」? 当前数据会自动备份。`, (async () => {
                                 let e = loading();
                                 try {
                                     await storageManager.restoreSnapshot(i.id), show.ok("恢复成功, 页面将刷新"), setTimeout(() => location.reload(), 1e3);
                                 } catch (t) {
-                                    clog.error(t), show.error("恢复失败: " + t.message);
+                                    clog.error(t), show.error("恢复失败: " + (t instanceof Error ? t.message : String(t)));
                                 } finally { e.close(); }
                             }));
-                        })), a && a.addEventListener("click", (async e => {
+                        })), a && a.addEventListener("click", (async (/** @type {MouseEvent} */ e) => {
                             let t = loading();
                             try {
                                 const e = await storageManager.getSnapshot(i.id);
                                 if (!e) throw new Error("快照不存在");
                                 utils.download(JSON.stringify(e.data), `snapshot_${escapeHtml(i.name)}.json`), show.ok("下载成功");
-                            } catch (n) { show.error("下载失败: " + n.message); } finally { t.close(); }
-                        })), s && s.addEventListener("click", (async e => {
+                            } catch (n) { show.error("下载失败: " + (n instanceof Error ? n.message : String(n))); } finally { t.close(); }
+                        })), s && s.addEventListener("click", (async (/** @type {MouseEvent} */ e) => {
                             utils.q(e, `删除快照「${escapeHtml(i.name)}」?`, (async () => {
                                 try {
                                     await storageManager.deleteSnapshot(i.id), show.ok("已删除"), renderSnapshotPanel();
-                                } catch (t) { clog.error(t), show.error("删除失败: " + t.message); }
+                                } catch (t) { clog.error(t), show.error("删除失败: " + (t instanceof Error ? t.message : String(t))); }
                             }));
                         }));
                     })), '<button type="button" class="jhs-btn jhs-btn--primary snap-restore">恢复</button> <button type="button" class="jhs-btn jhs-btn--secondary snap-download">下载</button> <button type="button" class="jhs-btn jhs-btn--danger snap-delete">删除</button>';
@@ -93,6 +102,7 @@ export async function renderSnapshotPanel() {
 }
 
 /** Show a data diff preview dialog before importing data. */
+/** @param {any} e @param {any} t @param {any} n @param {DialogHandle} dialog */
 export function showDiffPreview(e, t, n = null, dialog) {
     const a = e.summary, i = [];
     for (const [s, o] of Object.entries(e.stores)) {
@@ -110,7 +120,7 @@ export function showDiffPreview(e, t, n = null, dialog) {
     if (i.length > 0) {
         s += '<div class="jhs-scroll-frame"><table class="jhs-data-table"><thead><tr><th>数据源</th><th>状态</th><th class="is-center">当前</th><th class="is-center">导入</th><th class="is-center">新增</th><th class="is-center">删除</th><th class="is-center">修改</th></tr></thead><tbody>';
         const o = { added: "新增", removed: "缺失", modified: "变更", unchanged: "无变化" };
-        for (const r of i) s += `<tr><td>${escapeHtml(r.store)}</td><td>${o[r.status] || r.status}</td><td class="is-center">${r.oldCount}</td><td class="is-center">${r.newCount}</td><td class="is-center is-success">${r.added || "-"}</td><td class="is-center is-danger">${r.removed || "-"}</td><td class="is-center is-warning">${r.modified || "-"}</td></tr>`;
+        for (const r of i) s += `<tr><td>${escapeHtml(r.store)}</td><td>${o[/** @type {keyof typeof o} */ (r.status)] || r.status}</td><td class="is-center">${r.oldCount}</td><td class="is-center">${r.newCount}</td><td class="is-center is-success">${r.added || "-"}</td><td class="is-center is-danger">${r.removed || "-"}</td><td class="is-center is-warning">${r.modified || "-"}</td></tr>`;
         s += '</tbody></table></div>';
     } else {
         s += '<div class="jhs-empty-note">数据完全一致，无需导入</div>';
@@ -124,20 +134,21 @@ export function showDiffPreview(e, t, n = null, dialog) {
         area: utils.getResponsiveArea(["700px", "auto"]),
         btn: ["确认导入", "取消"],
         anim: -1,
-        yes: async s => {
+        yes: async (/** @type {number} */ s) => {
             dialog.close(s);
             let o = loading();
             try {
                 await storageManager.createSnapshot("导入前自动备份", "auto-import"),
                 n ? (await storageManager.importData(n), show.ok("导入成功!"), void setTimeout(() => location.reload(), 1e3)) : t && (await storageManager.importData(t), show.ok("导入成功!"), void setTimeout(() => location.reload(), 1e3));
             } catch (r) {
-                clog.error(r), show.error("导入失败: " + r.message);
+                clog.error(r), show.error("导入失败: " + (r instanceof Error ? r.message : String(r)));
             } finally { o.close(); }
         }
     });
 }
 
 /** Render the plugin management panel: categorized plugin list, timing, errors, cache stats. */
+/** @param {DiagnosticsHandle} diagnostics */
 export async function renderPluginMgmtPanel(diagnostics) {
     const diagnosticSnapshot = diagnostics.exportSnapshot();
     const disabled = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
@@ -170,7 +181,7 @@ export async function renderPluginMgmtPanel(diagnostics) {
     $("#pm-total").text(allNames.length);
     $("#pm-enabled").text(enabledCount);
     $("#pm-disabled").text(disabled.length);
-    $(".pm-toggle").off("change").on("change", async (e) => {
+    $(".pm-toggle").off("change").on("change", async (/** @type {Event} */ e) => {
         const name = $(e.target).data("plugin");
         let list = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
         const disabledId = disabledIdForPlugin(name);
@@ -187,10 +198,10 @@ export async function renderPluginMgmtPanel(diagnostics) {
         show.ok(`插件 "${name}" 已${$(e.target).is(":checked") ? "启用" : "禁用"}，刷新后生效`);
     });
     const startup = diagnosticSnapshot.legacyStartup, timings = diagnosticSnapshot.legacyTimings;
-    const formatMs = value => Number.isFinite(value) ? value.toFixed(1) : "0.0";
+    const formatMs = (/** @type {number} */ value) => Number.isFinite(value) ? value.toFixed(1) : "0.0";
     let startupHtml = startup ? `<div class="jhs-inline-metrics"><span>就绪: <strong>${formatMs(startup.readyMs)} ms</strong></span><span>注册: ${formatMs(startup.registrationMs)} ms</span><span>样式: ${formatMs(startup.cssMs)} ms</span><span>即时插件: ${formatMs(startup.immediateMs)} ms</span><span>空闲任务: ${startup.idleCompleted}/${startup.idleCompleted + startup.idlePending}</span></div><p class="jhs-caption">就绪耗时不包含 @require 下载及浏览器脚本解析时间。</p>` : "";
     if (timings.length) {
-        const sorted = [...timings].sort((a, b) => b.elapsed - a.elapsed);
+        const sorted = [...timings].sort(((/** @type {any} */ a, /** @type {any} */ b) => b.elapsed - a.elapsed));
         let tHtml = '<table class="jhs-data-table"><tr><th>插件</th><th class="is-center">阶段</th><th class="is-right">耗时(ms)</th><th class="is-center">状态</th></tr>';
         for (const t of sorted) {
             const stateClass = t.status === "disabled" ? "is-muted" : t.elapsed > 500 ? "is-slow" : t.elapsed > 200 ? "is-warning" : "";
@@ -202,7 +213,7 @@ export async function renderPluginMgmtPanel(diagnostics) {
     } else {
         $("#plugin-timing-table").html(startupHtml + '<p class="jhs-empty-note">暂无数据，刷新页面后自动采集。</p>');
     }
-    const errorLog = diagnosticSnapshot.errors.filter((error) => error.source === "legacy-plugin");
+    const errorLog = diagnosticSnapshot.errors.filter((/** @type {any} */ error) => error.source === "legacy-plugin");
     if (errorLog.length) {
         let eHtml = '<table class="jhs-data-table"><tr><th>时间</th><th>插件</th><th>阶段</th><th>错误信息</th></tr>';
         for (const err of [...errorLog].reverse()) {
@@ -223,7 +234,7 @@ export async function renderDataHealthPanel() {
     if (!e.length) return;
     e.text("体检中...");
     try {
-        const t = await storageManager.inspectDataHealth(), n = t.fixable.reduce(((e, t) => e + t.count), 0), a = t.readonly.reduce(((e, t) => e + t.count), 0), i = t => t.length ? t.map((e => `<li><strong>${escapeHtml(e.message)}</strong>：${e.count}</li>`)).join("") : "<li>无</li>";
+        const t = await storageManager.inspectDataHealth(), n = t.fixable.reduce(((/** @type {number} */ e, /** @type {HealthIssue} */ t) => e + t.count), 0), a = t.readonly.reduce(((/** @type {number} */ e, /** @type {HealthIssue} */ t) => e + t.count), 0), i = (/** @type {HealthIssue[]} */ t) => t.length ? t.map((e => `<li><strong>${escapeHtml(e.message)}</strong>：${e.count}</li>`)).join("") : "<li>无</li>";
         e.html(`
                 <div class="jhs-summary-grid">
                     <div>番号记录：<strong>${t.totals.carList}</strong></div>

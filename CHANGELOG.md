@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 截图、宿主详情工作区、兼容增强与统一离线模块进入 strict checkJs；Provider availability、宿主资源边界、Observer 和 jQuery 兼容句柄均补充显式类型，覆盖率门禁同步上调至 84%。
 - FC2 详情、外部站点入口和详情操作栏进入 strict checkJs，明确宿主工作区、影片/磁力数据与遗留 Vendor 句柄边界，生产源码类型覆盖率提升至 86.4%。
 - 磁力聚合中心与列表封面操作进入 strict checkJs，补齐来源、磁力结果、卡片事件和媒体句柄契约，生产源码类型覆盖率提升至 87.5%，最低覆盖门禁同步上调至 87%。
+- DMM 预览、备份文件操作和设置诊断面板进入真实 strict checkJs，移除遮蔽生产实现的同名声明文件；生产源码类型覆盖率提升至 89.2%，最低覆盖门禁同步上调至 89%。
 
 ### Fixed
 
@@ -24,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 修复鉴定记录表头全选只处理当前分页的问题；现在会选择当前搜索和筛选条件下的全部记录，支持跨页保留、逐项排除，并让批量提示与实际处理数量一致。
 - 修复列表页“全部”仍被旧状态显示设置二次过滤的问题；收藏、已下载和已看作品会正常出现在“全部”中，硬屏蔽内容仍统一收在“屏蔽项”。
 - 修复 DMM/FANZA 外部链接检测分支因缓存键变量遮蔽站点配置而触发 TDZ 异常的问题，并增加构建产物回归测试。
+- 修复 JavBus 与列表封面请求 DMM 预览时未注入 MovieService 和 LifecycleScope、导致无缓存请求无法访问远端 Provider 的问题。
 
 ## [6.4.1](../../compare/v6.4.0...v6.4.1) - 2026-08-23
 

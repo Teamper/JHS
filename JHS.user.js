@@ -6345,29 +6345,30 @@
   __name(createJhsTable, "createJhsTable");
 
   // src/plugins/backup/setting-backup.js
+  var errorMessage = /* @__PURE__ */ __name((error) => error instanceof Error ? error.message : String(error), "errorMessage");
   async function importSettingData(showDiffPreviewFn) {
     try {
       const input = document.createElement("input");
       input.type = "file", input.accept = ".json";
       const cleanup = /* @__PURE__ */ __name(() => input.remove(), "cleanup");
       input.onchange = async (e2) => {
-        const t2 = e2.target.files[0];
+        const t2 = e2.currentTarget.files?.[0];
         if (!t2) return void cleanup();
         const n2 = new FileReader();
         n2.onload = async (e3) => {
           cleanup();
           try {
-            const t3 = e3.target.result.toString(), n3 = JSON.parse(t3);
+            const t3 = String(e3.currentTarget.result || ""), n3 = JSON.parse(t3);
             if (!n3 || "object" != typeof n3 || Array.isArray(n3)) throw new Error("文件内容不是有效的数据对象");
             const a2 = loading();
             try {
               const e4 = await storageManager.exportData(), t4 = await storageManager.diffData(e4, n3);
               a2.close(), showDiffPreviewFn(t4, n3, null);
             } catch (i2) {
-              a2.close(), clog.error(i2), show.error("差异分析失败: " + i2.message);
+              a2.close(), clog.error(i2), show.error("差异分析失败: " + errorMessage(i2));
             }
           } catch (t3) {
-            clog.error(t3), show.error("导入失败：文件内容不是有效的JSON格式 " + t3.message);
+            clog.error(t3), show.error("导入失败：文件内容不是有效的JSON格式 " + errorMessage(t3));
           }
         }, n2.onerror = () => {
           cleanup(), show.error("读取文件时出错");
@@ -6375,7 +6376,7 @@
       }, document.body.appendChild(input), input.click();
       setTimeout(cleanup, 3e5);
     } catch (e2) {
-      clog.error(e2), show.error("导入数据时出错: " + e2.message);
+      clog.error(e2), show.error("导入数据时出错: " + errorMessage(e2));
     }
   }
   __name(importSettingData, "importSettingData");
@@ -6393,7 +6394,7 @@
       const e2 = webdavService.createClient({ url: n2, username: a2, password: i2 });
       await e2.backup(folderName, s2, o2), show.ok("备份完成");
     } catch (l2) {
-      clog.error(l2), show.error(l2.toString());
+      clog.error(l2), show.error(errorMessage(l2));
     } finally {
       r2.close();
     }
@@ -6411,7 +6412,7 @@
       const e2 = webdavService.createClient({ url: n2, username: a2, password: i2 }), t3 = await e2.getBackupList(folderName);
       openFileListDialogFn(t3, e2, "WebDav");
     } catch (o2) {
-      clog.error(o2), show.error(`发生错误: ${o2 ? o2.message : o2}`);
+      clog.error(o2), show.error(`发生错误: ${errorMessage(o2)}`);
     } finally {
       s2.close();
     }
@@ -6469,7 +6470,7 @@
                 container.html(renderCards(e2));
                 dialog.alert("删除成功");
               } catch (err) {
-                clog.error(err), show.error(`发生错误: ${err ? err.message : err}`);
+                clog.error(err), show.error(`发生错误: ${errorMessage(err)}`);
               } finally {
                 load.close();
               }
@@ -6495,7 +6496,7 @@
               load.close();
               showDiffPreviewFn(diff, null, parsed);
             } catch (err) {
-              load.close(), clog.error(err), show.error("预览失败: " + (err ? err.message : err));
+              load.close(), clog.error(err), show.error("预览失败: " + errorMessage(err));
             }
           }
         });
@@ -6515,7 +6516,7 @@
       area: utils.getResponsiveArea(["800px", "70%"]),
       anim: -1,
       success: /* @__PURE__ */ __name((a2) => {
-        const i2 = createJhsTable(Tabulator, "#table-container", {
+        const i2 = createJhsTable(globalThis.Tabulator, "#table-container", {
           pagination: false,
           layout: "fitColumns",
           placeholder: "暂无数据",
@@ -6575,7 +6576,7 @@
                       let e6 = await t2.getBackupList(folderName);
                       i2.replaceData(e6), dialog.alert("删除成功");
                     } catch (s4) {
-                      clog.error(s4), show.error(`发生错误: ${s4 ? s4.message : s4}`);
+                      clog.error(s4), show.error(`发生错误: ${errorMessage(s4)}`);
                     } finally {
                       a5.close();
                     }
@@ -6598,7 +6599,7 @@
                     const n3 = JSON.parse(e5), i3 = await storageManager.exportData(), s4 = await storageManager.diffData(i3, n3);
                     a5.close(), showDiffPreviewFn(s4, null, n3);
                   } catch (i3) {
-                    a5.close(), clog.error(i3), show.error("预览失败: " + (i3 ? i3.message : i3));
+                    a5.close(), clog.error(i3), show.error("预览失败: " + errorMessage(i3));
                   }
                 }));
               })), '\n                                    <button type="button" class="jhs-btn jhs-btn--danger backup-delete">删除</button>\n                                    <button type="button" class="jhs-btn jhs-btn--secondary backup-download">下载</button>\n                                    <button type="button" class="jhs-btn jhs-btn--primary backup-import">导入</button>\n                                ';
@@ -6631,7 +6632,7 @@
       const e2 = JSON.stringify(await storageManager.exportData()), t2 = `${utils.getNowStr("_", "_")}.json`;
       utils.download(e2, t2), show.ok("数据导出成功");
     } catch (t2) {
-      clog.error(t2), show.error("导出数据时出错: " + t2.message);
+      clog.error(t2), show.error("导出数据时出错: " + errorMessage(t2));
     }
   }
   __name(exportSettingData, "exportSettingData");
@@ -8593,7 +8594,7 @@
     if (i2.length) {
       let t3 = '<table class="jhs-data-table"><tr><th>域名</th><th class="is-center">状态</th><th class="is-center">失败次数</th><th class="is-center">操作</th></tr>';
       for (const [n3, a3] of i2) {
-        const i3 = "open" === a3.state ? "熔断" : "half-open" === a3.state ? "半开" : "正常", s3 = "open" === a3.state ? `剩余${Math.ceil((a3.cooldownMs - (Date.now() - a3.openTime)) / 1e3)}秒` : "";
+        const i3 = "open" === a3.state ? "熔断" : "half-open" === a3.state ? "半开" : "正常", s3 = "open" === a3.state ? `剩余${Math.ceil((Number(a3.cooldownMs) - (Date.now() - Number(a3.openTime))) / 1e3)}秒` : "";
         t3 += `<tr><td>${escapeHtml(n3)}</td><td class="is-center">${i3} ${s3}</td><td class="is-center">${Number(a3.failCount) || 0}</td><td class="is-center"><button type="button" class="jhs-btn jhs-btn--danger reset-breaker" data-domain="${escapeHtml(n3)}">重置</button></td></tr>`;
       }
       t3 += "</table>", $("#site-health-table").html(t3);
@@ -8626,7 +8627,7 @@
     };
     if (0 === e2.length) return void $("#snapshot-list").html('<div class="jhs-empty-note">暂无快照，点击上方按钮创建</div>');
     $("#snapshot-list").find(".tabulator").length && $("#snapshot-list").empty();
-    const n2 = createJhsTable(Tabulator, "#snapshot-list", {
+    const n2 = createJhsTable(globalThis.Tabulator, "#snapshot-list", {
       pagination: false,
       layout: "fitColumns",
       placeholder: "暂无数据",
@@ -8651,7 +8652,7 @@
                   try {
                     await storageManager.restoreSnapshot(i2.id), show.ok("恢复成功, 页面将刷新"), setTimeout(() => location.reload(), 1e3);
                   } catch (t5) {
-                    clog.error(t5), show.error("恢复失败: " + t5.message);
+                    clog.error(t5), show.error("恢复失败: " + (t5 instanceof Error ? t5.message : String(t5)));
                   } finally {
                     e5.close();
                   }
@@ -8663,7 +8664,7 @@
                   if (!e5) throw new Error("快照不存在");
                   utils.download(JSON.stringify(e5.data), `snapshot_${escapeHtml(i2.name)}.json`), show.ok("下载成功");
                 } catch (n3) {
-                  show.error("下载失败: " + n3.message);
+                  show.error("下载失败: " + (n3 instanceof Error ? n3.message : String(n3)));
                 } finally {
                   t5.close();
                 }
@@ -8672,7 +8673,7 @@
                   try {
                     await storageManager.deleteSnapshot(i2.id), show.ok("已删除"), renderSnapshotPanel();
                   } catch (t5) {
-                    clog.error(t5), show.error("删除失败: " + t5.message);
+                    clog.error(t5), show.error("删除失败: " + (t5 instanceof Error ? t5.message : String(t5)));
                   }
                 }));
               }));
@@ -8721,7 +8722,7 @@
         try {
           await storageManager.createSnapshot("导入前自动备份", "auto-import"), n2 ? (await storageManager.importData(n2), show.ok("导入成功!"), void setTimeout(() => location.reload(), 1e3)) : t2 && (await storageManager.importData(t2), show.ok("导入成功!"), void setTimeout(() => location.reload(), 1e3));
         } catch (r3) {
-          clog.error(r3), show.error("导入失败: " + r3.message);
+          clog.error(r3), show.error("导入失败: " + (r3 instanceof Error ? r3.message : String(r3)));
         } finally {
           o2.close();
         }
@@ -8781,7 +8782,7 @@
     const formatMs = /* @__PURE__ */ __name((value) => Number.isFinite(value) ? value.toFixed(1) : "0.0", "formatMs");
     let startupHtml = startup ? `<div class="jhs-inline-metrics"><span>就绪: <strong>${formatMs(startup.readyMs)} ms</strong></span><span>注册: ${formatMs(startup.registrationMs)} ms</span><span>样式: ${formatMs(startup.cssMs)} ms</span><span>即时插件: ${formatMs(startup.immediateMs)} ms</span><span>空闲任务: ${startup.idleCompleted}/${startup.idleCompleted + startup.idlePending}</span></div><p class="jhs-caption">就绪耗时不包含 @require 下载及浏览器脚本解析时间。</p>` : "";
     if (timings.length) {
-      const sorted = [...timings].sort((a2, b2) => b2.elapsed - a2.elapsed);
+      const sorted = [...timings].sort(((a2, b2) => b2.elapsed - a2.elapsed));
       let tHtml = '<table class="jhs-data-table"><tr><th>插件</th><th class="is-center">阶段</th><th class="is-right">耗时(ms)</th><th class="is-center">状态</th></tr>';
       for (const t2 of sorted) {
         const stateClass = t2.status === "disabled" ? "is-muted" : t2.elapsed > 500 ? "is-slow" : t2.elapsed > 200 ? "is-warning" : "";
@@ -12067,15 +12068,15 @@ ${failure.stack}` : "");
   var Z = /* @__PURE__ */ __name((e2, t2) => {
     if (!e2 || 0 === e2.length) return null;
     const n2 = new Set(e2);
-    if (n2.has(t2)) return t2;
+    if (t2 && n2.has(t2)) return t2;
     const a2 = L.map(((e3) => e3.quality)).reverse();
     for (const i2 of a2) if (n2.has(i2)) return i2;
-    return e2[0];
+    return e2[0] || null;
   }, "Z");
   var ee = "jhs_dmm_video";
   var _DmmPreviewParser = class _DmmPreviewParser {
     constructor(e2, storage, movie, scope) {
-      this.carNum = e2, this.storage = storage, this.movie = movie, this.scope = scope, this.lastError = null;
+      this.carNum = e2 || "", this.storage = storage, this.movie = movie, this.scope = scope, this.lastError = null;
     }
     _checkCache() {
       const cached = this.storage.getLocal(ee), e2 = cached ? JSON.parse(cached) : {};
@@ -12114,9 +12115,10 @@ ${failure.stack}` : "");
         if (!sources) return null;
         return this._updateCache(sources), sources;
       } catch (n2) {
-        this.lastError = n2 instanceof ProviderError ? n2 : new ProviderError("dmm", n2?.code || "PARSE_ERROR", n2.message || String(n2), {
+        const error = n2;
+        this.lastError = n2 instanceof ProviderError ? n2 : new ProviderError("dmm", error?.code || "PARSE_ERROR", error?.message || String(n2), {
           cause: n2,
-          retryable: n2?.retryable === true
+          retryable: error?.retryable === true
         }), clog.error("DMM API 搜索失败:", this.lastError);
         const e3 = $("#fanzaBtn");
         return e3.attr("href", this.movie.searchUrl("dmm", { carNum: this.carNum })), e3.attr("title", "未查询到, 点击前往搜索页"), e3.css("backgroundColor", "var(--jhs-status-filter)"), null;
@@ -12216,12 +12218,14 @@ ${failure.stack}` : "");
         "aria-label": "视频画质"
       });
       $host.find("#video-bottom-toolbar").remove();
-      let dmmPlayed = false, $dmmVideo = null, dmmVideo = null;
+      let dmmPlayed = false;
+      let $dmmVideo = null;
+      let dmmVideo = null;
       if (sources) {
         const preferredQuality = await storageManager.getSetting("videoQuality"), selectedQuality = Z(Object.keys(sources), preferredQuality), source = sources[selectedQuality];
         const currentTime = nativeVideo.currentTime;
         $dmmVideo = this.createDmmPlayer($nativeVideo), dmmVideo = $dmmVideo[0], dmmVideo.muted = muted == null || muted === true, $dmmVideo.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {
-          void settings.set("videoMuted", dmmVideo.muted).catch(((error2) => clog.error("保存视频静音设置失败", error2)));
+          void settings.set("videoMuted", dmmVideo.muted).catch((error2) => clog.error("保存视频静音设置失败", error2));
         })), $dmmVideo.attr("src", source), dmmVideo.load(), dmmVideo.currentTime = currentTime, $dmmVideo.addClass("is-active");
         dmmPlayed = await safePlay(dmmVideo, {
           context: "JavDB 高画质预览",
@@ -12313,7 +12317,10 @@ ${failure.stack}` : "");
                 </div>
             </button>`);
       $("#sample-waterfall").prepend(t2);
-      "yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes") && fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage")).catch(((error) => clog.warn("预加载 DMM 失败", error)));
+      if ("yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes")) {
+        const scope = await this.getRuntimeService("scope")();
+        void fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope).catch(((error) => clog.warn("预加载 DMM 失败", error)));
+      }
       let n2 = false, a2 = $(".preview-video-container");
       a2.on("click", (async (e3) => {
         if (e3.preventDefault(), e3.stopPropagation(), n2) show.info("正在加载中, 勿重复点击");
@@ -12335,7 +12342,7 @@ ${failure.stack}` : "");
         notify: true
       });
       let a2 = this.getPageInfo().carNum;
-      const { sources: i2, error: previewError } = await fetchDmmPreview(a2, this.getRuntimeService("storage"));
+      const scope = await this.getRuntimeService("scope")(), { sources: i2, error: previewError } = await fetchDmmPreview(a2, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope);
       i2 && 0 !== Object.keys(i2).length ? (await this.createVideoPlayerAndControls(i2, t2), n2 = $("#preview-video"), n2.length > 0 ? (e2.addClass("is-open"), await safePlay(n2[0], {
         context: "JavBus 预览视频",
         notify: true,
@@ -12576,7 +12583,7 @@ ${failure.stack}` : "");
         notify: true
       }), void t2.hide();
       t2.addClass("loading"), t2.after('<div class="loading-spinner"></div>');
-      const s2 = t2.attr("src"), { sources: o2, error: previewError } = await fetchDmmPreview(n2, this.getRuntimeService("storage"));
+      const s2 = t2.attr("src"), scope = await this.getRuntimeService("scope")(), { sources: o2, error: previewError } = await fetchDmmPreview(n2, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope);
       if (!o2) return show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未解析到视频"), void this.showImg(e2, t2, n2);
       let r2 = await storageManager.getSetting("videoQuality");
       r2 = Z(Object.keys(o2), r2);
@@ -12763,8 +12770,8 @@ ${failure.stack}` : "");
       }));
     }
     showErrorFallback(e2, t2) {
-      const errorMessage = t2 instanceof Error ? t2.message : "";
-      clog.error("获取缩略图失败:", errorMessage.substring(0, 100));
+      const errorMessage2 = t2 instanceof Error ? t2.message : "";
+      clog.error("获取缩略图失败:", errorMessage2.substring(0, 100));
       const a2 = `jhs-screenshot-message${l ? " jhs-screenshot-message--bus" : ""}`;
       const carNum = normalizeCarNum(e2);
       if (!carNum) return void $(".screen-container").empty().append($("<div></div>").addClass(a2).text("无法获取番号，缩略图未加载"));

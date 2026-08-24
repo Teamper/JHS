@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const preview = readTestFile(join(import.meta.dirname, "../src/plugins/image-viewer/preview-video.js"), "utf8");
 const bus = readTestFile(join(import.meta.dirname, "../src/plugins/image-viewer/bus-preview-video.js"), "utf8");
+const cover = readTestFile(join(import.meta.dirname, "../src/plugins/image-viewer/cover-button.js"), "utf8");
 
 describe("preview playback contracts", () => {
     it("starts the native JavDB preview before awaiting DMM without taking over its source", () => {
@@ -49,8 +50,15 @@ describe("preview playback contracts", () => {
             expect(source).toContain("jhs-video-quality-btn"); expect(source).toContain("aria-pressed"); expect(source).not.toContain("video-control-btn");
         }
     });
+    it("injects the movie service and lifecycle scope for every remote DMM preview", () => {
+        for (const source of [bus, cover]) {
+            expect(source).toContain('getRuntimeService("movie")');
+            expect(source).toContain('getRuntimeService("scope")()');
+            expect(source).toMatch(/fetchDmmPreview\([^\n]+getRuntimeService\("storage"\)[^\n]+getRuntimeService\("movie"\)[^\n]+scope\)/);
+        }
+    });
     it("keeps native play calls inside safePlay only", () => {
-        const allRuntime = [ preview, bus, readTestFile(join(import.meta.dirname, "../src/plugins/image-viewer/cover-button.js"), "utf8"), readTestFile(join(import.meta.dirname, "../src/plugins/status/list-page.js"), "utf8") ].join("\n");
+        const allRuntime = [ preview, bus, cover, readTestFile(join(import.meta.dirname, "../src/plugins/status/list-page.js"), "utf8") ].join("\n");
         expect(allRuntime).not.toMatch(/\.play\s*\(/);
     });
 });

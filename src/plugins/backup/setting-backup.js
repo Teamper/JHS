@@ -1,31 +1,41 @@
+// @ts-check
+
 import { escapeHtml } from "../../core/constants.js";
 import { decryptCredential, decryptData, encryptData } from "../../core/credential-crypto.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 
+/** @typedef {{ name: string, size: number, createTime: string | number, fileId: string }} BackupFile */
+/** @typedef {(diff: any, current: any, imported: any) => void} ShowDiffPreview */
+/** @typedef {any} WebDavHandle */
+/** @typedef {any} DialogHandle */
+/** @param {unknown} error */
+const errorMessage = error => error instanceof Error ? error.message : String(error);
+
 /** Handle JSON file import via file input, run diff analysis, show preview. */
+/** @param {ShowDiffPreview} showDiffPreviewFn */
 export async function importSettingData(showDiffPreviewFn) {
     try {
         const input = document.createElement("input");
         input.type = "file", input.accept = ".json";
         const cleanup = () => input.remove();
         input.onchange = async e => {
-            const t = e.target.files[0];
+            const t = /** @type {HTMLInputElement} */ (e.currentTarget).files?.[0];
             if (!t) return void cleanup();
             const n = new FileReader;
             n.onload = async e => {
                 cleanup();
                 try {
-                    const t = e.target.result.toString(), n = JSON.parse(t);
+                    const t = String((/** @type {FileReader} */ (e.currentTarget)).result || ""), n = JSON.parse(t);
                     if (!n || "object" != typeof n || Array.isArray(n)) throw new Error("文件内容不是有效的数据对象");
                     const a = loading();
                     try {
                         const e = await storageManager.exportData(), t = await storageManager.diffData(e, n);
                         a.close(), showDiffPreviewFn(t, n, null);
                     } catch (i) {
-                        a.close(), clog.error(i), show.error("差异分析失败: " + i.message);
+                        a.close(), clog.error(i), show.error("差异分析失败: " + errorMessage(i));
                     }
                 } catch (t) {
-                    clog.error(t), show.error("导入失败：文件内容不是有效的JSON格式 " + t.message);
+                    clog.error(t), show.error("导入失败：文件内容不是有效的JSON格式 " + errorMessage(t));
                 }
             }, n.onerror = () => {
                 cleanup(), show.error("读取文件时出错");
@@ -33,11 +43,12 @@ export async function importSettingData(showDiffPreviewFn) {
         }, document.body.appendChild(input), input.click();
         setTimeout(cleanup, 3e5);
     } catch (e) {
-        clog.error(e), show.error("导入数据时出错: " + e.message);
+        clog.error(e), show.error("导入数据时出错: " + errorMessage(e));
     }
 }
 
 /** Create encrypted backup and upload via WebDAV. */
+/** @param {string} folderName @param {WebDavHandle} webdavService */
 export async function backupDataByWebDav(folderName, webdavService) {
     const t = await storageManager.getSetting(), n = t.webDavUrl;
     if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
@@ -52,13 +63,14 @@ export async function backupDataByWebDav(folderName, webdavService) {
         const e = webdavService.createClient({ url: n, username: a, password: i });
         await e.backup(folderName, s, o), show.ok("备份完成");
     } catch (l) {
-        clog.error(l), show.error(l.toString());
+        clog.error(l), show.error(errorMessage(l));
     } finally {
         r.close();
     }
 }
 
 /** List WebDAV backups and open the file list dialog. */
+/** @param {string} folderName @param {Function} openFileListDialogFn @param {WebDavHandle} webdavService */
 export async function backupListBtnByWebDav(folderName, openFileListDialogFn, webdavService) {
     const t = await storageManager.getSetting(), n = t.webDavUrl;
     if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
@@ -71,25 +83,26 @@ export async function backupListBtnByWebDav(folderName, openFileListDialogFn, we
         const e = webdavService.createClient({ url: n, username: a, password: i }), t = await e.getBackupList(folderName);
         openFileListDialogFn(t, e, "WebDav");
     } catch (o) {
-        clog.error(o), show.error(`发生错误: ${o ? o.message : o}`);
+        clog.error(o), show.error(`发生错误: ${errorMessage(o)}`);
     } finally {
         s.close();
     }
 }
 
 /** Mobile-specific backup file list dialog using card-based UI. */
+/** @param {BackupFile[]} e @param {WebDavHandle} t @param {string} n @param {string} folderName @param {ShowDiffPreview} showDiffPreviewFn @param {DialogHandle} dialog */
 function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog) {
-    const formatSize = (size) => {
+    const formatSize = (/** @type {number} */ size) => {
         const units = ["B", "KB", "MB", "GB", "TB", "PB"];
         let i = 0, s = size;
         for (; s >= 1024 && i < units.length - 1;) s /= 1024, i++;
         return `${s % 1 == 0 ? s.toFixed(0) : s.toFixed(2)} ${units[i]}`;
     };
-    const renderCards = (files) => {
+    const renderCards = (/** @type {BackupFile[]} */ files) => {
         if (!files || files.length === 0) {
             return '<div class="jhs-backup-empty">暂无数据</div>';
         }
-        return files.map((file, idx) => `
+        return files.map((file, /** @type {number} */ idx) => `
                 <div class="jhs-backup-card" data-idx="${idx}">
                     <div class="jhs-backup-card-name">${escapeHtml(file.name)}</div>
                     <div class="jhs-backup-card-meta">${formatSize(file.size)} · ${utils.getNowStr("-", ":", file.createTime)}</div>
@@ -108,9 +121,9 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog
         content: `<div id="${containerId}" class="jhs-backup-cards">${renderCards(e)}</div>`,
         area: utils.getResponsiveArea(["800px", "70%"]),
         anim: -1,
-        success: (layerEl) => {
+        success: (/** @type {HTMLElement} */ layerEl) => {
             const container = $(layerEl).find(`#${containerId}`);
-            container.on("click", ".jhs-backup-btn", async (ev) => {
+            container.on("click", ".jhs-backup-btn", async (/** @type {MouseEvent} */ ev) => {
                 const btn = $(ev.currentTarget);
                 const action = btn.data("action");
                 const idx = btn.data("idx");
@@ -119,7 +132,7 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog
                 if (action === "delete") {
                     dialog.confirm(`是否删除 ${file.name} ?`, {
                         icon: 3, title: "提示", btn: ["确定", "取消"]
-                    }, async (confirmIdx) => {
+                    }, async (/** @type {number} */ confirmIdx) => {
                         dialog.close(confirmIdx);
                         let load = loading();
                         try {
@@ -128,7 +141,7 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog
                             container.html(renderCards(e));
                             dialog.alert("删除成功");
                         } catch (err) {
-                            clog.error(err), show.error(`发生错误: ${err ? err.message : err}`);
+                            clog.error(err), show.error(`发生错误: ${errorMessage(err)}`);
                         } finally { load.close(); }
                     });
                 } else if (action === "download") {
@@ -150,7 +163,7 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog
                         load.close();
                         showDiffPreviewFn(diff, null, parsed);
                     } catch (err) {
-                        load.close(), clog.error(err), show.error("预览失败: " + (err ? err.message : err));
+                        load.close(), clog.error(err), show.error("预览失败: " + errorMessage(err));
                     }
                 }
             });
@@ -159,6 +172,7 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog
 }
 
 /** Desktop backup file list dialog using Tabulator table. */
+/** @param {BackupFile[]} e @param {WebDavHandle} t @param {string} n @param {string} folderName @param {ShowDiffPreview} showDiffPreviewFn @param {DialogHandle} dialog */
 export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialog) {
     if (utils.isMobileMode()) {
         openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog);
@@ -170,8 +184,8 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialo
         content: '\n                <div class="jhs-table-dialog"> \n                    <div id="table-container" class="jhs-table-dialog__content"></div>\n                </div>\n            ',
         area: utils.getResponsiveArea([ "800px", "70%" ]),
         anim: -1,
-        success: a => {
-            const i = createJhsTable(Tabulator, "#table-container", {
+        success: (/** @type {HTMLElement} */ a) => {
+            const i = createJhsTable((/** @type {any} */ (globalThis)).Tabulator, "#table-container", {
                 pagination: !1,
                 layout: "fitColumns",
                 placeholder: "暂无数据",
@@ -194,7 +208,7 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialo
                     field: "size",
                     responsive: 1,
                     headerSort: !1,
-                    formatter: (e, t, n) => {
+                    formatter: (/** @type {any} */ e, /** @type {any} */ t, /** @type {any} */ n) => {
                         const a = [ "B", "KB", "MB", "GB", "TB", "PB" ];
                         let i = 0, s = e.getData().size;
                         for (;s >= 1024 && i < a.length - 1; ) s /= 1024, i++;
@@ -205,7 +219,7 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialo
                     field: "createTime",
                     responsive: 2,
                     headerSort: !1,
-                    formatter: (e, t, n) => {
+                    formatter: (/** @type {any} */ e, /** @type {any} */ t, /** @type {any} */ n) => {
                         const a = e.getData();
                         return `${utils.getNowStr("-", ":", a.createTime)}`;
                     }
@@ -214,16 +228,16 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialo
                     minWidth: 250,
                     responsive: 0,
                     headerSort: !1,
-                    formatter: (e, a, s) => {
+                    formatter: (/** @type {any} */ e, /** @type {any} */ a, /** @type {(callback: () => void) => void} */ s) => {
                         const o = e.getData();
                         return s((() => {
                             const a = e.getElement().querySelector(".backup-delete"), s = e.getElement().querySelector(".backup-download"), r = e.getElement().querySelector(".backup-import");
-                            a && a.addEventListener("click", (e => {
+                            a && a.addEventListener("click", ((/** @type {MouseEvent} */ e) => {
                                 dialog.confirm(`是否删除 ${o.name} ?`, {
                                     icon: 3,
                                     title: "提示",
                                     btn: [ "确定", "取消" ]
-                                }, (async e => {
+                                }, (async (/** @type {number} */ e) => {
                                     dialog.close(e);
                                     let a = loading();
                                     try {
@@ -231,12 +245,12 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialo
                                         let e = await t.getBackupList(folderName);
                                         i.replaceData(e), dialog.alert("删除成功");
                                     } catch (s) {
-                                        clog.error(s), show.error(`发生错误: ${s ? s.message : s}`);
+                                        clog.error(s), show.error(`发生错误: ${errorMessage(s)}`);
                                     } finally {
                                         a.close();
                                     }
                                 }));
-                            })), s && s.addEventListener("click", (async e => {
+                            })), s && s.addEventListener("click", (async (/** @type {MouseEvent} */ e) => {
                                 let a = loading();
                                 try {
                                     const e = await decryptData(await t.getFileContent(o.fileId));
@@ -246,7 +260,7 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialo
                                 } finally {
                                     a.close();
                                 }
-                            })), r && r.addEventListener("click", (async e => {
+                            })), r && r.addEventListener("click", (async (/** @type {MouseEvent} */ e) => {
                                 let a = loading();
                                 try {
                                     let e = await t.getFileContent(o.fileId);
@@ -254,7 +268,7 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialo
                                     const n = JSON.parse(e), i = await storageManager.exportData(), s = await storageManager.diffData(i, n);
                                     a.close(), showDiffPreviewFn(s, null, n);
                                 } catch (i) {
-                                    a.close(), clog.error(i), show.error("预览失败: " + (i ? i.message : i));
+                                    a.close(), clog.error(i), show.error("预览失败: " + errorMessage(i));
                                 }
                             }));
                         })), '\n                                    <button type="button" class="jhs-btn jhs-btn--danger backup-delete">删除</button>\n                                    <button type="button" class="jhs-btn jhs-btn--secondary backup-download">下载</button>\n                                    <button type="button" class="jhs-btn jhs-btn--primary backup-import">导入</button>\n                                ';
@@ -288,6 +302,6 @@ export async function exportSettingData() {
         const e = JSON.stringify(await storageManager.exportData()), t = `${utils.getNowStr("_", "_")}.json`;
         utils.download(e, t), show.ok("数据导出成功");
     } catch (t) {
-        clog.error(t), show.error("导出数据时出错: " + t.message);
+        clog.error(t), show.error("导出数据时出错: " + errorMessage(t));
     }
 }
