@@ -1,6 +1,4 @@
 import { normalizeCarNum } from "./constants.js";
-import { jhsEventBus } from "./event-bus.js";
-import { storageManager } from "./http.js";
 import { STATE_FLAG_NAMES, createEmptyStateFlags, normalizeStateFlags, syncLegacyStatus } from "./state-model.js";
 
 const ACTIVITY_SOFT_LIMIT = 1e3, ACTIVITY_HARD_LIMIT = 1e4, ACTIVITY_RETENTION_MS = 30 * 864e5;
@@ -64,7 +62,7 @@ function pruneActivityLog(log, now = Date.now()) {
     return result;
 }
 
-class StateService {
+export class StateService {
     constructor(storage, eventBus) {
         this.storage = storage, this.eventBus = eventBus, this._queue = Promise.resolve(), this._recovering = !1;
     }
@@ -270,9 +268,7 @@ class StateService {
     }
 }
 
-export const stateService = new StateService(storageManager, jhsEventBus);
-
 /** 在 Composition Root 中挂载仍由旧 StorageManager 调用的兼容引用。 */
-export function attachStateServiceCompatibility() {
+export function attachStateServiceCompatibility(stateService, storageManager) {
     storageManager.stateService = stateService;
 }

@@ -18,12 +18,12 @@ function loadController() {
         document: dom.window.document, $, m: "屏蔽", u: "取消屏蔽", v: "收藏", b: "取消收藏", y: "标记下载", k: "标记观看",
         normalizeCarNum: value => String(value).trim().toUpperCase(),
         normalizeStateFlags: flags => ({ blocked: false, favorite: false, downloaded: false, watched: false, ...flags }),
-        storageManager: { getCar: async carNum => records.get(carNum) }, stateService: { toggle },
+        storageManager: { getCar: async carNum => records.get(carNum) },
         utils: { q: confirm, closePage }, show: { error: vi.fn() }, clog: { error: vi.fn() }
     });
     const source = readTestFile(join(repoRoot, "src/core/detail-state-controller.js"), "utf8");
     vm.runInContext(`${source};globalThis.Controller=DetailStateController`, context);
-    return { controller: new context.Controller(), dom, $, records, toggle, confirm, closePage };
+    return { controller: new context.Controller({ toggle }), dom, $, records, toggle, confirm, closePage };
 }
 
 describe("DetailStateController", () => {

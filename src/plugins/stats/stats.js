@@ -3,7 +3,6 @@
 import { escapeHtml } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
-import { stateService } from "../../core/state-service.js";
 import { StatsRepository } from "../../features/stats/stats-repository.js";
 
 /** @typedef {Record<string, any>} StatsRecord */
@@ -11,8 +10,10 @@ import { StatsRepository } from "../../features/stats/stats-repository.js";
 export class StatsPlugin extends BasePlugin {
     constructor() {
         super(...arguments);
-        this.statsRepository = new StatsRepository({ storage: storageManager, state: stateService });
+        /** @type {StatsRepository | null} */
+        this.statsRepository = null;
     }
+    getStatsRepository() { return this.statsRepository ||= new StatsRepository({ storage: storageManager, state: this.getRuntimeService("state") }); }
     getName() { return "StatsPlugin"; }
     async initCss() {
         return `
@@ -41,7 +42,7 @@ export class StatsPlugin extends BasePlugin {
     }
     async openDialog() {
         const diagnostics = this.getRuntimeService("diagnostics").exportSnapshot();
-        const { cars, actresses, blacklist, activity } = await this.statsRepository.loadLibrarySnapshot(), total = cars.length;
+        const { cars, actresses, blacklist, activity } = await this.getStatsRepository().loadLibrarySnapshot(), total = cars.length;
         const counts = { manualBlocked: 0, favorite: 0, hasDown: 0, hasWatch: 0, pending: 0 };
         cars.forEach(((/** @type {StatsRecord} */ car) => { const flags = normalizeStateFlags(car.stateFlags); flags.blocked && counts.manualBlocked++, flags.favorite && counts.favorite++, flags.downloaded && counts.hasDown++, flags.watched && counts.hasWatch++, hasAnyState(flags) || counts.pending++; }));
         const actressCounts = new Map;

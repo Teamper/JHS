@@ -10,9 +10,9 @@ import { HistoryRepository } from "../src/features/history/history-repository.js
 
 function loadHistory() {
     const dom = new JSDOM("<body></body>", { url: "https://javdb.com/users/collection_codes" }), $ = jqueryFactory(dom.window), patch = vi.fn().mockResolvedValue(), toggle = vi.fn().mockResolvedValue(), close = vi.fn(), confirm = vi.fn((event, message, callback) => callback());
-    const layer = { open: vi.fn(), close }, context = vm.createContext({
-        document: dom.window.document, window: dom.window, $, BasePlugin: class { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : null; } }, HistorySelectionModel, HistoryRepository, Tabulator: class {}, layer,
-        normalizeStateFlags: flags => ({ favorite: false, downloaded: false, watched: false, blocked: false, ...flags }), storageManager: {}, stateService: { patch, toggle }, legacyActionToFlag: action => ({ filter: "blocked", favorite: "favorite", hasDown: "downloaded", hasWatch: "watched" })[action],
+    const layer = { open: vi.fn(), close }, stateService = { patch, toggle }, context = vm.createContext({
+        document: dom.window.document, window: dom.window, $, BasePlugin: class { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : name === "state" ? stateService : null; } }, HistorySelectionModel, HistoryRepository, Tabulator: class {}, layer,
+        normalizeStateFlags: flags => ({ favorite: false, downloaded: false, watched: false, blocked: false, ...flags }), storageManager: {}, legacyActionToFlag: action => ({ filter: "blocked", favorite: "favorite", hasDown: "downloaded", hasWatch: "watched" })[action],
         utils: { getDialogArea: () => [], q: confirm }, show: { error: vi.fn() }, clog: { debug: vi.fn() }, i: (target, key, value) => (target[key] = value),
         r: true, l: false, d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", m: "屏蔽", v: "收藏", y: "下载", k: "观看"
     });

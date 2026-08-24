@@ -1,7 +1,7 @@
 // @ts-check
 
 import { _, k, m, o, v, y } from "../../core/constants.js";
-import { detailStateController } from "../../core/detail-state-controller.js";
+import { DetailStateController } from "../../core/detail-state-controller.js";
 import { normalizeBtihHash } from "../../core/feature-helpers.js";
 import { markJavDbWantWatch } from "../../core/javdb-api.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
@@ -35,7 +35,15 @@ import { createFc2DetailContext, createFc2DetailShell } from "../status/detail-w
 /** @typedef {{ fc2Source?: string, url?: string }} Fc2SourceRecord */
 
 export class Fc2Plugin extends BasePlugin {
+    constructor() {
+        super(...arguments);
+        /** @type {DetailStateController | null} */
+        this.detailStateController = null;
+    }
     getName() { return "Fc2Plugin"; }
+    getDetailStateController() {
+        return this.detailStateController ||= new DetailStateController(this.getRuntimeService("state"));
+    }
     /** @param {string} carNum */
     async resolveMovieId(carNum) {
         const scope = await this.getRuntimeService("scope")();
@@ -150,7 +158,7 @@ export class Fc2Plugin extends BasePlugin {
             if (context.isAlive() && !box.children().length) box.append(hub);
             if (context.isAlive()) hubGroup.removeClass("is-collapsed"), hubButton.attr("aria-expanded", "true").text("收起磁力搜索"), box[0]?.scrollIntoView?.({ block: "nearest" });
         }));
-        detailStateController.bind({ root: context.root, layerIndex: context.layerIndex ?? null, carNum: context.carNum, activityType: "fc2-state", getRecord: () => ({ carNum: context.carNum, url: context.url, fc2Source: context.source, names: context.root.find('[data-jhs-role="actress-data"]').text(), publishTime: context.root.find('[data-jhs-role="publish-time"]').text() }) });
+        this.getDetailStateController().bind({ root: context.root, layerIndex: context.layerIndex ?? null, carNum: context.carNum, activityType: "fc2-state", getRecord: () => ({ carNum: context.carNum, url: context.url, fc2Source: context.source, names: context.root.find('[data-jhs-role="actress-data"]').text(), publishTime: context.root.find('[data-jhs-role="publish-time"]').text() }) });
         void this.getDependency("FilterTitleKeywordPlugin").bindDetailRoot(context.root, { layerIndex: context.layerIndex ?? null });
         void (/** @type {any} */ (this.getDependency("OtherSitePlugin"))).loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: !1, isActive: context.isAlive }).then((/** @type {JQueryHandle | null} */ box) => { if (context.isAlive() && !box) sitesGroup.remove(); }).catch((/** @type {unknown} */ error) => {
             context.isAlive() && sitesGroup.remove(), clog.error("FC2 外部站点加载失败", error);

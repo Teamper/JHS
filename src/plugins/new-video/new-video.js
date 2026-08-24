@@ -3,7 +3,6 @@ import { jhsEventBus } from "../../core/event-bus.js";
 import { mapLimit, normalizeHttpUrl, parseNumberSetting, shouldSkipStopped } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
-import { stateService } from "../../core/state-service.js";
 import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
 
 const AVATAR_SOURCE_INDEX_KEY = "jhs_img_cdn_index";
@@ -156,7 +155,7 @@ export class NewVideoPlugin extends BasePlugin {
     }
     async getPendingNewVideoTotal() {
         const e = await storageManager.getCarMap(), keys = new Set;
-        this.nvDecisionsCache = await stateService.getNewVideoDecisions();
+        this.nvDecisionsCache = await this.getRuntimeService("state").getNewVideoDecisions();
         (await storageManager.getFavoriteActressList()).forEach((actress => Array.isArray(actress.newVideoList) && actress.newVideoList.forEach((item => {
             const carNum = normalizeCarNum("string" == typeof item ? item : item.carNum);
             carNum && !e.has(carNum) && !this.isDecisionHidden(carNum) && keys.add(carNum);
@@ -234,7 +233,7 @@ export class NewVideoPlugin extends BasePlugin {
             try {
                 const enabled = await storageManager.getSetting("autoRemoveNewVideoMarkAfterBrowse", C);
                 if (enabled !== _) return;
-                await stateService.removeFromNewVideoList([ t ], "browse");
+                await this.getRuntimeService("state").removeFromNewVideoList([ t ], "browse");
             } catch (n) {
                 clog.error("移除新作品标记失败:", n);
             }
@@ -311,7 +310,7 @@ export class NewVideoPlugin extends BasePlugin {
         const generation = ++this.nvRenderGeneration, container = "list" === this._viewMode ? $("#new-video-list-container") : $("#actress-card-container");
         renderStateView(container, { type: "loading", title: "加载中" });
         try {
-            const [ actresses, carMap, decisions, javDbUrl, ruleTime ] = await Promise.all([ storageManager.getFavoriteActressList(), storageManager.getCarMap(), stateService.getNewVideoDecisions(), this.getDependency("OtherSitePlugin").getJavDbUrl(), storageManager.getSetting("checkNewVideo_ruleTime", 8760) ]);
+            const [ actresses, carMap, decisions, javDbUrl, ruleTime ] = await Promise.all([ storageManager.getFavoriteActressList(), storageManager.getCarMap(), this.getRuntimeService("state").getNewVideoDecisions(), this.getDependency("OtherSitePlugin").getJavDbUrl(), storageManager.getSetting("checkNewVideo_ruleTime", 8760) ]);
             if (!this.isWorkspaceMounted() || generation !== this.nvRenderGeneration) return;
             this.nvActressesCache = actresses, this.nvCarMapCache = carMap, this.nvDecisionsCache = decisions, this.nvJavDbUrl = javDbUrl, this.nvRuleTime = parseNumberSetting(ruleTime, 8760, { min: 0 });
             const items = aggregateNewVideoRecords(actresses, carMap, decisions), nextMap = new Map;
@@ -497,10 +496,10 @@ export class NewVideoPlugin extends BasePlugin {
             this.nvSelected.clear(), $("#new-video-list-container .nv-select").prop("checked", !1), this.renderBatchBar();
         })).on("click.jhsNvBatch", "#batchMarkFavorite,#batchMarkWatched,#batchMarkDownloaded", (event => {
             const flag = { batchMarkFavorite: "favorite", batchMarkWatched: "watched", batchMarkDownloaded: "downloaded" }[event.currentTarget.id];
-            void this.runBatchMutation((items => stateService.patch(items.map((item => item.carNum)), { [flag]: !0 }, { type: "new-video-batch-state", records: items.map((item => ({ carNum: item.carNum, url: item.url || `/search?q=${encodeURIComponent(item.carNum)}`, names: item.actressName, publishTime: item.publishTime }))) })), "已处理");
-        })).on("click.jhsNvBatch", "#batchIgnore", (() => void this.runBatchMutation((items => stateService.setNewVideoDecision(items.map((item => item.carNum)), "ignored")), "已忽略"))).on("click.jhsNvBatch", "#batchSnooze", (() => void this.runBatchMutation((items => stateService.setNewVideoDecision(items.map((item => item.carNum)), "snoozed", new Date(Date.now() + 7 * 864e5).toISOString())), "已暂缓"))).on("click.jhsNvBatch", "#batchRestore", (() => void this.runBatchMutation((items => stateService.setNewVideoDecision(items.map((item => item.carNum)), null)), "已恢复"))).on("click.jhsNvBatch", "#batchRemoveFromNewVideo", (event => {
+            void this.runBatchMutation((items => this.getRuntimeService("state").patch(items.map((item => item.carNum)), { [flag]: !0 }, { type: "new-video-batch-state", records: items.map((item => ({ carNum: item.carNum, url: item.url || `/search?q=${encodeURIComponent(item.carNum)}`, names: item.actressName, publishTime: item.publishTime }))) })), "已处理");
+        })).on("click.jhsNvBatch", "#batchIgnore", (() => void this.runBatchMutation((items => this.getRuntimeService("state").setNewVideoDecision(items.map((item => item.carNum)), "ignored")), "已忽略"))).on("click.jhsNvBatch", "#batchSnooze", (() => void this.runBatchMutation((items => this.getRuntimeService("state").setNewVideoDecision(items.map((item => item.carNum)), "snoozed", new Date(Date.now() + 7 * 864e5).toISOString())), "已暂缓"))).on("click.jhsNvBatch", "#batchRestore", (() => void this.runBatchMutation((items => this.getRuntimeService("state").setNewVideoDecision(items.map((item => item.carNum)), null)), "已恢复"))).on("click.jhsNvBatch", "#batchRemoveFromNewVideo", (event => {
             const items = this.selectedItems();
-            items.length && utils.q(event, `确认将 ${items.length} 个作品从新作列表移除？<br>不会删除作品状态记录。`, (() => void this.runBatchMutation((selected => stateService.removeFromNewVideoList(selected.map((item => item.carNum)), "manual")), "已移除")));
+            items.length && utils.q(event, `确认将 ${items.length} 个作品从新作列表移除？<br>不会删除作品状态记录。`, (() => void this.runBatchMutation((selected => this.getRuntimeService("state").removeFromNewVideoList(selected.map((item => item.carNum)), "manual")), "已移除")));
         }));
     }
     renderBatchBar() {

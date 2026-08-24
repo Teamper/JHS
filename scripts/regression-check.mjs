@@ -190,7 +190,8 @@ for (const [label, source] of [["FC2", fc2], ["FC2/123AV", fc2By123Av]]) {
   assert(!source.includes("layer.closeAll("), `${label} state actions must not close unrelated layers`);
   assert(!source.includes("stateService.patch("), `${label} state actions must use toggle semantics`);
 }
-assertIncludes(fc2, "detailStateController.bind", "shared FC2 detail state controller");
+assertIncludes(fc2, "this.getDetailStateController().bind", "declared-state FC2 detail controller");
+assert(!fc2.includes("import { detailStateController }"), "FC2 must not import a module-level detail state controller");
 assertIncludes(fc2, '"123av" === context.source ? void this.load123AvDetail(context)', "FC2 controller must own 123AV detail orchestration");
 assert(!fc2By123Av.includes('getDependency("Fc2Plugin")'), "123AV data source must not depend on the FC2 UI plugin");
 assert(!uiPrimitives.includes('.trigger("change")'), "JhsSelect must dispatch one native change without jQuery double fire");

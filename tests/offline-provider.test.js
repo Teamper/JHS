@@ -18,11 +18,11 @@ function loadOfflinePlugin(submit, history = vi.fn(async () => {})) {
         close: vi.fn(),
         open: vi.fn(options => { options.content.appendTo("body"); return 7; }),
     };
-    class BasePlugin { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : null; } }
+    const stateService = { appendOfflineHistory: history, patch: vi.fn() };
+    class BasePlugin { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : name === "state" ? stateService : null; } }
     const context = vm.createContext({
         window: dom.window, document: dom.window.document, $, BasePlugin, Map, Array, Date, TypeError,
         r: true, l: false, setTimeout, clearTimeout,
-        stateService: { appendOfflineHistory: history, patch: vi.fn() },
         show: { ok: vi.fn(), error: vi.fn() }, utils: { q: vi.fn(), getDialogArea: vi.fn(() => []) }, storageManager: { getSetting: vi.fn(async () => "ask") }, layer,
         getDetailResourceAdapter: vi.fn(), jhsEventBus: { on: vi.fn() }, readListItem: vi.fn()
     });

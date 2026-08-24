@@ -4,7 +4,6 @@ import { _, d, g, h, k, l, m, p, r, v, y } from "../../core/constants.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
-import { stateService } from "../../core/state-service.js";
 import { Z, fetchDmmPreview } from "./preview-video.js";
 
 /** @typedef {any} JQueryHandle */
@@ -144,7 +143,7 @@ export class CoverButtonPlugin extends BasePlugin {
                         let n = await e.parseActressName(s);
                         const flag = legacyActionToFlag(t);
                         if (!flag) throw new Error("不支持的状态操作");
-                        await stateService.patch(i, { [flag]: !0 }, { type: "list-card-state", record: { carNum: i, url: s, names: n, publishTime: o, fc2Source } }), show.ok("操作成功");
+                        await this.getRuntimeService("state").patch(i, { [flag]: !0 }, { type: "list-card-state", record: { carNum: i, url: s, names: n, publishTime: o, fc2Source } }), show.ok("操作成功");
                     } catch (r) { clog.error("保存操作失败:", r), show.error("操作失败"); }
                 };
                 n.hasClass("filterBtn") ? utils.q(t, `是否屏蔽${i}?`, (() => r(d))) : n.hasClass("favoriteBtn") ? void r(h) : n.hasClass("hasDownBtn") ? void r(g) : n.hasClass("hasWatchBtn") && void r(p), this.closeCardMenus();

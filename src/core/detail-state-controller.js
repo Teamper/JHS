@@ -2,7 +2,6 @@
 
 import { b, k, m, normalizeCarNum, u, v, y } from "./constants.js";
 import { normalizeStateFlags } from "./state-model.js";
-import { stateService } from "./state-service.js";
 
 const DETAIL_STATE_BUTTONS = {
     blocked: { selector: "#filterBtn", inactive: () => m, active: () => u },
@@ -20,7 +19,11 @@ function stateButtonEntries() {
 }
 
 /** 统一详情页四状态按钮、确认、持久化和精确关闭行为。 */
-class DetailStateController {
+export class DetailStateController {
+    /** @param {import("./state-service.js").StateService} stateService */
+    constructor(stateService) {
+        this.stateService = stateService;
+    }
     /** @param {{root?: any, layerIndex?: number | null, carNum: unknown, getRecord?: any, activityType?: string, selectors?: Partial<Record<DetailStateFlag, string>>}} options */
     bind({ root = document, layerIndex = null, carNum, getRecord = null, activityType = "detail-state", selectors = {} }) {
         const config = { root, layerIndex, carNum: normalizeCarNum(carNum), getRecord, activityType, selectors };
@@ -48,7 +51,7 @@ class DetailStateController {
         button.prop("disabled", !0).attr("aria-busy", "true");
         try {
             const record = "function" == typeof config.getRecord ? await config.getRecord() : config.getRecord || { carNum: config.carNum };
-            await stateService.toggle(config.carNum, flag, { type: config.activityType, record }), await this.render(config), await utils.closePage({ layerIndex: config.layerIndex, root: config.root });
+            await this.stateService.toggle(config.carNum, flag, { type: config.activityType, record }), await this.render(config), await utils.closePage({ layerIndex: config.layerIndex, root: config.root });
         } catch (error) {
             clog.error("详情状态更新失败", error), show.error("操作失败");
         } finally {
@@ -65,5 +68,3 @@ class DetailStateController {
         return flags;
     }
 }
-
-export const detailStateController = new DetailStateController;

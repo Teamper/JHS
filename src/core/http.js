@@ -1,9 +1,7 @@
-import { Utils } from "./utils.js";
-import { StorageManager } from "./storage.js";
-
-export const utils = globalThis.utils ?? new Utils;
-export const gmHttp = new class {
-    constructor() {
+export class GmHttp {
+    constructor({ utils, storageManager }) {
+        this.utils = utils;
+        this.storageManager = storageManager;
         this._circuitBreakers = new Map();
         this._domainStats = new Map();
     }
@@ -85,7 +83,7 @@ export const gmHttp = new class {
             const e = new URLSearchParams(a).toString();
             t += (t.includes("?") ? "&" : "?") + e;
         }
-        const o = this._getDomain(t), [m, r, b, k] = await Promise.all([storageManager.getSetting("httpTimeout", 5e3), storageManager.getSetting("httpRetryCount", 3), storageManager.getSetting("circuitBreakerThreshold", 3), storageManager.getSetting("circuitBreakerCooldown", 6e4)]);
+        const o = this._getDomain(t), [m, r, b, k] = await Promise.all([this.storageManager.getSetting("httpTimeout", 5e3), this.storageManager.getSetting("httpRetryCount", 3), this.storageManager.getSetting("circuitBreakerThreshold", 3), this.storageManager.getSetting("circuitBreakerCooldown", 6e4)]);
         let u = this._circuitBreakers.get(o);
         u || (u = { state: "closed", failCount: 0, openTime: 0, cooldownMs: k, threshold: b, probing: !1 }, this._circuitBreakers.set(o, u));
         const w = this._checkCircuitBreaker(o);
@@ -93,7 +91,7 @@ export const gmHttp = new class {
             const e = new Error(`站点 ${o} 已熔断，${w.remaining}秒后重试`);
             throw e._circuitBroken = !0, e;
         }
-        return n || (n = void 0), await utils.retry(() => {
+        return n || (n = void 0), await this.utils.retry(() => {
             const c = this._checkCircuitBreaker(o);
             if (c) {
                 const t = new Error(`站点 ${o} 已熔断，${c.remaining}秒后重试`);
@@ -155,5 +153,4 @@ export const gmHttp = new class {
         }));
         }, r);
     }
-};
-export const storageManager = globalThis.storageManager ?? new StorageManager;
+}

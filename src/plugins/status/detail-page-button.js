@@ -1,9 +1,8 @@
 // @ts-check
 
 import { C, _, escapeHtml, k, l, m, normalizeCarNum, r, v, y } from "../../core/constants.js";
-import { detailStateController } from "../../core/detail-state-controller.js";
+import { DetailStateController } from "../../core/detail-state-controller.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { stateService } from "../../core/state-service.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 
 /** @typedef {MouseEvent} ActionEvent */
@@ -16,6 +15,10 @@ export class DetailPageButtonPlugin extends BasePlugin {
     constructor() {
         super(), this.answerCount = 1;
         /** @type {any} */ this.stateBinding = null;
+        /** @type {DetailStateController | null} */ this.detailStateController = null;
+    }
+    getDetailStateController() {
+        return this.detailStateController ||= new DetailStateController(this.getRuntimeService("state"));
     }
     async handle() {
         this.hideVideoControls(), window.isDetailPage && (await this.createMenuBtn(), await this.autoRemoveNewVideoMark());
@@ -26,7 +29,7 @@ export class DetailPageButtonPlugin extends BasePlugin {
             if (e !== _) return;
             const t = this.getPageInfo();
             if (!t.carNum) return;
-            await stateService.removeFromNewVideoList([ t.carNum ], "browse");
+            await this.getRuntimeService("state").removeFromNewVideoList([ t.carNum ], "browse");
         } catch (e) { clog.error("自动移除新作品标记失败:", e); }
     }
     async createMenuBtn() {
@@ -60,11 +63,11 @@ export class DetailPageButtonPlugin extends BasePlugin {
             $("#filterBtn, #favoriteBtn, #hasDownBtn, #hasWatchBtn, #magnetSearchBtn, #xunLeiSubtitleBtn, #search-subtitle-btn").prop("disabled", !0).attr("title", "番号不可用");
             return void clog.warn("详情操作不可用：番号不可用");
         }
-        this.stateBinding = detailStateController.bind({ root: document, carNum: t, activityType: "detail-state", getRecord: () => this.getStateRecord() });
+        this.stateBinding = this.getDetailStateController().bind({ root: document, carNum: t, activityType: "detail-state", getRecord: () => this.getStateRecord() });
     }
     /** @param {string} e */
     async showStatus(e) {
-        return detailStateController.render({ root: document, carNum: e });
+        return this.getDetailStateController().render({ root: document, carNum: e });
     }
     getStateRecord() {
         const info = this.getPageInfo();
@@ -77,15 +80,15 @@ export class DetailPageButtonPlugin extends BasePlugin {
     }
     /** @param {ActionEvent} event */
     async favoriteOne(event) {
-        return detailStateController.requestToggle(this.getStateBinding(), "favorite", event);
+        return this.getDetailStateController().requestToggle(this.getStateBinding(), "favorite", event);
     }
     /** @param {ActionEvent} event */
     async hasDownOne(event) {
-        return detailStateController.requestToggle(this.getStateBinding(), "downloaded", event);
+        return this.getDetailStateController().requestToggle(this.getStateBinding(), "downloaded", event);
     }
     /** @param {ActionEvent} event */
     async hasWatchOne(event) {
-        return detailStateController.requestToggle(this.getStateBinding(), "watched", event);
+        return this.getDetailStateController().requestToggle(this.getStateBinding(), "watched", event);
     }
     /** @param {string} e */
     async searchXunLeiSubtitle(e) {
@@ -170,7 +173,7 @@ export class DetailPageButtonPlugin extends BasePlugin {
     /** @param {ActionEvent | null} e @param {unknown} t */
     async filterOne(e, t) {
         e && e.preventDefault();
-        return detailStateController.requestToggle(this.getStateBinding(), "blocked", e);
+        return this.getDetailStateController().requestToggle(this.getStateBinding(), "blocked", e);
     }
     hideVideoControls() {
         $(document).on("mouseenter", "#preview-video", ((/** @type {Event} */ event) => {

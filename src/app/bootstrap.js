@@ -5,8 +5,7 @@ import { injectCoreCss } from "../core/css-injection.js";
 import { JhsError } from "../core/jhs-error.js";
 import { runDataMigrations } from "../core/migration.js";
 import { PluginManager } from "../core/plugin-manager.js";
-import { attachStateServiceCompatibility, stateService } from "../core/state-service.js";
-import { gmHttp, storageManager, utils } from "../core/http.js";
+import { createLegacyRuntime } from "../core/legacy-runtime.js";
 import { initializeEventBus } from "../core/event-bus.js";
 import { migrateDisabledPlugins, parseDisabledPlugins } from "../core/legacy-plugin-contributions.js";
 import { initializeLoggerRuntime } from "../core/logger.js";
@@ -21,7 +20,7 @@ import { attachCompatibilityFacade } from "./compatibility-facade.js";
 import { createAppContext } from "./create-app-context.js";
 import { integrationManifests } from "./integration-catalog.js";
 
-function patchLayerRuntime(layerRuntime) {
+function patchLayerRuntime(layerRuntime, utilsRuntime) {
     const originalClose = layerRuntime.close;
     layerRuntime.close = function(id) {
         const result = originalClose.call(this, id);
@@ -36,21 +35,21 @@ function patchLayerRuntime(layerRuntime) {
         const success = options.success;
         return originalOpen.call(this, { ...options, success(element, id) {
             if (typeof success === "function") success.call(this, element, id);
-            globalThis.utils.setupEscClose(id);
+            utilsRuntime.setupEscClose(id);
         } });
     };
 }
 
-function importVendorStyles() {
+function importVendorStyles(utilsRuntime) {
     for (const url of [
         "https://cdn.jsdelivr.net/npm/layui-layer@1.0.9/layer.min.css",
         "https://cdn.jsdelivr.net/npm/toastify-js@1.12.0/src/toastify.min.css",
         "https://cdn.jsdelivr.net/npm/viewerjs@1.11.1/dist/viewer.min.css",
         "https://cdn.jsdelivr.net/npm/tabulator-tables@6.3.1/dist/css/tabulator_semanticui.min.css",
-    ]) utils.importResource(url);
+    ]) utilsRuntime.importResource(url);
 }
 
-async function migrateDisabledPluginSettings() {
+async function migrateDisabledPluginSettings(storageManager) {
     const raw = await storageManager.getSetting("disabledPlugins", "[]");
     const previous = parseDisabledPlugins(raw);
     const migrated = migrateDisabledPlugins(previous);
@@ -67,7 +66,7 @@ async function migrateDisabledPluginSettings() {
     }
 }
 
-async function prepareLocalOrigins() {
+async function prepareLocalOrigins(storageManager) {
     const settings = await storageManager.getSetting();
     const origins = new Set(Array.isArray(settings.trustedLocalOrigins) ? settings.trustedLocalOrigins : []);
     let legacyOrigin = null;
@@ -86,22 +85,22 @@ async function prepareLocalOrigins() {
 export async function bootstrapJhs() {
     try {
         const siteContext = initializeRuntimeConstants(window.location);
-        attachStateServiceCompatibility();
         const vendors = getVendorRuntime();
         const jhsEventBus = initializeEventBus();
+        const { utils, gmHttp, storageManager, stateService } = createLegacyRuntime(jhsEventBus);
         Object.assign(globalThis, { utils, gmHttp, storageManager, stateService, jhsEventBus });
-        patchLayerRuntime(vendors.layer);
-        importVendorStyles();
+        patchLayerRuntime(vendors.layer, utils);
+        importVendorStyles(utils);
         injectCoreCss();
-        const disabled = await migrateDisabledPluginSettings();
-        const localOriginSettings = await prepareLocalOrigins();
+        const disabled = await migrateDisabledPluginSettings(storageManager);
+        const localOriginSettings = await prepareLocalOrigins(storageManager);
         const javdbHostAdapter = new JavDbHostAdapter(), javbusHostAdapter = new JavBusHostAdapter();
         const hostAdapter = r ? javdbHostAdapter : l ? javbusHostAdapter : null;
         const route = hostAdapter?.detectRoute() ?? "other";
         const context = createAppContext({
             gmRequest: globalThis.GM_xmlhttpRequest, gmGetValue: globalThis.GM_getValue, gmSetValue: globalThis.GM_setValue,
             legacyHttp: gmHttp, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
-            layer: vendors.layer, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
+            layer: vendors.layer, stateService, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
         });
         const settingsSnapshot = await context.services.settings.load();
         const legacySortMethod = localStorage.getItem("jhs_sortMethod");

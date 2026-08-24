@@ -14,14 +14,12 @@ function loadHttp(onRequest = null) {
         unsafeWindow: {},
         window: {},
         clog: { warn() {}, error() {} },
-        Utils: class {},
-        StorageManager: class {},
         storageManager: { getSetting: async (key, fallback) => fallback },
         utils: { retry: async (operation) => operation() },
         GM_xmlhttpRequest: (options) => onRequest?.(options)
     });
-    vm.runInContext(`${httpSource};globalThis.testGmHttp=gmHttp`, context);
-    return context.testGmHttp;
+    vm.runInContext(`${httpSource};globalThis.TestGmHttp=GmHttp`, context);
+    return new context.TestGmHttp({ utils: context.utils, storageManager: context.storageManager });
 }
 
 describe("HTTP Cloudflare detection", () => {

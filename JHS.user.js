@@ -2547,432 +2547,444 @@
   __publicField(_BasePlugin, "_sharedIcons", null);
   var BasePlugin = _BasePlugin;
 
-  // src/core/event-bus.js
-  var _JhsEventBus = class _JhsEventBus {
-    constructor(channelName = "channel-refresh") {
-      this.originId = globalThis.crypto?.randomUUID?.() || `tab_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      this.listeners = /* @__PURE__ */ new Map(), this.seen = /* @__PURE__ */ new Set(), this.channel = new BroadcastChannel(channelName);
-      this.channel.addEventListener("message", ((event) => this._receive(event.data)));
+  // src/core/http.js
+  var _GmHttp = class _GmHttp {
+    constructor({ utils: utils2, storageManager: storageManager2 }) {
+      this.utils = utils2;
+      this.storageManager = storageManager2;
+      this._circuitBreakers = /* @__PURE__ */ new Map();
+      this._domainStats = /* @__PURE__ */ new Map();
     }
-    on(type, handler) {
-      const handlers = this.listeners.get(type) || /* @__PURE__ */ new Set();
-      return handlers.add(handler), this.listeners.set(type, handlers), () => handlers.delete(handler);
-    }
-    async _dispatch(event) {
-      for (const handler of [...this.listeners.get(event.type) || []]) await handler(event.payload, event);
-    }
-    _remember(eventId) {
-      this.seen.add(eventId), this.seen.size > 256 && this.seen.delete(this.seen.values().next().value);
-    }
-    async emit(type, payload = {}, options = {}) {
-      const event = { eventId: globalThis.crypto?.randomUUID?.() || `event_${Date.now()}_${Math.random().toString(36).slice(2)}`, originId: this.originId, type, payload, timestamp: Date.now() };
-      this._remember(event.eventId), await this._dispatch(event), false !== options.broadcast && this.channel.postMessage(event);
-      return event;
-    }
-    async _receive(event) {
-      if (!event || event.originId === this.originId || event.eventId && this.seen.has(event.eventId)) return;
-      if (!event.eventId) {
-        const legacyType = "refresh" === event.type ? "legacy-refresh" : event.type;
-        return this._dispatch({ ...event, type: legacyType, payload: event.payload || {}, eventId: `legacy_${Date.now()}_${Math.random()}`, originId: "legacy", timestamp: Date.now() });
+    _getDomain(e2) {
+      try {
+        return new URL(e2).hostname;
+      } catch {
+        return "unknown";
       }
-      this._remember(event.eventId), await this._dispatch(event);
+    }
+    _isCloudflareChallenge(e2, status = 0) {
+      if ("string" != typeof e2 || !e2) return false;
+      const text = e2.toLowerCase();
+      const hasChallengeTitle = /<title[^>]*>\s*just a moment(?:\.\.\.)?\s*<\/title>/i.test(e2);
+      const hasChallengeForm = /id=["']challenge-form["']/i.test(e2);
+      const hasCfChl = text.includes("cf-chl-") || text.includes("cf_chl_opt");
+      const hasChallengePlatform = text.includes("/cdn-cgi/challenge-platform/") || text.includes("challenge-platform");
+      const blockedStatus = 403 === status || 429 === status || 503 === status;
+      return hasChallengeTitle || hasChallengeForm && (hasCfChl || hasChallengePlatform) || blockedStatus && hasCfChl && hasChallengePlatform;
+    }
+    _checkCircuitBreaker(e2) {
+      const t2 = this._circuitBreakers.get(e2);
+      if (!t2) return null;
+      if ("open" === t2.state) {
+        const n2 = Date.now() - t2.openTime;
+        return n2 < t2.cooldownMs ? { state: "open", remaining: Math.ceil((t2.cooldownMs - n2) / 1e3) } : (t2.state = "half-open", t2.failCount = 0, t2.probing = false, null);
+      }
+      if ("half-open" === t2.state && t2.probing) return { state: "half-open", remaining: 0 };
+      return null;
+    }
+    isDomainCircuitBroken(e2) {
+      return this._checkCircuitBreaker(this._getDomain(e2));
+    }
+    /* domainStats.count 统计请求数（含重试），非独立请求数 */
+    _recordSuccess(e2) {
+      let t2 = this._circuitBreakers.get(e2);
+      t2 && (t2.state = "closed", t2.failCount = 0, t2.probing = false);
+      let n2 = this._domainStats.get(e2);
+      n2 || (n2 = { count: 0, errors: 0, lastUsed: 0 }, this._domainStats.set(e2, n2)), n2.count++, n2.lastUsed = Date.now();
+    }
+    _recordFailure(e2) {
+      let t2 = this._circuitBreakers.get(e2);
+      t2 || (t2 = { state: "closed", failCount: 0, openTime: 0, cooldownMs: 6e4, threshold: 3 }, this._circuitBreakers.set(e2, t2)), t2.failCount++, ("half-open" === t2.state || t2.failCount >= (t2.threshold || 3)) && (t2.state = "open", t2.openTime = Date.now(), t2.probing = false, clog.warn(`[熔断] ${e2} 连续失败 ${t2.failCount} 次，已熔断 ${t2.cooldownMs / 1e3} 秒`));
+      let n2 = this._domainStats.get(e2);
+      n2 || (n2 = { count: 0, errors: 0, lastUsed: 0 }, this._domainStats.set(e2, n2)), n2.count++, n2.errors++, n2.lastUsed = Date.now();
+    }
+    getCircuitBreakerStatus() {
+      const e2 = {};
+      return this._circuitBreakers.forEach(((t2, n2) => {
+        e2[n2] = { ...t2 };
+      })), e2;
+    }
+    resetCircuitBreaker(e2) {
+      this._circuitBreakers.delete(e2);
+    }
+    resetAllCircuitBreakers() {
+      this._circuitBreakers.clear();
+    }
+    getDomainStats() {
+      const e2 = {};
+      return this._domainStats.forEach(((t2, n2) => {
+        e2[n2] = { ...t2 };
+      })), e2;
+    }
+    clearDomainStats() {
+      this._domainStats.clear();
+    }
+    async get(e2, t2 = {}, n2 = {}, a2, i2 = {}) {
+      return this.gmRequest("GET", e2, null, t2, n2, a2, i2);
+    }
+    post(e2, t2 = {}, n2 = {}) {
+      n2 = {
+        "Content-Type": "application/json",
+        ...n2
+      };
+      let a2 = JSON.stringify(t2);
+      return this.gmRequest("POST", e2, a2, null, n2);
+    }
+    async gmRequest(e2, t2, n2 = {}, a2 = {}, i2 = {}, s2 = false, requestOptions = {}) {
+      if (a2 && Object.keys(a2).length) {
+        const e3 = new URLSearchParams(a2).toString();
+        t2 += (t2.includes("?") ? "&" : "?") + e3;
+      }
+      const o2 = this._getDomain(t2), [m2, r2, b2, k2] = await Promise.all([this.storageManager.getSetting("httpTimeout", 5e3), this.storageManager.getSetting("httpRetryCount", 3), this.storageManager.getSetting("circuitBreakerThreshold", 3), this.storageManager.getSetting("circuitBreakerCooldown", 6e4)]);
+      let u2 = this._circuitBreakers.get(o2);
+      u2 || (u2 = { state: "closed", failCount: 0, openTime: 0, cooldownMs: k2, threshold: b2, probing: false }, this._circuitBreakers.set(o2, u2));
+      const w = this._checkCircuitBreaker(o2);
+      if (w) {
+        const e3 = new Error(`站点 ${o2} 已熔断，${w.remaining}秒后重试`);
+        throw e3._circuitBroken = true, e3;
+      }
+      return n2 || (n2 = void 0), await this.utils.retry(() => {
+        const c2 = this._checkCircuitBreaker(o2);
+        if (c2) {
+          const t3 = new Error(`站点 ${o2} 已熔断，${c2.remaining}秒后重试`);
+          return t3._circuitBroken = true, Promise.reject(t3);
+        }
+        "half-open" === u2.state && (u2.probing = true);
+        return new Promise(((a3, r3) => {
+          GM_xmlhttpRequest({
+            method: e2,
+            url: t2,
+            headers: i2,
+            timeout: m2,
+            data: n2,
+            ...requestOptions.cookiePartitionTopLevelSite ? {
+              cookiePartition: { topLevelSite: requestOptions.cookiePartitionTopLevelSite }
+            } : {},
+            onload: /* @__PURE__ */ __name((e3) => {
+              try {
+                if (404 === e3.status && requestOptions.ignoreNotFound) return void a3(null);
+                if (this._isCloudflareChallenge(e3.responseText, e3.status)) {
+                  this._recordFailure(o2);
+                  const n3 = new Error(`Cloudflare challenge blocked: ${t2}`);
+                  return n3._cfBlocked = true, n3.status = e3.status, n3.requestUrl = t2, n3.finalUrl = e3.finalUrl, n3.cfDiagnostics = { status: e3.status, requestUrl: t2, finalUrl: e3.finalUrl, contentLength: e3.responseText?.length || 0 }, void r3(n3);
+                }
+                if (s2 && e3.finalUrl !== t2 && r3("请求被重定向了,URL是:" + e3.finalUrl), e3.status >= 200 && e3.status < 300) {
+                  this._recordSuccess(o2);
+                  if (e3.responseText) try {
+                    a3(JSON.parse(e3.responseText));
+                  } catch (n3) {
+                    a3(e3.responseText);
+                  }
+                  else a3(e3.responseText || e3);
+                } else {
+                  clog.error("请求失败,状态码:", e3.status, t2), this._recordFailure(o2);
+                  if (e3.responseText) {
+                    try {
+                      const t3 = JSON.parse(e3.responseText);
+                      t3.status = e3.status, r3(t3);
+                    } catch {
+                      const t3 = new Error(e3.responseText || `请求发生错误 ${e3.status}`);
+                      t3.status = e3.status, r3(t3);
+                    }
+                  } else {
+                    const t3 = new Error(`请求发生错误 ${e3.status}`);
+                    t3.status = e3.status, r3(t3);
+                  }
+                }
+              } catch (n3) {
+                this._recordFailure(o2), r3(n3);
+              }
+            }, "onload"),
+            onerror: /* @__PURE__ */ __name((e3) => {
+              clog.error("网络错误:", t2), this._recordFailure(o2), r3(new Error(e3.error || "网络错误"));
+            }, "onerror"),
+            ontimeout: /* @__PURE__ */ __name(() => {
+              this._recordFailure(o2), r3(new Error("请求超时: " + t2));
+            }, "ontimeout")
+          });
+        }));
+      }, r2);
     }
   };
-  __name(_JhsEventBus, "JhsEventBus");
-  var JhsEventBus = _JhsEventBus;
-  var jhsEventBus;
-  function initializeEventBus() {
-    if (jhsEventBus) return jhsEventBus;
-    jhsEventBus = new JhsEventBus();
-    const runtimeWindow = window;
-    runtimeWindow.refresh = () => jhsEventBus?.emit("legacy-refresh");
-    runtimeWindow.cleanCache_filter_actor_actress_car_list = () => jhsEventBus?.emit("blacklist-rules-changed");
-    runtimeWindow.clean_cacheSettingObj = () => jhsEventBus?.emit("settings-changed");
-    return jhsEventBus;
-  }
-  __name(initializeEventBus, "initializeEventBus");
+  __name(_GmHttp, "GmHttp");
+  var GmHttp = _GmHttp;
 
-  // src/core/utils.js
-  var _Utils = class _Utils {
-    constructor() {
-      return i(this, "intervalContainer", {}), i(this, "waitSequence", 0), i(this, "mimeTypes", {
-        txt: "text/plain",
-        html: "text/html",
-        css: "text/css",
-        csv: "text/csv",
-        json: "application/json",
-        xml: "application/xml",
-        jpg: "image/jpeg",
-        jpeg: "image/jpeg",
-        png: "image/png",
-        gif: "image/gif",
-        webp: "image/webp",
-        svg: "image/svg+xml",
-        pdf: "application/pdf",
-        doc: "application/msword",
-        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        xls: "application/vnd.ms-excel",
-        xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ppt: "application/vnd.ms-powerpoint",
-        pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        zip: "application/zip",
-        rar: "application/x-rar-compressed",
-        "7z": "application/x-7z-compressed",
-        mp3: "audio/mpeg",
-        wav: "audio/wav",
-        mp4: "video/mp4",
-        webm: "video/webm",
-        ogg: "audio/ogg"
-      }), i(this, "timers", /* @__PURE__ */ new Map()), i(this, "insertStyle", ((e2) => {
-        const t2 = (Array.isArray(e2) ? e2 : [e2]).filter(Boolean);
-        if (0 === t2.length) return;
-        const n2 = t2.map(((e3) => e3.replace(/^\s*<style[^>]*>/i, "").replace(/<\/style>?\s*$/i, ""))).filter(Boolean).join("\n"), a2 = document.createElement("style");
-        n2 && (a2.textContent = n2, document.head.append(a2));
-      })), i(this, "layerIndexStack", []), _Utils.instance || (_Utils.instance = this), _Utils.instance;
+  // src/core/state-service.js
+  var ACTIVITY_SOFT_LIMIT = 1e3;
+  var ACTIVITY_HARD_LIMIT = 1e4;
+  var ACTIVITY_RETENTION_MS = 30 * 864e5;
+  function cloneStateValue(value) {
+    return null == value ? value : JSON.parse(JSON.stringify(value));
+  }
+  __name(cloneStateValue, "cloneStateValue");
+  function stableStateValue(value) {
+    if (null === value || "object" != typeof value) return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(stableStateValue).join(",")}]`;
+    return `{${Object.keys(value).sort().map(((key) => `${JSON.stringify(key)}:${stableStateValue(value[key])}`)).join(",")}}`;
+  }
+  __name(stableStateValue, "stableStateValue");
+  function getStatePath(value, path) {
+    return path.split(".").reduce(((current, key) => current?.[key]), value);
+  }
+  __name(getStatePath, "getStatePath");
+  function setStatePath(value, path, next) {
+    const keys = path.split("."), last = keys.pop(), target = keys.reduce(((current, key) => current[key] || (current[key] = {})), value);
+    void 0 === next ? delete target[last] : target[last] = cloneStateValue(next);
+  }
+  __name(setStatePath, "setStatePath");
+  function captureNewVideoEffect(actresses, decisions, carNum) {
+    const key = normalizeCarNum(carNum), actressItems = [];
+    actresses.forEach(((actress, actressIndex) => (actress.newVideoList || []).forEach(((item, itemIndex) => {
+      normalizeCarNum("string" == typeof item ? item : item.carNum) === key && actressItems.push({ actressIndex, itemIndex, item: cloneStateValue(item) });
+    }))));
+    return { actressItems, decision: cloneStateValue(decisions[key] || null) };
+  }
+  __name(captureNewVideoEffect, "captureNewVideoEffect");
+  function canRestoreNewVideoEffect(actresses, decisions, carNum, effect) {
+    const key = normalizeCarNum(carNum);
+    if (stableStateValue(decisions[key] || null) !== stableStateValue(null)) return false;
+    return effect.actressItems.every(((entry) => !(actresses[entry.actressIndex]?.newVideoList || []).some(((item) => normalizeCarNum("string" == typeof item ? item : item.carNum) === key))));
+  }
+  __name(canRestoreNewVideoEffect, "canRestoreNewVideoEffect");
+  function restoreNewVideoEffect(actresses, decisions, carNum, effect) {
+    effect.actressItems.forEach(((entry) => {
+      const actress = actresses[entry.actressIndex];
+      if (!actress) return;
+      const list = [...actress.newVideoList || []], index = Math.min(entry.itemIndex, list.length);
+      list.splice(index, 0, cloneStateValue(entry.item)), actress.newVideoList = list;
+    }));
+    effect.decision ? decisions[normalizeCarNum(carNum)] = cloneStateValue(effect.decision) : delete decisions[normalizeCarNum(carNum)];
+  }
+  __name(restoreNewVideoEffect, "restoreNewVideoEffect");
+  function pruneActivityLog(log, now = Date.now()) {
+    const result = { entries: Array.isArray(log?.entries) ? log.entries : [], trackingStartedAt: log?.trackingStartedAt || new Date(now).toISOString(), coverageStart: log?.coverageStart || null, truncatedAt: log?.truncatedAt || null };
+    const cutoff = now - ACTIVITY_RETENTION_MS, recent = [], older = [];
+    result.entries.forEach(((entry) => (Date.parse(entry.createdAt) >= cutoff || "pending" === entry.commitState ? recent : older).push(entry)));
+    older.sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)))), recent.sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt))));
+    const olderAllowance = Math.max(0, ACTIVITY_SOFT_LIMIT - recent.length);
+    result.entries = [...older.slice(-olderAllowance), ...recent].sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt))));
+    if (result.entries.length > ACTIVITY_HARD_LIMIT) {
+      const pending = result.entries.filter(((entry) => "pending" === entry.commitState)), committed = result.entries.filter(((entry) => "pending" !== entry.commitState));
+      const committedAllowance = Math.max(0, ACTIVITY_HARD_LIMIT - pending.length);
+      result.entries = [...committedAllowance ? committed.slice(-committedAllowance) : [], ...pending].sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt))));
+      result.truncatedAt = new Date(now).toISOString(), result.coverageStart = result.entries[0]?.createdAt || result.truncatedAt;
     }
-    importResource(e2) {
-      let t2;
-      e2.indexOf("css") >= 0 ? (t2 = document.createElement("link"), t2.setAttribute("rel", "stylesheet"), t2.href = e2) : (t2 = document.createElement("script"), t2.setAttribute("type", "text/javascript"), t2.src = e2), document.documentElement.appendChild(t2);
+    return result;
+  }
+  __name(pruneActivityLog, "pruneActivityLog");
+  var _StateService = class _StateService {
+    constructor(storage, eventBus) {
+      this.storage = storage, this.eventBus = eventBus, this._queue = Promise.resolve(), this._recovering = false;
     }
-    openPage(e2, t2, n2, a2) {
-      n2 = n2 ?? true;
-      const navigation = a2 && (Object.prototype.hasOwnProperty.call(a2, "event") || Object.prototype.hasOwnProperty.call(a2, "newTab")) ? a2 : { event: a2 }, event = navigation.event;
-      const destination = new URL(e2, window.location.origin), carNum = normalizeCarNum(t2), isMovieDetail = /^\/v\/[^/]+/.test(destination.pathname);
-      isMovieDetail && carNum && destination.searchParams.set("jhsCarNum", carNum);
-      if (navigation.newTab || event && (event.ctrlKey || event.metaKey || 1 === event.button)) return void GM_openInTab(destination.href, {
-        insert: 0
-      });
-      destination.pathname.includes("/actors/") || destination.pathname.includes("/star/") || destination.searchParams.set("hideNav", "1");
-      layer.open({
-        type: 2,
-        title: t2,
-        content: destination.href,
-        scrollbar: false,
-        shadeClose: n2,
-        area: this.getDialogArea("workspace"),
-        isOutAnim: false,
-        anim: -1,
-        success: /* @__PURE__ */ __name((e3, t3) => {
-          this.setupEscClose(t3);
-        }, "success")
-      });
+    _withLock(callback) {
+      if (globalThis.navigator?.locks?.request) return navigator.locks.request("jhs_state_mutation", callback);
+      const run = this._queue.then(callback, callback);
+      return this._queue = run.catch((() => {
+      })), run;
     }
-    _handleGlobalEscKey(e2) {
-      if ("Escape" !== e2.key && 27 !== e2.keyCode) return;
-      if (0 === this.layerIndexStack.length) return;
-      const t2 = this.layerIndexStack[this.layerIndexStack.length - 1], n2 = $(`#layui-layer${t2}`);
-      let a2 = false;
-      if (n2.find(".viewer-container").length > 0) a2 = true;
-      else {
-        const e3 = n2.find(`#layui-layer-iframe${t2}`)[0];
-        if (e3 && e3.contentDocument) try {
-          $(e3.contentDocument).find(".viewer-container").length > 0 && (a2 = true);
-        } catch (i2) {
-          clog.warn("无法检查跨域 iframe 内的 .viewer-container");
-        }
-      }
-      a2 || (this.layerIndexStack.pop(), layer.close(t2));
+    async getActivityLog() {
+      return pruneActivityLog(await this.storage.forage.getItem("activity_log"));
     }
-    setupEscClose(e2) {
-      var t2;
-      this._boundHandler || (this._boundHandler = this._handleGlobalEscKey.bind(this), $(document).off("keydown.globalLayerEsc"), $(document).on("keydown.globalLayerEsc", this._boundHandler)), -1 === this.layerIndexStack.indexOf(e2) && this.layerIndexStack.push(e2);
-      const n2 = $(`#layui-layer-iframe${e2}`), a2 = `keydown.layerEsc${e2}`;
-      try {
-        const e3 = null == (t2 = n2[0]) ? void 0 : t2.contentDocument;
-        if (e3) {
-          if ("yes" === n2.attr("data-esc-bound")) return;
-          $(e3).off(a2), $(e3).on(a2, this._boundHandler), n2.attr("data-esc-bound", "yes");
-        }
-      } catch (i2) {
-        clog.error("iframe监听失败 (跨域或未加载完毕):", i2);
-      }
+    async getOfflineHistory() {
+      return await this.storage.forage.getItem("offline_history") || [];
     }
-    async closePage(options = {}) {
-      if ("yes" !== await storageManager.getSetting("needClosePage", "yes")) return false;
-      const root = options?.root, parseIndex = /* @__PURE__ */ __name((element) => {
-        const id = element?.id || "", match = /^layui-layer(\d+)$/.exec(id);
-        return match ? Number(match[1]) : null;
-      }, "parseIndex");
-      let layerIndex = Number.isInteger(options?.layerIndex) ? options.layerIndex : null;
-      if (null === layerIndex && root) {
-        const element = root.jquery ? root[0] : root.nodeType ? root : null, layerElement = element?.matches?.(".layui-layer") ? element : element?.closest?.(".layui-layer");
-        layerIndex = parseIndex(layerElement);
-      }
-      if (null === layerIndex && window.frameElement) layerIndex = parseIndex(window.frameElement.closest?.(".layui-layer"));
-      const ownerWindow = window.parent && window.parent !== window ? window.parent : window, ownerLayer = ownerWindow.layer || globalThis.layer;
-      if (null !== layerIndex && "function" == typeof ownerLayer?.close) return ownerLayer.close(layerIndex), true;
-      if (window.opener && !window.opener.closed) return window.close(), true;
-      return false;
+    async appendOfflineHistory(record) {
+      const history = await this.getOfflineHistory(), item = { id: record.id || globalThis.crypto?.randomUUID?.() || `offline_${Date.now()}`, createdAt: record.createdAt || (/* @__PURE__ */ new Date()).toISOString(), ...record, carNum: normalizeCarNum(record.carNum) };
+      history.push(item), history.length > 1e3 && history.splice(0, history.length - 1e3), await this.storage.forage.setItem("offline_history", history), await this.eventBus.emit("offline-history-changed", { ids: [item.id] });
+      return item;
     }
-    loopDetector(e2, t2, n2 = 20, a2 = 1e4, i2 = true, scope = null) {
-      const s2 = ++this.waitSequence;
-      let o2 = null, r2 = null, l2 = null, c2 = false;
-      const d2 = /* @__PURE__ */ __name(() => {
-        o2 && (scope?.releaseObserver ? scope.releaseObserver(o2) : o2.disconnect()), clearTimeout(r2), clearTimeout(l2), clearInterval(this.intervalContainer[s2]?.fallback), delete this.intervalContainer[s2];
-      }, "d"), h2 = /* @__PURE__ */ __name((e3) => {
-        if (c2) return;
-        c2 = true, d2(), e3 && t2 && t2();
-      }, "h"), g2 = /* @__PURE__ */ __name(() => {
-        if (c2) return;
-        e2() && h2(true);
-      }, "g"), p2 = /* @__PURE__ */ __name(() => {
-        c2 || (clearTimeout(r2), r2 = setTimeout(g2, Math.max(0, n2)));
-      }, "p");
-      const cancel = /* @__PURE__ */ __name(() => {
-        c2 = true, d2();
-      }, "cancel");
-      this.intervalContainer[s2] = {};
-      if (e2()) return h2(true), cancel;
-      if (scope?.observe && document.documentElement) o2 = scope.observe(document.documentElement, p2, { childList: true, subtree: true, characterData: true });
-      else this.intervalContainer[s2].fallback = setInterval(g2, Math.max(100, n2));
-      l2 = setTimeout((() => {
-        if (c2) return;
-        let t3 = false;
-        try {
-          t3 = e2();
-        } catch (e3) {
-          clog.error("DOM 等待条件执行失败", e3);
-        }
-        h2(t3 || i2);
-      }), Math.max(0, a2));
-      return cancel;
+    async removeOfflineHistory(ids) {
+      const keys = new Set(Array.isArray(ids) ? ids : [ids]), history = await this.getOfflineHistory(), next = history.filter(((item) => !keys.has(item.id)));
+      if (next.length === history.length) return false;
+      return await this.storage.forage.setItem("offline_history", next), await this.eventBus.emit("offline-history-changed", { ids: [...keys], removed: true }), true;
     }
-    rightClick(e2, t2, n2) {
-      let a2;
-      "string" == typeof e2 ? a2 = document.querySelector(e2) : e2 instanceof HTMLElement && (a2 = e2), a2 || (clog.warn("rightClick(), 容器无效或未提供，将使用 document.body 进行全局委托。"), a2 = document.body), "string" == typeof t2 && "" !== t2.trim() ? a2.addEventListener("contextmenu", ((e3) => {
-        const a3 = e3.target.closest(t2);
-        a3 && n2(e3, a3);
-      })) : clog.error("rightClick(), 必须提供有效的 targetSelector。");
+    async getNewVideoDecisions() {
+      return await this.storage.forage.getItem("new_video_decisions") || {};
     }
-    q(e2, t2, n2, a2) {
-      let o2;
-      if (this.isMobileMode()) {
-        o2 = layer.confirm(t2, {
-          title: "提示",
-          btn: ["确定", "取消"],
-          shade: 0,
-          zIndex: JHS_Z_INDEX.layer
-        }, (function() {
-          n2 && n2(), layer.close(o2);
-        }), (function() {
-          a2 && a2();
-        }));
-      } else {
-        let i2, s2;
-        e2 ? (i2 = e2.clientX - 130, s2 = e2.clientY - 120) : (i2 = window.innerWidth / 2 - 120, s2 = window.innerHeight / 2 - 120);
-        o2 = layer.confirm(t2, {
-          offset: [s2, i2],
-          title: "提示",
-          btn: ["确定", "取消"],
-          shade: 0,
-          zIndex: JHS_Z_INDEX.layer
-        }, (function() {
-          n2 && n2(), layer.close(o2);
-        }), (function() {
-          a2 && a2();
-        }));
-      }
+    async _readDomains() {
+      const [carList, actresses, decisions, activity] = await Promise.all([this.storage.forage.getItem(this.storage.car_list_key), this.storage.forage.getItem(this.storage.favorite_actresses_key), this.storage.forage.getItem("new_video_decisions"), this.storage.forage.getItem("activity_log")]);
+      return { carList: carList || [], actresses: actresses || [], decisions: decisions || {}, activity: pruneActivityLog(activity) };
     }
-    getNowStr(e2 = "-", t2 = ":", n2 = null) {
-      let a2;
-      a2 = n2 ? new Date(n2) : /* @__PURE__ */ new Date();
-      const i2 = a2.getFullYear(), s2 = String(a2.getMonth() + 1).padStart(2, "0"), o2 = String(a2.getDate()).padStart(2, "0"), r2 = String(a2.getHours()).padStart(2, "0"), l2 = String(a2.getMinutes()).padStart(2, "0"), c2 = String(a2.getSeconds()).padStart(2, "0");
-      return `${[i2, s2, o2].join(e2)} ${[r2, l2, c2].join(t2)}`;
-    }
-    formatDate(e2, t2 = "-", n2 = ":") {
-      let a2;
-      if (e2 instanceof Date) a2 = e2;
-      else {
-        if ("string" != typeof e2) throw new Error("Invalid date input: must be Date object or date string");
-        if (a2 = new Date(e2), isNaN(a2.getTime())) throw new Error("Invalid date string");
-      }
-      const i2 = a2.getFullYear(), s2 = String(a2.getMonth() + 1).padStart(2, "0"), o2 = String(a2.getDate()).padStart(2, "0"), r2 = String(a2.getHours()).padStart(2, "0"), l2 = String(a2.getMinutes()).padStart(2, "0"), c2 = String(a2.getSeconds()).padStart(2, "0");
-      return `${[i2, s2, o2].join(t2)} ${[r2, l2, c2].join(n2)}`;
-    }
-    getHourDifference(e2, t2) {
-      const n2 = e2.getTime(), a2 = t2.getTime(), i2 = Math.abs(a2 - n2) / 36e5;
-      return Math.floor(i2);
-    }
-    download(e2, t2) {
-      show.info("开始请求下载...");
-      const n2 = t2.split(".").pop().toLowerCase();
-      let a2, i2 = this.mimeTypes[n2] || "application/octet-stream";
-      if (e2 instanceof Blob) a2 = e2;
-      else if (e2 instanceof ArrayBuffer || ArrayBuffer.isView(e2)) a2 = new Blob([e2], {
-        type: i2
-      });
-      else if ("string" == typeof e2 && e2.startsWith("data:")) {
-        const t3 = atob(e2.split(",")[1]), n3 = new ArrayBuffer(t3.length), s3 = new Uint8Array(n3);
-        for (let e3 = 0; e3 < t3.length; e3++) s3[e3] = t3.charCodeAt(e3);
-        a2 = new Blob([s3], {
-          type: i2
-        });
-      } else a2 = new Blob([e2], {
-        type: i2
-      });
-      const s2 = URL.createObjectURL(a2), o2 = document.createElement("a");
-      o2.href = s2, o2.download = t2, document.body.appendChild(o2), o2.click(), setTimeout((() => {
-        document.body.removeChild(o2), URL.revokeObjectURL(s2);
-      }), 100);
-    }
-    smoothScrollToTop(e2 = 500) {
-      return new Promise(((t2) => {
-        const n2 = performance.now(), a2 = window.pageYOffset;
-        window.requestAnimationFrame(/* @__PURE__ */ __name((function i2(s2) {
-          const o2 = s2 - n2, r2 = Math.min(o2 / e2, 1), l2 = r2 < 0.5 ? 4 * r2 * r2 * r2 : 1 - Math.pow(-2 * r2 + 2, 3) / 2;
-          window.scrollTo(0, a2 * (1 - l2)), r2 < 1 ? window.requestAnimationFrame(i2) : t2();
-        }), "i"));
+    _removeHandledNewVideos(actresses, decisions, carNums) {
+      const keys = new Set(carNums.map(normalizeCarNum).filter(Boolean)), nextDecisions = { ...decisions };
+      keys.forEach(((key) => delete nextDecisions[key]));
+      const nextActresses = actresses.map(((actress) => {
+        if (!Array.isArray(actress.newVideoList)) return actress;
+        const newVideoList = actress.newVideoList.filter(((item) => !keys.has(normalizeCarNum("string" == typeof item ? item : item.carNum))));
+        if (newVideoList.length === actress.newVideoList.length) return actress;
+        return { ...actress, newVideoList };
       }));
+      return { actresses: nextActresses, decisions: nextDecisions };
     }
-    isUrl(e2) {
+    async _writeActivity(log) {
+      await this.storage.forage.setItem("activity_log", pruneActivityLog(log));
+    }
+    async _commit(domains, next, activity) {
+      const pendingActivity = cloneStateValue(activity), pendingLog = { ...domains.activity, entries: [...domains.activity.entries, pendingActivity] };
+      const journal = { id: activity.id, state: "prepared", createdAt: activity.createdAt, before: cloneStateValue(domains), after: cloneStateValue({ ...next, activity: pendingLog }) };
+      await this.storage.forage.setItem("mutation_journal", journal);
       try {
-        return new URL(e2), true;
-      } catch (t2) {
-        return false;
+        await this.storage._setItemAndInvalidate(this.storage.car_list_key, next.carList), await this._writeActivity(pendingLog), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, next.actresses), await this.storage.forage.setItem("new_video_decisions", next.decisions);
+        activity.commitState = "committed", pendingLog.entries = pendingLog.entries.map(((entry) => entry.id === activity.id ? activity : entry)), await this._writeActivity(pendingLog);
+        await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+      } catch (error) {
+        await this._recoverJournal(journal);
+        throw error;
       }
     }
-    setHrefParam(e2, t2) {
-      const n2 = new URL(window.location.href);
-      n2.searchParams.set(e2, t2), window.history.pushState({}, "", n2.toString());
-    }
-    getUrlParam(e2, t2) {
-      const n2 = e2.split("?")[1];
-      if (!n2) return null;
-      const a2 = new RegExp(`(?:^|&)${t2}=([^&]*)`), i2 = n2.match(a2);
-      let s2 = "";
-      return i2 && i2[1] && (s2 = decodeURIComponent(i2[1].replace(/\+/g, " "))), s2 ? "true" === s2 || "false" === s2 ? "true" === s2.toLowerCase() : "string" != typeof s2 || "" === s2.trim() || isNaN(Number(s2)) ? s2 : Number(s2) : s2;
-    }
-    getResponsiveArea(e2) {
-      const t2 = window.innerWidth;
-      return this.isMobileMode() ? ["100%", "90%"] : t2 >= 1200 ? e2 || this.getDefaultArea() : ["70%", "90%"];
-    }
-    getDialogArea(e2 = "md") {
-      const t2 = {
-        sm: [480, 640],
-        md: [720, 700],
-        lg: [1040, 760],
-        xl: [1320, 860],
-        workspace: [1440, 960]
-      }, n2 = t2[e2] || t2.md, a2 = window.innerWidth <= 768 ? 16 : "workspace" === e2 ? 32 : 64, i2 = Math.max(320, Math.min(n2[0], window.innerWidth - a2)), s2 = Math.max(320, Math.min(n2[1], window.innerHeight - a2));
-      return [`${i2}px`, `${s2}px`];
-    }
-    getDefaultArea() {
-      return ["85%", "90%"];
-    }
-    isMobile() {
-      const e2 = navigator.userAgent.toLowerCase();
-      return ["iphone", "ipod", "ipad", "android", "blackberry", "windows phone", "nokia", "webos", "opera mini", "mobile", "mobi", "tablet"].some(((t2) => e2.includes(t2)));
-    }
-    isMobileMode() {
-      const e2 = storageManager.getSettingSync("mobileMode", "auto");
-      return "on" === e2 || "off" !== e2 && (this.isMobile() || window.innerWidth < 768);
-    }
-    async copyToClipboard(e2, t2) {
-      const text = String(t2 ?? "");
-      let copied = false;
-      try {
-        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text), copied = true;
-        else throw new Error("Clipboard API unavailable");
-      } catch (clipboardError) {
-        const textarea = document.createElement("textarea"), activeElement = document.activeElement;
-        textarea.value = text, textarea.setAttribute("readonly", ""), textarea.style.position = "fixed", textarea.style.opacity = "0", document.body.appendChild(textarea), textarea.select();
-        try {
-          copied = true === document.execCommand("copy");
-          if (!copied) throw clipboardError;
-        } catch (fallbackError) {
-          clog.error("复制失败:", fallbackError), show.error("复制失败，请手动复制");
-        } finally {
-          textarea.remove(), activeElement?.focus?.();
-        }
+    async _recoverJournal(journal) {
+      const log = await this.getActivityLog(), activity = log.entries.find(((entry) => entry.id === journal.id));
+      if ("committed" === activity?.commitState) {
+        await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.after.carList), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.after.actresses), await this.storage.forage.setItem("new_video_decisions", journal.after.decisions);
+      } else {
+        const current = await this._readDomains(), keys = ["carList", "actresses", "decisions"];
+        const conflict = keys.some(((key) => {
+          const value = stableStateValue(current[key]);
+          return value !== stableStateValue(journal.before[key]) && value !== stableStateValue(journal.after[key]);
+        }));
+        if (conflict) throw new Error("检测到未完成状态事务且数据已发生冲突，请先运行数据健康检查");
+        await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.before.carList), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.before.actresses), await this.storage.forage.setItem("new_video_decisions", journal.before.decisions);
+        journal.before.activity ? await this._writeActivity(journal.before.activity) : (log.entries = log.entries.filter(((entry) => entry.id !== journal.id)), await this._writeActivity(log));
       }
-      return copied && show.info(`${e2}已复制到剪贴板, ${text}`), copied;
+      await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
     }
-    htmlTo$dom(e2) {
-      const t2 = new DOMParser();
-      return $(t2.parseFromString(e2, "text/html"));
+    async _recoverWithoutLock() {
+      const journal = await this.storage.forage.getItem("mutation_journal");
+      return journal ? (await this._recoverJournal(journal), true) : false;
     }
-    isHidden(e2) {
-      const t2 = e2.jquery ? e2[0] : e2;
-      return !t2 || (t2.offsetWidth <= 0 && t2.offsetHeight <= 0 || "none" === window.getComputedStyle(t2).display);
+    async recoverPendingTransaction() {
+      return this._withLock((() => this._recoverWithoutLock()));
     }
-    time(e2 = "default", t2 = "s", n2 = 2) {
-      if (this.timers.has(e2)) {
-        const t3 = this.timers.get(e2), n3 = performance.now() - t3.startTime;
-        let a2, i2;
-        return "s" === t3.unit ? (a2 = (n3 / 1e3).toFixed(t3.precision), i2 = "秒") : (a2 = n3.toFixed(t3.precision), i2 = "毫秒"), this.timers.delete(e2), `${e2}: ${a2}${i2}`;
-      }
-      this.timers.set(e2, {
-        startTime: performance.now(),
-        unit: t2,
-        precision: n2
+    async patch(carNums, patch, options = {}) {
+      const keys = [...new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean))];
+      if (!keys.length) throw new Error("番号为空");
+      const invalidFlag = Object.keys(patch).find(((key) => !STATE_FLAG_NAMES.includes(key) || "boolean" != typeof patch[key]));
+      if (invalidFlag) throw new TypeError(`无效状态字段: ${invalidFlag}`);
+      return this._withLock((() => this._patchWithoutLock(keys, patch, options)));
+    }
+    async _patchWithoutLock(keys, patch, options) {
+      await this._recoverWithoutLock();
+      const domains = await this._readDomains(), map = new Map(domains.carList.map(((record) => [normalizeCarNum(record.carNum), record]))), changes = [], handled = [];
+      const records = Array.isArray(options.records) ? new Map(options.records.map(((record) => [normalizeCarNum(record.carNum), record]))) : /* @__PURE__ */ new Map();
+      keys.forEach(((carNum) => {
+        const existing = map.get(carNum), metadata = records.get(carNum) || options.record || {}, now = utils.getNowStr(), before = existing ? cloneStateValue(existing) : null;
+        const record = existing ? { ...existing, stateFlags: normalizeStateFlags(existing.stateFlags) } : { carNum, url: metadata.url || window.location.href, names: metadata.names || "", createDate: now, stateFlags: createEmptyStateFlags() };
+        const fields = [];
+        ["url", "names", "publishTime", "starId", "remark", "fc2Source"].forEach(((field) => {
+          if ("fc2Source" === field && !["fc2", "123av"].includes(metadata[field])) return;
+          if (!Object.prototype.hasOwnProperty.call(metadata, field) || null == metadata[field] || !options.replaceMetadata && "" === metadata[field] || record[field] === metadata[field]) return;
+          record[field] = metadata[field], fields.push(field);
+        }));
+        STATE_FLAG_NAMES.forEach(((flag) => Object.prototype.hasOwnProperty.call(patch, flag) && record.stateFlags[flag] !== patch[flag] && (patch[flag] && handled.push(carNum), record.stateFlags[flag] = patch[flag], fields.push(`stateFlags.${flag}`))));
+        if (!fields.length && existing) return;
+        record.updateDate = now, syncLegacyStatus(record), map.set(carNum, record), changes.push({ carNum, operation: existing ? "patch" : "create", fields, before, after: cloneStateValue(record), undoState: "pending" });
+      }));
+      if (!changes.length) return { changed: [], transactionId: null };
+      changes.forEach(((change) => handled.includes(change.carNum) && (change.newVideoEffect = captureNewVideoEffect(domains.actresses, domains.decisions, change.carNum))));
+      const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, handled), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: options.type || "state-patch", commitState: "pending", changes, createdAt: (/* @__PURE__ */ new Date()).toISOString(), undoAttemptedAt: null };
+      await this._commit(domains, { carList: [...map.values()], ...effects }, activity), await this.eventBus.emit("car-state-changed", { carNums: changes.map(((change) => change.carNum)), transactionId: activity.id }), handled.length && await this.eventBus.emit("new-video-changed", { carNums: [...new Set(handled)], reason: "state-handled" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+      return { changed: changes.map(((change) => change.carNum)), transactionId: activity.id };
+    }
+    async toggle(carNum, flag, options = {}) {
+      if (!STATE_FLAG_NAMES.includes(flag)) throw new TypeError(`无效状态字段: ${flag}`);
+      const key = normalizeCarNum(carNum);
+      if (!key) throw new Error("番号为空");
+      return this._withLock(async () => {
+        await this._recoverWithoutLock();
+        const record = await this.storage.getCar(key), flags = normalizeStateFlags(record?.stateFlags);
+        return this._patchWithoutLock([key], { [flag]: !flags[flag] }, options);
       });
     }
-    sleep(e2 = 1e3) {
-      return new Promise(((t2) => setTimeout(t2, e2)));
+    async remove(carNums) {
+      const keys = new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean));
+      return this._withLock(async () => {
+        await this._recoverWithoutLock();
+        const domains = await this._readDomains(), changes = domains.carList.filter(((record) => keys.has(normalizeCarNum(record.carNum)))).map(((record) => ({ carNum: normalizeCarNum(record.carNum), operation: "delete", fields: ["record"], before: cloneStateValue(record), after: null, undoState: "pending" })));
+        if (!changes.length) return { changed: [], transactionId: null };
+        const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "record-delete", commitState: "pending", changes, createdAt: (/* @__PURE__ */ new Date()).toISOString(), undoAttemptedAt: null };
+        await this._commit(domains, { carList: domains.carList.filter(((record) => !keys.has(normalizeCarNum(record.carNum)))), actresses: domains.actresses, decisions: domains.decisions }, activity), await this.eventBus.emit("car-records-removed", { carNums: changes.map(((change) => change.carNum)), transactionId: activity.id }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+        return { changed: changes.map(((change) => change.carNum)), transactionId: activity.id };
+      });
     }
-    debounce(callback, wait = 200) {
-      let timer = null;
-      const debounced = /* @__PURE__ */ __name(function(...args) {
-        const context = this;
-        clearTimeout(timer), timer = setTimeout((() => {
-          timer = null, callback.apply(context, args);
-        }), Math.max(0, wait));
-      }, "debounced");
-      return debounced.cancel = () => {
-        clearTimeout(timer), timer = null;
-      }, debounced;
+    async setNewVideoDecision(carNums, action, until = null) {
+      if (!["ignored", "snoozed", null].includes(action)) throw new TypeError("无效新作决策");
+      const keys = [...new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean))];
+      return this._withLock(async () => {
+        await this._recoverWithoutLock();
+        const domains = await this._readDomains(), decisions = { ...domains.decisions }, now = (/* @__PURE__ */ new Date()).toISOString(), changes = [];
+        keys.forEach(((carNum) => {
+          const before = cloneStateValue(decisions[carNum] || null), after = action ? { action, until: "snoozed" === action ? until : null, createdAt: before?.createdAt || now, updatedAt: now } : null;
+          stableStateValue(before) === stableStateValue(after) || (after ? decisions[carNum] = after : delete decisions[carNum], changes.push({ carNum, operation: "new-video-decision", fields: ["decision"], before, after, undoState: "pending" }));
+        }));
+        if (!changes.length) return { changed: [], transactionId: null };
+        const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-decision", commitState: "pending", changes, createdAt: now, undoAttemptedAt: null };
+        const changed = changes.map(((change) => change.carNum));
+        await this._commit(domains, { carList: domains.carList, actresses: domains.actresses, decisions }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason: action || "decision-restored" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+        return { changed, transactionId: activity.id };
+      });
     }
-    genericSort(e2, t2, n2 = true) {
-      if (!Array.isArray(e2) || 0 === e2.length) return [];
-      if (!Array.isArray(t2) || 0 === t2.length) return [...e2];
-      const i2 = /* @__PURE__ */ __name((e3) => {
-        if (e3 instanceof Date) return e3;
-        if ("string" == typeof e3) {
-          const t3 = new Date(e3);
-          if (!isNaN(t3.getTime())) return t3;
-        }
-        return e3;
-      }, "i");
-      const getVal = /* @__PURE__ */ __name((e3, t3) => null != t3 ? "function" == typeof t3 ? t3(e3) : e3 && "object" == typeof e3 ? e3[t3] : void 0 : e3, "getVal");
-      const nulls = [], nonNulls = [];
-      for (const item of e2) {
-        let hasNull = false;
-        for (const s2 of t2) {
-          const val = getVal(item, s2.key);
-          if (null == val || void 0 === val) {
-            hasNull = true;
-            break;
+    async removeFromNewVideoList(carNums, reason = "manual") {
+      const keys = [...new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean))];
+      return this._withLock(async () => {
+        await this._recoverWithoutLock();
+        const domains = await this._readDomains(), changed = keys.filter(((carNum) => {
+          const effect = captureNewVideoEffect(domains.actresses, domains.decisions, carNum);
+          return effect.actressItems.length > 0 || !!effect.decision;
+        }));
+        if (!changed.length) return { changed: [], transactionId: null };
+        const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, changed), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-remove", commitState: "pending", changes: changed.map(((carNum) => ({ carNum, operation: "new-video-remove", fields: ["newVideoList", "decision"], before: null, after: { removed: true, reason }, newVideoEffect: captureNewVideoEffect(domains.actresses, domains.decisions, carNum), undoState: "pending" }))), createdAt: (/* @__PURE__ */ new Date()).toISOString(), undoAttemptedAt: null };
+        await this._commit(domains, { carList: domains.carList, ...effects }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+        return { changed, transactionId: activity.id };
+      });
+    }
+    async undoTransaction(transactionId) {
+      return this._withLock(async () => {
+        await this._recoverWithoutLock();
+        const domains = await this._readDomains(), transaction = domains.activity.entries.find(((entry) => entry.id === transactionId && "committed" === entry.commitState));
+        if (!transaction) throw new Error("操作记录不存在或尚未提交");
+        const carMap = new Map(domains.carList.map(((record) => [normalizeCarNum(record.carNum), cloneStateValue(record)]))), decisions = { ...domains.decisions }, actresses = cloneStateValue(domains.actresses), reverted = [], conflicts = [];
+        for (const change of transaction.changes) {
+          if ("reverted" === change.undoState) continue;
+          const current = carMap.get(change.carNum);
+          if (change.newVideoEffect && !canRestoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect)) {
+            change.undoState = "conflict", conflicts.push(change.carNum);
+            continue;
           }
+          if ("delete" === change.operation) {
+            current ? (change.undoState = "conflict", conflicts.push(change.carNum)) : (carMap.set(change.carNum, cloneStateValue(change.before)), change.undoState = "reverted", reverted.push(change.carNum));
+            continue;
+          }
+          if ("new-video-decision" === change.operation) {
+            const currentDecision = decisions[change.carNum] || null;
+            stableStateValue(currentDecision) !== stableStateValue(change.after) ? (change.undoState = "conflict", conflicts.push(change.carNum)) : (change.before ? decisions[change.carNum] = cloneStateValue(change.before) : delete decisions[change.carNum], change.undoState = "reverted", reverted.push(change.carNum));
+            continue;
+          }
+          if ("new-video-remove" === change.operation) {
+            restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), change.undoState = "reverted", reverted.push(change.carNum);
+            continue;
+          }
+          if (!["patch", "create"].includes(change.operation) || !current || change.fields.some(((field) => stableStateValue(getStatePath(current, field)) !== stableStateValue(getStatePath(change.after, field))))) {
+            change.undoState = "conflict", conflicts.push(change.carNum);
+            continue;
+          }
+          if ("create" === change.operation && !change.before) carMap.delete(change.carNum);
+          else change.fields.forEach(((field) => setStatePath(current, field, getStatePath(change.before, field)))), syncLegacyStatus(current), carMap.set(change.carNum, current);
+          change.newVideoEffect && restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), change.undoState = "reverted", reverted.push(change.carNum);
         }
-        hasNull ? nulls.push(item) : nonNulls.push(item);
-      }
-      return nonNulls.sort(((e3, a2) => {
-        for (const s2 of t2) {
-          const { key: t3, order: o2 = "asc" } = s2;
-          let r2 = getVal(e3, t3), l2 = getVal(a2, t3);
-          const c2 = i2(r2), d2 = i2(l2);
-          let h2 = c2 instanceof Date && d2 instanceof Date ? c2.getTime() - d2.getTime() : "number" == typeof r2 && "number" == typeof l2 ? r2 - l2 : "string" == typeof r2 && "string" == typeof l2 ? r2.localeCompare(l2) : String(r2).localeCompare(String(l2));
-          "desc" === o2 && (h2 *= -1);
-          if (0 !== h2) return h2;
-        }
-        return 0;
-      })), n2 ? [...nonNulls, ...nulls] : [...nulls, ...nonNulls];
-    }
-    async retry(e2, t2 = 3) {
-      let n2 = 0;
-      for (; n2 < t2; ) try {
-        const t3 = await e2();
-        return n2 > 0 && clog.debug(`[重试] 请求成功，共发起 ${n2 + 1} 次。`), t3;
-      } catch (a2) {
-        const e3 = a2 instanceof Error ? a2.message : "object" == typeof a2 ? JSON.stringify(a2) : String(a2);
-        if (a2?._cfBlocked || a2?._circuitBroken || e3.includes("Just a moment") || e3.includes("重定向") || e3.toLowerCase().includes("404 not found")) throw a2;
-        if (n2++, n2 === t2) throw clog.debug(`[重试] 达到最大重试次数 (${t2})，最终失败：`, a2), a2;
-        await this.sleep(500 * n2), clog.debug(`[重试] 请求失败，准备第 ${n2 + 1} 次重试, 错误信息: ${e3}`);
-      }
+        transaction.undoAttemptedAt = (/* @__PURE__ */ new Date()).toISOString();
+        const log = pruneActivityLog(domains.activity), nextCars = [...carMap.values()], journal = { id: `undo_${transactionId}`, state: "prepared", createdAt: transaction.undoAttemptedAt, before: cloneStateValue(domains), after: cloneStateValue({ carList: nextCars, actresses, decisions, activity: log }) };
+        await this.storage.forage.setItem("mutation_journal", journal), await this.storage._setItemAndInvalidate(this.storage.car_list_key, nextCars), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, actresses), await this.storage.forage.setItem("new_video_decisions", decisions), await this._writeActivity(log), await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+        reverted.length && await this.eventBus.emit("car-state-changed", { carNums: reverted, undoOf: transactionId }), await this.eventBus.emit("activity-log-changed", { transactionId, undo: true });
+        return { reverted, conflicts };
+      });
     }
   };
-  __name(_Utils, "Utils");
-  var Utils = _Utils;
+  __name(_StateService, "StateService");
+  var StateService = _StateService;
+  function attachStateServiceCompatibility(stateService, storageManager2) {
+    storageManager2.stateService = stateService;
+  }
+  __name(attachStateServiceCompatibility, "attachStateServiceCompatibility");
 
   // src/core/storage-index.js
   function createIndexedMap(items, key) {
@@ -3781,443 +3793,443 @@
   __name(_StorageManager, "StorageManager");
   var StorageManager = _StorageManager;
 
-  // src/core/http.js
-  var utils2 = globalThis.utils ?? new Utils();
-  var gmHttp2 = new class {
+  // src/core/utils.js
+  var _Utils = class _Utils {
     constructor() {
-      this._circuitBreakers = /* @__PURE__ */ new Map();
-      this._domainStats = /* @__PURE__ */ new Map();
+      return i(this, "intervalContainer", {}), i(this, "waitSequence", 0), i(this, "mimeTypes", {
+        txt: "text/plain",
+        html: "text/html",
+        css: "text/css",
+        csv: "text/csv",
+        json: "application/json",
+        xml: "application/xml",
+        jpg: "image/jpeg",
+        jpeg: "image/jpeg",
+        png: "image/png",
+        gif: "image/gif",
+        webp: "image/webp",
+        svg: "image/svg+xml",
+        pdf: "application/pdf",
+        doc: "application/msword",
+        docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        xls: "application/vnd.ms-excel",
+        xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ppt: "application/vnd.ms-powerpoint",
+        pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        zip: "application/zip",
+        rar: "application/x-rar-compressed",
+        "7z": "application/x-7z-compressed",
+        mp3: "audio/mpeg",
+        wav: "audio/wav",
+        mp4: "video/mp4",
+        webm: "video/webm",
+        ogg: "audio/ogg"
+      }), i(this, "timers", /* @__PURE__ */ new Map()), i(this, "insertStyle", ((e2) => {
+        const t2 = (Array.isArray(e2) ? e2 : [e2]).filter(Boolean);
+        if (0 === t2.length) return;
+        const n2 = t2.map(((e3) => e3.replace(/^\s*<style[^>]*>/i, "").replace(/<\/style>?\s*$/i, ""))).filter(Boolean).join("\n"), a2 = document.createElement("style");
+        n2 && (a2.textContent = n2, document.head.append(a2));
+      })), i(this, "layerIndexStack", []), _Utils.instance || (_Utils.instance = this), _Utils.instance;
     }
-    _getDomain(e2) {
-      try {
-        return new URL(e2).hostname;
-      } catch {
-        return "unknown";
-      }
+    importResource(e2) {
+      let t2;
+      e2.indexOf("css") >= 0 ? (t2 = document.createElement("link"), t2.setAttribute("rel", "stylesheet"), t2.href = e2) : (t2 = document.createElement("script"), t2.setAttribute("type", "text/javascript"), t2.src = e2), document.documentElement.appendChild(t2);
     }
-    _isCloudflareChallenge(e2, status = 0) {
-      if ("string" != typeof e2 || !e2) return false;
-      const text = e2.toLowerCase();
-      const hasChallengeTitle = /<title[^>]*>\s*just a moment(?:\.\.\.)?\s*<\/title>/i.test(e2);
-      const hasChallengeForm = /id=["']challenge-form["']/i.test(e2);
-      const hasCfChl = text.includes("cf-chl-") || text.includes("cf_chl_opt");
-      const hasChallengePlatform = text.includes("/cdn-cgi/challenge-platform/") || text.includes("challenge-platform");
-      const blockedStatus = 403 === status || 429 === status || 503 === status;
-      return hasChallengeTitle || hasChallengeForm && (hasCfChl || hasChallengePlatform) || blockedStatus && hasCfChl && hasChallengePlatform;
+    openPage(e2, t2, n2, a2) {
+      n2 = n2 ?? true;
+      const navigation = a2 && (Object.prototype.hasOwnProperty.call(a2, "event") || Object.prototype.hasOwnProperty.call(a2, "newTab")) ? a2 : { event: a2 }, event = navigation.event;
+      const destination = new URL(e2, window.location.origin), carNum = normalizeCarNum(t2), isMovieDetail = /^\/v\/[^/]+/.test(destination.pathname);
+      isMovieDetail && carNum && destination.searchParams.set("jhsCarNum", carNum);
+      if (navigation.newTab || event && (event.ctrlKey || event.metaKey || 1 === event.button)) return void GM_openInTab(destination.href, {
+        insert: 0
+      });
+      destination.pathname.includes("/actors/") || destination.pathname.includes("/star/") || destination.searchParams.set("hideNav", "1");
+      layer.open({
+        type: 2,
+        title: t2,
+        content: destination.href,
+        scrollbar: false,
+        shadeClose: n2,
+        area: this.getDialogArea("workspace"),
+        isOutAnim: false,
+        anim: -1,
+        success: /* @__PURE__ */ __name((e3, t3) => {
+          this.setupEscClose(t3);
+        }, "success")
+      });
     }
-    _checkCircuitBreaker(e2) {
-      const t2 = this._circuitBreakers.get(e2);
-      if (!t2) return null;
-      if ("open" === t2.state) {
-        const n2 = Date.now() - t2.openTime;
-        return n2 < t2.cooldownMs ? { state: "open", remaining: Math.ceil((t2.cooldownMs - n2) / 1e3) } : (t2.state = "half-open", t2.failCount = 0, t2.probing = false, null);
-      }
-      if ("half-open" === t2.state && t2.probing) return { state: "half-open", remaining: 0 };
-      return null;
-    }
-    isDomainCircuitBroken(e2) {
-      return this._checkCircuitBreaker(this._getDomain(e2));
-    }
-    /* domainStats.count 统计请求数（含重试），非独立请求数 */
-    _recordSuccess(e2) {
-      let t2 = this._circuitBreakers.get(e2);
-      t2 && (t2.state = "closed", t2.failCount = 0, t2.probing = false);
-      let n2 = this._domainStats.get(e2);
-      n2 || (n2 = { count: 0, errors: 0, lastUsed: 0 }, this._domainStats.set(e2, n2)), n2.count++, n2.lastUsed = Date.now();
-    }
-    _recordFailure(e2) {
-      let t2 = this._circuitBreakers.get(e2);
-      t2 || (t2 = { state: "closed", failCount: 0, openTime: 0, cooldownMs: 6e4, threshold: 3 }, this._circuitBreakers.set(e2, t2)), t2.failCount++, ("half-open" === t2.state || t2.failCount >= (t2.threshold || 3)) && (t2.state = "open", t2.openTime = Date.now(), t2.probing = false, clog.warn(`[熔断] ${e2} 连续失败 ${t2.failCount} 次，已熔断 ${t2.cooldownMs / 1e3} 秒`));
-      let n2 = this._domainStats.get(e2);
-      n2 || (n2 = { count: 0, errors: 0, lastUsed: 0 }, this._domainStats.set(e2, n2)), n2.count++, n2.errors++, n2.lastUsed = Date.now();
-    }
-    getCircuitBreakerStatus() {
-      const e2 = {};
-      return this._circuitBreakers.forEach(((t2, n2) => {
-        e2[n2] = { ...t2 };
-      })), e2;
-    }
-    resetCircuitBreaker(e2) {
-      this._circuitBreakers.delete(e2);
-    }
-    resetAllCircuitBreakers() {
-      this._circuitBreakers.clear();
-    }
-    getDomainStats() {
-      const e2 = {};
-      return this._domainStats.forEach(((t2, n2) => {
-        e2[n2] = { ...t2 };
-      })), e2;
-    }
-    clearDomainStats() {
-      this._domainStats.clear();
-    }
-    async get(e2, t2 = {}, n2 = {}, a2, i2 = {}) {
-      return this.gmRequest("GET", e2, null, t2, n2, a2, i2);
-    }
-    post(e2, t2 = {}, n2 = {}) {
-      n2 = {
-        "Content-Type": "application/json",
-        ...n2
-      };
-      let a2 = JSON.stringify(t2);
-      return this.gmRequest("POST", e2, a2, null, n2);
-    }
-    async gmRequest(e2, t2, n2 = {}, a2 = {}, i2 = {}, s2 = false, requestOptions = {}) {
-      if (a2 && Object.keys(a2).length) {
-        const e3 = new URLSearchParams(a2).toString();
-        t2 += (t2.includes("?") ? "&" : "?") + e3;
-      }
-      const o2 = this._getDomain(t2), [m2, r2, b2, k2] = await Promise.all([storageManager2.getSetting("httpTimeout", 5e3), storageManager2.getSetting("httpRetryCount", 3), storageManager2.getSetting("circuitBreakerThreshold", 3), storageManager2.getSetting("circuitBreakerCooldown", 6e4)]);
-      let u2 = this._circuitBreakers.get(o2);
-      u2 || (u2 = { state: "closed", failCount: 0, openTime: 0, cooldownMs: k2, threshold: b2, probing: false }, this._circuitBreakers.set(o2, u2));
-      const w = this._checkCircuitBreaker(o2);
-      if (w) {
-        const e3 = new Error(`站点 ${o2} 已熔断，${w.remaining}秒后重试`);
-        throw e3._circuitBroken = true, e3;
-      }
-      return n2 || (n2 = void 0), await utils2.retry(() => {
-        const c2 = this._checkCircuitBreaker(o2);
-        if (c2) {
-          const t3 = new Error(`站点 ${o2} 已熔断，${c2.remaining}秒后重试`);
-          return t3._circuitBroken = true, Promise.reject(t3);
+    _handleGlobalEscKey(e2) {
+      if ("Escape" !== e2.key && 27 !== e2.keyCode) return;
+      if (0 === this.layerIndexStack.length) return;
+      const t2 = this.layerIndexStack[this.layerIndexStack.length - 1], n2 = $(`#layui-layer${t2}`);
+      let a2 = false;
+      if (n2.find(".viewer-container").length > 0) a2 = true;
+      else {
+        const e3 = n2.find(`#layui-layer-iframe${t2}`)[0];
+        if (e3 && e3.contentDocument) try {
+          $(e3.contentDocument).find(".viewer-container").length > 0 && (a2 = true);
+        } catch (i2) {
+          clog.warn("无法检查跨域 iframe 内的 .viewer-container");
         }
-        "half-open" === u2.state && (u2.probing = true);
-        return new Promise(((a3, r3) => {
-          GM_xmlhttpRequest({
-            method: e2,
-            url: t2,
-            headers: i2,
-            timeout: m2,
-            data: n2,
-            ...requestOptions.cookiePartitionTopLevelSite ? {
-              cookiePartition: { topLevelSite: requestOptions.cookiePartitionTopLevelSite }
-            } : {},
-            onload: /* @__PURE__ */ __name((e3) => {
-              try {
-                if (404 === e3.status && requestOptions.ignoreNotFound) return void a3(null);
-                if (this._isCloudflareChallenge(e3.responseText, e3.status)) {
-                  this._recordFailure(o2);
-                  const n3 = new Error(`Cloudflare challenge blocked: ${t2}`);
-                  return n3._cfBlocked = true, n3.status = e3.status, n3.requestUrl = t2, n3.finalUrl = e3.finalUrl, n3.cfDiagnostics = { status: e3.status, requestUrl: t2, finalUrl: e3.finalUrl, contentLength: e3.responseText?.length || 0 }, void r3(n3);
-                }
-                if (s2 && e3.finalUrl !== t2 && r3("请求被重定向了,URL是:" + e3.finalUrl), e3.status >= 200 && e3.status < 300) {
-                  this._recordSuccess(o2);
-                  if (e3.responseText) try {
-                    a3(JSON.parse(e3.responseText));
-                  } catch (n3) {
-                    a3(e3.responseText);
-                  }
-                  else a3(e3.responseText || e3);
-                } else {
-                  clog.error("请求失败,状态码:", e3.status, t2), this._recordFailure(o2);
-                  if (e3.responseText) {
-                    try {
-                      const t3 = JSON.parse(e3.responseText);
-                      t3.status = e3.status, r3(t3);
-                    } catch {
-                      const t3 = new Error(e3.responseText || `请求发生错误 ${e3.status}`);
-                      t3.status = e3.status, r3(t3);
-                    }
-                  } else {
-                    const t3 = new Error(`请求发生错误 ${e3.status}`);
-                    t3.status = e3.status, r3(t3);
-                  }
-                }
-              } catch (n3) {
-                this._recordFailure(o2), r3(n3);
-              }
-            }, "onload"),
-            onerror: /* @__PURE__ */ __name((e3) => {
-              clog.error("网络错误:", t2), this._recordFailure(o2), r3(new Error(e3.error || "网络错误"));
-            }, "onerror"),
-            ontimeout: /* @__PURE__ */ __name(() => {
-              this._recordFailure(o2), r3(new Error("请求超时: " + t2));
-            }, "ontimeout")
-          });
-        }));
-      }, r2);
+      }
+      a2 || (this.layerIndexStack.pop(), layer.close(t2));
     }
-  }();
-  var storageManager2 = globalThis.storageManager ?? new StorageManager();
-
-  // src/core/state-service.js
-  var ACTIVITY_SOFT_LIMIT = 1e3;
-  var ACTIVITY_HARD_LIMIT = 1e4;
-  var ACTIVITY_RETENTION_MS = 30 * 864e5;
-  function cloneStateValue(value) {
-    return null == value ? value : JSON.parse(JSON.stringify(value));
-  }
-  __name(cloneStateValue, "cloneStateValue");
-  function stableStateValue(value) {
-    if (null === value || "object" != typeof value) return JSON.stringify(value);
-    if (Array.isArray(value)) return `[${value.map(stableStateValue).join(",")}]`;
-    return `{${Object.keys(value).sort().map(((key) => `${JSON.stringify(key)}:${stableStateValue(value[key])}`)).join(",")}}`;
-  }
-  __name(stableStateValue, "stableStateValue");
-  function getStatePath(value, path) {
-    return path.split(".").reduce(((current, key) => current?.[key]), value);
-  }
-  __name(getStatePath, "getStatePath");
-  function setStatePath(value, path, next) {
-    const keys = path.split("."), last = keys.pop(), target = keys.reduce(((current, key) => current[key] || (current[key] = {})), value);
-    void 0 === next ? delete target[last] : target[last] = cloneStateValue(next);
-  }
-  __name(setStatePath, "setStatePath");
-  function captureNewVideoEffect(actresses, decisions, carNum) {
-    const key = normalizeCarNum(carNum), actressItems = [];
-    actresses.forEach(((actress, actressIndex) => (actress.newVideoList || []).forEach(((item, itemIndex) => {
-      normalizeCarNum("string" == typeof item ? item : item.carNum) === key && actressItems.push({ actressIndex, itemIndex, item: cloneStateValue(item) });
-    }))));
-    return { actressItems, decision: cloneStateValue(decisions[key] || null) };
-  }
-  __name(captureNewVideoEffect, "captureNewVideoEffect");
-  function canRestoreNewVideoEffect(actresses, decisions, carNum, effect) {
-    const key = normalizeCarNum(carNum);
-    if (stableStateValue(decisions[key] || null) !== stableStateValue(null)) return false;
-    return effect.actressItems.every(((entry) => !(actresses[entry.actressIndex]?.newVideoList || []).some(((item) => normalizeCarNum("string" == typeof item ? item : item.carNum) === key))));
-  }
-  __name(canRestoreNewVideoEffect, "canRestoreNewVideoEffect");
-  function restoreNewVideoEffect(actresses, decisions, carNum, effect) {
-    effect.actressItems.forEach(((entry) => {
-      const actress = actresses[entry.actressIndex];
-      if (!actress) return;
-      const list = [...actress.newVideoList || []], index = Math.min(entry.itemIndex, list.length);
-      list.splice(index, 0, cloneStateValue(entry.item)), actress.newVideoList = list;
-    }));
-    effect.decision ? decisions[normalizeCarNum(carNum)] = cloneStateValue(effect.decision) : delete decisions[normalizeCarNum(carNum)];
-  }
-  __name(restoreNewVideoEffect, "restoreNewVideoEffect");
-  function pruneActivityLog(log, now = Date.now()) {
-    const result = { entries: Array.isArray(log?.entries) ? log.entries : [], trackingStartedAt: log?.trackingStartedAt || new Date(now).toISOString(), coverageStart: log?.coverageStart || null, truncatedAt: log?.truncatedAt || null };
-    const cutoff = now - ACTIVITY_RETENTION_MS, recent = [], older = [];
-    result.entries.forEach(((entry) => (Date.parse(entry.createdAt) >= cutoff || "pending" === entry.commitState ? recent : older).push(entry)));
-    older.sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)))), recent.sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt))));
-    const olderAllowance = Math.max(0, ACTIVITY_SOFT_LIMIT - recent.length);
-    result.entries = [...older.slice(-olderAllowance), ...recent].sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt))));
-    if (result.entries.length > ACTIVITY_HARD_LIMIT) {
-      const pending = result.entries.filter(((entry) => "pending" === entry.commitState)), committed = result.entries.filter(((entry) => "pending" !== entry.commitState));
-      const committedAllowance = Math.max(0, ACTIVITY_HARD_LIMIT - pending.length);
-      result.entries = [...committedAllowance ? committed.slice(-committedAllowance) : [], ...pending].sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt))));
-      result.truncatedAt = new Date(now).toISOString(), result.coverageStart = result.entries[0]?.createdAt || result.truncatedAt;
-    }
-    return result;
-  }
-  __name(pruneActivityLog, "pruneActivityLog");
-  var _StateService = class _StateService {
-    constructor(storage, eventBus) {
-      this.storage = storage, this.eventBus = eventBus, this._queue = Promise.resolve(), this._recovering = false;
-    }
-    _withLock(callback) {
-      if (globalThis.navigator?.locks?.request) return navigator.locks.request("jhs_state_mutation", callback);
-      const run = this._queue.then(callback, callback);
-      return this._queue = run.catch((() => {
-      })), run;
-    }
-    async getActivityLog() {
-      return pruneActivityLog(await this.storage.forage.getItem("activity_log"));
-    }
-    async getOfflineHistory() {
-      return await this.storage.forage.getItem("offline_history") || [];
-    }
-    async appendOfflineHistory(record) {
-      const history = await this.getOfflineHistory(), item = { id: record.id || globalThis.crypto?.randomUUID?.() || `offline_${Date.now()}`, createdAt: record.createdAt || (/* @__PURE__ */ new Date()).toISOString(), ...record, carNum: normalizeCarNum(record.carNum) };
-      history.push(item), history.length > 1e3 && history.splice(0, history.length - 1e3), await this.storage.forage.setItem("offline_history", history), await this.eventBus.emit("offline-history-changed", { ids: [item.id] });
-      return item;
-    }
-    async removeOfflineHistory(ids) {
-      const keys = new Set(Array.isArray(ids) ? ids : [ids]), history = await this.getOfflineHistory(), next = history.filter(((item) => !keys.has(item.id)));
-      if (next.length === history.length) return false;
-      return await this.storage.forage.setItem("offline_history", next), await this.eventBus.emit("offline-history-changed", { ids: [...keys], removed: true }), true;
-    }
-    async getNewVideoDecisions() {
-      return await this.storage.forage.getItem("new_video_decisions") || {};
-    }
-    async _readDomains() {
-      const [carList, actresses, decisions, activity] = await Promise.all([this.storage.forage.getItem(this.storage.car_list_key), this.storage.forage.getItem(this.storage.favorite_actresses_key), this.storage.forage.getItem("new_video_decisions"), this.storage.forage.getItem("activity_log")]);
-      return { carList: carList || [], actresses: actresses || [], decisions: decisions || {}, activity: pruneActivityLog(activity) };
-    }
-    _removeHandledNewVideos(actresses, decisions, carNums) {
-      const keys = new Set(carNums.map(normalizeCarNum).filter(Boolean)), nextDecisions = { ...decisions };
-      keys.forEach(((key) => delete nextDecisions[key]));
-      const nextActresses = actresses.map(((actress) => {
-        if (!Array.isArray(actress.newVideoList)) return actress;
-        const newVideoList = actress.newVideoList.filter(((item) => !keys.has(normalizeCarNum("string" == typeof item ? item : item.carNum))));
-        if (newVideoList.length === actress.newVideoList.length) return actress;
-        return { ...actress, newVideoList };
-      }));
-      return { actresses: nextActresses, decisions: nextDecisions };
-    }
-    async _writeActivity(log) {
-      await this.storage.forage.setItem("activity_log", pruneActivityLog(log));
-    }
-    async _commit(domains, next, activity) {
-      const pendingActivity = cloneStateValue(activity), pendingLog = { ...domains.activity, entries: [...domains.activity.entries, pendingActivity] };
-      const journal = { id: activity.id, state: "prepared", createdAt: activity.createdAt, before: cloneStateValue(domains), after: cloneStateValue({ ...next, activity: pendingLog }) };
-      await this.storage.forage.setItem("mutation_journal", journal);
+    setupEscClose(e2) {
+      var t2;
+      this._boundHandler || (this._boundHandler = this._handleGlobalEscKey.bind(this), $(document).off("keydown.globalLayerEsc"), $(document).on("keydown.globalLayerEsc", this._boundHandler)), -1 === this.layerIndexStack.indexOf(e2) && this.layerIndexStack.push(e2);
+      const n2 = $(`#layui-layer-iframe${e2}`), a2 = `keydown.layerEsc${e2}`;
       try {
-        await this.storage._setItemAndInvalidate(this.storage.car_list_key, next.carList), await this._writeActivity(pendingLog), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, next.actresses), await this.storage.forage.setItem("new_video_decisions", next.decisions);
-        activity.commitState = "committed", pendingLog.entries = pendingLog.entries.map(((entry) => entry.id === activity.id ? activity : entry)), await this._writeActivity(pendingLog);
-        await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
-      } catch (error) {
-        await this._recoverJournal(journal);
-        throw error;
+        const e3 = null == (t2 = n2[0]) ? void 0 : t2.contentDocument;
+        if (e3) {
+          if ("yes" === n2.attr("data-esc-bound")) return;
+          $(e3).off(a2), $(e3).on(a2, this._boundHandler), n2.attr("data-esc-bound", "yes");
+        }
+      } catch (i2) {
+        clog.error("iframe监听失败 (跨域或未加载完毕):", i2);
       }
     }
-    async _recoverJournal(journal) {
-      const log = await this.getActivityLog(), activity = log.entries.find(((entry) => entry.id === journal.id));
-      if ("committed" === activity?.commitState) {
-        await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.after.carList), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.after.actresses), await this.storage.forage.setItem("new_video_decisions", journal.after.decisions);
+    async closePage(options = {}) {
+      if ("yes" !== await storageManager.getSetting("needClosePage", "yes")) return false;
+      const root = options?.root, parseIndex = /* @__PURE__ */ __name((element) => {
+        const id = element?.id || "", match = /^layui-layer(\d+)$/.exec(id);
+        return match ? Number(match[1]) : null;
+      }, "parseIndex");
+      let layerIndex = Number.isInteger(options?.layerIndex) ? options.layerIndex : null;
+      if (null === layerIndex && root) {
+        const element = root.jquery ? root[0] : root.nodeType ? root : null, layerElement = element?.matches?.(".layui-layer") ? element : element?.closest?.(".layui-layer");
+        layerIndex = parseIndex(layerElement);
+      }
+      if (null === layerIndex && window.frameElement) layerIndex = parseIndex(window.frameElement.closest?.(".layui-layer"));
+      const ownerWindow = window.parent && window.parent !== window ? window.parent : window, ownerLayer = ownerWindow.layer || globalThis.layer;
+      if (null !== layerIndex && "function" == typeof ownerLayer?.close) return ownerLayer.close(layerIndex), true;
+      if (window.opener && !window.opener.closed) return window.close(), true;
+      return false;
+    }
+    loopDetector(e2, t2, n2 = 20, a2 = 1e4, i2 = true, scope = null) {
+      const s2 = ++this.waitSequence;
+      let o2 = null, r2 = null, l2 = null, c2 = false;
+      const d2 = /* @__PURE__ */ __name(() => {
+        o2 && (scope?.releaseObserver ? scope.releaseObserver(o2) : o2.disconnect()), clearTimeout(r2), clearTimeout(l2), clearInterval(this.intervalContainer[s2]?.fallback), delete this.intervalContainer[s2];
+      }, "d"), h2 = /* @__PURE__ */ __name((e3) => {
+        if (c2) return;
+        c2 = true, d2(), e3 && t2 && t2();
+      }, "h"), g2 = /* @__PURE__ */ __name(() => {
+        if (c2) return;
+        e2() && h2(true);
+      }, "g"), p2 = /* @__PURE__ */ __name(() => {
+        c2 || (clearTimeout(r2), r2 = setTimeout(g2, Math.max(0, n2)));
+      }, "p");
+      const cancel = /* @__PURE__ */ __name(() => {
+        c2 = true, d2();
+      }, "cancel");
+      this.intervalContainer[s2] = {};
+      if (e2()) return h2(true), cancel;
+      if (scope?.observe && document.documentElement) o2 = scope.observe(document.documentElement, p2, { childList: true, subtree: true, characterData: true });
+      else this.intervalContainer[s2].fallback = setInterval(g2, Math.max(100, n2));
+      l2 = setTimeout((() => {
+        if (c2) return;
+        let t3 = false;
+        try {
+          t3 = e2();
+        } catch (e3) {
+          clog.error("DOM 等待条件执行失败", e3);
+        }
+        h2(t3 || i2);
+      }), Math.max(0, a2));
+      return cancel;
+    }
+    rightClick(e2, t2, n2) {
+      let a2;
+      "string" == typeof e2 ? a2 = document.querySelector(e2) : e2 instanceof HTMLElement && (a2 = e2), a2 || (clog.warn("rightClick(), 容器无效或未提供，将使用 document.body 进行全局委托。"), a2 = document.body), "string" == typeof t2 && "" !== t2.trim() ? a2.addEventListener("contextmenu", ((e3) => {
+        const a3 = e3.target.closest(t2);
+        a3 && n2(e3, a3);
+      })) : clog.error("rightClick(), 必须提供有效的 targetSelector。");
+    }
+    q(e2, t2, n2, a2) {
+      let o2;
+      if (this.isMobileMode()) {
+        o2 = layer.confirm(t2, {
+          title: "提示",
+          btn: ["确定", "取消"],
+          shade: 0,
+          zIndex: JHS_Z_INDEX.layer
+        }, (function() {
+          n2 && n2(), layer.close(o2);
+        }), (function() {
+          a2 && a2();
+        }));
       } else {
-        const current = await this._readDomains(), keys = ["carList", "actresses", "decisions"];
-        const conflict = keys.some(((key) => {
-          const value = stableStateValue(current[key]);
-          return value !== stableStateValue(journal.before[key]) && value !== stableStateValue(journal.after[key]);
+        let i2, s2;
+        e2 ? (i2 = e2.clientX - 130, s2 = e2.clientY - 120) : (i2 = window.innerWidth / 2 - 120, s2 = window.innerHeight / 2 - 120);
+        o2 = layer.confirm(t2, {
+          offset: [s2, i2],
+          title: "提示",
+          btn: ["确定", "取消"],
+          shade: 0,
+          zIndex: JHS_Z_INDEX.layer
+        }, (function() {
+          n2 && n2(), layer.close(o2);
+        }), (function() {
+          a2 && a2();
         }));
-        if (conflict) throw new Error("检测到未完成状态事务且数据已发生冲突，请先运行数据健康检查");
-        await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.before.carList), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.before.actresses), await this.storage.forage.setItem("new_video_decisions", journal.before.decisions);
-        journal.before.activity ? await this._writeActivity(journal.before.activity) : (log.entries = log.entries.filter(((entry) => entry.id !== journal.id)), await this._writeActivity(log));
       }
-      await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
     }
-    async _recoverWithoutLock() {
-      const journal = await this.storage.forage.getItem("mutation_journal");
-      return journal ? (await this._recoverJournal(journal), true) : false;
+    getNowStr(e2 = "-", t2 = ":", n2 = null) {
+      let a2;
+      a2 = n2 ? new Date(n2) : /* @__PURE__ */ new Date();
+      const i2 = a2.getFullYear(), s2 = String(a2.getMonth() + 1).padStart(2, "0"), o2 = String(a2.getDate()).padStart(2, "0"), r2 = String(a2.getHours()).padStart(2, "0"), l2 = String(a2.getMinutes()).padStart(2, "0"), c2 = String(a2.getSeconds()).padStart(2, "0");
+      return `${[i2, s2, o2].join(e2)} ${[r2, l2, c2].join(t2)}`;
     }
-    async recoverPendingTransaction() {
-      return this._withLock((() => this._recoverWithoutLock()));
+    formatDate(e2, t2 = "-", n2 = ":") {
+      let a2;
+      if (e2 instanceof Date) a2 = e2;
+      else {
+        if ("string" != typeof e2) throw new Error("Invalid date input: must be Date object or date string");
+        if (a2 = new Date(e2), isNaN(a2.getTime())) throw new Error("Invalid date string");
+      }
+      const i2 = a2.getFullYear(), s2 = String(a2.getMonth() + 1).padStart(2, "0"), o2 = String(a2.getDate()).padStart(2, "0"), r2 = String(a2.getHours()).padStart(2, "0"), l2 = String(a2.getMinutes()).padStart(2, "0"), c2 = String(a2.getSeconds()).padStart(2, "0");
+      return `${[i2, s2, o2].join(t2)} ${[r2, l2, c2].join(n2)}`;
     }
-    async patch(carNums, patch, options = {}) {
-      const keys = [...new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean))];
-      if (!keys.length) throw new Error("番号为空");
-      const invalidFlag = Object.keys(patch).find(((key) => !STATE_FLAG_NAMES.includes(key) || "boolean" != typeof patch[key]));
-      if (invalidFlag) throw new TypeError(`无效状态字段: ${invalidFlag}`);
-      return this._withLock((() => this._patchWithoutLock(keys, patch, options)));
+    getHourDifference(e2, t2) {
+      const n2 = e2.getTime(), a2 = t2.getTime(), i2 = Math.abs(a2 - n2) / 36e5;
+      return Math.floor(i2);
     }
-    async _patchWithoutLock(keys, patch, options) {
-      await this._recoverWithoutLock();
-      const domains = await this._readDomains(), map = new Map(domains.carList.map(((record) => [normalizeCarNum(record.carNum), record]))), changes = [], handled = [];
-      const records = Array.isArray(options.records) ? new Map(options.records.map(((record) => [normalizeCarNum(record.carNum), record]))) : /* @__PURE__ */ new Map();
-      keys.forEach(((carNum) => {
-        const existing = map.get(carNum), metadata = records.get(carNum) || options.record || {}, now = utils.getNowStr(), before = existing ? cloneStateValue(existing) : null;
-        const record = existing ? { ...existing, stateFlags: normalizeStateFlags(existing.stateFlags) } : { carNum, url: metadata.url || window.location.href, names: metadata.names || "", createDate: now, stateFlags: createEmptyStateFlags() };
-        const fields = [];
-        ["url", "names", "publishTime", "starId", "remark", "fc2Source"].forEach(((field) => {
-          if ("fc2Source" === field && !["fc2", "123av"].includes(metadata[field])) return;
-          if (!Object.prototype.hasOwnProperty.call(metadata, field) || null == metadata[field] || !options.replaceMetadata && "" === metadata[field] || record[field] === metadata[field]) return;
-          record[field] = metadata[field], fields.push(field);
-        }));
-        STATE_FLAG_NAMES.forEach(((flag) => Object.prototype.hasOwnProperty.call(patch, flag) && record.stateFlags[flag] !== patch[flag] && (patch[flag] && handled.push(carNum), record.stateFlags[flag] = patch[flag], fields.push(`stateFlags.${flag}`))));
-        if (!fields.length && existing) return;
-        record.updateDate = now, syncLegacyStatus(record), map.set(carNum, record), changes.push({ carNum, operation: existing ? "patch" : "create", fields, before, after: cloneStateValue(record), undoState: "pending" });
+    download(e2, t2) {
+      show.info("开始请求下载...");
+      const n2 = t2.split(".").pop().toLowerCase();
+      let a2, i2 = this.mimeTypes[n2] || "application/octet-stream";
+      if (e2 instanceof Blob) a2 = e2;
+      else if (e2 instanceof ArrayBuffer || ArrayBuffer.isView(e2)) a2 = new Blob([e2], {
+        type: i2
+      });
+      else if ("string" == typeof e2 && e2.startsWith("data:")) {
+        const t3 = atob(e2.split(",")[1]), n3 = new ArrayBuffer(t3.length), s3 = new Uint8Array(n3);
+        for (let e3 = 0; e3 < t3.length; e3++) s3[e3] = t3.charCodeAt(e3);
+        a2 = new Blob([s3], {
+          type: i2
+        });
+      } else a2 = new Blob([e2], {
+        type: i2
+      });
+      const s2 = URL.createObjectURL(a2), o2 = document.createElement("a");
+      o2.href = s2, o2.download = t2, document.body.appendChild(o2), o2.click(), setTimeout((() => {
+        document.body.removeChild(o2), URL.revokeObjectURL(s2);
+      }), 100);
+    }
+    smoothScrollToTop(e2 = 500) {
+      return new Promise(((t2) => {
+        const n2 = performance.now(), a2 = window.pageYOffset;
+        window.requestAnimationFrame(/* @__PURE__ */ __name((function i2(s2) {
+          const o2 = s2 - n2, r2 = Math.min(o2 / e2, 1), l2 = r2 < 0.5 ? 4 * r2 * r2 * r2 : 1 - Math.pow(-2 * r2 + 2, 3) / 2;
+          window.scrollTo(0, a2 * (1 - l2)), r2 < 1 ? window.requestAnimationFrame(i2) : t2();
+        }), "i"));
       }));
-      if (!changes.length) return { changed: [], transactionId: null };
-      changes.forEach(((change) => handled.includes(change.carNum) && (change.newVideoEffect = captureNewVideoEffect(domains.actresses, domains.decisions, change.carNum))));
-      const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, handled), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: options.type || "state-patch", commitState: "pending", changes, createdAt: (/* @__PURE__ */ new Date()).toISOString(), undoAttemptedAt: null };
-      await this._commit(domains, { carList: [...map.values()], ...effects }, activity), await this.eventBus.emit("car-state-changed", { carNums: changes.map(((change) => change.carNum)), transactionId: activity.id }), handled.length && await this.eventBus.emit("new-video-changed", { carNums: [...new Set(handled)], reason: "state-handled" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
-      return { changed: changes.map(((change) => change.carNum)), transactionId: activity.id };
     }
-    async toggle(carNum, flag, options = {}) {
-      if (!STATE_FLAG_NAMES.includes(flag)) throw new TypeError(`无效状态字段: ${flag}`);
-      const key = normalizeCarNum(carNum);
-      if (!key) throw new Error("番号为空");
-      return this._withLock(async () => {
-        await this._recoverWithoutLock();
-        const record = await this.storage.getCar(key), flags = normalizeStateFlags(record?.stateFlags);
-        return this._patchWithoutLock([key], { [flag]: !flags[flag] }, options);
-      });
+    isUrl(e2) {
+      try {
+        return new URL(e2), true;
+      } catch (t2) {
+        return false;
+      }
     }
-    async remove(carNums) {
-      const keys = new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean));
-      return this._withLock(async () => {
-        await this._recoverWithoutLock();
-        const domains = await this._readDomains(), changes = domains.carList.filter(((record) => keys.has(normalizeCarNum(record.carNum)))).map(((record) => ({ carNum: normalizeCarNum(record.carNum), operation: "delete", fields: ["record"], before: cloneStateValue(record), after: null, undoState: "pending" })));
-        if (!changes.length) return { changed: [], transactionId: null };
-        const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "record-delete", commitState: "pending", changes, createdAt: (/* @__PURE__ */ new Date()).toISOString(), undoAttemptedAt: null };
-        await this._commit(domains, { carList: domains.carList.filter(((record) => !keys.has(normalizeCarNum(record.carNum)))), actresses: domains.actresses, decisions: domains.decisions }, activity), await this.eventBus.emit("car-records-removed", { carNums: changes.map(((change) => change.carNum)), transactionId: activity.id }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
-        return { changed: changes.map(((change) => change.carNum)), transactionId: activity.id };
-      });
+    setHrefParam(e2, t2) {
+      const n2 = new URL(window.location.href);
+      n2.searchParams.set(e2, t2), window.history.pushState({}, "", n2.toString());
     }
-    async setNewVideoDecision(carNums, action, until = null) {
-      if (!["ignored", "snoozed", null].includes(action)) throw new TypeError("无效新作决策");
-      const keys = [...new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean))];
-      return this._withLock(async () => {
-        await this._recoverWithoutLock();
-        const domains = await this._readDomains(), decisions = { ...domains.decisions }, now = (/* @__PURE__ */ new Date()).toISOString(), changes = [];
-        keys.forEach(((carNum) => {
-          const before = cloneStateValue(decisions[carNum] || null), after = action ? { action, until: "snoozed" === action ? until : null, createdAt: before?.createdAt || now, updatedAt: now } : null;
-          stableStateValue(before) === stableStateValue(after) || (after ? decisions[carNum] = after : delete decisions[carNum], changes.push({ carNum, operation: "new-video-decision", fields: ["decision"], before, after, undoState: "pending" }));
-        }));
-        if (!changes.length) return { changed: [], transactionId: null };
-        const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-decision", commitState: "pending", changes, createdAt: now, undoAttemptedAt: null };
-        const changed = changes.map(((change) => change.carNum));
-        await this._commit(domains, { carList: domains.carList, actresses: domains.actresses, decisions }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason: action || "decision-restored" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
-        return { changed, transactionId: activity.id };
-      });
+    getUrlParam(e2, t2) {
+      const n2 = e2.split("?")[1];
+      if (!n2) return null;
+      const a2 = new RegExp(`(?:^|&)${t2}=([^&]*)`), i2 = n2.match(a2);
+      let s2 = "";
+      return i2 && i2[1] && (s2 = decodeURIComponent(i2[1].replace(/\+/g, " "))), s2 ? "true" === s2 || "false" === s2 ? "true" === s2.toLowerCase() : "string" != typeof s2 || "" === s2.trim() || isNaN(Number(s2)) ? s2 : Number(s2) : s2;
     }
-    async removeFromNewVideoList(carNums, reason = "manual") {
-      const keys = [...new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean))];
-      return this._withLock(async () => {
-        await this._recoverWithoutLock();
-        const domains = await this._readDomains(), changed = keys.filter(((carNum) => {
-          const effect = captureNewVideoEffect(domains.actresses, domains.decisions, carNum);
-          return effect.actressItems.length > 0 || !!effect.decision;
-        }));
-        if (!changed.length) return { changed: [], transactionId: null };
-        const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, changed), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-remove", commitState: "pending", changes: changed.map(((carNum) => ({ carNum, operation: "new-video-remove", fields: ["newVideoList", "decision"], before: null, after: { removed: true, reason }, newVideoEffect: captureNewVideoEffect(domains.actresses, domains.decisions, carNum), undoState: "pending" }))), createdAt: (/* @__PURE__ */ new Date()).toISOString(), undoAttemptedAt: null };
-        await this._commit(domains, { carList: domains.carList, ...effects }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
-        return { changed, transactionId: activity.id };
-      });
+    getResponsiveArea(e2) {
+      const t2 = window.innerWidth;
+      return this.isMobileMode() ? ["100%", "90%"] : t2 >= 1200 ? e2 || this.getDefaultArea() : ["70%", "90%"];
     }
-    async undoTransaction(transactionId) {
-      return this._withLock(async () => {
-        await this._recoverWithoutLock();
-        const domains = await this._readDomains(), transaction = domains.activity.entries.find(((entry) => entry.id === transactionId && "committed" === entry.commitState));
-        if (!transaction) throw new Error("操作记录不存在或尚未提交");
-        const carMap = new Map(domains.carList.map(((record) => [normalizeCarNum(record.carNum), cloneStateValue(record)]))), decisions = { ...domains.decisions }, actresses = cloneStateValue(domains.actresses), reverted = [], conflicts = [];
-        for (const change of transaction.changes) {
-          if ("reverted" === change.undoState) continue;
-          const current = carMap.get(change.carNum);
-          if (change.newVideoEffect && !canRestoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect)) {
-            change.undoState = "conflict", conflicts.push(change.carNum);
-            continue;
-          }
-          if ("delete" === change.operation) {
-            current ? (change.undoState = "conflict", conflicts.push(change.carNum)) : (carMap.set(change.carNum, cloneStateValue(change.before)), change.undoState = "reverted", reverted.push(change.carNum));
-            continue;
-          }
-          if ("new-video-decision" === change.operation) {
-            const currentDecision = decisions[change.carNum] || null;
-            stableStateValue(currentDecision) !== stableStateValue(change.after) ? (change.undoState = "conflict", conflicts.push(change.carNum)) : (change.before ? decisions[change.carNum] = cloneStateValue(change.before) : delete decisions[change.carNum], change.undoState = "reverted", reverted.push(change.carNum));
-            continue;
-          }
-          if ("new-video-remove" === change.operation) {
-            restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), change.undoState = "reverted", reverted.push(change.carNum);
-            continue;
-          }
-          if (!["patch", "create"].includes(change.operation) || !current || change.fields.some(((field) => stableStateValue(getStatePath(current, field)) !== stableStateValue(getStatePath(change.after, field))))) {
-            change.undoState = "conflict", conflicts.push(change.carNum);
-            continue;
-          }
-          if ("create" === change.operation && !change.before) carMap.delete(change.carNum);
-          else change.fields.forEach(((field) => setStatePath(current, field, getStatePath(change.before, field)))), syncLegacyStatus(current), carMap.set(change.carNum, current);
-          change.newVideoEffect && restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), change.undoState = "reverted", reverted.push(change.carNum);
+    getDialogArea(e2 = "md") {
+      const t2 = {
+        sm: [480, 640],
+        md: [720, 700],
+        lg: [1040, 760],
+        xl: [1320, 860],
+        workspace: [1440, 960]
+      }, n2 = t2[e2] || t2.md, a2 = window.innerWidth <= 768 ? 16 : "workspace" === e2 ? 32 : 64, i2 = Math.max(320, Math.min(n2[0], window.innerWidth - a2)), s2 = Math.max(320, Math.min(n2[1], window.innerHeight - a2));
+      return [`${i2}px`, `${s2}px`];
+    }
+    getDefaultArea() {
+      return ["85%", "90%"];
+    }
+    isMobile() {
+      const e2 = navigator.userAgent.toLowerCase();
+      return ["iphone", "ipod", "ipad", "android", "blackberry", "windows phone", "nokia", "webos", "opera mini", "mobile", "mobi", "tablet"].some(((t2) => e2.includes(t2)));
+    }
+    isMobileMode() {
+      const e2 = storageManager.getSettingSync("mobileMode", "auto");
+      return "on" === e2 || "off" !== e2 && (this.isMobile() || window.innerWidth < 768);
+    }
+    async copyToClipboard(e2, t2) {
+      const text = String(t2 ?? "");
+      let copied = false;
+      try {
+        if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text), copied = true;
+        else throw new Error("Clipboard API unavailable");
+      } catch (clipboardError) {
+        const textarea = document.createElement("textarea"), activeElement = document.activeElement;
+        textarea.value = text, textarea.setAttribute("readonly", ""), textarea.style.position = "fixed", textarea.style.opacity = "0", document.body.appendChild(textarea), textarea.select();
+        try {
+          copied = true === document.execCommand("copy");
+          if (!copied) throw clipboardError;
+        } catch (fallbackError) {
+          clog.error("复制失败:", fallbackError), show.error("复制失败，请手动复制");
+        } finally {
+          textarea.remove(), activeElement?.focus?.();
         }
-        transaction.undoAttemptedAt = (/* @__PURE__ */ new Date()).toISOString();
-        const log = pruneActivityLog(domains.activity), nextCars = [...carMap.values()], journal = { id: `undo_${transactionId}`, state: "prepared", createdAt: transaction.undoAttemptedAt, before: cloneStateValue(domains), after: cloneStateValue({ carList: nextCars, actresses, decisions, activity: log }) };
-        await this.storage.forage.setItem("mutation_journal", journal), await this.storage._setItemAndInvalidate(this.storage.car_list_key, nextCars), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, actresses), await this.storage.forage.setItem("new_video_decisions", decisions), await this._writeActivity(log), await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
-        reverted.length && await this.eventBus.emit("car-state-changed", { carNums: reverted, undoOf: transactionId }), await this.eventBus.emit("activity-log-changed", { transactionId, undo: true });
-        return { reverted, conflicts };
+      }
+      return copied && show.info(`${e2}已复制到剪贴板, ${text}`), copied;
+    }
+    htmlTo$dom(e2) {
+      const t2 = new DOMParser();
+      return $(t2.parseFromString(e2, "text/html"));
+    }
+    isHidden(e2) {
+      const t2 = e2.jquery ? e2[0] : e2;
+      return !t2 || (t2.offsetWidth <= 0 && t2.offsetHeight <= 0 || "none" === window.getComputedStyle(t2).display);
+    }
+    time(e2 = "default", t2 = "s", n2 = 2) {
+      if (this.timers.has(e2)) {
+        const t3 = this.timers.get(e2), n3 = performance.now() - t3.startTime;
+        let a2, i2;
+        return "s" === t3.unit ? (a2 = (n3 / 1e3).toFixed(t3.precision), i2 = "秒") : (a2 = n3.toFixed(t3.precision), i2 = "毫秒"), this.timers.delete(e2), `${e2}: ${a2}${i2}`;
+      }
+      this.timers.set(e2, {
+        startTime: performance.now(),
+        unit: t2,
+        precision: n2
       });
+    }
+    sleep(e2 = 1e3) {
+      return new Promise(((t2) => setTimeout(t2, e2)));
+    }
+    debounce(callback, wait = 200) {
+      let timer = null;
+      const debounced = /* @__PURE__ */ __name(function(...args) {
+        const context = this;
+        clearTimeout(timer), timer = setTimeout((() => {
+          timer = null, callback.apply(context, args);
+        }), Math.max(0, wait));
+      }, "debounced");
+      return debounced.cancel = () => {
+        clearTimeout(timer), timer = null;
+      }, debounced;
+    }
+    genericSort(e2, t2, n2 = true) {
+      if (!Array.isArray(e2) || 0 === e2.length) return [];
+      if (!Array.isArray(t2) || 0 === t2.length) return [...e2];
+      const i2 = /* @__PURE__ */ __name((e3) => {
+        if (e3 instanceof Date) return e3;
+        if ("string" == typeof e3) {
+          const t3 = new Date(e3);
+          if (!isNaN(t3.getTime())) return t3;
+        }
+        return e3;
+      }, "i");
+      const getVal = /* @__PURE__ */ __name((e3, t3) => null != t3 ? "function" == typeof t3 ? t3(e3) : e3 && "object" == typeof e3 ? e3[t3] : void 0 : e3, "getVal");
+      const nulls = [], nonNulls = [];
+      for (const item of e2) {
+        let hasNull = false;
+        for (const s2 of t2) {
+          const val = getVal(item, s2.key);
+          if (null == val || void 0 === val) {
+            hasNull = true;
+            break;
+          }
+        }
+        hasNull ? nulls.push(item) : nonNulls.push(item);
+      }
+      return nonNulls.sort(((e3, a2) => {
+        for (const s2 of t2) {
+          const { key: t3, order: o2 = "asc" } = s2;
+          let r2 = getVal(e3, t3), l2 = getVal(a2, t3);
+          const c2 = i2(r2), d2 = i2(l2);
+          let h2 = c2 instanceof Date && d2 instanceof Date ? c2.getTime() - d2.getTime() : "number" == typeof r2 && "number" == typeof l2 ? r2 - l2 : "string" == typeof r2 && "string" == typeof l2 ? r2.localeCompare(l2) : String(r2).localeCompare(String(l2));
+          "desc" === o2 && (h2 *= -1);
+          if (0 !== h2) return h2;
+        }
+        return 0;
+      })), n2 ? [...nonNulls, ...nulls] : [...nulls, ...nonNulls];
+    }
+    async retry(e2, t2 = 3) {
+      let n2 = 0;
+      for (; n2 < t2; ) try {
+        const t3 = await e2();
+        return n2 > 0 && clog.debug(`[重试] 请求成功，共发起 ${n2 + 1} 次。`), t3;
+      } catch (a2) {
+        const e3 = a2 instanceof Error ? a2.message : "object" == typeof a2 ? JSON.stringify(a2) : String(a2);
+        if (a2?._cfBlocked || a2?._circuitBroken || e3.includes("Just a moment") || e3.includes("重定向") || e3.toLowerCase().includes("404 not found")) throw a2;
+        if (n2++, n2 === t2) throw clog.debug(`[重试] 达到最大重试次数 (${t2})，最终失败：`, a2), a2;
+        await this.sleep(500 * n2), clog.debug(`[重试] 请求失败，准备第 ${n2 + 1} 次重试, 错误信息: ${e3}`);
+      }
     }
   };
-  __name(_StateService, "StateService");
-  var StateService = _StateService;
-  var stateService = new StateService(storageManager2, jhsEventBus);
-  function attachStateServiceCompatibility() {
-    storageManager2.stateService = stateService;
+  __name(_Utils, "Utils");
+  var Utils = _Utils;
+
+  // src/core/legacy-runtime.js
+  function createLegacyRuntime(eventBus) {
+    const utils2 = globalThis.utils ?? new Utils();
+    const storageManager2 = globalThis.storageManager ?? new StorageManager();
+    const gmHttp2 = new GmHttp({ utils: utils2, storageManager: storageManager2 });
+    const stateService = new StateService(storageManager2, eventBus);
+    attachStateServiceCompatibility(stateService, storageManager2);
+    return Object.freeze({ utils: utils2, gmHttp: gmHttp2, storageManager: storageManager2, stateService });
   }
-  __name(attachStateServiceCompatibility, "attachStateServiceCompatibility");
+  __name(createLegacyRuntime, "createLegacyRuntime");
+
+  // src/core/event-bus.js
+  var _JhsEventBus = class _JhsEventBus {
+    constructor(channelName = "channel-refresh") {
+      this.originId = globalThis.crypto?.randomUUID?.() || `tab_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      this.listeners = /* @__PURE__ */ new Map(), this.seen = /* @__PURE__ */ new Set(), this.channel = new BroadcastChannel(channelName);
+      this.channel.addEventListener("message", ((event) => this._receive(event.data)));
+    }
+    on(type, handler) {
+      const handlers = this.listeners.get(type) || /* @__PURE__ */ new Set();
+      return handlers.add(handler), this.listeners.set(type, handlers), () => handlers.delete(handler);
+    }
+    async _dispatch(event) {
+      for (const handler of [...this.listeners.get(event.type) || []]) await handler(event.payload, event);
+    }
+    _remember(eventId) {
+      this.seen.add(eventId), this.seen.size > 256 && this.seen.delete(this.seen.values().next().value);
+    }
+    async emit(type, payload = {}, options = {}) {
+      const event = { eventId: globalThis.crypto?.randomUUID?.() || `event_${Date.now()}_${Math.random().toString(36).slice(2)}`, originId: this.originId, type, payload, timestamp: Date.now() };
+      this._remember(event.eventId), await this._dispatch(event), false !== options.broadcast && this.channel.postMessage(event);
+      return event;
+    }
+    async _receive(event) {
+      if (!event || event.originId === this.originId || event.eventId && this.seen.has(event.eventId)) return;
+      if (!event.eventId) {
+        const legacyType = "refresh" === event.type ? "legacy-refresh" : event.type;
+        return this._dispatch({ ...event, type: legacyType, payload: event.payload || {}, eventId: `legacy_${Date.now()}_${Math.random()}`, originId: "legacy", timestamp: Date.now() });
+      }
+      this._remember(event.eventId), await this._dispatch(event);
+    }
+  };
+  __name(_JhsEventBus, "JhsEventBus");
+  var JhsEventBus = _JhsEventBus;
+  var jhsEventBus;
+  function initializeEventBus() {
+    if (jhsEventBus) return jhsEventBus;
+    jhsEventBus = new JhsEventBus();
+    const runtimeWindow = window;
+    runtimeWindow.refresh = () => jhsEventBus?.emit("legacy-refresh");
+    runtimeWindow.cleanCache_filter_actor_actress_car_list = () => jhsEventBus?.emit("blacklist-rules-changed");
+    runtimeWindow.clean_cacheSettingObj = () => jhsEventBus?.emit("settings-changed");
+    return jhsEventBus;
+  }
+  __name(initializeEventBus, "initializeEventBus");
 
   // src/core/lifecycle-scope.js
   var _LifecycleScope = class _LifecycleScope {
@@ -7471,7 +7483,7 @@
     }
     async getFilterContext() {
       if (this.filterContext) return this.filterContext;
-      const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), stateService.getActivityLog()]), actorCarNumToNameMap = /* @__PURE__ */ new Map(), actressCarNumToNameMap = /* @__PURE__ */ new Map(), recentCarNums = /* @__PURE__ */ new Set();
+      const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), this.getRuntimeService("state").getActivityLog()]), actorCarNumToNameMap = /* @__PURE__ */ new Map(), actressCarNumToNameMap = /* @__PURE__ */ new Map(), recentCarNums = /* @__PURE__ */ new Set();
       const cutoff = Date.now() - 7 * 864e5;
       activity.entries.filter(((entry) => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)).forEach(((entry) => entry.changes.filter(((change) => "reverted" !== change.undoState && change.fields?.some(((field) => field.startsWith("stateFlags."))))).forEach(((change) => recentCarNums.add(change.carNum)))));
       for (const item of blacklistCars) {
@@ -7632,7 +7644,7 @@
           let s2 = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10"), o2 = "";
           s2.length && (o2 = s2.text().trim().split(",")[0].replace("(無碼)", "")), utils.q(e3, `是否屏蔽番号 ${n2}?`, (async () => {
             try {
-              o2 || (o2 = await this.parseActressName(a2)), await stateService.patch(n2, { blocked: true }, { record: { carNum: n2, url: a2, names: o2, publishTime: i2, fc2Source } }), show.ok("操作成功");
+              o2 || (o2 = await this.parseActressName(a2)), await this.getRuntimeService("state").patch(n2, { blocked: true }, { record: { carNum: n2, url: a2, names: o2, publishTime: i2, fc2Source } }), show.ok("操作成功");
             } catch (s3) {
               clog.error("屏蔽操作失败:", s3), show.error("操作失败");
             }
@@ -9328,7 +9340,7 @@
           const carNum = normalizeCarNum(rawCarNum);
           try {
             const current = existing.get(carNum);
-            await stateService.patch(carNum, { [flag]: true }, { type: "manual-car-number-import", record: { carNum, url: current?.url || buildFallbackCarUrl(carNum), names: current?.names || "", publishTime: current?.publishTime || "" } });
+            await this.getRuntimeService("state").patch(carNum, { [flag]: true }, { type: "manual-car-number-import", record: { carNum, url: current?.url || buildFallbackCarUrl(carNum), names: current?.names || "", publishTime: current?.publishTime || "" } });
             current ? summary.updated++ : summary.added++;
           } catch (error) {
             summary.failed++;
@@ -9724,7 +9736,7 @@
       for (const s2 of n2) {
         const t3 = $(s2), { carNum: n3, url: a3, publishTime: o2 } = readListItem(t3);
         if (a3 && n3) try {
-          await stateService.patch(n3, { blocked: true }, { type: "actor-page-block", record: { carNum: n3, url: a3, names: e2, publishTime: o2 } }), clog.log("屏蔽演员番号", e2, n3);
+          await this.getRuntimeService("state").patch(n3, { blocked: true }, { type: "actor-page-block", record: { carNum: n3, url: a3, names: e2, publishTime: o2 } }), clog.log("屏蔽演员番号", e2, n3);
         } catch (i2) {
           clog.error(`保存失败 [${n3}]:`, i2);
         }
@@ -9744,7 +9756,7 @@
         const n3 = $(i2), { carNum: a3, url: o2, publishTime: r2 } = readListItem(n3);
         if (o2 && a3) try {
           const flag = legacyActionToFlag(t2);
-          flag && await stateService.patch(a3, { [flag]: true }, { type: "actor-page-batch-state", record: { carNum: a3, url: o2, names: e2, publishTime: r2 } }), clog.log("批量操作", e2, a3, t2);
+          flag && await this.getRuntimeService("state").patch(a3, { [flag]: true }, { type: "actor-page-batch-state", record: { carNum: a3, url: o2, names: e2, publishTime: r2 } }), clog.log("批量操作", e2, a3, t2);
         } catch (s2) {
           clog.error(`保存失败 [${a3}]:`, s2);
         }
@@ -10049,6 +10061,9 @@
   }
   __name(stateButtonEntries, "stateButtonEntries");
   var _DetailStateController = class _DetailStateController {
+    constructor(stateService) {
+      this.stateService = stateService;
+    }
     bind({ root = document, layerIndex = null, carNum, getRecord = null, activityType = "detail-state", selectors = {} }) {
       const config = { root, layerIndex, carNum: normalizeCarNum(carNum), getRecord, activityType, selectors };
       for (const [flag, definition] of stateButtonEntries()) {
@@ -10073,7 +10088,7 @@
       button.prop("disabled", true).attr("aria-busy", "true");
       try {
         const record = "function" == typeof config.getRecord ? await config.getRecord() : config.getRecord || { carNum: config.carNum };
-        await stateService.toggle(config.carNum, flag, { type: config.activityType, record }), await this.render(config), await utils.closePage({ layerIndex: config.layerIndex, root: config.root });
+        await this.stateService.toggle(config.carNum, flag, { type: config.activityType, record }), await this.render(config), await utils.closePage({ layerIndex: config.layerIndex, root: config.root });
       } catch (error) {
         clog.error("详情状态更新失败", error), show.error("操作失败");
       } finally {
@@ -10091,7 +10106,6 @@
   };
   __name(_DetailStateController, "DetailStateController");
   var DetailStateController = _DetailStateController;
-  var detailStateController = new DetailStateController();
 
   // src/core/javdb-api.js
   var U = "https://jdforrepam.com/api";
@@ -10686,8 +10700,15 @@ ${value}\r
 
   // src/plugins/external-search/fc2.js
   var _Fc2Plugin = class _Fc2Plugin extends BasePlugin {
+    constructor() {
+      super(...arguments);
+      this.detailStateController = null;
+    }
     getName() {
       return "Fc2Plugin";
+    }
+    getDetailStateController() {
+      return this.detailStateController || (this.detailStateController = new DetailStateController(this.getRuntimeService("state")));
     }
     async resolveMovieId(carNum) {
       const scope = await this.getRuntimeService("scope")();
@@ -10806,7 +10827,7 @@ ${value}\r
         if (context.isAlive() && !box.children().length) box.append(hub);
         if (context.isAlive()) hubGroup.removeClass("is-collapsed"), hubButton.attr("aria-expanded", "true").text("收起磁力搜索"), box[0]?.scrollIntoView?.({ block: "nearest" });
       }));
-      detailStateController.bind({ root: context.root, layerIndex: context.layerIndex ?? null, carNum: context.carNum, activityType: "fc2-state", getRecord: /* @__PURE__ */ __name(() => ({ carNum: context.carNum, url: context.url, fc2Source: context.source, names: context.root.find('[data-jhs-role="actress-data"]').text(), publishTime: context.root.find('[data-jhs-role="publish-time"]').text() }), "getRecord") });
+      this.getDetailStateController().bind({ root: context.root, layerIndex: context.layerIndex ?? null, carNum: context.carNum, activityType: "fc2-state", getRecord: /* @__PURE__ */ __name(() => ({ carNum: context.carNum, url: context.url, fc2Source: context.source, names: context.root.find('[data-jhs-role="actress-data"]').text(), publishTime: context.root.find('[data-jhs-role="publish-time"]').text() }), "getRecord") });
       void this.getDependency("FilterTitleKeywordPlugin").bindDetailRoot(context.root, { layerIndex: context.layerIndex ?? null });
       void this.getDependency("OtherSitePlugin").loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: false, isActive: context.isAlive }).then((box) => {
         if (context.isAlive() && !box) sitesGroup.remove();
@@ -12571,7 +12592,7 @@ ${failure.stack}` : "");
               let n4 = await e2.parseActressName(s3);
               const flag = legacyActionToFlag(t4);
               if (!flag) throw new Error("不支持的状态操作");
-              await stateService.patch(i3, { [flag]: true }, { type: "list-card-state", record: { carNum: i3, url: s3, names: n4, publishTime: o2, fc2Source } }), show.ok("操作成功");
+              await this.getRuntimeService("state").patch(i3, { [flag]: true }, { type: "list-card-state", record: { carNum: i3, url: s3, names: n4, publishTime: o2, fc2Source } }), show.ok("操作成功");
             } catch (r3) {
               clog.error("保存操作失败:", r3), show.error("操作失败");
             }
@@ -13019,7 +13040,7 @@ ${failure.stack}` : "");
     }
     async getPendingNewVideoTotal() {
       const e2 = await storageManager.getCarMap(), keys = /* @__PURE__ */ new Set();
-      this.nvDecisionsCache = await stateService.getNewVideoDecisions();
+      this.nvDecisionsCache = await this.getRuntimeService("state").getNewVideoDecisions();
       (await storageManager.getFavoriteActressList()).forEach(((actress) => Array.isArray(actress.newVideoList) && actress.newVideoList.forEach(((item) => {
         const carNum = normalizeCarNum("string" == typeof item ? item : item.carNum);
         carNum && !e2.has(carNum) && !this.isDecisionHidden(carNum) && keys.add(carNum);
@@ -13096,7 +13117,7 @@ ${failure.stack}` : "");
         try {
           const enabled = await storageManager.getSetting("autoRemoveNewVideoMarkAfterBrowse", C);
           if (enabled !== _) return;
-          await stateService.removeFromNewVideoList([t2], "browse");
+          await this.getRuntimeService("state").removeFromNewVideoList([t2], "browse");
         } catch (n2) {
           clog.error("移除新作品标记失败:", n2);
         }
@@ -13173,7 +13194,7 @@ ${failure.stack}` : "");
       const generation = ++this.nvRenderGeneration, container = "list" === this._viewMode ? $("#new-video-list-container") : $("#actress-card-container");
       renderStateView(container, { type: "loading", title: "加载中" });
       try {
-        const [actresses, carMap, decisions, javDbUrl, ruleTime] = await Promise.all([storageManager.getFavoriteActressList(), storageManager.getCarMap(), stateService.getNewVideoDecisions(), this.getDependency("OtherSitePlugin").getJavDbUrl(), storageManager.getSetting("checkNewVideo_ruleTime", 8760)]);
+        const [actresses, carMap, decisions, javDbUrl, ruleTime] = await Promise.all([storageManager.getFavoriteActressList(), storageManager.getCarMap(), this.getRuntimeService("state").getNewVideoDecisions(), this.getDependency("OtherSitePlugin").getJavDbUrl(), storageManager.getSetting("checkNewVideo_ruleTime", 8760)]);
         if (!this.isWorkspaceMounted() || generation !== this.nvRenderGeneration) return;
         this.nvActressesCache = actresses, this.nvCarMapCache = carMap, this.nvDecisionsCache = decisions, this.nvJavDbUrl = javDbUrl, this.nvRuleTime = parseNumberSetting(ruleTime, 8760, { min: 0 });
         const items = aggregateNewVideoRecords(actresses, carMap, decisions), nextMap = /* @__PURE__ */ new Map();
@@ -13361,10 +13382,10 @@ ${failure.stack}` : "");
         this.nvSelected.clear(), $("#new-video-list-container .nv-select").prop("checked", false), this.renderBatchBar();
       })).on("click.jhsNvBatch", "#batchMarkFavorite,#batchMarkWatched,#batchMarkDownloaded", ((event) => {
         const flag = { batchMarkFavorite: "favorite", batchMarkWatched: "watched", batchMarkDownloaded: "downloaded" }[event.currentTarget.id];
-        void this.runBatchMutation(((items) => stateService.patch(items.map(((item) => item.carNum)), { [flag]: true }, { type: "new-video-batch-state", records: items.map(((item) => ({ carNum: item.carNum, url: item.url || `/search?q=${encodeURIComponent(item.carNum)}`, names: item.actressName, publishTime: item.publishTime }))) })), "已处理");
-      })).on("click.jhsNvBatch", "#batchIgnore", (() => void this.runBatchMutation(((items) => stateService.setNewVideoDecision(items.map(((item) => item.carNum)), "ignored")), "已忽略"))).on("click.jhsNvBatch", "#batchSnooze", (() => void this.runBatchMutation(((items) => stateService.setNewVideoDecision(items.map(((item) => item.carNum)), "snoozed", new Date(Date.now() + 7 * 864e5).toISOString())), "已暂缓"))).on("click.jhsNvBatch", "#batchRestore", (() => void this.runBatchMutation(((items) => stateService.setNewVideoDecision(items.map(((item) => item.carNum)), null)), "已恢复"))).on("click.jhsNvBatch", "#batchRemoveFromNewVideo", ((event) => {
+        void this.runBatchMutation(((items) => this.getRuntimeService("state").patch(items.map(((item) => item.carNum)), { [flag]: true }, { type: "new-video-batch-state", records: items.map(((item) => ({ carNum: item.carNum, url: item.url || `/search?q=${encodeURIComponent(item.carNum)}`, names: item.actressName, publishTime: item.publishTime }))) })), "已处理");
+      })).on("click.jhsNvBatch", "#batchIgnore", (() => void this.runBatchMutation(((items) => this.getRuntimeService("state").setNewVideoDecision(items.map(((item) => item.carNum)), "ignored")), "已忽略"))).on("click.jhsNvBatch", "#batchSnooze", (() => void this.runBatchMutation(((items) => this.getRuntimeService("state").setNewVideoDecision(items.map(((item) => item.carNum)), "snoozed", new Date(Date.now() + 7 * 864e5).toISOString())), "已暂缓"))).on("click.jhsNvBatch", "#batchRestore", (() => void this.runBatchMutation(((items) => this.getRuntimeService("state").setNewVideoDecision(items.map(((item) => item.carNum)), null)), "已恢复"))).on("click.jhsNvBatch", "#batchRemoveFromNewVideo", ((event) => {
         const items = this.selectedItems();
-        items.length && utils.q(event, `确认将 ${items.length} 个作品从新作列表移除？<br>不会删除作品状态记录。`, (() => void this.runBatchMutation(((selected) => stateService.removeFromNewVideoList(selected.map(((item) => item.carNum)), "manual")), "已移除")));
+        items.length && utils.q(event, `确认将 ${items.length} 个作品从新作列表移除？<br>不会删除作品状态记录。`, (() => void this.runBatchMutation(((selected) => this.getRuntimeService("state").removeFromNewVideoList(selected.map(((item) => item.carNum)), "manual")), "已移除")));
       }));
     }
     renderBatchBar() {
@@ -14281,14 +14302,14 @@ ${failure.stack}` : "");
       let submitted = false;
       try {
         button.addClass("loading").attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中"), await selected.provider.submit(resource, info), this.registry.updateAvailability(selected.provider.id, { available: true, authState: "ready", reason: "最近提交成功" });
-        await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "submitted", retryOf }), submitted = true, button.text("已提交"), show.ok(`${selected.provider.name} 离线任务已创建`), utils.q(event, "是否将该作品标记为已下载？", (async () => {
-          info?.carNum && await stateService.patch(info.carNum, { downloaded: true }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } });
+        await this.getRuntimeService("state").appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "submitted", retryOf }), submitted = true, button.text("已提交"), show.ok(`${selected.provider.name} 离线任务已创建`), utils.q(event, "是否将该作品标记为已下载？", (async () => {
+          info?.carNum && await this.getRuntimeService("state").patch(info.carNum, { downloaded: true }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } });
         }));
       } catch (error) {
         const errorRecord = error, code = errorRecord?.code || ("TOKEN_EXPIRED" === error ? "TOKEN_EXPIRED" : "SUBMIT_FAILED"), message = errorRecord?.message || String(error);
         ["AUTH_REQUIRED", "LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING"].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: false, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: message });
         restoreButton();
-        submitted || await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "failed", errorCode: code, errorMessage: message, retryOf }), show.error(`${selected.provider.name} 离线失败：${message}`);
+        submitted || await this.getRuntimeService("state").appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "failed", errorCode: code, errorMessage: message, retryOf }), show.error(`${selected.provider.name} 离线失败：${message}`);
       } finally {
         submitted ? setTimeout(restoreButton, this.BUTTON_COOLDOWN_MS) : restoreButton();
       }
@@ -14512,7 +14533,10 @@ ${failure.stack}` : "");
   var _StatsPlugin = class _StatsPlugin extends BasePlugin {
     constructor() {
       super(...arguments);
-      this.statsRepository = new StatsRepository({ storage: storageManager, state: stateService });
+      this.statsRepository = null;
+    }
+    getStatsRepository() {
+      return this.statsRepository || (this.statsRepository = new StatsRepository({ storage: storageManager, state: this.getRuntimeService("state") }));
     }
     getName() {
       return "StatsPlugin";
@@ -14546,7 +14570,7 @@ ${failure.stack}` : "");
     }
     async openDialog() {
       const diagnostics = this.getRuntimeService("diagnostics").exportSnapshot();
-      const { cars, actresses, blacklist, activity } = await this.statsRepository.loadLibrarySnapshot(), total = cars.length;
+      const { cars, actresses, blacklist, activity } = await this.getStatsRepository().loadLibrarySnapshot(), total = cars.length;
       const counts = { manualBlocked: 0, favorite: 0, hasDown: 0, hasWatch: 0, pending: 0 };
       cars.forEach(((car) => {
         const flags = normalizeStateFlags(car.stateFlags);
@@ -14830,7 +14854,7 @@ ${failure.stack}` : "");
       const button = $('<button type="button" class="jhs-btn jhs-btn--danger jhs-remove-car">移除记录</button>');
       $(".jhs-detail-btn-row,.movie-info-container,.container .info").first().append(button);
       button.on("click", ((event) => utils.q(event, `确定移除 ${carNum} 的鉴定记录？`, (async () => {
-        await stateService.remove(carNum);
+        await this.getRuntimeService("state").remove(carNum);
         button.remove();
         this.getDependency("ListPagePlugin")?.showCarNumBox?.(carNum);
         show.ok("鉴定记录已移除");
@@ -14921,6 +14945,10 @@ ${failure.stack}` : "");
     constructor() {
       super(), this.answerCount = 1;
       this.stateBinding = null;
+      this.detailStateController = null;
+    }
+    getDetailStateController() {
+      return this.detailStateController || (this.detailStateController = new DetailStateController(this.getRuntimeService("state")));
     }
     async handle() {
       this.hideVideoControls(), window.isDetailPage && (await this.createMenuBtn(), await this.autoRemoveNewVideoMark());
@@ -14931,7 +14959,7 @@ ${failure.stack}` : "");
         if (e2 !== _) return;
         const t2 = this.getPageInfo();
         if (!t2.carNum) return;
-        await stateService.removeFromNewVideoList([t2.carNum], "browse");
+        await this.getRuntimeService("state").removeFromNewVideoList([t2.carNum], "browse");
       } catch (e2) {
         clog.error("自动移除新作品标记失败:", e2);
       }
@@ -14996,10 +15024,10 @@ ${failure.stack}` : "");
         $("#filterBtn, #favoriteBtn, #hasDownBtn, #hasWatchBtn, #magnetSearchBtn, #xunLeiSubtitleBtn, #search-subtitle-btn").prop("disabled", true).attr("title", "番号不可用");
         return void clog.warn("详情操作不可用：番号不可用");
       }
-      this.stateBinding = detailStateController.bind({ root: document, carNum: t2, activityType: "detail-state", getRecord: /* @__PURE__ */ __name(() => this.getStateRecord(), "getRecord") });
+      this.stateBinding = this.getDetailStateController().bind({ root: document, carNum: t2, activityType: "detail-state", getRecord: /* @__PURE__ */ __name(() => this.getStateRecord(), "getRecord") });
     }
     async showStatus(e2) {
-      return detailStateController.render({ root: document, carNum: e2 });
+      return this.getDetailStateController().render({ root: document, carNum: e2 });
     }
     getStateRecord() {
       const info = this.getPageInfo();
@@ -15011,13 +15039,13 @@ ${failure.stack}` : "");
       return this.stateBinding = { root: document, layerIndex: null, carNum: normalizeCarNum(info.carNum), getRecord: /* @__PURE__ */ __name(() => this.getStateRecord(), "getRecord"), activityType: "detail-state", selectors: {} };
     }
     async favoriteOne(event) {
-      return detailStateController.requestToggle(this.getStateBinding(), "favorite", event);
+      return this.getDetailStateController().requestToggle(this.getStateBinding(), "favorite", event);
     }
     async hasDownOne(event) {
-      return detailStateController.requestToggle(this.getStateBinding(), "downloaded", event);
+      return this.getDetailStateController().requestToggle(this.getStateBinding(), "downloaded", event);
     }
     async hasWatchOne(event) {
-      return detailStateController.requestToggle(this.getStateBinding(), "watched", event);
+      return this.getDetailStateController().requestToggle(this.getStateBinding(), "watched", event);
     }
     async searchXunLeiSubtitle(e2) {
       const dialog = this.getRuntimeService("dialog"), subtitle = this.getRuntimeService("subtitle"), scope = await this.getRuntimeService("scope")();
@@ -15100,7 +15128,7 @@ ${failure.stack}` : "");
     }
     async filterOne(e2, t2) {
       e2 && e2.preventDefault();
-      return detailStateController.requestToggle(this.getStateBinding(), "blocked", e2);
+      return this.getDetailStateController().requestToggle(this.getStateBinding(), "blocked", e2);
     }
     hideVideoControls() {
       $(document).on("mouseenter", "#preview-video", ((event) => {
@@ -15414,10 +15442,13 @@ ${failure.stack}` : "");
   // src/plugins/status/history.js
   var _HistoryPlugin = class _HistoryPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectionModel", new HistorySelectionModel()), i(this, "historyRepository", new HistoryRepository({ storage: storageManager, state: stateService })), i(this, "historySorters", []), i(this, "historyFilteredCount", 0), i(this, "historySelectionSyncing", false);
+      super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectionModel", new HistorySelectionModel()), i(this, "_historyRepository", null), i(this, "historySorters", []), i(this, "historyFilteredCount", 0), i(this, "historySelectionSyncing", false);
     }
     getName() {
       return "HistoryPlugin";
+    }
+    get historyRepository() {
+      return this._historyRepository || (this._historyRepository = new HistoryRepository({ storage: storageManager, state: this.getRuntimeService("state") }));
     }
     async initCss() {
       return `
@@ -16746,7 +16777,7 @@ ${failure.stack}` : "");
       for (const i2 of t2) {
         const e3 = $(i2), t3 = e3.find("a").attr("href"), n3 = e3.find(".video-title strong").text().trim(), s2 = e3.find(".meta").text().trim();
         if (t3 && n3) try {
-          this.flag && await stateService.patch(n3, { [this.flag]: true }, { type: "javdb-list-import", record: { carNum: n3, url: t3, names: "", publishTime: s2 } }), result.imported++;
+          this.flag && await this.getRuntimeService("state").patch(n3, { [this.flag]: true }, { type: "javdb-list-import", record: { carNum: n3, url: t3, names: "", publishTime: s2 } }), result.imported++;
         } catch (a2) {
           result.failed++, clog.error(`保存失败 [${n3}]:`, a2);
         }
@@ -16804,42 +16835,42 @@ ${failure.stack}` : "");
   // src/plugins/registry.js
   var manifest = /* @__PURE__ */ __name((id, featureId, plugin, sites, order, requires = []) => defineContribution({ id, featureId, legacyPluginId: plugin.name, plugin, sites, order, requires }), "manifest");
   var legacyContributionManifests = Object.freeze([
-    manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [PORT.host, SERVICE.translation, SERVICE.http, SERVICE.storage]),
+    manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [PORT.host, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.state]),
     manifest("list.auto-page", "list", AutoPagePlugin, ["javdb", "javbus"], { javdb: 2, javbus: 5 }, [SERVICE.http]),
-    manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related]),
+    manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related, SERVICE.state]),
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
-    manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog]),
-    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.offline, SERVICE.magnet]),
+    manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog, SERVICE.state]),
+    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.state]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }, [SERVICE.movie]),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account]),
     manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch]),
-    manifest("detail.state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage]),
+    manifest("detail.state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage, SERVICE.state]),
     manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [PORT.host, SERVICE.movie, SERVICE.translation, SERVICE.settings]),
     manifest("detail.native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }),
     manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }, [PORT.host]),
     manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage]),
     manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related, SERVICE.settings]),
-    manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle]),
+    manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle, SERVICE.state]),
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [PORT.host, SERVICE.settings]),
     manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie]),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
     manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo]),
     manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie, SERVICE.storage]),
     manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings]),
-    manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }, [SERVICE.http]),
+    manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }, [SERVICE.http, SERVICE.state]),
     manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage, SERVICE.http, SERVICE.magnet]),
     manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot]),
-    manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [SERVICE.dialog, SERVICE.storage, SERVICE.http]),
+    manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.state]),
     manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }),
-    manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog, SERVICE.storage, SERVICE.actressInfo]),
+    manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog, SERVICE.storage, SERVICE.actressInfo, SERVICE.state]),
     manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }, [SERVICE.storage, SERVICE.http, SERVICE.actressInfo]),
-    manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics, SERVICE.dialog]),
+    manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics, SERVICE.dialog, SERVICE.state]),
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings]),
     manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }, [PORT.host, SERVICE.dialog, SERVICE.offline]),
-    manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [PORT.host, SERVICE.dialog, SERVICE.offline]),
-    manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }),
+    manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [PORT.host, SERVICE.dialog, SERVICE.offline, SERVICE.state]),
+    manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }, [SERVICE.state]),
     manifest("identity.javbus-navigation", "identity", BusNavBarPlugin, ["javbus"], { javbus: 7 }),
     manifest("detail.gallery", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),
     manifest("detail.native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }),
@@ -16872,6 +16903,7 @@ ${failure.stack}` : "");
         [SERVICE.account, "account"],
         [SERVICE.webdav, "webdav"],
         [SERVICE.storage, "storage"],
+        [SERVICE.state, "state"],
         [SERVICE.offline, "offline"],
         [SERVICE.dialog, "dialog"]
       ]);
@@ -18467,13 +18499,13 @@ ${failure.stack}` : "");
     const subtitle = new SubtitleService(integrations);
     const account = new AccountService(integrations);
     const offline = new OfflineService(providers, integrations);
-    container.register(PORT.navigation, navigationPort).register(PORT.http, httpPort).register(PORT.storage, storagePort).register(PORT.dialog, dialogPort).register(PORT.style, stylePort).register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy).register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.webdav, webdav).register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile).register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.imageSearch, imageSearch).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet).register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline).register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.account, account).register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
+    container.register(PORT.navigation, navigationPort).register(PORT.http, httpPort).register(PORT.storage, storagePort).register(PORT.dialog, dialogPort).register(PORT.style, stylePort).register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy).register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.webdav, webdav).register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile).register(SERVICE.state, runtime.stateService).register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.imageSearch, imageSearch).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet).register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline).register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.account, account).register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
     if (runtime.hostAdapter) container.register(PORT.host, runtime.hostAdapter);
     if (runtime.hostAdapters?.javdb) container.register(PORT.javdbHost, runtime.hostAdapters.javdb);
     if (runtime.hostAdapters?.javbus) container.register(PORT.javbusHost, runtime.hostAdapters.javbus);
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, state: runtime.stateService, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
   }
   __name(createAppContext, "createAppContext");
 
@@ -19989,7 +20021,7 @@ ${failure.stack}` : "");
   var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default8, manifest_default7, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13, manifest_default14, manifest_default15, manifest_default16, manifest_default17, manifest_default18, manifest_default19, manifest_default20]);
 
   // src/app/bootstrap.js
-  function patchLayerRuntime(layerRuntime) {
+  function patchLayerRuntime(layerRuntime, utilsRuntime) {
     const originalClose = layerRuntime.close;
     layerRuntime.close = function(id) {
       const result = originalClose.call(this, id);
@@ -20004,21 +20036,21 @@ ${failure.stack}` : "");
       const success = options.success;
       return originalOpen.call(this, { ...options, success(element, id) {
         if (typeof success === "function") success.call(this, element, id);
-        globalThis.utils.setupEscClose(id);
+        utilsRuntime.setupEscClose(id);
       } });
     };
   }
   __name(patchLayerRuntime, "patchLayerRuntime");
-  function importVendorStyles() {
+  function importVendorStyles(utilsRuntime) {
     for (const url of [
       "https://cdn.jsdelivr.net/npm/layui-layer@1.0.9/layer.min.css",
       "https://cdn.jsdelivr.net/npm/toastify-js@1.12.0/src/toastify.min.css",
       "https://cdn.jsdelivr.net/npm/viewerjs@1.11.1/dist/viewer.min.css",
       "https://cdn.jsdelivr.net/npm/tabulator-tables@6.3.1/dist/css/tabulator_semanticui.min.css"
-    ]) utils2.importResource(url);
+    ]) utilsRuntime.importResource(url);
   }
   __name(importVendorStyles, "importVendorStyles");
-  async function migrateDisabledPluginSettings() {
+  async function migrateDisabledPluginSettings(storageManager2) {
     const raw = await storageManager2.getSetting("disabledPlugins", "[]");
     const previous = parseDisabledPlugins(raw);
     const migrated = migrateDisabledPlugins(previous);
@@ -20035,7 +20067,7 @@ ${failure.stack}` : "");
     }
   }
   __name(migrateDisabledPluginSettings, "migrateDisabledPluginSettings");
-  async function prepareLocalOrigins() {
+  async function prepareLocalOrigins(storageManager2) {
     const settings = await storageManager2.getSetting();
     const origins = new Set(Array.isArray(settings.trustedLocalOrigins) ? settings.trustedLocalOrigins : []);
     let legacyOrigin = null;
@@ -20057,15 +20089,15 @@ ${failure.stack}` : "");
   async function bootstrapJhs() {
     try {
       const siteContext2 = initializeRuntimeConstants(window.location);
-      attachStateServiceCompatibility();
       const vendors = getVendorRuntime();
       const jhsEventBus2 = initializeEventBus();
+      const { utils: utils2, gmHttp: gmHttp2, storageManager: storageManager2, stateService } = createLegacyRuntime(jhsEventBus2);
       Object.assign(globalThis, { utils: utils2, gmHttp: gmHttp2, storageManager: storageManager2, stateService, jhsEventBus: jhsEventBus2 });
-      patchLayerRuntime(vendors.layer);
-      importVendorStyles();
+      patchLayerRuntime(vendors.layer, utils2);
+      importVendorStyles(utils2);
       injectCoreCss();
-      const disabled = await migrateDisabledPluginSettings();
-      const localOriginSettings = await prepareLocalOrigins();
+      const disabled = await migrateDisabledPluginSettings(storageManager2);
+      const localOriginSettings = await prepareLocalOrigins(storageManager2);
       const javdbHostAdapter = new JavDbHostAdapter(), javbusHostAdapter = new JavBusHostAdapter();
       const hostAdapter = r ? javdbHostAdapter : l ? javbusHostAdapter : null;
       const route = hostAdapter?.detectRoute() ?? "other";
@@ -20077,6 +20109,7 @@ ${failure.stack}` : "");
         storageForage: storageManager2.forage,
         localStorage: globalThis.localStorage,
         layer: vendors.layer,
+        stateService,
         hostAdapter,
         hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter },
         site: siteContext2.site,

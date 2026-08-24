@@ -21,7 +21,7 @@ describe("status and media UX contracts", () => {
         expect(cleanup.match(/\.sda-content/g)).toHaveLength(1);
         expect(cleanup).not.toMatch(/MutationObserver|setInterval|href|https?:\/\//);
     });
-    it("removes records through the transactional StateService", () => expect(source).toContain("stateService.remove(carNum)"));
+    it("removes records through the declared transactional StateService", () => expect(source).toContain('getRuntimeService("state").remove(carNum)'));
     it("loads actress state once into sets", () => { expect(source).toContain("new Set((await storageManager.getFavoriteActressList())"); expect(source).toContain("new Set((await storageManager.getBlacklist())"); });
     it("links bounded comment images without rebuilding review DOM", () => { expect(source).toContain("createTreeWalker"); expect(source).toContain("SHOW_TEXT"); expect(source).toContain("showImageViewer"); expect(source).not.toContain("node.html("); });
     it("intercepts image paste only on the navigation search input", () => { expect(nav).toContain('$("#search-keyword").on("paste"'); expect(nav).toContain('type.indexOf("image")'); });

@@ -4,7 +4,6 @@ import { l, r } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
-import { stateService } from "../../core/state-service.js";
 import { getDetailResourceAdapter } from "../status/detail-workspace.js";
 
 /** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
@@ -115,13 +114,13 @@ export class UnifiedOfflinePlugin extends BasePlugin {
         let submitted = !1;
         try {
             button.addClass("loading").attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中"), await selected.provider.submit(resource, info), this.registry.updateAvailability(selected.provider.id, { available: !0, authState: "ready", reason: "最近提交成功" });
-            await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "submitted", retryOf }), submitted = !0,
-            button.text("已提交"), show.ok(`${selected.provider.name} 离线任务已创建`), utils.q(event, "是否将该作品标记为已下载？", (async () => { info?.carNum && await stateService.patch(info.carNum, { downloaded: !0 }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } }); }));
+            await this.getRuntimeService("state").appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "submitted", retryOf }), submitted = !0,
+            button.text("已提交"), show.ok(`${selected.provider.name} 离线任务已创建`), utils.q(event, "是否将该作品标记为已下载？", (async () => { info?.carNum && await this.getRuntimeService("state").patch(info.carNum, { downloaded: !0 }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } }); }));
         } catch (error) {
             const errorRecord = /** @type {{ code?: string, message?: string }} */ (error), code = errorRecord?.code || ("TOKEN_EXPIRED" === error ? "TOKEN_EXPIRED" : "SUBMIT_FAILED"), message = errorRecord?.message || String(error);
             [ "AUTH_REQUIRED", "LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING" ].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: !1, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: message });
             restoreButton();
-            submitted || await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "failed", errorCode: code, errorMessage: message, retryOf }), show.error(`${selected.provider.name} 离线失败：${message}`);
+            submitted || await this.getRuntimeService("state").appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "failed", errorCode: code, errorMessage: message, retryOf }), show.error(`${selected.provider.name} 离线失败：${message}`);
         } finally { submitted ? setTimeout(restoreButton, this.BUTTON_COOLDOWN_MS) : restoreButton(); }
     }
 }

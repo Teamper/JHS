@@ -46,12 +46,11 @@ describe("v6.5 architecture runtime contracts", () => {
         vi.stubGlobal("$", $);
         vi.stubGlobal("jQuery", $);
         vi.stubGlobal("localforage", { INDEXEDDB: "indexeddb", createInstance: () => ({}) });
-        const legacyRuntime = await import("../src/core/http.js");
-        Object.assign(globalThis, legacyRuntime);
+        Object.assign(globalThis, { utils: {}, storageManager: {} });
         const { registerSitePlugins } = await import("../src/plugins/registry.js");
         const createRuntime = (site, disabled = []) => {
             const diagnostics = new DiagnosticsService();
-            const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {});
+            const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {}).register(SERVICE.state, {});
             const runtime = new FeatureRuntime({ container, commands: new CommandRegistry(), diagnostics, disabled, site, route: "list" });
             featureManifests.forEach((manifest) => runtime.register(manifest));
             return runtime;

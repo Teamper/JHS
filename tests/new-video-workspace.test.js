@@ -29,6 +29,7 @@ function createHarness() {
     const runtimeServices = {
         actressInfo: { placeholderUrl: vi.fn(() => "https://c0.jdbstatic.com/images/actor_unknow.jpg"), getAvatarSources: vi.fn(() => []) },
         storage: { getLocal: vi.fn(() => null), setLocal: vi.fn() },
+        state: stateService,
     };
     class BasePlugin { getBean(name) { return beans[name]; } getRuntimeService(name) { return runtimeServices[name]; } }
     class ImageHoverPreview { bindEvents() {} }

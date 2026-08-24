@@ -1,7 +1,6 @@
 import { b, d, g, h, i, k, l, m, normalizeCarNum, p, r, u, v, y } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
-import { stateService } from "../../core/state-service.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
 import { HistorySelectionModel } from "../../features/history/history-selection-model.js";
 import { HistoryRepository } from "../../features/history/history-repository.js";
@@ -10,12 +9,15 @@ import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 export class HistoryPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectionModel", new HistorySelectionModel),
-        i(this, "historyRepository", new HistoryRepository({ storage: storageManager, state: stateService })),
+        i(this, "_historyRepository", null),
         i(this, "historySorters", []), i(this, "historyFilteredCount", 0),
         i(this, "historySelectionSyncing", !1);
     }
     getName() {
         return "HistoryPlugin";
+    }
+    get historyRepository() {
+        return this._historyRepository ||= new HistoryRepository({ storage: storageManager, state: this.getRuntimeService("state") });
     }
     async initCss() {
         return `

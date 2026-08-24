@@ -96,15 +96,13 @@ function loadHttpManager(requestHandler) {
     console,
     URL,
     URLSearchParams,
-    Utils: TestUtils,
-    StorageManager: TestStorage,
     clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
     GM_xmlhttpRequest: requestHandler
   };
   context.window = context;
   context.unsafeWindow = context;
-  vm.runInContext(`${readTestFile(join(repoRoot, "src/core/http.js"), "utf8")};globalThis.testGmHttp=gmHttp`, vm.createContext(context));
-  return context.testGmHttp;
+  vm.runInContext(`${readTestFile(join(repoRoot, "src/core/http.js"), "utf8")};globalThis.TestGmHttp=GmHttp`, vm.createContext(context));
+  return new context.TestGmHttp({ utils: new TestUtils(), storageManager: new TestStorage() });
 }
 
 describe("startup scheduling", () => {

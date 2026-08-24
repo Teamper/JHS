@@ -6,7 +6,6 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { isHitShowPage } from "../../core/site-context.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
-import { stateService } from "../../core/state-service.js";
 
 const Te = {
     IS_FILTERED: {
@@ -330,7 +329,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     async getFilterContext() {
         if (this.filterContext) return this.filterContext;
-        const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([ storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), stateService.getActivityLog() ]), actorCarNumToNameMap = new Map, actressCarNumToNameMap = new Map, recentCarNums = new Set;
+        const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([ storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), this.getRuntimeService("state").getActivityLog() ]), actorCarNumToNameMap = new Map, actressCarNumToNameMap = new Map, recentCarNums = new Set;
         const cutoff = Date.now() - 7 * 864e5;
         activity.entries.filter((entry => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)).forEach((entry => entry.changes.filter((change => "reverted" !== change.undoState && change.fields?.some((field => field.startsWith("stateFlags."))))).forEach((change => recentCarNums.add(change.carNum)))));
         for (const item of blacklistCars) {
@@ -434,7 +433,7 @@ export class ListPagePlugin extends BasePlugin {
                 let s = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10"), o = "";
                 s.length && (o = s.text().trim().split(",")[0].replace("(無碼)", "")), utils.q(e, `是否屏蔽番号 ${n}?`, (async () => {
                     try {
-                        o || (o = await this.parseActressName(a)), await stateService.patch(n, { blocked: !0 }, { record: { carNum: n, url: a, names: o, publishTime: i, fc2Source } }), show.ok("操作成功");
+                        o || (o = await this.parseActressName(a)), await this.getRuntimeService("state").patch(n, { blocked: !0 }, { record: { carNum: n, url: a, names: o, publishTime: i, fc2Source } }), show.ok("操作成功");
                     } catch (s) { clog.error("屏蔽操作失败:", s), show.error("操作失败"); }
                 }));
             } catch (t) { clog.error("右键菜单处理失败:", t); }

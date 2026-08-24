@@ -8,7 +8,7 @@ const repoRoot = join(import.meta.dirname, "..");
 
 function loadStateService() {
     const constants = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), normalizeStart = constants.indexOf("function normalizeCarNum"), normalizeEnd = constants.indexOf("function assertPageInfoContract", normalizeStart);
-    const model = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), service = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8"), serviceEnd = service.indexOf("const stateService");
+    const model = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), service = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8"), serviceEnd = service.indexOf("function attachStateServiceCompatibility");
     const context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON, Math, window: { location: { href: "https://javdb.example/v/1" } }, crypto: { randomUUID: vi.fn().mockImplementation((() => `id-${Math.random()}`)) }, utils: { getNowStr: () => "2026-08-22 12:00:00" } });
     vm.runInContext(`${constants.slice(normalizeStart, normalizeEnd)}\n${model}\n${service.slice(0, serviceEnd)}; globalThis.StateServiceClass = StateService;`, context);
     return context.StateServiceClass;

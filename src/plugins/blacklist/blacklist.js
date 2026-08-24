@@ -5,7 +5,6 @@ import { requestHostPage } from "../../core/host-page-request.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
-import { stateService } from "../../core/state-service.js";
 import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
 import { parseDetailPage } from "../../integrations/host-list/parser.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
@@ -352,7 +351,7 @@ export class BlacklistPlugin extends BasePlugin {
         for (const s of n) {
             const t = $(s), {carNum: n, url: a, publishTime: o} = readListItem(t);
             if (a && n) try {
-                await stateService.patch(n, { blocked: !0 }, { type: "actor-page-block", record: { carNum: n, url: a, names: e, publishTime: o } }), clog.log("屏蔽演员番号", e, n);
+                await this.getRuntimeService("state").patch(n, { blocked: !0 }, { type: "actor-page-block", record: { carNum: n, url: a, names: e, publishTime: o } }), clog.log("屏蔽演员番号", e, n);
             } catch (i) {
                 clog.error(`保存失败 [${n}]:`, i);
             }
@@ -372,7 +371,7 @@ export class BlacklistPlugin extends BasePlugin {
             const n = $(i), {carNum: a, url: o, publishTime: r} = readListItem(n);
             if (o && a) try {
                 const flag = legacyActionToFlag(t);
-                flag && await stateService.patch(a, { [flag]: !0 }, { type: "actor-page-batch-state", record: { carNum: a, url: o, names: e, publishTime: r } }), clog.log("批量操作", e, a, t);
+                flag && await this.getRuntimeService("state").patch(a, { [flag]: !0 }, { type: "actor-page-batch-state", record: { carNum: a, url: o, names: e, publishTime: r } }), clog.log("批量操作", e, a, t);
             } catch (s) { clog.error(`保存失败 [${a}]:`, s); }
         }
         processed += n.length, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);

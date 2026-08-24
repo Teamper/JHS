@@ -36,7 +36,7 @@ import { IntegrationRegistry } from "./integration-registry.js";
 import { SettingsRegistry } from "./settings-registry.js";
 import { LifecycleScope } from "../core/lifecycle-scope.js";
 
-/** @param {{gmRequest: (options: Record<string, any>) => any, gmGetValue: (key: string, fallback?: unknown) => unknown, gmSetValue: (key: string, value: unknown) => void, legacyHttp?: any, storageForage: any, localStorage: Storage, layer: any, hostAdapter?: any, hostAdapters?: {javdb?: any, javbus?: any}, disabled?: string[], site?: string, route?: string, localOrigins?: string[]}} runtime */
+/** @param {{gmRequest: (options: Record<string, any>) => any, gmGetValue: (key: string, fallback?: unknown) => unknown, gmSetValue: (key: string, value: unknown) => void, legacyHttp?: any, storageForage: any, localStorage: Storage, layer: any, stateService: any, hostAdapter?: any, hostAdapters?: {javdb?: any, javbus?: any}, disabled?: string[], site?: string, route?: string, localOrigins?: string[]}} runtime */
 export function createAppContext(runtime) {
     const diagnostics = new DiagnosticsService({ legacyHttp: runtime.legacyHttp });
     const rootScope = new LifecycleScope("app:root", { onChange: (snapshot) => diagnostics.updateScope(snapshot) });
@@ -80,6 +80,7 @@ export function createAppContext(runtime) {
         .register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy)
         .register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.webdav, webdav)
         .register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile)
+        .register(SERVICE.state, runtime.stateService)
         .register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.imageSearch, imageSearch).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet)
         .register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline)
         .register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.account, account)
@@ -90,5 +91,5 @@ export function createAppContext(runtime) {
 
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, state: runtime.stateService, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
 }

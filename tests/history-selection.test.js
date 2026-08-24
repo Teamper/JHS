@@ -45,16 +45,16 @@ function loadHistory(records = createRecords()) {
             info: vi.fn(),
             error: vi.fn()
         };
+    const stateService = { patch, remove, toggle: vi.fn() };
     const context = vm.createContext({
         document: dom.window.document,
         window: dom.window,
         $,
-        BasePlugin: class { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : null; } },
+        BasePlugin: class { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : name === "state" ? stateService : null; } },
         HistorySelectionModel, HistoryRepository,
         Tabulator: class {},
         layer,
         storageManager: { getCarList },
-        stateService: { patch, remove, toggle: vi.fn() },
         normalizeCarNum: value => String(value || "").trim().toUpperCase(),
         normalizeStateFlags: flags => ({ favorite: !1, downloaded: !1, watched: !1, blocked: !1, ...flags }),
         hasAnyState: flags => Object.values(flags || {}).some(Boolean),

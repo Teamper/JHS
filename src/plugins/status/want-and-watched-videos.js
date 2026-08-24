@@ -3,7 +3,6 @@
 import { i } from "../../core/constants.js";
 import { requestHostPage } from "../../core/host-page-request.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { stateService } from "../../core/state-service.js";
 
 export class WantAndWatchedVideosPlugin extends BasePlugin {
     constructor() {
@@ -43,7 +42,7 @@ export class WantAndWatchedVideosPlugin extends BasePlugin {
         for (const i of t) {
             const e = $(i), t = e.find("a").attr("href"), n = e.find(".video-title strong").text().trim(), s = e.find(".meta").text().trim();
             if (t && n) try {
-                this.flag && await stateService.patch(n, { [this.flag]: !0 }, { type: "javdb-list-import", record: { carNum: n, url: t, names: "", publishTime: s } }), result.imported++;
+                this.flag && await this.getRuntimeService("state").patch(n, { [this.flag]: !0 }, { type: "javdb-list-import", record: { carNum: n, url: t, names: "", publishTime: s } }), result.imported++;
             } catch (a) {
                 result.failed++, clog.error(`保存失败 [${n}]:`, a);
             }
