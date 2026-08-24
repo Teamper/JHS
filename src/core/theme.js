@@ -406,9 +406,12 @@ export async function applyTheme() {
     document.documentElement.setAttribute("data-jhs-theme", resolved);
 }
 
-/** 跟随系统模式下, 监听系统深浅色切换并实时应用。 */
-window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (() => {
-    storageManager.getSetting("themeMode", "light").then((e => {
-        "auto" === e && applyTheme();
-    }));
-}));
+/** @param {import("./lifecycle-scope.js").LifecycleScope} scope */
+export function initializeThemeRuntime(scope) {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    scope.listen(media, "change", () => {
+        storageManager.getSetting("themeMode", "light").then((mode => {
+            if ("auto" === mode) void applyTheme();
+        }));
+    });
+}

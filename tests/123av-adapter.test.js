@@ -5,15 +5,17 @@ import { describe, expect, it } from "vitest";
 
 const readSource = (path) => readTestFile(join(import.meta.dirname, "..", path), "utf8");
 const fc2Source = readSource("src/plugins/external-search/fc2-by-123av.js");
+const integrationSource = readSource("src/integrations/av123/manifest.js");
 const otherSiteSource = readSource("src/plugins/external-search/other-site.js");
 const httpSource = readSource("src/core/http.js");
 
 describe("123AV Chinese adapter contract", () => {
     it("uses the confirmed Chinese list and encoded search routes", () => {
-        expect(fc2Source).toContain("/cn/makers/fc2?page=${sourcePage}");
-        expect(fc2Source).toContain("/cn/search?keyword=${encodeURIComponent(this.keyword)}");
-        expect(otherSiteSource).toContain('`${await this.getAv123Url()}/cn`');
-        expect(otherSiteSource).toContain("encodeURIComponent(t)");
+        expect(integrationSource).toContain("/cn/makers/fc2?page=${sourcePage}");
+        expect(integrationSource).toContain("/cn/search?keyword=${encodeURIComponent(keyword)}");
+        expect(fc2Source).not.toContain("123av.com");
+        expect(otherSiteSource).toContain('providerId: "av123"');
+        expect(otherSiteSource).toContain('getRuntimeService("movie").searchUrl');
     });
 
     it("removes obsolete 123AV selectors, routes and sorting controls", () => {
@@ -30,8 +32,8 @@ describe("123AV Chinese adapter contract", () => {
         expect(httpSource).toContain("n.requestUrl = t");
         expect(httpSource).toContain("n.finalUrl = e.finalUrl");
         expect(httpSource).toContain("n.cfDiagnostics =");
-        expect(fc2Source).toContain('cookiePartitionTopLevelSite: "https://123av.com"');
-        expect(otherSiteSource).toContain('requestOptions: { cookiePartitionTopLevelSite: "https://123av.com" }');
+        expect(integrationSource).toContain('cookiePartition: { topLevelSite: "https://123av.com" }');
+        expect(otherSiteSource).not.toContain("cookiePartitionTopLevelSite");
     });
 
     it("does not classify ordinary 404 markup as a Cloudflare challenge", () => {

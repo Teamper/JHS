@@ -1,4 +1,7 @@
-import { detectSite } from "../core/site-context.js";
+// @ts-check
+
+import { defineContribution } from "../contracts/manifests.js";
+import { PORT, SERVICE } from "../contracts/tokens.js";
 import { LEGACY_PLUGIN_DEPENDENCY_MAP } from "./dependency-map.js";
 import { ActressInfoPlugin } from "./avatar/actress-info.js";
 import { SearchByImagePlugin } from "./avatar/search-by-image.js";
@@ -44,51 +47,79 @@ import { WantAndWatchedVideosPlugin } from "./status/want-and-watched-videos.js"
 import { SubTitleCatPlugin } from "./subtitle/subtitle-cat.js";
 import { TranslatePlugin } from "./translate/translate.js";
 
-const DEFAULT_JAVDB_PLUGINS = [
-    ListPagePlugin, AutoPagePlugin, Fc2Plugin, FoldCategoryPlugin, ListPageButtonPlugin,
-    HistoryPlugin, SettingPlugin, NavBarPlugin, HitShowPlugin, Top250Plugin,
-    SearchByImagePlugin, CoverButtonPlugin, Fc2By123AvPlugin, DetailPagePlugin, DetailWorkspacePlugin, ReviewPlugin,
-    RelatedPlugin, DetailPageButtonPlugin, HighlightMagnetPlugin, PreviewVideoPlugin, FilterTitleKeywordPlugin,
-    ActressInfoPlugin, OtherSitePlugin, TranslatePlugin, WantAndWatchedVideosPlugin,
-    MagnetHubPlugin, ScreenShotPlugin, BlacklistPlugin, FavoriteActressesPlugin, NewVideoPlugin,
-    TaskPlugin, StatsPlugin, MobileBottomBarPlugin
-    , OneOneFiveMatchPlugin, UnifiedOfflinePlugin, CompatibilityEnhancementsPlugin
-];
+const manifest = (id, featureId, plugin, sites, order, requires = []) => defineContribution({ id, featureId, legacyPluginId: plugin.name, plugin, sites, order, requires });
 
-const DEFAULT_JAVBUS_PLUGINS = [
-    ListPagePlugin, ListPageButtonPlugin, SettingPlugin,
-    HistoryPlugin, AutoPagePlugin, SearchByImagePlugin, BusNavBarPlugin, CoverButtonPlugin,
-    BusImgPlugin, BusDetailPagePlugin, DetailWorkspacePlugin, DetailPageButtonPlugin, ReviewPlugin,
-    FilterTitleKeywordPlugin, HighlightMagnetPlugin, BusPreviewVideoPlugin, MagnetHubPlugin, ScreenShotPlugin,
-    OtherSitePlugin, TranslatePlugin, BlacklistPlugin, TaskPlugin, StatsPlugin, MobileBottomBarPlugin
-    , OneOneFiveMatchPlugin, UnifiedOfflinePlugin, CompatibilityEnhancementsPlugin
-];
+export const legacyContributionManifests = Object.freeze([
+    manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [SERVICE.translation]),
+    manifest("list.auto-page", "list", AutoPagePlugin, ["javdb", "javbus"], { javdb: 2, javbus: 5 }),
+    manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.screenshot]),
+    manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
+    manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
+    manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }),
+    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [SERVICE.diagnostics, SERVICE.webdav]),
+    manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }),
+    manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [SERVICE.movie, SERVICE.settings, SERVICE.cache]),
+    manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }),
+    manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }),
+    manifest("detail.state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }),
+    manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [SERVICE.movie, SERVICE.translation, SERVICE.settings]),
+    manifest("detail.native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }),
+    manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }),
+    manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie]),
+    manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related]),
+    manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie]),
+    manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }),
+    manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }),
+    manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
+    manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo]),
+    manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [SERVICE.movie]),
+    manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings]),
+    manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }),
+    manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }),
+    manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot]),
+    manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }),
+    manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }),
+    manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }),
+    manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }),
+    manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics]),
+    manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings]),
+    manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }),
+    manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }),
+    manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }),
+    manifest("identity.javbus-navigation", "identity", BusNavBarPlugin, ["javbus"], { javbus: 7 }),
+    manifest("detail.gallery", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),
+    manifest("detail.native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }),
+    manifest("detail.gallery", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings]),
+    manifest("external-bridge.123pan", "external-bridge", OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"], { javdb: 0, javbus: 0, "123pan": 1 }),
+    manifest("external-bridge.javtrailers", "external-bridge", JavTrailersPlugin, ["javtrailers"], { javtrailers: 1 }),
+    manifest("detail.subtitle", "external-bridge", SubTitleCatPlugin, ["subtitlecat"], { subtitlecat: 1 }),
+]);
 
-const DEFAULT_SHARED_PLUGIN_RULES = [
-    {
-        shouldRegister: context => context.isJavDB || context.isJavBus || context.is123Pan,
-        plugins: [ OneTwoThreeOfflinePlugin ]
-    },
-    {
-        shouldRegister: context => context.isJavTrailers,
-        plugins: [ JavTrailersPlugin ]
-    },
-    {
-        shouldRegister: context => context.isSubtitleCat,
-        plugins: [ SubTitleCatPlugin ]
-    }
-];
-
-function registerPluginGroup(pluginManager, plugins) {
-    plugins.forEach((pluginClass => pluginManager.register(pluginClass)));
-}
-
-export function registerSitePlugins(pluginManager, locationLike = window.location) {
+/** @param {import("../core/plugin-manager.js").PluginManager} pluginManager @param {import("../app/feature-runtime.js").FeatureRuntime} featureRuntime @param {string} site */
+export function registerSitePlugins(pluginManager, featureRuntime, site) {
     pluginManager.setDependencyDeclarations(LEGACY_PLUGIN_DEPENDENCY_MAP);
-    const context = detectSite(locationLike);
-    DEFAULT_SHARED_PLUGIN_RULES.forEach((rule => {
-        rule.shouldRegister(context) && registerPluginGroup(pluginManager, rule.plugins);
-    }));
-    context.isJavDB && registerPluginGroup(pluginManager, DEFAULT_JAVDB_PLUGINS);
-    context.isJavBus && registerPluginGroup(pluginManager, DEFAULT_JAVBUS_PLUGINS);
+    legacyContributionManifests
+        .filter((item) => item.sites.includes(site) && featureRuntime.isContributionEnabled(item.featureId, item.id, item.legacyPluginId))
+        .sort((left, right) => Number(left.order[site]) - Number(right.order[site]))
+        .forEach((item) => {
+            const dependencies = featureRuntime.resolveDeclaredDependencies(item.requires);
+            const runtimeServices = {};
+            runtimeServices.scope = () => featureRuntime.getScope(item.featureId);
+            const runtimeNames = new Map([
+                [PORT.host, "host"], [SERVICE.diagnostics, "diagnostics"], [SERVICE.review, "review"],
+                [SERVICE.related, "related"], [SERVICE.movie, "movie"], [SERVICE.magnet, "magnet"],
+                [SERVICE.settings, "settings"], [SERVICE.cache, "cache"],
+                [SERVICE.actressInfo, "actressInfo"],
+                [SERVICE.screenshot, "screenshot"],
+                [SERVICE.translation, "translation"],
+                [SERVICE.webdav, "webdav"],
+                [SERVICE.dialog, "dialog"],
+            ]);
+            for (const token of item.requires) {
+                const name = runtimeNames.get(token);
+                if (!name) throw new Error(`Legacy contribution ${item.id} has no runtime name for ${String(token)}`);
+                runtimeServices[name] = dependencies[token];
+            }
+            pluginManager.register(item.plugin, runtimeServices);
+        });
 }

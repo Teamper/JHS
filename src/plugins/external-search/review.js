@@ -1,5 +1,4 @@
 import { C, _, escapeHtml, l, r } from "../../core/constants.js";
-import { R, resolveJavDbMovieId } from "../../core/javdb-api.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class ReviewPlugin extends BasePlugin {
@@ -37,19 +36,24 @@ export class ReviewPlugin extends BasePlugin {
         if (!window.isDetailPage) return;
         if (r) {
             const movieId = this.parseMovieId(window.location.href);
-            const workspace = this.getDependency("DetailWorkspacePlugin");
-            await Promise.all([ this.showReview(movieId, workspace?.getSlot("reviews")), this.getDependency("RelatedPlugin").showRelated(workspace?.getSlot("related"), movieId) ]);
+            await this.showReview(movieId, this.getHostedSlot("reviews"));
         }
         if (l) {
             const carNumber = this.getPageInfo().carNum;
             if (!carNumber) return void clog.warn("跳过 JavBus 评论解析：番号不可用");
-            const movieId = await resolveJavDbMovieId(carNumber);
-            movieId && await this.showReview(movieId, this.getDependency("DetailWorkspacePlugin")?.getSlot("reviews"));
+            const scope = await this.getRuntimeService("scope")();
+            const movieRef = await this.getRuntimeService("movie").resolve({ carNum: carNumber }, { scope });
+            movieRef?.movieId && await this.showReview(movieRef.movieId, this.getHostedSlot("reviews"));
         }
+    }
+    getHostedSlot(name) {
+        const element = this.getRuntimeService("host").locateDetailSlots()[name];
+        return element ? $(element) : $();
     }
     async showReview(movieId, target, options = {}) {
         const isActive = "function" === typeof options.isActive ? options.isActive : () => !0;
-        const enabled = await storageManager.getSetting("enableLoadReview", _), host = target?.length ? target : this.getDependency("DetailWorkspacePlugin")?.getSlot("reviews") || $("#magnets-content");
+        const settings = await storageManager.getSetting();
+        const enabled = settings.enableLoadReview === _ ? _ : C, host = target?.length ? target : this.getHostedSlot("reviews");
         if (!isActive() || !host?.length) return $();
         const existing = host.children('[data-jhs-panel="reviews"]').filter(((_, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
         if (existing.length) return existing;
@@ -78,16 +82,18 @@ export class ReviewPlugin extends BasePlugin {
         const { movieId, panel } = state, container = panel.find(".jhs-review-container"), footer = panel.find(".jhs-review-footer");
         container.empty().append($('<div class="jhs-panel-state"></div>').text("获取评论中...")), footer.empty();
         const pageSize = await storageManager.getSetting("reviewCount", 20);
-        let reviews;
+        let reviews, scope;
         try {
-            reviews = await R(movieId, 1, pageSize);
+            scope = await this.getRuntimeService("scope")();
+            reviews = await this.getRuntimeService("review").list({ movieId }, { page: 1, limit: pageSize, scope });
         } catch (error) {
+            if (!state.isActive?.() || scope?.signal?.aborted) return void (state.loading = !1);
             error.toString().includes("簽名已過期") && show.error("生成签名失败, 请检查系统时间及时区是否正确!"), clog.error("获取评论失败:", error),
             clog.error("获取评论失败:", error);
             state.loading = !1;
             return void this.renderRetry(container, "获取评论失败", (() => this.fetchAndDisplayReviews(state)));
         }
-        if (!state.isActive?.()) return void (state.loading = !1);
+        if (!state.isActive?.() || scope?.signal?.aborted) return void (state.loading = !1);
         state.loading = !1, state.loaded = !0;
         container.empty();
         if (!reviews.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无评论"));
@@ -106,13 +112,16 @@ export class ReviewPlugin extends BasePlugin {
         footer.empty().append(button, end);
         button.on("click", (async () => {
             const nextPage = state.page + 1;
+            let scope;
             button.text("加载中...").prop("disabled", !0);
             try {
-                const reviews = await R(state.movieId, nextPage, pageSize);
-                if (!state.isActive?.()) return;
+                scope = await this.getRuntimeService("scope")();
+                const reviews = await this.getRuntimeService("review").list({ movieId: state.movieId }, { page: nextPage, limit: pageSize, scope });
+                if (!state.isActive?.() || scope?.signal?.aborted) return;
                 state.page = nextPage;
                 await this.displayReviews(state, reviews, container, keywords), reviews.length < pageSize ? (button.remove(), end.show()) : button.text("加载更多评论").prop("disabled", !1);
             } catch (error) {
+                if (!state.isActive?.() || scope?.signal?.aborted) return;
                 clog.error("加载更多评论失败:", error), button.text("加载失败，请重试").prop("disabled", !1);
             }
         }));
@@ -124,10 +133,10 @@ export class ReviewPlugin extends BasePlugin {
             const content = String(review.content || "");
             if (filter?.test(content)) continue;
             const item = $('<article class="jhs-review-item"></article>'), meta = $('<div class="jhs-review-meta"></div>'), body = $('<div class="review-content jhs-review-content"></div>');
-            meta.append($("<span></span>").addClass("jhs-review-author").text(review.username || "匿名用户"));
+            meta.append($("<span></span>").addClass("jhs-review-author").text(review.author || "匿名用户"));
             const stars = $('<span class="score-stars" aria-label="评分"></span>'), score = Math.max(0, Math.min(5, Number(review.score) || 0));
             for (let index = 0; index < score; index++) stars.append('<i class="icon-star"></i>');
-            meta.append(stars, $("<time></time>").text(utils.formatDate(review.created_at)), $("<span></span>").text(`点赞：${Number(review.likes_count) || 0}`),
+            meta.append(stars, $("<time></time>").text(utils.formatDate(review.createdAt)), $("<span></span>").text(`点赞：${Number(review.likes) || 0}`),
             $("<span></span>").addClass("jhs-review-floor").text(`#${state.floorIndex++}楼`));
             await this.appendReviewContent(body, content), item.append(meta, body), container.append(item);
         }

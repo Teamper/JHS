@@ -75,6 +75,7 @@ async function checkImportGraph() {
     const graph = new Map();
     const boundaryErrors = [];
     const allowedLayers = {
+        core: new Set(["core"]),
         features: new Set(["services", "ui", "contracts", "core"]),
         services: new Set(["contracts", "core"]),
         integrations: new Set(["contracts", "core"]),
@@ -95,8 +96,9 @@ async function checkImportGraph() {
             const sourceRelative = path.relative(path.join(rootDir, "src"), file).split(path.sep);
             const targetRelative = path.relative(path.join(rootDir, "src"), dependency).split(path.sep);
             const sameFeature = sourceLayer === "features" && targetLayer === "features" && sourceRelative[1] === targetRelative[1];
+            const sameIntegration = sourceLayer === "integrations" && targetLayer === "integrations" && sourceRelative[1] === targetRelative[1];
             const featureCatalog = sourceRelative.join("/") === "features/catalog.js" && targetLayer === "features";
-            if (allowedLayers[sourceLayer] && !allowedLayers[sourceLayer].has(targetLayer) && !sameFeature && !featureCatalog) {
+            if (allowedLayers[sourceLayer] && !allowedLayers[sourceLayer].has(targetLayer) && !sameFeature && !sameIntegration && !featureCatalog) {
                 boundaryErrors.push(`${sourceLayer} -> ${targetLayer}: ${path.relative(rootDir, file)} imports ${path.relative(rootDir, dependency)}`);
             }
         }

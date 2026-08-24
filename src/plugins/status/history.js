@@ -3,11 +3,13 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
 import { stateService } from "../../core/state-service.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
+import { HistorySelectionModel } from "../../features/history/history-selection-model.js";
+import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 
 export class HistoryPlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectAll", !1),
-        i(this, "historyExcludedCarNums", new Set), i(this, "historySorters", []), i(this, "historyFilteredCount", 0),
+        super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectionModel", new HistorySelectionModel),
+        i(this, "historySorters", []), i(this, "historyFilteredCount", 0),
         i(this, "historySelectionSyncing", !1);
     }
     getName() {
@@ -132,9 +134,12 @@ export class HistoryPlugin extends BasePlugin {
     normalizeHistoryCarNum(carNum) {
         return normalizeCarNum(carNum) || String(carNum || "").trim().toUpperCase();
     }
+    isHistoryAllFiltered() {
+        return "all-filtered" === this.historySelectionModel.mode;
+    }
     /** 清空 History 的全选、排除项和当前页选择。 */
     resetHistorySelection(deselectRows = !0) {
-        this.historySelectAll = !1, this.historyExcludedCarNums.clear();
+        this.historySelectionModel.clear();
         if (deselectRows && this.tableObj) {
             this.historySelectionSyncing = !0;
             try {
@@ -149,12 +154,12 @@ export class HistoryPlugin extends BasePlugin {
         const checkbox = document.createElement("input");
         return checkbox.type = "checkbox", checkbox.className = "jhs-history-select-all", checkbox.setAttribute("aria-label", "选择当前筛选条件下的全部记录"),
         checkbox.addEventListener("change", (() => {
-            checkbox.checked ? (this.historySelectAll = !0, this.historyExcludedCarNums.clear(), this.syncHistoryPageSelection()) : this.resetHistorySelection();
+            checkbox.checked ? (this.historySelectionModel.selectAllFiltered(), this.syncHistoryPageSelection()) : this.resetHistorySelection();
         })), checkbox;
     }
     syncHistoryPageSelection() {
-        if (!this.tableObj || !this.historySelectAll) return void this.updateHistorySelectionUi();
-        const currentRows = this.tableObj.getData?.() || [], selectedIds = currentRows.map((item => item.carNum)).filter((carNum => !this.historyExcludedCarNums.has(this.normalizeHistoryCarNum(carNum))));
+        if (!this.tableObj || !this.isHistoryAllFiltered()) return void this.updateHistorySelectionUi();
+        const currentRows = this.tableObj.getData?.() || [], selectedIds = currentRows.filter((item => this.historySelectionModel.has(item))).map((item => item.carNum));
         this.historySelectionSyncing = !0;
         try {
             this.tableObj.deselectRow(), selectedIds.length && this.tableObj.selectRow(selectedIds);
@@ -164,19 +169,19 @@ export class HistoryPlugin extends BasePlugin {
         this.updateHistorySelectionUi();
     }
     updateHistoryRowSelection(row, selected) {
-        if (!this.historySelectAll || this.historySelectionSyncing) return void this.updateHistorySelectionUi();
-        const carNum = this.normalizeHistoryCarNum(row?.getData?.().carNum);
-        carNum && (selected ? this.historyExcludedCarNums.delete(carNum) : this.historyExcludedCarNums.add(carNum)), this.updateHistorySelectionUi();
+        if (this.historySelectionSyncing) return void this.updateHistorySelectionUi();
+        const item = row?.getData?.();
+        item && this.historySelectionModel.set(item, selected), this.updateHistorySelectionUi();
     }
     getHistorySelectionSummary() {
-        if (this.historySelectAll) {
-            const excluded = this.historyExcludedCarNums.size, selected = Math.max(0, this.historyFilteredCount - excluded);
+        if (this.isHistoryAllFiltered()) {
+            const excluded = this.historySelectionModel.excluded.size, selected = Math.max(0, this.historyFilteredCount - excluded);
             return {
                 count: selected,
                 text: excluded ? `已选择当前筛选结果 ${selected} 条，已排除 ${excluded} 条` : `已选择当前筛选结果 ${selected} 条`
             };
         }
-        const count = this.tableObj?.getSelectedData?.().length || 0;
+        const count = this.historySelectionModel.selected.size;
         return {
             count,
             text: `已选择当前页 ${count} 条`
@@ -187,15 +192,15 @@ export class HistoryPlugin extends BasePlugin {
         const summary = this.getHistorySelectionSummary(), batchBox = this.historyRoot.find("#allSelectBox"), filterBox = this.historyRoot.find("#filterBox");
         this.historyRoot.find("#historySelectionSummary").text(summary.text), summary.count > 0 ? (filterBox.hide(), batchBox.show()) : (filterBox.show(), batchBox.hide());
         this.historyRoot.find(".jhs-history-select-all").each(((index, element) => {
-            element.checked = this.historySelectAll, element.indeterminate = this.historySelectAll ? this.historyExcludedCarNums.size > 0 : summary.count > 0;
+            element.checked = this.isHistoryAllFiltered(), element.indeterminate = this.isHistoryAllFiltered() ? this.historySelectionModel.excluded.size > 0 : summary.count > 0;
         }));
     }
     /** 解析批量操作实际要处理的当前页或完整筛选结果。 */
     async getHistoryBatchSelection() {
-        if (!this.historySelectAll) return this.tableObj?.getSelectedData?.() || [];
+        if (!this.isHistoryAllFiltered()) return this.historySelectionModel.values(this.tableObj?.getData?.() || []);
         const rows = await this.getFilteredHistoryData(this.historySorters), available = new Set(rows.map((item => this.normalizeHistoryCarNum(item.carNum))));
-        for (const carNum of this.historyExcludedCarNums) available.has(carNum) || this.historyExcludedCarNums.delete(carNum);
-        return this.historyFilteredCount = rows.length, rows.filter((item => !this.historyExcludedCarNums.has(this.normalizeHistoryCarNum(item.carNum))));
+        for (const carNum of this.historySelectionModel.excluded) available.has(carNum) || this.historySelectionModel.excluded.delete(carNum);
+        return this.historyFilteredCount = rows.length, this.historySelectionModel.values(rows);
     }
     bindHistoryActions(root) {
         root.on("click.jhsHistory", (function(e) {
@@ -237,7 +242,7 @@ export class HistoryPlugin extends BasePlugin {
             i = h) : t.hasClass("multiple-history-hasDownBtn") ? (a = "已下载", i = g) : t.hasClass("multiple-history-hasWatchBtn") ? (a = "已观看",
             i = p) : t.hasClass("multiple-history-deleteBtn") && (a = "移除", i = "delete");
             if (!n.length) return void show.info("请先选择要处理的记录");
-            const selectionText = this.historySelectAll ? this.historyExcludedCarNums.size ? `当前筛选结果中已选择 ${n.length} 条，排除 ${this.historyExcludedCarNums.size} 条` : `当前筛选结果中已选择全部 ${n.length} 条` : `当前页已选择 ${n.length} 条`;
+            const selectionText = this.isHistoryAllFiltered() ? this.historySelectionModel.excluded.size ? `当前筛选结果中已选择 ${n.length} 条，排除 ${this.historySelectionModel.excluded.size} 条` : `当前筛选结果中已选择全部 ${n.length} 条` : `当前页已选择 ${n.length} 条`;
             utils.q(e, `${selectionText}，是否标记为${a}？`, (async () => {
                 let e = loading();
                 try {
@@ -302,7 +307,7 @@ export class HistoryPlugin extends BasePlugin {
         };
     }
     async loadTableData() {
-        this.tableObj = new Tabulator(this.historyRoot.find("#table-container").get(0), {
+        this.tableObj = createJhsTable(Tabulator, this.historyRoot.find("#table-container").get(0), {
             layout: "fitColumns",
             placeholder: "暂无数据",
             virtualDom: !0,
@@ -459,7 +464,7 @@ export class HistoryPlugin extends BasePlugin {
                 }
             }
         }), this.tableObj.on("dataProcessed", (() => {
-            this.historySelectAll ? this.syncHistoryPageSelection() : this.updateHistorySelectionUi();
+            this.isHistoryAllFiltered() ? this.syncHistoryPageSelection() : this.updateHistorySelectionUi();
         })), this.tableObj.on("rowSelected", (row => {
             this.updateHistoryRowSelection(row, !0);
         })), this.tableObj.on("rowDeselected", (row => {

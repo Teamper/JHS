@@ -2,6 +2,7 @@ import { C, _, k, l, m, normalizeCarNum, r, v, y } from "../../core/constants.js
 import { detailStateController } from "../../core/detail-state-controller.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { stateService } from "../../core/state-service.js";
+import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 
 export class DetailPageButtonPlugin extends BasePlugin {
     getName() {
@@ -44,7 +45,10 @@ export class DetailPageButtonPlugin extends BasePlugin {
             let t = $("#magnets-span");
             "关闭磁力过滤" === t.text() ? (a.showAll(), t.text("开启磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", C)) : (a.doFilterMagnet(),
             t.text("关闭磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", _));
-        })), $("#search-subtitle-btn").on("click", (e => utils.openPage(`https://subtitlecat.com/index.php?search=${t}`, t, !1, e))),
+        })), $("#search-subtitle-btn").on("click", (e => {
+            const target = this.getRuntimeService("movie").sourceUrls({ carNum: t }, ["subtitlecat"])[0]?.url;
+            if (target) utils.openPage(target, t, !1, e);
+        })),
         $("#xunLeiSubtitleBtn").on("click", (() => this.searchXunLeiSubtitle(t)));
         if (!t) {
             $("#filterBtn, #favoriteBtn, #hasDownBtn, #hasWatchBtn, #magnetSearchBtn, #xunLeiSubtitleBtn, #search-subtitle-btn").prop("disabled", !0).attr("title", "番号不可用");
@@ -85,7 +89,8 @@ export class DetailPageButtonPlugin extends BasePlugin {
                 area: utils.getResponsiveArea([ "60%", "70%" ]),
                 anim: -1,
                 success: (t, a) => {
-                    new Tabulator("#xunlei-table-container", {
+                    createJhsTable(Tabulator, "#xunlei-table-container", {
+                        pagination: !1,
                         layout: "fitColumns",
                         placeholder: "暂无数据",
                         virtualDom: !0,

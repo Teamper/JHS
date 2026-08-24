@@ -38,9 +38,10 @@ function loadTaskLifecycle({ isListPage = false, hidden = false } = {}) {
 function loadListObserver() {
     const dom = new JSDOM('<div class="movie-list"></div>', { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
     dom.window.isListPage = true;
-    const fetch = vi.fn(async () => ({ ok: true, json: async () => ({ translation: "译文" }) })), mapLimit = vi.fn(async (items, concurrency, mapper) => Promise.all(items.map(mapper))), storageManager = { getSetting: vi.fn(async () => "yes") };
+    const translate = vi.fn(async () => "译文"), mapLimit = vi.fn(async (items, concurrency, mapper) => Promise.all(items.map(mapper))), storageManager = { getSetting: vi.fn(async () => "yes") };
     class BasePlugin {
         getSelector() { return { boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }; }
+        getRuntimeService(name) { return name === "translation" ? { translate } : async () => undefined; }
     }
     const context = vm.createContext({
         console, window: dom.window, document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver,
@@ -52,7 +53,7 @@ function loadListObserver() {
         hasAnyState: flags => [ "favorite", "downloaded", "watched", "blocked" ].some((key => !0 === flags?.[key]))
     });
     vm.runInContext(`${readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8")};globalThis.TestListPagePlugin=ListPagePlugin;`, context);
-    return { dom, plugin: new context.TestListPagePlugin(), $, fetch, mapLimit, storageManager, clog: context.clog };
+    return { dom, plugin: new context.TestListPagePlugin(), $, translate, mapLimit, storageManager, clog: context.clog };
 }
 
 function initializeAccessibilityDom(html) {
@@ -111,21 +112,14 @@ describe("list mutation hot path", () => {
         expect(plugin.processAddedItems).toHaveBeenCalledTimes(1);
     });
 
-    it("bounds translation concurrency and deduplicates an in-flight car number", async () => {
-        const { dom, plugin, $, fetch, mapLimit } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
+    it("bounds translation concurrency and delegates translation to the service", async () => {
+        const { dom, plugin, $, translate, mapLimit } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
         container.innerHTML = '<div class="item"><div class="video-title"><strong>ABC-123</strong> 原題</div></div><div class="item"><div class="video-title"><strong>ABC-123</strong> 原題</div></div>';
         const items = $(container).find(".item").toArray().map((item => $(item)));
         await plugin.translateListItems(items);
         expect(mapLimit).toHaveBeenCalledWith(items, 3, expect.any(Function));
-        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(translate).toHaveBeenCalledTimes(2);
         expect($(items[0]).attr("data-jhs-translation-key")).toBe("ABC-123");
-    });
-
-    it("recovers from a damaged translation cache", () => {
-        const { dom, plugin, clog } = loadListObserver();
-        dom.window.localStorage.setItem("jhs_translate", "{");
-        expect(plugin.getTranslationCache()).toEqual({});
-        expect(clog.warn).toHaveBeenCalledTimes(1);
     });
 
     it("collects one current-page summary with hard-hidden union and debug reasons", () => {

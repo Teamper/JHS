@@ -19,8 +19,9 @@ export async function fulfillHostFixtures(context) {
   });
 }
 
-export async function injectUserscriptRuntime(page) {
+export async function injectUserscriptRuntime(page, options = {}) {
   const startupErrors = [];
+  const browserVersion = page.context().browser()?.version() || "unknown";
   page.on("pageerror", (error) => startupErrors.push(error.stack || error.message));
   page.on("console", (message) => {
     if (message.type() === "error") startupErrors.push(message.text());
@@ -29,7 +30,15 @@ export async function injectUserscriptRuntime(page) {
   await page.addScriptTag({ path: join(browserRoot, "node_modules", "localforage", "dist", "localforage.min.js") });
   await page.addScriptTag({ path: join(browserRoot, "node_modules", "tabulator-tables", "dist", "js", "tabulator.min.js") });
   await page.addStyleTag({ path: join(browserRoot, "node_modules", "tabulator-tables", "dist", "css", "tabulator.min.css") });
-  await page.evaluate(() => {
+  await page.evaluate(async (disabledPlugins) => {
+    const forage = window.localforage.createInstance({ driver: window.localforage.INDEXEDDB, name: "JAV-JHS", version: 1, storeName: "appData" });
+    await forage.setItem("setting", {
+      translateTitle: "no",
+      ...(disabledPlugins?.length ? { disabledPlugins: JSON.stringify(disabledPlugins) } : {}),
+    });
+  }, options.disabledPlugins || []);
+  await page.evaluate((version) => {
+    window.__jhsBrowserTestMetadata = { fixture: true, version };
     window.__jhsBrowserDiagnostics = { requests: [], startedAt: performance.now() };
     window.unsafeWindow = window;
     window.GM_getValue = async (_key, fallback) => fallback;
@@ -73,7 +82,7 @@ export async function injectUserscriptRuntime(page) {
       confirm(_message, options, yes) { const id = this.open(options); yes?.(id); return id; },
       msg() {}
     };
-  });
+  }, browserVersion);
   await page.addScriptTag({ path: join(repoRoot, "JHS.user.js") });
   try {
     await page.waitForFunction(() => Boolean(window.unsafeWindow?.pluginManager?.getStartupReport), null, { timeout: 15_000 });

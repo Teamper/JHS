@@ -11,7 +11,10 @@ function loadStatsPlugin() {
     const listPage = { getCurrentPageSummary: vi.fn(() => ({ blockedItems: 7 })), setQuickFilter: vi.fn() };
     const newVideo = { getPendingNewVideoTotal: vi.fn(async () => 3), openDialog: vi.fn() };
     const beans = { ListPagePlugin: listPage, NewVideoPlugin: newVideo, OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com") } };
-    class BasePlugin { getBean(name) { return beans[name]; } }
+    class BasePlugin {
+        getBean(name) { return beans[name]; }
+        getRuntimeService() { return { exportSnapshot: () => ({ activeFeatures: ["list"], errors: [] }) }; }
+    }
     const layer = {
         close: vi.fn(),
         open: vi.fn(options => {
@@ -43,7 +46,7 @@ describe("Stats scope semantics", () => {
 
         expect(layer.open.mock.calls[0][0].title).toBe("统计");
         const groups = $(".jhs-stats__group"), overview = groups.eq(0), currentPage = groups.eq(1);
-        expect(overview.find(".jhs-stats__metric")).toHaveLength(9);
+        expect(overview.find(".jhs-stats__metric")).toHaveLength(11);
         expect(overview.find("button.jhs-stats__metric")).toHaveLength(1);
         expect(overview.find("button[data-action='new-video'] span").text()).toBe("新作品待处理");
         expect(overview.find("[data-filter]")).toHaveLength(0);

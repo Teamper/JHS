@@ -7,6 +7,7 @@ export class SettingsService extends EventTarget {
         this.storage = storage;
         this.validators = options.validators ?? {};
         this.snapshotValue = Object.freeze({});
+        this.writeChain = Promise.resolve();
     }
 
     /** @param {string} key */
@@ -22,10 +23,14 @@ export class SettingsService extends EventTarget {
     async set(name, value, storageKey = "setting") {
         const validator = this.validators[name];
         if (validator && !validator(value)) throw new TypeError(`Invalid setting: ${name}`);
-        const next = Object.freeze({ ...this.snapshotValue, [name]: value });
-        await this.storage.set(storageKey, next);
-        this.snapshotValue = next;
-        this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name, value, snapshot: next }) }));
-        return next;
+        const operation = this.writeChain.then(async () => {
+            const next = Object.freeze({ ...this.snapshotValue, [name]: value });
+            await this.storage.set(storageKey, next);
+            this.snapshotValue = next;
+            this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name, value, snapshot: next }) }));
+            return next;
+        });
+        this.writeChain = operation.then(() => undefined, () => undefined);
+        return operation;
     }
 }

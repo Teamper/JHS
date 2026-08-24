@@ -31,6 +31,7 @@ export class StatsPlugin extends BasePlugin {
         $("#newVideoBtn").after(e), $("#statsBtn").on("click", (() => this.openDialog()));
     }
     async openDialog() {
+        const diagnostics = this.getRuntimeService("diagnostics").exportSnapshot();
         const cars = await storageManager.getCarList(), actresses = await storageManager.getFavoriteActressList(), blacklist = await storageManager.getBlacklist(), activity = await stateService.getActivityLog(), total = cars.length;
         const counts = { manualBlocked: 0, favorite: 0, hasDown: 0, hasWatch: 0, pending: 0 };
         cars.forEach((car => { const flags = normalizeStateFlags(car.stateFlags); flags.blocked && counts.manualBlocked++, flags.favorite && counts.favorite++, flags.downloaded && counts.hasDown++, flags.watched && counts.hasWatch++, hasAnyState(flags) || counts.pending++; }));
@@ -54,6 +55,8 @@ export class StatsPlugin extends BasePlugin {
             { label: "收藏演员", value: actresses.length, action: null },
             { label: "黑名单演员", value: blacklist.length, action: null },
             { label: "新作品待处理", value: newVideos, action: "new-video" }
+            , { label: "活跃功能", value: diagnostics.activeFeatures.length, action: null }
+            , { label: "运行错误", value: diagnostics.errors.length, action: null }
         ];
         const statusRows = [ [ "收藏", counts.favorite, "var(--jhs-status-fav)" ], [ "下载", counts.hasDown, "var(--jhs-status-down)" ], [ "已看", counts.hasWatch, "var(--jhs-status-watch)" ], [ "手动屏蔽", counts.manualBlocked, "var(--jhs-status-filter)" ], [ "未鉴定", pending, "var(--jhs-border-strong)" ] ];
         const row = (label, value, max, color, href = "") => `<div class="jhs-stats__row">${href ? `<a class="jhs-stats__label" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(label)}">${escapeHtml(label)}</a>` : `<span class="jhs-stats__label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`}<span class="jhs-stats__track"><span class="jhs-stats__bar" data-width="${max ? Math.round(value / max * 100) : 0}" data-color="${color}"></span></span><span class="jhs-stats__value">${value}${max === total && total ? ` (${Math.round(value / total * 100)}%)` : ""}</span></div>`;

@@ -38,6 +38,27 @@ export class FeatureRuntime {
         return true;
     }
 
+    /** @param {string} featureId @param {string} contributionId @param {string} legacyPluginId */
+    isContributionEnabled(featureId, contributionId, legacyPluginId) {
+        const manifest = this.manifests.get(featureId);
+        if (!manifest) return false;
+        if (manifest.sites.length && !manifest.sites.includes(this.site)) return false;
+        if (!manifest.contributes.includes(contributionId)) return false;
+        if (manifest.kind !== "system" && this.disabled.has(manifest.id)) return false;
+        if (manifest.kind === "system") return true;
+        return !this.disabled.has(contributionId) && !this.disabled.has(legacyPluginId);
+    }
+
+    /** @param {symbol[]} tokens */
+    resolveDeclaredDependencies(tokens) {
+        return this.container.resolveDeclared(tokens);
+    }
+
+    /** @param {string} featureId */
+    async getScope(featureId) {
+        return (await this.activate(featureId)).scope;
+    }
+
     /** @param {string} id */
     activate(id) {
         const existing = this.activations.get(id);

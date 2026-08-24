@@ -18,13 +18,14 @@ function extractMetadata(source, key) {
   return source.match(new RegExp(`^// @${key}\\s+(.+)$`, "m"))?.[1]?.trim();
 }
 
-function extractRegistryArray(registrySource, name) {
-  const match = registrySource.match(new RegExp(`const ${name} = \\[([\\s\\S]*?)\\];`));
-  assert(match, `Missing registry array: ${name}`);
-  return match[1]
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
+function extractContributionOrder(registrySource, site) {
+  return registrySource.split(/\r?\n/).flatMap((line) => {
+    const match = line.match(/manifest\("[^"]+",\s*"[^"]+",\s*(\w+),\s*\[([^\]]+)\],\s*\{([^}]+)\}(?:,\s*\[[^\]]*\])?\)/);
+    if (!match || !match[2].includes(`"${site}"`)) return [];
+    const order = match[3].match(new RegExp(`(?:^|,\\s*)\\s*(?:"${site}"|${site})\\s*:\\s*(\\d+)`));
+    assert(order, `Missing ${site} order for ${match[1]}`);
+    return [{ plugin: match[1], order: Number(order[1]) }];
+  }).filter((item) => item.order > 0).sort((left, right) => left.order - right.order).map((item) => item.plugin);
 }
 
 function assertIncludes(source, token, label) {
@@ -308,8 +309,8 @@ for (const [file, className, pluginName] of expectedPlugins) {
   assertIncludes(source, `return "${pluginName}"`, file);
 }
 
-const javdbPlugins = extractRegistryArray(registry, "DEFAULT_JAVDB_PLUGINS");
-const javbusPlugins = extractRegistryArray(registry, "DEFAULT_JAVBUS_PLUGINS");
+const javdbPlugins = extractContributionOrder(registry, "javdb");
+const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
   javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,FoldCategoryPlugin,ListPageButtonPlugin,HistoryPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,FilterTitleKeywordPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,WantAndWatchedVideosPlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,FavoriteActressesPlugin,NewVideoPlugin,TaskPlugin,StatsPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin,CompatibilityEnhancementsPlugin",
   "JavDB plugin registration order changed"
@@ -318,10 +319,9 @@ assert(
   javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,HistoryPlugin,AutoPagePlugin,SearchByImagePlugin,BusNavBarPlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,FilterTitleKeywordPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,BlacklistPlugin,TaskPlugin,StatsPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin,CompatibilityEnhancementsPlugin",
   "JavBus plugin registration order changed"
 );
-assertIncludes(registry, "context.is123Pan", "shared registry");
-assertIncludes(registry, "plugins: [ OneTwoThreeOfflinePlugin ]", "shared registry");
-assertIncludes(registry, "context.isJavTrailers", "shared registry");
-assertIncludes(registry, "context.isSubtitleCat", "shared registry");
+assertIncludes(registry, 'OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"]', "shared registry");
+assertIncludes(registry, 'JavTrailersPlugin, ["javtrailers"]', "shared registry");
+assertIncludes(registry, 'SubTitleCatPlugin, ["subtitlecat"]', "shared registry");
 const siteContext = await read("src/core/site-context.js");
 for (const [metadataToken, runtimeToken] of [
   ["javdb", "JAVDB_HOST_PATTERN"],
@@ -350,7 +350,7 @@ sourceByFile.set("core/migration.js", migration);
 sourceByFile.set("core/state-service.js", stateService);
 sourceByFile.set("core/plugin-manager.js", await read("src/core/plugin-manager.js"));
 sourceByFile.set("core/utils.js", await read("src/core/utils.js"));
-sourceByFile.set("backup/webdav-client.js", await read("src/plugins/backup/webdav-client.js"));
+sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
 sourceByFile.set("backup/setting-styles.js", await read("src/plugins/backup/setting-styles.js"));
 sourceByFile.set("backup/setting-templates.js", await read("src/plugins/backup/setting-templates.js"));
@@ -369,7 +369,7 @@ const regressionMatrix = [
   ["黑名单检测", [["blacklist/blacklist.js", "BlacklistPlugin"], ["blacklist/filter-title-keyword.js", "FilterTitleKeywordPlugin"], ["core/storage.js", "batchSaveBlacklistCarList"]]],
   ["统计面板", [["stats/stats.js", "StatsPlugin"], ["stats/stats.js", "coverageStart"], ["stats/stats.js", "6.4.0"]]],
   ["数据导入导出", [["backup/setting-backup.js", "importSettingData"], ["backup/setting-backup.js", "exportSettingData"], ["core/storage.js", "exportData"]]],
-  ["WebDAV 备份", [["backup/webdav-client.js", "class WebDavClient"], ["backup/setting-backup.js", "backupDataByWebDav"], ["backup/webdav-client.js", "PROPFIND"]]],
+  ["WebDAV 备份", [["services/webdav-service.js", "class WebDavClient"], ["backup/setting-backup.js", "backupDataByWebDav"], ["services/webdav-service.js", "PROPFIND"]]],
   ["图片查看器", [["core/logger.js", "showImageViewer"], ["core/logger.js", "new Viewer"], ["image-viewer/screenshot.js", "ScreenShotPlugin"]]],
   ["第三方请求失败场景", [["core/storage.js", "cachedRequest"], ["core/http.js", "onerror"], ["external-search/other-site.js", "detectOtherSites"]]],
   ["多标签页同步", [["core/event-bus.js", "eventId"], ["core/event-bus.js", "originId"], ["status/list-page.js", "list-items-added"]]],

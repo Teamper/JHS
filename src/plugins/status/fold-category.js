@@ -1,4 +1,4 @@
-import { C, _, o } from "../../core/constants.js";
+import { o } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class FoldCategoryPlugin extends BasePlugin {
@@ -48,10 +48,11 @@ export class FoldCategoryPlugin extends BasePlugin {
         let a = $("h2.section-title");
         if (a.length > 0 && (a.append('\n                <div id="foldCategoryBtn">\n                    <button type="button" class="jhs-btn jhs-btn--ghost jhs-layout-2100e73d">\n                        <span></span>\n                        <i class="jhs-layout-78fa54ea"></i>\n                    </button>\n                </div>\n            '),
         t = $("section > div > div.box")), !t) return;
-        let i = $("#foldCategoryBtn"), s = localStorage.getItem("jhs_foldCategory") === _, [o, r] = s ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];
+        const settings = this.getRuntimeService("settings");
+        let i = $("#foldCategoryBtn"), s = settings.snapshot().foldCategoryCollapsed === !0, [o, r] = s ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];
         i.find("span").text(o).end().find("i").attr("class", r), window.location.href.includes("noFold=1") || t[s ? "hide" : "show"](),
         i.on("click", (async e => {
-            e.preventDefault(), s = !s, localStorage.setItem("jhs_foldCategory", s ? _ : C);
+            e.preventDefault(), s = !s, await settings.set("foldCategoryCollapsed", s);
             const [n, a] = s ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];
             i.find("span").text(n).end().find("i").attr("class", a), t[s ? "hide" : "show"]();
         }));

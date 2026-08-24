@@ -6,14 +6,15 @@ import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
 
-function loadPanels() {
+function loadPanels({ settings = { enableLoadReview: "yes", enableLoadRelated: "yes", enableTitleSelectFilter: "yes" } } = {}) {
     const dom = new JSDOM('<div id="review-a"></div><div id="review-b"></div><div id="related-a"></div><div id="related-b"></div>', { url: "https://javdb.com/v/a" }), $ = jqueryFactory(dom.window);
-    const reviewFetch = vi.fn(async movieId => [{ username: movieId, score: 1, created_at: "2026-08-22", likes_count: 0, content: "ok" }]);
-    const relatedFetch = vi.fn(async movieId => [{ relatedId: movieId, name: movieId, movieCount: 1, collectionCount: 0, viewCount: 0, createTime: "today" }]);
+    const reviewFetch = vi.fn(async movieRef => [{ author: movieRef.movieId, score: 1, createdAt: "2026-08-22", likes: 0, content: "ok" }]);
+    const relatedFetch = vi.fn(async movieRef => [{ id: movieRef.movieId, name: movieRef.movieId, movieCount: 1, collectionCount: 0, viewCount: 0, createdAt: "today" }]);
+    const runtimeServices = { review: { list: reviewFetch }, related: { list: relatedFetch }, scope: async () => null };
     const context = vm.createContext({
-        document: dom.window.document, window: dom.window, $, BasePlugin: class { getBean() { return null; } }, _: "yes", C: "no", r: false, l: false,
-        storageManager: { getSetting: vi.fn(async key => "reviewCount" === key ? 20 : "yes"), getReviewFilterKeywordList: vi.fn(async () => []), saveReviewFilterKeyword: vi.fn(), saveSettingItem: vi.fn() },
-        R: reviewFetch, K: relatedFetch, utils: { formatDate: value => value, q: (event, message, callback) => callback() }, show: { error: vi.fn(), ok: vi.fn() }, clog: { error: vi.fn(), warn: vi.fn() }, escapeHtml: String,
+        document: dom.window.document, window: dom.window, $, BasePlugin: class { getBean() { return null; } getRuntimeService(name) { return runtimeServices[name]; } }, _: "yes", C: "no", r: false, l: false,
+        storageManager: { getSetting: vi.fn(async (key, fallback) => null == key ? settings : "reviewCount" === key ? 20 : settings[key] ?? fallback), getReviewFilterKeywordList: vi.fn(async () => []), saveReviewFilterKeyword: vi.fn(), saveSettingItem: vi.fn() },
+        utils: { formatDate: value => value, q: (event, message, callback) => callback() }, show: { error: vi.fn(), ok: vi.fn() }, clog: { error: vi.fn(), warn: vi.fn() }, escapeHtml: String,
         i: (target, key, value) => (target[key] = value)
     });
     vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/external-search/review.js"), "utf8")};globalThis.Review=ReviewPlugin`, context);
@@ -22,6 +23,15 @@ function loadPanels() {
 }
 
 describe("detail panel instance lifecycle", () => {
+    it("does not fetch reviews until expanded when the preference was never saved", async () => {
+        const { $, Review, reviewFetch } = loadPanels({ settings: {} }), plugin = new Review;
+        const panel = await plugin.showReview("A", $("#review-a"));
+        expect(reviewFetch).not.toHaveBeenCalled();
+        expect(panel.find(".jhs-review-toggle").attr("aria-expanded")).toBe("false");
+        panel.find(".jhs-review-toggle").trigger("click");
+        await vi.waitFor((() => expect(reviewFetch).toHaveBeenCalledOnce()));
+    });
+
     it("keeps review floor, loading state, and panel ownership per target", async () => {
         const { $, Review, reviewFetch } = loadPanels(), plugin = new Review;
         const panelA = await plugin.showReview("A", $("#review-a")), panelB = await plugin.showReview("B", $("#review-b"));
@@ -54,7 +64,7 @@ describe("detail panel instance lifecycle", () => {
     it("adopts owned workspace headers and does not prefetch the second review page", async () => {
         const { $, Review, reviewFetch } = loadPanels(), plugin = new Review;
         const section = $('<section><header><div data-jhs-section-actions="reviews"></div></header><div id="owned-reviews"></div></section>').appendTo("body");
-        reviewFetch.mockResolvedValueOnce(Array.from({ length: 20 }, ((_, index) => ({ username: String(index), score: 1, created_at: "2026", likes_count: 0, content: "ok" }))));
+        reviewFetch.mockResolvedValueOnce(Array.from({ length: 20 }, ((_, index) => ({ author: String(index), score: 1, createdAt: "2026", likes: 0, content: "ok" }))));
         const panel = await plugin.showReview("owned", section.find("#owned-reviews"), { ownedSection: section, isActive: () => true });
         expect(panel.children(".jhs-panel-header")).toHaveLength(0), expect(section.find('> header [data-jhs-section-actions="reviews"] .jhs-review-toggle')).toHaveLength(1);
         expect(reviewFetch).toHaveBeenCalledTimes(1), expect(panel.find(".jhs-review-load-more")).toHaveLength(1);

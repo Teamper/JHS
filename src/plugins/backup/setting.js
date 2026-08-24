@@ -57,13 +57,20 @@ export class SettingPlugin extends BasePlugin {
     getName() {
         return "SettingPlugin";
     }
+    getFormDependencies() {
+        return Object.freeze({
+            otherSite: this.getDependency("OtherSitePlugin"), listPage: this.getDependency("ListPagePlugin"),
+            translate: this.getDependency("TranslatePlugin"), actressInfo: this.getDependency("ActressInfoPlugin"),
+            screenshot: this.getDependency("ScreenShotPlugin"), newVideo: this.getDependency("NewVideoPlugin"),
+            blacklist: this.getDependency("BlacklistPlugin"), busImg: this.getDependency("BusImgPlugin"),
+        });
+    }
     async initCss() {
         const e = await storageManager.getSetting();
         let t = (null == e ? void 0 : e.containerWidth) ?? "100";
         utils.isMobileMode() && (t = "100");
         let n = utils.isMobileMode() ? 1 : (null == e ? void 0 : e.containerColumns) ?? 5;
-        window.getBeanForSetting = this.getDependency.bind(this);
-        applyImageMode().catch((e => clog.error("[JHS] applyImageMode failed:", e)));
+        applyImageMode(this.getDependency("BusImgPlugin")).catch((e => clog.error("[JHS] applyImageMode failed:", e)));
         return buildSettingCss(t, n, l, r);
     }
     async handle() {
@@ -87,13 +94,13 @@ export class SettingPlugin extends BasePlugin {
             $(".simple-setting, .mini-simple-setting").html("").hide(), clog.lowZIndex(), void this.openSettingDialog().catch((error => clog.error("设置中心打开失败", error)));
         })), $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (async () => {
             $(".simple-setting").html(buildQuickSettingHtml()).show();
-            try { await initQuickSettingForm(this.getDependency.bind(this), this.getSelector.bind(this), this.openSettingDialog.bind(this)); } catch (error) { clog.warn("桌面快捷设置初始化失败", error); }
+            try { await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this)); } catch (error) { clog.warn("桌面快捷设置初始化失败", error); }
             clog.lowZIndex();
         })).on("mouseleave", ".setting-box", (() => {
             $(".simple-setting").html("").hide();
         })), $(".main-nav, .container-fluid").on("mouseenter", ".mini-setting-box", (async () => {
             $(".mini-simple-setting").html(buildQuickSettingHtml()).show();
-            try { await initQuickSettingForm(this.getDependency.bind(this), this.getSelector.bind(this), this.openSettingDialog.bind(this)); } catch (error) { clog.warn("迷你快捷设置初始化失败", error); }
+            try { await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this)); } catch (error) { clog.warn("迷你快捷设置初始化失败", error); }
             clog.lowZIndex();
         })).on("mouseleave", ".mini-setting-box", (() => {
             $(".mini-simple-setting").html("").hide();
@@ -125,7 +132,7 @@ export class SettingPlugin extends BasePlugin {
             event.shiftKey && document.activeElement === first ? (event.preventDefault(), last.focus()) : !event.shiftKey && document.activeElement === last && (event.preventDefault(), first.focus());
         }));
         try {
-            await initQuickSettingForm(this.getDependency.bind(this), this.getSelector.bind(this), (panel => {
+            await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), (panel => {
                 closeQuickSetting(!1), void this.openSettingDialog(panel).catch((error => clog.error("完整设置打开失败", error)));
             })), sheet.find(".jhs-quick-setting__close").trigger("focus");
         } catch (error) {
@@ -142,7 +149,7 @@ export class SettingPlugin extends BasePlugin {
             area: utils.getDialogArea("lg"),
             scrollbar: !1,
             success: async (e, n) => {
-                $(e).find(".layui-layer-content").css("position", "relative"), this.renderTaskStatuses(), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), injectResourceSourcesPanel(), await loadSettingForm(this.getDependency.bind(this)), await this.loadResourceSettings(),
+                $(e).find(".layui-layer-content").css("position", "relative"), this.renderTaskStatuses(), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), injectResourceSourcesPanel(), await loadSettingForm(this.getFormDependencies()), await this.loadResourceSettings(),
                 JhsSelect.enhance(e), this.bindClick(), $(".side-menu-item.active").attr("aria-current", "page"), utils.setupEscClose(n), t && t();
                 this.renderTaskStatuses(), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.renderTaskStatuses()));
                 if (utils.isMobileMode()) {
@@ -230,23 +237,23 @@ export class SettingPlugin extends BasePlugin {
         });
     }
     bindClick() {
-        const settingPlugin = this;
+        const settingPlugin = this, webdav = this.getRuntimeService("webdav");
         $(".side-menu-item").on("click", (function() {
             $(".side-menu-item").removeClass("active").attr("aria-current", "false"), $(this).addClass("active").attr("aria-current", "page"), $(".content-panel").hide();
             const e = $(this).data("panel");
             $("#" + e).show(), "cache-panel" === e ? ($("#saveBtn").hide(), $("#clean-all").removeClass("jhs-is-hidden")) : ($("#saveBtn").show(),
             $("#clean-all").addClass("jhs-is-hidden")), "health-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderDataHealthPanel()),
-            "plugin-mgmt-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderPluginMgmtPanel(this.pluginManager)),
+            "plugin-mgmt-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderPluginMgmtPanel(settingPlugin.getRuntimeService("diagnostics"))),
             "snapshot-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderSnapshotPanel()),
             "network-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderNetworkPanel());
         })), $("#importBtn").on("click", (e => importSettingData(showDiffPreview))), $("#exportBtn").on("click", (e => exportSettingData())),
         $("#preview-car-number-import").on("click", (() => this.previewCarNumbers())), $("#confirm-car-number-import").on("click", (async e => this.confirmCarNumbers(e))),
-        $("#webdavBackupBtn").on("click", (e => backupDataByWebDav(this.folderName))), $("#webdavBackupListBtn").on("click", (e => backupListBtnByWebDav(this.folderName, (files, client, label) => openFileListDialog(files, client, label, this.folderName, showDiffPreview)))),
-        $("#saveBtn").on("click", (() => saveSettingForm(this.getDependency.bind(this)))), $("#runHealthCheckBtn").on("click", (() => renderDataHealthPanel())),
+        $("#webdavBackupBtn").on("click", (e => backupDataByWebDav(this.folderName, webdav))), $("#webdavBackupListBtn").on("click", (e => backupListBtnByWebDav(this.folderName, (files, client, label) => openFileListDialog(files, client, label, this.folderName, showDiffPreview), webdav))),
+        $("#saveBtn").on("click", (() => saveSettingForm(this.getFormDependencies()))), $("#runHealthCheckBtn").on("click", (() => renderDataHealthPanel())),
         $("#repairHealthBtn").on("click", (e => {
             utils.q(e, "修复前会自动下载备份，是否继续?", (() => repairDataHealthWithBackup()));
         })), $("#pm-clear-log").on("click", (() => {
-            this.pluginManager.clearErrorLog(), $("#plugin-error-log").text("无错误记录"), show.ok("错误日志已清空");
+            this.getRuntimeService("diagnostics").clearErrors(), $("#plugin-error-log").text("无错误记录"), show.ok("错误日志已清空");
         })), $("#createSnapshotBtn").on("click", (async () => {
             let e = loading();
             try {

@@ -1,5 +1,16 @@
 // @ts-check
 
+const SENSITIVE_KEY = /^(?:authorization|cookie|set-cookie|password|token|secret|credential)$/i;
+
+/** @param {unknown} value @param {string} [key] @returns {unknown} */
+function sanitize(value, key = "") {
+    if (SENSITIVE_KEY.test(key)) return "[redacted]";
+    if (Array.isArray(value)) return value.map((item) => sanitize(item));
+    if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([childKey, child]) => [childKey, sanitize(child, childKey)]));
+    if (typeof value !== "string") return value;
+    return value.replace(/(https?:\/\/)([^\s/@:]+):([^\s/@]+)@/gi, "$1[redacted]@");
+}
+
 export class DiagnosticsService {
     constructor() {
         this.startedAt = performance.now();
@@ -13,6 +24,11 @@ export class DiagnosticsService {
         /** @type {Array<Record<string, any>>} */
         this.errors = [];
         this.browserMetadata = null;
+        /** @type {string[]} */
+        this.legacyPlugins = [];
+        this.legacyStartup = null;
+        /** @type {Array<Record<string, unknown>>} */
+        this.legacyTimings = [];
     }
 
     /** @param {string} id @param {number} durationMs */
@@ -33,21 +49,31 @@ export class DiagnosticsService {
     recordError(error) {
         const value = error && typeof error === "object" && "toJSON" in error && typeof error.toJSON === "function"
             ? error.toJSON()
-            : { message: error instanceof Error ? error.message : String(error) };
-        this.errors.push({ ...value, timestamp: new Date().toISOString() });
+            : error instanceof Error ? { message: error.message } : error && typeof error === "object" ? { ...error } : { message: String(error) };
+        this.errors.push({ ...(/** @type {Record<string, any>} */ (sanitize(value))), timestamp: new Date().toISOString() });
         if (this.errors.length > 100) this.errors.shift();
     }
     /** @param {Record<string, unknown>} metadata */
     setBrowserMetadata(metadata) { this.browserMetadata = Object.freeze({ ...metadata }); }
+    /** @param {string[]} names @param {Record<string, unknown>} startup @param {Array<Record<string, unknown>>} timings */
+    setLegacyRuntime(names, startup, timings) {
+        this.legacyPlugins = [...names];
+        this.legacyStartup = Object.freeze({ ...startup });
+        this.legacyTimings = timings.map((item) => Object.freeze({ ...item }));
+    }
+    clearErrors() { this.errors = []; }
 
     exportSnapshot() {
+        const scopes = [...this.scopes.values()];
         return Object.freeze({
             activeFeatures: [...this.activeFeatures], activeContributions: [...this.activeContributions],
-            startupTimings: Object.fromEntries(this.startupTimings), activeScopes: [...this.scopes.values()],
-            globalListeners: 0, observers: [...this.scopes.values()].reduce((sum, scope) => sum + Number(scope.observers ?? 0), 0),
+            startupTimings: Object.fromEntries(this.startupTimings), activeScopes: scopes,
+            globalListeners: scopes.filter((scope) => scope.id === "app:root").reduce((sum, scope) => sum + Number(scope.listeners ?? 0), 0),
+            observers: scopes.reduce((sum, scope) => sum + Number(scope.observers ?? 0), 0),
             requestConsumers: this.requestStats.consumers, underlyingRequests: this.requestStats.underlying,
             cacheHits: this.cacheStats.hits, cacheMisses: this.cacheStats.misses,
             providerHealth: Object.fromEntries(this.providerHealth), errors: this.errors.map((error) => ({ ...error })),
+            legacyPlugins: [...this.legacyPlugins], legacyStartup: this.legacyStartup, legacyTimings: this.legacyTimings.map((item) => ({ ...item })),
             browser: this.browserMetadata, uptimeMs: performance.now() - this.startedAt,
         });
     }

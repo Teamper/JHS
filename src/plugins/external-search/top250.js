@@ -1,7 +1,7 @@
 import { escapeHtml, i } from "../../core/constants.js";
 import { O, U, q } from "../../core/javdb-api.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { encryptData } from "../image-viewer/bus-preview-video.js";
+import { encryptData } from "../../core/credential-crypto.js";
 
 const me = "jhs_appAuthorization";
 

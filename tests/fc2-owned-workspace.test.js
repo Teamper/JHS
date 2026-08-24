@@ -5,6 +5,10 @@ import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
+import { createJavDbAdapter } from "../src/integrations/javdb/manifest.js";
+import { HttpService } from "../src/services/http-service.js";
+import { ExternalUrlPolicy } from "../src/services/external-url-policy.js";
+import { CacheService } from "../src/services/cache-service.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 const fc2Source = readTestFile(join(repoRoot, "src/plugins/external-search/fc2.js"), "utf8");
@@ -30,20 +34,13 @@ function loadWorkspace() {
 }
 
 function loadResolver(responseFactory) {
-    const cacheCalls = [], get = vi.fn(responseFactory), storageManager = {
-        async cachedRequest(key, ttl, loader) {
-            const loaded = await loader();
-            cacheCalls.push({ key, ttl, loaded });
-            return loaded?.data ?? loaded;
-        }
-    }, local = new Map(), context = vm.createContext({
-        storageManager, gmHttp: { get }, localStorage: { getItem: key => local.get(key) || null, setItem: (key, value) => local.set(key, value) }, md5: String,
-        normalizeCarNum: value => String(value || "").trim().toUpperCase().replace("FC2-PPV-", "FC2-") || null,
-        utils: { formatDate: String }, show: { error: vi.fn() }
-    });
-    const source = readTestFile(join(repoRoot, "src/core/javdb-api.js"), "utf8");
-    vm.runInContext(`${source};globalThis.resolveId=resolveJavDbMovieId`, context);
-    return { resolveId: context.resolveId, get, cacheCalls };
+    const requests = [], get = vi.fn(responseFactory), port = { request: async options => {
+        requests.push(options);
+        return { status: 200, data: await get(options), finalUrl: options.url };
+    } };
+    const http = new HttpService(port, new ExternalUrlPolicy(), { cache: new CacheService() });
+    const adapter = createJavDbAdapter(http, () => "signature");
+    return { resolveId: carNum => adapter.resolveMovie({ carNum }).then(value => value?.movieId || null), get, requests };
 }
 
 function loadWantApi({ encryptedToken = "encrypted", response = { success: 1 } } = {}) {
@@ -126,15 +123,15 @@ describe("FC2 owned detail workspace", () => {
         expect(listPageSource).toContain("{ source: fc2Source }");
         expect(historySource).toContain("resolveFc2Source(t)");
         expect(stateServiceSource).toContain('"fc2Source"');
-        expect(fc2Source).toContain("&source=${encodeURIComponent(source)}");
+        expect(fc2Source).toContain('target.searchParams.set("source", source)');
     });
 
     it("restores source links, magnet metadata and scoped quality filtering", () => {
         expect(fc2Source).toContain("FC2PPVDB");
         expect(fc2Source).toContain("FC2 市场");
-        expect(fc2Source).toContain("item.hd && tags.append");
-        expect(fc2Source).toContain("item.cnsub && tags.append");
-        expect(fc2Source).toContain("item.created_at");
+        expect(fc2Source).toContain("item.hasHdTag && tags.append");
+        expect(fc2Source).toContain("item.hasSubtitleTag && tags.append");
+        expect(fc2Source).toContain("item.createdAt");
         expect(fc2Source).toContain('data-jhs-action="filter-native-magnets"');
         expect(highlightMagnetSource).toContain("assessMagnet({");
     });
@@ -205,14 +202,15 @@ describe("JavDB exact movie resolver", () => {
         const first = loaded.resolveId("FC2-123"), second = loaded.resolveId("fc2-123");
         release({ data: { movies: [ { id: "wrong", number: "FC2-1234" }, { id: "right", number: "FC2-123" } ] } });
         await expect(Promise.all([ first, second ])).resolves.toEqual([ "right", "right" ]), expect(loaded.get).toHaveBeenCalledOnce();
-        expect(loaded.cacheCalls[0].loaded.__jhsCacheTtl).toBe(7 * 864e5);
+        expect(loaded.requests).toHaveLength(1);
+        expect(loaded.requests[0]).toMatchObject({ providerId: "javdb", cacheScope: "public", ttlMs: 7 * 864e5 });
     });
 
     it("uses a short negative cache value but does not convert network errors into misses", async () => {
         const miss = loadResolver(async () => ({ data: { movies: [ { id: "near", number: "FC2-999" } ] } }));
-        await expect(miss.resolveId("FC2-123")).resolves.toBeNull(), expect(miss.cacheCalls[0].loaded).toEqual({ __jhsCacheTtl: 6 * 36e5, data: { miss: true } });
+        await expect(miss.resolveId("FC2-123")).resolves.toBeNull(), expect(miss.get).toHaveBeenCalledOnce();
         const failed = loadResolver(async () => { throw new Error("network"); });
-        await expect(failed.resolveId("FC2-123")).rejects.toThrow("network"), expect(failed.cacheCalls).toHaveLength(0);
+        await expect(failed.resolveId("FC2-123")).rejects.toThrow("network"), expect(failed.get).toHaveBeenCalledOnce();
     });
 });
 

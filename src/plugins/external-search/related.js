@@ -1,5 +1,4 @@
-import { C, _ } from "../../core/constants.js";
-import { K } from "../../core/javdb-api.js";
+import { C, _, r } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class RelatedPlugin extends BasePlugin {
@@ -20,9 +19,18 @@ export class RelatedPlugin extends BasePlugin {
                 .jhs-related-time { color:var(--jhs-text-faint); font-size:14px; white-space:nowrap; }
             </style>`;
     }
+    async handle() {
+        if (!window.isDetailPage || !r) return;
+        const movieId = new URL(window.location.href).pathname.split("/").filter(Boolean).pop();
+        if (movieId) await this.showRelated(this.getHostedSlot("related"), movieId);
+    }
+    getHostedSlot(name) {
+        const element = this.getRuntimeService("host").locateDetailSlots()[name];
+        return element ? $(element) : $();
+    }
     async showRelated(target, movieId, options = {}) {
         const isActive = "function" === typeof options.isActive ? options.isActive : () => !0;
-        const enabled = await storageManager.getSetting("enableLoadRelated", C), host = target?.length ? target : this.getDependency("DetailWorkspacePlugin")?.getSlot("related");
+        const enabled = await storageManager.getSetting("enableLoadRelated", C), host = target?.length ? target : this.getHostedSlot("related");
         if (!movieId) return void show.error("未传入movieId");
         if (!isActive() || !host?.length) return $();
         const existing = host.children('[data-jhs-panel="related"]').filter(((_, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
@@ -47,15 +55,17 @@ export class RelatedPlugin extends BasePlugin {
         state.loading = !0;
         const { movieId, panel } = state, container = panel.find(".jhs-related-container"), footer = panel.find(".jhs-related-footer");
         container.empty().append($('<div class="jhs-panel-state"></div>').text("获取清单中...")), footer.empty();
-        let related;
+        let related, scope;
         try {
-            related = await K(movieId, 1, 20);
+            scope = await this.getRuntimeService("scope")();
+            related = await this.getRuntimeService("related").list({ movieId }, { page: 1, limit: 20, scope });
         } catch (error) {
+            if (!state.isActive?.() || scope?.signal?.aborted) return void (state.loading = !1);
             clog.error("获取清单失败:", error);
             state.loading = !1;
             return void this.renderRetry(container, (() => this.fetchAndDisplayRelateds(state)));
         }
-        if (!state.isActive?.()) return void (state.loading = !1);
+        if (!state.isActive?.() || scope?.signal?.aborted) return void (state.loading = !1);
         state.loading = !1, state.loaded = !0;
         container.empty();
         if (!related.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无清单"));
@@ -71,13 +81,16 @@ export class RelatedPlugin extends BasePlugin {
         footer.empty().append(button, end);
         button.on("click", (async () => {
             const nextPage = state.page + 1;
+            let scope;
             button.text("加载中...").prop("disabled", !0);
             try {
-                const related = await K(state.movieId, nextPage, 20);
-                if (!state.isActive?.()) return;
+                scope = await this.getRuntimeService("scope")();
+                const related = await this.getRuntimeService("related").list({ movieId: state.movieId }, { page: nextPage, limit: 20, scope });
+                if (!state.isActive?.() || scope?.signal?.aborted) return;
                 state.page = nextPage;
                 this.displayRelateds(state, related, container), related.length < 20 ? (button.remove(), end.show()) : button.text("加载更多清单").prop("disabled", !1);
             } catch (error) {
+                if (!state.isActive?.() || scope?.signal?.aborted) return;
                 clog.error("加载更多清单失败:", error), button.text("加载失败，请重试").prop("disabled", !1);
             }
         }));
@@ -85,10 +98,10 @@ export class RelatedPlugin extends BasePlugin {
     displayRelateds(state, related, container) {
         related.forEach((item => {
             const row = $('<article class="jhs-related-item"></article>'), title = $("<a></a>").addClass("jhs-related-title").attr({
-                href: `/lists/${encodeURIComponent(item.relatedId)}`,
+                href: `/lists/${encodeURIComponent(item.id)}`,
                 target: "_blank",
                 rel: "noopener noreferrer"
-            }).text(item.name || "未命名清单"), heading = $('<div class="jhs-related-heading"></div>').append($("<span></span>").addClass("jhs-related-index").text(`#${state.floorIndex++}`), title), meta = $('<div class="jhs-related-meta"></div>'), time = $('<time class="jhs-related-time"></time>').text(`创建时间：${item.createTime || "未知"}`);
+            }).text(item.name || "未命名清单"), heading = $('<div class="jhs-related-heading"></div>').append($("<span></span>").addClass("jhs-related-index").text(`#${state.floorIndex++}`), title), meta = $('<div class="jhs-related-meta"></div>'), time = $('<time class="jhs-related-time"></time>').text(`创建时间：${item.createdAt ? utils.formatDate(item.createdAt) : "未知"}`);
             meta.append($("<span></span>").text(`视频：${Number(item.movieCount) || 0}`), $("<span></span>").text(`收藏：${Number(item.collectionCount) || 0}`),
             $("<span></span>").text(`查看：${Number(item.viewCount) || 0}`), time), row.append(heading, meta), container.append(row);
         }));

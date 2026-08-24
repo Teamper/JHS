@@ -1,6 +1,7 @@
 import { escapeHtml } from "../../core/constants.js";
 import { disabledIdForPlugin, parseDisabledPlugins } from "../../core/legacy-plugin-contributions.js";
 import { getPluginCategories } from "./setting-templates.js";
+import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 
 /** Render the network/external requests panel: circuit breaker status, domain stats. */
 export async function renderNetworkPanel() {
@@ -44,7 +45,8 @@ export async function renderSnapshotPanel() {
     };
     if (0 === e.length) return void $("#snapshot-list").html('<div class="jhs-empty-note">暂无快照，点击上方按钮创建</div>');
     $("#snapshot-list").find(".tabulator").length && $("#snapshot-list").empty();
-    const n = new Tabulator("#snapshot-list", {
+    const n = createJhsTable(Tabulator, "#snapshot-list", {
+        pagination: !1,
         layout: "fitColumns",
         placeholder: "暂无数据",
         data: e,
@@ -136,9 +138,10 @@ export function showDiffPreview(e, t, n = null) {
 }
 
 /** Render the plugin management panel: categorized plugin list, timing, errors, cache stats. */
-export async function renderPluginMgmtPanel(pluginManager) {
+export async function renderPluginMgmtPanel(diagnostics) {
+    const diagnosticSnapshot = diagnostics.exportSnapshot();
     const disabled = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
-    const allNames = pluginManager.getPluginNames();
+    const allNames = diagnosticSnapshot.legacyPlugins;
     const { categories, corePlugins, pluginMeta } = getPluginCategories();
     const registeredSet = new Set(allNames);
     let html = "";
@@ -177,13 +180,13 @@ export async function renderPluginMgmtPanel(pluginManager) {
             if (!list.includes(disabledId)) list.push(disabledId);
         }
         await storageManager.saveSettingItem("disabledPlugins", JSON.stringify(list));
-        const all = pluginManager.getPluginNames();
+        const all = diagnosticSnapshot.legacyPlugins;
         $("#pm-total").text(all.length);
         $("#pm-enabled").text(all.length - list.length);
         $("#pm-disabled").text(list.length);
         show.ok(`插件 "${name}" 已${$(e.target).is(":checked") ? "启用" : "禁用"}，刷新后生效`);
     });
-    const startup = pluginManager.getStartupReport?.(), timings = pluginManager.getTimings();
+    const startup = diagnosticSnapshot.legacyStartup, timings = diagnosticSnapshot.legacyTimings;
     const formatMs = value => Number.isFinite(value) ? value.toFixed(1) : "0.0";
     let startupHtml = startup ? `<div class="jhs-inline-metrics"><span>就绪: <strong>${formatMs(startup.readyMs)} ms</strong></span><span>注册: ${formatMs(startup.registrationMs)} ms</span><span>样式: ${formatMs(startup.cssMs)} ms</span><span>即时插件: ${formatMs(startup.immediateMs)} ms</span><span>空闲任务: ${startup.idleCompleted}/${startup.idleCompleted + startup.idlePending}</span></div><p class="jhs-caption">就绪耗时不包含 @require 下载及浏览器脚本解析时间。</p>` : "";
     if (timings.length) {
@@ -199,11 +202,11 @@ export async function renderPluginMgmtPanel(pluginManager) {
     } else {
         $("#plugin-timing-table").html(startupHtml + '<p class="jhs-empty-note">暂无数据，刷新页面后自动采集。</p>');
     }
-    const errorLog = pluginManager.getErrorLog();
+    const errorLog = diagnosticSnapshot.errors.filter((error) => error.source === "legacy-plugin");
     if (errorLog.length) {
         let eHtml = '<table class="jhs-data-table"><tr><th>时间</th><th>插件</th><th>阶段</th><th>错误信息</th></tr>';
         for (const err of [...errorLog].reverse()) {
-            eHtml += `<tr><td class="is-muted">${escapeHtml(err.time.substring(11, 19))}</td><td>${escapeHtml(err.plugin)}</td><td>${escapeHtml(err.phase)}</td><td class="is-danger">${escapeHtml(err.message)}</td></tr>`;
+            eHtml += `<tr><td class="is-muted">${escapeHtml(String(err.timestamp || "").substring(11, 19))}</td><td>${escapeHtml(err.plugin)}</td><td>${escapeHtml(err.phase)}</td><td class="is-danger">${escapeHtml(err.message)}</td></tr>`;
         }
         eHtml += '</table>';
         $("#plugin-error-log").html(eHtml);

@@ -1,6 +1,5 @@
 import { escapeHtml, i } from "../../core/constants.js";
 import { normalizeHttpUrl } from "../../core/feature-helpers.js";
-import { V, W } from "../../core/javdb-api.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { isHitShowPage } from "../../core/site-context.js";
 
@@ -38,7 +37,7 @@ export class HitShowPlugin extends BasePlugin {
             await this.getDependency("ListPageButtonPlugin").sortItems();
             loadingObj.close(), loadingClosed = !0;
             void this.loadScore(movies, generation).then((async () => {
-                if (generation === this.loadGeneration && "rateCount" === localStorage.getItem("jhs_sortMethod")) await this.getDependency("ListPageButtonPlugin").sortItems();
+                if (generation === this.loadGeneration && "rateCount" === this.getRuntimeService("settings").snapshot().sortMethod) await this.getDependency("ListPageButtonPlugin").sortItems();
             })).catch((error => clog.error("热播评分补全失败", error)));
         } catch (error) {
             clog.error("所有重试尝试均失败，无法获取数据。", error);
@@ -49,7 +48,8 @@ export class HitShowPlugin extends BasePlugin {
     async fetchPlaybackWithRetry(period) {
         let lastError;
         for (let attempt = 1; attempt <= 3; attempt++) try {
-            return await W(period);
+            const scope = await this.getRuntimeService("scope")();
+            return await this.getRuntimeService("movie").rankings({ period, scope });
         } catch (error) {
             lastError = error;
             if (attempt < 3) clog.error(`获取热播数据失败 (第 ${attempt} 次重试)`, error), await new Promise((resolve => setTimeout(resolve, 1e3)));
@@ -76,10 +76,10 @@ export class HitShowPlugin extends BasePlugin {
     async loadScore(movies, generation = this.loadGeneration) {
         if (0 === movies.length) return;
         const cacheKey = "jhs_score_info";
-        let cache = {};
-        try { cache = JSON.parse(localStorage.getItem(cacheKey) || "{}"); } catch (error) { clog.warn("评分缓存解析失败，将重新建立缓存", error); }
+        const cacheService = this.getRuntimeService("cache"), cached = cacheService.get(cacheKey, { scope: "public" });
+        const cache = cached.hit && cached.value && typeof cached.value === "object" ? { ...cached.value } : {};
         const queue = [ ...movies ], workers = Array.from({ length: Math.min(4, queue.length) }, (() => this.scoreWorker(queue, cache, generation)));
-        await Promise.all(workers), localStorage.setItem(cacheKey, JSON.stringify(cache));
+        await Promise.all(workers), cacheService.set(cacheKey, cache, { scope: "public", ttlMs: 604_800_000 });
     }
     async scoreWorker(queue, cache, generation) {
         for (;;) {
@@ -87,19 +87,22 @@ export class HitShowPlugin extends BasePlugin {
             if (!movie) return;
             try {
                 if (generation !== this.loadGeneration) return;
-                const id = movie.id;
+                const id = movie.movieId ?? movie.id;
                 if (!$(`#score_${id}`).length || $(`#${id}`).is(":hidden")) continue;
                 if (cache[id]) {
                     const cached = this.normalizeScoreData(cache[id]);
                     this.appendScore(id, cached.score, cached.watchedCount);
                     continue;
                 }
-                const result = await V(id);
+                const scope = await this.getRuntimeService("scope")();
+                const result = await this.getRuntimeService("movie").detail({ movieId: id, providerId: "javdb" }, { scope });
+                if (!result) throw new Error("JavDB 影片详情不存在");
                 if (generation !== this.loadGeneration) return;
                 const score = Number(result.score), watchedCount = Number(result.watchedCount);
                 this.appendScore(id, score, watchedCount), cache[id] = { score: Number.isFinite(score) ? score : 0, watchedCount: Number.isFinite(watchedCount) ? watchedCount : 0 };
             } catch (error) {
-                $(`#${movie.id}`).attr("data-jhs-rate-count", "0"), clog.error(`解析评分数据失败 | 编号: ${movie.number}\n`, `错误详情: ${error.message}\n`, error.stack ? `调用栈:\n${error.stack}` : "");
+                const id = movie.movieId ?? movie.id, carNum = movie.carNum ?? movie.number;
+                $(`#${id}`).attr("data-jhs-rate-count", "0"), clog.error(`解析评分数据失败 | 编号: ${carNum}\n`, `错误详情: ${error.message}\n`, error.stack ? `调用栈:\n${error.stack}` : "");
             }
         }
     }
@@ -117,8 +120,10 @@ export class HitShowPlugin extends BasePlugin {
     markDataListHtml(e) {
         let t = "";
         return e.forEach(((e, index) => {
-            const coverUrl = normalizeHttpUrl(String(e.cover_url || "").replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com"));
-            t += `\n                <div class="item" id="${escapeHtml(e.id)}" data-jhs-publish-time="${escapeHtml(e.release_date)}" data-jhs-rate-count="0" data-original-index="${index}">\n                    <a href="/v/${escapeHtml(e.id)}" class="box" title="${escapeHtml(e.origin_title)}">\n                        <div class="cover ">${coverUrl ? `<img loading="lazy" src="${escapeHtml(coverUrl)}" alt="">` : ""}</div>\n                        <div class="video-title"><strong>${escapeHtml(e.number)}</strong> ${escapeHtml(e.origin_title)}</div>\n                        <div class="score" id="score_${escapeHtml(e.id)}"></div>\n                        <div class="meta">${escapeHtml(e.release_date)}</div>\n                        <div class="jhs-toolbar">\n                           ${e.has_cnsub ? '<span class="jhs-badge jhs-badge--watch">含中字磁力</span>' : e.magnets_count > 0 ? '<span class="jhs-badge jhs-badge--success">含磁力</span>' : '<span class="jhs-badge jhs-badge--neutral">无磁力</span>'}\n                           ${e.new_magnets ? '<span class="jhs-badge jhs-badge--accent">今日新增</span>' : ""}\n                        </div>\n                    </a>\n                </div>\n            `;
+            const id = e.movieId ?? e.id, carNum = e.carNum ?? e.number, title = e.title ?? e.origin_title,
+                releaseDate = e.releaseDate ?? e.release_date, coverUrl = normalizeHttpUrl(e.coverUrl ?? e.cover_url),
+                hasSubtitle = e.hasSubtitle ?? e.has_cnsub, magnetCount = Number(e.magnetCount ?? e.magnets_count), newMagnets = e.newMagnets ?? e.new_magnets;
+            t += `\n                <div class="item" id="${escapeHtml(id)}" data-jhs-publish-time="${escapeHtml(releaseDate)}" data-jhs-rate-count="0" data-original-index="${index}">\n                    <a href="/v/${escapeHtml(id)}" class="box" title="${escapeHtml(title)}">\n                        <div class="cover ">${coverUrl ? `<img loading="lazy" src="${escapeHtml(coverUrl)}" alt="">` : ""}</div>\n                        <div class="video-title"><strong>${escapeHtml(carNum)}</strong> ${escapeHtml(title)}</div>\n                        <div class="score" id="score_${escapeHtml(id)}"></div>\n                        <div class="meta">${escapeHtml(releaseDate)}</div>\n                        <div class="jhs-toolbar">\n                           ${hasSubtitle ? '<span class="jhs-badge jhs-badge--watch">含中字磁力</span>' : magnetCount > 0 ? '<span class="jhs-badge jhs-badge--success">含磁力</span>' : '<span class="jhs-badge jhs-badge--neutral">无磁力</span>'}\n                           ${newMagnets ? '<span class="jhs-badge jhs-badge--accent">今日新增</span>' : ""}\n                        </div>\n                    </a>\n                </div>\n            `;
         })), t;
     }
 }

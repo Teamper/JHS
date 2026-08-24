@@ -41,6 +41,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     const commandbar = readTestFile(join(process.cwd(), "src/plugins/status/mobile-bottom-bar.js"), "utf8");
     const hitShow = readTestFile(join(process.cwd(), "src/plugins/external-search/hit-show.js"), "utf8");
     const translate = readTestFile(join(process.cwd(), "src/plugins/translate/translate.js"), "utf8");
+    const translationUi = readTestFile(join(process.cwd(), "src/ui/translation/title-translation.js"), "utf8");
     const settings = readTestFile(join(process.cwd(), "src/plugins/backup/setting-templates.js"), "utf8");
     const settingStyles = readTestFile(join(process.cwd(), "src/plugins/backup/setting-styles.js"), "utf8");
     const pluginPanels = readTestFile(join(process.cwd(), "src/plugins/backup/setting-panels.js"), "utf8");
@@ -88,9 +89,10 @@ describe("list toolbar and UI cleanup contracts", () => {
     });
 
     it("uses an idempotent translation node and a safe cache key", () => {
-        expect(translate).toContain('nextAll(".translated-title").first()');
-        expect(translate).toContain('"undefined" !== s');
-        expect(translate).toContain('localStorage.setItem("jhs_translate"');
+        expect(translationUi).toContain('nextAll(".translated-title").first()');
+        expect(translate).toContain('getRuntimeService("translation")');
+        expect(translate).not.toContain("localStorage");
+        expect(translationUi).not.toMatch(/\.html\(/);
         expect(translate).not.toMatch(/\.html\(/);
     });
 
@@ -156,13 +158,13 @@ describe("list toolbar and UI cleanup contracts", () => {
     });
 
     it("binds full-settings layout ranges idempotently after loading the form", () => {
-        expect(settingForms).toContain("bindLayoutRangeEvents();");
+        expect(settingForms).toContain("bindLayoutRangeEvents(dependencies.busImg);");
         expect(settingForms).toContain('.off(".jhsSetting")');
         expect(settingForms).toContain('.on("input.jhsSetting"');
         expect(settingForms).toContain('.on("change.jhsSetting"');
         expect(settingForms).toContain('saveSettingItem("containerColumns"');
         expect(settingForms).toContain('saveSettingItem("containerWidth"');
-        expect(settingForms).toContain("await applyImageMode()");
+        expect(settingForms).toContain("await applyImageMode(busImgPlugin)");
         const rangeBinding = settingForms.slice(settingForms.indexOf("function bindLayoutRangeEvents"), settingForms.indexOf("async function initQuickSettingForm"));
         const columnsInput = rangeBinding.slice(rangeBinding.indexOf('on("input.jhsSetting"'), rangeBinding.indexOf('on("change.jhsSetting"'));
         expect(columnsInput).not.toContain("saveSettingItem");
@@ -178,7 +180,7 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(reviews).not.toContain("item columns is-desktop");
         expect(reviews).not.toContain("jhs-layout-");
         expect(related).toContain("jhs-related-item");
-        expect(related).toContain("encodeURIComponent(item.relatedId)");
+        expect(related).toContain("encodeURIComponent(item.id)");
         expect(related).not.toContain("item columns is-desktop");
         expect(related).not.toContain("jhs-layout-");
         expect(reviews).toMatch(/jhs-review-content[^}]*font-size:16px[^}]*line-height:1\.7/);
@@ -203,7 +205,7 @@ describe("list toolbar and UI cleanup contracts", () => {
 
     it("uses semantic keyboard popovers and stable sort storage", () => {
         expect(listButtons).toContain('role="menuitemradio"');
-        expect(listButtons).toContain('localStorage.setItem("jhs_sortMethod"');
+        expect(listButtons).toContain('getRuntimeService("settings").set("sortMethod"');
         for (const key of [ "ArrowDown", "ArrowUp", "Home", "End", "Escape" ]) expect(listButtons).toContain(key);
         expect(listButtons).not.toMatch(/<select[^>]+sort-toggle-btn/);
         expect(coverButtons).toContain("width:152px");

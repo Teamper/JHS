@@ -1,0 +1,54 @@
+// @ts-check
+
+export class WebDavClient {
+    /** @param {import("./http-service.js").HttpService} http @param {string} davUrl @param {string} username @param {string} password */
+    constructor(http, davUrl, username, password) {
+        this.http = http;
+        this.baseUrl = new URL(davUrl.endsWith("/") ? davUrl : `${davUrl}/`);
+        this.username = username;
+        this.password = password;
+        this.folderName = null;
+    }
+    authHeaders() { return { Authorization: `Basic ${btoa(`${this.username}:${this.password}`)}`, Depth: "1" }; }
+    /** @param {string} method @param {string} path @param {Record<string, string>} [headers] @param {unknown} [body] */
+    async request(method, path, headers = {}, body) {
+        const url = new URL(path.replace(/^\/+/, ""), this.baseUrl);
+        const response = await this.http.request({
+            providerId: "webdav", method, url: url.href, headers: { ...this.authHeaders(), ...headers }, body,
+            responseType: "text", cacheScope: "none",
+            urlPolicy: { trustClass: "user-local", expectedOrigin: this.baseUrl.origin },
+        });
+        return response.data ?? response.responseText ?? "";
+    }
+    /** @param {string} folder */
+    async ensureFolder(folder) {
+        try { await this.request("MKCOL", folder); }
+        catch (error) { if (!(error instanceof Error) || !/HTTP (405|409)/.test(error.message)) throw error; }
+    }
+    /** @param {string} folder @param {string} name @param {string} content */
+    async backup(folder, name, content) { await this.ensureFolder(folder); await this.request("PUT", `${folder}/${name}`, { "Content-Type": "text/plain" }, content); }
+    /** @param {string} folder */
+    async getFileList(folder) {
+        const xml = String(await this.request("PROPFIND", folder, { "Content-Type": "application/xml" }, '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:getcontentlength/><d:creationdate/><d:getlastmodified/><d:iscollection/></d:prop></d:propfind>'));
+        const responses = new DOMParser().parseFromString(xml, "text/xml").getElementsByTagNameNS("DAV:", "response"), files = [];
+        for (let index = 1; index < responses.length; index++) {
+            const item = responses[index], node = (/** @type {string} */ name) => item.getElementsByTagNameNS("DAV:", name)[0]?.textContent || "";
+            const href = node("href"), name = node("displayname") || decodeURIComponent(href.replace(/\/$/, "").split("/").pop() || ""), size = node("getcontentlength");
+            if (size !== "0") files.push({ fileId: name, name, size: Number(size), createTime: node("creationdate") || node("getlastmodified") });
+        }
+        return files.reverse();
+    }
+    /** @param {string} name */
+    async deleteFile(name) { await this.request("DELETE", `${this.folderName}/${encodeURI(name)}`, { "Cache-Control": "no-cache" }); }
+    /** @param {string} folder */
+    async getBackupList(folder) { this.folderName = folder; await this.ensureFolder(folder); return this.getFileList(folder); }
+    /** @param {string} name */
+    async getFileContent(name) { return String(await this.request("GET", `${this.folderName}/${name}`, { Accept: "application/octet-stream" })); }
+}
+
+export class WebDavService {
+    /** @param {import("./http-service.js").HttpService} http */
+    constructor(http) { this.http = http; }
+    /** @param {{url: string, username: string, password: string}} config */
+    createClient(config) { return new WebDavClient(this.http, config.url, config.username, config.password); }
+}

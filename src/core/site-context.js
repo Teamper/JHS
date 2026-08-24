@@ -1,13 +1,16 @@
+// @ts-check
+
 const JAVDB_HOST_PATTERN = /^(?:[a-z0-9-]+\.)?javdb(?:[a-z0-9-]*)\.com$/i;
 const JAVBUS_HOST_MARKERS = ["javbus", "javsee", "seejav"];
 
-/** 规范化 location、URL 或字符串输入。 */
+/** @param {Location | URL | string} [locationLike] */
 function normalizeLocation(locationLike = window.location) {
     if (locationLike instanceof URL) return locationLike;
     if ("string" === typeof locationLike) return new URL(locationLike);
     return new URL(locationLike.href || `${locationLike.protocol}//${locationLike.hostname}${locationLike.pathname || "/"}${locationLike.search || ""}`);
 }
 /** 仅按 hostname 识别脚本运行站点，避免 URL 查询串造成误判。 */
+/** @param {Location | URL | string} [locationLike] */
 export function detectSite(locationLike = window.location) {
     const locationUrl = normalizeLocation(locationLike);
     const hostname = locationUrl.hostname.toLowerCase().replace(/\.$/, "");
@@ -21,19 +24,21 @@ export function detectSite(locationLike = window.location) {
 }
 
 /** 识别由 JHS 接管渲染的 JavDB 热播榜页面。 */
+/** @param {Location | URL | string} [locationLike] */
 export function isHitShowPage(locationLike = window.location) {
     const locationUrl = normalizeLocation(locationLike);
     return "/advanced_search" === locationUrl.pathname && "1" === locationUrl.searchParams.get("handlePlayback");
 }
 
 /** 识别保留站点原生列表生命周期的页面。 */
-function isNormalListPage(locationLike = window.location, hasMovieList = null) {
+/** @param {Location | URL | string} [locationLike] @param {boolean | null} [hasMovieList] */
+function isNormalListPage(locationLike = window.location, hasMovieList = false) {
     const locationUrl = normalizeLocation(locationLike);
-    const hasList = null === hasMovieList ? "undefined" != typeof $ && $(".movie-list").length > 0 : Boolean(hasMovieList);
-    return !isHitShowPage(locationUrl) && (hasList || locationUrl.pathname.includes("advanced_search"));
+    return !isHitShowPage(locationUrl) && (Boolean(hasMovieList) || locationUrl.pathname.includes("advanced_search"));
 }
 
 /** 识别所有具备列表页能力的页面，包括 JHS 热播榜。 */
-export function isListPage(locationLike = window.location, hasMovieList = null) {
+/** @param {Location | URL | string} [locationLike] @param {boolean | null} [hasMovieList] */
+export function isListPage(locationLike = window.location, hasMovieList = false) {
     return isHitShowPage(locationLike) || isNormalListPage(locationLike, hasMovieList);
 }

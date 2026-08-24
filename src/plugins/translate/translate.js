@@ -1,6 +1,6 @@
 import { _, l } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { _e } from "../status/list-page.js";
+import { renderTranslatedTitle } from "../../ui/translation/title-translation.js";
 
 export class TranslatePlugin extends BasePlugin {
     getName() {
@@ -13,31 +13,9 @@ export class TranslatePlugin extends BasePlugin {
         isDetailPage && this.translate();
     }
     async translate(e, t = !0, options = {}) {
-        if (await storageManager.getSetting("translateTitle", _) !== _) return;
+        if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) !== _) return;
         l && (t = !1);
-        const root = options.root ? $(options.root) : $(document);
-        let n = root.find(".origin-title").first();
-        if (n.length || (n = root.find(".current-title").first()), n.length || (n = root.find("h3").first()), !n.length) return;
-        const a = n.text().trim();
-        if (!a) return void show.error("获取标题失败, 无法进行翻译");
-        let i = n.nextAll(".translated-title").first();
-        i.length || (i = $('<div class="translated-title"></div>').insertAfter(n)), i.removeClass("is-error").text("翻译中...");
-        e || (e = this.getPageInfo().carNum);
-        const s = "string" == typeof e ? e.trim() : "", o = s && "undefined" !== s ? s : a;
-        let r = {};
-        try {
-            const e = localStorage.getItem("jhs_translate");
-            e && (r = JSON.parse(e) || {});
-        } catch (l) {
-            clog.warn("翻译缓存无法解析，已忽略旧缓存", l);
-        }
-        if (r[o]) return void i.text(r[o]);
-        try {
-            const e = await _e(a, "ja", "zh-CN");
-            if (!n[0]?.isConnected) return;
-            i.text(e), r[o] = e, localStorage.setItem("jhs_translate", JSON.stringify(r));
-        } catch (l) {
-            clog.error("翻译失败:", l), i.addClass("is-error").text(`翻译失败: ${l.message || String(l)}`);
-        }
+        const scope = await this.getRuntimeService("scope")();
+        await renderTranslatedTitle({ root: options.root, carNum: e, translation: this.getRuntimeService("translation"), scope });
     }
 }

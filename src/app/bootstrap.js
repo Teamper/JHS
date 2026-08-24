@@ -1,6 +1,7 @@
 // @ts-check
 
 import { l, r } from "../core/constants.js";
+import { detectSite } from "../core/site-context.js";
 import { JhsError } from "../core/jhs-error.js";
 import { runDataMigrations } from "../core/migration.js";
 import { PluginManager } from "../core/plugin-manager.js";
@@ -9,7 +10,7 @@ import { gmHttp, storageManager, utils } from "../core/http.js";
 import { initializeEventBus } from "../core/event-bus.js";
 import { migrateDisabledPlugins, parseDisabledPlugins } from "../core/legacy-plugin-contributions.js";
 import { initializeLoggerRuntime } from "../core/logger.js";
-import { applyTheme } from "../core/theme.js";
+import { applyTheme, initializeThemeRuntime } from "../core/theme.js";
 import { getVendorRuntime } from "../platform/userscript/vendor-runtime.js";
 import { JavBusHostAdapter } from "../platform/hosts/javbus-host-adapter.js";
 import { JavDbHostAdapter } from "../platform/hosts/javdb-host-adapter.js";
@@ -90,19 +91,39 @@ export async function bootstrapJhs() {
         importVendorStyles();
         const disabled = await migrateDisabledPluginSettings();
         const localOriginSettings = await prepareLocalOrigins();
+        const siteContext = detectSite(window.location);
         const hostAdapter = r ? new JavDbHostAdapter() : l ? new JavBusHostAdapter() : null;
         const route = hostAdapter?.detectRoute() ?? "other";
         const context = createAppContext({
             gmRequest: globalThis.GM_xmlhttpRequest, storageForage: storageManager.forage,
-            layer: vendors.layer, hostAdapter, site: r ? "javdb" : l ? "javbus" : "other", route, disabled, localOrigins: localOriginSettings.origins,
+            layer: vendors.layer, hostAdapter, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
         });
+        const settingsSnapshot = await context.services.settings.load();
+        const legacySortMethod = localStorage.getItem("jhs_sortMethod");
+        if (settingsSnapshot.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) {
+            await context.services.settings.set("sortMethod", legacySortMethod);
+        }
+        const legacyFoldCategory = localStorage.getItem("jhs_foldCategory");
+        if (settingsSnapshot.foldCategoryCollapsed == null && ["yes", "no"].includes(legacyFoldCategory || "")) {
+            await context.services.settings.set("foldCategoryCollapsed", legacyFoldCategory === "yes");
+        }
+        const legacyVideoMuted = localStorage.getItem("jhs_videoMuted");
+        if (settingsSnapshot.videoMuted == null && ["yes", "no"].includes(legacyVideoMuted || "")) {
+            await context.services.settings.set("videoMuted", legacyVideoMuted === "yes");
+        }
         const logger = initializeLoggerRuntime(context.rootScope);
+        initializeThemeRuntime(context.rootScope);
+        context.services.diagnostics.setBrowserMetadata({
+            userAgent: navigator.userAgent,
+            platform: navigator.platform,
+            ...(globalThis.__jhsBrowserTestMetadata ?? {}),
+        });
         Object.assign(globalThis, logger);
         if (localOriginSettings.notice) globalThis.show.info(localOriginSettings.notice);
-        const pluginManager = new PluginManager();
-        registerSitePlugins(pluginManager);
+        const pluginManager = new PluginManager({ diagnostics: context.services.diagnostics });
         for (const manifest of integrationManifests) context.registries.integrations.register(manifest);
         for (const manifest of featureManifests) context.registries.features.register(manifest);
+        registerSitePlugins(pluginManager, context.registries.features, siteContext.site);
         await context.registries.features.start();
         attachCompatibilityFacade({
             pluginManager, utils, gmHttp, storageManager, stateService, jhsEventBus,

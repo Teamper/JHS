@@ -23,7 +23,7 @@ async function listJavaScriptFiles(dir) {
   return files;
 }
 
-const [theme, primitives, build, injection, magnet, settings, utils, detail, commandbar, newVideo, manager, hitShow, translate, settingStyles, main, packageSource, logger, reviews, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, screenshot, parsers, otherSite, builtSource] = await Promise.all([
+const [theme, primitives, build, injection, magnet, settings, utils, detail, commandbar, newVideo, manager, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, screenshot, parsers, javstoreIntegration, otherSite, builtSource] = await Promise.all([
   readFile(join(srcRoot, "core", "theme.js"), "utf8"),
   readFile(join(srcRoot, "core", "ui-primitives.js"), "utf8"),
   readFile(join(repoRoot, "scripts", "build.mjs"), "utf8"),
@@ -37,6 +37,7 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(srcRoot, "core", "plugin-manager.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "external-search", "hit-show.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "translate", "translate.js"), "utf8"),
+  readFile(join(srcRoot, "ui", "translation", "title-translation.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "backup", "setting-styles.js"), "utf8"),
   readFile(join(srcRoot, "main.js"), "utf8"),
   readFile(join(repoRoot, "package.json"), "utf8"),
@@ -54,6 +55,7 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(srcRoot, "plugins", "image-viewer", "preview-video.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "image-viewer", "screenshot.js"), "utf8"),
   readFile(join(srcRoot, "integrations", "javstore", "parser.js"), "utf8"),
+  readFile(join(srcRoot, "integrations", "javstore", "manifest.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "external-search", "other-site.js"), "utf8"),
   readFile(join(repoRoot, "JHS.user.js"), "utf8")
 ]);
@@ -132,9 +134,10 @@ forbidMatch(hitShow, /is-active|aria-current/, "hit show period must not retain 
 for (const field of ["data-jhs-rate-count", "data-jhs-publish-time", "data-original-index"])
   requireMatch(hitShow, new RegExp(field), `hit show sorting field missing ${field}`);
 forbidMatch(hitShow, /tool-box|button is-small/, "hit show must use the shared segmented toolbar");
-requireMatch(translate, /const s = "string" == typeof e \? e\.trim\(\) : "", o = s && "undefined" !== s \? s : a/, "translation cache key needs a safe title fallback");
-requireMatch(translate, /nextAll\("\.translated-title"\)/, "translation output must update an existing node");
-forbidMatch(translate, /translated-title[\s\S]{0,300}\.html\(/, "translated external text must not use html()");
+requireMatch(translate, /getRuntimeService\("translation"\)/, "translation feature must use the declared service");
+forbidMatch(translate, /localStorage|fetch\(/, "translation feature must not own network or cache persistence");
+requireMatch(translationUi, /nextAll\("\.translated-title"\)/, "translation output must update an existing node");
+forbidMatch(translationUi, /translated-title[\s\S]{0,400}\.html\(/, "translated external text must not use html()");
 forbidMatch(settingStyles, /mini-switch:checked[\s\S]{0,120}status-down/, "ordinary switches must use the accent color");
 forbidMatch(settingStyles, /right:\s*-300%/, "quick settings must be anchored to its trigger");
 forbidMatch(settingStyles, /\.form-content\s+\*/, "legacy form-content wildcard must not resize nested controls");
@@ -172,7 +175,8 @@ requireMatch(detail, /normalizeHostActions\(root\.find\("\.video-meta-panel"\)\.
 requireMatch(detail, /jhs-detail-host-action/, "detail workspace host action appearance class is missing");
 
 requireMatch(listButtons, /role="menuitemradio"/, "sort control must use menuitemradio options");
-requireMatch(listButtons, /jhs_sortMethod/, "sort control must retain its storage key");
+requireMatch(listButtons, /getRuntimeService\("settings"\)\.set\("sortMethod"/, "sort control must persist through SettingsService");
+requireMatch(await readFile(join(srcRoot, "app", "bootstrap.js"), "utf8"), /localStorage\.getItem\("jhs_sortMethod"\)[\s\S]*settings\.set\("sortMethod"/, "sort control must migrate its legacy storage key");
 for (const key of ["ArrowDown", "ArrowUp", "Home", "End", "Escape"])
   requireMatch(listButtons, new RegExp(key), `sort control is missing ${key} keyboard behavior`);
 forbidMatch(listButtons, /<select[^>]+sort-toggle-btn/, "native sort select must not return");
@@ -219,17 +223,17 @@ forbidMatch(previewVideo, /nativePreviewSrc|rememberNativeSource|restoreNativeSo
 forbidMatch(previewVideo, /\$nativeVideo\.attr\("src"|nativeVideo\.load\(\)/, "JHS must not replace or reload the JavDB HLS media source");
 requireMatch(screenshot, /async getScreenshot\(e\)\s*\{\s*e = normalizeCarNum\(e\)/, "screenshots must validate carNum first");
 requireMatch(screenshot, /无法获取番号，缩略图未加载/, "screenshot invalid-number fallback is missing");
-requireMatch(screenshot, /javstore\.net\/search\?q=\$\{encodeURIComponent\(e\)\}/, "JavStore must use its query search endpoint");
+requireMatch(javstoreIntegration, /javstore\.net\/search\?q=\$\{encodeURIComponent\(movieRef\.carNum \|\| ""\)\}/, "JavStore must use its query search endpoint");
 requireMatch(parsers, /a\[href\$=["']-pn\.html["']\][\s\S]{0,240}includes\(normalizedCarNum\.toUpperCase\(\)\)[\s\S]{0,180}\.map\([\s\S]{0,120}\.get\(\)/,
   "JavStore must preserve all matching -pn.html results in source order");
-requireMatch(screenshot, /for \(const e of i\)[\s\S]*gmHttp\.get\(t/, "JavStore detail URLs must be checked sequentially");
+requireMatch(javstoreIntegration, /for \(const candidate of candidates\)[\s\S]*await request\(candidate/, "JavStore detail URLs must be checked sequentially");
 requireMatch(parsers, /normalizeJavStoreAssetUrl\(previewHref, detailUrl\)/, "JavStore preview URLs must be resolved and normalized against the detail page");
 requireMatch(parsers, /"javstore\.net" === hostname \|\| hostname\.endsWith\("\.javstore\.net"\)[\s\S]{0,100}url\.protocol = "https:"/, "JavStore HTTP preview URLs must be upgraded selectively");
 requireMatch(parsers, /previewUrl\.replace\("\.th", ""\)/, "JavStore preview URLs must retain .th compatibility");
-requireMatch(screenshot, /"javstore" === provider \? normalizeJavStoreAssetUrl\(cachedUrl\) : cachedUrl/, "legacy JavStore screenshot cache reads must normalize asset URLs");
+requireMatch(screenshot, /getRuntimeService\("screenshot"\)\.resolve/, "screenshots must resolve through ScreenshotService");
 requireMatch(screenshot, /addImg\(e, t\)[\s\S]{0,100}normalizeJavStoreAssetUrl\(t\)/, "screenshot rendering must normalize JavStore asset URLs at the final boundary");
 requireMatch(parsers, /"CLICK HERE!" === wrap\(element\)\.text\(\)\.trim\(\)/, "JavStore detail parsing must retain the CLICK HERE! link contract");
-requireMatch(screenshot, /详情页没有 CLICK HERE![\s\S]{0,80}continue/, "JavStore must continue after a candidate without CLICK HERE!");
+requireMatch(javstoreIntegration, /if \(imageUrl\) return[\s\S]*return \[\]/, "JavStore must continue after a candidate without CLICK HERE!");
 forbidMatch(screenshot, /javstore\.net\/search\/|img\[src\*=['"]_s\.jpg/, "legacy JavStore search or detail fallback must not return");
 requireMatch(otherSite, /跳过第三方站点解析：番号不可用/, "external sites must fail fast without a car number");
 for (const entry of ["checkNewVideo", "checkFavoriteActress", "checkOneNewVideo"])

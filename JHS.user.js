@@ -426,6 +426,22 @@
 
   // src/core/legacy-plugin-contributions.js
   var LEGACY_PLUGIN_CONTRIBUTION_MAP = Object.freeze({
+    ListPagePlugin: "list.core",
+    AutoPagePlugin: "list.auto-page",
+    Fc2Plugin: "detail.fc2-owned",
+    FoldCategoryPlugin: "list.fold-category",
+    ListPageButtonPlugin: "list.actions",
+    HistoryPlugin: "library.history",
+    SettingPlugin: "settings.core",
+    NavBarPlugin: "identity.javdb-navigation",
+    BusNavBarPlugin: "identity.javbus-navigation",
+    HitShowPlugin: "discovery.hit-show",
+    TOP250Plugin: "discovery.top250",
+    SearchByImagePlugin: "identity.image-search",
+    Fc2By123AvPlugin: "detail.fc2-lookup",
+    DetailPagePlugin: "detail.native",
+    BusDetailPagePlugin: "detail.native",
+    DetailWorkspacePlugin: "detail.workspace",
     ReviewPlugin: "detail.reviews",
     RelatedPlugin: "detail.related",
     ScreenShotPlugin: "detail.screenshot",
@@ -436,7 +452,24 @@
     DetailPageButtonPlugin: "detail.state-actions",
     HighlightMagnetPlugin: "detail.native-magnets",
     OtherSitePlugin: "detail.external-sites",
-    SubTitleCatPlugin: "detail.subtitle"
+    SubTitleCatPlugin: "detail.subtitle",
+    FilterTitleKeywordPlugin: "library.keyword-filter",
+    ActressInfoPlugin: "identity.actress-info",
+    TranslatePlugin: "external-bridge.translation",
+    WantAndWatchedVideosPlugin: "library.state-actions",
+    BlacklistPlugin: "library.blacklist",
+    FavoriteActressesPlugin: "library.favorite-actresses",
+    NewVideoPlugin: "discovery.new-video",
+    TaskPlugin: "discovery.scheduler",
+    StatsPlugin: "stats.dashboard",
+    MobileBottomBarPlugin: "responsive-shell.bottom-bar",
+    OneOneFiveMatchPlugin: "external-bridge.115-match",
+    UnifiedOfflinePlugin: "external-bridge.offline",
+    CompatibilityEnhancementsPlugin: "compatibility.enhancements",
+    BusImgPlugin: "detail.gallery",
+    BusPreviewVideoPlugin: "detail.gallery",
+    OneTwoThreeOfflinePlugin: "external-bridge.123pan",
+    JavTrailersPlugin: "external-bridge.javtrailers"
   });
   function migrateDisabledPlugins(value) {
     const input = Array.isArray(value) ? value : [];
@@ -466,7 +499,7 @@
 
   // src/core/plugin-manager.js
   var _PluginManager = class _PluginManager {
-    constructor() {
+    constructor(options = {}) {
       this.plugins = /* @__PURE__ */ new Map();
       this._errorLog = [];
       this._lastTimings = [];
@@ -479,12 +512,13 @@
       this._idleCompleted = 0;
       this._disabledPluginsPromise = null;
       this._dependencyDeclarations = Object.freeze({});
+      this.diagnostics = options.diagnostics ?? null;
     }
     setDependencyDeclarations(declarations) {
       if (this.plugins.size) throw new Error("依赖声明必须在插件注册前配置");
       this._dependencyDeclarations = declarations || Object.freeze({});
     }
-    register(e2) {
+    register(e2, runtimeServices = {}) {
       if ("function" != typeof e2) throw new Error("插件必须是一个类");
       const a2 = performance.now();
       const t2 = new e2();
@@ -492,8 +526,10 @@
       const n2 = t2.getName();
       if (this.plugins.has(n2)) throw new Error(`插件"${n2}"已注册`);
       t2.declaredDependencies = new Set(this._dependencyDeclarations[n2] || []);
+      t2.runtimeServices = Object.freeze({ ...runtimeServices });
       this.plugins.set(n2, t2);
       this._registrationMs += performance.now() - a2;
+      this._syncDiagnostics();
     }
     // 仅供 6.6 前的外部 Compatibility Facade 使用。
     getBean(e2) {
@@ -511,12 +547,14 @@
         stack: n2?.stack || ""
       });
       this._errorLog.length > 200 && this._errorLog.shift();
+      this.diagnostics?.recordError({ source: "legacy-plugin", plugin: e2, phase: t2, message: n2?.message || String(n2) });
     }
     getErrorLog() {
       return [...this._errorLog];
     }
     clearErrorLog() {
       this._errorLog = [];
+      this.diagnostics?.clearErrors();
     }
     getTimings() {
       return [...this._lastTimings];
@@ -534,6 +572,9 @@
         idlePending: this._idlePending,
         idleCompleted: this._idleCompleted
       };
+    }
+    _syncDiagnostics() {
+      this.diagnostics?.setLegacyRuntime(this.getPluginNames(), this.getStartupReport(), this.getTimings());
     }
     async _getDisabledPlugins() {
       return this._disabledPluginsPromise || (this._disabledPluginsPromise = (async () => {
@@ -574,6 +615,7 @@
       const o2 = s2.map(((e2) => e2.css)).filter(Boolean);
       o2.length > 0 && utils.insertStyle(o2);
       this._cssMs = performance.now() - a2;
+      this._syncDiagnostics();
     }
     async _runPlugin(e2) {
       const t2 = performance.now();
@@ -602,6 +644,7 @@
         this._idlePending--;
         this._idleCompleted++;
       }
+      this._syncDiagnostics();
     }
     async processPlugins() {
       const e2 = await this._getDisabledPlugins(), t2 = utils.isMobileMode(), n2 = [], a2 = [], i2 = [];
@@ -633,6 +676,7 @@
       this._readyMs = performance.now() - this._startedAt;
       this._idlePending = a2.length;
       a2.length && this._scheduleIdle((() => this._runIdlePlugins(a2)));
+      this._syncDiagnostics();
     }
   };
   __name(_PluginManager, "PluginManager");
@@ -648,6 +692,7 @@
       }
       i(this, "pluginManager", null);
       i(this, "declaredDependencies", /* @__PURE__ */ new Set());
+      i(this, "runtimeServices", Object.freeze({}));
     }
     getName() {
       throw new Error(`${this.constructor.name} 未显示getName()`);
@@ -657,6 +702,10 @@
         throw new Error(`${this.getName()} 未声明依赖 ${e2}`);
       }
       return this.pluginManager.resolveDeclaredPlugin(e2);
+    }
+    getRuntimeService(name) {
+      if (!Object.prototype.hasOwnProperty.call(this.runtimeServices, name)) throw new Error(`${this.getName()} 未声明运行时依赖 ${name}`);
+      return this.runtimeServices[name];
     }
     async initCss() {
       return "";
@@ -898,11 +947,15 @@
     document.documentElement.setAttribute("data-jhs-theme", resolved);
   }
   __name(applyTheme, "applyTheme");
-  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (() => {
-    storageManager.getSetting("themeMode", "light").then(((e2) => {
-      "auto" === e2 && applyTheme();
-    }));
-  }));
+  function initializeThemeRuntime(scope) {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    scope.listen(media, "change", () => {
+      storageManager.getSetting("themeMode", "light").then(((mode) => {
+        if ("auto" === mode) void applyTheme();
+      }));
+    });
+  }
+  __name(initializeThemeRuntime, "initializeThemeRuntime");
 
   // src/core/utils.js
   var _Utils = class _Utils {
@@ -3548,10 +3601,16 @@
       return this.document.querySelector(".masonry");
     }
     locateDetailRoot() {
-      return this.document.querySelector(".container .row.movie");
+      return this.locateNativeMagnets()?.closest(".container") ?? this.document.querySelector(".container .row.movie")?.parentElement ?? null;
     }
     locateDetailSlots() {
-      return Object.freeze({ summary: this.locateDetailRoot(), resources: this.locateNativeMagnets(), reviews: this.document.querySelector("#reviews") });
+      const root = this.locateDetailRoot();
+      return Object.freeze({
+        summary: root?.querySelector('[data-jhs-slot="summary-actions"]') ?? root?.querySelector(".row.movie") ?? null,
+        resources: this.locateNativeMagnets(),
+        reviews: root?.querySelector('[data-jhs-slot="reviews"]') ?? this.document.querySelector("#reviews"),
+        related: root?.querySelector('[data-jhs-slot="related"]')
+      });
     }
     locateNativeGallery() {
       return this.document.querySelector("#sample-waterfall, .sample-box");
@@ -3583,10 +3642,16 @@
       return this.document.querySelector(".movie-list");
     }
     locateDetailRoot() {
-      return this.document.querySelector(".movie-panel-info")?.closest(".container") ?? this.document.querySelector("main");
+      return this.document.querySelector(".video-detail") ?? this.document.querySelector(".movie-panel-info")?.closest(".container") ?? this.document.querySelector("main");
     }
     locateDetailSlots() {
-      return Object.freeze({ summary: this.document.querySelector(".movie-panel-info"), resources: this.document.querySelector("#magnets-content"), reviews: this.document.querySelector("#reviews") });
+      const root = this.locateDetailRoot();
+      return Object.freeze({
+        summary: root?.querySelector('[data-jhs-slot="summary-actions"]') ?? this.document.querySelector(".movie-panel-info"),
+        resources: this.document.querySelector("#magnets-content"),
+        reviews: root?.querySelector('[data-jhs-slot="reviews"]') ?? this.document.querySelector("#reviews"),
+        related: root?.querySelector('[data-jhs-slot="related"]')
+      });
     }
     locateNativeGallery() {
       return this.document.querySelector(".tile-images, .preview-images");
@@ -3611,35 +3676,47 @@
     if (!Array.isArray(value)) throw new TypeError(`${field} must be an array`);
   }
   __name(requireArray, "requireArray");
-  function defineFeature(manifest) {
-    requireNonEmptyString(manifest.id, "Feature id");
-    if (!FEATURE_KINDS.has(String(manifest.kind))) throw new TypeError("Feature kind must be system or feature");
-    if (!STARTUP_MODES.has(String(manifest.startup))) throw new TypeError("Feature startup mode is invalid");
-    for (const field of ["sites", "routes", "requires", "contributes", "providesCommands"]) requireArray(manifest[field], field);
-    if (typeof manifest.activate !== "function") throw new TypeError("Feature activate must be a function");
-    if (manifest.kind === "system" && manifest.disableable !== false) throw new TypeError("System features cannot be disableable");
-    return Object.freeze({ ...manifest });
+  function defineFeature(manifest2) {
+    requireNonEmptyString(manifest2.id, "Feature id");
+    if (!FEATURE_KINDS.has(String(manifest2.kind))) throw new TypeError("Feature kind must be system or feature");
+    if (!STARTUP_MODES.has(String(manifest2.startup))) throw new TypeError("Feature startup mode is invalid");
+    for (const field of ["sites", "routes", "requires", "contributes", "providesCommands"]) requireArray(manifest2[field], field);
+    if (typeof manifest2.activate !== "function") throw new TypeError("Feature activate must be a function");
+    if (manifest2.kind === "system" && manifest2.disableable !== false) throw new TypeError("System features cannot be disableable");
+    return Object.freeze({ ...manifest2 });
   }
   __name(defineFeature, "defineFeature");
-  function defineIntegration(manifest) {
-    requireNonEmptyString(manifest.id, "Integration id");
-    if (!TRUST_CLASSES.has(String(manifest.trustClass))) throw new TypeError("Integration trustClass is invalid");
-    if (!QUALITY_LEVELS.has(String(manifest.quality))) throw new TypeError("Integration quality is invalid");
-    for (const field of ["hosts", "capabilities", "requires"]) requireArray(manifest[field], field);
+  function defineContribution(manifest2) {
+    requireNonEmptyString(manifest2.id, "Contribution id");
+    requireNonEmptyString(manifest2.featureId, "Contribution featureId");
+    requireNonEmptyString(manifest2.legacyPluginId, "Contribution legacyPluginId");
+    requireArray(manifest2.sites, "sites");
+    requireArray(manifest2.requires, "requires");
+    if (typeof manifest2.plugin !== "function") throw new TypeError("Contribution plugin must be a class");
+    if (!manifest2.order || typeof manifest2.order !== "object") throw new TypeError("Contribution order must be explicit");
+    return Object.freeze({ ...manifest2, sites: Object.freeze([.../** @type {unknown[]} */
+    manifest2.sites]), order: Object.freeze({ ...manifest2.order }) });
+  }
+  __name(defineContribution, "defineContribution");
+  function defineIntegration(manifest2) {
+    requireNonEmptyString(manifest2.id, "Integration id");
+    if (!TRUST_CLASSES.has(String(manifest2.trustClass))) throw new TypeError("Integration trustClass is invalid");
+    if (!QUALITY_LEVELS.has(String(manifest2.quality))) throw new TypeError("Integration quality is invalid");
+    for (const field of ["hosts", "capabilities", "requires"]) requireArray(manifest2[field], field);
     const hosts = (
       /** @type {unknown[]} */
-      manifest.hosts
+      manifest2.hosts
     );
     const capabilities = (
       /** @type {unknown[]} */
-      manifest.capabilities
+      manifest2.capabilities
     );
     if (hosts.length === 0 || capabilities.length === 0) throw new TypeError("Integration hosts and capabilities cannot be empty");
-    if (manifest.cachePolicy === void 0) throw new TypeError("Integration cachePolicy must be explicit");
-    if (typeof manifest.createClient !== "function" || typeof manifest.createAdapter !== "function") {
+    if (manifest2.cachePolicy === void 0) throw new TypeError("Integration cachePolicy must be explicit");
+    if (typeof manifest2.createClient !== "function" || typeof manifest2.createAdapter !== "function") {
       throw new TypeError("Integration client and adapter factories are required");
     }
-    return Object.freeze({ ...manifest });
+    return Object.freeze({ ...manifest2 });
   }
   __name(defineIntegration, "defineIntegration");
 
@@ -3662,13 +3739,16 @@
     navigation: createToken("service", "navigation"),
     http: createToken("service", "http"),
     storage: createToken("service", "storage"),
+    webdav: createToken("service", "webdav"),
     dialog: createToken("service", "dialog"),
     settings: createToken("service", "settings"),
     movie: createToken("service", "movie"),
+    actressInfo: createToken("service", "actress-info"),
     review: createToken("service", "review"),
     related: createToken("service", "related"),
     magnet: createToken("service", "magnet"),
     screenshot: createToken("service", "screenshot"),
+    translation: createToken("service", "translation"),
     offline: createToken("service", "offline"),
     cache: createToken("service", "cache"),
     state: createToken("service", "state"),
@@ -3693,11 +3773,41 @@
       this.root = null;
       this.slots = Object.freeze({});
       this.mounted = /* @__PURE__ */ new Map();
+      this.created = /* @__PURE__ */ new Set();
     }
     mount() {
       this.root = this.hostAdapter.locateDetailRoot();
+      if (this.root) this.ensureOwnedSlots();
       this.slots = Object.freeze({ ...this.hostAdapter.locateDetailSlots() });
       return this;
+    }
+    ensureOwnedSlots() {
+      if (!this.root) return;
+      const documentRuntime = this.root.ownerDocument;
+      let summary = this.root.querySelector(':scope > [data-jhs-slot="summary-actions"]');
+      if (!summary) {
+        summary = documentRuntime.createElement("div");
+        summary.className = "jhs-detail-owned-slot jhs-detail-owned-slot--summary-actions";
+        summary.setAttribute("data-jhs-slot", "summary-actions");
+        this.root.append(summary);
+        this.created.add(summary);
+      }
+      let group = this.root.querySelector(':scope > [data-jhs-slot-group="post-resource"]');
+      if (!group) {
+        group = documentRuntime.createElement("div");
+        group.className = "jhs-detail-post-resource";
+        group.setAttribute("data-jhs-slot-group", "post-resource");
+        this.root.append(group);
+        this.created.add(group);
+      }
+      for (const name of ["reviews", "related"]) {
+        if (group.querySelector(`[data-jhs-slot="${name}"]`)) continue;
+        const slot = documentRuntime.createElement("section");
+        slot.className = `jhs-detail-owned-slot jhs-detail-owned-slot--${name}`;
+        slot.setAttribute("data-jhs-slot", name);
+        group.append(slot);
+        this.created.add(slot);
+      }
     }
     /** @param {string} slot @param {Element} element */
     mountPanel(slot, element) {
@@ -3709,7 +3819,9 @@
     }
     dispose() {
       for (const element of this.mounted.values()) element.remove();
+      for (const element of this.created) element.remove();
       this.mounted.clear();
+      this.created.clear();
       this.root = null;
       this.slots = Object.freeze({});
     }
@@ -3750,7 +3862,7 @@
     routes: ["detail"],
     startup: "eager",
     requires: [PORT.host, SERVICE.movie, SERVICE.review, SERVICE.related, SERVICE.magnet, SERVICE.screenshot],
-    contributes: ["detail.state-actions", "detail.gallery", "detail.reviews", "detail.related", "detail.native-magnets", "detail.external-magnets", "detail.screenshot", "detail.subtitle", "detail.external-sites"],
+    contributes: ["detail.native", "detail.workspace", "detail.fc2-owned", "detail.fc2-lookup", "detail.state-actions", "detail.gallery", "detail.reviews", "detail.related", "detail.native-magnets", "detail.external-magnets", "detail.screenshot", "detail.subtitle", "detail.external-sites"],
     providesCommands: [],
     activate: /* @__PURE__ */ __name((deps, runtime) => {
       const controller = new DetailController({ hostAdapter: deps[PORT.host], scope: runtime.scope, enabledContributions: runtime.enabledContributions });
@@ -3758,6 +3870,28 @@
       return { dispose: /* @__PURE__ */ __name(() => controller.dispose(), "dispose") };
     }, "activate")
   });
+
+  // src/features/legacy-capabilities.js
+  var feature = /* @__PURE__ */ __name((id, sites, contributes) => defineFeature({
+    id,
+    kind: "feature",
+    disableable: true,
+    sites,
+    routes: [],
+    startup: "eager",
+    requires: [],
+    contributes,
+    providesCommands: [],
+    activate: /* @__PURE__ */ __name(() => ({}), "activate")
+  }), "feature");
+  var legacyCapabilityManifests = Object.freeze([
+    feature("list", ["javdb", "javbus"], ["list.core", "list.auto-page", "list.fold-category", "list.actions"]),
+    feature("library", ["javdb", "javbus"], ["library.history", "library.keyword-filter", "library.state-actions", "library.blacklist", "library.favorite-actresses"]),
+    feature("discovery", ["javdb", "javbus"], ["discovery.hit-show", "discovery.top250", "discovery.new-video", "discovery.scheduler"]),
+    feature("external-bridge", ["javdb", "javbus", "123pan", "javtrailers", "subtitlecat"], ["external-bridge.translation", "external-bridge.115-match", "external-bridge.offline", "external-bridge.123pan", "external-bridge.javtrailers", "detail.subtitle"]),
+    feature("identity", ["javdb", "javbus"], ["identity.javdb-navigation", "identity.javbus-navigation", "identity.image-search", "identity.actress-info"]),
+    feature("compatibility", ["javdb", "javbus"], ["compatibility.enhancements"])
+  ]);
 
   // src/features/system/catalog.js
   var systemFeatureManifests = Object.freeze([
@@ -3769,7 +3903,7 @@
       routes: [],
       startup: "on-command",
       requires: [SERVICE.diagnostics],
-      contributes: [],
+      contributes: ["settings.core"],
       providesCommands: ["settings.open"],
       activate: /* @__PURE__ */ __name(() => ({ commands: { "settings.open": /* @__PURE__ */ __name(() => document.querySelector("#setting-btn, #mini-setting-btn")?.dispatchEvent(new MouseEvent("click", { bubbles: true })), "settings.open") } }), "activate")
     }),
@@ -3793,7 +3927,7 @@
       routes: [],
       startup: "eager",
       requires: [SERVICE.profile],
-      contributes: [],
+      contributes: ["responsive-shell.bottom-bar"],
       providesCommands: [],
       activate: /* @__PURE__ */ __name((deps) => ({ profile: deps[SERVICE.profile].current() }), "activate")
     }),
@@ -3805,14 +3939,14 @@
       routes: [],
       startup: "idle",
       requires: [SERVICE.diagnostics],
-      contributes: [],
+      contributes: ["stats.dashboard"],
       providesCommands: [],
       activate: /* @__PURE__ */ __name((deps) => ({ diagnostics: deps[SERVICE.diagnostics] }), "activate")
     })
   ]);
 
   // src/features/catalog.js
-  var featureManifests = Object.freeze([...systemFeatureManifests, manifest_default]);
+  var featureManifests = Object.freeze([...systemFeatureManifests, manifest_default, ...legacyCapabilityManifests]);
 
   // src/plugins/dependency-map.js
   var LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
@@ -3822,16 +3956,14 @@
     CompatibilityEnhancementsPlugin: ["ListPagePlugin"],
     CoverButtonPlugin: ["ListPagePlugin", "ScreenShotPlugin", "OtherSitePlugin"],
     DetailPageButtonPlugin: ["DetailWorkspacePlugin", "MagnetHubPlugin", "HighlightMagnetPlugin"],
-    Fc2By123AvPlugin: ["OtherSitePlugin", "Fc2Plugin", "TranslatePlugin"],
+    Fc2By123AvPlugin: ["OtherSitePlugin", "Fc2Plugin"],
     Fc2Plugin: [
       "DetailPageButtonPlugin",
       "MagnetHubPlugin",
       "FilterTitleKeywordPlugin",
       "OtherSitePlugin",
-      "ScreenShotPlugin",
       "Fc2By123AvPlugin",
       "TOP250Plugin",
-      "TranslatePlugin",
       "HighlightMagnetPlugin",
       "ReviewPlugin",
       "RelatedPlugin"
@@ -3858,8 +3990,6 @@
     NavBarPlugin: ["SearchByImagePlugin"],
     NewVideoPlugin: ["TaskPlugin", "SettingPlugin", "OtherSitePlugin"],
     PreviewVideoPlugin: ["DetailPageButtonPlugin"],
-    RelatedPlugin: ["DetailWorkspacePlugin"],
-    ReviewPlugin: ["DetailWorkspacePlugin", "RelatedPlugin"],
     SettingPlugin: [
       "CoverButtonPlugin",
       "TaskPlugin",
@@ -3880,105 +4010,80 @@
 
   // src/plugins/avatar/actress-info.js
   var _ActressInfoPlugin = class _ActressInfoPlugin extends BasePlugin {
-    constructor() {
-      super(...arguments), i(this, "apiUrl", "https://ja.wikipedia.org/wiki/");
-    }
     getName() {
       return "ActressInfoPlugin";
     }
     async handle() {
-      "yes" === await storageManager.getSetting("enableLoadActressInfo", "yes") && await this.loadActressInfo();
+      if ("yes" === await storageManager.getSetting("enableLoadActressInfo", "yes")) await this.loadActressInfo();
     }
     async loadActressInfo() {
       await Promise.all([this.handleDetailPage(), this.handleStarPage()]);
     }
     async initCss() {
-      return "\n            <style>\n                .info-tag {\n                    background-color: var(--jhs-status-fav-tint);\n                    display: inline-block;\n                    height: 32px;\n                    padding: 0 10px;\n                    line-height: 30px;\n                    font-size: 12px;\n                    color: var(--jhs-status-fav);\n                    border: 1px solid var(--jhs-status-fav-tint);\n                    border-radius: 4px;\n                    box-sizing: border-box;\n                    white-space: nowrap;\n                }\n            </style>\n        ";
+      return `<style>
+            .info-tag { background-color:var(--jhs-status-fav-tint); display:inline-block; height:32px; padding:0 10px; line-height:30px; font-size:12px; color:var(--jhs-status-fav); border:1px solid var(--jhs-status-fav-tint); border-radius:4px; box-sizing:border-box; white-space:nowrap; }
+        </style>`;
     }
     async handleDetailPage() {
       if ($(".actress-info").length > 0) return;
-      let e2 = $(".female").prev().map(((e3, t3) => $(t3).text().trim())).get();
-      if (!e2.length) return;
-      const t2 = "jhs_actress_info", n2 = localStorage.getItem(t2) ? JSON.parse(localStorage.getItem(t2)) : {};
-      let a2 = null, i2 = "";
-      for (let o2 = 0; o2 < e2.length; o2++) {
-        let t3 = e2[o2];
-        if (a2 = n2[t3], !a2) try {
-          a2 = await this.searchInfo(t3), a2 && (n2[t3] = a2);
-        } catch (s2) {
+      const names = $(".female").prev().map(((index, item) => $(item).text().trim())).get();
+      if (!names.length) return;
+      const blocks = [];
+      for (const name of names) {
+        let info = null;
+        try {
+          info = await this.searchInfo(name);
+        } catch {
           clog.error("该名称查询失败,尝试其它名称");
         }
-        let r2 = "";
-        r2 = a2 ? `
-                    <div class="panel-block actress-info">
-                        <strong>${t3}:</strong>
-                        <a href="${a2.url}" target="_blank" class="jhs-layout-9813a0dd">
-                            <span class="info-tag">${a2.birthday} ${a2.age}</span>
-                            <span class="info-tag">${a2.height} ${a2.weight}</span>
-                            <span class="info-tag">${a2.threeSizeText} ${a2.braSize}</span>
-                        </a>
-                    </div>
-                ` : `<div class="panel-block actress-info"><a href="${this.apiUrl + t3}" target="_blank"><strong>${t3}:</strong></a></div> `, i2 += r2;
+        const block = $('<div class="panel-block actress-info"></div>');
+        if (info) {
+          block.append($("<strong></strong>").text(`${name}:`));
+          const link = $("<a></a>").attr({ href: info.url, target: "_blank", rel: "noopener noreferrer" }).addClass("jhs-layout-9813a0dd");
+          link.append(
+            $("<span></span>").addClass("info-tag").text(`${info.birthday} ${info.age}`.trim()),
+            $("<span></span>").addClass("info-tag").text(`${info.height} ${info.weight}`.trim()),
+            $("<span></span>").addClass("info-tag").text(`${info.threeSizeText} ${info.braSize}`.trim())
+          );
+          block.append(link);
+        } else {
+          const href = this.getRuntimeService("actressInfo").profileUrl(name);
+          block.append($("<a></a>").attr({ href, target: "_blank", rel: "noopener noreferrer" }).append($("<strong></strong>").text(`${name}:`)));
+        }
+        blocks.push(block);
       }
-      $('strong:contains("演員")').parent().after(i2), localStorage.setItem(t2, JSON.stringify(n2));
+      $('strong:contains("演員")').parent().after(...blocks);
     }
     async handleStarPage() {
       if ($(".actress-info").length > 0) return;
-      let e2 = [], t2 = $(".actor-section-name");
-      t2.length && t2.text().trim().split(",").forEach(((t3) => {
-        e2.push(t3.trim());
-      }));
-      let n2 = $(".section-meta:not(:contains('影片'))");
-      if (n2.length && n2.text().trim().split(",").forEach(((t3) => {
-        e2.push(t3.trim());
-      })), !e2.length) return;
-      const a2 = "jhs_actress_info", i2 = localStorage.getItem(a2) ? JSON.parse(localStorage.getItem(a2)) : {};
-      let s2 = null;
-      for (let l2 = 0; l2 < e2.length; l2++) {
-        let t3 = e2[l2];
-        if (s2 = i2[t3], s2) break;
+      const names = [], title = $(".actor-section-name");
+      if (title.length) title.text().trim().split(",").forEach(((name) => names.push(name.trim())));
+      const meta = $(".section-meta:not(:contains('影片'))");
+      if (meta.length) meta.text().trim().split(",").forEach(((name) => names.push(name.trim())));
+      if (!names.length) return;
+      let info = null;
+      for (const name of names) {
         try {
-          s2 = await this.searchInfo(t3);
-        } catch (r2) {
+          info = await this.searchInfo(name);
+        } catch {
           clog.error("该名称查询失败,尝试其它名称");
         }
-        if (s2) break;
+        if (info) break;
       }
-      s2 && e2.forEach(((e3) => {
-        i2[e3] = s2;
-      }));
-      let o2 = '<div class="actress-info jhs-layout-c0d4a511">无此相关演员信息</div>';
-      s2 && (o2 = `
-                <a class="actress-info" href="${s2.url}" target="_blank">
-                    <div class="jhs-layout-c0d4a511">
-                        <div class="jhs-layout-1b3790ef">
-                            <span class="jhs-layout-dd5a75f6">出生日期: ${s2.birthday}</span>
-                            <span class="jhs-layout-d4a09a0d">年龄: ${s2.age}</span>
-                            <span class="jhs-layout-d4a09a0d">身高: ${s2.height}</span>
-                        </div>
-                        <div class="jhs-layout-1b3790ef">
-                            <span class="jhs-layout-dd5a75f6">体重: ${s2.weight}</span>
-                            <span class="jhs-layout-d4a09a0d">三围: ${s2.threeSizeText}</span>
-                            <span class="jhs-layout-d4a09a0d">罩杯: ${s2.braSize}</span>
-                        </div>
-                    </div>
-                </a>
-            `), t2.parent().append(o2), localStorage.setItem(a2, JSON.stringify(i2));
+      const body = $('<div class="jhs-layout-c0d4a511"></div>');
+      if (!info) body.text("无此相关演员信息");
+      else {
+        const row1 = $('<div class="jhs-layout-1b3790ef"></div>'), row2 = $('<div class="jhs-layout-1b3790ef"></div>');
+        row1.append($("<span></span>").addClass("jhs-layout-dd5a75f6").text(`出生日期: ${info.birthday}`), $("<span></span>").addClass("jhs-layout-d4a09a0d").text(`年龄: ${info.age}`), $("<span></span>").addClass("jhs-layout-d4a09a0d").text(`身高: ${info.height}`));
+        row2.append($("<span></span>").addClass("jhs-layout-dd5a75f6").text(`体重: ${info.weight}`), $("<span></span>").addClass("jhs-layout-d4a09a0d").text(`三围: ${info.threeSizeText}`), $("<span></span>").addClass("jhs-layout-d4a09a0d").text(`罩杯: ${info.braSize}`));
+        body.append(row1, row2);
+      }
+      const result = info ? $("<a></a>").addClass("actress-info").attr({ href: info.url, target: "_blank", rel: "noopener noreferrer" }).append(body) : body.addClass("actress-info");
+      title.parent().append(result);
     }
-    async searchInfo(e2) {
-      "三上悠亞" === e2 && (e2 = "三上悠亜");
-      let t2 = this.apiUrl + e2;
-      const n2 = await gmHttp.get(t2), a2 = new DOMParser(), i2 = $(a2.parseFromString(n2, "text/html"));
-      let s2 = i2.find('a[title="誕生日"]').parent().parent().find("td").text().trim(), o2 = i2.find("th:contains('現年齢')").parent().find("td").text().trim() ? parseInt(i2.find("th:contains('現年齢')").parent().find("td").text().trim()) + "岁" : "", r2 = i2.find('tr:has(a[title="身長"]) td').text().trim().split(" ")[0] + "cm", l2 = i2.find('tr:has(a[title="体重"]) td').text().trim().split("/")[1].trim();
-      return "― kg" === l2 && (l2 = ""), {
-        birthday: s2,
-        age: o2,
-        height: r2,
-        weight: l2,
-        threeSizeText: i2.find('a[title="スリーサイズ"]').closest("tr").find("td").text().replace("cm", "").trim(),
-        braSize: i2.find('th:contains("ブラサイズ")').next("td").contents().first().text().trim(),
-        url: t2
-      };
+    async searchInfo(name) {
+      const scope = await this.getRuntimeService("scope")();
+      return this.getRuntimeService("actressInfo").lookup(name, { scope });
     }
   };
   __name(_ActressInfoPlugin, "ActressInfoPlugin");
@@ -4583,604 +4688,67 @@
   __name(_ResourceSettingsService, "ResourceSettingsService");
   var ResourceSettingsService = _ResourceSettingsService;
 
-  // src/plugins/backup/webdav-client.js
-  var _WebDavClient = class _WebDavClient {
-    constructor(e2, t2, n2) {
-      this.davUrl = e2.endsWith("/") ? e2 : e2 + "/", this.username = t2, this.password = n2, this.folderName = null;
-    }
-    _getAuthHeaders() {
-      return {
-        Authorization: `Basic ${btoa(`${this.username}:${this.password}`)}`,
-        Depth: "1"
-      };
-    }
-    _sendRequest(e2, t2, n2 = {}, a2) {
-      return new Promise(((i2, s2) => {
-        const o2 = this.davUrl + t2, r2 = {
-          ...this._getAuthHeaders(),
-          ...n2
-        };
-        GM_xmlhttpRequest({
-          method: e2,
-          url: o2,
-          headers: r2,
-          data: a2,
-          onload: /* @__PURE__ */ __name((e3) => {
-            e3.status >= 200 && e3.status < 300 ? i2(e3) : (clog.error(e3), s2(new Error(`请求失败 ${e3.status}: ${e3.statusText}`)));
-          }, "onload"),
-          onerror: /* @__PURE__ */ __name((e3) => {
-            clog.error("请求WebDav发生错误:", e3), s2(new Error("请求WebDav失败, 请检查服务是否启动, 凭证是否正确"));
-          }, "onerror")
-        });
-      }));
-    }
-    async _ensureFolder(e2) {
-      try {
-        await this._sendRequest("MKCOL", e2);
-      } catch (t2) {
-        if (!/请求失败 (405|409):/.test(t2.message)) throw t2;
-      }
-    }
-    async backup(e2, t2, n2) {
-      await this._ensureFolder(e2);
-      const a2 = e2 + "/" + t2;
-      await this._sendRequest("PUT", a2, {
-        "Content-Type": "text/plain"
-      }, n2);
-    }
-    async getFileList(e2) {
-      var t2, n2, a2;
-      const i2 = (await this._sendRequest("PROPFIND", e2, {
-        "Content-Type": "application/xml"
-      }, '<?xml version="1.0"?>\n                <d:propfind xmlns:d="DAV:">\n                    <d:prop>\n                        <d:displayname />\n                        <d:getcontentlength />\n                        <d:creationdate />\n                        <d:getlastmodified />\n                        <d:iscollection />\n                    </d:prop>\n                </d:propfind>\n            ')).responseText, s2 = new DOMParser().parseFromString(i2, "text/xml").getElementsByTagNameNS("DAV:", "response"), o2 = [];
-      for (let r2 = 0; r2 < s2.length; r2++) {
-        if (0 === r2) continue;
-        let e3 = s2[r2];
-        const displayNameNode = e3.getElementsByTagNameNS("DAV:", "displayname")[0];
-        const href = e3.getElementsByTagNameNS("DAV:", "href")[0]?.textContent || "";
-        const fallbackName = decodeURIComponent(href.replace(/\/$/, "").split("/").pop() || "");
-        const i3 = displayNameNode?.textContent || fallbackName, l2 = (null == (t2 = e3.getElementsByTagNameNS("DAV:", "getcontentlength")[0]) ? void 0 : t2.textContent) || "0", c2 = (null == (n2 = e3.getElementsByTagNameNS("DAV:", "creationdate")[0]) ? void 0 : n2.textContent) || (null == (a2 = e3.getElementsByTagNameNS("DAV:", "getlastmodified")[0]) ? void 0 : a2.textContent) || "";
-        "0" !== l2 && o2.push({
-          fileId: i3,
-          name: i3,
-          size: Number(l2),
-          createTime: c2
-        });
-      }
-      return o2.reverse(), o2;
-    }
-    async deleteFile(e2) {
-      let t2 = this.folderName + "/" + encodeURI(e2);
-      await this._sendRequest("DELETE", t2, {
-        "Cache-Control": "no-cache"
-      });
-    }
-    async getBackupList(e2) {
-      return this.folderName = e2, await this._ensureFolder(e2), this.getFileList(e2);
-    }
-    async getFileContent(e2) {
-      let t2 = this.folderName + "/" + e2;
-      return (await this._sendRequest("GET", t2, {
-        Accept: "application/octet-stream"
-      })).responseText;
-    }
-  };
-  __name(_WebDavClient, "WebDavClient");
-  var WebDavClient = _WebDavClient;
-
-  // src/core/cache-policy.js
-  var HOUR = 60 * 60 * 1e3;
-  var DAY = 24 * HOUR;
-  var CACHE_TTL = Object.freeze({ magnet: 6 * HOUR, screenshot: 7 * DAY, screenshotNegative: 12 * HOUR, match115: HOUR, externalDetail: DAY });
-  var _ProviderError = class _ProviderError extends Error {
-    /** @param {string} provider @param {string} code @param {string} message @param {{cause?: unknown, status?: number, url?: string, retryable?: boolean}} [options] */
-    constructor(provider, code, message, options = {}) {
-      super(message, { cause: options.cause });
-      this.name = "ProviderError";
-      this.provider = provider;
-      this.code = code;
-      this.status = options.status || 0;
-      this.url = options.url || "";
-      this.retryable = Boolean(options.retryable);
-    }
-  };
-  __name(_ProviderError, "ProviderError");
-  var ProviderError = _ProviderError;
-
-  // src/plugins/image-viewer/preview-video.js
-  var Z = /* @__PURE__ */ __name((e2, t2) => {
-    if (!e2 || 0 === e2.length) return null;
-    const n2 = new Set(e2);
-    if (n2.has(t2)) return t2;
-    const a2 = L.map(((e3) => e3.quality)).reverse();
-    for (const i2 of a2) if (n2.has(i2)) return i2;
-    return e2[0];
-  }, "Z");
-  var ee = "jhs_dmm_video";
-  var _DmmPreviewParser = class _DmmPreviewParser {
-    constructor(e2) {
-      this.carNum = e2, this.lastError = null;
-    }
-    _checkCache() {
-      const e2 = localStorage.getItem(ee) ? JSON.parse(localStorage.getItem(ee)) : {};
-      return e2[this.carNum] ? (clog.debug("缓存中存在预览视频信息", e2[this.carNum]), e2[this.carNum]) : null;
-    }
-    _updateCache(e2) {
-      const t2 = localStorage.getItem(ee) ? JSON.parse(localStorage.getItem(ee)) : {};
-      t2[this.carNum] = e2, clog.debug("成功解析出预览视频并已缓存:", e2), localStorage.setItem(ee, JSON.stringify(t2));
-    }
-    async _searchContentIds() {
-      const e2 = this.carNum, t2 = e2.replace(/-/g, ""), n2 = [{
-        keyword: e2.replace("-", "00"),
-        name: "00-替换关键词"
-      }, {
-        keyword: e2,
-        name: "原始番号关键词"
-      }, {
-        keyword: t2,
-        name: "无连字符关键词"
-      }], a2 = e2.toLowerCase();
-      let hadSuccessfulRequest = false;
-      for (const o2 of n2) {
-        const { keyword: e3, name: n3 } = o2, i3 = e3.toLowerCase();
-        clog.debug(`--- 尝试使用 ${n3} (${e3}) 进行 API 搜索 ---`);
-        const r2 = `https://api.dmm.com/affiliate/v3/ItemList?${new URLSearchParams({
-          api_id: "UrwskPfkqQ0DuVry2gYL",
-          affiliate_id: "10278-996",
-          output: "json",
-          site: "FANZA",
-          sort: "match",
-          keyword: e3
-        }).toString()}`;
-        let l2;
-        try {
-          l2 = await gmHttp.get(r2);
-          hadSuccessfulRequest = true;
-        } catch (s2) {
-          this.lastError = new ProviderError("dmm", "HTTP_ERROR", `DMM API 请求失败: ${s2.message || s2}`, {
-            cause: s2,
-            url: r2,
-            status: s2?.status,
-            retryable: true
-          }), clog.error(`API 请求失败，跳过 ${n3}:`, this.lastError);
-          continue;
-        }
-        if (!l2 || !l2.result || !l2.result.result_count) {
-          clog.debug("API 返回无结果，尝试下一个关键词。");
-          continue;
-        }
-        const c2 = [];
-        for (const s2 of l2.result.items) {
-          if (c2.length >= 2) break;
-          const e4 = s2.content_id || "", o3 = s2.maker_product || "";
-          (e4.includes(i3.replace("-", "")) || a2 === o3.toLowerCase() || e4.includes(t2.toLowerCase())) && (c2.push({
-            serviceCode: s2.service_code,
-            floorCode: s2.floor_code,
-            contentId: e4,
-            pageUrl: s2.URL
-          }), clog.debug(`[${n3}] cid|makerProduct 匹配成功:`, e4, o3));
-        }
-        if (c2.length > 0) {
-          clog.debug(`--- 成功通过 ${n3} 找到 Content IDs ---`);
-          const t3 = $("#fanzaBtn");
-          let a3 = `https://www.dmm.co.jp/search/=/searchstr=${e3}`, i4 = "single";
-          c2.length > 1 ? (t3.attr("href", a3), t3.append('<span class="site-tag jhs-layout-294497f1">多结果</span>'), t3.css("backgroundColor", "var(--jhs-status-down)"), i4 = "multiple") : (a3 = c2[0].pageUrl, t3.attr("href", a3), t3.css("backgroundColor", "var(--jhs-status-down)"));
-          const s2 = "jhs_other_site_dmm", o3 = localStorage.getItem(s2) ? JSON.parse(localStorage.getItem(s2)) : {};
-          return o3[this.carNum] = {
-            type: i4,
-            url: a3
-          }, localStorage.setItem(s2, JSON.stringify(o3)), c2;
-        }
-        clog.debug(`[${n3}] API 返回结果数 ${l2.result.result_count}，但无精确匹配的 Content ID。`);
-      }
-      hadSuccessfulRequest && (this.lastError = null);
-      clog.warn("所有关键词尝试均未找到匹配的Content ID, 解析Dmm视频失败");
-      const i2 = $("#fanzaBtn");
-      return i2.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`), i2.attr("title", "未查询到, 点击前往搜索页"), i2.css("backgroundColor", "var(--jhs-status-filter)"), null;
-    }
-    async _extractTrailerLinks({ contentId: e2, serviceCode: t2, floorCode: n2 }) {
-      const a2 = `https://www.dmm.co.jp/service/digitalapi/-/html5_player/=/cid=${e2}/mtype=AhRVShI_/service=${t2}/floor=${n2}/mode=/`, i2 = await gmHttp.get(a2, null, {
-        "accept-language": "ja-JP,ja;q=0.9",
-        Cookie: "age_check_done=1"
-      });
-      if ("string" != typeof i2) throw clog.error(i2), new ProviderError("dmm", "PARSE_ERROR", "解析播放页内容失败, 非文本内容", {
-        url: a2
-      });
-      if (i2.includes("このサービスはお住まいの地域からは")) throw new ProviderError("dmm", "REGION_BLOCKED", "DMM 预览源不可用，请将 DMM 域名分流到日本 IP", {
-        url: a2
-      });
-      const s2 = i2.match(/const\s+args\s+=\s+(.*);/);
-      if (!s2) throw new ProviderError("dmm", "PARSE_ERROR", "未在脚本中找到 const args = ... 变量", {
-        url: a2
-      });
-      let o2;
-      try {
-        ({ bitrates: o2 } = JSON.parse(s2[1]));
-      } catch (d2) {
-        throw new ProviderError("dmm", "PARSE_ERROR", `解析播放器脚本 JSON 失败: ${d2.message}`, {
-          cause: d2,
-          url: a2
-        });
-      }
-      const r2 = {}, l2 = L.map(((e3) => e3.quality)).join("|"), c2 = new RegExp(`(${l2})\\.mp4$`);
-      if (!Array.isArray(o2)) throw clog.error("解析画质链接失败: bitrates 字段不是一个数组或不存在"), new ProviderError("dmm", "PARSE_ERROR", "解析画质链接失败: bitrates 字段不是一个数组或不存在", {
-        url: a2
-      });
-      clog.debug("原始数据返回:", o2);
-      for (const h2 of o2) {
-        const e3 = null == h2 ? void 0 : h2.src;
-        if (!e3 || "string" != typeof e3 || !e3.endsWith(".mp4")) continue;
-        const t3 = e3.match(c2);
-        let n3 = "";
-        t3 && t3[1] && (n3 = t3[1]), n3 && !r2[n3] && (r2[n3] = e3);
-      }
-      if (0 === Object.keys(r2).length) throw new ProviderError("dmm", "PARSE_ERROR", "未找到匹配要求的预览画质视频", {
-        url: a2
-      });
-      return r2;
-    }
-    async fetchVideo() {
-      const carNum = normalizeCarNum(this.carNum);
-      if (!carNum) return clog.warn("跳过 DMM 解析：番号不可用"), null;
-      this.carNum = carNum;
-      const e2 = this._checkCache();
-      if (e2) return e2;
-      let t2;
-      try {
-        const e3 = this.carNum.toLowerCase();
-        if (e3.startsWith("heyzo") || /^(n\d+|\d+(-\d+)*)$/.test(e3) || /^n\d+$/.test(e3)) return clog.debug("无码番号类型，取消 DMM 解析"), null;
-        if (this.carNum.includes("VR-")) return clog.debug("VR 类型，取消 DMM 解析"), null;
-        t2 = await this._searchContentIds();
-      } catch (n2) {
-        this.lastError = n2 instanceof ProviderError ? n2 : new ProviderError("dmm", "PARSE_ERROR", n2.message || String(n2), {
-          cause: n2
-        }), clog.error("DMM API 搜索失败:", this.lastError);
-        const e3 = $("#fanzaBtn");
-        return e3.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`), e3.attr("title", "未查询到, 点击前往搜索页"), e3.css("backgroundColor", "var(--jhs-status-filter)"), null;
-      }
-      if (!t2 || 0 === t2.length) return null;
-      try {
-        const e3 = await Promise.any(t2.map(((e4) => this._extractTrailerLinks(e4))));
-        return this._updateCache(e3), e3;
-      } catch (a2) {
-        const e3 = a2.errors || [a2];
-        this.lastError = e3.find(((e4) => "REGION_BLOCKED" === e4?.code)) || e3.find(((e4) => e4 instanceof ProviderError)) || new ProviderError("dmm", "PARSE_ERROR", e3[0]?.message || String(e3[0]), {
-          cause: e3[0]
-        }), clog.error(`解析失败: ${this.lastError.message}`, e3);
-        const t3 = $("#fanzaBtn");
-        return t3.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`), t3.attr("title", "未查询到, 点击前往搜索页"), t3.css("backgroundColor", "var(--jhs-status-filter)"), null;
-      }
-    }
-  };
-  __name(_DmmPreviewParser, "DmmPreviewParser");
-  var DmmPreviewParser = _DmmPreviewParser;
-  async function fetchDmmPreview(carNum) {
-    const parser = new DmmPreviewParser(carNum), sources = await parser.fetchVideo();
-    return {
-      sources,
-      error: parser.lastError
-    };
-  }
-  __name(fetchDmmPreview, "fetchDmmPreview");
-  var _PreviewVideoPlugin = class _PreviewVideoPlugin extends BasePlugin {
-    getName() {
-      return "PreviewVideoPlugin";
-    }
-    async initCss() {
-      return ".jhs-dmm-preview-player{display:none;width:100%;height:auto}.jhs-dmm-preview-player.is-active{display:block}.jhs-native-preview-hidden{display:none!important}";
-    }
-    async handle() {
-      if (!isDetailPage) return;
-      const trigger = $(".preview-video-container"), openVideo = /* @__PURE__ */ __name(() => {
-        utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => {
-          this.handleVideo().catch(((error) => clog.error("预览视频处理失败", error)));
-        }));
-      }, "openVideo");
-      trigger.off("click.jhsVideo").on("click.jhsVideo", openVideo);
-      await storageManager.getSetting("enableLoadPreviewVideo", _) !== _ || o.includes("autoPlay=1") || this.initDmm();
-      const url = window.location.href;
-      (url.includes("gallery-1") || url.includes("gallery-2")) && openVideo(), url.includes("autoPlay=1") && trigger.length > 0 && trigger[0].click();
-    }
-    async initDmm() {
-      try {
-        const { sources } = await this.getDmmPreview();
-        if (!sources) return;
-        const $video = $("#preview-video"), video = $video[0];
-        if (video) return;
-        clog.debug("JavDB没有视频播放元素, 开始创建...");
-        const cover = $(".column-video-cover img").attr("src");
-        $(".preview-images").prepend(`
-                <a class="preview-video-container" data-fancybox="gallery" href="#preview-video">
-                    <span>预告片</span>
-                    <img src="${cover}" class="video-cover jhs-layout-8cf76fd7" alt="">
-                </a>
-            `), $(".preview-video-container").off("click.jhsVideo").on("click.jhsVideo", (() => {
-          utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => this.handleVideo().catch(((error) => clog.error("预览视频处理失败", error)))));
-        }));
-      } catch (error) {
-        clog.error("预加载 DMM 失败:", error);
-      }
-    }
-    /** 复用单次 DMM 请求，避免预加载和点击处理重复抓取。 */
-    getDmmPreview() {
-      if (this.dmmPreviewPromise) return this.dmmPreviewPromise;
-      this.dmmPreviewPromise = fetchDmmPreview(this.getPageInfo().carNum).then(((result) => {
-        (result.error?.retryable || "HTTP_ERROR" === result.error?.code) && (this.dmmPreviewPromise = null);
-        return result;
-      }), ((error) => {
-        this.dmmPreviewPromise = null;
-        throw error;
-      }));
-      return this.dmmPreviewPromise;
-    }
-    /** 创建与 JavDB HLS 生命周期完全隔离的 DMM 播放器。 */
-    createDmmPlayer($nativeVideo) {
-      const $host = $nativeVideo.parent(), existing = $host.find("#jhs-preview-video");
-      if (existing.length) return existing;
-      const $player = $('<video id="jhs-preview-video" class="jhs-video-player jhs-dmm-preview-player" controls playsinline></video>');
-      return $nativeVideo.after($player), $player;
-    }
-    /** 销毁 JHS 播放器并把播放权完整交回 JavDB。 */
-    async restoreNativePlayer($nativeVideo, nativeVideo, notify = false) {
-      const $dmmVideo = $nativeVideo.parent().find("#jhs-preview-video"), dmmVideo = $dmmVideo[0];
-      dmmVideo && (dmmVideo.pause(), $dmmVideo.removeAttr("src"), dmmVideo.load(), $dmmVideo.remove());
-      $nativeVideo.removeClass("jhs-native-preview-hidden");
-      return safePlay(nativeVideo, {
-        context: "JavDB 原生预览回退",
-        notify
-      });
-    }
-    async handleVideo() {
-      const $nativeVideo = $("#preview-video");
-      if (!$nativeVideo.length) return;
-      const $host = $nativeVideo.parent().css("position", "relative"), nativeVideo = $nativeVideo[0], muted = localStorage.getItem("jhs_videoMuted");
-      void safePlay(nativeVideo, {
-        context: "JavDB 原生预览",
-        notify: false
-      });
-      const dmmEnabled = await storageManager.getSetting("enableLoadPreviewVideo", _) !== C, dmmResult = dmmEnabled ? await this.getDmmPreview() : {
-        sources: null,
-        error: null
-      }, { sources, error } = dmmResult, $toolbar = $("<div></div>").attr("id", "video-bottom-toolbar").addClass("jhs-video-toolbar"), $qualityList = $("<div></div>").addClass("jhs-video-quality-list").attr({
-        role: "group",
-        "aria-label": "视频画质"
-      });
-      $host.find("#video-bottom-toolbar").remove();
-      let dmmPlayed = false, $dmmVideo = null, dmmVideo = null;
-      if (sources) {
-        const preferredQuality = await storageManager.getSetting("videoQuality"), selectedQuality = Z(Object.keys(sources), preferredQuality), source = sources[selectedQuality];
-        const currentTime = nativeVideo.currentTime;
-        $dmmVideo = this.createDmmPlayer($nativeVideo), dmmVideo = $dmmVideo[0], dmmVideo.muted = !muted || "yes" === muted, $dmmVideo.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {
-          localStorage.setItem("jhs_videoMuted", dmmVideo.muted ? "yes" : "no");
-        })), $dmmVideo.attr("src", source), dmmVideo.load(), dmmVideo.currentTime = currentTime, $dmmVideo.addClass("is-active");
-        dmmPlayed = await safePlay(dmmVideo, {
-          context: "JavDB 高画质预览",
-          notify: false
-        });
-        if (!dmmPlayed && !dmmVideo.muted) dmmVideo.muted = true, dmmPlayed = await safePlay(dmmVideo, {
-          context: "JavDB 高画质预览静音重试",
-          notify: false
-        });
-        dmmPlayed ? (nativeVideo.pause(), $nativeVideo.addClass("jhs-native-preview-hidden")) : ($dmmVideo.removeClass("is-active"), await this.restoreNativePlayer($nativeVideo, nativeVideo, true));
-        dmmPlayed && L.forEach(((quality) => {
-          const qualitySource = sources[quality.quality];
-          if (!qualitySource) return;
-          const active = dmmPlayed && selectedQuality === quality.quality;
-          $qualityList.append($(`<button type="button" class="jhs-btn jhs-video-quality-btn${active ? " active" : ""}" data-quality="${quality.quality}" data-video-src="${qualitySource}" aria-pressed="${active ? "true" : "false"}">${quality.text}</button>`));
-        }));
-      }
-      $toolbar.append($qualityList);
-      const $actions = $("<div></div>").addClass("jhs-toolbar");
-      $actions.append('<button type="button" class="jhs-btn jhs-btn--filter jhs-layout-3f0d74e1" id="video-filterBtn">屏蔽</button>', '<button type="button" class="jhs-btn jhs-btn--fav jhs-layout-2afc43dc" id="video-favoriteBtn">收藏</button>', '<button type="button" class="jhs-btn jhs-btn--down jhs-layout-5c319329" id="speed-btn">快进</button>'), $toolbar.append($actions), $host.append($toolbar), sources || await safePlay(nativeVideo, {
-        context: "JavDB 预览视频",
-        notify: true,
-        message: "REGION_BLOCKED" === error?.code ? error.message : "当前视频源无法播放"
-      });
-      $toolbar.off("click.jhsVideo").on("click.jhsVideo", ".jhs-video-quality-btn", (async (event) => {
-        const $button = $(event.currentTarget);
-        if ($button.hasClass("active")) return;
-        try {
-          if (!dmmVideo) return;
-          const currentTime = dmmVideo.currentTime, previousSource = $dmmVideo.attr("src");
-          $dmmVideo.attr("src", $button.data("video-src")), dmmVideo.load(), dmmVideo.currentTime = currentTime;
-          const played = await safePlay(dmmVideo, {
-            context: "JavDB 画质切换",
-            notify: false
-          });
-          if (played) $toolbar.find(".jhs-video-quality-btn").removeClass("active").attr("aria-pressed", "false"), $button.addClass("active").attr("aria-pressed", "true");
-          else {
-            previousSource && ($dmmVideo.attr("src", previousSource), dmmVideo.load(), dmmVideo.currentTime = currentTime);
-            const restored = previousSource && await safePlay(dmmVideo, {
-              context: "JavDB 画质切换回退",
-              notify: false
-            });
-            restored || await this.restoreNativePlayer($nativeVideo, nativeVideo, true);
-          }
-        } catch (playbackError) {
-          clog.error("切换画质失败:", playbackError);
-        }
-      })), $("#speed-btn").off("click.jhsVideo").on("click.jhsVideo", (() => {
-        dmmVideo && (dmmVideo.currentTime += 10);
-      })), $toolbar.off("contextmenu.jhsVideo").on("contextmenu.jhsVideo", "#speed-btn", ((event) => (event.preventDefault(), this.getDependency("DetailPageButtonPlugin").filterOne(event)))), $("#video-filterBtn").off("click.jhsVideo").on("click.jhsVideo", ((event) => this.getDependency("DetailPageButtonPlugin").filterOne(event))), $("#video-favoriteBtn").off("click.jhsVideo").on("click.jhsVideo", ((event) => this.getDependency("DetailPageButtonPlugin").favoriteOne(event)));
-    }
-  };
-  __name(_PreviewVideoPlugin, "PreviewVideoPlugin");
-  var PreviewVideoPlugin = _PreviewVideoPlugin;
-
-  // src/plugins/image-viewer/bus-preview-video.js
+  // src/core/credential-crypto.js
   var ENCRYPTION_SALT = "x7k9p3";
+  var CREDENTIAL_PREFIX = "AES:";
   async function getEncryptionKey() {
-    const enc = new TextEncoder();
-    const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(ENCRYPTION_SALT + ".jhs.v1"), {
-      name: "PBKDF2"
-    }, false, ["deriveKey"]);
-    return crypto.subtle.deriveKey({
-      name: "PBKDF2",
-      salt: enc.encode("jhs-backup"),
-      iterations: 1e5,
-      hash: "SHA-256"
-    }, keyMaterial, {
-      name: "AES-GCM",
-      length: 256
-    }, false, ["encrypt", "decrypt"]);
+    const encoder = new TextEncoder();
+    const material = await crypto.subtle.importKey("raw", encoder.encode(`${ENCRYPTION_SALT}.jhs.v1`), { name: "PBKDF2" }, false, ["deriveKey"]);
+    return crypto.subtle.deriveKey({ name: "PBKDF2", salt: encoder.encode("jhs-backup"), iterations: 1e5, hash: "SHA-256" }, material, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
   }
   __name(getEncryptionKey, "getEncryptionKey");
-  function arrayBufferToBase64(e2) {
-    const t2 = new Uint8Array(e2), n2 = 32768;
-    let a2 = "";
-    for (let i2 = 0; i2 < t2.length; i2 += n2) a2 += String.fromCharCode.apply(null, t2.subarray(i2, i2 + n2));
-    return btoa(a2);
+  function arrayBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer), chunkSize = 32768;
+    let value = "";
+    for (let index = 0; index < bytes.length; index += chunkSize) value += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+    return btoa(value);
   }
   __name(arrayBufferToBase64, "arrayBufferToBase64");
-  function base64ToArrayBuffer(e2) {
-    const t2 = atob(e2), n2 = new Uint8Array(t2.length);
-    for (let a2 = 0; a2 < t2.length; a2++) n2[a2] = t2.charCodeAt(a2);
-    return n2;
+  function base64ToArrayBuffer(value) {
+    const decoded = atob(value), bytes = new Uint8Array(decoded.length);
+    for (let index = 0; index < decoded.length; index++) bytes[index] = decoded.charCodeAt(index);
+    return bytes;
   }
   __name(base64ToArrayBuffer, "base64ToArrayBuffer");
-  async function encryptData(e2) {
-    const t2 = await getEncryptionKey(), n2 = crypto.getRandomValues(new Uint8Array(12)), a2 = new TextEncoder(), i2 = await crypto.subtle.encrypt({
-      name: "AES-GCM",
-      iv: n2
-    }, t2, a2.encode(e2)), s2 = new Uint8Array(n2.length + i2.byteLength);
-    return s2.set(n2), s2.set(new Uint8Array(i2), n2.length), arrayBufferToBase64(s2);
+  async function encryptData(value) {
+    const key = await getEncryptionKey(), iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(value));
+    const combined = new Uint8Array(iv.length + encrypted.byteLength);
+    combined.set(iv);
+    combined.set(new Uint8Array(encrypted), iv.length);
+    return arrayBufferToBase64(combined.buffer);
   }
   __name(encryptData, "encryptData");
-  async function decryptData(e2) {
-    const t2 = await getEncryptionKey(), n2 = base64ToArrayBuffer(e2), a2 = n2.slice(0, 12), i2 = n2.slice(12), s2 = await crypto.subtle.decrypt({
-      name: "AES-GCM",
-      iv: a2
-    }, t2, i2);
-    return new TextDecoder().decode(s2);
+  async function decryptData(value) {
+    const key = await getEncryptionKey(), combined = base64ToArrayBuffer(value), iv = combined.slice(0, 12), data = combined.slice(12);
+    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+    return new TextDecoder().decode(decrypted);
   }
   __name(decryptData, "decryptData");
-  var CREDENTIAL_PREFIX = "AES:";
-  async function encryptCredential(e2) {
-    return e2 && !e2.startsWith(CREDENTIAL_PREFIX) ? CREDENTIAL_PREFIX + await encryptData(e2) : e2;
+  async function encryptCredential(value) {
+    return value && !value.startsWith(CREDENTIAL_PREFIX) ? CREDENTIAL_PREFIX + await encryptData(value) : value;
   }
   __name(encryptCredential, "encryptCredential");
-  async function decryptCredential(e2) {
-    return e2 && e2.startsWith(CREDENTIAL_PREFIX) ? await decryptData(e2.slice(CREDENTIAL_PREFIX.length)) : e2;
+  async function decryptCredential(value) {
+    return value && value.startsWith(CREDENTIAL_PREFIX) ? decryptData(value.slice(CREDENTIAL_PREFIX.length)) : value;
   }
   __name(decryptCredential, "decryptCredential");
-  var _BusPreviewVideoPlugin = class _BusPreviewVideoPlugin extends BasePlugin {
-    getName() {
-      return "BusPreviewVideoPlugin";
-    }
-    async initCss() {
-      return "\n            .bus-preview-modal { position:fixed; inset:0; z-index:var(--jhs-z-modal); display:flex; align-items:center; justify-content:center; visibility:hidden; opacity:0; background:rgba(0,0,0,.95); transition:opacity var(--jhs-motion-base) var(--jhs-ease); }\n            .bus-preview-modal.is-open { visibility:visible; opacity:1; }\n            .bus-preview-modal-content { position:relative; display:flex; max-width:95%; max-height:95%; flex-direction:column; align-items:center; gap:var(--jhs-space-3); }\n            .video-player-wrapper { position:relative; width:80vw; max-width:100%; max-height:85vh; aspect-ratio:16/9; background:#000; }\n            .video-player-wrapper #preview-video { position:absolute; inset:0; }\n        ";
-    }
-    initModal() {
-      if (0 === $("#bus-preview-modal").length) {
-        $("body").append('\n                <div id="bus-preview-modal" class="bus-preview-modal">\n                    <div class="bus-preview-modal-content">\n                        </div>\n                </div>\n            ');
-        const e2 = $("#bus-preview-modal");
-        e2.on("click", ((e3) => {
-          "bus-preview-modal" === e3.target.id && this.closeVideoModal();
-        })), $(document).on("keydown", ((t2) => {
-          "Escape" === t2.key && e2.hasClass("is-open") && this.closeVideoModal();
-        }));
-      }
-    }
-    closeVideoModal() {
-      const e2 = $("#preview-video");
-      e2.length > 0 && e2[0].pause(), $("#bus-preview-modal").removeClass("is-open");
-    }
-    async handle() {
-      if (!isDetailPage) return;
-      this.initModal();
-      const e2 = $("#sample-waterfall .sample-box .photo-frame img:first").attr("src"), t2 = $(`
-            <button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65">
-                <div class="photo-frame jhs-layout-87db2275">
-                    <img src="${e2}" class="video-cover" alt="">
-                    <div class="play-icon jhs-play-overlay">
-                        ▶
-                    </div>
-                </div>
-            </button>`);
-      $("#sample-waterfall").prepend(t2);
-      "yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes") && fetchDmmPreview(this.getPageInfo().carNum).catch(((e3) => clog.warn("预加载 DMM 失败", e3)));
-      let n2 = false, a2 = $(".preview-video-container");
-      a2.on("click", (async (e3) => {
-        if (e3.preventDefault(), e3.stopPropagation(), n2) show.info("正在加载中, 勿重复点击");
-        else {
-          n2 = true;
-          try {
-            await this.handleVideo();
-          } finally {
-            n2 = false;
-          }
-        }
-      })), window.location.href.includes("autoPlay=1") && a2.trigger("click");
-    }
-    async handleVideo() {
-      const e2 = $("#bus-preview-modal"), t2 = e2.find(".bus-preview-modal-content");
-      let n2 = $("#preview-video");
-      if (n2.length > 0) return e2.addClass("is-open"), void await safePlay(n2[0], {
-        context: "JavBus 预览视频",
-        notify: true
-      });
-      let a2 = this.getPageInfo().carNum;
-      const { sources: i2, error: previewError } = await fetchDmmPreview(a2);
-      i2 && 0 !== Object.keys(i2).length ? (await this.createVideoPlayerAndControls(i2, t2), n2 = $("#preview-video"), n2.length > 0 ? (e2.addClass("is-open"), await safePlay(n2[0], {
-        context: "JavBus 预览视频",
-        notify: true,
-        message: "REGION_BLOCKED" === previewError?.code ? previewError.message : "当前视频源无法播放"
-      })) : show.error("视频播放器创建失败。")) : show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未找到可用的视频源。");
-    }
-    async createVideoPlayerAndControls(e2, t2) {
-      let n2 = await storageManager.getSetting("videoQuality");
-      n2 = Z(Object.keys(e2), n2);
-      let a2 = e2[n2];
-      t2.html(`
-            <div class="video-player-wrapper">
-                <video id="preview-video" class="jhs-video-player" controls playsinline>
-                    <source src="${a2}" />
-                </video>
-            </div>
-            <div class="jhs-video-toolbar jhs-video-quality-list" role="group" aria-label="视频画质">
-                </div>
-        `);
-      const i2 = $("#preview-video"), s2 = i2.find("source"), o2 = t2.find(".jhs-video-quality-list");
-      if (!i2.length || !s2.length) return;
-      const r2 = i2[0], l2 = localStorage.getItem("jhs_videoMuted");
-      r2.muted = !l2 || "yes" === l2, i2.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (function() {
-        localStorage.setItem("jhs_videoMuted", r2.muted ? "yes" : "no");
-      }));
-      let c2 = "";
-      L.forEach(((t3) => {
-        let a3 = e2[t3.quality];
-        if (a3) {
-          const e3 = n2 === t3.quality;
-          c2 += `
-                    <button type="button" class="jhs-btn jhs-video-quality-btn${e3 ? " active" : ""}"
-                            data-quality="${t3.quality}"
-                            data-video-src="${a3}"
-                            aria-pressed="${e3 ? "true" : "false"}">
-                        ${t3.text}
-                    </button>
-                `;
-        }
-      })), o2.html(c2);
-      const d2 = o2.find(".jhs-video-quality-btn");
-      o2.off("click.jhsVideo").on("click.jhsVideo", ".jhs-video-quality-btn", (async (e3) => {
-        try {
-          const t3 = $(e3.currentTarget);
-          if (t3.hasClass("active")) return;
-          let n3 = t3.attr("data-video-src");
-          s2.attr("src", n3);
-          const a3 = r2.currentTime;
-          r2.load(), r2.currentTime = a3, await safePlay(r2, {
-            context: "JavBus 画质切换",
-            notify: true
-          }) && (d2.removeClass("active").attr("aria-pressed", "false"), t3.addClass("active").attr("aria-pressed", "true"));
-        } catch (t3) {
-          clog.error("切换画质失败:", t3);
-        }
-      }));
-    }
-  };
-  __name(_BusPreviewVideoPlugin, "BusPreviewVideoPlugin");
-  var BusPreviewVideoPlugin = _BusPreviewVideoPlugin;
+
+  // src/ui/table/create-jhs-table.js
+  function createJhsTable(TabulatorRuntime, target, options) {
+    if (typeof TabulatorRuntime !== "function") throw new TypeError("Tabulator runtime is required");
+    const pageSizes = (options.paginationSizeSelector ?? [20, 50, 100, 1e3]).filter((value) => Number.isInteger(value) && value > 0);
+    return new TabulatorRuntime(target, {
+      layout: "fitColumns",
+      responsiveLayout: "collapse",
+      pagination: true,
+      paginationMode: "local",
+      paginationSize: pageSizes[0] ?? 20,
+      ...options,
+      paginationSizeSelector: pageSizes
+    });
+  }
+  __name(createJhsTable, "createJhsTable");
 
   // src/plugins/backup/setting-backup.js
   async function importSettingData(showDiffPreviewFn) {
@@ -5217,7 +4785,7 @@
     }
   }
   __name(importSettingData, "importSettingData");
-  async function backupDataByWebDav(folderName) {
+  async function backupDataByWebDav(folderName, webdavService) {
     const t2 = await storageManager.getSetting(), n2 = t2.webDavUrl;
     if (!n2) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
     const a2 = t2.webDavUsername;
@@ -5228,7 +4796,7 @@
     o2 = await encryptData(o2);
     let r2 = loading();
     try {
-      const e2 = new WebDavClient(n2, a2, i2);
+      const e2 = webdavService.createClient({ url: n2, username: a2, password: i2 });
       await e2.backup(folderName, s2, o2), show.ok("备份完成");
     } catch (l2) {
       clog.error(l2), show.error(l2.toString());
@@ -5237,7 +4805,7 @@
     }
   }
   __name(backupDataByWebDav, "backupDataByWebDav");
-  async function backupListBtnByWebDav(folderName, openFileListDialogFn) {
+  async function backupListBtnByWebDav(folderName, openFileListDialogFn, webdavService) {
     const t2 = await storageManager.getSetting(), n2 = t2.webDavUrl;
     if (!n2) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
     const a2 = t2.webDavUsername;
@@ -5246,7 +4814,7 @@
     if (!i2) return void show.error("请填写webDav密码并保存后, 再试此功能");
     let s2 = loading();
     try {
-      const e2 = new WebDavClient(n2, a2, i2), t3 = await e2.getBackupList(folderName);
+      const e2 = webdavService.createClient({ url: n2, username: a2, password: i2 }), t3 = await e2.getBackupList(folderName);
       openFileListDialogFn(t3, e2, "WebDav");
     } catch (o2) {
       clog.error(o2), show.error(`发生错误: ${o2 ? o2.message : o2}`);
@@ -5353,7 +4921,8 @@
       area: utils.getResponsiveArea(["800px", "70%"]),
       anim: -1,
       success: /* @__PURE__ */ __name((a2) => {
-        const i2 = new Tabulator("#table-container", {
+        const i2 = createJhsTable(Tabulator, "#table-container", {
+          pagination: false,
           layout: "fitColumns",
           placeholder: "暂无数据",
           virtualDom: true,
@@ -5871,7 +5440,7 @@
         `;
   }
   __name(buildSettingCss, "buildSettingCss");
-  async function applyImageMode() {
+  async function applyImageMode(busImgPlugin = null) {
     $("#verticalImgStyle").remove();
     if (await storageManager.getSetting("enableVerticalModel", C) === _) {
       let e2 = "100% 50% !important";
@@ -5916,24 +5485,11 @@
             `;
       $("<style>").attr("id", "verticalImgStyle").text(e2).appendTo("head");
     }
-    l && window.getBeanForSetting("BusImgPlugin").logImageHeightsByRow();
+    l && busImgPlugin?.logImageHeightsByRow();
   }
   __name(applyImageMode, "applyImageMode");
 
   // src/plugins/status/list-page.js
-  var _e = /* @__PURE__ */ __name(async (e2, t2 = "ja", n2 = "zh-CN") => {
-    if (!e2) throw new Error("翻译文本不能为空");
-    const a2 = "https://translate-pa.googleapis.com/v1/translate?" + new URLSearchParams({
-      "params.client": "gtx",
-      dataTypes: "TRANSLATION",
-      key: "AIzaSyDLEeFI5OtFBwYBIoK_jj5m32rZK5CkCXA",
-      "query.sourceLanguage": t2,
-      "query.targetLanguage": n2,
-      "query.text": e2
-    }), i2 = await fetch(a2);
-    if (!i2.ok) throw new Error(`${i2.status} ${i2.statusText}`);
-    return (await i2.json()).translation;
-  }, "_e");
   var Te = {
     IS_FILTERED: {
       text: u,
@@ -6048,7 +5604,7 @@
       return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}</style>`;
     }
     constructor() {
-      super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0), i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0), i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0), i(this, "currentPageTotalCount", 0), i(this, "cache", null), i(this, "translationPending", /* @__PURE__ */ new Map()), i(this, "filterContext", null), i(this, "pendingItems", /* @__PURE__ */ new Set()), i(this, "processTimer", null), i(this, "hdImageObserver", null), i(this, "hdEagerRemaining", 12), i(this, "writeQueue", Promise.resolve()), i(this, "_debouncedTranslateWrite", null), i(this, "itemIndex", /* @__PURE__ */ new Map()), i(this, "recountFrame", null);
+      super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0), i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0), i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0), i(this, "currentPageTotalCount", 0), i(this, "filterContext", null), i(this, "pendingItems", /* @__PURE__ */ new Set()), i(this, "processTimer", null), i(this, "hdImageObserver", null), i(this, "hdEagerRemaining", 12), i(this, "writeQueue", Promise.resolve()), i(this, "itemIndex", /* @__PURE__ */ new Map()), i(this, "recountFrame", null);
     }
     getName() {
       return "ListPagePlugin";
@@ -6294,7 +5850,7 @@
       const b2 = utils.time("组装数据耗时"), P2 = (null == s2 ? void 0 : s2.tagPosition) || "rightTop";
       const O2 = n2.filter(((e3) => e3));
       this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0, this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0, this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时");
-      const R2 = [];
+      const R = [];
       for (let n3 = 0; n3 < e2.length; n3++) {
         n3 > 0 && n3 % 12 == 0 && await this.yieldListFrame();
         let t2 = $(e2[n3]);
@@ -6327,9 +5883,9 @@
             }
           }
         }
-        hardHidden || R2.push(t2);
+        hardHidden || R.push(t2);
       }
-      this.scheduleRecount(), void this.translateListItems(R2).catch(((e3) => clog.error("列表页翻译任务失败", e3)));
+      this.scheduleRecount(), void this.translateListItems(R).catch(((e3) => clog.error("列表页翻译任务失败", e3)));
       const D2 = utils.time("处理页面耗时"), A2 = utils.time("累计耗费时间");
       clog.log(`
             <table class="countTable jhs-layout-b12542a5">
@@ -6509,20 +6065,6 @@
         }));
       }));
     }
-    getTranslationCache() {
-      if (this.cache && "object" == typeof this.cache && !Array.isArray(this.cache)) return this.cache;
-      try {
-        this.cache = JSON.parse(localStorage.getItem("jhs_translate") || "{}");
-      } catch (error) {
-        clog.warn("列表翻译缓存无法解析，已忽略旧缓存", error), this.cache = {};
-      }
-      return this.cache && "object" == typeof this.cache && !Array.isArray(this.cache) ? this.cache : this.cache = {};
-    }
-    scheduleTranslationWrite() {
-      this._debouncedTranslateWrite && clearTimeout(this._debouncedTranslateWrite), this._debouncedTranslateWrite = setTimeout((() => {
-        localStorage.setItem("jhs_translate", JSON.stringify(this.getTranslationCache()));
-      }), 500);
-    }
     applyTranslatedTitle(e2, t2, n2) {
       const a2 = e2.find(".video-title");
       r ? (a2.contents().each((function() {
@@ -6532,13 +6074,9 @@
     async translate(e2) {
       let t2, n2, a2 = e2.find(".video-title");
       if (r ? (t2 = a2.contents().filter(((e3, t3) => 3 === t3.nodeType && "" !== t3.textContent.trim())).text().trim(), n2 = e2.find(".video-title strong").text().trim()) : (t2 = (e2.find("img").attr("data-title") || "").trim(), n2 = (e2.find("a").attr("href") || "").split("/").filter(Boolean).pop()?.trim()), !t2 || !n2) return;
-      const cache = this.getTranslationCache();
-      if (cache[n2]) return void this.applyTranslatedTitle(e2, cache[n2], n2);
-      let pending = this.translationPending.get(n2);
-      if (!pending) {
-        pending = _e(t2).then(((translated) => (cache[n2] = translated, this.scheduleTranslationWrite(), translated))).finally((() => this.translationPending.delete(n2))), this.translationPending.set(n2, pending);
-      }
-      this.applyTranslatedTitle(e2, await pending, n2);
+      const scope = await this.getRuntimeService("scope")();
+      const translated = await this.getRuntimeService("translation").translate(t2, { scope });
+      this.applyTranslatedTitle(e2, translated, n2);
     }
     async revertTranslation() {
       $(this.getSelector().itemSelector).toArray().forEach(((e2) => {
@@ -6582,12 +6120,12 @@
   var ListPagePlugin = _ListPagePlugin;
 
   // src/plugins/backup/setting-forms.js
-  async function loadSettingForm(getBean) {
+  async function loadSettingForm(dependencies) {
     let e2 = await storageManager.getSetting();
     $("#videoQuality").val(e2.videoQuality), $("#reviewCount").val(e2.reviewCount || 20), $("#tagPosition").val(e2.tagPosition || "rightTop"), $("#defaultQuickFilterTab").val(normalizeQuickFilterKey(e2.defaultQuickFilterTab)), $("#needClosePageBasic").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e2.autoRemoveNewVideoMarkAfterBrowse && e2.autoRemoveNewVideoMarkAfterBrowse === _), $("#waitCheckCount").val(e2.waitCheckCount || 5), $("#checkConcurrencyCount").val(parseNumberSetting(e2.checkConcurrencyCount, 2, { min: 2, max: 5 })), $("#checkRequestSleep").val(parseNumberSetting(e2.checkRequestSleep, 100, { min: 0, max: 3e3 })), $("#enableCheckBlacklist").val(e2.enableCheckBlacklist || _), $("#checkBlacklist_intervalTime").val(e2.checkBlacklist_intervalTime || 12), $("#checkBlacklist_ruleTime").val(parseNumberSetting(e2.checkBlacklist_ruleTime, 8760, { min: 0 })), $("#enableCheckFavoriteActress").val(e2.enableCheckFavoriteActress || _), $("#checkFavoriteActress_IntervalTime").val(e2.checkFavoriteActress_IntervalTime || 24), $("#enableCheckNewVideo").val(e2.enableCheckNewVideo || _), $("#checkNewVideo_intervalTime").val(e2.checkNewVideo_intervalTime || 12), $("#checkNewVideo_ruleTime").val(parseNumberSetting(e2.checkNewVideo_ruleTime, 8760, { min: 0 }));
     const t2 = e2.highlightedTagNumber || 1, n2 = e2.highlightedTagColor || "#ce2222";
     $("#highlightedTagNumber").val(e2.highlightedTagNumber || 1), $("#highlightedTagColor").val(e2.highlightedTagColor || "#ce2222"), $("#highlightedTagLabel").css("border", `${t2}px solid ${n2}`), $("#enableClog").val(e2.enableClog || _), $("#clogMsgCount").val(e2.clogMsgCount || 2e3), $("#mobileMode").val(e2.mobileMode || "auto"), $("#themeMode").val(e2.themeMode || "light"), $("#httpTimeout").val(e2.httpTimeout || 5e3), $("#httpRetryCount").val(e2.httpRetryCount || 3), $("#webDavUrl").val(e2.webDavUrl || ""), $("#webDavUsername").val(e2.webDavUsername || ""), $("#webDavPassword").val(await decryptCredential(e2.webDavPassword) || ""), $("#enableTitleSelectFilter").prop("checked", !e2.enableTitleSelectFilter || e2.enableTitleSelectFilter === _), $("#enableFavoriteActresses").prop("checked", !e2.enableFavoriteActresses || e2.enableFavoriteActresses === _), $("#enableSaveActressCarInfo").prop("checked", !!e2.enableSaveActressCarInfo && e2.enableSaveActressCarInfo === _), $("#enableScreenSvg").prop("checked", !e2.enableScreenSvg || e2.enableScreenSvg === _), $("#enableVideoSvg").prop("checked", !e2.enableVideoSvg || e2.enableVideoSvg === _), $("#enableHandleSvg").prop("checked", !e2.enableHandleSvg || e2.enableHandleSvg === _), $("#enableSiteSvg").prop("checked", !e2.enableSiteSvg || e2.enableSiteSvg === _), $("#enableCopySvg").prop("checked", !e2.enableCopySvg || e2.enableCopySvg === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableVerticalModel").prop("checked", !!e2.enableVerticalModel && e2.enableVerticalModel === _), $("#containerColumns").val(e2.containerColumns || 5), $("#showContainerColumns").text(e2.containerColumns || 5), $("#containerWidth").val((e2.containerWidth || 100) - 70), $("#showContainerWidth").text((e2.containerWidth || 100) + "%");
-    const a2 = getBean("OtherSitePlugin"), i2 = await a2.getMissAvUrl(), s2 = await a2.getjableUrl(), o2 = await a2.getAvgleUrl(), r2 = await a2.getJavTrailersUrl(), l2 = await a2.getAv123Url(), c2 = await a2.getJavDbUrl(), d2 = await a2.getJavBusUrl(), h2 = await a2.getSupJavUrl();
+    const a2 = dependencies.otherSite, i2 = await a2.getMissAvUrl(), s2 = await a2.getjableUrl(), o2 = await a2.getAvgleUrl(), r2 = await a2.getJavTrailersUrl(), l2 = await a2.getAv123Url(), c2 = await a2.getJavDbUrl(), d2 = await a2.getJavBusUrl(), h2 = await a2.getSupJavUrl();
     $("#missAvUrl").val(i2), $("#jableUrl").val(s2), $("#avgleUrl").val(o2), $("#javTrailersUrl").val(r2), $("#av123Url").val(l2), $("#javDbUrl").val(c2), $("#javBusUrl").val(d2), $("#supJavUrl").val(h2);
     let g2 = await storageManager.getReviewFilterKeywordList(), p2 = await storageManager.getTitleFilterKeyword();
     g2 && g2.forEach(((e3) => {
@@ -6599,10 +6137,10 @@
         "Enter" === t3.key && addKeyword(t3, e3);
       }));
     }));
-    bindLayoutRangeEvents();
+    bindLayoutRangeEvents(dependencies.busImg);
   }
   __name(loadSettingForm, "loadSettingForm");
-  function bindLayoutRangeEvents() {
+  function bindLayoutRangeEvents(busImgPlugin) {
     $("#containerColumns").off(".jhsSetting").on("input.jhsSetting", (() => {
       const columns = $("#containerColumns").val();
       $("#showContainerColumns").text(columns);
@@ -6610,7 +6148,7 @@
       movieList && (movieList.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
       masonry && (masonry.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
     })).on("change.jhsSetting", (async (event) => {
-      await storageManager.saveSettingItem("containerColumns", $(event.currentTarget).val()), await applyImageMode();
+      await storageManager.saveSettingItem("containerColumns", $(event.currentTarget).val()), await applyImageMode(busImgPlugin);
     }));
     $("#containerWidth").off(".jhsSetting").on("input.jhsSetting", ((event) => {
       const width = parseInt($(event.target).val()) + 70, widthText = `${width}%`;
@@ -6621,7 +6159,7 @@
     })).on("change.jhsSetting", ((event) => storageManager.saveSettingItem("containerWidth", parseInt($(event.currentTarget).val()) + 70)));
   }
   __name(bindLayoutRangeEvents, "bindLayoutRangeEvents");
-  async function initQuickSettingForm(getBean, getSelector, openSettingDialogFn) {
+  async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn) {
     let e2 = await storageManager.getSetting();
     $("#needClosePage").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoPage").prop("checked", !e2.autoPage || e2.autoPage === _), $("#translateTitle").prop("checked", !e2.translateTitle || e2.translateTitle === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableLoadOtherSite").prop("checked", !e2.enableLoadOtherSite || e2.enableLoadOtherSite === _), $("#needClosePage").on("change", (async (t2) => {
       await storageManager.saveSettingItem("needClosePage", $("#needClosePage").is(":checked") ? _ : C), await jhsEventBus.emit("filter-rules-changed");
@@ -6630,7 +6168,7 @@
       await storageManager.saveSettingItem("autoPage", n2), $("#sort-toggle-btn").prop("disabled", n2 === _).attr("title", n2 === _ ? "瀑布流模式仅支持默认排序" : "选择列表排序方式");
     })), $("#translateTitle").on("change", (async (t2) => {
       const n2 = $("#translateTitle").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("translateTitle", n2), n2 === _ ? (await getBean("ListPagePlugin").doFilter(), isDetailPage && await getBean("TranslatePlugin").translate()) : (await getBean("ListPagePlugin").revertTranslation(), $(".translated-title").remove());
+      await storageManager.saveSettingItem("translateTitle", n2), n2 === _ ? (await dependencies.listPage.doFilter(), isDetailPage && await dependencies.translate?.translate()) : (await dependencies.listPage.revertTranslation(), $(".translated-title").remove());
     })), $("#hoverBigImg").prop("checked", !!e2.hoverBigImg && e2.hoverBigImg === _), $("#hoverBigImg").on("change", (async (t2) => {
       const n2 = $("#hoverBigImg").is(":checked") ? _ : C;
       await storageManager.saveSettingItem("hoverBigImg", n2), window.imageHoverPreviewObj && (window.imageHoverPreviewObj.destroy(), window.imageHoverPreviewObj = null), n2 === _ && (window.imageHoverPreviewObj = new ImageHoverPreview({
@@ -6638,25 +6176,25 @@
       }));
     })), $("#enableLoadActressInfo").on("change", (async (t2) => {
       const n2 = $("#enableLoadActressInfo").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("enableLoadActressInfo", n2), n2 === _ ? getBean("ActressInfoPlugin").loadActressInfo() : $(".actress-info").remove();
+      await storageManager.saveSettingItem("enableLoadActressInfo", n2), n2 === _ ? dependencies.actressInfo?.loadActressInfo() : $(".actress-info").remove();
     })), $("#enableLoadOtherSite").on("change", (async (t2) => {
       const n2 = $("#enableLoadOtherSite").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("enableLoadOtherSite", n2), n2 === _ ? await getBean("OtherSitePlugin").loadOtherSite() : $("#otherSiteBox").remove();
+      await storageManager.saveSettingItem("enableLoadOtherSite", n2), n2 === _ ? await dependencies.otherSite.loadOtherSite() : $("#otherSiteBox").remove();
     })), $("#enableLoadScreenShot").prop("checked", !e2.enableLoadScreenShot || e2.enableLoadScreenShot === _), $("#enableLoadScreenShot").on("change", (async (t2) => {
       const n2 = $("#enableLoadScreenShot").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("enableLoadScreenShot", n2), n2 === _ ? await getBean("ScreenShotPlugin").loadScreenShot() : $(".screen-container").remove();
+      await storageManager.saveSettingItem("enableLoadScreenShot", n2), n2 === _ ? await dependencies.screenshot.loadScreenShot() : $(".screen-container").remove();
     })), $("#enableLoadPreviewVideo").prop("checked", !e2.enableLoadPreviewVideo || e2.enableLoadPreviewVideo === _), $("#enableLoadPreviewVideo").on("change", (async (t2) => {
       const n2 = $("#enableLoadPreviewVideo").is(":checked") ? _ : C;
       await storageManager.saveSettingItem("enableLoadPreviewVideo", n2);
     })), $("#enableVerticalModel").prop("checked", !!e2.enableVerticalModel && e2.enableVerticalModel === _), $("#enableVerticalModel").on("change", (async (t2) => {
       const n2 = $("#enableVerticalModel").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("enableVerticalModel", n2), applyImageMode();
+      await storageManager.saveSettingItem("enableVerticalModel", n2), applyImageMode(dependencies.busImg);
     })), $("#moreBtn").on("click", (() => {
       $(".simple-setting, .mini-simple-setting").html("").hide(), openSettingDialogFn("base-panel");
     }));
   }
   __name(initQuickSettingForm, "initQuickSettingForm");
-  async function saveSettingForm(getBean) {
+  async function saveSettingForm(dependencies) {
     let e2 = await storageManager.getSetting();
     const nextWebDavUrl = String($("#webDavUrl").val() || "").trim();
     let nextWebDavOrigin = null;
@@ -6686,8 +6224,8 @@
       let t3 = $(e3).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
       n2.push(t3);
     })), await storageManager.saveTitleFilterKeyword(n2), show.ok("保存成功"), await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" });
-    const a2 = getBean("NewVideoPlugin");
-    a2 && a2.resetBtnTip(), getBean("BlacklistPlugin").resetBtnTip(), getBean("BlacklistPlugin").reloadTable();
+    const a2 = dependencies.newVideo;
+    a2 && a2.resetBtnTip(), dependencies.blacklist.resetBtnTip(), dependencies.blacklist.reloadTable();
   }
   __name(saveSettingForm, "saveSettingForm");
   function addLabelTag(e2, t2) {
@@ -7463,7 +7001,8 @@
     };
     if (0 === e2.length) return void $("#snapshot-list").html('<div class="jhs-empty-note">暂无快照，点击上方按钮创建</div>');
     $("#snapshot-list").find(".tabulator").length && $("#snapshot-list").empty();
-    const n2 = new Tabulator("#snapshot-list", {
+    const n2 = createJhsTable(Tabulator, "#snapshot-list", {
+      pagination: false,
       layout: "fitColumns",
       placeholder: "暂无数据",
       data: e2,
@@ -7565,9 +7104,10 @@
     });
   }
   __name(showDiffPreview, "showDiffPreview");
-  async function renderPluginMgmtPanel(pluginManager) {
+  async function renderPluginMgmtPanel(diagnostics) {
+    const diagnosticSnapshot = diagnostics.exportSnapshot();
     const disabled = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
-    const allNames = pluginManager.getPluginNames();
+    const allNames = diagnosticSnapshot.legacyPlugins;
     const { categories, corePlugins, pluginMeta } = getPluginCategories();
     const registeredSet = new Set(allNames);
     let html = "";
@@ -7606,13 +7146,13 @@
         if (!list.includes(disabledId)) list.push(disabledId);
       }
       await storageManager.saveSettingItem("disabledPlugins", JSON.stringify(list));
-      const all = pluginManager.getPluginNames();
+      const all = diagnosticSnapshot.legacyPlugins;
       $("#pm-total").text(all.length);
       $("#pm-enabled").text(all.length - list.length);
       $("#pm-disabled").text(list.length);
       show.ok(`插件 "${name}" 已${$(e2.target).is(":checked") ? "启用" : "禁用"}，刷新后生效`);
     });
-    const startup = pluginManager.getStartupReport?.(), timings = pluginManager.getTimings();
+    const startup = diagnosticSnapshot.legacyStartup, timings = diagnosticSnapshot.legacyTimings;
     const formatMs = /* @__PURE__ */ __name((value) => Number.isFinite(value) ? value.toFixed(1) : "0.0", "formatMs");
     let startupHtml = startup ? `<div class="jhs-inline-metrics"><span>就绪: <strong>${formatMs(startup.readyMs)} ms</strong></span><span>注册: ${formatMs(startup.registrationMs)} ms</span><span>样式: ${formatMs(startup.cssMs)} ms</span><span>即时插件: ${formatMs(startup.immediateMs)} ms</span><span>空闲任务: ${startup.idleCompleted}/${startup.idleCompleted + startup.idlePending}</span></div><p class="jhs-caption">就绪耗时不包含 @require 下载及浏览器脚本解析时间。</p>` : "";
     if (timings.length) {
@@ -7628,11 +7168,11 @@
     } else {
       $("#plugin-timing-table").html(startupHtml + '<p class="jhs-empty-note">暂无数据，刷新页面后自动采集。</p>');
     }
-    const errorLog = pluginManager.getErrorLog();
+    const errorLog = diagnosticSnapshot.errors.filter((error) => error.source === "legacy-plugin");
     if (errorLog.length) {
       let eHtml = '<table class="jhs-data-table"><tr><th>时间</th><th>插件</th><th>阶段</th><th>错误信息</th></tr>';
       for (const err of [...errorLog].reverse()) {
-        eHtml += `<tr><td class="is-muted">${escapeHtml(err.time.substring(11, 19))}</td><td>${escapeHtml(err.plugin)}</td><td>${escapeHtml(err.phase)}</td><td class="is-danger">${escapeHtml(err.message)}</td></tr>`;
+        eHtml += `<tr><td class="is-muted">${escapeHtml(String(err.timestamp || "").substring(11, 19))}</td><td>${escapeHtml(err.plugin)}</td><td>${escapeHtml(err.phase)}</td><td class="is-danger">${escapeHtml(err.message)}</td></tr>`;
       }
       eHtml += "</table>";
       $("#plugin-error-log").html(eHtml);
@@ -7674,6 +7214,25 @@
     show.ok(`已修复 ${n2.fixedGroups} 组数据问题，修复前备份已下载`), await renderDataHealthPanel();
   }
   __name(repairDataHealthWithBackup, "repairDataHealthWithBackup");
+
+  // src/core/cache-policy.js
+  var HOUR = 60 * 60 * 1e3;
+  var DAY = 24 * HOUR;
+  var CACHE_TTL = Object.freeze({ magnet: 6 * HOUR, screenshot: 7 * DAY, screenshotNegative: 12 * HOUR, match115: HOUR, externalDetail: DAY });
+  var _ProviderError = class _ProviderError extends Error {
+    /** @param {string} provider @param {string} code @param {string} message @param {{cause?: unknown, status?: number, url?: string, retryable?: boolean}} [options] */
+    constructor(provider, code, message, options = {}) {
+      super(message, { cause: options.cause });
+      this.name = "ProviderError";
+      this.provider = provider;
+      this.code = code;
+      this.status = options.status || 0;
+      this.url = options.url || "";
+      this.retryable = Boolean(options.retryable);
+    }
+  };
+  __name(_ProviderError, "ProviderError");
+  var ProviderError = _ProviderError;
 
   // src/plugins/one-one-five/client.js
   var _OneOneFiveClient = class _OneOneFiveClient {
@@ -7797,13 +7356,24 @@
     getName() {
       return "SettingPlugin";
     }
+    getFormDependencies() {
+      return Object.freeze({
+        otherSite: this.getDependency("OtherSitePlugin"),
+        listPage: this.getDependency("ListPagePlugin"),
+        translate: this.getDependency("TranslatePlugin"),
+        actressInfo: this.getDependency("ActressInfoPlugin"),
+        screenshot: this.getDependency("ScreenShotPlugin"),
+        newVideo: this.getDependency("NewVideoPlugin"),
+        blacklist: this.getDependency("BlacklistPlugin"),
+        busImg: this.getDependency("BusImgPlugin")
+      });
+    }
     async initCss() {
       const e2 = await storageManager.getSetting();
       let t2 = (null == e2 ? void 0 : e2.containerWidth) ?? "100";
       utils.isMobileMode() && (t2 = "100");
       let n2 = utils.isMobileMode() ? 1 : (null == e2 ? void 0 : e2.containerColumns) ?? 5;
-      window.getBeanForSetting = this.getDependency.bind(this);
-      applyImageMode().catch(((e3) => clog.error("[JHS] applyImageMode failed:", e3)));
+      applyImageMode(this.getDependency("BusImgPlugin")).catch(((e3) => clog.error("[JHS] applyImageMode failed:", e3)));
       return buildSettingCss(t2, n2, l, r);
     }
     async handle() {
@@ -7824,7 +7394,7 @@
       })), $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (async () => {
         $(".simple-setting").html(buildQuickSettingHtml()).show();
         try {
-          await initQuickSettingForm(this.getDependency.bind(this), this.getSelector.bind(this), this.openSettingDialog.bind(this));
+          await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this));
         } catch (error) {
           clog.warn("桌面快捷设置初始化失败", error);
         }
@@ -7834,7 +7404,7 @@
       })), $(".main-nav, .container-fluid").on("mouseenter", ".mini-setting-box", (async () => {
         $(".mini-simple-setting").html(buildQuickSettingHtml()).show();
         try {
-          await initQuickSettingForm(this.getDependency.bind(this), this.getSelector.bind(this), this.openSettingDialog.bind(this));
+          await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this));
         } catch (error) {
           clog.warn("迷你快捷设置初始化失败", error);
         }
@@ -7868,7 +7438,7 @@
         event.shiftKey && document.activeElement === first ? (event.preventDefault(), last.focus()) : !event.shiftKey && document.activeElement === last && (event.preventDefault(), first.focus());
       }));
       try {
-        await initQuickSettingForm(this.getDependency.bind(this), this.getSelector.bind(this), ((panel) => {
+        await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), ((panel) => {
           closeQuickSetting(false), void this.openSettingDialog(panel).catch(((error) => clog.error("完整设置打开失败", error)));
         })), sheet.find(".jhs-quick-setting__close").trigger("focus");
       } catch (error) {
@@ -7885,7 +7455,7 @@
         area: utils.getDialogArea("lg"),
         scrollbar: false,
         success: /* @__PURE__ */ __name(async (e3, n2) => {
-          $(e3).find(".layui-layer-content").css("position", "relative"), this.renderTaskStatuses(), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), injectResourceSourcesPanel(), await loadSettingForm(this.getDependency.bind(this)), await this.loadResourceSettings(), JhsSelect.enhance(e3), this.bindClick(), $(".side-menu-item.active").attr("aria-current", "page"), utils.setupEscClose(n2), t2 && t2();
+          $(e3).find(".layui-layer-content").css("position", "relative"), this.renderTaskStatuses(), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), injectResourceSourcesPanel(), await loadSettingForm(this.getFormDependencies()), await this.loadResourceSettings(), JhsSelect.enhance(e3), this.bindClick(), $(".side-menu-item.active").attr("aria-current", "page"), utils.setupEscClose(n2), t2 && t2();
           this.renderTaskStatuses(), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.renderTaskStatuses()));
           if (utils.isMobileMode()) {
             this.collapseAdvancedTabs();
@@ -7972,15 +7542,15 @@
       });
     }
     bindClick() {
-      const settingPlugin = this;
+      const settingPlugin = this, webdav = this.getRuntimeService("webdav");
       $(".side-menu-item").on("click", (function() {
         $(".side-menu-item").removeClass("active").attr("aria-current", "false"), $(this).addClass("active").attr("aria-current", "page"), $(".content-panel").hide();
         const e3 = $(this).data("panel");
-        $("#" + e3).show(), "cache-panel" === e3 ? ($("#saveBtn").hide(), $("#clean-all").removeClass("jhs-is-hidden")) : ($("#saveBtn").show(), $("#clean-all").addClass("jhs-is-hidden")), "health-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderDataHealthPanel()), "plugin-mgmt-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderPluginMgmtPanel(this.pluginManager)), "snapshot-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderSnapshotPanel()), "network-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderNetworkPanel());
-      })), $("#importBtn").on("click", ((e3) => importSettingData(showDiffPreview))), $("#exportBtn").on("click", ((e3) => exportSettingData())), $("#preview-car-number-import").on("click", (() => this.previewCarNumbers())), $("#confirm-car-number-import").on("click", (async (e3) => this.confirmCarNumbers(e3))), $("#webdavBackupBtn").on("click", ((e3) => backupDataByWebDav(this.folderName))), $("#webdavBackupListBtn").on("click", ((e3) => backupListBtnByWebDav(this.folderName, (files, client, label) => openFileListDialog(files, client, label, this.folderName, showDiffPreview)))), $("#saveBtn").on("click", (() => saveSettingForm(this.getDependency.bind(this)))), $("#runHealthCheckBtn").on("click", (() => renderDataHealthPanel())), $("#repairHealthBtn").on("click", ((e3) => {
+        $("#" + e3).show(), "cache-panel" === e3 ? ($("#saveBtn").hide(), $("#clean-all").removeClass("jhs-is-hidden")) : ($("#saveBtn").show(), $("#clean-all").addClass("jhs-is-hidden")), "health-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderDataHealthPanel()), "plugin-mgmt-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderPluginMgmtPanel(settingPlugin.getRuntimeService("diagnostics"))), "snapshot-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderSnapshotPanel()), "network-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderNetworkPanel());
+      })), $("#importBtn").on("click", ((e3) => importSettingData(showDiffPreview))), $("#exportBtn").on("click", ((e3) => exportSettingData())), $("#preview-car-number-import").on("click", (() => this.previewCarNumbers())), $("#confirm-car-number-import").on("click", (async (e3) => this.confirmCarNumbers(e3))), $("#webdavBackupBtn").on("click", ((e3) => backupDataByWebDav(this.folderName, webdav))), $("#webdavBackupListBtn").on("click", ((e3) => backupListBtnByWebDav(this.folderName, (files, client, label) => openFileListDialog(files, client, label, this.folderName, showDiffPreview), webdav))), $("#saveBtn").on("click", (() => saveSettingForm(this.getFormDependencies()))), $("#runHealthCheckBtn").on("click", (() => renderDataHealthPanel())), $("#repairHealthBtn").on("click", ((e3) => {
         utils.q(e3, "修复前会自动下载备份，是否继续?", (() => repairDataHealthWithBackup()));
       })), $("#pm-clear-log").on("click", (() => {
-        this.pluginManager.clearErrorLog(), $("#plugin-error-log").text("无错误记录"), show.ok("错误日志已清空");
+        this.getRuntimeService("diagnostics").clearErrors(), $("#plugin-error-log").text("无错误记录"), show.ok("错误日志已清空");
       })), $("#createSnapshotBtn").on("click", (async () => {
         let e3 = loading();
         try {
@@ -8451,7 +8021,7 @@
       this.checkBlacklist_ruleTime = parseNumberSetting(await storageManager.getSetting("checkBlacklist_ruleTime"), 8760, { min: 0 });
       const e2 = await this.getTableData(), placeholder = document.createElement("div");
       renderStateView(placeholder, { type: "empty", title: "没有符合当前筛选条件的黑名单记录" });
-      this.tableObj = new Tabulator("#table-container", {
+      this.tableObj = createJhsTable(Tabulator, "#table-container", {
         layout: "fitColumns",
         placeholder,
         virtualDom: true,
@@ -8706,222 +8276,35 @@
   __name(_FilterTitleKeywordPlugin, "FilterTitleKeywordPlugin");
   var FilterTitleKeywordPlugin = _FilterTitleKeywordPlugin;
 
-  // src/core/javdb-api.js
-  var U = "https://jdforrepam.com/api";
-  var javDbMovieIdRequests = /* @__PURE__ */ new Map();
-  function O() {
-    const e2 = "jhs_review_ts", t2 = "jhs_review_sign", n2 = Math.floor(Date.now() / 1e3);
-    if (n2 - (localStorage.getItem(e2) || 0) <= 20) return localStorage.getItem(t2);
-    const a2 = `${n2}.lpw6vgqzsp.${md5(`${n2}71cf27bb3c0bcdf207b64abecddc970098c7421ee7203b9cdae54478478a199e7d5a6e1a57691123c1a931c057842fb73ba3b3c83bcd69c17ccf174081e3d8aa`)}`;
-    return localStorage.setItem(e2, n2), localStorage.setItem(t2, a2), a2;
-  }
-  __name(O, "O");
-  async function resolveJavDbMovieId(carNum) {
-    const normalized = normalizeCarNum(carNum);
-    if (!normalized) return null;
-    if (javDbMovieIdRequests.has(normalized)) return javDbMovieIdRequests.get(normalized);
-    const request = storageManager.cachedRequest(`javdb-movie-id:${normalized}`, 7 * 864e5, (async () => {
-      const response = await gmHttp.get(`${U}/v2/search`, {
-        q: normalized,
-        page: 1,
-        type: "movie",
-        limit: 20,
-        movie_type: "all",
-        from_recent: "false",
-        movie_filter_by: "all",
-        movie_sort_by: "relevance"
-      }, {
-        "user-agent": "Dart/3.5 (dart:io)",
-        "accept-language": "zh-TW",
-        host: "jdforrepam.com",
-        jdsignature: await O()
-      });
-      if (!Array.isArray(response?.data?.movies)) throw new Error(response?.message || "JavDB 番号解析失败");
-      const match = response.data.movies.find(((movie) => normalizeCarNum(movie.number) === normalized));
-      return match?.id ? { __jhsCacheTtl: 7 * 864e5, data: { movieId: String(match.id) } } : { __jhsCacheTtl: 6 * 36e5, data: { miss: true } };
-    })).then(((value) => value?.miss ? null : value?.movieId || null));
-    javDbMovieIdRequests.set(normalized, request);
-    try {
-      return await request;
-    } finally {
-      javDbMovieIdRequests.get(normalized) === request && javDbMovieIdRequests.delete(normalized);
-    }
-  }
-  __name(resolveJavDbMovieId, "resolveJavDbMovieId");
-  async function markJavDbWantWatch(movieId) {
-    const id = String(movieId || "").trim(), encryptedToken = localStorage.getItem("jhs_appAuthorization"), token = encryptedToken ? await decryptData(encryptedToken) : "";
-    if (!token) {
-      const error = new Error("请先登录 JavDB 账号");
-      throw error.code = "LOGIN_REQUIRED", error;
-    }
-    if (!id) throw new Error("JavDB 影片 ID 无效");
-    const boundary = "----jhs-javdb-want-watch", body = [["status", "want_watch"], ["score", "0"], ["content", ""]].map((([name, value]) => `--${boundary}\r
-Content-Disposition: form-data; name="${name}"\r
-\r
-${value}\r
-`)).join("") + `--${boundary}--\r
-`;
-    try {
-      const response = await gmHttp.gmRequest("POST", `${U}/v1/movies/${encodeURIComponent(id)}/reviews`, body, {}, {
-        "user-agent": "Dart/3.5 (dart:io)",
-        "accept-language": "zh-TW",
-        authorization: `Bearer ${token}`,
-        jdsignature: await O(),
-        "content-type": `multipart/form-data; boundary=${boundary}`
-      });
-      if (0 === response?.success) throw response;
-      await storageManager.deleteCachedRequest(`movie-detail:${id}`);
-      return response;
-    } catch (error) {
-      if (401 === error?.status || "JWTVerificationError" === error?.action || /未登录|登录|unauthorized|jwt/i.test(error?.message || "")) {
-        localStorage.removeItem("jhs_appAuthorization");
-        const loginError = new Error("JavDB 登录已失效，请重新登录");
-        throw loginError.code = "LOGIN_REQUIRED", loginError;
-      }
-      throw error instanceof Error ? error : new Error(error?.message || "加入 JavDB 想看失败");
-    }
-  }
-  __name(markJavDbWantWatch, "markJavDbWantWatch");
-  var R = /* @__PURE__ */ __name(async (e2, t2 = 1, n2 = 20) => {
-    let a2 = `${U}/v1/movies/${e2}/reviews`, i2 = {
-      jdSignature: await O()
-    };
-    return await storageManager.cachedRequest(`reviews:${e2}:${t2}:${n2}`, 864e5, (async () => {
-      const e3 = await gmHttp.get(a2, {
-        page: t2,
-        sort_by: "hotly",
-        limit: n2
-      }, i2);
-      if (!e3?.data?.reviews) throw new Error(e3?.message || "获取评论失败");
-      return e3.data.reviews;
-    }));
-  }, "R");
-  var V = /* @__PURE__ */ __name(async (e2) => {
-    let t2 = `${U}/v4/movies/${e2}`, n2 = {
-      jdSignature: await O()
-    };
-    const a2 = await storageManager.cachedRequest(`movie-detail:${e2}`, 6048e5, (async () => {
-      const e3 = await gmHttp.get(t2, null, n2);
-      if (!e3.data) throw new Error(e3.message || "获取视频详情失败");
-      return e3;
-    }));
-    if (!a2.data) throw show.error("获取视频详情失败: " + a2.message), new Error(a2.message);
-    const i2 = a2.data.movie, s2 = i2.preview_images, o2 = [];
-    return s2.forEach(((e3) => {
-      o2.push(e3.large_url.replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com"));
-    })), {
-      movieId: i2.id,
-      actors: i2.actors,
-      duration: i2.duration,
-      title: i2.origin_title,
-      carNum: i2.number,
-      score: i2.score,
-      releaseDate: i2.release_date,
-      watchedCount: i2.watched_count,
-      imgList: o2
-    };
-  }, "V");
-  var K = /* @__PURE__ */ __name(async (e2, t2 = 1, n2 = 20) => {
-    let a2 = `${U}/v1/lists/related?movie_id=${e2}&page=${t2}&limit=${n2}`, i2 = {
-      jdSignature: await O()
-    };
-    const s2 = await storageManager.cachedRequest(`related:${e2}:${t2}:${n2}`, 864e5, (async () => {
-      const e3 = await gmHttp.get(a2, null, i2);
-      if (!e3?.data?.lists) throw new Error(e3?.message || "获取相关清单失败");
-      return e3;
-    })), o2 = [];
-    return s2.data.lists.forEach(((e3) => {
-      o2.push({
-        relatedId: e3.id,
-        name: e3.name,
-        movieCount: e3.movies_count,
-        collectionCount: e3.collections_count,
-        viewCount: e3.views_count,
-        createTime: utils.formatDate(e3.created_at)
-      });
-    })), o2;
-  }, "K");
-  var W = /* @__PURE__ */ __name(async (e2 = "daily", t2 = "high_score") => {
-    let n2 = `${U}/v1/rankings/playback?period=${e2}&filter_by=${t2}`, a2 = {
-      jdSignature: await O()
-    };
-    return (await gmHttp.get(n2, null, a2)).data.movies;
-  }, "W");
-  var q = /* @__PURE__ */ __name(async (e2 = "all", t2 = "", n2 = 1, a2 = 40) => {
-    let i2 = `${U}/v1/movies/top?start_rank=1&type=${e2}&type_value=${t2}&ignore_watched=false&page=${n2}&limit=${a2}`;
-    const l2 = localStorage.getItem("jhs_appAuthorization"), c2 = l2 ? await decryptData(l2) : "";
-    let s2 = {
-      "user-agent": "Dart/3.5 (dart:io)",
-      "accept-language": "zh-TW",
-      host: "jdforrepam.com",
-      authorization: "Bearer " + c2,
-      jdsignature: await O()
-    };
-    return await gmHttp.get(i2, null, s2);
-  }, "q");
-
-  // src/integrations/av123/parser.js
-  function parse123AvCards($page, baseUrl = "https://123av.com") {
-    const items = /* @__PURE__ */ new Map();
-    const wrap = (
+  // src/ui/translation/title-translation.js
+  async function renderTranslatedTitle(options) {
+    const jq = (
       /** @type {any} */
-      globalThis.jQuery ?? /** @type {any} */
-      globalThis.$ ?? $page.constructor
+      globalThis.$
     );
-    $page.find(".card").each(((index, element) => {
-      const $card = wrap(element);
-      const $link = $card.find('a.card__link[href*="/cn/v/fc2-ppv-"]').first();
-      const href = $link.attr("href"), text = $link.text().trim();
-      const numberMatch = text.match(/FC2-PPV-(\d+)/i);
-      if (!href || !numberMatch) return;
-      const carNum = `FC2-${numberMatch[1]}`;
-      const detailUrl = new URL(href, baseUrl);
-      detailUrl.hash = "";
-      items.set(carNum, {
-        imgSrc: $card.find("img.card__img[src]").first().attr("src") || "",
-        carNum,
-        href: detailUrl.href,
-        title: text.replace(/^FC2-PPV-\d+\s*[—–-]\s*/i, "").trim(),
-        preview: $card.find(".card__poster[data-preview]").first().attr("data-preview") || null
-      });
-    }));
-    return [...items.values()];
-  }
-  __name(parse123AvCards, "parse123AvCards");
-  function merge123AvCards(cardLists) {
-    const items = /* @__PURE__ */ new Map();
-    cardLists.flat().forEach(
-      /** @type {Record<string, any>} */
-      ((item) => items.set(item.carNum, item))
-    );
-    return [...items.values()];
-  }
-  __name(merge123AvCards, "merge123AvCards");
-  function parse123AvSourceMaxPage($page, baseUrl = "https://123av.com") {
-    const lastHref = $page.find('a[rel="last"]').first().attr("href");
-    if (lastHref) {
-      const page = Number.parseInt(new URL(lastHref, baseUrl).searchParams.get("page") ?? "", 10);
-      if (Number.isFinite(page)) return page;
+    const root = options.root ? jq(options.root) : jq(document);
+    let title = root.find(".origin-title").first();
+    if (!title.length) title = root.find(".current-title").first();
+    if (!title.length) title = root.find("h3").first();
+    if (!title.length) return;
+    const sourceText = title.text().trim();
+    if (!sourceText) throw new TypeError("获取标题失败, 无法进行翻译");
+    let translatedNode = title.nextAll(".translated-title").first();
+    if (!translatedNode.length) translatedNode = jq('<div class="translated-title"></div>').insertAfter(title);
+    translatedNode.removeClass("is-error").text("翻译中...");
+    try {
+      const translated = await options.translation.translate(sourceText, { scope: options.scope });
+      if (!title[0]?.isConnected) return;
+      translatedNode.text(translated);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      globalThis.clog?.error("翻译失败:", error);
+      translatedNode.addClass("is-error").text(`翻译失败: ${message}`);
     }
-    const inputMax = Number.parseInt($page.find("input.pager__input[max]").first().attr("max"), 10);
-    if (Number.isFinite(inputMax)) return inputMax;
-    const totalMatch = $page.find(".pager__total").first().text().match(/(\d[\d,]*)/);
-    return totalMatch ? Number.parseInt(totalMatch[1].replaceAll(",", ""), 10) : null;
   }
-  __name(parse123AvSourceMaxPage, "parse123AvSourceMaxPage");
-  function parse123AvVideoInfo($page, url) {
-    const idMatch = new URL(url).pathname.match(/fc2-ppv-(\d+)/i);
-    const id = idMatch ? idMatch[1] : null;
-    const rawTitle = $page.find("h1.watch__title").first().text().trim();
-    const title = id ? rawTitle.replace(new RegExp(`^FC2-PPV-${id}\\s*[—–-]\\s*`, "i"), "").trim() : rawTitle;
-    const pageText = $page.find("body").text();
-    const publishDate = pageText.match(/发布日期\s*(\d{4}-\d{2}-\d{2})/)?.[1] || "";
-    return { id, publishDate, title, moviePoster: null };
-  }
-  __name(parse123AvVideoInfo, "parse123AvVideoInfo");
+  __name(renderTranslatedTitle, "renderTranslatedTitle");
 
   // src/plugins/external-search/fc2-by-123av.js
-  var AV123_REQUEST_OPTIONS = Object.freeze({ cookiePartitionTopLevelSite: "https://123av.com" });
   var _Fc2By123AvPlugin = class _Fc2By123AvPlugin extends BasePlugin {
     constructor() {
       super(...arguments), i(this, "$contentBox", $(".section .container")), i(this, "urlParams", new URLSearchParams(window.location.search)), i(this, "currentPage", this.urlParams.get("page") ? parseInt(this.urlParams.get("page")) : 1), i(this, "maxPage", null), i(this, "keyword", this.urlParams.get("keyword") || null);
@@ -8929,11 +8312,9 @@ ${value}\r
     getName() {
       return "Fc2By123AvPlugin";
     }
-    async getBaseUrl() {
-      return await this.getDependency("OtherSitePlugin").getAv123Url();
-    }
-    request123Av(e2, requestOptions = {}) {
-      return gmHttp.get(e2, {}, {}, false, { ...AV123_REQUEST_OPTIONS, ...requestOptions });
+    async resolveMovieId(carNum) {
+      const scope = await this.getRuntimeService("scope")();
+      return (await this.getRuntimeService("movie").resolve({ carNum }, { scope }))?.movieId || null;
     }
     async handle() {
       $("#navbar-menu-hero > div > div:nth-child(1) > div > a:nth-child(4)").after('<a class="navbar-item" href="/advanced_search?type=100&released_start=2099-09">123Av-Fc2</a>'), $('.tabs li:contains("FC2")').after('<li><a href="/advanced_search?type=100&released_start=2099-09"><span>123Av-Fc2</span></a></li>'), o.includes("/advanced_search?type=100") && (this.hookPage(), await this.handleQuery());
@@ -8969,20 +8350,14 @@ ${value}\r
     async handleQuery() {
       let e2 = loading();
       try {
-        let e3 = [2 * this.currentPage - 1, 2 * this.currentPage];
-        this.keyword && (e3 = [1], $(".page-box").hide());
-        const t2 = await this.getBaseUrl();
-        const requests = e3.map(((sourcePage) => this.request123Av(this.keyword ? `${t2}/cn/search?keyword=${encodeURIComponent(this.keyword)}` : `${t2}/cn/makers/fc2?page=${sourcePage}`)));
-        const pages = (await Promise.all(requests)).map(((html) => utils.htmlTo$dom(html)));
-        const i2 = merge123AvCards(pages.map((($page) => parse123AvCards($page, t2))));
-        if (!this.keyword && !this.maxPage && pages.length) {
-          const sourceMaxPage = parse123AvSourceMaxPage(pages[0], t2);
-          sourceMaxPage && (this.maxPage = Math.ceil(sourceMaxPage / 2), this.renderPagination());
-        }
+        this.keyword && $(".page-box").hide();
+        const scope = await this.getRuntimeService("scope")();
+        const result = await this.getRuntimeService("movie").catalog("av123", { page: this.currentPage, keyword: this.keyword || "" }, { scope });
+        const i2 = result.items;
+        if (!this.keyword && !this.maxPage && result.maxPage) this.maxPage = result.maxPage, this.renderPagination();
         if (0 === i2.length) {
           clog.log(i2), show.error("无结果");
-          const e4 = this.keyword ? `${t2}/cn/search?keyword=${encodeURIComponent(this.keyword)}` : `${t2}/cn/makers/fc2`;
-          clog.error("获取数据失败!", e4);
+          clog.error("123AV 获取数据失败");
         }
         let s2 = this.markDataListHtml(i2);
         $(".movie-list").html(s2), await utils.smoothScrollToTop();
@@ -8997,7 +8372,7 @@ ${value}\r
     }
     /** 将 123AV 数据填入 Fc2Plugin 创建的固定工作区。 */
     async loadDetail(context, url) {
-      const infoPromise = this.loadSummary(context, url), imagesPromise = this.getImgList(context.carNum), actressPromise = this.getActressInfo(context.carNum), movieIdPromise = resolveJavDbMovieId(context.carNum), fc2Plugin = this.getDependency("Fc2Plugin");
+      const infoPromise = this.loadSummary(context, url), imagesPromise = this.getImgList(context.carNum), actressPromise = this.getActressInfo(context.carNum), movieIdPromise = this.resolveMovieId(context.carNum), fc2Plugin = this.getDependency("Fc2Plugin");
       void fc2Plugin.configureJavDbWantButton(context, movieIdPromise), void fc2Plugin.mountPanels(context, movieIdPromise), void movieIdPromise.then(((movieId) => context.isAlive() && fc2Plugin.fetchAndRenderNativeMagnets(context, movieId))).catch(((error) => {
         context.isAlive() && fc2Plugin.setState(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.retryResolvedMagnets(context))), clog.error("123AV 磁力关联失败", error);
       }));
@@ -9010,9 +8385,11 @@ ${value}\r
     }
     async loadSummary(context, url) {
       try {
-        const info = await this.get123AvVideoInfo(url);
+        const info = await this.get123AvVideoInfo(context.carNum, url);
         if (!context.isAlive()) return null;
-        this.render123AvSummary(context, info), await this.getDependency("TranslatePlugin").translate(context.carNum, false, { root: context.root });
+        this.render123AvSummary(context, info);
+        const scope = await this.getRuntimeService("scope")();
+        if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) === _) await renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope });
         return info;
       } catch (error) {
         context.isAlive() && this.getDependency("Fc2Plugin").setState(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.loadSummary(context, url))), clog.error("123AV 详情加载失败", error);
@@ -9021,7 +8398,7 @@ ${value}\r
     }
     async retryResolvedMagnets(context) {
       try {
-        return await this.getDependency("Fc2Plugin").fetchAndRenderNativeMagnets(context, await resolveJavDbMovieId(context.carNum));
+        return await this.getDependency("Fc2Plugin").fetchAndRenderNativeMagnets(context, await this.resolveMovieId(context.carNum));
       } catch (error) {
         context.isAlive() && this.getDependency("Fc2Plugin").setState(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.retryResolvedMagnets(context)));
       }
@@ -9030,42 +8407,18 @@ ${value}\r
       const body = context.root.find('[data-jhs-role="summary-content"]').empty(), title = $('<h1 class="jhs-fc2-title"><strong class="current-title"></strong></h1>');
       title.find("strong").text(info.title || "无标题"), body.append(title, $('<div class="jhs-fc2-meta"></div>').append($("<span></span>").text(`番号：${context.carNum}`), $("<span></span>").text(`发行：${info.publishDate || "未知"}`)), '<div class="jhs-fc2-actors" data-jhs-role="actors"><strong>主演：</strong><span>正在加载演员…</span></div>', '<div class="jhs-fc2-meta" data-jhs-role="seller"></div>', this.getDependency("Fc2Plugin").createSourceLinks(context), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(info.publishDate || ""));
     }
-    async get123AvVideoInfo(e2) {
-      const t2 = await this.request123Av(e2);
-      return parse123AvVideoInfo(utils.htmlTo$dom(t2), e2);
+    async get123AvVideoInfo(carNum, e2) {
+      const scope = await this.getRuntimeService("scope")();
+      const detail = await this.getRuntimeService("movie").detail({ carNum, url: e2, providerId: "av123" }, { scope });
+      return { title: detail?.title || "", publishDate: detail?.releaseDate || "", moviePoster: null };
     }
     async getActressInfo(e2) {
-      let t2 = `https://fc2ppvdb.com/articles/${e2.replace("FC2-", "")}`;
-      const n2 = await gmHttp.get(t2), a2 = $(n2), i2 = a2.find("div").filter((function() {
-        return 0 === $(this).text().trim().indexOf("女優：");
-      }));
-      if (0 === i2.length || i2.length > 1) return { actors: [], seller: null };
-      const s2 = $(i2[0]).find("a");
-      const actors = [];
-      if (s2.length > 0) {
-        s2.each(((t3, n3) => {
-          const link = $(n3), name = link.text().trim(), url = normalizeHttpUrl(link.attr("href"), "https://fc2ppvdb.com");
-          name && actors.push({ name, url });
-        }));
-      }
-      const r2 = a2.find("div").filter((function() {
-        return 0 === $(this).text().trim().indexOf("販売者：");
-      }));
-      let seller = null;
-      if (r2.length > 0) {
-        const link = $(r2[0]).find("a").first();
-        link.length && (seller = { name: link.text().trim(), url: normalizeHttpUrl(link.attr("href"), "https://fc2ppvdb.com") });
-      }
-      return { actors, seller };
+      const scope = await this.getRuntimeService("scope")();
+      return this.getRuntimeService("movie").people("fc2ppvdb", { carNum: e2 }, { scope });
     }
     async getImgList(e2) {
-      let t2 = e2.replace("FC2-", ""), n2 = `https://adult.contents.fc2.com/article/${e2.replace("FC2-", "")}/`;
-      const a2 = await gmHttp.get(n2, null, {
-        referer: n2
-      });
-      return $(a2).find(".items_article_SampleImagesArea img").map((function() {
-        return normalizeHttpUrl($(this).attr("src"), n2);
-      })).get().filter(Boolean);
+      const scope = await this.getRuntimeService("scope")();
+      return (await this.getRuntimeService("movie").images("fc2content", { carNum: e2 }, { scope })).map(((item) => item.url));
     }
     async reloadImages(context) {
       try {
@@ -9084,7 +8437,7 @@ ${value}\r
     markDataListHtml(e2) {
       let t2 = "";
       return e2.forEach(((e3) => {
-        const href = normalizeHttpUrl(e3.href, "https://123av.com"), imageUrl = normalizeHttpUrl(e3.imgSrc, "https://123av.com");
+        const href = e3.url, imageUrl = e3.imageUrl;
         if (!href) return;
         t2 += `
                 <div class="item" data-jhs-fc2-source="123av">
@@ -9151,6 +8504,129 @@ ${value}\r
   __name(_DetailStateController, "DetailStateController");
   var DetailStateController = _DetailStateController;
   var detailStateController = new DetailStateController();
+
+  // src/core/javdb-api.js
+  var U = "https://jdforrepam.com/api";
+  var signatureSecond = 0;
+  var signatureValue = "";
+  function O() {
+    const now = Math.floor(Date.now() / 1e3);
+    if (signatureValue && now - signatureSecond <= 20) return signatureValue;
+    signatureSecond = now;
+    signatureValue = `${now}.lpw6vgqzsp.${md5(`${now}71cf27bb3c0bcdf207b64abecddc970098c7421ee7203b9cdae54478478a199e7d5a6e1a57691123c1a931c057842fb73ba3b3c83bcd69c17ccf174081e3d8aa`)}`;
+    return signatureValue;
+  }
+  __name(O, "O");
+  async function markJavDbWantWatch(movieId) {
+    const id = String(movieId || "").trim(), encryptedToken = localStorage.getItem("jhs_appAuthorization"), token = encryptedToken ? await decryptData(encryptedToken) : "";
+    if (!token) {
+      const error = new Error("请先登录 JavDB 账号");
+      throw error.code = "LOGIN_REQUIRED", error;
+    }
+    if (!id) throw new Error("JavDB 影片 ID 无效");
+    const boundary = "----jhs-javdb-want-watch", body = [["status", "want_watch"], ["score", "0"], ["content", ""]].map((([name, value]) => `--${boundary}\r
+Content-Disposition: form-data; name="${name}"\r
+\r
+${value}\r
+`)).join("") + `--${boundary}--\r
+`;
+    try {
+      const response = await gmHttp.gmRequest("POST", `${U}/v1/movies/${encodeURIComponent(id)}/reviews`, body, {}, {
+        "user-agent": "Dart/3.5 (dart:io)",
+        "accept-language": "zh-TW",
+        authorization: `Bearer ${token}`,
+        jdsignature: await O(),
+        "content-type": `multipart/form-data; boundary=${boundary}`
+      });
+      if (0 === response?.success) throw response;
+      await storageManager.deleteCachedRequest(`movie-detail:${id}`);
+      return response;
+    } catch (error) {
+      if (401 === error?.status || "JWTVerificationError" === error?.action || /未登录|登录|unauthorized|jwt/i.test(error?.message || "")) {
+        localStorage.removeItem("jhs_appAuthorization");
+        const loginError = new Error("JavDB 登录已失效，请重新登录");
+        throw loginError.code = "LOGIN_REQUIRED", loginError;
+      }
+      throw error instanceof Error ? error : new Error(error?.message || "加入 JavDB 想看失败");
+    }
+  }
+  __name(markJavDbWantWatch, "markJavDbWantWatch");
+  var q = /* @__PURE__ */ __name(async (e2 = "all", t2 = "", n2 = 1, a2 = 40) => {
+    let i2 = `${U}/v1/movies/top?start_rank=1&type=${e2}&type_value=${t2}&ignore_watched=false&page=${n2}&limit=${a2}`;
+    const l2 = localStorage.getItem("jhs_appAuthorization"), c2 = l2 ? await decryptData(l2) : "";
+    let s2 = {
+      "user-agent": "Dart/3.5 (dart:io)",
+      "accept-language": "zh-TW",
+      host: "jdforrepam.com",
+      authorization: "Bearer " + c2,
+      jdsignature: await O()
+    };
+    return await gmHttp.get(i2, null, s2);
+  }, "q");
+
+  // src/ui/detail/screenshot-panel.js
+  function normalizeImageUrl(value) {
+    try {
+      const url = new URL(String(value || ""));
+      return url.protocol === "https:" ? url.href : null;
+    } catch {
+      return null;
+    }
+  }
+  __name(normalizeImageUrl, "normalizeImageUrl");
+  function renderImage(host, url, alt) {
+    const jq = (
+      /** @type {any} */
+      globalThis.$
+    );
+    const normalized = normalizeImageUrl(url);
+    if (!normalized) return null;
+    const image = jq("<img>").attr({ src: normalized, alt, loading: "lazy" }).addClass("jhs-fc2-gallery__image");
+    const button = jq('<button type="button" class="jhs-btn jhs-fc2-gallery-item jhs-fc2-screenshot-thumbnail"></button>').attr("aria-label", `查看${alt}大图`).append(image);
+    host.empty().append(button).off("click.jhsScreenshot").on("click.jhsScreenshot", ".jhs-fc2-screenshot-thumbnail", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      globalThis.showImageViewer(image[0]);
+    });
+    return normalized;
+  }
+  __name(renderImage, "renderImage");
+  async function renderScreenshotPanel(options) {
+    const jq = (
+      /** @type {any} */
+      globalThis.$
+    );
+    const host = jq(options.target), isActive = options.isActive ?? (() => true);
+    if (!host.length || options.settings.enableLoadScreenShot === "no") return host.empty(), null;
+    const load = /* @__PURE__ */ __name(async (resultHost = host) => {
+      resultHost.empty().append(jq("<div></div>").addClass("jhs-panel-state").text("正在加载缩略图…"));
+      try {
+        const images = await options.screenshot.resolve({ carNum: options.carNum }, { scope: options.scope });
+        if (!isActive()) return null;
+        const image = Array.isArray(images) ? images[0] : images;
+        if (!image?.url) return resultHost.empty(), null;
+        return renderImage(resultHost, image.url, "缩略图");
+      } catch (error) {
+        if (!isActive()) return null;
+        const state = jq("<div></div>").addClass("jhs-panel-state").text("缩略图加载失败 ");
+        const retry = jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", () => void load(resultHost));
+        resultHost.empty().append(state.append(retry));
+        globalThis.clog?.error("缩略图加载失败", error);
+        return null;
+      }
+    }, "load");
+    if (options.settings.screenshotMode !== "manual") return load();
+    const tabs = jq('<div class="jhs-screenshot-providers" role="tablist" aria-label="截图来源"></div>');
+    const result = jq('<div class="jhs-screenshot-result"></div>').text("请选择截图来源");
+    const button = jq('<button type="button" class="jhs-btn jhs-btn--secondary" role="tab" aria-selected="false">JavStore</button>');
+    button.on("click", async () => {
+      button.attr("aria-selected", "true");
+      await load(result);
+    });
+    host.empty().append(tabs.append(button), result);
+    return host;
+  }
+  __name(renderScreenshotPanel, "renderScreenshotPanel");
 
   // src/plugins/status/detail-workspace.js
   function getDetailResourceAdapter() {
@@ -9378,6 +8854,10 @@ ${value}\r
     getName() {
       return "Fc2Plugin";
     }
+    async resolveMovieId(carNum) {
+      const scope = await this.getRuntimeService("scope")();
+      return (await this.getRuntimeService("movie").resolve({ carNum }, { scope }))?.movieId || null;
+    }
     async initCss() {
       return `<style>
             .movie-detail-layer .layui-layer-content { min-height:0; overflow:hidden; background:var(--jhs-bg); }
@@ -9443,7 +8923,7 @@ ${value}\r
     }
     openFc2Dialog(movieId, carNum, url, { source = "fc2" } = {}) {
       let context = null;
-      return layer.open({
+      return this.getRuntimeService("dialog").open({
         type: 1,
         title: carNum,
         content: '<div class="jhs-fc2-dialog-host"></div>',
@@ -9478,7 +8958,10 @@ ${value}\r
       const resources = $('<div class="jhs-fc2-resource-stack"></div>'), nativeGroup = this.createResourceGroup("站内磁力", "native-magnets"), sitesGroup = this.createResourceGroup("第三方站点", "other-sites"), hubGroup = this.createResourceGroup("更多磁力来源", "magnet-hub"), hubButton = $('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="magnet-hub" aria-expanded="false">展开磁力搜索</button>');
       let magnetHubPromise = null;
       hubGroup.find('[data-jhs-role="magnet-hub"]').append(hubButton, '<div data-jhs-role="magnet-hub-content"></div>'), resources.append(nativeGroup, sitesGroup, hubGroup), context.getSlot("resources").append(resources);
-      toolbar.on(`click${context.namespace}`, '[data-jhs-action="subtitlecat"]', ((event) => utils.openPage(`https://subtitlecat.com/index.php?search=${encodeURIComponent(context.carNum)}`, context.carNum, false, event))), toolbar.on(`click${context.namespace}`, '[data-jhs-action="xunlei"]', (() => this.getDependency("DetailPageButtonPlugin").searchXunLeiSubtitle(context.carNum)));
+      toolbar.on(`click${context.namespace}`, '[data-jhs-action="subtitlecat"]', ((event) => {
+        const target = this.getRuntimeService("movie").sourceUrls({ carNum: context.carNum }, ["subtitlecat"])[0]?.url;
+        if (target) utils.openPage(target, context.carNum, false, event);
+      })), toolbar.on(`click${context.namespace}`, '[data-jhs-action="xunlei"]', (() => this.getDependency("DetailPageButtonPlugin").searchXunLeiSubtitle(context.carNum)));
       hubButton.on(`click${context.namespace}`, (async () => {
         if (!context.isAlive()) return;
         const box = hubGroup.find('[data-jhs-role="magnet-hub-content"]'), expanded = "true" === hubButton.attr("aria-expanded");
@@ -9495,7 +8978,15 @@ ${value}\r
       })).catch(((error) => {
         context.isAlive() && sitesGroup.remove(), clog.error("FC2 外部站点加载失败", error);
       }));
-      void this.getDependency("ScreenShotPlugin").loadInto(screenshot, context.carNum.replace("FC2-", ""), { isActive: context.isAlive }).then(((result) => {
+      const scopePromise = this.getRuntimeService("scope")();
+      void scopePromise.then(((scope) => renderScreenshotPanel({
+        target: screenshot,
+        carNum: context.carNum.replace("FC2-", ""),
+        screenshot: this.getRuntimeService("screenshot"),
+        settings: this.getRuntimeService("settings").snapshot(),
+        scope,
+        isActive: context.isAlive
+      }))).then(((result) => {
         if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove();
       }));
       "123av" === context.source ? void this.getDependency("Fc2By123AvPlugin").loadDetail(context, context.url) : void this.loadNativeDetail(context);
@@ -9520,7 +9011,7 @@ ${value}\r
         if (!movieId) return void button.prop("disabled", true).text("JavDB 暂无对应作品");
         button.prop("disabled", false).text("JavDB 想看").off(`click${context.namespace}`).on(`click${context.namespace}`, (() => void this.submitJavDbWant(context, movieId, button)));
       } catch (error) {
-        context.isAlive() && button.prop("disabled", false).text("JavDB 关联失败，重试").off(`click${context.namespace}`).on(`click${context.namespace}`, (() => void this.configureJavDbWantButton(context, resolveJavDbMovieId(context.carNum)))), clog.error("FC2 JavDB 想看关联失败", error);
+        context.isAlive() && button.prop("disabled", false).text("JavDB 关联失败，重试").off(`click${context.namespace}`).on(`click${context.namespace}`, (() => void this.configureJavDbWantButton(context, this.resolveMovieId(context.carNum)))), clog.error("FC2 JavDB 想看关联失败", error);
       }
     }
     async submitJavDbWant(context, movieId, button) {
@@ -9544,9 +9035,12 @@ ${value}\r
     }
     async fetchAndRenderNativeDetail(context) {
       try {
-        const movie = await V(context.movieId);
+        const scope = await this.getRuntimeService("scope")();
+        const movie = await this.getRuntimeService("movie").detail({ movieId: context.movieId, carNum: context.carNum, providerId: "javdb" }, { scope });
+        if (!movie) throw new Error("JavDB 影片详情不存在");
         if (!context.isAlive()) return;
-        this.renderSummary(context, movie), this.renderGallery(context, movie.imgList || []), await this.getDependency("TranslatePlugin").translate(movie.carNum || context.carNum, false, { root: context.root });
+        this.renderSummary(context, movie), this.renderGallery(context, movie.imageUrls || []);
+        if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) === _) await renderTranslatedTitle({ root: context.root, carNum: movie.carNum || context.carNum, translation: this.getRuntimeService("translation"), scope });
       } catch (error) {
         context.isAlive() && this.setState(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.fetchAndRenderNativeDetail(context))), clog.error("FC2 详情加载失败", error);
       }
@@ -9563,7 +9057,7 @@ ${value}\r
       movie.actors?.length || actors.append($("<span></span>").text("暂无演员信息")), body.append(actors, this.createSourceLinks(context), $('<span class="jhs-is-hidden" data-jhs-role="actress-data"></span>').text(actressNames.join(" ")), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(movie.releaseDate || ""));
     }
     createSourceLinks(context) {
-      const id = String(context.carNum || "").replace(/^FC2-(?:PPV-)?/i, ""), links = $('<div class="jhs-fc2-source-links" aria-label="影片来源"></div>'), values = [["123av" === context.source ? "123AV 原页面" : "JavDB 原页面", normalizeHttpUrl(context.url)], ["FC2PPVDB", `https://fc2ppvdb.com/articles/${encodeURIComponent(id)}`], ["FC2 市场", `https://adult.contents.fc2.com/article/${encodeURIComponent(id)}/`]];
+      const links = $('<div class="jhs-fc2-source-links" aria-label="影片来源"></div>'), providerLinks = this.getRuntimeService("movie").sourceUrls({ carNum: context.carNum }, ["fc2ppvdb", "fc2content"]), values = [["123av" === context.source ? "123AV 原页面" : "JavDB 原页面", normalizeHttpUrl(context.url)], ...providerLinks.map(((item) => [item.providerId === "fc2ppvdb" ? "FC2PPVDB" : "FC2 市场", item.url]))];
       values.forEach((([label, href]) => href && links.append($("<a></a>").addClass("jhs-btn jhs-btn--ghost jhs-btn--sm").attr({ href, target: "_blank", rel: "noopener noreferrer" }).text(label))));
       return links;
     }
@@ -9578,7 +9072,8 @@ ${value}\r
       this.setState(host, "正在加载站内磁力…");
       try {
         if (!movieId) return this.setState(host, "JavDB 暂无对应作品");
-        const response = await gmHttp.get(`${U}/v1/movies/${movieId}/magnets`, null, { jdSignature: await O() }), magnets = response?.data?.magnets || [];
+        const scope = await this.getRuntimeService("scope")();
+        const magnets = await this.getRuntimeService("magnet").listNative({ movieId, providerId: "javdb" }, { scope });
         if (!context.isAlive()) return;
         host.empty();
         if (!magnets.length) return this.setState(host, "暂无站内磁力");
@@ -9586,9 +9081,9 @@ ${value}\r
         magnets.forEach(((item) => {
           const hash = normalizeBtihHash(item.hash);
           if (!hash) return;
-          const magnet = `magnet:?xt=urn:btih:${hash}`, assessment = highlighter.assessMagnet({ title: item.name, hasHdTag: !!item.hd, hasSubtitleTag: !!item.cnsub, date: item.created_at, seeders: Number(item.seeders) || 0 }), row = $('<div class="jhs-fc2-magnet-item"></div>').attr("data-jhs-high-quality", String(assessment.highQuality)), info = $('<div class="jhs-fc2-magnet-name"></div>'), actions = $('<div class="jhs-toolbar"></div>'), tags = $('<div class="jhs-fc2-magnet-tags"></div>');
-          assessments.push(assessment), tags.append($("<span></span>").addClass("jhs-badge").attr("title", `磁力质量评分 ${assessment.score.total}`).text(`${assessment.grade} ${assessment.score.total}`)), item.hd && tags.append('<span class="jhs-badge">高清</span>'), item.cnsub && tags.append('<span class="jhs-badge">字幕</span>');
-          info.append($("<a></a>").attr("href", magnet).text(item.name || magnet), $("<div></div>").addClass("jhs-fc2-meta").text(`${(Number(item.size || 0) / 1024).toFixed(2)} GB · ${Number(item.files_count) || 0} 个文件${item.created_at ? ` · ${item.created_at}` : ""}`), tags), actions.append($('<button type="button" class="jhs-btn jhs-btn--secondary copy-to-clipboard">复制</button>').attr("data-clipboard-text", magnet), $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn">离线</button>').attr({ "data-resource": magnet, "data-jhs-offline-owner": "fc2" })), host.append(row.append(info, actions));
+          const magnet = `magnet:?xt=urn:btih:${hash}`, assessment = highlighter.assessMagnet({ title: item.title, hasHdTag: item.hasHdTag, hasSubtitleTag: item.hasSubtitleTag, date: item.createdAt, seeders: item.seeders }), row = $('<div class="jhs-fc2-magnet-item"></div>').attr("data-jhs-high-quality", String(assessment.highQuality)), info = $('<div class="jhs-fc2-magnet-name"></div>'), actions = $('<div class="jhs-toolbar"></div>'), tags = $('<div class="jhs-fc2-magnet-tags"></div>');
+          assessments.push(assessment), tags.append($("<span></span>").addClass("jhs-badge").attr("title", `磁力质量评分 ${assessment.score.total}`).text(`${assessment.grade} ${assessment.score.total}`)), item.hasHdTag && tags.append('<span class="jhs-badge">高清</span>'), item.hasSubtitleTag && tags.append('<span class="jhs-badge">字幕</span>');
+          info.append($("<a></a>").attr("href", magnet).text(item.title || magnet), $("<div></div>").addClass("jhs-fc2-meta").text(`${(Number(item.sizeMb || 0) / 1024).toFixed(2)} GB · ${Number(item.fileCount) || 0} 个文件${item.createdAt ? ` · ${item.createdAt}` : ""}`), tags), actions.append($('<button type="button" class="jhs-btn jhs-btn--secondary copy-to-clipboard">复制</button>').attr("data-clipboard-text", magnet), $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn">离线</button>').attr({ "data-resource": magnet, "data-jhs-offline-owner": "fc2" })), host.append(row.append(info, actions));
         }));
         await this.bindNativeMagnetFilter(context, host, assessments.some(((item) => item.highQuality)));
       } catch (error) {
@@ -9618,7 +9113,7 @@ ${value}\r
       } catch (error) {
         if (!context.isAlive()) return;
         this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related");
-        const retry = /* @__PURE__ */ __name(() => void this.mountPanels(context, resolveJavDbMovieId(context.carNum)), "retry");
+        const retry = /* @__PURE__ */ __name(() => void this.mountPanels(context, this.resolveMovieId(context.carNum)), "retry");
         this.setState(context.getSlot("reviews"), "评论关联失败", retry), this.setState(context.getSlot("related"), "相关清单关联失败", retry), clog.error("FC2 JavDB 关联失败", error);
       }
     }
@@ -9628,14 +9123,15 @@ ${value}\r
     async resolveFc2Source(record = {}) {
       if (["fc2", "123av"].includes(record.fc2Source)) return record.fc2Source;
       try {
-        return new URL(record.url, window.location.origin).hostname === new URL(await this.getDependency("OtherSitePlugin").getAv123Url()).hostname ? "123av" : "fc2";
-      } catch (error) {
+        return this.getRuntimeService("movie").matchesProviderUrl("av123", new URL(record.url, window.location.origin).href) ? "123av" : "fc2";
+      } catch {
         return "fc2";
       }
     }
     async openFc2Page(movieId, carNum, url, navigation = { newTab: true }, { source = "fc2" } = {}) {
-      const baseUrl = await this.getDependency("OtherSitePlugin").getJavDbUrl();
-      utils.openPage(`${baseUrl}/users/collection_codes?movieId=${movieId || ""}&carNum=${encodeURIComponent(carNum)}&url=${encodeURIComponent(url)}&source=${encodeURIComponent(source)}`, carNum, true, navigation);
+      const target = new URL("/users/collection_codes", window.location.origin);
+      target.searchParams.set("movieId", movieId || ""), target.searchParams.set("carNum", carNum), target.searchParams.set("url", url), target.searchParams.set("source", source);
+      utils.openPage(target.href, carNum, true, navigation);
     }
   };
   __name(_Fc2Plugin, "Fc2Plugin");
@@ -9675,7 +9171,7 @@ ${value}\r
         await this.getDependency("ListPageButtonPlugin").sortItems();
         loadingObj.close(), loadingClosed = true;
         void this.loadScore(movies, generation).then((async () => {
-          if (generation === this.loadGeneration && "rateCount" === localStorage.getItem("jhs_sortMethod")) await this.getDependency("ListPageButtonPlugin").sortItems();
+          if (generation === this.loadGeneration && "rateCount" === this.getRuntimeService("settings").snapshot().sortMethod) await this.getDependency("ListPageButtonPlugin").sortItems();
         })).catch(((error) => clog.error("热播评分补全失败", error)));
       } catch (error) {
         clog.error("所有重试尝试均失败，无法获取数据。", error);
@@ -9686,7 +9182,8 @@ ${value}\r
     async fetchPlaybackWithRetry(period) {
       let lastError;
       for (let attempt = 1; attempt <= 3; attempt++) try {
-        return await W(period);
+        const scope = await this.getRuntimeService("scope")();
+        return await this.getRuntimeService("movie").rankings({ period, scope });
       } catch (error) {
         lastError = error;
         if (attempt < 3) clog.error(`获取热播数据失败 (第 ${attempt} 次重试)`, error), await new Promise(((resolve) => setTimeout(resolve, 1e3)));
@@ -9719,14 +9216,10 @@ ${value}\r
     async loadScore(movies, generation = this.loadGeneration) {
       if (0 === movies.length) return;
       const cacheKey = "jhs_score_info";
-      let cache = {};
-      try {
-        cache = JSON.parse(localStorage.getItem(cacheKey) || "{}");
-      } catch (error) {
-        clog.warn("评分缓存解析失败，将重新建立缓存", error);
-      }
+      const cacheService = this.getRuntimeService("cache"), cached = cacheService.get(cacheKey, { scope: "public" });
+      const cache = cached.hit && cached.value && typeof cached.value === "object" ? { ...cached.value } : {};
       const queue = [...movies], workers = Array.from({ length: Math.min(4, queue.length) }, (() => this.scoreWorker(queue, cache, generation)));
-      await Promise.all(workers), localStorage.setItem(cacheKey, JSON.stringify(cache));
+      await Promise.all(workers), cacheService.set(cacheKey, cache, { scope: "public", ttlMs: 6048e5 });
     }
     async scoreWorker(queue, cache, generation) {
       for (; ; ) {
@@ -9734,19 +9227,22 @@ ${value}\r
         if (!movie) return;
         try {
           if (generation !== this.loadGeneration) return;
-          const id = movie.id;
+          const id = movie.movieId ?? movie.id;
           if (!$(`#score_${id}`).length || $(`#${id}`).is(":hidden")) continue;
           if (cache[id]) {
             const cached = this.normalizeScoreData(cache[id]);
             this.appendScore(id, cached.score, cached.watchedCount);
             continue;
           }
-          const result = await V(id);
+          const scope = await this.getRuntimeService("scope")();
+          const result = await this.getRuntimeService("movie").detail({ movieId: id, providerId: "javdb" }, { scope });
+          if (!result) throw new Error("JavDB 影片详情不存在");
           if (generation !== this.loadGeneration) return;
           const score = Number(result.score), watchedCount = Number(result.watchedCount);
           this.appendScore(id, score, watchedCount), cache[id] = { score: Number.isFinite(score) ? score : 0, watchedCount: Number.isFinite(watchedCount) ? watchedCount : 0 };
         } catch (error) {
-          $(`#${movie.id}`).attr("data-jhs-rate-count", "0"), clog.error(`解析评分数据失败 | 编号: ${movie.number}
+          const id = movie.movieId ?? movie.id, carNum = movie.carNum ?? movie.number;
+          $(`#${id}`).attr("data-jhs-rate-count", "0"), clog.error(`解析评分数据失败 | 编号: ${carNum}
 `, `错误详情: ${error.message}
 `, error.stack ? `调用栈:
 ${error.stack}` : "");
@@ -9767,17 +9263,17 @@ ${error.stack}` : "");
     markDataListHtml(e2) {
       let t2 = "";
       return e2.forEach(((e3, index) => {
-        const coverUrl = normalizeHttpUrl(String(e3.cover_url || "").replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com"));
+        const id = e3.movieId ?? e3.id, carNum = e3.carNum ?? e3.number, title = e3.title ?? e3.origin_title, releaseDate = e3.releaseDate ?? e3.release_date, coverUrl = normalizeHttpUrl(e3.coverUrl ?? e3.cover_url), hasSubtitle = e3.hasSubtitle ?? e3.has_cnsub, magnetCount = Number(e3.magnetCount ?? e3.magnets_count), newMagnets = e3.newMagnets ?? e3.new_magnets;
         t2 += `
-                <div class="item" id="${escapeHtml(e3.id)}" data-jhs-publish-time="${escapeHtml(e3.release_date)}" data-jhs-rate-count="0" data-original-index="${index}">
-                    <a href="/v/${escapeHtml(e3.id)}" class="box" title="${escapeHtml(e3.origin_title)}">
+                <div class="item" id="${escapeHtml(id)}" data-jhs-publish-time="${escapeHtml(releaseDate)}" data-jhs-rate-count="0" data-original-index="${index}">
+                    <a href="/v/${escapeHtml(id)}" class="box" title="${escapeHtml(title)}">
                         <div class="cover ">${coverUrl ? `<img loading="lazy" src="${escapeHtml(coverUrl)}" alt="">` : ""}</div>
-                        <div class="video-title"><strong>${escapeHtml(e3.number)}</strong> ${escapeHtml(e3.origin_title)}</div>
-                        <div class="score" id="score_${escapeHtml(e3.id)}"></div>
-                        <div class="meta">${escapeHtml(e3.release_date)}</div>
+                        <div class="video-title"><strong>${escapeHtml(carNum)}</strong> ${escapeHtml(title)}</div>
+                        <div class="score" id="score_${escapeHtml(id)}"></div>
+                        <div class="meta">${escapeHtml(releaseDate)}</div>
                         <div class="jhs-toolbar">
-                           ${e3.has_cnsub ? '<span class="jhs-badge jhs-badge--watch">含中字磁力</span>' : e3.magnets_count > 0 ? '<span class="jhs-badge jhs-badge--success">含磁力</span>' : '<span class="jhs-badge jhs-badge--neutral">无磁力</span>'}
-                           ${e3.new_magnets ? '<span class="jhs-badge jhs-badge--accent">今日新增</span>' : ""}
+                           ${hasSubtitle ? '<span class="jhs-badge jhs-badge--watch">含中字磁力</span>' : magnetCount > 0 ? '<span class="jhs-badge jhs-badge--success">含磁力</span>' : '<span class="jhs-badge jhs-badge--neutral">无磁力</span>'}
+                           ${newMagnets ? '<span class="jhs-badge jhs-badge--accent">今日新增</span>' : ""}
                         </div>
                     </a>
                 </div>
@@ -10143,16 +9639,7 @@ ${error.stack}` : "");
         findCarNumOrTitle: /* @__PURE__ */ __name((e2) => e2.find("p.card-text").text(), "findCarNumOrTitle")
       }, {
         id: "123AvBtn",
-        getBaseUrl: /* @__PURE__ */ __name(async () => `${await this.getAv123Url()}/cn`, "getBaseUrl"),
-        itemSelector: ".card",
-        searchPath: /* @__PURE__ */ __name((e2, t2) => `${e2}/search?keyword=${encodeURIComponent(t2)}`, "searchPath"),
-        requestOptions: { cookiePartitionTopLevelSite: "https://123av.com" },
-        getDetailPageHref: /* @__PURE__ */ __name((e2, t2) => {
-          const href = e2.find('a.card__link[href*="/cn/v/"]').first().attr("href");
-          return href ? new URL(href, t2).href : null;
-        }, "getDetailPageHref"),
-        findCarNumOrTitle: /* @__PURE__ */ __name((e2) => e2.find(".card__link").first().text(), "findCarNumOrTitle"),
-        matches: /* @__PURE__ */ __name((text, carNum) => text.replace(/FC2-PPV-/gi, "FC2-").toLowerCase().includes(carNum.toLowerCase()), "matches")
+        providerId: "av123"
       }, {
         id: "jableBtn",
         getBaseUrl: /* @__PURE__ */ __name(async () => await this.getjableUrl(), "getBaseUrl"),
@@ -10261,6 +9748,10 @@ ${error.stack}` : "");
       const n2 = view.root.find(`[data-jhs-site-id="${t2.id}"],#${t2.id}`).first();
       if (!(e2 = normalizeCarNum(e2))) return n2.removeAttr("href").attr({ "aria-disabled": "true", title: "番号不可用" }), void this.setSiteState(n2, "idle");
       if (t2.initUrl) return void (n2.attr("href", t2.initUrl(e2)), this.setSiteState(n2, "idle"), n2.attr("title", "点击前往外部搜索页"));
+      if (t2.providerId) {
+        const url = this.getRuntimeService("movie").searchUrl(t2.providerId, { carNum: e2 });
+        return void (url ? (n2.attr("href", url), n2.attr("title", "点击前往外部搜索页"), this.setSiteState(n2, "idle")) : (n2.attr("title", "外部站点地址不可用"), this.setSiteState(n2, "domain-error")));
+      }
       try {
         const a2 = await t2.getBaseUrl(), i2 = t2.searchPath(a2, e2);
         view.isActive() && (n2.attr("href", i2), n2.attr("title", "点击前往外部搜索页；点击检测按钮后才自动检测"), this.setSiteState(n2, "idle"));
@@ -10284,7 +9775,18 @@ ${error.stack}` : "");
       if (t2.initUrl && n2.attr("href", t2.initUrl(e2)), t2.noHandle && true === t2.noHandle) {
         const t3 = "jhs_other_site_dmm", a2 = (localStorage.getItem(t3) ? JSON.parse(localStorage.getItem(t3)) : {})[e2];
         a2 ? (n2.attr("href", a2.url), "multiple" === a2.type && n2.append('<span class="site-tag">多结果</span>'), this.setSiteState(n2, "available")) : this.setSiteState(n2, "idle");
-      } else try {
+      } else if (t2.providerId) try {
+        const scope = await this.getRuntimeService("scope")();
+        const result = await this.getRuntimeService("movie").resolve({ carNum: e2, providerId: t2.providerId }, { scope });
+        if (!view.isActive()) return;
+        const searchUrl = this.getRuntimeService("movie").searchUrl(t2.providerId, { carNum: e2 });
+        n2.attr("href", result?.url || searchUrl || "");
+        this.setSiteState(n2, result?.url ? "available" : "unavailable");
+        if (!result?.url) n2.attr("title", "未查询到, 点击前往搜索页");
+      } catch (error) {
+        if (view.isActive()) n2.attr("title", "请求失败。"), this.setSiteState(n2, "unavailable"), clog.warn(`检测第三方资源失败, ${t2.id.replace("Btn", "")}`);
+      }
+      else try {
         if (n2.attr("href")) return void this.setSiteState(n2, "idle");
         if (utils.isHidden(n2)) return;
         const a2 = "jhs_other_site", i2 = localStorage.getItem(a2) ? JSON.parse(localStorage.getItem(a2)) : {}, s2 = e2 + "_" + t2.id.replace("Btn", ""), o2 = i2[s2], m2 = Date.now();
@@ -10345,9 +9847,6 @@ ${error.stack}` : "");
     }
     async getJavTrailersUrl() {
       return (await this.getSettingCache()).javTrailersUrl || "https://javtrailers.com";
-    }
-    async getAv123Url() {
-      return (await this.getSettingCache()).av123Url || "https://123av.com";
     }
     async getJavDbUrl() {
       return (await this.getSettingCache()).javDbUrl || "https://javdb.com";
@@ -10420,9 +9919,18 @@ ${error.stack}` : "");
                 .jhs-related-time { color:var(--jhs-text-faint); font-size:14px; white-space:nowrap; }
             </style>`;
     }
+    async handle() {
+      if (!window.isDetailPage || !r) return;
+      const movieId = new URL(window.location.href).pathname.split("/").filter(Boolean).pop();
+      if (movieId) await this.showRelated(this.getHostedSlot("related"), movieId);
+    }
+    getHostedSlot(name) {
+      const element = this.getRuntimeService("host").locateDetailSlots()[name];
+      return element ? $(element) : $();
+    }
     async showRelated(target, movieId, options = {}) {
       const isActive = "function" === typeof options.isActive ? options.isActive : () => true;
-      const enabled = await storageManager.getSetting("enableLoadRelated", C), host = target?.length ? target : this.getDependency("DetailWorkspacePlugin")?.getSlot("related");
+      const enabled = await storageManager.getSetting("enableLoadRelated", C), host = target?.length ? target : this.getHostedSlot("related");
       if (!movieId) return void show.error("未传入movieId");
       if (!isActive() || !host?.length) return $();
       const existing = host.children('[data-jhs-panel="related"]').filter(((_2, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
@@ -10446,15 +9954,17 @@ ${error.stack}` : "");
       state.loading = true;
       const { movieId, panel } = state, container = panel.find(".jhs-related-container"), footer = panel.find(".jhs-related-footer");
       container.empty().append($('<div class="jhs-panel-state"></div>').text("获取清单中...")), footer.empty();
-      let related;
+      let related, scope;
       try {
-        related = await K(movieId, 1, 20);
+        scope = await this.getRuntimeService("scope")();
+        related = await this.getRuntimeService("related").list({ movieId }, { page: 1, limit: 20, scope });
       } catch (error) {
+        if (!state.isActive?.() || scope?.signal?.aborted) return void (state.loading = false);
         clog.error("获取清单失败:", error);
         state.loading = false;
         return void this.renderRetry(container, (() => this.fetchAndDisplayRelateds(state)));
       }
-      if (!state.isActive?.()) return void (state.loading = false);
+      if (!state.isActive?.() || scope?.signal?.aborted) return void (state.loading = false);
       state.loading = false, state.loaded = true;
       container.empty();
       if (!related.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无清单"));
@@ -10470,13 +9980,16 @@ ${error.stack}` : "");
       footer.empty().append(button, end);
       button.on("click", (async () => {
         const nextPage = state.page + 1;
+        let scope;
         button.text("加载中...").prop("disabled", true);
         try {
-          const related = await K(state.movieId, nextPage, 20);
-          if (!state.isActive?.()) return;
+          scope = await this.getRuntimeService("scope")();
+          const related = await this.getRuntimeService("related").list({ movieId: state.movieId }, { page: nextPage, limit: 20, scope });
+          if (!state.isActive?.() || scope?.signal?.aborted) return;
           state.page = nextPage;
           this.displayRelateds(state, related, container), related.length < 20 ? (button.remove(), end.show()) : button.text("加载更多清单").prop("disabled", false);
         } catch (error) {
+          if (!state.isActive?.() || scope?.signal?.aborted) return;
           clog.error("加载更多清单失败:", error), button.text("加载失败，请重试").prop("disabled", false);
         }
       }));
@@ -10484,10 +9997,10 @@ ${error.stack}` : "");
     displayRelateds(state, related, container) {
       related.forEach(((item) => {
         const row = $('<article class="jhs-related-item"></article>'), title = $("<a></a>").addClass("jhs-related-title").attr({
-          href: `/lists/${encodeURIComponent(item.relatedId)}`,
+          href: `/lists/${encodeURIComponent(item.id)}`,
           target: "_blank",
           rel: "noopener noreferrer"
-        }).text(item.name || "未命名清单"), heading = $('<div class="jhs-related-heading"></div>').append($("<span></span>").addClass("jhs-related-index").text(`#${state.floorIndex++}`), title), meta = $('<div class="jhs-related-meta"></div>'), time = $('<time class="jhs-related-time"></time>').text(`创建时间：${item.createTime || "未知"}`);
+        }).text(item.name || "未命名清单"), heading = $('<div class="jhs-related-heading"></div>').append($("<span></span>").addClass("jhs-related-index").text(`#${state.floorIndex++}`), title), meta = $('<div class="jhs-related-meta"></div>'), time = $('<time class="jhs-related-time"></time>').text(`创建时间：${item.createdAt ? utils.formatDate(item.createdAt) : "未知"}`);
         meta.append(
           $("<span></span>").text(`视频：${Number(item.movieCount) || 0}`),
           $("<span></span>").text(`收藏：${Number(item.collectionCount) || 0}`),
@@ -10536,19 +10049,24 @@ ${error.stack}` : "");
       if (!window.isDetailPage) return;
       if (r) {
         const movieId = this.parseMovieId(window.location.href);
-        const workspace = this.getDependency("DetailWorkspacePlugin");
-        await Promise.all([this.showReview(movieId, workspace?.getSlot("reviews")), this.getDependency("RelatedPlugin").showRelated(workspace?.getSlot("related"), movieId)]);
+        await this.showReview(movieId, this.getHostedSlot("reviews"));
       }
       if (l) {
         const carNumber = this.getPageInfo().carNum;
         if (!carNumber) return void clog.warn("跳过 JavBus 评论解析：番号不可用");
-        const movieId = await resolveJavDbMovieId(carNumber);
-        movieId && await this.showReview(movieId, this.getDependency("DetailWorkspacePlugin")?.getSlot("reviews"));
+        const scope = await this.getRuntimeService("scope")();
+        const movieRef = await this.getRuntimeService("movie").resolve({ carNum: carNumber }, { scope });
+        movieRef?.movieId && await this.showReview(movieRef.movieId, this.getHostedSlot("reviews"));
       }
+    }
+    getHostedSlot(name) {
+      const element = this.getRuntimeService("host").locateDetailSlots()[name];
+      return element ? $(element) : $();
     }
     async showReview(movieId, target, options = {}) {
       const isActive = "function" === typeof options.isActive ? options.isActive : () => true;
-      const enabled = await storageManager.getSetting("enableLoadReview", _), host = target?.length ? target : this.getDependency("DetailWorkspacePlugin")?.getSlot("reviews") || $("#magnets-content");
+      const settings = await storageManager.getSetting();
+      const enabled = settings.enableLoadReview === _ ? _ : C, host = target?.length ? target : this.getHostedSlot("reviews");
       if (!isActive() || !host?.length) return $();
       const existing = host.children('[data-jhs-panel="reviews"]').filter(((_2, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
       if (existing.length) return existing;
@@ -10576,15 +10094,17 @@ ${error.stack}` : "");
       const { movieId, panel } = state, container = panel.find(".jhs-review-container"), footer = panel.find(".jhs-review-footer");
       container.empty().append($('<div class="jhs-panel-state"></div>').text("获取评论中...")), footer.empty();
       const pageSize = await storageManager.getSetting("reviewCount", 20);
-      let reviews;
+      let reviews, scope;
       try {
-        reviews = await R(movieId, 1, pageSize);
+        scope = await this.getRuntimeService("scope")();
+        reviews = await this.getRuntimeService("review").list({ movieId }, { page: 1, limit: pageSize, scope });
       } catch (error) {
+        if (!state.isActive?.() || scope?.signal?.aborted) return void (state.loading = false);
         error.toString().includes("簽名已過期") && show.error("生成签名失败, 请检查系统时间及时区是否正确!"), clog.error("获取评论失败:", error), clog.error("获取评论失败:", error);
         state.loading = false;
         return void this.renderRetry(container, "获取评论失败", (() => this.fetchAndDisplayReviews(state)));
       }
-      if (!state.isActive?.()) return void (state.loading = false);
+      if (!state.isActive?.() || scope?.signal?.aborted) return void (state.loading = false);
       state.loading = false, state.loaded = true;
       container.empty();
       if (!reviews.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无评论"));
@@ -10603,13 +10123,16 @@ ${error.stack}` : "");
       footer.empty().append(button, end);
       button.on("click", (async () => {
         const nextPage = state.page + 1;
+        let scope;
         button.text("加载中...").prop("disabled", true);
         try {
-          const reviews = await R(state.movieId, nextPage, pageSize);
-          if (!state.isActive?.()) return;
+          scope = await this.getRuntimeService("scope")();
+          const reviews = await this.getRuntimeService("review").list({ movieId: state.movieId }, { page: nextPage, limit: pageSize, scope });
+          if (!state.isActive?.() || scope?.signal?.aborted) return;
           state.page = nextPage;
           await this.displayReviews(state, reviews, container, keywords), reviews.length < pageSize ? (button.remove(), end.show()) : button.text("加载更多评论").prop("disabled", false);
         } catch (error) {
+          if (!state.isActive?.() || scope?.signal?.aborted) return;
           clog.error("加载更多评论失败:", error), button.text("加载失败，请重试").prop("disabled", false);
         }
       }));
@@ -10621,13 +10144,13 @@ ${error.stack}` : "");
         const content = String(review.content || "");
         if (filter?.test(content)) continue;
         const item = $('<article class="jhs-review-item"></article>'), meta = $('<div class="jhs-review-meta"></div>'), body = $('<div class="review-content jhs-review-content"></div>');
-        meta.append($("<span></span>").addClass("jhs-review-author").text(review.username || "匿名用户"));
+        meta.append($("<span></span>").addClass("jhs-review-author").text(review.author || "匿名用户"));
         const stars = $('<span class="score-stars" aria-label="评分"></span>'), score = Math.max(0, Math.min(5, Number(review.score) || 0));
         for (let index = 0; index < score; index++) stars.append('<i class="icon-star"></i>');
         meta.append(
           stars,
-          $("<time></time>").text(utils.formatDate(review.created_at)),
-          $("<span></span>").text(`点赞：${Number(review.likes_count) || 0}`),
+          $("<time></time>").text(utils.formatDate(review.createdAt)),
+          $("<span></span>").text(`点赞：${Number(review.likes) || 0}`),
           $("<span></span>").addClass("jhs-review-floor").text(`#${state.floorIndex++}楼`)
         );
         await this.appendReviewContent(body, content), item.append(meta, body), container.append(item);
@@ -10976,6 +10499,446 @@ ${error.stack}` : "");
   __name(_BusImgPlugin, "BusImgPlugin");
   var BusImgPlugin = _BusImgPlugin;
 
+  // src/plugins/image-viewer/preview-video.js
+  var Z = /* @__PURE__ */ __name((e2, t2) => {
+    if (!e2 || 0 === e2.length) return null;
+    const n2 = new Set(e2);
+    if (n2.has(t2)) return t2;
+    const a2 = L.map(((e3) => e3.quality)).reverse();
+    for (const i2 of a2) if (n2.has(i2)) return i2;
+    return e2[0];
+  }, "Z");
+  var ee = "jhs_dmm_video";
+  var _DmmPreviewParser = class _DmmPreviewParser {
+    constructor(e2) {
+      this.carNum = e2, this.lastError = null;
+    }
+    _checkCache() {
+      const e2 = localStorage.getItem(ee) ? JSON.parse(localStorage.getItem(ee)) : {};
+      return e2[this.carNum] ? (clog.debug("缓存中存在预览视频信息", e2[this.carNum]), e2[this.carNum]) : null;
+    }
+    _updateCache(e2) {
+      const t2 = localStorage.getItem(ee) ? JSON.parse(localStorage.getItem(ee)) : {};
+      t2[this.carNum] = e2, clog.debug("成功解析出预览视频并已缓存:", e2), localStorage.setItem(ee, JSON.stringify(t2));
+    }
+    async _searchContentIds() {
+      const e2 = this.carNum, t2 = e2.replace(/-/g, ""), n2 = [{
+        keyword: e2.replace("-", "00"),
+        name: "00-替换关键词"
+      }, {
+        keyword: e2,
+        name: "原始番号关键词"
+      }, {
+        keyword: t2,
+        name: "无连字符关键词"
+      }], a2 = e2.toLowerCase();
+      let hadSuccessfulRequest = false;
+      for (const o2 of n2) {
+        const { keyword: e3, name: n3 } = o2, i3 = e3.toLowerCase();
+        clog.debug(`--- 尝试使用 ${n3} (${e3}) 进行 API 搜索 ---`);
+        const r2 = `https://api.dmm.com/affiliate/v3/ItemList?${new URLSearchParams({
+          api_id: "UrwskPfkqQ0DuVry2gYL",
+          affiliate_id: "10278-996",
+          output: "json",
+          site: "FANZA",
+          sort: "match",
+          keyword: e3
+        }).toString()}`;
+        let l2;
+        try {
+          l2 = await gmHttp.get(r2);
+          hadSuccessfulRequest = true;
+        } catch (s2) {
+          this.lastError = new ProviderError("dmm", "HTTP_ERROR", `DMM API 请求失败: ${s2.message || s2}`, {
+            cause: s2,
+            url: r2,
+            status: s2?.status,
+            retryable: true
+          }), clog.error(`API 请求失败，跳过 ${n3}:`, this.lastError);
+          continue;
+        }
+        if (!l2 || !l2.result || !l2.result.result_count) {
+          clog.debug("API 返回无结果，尝试下一个关键词。");
+          continue;
+        }
+        const c2 = [];
+        for (const s2 of l2.result.items) {
+          if (c2.length >= 2) break;
+          const e4 = s2.content_id || "", o3 = s2.maker_product || "";
+          (e4.includes(i3.replace("-", "")) || a2 === o3.toLowerCase() || e4.includes(t2.toLowerCase())) && (c2.push({
+            serviceCode: s2.service_code,
+            floorCode: s2.floor_code,
+            contentId: e4,
+            pageUrl: s2.URL
+          }), clog.debug(`[${n3}] cid|makerProduct 匹配成功:`, e4, o3));
+        }
+        if (c2.length > 0) {
+          clog.debug(`--- 成功通过 ${n3} 找到 Content IDs ---`);
+          const t3 = $("#fanzaBtn");
+          let a3 = `https://www.dmm.co.jp/search/=/searchstr=${e3}`, i4 = "single";
+          c2.length > 1 ? (t3.attr("href", a3), t3.append('<span class="site-tag jhs-layout-294497f1">多结果</span>'), t3.css("backgroundColor", "var(--jhs-status-down)"), i4 = "multiple") : (a3 = c2[0].pageUrl, t3.attr("href", a3), t3.css("backgroundColor", "var(--jhs-status-down)"));
+          const s2 = "jhs_other_site_dmm", o3 = localStorage.getItem(s2) ? JSON.parse(localStorage.getItem(s2)) : {};
+          return o3[this.carNum] = {
+            type: i4,
+            url: a3
+          }, localStorage.setItem(s2, JSON.stringify(o3)), c2;
+        }
+        clog.debug(`[${n3}] API 返回结果数 ${l2.result.result_count}，但无精确匹配的 Content ID。`);
+      }
+      hadSuccessfulRequest && (this.lastError = null);
+      clog.warn("所有关键词尝试均未找到匹配的Content ID, 解析Dmm视频失败");
+      const i2 = $("#fanzaBtn");
+      return i2.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`), i2.attr("title", "未查询到, 点击前往搜索页"), i2.css("backgroundColor", "var(--jhs-status-filter)"), null;
+    }
+    async _extractTrailerLinks({ contentId: e2, serviceCode: t2, floorCode: n2 }) {
+      const a2 = `https://www.dmm.co.jp/service/digitalapi/-/html5_player/=/cid=${e2}/mtype=AhRVShI_/service=${t2}/floor=${n2}/mode=/`, i2 = await gmHttp.get(a2, null, {
+        "accept-language": "ja-JP,ja;q=0.9",
+        Cookie: "age_check_done=1"
+      });
+      if ("string" != typeof i2) throw clog.error(i2), new ProviderError("dmm", "PARSE_ERROR", "解析播放页内容失败, 非文本内容", {
+        url: a2
+      });
+      if (i2.includes("このサービスはお住まいの地域からは")) throw new ProviderError("dmm", "REGION_BLOCKED", "DMM 预览源不可用，请将 DMM 域名分流到日本 IP", {
+        url: a2
+      });
+      const s2 = i2.match(/const\s+args\s+=\s+(.*);/);
+      if (!s2) throw new ProviderError("dmm", "PARSE_ERROR", "未在脚本中找到 const args = ... 变量", {
+        url: a2
+      });
+      let o2;
+      try {
+        ({ bitrates: o2 } = JSON.parse(s2[1]));
+      } catch (d2) {
+        throw new ProviderError("dmm", "PARSE_ERROR", `解析播放器脚本 JSON 失败: ${d2.message}`, {
+          cause: d2,
+          url: a2
+        });
+      }
+      const r2 = {}, l2 = L.map(((e3) => e3.quality)).join("|"), c2 = new RegExp(`(${l2})\\.mp4$`);
+      if (!Array.isArray(o2)) throw clog.error("解析画质链接失败: bitrates 字段不是一个数组或不存在"), new ProviderError("dmm", "PARSE_ERROR", "解析画质链接失败: bitrates 字段不是一个数组或不存在", {
+        url: a2
+      });
+      clog.debug("原始数据返回:", o2);
+      for (const h2 of o2) {
+        const e3 = null == h2 ? void 0 : h2.src;
+        if (!e3 || "string" != typeof e3 || !e3.endsWith(".mp4")) continue;
+        const t3 = e3.match(c2);
+        let n3 = "";
+        t3 && t3[1] && (n3 = t3[1]), n3 && !r2[n3] && (r2[n3] = e3);
+      }
+      if (0 === Object.keys(r2).length) throw new ProviderError("dmm", "PARSE_ERROR", "未找到匹配要求的预览画质视频", {
+        url: a2
+      });
+      return r2;
+    }
+    async fetchVideo() {
+      const carNum = normalizeCarNum(this.carNum);
+      if (!carNum) return clog.warn("跳过 DMM 解析：番号不可用"), null;
+      this.carNum = carNum;
+      const e2 = this._checkCache();
+      if (e2) return e2;
+      let t2;
+      try {
+        const e3 = this.carNum.toLowerCase();
+        if (e3.startsWith("heyzo") || /^(n\d+|\d+(-\d+)*)$/.test(e3) || /^n\d+$/.test(e3)) return clog.debug("无码番号类型，取消 DMM 解析"), null;
+        if (this.carNum.includes("VR-")) return clog.debug("VR 类型，取消 DMM 解析"), null;
+        t2 = await this._searchContentIds();
+      } catch (n2) {
+        this.lastError = n2 instanceof ProviderError ? n2 : new ProviderError("dmm", "PARSE_ERROR", n2.message || String(n2), {
+          cause: n2
+        }), clog.error("DMM API 搜索失败:", this.lastError);
+        const e3 = $("#fanzaBtn");
+        return e3.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`), e3.attr("title", "未查询到, 点击前往搜索页"), e3.css("backgroundColor", "var(--jhs-status-filter)"), null;
+      }
+      if (!t2 || 0 === t2.length) return null;
+      try {
+        const e3 = await Promise.any(t2.map(((e4) => this._extractTrailerLinks(e4))));
+        return this._updateCache(e3), e3;
+      } catch (a2) {
+        const e3 = a2.errors || [a2];
+        this.lastError = e3.find(((e4) => "REGION_BLOCKED" === e4?.code)) || e3.find(((e4) => e4 instanceof ProviderError)) || new ProviderError("dmm", "PARSE_ERROR", e3[0]?.message || String(e3[0]), {
+          cause: e3[0]
+        }), clog.error(`解析失败: ${this.lastError.message}`, e3);
+        const t3 = $("#fanzaBtn");
+        return t3.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`), t3.attr("title", "未查询到, 点击前往搜索页"), t3.css("backgroundColor", "var(--jhs-status-filter)"), null;
+      }
+    }
+  };
+  __name(_DmmPreviewParser, "DmmPreviewParser");
+  var DmmPreviewParser = _DmmPreviewParser;
+  async function fetchDmmPreview(carNum) {
+    const parser = new DmmPreviewParser(carNum), sources = await parser.fetchVideo();
+    return {
+      sources,
+      error: parser.lastError
+    };
+  }
+  __name(fetchDmmPreview, "fetchDmmPreview");
+  var _PreviewVideoPlugin = class _PreviewVideoPlugin extends BasePlugin {
+    getName() {
+      return "PreviewVideoPlugin";
+    }
+    async initCss() {
+      return ".jhs-dmm-preview-player{display:none;width:100%;height:auto}.jhs-dmm-preview-player.is-active{display:block}.jhs-native-preview-hidden{display:none!important}";
+    }
+    async handle() {
+      if (!isDetailPage) return;
+      const trigger = $(".preview-video-container"), openVideo = /* @__PURE__ */ __name(() => {
+        utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => {
+          this.handleVideo().catch(((error) => clog.error("预览视频处理失败", error)));
+        }));
+      }, "openVideo");
+      trigger.off("click.jhsVideo").on("click.jhsVideo", openVideo);
+      await storageManager.getSetting("enableLoadPreviewVideo", _) !== _ || o.includes("autoPlay=1") || this.initDmm();
+      const url = window.location.href;
+      (url.includes("gallery-1") || url.includes("gallery-2")) && openVideo(), url.includes("autoPlay=1") && trigger.length > 0 && trigger[0].click();
+    }
+    async initDmm() {
+      try {
+        const { sources } = await this.getDmmPreview();
+        if (!sources) return;
+        const $video = $("#preview-video"), video = $video[0];
+        if (video) return;
+        clog.debug("JavDB没有视频播放元素, 开始创建...");
+        const cover = $(".column-video-cover img").attr("src");
+        $(".preview-images").prepend(`
+                <a class="preview-video-container" data-fancybox="gallery" href="#preview-video">
+                    <span>预告片</span>
+                    <img src="${cover}" class="video-cover jhs-layout-8cf76fd7" alt="">
+                </a>
+            `), $(".preview-video-container").off("click.jhsVideo").on("click.jhsVideo", (() => {
+          utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => this.handleVideo().catch(((error) => clog.error("预览视频处理失败", error)))));
+        }));
+      } catch (error) {
+        clog.error("预加载 DMM 失败:", error);
+      }
+    }
+    /** 复用单次 DMM 请求，避免预加载和点击处理重复抓取。 */
+    getDmmPreview() {
+      if (this.dmmPreviewPromise) return this.dmmPreviewPromise;
+      this.dmmPreviewPromise = fetchDmmPreview(this.getPageInfo().carNum).then(((result) => {
+        (result.error?.retryable || "HTTP_ERROR" === result.error?.code) && (this.dmmPreviewPromise = null);
+        return result;
+      }), ((error) => {
+        this.dmmPreviewPromise = null;
+        throw error;
+      }));
+      return this.dmmPreviewPromise;
+    }
+    /** 创建与 JavDB HLS 生命周期完全隔离的 DMM 播放器。 */
+    createDmmPlayer($nativeVideo) {
+      const $host = $nativeVideo.parent(), existing = $host.find("#jhs-preview-video");
+      if (existing.length) return existing;
+      const $player = $('<video id="jhs-preview-video" class="jhs-video-player jhs-dmm-preview-player" controls playsinline></video>');
+      return $nativeVideo.after($player), $player;
+    }
+    /** 销毁 JHS 播放器并把播放权完整交回 JavDB。 */
+    async restoreNativePlayer($nativeVideo, nativeVideo, notify = false) {
+      const $dmmVideo = $nativeVideo.parent().find("#jhs-preview-video"), dmmVideo = $dmmVideo[0];
+      dmmVideo && (dmmVideo.pause(), $dmmVideo.removeAttr("src"), dmmVideo.load(), $dmmVideo.remove());
+      $nativeVideo.removeClass("jhs-native-preview-hidden");
+      return safePlay(nativeVideo, {
+        context: "JavDB 原生预览回退",
+        notify
+      });
+    }
+    async handleVideo() {
+      const $nativeVideo = $("#preview-video");
+      if (!$nativeVideo.length) return;
+      const $host = $nativeVideo.parent().css("position", "relative"), nativeVideo = $nativeVideo[0], muted = localStorage.getItem("jhs_videoMuted");
+      void safePlay(nativeVideo, {
+        context: "JavDB 原生预览",
+        notify: false
+      });
+      const dmmEnabled = await storageManager.getSetting("enableLoadPreviewVideo", _) !== C, dmmResult = dmmEnabled ? await this.getDmmPreview() : {
+        sources: null,
+        error: null
+      }, { sources, error } = dmmResult, $toolbar = $("<div></div>").attr("id", "video-bottom-toolbar").addClass("jhs-video-toolbar"), $qualityList = $("<div></div>").addClass("jhs-video-quality-list").attr({
+        role: "group",
+        "aria-label": "视频画质"
+      });
+      $host.find("#video-bottom-toolbar").remove();
+      let dmmPlayed = false, $dmmVideo = null, dmmVideo = null;
+      if (sources) {
+        const preferredQuality = await storageManager.getSetting("videoQuality"), selectedQuality = Z(Object.keys(sources), preferredQuality), source = sources[selectedQuality];
+        const currentTime = nativeVideo.currentTime;
+        $dmmVideo = this.createDmmPlayer($nativeVideo), dmmVideo = $dmmVideo[0], dmmVideo.muted = !muted || "yes" === muted, $dmmVideo.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {
+          localStorage.setItem("jhs_videoMuted", dmmVideo.muted ? "yes" : "no");
+        })), $dmmVideo.attr("src", source), dmmVideo.load(), dmmVideo.currentTime = currentTime, $dmmVideo.addClass("is-active");
+        dmmPlayed = await safePlay(dmmVideo, {
+          context: "JavDB 高画质预览",
+          notify: false
+        });
+        if (!dmmPlayed && !dmmVideo.muted) dmmVideo.muted = true, dmmPlayed = await safePlay(dmmVideo, {
+          context: "JavDB 高画质预览静音重试",
+          notify: false
+        });
+        dmmPlayed ? (nativeVideo.pause(), $nativeVideo.addClass("jhs-native-preview-hidden")) : ($dmmVideo.removeClass("is-active"), await this.restoreNativePlayer($nativeVideo, nativeVideo, true));
+        dmmPlayed && L.forEach(((quality) => {
+          const qualitySource = sources[quality.quality];
+          if (!qualitySource) return;
+          const active = dmmPlayed && selectedQuality === quality.quality;
+          $qualityList.append($(`<button type="button" class="jhs-btn jhs-video-quality-btn${active ? " active" : ""}" data-quality="${quality.quality}" data-video-src="${qualitySource}" aria-pressed="${active ? "true" : "false"}">${quality.text}</button>`));
+        }));
+      }
+      $toolbar.append($qualityList);
+      const $actions = $("<div></div>").addClass("jhs-toolbar");
+      $actions.append('<button type="button" class="jhs-btn jhs-btn--filter jhs-layout-3f0d74e1" id="video-filterBtn">屏蔽</button>', '<button type="button" class="jhs-btn jhs-btn--fav jhs-layout-2afc43dc" id="video-favoriteBtn">收藏</button>', '<button type="button" class="jhs-btn jhs-btn--down jhs-layout-5c319329" id="speed-btn">快进</button>'), $toolbar.append($actions), $host.append($toolbar), sources || await safePlay(nativeVideo, {
+        context: "JavDB 预览视频",
+        notify: true,
+        message: "REGION_BLOCKED" === error?.code ? error.message : "当前视频源无法播放"
+      });
+      $toolbar.off("click.jhsVideo").on("click.jhsVideo", ".jhs-video-quality-btn", (async (event) => {
+        const $button = $(event.currentTarget);
+        if ($button.hasClass("active")) return;
+        try {
+          if (!dmmVideo) return;
+          const currentTime = dmmVideo.currentTime, previousSource = $dmmVideo.attr("src");
+          $dmmVideo.attr("src", $button.data("video-src")), dmmVideo.load(), dmmVideo.currentTime = currentTime;
+          const played = await safePlay(dmmVideo, {
+            context: "JavDB 画质切换",
+            notify: false
+          });
+          if (played) $toolbar.find(".jhs-video-quality-btn").removeClass("active").attr("aria-pressed", "false"), $button.addClass("active").attr("aria-pressed", "true");
+          else {
+            previousSource && ($dmmVideo.attr("src", previousSource), dmmVideo.load(), dmmVideo.currentTime = currentTime);
+            const restored = previousSource && await safePlay(dmmVideo, {
+              context: "JavDB 画质切换回退",
+              notify: false
+            });
+            restored || await this.restoreNativePlayer($nativeVideo, nativeVideo, true);
+          }
+        } catch (playbackError) {
+          clog.error("切换画质失败:", playbackError);
+        }
+      })), $("#speed-btn").off("click.jhsVideo").on("click.jhsVideo", (() => {
+        dmmVideo && (dmmVideo.currentTime += 10);
+      })), $toolbar.off("contextmenu.jhsVideo").on("contextmenu.jhsVideo", "#speed-btn", ((event) => (event.preventDefault(), this.getDependency("DetailPageButtonPlugin").filterOne(event)))), $("#video-filterBtn").off("click.jhsVideo").on("click.jhsVideo", ((event) => this.getDependency("DetailPageButtonPlugin").filterOne(event))), $("#video-favoriteBtn").off("click.jhsVideo").on("click.jhsVideo", ((event) => this.getDependency("DetailPageButtonPlugin").favoriteOne(event)));
+    }
+  };
+  __name(_PreviewVideoPlugin, "PreviewVideoPlugin");
+  var PreviewVideoPlugin = _PreviewVideoPlugin;
+
+  // src/plugins/image-viewer/bus-preview-video.js
+  var _BusPreviewVideoPlugin = class _BusPreviewVideoPlugin extends BasePlugin {
+    getName() {
+      return "BusPreviewVideoPlugin";
+    }
+    async initCss() {
+      return "\n            .bus-preview-modal { position:fixed; inset:0; z-index:var(--jhs-z-modal); display:flex; align-items:center; justify-content:center; visibility:hidden; opacity:0; background:rgba(0,0,0,.95); transition:opacity var(--jhs-motion-base) var(--jhs-ease); }\n            .bus-preview-modal.is-open { visibility:visible; opacity:1; }\n            .bus-preview-modal-content { position:relative; display:flex; max-width:95%; max-height:95%; flex-direction:column; align-items:center; gap:var(--jhs-space-3); }\n            .video-player-wrapper { position:relative; width:80vw; max-width:100%; max-height:85vh; aspect-ratio:16/9; background:#000; }\n            .video-player-wrapper #preview-video { position:absolute; inset:0; }\n        ";
+    }
+    initModal() {
+      if (0 === $("#bus-preview-modal").length) {
+        $("body").append('\n                <div id="bus-preview-modal" class="bus-preview-modal">\n                    <div class="bus-preview-modal-content">\n                        </div>\n                </div>\n            ');
+        const e2 = $("#bus-preview-modal");
+        e2.on("click", ((e3) => {
+          "bus-preview-modal" === e3.target.id && this.closeVideoModal();
+        })), $(document).on("keydown", ((t2) => {
+          "Escape" === t2.key && e2.hasClass("is-open") && this.closeVideoModal();
+        }));
+      }
+    }
+    closeVideoModal() {
+      const e2 = $("#preview-video");
+      e2.length > 0 && e2[0].pause(), $("#bus-preview-modal").removeClass("is-open");
+    }
+    async handle() {
+      if (!isDetailPage) return;
+      this.initModal();
+      const e2 = $("#sample-waterfall .sample-box .photo-frame img:first").attr("src"), t2 = $(`
+            <button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65">
+                <div class="photo-frame jhs-layout-87db2275">
+                    <img src="${e2}" class="video-cover" alt="">
+                    <div class="play-icon jhs-play-overlay">
+                        ▶
+                    </div>
+                </div>
+            </button>`);
+      $("#sample-waterfall").prepend(t2);
+      "yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes") && fetchDmmPreview(this.getPageInfo().carNum).catch(((e3) => clog.warn("预加载 DMM 失败", e3)));
+      let n2 = false, a2 = $(".preview-video-container");
+      a2.on("click", (async (e3) => {
+        if (e3.preventDefault(), e3.stopPropagation(), n2) show.info("正在加载中, 勿重复点击");
+        else {
+          n2 = true;
+          try {
+            await this.handleVideo();
+          } finally {
+            n2 = false;
+          }
+        }
+      })), window.location.href.includes("autoPlay=1") && a2.trigger("click");
+    }
+    async handleVideo() {
+      const e2 = $("#bus-preview-modal"), t2 = e2.find(".bus-preview-modal-content");
+      let n2 = $("#preview-video");
+      if (n2.length > 0) return e2.addClass("is-open"), void await safePlay(n2[0], {
+        context: "JavBus 预览视频",
+        notify: true
+      });
+      let a2 = this.getPageInfo().carNum;
+      const { sources: i2, error: previewError } = await fetchDmmPreview(a2);
+      i2 && 0 !== Object.keys(i2).length ? (await this.createVideoPlayerAndControls(i2, t2), n2 = $("#preview-video"), n2.length > 0 ? (e2.addClass("is-open"), await safePlay(n2[0], {
+        context: "JavBus 预览视频",
+        notify: true,
+        message: "REGION_BLOCKED" === previewError?.code ? previewError.message : "当前视频源无法播放"
+      })) : show.error("视频播放器创建失败。")) : show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未找到可用的视频源。");
+    }
+    async createVideoPlayerAndControls(e2, t2) {
+      let n2 = await storageManager.getSetting("videoQuality");
+      n2 = Z(Object.keys(e2), n2);
+      let a2 = e2[n2];
+      t2.html(`
+            <div class="video-player-wrapper">
+                <video id="preview-video" class="jhs-video-player" controls playsinline>
+                    <source src="${a2}" />
+                </video>
+            </div>
+            <div class="jhs-video-toolbar jhs-video-quality-list" role="group" aria-label="视频画质">
+                </div>
+        `);
+      const i2 = $("#preview-video"), s2 = i2.find("source"), o2 = t2.find(".jhs-video-quality-list");
+      if (!i2.length || !s2.length) return;
+      const settings = this.getRuntimeService("settings"), r2 = i2[0], muted = settings.snapshot().videoMuted;
+      r2.muted = muted == null || muted === true, i2.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {
+        void settings.set("videoMuted", r2.muted).catch(((error) => clog.error("保存视频静音设置失败", error)));
+      }));
+      let c2 = "";
+      L.forEach(((t3) => {
+        let a3 = e2[t3.quality];
+        if (a3) {
+          const e3 = n2 === t3.quality;
+          c2 += `
+                    <button type="button" class="jhs-btn jhs-video-quality-btn${e3 ? " active" : ""}"
+                            data-quality="${t3.quality}"
+                            data-video-src="${a3}"
+                            aria-pressed="${e3 ? "true" : "false"}">
+                        ${t3.text}
+                    </button>
+                `;
+        }
+      })), o2.html(c2);
+      const d2 = o2.find(".jhs-video-quality-btn");
+      o2.off("click.jhsVideo").on("click.jhsVideo", ".jhs-video-quality-btn", (async (e3) => {
+        try {
+          const t3 = $(e3.currentTarget);
+          if (t3.hasClass("active")) return;
+          let n3 = t3.attr("data-video-src");
+          s2.attr("src", n3);
+          const a3 = r2.currentTime;
+          r2.load(), r2.currentTime = a3, await safePlay(r2, {
+            context: "JavBus 画质切换",
+            notify: true
+          }) && (d2.removeClass("active").attr("aria-pressed", "false"), t3.addClass("active").attr("aria-pressed", "true"));
+        } catch (t3) {
+          clog.error("切换画质失败:", t3);
+        }
+      }));
+    }
+  };
+  __name(_BusPreviewVideoPlugin, "BusPreviewVideoPlugin");
+  var BusPreviewVideoPlugin = _BusPreviewVideoPlugin;
+
   // src/plugins/image-viewer/cover-button.js
   var _CoverButtonPlugin = class _CoverButtonPlugin extends BasePlugin {
     getName() {
@@ -11187,6 +11150,14 @@ ${error.stack}` : "");
   __name(normalizeMovieCarNum, "normalizeMovieCarNum");
 
   // src/integrations/javstore/parser.js
+  function resolveDocument(page) {
+    if (typeof page === "string") return new DOMParser().parseFromString(page, "text/html");
+    if (typeof page?.querySelectorAll === "function") return page;
+    const candidate = page?.[0] ?? page?.get?.(0);
+    if (typeof candidate?.querySelectorAll === "function") return candidate;
+    throw new TypeError("JavStore document is invalid");
+  }
+  __name(resolveDocument, "resolveDocument");
   function normalizeJavStoreAssetUrl(value, baseUrl = "https://javstore.net") {
     if (!value) return null;
     try {
@@ -11202,22 +11173,31 @@ ${error.stack}` : "");
   function parseJavStoreSearch($searchPage, carNum, baseUrl = "https://javstore.net") {
     const normalizedCarNum = normalizeMovieCarNum(carNum);
     if (!normalizedCarNum) return [];
-    const wrap = (
-      /** @type {any} */
-      globalThis.jQuery ?? /** @type {any} */
-      globalThis.$ ?? $searchPage.constructor
-    );
-    return $searchPage.find('a[href$="-pn.html"]').filter(((index, element) => wrap(element).text().trim().toUpperCase().includes(normalizedCarNum.toUpperCase()))).map(((index, element) => new URL(wrap(element).attr("href"), baseUrl).href)).get();
+    if (typeof $searchPage?.find === "function") {
+      const wrap = (
+        /** @type {any} */
+        globalThis.jQuery ?? /** @type {any} */
+        globalThis.$ ?? $searchPage.constructor
+      );
+      return $searchPage.find('a[href$="-pn.html"]').filter(((index, element) => wrap(element).text().trim().toUpperCase().includes(normalizedCarNum.toUpperCase()))).map(((index, element) => new URL(wrap(element).attr("href"), baseUrl).href)).get();
+    }
+    return [...resolveDocument($searchPage).querySelectorAll('a[href$="-pn.html"]')].filter((element) => element.textContent?.trim().toUpperCase().includes(normalizedCarNum.toUpperCase())).map((element) => new URL(element.getAttribute("href") || "", baseUrl).href);
   }
   __name(parseJavStoreSearch, "parseJavStoreSearch");
   function parseJavStorePreview($detailPage, detailUrl) {
-    const wrap = (
-      /** @type {any} */
-      globalThis.jQuery ?? /** @type {any} */
-      globalThis.$ ?? $detailPage.constructor
-    );
-    const isPreviewLink = /* @__PURE__ */ __name((index, element) => "CLICK HERE!" === wrap(element).text().trim(), "isPreviewLink");
-    const previewHref = $detailPage.find("a").filter(isPreviewLink).first().attr("href");
+    if (typeof $detailPage?.find === "function") {
+      const wrap = (
+        /** @type {any} */
+        globalThis.jQuery ?? /** @type {any} */
+        globalThis.$ ?? $detailPage.constructor
+      );
+      const link = $detailPage.find("a").filter(((index, element) => "CLICK HERE!" === wrap(element).text().trim())).first();
+      const previewHref2 = link.attr("href");
+      if (!previewHref2) return null;
+      const previewUrl2 = normalizeJavStoreAssetUrl(previewHref2, detailUrl);
+      return previewUrl2 ? previewUrl2.replace(".th", "") : null;
+    }
+    const previewHref = [...resolveDocument($detailPage).querySelectorAll("a")].find((element) => element.textContent?.trim() === "CLICK HERE!")?.getAttribute("href");
     if (!previewHref) return null;
     const previewUrl = normalizeJavStoreAssetUrl(previewHref, detailUrl);
     return previewUrl ? previewUrl.replace(".th", "") : null;
@@ -11226,28 +11206,32 @@ ${error.stack}` : "");
 
   // src/plugins/image-viewer/screenshot-provider-registry.js
   var _ScreenshotProviderRegistry = class _ScreenshotProviderRegistry {
+    /** @param {Array<{id: string, name: string, enabled?: boolean, priority?: number, getScreenshot: (carNum: string) => Promise<any>}>} [providers] */
     constructor(providers = []) {
       this.providers = /* @__PURE__ */ new Map();
       providers.forEach(((provider) => this.register(provider)));
     }
+    /** @param {{id: string, name: string, enabled?: boolean, priority?: number, getScreenshot: (carNum: string) => Promise<any>}} provider */
     register(provider) {
       if (!provider?.id || !provider.name || "function" !== typeof provider.getScreenshot) throw new TypeError("Invalid screenshot provider");
       this.providers.set(provider.id, { enabled: true, priority: 100, ...provider });
       return this;
     }
+    /** @param {string} id */
     get(id) {
       return this.providers.get(id) || null;
     }
     getEnabledProviders() {
       return [...this.providers.values()].filter(((provider) => provider.enabled)).sort(((a2, b2) => a2.priority - b2.priority));
     }
+    /** @param {string} carNum */
     async first(carNum) {
       for (const provider of this.getEnabledProviders()) {
         try {
           const result = await provider.getScreenshot(carNum);
           if (result?.url) return result;
         } catch (error) {
-          clog.warn(`截图源 ${provider.name} 请求失败`, error);
+          globalThis.clog?.warn(`截图源 ${provider.name} 请求失败`, error);
         }
       }
       return null;
@@ -11264,7 +11248,7 @@ ${error.stack}` : "");
     async initializeProviders() {
       const settings = await new ResourceSettingsService().getScreenshotSettings(), configured = /* @__PURE__ */ __name((id) => settings.providers.find(((provider) => provider.id === id)) || {}, "configured");
       this.providerRegistry = new ScreenshotProviderRegistry([
-        { id: "javstore", name: "JavStore", priority: 10, getScreenshot: /* @__PURE__ */ __name((carNum) => this.getCachedProviderScreenshot("javstore", carNum, (() => this.getJavStoreScreenShot(carNum))), "getScreenshot") },
+        { id: "javstore", name: "JavStore", priority: 10, getScreenshot: /* @__PURE__ */ __name((carNum) => this.getServiceScreenshot(carNum), "getScreenshot") },
         { id: "projectjav", name: "ProjectJav", enabled: false, priority: 20, getScreenshot: /* @__PURE__ */ __name(async () => null, "getScreenshot") },
         { id: "18av", name: "18AV", enabled: false, priority: 30, getScreenshot: /* @__PURE__ */ __name(async () => null, "getScreenshot") }
       ].map(((provider) => ({ ...provider, ...configured(provider.id), enabled: !["projectjav", "18av"].includes(provider.id) && (configured(provider.id).enabled ?? provider.enabled ?? true), getScreenshot: provider.getScreenshot }))));
@@ -11318,7 +11302,6 @@ ${error.stack}` : "");
     async getScreenshotFromInitializedProviders(e2) {
       e2 = normalizeCarNum(e2);
       if (!e2) throw new Error("缩略图番号不可用");
-      localStorage.removeItem("jhs_screenShot");
       let n2;
       try {
         n2 = await this.providerRegistry.first(e2);
@@ -11329,39 +11312,11 @@ ${error.stack}` : "");
       let url = n2.url, a2 = url.indexOf("https://");
       return -1 !== a2 && (url = url.substring(a2)), clog.log(`缩略图获取成功 (${n2.source}):`, url), url;
     }
-    async getCachedProviderScreenshot(provider, carNum, loader) {
-      const value = await storageManager.cachedRequest(`screenshot:${provider}:${carNum}`, CACHE_TTL.screenshot, (async () => {
-        const loadedUrl = await loader(), url2 = "javstore" === provider ? normalizeJavStoreAssetUrl(loadedUrl) : loadedUrl;
-        return url2 ? { __jhsCacheTtl: CACHE_TTL.screenshot, data: { url: url2 } } : { __jhsCacheTtl: CACHE_TTL.screenshotNegative, data: { miss: true } };
-      }));
-      if (!value || value.miss) return null;
-      const cachedUrl = "string" === typeof value ? value : value.url, url = "javstore" === provider ? normalizeJavStoreAssetUrl(cachedUrl) : cachedUrl;
-      return url ? { url, source: provider, detailUrl: null } : null;
-    }
-    async getJavStoreScreenShot(e2) {
-      const t2 = `https://javstore.net/search?q=${encodeURIComponent(e2)}`;
-      clog.debug("JavStore 搜索地址:", t2);
-      let n2 = await gmHttp.get(t2, {}, {}, false, { ignoreNotFound: true });
-      if (!n2) return clog.debug("JavStore 搜索页未获取:", t2), null;
-      const a2 = utils.htmlTo$dom(n2);
-      const i2 = parseJavStoreSearch(a2, e2);
-      if (!i2.length) return clog.debug("JavStore, 查询番号无结果:", t2), null;
-      for (const e3 of i2) {
-        const t3 = e3;
-        clog.debug("JavStore 候选详情:", t3);
-        const n3 = await gmHttp.get(t3, {}, {}, false, { ignoreNotFound: true });
-        if (!n3) {
-          clog.debug("JavStore 详情页未获取:", t3);
-          continue;
-        }
-        const a3 = parseJavStorePreview(utils.htmlTo$dom(n3), t3);
-        if (!a3) {
-          clog.debug("JavStore 详情页没有 CLICK HERE!:", t3);
-          continue;
-        }
-        return clog.debug("JavStore 预览图:", a3), a3;
-      }
-      return clog.debug("JavStore, 所有候选均无有效预览图:", t2), null;
+    async getServiceScreenshot(carNum) {
+      const scope = await this.getRuntimeService("scope")();
+      const images = await this.getRuntimeService("screenshot").resolve({ carNum }, { scope });
+      const image = Array.isArray(images) ? images[0] : images;
+      return image?.url ? { url: image.url, source: image.providerId || "javstore", detailUrl: null } : null;
     }
     addImg(e2, t2) {
       const url = normalizeJavStoreAssetUrl(t2);
@@ -13223,6 +13178,7 @@ ${error.stack}` : "");
       $("#newVideoBtn").after(e2), $("#statsBtn").on("click", (() => this.openDialog()));
     }
     async openDialog() {
+      const diagnostics = this.getRuntimeService("diagnostics").exportSnapshot();
       const cars = await storageManager.getCarList(), actresses = await storageManager.getFavoriteActressList(), blacklist = await storageManager.getBlacklist(), activity = await stateService.getActivityLog(), total = cars.length;
       const counts = { manualBlocked: 0, favorite: 0, hasDown: 0, hasWatch: 0, pending: 0 };
       cars.forEach(((car) => {
@@ -13251,7 +13207,9 @@ ${error.stack}` : "");
         { label: "未鉴定", value: pending, action: null },
         { label: "收藏演员", value: actresses.length, action: null },
         { label: "黑名单演员", value: blacklist.length, action: null },
-        { label: "新作品待处理", value: newVideos, action: "new-video" }
+        { label: "新作品待处理", value: newVideos, action: "new-video" },
+        { label: "活跃功能", value: diagnostics.activeFeatures.length, action: null },
+        { label: "运行错误", value: diagnostics.errors.length, action: null }
       ];
       const statusRows = [["收藏", counts.favorite, "var(--jhs-status-fav)"], ["下载", counts.hasDown, "var(--jhs-status-down)"], ["已看", counts.hasWatch, "var(--jhs-status-watch)"], ["手动屏蔽", counts.manualBlocked, "var(--jhs-status-filter)"], ["未鉴定", pending, "var(--jhs-border-strong)"]];
       const row = /* @__PURE__ */ __name((label, value, max, color, href = "") => `<div class="jhs-stats__row">${href ? `<a class="jhs-stats__label" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(label)}">${escapeHtml(label)}</a>` : `<span class="jhs-stats__label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`}<span class="jhs-stats__track"><span class="jhs-stats__bar" data-width="${max ? Math.round(value / max * 100) : 0}" data-color="${color}"></span></span><span class="jhs-stats__value">${value}${max === total && total ? ` (${Math.round(value / total * 100)}%)` : ""}</span></div>`, "row");
@@ -13640,7 +13598,10 @@ ${error.stack}` : "");
       $("#magnets-span").text(i2 === _ ? "关闭磁力过滤" : "开启磁力过滤"), i2 === _ && a2.doFilterMagnet(), $("#enable-magnets-filter").on("click", ((e3) => {
         let t3 = $("#magnets-span");
         "关闭磁力过滤" === t3.text() ? (a2.showAll(), t3.text("开启磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", C)) : (a2.doFilterMagnet(), t3.text("关闭磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", _));
-      })), $("#search-subtitle-btn").on("click", ((e3) => utils.openPage(`https://subtitlecat.com/index.php?search=${t2}`, t2, false, e3))), $("#xunLeiSubtitleBtn").on("click", (() => this.searchXunLeiSubtitle(t2)));
+      })), $("#search-subtitle-btn").on("click", ((e3) => {
+        const target = this.getRuntimeService("movie").sourceUrls({ carNum: t2 }, ["subtitlecat"])[0]?.url;
+        if (target) utils.openPage(target, t2, false, e3);
+      })), $("#xunLeiSubtitleBtn").on("click", (() => this.searchXunLeiSubtitle(t2)));
       if (!t2) {
         $("#filterBtn, #favoriteBtn, #hasDownBtn, #hasWatchBtn, #magnetSearchBtn, #xunLeiSubtitleBtn, #search-subtitle-btn").prop("disabled", true).attr("title", "番号不可用");
         return void clog.warn("详情操作不可用：番号不可用");
@@ -13680,7 +13641,8 @@ ${error.stack}` : "");
           area: utils.getResponsiveArea(["60%", "70%"]),
           anim: -1,
           success: /* @__PURE__ */ __name((t4, a2) => {
-            new Tabulator("#xunlei-table-container", {
+            createJhsTable(Tabulator, "#xunlei-table-container", {
+              pagination: false,
               layout: "fitColumns",
               placeholder: "暂无数据",
               virtualDom: true,
@@ -13895,9 +13857,10 @@ ${error.stack}` : "");
         `);
       let a2 = $("h2.section-title");
       if (a2.length > 0 && (a2.append('\n                <div id="foldCategoryBtn">\n                    <button type="button" class="jhs-btn jhs-btn--ghost jhs-layout-2100e73d">\n                        <span></span>\n                        <i class="jhs-layout-78fa54ea"></i>\n                    </button>\n                </div>\n            '), t2 = $("section > div > div.box")), !t2) return;
-      let i2 = $("#foldCategoryBtn"), s2 = localStorage.getItem("jhs_foldCategory") === _, [o2, r2] = s2 ? ["展开", "icon-angle-double-down"] : ["折叠", "icon-angle-double-up"];
+      const settings = this.getRuntimeService("settings");
+      let i2 = $("#foldCategoryBtn"), s2 = settings.snapshot().foldCategoryCollapsed === true, [o2, r2] = s2 ? ["展开", "icon-angle-double-down"] : ["折叠", "icon-angle-double-up"];
       i2.find("span").text(o2).end().find("i").attr("class", r2), window.location.href.includes("noFold=1") || t2[s2 ? "hide" : "show"](), i2.on("click", (async (e2) => {
-        e2.preventDefault(), s2 = !s2, localStorage.setItem("jhs_foldCategory", s2 ? _ : C);
+        e2.preventDefault(), s2 = !s2, await settings.set("foldCategoryCollapsed", s2);
         const [n3, a3] = s2 ? ["展开", "icon-angle-double-down"] : ["折叠", "icon-angle-double-up"];
         i2.find("span").text(n3).end().find("i").attr("class", a3), t2[s2 ? "hide" : "show"]();
       }));
@@ -13992,10 +13955,66 @@ ${error.stack}` : "");
   __name(_HighlightMagnetPlugin, "HighlightMagnetPlugin");
   var HighlightMagnetPlugin = _HighlightMagnetPlugin;
 
+  // src/core/selection-model.js
+  var _SelectionModel = class _SelectionModel extends EventTarget {
+    /** @param {(item: any) => string} keyOf */
+    constructor(keyOf) {
+      super();
+      this.keyOf = keyOf;
+      this.mode = "explicit";
+      this.selected = /* @__PURE__ */ new Set();
+      this.excluded = /* @__PURE__ */ new Set();
+    }
+    /** @param {any} item @param {boolean} selected */
+    set(item, selected) {
+      const key = this.keyOf(item), target = this.mode === "all-filtered" ? this.excluded : this.selected;
+      this.mode === "all-filtered" ? selected ? target.delete(key) : target.add(key) : selected ? target.add(key) : target.delete(key);
+      this.emit();
+    }
+    selectAllFiltered() {
+      this.mode = "all-filtered";
+      this.selected.clear();
+      this.excluded.clear();
+      this.emit();
+    }
+    clear() {
+      this.mode = "explicit";
+      this.selected.clear();
+      this.excluded.clear();
+      this.emit();
+    }
+    /** @param {any} item */
+    has(item) {
+      const key = this.keyOf(item);
+      return this.mode === "all-filtered" ? !this.excluded.has(key) : this.selected.has(key);
+    }
+    /** @param {any[]} filteredItems */
+    values(filteredItems) {
+      return this.mode === "all-filtered" ? filteredItems.filter((item) => !this.excluded.has(this.keyOf(item))) : filteredItems.filter((item) => this.selected.has(this.keyOf(item)));
+    }
+    snapshot() {
+      return Object.freeze({ mode: this.mode, selected: [...this.selected], excluded: [...this.excluded] });
+    }
+    emit() {
+      this.dispatchEvent(new CustomEvent("selection.changed", { detail: this.snapshot() }));
+    }
+  };
+  __name(_SelectionModel, "SelectionModel");
+  var SelectionModel = _SelectionModel;
+
+  // src/features/history/history-selection-model.js
+  var _HistorySelectionModel = class _HistorySelectionModel extends SelectionModel {
+    constructor() {
+      super((item) => normalizeMovieCarNum(item?.carNum) ?? String(item?.id ?? ""));
+    }
+  };
+  __name(_HistorySelectionModel, "HistorySelectionModel");
+  var HistorySelectionModel = _HistorySelectionModel;
+
   // src/plugins/status/history.js
   var _HistoryPlugin = class _HistoryPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectAll", false), i(this, "historyExcludedCarNums", /* @__PURE__ */ new Set()), i(this, "historySorters", []), i(this, "historyFilteredCount", 0), i(this, "historySelectionSyncing", false);
+      super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectionModel", new HistorySelectionModel()), i(this, "historySorters", []), i(this, "historyFilteredCount", 0), i(this, "historySelectionSyncing", false);
     }
     getName() {
       return "HistoryPlugin";
@@ -14135,9 +14154,12 @@ ${error.stack}` : "");
     normalizeHistoryCarNum(carNum) {
       return normalizeCarNum(carNum) || String(carNum || "").trim().toUpperCase();
     }
+    isHistoryAllFiltered() {
+      return "all-filtered" === this.historySelectionModel.mode;
+    }
     /** 清空 History 的全选、排除项和当前页选择。 */
     resetHistorySelection(deselectRows = true) {
-      this.historySelectAll = false, this.historyExcludedCarNums.clear();
+      this.historySelectionModel.clear();
       if (deselectRows && this.tableObj) {
         this.historySelectionSyncing = true;
         try {
@@ -14151,12 +14173,12 @@ ${error.stack}` : "");
     createHistorySelectAllCheckbox() {
       const checkbox = document.createElement("input");
       return checkbox.type = "checkbox", checkbox.className = "jhs-history-select-all", checkbox.setAttribute("aria-label", "选择当前筛选条件下的全部记录"), checkbox.addEventListener("change", (() => {
-        checkbox.checked ? (this.historySelectAll = true, this.historyExcludedCarNums.clear(), this.syncHistoryPageSelection()) : this.resetHistorySelection();
+        checkbox.checked ? (this.historySelectionModel.selectAllFiltered(), this.syncHistoryPageSelection()) : this.resetHistorySelection();
       })), checkbox;
     }
     syncHistoryPageSelection() {
-      if (!this.tableObj || !this.historySelectAll) return void this.updateHistorySelectionUi();
-      const currentRows = this.tableObj.getData?.() || [], selectedIds = currentRows.map(((item) => item.carNum)).filter(((carNum) => !this.historyExcludedCarNums.has(this.normalizeHistoryCarNum(carNum))));
+      if (!this.tableObj || !this.isHistoryAllFiltered()) return void this.updateHistorySelectionUi();
+      const currentRows = this.tableObj.getData?.() || [], selectedIds = currentRows.filter(((item) => this.historySelectionModel.has(item))).map(((item) => item.carNum));
       this.historySelectionSyncing = true;
       try {
         this.tableObj.deselectRow(), selectedIds.length && this.tableObj.selectRow(selectedIds);
@@ -14166,19 +14188,19 @@ ${error.stack}` : "");
       this.updateHistorySelectionUi();
     }
     updateHistoryRowSelection(row, selected) {
-      if (!this.historySelectAll || this.historySelectionSyncing) return void this.updateHistorySelectionUi();
-      const carNum = this.normalizeHistoryCarNum(row?.getData?.().carNum);
-      carNum && (selected ? this.historyExcludedCarNums.delete(carNum) : this.historyExcludedCarNums.add(carNum)), this.updateHistorySelectionUi();
+      if (this.historySelectionSyncing) return void this.updateHistorySelectionUi();
+      const item = row?.getData?.();
+      item && this.historySelectionModel.set(item, selected), this.updateHistorySelectionUi();
     }
     getHistorySelectionSummary() {
-      if (this.historySelectAll) {
-        const excluded = this.historyExcludedCarNums.size, selected = Math.max(0, this.historyFilteredCount - excluded);
+      if (this.isHistoryAllFiltered()) {
+        const excluded = this.historySelectionModel.excluded.size, selected = Math.max(0, this.historyFilteredCount - excluded);
         return {
           count: selected,
           text: excluded ? `已选择当前筛选结果 ${selected} 条，已排除 ${excluded} 条` : `已选择当前筛选结果 ${selected} 条`
         };
       }
-      const count = this.tableObj?.getSelectedData?.().length || 0;
+      const count = this.historySelectionModel.selected.size;
       return {
         count,
         text: `已选择当前页 ${count} 条`
@@ -14189,15 +14211,15 @@ ${error.stack}` : "");
       const summary = this.getHistorySelectionSummary(), batchBox = this.historyRoot.find("#allSelectBox"), filterBox = this.historyRoot.find("#filterBox");
       this.historyRoot.find("#historySelectionSummary").text(summary.text), summary.count > 0 ? (filterBox.hide(), batchBox.show()) : (filterBox.show(), batchBox.hide());
       this.historyRoot.find(".jhs-history-select-all").each(((index, element) => {
-        element.checked = this.historySelectAll, element.indeterminate = this.historySelectAll ? this.historyExcludedCarNums.size > 0 : summary.count > 0;
+        element.checked = this.isHistoryAllFiltered(), element.indeterminate = this.isHistoryAllFiltered() ? this.historySelectionModel.excluded.size > 0 : summary.count > 0;
       }));
     }
     /** 解析批量操作实际要处理的当前页或完整筛选结果。 */
     async getHistoryBatchSelection() {
-      if (!this.historySelectAll) return this.tableObj?.getSelectedData?.() || [];
+      if (!this.isHistoryAllFiltered()) return this.historySelectionModel.values(this.tableObj?.getData?.() || []);
       const rows = await this.getFilteredHistoryData(this.historySorters), available = new Set(rows.map(((item) => this.normalizeHistoryCarNum(item.carNum))));
-      for (const carNum of this.historyExcludedCarNums) available.has(carNum) || this.historyExcludedCarNums.delete(carNum);
-      return this.historyFilteredCount = rows.length, rows.filter(((item) => !this.historyExcludedCarNums.has(this.normalizeHistoryCarNum(item.carNum))));
+      for (const carNum of this.historySelectionModel.excluded) available.has(carNum) || this.historySelectionModel.excluded.delete(carNum);
+      return this.historyFilteredCount = rows.length, this.historySelectionModel.values(rows);
     }
     bindHistoryActions(root) {
       root.on("click.jhsHistory", (function(e2) {
@@ -14239,7 +14261,7 @@ ${error.stack}` : "");
         let n2 = await this.getHistoryBatchSelection(), a2 = "", i2 = "";
         t2.hasClass("multiple-history-filterBtn") ? (a2 = "屏蔽", i2 = d) : t2.hasClass("multiple-history-favoriteBtn") ? (a2 = "收藏", i2 = h) : t2.hasClass("multiple-history-hasDownBtn") ? (a2 = "已下载", i2 = g) : t2.hasClass("multiple-history-hasWatchBtn") ? (a2 = "已观看", i2 = p) : t2.hasClass("multiple-history-deleteBtn") && (a2 = "移除", i2 = "delete");
         if (!n2.length) return void show.info("请先选择要处理的记录");
-        const selectionText = this.historySelectAll ? this.historyExcludedCarNums.size ? `当前筛选结果中已选择 ${n2.length} 条，排除 ${this.historyExcludedCarNums.size} 条` : `当前筛选结果中已选择全部 ${n2.length} 条` : `当前页已选择 ${n2.length} 条`;
+        const selectionText = this.isHistoryAllFiltered() ? this.historySelectionModel.excluded.size ? `当前筛选结果中已选择 ${n2.length} 条，排除 ${this.historySelectionModel.excluded.size} 条` : `当前筛选结果中已选择全部 ${n2.length} 条` : `当前页已选择 ${n2.length} 条`;
         utils.q(e2, `${selectionText}，是否标记为${a2}？`, (async () => {
           let e3 = loading();
           try {
@@ -14300,7 +14322,7 @@ ${error.stack}` : "");
       };
     }
     async loadTableData() {
-      this.tableObj = new Tabulator(this.historyRoot.find("#table-container").get(0), {
+      this.tableObj = createJhsTable(Tabulator, this.historyRoot.find("#table-container").get(0), {
         layout: "fitColumns",
         placeholder: "暂无数据",
         virtualDom: true,
@@ -14457,7 +14479,7 @@ ${error.stack}` : "");
           }
         }
       }), this.tableObj.on("dataProcessed", (() => {
-        this.historySelectAll ? this.syncHistoryPageSelection() : this.updateHistorySelectionUi();
+        this.isHistoryAllFiltered() ? this.syncHistoryPageSelection() : this.updateHistorySelectionUi();
       })), this.tableObj.on("rowSelected", ((row) => {
         this.updateHistoryRowSelection(row, true);
       })), this.tableObj.on("rowDeselected", ((row) => {
@@ -14588,7 +14610,7 @@ ${error.stack}` : "");
         }));
         const r2 = o.includes("advanced_search");
         r2 && (t2 = $("h2.section-title"));
-        const l2 = localStorage.getItem("jhs_sortMethod"), d2 = "当前排序方式: " + ("rateCount" === l2 ? "评价人数" : "date" === l2 ? "时间" : "默认");
+        const l2 = this.getRuntimeService("settings").snapshot().sortMethod || "default", d2 = "当前排序方式: " + ("rateCount" === l2 ? "评价人数" : "date" === l2 ? "时间" : "默认");
         t2.append(`
                 <div class="jhs-list-btn-row">
                     <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>
@@ -14616,7 +14638,7 @@ ${error.stack}` : "");
           const e3 = await storageManager.getBlacklist(), a3 = this.getActressPageInfo();
           e3.find(((e4) => e4.starId === a3.starId)) && (t2 = "已加入黑名单", n2 = "jhs-btn--muted");
         }
-        const a2 = localStorage.getItem("jhs_sortMethod") || "default";
+        const a2 = this.getRuntimeService("settings").snapshot().sortMethod || "default";
         $(".masonry").parent().prepend(`
                 <div class="jhs-list-btn-row">
                     <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>
@@ -14707,9 +14729,9 @@ ${error.stack}` : "");
         const open = !menu.hasClass("is-open");
         menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && menu.find('[aria-checked="true"]').trigger("focus");
       }));
-      menu.on("click", ".jhs-sort-option", ((event) => {
+      menu.on("click", ".jhs-sort-option", (async (event) => {
         const item = $(event.currentTarget), method = item.data("sort-method");
-        localStorage.setItem("jhs_sortMethod", method), menu.find(".jhs-sort-option").attr("aria-checked", "false"), item.attr("aria-checked", "true"), $("#jhs-sort-current").text(item.text()), close(true), void this.sortItems().catch(((error) => clog.error("列表排序失败", error)));
+        await this.getRuntimeService("settings").set("sortMethod", method), menu.find(".jhs-sort-option").attr("aria-checked", "false"), item.attr("aria-checked", "true"), $("#jhs-sort-current").text(item.text()), close(true), await this.sortItems().catch(((error) => clog.error("列表排序失败", error)));
       })).on("keydown", ".jhs-sort-option", ((event) => {
         const items = menu.find(".jhs-sort-option"), index = items.index(event.currentTarget);
         if ("Escape" === event.key) return event.preventDefault(), close(true);
@@ -14727,7 +14749,7 @@ ${error.stack}` : "");
       if (!e2 && (o.includes("handle") || o.includes("advanced_search"))) return;
       const s2 = await storageManager.getSetting("autoPage");
       if (c || s2 === _ && !e2) return;
-      const t2 = localStorage.getItem("jhs_sortMethod");
+      const t2 = this.getRuntimeService("settings").snapshot().sortMethod;
       if (!t2) return;
       const i2 = this.getSelector(), d2 = $(i2.boxSelector), h2 = $(i2.itemSelector);
       h2.each((function(e3) {
@@ -15052,7 +15074,7 @@ ${error.stack}` : "");
       const item = /* @__PURE__ */ __name((action, label, attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, "item"), group = /* @__PURE__ */ __name((content) => `<div class="jhs-fab-group">${content}</div>`, "group"), divider = '<div class="jhs-fab-divider" role="separator"></div>';
       let items;
       if (window.isListPage) {
-        const sortMethod = localStorage.getItem("jhs_sortMethod") || "default", sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getDependency("ListPagePlugin")?.activeQuickFilter), filterOptions = [...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""), sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
+        const sortMethod = this.getRuntimeService("settings").snapshot().sortMethod || "default", sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getDependency("ListPagePlugin")?.activeQuickFilter), filterOptions = [...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""), sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
         items = group(item("check", "开始鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort", `排序: ${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') + item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"')) + divider + group(item("logger", "运行日志") + item("setting", "设置")) + `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div><div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>`;
       } else if (window.isDetailPage) {
         const statusDefs = [{ action: "filter", icon: m, label: "屏蔽", key: "filter" }, { action: "fav", icon: v, label: "收藏", key: "fav" }, { action: "down", icon: y, label: "已下载", key: "down" }, { action: "watch", icon: k, label: "已观看", key: "watch" }];
@@ -15111,7 +15133,7 @@ ${error.stack}` : "");
           menu.addClass("jhs-fab-menu-open").attr("aria-hidden", "false");
           backdrop.addClass("jhs-fab-backdrop-visible");
           if (window.isListPage) {
-            const sortMethod = localStorage.getItem("jhs_sortMethod") || "default";
+            const sortMethod = this.getRuntimeService("settings").snapshot().sortMethod || "default";
             const sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
             menu.find('[data-action="sort"]').text(`排序: ${sortLabel}`);
             this.getDependency("ListPagePlugin")?.syncQuickFilterUi();
@@ -15156,10 +15178,10 @@ ${error.stack}` : "");
         event.preventDefault();
         const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
         items.eq(next).trigger("focus");
-      })).on("click", ".jhs-mobile-sort-option", ((event) => {
+      })).on("click", ".jhs-mobile-sort-option", (async (event) => {
         event.stopPropagation();
         const value = $(event.currentTarget).data("jhs-sort");
-        localStorage.setItem("jhs_sortMethod", value), sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true"), void this.getDependency("ListPageButtonPlugin")?.sortItems?.(), closeMenu(true);
+        await this.getRuntimeService("settings").set("sortMethod", value), sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true"), await this.getDependency("ListPageButtonPlugin")?.sortItems?.(), closeMenu(true);
       }));
       menu.on("click", ".jhs-fab-menu-item", (e2) => {
         const action = $(e2.currentTarget).data("action");
@@ -15371,131 +15393,90 @@ ${error.stack}` : "");
       isDetailPage && this.translate();
     }
     async translate(e2, t2 = true, options = {}) {
-      if (await storageManager.getSetting("translateTitle", _) !== _) return;
+      if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) !== _) return;
       l && (t2 = false);
-      const root = options.root ? $(options.root) : $(document);
-      let n2 = root.find(".origin-title").first();
-      if (n2.length || (n2 = root.find(".current-title").first()), n2.length || (n2 = root.find("h3").first()), !n2.length) return;
-      const a2 = n2.text().trim();
-      if (!a2) return void show.error("获取标题失败, 无法进行翻译");
-      let i2 = n2.nextAll(".translated-title").first();
-      i2.length || (i2 = $('<div class="translated-title"></div>').insertAfter(n2)), i2.removeClass("is-error").text("翻译中...");
-      e2 || (e2 = this.getPageInfo().carNum);
-      const s2 = "string" == typeof e2 ? e2.trim() : "", o2 = s2 && "undefined" !== s2 ? s2 : a2;
-      let r2 = {};
-      try {
-        const e3 = localStorage.getItem("jhs_translate");
-        e3 && (r2 = JSON.parse(e3) || {});
-      } catch (l2) {
-        clog.warn("翻译缓存无法解析，已忽略旧缓存", l2);
-      }
-      if (r2[o2]) return void i2.text(r2[o2]);
-      try {
-        const e3 = await _e(a2, "ja", "zh-CN");
-        if (!n2[0]?.isConnected) return;
-        i2.text(e3), r2[o2] = e3, localStorage.setItem("jhs_translate", JSON.stringify(r2));
-      } catch (l2) {
-        clog.error("翻译失败:", l2), i2.addClass("is-error").text(`翻译失败: ${l2.message || String(l2)}`);
-      }
+      const scope = await this.getRuntimeService("scope")();
+      await renderTranslatedTitle({ root: options.root, carNum: e2, translation: this.getRuntimeService("translation"), scope });
     }
   };
   __name(_TranslatePlugin, "TranslatePlugin");
   var TranslatePlugin = _TranslatePlugin;
 
   // src/plugins/registry.js
-  var DEFAULT_JAVDB_PLUGINS = [
-    ListPagePlugin,
-    AutoPagePlugin,
-    Fc2Plugin,
-    FoldCategoryPlugin,
-    ListPageButtonPlugin,
-    HistoryPlugin,
-    SettingPlugin,
-    NavBarPlugin,
-    HitShowPlugin,
-    Top250Plugin,
-    SearchByImagePlugin,
-    CoverButtonPlugin,
-    Fc2By123AvPlugin,
-    DetailPagePlugin,
-    DetailWorkspacePlugin,
-    ReviewPlugin,
-    RelatedPlugin,
-    DetailPageButtonPlugin,
-    HighlightMagnetPlugin,
-    PreviewVideoPlugin,
-    FilterTitleKeywordPlugin,
-    ActressInfoPlugin,
-    OtherSitePlugin,
-    TranslatePlugin,
-    WantAndWatchedVideosPlugin,
-    MagnetHubPlugin,
-    ScreenShotPlugin,
-    BlacklistPlugin,
-    FavoriteActressesPlugin,
-    NewVideoPlugin,
-    TaskPlugin,
-    StatsPlugin,
-    MobileBottomBarPlugin,
-    OneOneFiveMatchPlugin,
-    UnifiedOfflinePlugin,
-    CompatibilityEnhancementsPlugin
-  ];
-  var DEFAULT_JAVBUS_PLUGINS = [
-    ListPagePlugin,
-    ListPageButtonPlugin,
-    SettingPlugin,
-    HistoryPlugin,
-    AutoPagePlugin,
-    SearchByImagePlugin,
-    BusNavBarPlugin,
-    CoverButtonPlugin,
-    BusImgPlugin,
-    BusDetailPagePlugin,
-    DetailWorkspacePlugin,
-    DetailPageButtonPlugin,
-    ReviewPlugin,
-    FilterTitleKeywordPlugin,
-    HighlightMagnetPlugin,
-    BusPreviewVideoPlugin,
-    MagnetHubPlugin,
-    ScreenShotPlugin,
-    OtherSitePlugin,
-    TranslatePlugin,
-    BlacklistPlugin,
-    TaskPlugin,
-    StatsPlugin,
-    MobileBottomBarPlugin,
-    OneOneFiveMatchPlugin,
-    UnifiedOfflinePlugin,
-    CompatibilityEnhancementsPlugin
-  ];
-  var DEFAULT_SHARED_PLUGIN_RULES = [
-    {
-      shouldRegister: /* @__PURE__ */ __name((context) => context.isJavDB || context.isJavBus || context.is123Pan, "shouldRegister"),
-      plugins: [OneTwoThreeOfflinePlugin]
-    },
-    {
-      shouldRegister: /* @__PURE__ */ __name((context) => context.isJavTrailers, "shouldRegister"),
-      plugins: [JavTrailersPlugin]
-    },
-    {
-      shouldRegister: /* @__PURE__ */ __name((context) => context.isSubtitleCat, "shouldRegister"),
-      plugins: [SubTitleCatPlugin]
-    }
-  ];
-  function registerPluginGroup(pluginManager, plugins) {
-    plugins.forEach(((pluginClass) => pluginManager.register(pluginClass)));
-  }
-  __name(registerPluginGroup, "registerPluginGroup");
-  function registerSitePlugins(pluginManager, locationLike = window.location) {
+  var manifest = /* @__PURE__ */ __name((id, featureId, plugin, sites, order, requires = []) => defineContribution({ id, featureId, legacyPluginId: plugin.name, plugin, sites, order, requires }), "manifest");
+  var legacyContributionManifests = Object.freeze([
+    manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [SERVICE.translation]),
+    manifest("list.auto-page", "list", AutoPagePlugin, ["javdb", "javbus"], { javdb: 2, javbus: 5 }),
+    manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.screenshot]),
+    manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
+    manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
+    manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }),
+    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [SERVICE.diagnostics, SERVICE.webdav]),
+    manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }),
+    manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [SERVICE.movie, SERVICE.settings, SERVICE.cache]),
+    manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }),
+    manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }),
+    manifest("detail.state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }),
+    manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [SERVICE.movie, SERVICE.translation, SERVICE.settings]),
+    manifest("detail.native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }),
+    manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }),
+    manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie]),
+    manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related]),
+    manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie]),
+    manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }),
+    manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }),
+    manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
+    manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo]),
+    manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [SERVICE.movie]),
+    manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings]),
+    manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }),
+    manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }),
+    manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot]),
+    manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }),
+    manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }),
+    manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }),
+    manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }),
+    manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics]),
+    manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings]),
+    manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }),
+    manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }),
+    manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }),
+    manifest("identity.javbus-navigation", "identity", BusNavBarPlugin, ["javbus"], { javbus: 7 }),
+    manifest("detail.gallery", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),
+    manifest("detail.native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }),
+    manifest("detail.gallery", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings]),
+    manifest("external-bridge.123pan", "external-bridge", OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"], { javdb: 0, javbus: 0, "123pan": 1 }),
+    manifest("external-bridge.javtrailers", "external-bridge", JavTrailersPlugin, ["javtrailers"], { javtrailers: 1 }),
+    manifest("detail.subtitle", "external-bridge", SubTitleCatPlugin, ["subtitlecat"], { subtitlecat: 1 })
+  ]);
+  function registerSitePlugins(pluginManager, featureRuntime, site) {
     pluginManager.setDependencyDeclarations(LEGACY_PLUGIN_DEPENDENCY_MAP);
-    const context = detectSite(locationLike);
-    DEFAULT_SHARED_PLUGIN_RULES.forEach(((rule) => {
-      rule.shouldRegister(context) && registerPluginGroup(pluginManager, rule.plugins);
-    }));
-    context.isJavDB && registerPluginGroup(pluginManager, DEFAULT_JAVDB_PLUGINS);
-    context.isJavBus && registerPluginGroup(pluginManager, DEFAULT_JAVBUS_PLUGINS);
+    legacyContributionManifests.filter((item) => item.sites.includes(site) && featureRuntime.isContributionEnabled(item.featureId, item.id, item.legacyPluginId)).sort((left, right) => Number(left.order[site]) - Number(right.order[site])).forEach((item) => {
+      const dependencies = featureRuntime.resolveDeclaredDependencies(item.requires);
+      const runtimeServices = {};
+      runtimeServices.scope = () => featureRuntime.getScope(item.featureId);
+      const runtimeNames = /* @__PURE__ */ new Map([
+        [PORT.host, "host"],
+        [SERVICE.diagnostics, "diagnostics"],
+        [SERVICE.review, "review"],
+        [SERVICE.related, "related"],
+        [SERVICE.movie, "movie"],
+        [SERVICE.magnet, "magnet"],
+        [SERVICE.settings, "settings"],
+        [SERVICE.cache, "cache"],
+        [SERVICE.actressInfo, "actressInfo"],
+        [SERVICE.screenshot, "screenshot"],
+        [SERVICE.translation, "translation"],
+        [SERVICE.webdav, "webdav"],
+        [SERVICE.dialog, "dialog"]
+      ]);
+      for (const token of item.requires) {
+        const name = runtimeNames.get(token);
+        if (!name) throw new Error(`Legacy contribution ${item.id} has no runtime name for ${String(token)}`);
+        runtimeServices[name] = dependencies[token];
+      }
+      pluginManager.register(item.plugin, runtimeServices);
+    });
   }
   __name(registerSitePlugins, "registerSitePlugins");
 
@@ -15622,7 +15603,7 @@ ${error.stack}` : "");
       if (typeof requestImplementation !== "function") throw new TypeError("GM_xmlhttpRequest is required");
       this.requestImplementation = requestImplementation;
     }
-    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, timeout?: number, signal?: AbortSignal}} options */
+    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, timeout?: number, signal?: AbortSignal, requestOptions?: Record<string, unknown>}} options */
     request(options) {
       return new Promise((resolve, reject) => {
         let settled = false;
@@ -15638,6 +15619,7 @@ ${error.stack}` : "");
           finish(reject, new JhsError("ABORTED", "网络请求已取消", { source: "UserscriptHttpAdapter" }));
         }, "onAbort");
         handle = this.requestImplementation({
+          ...options.requestOptions,
           method: options.method ?? "GET",
           url: options.url,
           headers: options.headers,
@@ -15709,7 +15691,51 @@ ${error.stack}` : "");
   __name(_CacheService, "CacheService");
   var CacheService = _CacheService;
 
+  // src/services/actress-info-service.js
+  var _ActressInfoService = class _ActressInfoService {
+    /** @param {import("../app/integration-registry.js").IntegrationRegistry} integrations @param {import("./cache-service.js").CacheService} cache */
+    constructor(integrations, cache) {
+      this.integrations = integrations;
+      this.cache = cache;
+    }
+    /** @param {string} name */
+    profileUrl(name) {
+      for (const manifest2 of this.integrations.list("person.actress-info")) {
+        const adapter = this.integrations.getAdapter(manifest2.id);
+        if (typeof adapter.profileUrl === "function") return adapter.profileUrl(name);
+      }
+      return "";
+    }
+    /** @param {string} name @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async lookup(name, options = {}) {
+      const normalized = String(name).trim() === "三上悠亞" ? "三上悠亜" : String(name).trim();
+      if (!normalized) return null;
+      const key = `actress-info:${normalized}`;
+      const cached = this.cache.get(key, { scope: "public" });
+      if (cached.hit) return cached.value;
+      for (const manifest2 of this.integrations.list("person.actress-info")) {
+        const adapter = this.integrations.getAdapter(manifest2.id);
+        if (typeof adapter.lookup !== "function") continue;
+        const result = await adapter.lookup(normalized, options);
+        this.cache.set(key, result, { scope: "public", ttlMs: 6048e5, negative: !result });
+        return result;
+      }
+      return null;
+    }
+  };
+  __name(_ActressInfoService, "ActressInfoService");
+  var ActressInfoService = _ActressInfoService;
+
   // src/services/diagnostics-service.js
+  var SENSITIVE_KEY = /^(?:authorization|cookie|set-cookie|password|token|secret|credential)$/i;
+  function sanitize(value, key = "") {
+    if (SENSITIVE_KEY.test(key)) return "[redacted]";
+    if (Array.isArray(value)) return value.map((item) => sanitize(item));
+    if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([childKey, child]) => [childKey, sanitize(child, childKey)]));
+    if (typeof value !== "string") return value;
+    return value.replace(/(https?:\/\/)([^\s/@:]+):([^\s/@]+)@/gi, "$1[redacted]@");
+  }
+  __name(sanitize, "sanitize");
   var _DiagnosticsService = class _DiagnosticsService {
     constructor() {
       this.startedAt = performance.now();
@@ -15722,6 +15748,9 @@ ${error.stack}` : "");
       this.providerHealth = /* @__PURE__ */ new Map();
       this.errors = [];
       this.browserMetadata = null;
+      this.legacyPlugins = [];
+      this.legacyStartup = null;
+      this.legacyTimings = [];
     }
     /** @param {string} id @param {number} durationMs */
     recordStartup(id, durationMs) {
@@ -15753,28 +15782,42 @@ ${error.stack}` : "");
     }
     /** @param {unknown} error */
     recordError(error) {
-      const value = error && typeof error === "object" && "toJSON" in error && typeof error.toJSON === "function" ? error.toJSON() : { message: error instanceof Error ? error.message : String(error) };
-      this.errors.push({ ...value, timestamp: (/* @__PURE__ */ new Date()).toISOString() });
+      const value = error && typeof error === "object" && "toJSON" in error && typeof error.toJSON === "function" ? error.toJSON() : error instanceof Error ? { message: error.message } : error && typeof error === "object" ? { ...error } : { message: String(error) };
+      this.errors.push({ .../** @type {Record<string, any>} */
+      sanitize(value), timestamp: (/* @__PURE__ */ new Date()).toISOString() });
       if (this.errors.length > 100) this.errors.shift();
     }
     /** @param {Record<string, unknown>} metadata */
     setBrowserMetadata(metadata) {
       this.browserMetadata = Object.freeze({ ...metadata });
     }
+    /** @param {string[]} names @param {Record<string, unknown>} startup @param {Array<Record<string, unknown>>} timings */
+    setLegacyRuntime(names, startup, timings) {
+      this.legacyPlugins = [...names];
+      this.legacyStartup = Object.freeze({ ...startup });
+      this.legacyTimings = timings.map((item) => Object.freeze({ ...item }));
+    }
+    clearErrors() {
+      this.errors = [];
+    }
     exportSnapshot() {
+      const scopes = [...this.scopes.values()];
       return Object.freeze({
         activeFeatures: [...this.activeFeatures],
         activeContributions: [...this.activeContributions],
         startupTimings: Object.fromEntries(this.startupTimings),
-        activeScopes: [...this.scopes.values()],
-        globalListeners: 0,
-        observers: [...this.scopes.values()].reduce((sum, scope) => sum + Number(scope.observers ?? 0), 0),
+        activeScopes: scopes,
+        globalListeners: scopes.filter((scope) => scope.id === "app:root").reduce((sum, scope) => sum + Number(scope.listeners ?? 0), 0),
+        observers: scopes.reduce((sum, scope) => sum + Number(scope.observers ?? 0), 0),
         requestConsumers: this.requestStats.consumers,
         underlyingRequests: this.requestStats.underlying,
         cacheHits: this.cacheStats.hits,
         cacheMisses: this.cacheStats.misses,
         providerHealth: Object.fromEntries(this.providerHealth),
         errors: this.errors.map((error) => ({ ...error })),
+        legacyPlugins: [...this.legacyPlugins],
+        legacyStartup: this.legacyStartup,
+        legacyTimings: this.legacyTimings.map((item) => ({ ...item })),
         browser: this.browserMetadata,
         uptimeMs: performance.now() - this.startedAt
       });
@@ -16023,9 +16066,10 @@ ${error.stack}` : "");
 
   // src/services/magnet-service.js
   var _MagnetService = class _MagnetService {
-    /** @param {import("../app/provider-registry.js").ProviderRegistry} providers */
-    constructor(providers) {
+    /** @param {import("../app/provider-registry.js").ProviderRegistry} providers @param {import("../app/integration-registry.js").IntegrationRegistry | null} [integrations] */
+    constructor(providers, integrations = null) {
       this.providers = providers;
+      this.integrations = integrations;
     }
     /** @param {Record<string, unknown>} movieRef @param {Record<string, unknown>} [context] */
     async search(movieRef, context = {}) {
@@ -16041,12 +16085,24 @@ ${error.stack}` : "");
       }
       return results;
     }
+    /** @param {Record<string, unknown>} movieRef @param {Record<string, any>} [context] */
+    async listNative(movieRef, context = {}) {
+      const providerId = typeof movieRef.providerId === "string" ? movieRef.providerId : "javdb";
+      const manifest2 = (this.integrations?.list("movie.magnets") ?? []).find((item) => item.id === providerId);
+      if (!manifest2) return [];
+      const adapter = this.integrations?.getAdapter(manifest2.id);
+      return typeof adapter?.listMagnets === "function" ? adapter.listMagnets(movieRef, context) : [];
+    }
   };
   __name(_MagnetService, "MagnetService");
   var MagnetService = _MagnetService;
 
   // src/services/movie-identity-service.js
   var _MovieIdentityService = class _MovieIdentityService {
+    /** @param {import("../app/integration-registry.js").IntegrationRegistry | null} [integrations] */
+    constructor(integrations = null) {
+      this.integrations = integrations;
+    }
     /** @param {unknown} value */
     normalize(value) {
       return normalizeMovieCarNum(value);
@@ -16058,6 +16114,92 @@ ${error.stack}` : "");
         if (carNum) return carNum;
       }
       return null;
+    }
+    /** @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async resolve(movieRef, options = {}) {
+      const carNum = this.normalize(movieRef.carNum);
+      if (!carNum) return null;
+      const candidates = this.integrations?.list("movie.search") ?? [];
+      const providerId = typeof movieRef.providerId === "string" ? movieRef.providerId : null;
+      const ordered = providerId ? candidates.filter((manifest2) => manifest2.id === providerId) : [...candidates].sort((left, right) => Number(right.id === "javdb") - Number(left.id === "javdb"));
+      for (const manifest2 of ordered) {
+        const adapter = this.integrations?.getAdapter(manifest2.id);
+        if (typeof adapter?.resolveMovie !== "function") continue;
+        const resolved = await adapter.resolveMovie({ ...movieRef, carNum }, options);
+        if (resolved) return resolved;
+      }
+      return Object.freeze({ ...movieRef, carNum });
+    }
+    /** @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async detail(movieRef, options = {}) {
+      const candidates = this.integrations?.list("movie.detail") ?? [];
+      const providerId = typeof movieRef.providerId === "string" ? movieRef.providerId : movieRef.movieId ? "javdb" : null;
+      const ordered = providerId ? candidates.filter((manifest2) => manifest2.id === providerId) : candidates;
+      for (const manifest2 of ordered) {
+        const adapter = this.integrations?.getAdapter(manifest2.id);
+        if (typeof adapter?.getDetail === "function") return adapter.getDetail(movieRef, options);
+      }
+      return null;
+    }
+    /** @param {{period?: string, filter?: string, scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async rankings(options = {}) {
+      for (const manifest2 of this.integrations?.list("movie.ranking") ?? []) {
+        const adapter = this.integrations?.getAdapter(manifest2.id);
+        if (typeof adapter?.listRankings === "function") return adapter.listRankings(options);
+      }
+      return [];
+    }
+    /** @param {string} providerId @param {Record<string, unknown>} query @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async catalog(providerId, query = {}, options = {}) {
+      const manifest2 = (this.integrations?.list("movie.catalog") ?? []).find((item) => item.id === providerId);
+      if (!manifest2) throw new TypeError(`Movie catalog provider is unavailable: ${providerId}`);
+      const adapter = this.integrations?.getAdapter(manifest2.id);
+      if (typeof adapter?.listCatalog !== "function") throw new TypeError(`Movie catalog operation is unavailable: ${providerId}`);
+      return adapter.listCatalog(query, options);
+    }
+    /** @param {string} providerId @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async people(providerId, movieRef, options = {}) {
+      const manifest2 = (this.integrations?.list("movie.credits") ?? []).find((item) => item.id === providerId);
+      if (!manifest2) return Object.freeze({ actors: Object.freeze([]), seller: null });
+      const adapter = this.integrations?.getAdapter(manifest2.id);
+      return typeof adapter?.getPeople === "function" ? adapter.getPeople(movieRef, options) : Object.freeze({ actors: Object.freeze([]), seller: null });
+    }
+    /** @param {string} providerId @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async images(providerId, movieRef, options = {}) {
+      const manifest2 = (this.integrations?.list("movie.images") ?? []).find((item) => item.id === providerId);
+      if (!manifest2) return [];
+      const adapter = this.integrations?.getAdapter(manifest2.id);
+      return typeof adapter?.getImages === "function" ? adapter.getImages(movieRef, options) : [];
+    }
+    /** @param {Record<string, unknown>} movieRef @param {string[]} providerIds */
+    sourceUrls(movieRef, providerIds) {
+      return Object.freeze(providerIds.map((providerId) => {
+        try {
+          const adapter = this.integrations?.getAdapter(providerId);
+          const url = typeof adapter?.detailUrl === "function" ? adapter.detailUrl(movieRef) : null;
+          return url ? Object.freeze({ providerId, url }) : null;
+        } catch {
+          return null;
+        }
+      }).filter(Boolean));
+    }
+    /** @param {string} providerId @param {Record<string, unknown>} movieRef */
+    searchUrl(providerId, movieRef) {
+      try {
+        const adapter = this.integrations?.getAdapter(providerId);
+        return typeof adapter?.searchUrl === "function" ? adapter.searchUrl(movieRef) : null;
+      } catch {
+        return null;
+      }
+    }
+    /** @param {string} providerId @param {string} url */
+    matchesProviderUrl(providerId, url) {
+      try {
+        const adapter = this.integrations?.getAdapter(providerId);
+        return typeof adapter?.matchesUrl === "function" && adapter.matchesUrl(url);
+      } catch {
+        return false;
+      }
     }
   };
   __name(_MovieIdentityService, "MovieIdentityService");
@@ -16134,10 +16276,10 @@ ${error.stack}` : "");
     constructor(integrations) {
       this.integrations = integrations;
     }
-    /** @param {Record<string, unknown>} movieRef @param {{signal?: AbortSignal}} [options] */
+    /** @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope, page?: number, limit?: number}} [options] */
     async list(movieRef, options = {}) {
-      for (const manifest of this.integrations.list("movie.related")) {
-        const adapter = this.integrations.getAdapter(manifest.id);
+      for (const manifest2 of this.integrations.list("movie.related")) {
+        const adapter = this.integrations.getAdapter(manifest2.id);
         if (typeof adapter.listRelated === "function") return adapter.listRelated(movieRef, options);
       }
       return [];
@@ -16152,10 +16294,10 @@ ${error.stack}` : "");
     constructor(integrations) {
       this.integrations = integrations;
     }
-    /** @param {Record<string, unknown>} movieRef @param {{signal?: AbortSignal}} [options] */
+    /** @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope, page?: number, limit?: number}} [options] */
     async list(movieRef, options = {}) {
-      for (const manifest of this.integrations.list("movie.reviews")) {
-        const adapter = this.integrations.getAdapter(manifest.id);
+      for (const manifest2 of this.integrations.list("movie.reviews")) {
+        const adapter = this.integrations.getAdapter(manifest2.id);
         if (typeof adapter.listReviews === "function") return adapter.listReviews(movieRef, options);
       }
       return [];
@@ -16166,9 +16308,10 @@ ${error.stack}` : "");
 
   // src/services/screenshot-service.js
   var _ScreenshotService = class _ScreenshotService {
-    /** @param {import("../app/provider-registry.js").ProviderRegistry} providers */
-    constructor(providers) {
+    /** @param {import("../app/provider-registry.js").ProviderRegistry} providers @param {import("../app/integration-registry.js").IntegrationRegistry | null} [integrations] */
+    constructor(providers, integrations = null) {
       this.providers = providers;
+      this.integrations = integrations;
     }
     /** @param {Record<string, unknown>} movieRef @param {Record<string, unknown>} [context] */
     async resolve(movieRef, context = {}) {
@@ -16181,11 +16324,35 @@ ${error.stack}` : "");
           this.providers.updateHealth(provider.id, { ok: false, error: error instanceof Error ? error.message : String(error) });
         }
       }
+      for (const manifest2 of this.integrations?.list("movie.images") ?? []) {
+        const adapter = this.integrations?.getAdapter(manifest2.id);
+        if (typeof adapter?.getImages !== "function") continue;
+        const result = await adapter.getImages(movieRef, context);
+        if (Array.isArray(result) && result.length) return result;
+      }
       return null;
     }
   };
   __name(_ScreenshotService, "ScreenshotService");
   var ScreenshotService = _ScreenshotService;
+
+  // src/services/translation-service.js
+  var _TranslationService = class _TranslationService {
+    /** @param {import("../app/integration-registry.js").IntegrationRegistry} integrations */
+    constructor(integrations) {
+      this.integrations = integrations;
+    }
+    /** @param {string} text @param {{sourceLanguage?: string, targetLanguage?: string, scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async translate(text, options = {}) {
+      const manifest2 = this.integrations.list("text.translate")[0];
+      if (!manifest2) throw new TypeError("Translation provider is unavailable");
+      const adapter = this.integrations.getAdapter(manifest2.id);
+      if (typeof adapter?.translate !== "function") throw new TypeError(`Translation operation is unavailable: ${manifest2.id}`);
+      return adapter.translate(text, options);
+    }
+  };
+  __name(_TranslationService, "TranslationService");
+  var TranslationService = _TranslationService;
 
   // src/services/settings-service.js
   var _SettingsService = class _SettingsService extends EventTarget {
@@ -16195,6 +16362,7 @@ ${error.stack}` : "");
       this.storage = storage;
       this.validators = options.validators ?? {};
       this.snapshotValue = Object.freeze({});
+      this.writeChain = Promise.resolve();
     }
     /** @param {string} key */
     async load(key = "setting") {
@@ -16209,11 +16377,15 @@ ${error.stack}` : "");
     async set(name, value, storageKey = "setting") {
       const validator = this.validators[name];
       if (validator && !validator(value)) throw new TypeError(`Invalid setting: ${name}`);
-      const next = Object.freeze({ ...this.snapshotValue, [name]: value });
-      await this.storage.set(storageKey, next);
-      this.snapshotValue = next;
-      this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name, value, snapshot: next }) }));
-      return next;
+      const operation = this.writeChain.then(async () => {
+        const next = Object.freeze({ ...this.snapshotValue, [name]: value });
+        await this.storage.set(storageKey, next);
+        this.snapshotValue = next;
+        this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name, value, snapshot: next }) }));
+        return next;
+      });
+      this.writeChain = operation.then(() => void 0, () => void 0);
+      return operation;
     }
   };
   __name(_SettingsService, "SettingsService");
@@ -16240,6 +16412,88 @@ ${error.stack}` : "");
   };
   __name(_StorageService, "StorageService");
   var StorageService = _StorageService;
+
+  // src/services/webdav-service.js
+  var _WebDavClient = class _WebDavClient {
+    /** @param {import("./http-service.js").HttpService} http @param {string} davUrl @param {string} username @param {string} password */
+    constructor(http, davUrl, username, password) {
+      this.http = http;
+      this.baseUrl = new URL(davUrl.endsWith("/") ? davUrl : `${davUrl}/`);
+      this.username = username;
+      this.password = password;
+      this.folderName = null;
+    }
+    authHeaders() {
+      return { Authorization: `Basic ${btoa(`${this.username}:${this.password}`)}`, Depth: "1" };
+    }
+    /** @param {string} method @param {string} path @param {Record<string, string>} [headers] @param {unknown} [body] */
+    async request(method, path, headers = {}, body) {
+      const url = new URL(path.replace(/^\/+/, ""), this.baseUrl);
+      const response = await this.http.request({
+        providerId: "webdav",
+        method,
+        url: url.href,
+        headers: { ...this.authHeaders(), ...headers },
+        body,
+        responseType: "text",
+        cacheScope: "none",
+        urlPolicy: { trustClass: "user-local", expectedOrigin: this.baseUrl.origin }
+      });
+      return response.data ?? response.responseText ?? "";
+    }
+    /** @param {string} folder */
+    async ensureFolder(folder) {
+      try {
+        await this.request("MKCOL", folder);
+      } catch (error) {
+        if (!(error instanceof Error) || !/HTTP (405|409)/.test(error.message)) throw error;
+      }
+    }
+    /** @param {string} folder @param {string} name @param {string} content */
+    async backup(folder, name, content) {
+      await this.ensureFolder(folder);
+      await this.request("PUT", `${folder}/${name}`, { "Content-Type": "text/plain" }, content);
+    }
+    /** @param {string} folder */
+    async getFileList(folder) {
+      const xml = String(await this.request("PROPFIND", folder, { "Content-Type": "application/xml" }, '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:getcontentlength/><d:creationdate/><d:getlastmodified/><d:iscollection/></d:prop></d:propfind>'));
+      const responses = new DOMParser().parseFromString(xml, "text/xml").getElementsByTagNameNS("DAV:", "response"), files = [];
+      for (let index = 1; index < responses.length; index++) {
+        const item = responses[index], node = /* @__PURE__ */ __name((name2) => item.getElementsByTagNameNS("DAV:", name2)[0]?.textContent || "", "node");
+        const href = node("href"), name = node("displayname") || decodeURIComponent(href.replace(/\/$/, "").split("/").pop() || ""), size = node("getcontentlength");
+        if (size !== "0") files.push({ fileId: name, name, size: Number(size), createTime: node("creationdate") || node("getlastmodified") });
+      }
+      return files.reverse();
+    }
+    /** @param {string} name */
+    async deleteFile(name) {
+      await this.request("DELETE", `${this.folderName}/${encodeURI(name)}`, { "Cache-Control": "no-cache" });
+    }
+    /** @param {string} folder */
+    async getBackupList(folder) {
+      this.folderName = folder;
+      await this.ensureFolder(folder);
+      return this.getFileList(folder);
+    }
+    /** @param {string} name */
+    async getFileContent(name) {
+      return String(await this.request("GET", `${this.folderName}/${name}`, { Accept: "application/octet-stream" }));
+    }
+  };
+  __name(_WebDavClient, "WebDavClient");
+  var WebDavClient = _WebDavClient;
+  var _WebDavService = class _WebDavService {
+    /** @param {import("./http-service.js").HttpService} http */
+    constructor(http) {
+      this.http = http;
+    }
+    /** @param {{url: string, username: string, password: string}} config */
+    createClient(config) {
+      return new WebDavClient(this.http, config.url, config.username, config.password);
+    }
+  };
+  __name(_WebDavService, "WebDavService");
+  var WebDavService = _WebDavService;
 
   // src/services/style-registry.js
   var _StyleRegistry = class _StyleRegistry {
@@ -16351,56 +16605,74 @@ ${error.stack}` : "");
       this.commands.setActivator((featureId) => this.activate(featureId).then(() => void 0));
     }
     /** @param {Record<string, any>} manifest */
-    register(manifest) {
+    register(manifest2) {
       const validated = (
         /** @type {Record<string, any>} */
-        defineFeature(manifest)
+        defineFeature(manifest2)
       );
       if (this.manifests.has(validated.id)) throw new Error(`Duplicate feature: ${validated.id}`);
       this.manifests.set(validated.id, validated);
       for (const command of validated.providesCommands) this.commands.registerOwner(command, validated.id);
     }
     /** @param {Record<string, any>} manifest */
-    isEligible(manifest) {
-      if (manifest.kind !== "system" && this.disabled.has(manifest.id)) return false;
-      if (manifest.sites.length && !manifest.sites.includes(this.site)) return false;
-      if (manifest.routes.length && !manifest.routes.includes(this.route)) return false;
+    isEligible(manifest2) {
+      if (manifest2.kind !== "system" && this.disabled.has(manifest2.id)) return false;
+      if (manifest2.sites.length && !manifest2.sites.includes(this.site)) return false;
+      if (manifest2.routes.length && !manifest2.routes.includes(this.route)) return false;
       return true;
+    }
+    /** @param {string} featureId @param {string} contributionId @param {string} legacyPluginId */
+    isContributionEnabled(featureId, contributionId, legacyPluginId) {
+      const manifest2 = this.manifests.get(featureId);
+      if (!manifest2) return false;
+      if (manifest2.sites.length && !manifest2.sites.includes(this.site)) return false;
+      if (!manifest2.contributes.includes(contributionId)) return false;
+      if (manifest2.kind !== "system" && this.disabled.has(manifest2.id)) return false;
+      if (manifest2.kind === "system") return true;
+      return !this.disabled.has(contributionId) && !this.disabled.has(legacyPluginId);
+    }
+    /** @param {symbol[]} tokens */
+    resolveDeclaredDependencies(tokens) {
+      return this.container.resolveDeclared(tokens);
+    }
+    /** @param {string} featureId */
+    async getScope(featureId) {
+      return (await this.activate(featureId)).scope;
     }
     /** @param {string} id */
     activate(id) {
       const existing = this.activations.get(id);
       if (existing) return existing;
-      const manifest = this.manifests.get(id);
-      if (!manifest) return Promise.reject(new Error(`Unknown feature: ${id}`));
-      if (!this.isEligible(manifest)) return Promise.reject(new Error(`Feature is disabled or ineligible: ${id}`));
-      const activation = this.activateManifest(manifest);
+      const manifest2 = this.manifests.get(id);
+      if (!manifest2) return Promise.reject(new Error(`Unknown feature: ${id}`));
+      if (!this.isEligible(manifest2)) return Promise.reject(new Error(`Feature is disabled or ineligible: ${id}`));
+      const activation = this.activateManifest(manifest2);
       this.activations.set(id, activation);
       activation.catch(() => this.activations.delete(id));
       return activation;
     }
     /** @param {Record<string, any>} manifest */
-    async activateManifest(manifest) {
+    async activateManifest(manifest2) {
       const started = performance.now();
-      const scope = new LifecycleScope(`feature:${manifest.id}`, { onChange: /* @__PURE__ */ __name((snapshot) => this.diagnostics.updateScope(snapshot), "onChange") });
+      const scope = new LifecycleScope(`feature:${manifest2.id}`, { onChange: /* @__PURE__ */ __name((snapshot) => this.diagnostics.updateScope(snapshot), "onChange") });
       try {
-        const dependencies = this.container.resolveDeclared(manifest.requires);
-        const enabledContributions = Object.freeze(manifest.contributes.filter((id) => !this.disabled.has(id)));
-        const result = await manifest.activate(dependencies, Object.freeze({ scope, enabledContributions }));
-        for (const command of manifest.providesCommands) {
+        const dependencies = this.container.resolveDeclared(manifest2.requires);
+        const enabledContributions = Object.freeze(manifest2.contributes.filter((id) => !this.disabled.has(id)));
+        const result = await manifest2.activate(dependencies, Object.freeze({ scope, enabledContributions }));
+        for (const command of manifest2.providesCommands) {
           const handler = result?.commands?.[command];
-          if (typeof handler !== "function") throw new Error(`Feature ${manifest.id} did not provide command ${command}`);
-          this.commands.registerHandler(command, handler, manifest.id);
+          if (typeof handler !== "function") throw new Error(`Feature ${manifest2.id} did not provide command ${command}`);
+          this.commands.registerHandler(command, handler, manifest2.id);
         }
-        this.diagnostics.setFeature(manifest.id, true);
+        this.diagnostics.setFeature(manifest2.id, true);
         enabledContributions.forEach((id) => this.diagnostics.setContribution(id, true));
-        this.diagnostics.recordStartup(manifest.id, performance.now() - started);
-        return Object.freeze({ manifest, scope, enabledContributions, dispose: /* @__PURE__ */ __name(() => {
+        this.diagnostics.recordStartup(manifest2.id, performance.now() - started);
+        return Object.freeze({ manifest: manifest2, scope, enabledContributions, dispose: /* @__PURE__ */ __name(() => {
           result?.dispose?.();
           scope.dispose();
-          this.diagnostics.setFeature(manifest.id, false);
+          this.diagnostics.setFeature(manifest2.id, false);
           enabledContributions.forEach((id) => this.diagnostics.setContribution(id, false));
-          this.activations.delete(manifest.id);
+          this.activations.delete(manifest2.id);
         }, "dispose") });
       } catch (error) {
         scope.dispose();
@@ -16409,12 +16681,12 @@ ${error.stack}` : "");
       }
     }
     async start() {
-      for (const manifest of this.manifests.values()) {
-        if (!this.isEligible(manifest)) continue;
-        if (manifest.startup === "eager") await this.activate(manifest.id);
-        else if (manifest.startup === "idle") {
+      for (const manifest2 of this.manifests.values()) {
+        if (!this.isEligible(manifest2)) continue;
+        if (manifest2.startup === "eager") await this.activate(manifest2.id);
+        else if (manifest2.startup === "idle") {
           const schedule = globalThis.requestIdleCallback ?? ((callback) => setTimeout(callback, 0));
-          schedule(() => void this.activate(manifest.id).catch(() => void 0));
+          schedule(() => void this.activate(manifest2.id).catch(() => void 0));
         }
       }
     }
@@ -16482,11 +16754,11 @@ ${error.stack}` : "");
       this.adapters = /* @__PURE__ */ new Map();
     }
     /** @param {Record<string, any>} manifest */
-    register(manifest) {
+    register(manifest2) {
       try {
         const validated = (
           /** @type {Record<string, any>} */
-          defineIntegration(manifest)
+          defineIntegration(manifest2)
         );
         if (this.manifests.has(validated.id)) throw new Error(`Duplicate integration: ${validated.id}`);
         this.manifests.set(validated.id, validated);
@@ -16497,18 +16769,18 @@ ${error.stack}` : "");
     }
     /** @param {string} capability */
     list(capability) {
-      return [...this.manifests.values()].filter((manifest) => manifest.capabilities.includes(capability));
+      return [...this.manifests.values()].filter((manifest2) => manifest2.capabilities.includes(capability));
     }
     /** @param {string} id */
     getAdapter(id) {
       const cached = this.adapters.get(id);
       if (cached) return cached;
-      const manifest = this.manifests.get(id);
-      if (!manifest) throw new Error(`Unknown integration: ${id}`);
+      const manifest2 = this.manifests.get(id);
+      if (!manifest2) throw new Error(`Unknown integration: ${id}`);
       try {
-        const dependencies = this.container.resolveDeclared(manifest.requires);
-        const client = manifest.createClient(dependencies);
-        const adapter = manifest.createAdapter(client, dependencies);
+        const dependencies = this.container.resolveDeclared(manifest2.requires);
+        const client = manifest2.createClient(dependencies);
+        const adapter = manifest2.createAdapter(client, dependencies);
         this.adapters.set(id, adapter);
         return adapter;
       } catch (error) {
@@ -16560,6 +16832,7 @@ ${error.stack}` : "");
     const dialog = new DialogService(dialogPort);
     const styles = new StyleRegistry(stylePort);
     const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache });
+    const webdav = new WebDavService(http);
     const settings = new SettingsService(storage);
     const profile = new ProfileService({ scope: rootScope });
     profile.start();
@@ -16567,42 +16840,463 @@ ${error.stack}` : "");
     const providers = new ProviderRegistry(diagnostics);
     const settingsRegistry = new SettingsRegistry();
     const integrations = new IntegrationRegistry(container, diagnostics);
-    const movie = new MovieIdentityService();
+    const movie = new MovieIdentityService(integrations);
+    const actressInfo = new ActressInfoService(integrations, cache);
     const review = new ReviewService(integrations);
     const related = new RelatedService(integrations);
-    const magnet = new MagnetService(providers);
-    const screenshot = new ScreenshotService(providers);
+    const magnet = new MagnetService(providers, integrations);
+    const screenshot = new ScreenshotService(providers, integrations);
+    const translation = new TranslationService(integrations);
     const offline = new OfflineService(providers);
-    container.register(PORT.navigation, navigationPort).register(PORT.http, httpPort).register(PORT.storage, storagePort).register(PORT.dialog, dialogPort).register(PORT.style, stylePort).register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy).register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile).register(SERVICE.movie, movie).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet).register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline).register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
+    container.register(PORT.navigation, navigationPort).register(PORT.http, httpPort).register(PORT.storage, storagePort).register(PORT.dialog, dialogPort).register(PORT.style, stylePort).register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy).register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.webdav, webdav).register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile).register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet).register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline).register(SERVICE.translation, translation).register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
     if (runtime.hostAdapter) container.register(PORT.host, runtime.hostAdapter);
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, dialog, styles, settings, cache, profile, movie, review, related, magnet, screenshot, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, movie, actressInfo, review, related, magnet, screenshot, translation, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
   }
   __name(createAppContext, "createAppContext");
 
+  // src/contracts/models.js
+  var ACTRESS_TYPE = Object.freeze({ censored: "censored", uncensored: "uncensored" });
+  function defineMovieRef(value) {
+    if (typeof value.carNum !== "string" || !value.carNum) throw new TypeError("MovieRef.carNum is required");
+    return Object.freeze({ ...value });
+  }
+  __name(defineMovieRef, "defineMovieRef");
+  function defineMovieDetail(value) {
+    if (typeof value.carNum !== "string" || !value.carNum) throw new TypeError("MovieDetail.carNum is required");
+    return Object.freeze({ ...value });
+  }
+  __name(defineMovieDetail, "defineMovieDetail");
+
+  // src/integrations/av123/parser.js
+  function resolveDocument2(page) {
+    if (typeof page === "string") return new DOMParser().parseFromString(page, "text/html");
+    if (typeof page?.querySelectorAll === "function") return page;
+    const candidate = page?.[0] ?? page?.get?.(0);
+    if (typeof candidate?.querySelectorAll === "function") return candidate;
+    throw new TypeError("123AV document is invalid");
+  }
+  __name(resolveDocument2, "resolveDocument");
+  function parse123AvCards($page, baseUrl = "https://123av.com") {
+    const items = /* @__PURE__ */ new Map();
+    if (typeof $page?.find !== "function") {
+      for (const card of resolveDocument2($page).querySelectorAll(".card")) {
+        const link = card.querySelector('a.card__link[href*="/cn/v/fc2-ppv-"]');
+        const href = link?.getAttribute("href"), text = link?.textContent?.trim() ?? "";
+        const numberMatch = text.match(/FC2-PPV-(\d+)/i);
+        if (!href || !numberMatch) continue;
+        const carNum = `FC2-${numberMatch[1]}`, detailUrl = new URL(href, baseUrl);
+        detailUrl.hash = "";
+        items.set(carNum, {
+          imgSrc: card.querySelector("img.card__img[src]")?.getAttribute("src") || "",
+          carNum,
+          href: detailUrl.href,
+          title: text.replace(/^FC2-PPV-\d+\s*[—–-]\s*/i, "").trim(),
+          preview: card.querySelector(".card__poster[data-preview]")?.getAttribute("data-preview") || null
+        });
+      }
+      return [...items.values()];
+    }
+    const wrap = (
+      /** @type {any} */
+      globalThis.jQuery ?? /** @type {any} */
+      globalThis.$ ?? $page.constructor
+    );
+    $page.find(".card").each(((index, element) => {
+      const $card = wrap(element);
+      const $link = $card.find('a.card__link[href*="/cn/v/fc2-ppv-"]').first();
+      const href = $link.attr("href"), text = $link.text().trim();
+      const numberMatch = text.match(/FC2-PPV-(\d+)/i);
+      if (!href || !numberMatch) return;
+      const carNum = `FC2-${numberMatch[1]}`;
+      const detailUrl = new URL(href, baseUrl);
+      detailUrl.hash = "";
+      items.set(carNum, {
+        imgSrc: $card.find("img.card__img[src]").first().attr("src") || "",
+        carNum,
+        href: detailUrl.href,
+        title: text.replace(/^FC2-PPV-\d+\s*[—–-]\s*/i, "").trim(),
+        preview: $card.find(".card__poster[data-preview]").first().attr("data-preview") || null
+      });
+    }));
+    return [...items.values()];
+  }
+  __name(parse123AvCards, "parse123AvCards");
+  function merge123AvCards(cardLists) {
+    const items = /* @__PURE__ */ new Map();
+    cardLists.flat().forEach(
+      /** @type {Record<string, any>} */
+      ((item) => items.set(item.carNum, item))
+    );
+    return [...items.values()];
+  }
+  __name(merge123AvCards, "merge123AvCards");
+  function parse123AvSourceMaxPage($page, baseUrl = "https://123av.com") {
+    if (typeof $page?.find !== "function") {
+      const document2 = resolveDocument2($page), lastHref2 = document2.querySelector('a[rel="last"]')?.getAttribute("href");
+      if (lastHref2) {
+        const page = Number.parseInt(new URL(lastHref2, baseUrl).searchParams.get("page") ?? "", 10);
+        if (Number.isFinite(page)) return page;
+      }
+      const inputMax2 = Number.parseInt(document2.querySelector("input.pager__input[max]")?.getAttribute("max") ?? "", 10);
+      if (Number.isFinite(inputMax2)) return inputMax2;
+      const totalMatch2 = document2.querySelector(".pager__total")?.textContent?.match(/(\d[\d,]*)/);
+      return totalMatch2 ? Number.parseInt(totalMatch2[1].replaceAll(",", ""), 10) : null;
+    }
+    const lastHref = $page.find('a[rel="last"]').first().attr("href");
+    if (lastHref) {
+      const page = Number.parseInt(new URL(lastHref, baseUrl).searchParams.get("page") ?? "", 10);
+      if (Number.isFinite(page)) return page;
+    }
+    const inputMax = Number.parseInt($page.find("input.pager__input[max]").first().attr("max"), 10);
+    if (Number.isFinite(inputMax)) return inputMax;
+    const totalMatch = $page.find(".pager__total").first().text().match(/(\d[\d,]*)/);
+    return totalMatch ? Number.parseInt(totalMatch[1].replaceAll(",", ""), 10) : null;
+  }
+  __name(parse123AvSourceMaxPage, "parse123AvSourceMaxPage");
+  function parse123AvVideoInfo($page, url) {
+    const idMatch = new URL(url).pathname.match(/fc2-ppv-(\d+)/i);
+    const id = idMatch ? idMatch[1] : null;
+    const nativeDocument = typeof $page?.find === "function" ? null : resolveDocument2($page);
+    const rawTitle = nativeDocument ? nativeDocument.querySelector("h1.watch__title")?.textContent?.trim() ?? "" : $page.find("h1.watch__title").first().text().trim();
+    const title = id ? rawTitle.replace(new RegExp(`^FC2-PPV-${id}\\s*[—–-]\\s*`, "i"), "").trim() : rawTitle;
+    const pageText = nativeDocument ? nativeDocument.body?.textContent ?? "" : $page.find("body").text();
+    const publishDate = pageText.match(/发布日期\s*(\d{4}-\d{2}-\d{2})/)?.[1] || "";
+    return { id, publishDate, title, moviePoster: null };
+  }
+  __name(parse123AvVideoInfo, "parse123AvVideoInfo");
+
   // src/integrations/av123/manifest.js
+  var REQUEST_OPTIONS = Object.freeze({ cookiePartition: { topLevelSite: "https://123av.com" } });
+  function create123AvAdapter(http) {
+    const request = /* @__PURE__ */ __name((url, scope) => http.request({
+      providerId: "av123",
+      method: "GET",
+      url,
+      responseType: "text",
+      cacheScope: "public",
+      ttlMs: 6048e5,
+      requestOptions: REQUEST_OPTIONS,
+      urlPolicy: { trustClass: "builtin-public", hosts: ["123av.com"] }
+    }, scope), "request");
+    return Object.freeze({
+      contracts: ["MovieRef", "MovieDetail"],
+      /** @param {{carNum?: unknown}} movieRef */
+      searchUrl(movieRef) {
+        const carNum = normalizeMovieCarNum(movieRef?.carNum);
+        return carNum ? `https://123av.com/cn/search?keyword=${encodeURIComponent(carNum)}` : null;
+      },
+      /** @param {{carNum: string, url?: string}} movieRef */
+      detailUrl(movieRef) {
+        const id = normalizeMovieCarNum(movieRef.carNum)?.match(/^FC2-(\d+)$/)?.[1];
+        return movieRef.url ? new URL(movieRef.url).href : id ? `https://123av.com/cn/v/fc2-ppv-${id}` : null;
+      },
+      /** @param {string} value */
+      matchesUrl(value) {
+        try {
+          return new URL(value).hostname === "123av.com";
+        } catch {
+          return false;
+        }
+      },
+      /** @param {{page?: number, keyword?: string}} query @param {{scope?: any}} [options] */
+      async listCatalog(query = {}, options = {}) {
+        const page = Math.max(1, Number(query.page) || 1), keyword = String(query.keyword || "").trim();
+        const sourcePages = keyword ? [1] : [page * 2 - 1, page * 2];
+        const urls = sourcePages.map((sourcePage) => keyword ? `https://123av.com/cn/search?keyword=${encodeURIComponent(keyword)}` : `https://123av.com/cn/makers/fc2?page=${sourcePage}`);
+        const responses = await Promise.all(urls.map((url) => request(url, options.scope)));
+        const lists = responses.map((response, index) => parse123AvCards(response.data, response.finalUrl || urls[index]));
+        const items = merge123AvCards(lists).map((item) => Object.freeze({
+          carNum: item.carNum,
+          title: item.title,
+          url: item.href,
+          imageUrl: item.imgSrc ? new URL(item.imgSrc, "https://123av.com").href : null,
+          previewUrl: item.preview ? new URL(item.preview, "https://123av.com").href : null,
+          providerId: "av123"
+        }));
+        const sourceMaxPage = keyword || !responses.length ? null : parse123AvSourceMaxPage(responses[0].data, responses[0].finalUrl || urls[0]);
+        return Object.freeze({ items, maxPage: sourceMaxPage ? Math.ceil(sourceMaxPage / 2) : null });
+      },
+      /** @param {{carNum: string}} movieRef @param {{scope?: any}} [options] */
+      async resolveMovie(movieRef, options = {}) {
+        const carNum = normalizeMovieCarNum(movieRef.carNum);
+        if (!carNum) return null;
+        const url = this.searchUrl({ carNum });
+        if (!url) return null;
+        const response = await request(url, options.scope);
+        const match = parse123AvCards(response.data, response.finalUrl || url).find((item) => normalizeMovieCarNum(item.carNum) === carNum);
+        return match ? defineMovieRef({ carNum, url: match.href, providerId: "av123" }) : null;
+      },
+      /** @param {{carNum: string, url?: string}} movieRef @param {{scope?: any}} [options] */
+      async getDetail(movieRef, options = {}) {
+        const carNum = normalizeMovieCarNum(movieRef.carNum), id = carNum?.match(/^FC2-(\d+)$/)?.[1];
+        if (!carNum || !movieRef.url && !id) throw new TypeError("123AV movie reference is invalid");
+        const url = new URL(movieRef.url || `https://123av.com/cn/v/fc2-ppv-${id}`).href;
+        const response = await request(url, options.scope), info = parse123AvVideoInfo(response.data, response.finalUrl || url);
+        if (!info.title) throw new TypeError("123AV detail is malformed");
+        return defineMovieDetail({ carNum, title: info.title, releaseDate: info.publishDate || null, url: response.finalUrl || url, providerId: "av123" });
+      }
+    });
+  }
+  __name(create123AvAdapter, "create123AvAdapter");
   var manifest_default2 = defineIntegration({
     id: "av123",
     trustClass: "builtin-public",
     hosts: ["123av.com"],
-    capabilities: ["movie.search", "movie.detail", "movie.images", "actor.lookup"],
-    requires: [PORT.http, SERVICE.urlPolicy],
-    createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "av123" }), "createClient"),
-    createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MovieRef", "MovieDetail"] }), "createAdapter"),
+    capabilities: ["movie.search", "movie.detail", "movie.catalog"],
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => create123AvAdapter(client.http), "createAdapter"),
     createHostAdapter: null,
-    cachePolicy: { "movie.detail": CACHE.externalDetail },
+    cachePolicy: { "movie.search": "public-7d", "movie.detail": CACHE.externalDetail, "movie.catalog": "public-7d" },
     quality: "silver"
   });
 
+  // src/integrations/dmm/parser.js
+  function resolveDocument3(page) {
+    if (typeof page === "string") return new DOMParser().parseFromString(page, "text/html");
+    if (typeof page?.querySelector === "function") return page;
+    const candidate = page?.[0] ?? page?.get?.(0);
+    if (typeof candidate?.querySelector === "function") return candidate;
+    throw new TypeError("DMM preview document is invalid");
+  }
+  __name(resolveDocument3, "resolveDocument");
+  function parseDmmPreview(page, baseUrl) {
+    const document2 = resolveDocument3(page);
+    const value = document2.querySelector("[data-video-url]")?.getAttribute("data-video-url") ?? document2.querySelector("video source[src]")?.getAttribute("src");
+    if (!value) throw new TypeError("DMM preview URL is missing");
+    const url = new URL(value, baseUrl);
+    if (url.protocol !== "https:") throw new TypeError("DMM preview must use HTTPS");
+    return Object.freeze({ url: url.href });
+  }
+  __name(parseDmmPreview, "parseDmmPreview");
+
   // src/integrations/dmm/manifest.js
-  var manifest_default3 = defineIntegration({ id: "dmm", trustClass: "builtin-public", hosts: ["dmm.co.jp"], capabilities: ["movie.preview"], requires: [PORT.http, SERVICE.urlPolicy], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "dmm" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MoviePreview"] }), "createAdapter"), createHostAdapter: null, cachePolicy: { "movie.preview": CACHE.externalDetail }, quality: "silver" });
+  function createDmmAdapter(http) {
+    return Object.freeze({
+      contracts: ["MoviePreview"],
+      /** @param {{url: string}} movieRef @param {{scope?: any}} [options] */
+      async getPreview(movieRef, options = {}) {
+        const url = new URL(movieRef.url);
+        const response = await http.request({
+          providerId: "dmm",
+          method: "GET",
+          url: url.href,
+          responseType: "text",
+          cacheScope: "public",
+          ttlMs: 6048e5,
+          urlPolicy: { trustClass: "builtin-public", hosts: ["dmm.co.jp"] }
+        }, options.scope);
+        return parseDmmPreview(response.data, response.finalUrl || url.href);
+      }
+    });
+  }
+  __name(createDmmAdapter, "createDmmAdapter");
+  var manifest_default3 = defineIntegration({
+    id: "dmm",
+    trustClass: "builtin-public",
+    hosts: ["dmm.co.jp"],
+    capabilities: ["movie.preview"],
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createDmmAdapter(client.http), "createAdapter"),
+    createHostAdapter: null,
+    cachePolicy: { "movie.preview": CACHE.externalDetail },
+    quality: "silver"
+  });
+
+  // src/integrations/fc2ppvdb/parser.js
+  function resolveDocument4(page) {
+    if (typeof page === "string") return new DOMParser().parseFromString(page, "text/html");
+    if (typeof page?.querySelector === "function") return page;
+    const candidate = page?.[0] ?? page?.get?.(0);
+    if (typeof candidate?.querySelector === "function") return candidate;
+    throw new TypeError("FC2PPVDB detail document is invalid");
+  }
+  __name(resolveDocument4, "resolveDocument");
+  function parseFc2PpvDbDetail(page, url) {
+    const id = new URL(url).pathname.match(/(?:articles?|videos?)\/(\d+)/i)?.[1];
+    const carNum = normalizeMovieCarNum(id ? `FC2-${id}` : "");
+    const title = resolveDocument4(page).querySelector("h1")?.textContent?.trim() ?? "";
+    if (!carNum || !title) throw new TypeError("FC2PPVDB detail is malformed");
+    return defineMovieDetail({ carNum, title, url: new URL(url).href });
+  }
+  __name(parseFc2PpvDbDetail, "parseFc2PpvDbDetail");
+  function parseFc2PpvDbPeople(page, url) {
+    const document2 = resolveDocument4(page), baseUrl = new URL(url);
+    const rows = [...document2.querySelectorAll("div")];
+    const actressRow = rows.find((item) => item.textContent?.trim().startsWith("女優："));
+    const sellerRow = rows.find((item) => item.textContent?.trim().startsWith("販売者："));
+    const actors = [...actressRow?.querySelectorAll("a[href]") ?? []].map((link) => Object.freeze({
+      name: link.textContent?.trim() || "",
+      url: new URL(link.getAttribute("href") || "", baseUrl).href
+    })).filter((actor) => actor.name);
+    const sellerLink = sellerRow?.querySelector("a[href]");
+    const seller = sellerLink ? Object.freeze({ name: sellerLink.textContent?.trim() || "", url: new URL(sellerLink.getAttribute("href") || "", baseUrl).href }) : null;
+    return Object.freeze({ actors: Object.freeze(actors), seller });
+  }
+  __name(parseFc2PpvDbPeople, "parseFc2PpvDbPeople");
 
   // src/integrations/fc2ppvdb/manifest.js
-  var manifest_default4 = defineIntegration({ id: "fc2ppvdb", trustClass: "builtin-public", hosts: ["fc2ppvdb.com"], capabilities: ["movie.detail", "movie.images"], requires: [PORT.http, SERVICE.urlPolicy], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "fc2ppvdb" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MovieDetail"] }), "createAdapter"), createHostAdapter: null, cachePolicy: { "movie.detail": CACHE.externalDetail }, quality: "silver" });
+  function createFc2PpvDbAdapter(http) {
+    const resolveUrl = /* @__PURE__ */ __name((movieRef) => {
+      const id = String(movieRef.carNum || "").match(/^(?:FC2-)?(?:PPV-)?(\d+)$/i)?.[1];
+      if (!id) throw new TypeError("FC2PPVDB movie identifier is invalid");
+      return new URL(movieRef.url || `https://fc2ppvdb.com/articles/${id}`);
+    }, "resolveUrl");
+    const request = /* @__PURE__ */ __name((url, scope) => http.request({
+      providerId: "fc2ppvdb",
+      method: "GET",
+      url: url.href,
+      responseType: "text",
+      cacheScope: "public",
+      ttlMs: 6048e5,
+      urlPolicy: { trustClass: "builtin-public", hosts: ["fc2ppvdb.com"] }
+    }, scope), "request");
+    return Object.freeze({
+      contracts: ["MovieDetail", "MovieCredits"],
+      /** @param {{carNum: string, url?: string}} movieRef */
+      detailUrl(movieRef) {
+        return resolveUrl(movieRef).href;
+      },
+      /** @param {{carNum: string, url?: string}} movieRef @param {{scope?: any}} [options] */
+      async getDetail(movieRef, options = {}) {
+        const url = resolveUrl(movieRef), response = await request(url, options.scope);
+        return parseFc2PpvDbDetail(response.data, response.finalUrl || url.href);
+      },
+      /** @param {{carNum: string, url?: string}} movieRef @param {{scope?: any}} [options] */
+      async getPeople(movieRef, options = {}) {
+        const url = resolveUrl(movieRef), response = await request(url, options.scope);
+        return parseFc2PpvDbPeople(response.data, response.finalUrl || url.href);
+      }
+    });
+  }
+  __name(createFc2PpvDbAdapter, "createFc2PpvDbAdapter");
+  var manifest_default4 = defineIntegration({
+    id: "fc2ppvdb",
+    trustClass: "builtin-public",
+    hosts: ["fc2ppvdb.com"],
+    capabilities: ["movie.detail", "movie.credits"],
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createFc2PpvDbAdapter(client.http), "createAdapter"),
+    createHostAdapter: null,
+    cachePolicy: { "movie.detail": CACHE.externalDetail, "movie.credits": CACHE.externalDetail },
+    quality: "silver"
+  });
+
+  // src/integrations/fc2content/parser.js
+  function parseFc2ContentImages(html, baseUrl) {
+    const document2 = new DOMParser().parseFromString(html, "text/html"), images = /* @__PURE__ */ new Set();
+    for (const image of document2.querySelectorAll(".items_article_SampleImagesArea img[src]")) {
+      const url = new URL(image.getAttribute("src") || "", baseUrl);
+      if (url.protocol === "https:") images.add(url.href);
+    }
+    return Object.freeze([...images].map((url) => Object.freeze({ url, providerId: "fc2content" })));
+  }
+  __name(parseFc2ContentImages, "parseFc2ContentImages");
+
+  // src/integrations/fc2content/manifest.js
+  function createFc2ContentAdapter(http) {
+    return Object.freeze({
+      contracts: ["Screenshot"],
+      /** @param {{carNum: string}} movieRef */
+      detailUrl(movieRef) {
+        const id = String(movieRef.carNum || "").match(/^(?:FC2-)?(?:PPV-)?(\d+)$/i)?.[1];
+        return id ? `https://adult.contents.fc2.com/article/${id}/` : null;
+      },
+      /** @param {{carNum: string}} movieRef @param {{scope?: any}} [options] */
+      async getImages(movieRef, options = {}) {
+        const id = String(movieRef.carNum || "").match(/^(?:FC2-)?(?:PPV-)?(\d+)$/i)?.[1];
+        if (!id) return [];
+        const url = `https://adult.contents.fc2.com/article/${id}/`;
+        const response = await http.request({
+          providerId: "fc2content",
+          method: "GET",
+          url,
+          responseType: "text",
+          cacheScope: "public",
+          ttlMs: 6048e5,
+          headers: { referer: url },
+          urlPolicy: { trustClass: "builtin-public", hosts: ["adult.contents.fc2.com"] }
+        }, options.scope);
+        return parseFc2ContentImages(response.data, response.finalUrl || url);
+      }
+    });
+  }
+  __name(createFc2ContentAdapter, "createFc2ContentAdapter");
+  var manifest_default5 = defineIntegration({
+    id: "fc2content",
+    trustClass: "builtin-public",
+    hosts: ["adult.contents.fc2.com"],
+    capabilities: ["movie.images"],
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createFc2ContentAdapter(client.http), "createAdapter"),
+    createHostAdapter: null,
+    cachePolicy: { "movie.images": CACHE.externalDetail },
+    quality: "silver"
+  });
+
+  // src/integrations/google-translate/parser.js
+  function parseGoogleTranslation(payload) {
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new TypeError("Translation response is invalid");
+    const translation = (
+      /** @type {{translation?: unknown}} */
+      payload.translation
+    );
+    if (typeof translation !== "string" || !translation.trim()) throw new TypeError("Translation text is missing");
+    return translation;
+  }
+  __name(parseGoogleTranslation, "parseGoogleTranslation");
+
+  // src/integrations/google-translate/manifest.js
+  var ENDPOINT = "https://translate-pa.googleapis.com/v1/translate";
+  function createGoogleTranslateAdapter(http) {
+    return Object.freeze({
+      contracts: ["Translation"],
+      /** @param {string} text @param {{sourceLanguage?: string, targetLanguage?: string, scope?: any}} [options] */
+      async translate(text, options = {}) {
+        if (!String(text || "").trim()) throw new TypeError("Translation text cannot be empty");
+        const url = new URL(ENDPOINT);
+        url.search = new URLSearchParams({
+          "params.client": "gtx",
+          dataTypes: "TRANSLATION",
+          key: "AIzaSyDLEeFI5OtFBwYBIoK_jj5m32rZK5CkCXA",
+          "query.sourceLanguage": options.sourceLanguage ?? "ja",
+          "query.targetLanguage": options.targetLanguage ?? "zh-CN",
+          "query.text": text
+        }).toString();
+        const response = await http.request({
+          providerId: "google-translate",
+          method: "GET",
+          url: url.href,
+          responseType: "json",
+          cacheScope: "public",
+          ttlMs: 2592e6,
+          urlPolicy: { trustClass: "builtin-public", hosts: ["translate-pa.googleapis.com"] }
+        }, options.scope);
+        return parseGoogleTranslation(response.data);
+      }
+    });
+  }
+  __name(createGoogleTranslateAdapter, "createGoogleTranslateAdapter");
+  var manifest_default6 = defineIntegration({
+    id: "google-translate",
+    trustClass: "builtin-public",
+    hosts: ["translate-pa.googleapis.com"],
+    capabilities: ["text.translate"],
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createGoogleTranslateAdapter(client.http), "createAdapter"),
+    createHostAdapter: null,
+    cachePolicy: { "text.translate": CACHE.externalDetail },
+    quality: "silver"
+  });
 
   // src/integrations/host-list/manifest.js
-  var manifest_default5 = defineIntegration({
+  var manifest_default7 = defineIntegration({
     id: "host-list",
     trustClass: "builtin-public",
     hosts: ["javdb.com", "javbus.com"],
@@ -16615,56 +17309,362 @@ ${error.stack}` : "");
     quality: "bronze"
   });
 
+  // src/integrations/javdb/signature.js
+  var signatureSecond2 = 0;
+  var signatureValue2 = "";
+  function createJavDbSignature() {
+    const now = Math.floor(Date.now() / 1e3);
+    if (signatureValue2 && now - signatureSecond2 <= 20) return signatureValue2;
+    const md5Runtime = (
+      /** @type {any} */
+      globalThis.md5
+    );
+    if (typeof md5Runtime !== "function") throw new Error("Missing userscript vendor runtime: md5");
+    signatureSecond2 = now;
+    signatureValue2 = `${now}.lpw6vgqzsp.${md5Runtime(`${now}71cf27bb3c0bcdf207b64abecddc970098c7421ee7203b9cdae54478478a199e7d5a6e1a57691123c1a931c057842fb73ba3b3c83bcd69c17ccf174081e3d8aa`)}`;
+    return signatureValue2;
+  }
+  __name(createJavDbSignature, "createJavDbSignature");
+
   // src/integrations/javdb/manifest.js
-  var manifest_default6 = defineIntegration({
+  var API_ORIGIN = "https://jdforrepam.com";
+  function createJavDbAdapter(http, sign = createJavDbSignature) {
+    const request = /* @__PURE__ */ __name(async (path, query, options = {}, headers = {}) => {
+      const url = new URL(path, API_ORIGIN);
+      Object.entries(query).forEach(([key, value]) => url.searchParams.set(key, String(value)));
+      const response = await http.request({
+        providerId: "javdb",
+        method: "GET",
+        url: url.href,
+        responseType: "json",
+        headers: { jdSignature: sign(), ...headers },
+        cacheScope: "public",
+        ttlMs: options.ttlMs ?? 864e5,
+        urlPolicy: { trustClass: "builtin-public", hosts: ["jdforrepam.com"] }
+      }, options.scope);
+      return response.data;
+    }, "request");
+    return Object.freeze({
+      contracts: ["MovieRef", "MovieDetail", "Actor", "Magnet", "Review", "RelatedList"],
+      /** @param {Record<string, unknown>} movieRef @param {{scope?: any}} [options] */
+      async resolveMovie(movieRef, options = {}) {
+        const carNum = normalizeMovieCarNum(movieRef.carNum);
+        if (!carNum) return null;
+        const payload = await request("/api/v2/search", { q: carNum, page: 1, type: "movie", limit: 20, movie_type: "all", from_recent: "false", movie_filter_by: "all", movie_sort_by: "relevance" }, { ...options, ttlMs: 6048e5 }, { "user-agent": "Dart/3.5 (dart:io)", "accept-language": "zh-TW", host: "jdforrepam.com" });
+        if (!Array.isArray(payload?.data?.movies)) throw new Error(payload?.message || "JavDB search response is invalid");
+        const match = payload.data.movies.find((movie) => normalizeMovieCarNum(movie.number) === carNum);
+        return match?.id ? Object.freeze({ carNum, movieId: String(match.id), providerId: "javdb" }) : null;
+      },
+      /** @param {Record<string, unknown>} movieRef @param {{scope?: any}} [options] */
+      async getDetail(movieRef, options = {}) {
+        const movieId = String(movieRef.movieId || "").trim();
+        if (!movieId) throw new TypeError("JavDB movie id is required");
+        const payload = await request(`/api/v4/movies/${encodeURIComponent(movieId)}`, {}, { ...options, ttlMs: 6048e5 });
+        const movie = payload?.data?.movie;
+        if (!movie?.number) throw new Error(payload?.message || "JavDB detail response is invalid");
+        const imageUrls = Array.isArray(movie.preview_images) ? movie.preview_images.map((image) => String(image.large_url || "").replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com")).filter(Boolean) : [];
+        return Object.freeze({
+          movieId: String(movie.id || movieId),
+          carNum: normalizeMovieCarNum(movie.number),
+          title: String(movie.origin_title || movie.title || ""),
+          actors: Array.isArray(movie.actors) ? movie.actors.map((actor) => Object.freeze({ id: String(actor.id), name: String(actor.name || ""), gender: Number(actor.gender) })) : [],
+          duration: Number(movie.duration) || null,
+          score: Number(movie.score) || 0,
+          releaseDate: movie.release_date || null,
+          watchedCount: Number(movie.watched_count) || 0,
+          imageUrls: Object.freeze(imageUrls),
+          providerId: "javdb"
+        });
+      },
+      /** @param {Record<string, unknown>} movieRef @param {{scope?: any}} [options] */
+      async listMagnets(movieRef, options = {}) {
+        const movieId = String(movieRef.movieId || "").trim();
+        if (!movieId) return [];
+        const payload = await request(`/api/v1/movies/${encodeURIComponent(movieId)}/magnets`, {}, options);
+        if (!Array.isArray(payload?.data?.magnets)) throw new Error(payload?.message || "JavDB magnet response is invalid");
+        return payload.data.magnets.map((item) => Object.freeze({
+          hash: String(item.hash || ""),
+          title: String(item.name || ""),
+          hasHdTag: Boolean(item.hd),
+          hasSubtitleTag: Boolean(item.cnsub),
+          createdAt: item.created_at || null,
+          seeders: Number(item.seeders) || 0,
+          sizeMb: Number(item.size) || 0,
+          fileCount: Number(item.files_count) || 0,
+          providerId: "javdb"
+        }));
+      },
+      /** @param {{period?: string, filter?: string, scope?: any}} [options] */
+      async listRankings(options = {}) {
+        const payload = await request("/api/v1/rankings/playback", { period: options.period || "daily", filter_by: options.filter || "high_score" }, options);
+        if (!Array.isArray(payload?.data?.movies)) throw new Error(payload?.message || "JavDB ranking response is invalid");
+        return payload.data.movies.map((movie) => Object.freeze({
+          movieId: String(movie.id),
+          carNum: normalizeMovieCarNum(movie.number),
+          title: String(movie.origin_title || ""),
+          coverUrl: String(movie.cover_url || "").replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com"),
+          releaseDate: movie.release_date || null,
+          hasSubtitle: Boolean(movie.has_cnsub),
+          magnetCount: Number(movie.magnets_count) || 0,
+          newMagnets: Boolean(movie.new_magnets),
+          providerId: "javdb"
+        }));
+      },
+      /** @param {Record<string, unknown>} movieRef @param {{scope?: any, page?: number, limit?: number}} [options] */
+      async listReviews(movieRef, options = {}) {
+        const movieId = String(movieRef.movieId || "").trim();
+        if (!movieId) return [];
+        const payload = await request(`/api/v1/movies/${encodeURIComponent(movieId)}/reviews`, { page: options.page ?? 1, sort_by: "hotly", limit: options.limit ?? 20 }, options);
+        if (!Array.isArray(payload?.data?.reviews)) throw new Error(payload?.message || "JavDB review response is invalid");
+        return payload.data.reviews.map((review) => Object.freeze({
+          author: String(review.username || "匿名用户"),
+          content: String(review.content || ""),
+          score: Number(review.score) || 0,
+          createdAt: review.created_at || null,
+          likes: Number(review.likes_count) || 0
+        }));
+      },
+      /** @param {Record<string, unknown>} movieRef @param {{scope?: any, page?: number, limit?: number}} [options] */
+      async listRelated(movieRef, options = {}) {
+        const movieId = String(movieRef.movieId || "").trim();
+        if (!movieId) return [];
+        const payload = await request("/api/v1/lists/related", { movie_id: movieId, page: options.page ?? 1, limit: options.limit ?? 20 }, options);
+        if (!Array.isArray(payload?.data?.lists)) throw new Error(payload?.message || "JavDB related response is invalid");
+        return payload.data.lists.map((item) => Object.freeze({
+          id: String(item.id),
+          name: String(item.name || "未命名清单"),
+          movieCount: Number(item.movies_count) || 0,
+          collectionCount: Number(item.collections_count) || 0,
+          viewCount: Number(item.views_count) || 0,
+          createdAt: item.created_at || null
+        }));
+      }
+    });
+  }
+  __name(createJavDbAdapter, "createJavDbAdapter");
+  var manifest_default8 = defineIntegration({
     id: "javdb",
     trustClass: "builtin-public",
-    hosts: ["javdb.com"],
-    capabilities: ["movie.search", "movie.detail", "movie.state", "actor.lookup"],
-    requires: [PORT.http, SERVICE.urlPolicy],
-    createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "javdb" }), "createClient"),
-    createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MovieRef", "MovieDetail", "Actor"] }), "createAdapter"),
+    hosts: ["javdb.com", "jdforrepam.com"],
+    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup"],
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createJavDbAdapter(client.http), "createAdapter"),
     createHostAdapter: null,
-    cachePolicy: { "movie.detail": CACHE.externalDetail },
+    cachePolicy: { "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.reviews": "public-1d", "movie.related": "public-1d" },
     quality: "silver"
   });
 
+  // src/integrations/javbus/parser.js
+  function resolveDocument5(page) {
+    if (typeof page === "string") return new DOMParser().parseFromString(page, "text/html");
+    if (typeof page?.querySelector === "function") return page;
+    const candidate = page?.[0] ?? page?.get?.(0);
+    if (typeof candidate?.querySelector === "function") return candidate;
+    throw new TypeError("JavBus document is invalid");
+  }
+  __name(resolveDocument5, "resolveDocument");
+  function readMovieRef(page, url) {
+    if (typeof page?.find === "function") {
+      return normalizeMovieCarNum(page.find("span.header:contains('識別碼:')").parent().text().replace("識別碼:", "")) ?? normalizeMovieCarNum(new URL(url).pathname.split("/").filter(Boolean).pop());
+    }
+    const document2 = resolveDocument5(page);
+    const label = [...document2.querySelectorAll("span.header")].find((element) => element.textContent?.includes("識別碼"));
+    return normalizeMovieCarNum(label?.parentElement?.textContent?.replace("識別碼:", "")) ?? normalizeMovieCarNum(new URL(url).pathname.split("/").filter(Boolean).pop());
+  }
+  __name(readMovieRef, "readMovieRef");
+  function parseJavBusMovieRef(page, url) {
+    const carNum = readMovieRef(page, url);
+    if (!carNum) throw new TypeError("JavBus movie identifier is missing");
+    return defineMovieRef({ carNum, url: new URL(url).href });
+  }
+  __name(parseJavBusMovieRef, "parseJavBusMovieRef");
+  function parseJavBusMovieDetail(page, url) {
+    const movieRef = parseJavBusMovieRef(page, url);
+    const nativeDocument = typeof page?.find === "function" ? null : resolveDocument5(page);
+    const title = nativeDocument ? nativeDocument.querySelector("h3")?.textContent?.trim() || movieRef.carNum : page.find("h3").first().text().trim() || movieRef.carNum;
+    const coverValue = nativeDocument ? nativeDocument.querySelector(".bigImage img[src], a.bigImage img[src]")?.getAttribute("src") : page.find(".bigImage img[src], a.bigImage img[src]").first().attr("src");
+    return defineMovieDetail({ ...movieRef, title, coverUrl: coverValue ? new URL(coverValue, url).href : null, providerId: "javbus" });
+  }
+  __name(parseJavBusMovieDetail, "parseJavBusMovieDetail");
+
   // src/integrations/javbus/manifest.js
-  var manifest_default7 = defineIntegration({
+  function createJavBusAdapter(http) {
+    return Object.freeze({
+      contracts: ["MovieDetail", "Screenshot"],
+      /** @param {{carNum: string, url?: string}} movieRef @param {{scope?: any}} [options] */
+      async getDetail(movieRef, options = {}) {
+        const carNum = normalizeMovieCarNum(movieRef.carNum);
+        if (!carNum) throw new TypeError("JavBus movie reference is invalid");
+        const url = new URL(movieRef.url || `https://www.javbus.com/${encodeURIComponent(carNum)}`).href;
+        const response = await http.request({
+          providerId: "javbus",
+          method: "GET",
+          url,
+          responseType: "text",
+          cacheScope: "public",
+          ttlMs: 6048e5,
+          urlPolicy: { trustClass: "builtin-public", hosts: ["javbus.com"] }
+        }, options.scope);
+        return parseJavBusMovieDetail(response.data, response.finalUrl || url);
+      },
+      /** @param {{carNum: string, url?: string}} movieRef @param {{scope?: any}} [options] */
+      async getImages(movieRef, options = {}) {
+        const detail = await this.getDetail(movieRef, options);
+        return detail.coverUrl ? [Object.freeze({ url: detail.coverUrl, providerId: "javbus" })] : [];
+      }
+    });
+  }
+  __name(createJavBusAdapter, "createJavBusAdapter");
+  var manifest_default9 = defineIntegration({
     id: "javbus",
     trustClass: "builtin-public",
     hosts: ["javbus.com"],
-    capabilities: ["movie.search", "movie.detail", "movie.images"],
-    requires: [PORT.http, SERVICE.urlPolicy],
-    createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "javbus" }), "createClient"),
-    createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MovieRef", "MovieDetail"] }), "createAdapter"),
+    capabilities: ["movie.detail", "movie.images"],
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createJavBusAdapter(client.http), "createAdapter"),
     createHostAdapter: null,
-    cachePolicy: { "movie.detail": CACHE.externalDetail },
+    cachePolicy: { "movie.detail": CACHE.externalDetail, "movie.images": CACHE.externalDetail },
     quality: "silver"
   });
 
   // src/integrations/javstore/manifest.js
-  var manifest_default8 = defineIntegration({
+  function createJavStoreAdapter(http) {
+    const request = /* @__PURE__ */ __name((url, scope) => http.request({
+      providerId: "javstore",
+      method: "GET",
+      url,
+      responseType: "text",
+      cacheScope: "public",
+      ttlMs: 6048e5,
+      urlPolicy: { trustClass: "builtin-public", hosts: ["javstore.net"] }
+    }, scope), "request");
+    return Object.freeze({
+      contracts: ["Screenshot"],
+      /** @param {{carNum: string}} movieRef @param {{scope?: any}} [options] */
+      async getImages(movieRef, options = {}) {
+        const searchUrl = `https://javstore.net/search?q=${encodeURIComponent(movieRef.carNum || "")}`;
+        const search = await request(searchUrl, options.scope);
+        const candidates = parseJavStoreSearch(search.data, movieRef.carNum, search.finalUrl || searchUrl);
+        if (!candidates.length) return [];
+        for (const candidate of candidates) {
+          try {
+            const detail = await request(candidate, options.scope);
+            const imageUrl = parseJavStorePreview(detail.data, detail.finalUrl || candidate);
+            if (imageUrl) return [Object.freeze({ url: imageUrl, providerId: "javstore" })];
+          } catch (error) {
+            if (!(error && typeof error === "object" && "code" in error && error.code === "NOT_FOUND")) throw error;
+          }
+        }
+        return [];
+      }
+    });
+  }
+  __name(createJavStoreAdapter, "createJavStoreAdapter");
+  var manifest_default10 = defineIntegration({
     id: "javstore",
     trustClass: "builtin-public",
     hosts: ["javstore.net"],
     capabilities: ["movie.images"],
-    requires: [PORT.http, SERVICE.urlPolicy],
-    createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "javstore" }), "createClient"),
-    createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["Screenshot"] }), "createAdapter"),
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createJavStoreAdapter(client.http), "createAdapter"),
     createHostAdapter: null,
     cachePolicy: { "movie.images": CACHE.externalDetail },
     quality: "silver"
   });
 
   // src/integrations/javtrailers/manifest.js
-  var manifest_default9 = defineIntegration({ id: "javtrailers", trustClass: "builtin-public", hosts: ["javtrailers.com"], capabilities: ["movie.preview"], requires: [PORT.http, SERVICE.urlPolicy], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "javtrailers" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MoviePreview"] }), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
+  var manifest_default11 = defineIntegration({ id: "javtrailers", trustClass: "builtin-public", hosts: ["javtrailers.com"], capabilities: ["movie.preview"], requires: [PORT.http, SERVICE.urlPolicy], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "javtrailers" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MoviePreview"] }), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
 
   // src/integrations/subtitlecat/manifest.js
-  var manifest_default10 = defineIntegration({ id: "subtitlecat", trustClass: "builtin-public", hosts: ["subtitlecat.com"], capabilities: ["subtitle.search"], requires: [PORT.http, SERVICE.urlPolicy], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "subtitlecat" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["Subtitle"] }), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
+  function createSubtitleCatAdapter() {
+    return Object.freeze({
+      contracts: ["Subtitle"],
+      /** @param {{carNum?: unknown}} movieRef */
+      detailUrl(movieRef) {
+        const carNum = String(movieRef?.carNum || "").trim();
+        if (!carNum) return null;
+        const url = new URL("/index.php", "https://subtitlecat.com");
+        url.searchParams.set("search", carNum);
+        return url.href;
+      }
+    });
+  }
+  __name(createSubtitleCatAdapter, "createSubtitleCatAdapter");
+  var manifest_default12 = defineIntegration({ id: "subtitlecat", trustClass: "builtin-public", hosts: ["subtitlecat.com"], capabilities: ["subtitle.search"], requires: [], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "subtitlecat" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => createSubtitleCatAdapter(), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
+
+  // src/integrations/wikipedia/parser.js
+  function compact(value) {
+    return value.replace(/\s+/g, " ").trim();
+  }
+  __name(compact, "compact");
+  function parseWikipediaActressInfo(html, url) {
+    const document2 = new DOMParser().parseFromString(html, "text/html");
+    const birthday = compact(document2.querySelector('a[title="誕生日"]')?.closest("tr")?.querySelector("td")?.textContent ?? "");
+    const ageCell = [...document2.querySelectorAll("th")].find((item) => item.textContent?.includes("現年齢"))?.parentElement?.querySelector("td");
+    const heightCell = document2.querySelector('a[title="身長"]')?.closest("tr")?.querySelector("td");
+    const weightCell = document2.querySelector('a[title="体重"]')?.closest("tr")?.querySelector("td");
+    const sizesCell = document2.querySelector('a[title="スリーサイズ"]')?.closest("tr")?.querySelector("td");
+    const braCell = [...document2.querySelectorAll("th")].find((item) => item.textContent?.includes("ブラサイズ"))?.nextElementSibling;
+    if (!birthday && !heightCell && !sizesCell) throw new TypeError("Wikipedia actress information is missing");
+    const age = Number.parseInt(compact(ageCell?.textContent ?? ""), 10);
+    const height = compact(heightCell?.textContent ?? "").split(" ")[0];
+    const weightParts = compact(weightCell?.textContent ?? "").split("/");
+    const weight = compact(weightParts.at(-1) ?? "").replace(/^―\s*kg$/, "");
+    return Object.freeze({
+      birthday,
+      age: Number.isFinite(age) ? `${age}岁` : "",
+      height: height && !height.endsWith("cm") ? `${height}cm` : height,
+      weight,
+      threeSizeText: compact(sizesCell?.textContent ?? "").replace("cm", "").trim(),
+      braSize: compact(braCell?.textContent ?? ""),
+      url: new URL(url).href
+    });
+  }
+  __name(parseWikipediaActressInfo, "parseWikipediaActressInfo");
+
+  // src/integrations/wikipedia/manifest.js
+  function createWikipediaAdapter(http) {
+    return Object.freeze({
+      contracts: ["ActressInfo"],
+      /** @param {string} name */
+      profileUrl(name) {
+        return new URL(`/wiki/${encodeURIComponent(String(name))}`, "https://ja.wikipedia.org").href;
+      },
+      /** @param {string} name @param {{scope?: any}} [options] */
+      async lookup(name, options = {}) {
+        const url = this.profileUrl(name);
+        const response = await http.request({
+          providerId: "wikipedia",
+          method: "GET",
+          url,
+          responseType: "text",
+          cacheScope: "public",
+          ttlMs: 6048e5,
+          urlPolicy: { trustClass: "builtin-public", hosts: ["ja.wikipedia.org"] }
+        }, options.scope);
+        return parseWikipediaActressInfo(response.data, response.finalUrl || url);
+      }
+    });
+  }
+  __name(createWikipediaAdapter, "createWikipediaAdapter");
+  var manifest_default13 = defineIntegration({
+    id: "wikipedia",
+    trustClass: "builtin-public",
+    hosts: ["ja.wikipedia.org"],
+    capabilities: ["person.actress-info"],
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createWikipediaAdapter(client.http), "createAdapter"),
+    createHostAdapter: null,
+    cachePolicy: { "person.actress-info": CACHE.externalDetail },
+    quality: "silver"
+  });
 
   // src/app/integration-catalog.js
-  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default7, manifest_default8, manifest_default9, manifest_default10]);
+  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default7, manifest_default8, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13]);
 
   // src/app/bootstrap.js
   function patchLayerRuntime(layerRuntime) {
@@ -16741,6 +17741,7 @@ ${error.stack}` : "");
       importVendorStyles();
       const disabled = await migrateDisabledPluginSettings();
       const localOriginSettings = await prepareLocalOrigins();
+      const siteContext2 = detectSite(window.location);
       const hostAdapter = r ? new JavDbHostAdapter() : l ? new JavBusHostAdapter() : null;
       const route = hostAdapter?.detectRoute() ?? "other";
       const context = createAppContext({
@@ -16748,18 +17749,37 @@ ${error.stack}` : "");
         storageForage: storageManager2.forage,
         layer: vendors.layer,
         hostAdapter,
-        site: r ? "javdb" : l ? "javbus" : "other",
+        site: siteContext2.site,
         route,
         disabled,
         localOrigins: localOriginSettings.origins
       });
+      const settingsSnapshot = await context.services.settings.load();
+      const legacySortMethod = localStorage.getItem("jhs_sortMethod");
+      if (settingsSnapshot.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) {
+        await context.services.settings.set("sortMethod", legacySortMethod);
+      }
+      const legacyFoldCategory = localStorage.getItem("jhs_foldCategory");
+      if (settingsSnapshot.foldCategoryCollapsed == null && ["yes", "no"].includes(legacyFoldCategory || "")) {
+        await context.services.settings.set("foldCategoryCollapsed", legacyFoldCategory === "yes");
+      }
+      const legacyVideoMuted = localStorage.getItem("jhs_videoMuted");
+      if (settingsSnapshot.videoMuted == null && ["yes", "no"].includes(legacyVideoMuted || "")) {
+        await context.services.settings.set("videoMuted", legacyVideoMuted === "yes");
+      }
       const logger = initializeLoggerRuntime(context.rootScope);
+      initializeThemeRuntime(context.rootScope);
+      context.services.diagnostics.setBrowserMetadata({
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        ...globalThis.__jhsBrowserTestMetadata ?? {}
+      });
       Object.assign(globalThis, logger);
       if (localOriginSettings.notice) globalThis.show.info(localOriginSettings.notice);
-      const pluginManager = new PluginManager();
-      registerSitePlugins(pluginManager);
-      for (const manifest of integrationManifests) context.registries.integrations.register(manifest);
-      for (const manifest of featureManifests) context.registries.features.register(manifest);
+      const pluginManager = new PluginManager({ diagnostics: context.services.diagnostics });
+      for (const manifest2 of integrationManifests) context.registries.integrations.register(manifest2);
+      for (const manifest2 of featureManifests) context.registries.features.register(manifest2);
+      registerSitePlugins(pluginManager, context.registries.features, siteContext2.site);
       await context.registries.features.start();
       attachCompatibilityFacade({
         pluginManager,

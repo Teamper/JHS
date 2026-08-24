@@ -3,63 +3,6 @@ import { safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { Z, fetchDmmPreview } from "./preview-video.js";
 
-const ENCRYPTION_SALT = "x7k9p3";
-
-async function getEncryptionKey() {
-    const enc = new TextEncoder();
-    const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(ENCRYPTION_SALT + ".jhs.v1"), {
-        name: "PBKDF2"
-    }, false, [ "deriveKey" ]);
-    return crypto.subtle.deriveKey({
-        name: "PBKDF2",
-        salt: enc.encode("jhs-backup"),
-        iterations: 1e5,
-        hash: "SHA-256"
-    }, keyMaterial, {
-        name: "AES-GCM",
-        length: 256
-    }, false, [ "encrypt", "decrypt" ]);
-}
-
-function arrayBufferToBase64(e) {
-    const t = new Uint8Array(e), n = 0x8000;
-    let a = "";
-    for (let i = 0; i < t.length; i += n) a += String.fromCharCode.apply(null, t.subarray(i, i + n));
-    return btoa(a);
-}
-
-function base64ToArrayBuffer(e) {
-    const t = atob(e), n = new Uint8Array(t.length);
-    for (let a = 0; a < t.length; a++) n[a] = t.charCodeAt(a);
-    return n;
-}
-
-export async function encryptData(e) {
-    const t = await getEncryptionKey(), n = crypto.getRandomValues(new Uint8Array(12)), a = new TextEncoder(), i = await crypto.subtle.encrypt({
-        name: "AES-GCM",
-        iv: n
-    }, t, a.encode(e)), s = new Uint8Array(n.length + i.byteLength);
-    return s.set(n), s.set(new Uint8Array(i), n.length), arrayBufferToBase64(s);
-}
-
-export async function decryptData(e) {
-    const t = await getEncryptionKey(), n = base64ToArrayBuffer(e), a = n.slice(0, 12), i = n.slice(12), s = await crypto.subtle.decrypt({
-        name: "AES-GCM",
-        iv: a
-    }, t, i);
-    return new TextDecoder().decode(s);
-}
-
-const CREDENTIAL_PREFIX = "AES:";
-
-export async function encryptCredential(e) {
-    return e && !e.startsWith(CREDENTIAL_PREFIX) ? CREDENTIAL_PREFIX + await encryptData(e) : e;
-}
-
-export async function decryptCredential(e) {
-    return e && e.startsWith(CREDENTIAL_PREFIX) ? await decryptData(e.slice(CREDENTIAL_PREFIX.length)) : e;
-}
-
 export class BusPreviewVideoPlugin extends BasePlugin {
     getName() {
         return "BusPreviewVideoPlugin";
@@ -123,9 +66,9 @@ export class BusPreviewVideoPlugin extends BasePlugin {
         t.html(`\n            <div class="video-player-wrapper">\n                <video id="preview-video" class="jhs-video-player" controls playsinline>\n                    <source src="${a}" />\n                </video>\n            </div>\n            <div class="jhs-video-toolbar jhs-video-quality-list" role="group" aria-label="视频画质">\n                </div>\n        `);
         const i = $("#preview-video"), s = i.find("source"), o = t.find(".jhs-video-quality-list");
         if (!i.length || !s.length) return;
-        const r = i[0], l = localStorage.getItem("jhs_videoMuted");
-        r.muted = !l || "yes" === l, i.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (function() {
-            localStorage.setItem("jhs_videoMuted", r.muted ? "yes" : "no");
+        const settings = this.getRuntimeService("settings"), r = i[0], muted = settings.snapshot().videoMuted;
+        r.muted = muted == null || muted === !0, i.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {
+            void settings.set("videoMuted", r.muted).catch((error => clog.error("保存视频静音设置失败", error)));
         }));
         let c = "";
         L.forEach((t => {

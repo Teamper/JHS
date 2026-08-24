@@ -15,17 +15,20 @@
     "src/contracts/**/*.js",
     "src/core/jhs-error.js",
     "src/core/cache-policy.js",
+    "src/core/credential-crypto.js",
     "src/core/event-bus.js",
     "src/core/legacy-plugin-contributions.js",
     "src/core/lifecycle-scope.js",
     "src/core/movie-identity.js",
     "src/core/selection-model.js",
+    "src/core/site-context.js",
     "src/features/**/*.js",
     "src/integrations/**/*.js",
     "src/platform/**/*.js",
     "src/services/**/*.js",
     "src/ui/**/*.js",
-    "src/plugins/dependency-map.js"
+    "src/plugins/dependency-map.js",
+    "src/plugins/image-viewer/screenshot-provider-registry.js"
   ],
   "exclude": ["src/app/bootstrap.js"]
 }

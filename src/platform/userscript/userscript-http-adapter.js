@@ -9,7 +9,7 @@ export class UserscriptHttpAdapter {
         this.requestImplementation = requestImplementation;
     }
 
-    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, timeout?: number, signal?: AbortSignal}} options */
+    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, timeout?: number, signal?: AbortSignal, requestOptions?: Record<string, unknown>}} options */
     request(options) {
         return new Promise((resolve, reject) => {
             let settled = false;
@@ -27,6 +27,7 @@ export class UserscriptHttpAdapter {
                 finish(reject, new JhsError("ABORTED", "网络请求已取消", { source: "UserscriptHttpAdapter" }));
             };
             handle = this.requestImplementation({
+                ...options.requestOptions,
                 method: options.method ?? "GET", url: options.url, headers: options.headers,
                 data: options.body, responseType: options.responseType, timeout: options.timeout,
                 onload: (/** @type {any} */ response) => finish(resolve, {

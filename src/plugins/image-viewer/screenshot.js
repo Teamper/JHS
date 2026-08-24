@@ -1,7 +1,6 @@
-import { CACHE_TTL } from "../../core/cache-policy.js";
 import { l, normalizeCarNum, r } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { normalizeJavStoreAssetUrl, parseJavStorePreview, parseJavStoreSearch } from "../../integrations/javstore/parser.js";
+import { normalizeJavStoreAssetUrl } from "../../integrations/javstore/parser.js";
 import { ResourceSettingsService } from "../backup/resource-settings.js";
 import { ScreenshotProviderRegistry } from "./screenshot-provider-registry.js";
 
@@ -12,7 +11,7 @@ export class ScreenShotPlugin extends BasePlugin {
     async initializeProviders() {
         const settings = await new ResourceSettingsService().getScreenshotSettings(), configured = id => settings.providers.find((provider => provider.id === id)) || {};
         this.providerRegistry = new ScreenshotProviderRegistry([
-            { id: "javstore", name: "JavStore", priority: 10, getScreenshot: carNum => this.getCachedProviderScreenshot("javstore", carNum, (() => this.getJavStoreScreenShot(carNum))) },
+            { id: "javstore", name: "JavStore", priority: 10, getScreenshot: carNum => this.getServiceScreenshot(carNum) },
             { id: "projectjav", name: "ProjectJav", enabled: !1, priority: 20, getScreenshot: async () => null },
             { id: "18av", name: "18AV", enabled: !1, priority: 30, getScreenshot: async () => null }
         ].map((provider => ({ ...provider, ...configured(provider.id), enabled: !["projectjav", "18av"].includes(provider.id) && (configured(provider.id).enabled ?? provider.enabled ?? true), getScreenshot: provider.getScreenshot }))));
@@ -61,7 +60,6 @@ export class ScreenShotPlugin extends BasePlugin {
     async getScreenshotFromInitializedProviders(e) {
         e = normalizeCarNum(e);
         if (!e) throw new Error("缩略图番号不可用");
-        localStorage.removeItem("jhs_screenShot");
         let n;
         try {
             n = await this.providerRegistry.first(e);
@@ -72,39 +70,11 @@ export class ScreenShotPlugin extends BasePlugin {
         let url = n.url, a = url.indexOf("https://");
         return -1 !== a && (url = url.substring(a)), clog.log(`缩略图获取成功 (${n.source}):`, url), url;
     }
-    async getCachedProviderScreenshot(provider, carNum, loader) {
-        const value = await storageManager.cachedRequest(`screenshot:${provider}:${carNum}`, CACHE_TTL.screenshot, (async () => {
-            const loadedUrl = await loader(), url = "javstore" === provider ? normalizeJavStoreAssetUrl(loadedUrl) : loadedUrl;
-            return url ? { __jhsCacheTtl: CACHE_TTL.screenshot, data: { url } } : { __jhsCacheTtl: CACHE_TTL.screenshotNegative, data: { miss: !0 } };
-        }));
-        if (!value || value.miss) return null;
-        const cachedUrl = "string" === typeof value ? value : value.url, url = "javstore" === provider ? normalizeJavStoreAssetUrl(cachedUrl) : cachedUrl;
-        return url ? { url, source: provider, detailUrl: null } : null;
-    }
-    async getJavStoreScreenShot(e) {
-        const t = `https://javstore.net/search?q=${encodeURIComponent(e)}`;
-        clog.debug("JavStore 搜索地址:", t);
-        let n = await gmHttp.get(t, {}, {}, !1, {ignoreNotFound: !0});
-        if (!n) return clog.debug("JavStore 搜索页未获取:", t), null;
-        const a = utils.htmlTo$dom(n);
-        const i = parseJavStoreSearch(a, e);
-        if (!i.length) return clog.debug("JavStore, 查询番号无结果:", t), null;
-        for (const e of i) {
-            const t = e;
-            clog.debug("JavStore 候选详情:", t);
-            const n = await gmHttp.get(t, {}, {}, !1, {ignoreNotFound: !0});
-            if (!n) {
-                clog.debug("JavStore 详情页未获取:", t);
-                continue;
-            }
-            const a = parseJavStorePreview(utils.htmlTo$dom(n), t);
-            if (!a) {
-                clog.debug("JavStore 详情页没有 CLICK HERE!:", t);
-                continue;
-            }
-            return clog.debug("JavStore 预览图:", a), a;
-        }
-        return clog.debug("JavStore, 所有候选均无有效预览图:", t), null;
+    async getServiceScreenshot(carNum) {
+        const scope = await this.getRuntimeService("scope")();
+        const images = await this.getRuntimeService("screenshot").resolve({ carNum }, { scope });
+        const image = Array.isArray(images) ? images[0] : images;
+        return image?.url ? { url: image.url, source: image.providerId || "javstore", detailUrl: null } : null;
     }
     addImg(e, t) {
         const url = normalizeJavStoreAssetUrl(t);

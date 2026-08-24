@@ -54,4 +54,16 @@ describe("HTTP, URL and settings contracts", () => {
         expect(settings.snapshot()).toEqual({ theme: "dark" });
         expect(() => settings.set("theme", "invalid")).rejects.toThrow(/Invalid/);
     });
+
+    it("serializes concurrent settings writes without dropping fields", async () => {
+        const values = new Map([["setting", { existing: true }]]), storage = {
+            get: vi.fn(async key => values.get(key)),
+            set: vi.fn(async (key, value) => { await Promise.resolve(); values.set(key, value); }),
+        };
+        const settings = new SettingsService(storage);
+        await settings.load();
+        await Promise.all([settings.set("sortMethod", "date"), settings.set("theme", "dark")]);
+        expect(settings.snapshot()).toEqual({ existing: true, sortMethod: "date", theme: "dark" });
+        expect(values.get("setting")).toEqual(settings.snapshot());
+    });
 });

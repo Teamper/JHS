@@ -6,19 +6,7 @@ import { isHitShowPage } from "../../core/site-context.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
 import { stateService } from "../../core/state-service.js";
 
-export const _e = async (e, t = "ja", n = "zh-CN") => {
-    if (!e) throw new Error("翻译文本不能为空");
-    const a = "https://translate-pa.googleapis.com/v1/translate?" + new URLSearchParams({
-        "params.client": "gtx",
-        dataTypes: "TRANSLATION",
-        key: "AIzaSyDLEeFI5OtFBwYBIoK_jj5m32rZK5CkCXA",
-        "query.sourceLanguage": t,
-        "query.targetLanguage": n,
-        "query.text": e
-    }), i = await fetch(a);
-    if (!i.ok) throw new Error(`${i.status} ${i.statusText}`);
-    return (await i.json()).translation;
-}, Te = {
+const Te = {
     IS_FILTERED: {
         text: u,
         color: "var(--jhs-status-filter)",
@@ -131,10 +119,10 @@ export class ListPagePlugin extends BasePlugin {
         super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0),
         i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0),
         i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0),
-        i(this, "currentPageTotalCount", 0), i(this, "cache", null), i(this, "translationPending", new Map),
+        i(this, "currentPageTotalCount", 0),
         i(this, "filterContext", null), i(this, "pendingItems", new Set), i(this, "processTimer", null),
         i(this, "hdImageObserver", null), i(this, "hdEagerRemaining", 12), i(this, "writeQueue", Promise.resolve()),
-        i(this, "_debouncedTranslateWrite", null), i(this, "itemIndex", new Map), i(this, "recountFrame", null);
+        i(this, "itemIndex", new Map), i(this, "recountFrame", null);
     }
     getName() {
         return "ListPagePlugin";
@@ -551,18 +539,6 @@ export class ListPagePlugin extends BasePlugin {
             }));
         }));
     }
-    getTranslationCache() {
-        if (this.cache && "object" == typeof this.cache && !Array.isArray(this.cache)) return this.cache;
-        try { this.cache = JSON.parse(localStorage.getItem("jhs_translate") || "{}"); } catch (error) {
-            clog.warn("列表翻译缓存无法解析，已忽略旧缓存", error), this.cache = {};
-        }
-        return this.cache && "object" == typeof this.cache && !Array.isArray(this.cache) ? this.cache : this.cache = {};
-    }
-    scheduleTranslationWrite() {
-        this._debouncedTranslateWrite && clearTimeout(this._debouncedTranslateWrite), this._debouncedTranslateWrite = setTimeout((() => {
-            localStorage.setItem("jhs_translate", JSON.stringify(this.getTranslationCache()));
-        }), 500);
-    }
     applyTranslatedTitle(e, t, n) {
         const a = e.find(".video-title");
         r ? (a.contents().each((function() {
@@ -574,14 +550,9 @@ export class ListPagePlugin extends BasePlugin {
         if (r ? (t = a.contents().filter(((e, t) => 3 === t.nodeType && "" !== t.textContent.trim())).text().trim(),
         n = e.find(".video-title strong").text().trim()) : (t = (e.find("img").attr("data-title") || "").trim(),
         n = (e.find("a").attr("href") || "").split("/").filter(Boolean).pop()?.trim()), !t || !n) return;
-        const cache = this.getTranslationCache();
-        if (cache[n]) return void this.applyTranslatedTitle(e, cache[n], n);
-        let pending = this.translationPending.get(n);
-        if (!pending) {
-            pending = _e(t).then((translated => (cache[n] = translated, this.scheduleTranslationWrite(), translated))).finally((() => this.translationPending.delete(n))),
-            this.translationPending.set(n, pending);
-        }
-        this.applyTranslatedTitle(e, await pending, n);
+        const scope = await this.getRuntimeService("scope")();
+        const translated = await this.getRuntimeService("translation").translate(t, { scope });
+        this.applyTranslatedTitle(e, translated, n);
     }
     async revertTranslation() {
         $(this.getSelector().itemSelector).toArray().forEach((e => {

@@ -96,7 +96,7 @@ function loadScreenshotPlugin(overrides = {}) {
     const warn = vi.fn(), debug = vi.fn(), error = vi.fn(), cachedRequest = vi.fn(), context = vm.createContext({
         console,
         URL,
-        BasePlugin: class {},
+        BasePlugin: class { getRuntimeService(name) { return "scope" === name ? async () => overrides.scope : overrides[name]; } },
         normalizeCarNum: loadCarNumHelpers().normalize,
         clog: { warn, debug, error, log: vi.fn() },
         storageManager: { cachedRequest },
@@ -193,77 +193,13 @@ describe("detail car number propagation", () => {
         expect(cachedRequest).not.toHaveBeenCalled();
     });
 
-    it("checks matching JavStore results in source order until CLICK HERE! is found", async () => {
-        const candidates = [
-            { text: "IPZZ-479 first", href: "/first-ipzz479-pn.html" },
-            { text: "IPZZ-479 second", href: "/second-ipzz479-pn.html" },
-            { text: "another title", href: "/other-pn.html" }
-        ];
-        const searchLinks = {
-            filter: (predicate) => {
-                const matches = candidates.filter((element, index) => predicate(index, element));
-                return { map: (mapper) => ({ get: () => matches.map((element, index) => mapper(index, element)) }) };
-            }
-        };
-        const noPreview = { filter: () => noPreview, first: () => noPreview, attr: () => undefined };
-        const previewLink = { filter: (predicate) => (predicate(0, { text: "CLICK HERE!" }), previewLink), first: () => previewLink,
-            attr: () => "//img.javstore.net/images/2025/02/13/MOSAIC-ARCHIVE-ipzz-479_s.jpg" };
-        const searchDom = { find: vi.fn(() => searchLinks) };
-        const firstDetail = { find: vi.fn(() => noPreview) };
-        const secondDetail = { find: vi.fn(() => previewLink) };
-        const gmHttp = { get: vi.fn().mockResolvedValueOnce("search-html").mockResolvedValueOnce("first-html").mockResolvedValueOnce("second-html") };
-        const utils = { htmlTo$dom: vi.fn((html) => ({ "search-html": searchDom, "first-html": firstDetail, "second-html": secondDetail })[html]) };
-        const { Plugin } = loadScreenshotPlugin({ gmHttp, utils, $: (element) => ({ text: () => element.text, attr: () => element.href }) });
-        await expect(new Plugin().getJavStoreScreenShot("IPZZ-479")).resolves.toBe("https://img.javstore.net/images/2025/02/13/MOSAIC-ARCHIVE-ipzz-479_s.jpg");
-        expect(gmHttp.get.mock.calls.map(([url]) => url)).toEqual([
-            "https://javstore.net/search?q=IPZZ-479",
-            "https://javstore.net/first-ipzz479-pn.html",
-            "https://javstore.net/second-ipzz479-pn.html"
-        ]);
-        expect(searchDom.find).toHaveBeenCalledWith('a[href$="-pn.html"]');
-        expect(firstDetail.find).toHaveBeenCalledWith("a");
-        expect(secondDetail.find).toHaveBeenCalledWith("a");
-    });
-
-    it("returns null for a JavStore 404 or empty search without requesting details", async () => {
-        const gmHttp = { get: vi.fn().mockResolvedValue(null) };
-        const { Plugin } = loadScreenshotPlugin({ gmHttp });
-        await expect(new Plugin().getJavStoreScreenShot("ABF-142")).resolves.toBeNull();
-        expect(gmHttp.get).toHaveBeenCalledTimes(1);
-        expect(gmHttp.get.mock.calls[0][4]).toEqual({ ignoreNotFound: true });
-    });
-
-    it("returns null when no -pn.html result text matches the car number", async () => {
-        const links = { filter: (predicate) => (predicate(0, { text: "another title" }), { map: () => ({ get: () => [] }) }) };
-        const gmHttp = { get: vi.fn().mockResolvedValue("search-html") };
-        const utils = { htmlTo$dom: vi.fn(() => ({ find: vi.fn(() => links) })) };
-        const { Plugin, debug } = loadScreenshotPlugin({ gmHttp, utils, $: (element) => ({ text: () => element.text }) });
-        await expect(new Plugin().getJavStoreScreenShot("IPZZ-479")).resolves.toBeNull();
-        expect(gmHttp.get).toHaveBeenCalledTimes(1);
-        expect(debug).toHaveBeenCalledWith("JavStore, 查询番号无结果:", "https://javstore.net/search?q=IPZZ-479");
-    });
-
-    it("continues after a candidate 404 and returns the next valid preview", async () => {
-        const candidateElements = [ { text: "IPZZ-479 first", href: "/missing-pn.html" }, { text: "IPZZ-479 second", href: "/valid-pn.html" } ];
-        const searchLinks = { filter: (predicate) => ({ map: (mapper) => ({ get: () => candidateElements.filter((element, index) => predicate(index, element)).map((element, index) => mapper(index, element)) }) }) };
-        const preview = { filter: (predicate) => (predicate(0, { text: "CLICK HERE!" }), preview), first: () => preview, attr: () => "/preview.th.jpg" };
-        const gmHttp = { get: vi.fn().mockResolvedValueOnce("search-html").mockResolvedValueOnce(null).mockResolvedValueOnce("detail-html") };
-        const utils = { htmlTo$dom: vi.fn((html) => "search-html" === html ? { find: () => searchLinks } : { find: () => preview }) };
-        const { Plugin } = loadScreenshotPlugin({ gmHttp, utils, $: (element) => ({ text: () => element.text, attr: () => element.href }) });
-        await expect(new Plugin().getJavStoreScreenShot("IPZZ-479")).resolves.toBe("https://javstore.net/preview.jpg");
-        expect(gmHttp.get).toHaveBeenCalledTimes(3);
-    });
-
-    it("upgrades legacy JavStore cache entries and normalizes new cache writes", async () => {
-        const loaded = loadScreenshotPlugin();
-        loaded.cachedRequest.mockResolvedValueOnce({ url: "http://img.javstore.net/legacy.jpg" });
-        await expect(new loaded.Plugin().getCachedProviderScreenshot("javstore", "IPZZ-479", vi.fn())).resolves.toEqual({
-            url: "https://img.javstore.net/legacy.jpg", source: "javstore", detailUrl: null
+    it("resolves screenshots through the declared ScreenshotService", async () => {
+        const resolve = vi.fn(async () => [{ url: "https://img.javstore.net/preview.jpg", providerId: "javstore" }]);
+        const { Plugin } = loadScreenshotPlugin({ screenshot: { resolve }, scope: { id: "detail" } });
+        await expect(new Plugin().getServiceScreenshot("IPZZ-479")).resolves.toEqual({
+            url: "https://img.javstore.net/preview.jpg", source: "javstore", detailUrl: null,
         });
-        loaded.cachedRequest.mockImplementationOnce(async (key, ttl, loader) => (await loader()).data);
-        await expect(new loaded.Plugin().getCachedProviderScreenshot("javstore", "IPZZ-480", async () => "http://img2.javstore.net/new.jpg")).resolves.toEqual({
-            url: "https://img2.javstore.net/new.jpg", source: "javstore", detailUrl: null
-        });
+        expect(resolve).toHaveBeenCalledWith({ carNum: "IPZZ-479" }, { scope: { id: "detail" } });
     });
 
     it("normalizes a legacy JavStore URL again at the image rendering boundary", () => {
@@ -278,7 +214,6 @@ describe("detail car number propagation", () => {
 describe("source regression contracts", () => {
     it("keeps detail consumers on the strict getPageInfo object contract", () => {
         for (const file of [
-            "src/plugins/translate/translate.js",
             "src/plugins/status/detail-page-button.js",
             "src/plugins/image-viewer/preview-video.js",
             "src/plugins/image-viewer/screenshot.js"
@@ -287,6 +222,9 @@ describe("source regression contracts", () => {
             expect(source).toContain("getPageInfo()");
             expect(source).not.toContain("getPageInfo()?.carNum");
         }
+        const translate = readTestFile(join(repoRoot, "src/plugins/translate/translate.js"), "utf8");
+        expect(translate).toContain('getRuntimeService("translation")');
+        expect(translate).not.toContain("getPageInfo()?.carNum");
     });
 
     it("treats opted-in HTTP 404 responses as neutral results before retry accounting", () => {

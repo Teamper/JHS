@@ -2,7 +2,7 @@ import { A, B, D, I, P, T, assertPageInfoContract, firstValidCarNum, i, l, norma
 import { disabledIdForPlugin, parseDisabledPlugins } from "./legacy-plugin-contributions.js";
 
 export class PluginManager {
-    constructor() {
+    constructor(options = {}) {
         this.plugins = new Map;
         this._errorLog = [];
         this._lastTimings = [];
@@ -15,12 +15,13 @@ export class PluginManager {
         this._idleCompleted = 0;
         this._disabledPluginsPromise = null;
         this._dependencyDeclarations = Object.freeze({});
+        this.diagnostics = options.diagnostics ?? null;
     }
     setDependencyDeclarations(declarations) {
         if (this.plugins.size) throw new Error("依赖声明必须在插件注册前配置");
         this._dependencyDeclarations = declarations || Object.freeze({});
     }
-    register(e) {
+    register(e, runtimeServices = {}) {
         if ("function" != typeof e) throw new Error("插件必须是一个类");
         const a = performance.now();
         const t = new e;
@@ -28,8 +29,10 @@ export class PluginManager {
         const n = t.getName();
         if (this.plugins.has(n)) throw new Error(`插件"${n}"已注册`);
         t.declaredDependencies = new Set(this._dependencyDeclarations[n] || []);
+        t.runtimeServices = Object.freeze({ ...runtimeServices });
         this.plugins.set(n, t);
         this._registrationMs += performance.now() - a;
+        this._syncDiagnostics();
     }
     // 仅供 6.6 前的外部 Compatibility Facade 使用。
     getBean(e) {
@@ -47,9 +50,10 @@ export class PluginManager {
             stack: n?.stack || ""
         });
         this._errorLog.length > 200 && this._errorLog.shift();
+        this.diagnostics?.recordError({ source: "legacy-plugin", plugin: e, phase: t, message: n?.message || String(n) });
     }
     getErrorLog() { return [...this._errorLog]; }
-    clearErrorLog() { this._errorLog = []; }
+    clearErrorLog() { this._errorLog = []; this.diagnostics?.clearErrors(); }
     getTimings() { return [...this._lastTimings]; }
     getPluginNames() { return Array.from(this.plugins.keys()); }
     getStartupReport() {
@@ -63,6 +67,7 @@ export class PluginManager {
             idleCompleted: this._idleCompleted
         };
     }
+    _syncDiagnostics() { this.diagnostics?.setLegacyRuntime(this.getPluginNames(), this.getStartupReport(), this.getTimings()); }
     async _getDisabledPlugins() {
         return this._disabledPluginsPromise || (this._disabledPluginsPromise = (async () => { try {
             const e = await storageManager.getSetting("disabledPlugins", "[]");
@@ -99,6 +104,7 @@ export class PluginManager {
         const o = s.map((e => e.css)).filter(Boolean);
         o.length > 0 && utils.insertStyle(o);
         this._cssMs = performance.now() - a;
+        this._syncDiagnostics();
     }
     async _runPlugin(e) {
         const t = performance.now();
@@ -127,6 +133,7 @@ export class PluginManager {
             this._idlePending--;
             this._idleCompleted++;
         }
+        this._syncDiagnostics();
     }
     async processPlugins() {
         const e = await this._getDisabledPlugins(), t = utils.isMobileMode(), n = [], a = [], i = [];
@@ -157,6 +164,7 @@ export class PluginManager {
         this._readyMs = performance.now() - this._startedAt;
         this._idlePending = a.length;
         a.length && this._scheduleIdle((() => this._runIdlePlugins(a)));
+        this._syncDiagnostics();
     }
 }
 
@@ -187,6 +195,7 @@ export class BasePlugin {
         }
         i(this, "pluginManager", null);
         i(this, "declaredDependencies", new Set);
+        i(this, "runtimeServices", Object.freeze({}));
     }
     getName() {
         throw new Error(`${this.constructor.name} 未显示getName()`);
@@ -196,6 +205,10 @@ export class BasePlugin {
             throw new Error(`${this.getName()} 未声明依赖 ${e}`);
         }
         return this.pluginManager.resolveDeclaredPlugin(e);
+    }
+    getRuntimeService(name) {
+        if (!Object.prototype.hasOwnProperty.call(this.runtimeServices, name)) throw new Error(`${this.getName()} 未声明运行时依赖 ${name}`);
+        return this.runtimeServices[name];
     }
     async initCss() {
         return "";

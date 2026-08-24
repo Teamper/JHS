@@ -1,6 +1,6 @@
 import { escapeHtml } from "../../core/constants.js";
-import { WebDavClient } from "./webdav-client.js";
-import { decryptCredential, decryptData, encryptData } from "../image-viewer/bus-preview-video.js";
+import { decryptCredential, decryptData, encryptData } from "../../core/credential-crypto.js";
+import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 
 /** Handle JSON file import via file input, run diff analysis, show preview. */
 export async function importSettingData(showDiffPreviewFn) {
@@ -38,7 +38,7 @@ export async function importSettingData(showDiffPreviewFn) {
 }
 
 /** Create encrypted backup and upload via WebDAV. */
-export async function backupDataByWebDav(folderName) {
+export async function backupDataByWebDav(folderName, webdavService) {
     const t = await storageManager.getSetting(), n = t.webDavUrl;
     if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
     const a = t.webDavUsername;
@@ -49,7 +49,7 @@ export async function backupDataByWebDav(folderName) {
     o = await encryptData(o);
     let r = loading();
     try {
-        const e = new WebDavClient(n, a, i);
+        const e = webdavService.createClient({ url: n, username: a, password: i });
         await e.backup(folderName, s, o), show.ok("备份完成");
     } catch (l) {
         clog.error(l), show.error(l.toString());
@@ -59,7 +59,7 @@ export async function backupDataByWebDav(folderName) {
 }
 
 /** List WebDAV backups and open the file list dialog. */
-export async function backupListBtnByWebDav(folderName, openFileListDialogFn) {
+export async function backupListBtnByWebDav(folderName, openFileListDialogFn, webdavService) {
     const t = await storageManager.getSetting(), n = t.webDavUrl;
     if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
     const a = t.webDavUsername;
@@ -68,7 +68,7 @@ export async function backupListBtnByWebDav(folderName, openFileListDialogFn) {
     if (!i) return void show.error("请填写webDav密码并保存后, 再试此功能");
     let s = loading();
     try {
-        const e = new WebDavClient(n, a, i), t = await e.getBackupList(folderName);
+        const e = webdavService.createClient({ url: n, username: a, password: i }), t = await e.getBackupList(folderName);
         openFileListDialogFn(t, e, "WebDav");
     } catch (o) {
         clog.error(o), show.error(`发生错误: ${o ? o.message : o}`);
@@ -171,7 +171,8 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn) {
         area: utils.getResponsiveArea([ "800px", "70%" ]),
         anim: -1,
         success: a => {
-            const i = new Tabulator("#table-container", {
+            const i = createJhsTable(Tabulator, "#table-container", {
+                pagination: !1,
                 layout: "fitColumns",
                 placeholder: "暂无数据",
                 virtualDom: !0,

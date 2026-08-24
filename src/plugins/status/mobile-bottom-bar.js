@@ -279,7 +279,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
         const item = (action, label, attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = content => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
         let items;
         if (window.isListPage) {
-            const sortMethod = localStorage.getItem("jhs_sortMethod") || "default", sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getDependency("ListPagePlugin")?.activeQuickFilter),
+            const sortMethod = this.getRuntimeService("settings").snapshot().sortMethod || "default", sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getDependency("ListPagePlugin")?.activeQuickFilter),
                 filterOptions = [ ...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS ].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""),
                 sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
             items = group(item("check", "开始鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort", `排序: ${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') + item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"')) + divider + group(item("logger", "运行日志") + item("setting", "设置")) + `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div><div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>`;
@@ -336,7 +336,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
                 backdrop.addClass("jhs-fab-backdrop-visible");
                 // 刷新排序标签
                 if (window.isListPage) {
-                    const sortMethod = localStorage.getItem("jhs_sortMethod") || "default";
+                    const sortMethod = this.getRuntimeService("settings").snapshot().sortMethod || "default";
                     const sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
                     menu.find('[data-action="sort"]').text(`排序: ${sortLabel}`);
                     this.getDependency("ListPagePlugin")?.syncQuickFilterUi();
@@ -385,10 +385,10 @@ export class MobileBottomBarPlugin extends BasePlugin {
             event.preventDefault();
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
-        })).on("click", ".jhs-mobile-sort-option", (event => {
+        })).on("click", ".jhs-mobile-sort-option", (async event => {
             event.stopPropagation();
             const value = $(event.currentTarget).data("jhs-sort");
-            localStorage.setItem("jhs_sortMethod", value), sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true"), void this.getDependency("ListPageButtonPlugin")?.sortItems?.(), closeMenu(!0);
+            await this.getRuntimeService("settings").set("sortMethod", value), sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true"), await this.getDependency("ListPageButtonPlugin")?.sortItems?.(), closeMenu(!0);
         }));
         // 菜单项点击
         menu.on("click", ".jhs-fab-menu-item", (e) => {

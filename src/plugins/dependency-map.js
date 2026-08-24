@@ -12,10 +12,10 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     CompatibilityEnhancementsPlugin: ["ListPagePlugin"],
     CoverButtonPlugin: ["ListPagePlugin", "ScreenShotPlugin", "OtherSitePlugin"],
     DetailPageButtonPlugin: ["DetailWorkspacePlugin", "MagnetHubPlugin", "HighlightMagnetPlugin"],
-    Fc2By123AvPlugin: ["OtherSitePlugin", "Fc2Plugin", "TranslatePlugin"],
+    Fc2By123AvPlugin: ["OtherSitePlugin", "Fc2Plugin"],
     Fc2Plugin: [
         "DetailPageButtonPlugin", "MagnetHubPlugin", "FilterTitleKeywordPlugin", "OtherSitePlugin",
-        "ScreenShotPlugin", "Fc2By123AvPlugin", "TOP250Plugin", "TranslatePlugin",
+        "Fc2By123AvPlugin", "TOP250Plugin",
         "HighlightMagnetPlugin", "ReviewPlugin", "RelatedPlugin"
     ],
     HistoryPlugin: ["UnifiedOfflinePlugin", "ListPagePlugin", "Fc2Plugin"],
@@ -32,8 +32,6 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     NavBarPlugin: ["SearchByImagePlugin"],
     NewVideoPlugin: ["TaskPlugin", "SettingPlugin", "OtherSitePlugin"],
     PreviewVideoPlugin: ["DetailPageButtonPlugin"],
-    RelatedPlugin: ["DetailWorkspacePlugin"],
-    ReviewPlugin: ["DetailWorkspacePlugin", "RelatedPlugin"],
     SettingPlugin: [
         "CoverButtonPlugin", "TaskPlugin", "OtherSitePlugin", "ListPagePlugin", "TranslatePlugin",
         "ActressInfoPlugin", "ScreenShotPlugin", "NewVideoPlugin", "BlacklistPlugin", "BusImgPlugin"

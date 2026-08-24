@@ -46,6 +46,13 @@ for (const entry of entries) {
     if (manifest?.quality === "silver") {
         const malformedTest = path.join(rootDir, "tests", "integrations", `${entry.name}.malformed.test.js`);
         if (!(await exists(malformedTest))) errors.push(`${entry.name}: Silver requires malformed response test`);
+        try {
+            const adapter = manifest.createAdapter(manifest.createClient({}), {});
+            const operations = Object.keys(adapter ?? {}).filter((key) => key !== "contracts" && typeof adapter[key] === "function");
+            if (operations.length === 0) errors.push(`${entry.name}: Silver requires an executable adapter operation`);
+        } catch (error) {
+            errors.push(`${entry.name}: Silver adapter cannot be constructed for quality inspection (${error?.message || error})`);
+        }
     }
 }
 

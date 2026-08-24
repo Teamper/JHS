@@ -19,6 +19,7 @@ function createPlugin() {
     const JhsSelect = { setValue: vi.fn((target, value) => $(target).val(value)) };
     let tabulatorOptions;
     function Tabulator(selector, options) { tabulatorOptions = options; }
+    const createJhsTable = (Runtime, selector, options) => new Runtime(selector, options);
     const context = vm.createContext({
         console, Object, Array, Map, Set, Promise, Date, URL, $, BasePlugin, storageManager, JhsSelect,
         i: (target, key, value) => target[key] = value,
@@ -26,7 +27,7 @@ function createPlugin() {
         B: "actor", P: "actress", D: "censored", A: "uncensored", T: "javdb", I: "javbus", l: false, r: true,
         window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
         normalizeHttpUrl: value => { try { const url = new URL(String(value), dom.window.location.href); return ["http:", "https:"].includes(url.protocol) ? url.href : null; } catch { return null; } }, parseNumberSetting: (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback,
-        renderStateView: vi.fn(), utils: {}, show: {}, clog: {}, navigator: {}, jhsEventBus: {}, stateService: {}, gmHttp: {}, Tabulator
+        renderStateView: vi.fn(), utils: {}, show: {}, clog: {}, navigator: {}, jhsEventBus: {}, stateService: {}, gmHttp: {}, Tabulator, createJhsTable
     });
     vm.runInContext(`${source};globalThis.TestPlugin=BlacklistPlugin`, context);
     const plugin = new context.TestPlugin;

@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi } from "vitest";
+import jquery from "jquery";
 import { CommandRegistry } from "../src/app/command-registry.js";
 import { DependencyContainer } from "../src/app/dependency-container.js";
 import { FeatureRuntime, migrateDisabledPlugins } from "../src/app/feature-runtime.js";
 import { ProviderRegistry } from "../src/app/provider-registry.js";
 import { defineFeature, defineIntegration } from "../src/contracts/manifests.js";
-import { SERVICE } from "../src/contracts/tokens.js";
+import { PORT, SERVICE } from "../src/contracts/tokens.js";
+import { featureManifests } from "../src/features/catalog.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
@@ -35,6 +37,50 @@ describe("v6.5 architecture runtime contracts", () => {
         const consumer = manager.getBean("ConsumerPlugin");
         expect(consumer.dependency("DependencyPlugin")).toBe(manager.getBean("DependencyPlugin"));
         expect(() => consumer.dependency("UndeclaredPlugin")).toThrow(/未声明依赖/);
+    });
+
+    it("registers legacy contributions from manifests without changing site order", async () => {
+        expect(featureManifests).toHaveLength(11);
+        window.matchMedia ??= () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+        const $ = jquery;
+        vi.stubGlobal("$", $);
+        vi.stubGlobal("jQuery", $);
+        vi.stubGlobal("localforage", { INDEXEDDB: "indexeddb", createInstance: () => ({}) });
+        const legacyRuntime = await import("../src/core/http.js");
+        Object.assign(globalThis, legacyRuntime);
+        const { registerSitePlugins } = await import("../src/plugins/registry.js");
+        const createRuntime = (site, disabled = []) => {
+            const diagnostics = new DiagnosticsService();
+            const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.settings, {}).register(SERVICE.cache, {});
+            const runtime = new FeatureRuntime({ container, commands: new CommandRegistry(), diagnostics, disabled, site, route: "list" });
+            featureManifests.forEach((manifest) => runtime.register(manifest));
+            return runtime;
+        };
+        const javdb = new PluginManager();
+        registerSitePlugins(javdb, createRuntime("javdb"), "javdb");
+        expect(javdb.getPluginNames()).toEqual([
+            "OneTwoThreeOfflinePlugin", "ListPagePlugin", "AutoPagePlugin", "Fc2Plugin", "FoldCategoryPlugin", "ListPageButtonPlugin",
+            "HistoryPlugin", "SettingPlugin", "NavBarPlugin", "HitShowPlugin", "TOP250Plugin", "SearchByImagePlugin", "CoverButtonPlugin",
+            "Fc2By123AvPlugin", "DetailPagePlugin", "DetailWorkspacePlugin", "ReviewPlugin", "RelatedPlugin", "DetailPageButtonPlugin",
+            "HighlightMagnetPlugin", "PreviewVideoPlugin", "FilterTitleKeywordPlugin", "ActressInfoPlugin", "OtherSitePlugin", "TranslatePlugin",
+            "WantAndWatchedVideosPlugin", "MagnetHubPlugin", "ScreenShotPlugin", "BlacklistPlugin", "FavoriteActressesPlugin", "NewVideoPlugin",
+            "TaskPlugin", "StatsPlugin", "MobileBottomBarPlugin", "OneOneFiveMatchPlugin", "UnifiedOfflinePlugin", "CompatibilityEnhancementsPlugin",
+        ]);
+        const javbus = new PluginManager();
+        registerSitePlugins(javbus, createRuntime("javbus", ["ReviewPlugin"]), "javbus");
+        expect(javbus.getPluginNames()).not.toContain("ReviewPlugin");
+        expect(javbus.getPluginNames()).toContain("DetailWorkspacePlugin");
+    }, 15_000);
+
+    it("exports measured and redacted diagnostics", () => {
+        const diagnostics = new DiagnosticsService();
+        diagnostics.updateScope({ id: "app:root", listeners: 3, observers: 1 });
+        diagnostics.recordError({ message: "failed https://user:pass@example.com/x", authorization: "Bearer secret" });
+        const snapshot = diagnostics.exportSnapshot();
+        expect(snapshot.globalListeners).toBe(3);
+        expect(snapshot.observers).toBe(1);
+        expect(snapshot.errors[0]).toMatchObject({ authorization: "[redacted]" });
+        expect(snapshot.errors[0].message).not.toContain("user:pass");
     });
 
     it("lazily activates a command owner and preserves contribution-level disabling", async () => {

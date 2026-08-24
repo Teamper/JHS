@@ -27,6 +27,18 @@ export function defineFeature(manifest) {
 }
 
 /** @param {Record<string, unknown>} manifest */
+export function defineContribution(manifest) {
+    requireNonEmptyString(manifest.id, "Contribution id");
+    requireNonEmptyString(manifest.featureId, "Contribution featureId");
+    requireNonEmptyString(manifest.legacyPluginId, "Contribution legacyPluginId");
+    requireArray(manifest.sites, "sites");
+    requireArray(manifest.requires, "requires");
+    if (typeof manifest.plugin !== "function") throw new TypeError("Contribution plugin must be a class");
+    if (!manifest.order || typeof manifest.order !== "object") throw new TypeError("Contribution order must be explicit");
+    return Object.freeze({ ...manifest, sites: Object.freeze([...(/** @type {unknown[]} */ (manifest.sites))]), order: Object.freeze({ ...manifest.order }) });
+}
+
+/** @param {Record<string, unknown>} manifest */
 export function defineIntegration(manifest) {
     requireNonEmptyString(manifest.id, "Integration id");
     if (!TRUST_CLASSES.has(String(manifest.trustClass))) throw new TypeError("Integration trustClass is invalid");

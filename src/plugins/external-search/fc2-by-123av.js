@@ -1,10 +1,6 @@
-import { escapeHtml, i, o } from "../../core/constants.js";
-import { normalizeHttpUrl } from "../../core/feature-helpers.js";
-import { resolveJavDbMovieId } from "../../core/javdb-api.js";
+import { _, escapeHtml, i, o } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { merge123AvCards, parse123AvCards, parse123AvSourceMaxPage, parse123AvVideoInfo } from "../../integrations/av123/parser.js";
-
-const AV123_REQUEST_OPTIONS = Object.freeze({ cookiePartitionTopLevelSite: "https://123av.com" });
+import { renderTranslatedTitle } from "../../ui/translation/title-translation.js";
 
 export class Fc2By123AvPlugin extends BasePlugin {
     constructor() {
@@ -15,11 +11,9 @@ export class Fc2By123AvPlugin extends BasePlugin {
     getName() {
         return "Fc2By123AvPlugin";
     }
-    async getBaseUrl() {
-        return await this.getDependency("OtherSitePlugin").getAv123Url();
-    }
-    request123Av(e, requestOptions = {}) {
-        return gmHttp.get(e, {}, {}, !1, { ...AV123_REQUEST_OPTIONS, ...requestOptions });
+    async resolveMovieId(carNum) {
+        const scope = await this.getRuntimeService("scope")();
+        return (await this.getRuntimeService("movie").resolve({ carNum }, { scope }))?.movieId || null;
     }
     async handle() {
         $("#navbar-menu-hero > div > div:nth-child(1) > div > a:nth-child(4)").after('<a class="navbar-item" href="/advanced_search?type=100&released_start=2099-09">123Av-Fc2</a>'),
@@ -68,22 +62,14 @@ export class Fc2By123AvPlugin extends BasePlugin {
     async handleQuery() {
         let e = loading();
         try {
-            let e = [ 2 * this.currentPage - 1, 2 * this.currentPage ];
-            this.keyword && (e = [ 1 ], $(".page-box").hide());
-            const t = await this.getBaseUrl();
-            const requests = e.map((sourcePage => this.request123Av(this.keyword
-                ? `${t}/cn/search?keyword=${encodeURIComponent(this.keyword)}`
-                : `${t}/cn/makers/fc2?page=${sourcePage}`)));
-            const pages = (await Promise.all(requests)).map((html => utils.htmlTo$dom(html)));
-            const i = merge123AvCards(pages.map(($page => parse123AvCards($page, t))));
-            if (!this.keyword && !this.maxPage && pages.length) {
-                const sourceMaxPage = parse123AvSourceMaxPage(pages[0], t);
-                sourceMaxPage && (this.maxPage = Math.ceil(sourceMaxPage / 2), this.renderPagination());
-            }
+            this.keyword && $(".page-box").hide();
+            const scope = await this.getRuntimeService("scope")();
+            const result = await this.getRuntimeService("movie").catalog("av123", { page: this.currentPage, keyword: this.keyword || "" }, { scope });
+            const i = result.items;
+            if (!this.keyword && !this.maxPage && result.maxPage) this.maxPage = result.maxPage, this.renderPagination();
             if (0 === i.length) {
                 clog.log(i), show.error("无结果");
-                const e = this.keyword ? `${t}/cn/search?keyword=${encodeURIComponent(this.keyword)}` : `${t}/cn/makers/fc2`;
-                clog.error("获取数据失败!", e);
+                clog.error("123AV 获取数据失败");
             }
             let s = this.markDataListHtml(i);
             $(".movie-list").html(s), await utils.smoothScrollToTop();
@@ -96,7 +82,7 @@ export class Fc2By123AvPlugin extends BasePlugin {
     async open123AvFc2Dialog(carNum, url) { return this.getDependency("Fc2Plugin").openFc2Dialog(null, carNum, url, { source: "123av" }); }
     /** 将 123AV 数据填入 Fc2Plugin 创建的固定工作区。 */
     async loadDetail(context, url) {
-        const infoPromise = this.loadSummary(context, url), imagesPromise = this.getImgList(context.carNum), actressPromise = this.getActressInfo(context.carNum), movieIdPromise = resolveJavDbMovieId(context.carNum), fc2Plugin = this.getDependency("Fc2Plugin");
+        const infoPromise = this.loadSummary(context, url), imagesPromise = this.getImgList(context.carNum), actressPromise = this.getActressInfo(context.carNum), movieIdPromise = this.resolveMovieId(context.carNum), fc2Plugin = this.getDependency("Fc2Plugin");
         void fc2Plugin.configureJavDbWantButton(context, movieIdPromise), void fc2Plugin.mountPanels(context, movieIdPromise), void movieIdPromise.then((movieId => context.isAlive() && fc2Plugin.fetchAndRenderNativeMagnets(context, movieId))).catch((error => {
             context.isAlive() && fc2Plugin.setState(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.retryResolvedMagnets(context))), clog.error("123AV 磁力关联失败", error);
         }));
@@ -109,9 +95,11 @@ export class Fc2By123AvPlugin extends BasePlugin {
     }
     async loadSummary(context, url) {
         try {
-            const info = await this.get123AvVideoInfo(url);
+            const info = await this.get123AvVideoInfo(context.carNum, url);
             if (!context.isAlive()) return null;
-            this.render123AvSummary(context, info), await this.getDependency("TranslatePlugin").translate(context.carNum, !1, { root: context.root });
+            this.render123AvSummary(context, info);
+            const scope = await this.getRuntimeService("scope")();
+            if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) === _) await renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope });
             return info;
         } catch (error) {
             context.isAlive() && this.getDependency("Fc2Plugin").setState(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.loadSummary(context, url))), clog.error("123AV 详情加载失败", error);
@@ -119,48 +107,24 @@ export class Fc2By123AvPlugin extends BasePlugin {
         }
     }
     async retryResolvedMagnets(context) {
-        try { return await this.getDependency("Fc2Plugin").fetchAndRenderNativeMagnets(context, await resolveJavDbMovieId(context.carNum)); } catch (error) { context.isAlive() && this.getDependency("Fc2Plugin").setState(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.retryResolvedMagnets(context))); }
+        try { return await this.getDependency("Fc2Plugin").fetchAndRenderNativeMagnets(context, await this.resolveMovieId(context.carNum)); } catch (error) { context.isAlive() && this.getDependency("Fc2Plugin").setState(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.retryResolvedMagnets(context))); }
     }
     render123AvSummary(context, info) {
         const body = context.root.find('[data-jhs-role="summary-content"]').empty(), title = $('<h1 class="jhs-fc2-title"><strong class="current-title"></strong></h1>');
         title.find("strong").text(info.title || "无标题"), body.append(title, $('<div class="jhs-fc2-meta"></div>').append($("<span></span>").text(`番号：${context.carNum}`), $("<span></span>").text(`发行：${info.publishDate || "未知"}`)), '<div class="jhs-fc2-actors" data-jhs-role="actors"><strong>主演：</strong><span>正在加载演员…</span></div>', '<div class="jhs-fc2-meta" data-jhs-role="seller"></div>', this.getDependency("Fc2Plugin").createSourceLinks(context), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(info.publishDate || ""));
     }
-    async get123AvVideoInfo(e) {
-        const t = await this.request123Av(e);
-        return parse123AvVideoInfo(utils.htmlTo$dom(t), e);
+    async get123AvVideoInfo(carNum, e) {
+        const scope = await this.getRuntimeService("scope")();
+        const detail = await this.getRuntimeService("movie").detail({ carNum, url: e, providerId: "av123" }, { scope });
+        return { title: detail?.title || "", publishDate: detail?.releaseDate || "", moviePoster: null };
     }
     async getActressInfo(e) {
-        let t = `https://fc2ppvdb.com/articles/${e.replace("FC2-", "")}`;
-        const n = await gmHttp.get(t), a = $(n), i = a.find("div").filter((function() {
-            return 0 === $(this).text().trim().indexOf("女優：");
-        }));
-        if (0 === i.length || i.length > 1) return { actors: [], seller: null };
-        const s = $(i[0]).find("a");
-        const actors = [];
-        if (s.length > 0) {
-            s.each(((t, n) => {
-                const link = $(n), name = link.text().trim(), url = normalizeHttpUrl(link.attr("href"), "https://fc2ppvdb.com");
-                name && actors.push({ name, url });
-            }));
-        }
-        const r = a.find("div").filter((function() {
-            return 0 === $(this).text().trim().indexOf("販売者：");
-        }));
-        let seller = null;
-        if (r.length > 0) {
-            const link = $(r[0]).find("a").first();
-            link.length && (seller = { name: link.text().trim(), url: normalizeHttpUrl(link.attr("href"), "https://fc2ppvdb.com") });
-        }
-        return { actors, seller };
+        const scope = await this.getRuntimeService("scope")();
+        return this.getRuntimeService("movie").people("fc2ppvdb", { carNum: e }, { scope });
     }
     async getImgList(e) {
-        let t = e.replace("FC2-", ""), n = `https://adult.contents.fc2.com/article/${e.replace("FC2-", "")}/`;
-        const a = await gmHttp.get(n, null, {
-            referer: n
-        });
-        return $(a).find(".items_article_SampleImagesArea img").map((function() {
-            return normalizeHttpUrl($(this).attr("src"), n);
-        })).get().filter(Boolean);
+        const scope = await this.getRuntimeService("scope")();
+        return (await this.getRuntimeService("movie").images("fc2content", { carNum: e }, { scope })).map((item => item.url));
     }
     async reloadImages(context) {
         try {
@@ -179,7 +143,7 @@ export class Fc2By123AvPlugin extends BasePlugin {
     markDataListHtml(e) {
         let t = "";
         return e.forEach((e => {
-            const href = normalizeHttpUrl(e.href, "https://123av.com"), imageUrl = normalizeHttpUrl(e.imgSrc, "https://123av.com");
+            const href = e.url, imageUrl = e.imageUrl;
             if (!href) return;
             t += `\n                <div class="item" data-jhs-fc2-source="123av">\n                    <a href="${escapeHtml(href)}" class="box" title="${escapeHtml(e.title)}">\n                        <div class="cover ">${imageUrl ? `<img loading="lazy" src="${escapeHtml(imageUrl)}" alt="">` : ""}</div>\n                        <div class="video-title"><strong>${escapeHtml(e.carNum)}</strong> ${escapeHtml(e.title)}</div>\n                        <div class="score"></div><div class="meta"></div><div class="jhs-toolbar"></div>\n                    </a>\n                </div>\n            `;
         })), t;

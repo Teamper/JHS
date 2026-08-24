@@ -14,7 +14,18 @@ for (const [label, url, expectedPlugin] of [
     await expect(page.locator("body")).toBeVisible();
     await assertNoHorizontalOverflow(page);
     await page.waitForTimeout(250);
-    const initialRequests = await page.evaluate(() => window.__jhsBrowserDiagnostics.requests.length);
-    expect(initialRequests, "deterministic fixture startup request budget").toBeLessThanOrEqual(budget.browserFixture.maximumInitialRequests[label]);
+    const initialRequests = await page.evaluate(() => window.__jhsBrowserDiagnostics.requests);
+    expect(initialRequests.length, `deterministic fixture startup request budget: ${JSON.stringify(initialRequests)}`).toBeLessThanOrEqual(budget.browserFixture.maximumInitialRequests[label]);
   });
 }
+
+test("legacy disabled plugin migrates to one contribution only", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers storage migration");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/v/test-id", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page, { disabledPlugins: ["ReviewPlugin"] });
+  const pluginNames = await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames());
+  expect(pluginNames).not.toContain("ReviewPlugin");
+  expect(pluginNames).toContain("RelatedPlugin");
+  expect(pluginNames).toContain("DetailWorkspacePlugin");
+});

@@ -8,15 +8,17 @@ import { describe, expect, it, vi } from "vitest";
 
 function loadPlugin(url, html) {
     const dom = new JSDOM(html, { url }), $ = jqueryFactory(dom.window);
+    let sortMethod = "default";
+    const settings = { snapshot: () => ({ sortMethod }), set: vi.fn(async (name, value) => { sortMethod = value; }) };
     const context = vm.createContext({
         window: dom.window, document: dom.window.document, URLSearchParams, $, o: dom.window.location.href, r: true, l: false, c: false, _: "yes",
         localStorage: dom.window.localStorage, storageManager: { getSetting: vi.fn(async () => "yes") }, isHitShowPage: () => false,
-        BasePlugin: class { getSelector() { return { boxSelector: ".movie-list", itemSelector: ".movie-list > .item" }; } },
+        BasePlugin: class { getSelector() { return { boxSelector: ".movie-list", itemSelector: ".movie-list > .item" }; } getRuntimeService() { return settings; } },
         clog: { error: vi.fn() }
     });
     const source = readTestFile(join(import.meta.dirname, "../src/plugins/status/list-page-button.js"), "utf8");
     vm.runInContext(`${source};globalThis.Plugin=ListPageButtonPlugin`, context);
-    return { $, plugin: new context.Plugin(), localStorage: dom.window.localStorage };
+    return { $, plugin: new context.Plugin(), setSortMethod: value => { sortMethod = value; } };
 }
 
 describe("FC2 list sorting", () => {
@@ -27,7 +29,7 @@ describe("FC2 list sorting", () => {
             <div class="item" id="five"><div class="score">3.67分, 由5人评价</div></div>
             <div class="item" id="fifty-five"><div class="score">3.50分, 由55人评价</div></div>
         </div>`);
-        loaded.localStorage.setItem("jhs_sortMethod", "rateCount");
+        loaded.setSortMethod("rateCount");
 
         await loaded.plugin.sortItems();
 

@@ -6,6 +6,7 @@ import { legacyActionToFlag } from "../../core/state-model.js";
 import { stateService } from "../../core/state-service.js";
 import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
 import { parseDetailPage } from "../../integrations/host-list/parser.js";
+import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 
 export class BlacklistPlugin extends BasePlugin {
     constructor() {
@@ -196,7 +197,7 @@ export class BlacklistPlugin extends BasePlugin {
         this.checkBlacklist_ruleTime = parseNumberSetting(await storageManager.getSetting("checkBlacklist_ruleTime"), 8760, { min: 0 });
         const e = await this.getTableData(), placeholder = document.createElement("div");
         renderStateView(placeholder, { type: "empty", title: "没有符合当前筛选条件的黑名单记录" });
-        this.tableObj = new Tabulator("#table-container", {
+        this.tableObj = createJhsTable(Tabulator, "#table-container", {
             layout: "fitColumns",
             placeholder,
             virtualDom: !0,

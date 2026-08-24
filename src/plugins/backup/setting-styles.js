@@ -399,7 +399,7 @@ export function buildSettingCss(containerWidth, containerColumns, isJavBus, isJa
 }
 
 /** Toggle between vertical (cover-fit) and normal (contain) image display modes. */
-export async function applyImageMode() {
+export async function applyImageMode(busImgPlugin = null) {
     $("#verticalImgStyle").remove();
     if (await storageManager.getSetting("enableVerticalModel", C) === _) {
         let e = "100% 50% !important";
@@ -444,5 +444,5 @@ export async function applyImageMode() {
             `;
         $("<style>").attr("id", "verticalImgStyle").text(e).appendTo("head");
     }
-    l && window.getBeanForSetting("BusImgPlugin").logImageHeightsByRow();
+    l && busImgPlugin?.logImageHeightsByRow();
 }

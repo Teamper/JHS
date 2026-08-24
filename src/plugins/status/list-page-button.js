@@ -33,7 +33,7 @@ export class ListPageButtonPlugin extends BasePlugin {
             }));
             const r = o.includes("advanced_search");
             r && (t = $("h2.section-title"));
-            const l = localStorage.getItem("jhs_sortMethod"), d = "当前排序方式: " + ("rateCount" === l ? "评价人数" : "date" === l ? "时间" : "默认");
+            const l = this.getRuntimeService("settings").snapshot().sortMethod || "default", d = "当前排序方式: " + ("rateCount" === l ? "评价人数" : "date" === l ? "时间" : "默认");
             t.append(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e ? `\n                     <button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>\n                     <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></button>\n                     <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="一键收藏当前页面所有作品"><span>一键收藏所有作品</span></button>\n                     <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="一键标记当前页面所有作品为已下载"><span>一键已下载所有作品</span></button>\n                    ` : ""}\n                    ${o.includes("/tags") ? `\n                      <button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>\n                    ` : ""}\n                </div>\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="newVideoBtn" class="jhs-btn jhs-btn--secondary"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></button>\n                    <button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>\n                    ${c ? "" : this.sortMenuHtml(l || "default", d)}\n                </div>\n            `);
         }
         if (l) {
@@ -43,7 +43,7 @@ export class ListPageButtonPlugin extends BasePlugin {
                 const e = await storageManager.getBlacklist(), a = this.getActressPageInfo();
                 e.find((e => e.starId === a.starId)) && (t = "已加入黑名单", n = "jhs-btn--muted");
             }
-            const a = localStorage.getItem("jhs_sortMethod") || "default";
+            const a = this.getRuntimeService("settings").snapshot().sortMethod || "default";
             $(".masonry").parent().prepend(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e ? `    \n                        <button type="button" id="addBlacklistBtn" class="jhs-btn ${n}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${t}</span></button>\n                        <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></button>\n                        <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="一键收藏当前页面所有作品"><span>一键收藏所有作品</span></button>\n                        <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="一键标记当前页面所有作品为已下载"><span>一键已下载所有作品</span></button>\n                    ` : '<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>'}\n                    ${this.sortMenuHtml(a)}\n                </div>\n            `);
         }
         $("#waitCheckBtn > span").text("开始鉴定");
@@ -109,10 +109,10 @@ export class ListPageButtonPlugin extends BasePlugin {
             const open = !menu.hasClass("is-open");
             menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && menu.find('[aria-checked="true"]').trigger("focus");
         }));
-        menu.on("click", ".jhs-sort-option", (event => {
+        menu.on("click", ".jhs-sort-option", (async event => {
             const item = $(event.currentTarget), method = item.data("sort-method");
-            localStorage.setItem("jhs_sortMethod", method), menu.find(".jhs-sort-option").attr("aria-checked", "false"), item.attr("aria-checked", "true"),
-            $("#jhs-sort-current").text(item.text()), close(!0), void this.sortItems().catch((error => clog.error("列表排序失败", error)));
+            await this.getRuntimeService("settings").set("sortMethod", method), menu.find(".jhs-sort-option").attr("aria-checked", "false"), item.attr("aria-checked", "true"),
+            $("#jhs-sort-current").text(item.text()), close(!0), await this.sortItems().catch((error => clog.error("列表排序失败", error)));
         })).on("keydown", ".jhs-sort-option", (event => {
             const items = menu.find(".jhs-sort-option"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), close(!0);
@@ -130,7 +130,7 @@ export class ListPageButtonPlugin extends BasePlugin {
         if (!e && (o.includes("handle") || o.includes("advanced_search"))) return;
         const s = await storageManager.getSetting("autoPage");
         if (c || s === _ && !e) return;
-        const t = localStorage.getItem("jhs_sortMethod");
+        const t = this.getRuntimeService("settings").snapshot().sortMethod;
         if (!t) return;
         const i = this.getSelector(), d = $(i.boxSelector), h = $(i.itemSelector);
         h.each((function(e) {

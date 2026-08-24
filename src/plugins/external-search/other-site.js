@@ -27,16 +27,7 @@ export class OtherSitePlugin extends BasePlugin {
             findCarNumOrTitle: e => e.find("p.card-text").text()
         }, {
             id: "123AvBtn",
-            getBaseUrl: async () => `${await this.getAv123Url()}/cn`,
-            itemSelector: ".card",
-            searchPath: (e, t) => `${e}/search?keyword=${encodeURIComponent(t)}`,
-            requestOptions: { cookiePartitionTopLevelSite: "https://123av.com" },
-            getDetailPageHref: (e, t) => {
-                const href = e.find('a.card__link[href*="/cn/v/"]').first().attr("href");
-                return href ? new URL(href, t).href : null;
-            },
-            findCarNumOrTitle: e => e.find(".card__link").first().text(),
-            matches: (text, carNum) => text.replace(/FC2-PPV-/gi, "FC2-").toLowerCase().includes(carNum.toLowerCase())
+            providerId: "av123"
         }, {
             id: "jableBtn",
             getBaseUrl: async () => await this.getjableUrl(),
@@ -145,6 +136,10 @@ export class OtherSitePlugin extends BasePlugin {
         const n = view.root.find(`[data-jhs-site-id="${t.id}"],#${t.id}`).first();
         if (!(e = normalizeCarNum(e))) return n.removeAttr("href").attr({ "aria-disabled": "true", title: "番号不可用" }), void this.setSiteState(n, "idle");
         if (t.initUrl) return void (n.attr("href", t.initUrl(e)), this.setSiteState(n, "idle"), n.attr("title", "点击前往外部搜索页"));
+        if (t.providerId) {
+            const url = this.getRuntimeService("movie").searchUrl(t.providerId, { carNum: e });
+            return void (url ? (n.attr("href", url), n.attr("title", "点击前往外部搜索页"), this.setSiteState(n, "idle")) : (n.attr("title", "外部站点地址不可用"), this.setSiteState(n, "domain-error")));
+        }
         try {
             const a = await t.getBaseUrl(), i = t.searchPath(a, e);
             view.isActive() && (n.attr("href", i), n.attr("title", "点击前往外部搜索页；点击检测按钮后才自动检测"), this.setSiteState(n, "idle"));
@@ -168,6 +163,16 @@ export class OtherSitePlugin extends BasePlugin {
         if (t.initUrl && n.attr("href", t.initUrl(e)), t.noHandle && !0 === t.noHandle) {
             const t = "jhs_other_site_dmm", a = (localStorage.getItem(t) ? JSON.parse(localStorage.getItem(t)) : {})[e];
             a ? (n.attr("href", a.url), "multiple" === a.type && n.append('<span class="site-tag">多结果</span>'), this.setSiteState(n, "available")) : this.setSiteState(n, "idle");
+        } else if (t.providerId) try {
+            const scope = await this.getRuntimeService("scope")();
+            const result = await this.getRuntimeService("movie").resolve({ carNum: e, providerId: t.providerId }, { scope });
+            if (!view.isActive()) return;
+            const searchUrl = this.getRuntimeService("movie").searchUrl(t.providerId, { carNum: e });
+            n.attr("href", result?.url || searchUrl || "");
+            this.setSiteState(n, result?.url ? "available" : "unavailable");
+            if (!result?.url) n.attr("title", "未查询到, 点击前往搜索页");
+        } catch (error) {
+            if (view.isActive()) n.attr("title", "请求失败。"), this.setSiteState(n, "unavailable"), clog.warn(`检测第三方资源失败, ${t.id.replace("Btn", "")}`);
         } else try {
             if (n.attr("href")) return void this.setSiteState(n, "idle");
             if (utils.isHidden(n)) return;
@@ -235,9 +240,6 @@ export class OtherSitePlugin extends BasePlugin {
     }
     async getJavTrailersUrl() {
         return (await this.getSettingCache()).javTrailersUrl || "https://javtrailers.com";
-    }
-    async getAv123Url() {
-        return (await this.getSettingCache()).av123Url || "https://123av.com";
     }
     async getJavDbUrl() {
         return (await this.getSettingCache()).javDbUrl || "https://javdb.com";

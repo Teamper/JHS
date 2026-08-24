@@ -2,11 +2,11 @@ import { C, _, r } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { parseNumberSetting } from "../../core/feature-helpers.js";
 import { applyImageMode } from "./setting-styles.js";
-import { decryptCredential, encryptCredential } from "../image-viewer/bus-preview-video.js";
+import { decryptCredential, encryptCredential } from "../../core/credential-crypto.js";
 import { normalizeQuickFilterKey } from "../status/list-page.js";
 
 /** Load all settings from storage into the main settings dialog form fields. */
-export async function loadSettingForm(getBean) {
+export async function loadSettingForm(dependencies) {
     let e = await storageManager.getSetting();
     $("#videoQuality").val(e.videoQuality), $("#reviewCount").val(e.reviewCount || 20),
     $("#tagPosition").val(e.tagPosition || "rightTop"), $("#defaultQuickFilterTab").val(normalizeQuickFilterKey(e.defaultQuickFilterTab)), $("#needClosePageBasic").prop("checked", !e.needClosePage || e.needClosePage === _), $("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e.autoRemoveNewVideoMarkAfterBrowse && e.autoRemoveNewVideoMarkAfterBrowse === _), $("#waitCheckCount").val(e.waitCheckCount || 5),
@@ -35,7 +35,7 @@ export async function loadSettingForm(getBean) {
     $("#enableVerticalModel").prop("checked", !!e.enableVerticalModel && e.enableVerticalModel === _),
     $("#containerColumns").val(e.containerColumns || 5), $("#showContainerColumns").text(e.containerColumns || 5),
     $("#containerWidth").val((e.containerWidth || 100) - 70), $("#showContainerWidth").text((e.containerWidth || 100) + "%");
-    const a = getBean("OtherSitePlugin"), i = await a.getMissAvUrl(), s = await a.getjableUrl(), o = await a.getAvgleUrl(), r = await a.getJavTrailersUrl(), l = await a.getAv123Url(), c = await a.getJavDbUrl(), d = await a.getJavBusUrl(), h = await a.getSupJavUrl();
+    const a = dependencies.otherSite, i = await a.getMissAvUrl(), s = await a.getjableUrl(), o = await a.getAvgleUrl(), r = await a.getJavTrailersUrl(), l = await a.getAv123Url(), c = await a.getJavDbUrl(), d = await a.getJavBusUrl(), h = await a.getSupJavUrl();
     $("#missAvUrl").val(i), $("#jableUrl").val(s), $("#avgleUrl").val(o), $("#javTrailersUrl").val(r),
     $("#av123Url").val(l), $("#javDbUrl").val(c), $("#javBusUrl").val(d), $("#supJavUrl").val(h);
     let g = await storageManager.getReviewFilterKeywordList(), p = await storageManager.getTitleFilterKeyword();
@@ -48,11 +48,11 @@ export async function loadSettingForm(getBean) {
             "Enter" === t.key && addKeyword(t, e);
         }));
     }));
-    bindLayoutRangeEvents();
+    bindLayoutRangeEvents(dependencies.busImg);
 }
 
 /** Bind the shared layout range controls without accumulating handlers. */
-function bindLayoutRangeEvents() {
+function bindLayoutRangeEvents(busImgPlugin) {
     $("#containerColumns").off(".jhsSetting").on("input.jhsSetting", (() => {
         const columns = $("#containerColumns").val();
         $("#showContainerColumns").text(columns);
@@ -60,7 +60,7 @@ function bindLayoutRangeEvents() {
         movieList && (movieList.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
         masonry && (masonry.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
     })).on("change.jhsSetting", (async event => {
-        await storageManager.saveSettingItem("containerColumns", $(event.currentTarget).val()), await applyImageMode();
+        await storageManager.saveSettingItem("containerColumns", $(event.currentTarget).val()), await applyImageMode(busImgPlugin);
     }));
     $("#containerWidth").off(".jhsSetting").on("input.jhsSetting", (event => {
         const width = parseInt($(event.target).val()) + 70, widthText = `${width}%`;
@@ -72,7 +72,7 @@ function bindLayoutRangeEvents() {
 }
 
 /** Initialize quick settings in either the desktop popover or mobile layer. */
-export async function initQuickSettingForm(getBean, getSelector, openSettingDialogFn) {
+export async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn) {
     let e = await storageManager.getSetting();
     $("#needClosePage").prop("checked", !e.needClosePage || e.needClosePage === _),
     $("#autoPage").prop("checked", !e.autoPage || e.autoPage === _), $("#translateTitle").prop("checked", !e.translateTitle || e.translateTitle === _),
@@ -86,8 +86,8 @@ export async function initQuickSettingForm(getBean, getSelector, openSettingDial
         await storageManager.saveSettingItem("autoPage", n), $("#sort-toggle-btn").prop("disabled", n === _).attr("title", n === _ ? "瀑布流模式仅支持默认排序" : "选择列表排序方式");
     })), $("#translateTitle").on("change", (async t => {
         const n = $("#translateTitle").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("translateTitle", n), n === _ ? (await getBean("ListPagePlugin").doFilter(),
-        isDetailPage && await getBean("TranslatePlugin").translate()) : (await getBean("ListPagePlugin").revertTranslation(),
+        await storageManager.saveSettingItem("translateTitle", n), n === _ ? (await dependencies.listPage.doFilter(),
+        isDetailPage && await dependencies.translate?.translate()) : (await dependencies.listPage.revertTranslation(),
         $(".translated-title").remove());
     })), $("#hoverBigImg").prop("checked", !!e.hoverBigImg && e.hoverBigImg === _),
     $("#hoverBigImg").on("change", (async t => {
@@ -98,14 +98,14 @@ export async function initQuickSettingForm(getBean, getSelector, openSettingDial
         }));
     })), $("#enableLoadActressInfo").on("change", (async t => {
         const n = $("#enableLoadActressInfo").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("enableLoadActressInfo", n), n === _ ? getBean("ActressInfoPlugin").loadActressInfo() : $(".actress-info").remove();
+        await storageManager.saveSettingItem("enableLoadActressInfo", n), n === _ ? dependencies.actressInfo?.loadActressInfo() : $(".actress-info").remove();
     })), $("#enableLoadOtherSite").on("change", (async t => {
         const n = $("#enableLoadOtherSite").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("enableLoadOtherSite", n), n === _ ? await getBean("OtherSitePlugin").loadOtherSite() : $("#otherSiteBox").remove();
+        await storageManager.saveSettingItem("enableLoadOtherSite", n), n === _ ? await dependencies.otherSite.loadOtherSite() : $("#otherSiteBox").remove();
     })), $("#enableLoadScreenShot").prop("checked", !e.enableLoadScreenShot || e.enableLoadScreenShot === _),
     $("#enableLoadScreenShot").on("change", (async t => {
         const n = $("#enableLoadScreenShot").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("enableLoadScreenShot", n), n === _ ? await getBean("ScreenShotPlugin").loadScreenShot() : $(".screen-container").remove();
+        await storageManager.saveSettingItem("enableLoadScreenShot", n), n === _ ? await dependencies.screenshot.loadScreenShot() : $(".screen-container").remove();
     })), $("#enableLoadPreviewVideo").prop("checked", !e.enableLoadPreviewVideo || e.enableLoadPreviewVideo === _),
     $("#enableLoadPreviewVideo").on("change", (async t => {
         const n = $("#enableLoadPreviewVideo").is(":checked") ? _ : C;
@@ -113,14 +113,14 @@ export async function initQuickSettingForm(getBean, getSelector, openSettingDial
     })), $("#enableVerticalModel").prop("checked", !!e.enableVerticalModel && e.enableVerticalModel === _),
     $("#enableVerticalModel").on("change", (async t => {
         const n = $("#enableVerticalModel").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("enableVerticalModel", n), applyImageMode();
+        await storageManager.saveSettingItem("enableVerticalModel", n), applyImageMode(dependencies.busImg);
     })), $("#moreBtn").on("click", (() => {
         $(".simple-setting, .mini-simple-setting").html("").hide(), openSettingDialogFn("base-panel");
     }));
 }
 
 /** Read all form values and save to storage. */
-export async function saveSettingForm(getBean) {
+export async function saveSettingForm(dependencies) {
     let e = await storageManager.getSetting();
     const nextWebDavUrl = String($("#webDavUrl").val() || "").trim();
     let nextWebDavOrigin = null;
@@ -175,8 +175,8 @@ export async function saveSettingForm(getBean) {
         let t = $(e).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
         n.push(t);
     })), await storageManager.saveTitleFilterKeyword(n), show.ok("保存成功"), await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" });
-    const a = getBean("NewVideoPlugin");
-    a && a.resetBtnTip(), getBean("BlacklistPlugin").resetBtnTip(), getBean("BlacklistPlugin").reloadTable();
+    const a = dependencies.newVideo;
+    a && a.resetBtnTip(), dependencies.blacklist.resetBtnTip(), dependencies.blacklist.reloadTable();
 }
 
 /** Create a removable keyword label tag in the filter panel. */

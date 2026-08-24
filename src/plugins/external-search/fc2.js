@@ -1,12 +1,18 @@
 import { C, _, k, m, o, v, y } from "../../core/constants.js";
 import { detailStateController } from "../../core/detail-state-controller.js";
 import { normalizeBtihHash, normalizeHttpUrl } from "../../core/feature-helpers.js";
-import { O, U, V, markJavDbWantWatch, resolveJavDbMovieId } from "../../core/javdb-api.js";
+import { markJavDbWantWatch } from "../../core/javdb-api.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
+import { renderTranslatedTitle } from "../../ui/translation/title-translation.js";
+import { renderScreenshotPanel } from "../../ui/detail/screenshot-panel.js";
 import { createFc2DetailContext, createFc2DetailShell } from "../status/detail-workspace.js";
 
 export class Fc2Plugin extends BasePlugin {
     getName() { return "Fc2Plugin"; }
+    async resolveMovieId(carNum) {
+        const scope = await this.getRuntimeService("scope")();
+        return (await this.getRuntimeService("movie").resolve({ carNum }, { scope }))?.movieId || null;
+    }
     async initCss() {
         return `<style>
             .movie-detail-layer .layui-layer-content { min-height:0; overflow:hidden; background:var(--jhs-bg); }
@@ -72,7 +78,7 @@ export class Fc2Plugin extends BasePlugin {
     }
     openFc2Dialog(movieId, carNum, url, { source = "fc2" } = {}) {
         let context = null;
-        return layer.open({ type: 1, title: carNum, content: '<div class="jhs-fc2-dialog-host"></div>', area: utils.getDialogArea("workspace"), skin: "movie-detail-layer", scrollbar: !1, shadeClose: !0,
+        return this.getRuntimeService("dialog").open({ type: 1, title: carNum, content: '<div class="jhs-fc2-dialog-host"></div>', area: utils.getDialogArea("workspace"), skin: "movie-detail-layer", scrollbar: !1, shadeClose: !0,
             success: (layerRoot, layerIndex) => { context = this.mountFc2Detail($(layerRoot).find(".jhs-fc2-dialog-host"), { movieId, carNum, url, source, layerIndex, mode: "dialog" }), utils.setupEscClose(layerIndex); },
             end: () => context?.destroy()
         });
@@ -98,7 +104,10 @@ export class Fc2Plugin extends BasePlugin {
         const resources = $('<div class="jhs-fc2-resource-stack"></div>'), nativeGroup = this.createResourceGroup("站内磁力", "native-magnets"), sitesGroup = this.createResourceGroup("第三方站点", "other-sites"), hubGroup = this.createResourceGroup("更多磁力来源", "magnet-hub"), hubButton = $('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="magnet-hub" aria-expanded="false">展开磁力搜索</button>');
         let magnetHubPromise = null;
         hubGroup.find('[data-jhs-role="magnet-hub"]').append(hubButton, '<div data-jhs-role="magnet-hub-content"></div>'), resources.append(nativeGroup, sitesGroup, hubGroup), context.getSlot("resources").append(resources);
-        toolbar.on(`click${context.namespace}`, '[data-jhs-action="subtitlecat"]', (event => utils.openPage(`https://subtitlecat.com/index.php?search=${encodeURIComponent(context.carNum)}`, context.carNum, !1, event))), toolbar.on(`click${context.namespace}`, '[data-jhs-action="xunlei"]', (() => this.getDependency("DetailPageButtonPlugin").searchXunLeiSubtitle(context.carNum)));
+        toolbar.on(`click${context.namespace}`, '[data-jhs-action="subtitlecat"]', (event => {
+            const target = this.getRuntimeService("movie").sourceUrls({ carNum: context.carNum }, ["subtitlecat"])[0]?.url;
+            if (target) utils.openPage(target, context.carNum, !1, event);
+        })), toolbar.on(`click${context.namespace}`, '[data-jhs-action="xunlei"]', (() => this.getDependency("DetailPageButtonPlugin").searchXunLeiSubtitle(context.carNum)));
         hubButton.on(`click${context.namespace}`, (async () => {
             if (!context.isAlive()) return;
             const box = hubGroup.find('[data-jhs-role="magnet-hub-content"]'), expanded = "true" === hubButton.attr("aria-expanded");
@@ -113,7 +122,11 @@ export class Fc2Plugin extends BasePlugin {
         void this.getDependency("OtherSitePlugin").loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: !1, isActive: context.isAlive }).then((box => { if (context.isAlive() && !box) sitesGroup.remove(); })).catch((error => {
             context.isAlive() && sitesGroup.remove(), clog.error("FC2 外部站点加载失败", error);
         }));
-        void this.getDependency("ScreenShotPlugin").loadInto(screenshot, context.carNum.replace("FC2-", ""), { isActive: context.isAlive }).then((result => { if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove(); }));
+        const scopePromise = this.getRuntimeService("scope")();
+        void scopePromise.then((scope => renderScreenshotPanel({
+            target: screenshot, carNum: context.carNum.replace("FC2-", ""), screenshot: this.getRuntimeService("screenshot"),
+            settings: this.getRuntimeService("settings").snapshot(), scope, isActive: context.isAlive,
+        }))).then((result => { if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove(); }));
         "123av" === context.source ? void this.getDependency("Fc2By123AvPlugin").loadDetail(context, context.url) : void this.loadNativeDetail(context);
     }
     createResourceGroup(title, role) { return $('<section class="jhs-fc2-resource-group"><h3 class="jhs-fc2-resource-title"></h3><div></div></section>').find("h3").text(title).end().find("div").attr("data-jhs-role", role).end(); }
@@ -134,7 +147,7 @@ export class Fc2Plugin extends BasePlugin {
             if (!movieId) return void button.prop("disabled", !0).text("JavDB 暂无对应作品");
             button.prop("disabled", !1).text("JavDB 想看").off(`click${context.namespace}`).on(`click${context.namespace}`, (() => void this.submitJavDbWant(context, movieId, button)));
         } catch (error) {
-            context.isAlive() && button.prop("disabled", !1).text("JavDB 关联失败，重试").off(`click${context.namespace}`).on(`click${context.namespace}`, (() => void this.configureJavDbWantButton(context, resolveJavDbMovieId(context.carNum)))), clog.error("FC2 JavDB 想看关联失败", error);
+            context.isAlive() && button.prop("disabled", !1).text("JavDB 关联失败，重试").off(`click${context.namespace}`).on(`click${context.namespace}`, (() => void this.configureJavDbWantButton(context, this.resolveMovieId(context.carNum)))), clog.error("FC2 JavDB 想看关联失败", error);
         }
     }
     async submitJavDbWant(context, movieId, button) {
@@ -158,9 +171,12 @@ export class Fc2Plugin extends BasePlugin {
     }
     async fetchAndRenderNativeDetail(context) {
         try {
-            const movie = await V(context.movieId);
+            const scope = await this.getRuntimeService("scope")();
+            const movie = await this.getRuntimeService("movie").detail({ movieId: context.movieId, carNum: context.carNum, providerId: "javdb" }, { scope });
+            if (!movie) throw new Error("JavDB 影片详情不存在");
             if (!context.isAlive()) return;
-            this.renderSummary(context, movie), this.renderGallery(context, movie.imgList || []), await this.getDependency("TranslatePlugin").translate(movie.carNum || context.carNum, !1, { root: context.root });
+            this.renderSummary(context, movie), this.renderGallery(context, movie.imageUrls || []);
+            if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) === _) await renderTranslatedTitle({ root: context.root, carNum: movie.carNum || context.carNum, translation: this.getRuntimeService("translation"), scope });
         } catch (error) {
             context.isAlive() && this.setState(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.fetchAndRenderNativeDetail(context))), clog.error("FC2 详情加载失败", error);
         }
@@ -175,7 +191,7 @@ export class Fc2Plugin extends BasePlugin {
         movie.actors?.length || actors.append($("<span></span>").text("暂无演员信息")), body.append(actors, this.createSourceLinks(context), $('<span class="jhs-is-hidden" data-jhs-role="actress-data"></span>').text(actressNames.join(" ")), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(movie.releaseDate || ""));
     }
     createSourceLinks(context) {
-        const id = String(context.carNum || "").replace(/^FC2-(?:PPV-)?/i, ""), links = $('<div class="jhs-fc2-source-links" aria-label="影片来源"></div>'), values = [ [ "123av" === context.source ? "123AV 原页面" : "JavDB 原页面", normalizeHttpUrl(context.url) ], [ "FC2PPVDB", `https://fc2ppvdb.com/articles/${encodeURIComponent(id)}` ], [ "FC2 市场", `https://adult.contents.fc2.com/article/${encodeURIComponent(id)}/` ] ];
+        const links = $('<div class="jhs-fc2-source-links" aria-label="影片来源"></div>'), providerLinks = this.getRuntimeService("movie").sourceUrls({ carNum: context.carNum }, ["fc2ppvdb", "fc2content"]), values = [ [ "123av" === context.source ? "123AV 原页面" : "JavDB 原页面", normalizeHttpUrl(context.url) ], ...providerLinks.map((item => [ item.providerId === "fc2ppvdb" ? "FC2PPVDB" : "FC2 市场", item.url ])) ];
         values.forEach((([ label, href ]) => href && links.append($("<a></a>").addClass("jhs-btn jhs-btn--ghost jhs-btn--sm").attr({ href, target: "_blank", rel: "noopener noreferrer" }).text(label))));
         return links;
     }
@@ -190,7 +206,8 @@ export class Fc2Plugin extends BasePlugin {
         this.setState(host, "正在加载站内磁力…");
         try {
             if (!movieId) return this.setState(host, "JavDB 暂无对应作品");
-            const response = await gmHttp.get(`${U}/v1/movies/${movieId}/magnets`, null, { jdSignature: await O() }), magnets = response?.data?.magnets || [];
+            const scope = await this.getRuntimeService("scope")();
+            const magnets = await this.getRuntimeService("magnet").listNative({ movieId, providerId: "javdb" }, { scope });
             if (!context.isAlive()) return;
             host.empty();
             if (!magnets.length) return this.setState(host, "暂无站内磁力");
@@ -198,9 +215,9 @@ export class Fc2Plugin extends BasePlugin {
             magnets.forEach((item => {
                 const hash = normalizeBtihHash(item.hash);
                 if (!hash) return;
-                const magnet = `magnet:?xt=urn:btih:${hash}`, assessment = highlighter.assessMagnet({ title: item.name, hasHdTag: !!item.hd, hasSubtitleTag: !!item.cnsub, date: item.created_at, seeders: Number(item.seeders) || 0 }), row = $('<div class="jhs-fc2-magnet-item"></div>').attr("data-jhs-high-quality", String(assessment.highQuality)), info = $('<div class="jhs-fc2-magnet-name"></div>'), actions = $('<div class="jhs-toolbar"></div>'), tags = $('<div class="jhs-fc2-magnet-tags"></div>');
-                assessments.push(assessment), tags.append($("<span></span>").addClass("jhs-badge").attr("title", `磁力质量评分 ${assessment.score.total}`).text(`${assessment.grade} ${assessment.score.total}`)), item.hd && tags.append('<span class="jhs-badge">高清</span>'), item.cnsub && tags.append('<span class="jhs-badge">字幕</span>');
-                info.append($("<a></a>").attr("href", magnet).text(item.name || magnet), $("<div></div>").addClass("jhs-fc2-meta").text(`${(Number(item.size || 0) / 1024).toFixed(2)} GB · ${Number(item.files_count) || 0} 个文件${item.created_at ? ` · ${item.created_at}` : ""}`), tags), actions.append($('<button type="button" class="jhs-btn jhs-btn--secondary copy-to-clipboard">复制</button>').attr("data-clipboard-text", magnet), $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn">离线</button>').attr({ "data-resource": magnet, "data-jhs-offline-owner": "fc2" })), host.append(row.append(info, actions));
+                const magnet = `magnet:?xt=urn:btih:${hash}`, assessment = highlighter.assessMagnet({ title: item.title, hasHdTag: item.hasHdTag, hasSubtitleTag: item.hasSubtitleTag, date: item.createdAt, seeders: item.seeders }), row = $('<div class="jhs-fc2-magnet-item"></div>').attr("data-jhs-high-quality", String(assessment.highQuality)), info = $('<div class="jhs-fc2-magnet-name"></div>'), actions = $('<div class="jhs-toolbar"></div>'), tags = $('<div class="jhs-fc2-magnet-tags"></div>');
+                assessments.push(assessment), tags.append($("<span></span>").addClass("jhs-badge").attr("title", `磁力质量评分 ${assessment.score.total}`).text(`${assessment.grade} ${assessment.score.total}`)), item.hasHdTag && tags.append('<span class="jhs-badge">高清</span>'), item.hasSubtitleTag && tags.append('<span class="jhs-badge">字幕</span>');
+                info.append($("<a></a>").attr("href", magnet).text(item.title || magnet), $("<div></div>").addClass("jhs-fc2-meta").text(`${(Number(item.sizeMb || 0) / 1024).toFixed(2)} GB · ${Number(item.fileCount) || 0} 个文件${item.createdAt ? ` · ${item.createdAt}` : ""}`), tags), actions.append($('<button type="button" class="jhs-btn jhs-btn--secondary copy-to-clipboard">复制</button>').attr("data-clipboard-text", magnet), $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn">离线</button>').attr({ "data-resource": magnet, "data-jhs-offline-owner": "fc2" })), host.append(row.append(info, actions));
             }));
             await this.bindNativeMagnetFilter(context, host, assessments.some((item => item.highQuality)));
         } catch (error) { context.isAlive() && this.setState(host, "站内磁力加载失败", (() => void this.fetchAndRenderNativeMagnets(context, movieId))), clog.error("FC2 磁力加载失败", error); }
@@ -221,17 +238,18 @@ export class Fc2Plugin extends BasePlugin {
         } catch (error) {
             if (!context.isAlive()) return;
             this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related");
-            const retry = () => void this.mountPanels(context, resolveJavDbMovieId(context.carNum));
+            const retry = () => void this.mountPanels(context, this.resolveMovieId(context.carNum));
             this.setState(context.getSlot("reviews"), "评论关联失败", retry), this.setState(context.getSlot("related"), "相关清单关联失败", retry), clog.error("FC2 JavDB 关联失败", error);
         }
     }
     clearOwnedPanel(context, name) { context.getSlot(name).empty(), context.getSection(name).find(".jhs-fc2-section__actions").empty(); }
     async resolveFc2Source(record = {}) {
         if ([ "fc2", "123av" ].includes(record.fc2Source)) return record.fc2Source;
-        try { return new URL(record.url, window.location.origin).hostname === new URL(await this.getDependency("OtherSitePlugin").getAv123Url()).hostname ? "123av" : "fc2"; } catch (error) { return "fc2"; }
+        try { return this.getRuntimeService("movie").matchesProviderUrl("av123", new URL(record.url, window.location.origin).href) ? "123av" : "fc2"; } catch { return "fc2"; }
     }
     async openFc2Page(movieId, carNum, url, navigation = { newTab: !0 }, { source = "fc2" } = {}) {
-        const baseUrl = await this.getDependency("OtherSitePlugin").getJavDbUrl();
-        utils.openPage(`${baseUrl}/users/collection_codes?movieId=${movieId || ""}&carNum=${encodeURIComponent(carNum)}&url=${encodeURIComponent(url)}&source=${encodeURIComponent(source)}`, carNum, !0, navigation);
+        const target = new URL("/users/collection_codes", window.location.origin);
+        target.searchParams.set("movieId", movieId || ""), target.searchParams.set("carNum", carNum), target.searchParams.set("url", url), target.searchParams.set("source", source);
+        utils.openPage(target.href, carNum, !0, navigation);
     }
 }

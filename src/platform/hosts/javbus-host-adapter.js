@@ -9,8 +9,16 @@ export class JavBusHostAdapter {
         return carNum ? Object.freeze({ carNum, url: this.location.href, site: "javbus" }) : null;
     }
     locateListRoot() { return this.document.querySelector(".masonry"); }
-    locateDetailRoot() { return this.document.querySelector(".container .row.movie"); }
-    locateDetailSlots() { return Object.freeze({ summary: this.locateDetailRoot(), resources: this.locateNativeMagnets(), reviews: this.document.querySelector("#reviews") }); }
+    locateDetailRoot() { return this.locateNativeMagnets()?.closest(".container") ?? this.document.querySelector(".container .row.movie")?.parentElement ?? null; }
+    locateDetailSlots() {
+        const root = this.locateDetailRoot();
+        return Object.freeze({
+            summary: root?.querySelector('[data-jhs-slot="summary-actions"]') ?? root?.querySelector(".row.movie") ?? null,
+            resources: this.locateNativeMagnets(),
+            reviews: root?.querySelector('[data-jhs-slot="reviews"]') ?? this.document.querySelector("#reviews"),
+            related: root?.querySelector('[data-jhs-slot="related"]'),
+        });
+    }
     locateNativeGallery() { return this.document.querySelector("#sample-waterfall, .sample-box"); }
     locateNativeMagnets() { return this.document.querySelector("#magnet-table"); }
 }

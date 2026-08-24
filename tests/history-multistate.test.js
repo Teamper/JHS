@@ -5,11 +5,12 @@ import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
+import { HistorySelectionModel } from "../src/features/history/history-selection-model.js";
 
 function loadHistory() {
     const dom = new JSDOM("<body></body>", { url: "https://javdb.com/users/collection_codes" }), $ = jqueryFactory(dom.window), patch = vi.fn().mockResolvedValue(), toggle = vi.fn().mockResolvedValue(), close = vi.fn(), confirm = vi.fn((event, message, callback) => callback());
     const layer = { open: vi.fn(), close }, context = vm.createContext({
-        document: dom.window.document, window: dom.window, $, BasePlugin: class {}, Tabulator: class {}, layer,
+        document: dom.window.document, window: dom.window, $, BasePlugin: class {}, HistorySelectionModel, Tabulator: class {}, layer,
         normalizeStateFlags: flags => ({ favorite: false, downloaded: false, watched: false, blocked: false, ...flags }), stateService: { patch, toggle }, legacyActionToFlag: action => ({ filter: "blocked", favorite: "favorite", hasDown: "downloaded", hasWatch: "watched" })[action],
         utils: { getDialogArea: () => [], q: confirm }, show: { error: vi.fn() }, clog: { debug: vi.fn() }, i: (target, key, value) => (target[key] = value),
         r: true, l: false, d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", m: "屏蔽", v: "收藏", y: "下载", k: "观看"

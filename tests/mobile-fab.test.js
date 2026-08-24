@@ -11,7 +11,8 @@ function loadMobilePlugin() {
     dom.window.isListPage = true, dom.window.isDetailPage = false;
     const listPage = { activeQuickFilter: "waitCheck", setQuickFilter: vi.fn(), syncQuickFilterUi: vi.fn() }, listButtons = { openWaitCheck: vi.fn(async () => {}), sortItems: vi.fn(async () => {}) };
     const beans = { ListPagePlugin: listPage, ListPageButtonPlugin: listButtons };
-    class BasePlugin { getBean(name) { return beans[name]; } }
+    const settings = { snapshot: () => ({ sortMethod: "default" }), set: vi.fn(async () => {}) };
+    class BasePlugin { getBean(name) { return beans[name]; } getRuntimeService() { return settings; } }
     const labels = { all: "全部", waitCheck: "待鉴定", favorite: "收藏", hasDown: "下载", hasWatch: "已看", blockedItems: "屏蔽项", favoriteUndownloaded: "收藏未下载", favoriteUnwatched: "收藏未观看", downloadedUnwatched: "下载未观看", recent7d: "最近 7 天" };
     const context = vm.createContext({
         window: dom.window, document: dom.window.document, $, BasePlugin, localStorage: dom.window.localStorage,
