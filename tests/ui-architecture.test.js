@@ -54,6 +54,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     const related = readTestFile(join(process.cwd(), "src/plugins/external-search/related.js"), "utf8");
     const relatedUi = readTestFile(join(process.cwd(), "src/ui/detail/related-panel.js"), "utf8");
     const otherSite = readTestFile(join(process.cwd(), "src/plugins/external-search/other-site.js"), "utf8");
+    const magnetHub = readTestFile(join(process.cwd(), "src/plugins/external-search/magnet-hub.js"), "utf8");
     const settingForms = readTestFile(join(process.cwd(), "src/plugins/backup/setting-forms.js"), "utf8");
     const listButtons = readTestFile(join(process.cwd(), "src/plugins/status/list-page-button.js"), "utf8");
     const coverButtons = readTestFile(join(process.cwd(), "src/plugins/image-viewer/cover-button.js"), "utf8");
@@ -210,6 +211,14 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(otherSite).toContain('getLocal("jhs_enabled_sites")');
         expect(otherSite).toContain('setLocal("jhs_enabled_sites"');
         expect(otherSite).toContain("const latestRaw = storage.getLocal(a)");
+    });
+
+    it("routes magnet source requests through scoped HttpService", () => {
+        expect(magnetHub).not.toContain("gmHttp");
+        expect(magnetHub).toContain('getRuntimeService("http").request');
+        expect(magnetHub).toContain('getRuntimeService("scope")');
+        expect(magnetHub).toContain('trustClass: "custom-public"');
+        expect(magnetHub).toContain('trustClass: "builtin-public"');
     });
 
     it("uses an explicit unknown category without conflating it with all", () => {

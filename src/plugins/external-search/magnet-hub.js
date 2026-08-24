@@ -95,7 +95,7 @@ export class MagnetHubPlugin extends BasePlugin {
             return void e.html(`<div class="magnet-error">${escapeHtml(t.name)} 请求失败</div>`);
         }
         if (t.parseHtml) try {
-            const i = t.url.replace("{keyword}", encodeURIComponent(n)), s = await storageManager.cachedRequest(`magnet:${t.id}:${n}`, 216e5, (() => gmHttp.get(i).then((e => t.parseHtml.call(this, e, n)))));
+            const i = t.url.replace("{keyword}", encodeURIComponent(n)), payload = await this.requestSource(t.id, i, { ttlMs: 216e5 }), s = t.parseHtml.call(this, payload, n);
             return void this.displayResults(e, s, t.name);
         } catch (s) {
             return void e.html(`<div class="magnet-error">解析 ${escapeHtml(t.name)} 结果失败: ${escapeHtml(s.message)}</div>`);
@@ -104,10 +104,9 @@ export class MagnetHubPlugin extends BasePlugin {
     }
     async searchTorrentSource(source, template, keyword) {
         const url = template.replace("{keyword}", encodeURIComponent(keyword));
-        return storageManager.cachedRequest(`magnet:${source}:${keyword}`, CACHE_TTL.magnet, (async () => {
-            const html = await gmHttp.get(url);
-            return this.parseTorrentList(html, keyword).map((item => ({ ...item, source, files: [] })));
-        }));
+        const config = BUILT_IN_MAGNET_SOURCES.find((item => item.id === source)), targetHost = new URL(url).hostname;
+        const html = await this.requestSource(source, url, { ttlMs: CACHE_TTL.magnet, hosts: config?.domain ? [config.domain] : undefined, custom: Boolean(config?.domain && targetHost !== config.domain) });
+        return this.parseTorrentList(html, keyword).map((item => ({ ...item, source, files: [] })));
     }
     async searchCustomSources(keyword) {
         const configs = JSON.parse(await storageManager.getSetting("customMagnetSources", "[]"));
@@ -115,23 +114,37 @@ export class MagnetHubPlugin extends BasePlugin {
         const groups = await mapLimit(enabled, 4, (async config => {
             const url = config.searchUrlTemplate.replaceAll("{keyword}", encodeURIComponent(keyword));
             try {
-                const payload = await storageManager.cachedRequest(`magnet:custom:${config.id}:${keyword}`, CACHE_TTL.magnet, (() => gmHttp.get(url)));
+                const payload = await this.requestSource(config.id, url, { ttlMs: CACHE_TTL.magnet, custom: true, responseType: config.parserType === "json" ? "json" : "text" });
                 const parsed = "json" === config.parserType && "string" === typeof payload ? JSON.parse(payload) : payload;
                 return parseCustomMagnetResponse(config, parsed, config.id);
-            } catch (cause) { clog.error(`自定义磁力源 ${config.name} 失败`, new ProviderError(config.id, cause._cfBlocked ? "CF_BLOCKED" : "HTTP_ERROR", cause.message, { cause, url, status: cause.status })); return []; }
+            } catch (cause) { clog.error(`自定义磁力源 ${config.name} 失败`, new ProviderError(config.id, cause.code || "HTTP_ERROR", cause.message, { cause, url, status: cause.status, retryable: cause.retryable })); return []; }
         }));
         return deduplicateMagnetResults(groups.flat());
     }
     async searchCustomSource(config, keyword) {
         const url = config.searchUrlTemplate.replaceAll("{keyword}", encodeURIComponent(keyword));
-        const payload = await storageManager.cachedRequest(`magnet:custom:${config.id}:${keyword}`, CACHE_TTL.magnet, (() => gmHttp.get(url)));
+        const payload = await this.requestSource(config.id, url, { ttlMs: CACHE_TTL.magnet, custom: true, responseType: config.parserType === "json" ? "json" : "text" });
         return parseCustomMagnetResponse(config, "json" === config.parserType && "string" === typeof payload ? JSON.parse(payload) : payload, config.id);
     }
     async searchAllSources(sources, keyword) { const groups = await mapLimit(sources, 3, (async source => { try { return await source.search(keyword); } catch (error) { clog.warn(`磁力源 ${source.name} 聚合失败`, error); return []; } })); return deduplicateMagnetResults(groups.flat()); }
     async searchBtsow(keyword, baseUrl = "https://btsow.lol") {
-        const payload = await storageManager.cachedRequest(`magnet:btsow:${keyword}`, CACHE_TTL.magnet, (() => gmHttp.gmRequest("POST", `${baseUrl}/search`, JSON.stringify([{ search: keyword }, 50, 1]), {}, { "Content-Type": "application/json" })));
+        const defaultHost = BUILT_IN_MAGNET_SOURCES.find((item => item.id === "btsow"))?.domain, targetHost = new URL(baseUrl).hostname;
+        const payload = await this.requestSource("btsow", `${baseUrl}/search`, {
+            method: "POST", body: JSON.stringify([{ search: keyword }, 50, 1]), responseType: "json", headers: { "Content-Type": "application/json" },
+            custom: targetHost !== defaultHost, hosts: defaultHost ? [defaultHost] : undefined,
+        });
         const value = "string" === typeof payload ? JSON.parse(payload) : payload;
         return (value?.data || []).map((item => normalizeMagnetResult({ title: item.name, magnet: `magnet:?xt=urn:btih:${item.hash}`, size: `${(Number(item.size) / 1073741824).toFixed(2)} GB`, date: utils.formatDate(new Date(1e3 * item.lastUpdateTime)) }, "btsow"))).filter(Boolean);
+    }
+    /** 通过统一 HTTP/URL Policy 边界请求磁力来源。 */
+    async requestSource(sourceId, url, options = {}) {
+        const scope = await this.getRuntimeService("scope")(), response = await this.getRuntimeService("http").request({
+            providerId: `magnet:${sourceId}`, method: options.method || "GET", url, body: options.body,
+            headers: options.headers, responseType: options.responseType || "text",
+            cacheScope: options.method && options.method !== "GET" ? "none" : "public", ttlMs: options.ttlMs ?? CACHE_TTL.magnet,
+            urlPolicy: options.custom ? { trustClass: "custom-public" } : { trustClass: "builtin-public", hosts: options.hosts || [new URL(url).hostname] },
+        }, scope);
+        return response.data;
     }
     async applyRuntimeRules(results) {
         const service = new ResourceSettingsService(), [tags, filters] = await Promise.all([service.getMagnetTagRules(), service.getMagnetFilterRules()]);

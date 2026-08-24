@@ -9787,7 +9787,7 @@ ${error.stack}` : "");
         return void e2.html(`<div class="magnet-error">${escapeHtml(t2.name)} 请求失败</div>`);
       }
       if (t2.parseHtml) try {
-        const i2 = t2.url.replace("{keyword}", encodeURIComponent(n2)), s2 = await storageManager.cachedRequest(`magnet:${t2.id}:${n2}`, 216e5, (() => gmHttp.get(i2).then(((e3) => t2.parseHtml.call(this, e3, n2)))));
+        const i2 = t2.url.replace("{keyword}", encodeURIComponent(n2)), payload = await this.requestSource(t2.id, i2, { ttlMs: 216e5 }), s2 = t2.parseHtml.call(this, payload, n2);
         return void this.displayResults(e2, s2, t2.name);
       } catch (s2) {
         return void e2.html(`<div class="magnet-error">解析 ${escapeHtml(t2.name)} 结果失败: ${escapeHtml(s2.message)}</div>`);
@@ -9796,10 +9796,9 @@ ${error.stack}` : "");
     }
     async searchTorrentSource(source, template, keyword) {
       const url = template.replace("{keyword}", encodeURIComponent(keyword));
-      return storageManager.cachedRequest(`magnet:${source}:${keyword}`, CACHE_TTL.magnet, (async () => {
-        const html = await gmHttp.get(url);
-        return this.parseTorrentList(html, keyword).map(((item) => ({ ...item, source, files: [] })));
-      }));
+      const config = BUILT_IN_MAGNET_SOURCES.find(((item) => item.id === source)), targetHost = new URL(url).hostname;
+      const html = await this.requestSource(source, url, { ttlMs: CACHE_TTL.magnet, hosts: config?.domain ? [config.domain] : void 0, custom: Boolean(config?.domain && targetHost !== config.domain) });
+      return this.parseTorrentList(html, keyword).map(((item) => ({ ...item, source, files: [] })));
     }
     async searchCustomSources(keyword) {
       const configs = JSON.parse(await storageManager.getSetting("customMagnetSources", "[]"));
@@ -9807,11 +9806,11 @@ ${error.stack}` : "");
       const groups = await mapLimit(enabled, 4, (async (config) => {
         const url = config.searchUrlTemplate.replaceAll("{keyword}", encodeURIComponent(keyword));
         try {
-          const payload = await storageManager.cachedRequest(`magnet:custom:${config.id}:${keyword}`, CACHE_TTL.magnet, (() => gmHttp.get(url)));
+          const payload = await this.requestSource(config.id, url, { ttlMs: CACHE_TTL.magnet, custom: true, responseType: config.parserType === "json" ? "json" : "text" });
           const parsed = "json" === config.parserType && "string" === typeof payload ? JSON.parse(payload) : payload;
           return parseCustomMagnetResponse(config, parsed, config.id);
         } catch (cause) {
-          clog.error(`自定义磁力源 ${config.name} 失败`, new ProviderError(config.id, cause._cfBlocked ? "CF_BLOCKED" : "HTTP_ERROR", cause.message, { cause, url, status: cause.status }));
+          clog.error(`自定义磁力源 ${config.name} 失败`, new ProviderError(config.id, cause.code || "HTTP_ERROR", cause.message, { cause, url, status: cause.status, retryable: cause.retryable }));
           return [];
         }
       }));
@@ -9819,7 +9818,7 @@ ${error.stack}` : "");
     }
     async searchCustomSource(config, keyword) {
       const url = config.searchUrlTemplate.replaceAll("{keyword}", encodeURIComponent(keyword));
-      const payload = await storageManager.cachedRequest(`magnet:custom:${config.id}:${keyword}`, CACHE_TTL.magnet, (() => gmHttp.get(url)));
+      const payload = await this.requestSource(config.id, url, { ttlMs: CACHE_TTL.magnet, custom: true, responseType: config.parserType === "json" ? "json" : "text" });
       return parseCustomMagnetResponse(config, "json" === config.parserType && "string" === typeof payload ? JSON.parse(payload) : payload, config.id);
     }
     async searchAllSources(sources, keyword) {
@@ -9834,9 +9833,31 @@ ${error.stack}` : "");
       return deduplicateMagnetResults(groups.flat());
     }
     async searchBtsow(keyword, baseUrl = "https://btsow.lol") {
-      const payload = await storageManager.cachedRequest(`magnet:btsow:${keyword}`, CACHE_TTL.magnet, (() => gmHttp.gmRequest("POST", `${baseUrl}/search`, JSON.stringify([{ search: keyword }, 50, 1]), {}, { "Content-Type": "application/json" })));
+      const defaultHost = BUILT_IN_MAGNET_SOURCES.find(((item) => item.id === "btsow"))?.domain, targetHost = new URL(baseUrl).hostname;
+      const payload = await this.requestSource("btsow", `${baseUrl}/search`, {
+        method: "POST",
+        body: JSON.stringify([{ search: keyword }, 50, 1]),
+        responseType: "json",
+        headers: { "Content-Type": "application/json" },
+        custom: targetHost !== defaultHost,
+        hosts: defaultHost ? [defaultHost] : void 0
+      });
       const value = "string" === typeof payload ? JSON.parse(payload) : payload;
       return (value?.data || []).map(((item) => normalizeMagnetResult({ title: item.name, magnet: `magnet:?xt=urn:btih:${item.hash}`, size: `${(Number(item.size) / 1073741824).toFixed(2)} GB`, date: utils.formatDate(new Date(1e3 * item.lastUpdateTime)) }, "btsow"))).filter(Boolean);
+    }
+    async requestSource(sourceId, url, options = {}) {
+      const scope = await this.getRuntimeService("scope")(), response = await this.getRuntimeService("http").request({
+        providerId: `magnet:${sourceId}`,
+        method: options.method || "GET",
+        url,
+        body: options.body,
+        headers: options.headers,
+        responseType: options.responseType || "text",
+        cacheScope: options.method && options.method !== "GET" ? "none" : "public",
+        ttlMs: options.ttlMs ?? CACHE_TTL.magnet,
+        urlPolicy: options.custom ? { trustClass: "custom-public" } : { trustClass: "builtin-public", hosts: options.hosts || [new URL(url).hostname] }
+      }, scope);
+      return response.data;
     }
     async applyRuntimeRules(results) {
       const service = new ResourceSettingsService(), [tags, filters] = await Promise.all([service.getMagnetTagRules(), service.getMagnetFilterRules()]);
@@ -15387,7 +15408,7 @@ ${error.stack}` : "");
     manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie, SERVICE.storage]),
     manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings]),
     manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }, [SERVICE.http]),
-    manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage]),
+    manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage, SERVICE.http]),
     manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot]),
     manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [SERVICE.dialog, SERVICE.storage, SERVICE.http]),
     manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }),
