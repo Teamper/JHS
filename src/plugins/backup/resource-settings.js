@@ -1,3 +1,5 @@
+// @ts-check
+
 import { MAGNET_SOURCE_IDS, validateCustomMagnetSource, validateHttpsBaseUrl } from "../external-search/magnet-source-registry.js";
 
 export const BUILT_IN_NATIVE_MAGNET_SOURCES = Object.freeze([
@@ -11,13 +13,15 @@ export const BUILT_IN_SCREENSHOT_SOURCES = Object.freeze([
     { id: "18av", name: "18AV", domain: "18av.mm-cg.com", priority: 30, enabled: false, implemented: false }
 ]);
 
-export function validateRule(rule) {
+/** @typedef {Record<string, any>} ResourceRecord */
+
+export function validateRule(/** @type {ResourceRecord} */ rule) {
     if (!rule.name?.trim() || !rule.pattern?.trim()) throw new TypeError("规则名称和匹配内容不能为空");
     if ("regex" === rule.type) try { new RegExp(rule.pattern); } catch { throw new TypeError("正则表达式无效"); }
     return { ...rule, name: rule.name.trim(), pattern: rule.pattern.trim() };
 }
 
-export function buildCustomMagnetSource(form, existing = null) {
+export function buildCustomMagnetSource(/** @type {ResourceRecord} */ form, /** @type {ResourceRecord | null} */ existing = null) {
     const parserType = form.parserType || "magnet-links";
     const config = { id: existing?.id || `source-${Date.now()}`, name: String(form.name || "").trim(), enabled: Boolean(form.enabled), priority: Number(form.priority) || 100, searchUrlTemplate: String(form.searchUrlTemplate || "").trim(), targetUrlTemplate: String(form.targetUrlTemplate || form.searchUrlTemplate || "").trim(), parserType };
     if (!config.name) throw new TypeError("来源名称不能为空");
@@ -27,26 +31,26 @@ export function buildCustomMagnetSource(form, existing = null) {
 }
 
 export class ResourceSettingsService {
-    constructor(storage = storageManager) { this.storage = storage; }
-    async getArray(key) { const value = await this.storage.getSetting(key, "[]"); if (Array.isArray(value)) return value; try { const parsed = JSON.parse(value || "[]"); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
-    async saveArray(key, value) { if (!Array.isArray(value)) throw new TypeError("配置必须是数组"); await this.storage.saveSettingItem(key, JSON.stringify(value)); return value; }
+    constructor(/** @type {any} */ storage = storageManager) { this.storage = storage; }
+    async getArray(/** @type {string} */ key) { const value = await this.storage.getSetting(key, "[]"); if (Array.isArray(value)) return value; try { const parsed = JSON.parse(value || "[]"); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
+    async saveArray(/** @type {string} */ key, /** @type {any[]} */ value) { if (!Array.isArray(value)) throw new TypeError("配置必须是数组"); await this.storage.saveSettingItem(key, JSON.stringify(value)); return value; }
     getMagnetSources() { return this.getArray("customMagnetSources"); }
-    saveMagnetSources(value) { value.forEach(validateCustomMagnetSource); return this.saveArray("customMagnetSources", value); }
+    saveMagnetSources(/** @type {ResourceRecord[]} */ value) { value.forEach(validateCustomMagnetSource); return this.saveArray("customMagnetSources", value); }
     getMagnetTagRules() { return this.getArray("magnetTagRules"); }
-    saveMagnetTagRules(value) { value.forEach(validateRule); return this.saveArray("magnetTagRules", value); }
+    saveMagnetTagRules(/** @type {ResourceRecord[]} */ value) { value.forEach(validateRule); return this.saveArray("magnetTagRules", value); }
     getMagnetFilterRules() { return this.getArray("magnetFilterRules"); }
-    saveMagnetFilterRules(value) { value.forEach(validateRule); return this.saveArray("magnetFilterRules", value); }
+    saveMagnetFilterRules(/** @type {ResourceRecord[]} */ value) { value.forEach(validateRule); return this.saveArray("magnetFilterRules", value); }
     async getBuiltInSources() { return await this.getArray("magnetBuiltInSources"); }
-    saveBuiltInSources(value) { value.forEach((source => { if (!MAGNET_SOURCE_IDS.includes(source.id)) throw new TypeError("未知的内置磁力源"); if (source.baseUrl) validateHttpsBaseUrl(source.baseUrl); if (source.priority != null && (!Number.isFinite(Number(source.priority)) || Number(source.priority) < 1)) throw new TypeError("来源优先级无效"); })); return this.saveArray("magnetBuiltInSources", value); }
+    saveBuiltInSources(/** @type {ResourceRecord[]} */ value) { value.forEach((source => { if (!MAGNET_SOURCE_IDS.includes(source.id)) throw new TypeError("未知的内置磁力源"); if (source.baseUrl) validateHttpsBaseUrl(source.baseUrl); if (source.priority != null && (!Number.isFinite(Number(source.priority)) || Number(source.priority) < 1)) throw new TypeError("来源优先级无效"); })); return this.saveArray("magnetBuiltInSources", value); }
     async getScreenshotSettings() { return { mode: await this.storage.getSetting("screenshotMode", "auto"), providers: await this.getArray("screenshotProviders") }; }
-    async saveScreenshotSettings(value) { await this.storage.saveSettingItem("screenshotMode", value.mode); await this.saveArray("screenshotProviders", value.providers); }
+    async saveScreenshotSettings(/** @type {ResourceRecord} */ value) { await this.storage.saveSettingItem("screenshotMode", value.mode); await this.saveArray("screenshotProviders", value.providers); }
     async getCloudSettings() { return { enable123Offline: Boolean(await this.storage.getSetting("enable123Offline", true)), enable115Offline: Boolean(await this.storage.getSetting("enable115Offline", false)), enable115Match: Boolean(await this.storage.getSetting("enable115Match", false)), enable115LoginRedirect: Boolean(await this.storage.getSetting("enable115LoginRedirect", false)), providerMode: await this.storage.getSetting("offlineProviderMode", "ask"), concurrency: Number(await this.storage.getSetting("oneOneFiveConcurrency", 4)), cacheMinutes: Number(await this.storage.getSetting("oneOneFiveCacheMinutes", 60)) }; }
-    async saveCloudSettings(value) { for (const [key, item] of Object.entries({ enable123Offline: value.enable123Offline, enable115Offline: value.enable115Offline, enable115Match: value.enable115Match, enable115LoginRedirect: value.enable115LoginRedirect, offlineProviderMode: value.providerMode || "ask", oneOneFiveConcurrency: value.concurrency, oneOneFiveCacheMinutes: value.cacheMinutes })) await this.storage.saveSettingItem(key, item); }
+    async saveCloudSettings(/** @type {ResourceRecord} */ value) { for (const [key, item] of Object.entries({ enable123Offline: value.enable123Offline, enable115Offline: value.enable115Offline, enable115Match: value.enable115Match, enable115LoginRedirect: value.enable115LoginRedirect, offlineProviderMode: value.providerMode || "ask", oneOneFiveConcurrency: value.concurrency, oneOneFiveCacheMinutes: value.cacheMinutes })) await this.storage.saveSettingItem(key, item); }
     async exportConfig() { return { customMagnetSources: await this.getMagnetSources(), magnetTagRules: await this.getMagnetTagRules(), magnetFilterRules: await this.getMagnetFilterRules(), magnetBuiltInSources: await this.getBuiltInSources(), screenshot: await this.getScreenshotSettings() }; }
-    async importConfig(text) {
-        let value; try { value = JSON.parse(text); } catch (error) { throw new TypeError(`配置格式错误：${error.message}`); }
+    async importConfig(/** @type {string} */ text) {
+        /** @type {ResourceRecord} */ let value; try { value = JSON.parse(text); } catch (error) { throw new TypeError(`配置格式错误：${error instanceof Error ? error.message : String(error)}`); }
         if (!value || "object" !== typeof value || Array.isArray(value)) throw new TypeError("配置格式错误：根节点必须是对象");
-        const operations = [];
+        /** @type {Array<() => Promise<unknown>>} */ const operations = [];
         if (Object.hasOwn(value, "customMagnetSources")) { if (!Array.isArray(value.customMagnetSources)) throw new TypeError("自定义磁力源必须是数组"); value.customMagnetSources.forEach(validateCustomMagnetSource); operations.push(() => this.saveMagnetSources(value.customMagnetSources)); }
         if (Object.hasOwn(value, "magnetTagRules")) { if (!Array.isArray(value.magnetTagRules)) throw new TypeError("标签规则必须是数组"); value.magnetTagRules.forEach(validateRule); operations.push(() => this.saveMagnetTagRules(value.magnetTagRules)); }
         if (Object.hasOwn(value, "magnetFilterRules")) { if (!Array.isArray(value.magnetFilterRules)) throw new TypeError("过滤规则必须是数组"); value.magnetFilterRules.forEach(validateRule); operations.push(() => this.saveMagnetFilterRules(value.magnetFilterRules)); }

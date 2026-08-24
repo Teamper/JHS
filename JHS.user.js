@@ -292,8 +292,9 @@
   }
   __name(createEmptyStateFlags, "createEmptyStateFlags");
   function stateFlagsFromLegacyStatus(status) {
-    const flags = createEmptyStateFlags(), flag = LEGACY_STATUS_TO_FLAG[status];
-    return flag && (flags[flag] = true), flags;
+    const flags = createEmptyStateFlags(), flag = typeof status === "string" ? LEGACY_STATUS_TO_FLAG[status] : void 0;
+    if (flag) flags[flag] = true;
+    return flags;
   }
   __name(stateFlagsFromLegacyStatus, "stateFlagsFromLegacyStatus");
   function normalizeStateFlags(flags) {
@@ -316,11 +317,13 @@
   }
   __name(hasAnyState, "hasAnyState");
   function legacyActionToFlag(actionType) {
-    return LEGACY_STATUS_TO_FLAG[actionType] || null;
+    return typeof actionType === "string" ? LEGACY_STATUS_TO_FLAG[actionType] || null : null;
   }
   __name(legacyActionToFlag, "legacyActionToFlag");
   function mergeCanonicalCarRecords(records) {
-    const groups = /* @__PURE__ */ new Map(), collisions = [], unknownStatuses = [];
+    const groups = /* @__PURE__ */ new Map();
+    const collisions = [];
+    const unknownStatuses = [];
     records.filter(Boolean).forEach(((record) => {
       const original = record.carNum, carNum = normalizeCarNum(original);
       if (!carNum) return;
@@ -332,7 +335,8 @@
     const list = [];
     for (const [carNum, group] of groups) {
       const sorted = group.map(((entry) => entry.item)).sort(((left, right) => String(left.updateDate || "").localeCompare(String(right.updateDate || ""))));
-      const merged = {}, flags = createEmptyStateFlags();
+      const merged = {};
+      const flags = createEmptyStateFlags();
       sorted.forEach(((record) => {
         Object.entries(record).forEach((([key, value]) => null != value && "" !== value && "stateFlags" !== key && "status" !== key && (merged[key] = value)));
         STATE_FLAG_NAMES.forEach(((name) => flags[name] = flags[name] || record.stateFlags[name]));
@@ -372,7 +376,7 @@
   __name(hasPortableUserData, "hasPortableUserData");
   async function ensureV2MigrationSnapshot(storage) {
     if (!await hasPortableUserData(storage)) return null;
-    const snapshots = await storage._getSnapshots(), existing = snapshots.find(((item) => "migration-snapshot" === item.kind && 2 === item.targetDataVersion));
+    const snapshots = await storage._getSnapshots(), existing = snapshots.find((item) => "migration-snapshot" === item.kind && 2 === item.targetDataVersion);
     if (existing) return existing;
     const data = await storage.exportPortableData(), snapshot = {
       id: "migration_v2_" + Date.now(),
@@ -398,14 +402,14 @@
     const cars = await storage.forage.getItem(storage.car_list_key) || [], result = mergeCanonicalCarRecords(cars);
     await storage._setItemAndInvalidate(storage.car_list_key, result.list);
     const actresses = await storage.forage.getItem(storage.favorite_actresses_key) || [];
-    const migratedActresses = actresses.map(((actress) => {
+    const migratedActresses = actresses.map((actress) => {
       if (!Array.isArray(actress.newVideoList)) return actress;
-      const newVideoList = actress.newVideoList.map(((item) => "string" == typeof item ? normalizeCarNum(item) : {
+      const newVideoList = actress.newVideoList.map((item) => "string" == typeof item ? normalizeCarNum(item) : {
         ...item,
         carNum: normalizeCarNum(item.carNum)
-      })).filter(((item) => "string" == typeof item ? item : item.carNum));
+      }).filter(((item) => "string" == typeof item ? item : item.carNum));
       return { ...actress, newVideoList };
-    }));
+    });
     await storage._setItemAndInvalidate(storage.favorite_actresses_key, migratedActresses);
     const warnings = await storage.forage.getItem("data_health_warnings") || [];
     result.collisions.length && warnings.push({ type: "canonical-collision", createdAt: (/* @__PURE__ */ new Date()).toISOString(), items: result.collisions });
@@ -1356,7 +1360,8 @@
   }
   __name(groupDuplicateItems, "groupDuplicateItems");
   function dedupeByKey(items, key) {
-    const seen = /* @__PURE__ */ new Map(), list = [];
+    const seen = /* @__PURE__ */ new Map();
+    const list = [];
     let changed = false;
     for (const item of items) {
       const value = item && item[key];
@@ -1364,8 +1369,9 @@
         list.push(item);
         continue;
       }
-      if (seen.has(value)) {
-        Object.assign(seen.get(value), item), changed = true;
+      const existing = seen.get(value);
+      if (existing) {
+        Object.assign(existing, item), changed = true;
       } else seen.set(value, item), list.push(item);
     }
     return {
@@ -4525,13 +4531,13 @@
   }
   __name(normalizeBtihHash, "normalizeBtihHash");
   function parseCarNumberText(text) {
-    const tokens = String(text || "").split(/[\s,，;；]+/).map(((item) => normalizeCarNum(item))).filter(Boolean);
+    const tokens = String(text || "").split(/[\s,，;；]+/).map(((item) => normalizeCarNum(item))).filter(((item) => "string" == typeof item));
     const valid = tokens.filter(((item) => /^(?:FC2-)?[A-Z\d]+(?:-[A-Z\d]+)+$/i.test(item)));
     return { recognized: tokens.length, values: [...new Set(valid.map(((item) => item.toUpperCase())))], invalid: tokens.filter(((item) => !valid.includes(item))) };
   }
   __name(parseCarNumberText, "parseCarNumberText");
   function buildFallbackCarUrl(carNum, baseUrl = "https://javdb.com") {
-    return `${baseUrl}/search?q=${encodeURIComponent(carNum)}`;
+    return `${baseUrl}/search?q=${encodeURIComponent(String(carNum ?? ""))}`;
   }
   __name(buildFallbackCarUrl, "buildFallbackCarUrl");
   async function safePlay(mediaElement, { context = "视频", notify = false, message = "当前视频源无法播放" } = {}) {
@@ -4545,7 +4551,7 @@
       return true;
     } catch (error) {
       clog.warn(`${context}播放失败`, error);
-      const name = error?.name || "";
+      const name = error && "object" == typeof error && "name" in error ? String(error.name) : "";
       notify && !["NotAllowedError", "AbortError"].includes(name) && show.error(message);
       return false;
     }
@@ -4617,7 +4623,8 @@
     const tags = tagRules.filter(((rule) => rule.enabled && matches(rule, text)));
     let hidden = false, penalty = 0;
     const filteredReasons = [];
-    [...titleFilters.map(((rule) => ({ ...rule, value: result.title || "" }))), ...fileFilters.map(((rule) => ({ ...rule, value: (result.files || []).join(" ") })))].filter(((rule) => rule.enabled)).forEach(((rule) => {
+    const filterRules = [...titleFilters.map(((rule) => ({ ...rule, value: result.title || "" }))), ...fileFilters.map(((rule) => ({ ...rule, value: (result.files || []).join(" ") })))];
+    filterRules.filter(((rule) => rule.enabled)).forEach(((rule) => {
       if (!matches(rule, rule.value)) return;
       filteredReasons.push(rule.id || rule.pattern);
       "hide" === rule.action ? hidden = true : penalty += Number(rule.penalty) || 0;
@@ -4753,7 +4760,7 @@
       try {
         value = JSON.parse(text);
       } catch (error) {
-        throw new TypeError(`配置格式错误：${error.message}`);
+        throw new TypeError(`配置格式错误：${error instanceof Error ? error.message : String(error)}`);
       }
       if (!value || "object" !== typeof value || Array.isArray(value)) throw new TypeError("配置格式错误：根节点必须是对象");
       const operations = [];
@@ -8571,6 +8578,10 @@
   var U = "https://jdforrepam.com/api";
   var signatureSecond = 0;
   var signatureValue = "";
+  function asResponseRecord(value) {
+    return value && "object" == typeof value ? value : {};
+  }
+  __name(asResponseRecord, "asResponseRecord");
   function O() {
     const now = Math.floor(Date.now() / 1e3);
     if (signatureValue && now - signatureSecond <= 20) return signatureValue;
@@ -8582,8 +8593,7 @@
   async function markJavDbWantWatch(movieId) {
     const id = String(movieId || "").trim(), encryptedToken = localStorage.getItem("jhs_appAuthorization"), token = encryptedToken ? await decryptData(encryptedToken) : "";
     if (!token) {
-      const error = new Error("请先登录 JavDB 账号");
-      throw error.code = "LOGIN_REQUIRED", error;
+      throw Object.assign(new Error("请先登录 JavDB 账号"), { code: "LOGIN_REQUIRED" });
     }
     if (!id) throw new Error("JavDB 影片 ID 无效");
     const boundary = "----jhs-javdb-want-watch", body = [["status", "want_watch"], ["score", "0"], ["content", ""]].map((([name, value]) => `--${boundary}\r
@@ -8604,12 +8614,12 @@ ${value}\r
       await storageManager.deleteCachedRequest(`movie-detail:${id}`);
       return response;
     } catch (error) {
-      if (401 === error?.status || "JWTVerificationError" === error?.action || /未登录|登录|unauthorized|jwt/i.test(error?.message || "")) {
+      const failure = asResponseRecord(error);
+      if (401 === failure.status || "JWTVerificationError" === failure.action || /未登录|登录|unauthorized|jwt/i.test(failure.message || "")) {
         localStorage.removeItem("jhs_appAuthorization");
-        const loginError = new Error("JavDB 登录已失效，请重新登录");
-        throw loginError.code = "LOGIN_REQUIRED", loginError;
+        throw Object.assign(new Error("JavDB 登录已失效，请重新登录"), { code: "LOGIN_REQUIRED" });
       }
-      throw error instanceof Error ? error : new Error(error?.message || "加入 JavDB 想看失败");
+      throw error instanceof Error ? error : new Error(failure.message || "加入 JavDB 想看失败");
     }
   }
   __name(markJavDbWantWatch, "markJavDbWantWatch");

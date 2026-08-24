@@ -1,3 +1,5 @@
+// @ts-check
+
 export class JhsEventBus {
     /** @param {string} [channelName] */
     constructor(channelName = "channel-refresh") {

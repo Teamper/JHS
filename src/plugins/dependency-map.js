@@ -1,3 +1,5 @@
+// @ts-check
+
 /**
  * Transitional dependency declarations for legacy plugins.
  *

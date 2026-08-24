@@ -1,3 +1,5 @@
+// @ts-check
+
 /** 设计令牌层 (Design tokens): 全部 --jhs-* 变量, 亮色(:root) + 暗色(:root[data-jhs-theme="dark"])。
  * 在 css-injection.js 最先注入, 供所有后续插件 CSS 通过 var(--jhs-*) 消费。 */
 
@@ -410,7 +412,7 @@ export async function applyTheme() {
 export function initializeThemeRuntime(scope) {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     scope.listen(media, "change", () => {
-        storageManager.getSetting("themeMode", "light").then((mode => {
+        storageManager.getSetting("themeMode", "light").then(((/** @type {unknown} */ mode) => {
             if ("auto" === mode) void applyTheme();
         }));
     });

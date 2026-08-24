@@ -1,3 +1,5 @@
+// @ts-check
+
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 export const CACHE_TTL = Object.freeze({ magnet: 6 * HOUR, screenshot: 7 * DAY, screenshotNegative: 12 * HOUR, match115: HOUR, externalDetail: DAY });

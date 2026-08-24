@@ -1,3 +1,5 @@
+// @ts-check
+
 export const LEGACY_PLUGIN_CONTRIBUTION_MAP = Object.freeze({
     ListPagePlugin: "list.core",
     AutoPagePlugin: "list.auto-page",
