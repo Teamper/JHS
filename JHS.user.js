@@ -13111,7 +13111,31 @@ ${failure.stack}` : "");
   // src/plugins/new-video/task.js
   var _TaskPlugin = class _TaskPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "singleTaskKey", "checkNewActressActorFilterCar"), i(this, "taskConfig", null), i(this, "storageQueue", new StorageQueue()), i(this, "lastCheckFavoriteActressTimeKey", "jhs_time_checkFavoriteActress"), i(this, "lastCheckBlacklistTimeKey", "jhs_time_checkBlacklist"), i(this, "lastCheckNewVideoTimeKey", "jhs_time_checkNewVideo"), i(this, "lastCheckFavoriteActressAttemptKey", "jhs_time_checkFavoriteActress_attempt"), i(this, "lastCheckFavoriteActressNextKey", "jhs_time_checkFavoriteActress_next"), i(this, "lastCheckBlacklistAttemptKey", "jhs_time_checkBlacklist_attempt"), i(this, "lastCheckBlacklistNextKey", "jhs_time_checkBlacklist_next"), i(this, "lastCheckNewVideoAttemptKey", "jhs_time_checkNewVideo_attempt"), i(this, "lastCheckNewVideoNextKey", "jhs_time_checkNewVideo_next"), i(this, "taskTimer", null), i(this, "taskRunning", false), i(this, "visibilityHandler", null), i(this, "pageHideHandler", null), i(this, "lifecycleScope", null), i(this, "settingsHandler", null), i(this, "taskConfigDirty", false), i(this, "configLoadPromise", null), i(this, "configLoadQueued", false), i(this, "configRefreshPromise", null), i(this, "configRefreshQueued", false), i(this, "activeTasks", /* @__PURE__ */ new Set());
+      super(...arguments);
+      this.singleTaskKey = "checkNewActressActorFilterCar";
+      this.taskConfig = null;
+      this.storageQueue = new StorageQueue();
+      this.lastCheckFavoriteActressTimeKey = "jhs_time_checkFavoriteActress";
+      this.lastCheckBlacklistTimeKey = "jhs_time_checkBlacklist";
+      this.lastCheckNewVideoTimeKey = "jhs_time_checkNewVideo";
+      this.lastCheckFavoriteActressAttemptKey = "jhs_time_checkFavoriteActress_attempt";
+      this.lastCheckFavoriteActressNextKey = "jhs_time_checkFavoriteActress_next";
+      this.lastCheckBlacklistAttemptKey = "jhs_time_checkBlacklist_attempt";
+      this.lastCheckBlacklistNextKey = "jhs_time_checkBlacklist_next";
+      this.lastCheckNewVideoAttemptKey = "jhs_time_checkNewVideo_attempt";
+      this.lastCheckNewVideoNextKey = "jhs_time_checkNewVideo_next";
+      this.taskTimer = null;
+      this.taskRunning = false;
+      this.visibilityHandler = null;
+      this.pageHideHandler = null;
+      this.lifecycleScope = null;
+      this.settingsHandler = null;
+      this.taskConfigDirty = false;
+      this.configLoadPromise = null;
+      this.configLoadQueued = false;
+      this.configRefreshPromise = null;
+      this.configRefreshQueued = false;
+      this.activeTasks = /* @__PURE__ */ new Set();
     }
     getName() {
       return "TaskPlugin";
@@ -13135,7 +13159,7 @@ ${failure.stack}` : "");
           o3 > 0 && (clog.debug(`剩余任务数: <span class="jhs-task-emphasis">${o3}</span>`), await utils.sleep(n2));
         }
       }));
-      const l2 = await Promise.allSettled(r2), c2 = l2.find(((e3) => "rejected" === e3.status));
+      const l2 = await Promise.allSettled(r2), c2 = l2.find((e3) => "rejected" === e3.status);
       if (c2) throw c2.reason;
     }
     isNetworkBlocked(e2) {
@@ -13161,8 +13185,9 @@ ${failure.stack}` : "");
         if (typeof response.data !== "string") throw new TypeError("宿主页面响应不是 HTML 文本");
         return response.data;
       } catch (error) {
-        error._taskNetwork = true;
-        throw error;
+        const taskError = error;
+        taskError._taskNetwork = true;
+        throw taskError;
       }
     }
     createTaskResult(extra = {}) {
@@ -13178,7 +13203,7 @@ ${failure.stack}` : "");
     }
     isUnnecessaryCheck(e2, t2) {
       if (!t2) throw new Error("未传入checkIntervalTime");
-      t2 = parseInt(t2);
+      t2 = parseInt(String(t2));
       return utils.getHourDifference(new Date(e2), /* @__PURE__ */ new Date()) < t2;
     }
     getTaskSchedule(name) {
@@ -13461,13 +13486,15 @@ ${failure.stack}` : "");
       this.beginTaskAttempt("favoriteActress"), result.attempted = true;
       return this.withActiveTask("favoriteActress", async () => {
         try {
-          const actors = [], sync = await this.scrapeActorInfo(`${this.javDbUrl}/users/collection_actors`, actors);
+          const actors = [];
+          const sync = await this.scrapeActorInfo(`${this.javDbUrl}/users/collection_actors`, actors);
           actors.length > 0 && await storageManager.addFavoriteActressList(actors), result.success = actors.length, result.actorCount = actors.length, result.pages = sync.pages;
           await this.finalizeTask("favoriteActress", true), result.completed = true, clog.log("所有演员信息已收集, 总计数量:", actors.length), $("#checkNewVideoMsg").text(`完整同步完成：演员 ${actors.length}，页面 ${sync.pages}`);
           actors.length > 0 && await this.emitNewVideoChanged("favorite-actress-sync");
           return result;
         } catch (error) {
-          result.completed = false, error?._taskNetwork ? result.networkFailed++ : result.parseFailed++, result.fatal = this.isNetworkBlocked(error), await this.finalizeTask("favoriteActress", false), $("#checkNewVideoMsg").text("演员同步失败，5 分钟后重试整轮"), clog.error("同步收藏演员失败", error);
+          const taskError = error;
+          result.completed = false, taskError?._taskNetwork ? result.networkFailed++ : result.parseFailed++, result.fatal = this.isNetworkBlocked(taskError), await this.finalizeTask("favoriteActress", false), $("#checkNewVideoMsg").text("演员同步失败，5 分钟后重试整轮"), clog.error("同步收藏演员失败", taskError);
           if (result.fatal) throw error;
           return result;
         }
@@ -13475,7 +13502,8 @@ ${failure.stack}` : "");
     }
     async scrapeActorInfo(startUrl, target = []) {
       const expected = new URL("/users/collection_actors", this.javDbUrl), visitedUrls = /* @__PURE__ */ new Set();
-      let currentUrl = new URL(startUrl, this.javDbUrl), pages = 0;
+      let currentUrl = new URL(startUrl, this.javDbUrl);
+      let pages = 0;
       for (; currentUrl; ) {
         try {
           if (currentUrl.origin !== expected.origin || currentUrl.pathname !== expected.pathname) throw new Error(`收藏演员分页地址越界: ${currentUrl.href}`);
@@ -13488,9 +13516,10 @@ ${failure.stack}` : "");
           target.push(...parsed.actors), currentUrl = parsed.nextUrl ? new URL(parsed.nextUrl, currentUrl.href) : null;
         } catch (error) {
           const requestCodes = ["NETWORK_ERROR", "TIMEOUT", "AUTH_REQUIRED", "RATE_LIMITED", "CF_BLOCKED", "CIRCUIT_OPEN", "ABORTED"];
-          requestCodes.includes(error?.code) && (error._taskNetwork = true);
-          error._taskNetwork || Object.prototype.hasOwnProperty.call(error, "_taskParse") || (error._taskParse = true);
-          throw clog.error(`抓取 ${currentUrl?.href || startUrl} 时发生错误，停止本轮同步:`, error), error;
+          const taskError = error;
+          requestCodes.includes(taskError?.code) && (taskError._taskNetwork = true);
+          taskError._taskNetwork || Object.prototype.hasOwnProperty.call(taskError, "_taskParse") || (taskError._taskParse = true);
+          throw clog.error(`抓取 ${currentUrl?.href || startUrl} 时发生错误，停止本轮同步:`, taskError), taskError;
         }
       }
       return { actors: target, pages };
@@ -13518,7 +13547,7 @@ ${failure.stack}` : "");
           }
           clog.log(`<span class="jhs-task-emphasis">检测最新作品, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
           if (eligible.length > 0) {
-            const titleKeywords = await storageManager.getTitleFilterKeyword(), blacklistCars = await storageManager.getBlacklistCarList(), blacklistSet = new Set(blacklistCars.map(((item) => item.carNum)));
+            const titleKeywords = await storageManager.getTitleFilterKeyword(), blacklistCars = await storageManager.getBlacklistCarList(), blacklistSet = new Set(blacklistCars.map((item) => item.carNum));
             try {
               await this.limitConcurrency(eligible, concurrency, sleep, (async (actress) => {
                 const { name, starId } = actress, url = `${this.javDbUrl}/actors/${starId}?t=d`;
@@ -13577,7 +13606,7 @@ ${failure.stack}` : "");
         const e3 = $(m2), { carNum: s3, url: o3, title: r2, publishTime: l2 } = readListItem(e3);
         l2 && publishTimes.push(l2);
         if (!s3) continue;
-        a2.find(((e4) => r2.includes(e4) || s3.includes(e4))) || (i2.has(s3) || (() => {
+        a2.find((e4) => r2.includes(e4) || s3.includes(e4)) || (i2.has(s3) || (() => {
           let coverUrl = e3.find("img").attr("src") || "";
           if (coverUrl && !coverUrl.startsWith("http")) {
             coverUrl = coverUrl.startsWith("/") ? this.javDbUrl + coverUrl : this.javDbUrl + "/" + coverUrl;
@@ -13599,7 +13628,7 @@ ${failure.stack}` : "");
           c2.push({ carNum: s3, coverUrl, title: r2 || "", publishTime: l2 || "", score, voteCount, url });
         })());
       }
-      const d2 = selectLatestPublishTime(publishTimes), h2 = await storageManager.getCarMap(), p2 = c2.filter(((e3) => !h2.has(e3.carNum)));
+      const d2 = selectLatestPublishTime(publishTimes), h2 = await storageManager.getCarMap(), p2 = c2.filter((e3) => !h2.has(e3.carNum));
       p2.length > 0 && clog.log(`<span class="jhs-task-emphasis">检测出新作品, ${n2}, 共${p2.length}部</span>`), await storageManager.updateFavoriteActress({
         starId: t2,
         lastCheckTime: utils.getNowStr(),
@@ -13610,10 +13639,10 @@ ${failure.stack}` : "");
     }
     async parseActorMovies(items, starId, name, titleKeywords, blacklistSet) {
       if (!items.length) return await storageManager.updateFavoriteActress({ starId, lastCheckTime: utils.getNowStr(), newVideoList: [] }), 0;
-      const publishTimes = items.map(((item) => item.publishTime)).filter(Boolean), candidates = items.filter(((item) => {
+      const publishTimes = items.map((item) => item.publishTime).filter(Boolean), candidates = items.filter((item) => {
         if (!item.carNum || blacklistSet.has(item.carNum)) return false;
-        return !titleKeywords.some(((keyword) => item.title?.includes(keyword) || item.carNum.includes(keyword)));
-      })).map(((item) => ({
+        return !titleKeywords.some((keyword) => item.title?.includes(keyword) || item.carNum.includes(keyword));
+      }).map((item) => ({
         carNum: item.carNum,
         coverUrl: item.coverUrl || "",
         title: item.title || "",
@@ -13621,15 +13650,15 @@ ${failure.stack}` : "");
         score: Number(item.score) || 0,
         voteCount: Number(item.voteCount) || 0,
         url: item.url || ""
-      })));
-      const latestPublishTime = selectLatestPublishTime(publishTimes), carMap = await storageManager.getCarMap(), fresh = candidates.filter(((item) => !carMap.has(item.carNum)));
+      }));
+      const latestPublishTime = selectLatestPublishTime(publishTimes), carMap = await storageManager.getCarMap(), fresh = candidates.filter((item) => !carMap.has(item.carNum));
       fresh.length > 0 && clog.log(`<span class="jhs-task-emphasis">检测出新作品, ${name}, 共${fresh.length}部</span>`);
       await storageManager.updateFavoriteActress({ starId, lastCheckTime: utils.getNowStr(), newVideoList: fresh, lastPublishTime: latestPublishTime });
       return fresh.length;
     }
     async checkOneNewVideo(e2) {
       await this.ensureReady();
-      const t2 = await storageManager.getTitleFilterKeyword(), n2 = await storageManager.getBlacklistCarList(), a2 = new Set(n2.map(((e3) => e3.carNum))), { lastCheckTime: i2, name: s2, starId: o2 } = e2;
+      const t2 = await storageManager.getTitleFilterKeyword(), n2 = await storageManager.getBlacklistCarList(), a2 = new Set(n2.map((e3) => e3.carNum)), { lastCheckTime: i2, name: s2, starId: o2 } = e2;
       let r2 = `${this.javDbUrl}/actors/${o2}?t=d`;
       const l2 = $("#checkNewVideoMsg");
       try {
@@ -15691,6 +15720,11 @@ ${failure.stack}` : "");
   var ListPageButtonPlugin = _ListPageButtonPlugin;
 
   // src/plugins/status/list-page.js
+  function getListEventBus() {
+    if (!jhsEventBus) throw new Error("List EventBus 未初始化");
+    return jhsEventBus;
+  }
+  __name(getListEventBus, "getListEventBus");
   var Te = {
     IS_FILTERED: {
       text: u,
@@ -15762,7 +15796,24 @@ ${failure.stack}` : "");
       return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}</style>`;
     }
     constructor() {
-      super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0), i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0), i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0), i(this, "currentPageTotalCount", 0), i(this, "filterContext", null), i(this, "pendingItems", /* @__PURE__ */ new Set()), i(this, "processTimer", null), i(this, "hdImageObserver", null), i(this, "hdEagerRemaining", 12), i(this, "writeQueue", Promise.resolve()), i(this, "itemIndex", /* @__PURE__ */ new Map()), i(this, "recountFrame", null);
+      super(...arguments);
+      this.currentPageFilterCount = 0;
+      this.currentPageFavoriteCount = 0;
+      this.currentPageHasDownCount = 0;
+      this.currentPageHasWatchCount = 0;
+      this.currentPageKeywordFilterCount = 0;
+      this.currentPageActorFilterCount = 0;
+      this.currentPageWaitCheckCount = 0;
+      this.currentPageTotalCount = 0;
+      this.filterContext = null;
+      this.pendingItems = /* @__PURE__ */ new Set();
+      this.processTimer = null;
+      this.hdImageObserver = null;
+      this.hdEagerRemaining = 12;
+      this.writeQueue = Promise.resolve();
+      this.itemIndex = /* @__PURE__ */ new Map();
+      this.recountFrame = null;
+      this.$currentImage = null;
     }
     getName() {
       return "ListPagePlugin";
@@ -15775,13 +15826,13 @@ ${failure.stack}` : "");
         const e2 = this.getDependency("HistoryPlugin");
         e2.tableObj && e2.tableObj.setData();
       }, "refreshAll");
-      ["legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed"].forEach(((type) => scope.addCleanup(jhsEventBus.on(type, refreshAll)))), scope.addCleanup(jhsEventBus.on("car-state-changed", (async (payload) => {
+      ["legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed"].forEach(((type) => scope.addCleanup(getListEventBus().on(type, refreshAll)))), scope.addCleanup(getListEventBus().on("car-state-changed", (async (payload) => {
         this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key);
         const items = this.getIndexedItems(payload.carNums || []);
         items.length && (await this.doFilterItems(items), this.applyVisibility(items));
         const history = this.getDependency("HistoryPlugin");
         history.tableObj && history.tableObj.setData();
-      }))), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(), this.rememberTagExpand(), $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await jhsEventBus.emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: false }), this.checkDom(scope), scope.addCleanup((() => {
+      }))), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(), this.rememberTagExpand(), $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await getListEventBus().emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: false }), this.checkDom(scope), scope.addCleanup((() => {
         this.processTimer && clearTimeout(this.processTimer), this.processTimer = null, this.pendingItems.clear();
         this.hdImageObserver?.disconnect(), this.hdImageObserver = null;
         this.recountFrame && (globalThis.cancelAnimationFrame?.(this.recountFrame) ?? clearTimeout(this.recountFrame)), this.recountFrame = null;
@@ -15827,8 +15878,8 @@ ${failure.stack}` : "");
     }
     applyVisibility(items = null) {
       const e2 = this.activeQuickFilter || "waitCheck", t2 = this.getSelector().itemSelector;
-      (items ? $(items) : $(t2)).each((function() {
-        const t3 = $(this), flags = normalizeStateFlags(JSON.parse(t3.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(t3.attr("data-jhs-visibility") || "{}"), recent = "yes" === t3.attr("data-jhs-recent");
+      (items ? $(items) : $(t2)).each(((index, element) => {
+        const t3 = $(element), flags = normalizeStateFlags(JSON.parse(t3.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(t3.attr("data-jhs-visibility") || "{}"), recent = "yes" === t3.attr("data-jhs-recent");
         shouldShowItem({ filter: e2, flags, visibilityReasons, recent }) ? t3.show() : t3.hide();
       }));
     }
@@ -15863,13 +15914,14 @@ ${failure.stack}` : "");
           this.removeIndexedItems(record.removedNodes);
           for (const node of record.addedNodes) {
             if (node.nodeType !== Node.ELEMENT_NODE) continue;
-            node.matches?.(e2.itemSelector) && "true" !== node.dataset.jhsProcessed && this.pendingItems.add(node), node.querySelectorAll?.(e2.itemSelector).forEach(((item) => {
+            const element = node;
+            element.matches?.(e2.itemSelector) && "true" !== element.dataset.jhsProcessed && this.pendingItems.add(element), element.querySelectorAll?.(e2.itemSelector).forEach((item) => {
               "true" !== item.dataset.jhsProcessed && this.pendingItems.add(item);
-            }));
+            });
           }
         }
         this.pendingItems.size && (this.processTimer && clearTimeout(this.processTimer), this.processTimer = setTimeout((() => {
-          const items = [...this.pendingItems].filter(((item) => item.isConnected && "true" !== item.dataset.jhsProcessed));
+          const items = [...this.pendingItems].filter((item) => item.isConnected && "true" !== item.dataset.jhsProcessed);
           this.pendingItems.clear(), this.processTimer = null, items.length && void this.processAddedItems(items).catch(((error) => clog.error("列表增量处理失败", error)));
         }), 100));
       }), {
@@ -15878,14 +15930,14 @@ ${failure.stack}` : "");
       });
     }
     async processAddedItems(items) {
-      const selector = this.getSelector(), covers = items.flatMap(((item) => [...item.querySelectorAll(selector.coverImgSelector)]));
-      this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items), await this.doFilterItems(items), this.applyVisibility(items), await this.getDependency("ListPageButtonPlugin").sortItems(), await this.getDependency("CoverButtonPlugin").addSvgBtn(items), items.forEach(((item) => item.dataset.jhsProcessed = "true")), this.indexItems(items), await jhsEventBus.emit("list-items-added", { items }, { broadcast: false }), this.getDependency("AutoPagePlugin").checkLoad();
+      const selector = this.getSelector(), covers = items.flatMap((item) => [...item.querySelectorAll(selector.coverImgSelector)]);
+      this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items), await this.doFilterItems(items), this.applyVisibility(items), await this.getDependency("ListPageButtonPlugin").sortItems(), await this.getDependency("CoverButtonPlugin").addSvgBtn(items), items.forEach((item) => item.dataset.jhsProcessed = "true"), this.indexItems(items), await getListEventBus().emit("list-items-added", { items }, { broadcast: false }), this.getDependency("AutoPagePlugin").checkLoad();
     }
     rebuildItemIndex() {
       this.itemIndex.clear(), this.indexItems($(this.getSelector().itemSelector).toArray());
     }
     indexItems(items) {
-      items.forEach(((item) => {
+      items.forEach((item) => {
         try {
           const key = normalizeCarNum(this.findCarNumAndHref($(item)).carNum);
           if (!key) return;
@@ -15894,44 +15946,46 @@ ${failure.stack}` : "");
         } catch (error) {
           clog.debug("列表项索引跳过无效卡片", error);
         }
-      }));
+      });
     }
     removeIndexedItems(nodes) {
       const removed = /* @__PURE__ */ new Set();
-      Array.from(nodes || []).forEach(((node) => {
-        node.nodeType === Node.ELEMENT_NODE && (removed.add(node), node.querySelectorAll?.(this.getSelector().itemSelector).forEach(((item) => removed.add(item))));
-      }));
+      Array.from(nodes || []).forEach((node) => {
+        const element = node;
+        node.nodeType === Node.ELEMENT_NODE && (removed.add(element), element.querySelectorAll?.(this.getSelector().itemSelector).forEach((item) => removed.add(item)));
+      });
       if (!removed.size) return;
       this.itemIndex.forEach(((items, key) => {
-        items.forEach(((item) => {
+        items.forEach((item) => {
           removed.has(item) && items.delete(item);
-        })), items.size || this.itemIndex.delete(key);
+        }), items.size || this.itemIndex.delete(key);
       }));
     }
     getIndexedItems(carNums) {
       const result = /* @__PURE__ */ new Set();
-      carNums.map(normalizeCarNum).forEach(((key) => {
+      carNums.map(normalizeCarNum).forEach((key) => {
+        if (!key) return;
         const items = this.itemIndex.get(key);
-        items?.forEach(((item) => item.isConnected ? result.add(item) : items.delete(item))), items && !items.size && this.itemIndex.delete(key);
-      }));
+        items?.forEach((item) => item.isConnected ? result.add(item) : items.delete(item)), items && !items.size && this.itemIndex.delete(key);
+      });
       return [...result];
     }
     fixBusTitleBox(items = null) {
       if (!l) return;
-      (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach(((e2) => {
+      (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach((e2) => {
         var t2;
         let n2 = $(e2);
         if (n2.find(".avatar-box").length > 0) return;
         const a2 = (null == (t2 = n2.find("img").attr("title")) ? void 0 : t2.trim()) || "";
         n2.find(".photo-info span:first").contents().first().wrap(`<span class="video-title" title="${a2}">${a2}</span>`), n2.find("br").remove();
-      }));
+      });
     }
     cleanRepeatId() {
       if (!l) return;
       $("#waterfall_h").removeAttr("id").attr("id", "no-page");
       const e2 = $('[id="waterfall"]');
-      0 !== e2.length && e2.each((function() {
-        const e3 = $(this);
+      0 !== e2.length && e2.each(((index, element) => {
+        const e3 = $(element);
         if (!e3.hasClass("masonry")) {
           e3.children().insertAfter(e3), e3.remove();
         }
@@ -15944,13 +15998,13 @@ ${failure.stack}` : "");
       if (!window.isListPage) return;
       let e2 = items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray();
       e2.length && (await this.filterMovieList(e2), l && setTimeout((() => {
-        this.getDependency("BusImgPlugin").logImageHeightsByRow().catch(((e3) => clog.error("JavBus图片高度修正失败", e3)));
+        this.getDependency("BusImgPlugin").logImageHeightsByRow().catch((e3) => clog.error("JavBus图片高度修正失败", e3));
       })));
     }
     async yieldListFrame() {
-      await new Promise(((e2) => {
+      await new Promise((e2) => {
         window.requestAnimationFrame ? window.requestAnimationFrame((() => setTimeout(e2))) : setTimeout(e2);
-      }));
+      });
     }
     findMatchedTitleKeyword(e2, t2, n2) {
       for (const a2 of e2) if (t2.includes(a2) || n2.startsWith(a2)) return a2;
@@ -15960,7 +16014,9 @@ ${failure.stack}` : "");
       if (this.filterContext) return this.filterContext;
       const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), this.getRuntimeService("state").getActivityLog()]), actorCarNumToNameMap = /* @__PURE__ */ new Map(), actressCarNumToNameMap = /* @__PURE__ */ new Map(), recentCarNums = /* @__PURE__ */ new Set();
       const cutoff = Date.now() - 7 * 864e5;
-      activity.entries.filter(((entry) => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)).forEach(((entry) => entry.changes.filter(((change) => "reverted" !== change.undoState && change.fields?.some(((field) => field.startsWith("stateFlags."))))).forEach(((change) => recentCarNums.add(change.carNum)))));
+      activity.entries.filter((entry) => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff).forEach((entry) => {
+        entry.changes.filter((change) => "reverted" !== change.undoState && change.fields?.some((field) => field.startsWith("stateFlags."))).forEach((change) => recentCarNums.add(change.carNum));
+      });
       for (const item of blacklistCars) {
         const role = blacklistMap.get(item.starId)?.role;
         if (!role) {
@@ -16012,7 +16068,7 @@ ${failure.stack}` : "");
       const { titleKeywords: n2, settings: s2, carMap: m2, recentCarNums: recent, actorCarNumToNameMap: f, actressCarNumToNameMap: v2 } = await this.getFilterContext(), o2 = utils.time("读取数据耗时");
       utils.time("组装数据耗时");
       const b2 = utils.time("组装数据耗时"), P2 = (null == s2 ? void 0 : s2.tagPosition) || "rightTop";
-      const O2 = n2.filter(((e3) => e3));
+      const O2 = n2.filter((e3) => e3);
       this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0, this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0, this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时");
       const R = [];
       for (let n3 = 0; n3 < e2.length; n3++) {
@@ -16033,7 +16089,7 @@ ${failure.stack}` : "");
             [visibilityReasons.keyword, Te.IS_KEYWORD_FILTER, keyword || "未知"],
             [visibilityReasons.actorBlacklist, Te.IS_ACTOR_FILTER, f.get(a2) || ""],
             [visibilityReasons.actressBlacklist, Te.IS_ACTRESS_FILTER, v2.get(a2) || ""]
-          ].filter(((item) => item[0]));
+          ].filter((item) => item[0]);
           if (badgeDefs.length) {
             const box = $(`<span class="jhs-status-tags ${"rightTop" === P2 ? "jhs-status-tags--right" : "jhs-status-tags--left"}"></span>`);
             badgeDefs.forEach((([, definition, tip]) => {
@@ -16049,7 +16105,7 @@ ${failure.stack}` : "");
         }
         hardHidden || R.push(t2);
       }
-      this.scheduleRecount(), void this.translateListItems(R).catch(((e3) => clog.error("列表页翻译任务失败", e3)));
+      this.scheduleRecount(), void this.translateListItems(R).catch((e3) => clog.error("列表页翻译任务失败", e3));
       const D2 = utils.time("处理页面耗时"), A2 = utils.time("累计耗费时间");
       clog.log(`
             <table class="countTable jhs-layout-b12542a5">
@@ -16168,7 +16224,7 @@ ${failure.stack}` : "");
       }
     }
     showCarNumBox(e2) {
-      const t2 = this.getRuntimeService("host").locateListItems().find(((t3) => $(t3).find(".video-title strong").text() === e2));
+      const t2 = this.getRuntimeService("host").locateListItems().find((t3) => $(t3).find(".video-title strong").text() === e2);
       if (t2) {
         const n2 = $(t2);
         n2.attr("data-hide") === "yes" && (n2.show(), n2.removeAttr("data-hide"));
@@ -16197,43 +16253,45 @@ ${failure.stack}` : "");
     }
     replaceHdImg(e2) {
       if (e2 && "string" == typeof e2.jquery && (e2 = e2.toArray()), e2 || (e2 = document.querySelectorAll(this.getSelector().coverImgSelector)), !e2.length) return;
-      const t2 = Array.from(e2).filter(((e3) => "true" !== e3.dataset.hdReplaced && "true" !== e3.dataset.jhsHdObserved));
+      const t2 = Array.from(e2).filter((e3) => "true" !== e3.dataset.hdReplaced && "true" !== e3.dataset.jhsHdObserved);
       if ("IntersectionObserver" in window && !this.hdImageObserver) this.hdImageObserver = new IntersectionObserver(((entries) => {
         entries.forEach(((entry) => {
-          entry.isIntersecting && (this.hdImageObserver.unobserve(entry.target), delete entry.target.dataset.jhsHdObserved, this._replaceSingleHdImg(entry.target));
+          const image = entry.target;
+          entry.isIntersecting && (this.hdImageObserver?.unobserve(image), delete image.dataset.jhsHdObserved, this._replaceSingleHdImg(image));
         }));
       }), { rootMargin: "200px" });
       for (const image of t2) this.hdEagerRemaining > 0 ? (this.hdEagerRemaining--, this._replaceSingleHdImg(image)) : this.hdImageObserver ? (image.dataset.jhsHdObserved = "true", this.hdImageObserver.observe(image)) : this._replaceSingleHdImg(image);
-      storageManager.getSetting("hoverBigImg", C).then(((e3) => {
-        e3 === _ && (window.imageHoverPreviewObj ? window.imageHoverPreviewObj.bindEvents() : window.imageHoverPreviewObj = new ImageHoverPreview({
+      storageManager.getSetting("hoverBigImg", C).then((e3) => {
+        const runtimeWindow = window;
+        e3 === _ && (runtimeWindow.imageHoverPreviewObj ? runtimeWindow.imageHoverPreviewObj.bindEvents() : runtimeWindow.imageHoverPreviewObj = new ImageHoverPreview({
           selector: this.getSelector().coverImgSelector
         }));
-      }));
+      });
     }
     applyTranslatedTitle(e2, t2, n2) {
       const a2 = e2.find(".video-title");
-      r ? (a2.contents().each((function() {
-        3 !== this.nodeType || "" === this.textContent.trim() || this.textContent.includes(n2) || (this.textContent = " " + t2 + " ");
+      r ? (a2.contents().each(((index, node) => {
+        3 !== node.nodeType || "" === (node.textContent || "").trim() || (node.textContent || "").includes(n2) || (node.textContent = " " + t2 + " ");
       })), a2.attr("title", t2)) : a2.text(t2), e2.attr("data-jhs-translation-key", n2);
     }
     async translate(e2) {
       let t2, n2, a2 = e2.find(".video-title");
-      if (r ? (t2 = a2.contents().filter(((e3, t3) => 3 === t3.nodeType && "" !== t3.textContent.trim())).text().trim(), n2 = e2.find(".video-title strong").text().trim()) : (t2 = (e2.find("img").attr("data-title") || "").trim(), n2 = (e2.find("a").attr("href") || "").split("/").filter(Boolean).pop()?.trim()), !t2 || !n2) return;
+      if (r ? (t2 = a2.contents().filter(((e3, t3) => 3 === t3.nodeType && "" !== (t3.textContent || "").trim())).text().trim(), n2 = e2.find(".video-title strong").text().trim()) : (t2 = (e2.find("img").attr("data-title") || "").trim(), n2 = (e2.find("a").attr("href") || "").split("/").filter(Boolean).pop()?.trim()), !t2 || !n2) return;
       const scope = await this.getRuntimeService("scope")();
       const translated = await this.getRuntimeService("translation").translate(t2, { scope });
       this.applyTranslatedTitle(e2, translated, n2);
     }
     async revertTranslation() {
-      $(this.getSelector().itemSelector).toArray().forEach(((e2) => {
+      $(this.getSelector().itemSelector).toArray().forEach((e2) => {
         let t2 = $(e2);
         const n2 = t2.find(".box").attr("title") || t2.find(".video-title").attr("title") || t2.find("img").attr("data-title");
         let a2;
         r && (a2 = t2.find(".video-title strong").text().trim());
         const i2 = t2.find(".video-title");
-        i2.contents().each((function() {
-          3 !== this.nodeType || "" === this.textContent.trim() || this.textContent.includes(a2) || (this.textContent = " " + n2 + " ");
+        i2.contents().each(((index, node) => {
+          3 !== node.nodeType || "" === (node.textContent || "").trim() || (node.textContent || "").includes(a2 || "") || (node.textContent = " " + n2 + " ");
         })), i2.removeAttr("title");
-      }));
+      });
     }
     addJumpPageControl() {
       const e2 = "gemini-jump-page-control";

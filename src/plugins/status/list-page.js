@@ -1,4 +1,6 @@
-import { B, C, _, b, escapeHtml, i, k, l, normalizeCarNum, o, r, u, y } from "../../core/constants.js";
+// @ts-check
+
+import { B, C, _, b, escapeHtml, k, l, normalizeCarNum, o, r, u, y } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { mapLimit, safePlay } from "../../core/feature-helpers.js";
 import { requestHostPage } from "../../core/host-page-request.js";
@@ -7,6 +9,14 @@ import { readListItem } from "../../core/list-item-reader.js";
 import { isHitShowPage } from "../../core/site-context.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
 import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isHardHidden, matchesQuickFilter, normalizeQuickFilterKey, shouldShowItem } from "../../features/list/list-filters.js";
+
+/** @typedef {Record<string, any>} ListRecord */
+/** @typedef {any} JQueryHandle */
+/** @returns {NonNullable<typeof jhsEventBus>} */
+function getListEventBus() {
+    if (!jhsEventBus) throw new Error("List EventBus 未初始化");
+    return jhsEventBus;
+}
 
 const Te = {
     IS_FILTERED: {
@@ -80,13 +90,24 @@ export class ListPagePlugin extends BasePlugin {
         return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}</style>`;
     }
     constructor() {
-        super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0),
-        i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0),
-        i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0),
-        i(this, "currentPageTotalCount", 0),
-        i(this, "filterContext", null), i(this, "pendingItems", new Set), i(this, "processTimer", null),
-        i(this, "hdImageObserver", null), i(this, "hdEagerRemaining", 12), i(this, "writeQueue", Promise.resolve()),
-        i(this, "itemIndex", new Map), i(this, "recountFrame", null);
+        super(...arguments);
+        this.currentPageFilterCount = 0;
+        this.currentPageFavoriteCount = 0;
+        this.currentPageHasDownCount = 0;
+        this.currentPageHasWatchCount = 0;
+        this.currentPageKeywordFilterCount = 0;
+        this.currentPageActorFilterCount = 0;
+        this.currentPageWaitCheckCount = 0;
+        this.currentPageTotalCount = 0;
+        /** @type {any} */ this.filterContext = null;
+        /** @type {Set<Element>} */ this.pendingItems = new Set();
+        /** @type {ReturnType<typeof setTimeout> | null} */ this.processTimer = null;
+        /** @type {IntersectionObserver | null} */ this.hdImageObserver = null;
+        this.hdEagerRemaining = 12;
+        this.writeQueue = Promise.resolve();
+        /** @type {Map<string, Set<Element>>} */ this.itemIndex = new Map();
+        /** @type {number | null} */ this.recountFrame = null;
+        /** @type {any} */ this.$currentImage = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -99,8 +120,8 @@ export class ListPagePlugin extends BasePlugin {
                 const e = this.getDependency("HistoryPlugin");
                 e.tableObj && e.tableObj.setData();
         };
-        [ "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed" ].forEach((type => scope.addCleanup(jhsEventBus.on(type, refreshAll)))),
-        scope.addCleanup(jhsEventBus.on("car-state-changed", (async payload => {
+        [ "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed" ].forEach((type => scope.addCleanup(getListEventBus().on(type, refreshAll)))),
+        scope.addCleanup(getListEventBus().on("car-state-changed", (async payload => {
             this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key);
             const items = this.getIndexedItems(payload.carNums || []);
             items.length && (await this.doFilterItems(items), this.applyVisibility(items));
@@ -109,7 +130,7 @@ export class ListPagePlugin extends BasePlugin {
         }))), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
         await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(),
         this.rememberTagExpand(),
-        $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await jhsEventBus.emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: !1 }),
+        $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await getListEventBus().emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: !1 }),
         this.checkDom(scope), scope.addCleanup((() => {
             this.processTimer && clearTimeout(this.processTimer), this.processTimer = null, this.pendingItems.clear();
             this.hdImageObserver?.disconnect(), this.hdImageObserver = null;
@@ -132,15 +153,15 @@ export class ListPagePlugin extends BasePlugin {
         const root = $("#jhs-quick-filter"), toggle = root.find(".jhs-quick-filter__toggle"), menu = root.find(".jhs-quick-filter__menu"), closeMenu = (restoreFocus = !1) => {
             menu.removeClass("is-open"), toggle.attr("aria-expanded", "false"), restoreFocus && toggle.trigger("focus");
         };
-        root.on("click", ".jhs-segmented__item", (event => this.setQuickFilter($(event.currentTarget).data("jhs-filter"))))
-            .on("keydown", ".jhs-segmented__item", (event => {
+        root.on("click", ".jhs-segmented__item", ((/** @type {any} */ event) => this.setQuickFilter($(event.currentTarget).data("jhs-filter"))))
+            .on("keydown", ".jhs-segmented__item", ((/** @type {any} */ event) => {
                 if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(event.key)) return;
                 event.preventDefault();
                 const tabs = root.find(".jhs-segmented__item"), index = tabs.index(event.currentTarget), next = "Home" === event.key ? 0 : "End" === event.key ? tabs.length - 1 : "ArrowRight" === event.key ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
                 tabs.eq(next).trigger("click").trigger("focus");
-            })).on("click", ".jhs-filter-option", (event => {
+            })).on("click", ".jhs-filter-option", ((/** @type {any} */ event) => {
                 this.setQuickFilter($(event.currentTarget).data("jhs-filter")), closeMenu(!0);
-            })).on("keydown", ".jhs-filter-option", (event => {
+            })).on("keydown", ".jhs-filter-option", ((/** @type {any} */ event) => {
                 const items = menu.find(".jhs-filter-option"), index = items.index(event.currentTarget);
                 if ("Escape" === event.key) return event.preventDefault(), closeMenu(!0);
                 if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
@@ -148,22 +169,24 @@ export class ListPagePlugin extends BasePlugin {
                 const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
                 items.eq(next).trigger("focus");
             }));
-        toggle.on("click", (event => {
+        toggle.on("click", ((/** @type {any} */ event) => {
             event.preventDefault(), event.stopPropagation();
             const open = !menu.hasClass("is-open");
             menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && (menu.find('[aria-checked="true"]').first().length ? menu.find('[aria-checked="true"]').first() : menu.find(".jhs-filter-option").first()).trigger("focus");
-        })), $(document).off("click.jhsQuickFilter").on("click.jhsQuickFilter", (event => {
+        })), $(document).off("click.jhsQuickFilter").on("click.jhsQuickFilter", ((/** @type {any} */ event) => {
             $(event.target).closest(root).length || closeMenu();
         }));
         this.setQuickFilter(await storageManager.getSetting("defaultQuickFilterTab", "waitCheck"));
     }
+    /** @param {Element[] | null} [items] */
     applyVisibility(items = null) {
         const e = this.activeQuickFilter || "waitCheck", t = this.getSelector().itemSelector;
-        (items ? $(items) : $(t)).each((function() {
-            const t = $(this), flags = normalizeStateFlags(JSON.parse(t.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(t.attr("data-jhs-visibility") || "{}"), recent = "yes" === t.attr("data-jhs-recent");
+        (items ? $(items) : $(t)).each(((/** @type {number} */ index, /** @type {Element} */ element) => {
+            const t = $(element), flags = normalizeStateFlags(JSON.parse(t.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(t.attr("data-jhs-visibility") || "{}"), recent = "yes" === t.attr("data-jhs-recent");
             shouldShowItem({ filter: e, flags, visibilityReasons, recent }) ? t.show() : t.hide();
         }));
     }
+    /** @param {unknown} filter @param {{ syncUi?: boolean }} [options] */
     setQuickFilter(filter, { syncUi = !0 } = {}) {
         this.activeQuickFilter = normalizeQuickFilterKey(filter), this.applyVisibility(), syncUi && this.syncQuickFilterUi();
     }
@@ -185,24 +208,26 @@ export class ListPagePlugin extends BasePlugin {
             clog.debug("触发"), storage.setLocal(t, e.toString());
         }));
     }
+    /** @param {any} [scope] */
     checkDom(scope = null) {
         if (!window.isListPage || isHitShowPage()) return;
         const e = this.getSelector(), t = document.querySelector(e.boxSelector);
         if (!t) return void clog.error("没有找到容器节点!");
         if (!scope) return;
-        scope.observe(t, (records => {
+        scope.observe(t, ((/** @type {MutationRecord[]} */ records) => {
             for (const record of records) {
                 this.removeIndexedItems(record.removedNodes);
                 for (const node of record.addedNodes) {
                 if (node.nodeType !== Node.ELEMENT_NODE) continue;
-                node.matches?.(e.itemSelector) && "true" !== node.dataset.jhsProcessed && this.pendingItems.add(node),
-                node.querySelectorAll?.(e.itemSelector).forEach((item => {
-                    "true" !== item.dataset.jhsProcessed && this.pendingItems.add(item);
-                }));
+                const element = /** @type {Element} */ (node);
+                element.matches?.(e.itemSelector) && "true" !== /** @type {HTMLElement} */ (element).dataset.jhsProcessed && this.pendingItems.add(element),
+                element.querySelectorAll?.(e.itemSelector).forEach((/** @type {Element} */ item) => {
+                    "true" !== /** @type {HTMLElement} */ (item).dataset.jhsProcessed && this.pendingItems.add(item);
+                });
                 }
             }
             this.pendingItems.size && (this.processTimer && clearTimeout(this.processTimer), this.processTimer = setTimeout((() => {
-                const items = [ ...this.pendingItems ].filter((item => item.isConnected && "true" !== item.dataset.jhsProcessed));
+                const items = [ ...this.pendingItems ].filter((/** @type {Element} */ item) => item.isConnected && "true" !== /** @type {HTMLElement} */ (item).dataset.jhsProcessed);
                 this.pendingItems.clear(), this.processTimer = null, items.length && void this.processAddedItems(items).catch((error => clog.error("列表增量处理失败", error)));
             }), 100));
         }), {
@@ -210,17 +235,19 @@ export class ListPagePlugin extends BasePlugin {
             subtree: !1
         });
     }
+    /** @param {Element[]} items */
     async processAddedItems(items) {
-        const selector = this.getSelector(), covers = items.flatMap((item => [ ...item.querySelectorAll(selector.coverImgSelector) ]));
+        const selector = this.getSelector(), covers = items.flatMap((/** @type {Element} */ item) => [ ...item.querySelectorAll(selector.coverImgSelector) ]);
         this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items), await this.doFilterItems(items), this.applyVisibility(items),
         await this.getDependency("ListPageButtonPlugin").sortItems(), await this.getDependency("CoverButtonPlugin").addSvgBtn(items),
-        items.forEach((item => item.dataset.jhsProcessed = "true")), this.indexItems(items), await jhsEventBus.emit("list-items-added", { items }, { broadcast: !1 }), this.getDependency("AutoPagePlugin").checkLoad();
+        items.forEach((/** @type {Element} */ item) => /** @type {HTMLElement} */ (item).dataset.jhsProcessed = "true"), this.indexItems(items), await getListEventBus().emit("list-items-added", { items }, { broadcast: !1 }), this.getDependency("AutoPagePlugin").checkLoad();
     }
     rebuildItemIndex() {
         this.itemIndex.clear(), this.indexItems($(this.getSelector().itemSelector).toArray());
     }
+    /** @param {Element[]} items */
     indexItems(items) {
-        items.forEach((item => {
+        items.forEach((/** @type {Element} */ item) => {
             try {
                 const key = normalizeCarNum(this.findCarNumAndHref($(item)).carNum);
                 if (!key) return;
@@ -229,43 +256,48 @@ export class ListPagePlugin extends BasePlugin {
             } catch (error) {
                 clog.debug("列表项索引跳过无效卡片", error);
             }
-        }));
+        });
     }
+    /** @param {NodeList | Node[]} nodes */
     removeIndexedItems(nodes) {
         const removed = new Set;
-        Array.from(nodes || []).forEach((node => {
-            node.nodeType === Node.ELEMENT_NODE && (removed.add(node), node.querySelectorAll?.(this.getSelector().itemSelector).forEach((item => removed.add(item))));
-        }));
+        Array.from(nodes || []).forEach((/** @type {Node} */ node) => {
+            const element = /** @type {Element} */ (node);
+            node.nodeType === Node.ELEMENT_NODE && (removed.add(element), element.querySelectorAll?.(this.getSelector().itemSelector).forEach((/** @type {Element} */ item) => removed.add(item)));
+        });
         if (!removed.size) return;
-        this.itemIndex.forEach(((items, key) => {
-            items.forEach((item => { removed.has(item) && items.delete(item); })), items.size || this.itemIndex.delete(key);
+        this.itemIndex.forEach(((/** @type {Set<Element>} */ items, /** @type {string} */ key) => {
+            items.forEach((/** @type {Element} */ item) => { removed.has(item) && items.delete(item); }), items.size || this.itemIndex.delete(key);
         }));
     }
+    /** @param {unknown[]} carNums */
     getIndexedItems(carNums) {
         const result = new Set;
-        carNums.map(normalizeCarNum).forEach((key => {
+        carNums.map(normalizeCarNum).forEach((/** @type {string | null} */ key) => {
+            if (!key) return;
             const items = this.itemIndex.get(key);
-            items?.forEach((item => item.isConnected ? result.add(item) : items.delete(item))), items && !items.size && this.itemIndex.delete(key);
-        }));
+            items?.forEach((/** @type {Element} */ item) => item.isConnected ? result.add(item) : items.delete(item)), items && !items.size && this.itemIndex.delete(key);
+        });
         return [ ...result ];
     }
+    /** @param {Element[] | null} [items] */
     fixBusTitleBox(items = null) {
         if (!l) return;
-        (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach((e => {
+        (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach((/** @type {Element} */ e) => {
             var t;
             let n = $(e);
             if (n.find(".avatar-box").length > 0) return;
             const a = (null == (t = n.find("img").attr("title")) ? void 0 : t.trim()) || "";
             n.find(".photo-info span:first").contents().first().wrap(`<span class="video-title" title="${a}">${a}</span>`),
             n.find("br").remove();
-        }));
+        });
     }
     cleanRepeatId() {
         if (!l) return;
         $("#waterfall_h").removeAttr("id").attr("id", "no-page");
         const e = $('[id="waterfall"]');
-        0 !== e.length && e.each((function() {
-            const e = $(this);
+        0 !== e.length && e.each(((/** @type {number} */ index, /** @type {Element} */ element) => {
+            const e = $(element);
             if (!e.hasClass("masonry")) {
                 e.children().insertAfter(e), e.remove();
             }
@@ -274,18 +306,20 @@ export class ListPagePlugin extends BasePlugin {
     async doFilter() {
         return this.doFilterItems();
     }
+    /** @param {Element[] | null} [items] */
     async doFilterItems(items = null) {
         if (!window.isListPage) return;
         let e = items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray();
         e.length && (await this.filterMovieList(e), l && setTimeout((() => {
-            this.getDependency("BusImgPlugin").logImageHeightsByRow().catch((e => clog.error("JavBus图片高度修正失败", e)));
+            this.getDependency("BusImgPlugin").logImageHeightsByRow().catch((/** @type {unknown} */ e) => clog.error("JavBus图片高度修正失败", e));
         })));
     }
     async yieldListFrame() {
-        await new Promise((e => {
+        await new Promise((/** @type {(value: void) => void} */ e) => {
             window.requestAnimationFrame ? window.requestAnimationFrame((() => setTimeout(e))) : setTimeout(e);
-        }));
+        });
     }
+    /** @param {string[]} e @param {string} t @param {string} n */
     findMatchedTitleKeyword(e, t, n) {
         for (const a of e) if (t.includes(a) || n.startsWith(a)) return a;
         return null;
@@ -294,7 +328,13 @@ export class ListPagePlugin extends BasePlugin {
         if (this.filterContext) return this.filterContext;
         const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([ storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), this.getRuntimeService("state").getActivityLog() ]), actorCarNumToNameMap = new Map, actressCarNumToNameMap = new Map, recentCarNums = new Set;
         const cutoff = Date.now() - 7 * 864e5;
-        activity.entries.filter((entry => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)).forEach((entry => entry.changes.filter((change => "reverted" !== change.undoState && change.fields?.some((field => field.startsWith("stateFlags."))))).forEach((change => recentCarNums.add(change.carNum)))));
+        activity.entries
+            .filter((/** @type {ListRecord} */ entry) => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)
+            .forEach((/** @type {ListRecord} */ entry) => {
+                entry.changes
+                    .filter((/** @type {ListRecord} */ change) => "reverted" !== change.undoState && change.fields?.some((/** @type {string} */ field) => field.startsWith("stateFlags.")))
+                    .forEach((/** @type {ListRecord} */ change) => recentCarNums.add(change.carNum));
+            });
         for (const item of blacklistCars) {
             const role = blacklistMap.get(item.starId)?.role;
             if (!role) {
@@ -308,7 +348,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     collectCurrentPageSummary() {
         const summary = { total: 0, pending: 0, blockedItems: 0, favorite: 0, downloaded: 0, watched: 0, debug: { manualBlocked: 0, keywordBlocked: 0, actorBlocked: 0, actressBlocked: 0 } };
-        $(this.getSelector().itemSelector).each(((e, item) => {
+        $(this.getSelector().itemSelector).each(((/** @type {number} */ e, /** @type {Element} */ item) => {
             const card = $(item);
             if (l && card.find(".avatar-box").length > 0) return;
             const flags = normalizeStateFlags(JSON.parse(card.attr("data-jhs-flags") || "{}")), reasons = JSON.parse(card.attr("data-jhs-visibility") || "{}"), hardHidden = isHardHidden(flags, reasons);
@@ -330,23 +370,25 @@ export class ListPagePlugin extends BasePlugin {
     }
     scheduleRecount() {
         if (this.recountFrame) return;
-        const schedule = window.requestAnimationFrame || (callback => setTimeout(callback, 0));
+        const schedule = window.requestAnimationFrame || ((/** @type {FrameRequestCallback} */ callback) => setTimeout(callback, 0));
         this.recountFrame = schedule((() => {
             this.recountFrame = null, this.recountStatuses();
         }));
     }
+    /** @param {JQueryHandle[]} e */
     async translateListItems(e) {
         if (await storageManager.getSetting("translateTitle", _) !== _) return;
         await mapLimit(e, 3, (async (item, index) => {
             try { index > 0 && index % 8 == 0 && await this.yieldListFrame(), await this.translate(item); } catch (error) { clog.error("列表标题翻译失败", error); }
         }));
     }
+    /** @param {Element[]} e */
     async filterMovieList(e) {
         utils.time("累计耗费时间"), utils.time("读取数据耗时");
         const {titleKeywords: n, settings: s, carMap: m, recentCarNums: recent, actorCarNumToNameMap: f, actressCarNumToNameMap: v} = await this.getFilterContext(), o = utils.time("读取数据耗时");
         utils.time("组装数据耗时");
         const b = utils.time("组装数据耗时"), P = (null == s ? void 0 : s.tagPosition) || "rightTop";
-        const O = n.filter((e => e));
+        const O = n.filter((/** @type {string} */ e) => e);
         this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0,
         this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0,
         this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时");
@@ -364,7 +406,7 @@ export class ListPagePlugin extends BasePlugin {
                 const badgeDefs = [
                     [ flags.blocked, Te.IS_FILTERED, "单番号屏蔽" ], [ flags.favorite, Te.IS_FAVORITE, "" ], [ flags.downloaded, Te.IS_HAS_DOWN, "" ], [ flags.watched, Te.IS_HAS_WATCH, "" ],
                     [ visibilityReasons.keyword, Te.IS_KEYWORD_FILTER, keyword || "未知" ], [ visibilityReasons.actorBlacklist, Te.IS_ACTOR_FILTER, f.get(a) || "" ], [ visibilityReasons.actressBlacklist, Te.IS_ACTRESS_FILTER, v.get(a) || "" ]
-                ].filter((item => item[0]));
+                ].filter((/** @type {any[]} */ item) => item[0]);
                 if (badgeDefs.length) {
                     const box = $(`<span class="jhs-status-tags ${"rightTop" === P ? "jhs-status-tags--right" : "jhs-status-tags--left"}"></span>`);
                     badgeDefs.forEach((([, definition, tip]) => {
@@ -376,20 +418,20 @@ export class ListPagePlugin extends BasePlugin {
             }
             hardHidden || R.push(t);
         }
-        this.scheduleRecount(), void this.translateListItems(R).catch((e => clog.error("列表页翻译任务失败", e)));
+        this.scheduleRecount(), void this.translateListItems(R).catch((/** @type {unknown} */ e) => clog.error("列表页翻译任务失败", e));
         const D = utils.time("处理页面耗时"), A = utils.time("累计耗费时间");
         clog.log(`\n            <table class="countTable jhs-layout-b12542a5">\n                <tr>\n                    <td colspan="2" class="jhs-count-table__cell">${o}</td>\n                    <td colspan="2" class="jhs-count-table__cell">${b}</td>\n                </tr>\n                \n                <tr>\n                    <td colspan="2" class="jhs-count-table__cell">${D}</td>\n                    <td colspan="2" class="jhs-count-table__cell">${A}</td>\n                </tr>\n                <tr>\n                    <td class="jhs-count-table__head">项目</td>\n                    <td class="jhs-count-table__head">数量</td>\n                    <td class="jhs-count-table__head">项目</td>\n                    <td class="jhs-count-table__head">数量</td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽单番号</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageFilterCount}</strong></td>\n                     <td class="jhs-count-table__cell">收藏</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageFavoriteCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽演员</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageActorFilterCount}</strong></td>\n                    <td class="jhs-count-table__cell">已下载</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasDownCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽关键词</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageKeywordFilterCount}</strong></td>\n                    <td class="jhs-count-table__cell">已观看</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasWatchCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">待鉴定</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageWaitCheckCount}</strong></td>\n                    <td class="jhs-count-table__cell"></td>\n                    <td class="jhs-count-table__cell"></td>\n                </tr>\n        \n                <tr>\n                    <td class="jhs-count-table__cell"><strong>总数</strong></td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageTotalCount}</strong></td>\n                </tr>\n            </table>\n        `);
     }
     async bindClick() {
         let e = this.getSelector();
-        this.bindMovieDetailNavigation(e.boxSelector), $(e.boxSelector).on("click", ".item video", (async e => {
+        this.bindMovieDetailNavigation(e.boxSelector), $(e.boxSelector).on("click", ".item video", (async (/** @type {any} */ e) => {
             const t = e.currentTarget;
             t.paused ? await safePlay(t, {
                 context: "列表视频",
                 notify: !0
             }) : t.pause(), e.preventDefault(),
             e.stopPropagation();
-        })), $(e.boxSelector).on("contextmenu", ".item img, .item video", (async e => {
+        })), $(e.boxSelector).on("contextmenu", ".item img, .item video", (async (/** @type {any} */ e) => {
             try {
                 e.preventDefault();
                 const t = $(e.target).closest(".item"), {carNum: n, url: a, publishTime: i, fc2Source} = this.findCarNumAndHref(t);
@@ -403,6 +445,7 @@ export class ListPagePlugin extends BasePlugin {
         }));
     }
     /** 从任意列表卡片进入统一详情导航。 */
+    /** @param {any} item @param {{ event?: MouseEvent | null, autoplay?: boolean, newTab?: boolean }} [options] */
     async openMovieDetail(item, { event = null, autoplay = !1, newTab = !1 } = {}) {
         const card = item?.jquery ? item : $(item), {carNum, aHref, fc2Source} = this.findCarNumAndHref(card);
         if (!carNum || !aHref) return;
@@ -415,36 +458,41 @@ export class ListPagePlugin extends BasePlugin {
         autoplay && destination.searchParams.set("autoPlay", "1"), utils.openPage(destination.href, carNum, !0, { event, newTab: shouldOpenTab }), this.$currentImage = null;
     }
     /** 为宿主与合成列表统一绑定左键、修饰键和中键导航。 */
+    /** @param {any} container */
     bindMovieDetailNavigation(container) {
         const root = $(container), selector = ".item img, .item .video-title";
-        root.off("click.jhsMovieDetail auxclick.jhsMovieDetail", selector).on("click.jhsMovieDetail auxclick.jhsMovieDetail", selector, (event => {
+        root.off("click.jhsMovieDetail auxclick.jhsMovieDetail", selector).on("click.jhsMovieDetail auxclick.jhsMovieDetail", selector, ((/** @type {any} */ event) => {
             if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
             if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
             event.preventDefault(), event.stopPropagation();
             void this.openMovieDetail($(event.currentTarget).closest(".item"), { event }).catch((error => clog.error("打开影片详情失败", error)));
         }));
     }
+    /** @param {string} e */
     async parseActressName(e) {
         let t = null;
         if (await storageManager.getSetting("enableSaveActressCarInfo", C) === _) {
             clog.debug("鉴定补录演员信息-已启用, 开始解析详情页"), clog.debug("开始解析演员详情页", e);
             const scope = await this.getRuntimeService("scope")();
             const n = await requestHostPage(this.getRuntimeService("http"), e, scope), a = utils.htmlTo$dom(n);
-            r ? t = a.find(".female").prev().map(((e, t) => $(t).text())).get().join(" ") : l && (t = a.find('span[onmouseover*="star_"] a').map(((e, t) => $(t).text())).get().join(" ")),
+            r ? t = a.find(".female").prev().map(((/** @type {number} */ e, /** @type {Element} */ t) => $(t).text())).get().join(" ") : l && (t = a.find('span[onmouseover*="star_"] a').map(((/** @type {number} */ e, /** @type {Element} */ t) => $(t).text())).get().join(" ")),
             clog.debug("解析到名称:", t);
         }
         return t;
     }
+    /** @param {JQueryHandle} e */
     findCarNumAndHref(e) {
         try { return readListItem(e); } catch (error) { show.error("提取番号信息失败"); throw error; }
     }
+    /** @param {string} e */
     showCarNumBox(e) {
-        const t = this.getRuntimeService("host").locateListItems().find((t => $(t).find(".video-title strong").text() === e));
+        const t = this.getRuntimeService("host").locateListItems().find((/** @type {Element} */ t) => $(t).find(".video-title strong").text() === e);
         if (t) {
             const n = $(t);
             n.attr("data-hide") === "yes" && (n.show(), n.removeAttr("data-hide"));
         }
     }
+    /** @param {HTMLImageElement} e */
     _replaceSingleHdImg(e) {
         if ("true" === e.dataset.hdReplaced) return;
         if (r) {
@@ -468,33 +516,38 @@ export class ListPagePlugin extends BasePlugin {
             e.dataset.hdReplaced = "true", e.dataset.title = e.title, e.title = "");
         }
     }
+    /** @param {any} [e] */
     replaceHdImg(e) {
         if (e && "string" == typeof e.jquery && (e = e.toArray()), e || (e = document.querySelectorAll(this.getSelector().coverImgSelector)),
         !e.length) return;
-        const t = Array.from(e).filter((e => "true" !== e.dataset.hdReplaced && "true" !== e.dataset.jhsHdObserved));
+        const t = Array.from(/** @type {Iterable<HTMLImageElement>} */ (e)).filter((/** @type {HTMLImageElement} */ e) => "true" !== e.dataset.hdReplaced && "true" !== e.dataset.jhsHdObserved);
         if ("IntersectionObserver" in window && !this.hdImageObserver) this.hdImageObserver = new IntersectionObserver((entries => {
             entries.forEach((entry => {
-                entry.isIntersecting && (this.hdImageObserver.unobserve(entry.target), delete entry.target.dataset.jhsHdObserved,
-                this._replaceSingleHdImg(entry.target));
+                const image = /** @type {HTMLImageElement} */ (entry.target);
+                entry.isIntersecting && (this.hdImageObserver?.unobserve(image), delete image.dataset.jhsHdObserved,
+                this._replaceSingleHdImg(image));
             }));
         }), { rootMargin: "200px" });
         for (const image of t) this.hdEagerRemaining > 0 ? (this.hdEagerRemaining--, this._replaceSingleHdImg(image)) : this.hdImageObserver ? (image.dataset.jhsHdObserved = "true",
         this.hdImageObserver.observe(image)) : this._replaceSingleHdImg(image);
-        storageManager.getSetting("hoverBigImg", C).then((e => {
-            e === _ && (window.imageHoverPreviewObj ? window.imageHoverPreviewObj.bindEvents() : window.imageHoverPreviewObj = new ImageHoverPreview({
+        storageManager.getSetting("hoverBigImg", C).then((/** @type {unknown} */ e) => {
+            const runtimeWindow = /** @type {any} */ (window);
+            e === _ && (runtimeWindow.imageHoverPreviewObj ? runtimeWindow.imageHoverPreviewObj.bindEvents() : runtimeWindow.imageHoverPreviewObj = new ImageHoverPreview({
                 selector: this.getSelector().coverImgSelector
             }));
-        }));
+        });
     }
+    /** @param {JQueryHandle} e @param {string} t @param {string} n */
     applyTranslatedTitle(e, t, n) {
         const a = e.find(".video-title");
-        r ? (a.contents().each((function() {
-            3 !== this.nodeType || "" === this.textContent.trim() || this.textContent.includes(n) || (this.textContent = " " + t + " ");
+        r ? (a.contents().each(((/** @type {number} */ index, /** @type {Node} */ node) => {
+            3 !== node.nodeType || "" === (node.textContent || "").trim() || (node.textContent || "").includes(n) || (node.textContent = " " + t + " ");
         })), a.attr("title", t)) : a.text(t), e.attr("data-jhs-translation-key", n);
     }
+    /** @param {JQueryHandle} e */
     async translate(e) {
         let t, n, a = e.find(".video-title");
-        if (r ? (t = a.contents().filter(((e, t) => 3 === t.nodeType && "" !== t.textContent.trim())).text().trim(),
+        if (r ? (t = a.contents().filter(((/** @type {number} */ e, /** @type {Node} */ t) => 3 === t.nodeType && "" !== (t.textContent || "").trim())).text().trim(),
         n = e.find(".video-title strong").text().trim()) : (t = (e.find("img").attr("data-title") || "").trim(),
         n = (e.find("a").attr("href") || "").split("/").filter(Boolean).pop()?.trim()), !t || !n) return;
         const scope = await this.getRuntimeService("scope")();
@@ -502,16 +555,17 @@ export class ListPagePlugin extends BasePlugin {
         this.applyTranslatedTitle(e, translated, n);
     }
     async revertTranslation() {
-        $(this.getSelector().itemSelector).toArray().forEach((e => {
+        $(this.getSelector().itemSelector).toArray().forEach((/** @type {Element} */ e) => {
             let t = $(e);
             const n = t.find(".box").attr("title") || t.find(".video-title").attr("title") || t.find("img").attr("data-title");
+            /** @type {string | undefined} */
             let a;
             r && (a = t.find(".video-title strong").text().trim());
             const i = t.find(".video-title");
-            i.contents().each((function() {
-                3 !== this.nodeType || "" === this.textContent.trim() || this.textContent.includes(a) || (this.textContent = " " + n + " ");
+            i.contents().each(((/** @type {number} */ index, /** @type {Node} */ node) => {
+                3 !== node.nodeType || "" === (node.textContent || "").trim() || (node.textContent || "").includes(a || "") || (node.textContent = " " + n + " ");
             })), i.removeAttr("title");
-        }));
+        });
     }
     addJumpPageControl() {
         const e = "gemini-jump-page-control";
@@ -534,7 +588,7 @@ export class ListPagePlugin extends BasePlugin {
             const t = new URL(window.location.href);
             t.searchParams.set("page", e.toString()), window.location.href = t.toString();
         };
-        a.on("click", s), n.on("keypress", (function(e) {
+        a.on("click", s), n.on("keypress", (function(/** @type {any} */ e) {
             13 === e.which && (s(), e.preventDefault());
         }));
     }
