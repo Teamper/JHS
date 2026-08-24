@@ -61,6 +61,7 @@ export class HttpService {
         if (method !== "GET" && cacheScope !== "none") throw new TypeError("Mutation requests cannot use generic cache/dedupe");
         const urlPolicy = /** @type {{trustClass: string, hosts?: string[], expectedOrigin?: string}} */ (options.urlPolicy);
         const initialUrl = this.urlPolicy.assertAllowed(options.url, urlPolicy);
+        if (method !== "GET" || cacheScope === "none") return this.executeUnderlying({ ...options, method, url: initialUrl.href, signal: scope?.signal }, urlPolicy);
         const requestKey = await createRequestKey({ ...options, method, url: initialUrl.href, cacheScope });
         const serializedKey = stableSerialize(requestKey);
         const cachePolicy = { scope: cacheScope, sessionScopeId: options.sessionScopeId };
@@ -68,8 +69,6 @@ export class HttpService {
             const cached = this.cache.get(serializedKey, cachePolicy);
             if (cached.hit) return cached.value;
         }
-        if (method !== "GET" || cacheScope === "none") return this.executeUnderlying({ ...options, method, url: initialUrl.href, signal: scope?.signal }, urlPolicy);
-
         let entry = this.inflight.get(serializedKey);
         if (!entry) {
             const controller = new AbortController();

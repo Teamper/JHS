@@ -3,10 +3,21 @@ import { JSDOM } from "jsdom";
 import { expect, it, vi } from "vitest";
 import { parseJavDbActorList } from "../../src/integrations/javdb/parser.js";
 import { createJavDbAdapter } from "../../src/integrations/javdb/manifest.js";
+import { AccountService } from "../../src/services/account-service.js";
 
 it("normalizes JavDB actor contracts", () => {
     const dom = new JSDOM('<div id="actors"><div class="actor-box"><a href="/actors/a1" title="Actor"><span class="info">有码</span></a></div></div>');
     expect(parseJavDbActorList(jquery(dom.window)(dom.window.document), "https://javdb.com")).toMatchObject({ state: "valid", actors: [{ starId: "a1", name: "Actor" }] });
+});
+
+it("normalizes JavDB login without caching credentials", async () => {
+    const request = vi.fn(async options => ({ data: { success: 1, data: { token: "token" } }, finalUrl: options.url }));
+    const adapter = createJavDbAdapter({ request }, () => "signature");
+    await expect(adapter.login({ username: "user", password: "secret" }, { scope: "scope" })).resolves.toEqual({ success: true, token: "token", message: "" });
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", cacheScope: "none", urlPolicy: { trustClass: "builtin-public", hosts: ["jdforrepam.com"] } }), "scope");
+    const login = vi.fn(async () => ({ success: true, token: "token" }));
+    const service = new AccountService({ list: () => [{ id: "javdb" }], getAdapter: () => ({ login }) });
+    await expect(service.login("javdb", { username: "user", password: "secret" })).resolves.toMatchObject({ success: true });
 });
 
 it("normalizes JavDB review and related API contracts through HttpService", async () => {

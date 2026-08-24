@@ -1,5 +1,5 @@
 import { escapeHtml, i } from "../../core/constants.js";
-import { O, U, q } from "../../core/javdb-api.js";
+import { q } from "../../core/javdb-api.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { hasStoredEncryptedCredential, removeStoredEncryptedCredential, storeEncryptedCredential } from "../../core/credential-crypto.js";
 
@@ -106,7 +106,7 @@ export class Top250Plugin extends BasePlugin {
         }) : window.location.href = s;
     }
     openLoginDialog({ onSuccess = null } = {}) {
-        const dialog = this.getRuntimeService("dialog");
+        const dialog = this.getRuntimeService("dialog"), account = this.getRuntimeService("account"), getScope = this.getRuntimeService("scope");
         dialog.open({
             type: 1,
             title: "JavDB",
@@ -115,26 +115,13 @@ export class Top250Plugin extends BasePlugin {
             shadeClose: !1,
             content: '\n                <style>#loginBtn:hover{background:var(--jhs-accent-hover)}</style>\n                <div class="jhs-layout-e32cff7f">\n                    <div class="jhs-layout-598afa5a">\n                        <input type="text" id="username" name="username" \n                           \n                            placeholder="用户名 | 邮箱"\n                            onfocus="this.style.borderColor=\'var(--jhs-accent)\'; this.style.background=\'var(--jhs-surface)\'"\n                            onblur="this.style.borderColor=\'var(--jhs-border-strong)\'; this.style.background=\'var(--jhs-surface-2)\'" class="jhs-field">\n                    </div>\n                    \n                    <div class="jhs-layout-da303dcf">\n                        <input type="password" id="password" name="password" \n                           \n                            placeholder="密码"\n                            onfocus="this.style.borderColor=\'var(--jhs-accent)\'; this.style.background=\'var(--jhs-surface)\'"\n                            onblur="this.style.borderColor=\'var(--jhs-border-strong)\'; this.style.background=\'var(--jhs-surface-2)\'" class="jhs-field">\n                    </div>\n                    \n                    <button id="loginBtn" \n                           \n                             class="jhs-btn jhs-layout-c4eb15bf">\n                        登录\n                    </button>\n                </div>\n            ',
             success: (e, t) => {
-                $("#loginBtn").click((function() {
+                $("#loginBtn").click((async function() {
                     const e = $("#username").val(), n = $("#password").val();
                     if (!e || !n) return void show.error("请输入用户名和密码");
                     let a = loading();
-                    (async (e, t) => {
-                        let n = `${U}/v1/sessions?username=${encodeURIComponent(e)}&password=${encodeURIComponent(t)}&device_uuid=04b9534d-5118-53de-9f87-2ddded77111e&device_name=iPhone&device_model=iPhone&platform=ios&system_version=17.4&app_version=official&app_version_number=1.9.29&app_channel=official`, a = {
-                            "user-agent": "Dart/3.5 (dart:io)",
-                            "accept-language": "zh-TW",
-                            "content-type": "multipart/form-data; boundary=--dio-boundary-2210433284",
-                            jdsignature: await O()
-                        };
-                        return await gmHttp.post(n, null, a);
-                    })(e, n).then((async e => {
-                        let n = e.success;
-                        if (0 === n) show.error(e.message); else {
-                            if (1 !== n) throw clog.error("登录失败", e), new Error(e.message);
-                            {
-                                let n = e.data.token;
-                                await storeEncryptedCredential(me, n), show.ok("登录成功"), dialog.close(t), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
-                            }
+                    account.login("javdb", { username: e, password: n }, { scope: await getScope() }).then((async result => {
+                        if (!result.success) show.error(result.message); else {
+                            await storeEncryptedCredential(me, result.token), show.ok("登录成功"), dialog.close(t), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
                         }
                     })).catch((e => {
                         clog.error("登录异常:", e), show.error(e.message);

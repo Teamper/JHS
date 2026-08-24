@@ -3713,6 +3713,7 @@
     screenshot: createToken("service", "screenshot"),
     translation: createToken("service", "translation"),
     subtitle: createToken("service", "subtitle"),
+    account: createToken("service", "account"),
     offline: createToken("service", "offline"),
     cache: createToken("service", "cache"),
     state: createToken("service", "state"),
@@ -10416,7 +10417,7 @@ ${error.stack}` : "");
       }) : window.location.href = s2;
     }
     openLoginDialog({ onSuccess = null } = {}) {
-      const dialog = this.getRuntimeService("dialog");
+      const dialog = this.getRuntimeService("dialog"), account = this.getRuntimeService("account"), getScope = this.getRuntimeService("scope");
       dialog.open({
         type: 1,
         title: "JavDB",
@@ -10450,27 +10451,14 @@ ${error.stack}` : "");
                 </div>
             `,
         success: /* @__PURE__ */ __name((e2, t2) => {
-          $("#loginBtn").click((function() {
+          $("#loginBtn").click((async function() {
             const e3 = $("#username").val(), n2 = $("#password").val();
             if (!e3 || !n2) return void show.error("请输入用户名和密码");
             let a2 = loading();
-            (async (e4, t3) => {
-              let n3 = `${U}/v1/sessions?username=${encodeURIComponent(e4)}&password=${encodeURIComponent(t3)}&device_uuid=04b9534d-5118-53de-9f87-2ddded77111e&device_name=iPhone&device_model=iPhone&platform=ios&system_version=17.4&app_version=official&app_version_number=1.9.29&app_channel=official`, a3 = {
-                "user-agent": "Dart/3.5 (dart:io)",
-                "accept-language": "zh-TW",
-                "content-type": "multipart/form-data; boundary=--dio-boundary-2210433284",
-                jdsignature: await O()
-              };
-              return await gmHttp.post(n3, null, a3);
-            })(e3, n2).then((async (e4) => {
-              let n3 = e4.success;
-              if (0 === n3) show.error(e4.message);
+            account.login("javdb", { username: e3, password: n2 }, { scope: await getScope() }).then((async (result) => {
+              if (!result.success) show.error(result.message);
               else {
-                if (1 !== n3) throw clog.error("登录失败", e4), new Error(e4.message);
-                {
-                  let n4 = e4.data.token;
-                  await storeEncryptedCredential(me, n4), show.ok("登录成功"), dialog.close(t2), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
-                }
+                await storeEncryptedCredential(me, result.token), show.ok("登录成功"), dialog.close(t2), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
               }
             })).catch(((e4) => {
               clog.error("登录异常:", e4), show.error(e4.message);
@@ -15394,7 +15382,7 @@ ${error.stack}` : "");
     manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.http]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [SERVICE.movie, SERVICE.settings, SERVICE.cache]),
-    manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [SERVICE.dialog]),
+    manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [SERVICE.dialog, SERVICE.account]),
     manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog, SERVICE.storage]),
     manifest("detail.state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage]),
     manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [SERVICE.movie, SERVICE.translation, SERVICE.settings]),
@@ -15449,6 +15437,7 @@ ${error.stack}` : "");
         [SERVICE.screenshot, "screenshot"],
         [SERVICE.translation, "translation"],
         [SERVICE.subtitle, "subtitle"],
+        [SERVICE.account, "account"],
         [SERVICE.webdav, "webdav"],
         [SERVICE.storage, "storage"],
         [SERVICE.offline, "offline"],
@@ -15942,6 +15931,7 @@ ${error.stack}` : "");
       if (method !== "GET" && cacheScope !== "none") throw new TypeError("Mutation requests cannot use generic cache/dedupe");
       const urlPolicy = options.urlPolicy;
       const initialUrl = this.urlPolicy.assertAllowed(options.url, urlPolicy);
+      if (method !== "GET" || cacheScope === "none") return this.executeUnderlying({ ...options, method, url: initialUrl.href, signal: scope?.signal }, urlPolicy);
       const requestKey = await createRequestKey({ ...options, method, url: initialUrl.href, cacheScope });
       const serializedKey = stableSerialize(requestKey);
       const cachePolicy = { scope: cacheScope, sessionScopeId: options.sessionScopeId };
@@ -15949,7 +15939,6 @@ ${error.stack}` : "");
         const cached = this.cache.get(serializedKey, cachePolicy);
         if (cached.hit) return cached.value;
       }
-      if (method !== "GET" || cacheScope === "none") return this.executeUnderlying({ ...options, method, url: initialUrl.href, signal: scope?.signal }, urlPolicy);
       let entry = this.inflight.get(serializedKey);
       if (!entry) {
         const controller = new AbortController();
@@ -16343,6 +16332,22 @@ ${error.stack}` : "");
   };
   __name(_SubtitleService, "SubtitleService");
   var SubtitleService = _SubtitleService;
+
+  // src/services/account-service.js
+  var _AccountService = class _AccountService {
+    constructor(integrations) {
+      this.integrations = integrations;
+    }
+    async login(providerId, credentials, options = {}) {
+      const manifest2 = this.integrations.list("account.login").find((item) => item.id === providerId);
+      if (!manifest2) throw new TypeError(`Account provider is unavailable: ${providerId}`);
+      const adapter = this.integrations.getAdapter(manifest2.id);
+      if (typeof adapter?.login !== "function") throw new TypeError(`Account login is unavailable: ${providerId}`);
+      return adapter.login(credentials, options);
+    }
+  };
+  __name(_AccountService, "AccountService");
+  var AccountService = _AccountService;
 
   // src/services/settings-service.js
   var _SettingsService = class _SettingsService extends EventTarget {
@@ -16798,12 +16803,13 @@ ${error.stack}` : "");
     const screenshot = new ScreenshotService(providers, integrations);
     const translation = new TranslationService(integrations);
     const subtitle = new SubtitleService(integrations);
+    const account = new AccountService(integrations);
     const offline = new OfflineService(providers, integrations);
-    container.register(PORT.navigation, navigationPort).register(PORT.http, httpPort).register(PORT.storage, storagePort).register(PORT.dialog, dialogPort).register(PORT.style, stylePort).register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy).register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.webdav, webdav).register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile).register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet).register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline).register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
+    container.register(PORT.navigation, navigationPort).register(PORT.http, httpPort).register(PORT.storage, storagePort).register(PORT.dialog, dialogPort).register(PORT.style, stylePort).register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy).register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.webdav, webdav).register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile).register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet).register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline).register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.account, account).register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
     if (runtime.hostAdapter) container.register(PORT.host, runtime.hostAdapter);
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, movie, actressInfo, review, related, magnet, screenshot, translation, subtitle, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, movie, actressInfo, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
   }
   __name(createAppContext, "createAppContext");
 
@@ -17381,7 +17387,35 @@ ${error.stack}` : "");
       return response.data;
     }, "request");
     return Object.freeze({
-      contracts: ["MovieRef", "MovieDetail", "Actor", "Magnet", "Review", "RelatedList"],
+      contracts: ["MovieRef", "MovieDetail", "Actor", "Magnet", "Review", "RelatedList", "AccountSession"],
+      async login(credentials, options = {}) {
+        const url = new URL("/api/v1/sessions", API_ORIGIN);
+        Object.entries({
+          username: credentials.username,
+          password: credentials.password,
+          device_uuid: "04b9534d-5118-53de-9f87-2ddded77111e",
+          device_name: "iPhone",
+          device_model: "iPhone",
+          platform: "ios",
+          system_version: "17.4",
+          app_version: "official",
+          app_version_number: "1.9.29",
+          app_channel: "official"
+        }).forEach(([key, value]) => url.searchParams.set(key, value));
+        const response = await http.request({
+          providerId: "javdb",
+          method: "POST",
+          url: url.href,
+          responseType: "json",
+          cacheScope: "none",
+          headers: { "user-agent": "Dart/3.5 (dart:io)", "accept-language": "zh-TW", "content-type": "multipart/form-data; boundary=--dio-boundary-2210433284", jdsignature: sign() },
+          urlPolicy: { trustClass: "builtin-public", hosts: ["jdforrepam.com"] }
+        }, options.scope);
+        const payload = response.data;
+        if (payload?.success === 0) return Object.freeze({ success: false, token: null, message: String(payload.message || "登录失败") });
+        if (payload?.success !== 1 || typeof payload?.data?.token !== "string") throw new JhsError("INVALID_RESPONSE", String(payload?.message || "JavDB 登录响应无效"), { source: "javdb" });
+        return Object.freeze({ success: true, token: payload.data.token, message: String(payload.message || "") });
+      },
       async resolveMovie(movieRef, options = {}) {
         const carNum = normalizeMovieCarNum(movieRef.carNum);
         if (!carNum) return null;
@@ -17476,12 +17510,12 @@ ${error.stack}` : "");
     id: "javdb",
     trustClass: "builtin-public",
     hosts: ["javdb.com", "jdforrepam.com"],
-    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup"],
+    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup", "account.login"],
     requires: [SERVICE.http],
     createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
     createAdapter: /* @__PURE__ */ __name((client) => createJavDbAdapter(client.http), "createAdapter"),
     createHostAdapter: null,
-    cachePolicy: { "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.reviews": "public-1d", "movie.related": "public-1d" },
+    cachePolicy: { "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.reviews": "public-1d", "movie.related": "public-1d", "account.login": "none" },
     quality: "silver"
   });
 

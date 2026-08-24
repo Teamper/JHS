@@ -7,6 +7,13 @@ import { canonicalizeUrl, createRequestKey, HttpService } from "../src/services/
 import { SettingsService } from "../src/services/settings-service.js";
 
 describe("HTTP, URL and settings contracts", () => {
+    it("does not derive RequestKeys for mutation or no-cache requests", async () => {
+        const digest = vi.spyOn(crypto.subtle, "digest"), port = { request: vi.fn(async options => ({ status: 200, data: {}, finalUrl: options.url })) };
+        const service = new HttpService(port, new ExternalUrlPolicy());
+        await service.request({ providerId: "account", method: "POST", url: "https://api.example.test/login?password=secret", responseType: "json", cacheScope: "none", urlPolicy: { trustClass: "builtin-public", hosts: ["example.test"] } });
+        expect(digest).not.toHaveBeenCalled();
+        digest.mockRestore();
+    });
     it("canonicalizes RequestKey without retaining credential values", async () => {
         expect(canonicalizeUrl("https://api.example.test/a?z=2&a=1#secret")).toBe("https://api.example.test/a?a=1&z=2");
         const key = await createRequestKey({ providerId: "example", method: "GET", url: "https://api.example.test/a", headers: { Authorization: "Bearer secret" }, varyHeaders: ["Authorization"], cacheScope: "session", sessionScopeId: "account-a" });

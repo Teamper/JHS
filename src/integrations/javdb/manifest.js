@@ -4,6 +4,7 @@ import { defineIntegration } from "../../contracts/manifests.js";
 import { CACHE, SERVICE } from "../../contracts/tokens.js";
 import { normalizeMovieCarNum } from "../../core/movie-identity.js";
 import { createJavDbSignature } from "./signature.js";
+import { JhsError } from "../../core/jhs-error.js";
 
 const API_ORIGIN = "https://jdforrepam.com";
 
@@ -21,7 +22,25 @@ export function createJavDbAdapter(http, sign = createJavDbSignature) {
         return response.data;
     };
     return Object.freeze({
-        contracts: ["MovieRef", "MovieDetail", "Actor", "Magnet", "Review", "RelatedList"],
+        contracts: ["MovieRef", "MovieDetail", "Actor", "Magnet", "Review", "RelatedList", "AccountSession"],
+        /** @param {{username: string, password: string}} credentials @param {{scope?: any}} [options] */
+        async login(credentials, options = {}) {
+            const url = new URL("/api/v1/sessions", API_ORIGIN);
+            Object.entries({
+                username: credentials.username, password: credentials.password,
+                device_uuid: "04b9534d-5118-53de-9f87-2ddded77111e", device_name: "iPhone", device_model: "iPhone",
+                platform: "ios", system_version: "17.4", app_version: "official", app_version_number: "1.9.29", app_channel: "official",
+            }).forEach(([key, value]) => url.searchParams.set(key, value));
+            const response = await http.request({
+                providerId: "javdb", method: "POST", url: url.href, responseType: "json", cacheScope: "none",
+                headers: { "user-agent": "Dart/3.5 (dart:io)", "accept-language": "zh-TW", "content-type": "multipart/form-data; boundary=--dio-boundary-2210433284", jdsignature: sign() },
+                urlPolicy: { trustClass: "builtin-public", hosts: ["jdforrepam.com"] },
+            }, options.scope);
+            const payload = response.data;
+            if (payload?.success === 0) return Object.freeze({ success: false, token: null, message: String(payload.message || "登录失败") });
+            if (payload?.success !== 1 || typeof payload?.data?.token !== "string") throw new JhsError("INVALID_RESPONSE", String(payload?.message || "JavDB 登录响应无效"), { source: "javdb" });
+            return Object.freeze({ success: true, token: payload.data.token, message: String(payload.message || "") });
+        },
         /** @param {Record<string, unknown>} movieRef @param {{scope?: any}} [options] */
         async resolveMovie(movieRef, options = {}) {
             const carNum = normalizeMovieCarNum(movieRef.carNum);
@@ -97,9 +116,9 @@ export function createJavDbAdapter(http, sign = createJavDbSignature) {
 
 export default defineIntegration({
     id: "javdb", trustClass: "builtin-public", hosts: ["javdb.com", "jdforrepam.com"],
-    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup"],
+    capabilities: ["movie.search", "movie.detail", "movie.magnets", "movie.ranking", "movie.state", "movie.reviews", "movie.related", "actor.lookup", "account.login"],
     requires: [SERVICE.http],
     createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }),
     createAdapter: (/** @type {any} */ client) => createJavDbAdapter(client.http), createHostAdapter: null,
-    cachePolicy: { "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.reviews": "public-1d", "movie.related": "public-1d" }, quality: "silver",
+    cachePolicy: { "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.reviews": "public-1d", "movie.related": "public-1d", "account.login": "none" }, quality: "silver",
 });

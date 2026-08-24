@@ -22,6 +22,7 @@ import { ReviewService } from "../services/review-service.js";
 import { ScreenshotService } from "../services/screenshot-service.js";
 import { TranslationService } from "../services/translation-service.js";
 import { SubtitleService } from "../services/subtitle-service.js";
+import { AccountService } from "../services/account-service.js";
 import { SettingsService } from "../services/settings-service.js";
 import { StorageService } from "../services/storage-service.js";
 import { WebDavService } from "../services/webdav-service.js";
@@ -67,6 +68,7 @@ export function createAppContext(runtime) {
     const screenshot = new ScreenshotService(providers, integrations);
     const translation = new TranslationService(integrations);
     const subtitle = new SubtitleService(integrations);
+    const account = new AccountService(integrations);
     const offline = new OfflineService(providers, integrations);
 
     container
@@ -77,11 +79,11 @@ export function createAppContext(runtime) {
         .register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile)
         .register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet)
         .register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline)
-        .register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle)
+        .register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.account, account)
         .register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
     if (runtime.hostAdapter) container.register(PORT.host, runtime.hostAdapter);
 
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, movie, actressInfo, review, related, magnet, screenshot, translation, subtitle, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, movie, actressInfo, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
 }
