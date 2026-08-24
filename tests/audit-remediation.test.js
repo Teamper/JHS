@@ -65,6 +65,17 @@ describe("6.2.0 audit remediation", () => {
         expect($("#settingsArea").hasClass("jhs-is-hidden")).toBe(false);
     });
 
+    it("pins OtherSite checks to built-in or configured exact origins", () => {
+        const { Class } = loadClass("src/plugins/external-search/other-site.js", "OtherSitePlugin", { normalizeCarNum: value => value });
+        const plugin = new Class();
+        expect(plugin.getSiteUrlPolicy({ id: "javBusBtn" }, "https://www.javbus.com/ABC-123")).toEqual({
+            trustClass: "builtin-public", hosts: ["javbus.com"], expectedOrigin: "https://www.javbus.com",
+        });
+        expect(plugin.getSiteUrlPolicy({ id: "javBusBtn" }, "https://mirror.example/ABC-123")).toEqual({
+            trustClass: "custom-public", expectedOrigin: "https://mirror.example",
+        });
+    });
+
     it("keeps all JHS UI layout decisions on mobileMode", () => {
         const setting = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8"), search = readTestFile(join(process.cwd(), "src/plugins/avatar/search-by-image.js"), "utf8"), mobile = readTestFile(join(process.cwd(), "src/plugins/status/mobile-bottom-bar.js"), "utf8");
         expect(setting).not.toContain("utils.isMobile()");

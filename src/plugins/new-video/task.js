@@ -3,7 +3,6 @@ import { parseNumberSetting, parseTaskTimestamp, selectLatestPublishTime, should
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { detectSite } from "../../core/site-context.js";
-import { parseJavDbActorList } from "../../integrations/javdb/parser.js";
 import { parseDetailPage } from "../../integrations/host-list/parser.js";
 import { StorageQueue } from "../external-search/other-site.js";
 
@@ -45,7 +44,25 @@ export class TaskPlugin extends BasePlugin {
         if (c) throw c.reason;
     }
     isNetworkBlocked(e) {
-        return !0 === e?._cfBlocked || !0 === e?._circuitBroken;
+        return [ "CF_BLOCKED", "CIRCUIT_OPEN", "ABORTED" ].includes(e?.code) || !0 === e?._cfBlocked || !0 === e?._circuitBroken;
+    }
+    /** 通过统一 HttpService 抓取当前配置宿主的 HTML。 */
+    async requestHostPage(url, site) {
+        const target = new URL(url), builtinHost = site === T ? "javdb.com" : site === I ? "javbus.com" : null;
+        const isBuiltin = builtinHost && (target.hostname === builtinHost || target.hostname.endsWith(`.${builtinHost}`));
+        const urlPolicy = isBuiltin
+            ? { trustClass: "builtin-public", hosts: [builtinHost], expectedOrigin: target.origin }
+            : { trustClass: "custom-public", expectedOrigin: target.origin };
+        try {
+            const response = await this.getRuntimeService("http").request({
+                providerId: `host-task:${site}`, method: "GET", url: target.href, responseType: "text", cacheScope: "none",
+                timeout: this.taskConfig?.httpTimeout, retryCount: Math.max(0, (this.taskConfig?.httpRetryCount ?? 1) - 1),
+                circuitThreshold: this.taskConfig?.circuitBreakerThreshold, circuitCooldownMs: this.taskConfig?.circuitBreakerCooldown,
+                urlPolicy,
+            }, await this.getRuntimeService("scope")());
+            if (typeof response.data !== "string") throw new TypeError("宿主页面响应不是 HTML 文本");
+            return response.data;
+        } catch (error) { error._taskNetwork = true; throw error; }
     }
     createTaskResult(extra = {}) {
         return { attempted: !1, completed: !1, fatal: !1, success: 0, networkFailed: 0, parseFailed: 0, aborted: 0, skippedInterval: 0, skippedStopped: 0, ...extra };
@@ -224,7 +241,11 @@ export class TaskPlugin extends BasePlugin {
                     checkFavoriteActress_IntervalTime: parseNumberSetting(e.checkFavoriteActress_IntervalTime, 24, { min: Number.EPSILON }),
                     enableCheckNewVideo: e.enableCheckNewVideo || _,
                     checkNewVideo_intervalTime: parseNumberSetting(e.checkNewVideo_intervalTime, 12, { min: Number.EPSILON }),
-                    checkNewVideo_ruleTime: parseNumberSetting(e.checkNewVideo_ruleTime, 8760, { min: 0 })
+                    checkNewVideo_ruleTime: parseNumberSetting(e.checkNewVideo_ruleTime, 8760, { min: 0 }),
+                    httpTimeout: parseNumberSetting(e.httpTimeout, 5e3, { min: 1000, max: 120e3 }),
+                    httpRetryCount: parseNumberSetting(e.httpRetryCount, 3, { min: 0, max: 5 }),
+                    circuitBreakerThreshold: parseNumberSetting(e.circuitBreakerThreshold, 3, { min: 1, max: 20 }),
+                    circuitBreakerCooldown: parseNumberSetting(e.circuitBreakerCooldown, 6e4, { min: 1000, max: 36e5 })
                 };
                 this.taskConfig = nextConfig, this.taskConfigDirty = !1;
             } while (this.configLoadQueued || this.taskConfigDirty);
@@ -293,7 +314,7 @@ export class TaskPlugin extends BasePlugin {
                     const {starId, name, url} = item;
                     let responseText;
                     try {
-                        clog.log("正在检屏黑名单演员:", name, url), $("#checkBlacklistMsg").text(`正在检屏黑名单演员: ${name} ${url}`), responseText = await gmHttp.get(url);
+                        clog.log("正在检屏黑名单演员:", name, url), $("#checkBlacklistMsg").text(`正在检屏黑名单演员: ${name} ${url}`), responseText = await this.requestHostPage(url, site);
                     } catch (error) {
                         result.networkFailed++;
                         if (this.isNetworkBlocked(error)) throw error;
@@ -357,13 +378,13 @@ export class TaskPlugin extends BasePlugin {
                 if (visitedUrls.has(currentUrl.href)) throw new Error(`收藏演员分页循环: ${currentUrl.href}`);
                 if (pages >= 200) throw new Error("收藏演员分页超过 200 页");
                 visitedUrls.add(currentUrl.href), pages++, clog.log(`正在抓取页面: ${currentUrl.href}`), $("#checkNewVideoMsg").text(`正在解析已收藏的演员: ${currentUrl.href}`);
-                let responseText;
-                try { responseText = await gmHttp.get(currentUrl.href); } catch (error) { throw error._taskNetwork = !0, error; }
-                const page = utils.htmlTo$dom(responseText), parsed = parseJavDbActorList(page, currentUrl.href);
+                const parsed = await this.getRuntimeService("actressInfo").collection("javdb", { baseUrl: this.javDbUrl, pageUrl: currentUrl.href }, { scope: await this.getRuntimeService("scope")() });
                 if ("valid" !== parsed.state) throw Object.assign(new Error(`收藏演员页面无效: ${parsed.state}`), { _taskParse: !0 });
                 if (parsed.isEmpty && parsed.nextUrl) throw Object.assign(new Error("收藏演员空页面包含下一页"), { _taskParse: !0 });
                 target.push(...parsed.actors), currentUrl = parsed.nextUrl ? new URL(parsed.nextUrl, currentUrl.href) : null;
             } catch (error) {
+                const requestCodes = [ "NETWORK_ERROR", "TIMEOUT", "AUTH_REQUIRED", "RATE_LIMITED", "CF_BLOCKED", "CIRCUIT_OPEN", "ABORTED" ];
+                requestCodes.includes(error?.code) && (error._taskNetwork = !0);
                 error._taskNetwork || Object.prototype.hasOwnProperty.call(error, "_taskParse") || (error._taskParse = !0);
                 throw clog.error(`抓取 ${currentUrl?.href || startUrl} 时发生错误，停止本轮同步:`, error), error;
             }
@@ -399,9 +420,9 @@ export class TaskPlugin extends BasePlugin {
                         const {name, starId} = actress, url = `${this.javDbUrl}/actors/${starId}?t=d`;
                         try {
                             clog.log("正在检测最新作品, 演员:", name, url), $("#checkNewVideoMsg").text(`正在检测最新作品, 演员: ${name}`);
-                            const responseText = await gmHttp.get(url), page = utils.htmlTo$dom(responseText);
+                            const movies = await this.getRuntimeService("actressInfo").movies("javdb", { actorId: starId, baseUrl: this.javDbUrl }, { scope: await this.getRuntimeService("scope")(), ttlMs: 0 });
                             try {
-                                await this.storageQueue.addTask((async () => this.parsePage(page, T, starId, name, titleKeywords, blacklistSet))), result.success++;
+                                await this.storageQueue.addTask((async () => this.parseActorMovies(movies, starId, name, titleKeywords, blacklistSet))), result.success++;
                             } catch (error) {
                                 result.parseFailed++, clog.error("解析或保存演员作品失败:", url, error);
                             }
@@ -484,6 +505,20 @@ export class TaskPlugin extends BasePlugin {
         });
         return p.length;
     }
+    async parseActorMovies(items, starId, name, titleKeywords, blacklistSet) {
+        if (!items.length) return await storageManager.updateFavoriteActress({ starId, lastCheckTime: utils.getNowStr(), newVideoList: [] }), 0;
+        const publishTimes = items.map((item => item.publishTime)).filter(Boolean), candidates = items.filter((item => {
+            if (!item.carNum || blacklistSet.has(item.carNum)) return false;
+            return !titleKeywords.some((keyword => item.title?.includes(keyword) || item.carNum.includes(keyword)));
+        })).map((item => ({
+            carNum: item.carNum, coverUrl: item.coverUrl || "", title: item.title || "", publishTime: item.publishTime || "",
+            score: Number(item.score) || 0, voteCount: Number(item.voteCount) || 0, url: item.url || "",
+        })));
+        const latestPublishTime = selectLatestPublishTime(publishTimes), carMap = await storageManager.getCarMap(), fresh = candidates.filter((item => !carMap.has(item.carNum)));
+        fresh.length > 0 && clog.log(`<span class="jhs-task-emphasis">检测出新作品, ${name}, 共${fresh.length}部</span>`);
+        await storageManager.updateFavoriteActress({ starId, lastCheckTime: utils.getNowStr(), newVideoList: fresh, lastPublishTime: latestPublishTime });
+        return fresh.length;
+    }
     async checkOneNewVideo(e) {
         await this.ensureReady();
         const t = await storageManager.getTitleFilterKeyword(), n = await storageManager.getBlacklistCarList(), a = new Set(n.map((e => e.carNum))), {lastCheckTime: i, name: s, starId: o} = e;
@@ -491,8 +526,8 @@ export class TaskPlugin extends BasePlugin {
         const l = $("#checkNewVideoMsg");
         try {
             clog.log("正在检测最新作品, 演员:", s, r), l.text(`正在检测最新作品, 演员: ${s}`);
-            const e = await gmHttp.get(r), n = utils.htmlTo$dom(e);
-            await this.parsePage(n, T, o, s, t, a), clog.log('<span class="jhs-task-emphasis">检测最新作品---结束</span>'),
+            const movies = await this.getRuntimeService("actressInfo").movies("javdb", { actorId: o, baseUrl: this.javDbUrl }, { scope: await this.getRuntimeService("scope")(), ttlMs: 0 });
+            await this.parseActorMovies(movies, o, s, t, a), clog.log('<span class="jhs-task-emphasis">检测最新作品---结束</span>'),
             l.text("检测完毕");
             await this.emitNewVideoChanged("single-actress-check");
         } catch (c) {

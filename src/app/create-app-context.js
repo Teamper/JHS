@@ -35,7 +35,7 @@ import { IntegrationRegistry } from "./integration-registry.js";
 import { SettingsRegistry } from "./settings-registry.js";
 import { LifecycleScope } from "../core/lifecycle-scope.js";
 
-/** @param {{gmRequest: (options: Record<string, any>) => any, gmGetValue: (key: string, fallback?: unknown) => unknown, gmSetValue: (key: string, value: unknown) => void, legacyHttp?: any, storageForage: any, localStorage: Storage, layer: any, hostAdapter?: any, disabled?: string[], site?: string, route?: string, localOrigins?: string[]}} runtime */
+/** @param {{gmRequest: (options: Record<string, any>) => any, gmGetValue: (key: string, fallback?: unknown) => unknown, gmSetValue: (key: string, value: unknown) => void, legacyHttp?: any, storageForage: any, localStorage: Storage, layer: any, hostAdapter?: any, hostAdapters?: {javdb?: any, javbus?: any}, disabled?: string[], site?: string, route?: string, localOrigins?: string[]}} runtime */
 export function createAppContext(runtime) {
     const diagnostics = new DiagnosticsService({ legacyHttp: runtime.legacyHttp });
     const rootScope = new LifecycleScope("app:root", { onChange: (snapshot) => diagnostics.updateScope(snapshot) });
@@ -52,6 +52,7 @@ export function createAppContext(runtime) {
     const dialog = new DialogService(dialogPort);
     const styles = new StyleRegistry(stylePort);
     const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache });
+    diagnostics.setNetworkController(http);
     const webdav = new WebDavService(http);
     const settings = new SettingsService(storage);
     const profile = new ProfileService({ scope: rootScope });
@@ -82,6 +83,8 @@ export function createAppContext(runtime) {
         .register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.account, account)
         .register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
     if (runtime.hostAdapter) container.register(PORT.host, runtime.hostAdapter);
+    if (runtime.hostAdapters?.javdb) container.register(PORT.javdbHost, runtime.hostAdapters.javdb);
+    if (runtime.hostAdapters?.javbus) container.register(PORT.javbusHost, runtime.hostAdapters.javbus);
 
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
     container.register(REGISTRY.feature, features);

@@ -1,13 +1,44 @@
+// @vitest-environment jsdom
 import jquery from "jquery";
 import { JSDOM } from "jsdom";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { parseJavDbActorList } from "../../src/integrations/javdb/parser.js";
 import { createJavDbAdapter } from "../../src/integrations/javdb/manifest.js";
 import { AccountService } from "../../src/services/account-service.js";
+import { JavDbHostAdapter } from "../../src/platform/hosts/javdb-host-adapter.js";
 
 it("normalizes JavDB actor contracts", () => {
     const dom = new JSDOM('<div id="actors"><div class="actor-box"><a href="/actors/a1" title="Actor"><span class="info">有码</span></a></div></div>');
-    expect(parseJavDbActorList(jquery(dom.window)(dom.window.document), "https://javdb.com")).toMatchObject({ state: "valid", actors: [{ starId: "a1", name: "Actor" }] });
+    expect(parseJavDbActorList(jquery(dom.window.document), "https://javdb.com")).toMatchObject({ state: "valid", actors: [{ starId: "a1", name: "Actor" }] });
+});
+
+it("normalizes JavDB host actor movies and uncollect mutations", async () => {
+    const html = readFileSync(join(import.meta.dirname, "../fixtures/integrations/javdb/actor-movies.html"), "utf8");
+    const hostAdapter = new JavDbHostAdapter();
+    expect(hostAdapter.parseActorMovies(html, "https://javdb.com")).toEqual([{
+        carNum: "ABC-123", title: "Sample title", coverUrl: "https://javdb.com/covers/a.jpg", url: "https://javdb.com/v/a", publishTime: "2026-08-24",
+        score: 0, voteCount: 0,
+    }]);
+    const request = vi.fn()
+        .mockResolvedValueOnce({ data: html, finalUrl: "https://javdb.com/actors/a?t=d" })
+        .mockResolvedValueOnce({ data: "removeClass", finalUrl: "https://javdb.com/actors/a/uncollect" });
+    const adapter = createJavDbAdapter({ request }, () => "signature", hostAdapter);
+    await expect(adapter.listActorMovies({ actorId: "a" }, { scope: "scope" })).resolves.toHaveLength(1);
+    await expect(adapter.uncollectActor({ actorId: "a", csrfToken: "csrf" }, { scope: "scope" })).resolves.toEqual({ success: true });
+    expect(request.mock.calls[0][0]).toMatchObject({ cacheScope: "public", urlPolicy: { trustClass: "builtin-public", hosts: ["javdb.com"], expectedOrigin: "https://javdb.com" } });
+    expect(request.mock.calls[1][0]).toMatchObject({ method: "POST", cacheScope: "none", headers: { "Content-Type": "application/json", "x-csrf-token": "csrf" } });
+});
+
+it("normalizes JavDB host actor collections with absolute URLs", () => {
+    const hostAdapter = new JavDbHostAdapter(), parsed = hostAdapter.parseActorCollection(`
+        <div id="actors"><div class="actor-box"><a title="Actor, Alias" href="/actors/a"><img src="/avatars/a.jpg"><span class="info">無碼</span></a></div></div>
+        <a class="pagination-next" href="?page=2"></a>
+    `, "https://javdb.com/users/collection_actors");
+    expect(parsed).toMatchObject({ state: "valid", isEmpty: false, nextUrl: "https://javdb.com/users/collection_actors?page=2", actors: [{
+        starId: "a", name: "Actor", allName: ["Actor", "Alias"], avatar: "https://javdb.com/avatars/a.jpg", actressType: "uncensored",
+    }] });
 });
 
 it("normalizes JavDB login without caching credentials", async () => {

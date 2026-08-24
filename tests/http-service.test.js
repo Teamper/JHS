@@ -3,7 +3,7 @@ import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { CacheService } from "../src/services/cache-service.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 import { ExternalUrlPolicy } from "../src/services/external-url-policy.js";
-import { canonicalizeUrl, createRequestKey, HttpService } from "../src/services/http-service.js";
+import { canonicalizeUrl, createRequestKey, HttpService, isCloudflareChallenge } from "../src/services/http-service.js";
 import { SettingsService } from "../src/services/settings-service.js";
 
 describe("HTTP, URL and settings contracts", () => {
@@ -61,6 +61,31 @@ describe("HTTP, URL and settings contracts", () => {
         await expect(unauthorized.request(options)).rejects.toMatchObject({ code: "AUTH_REQUIRED", retryable: false, details: { status: 401 } });
         const limited = new HttpService({ request: async () => ({ status: 429, finalUrl: options.url }) }, policy);
         await expect(limited.request(options)).rejects.toMatchObject({ code: "RATE_LIMITED", retryable: true, details: { status: 429 } });
+    });
+
+    it("retries transient failures and records domain health", async () => {
+        const request = vi.fn()
+            .mockRejectedValueOnce(new DOMException("timeout", "TimeoutError"))
+            .mockResolvedValueOnce({ status: 200, data: "ok", finalUrl: "https://api.example.test/data" });
+        const service = new HttpService({ request }, new ExternalUrlPolicy());
+        await expect(service.request({ providerId: "example", url: "https://api.example.test/data", cacheScope: "none", retryCount: 1, retryDelayMs: 0, urlPolicy: { trustClass: "builtin-public", hosts: ["example.test"] } })).resolves.toMatchObject({ data: "ok" });
+        expect(request).toHaveBeenCalledTimes(2);
+        expect(service.getDomainStats()["api.example.test"]).toMatchObject({ count: 2, errors: 1 });
+    });
+
+    it("detects Cloudflare challenges and opens a domain circuit", async () => {
+        const challenge = '<title>Just a moment...</title><form id="challenge-form"><script src="/cdn-cgi/challenge-platform/x"></script></form>';
+        expect(isCloudflareChallenge(challenge, 503)).toBe(true);
+        const request = vi.fn(async options => ({ status: 503, data: challenge, responseText: challenge, finalUrl: options.url }));
+        const service = new HttpService({ request }, new ExternalUrlPolicy()), options = {
+            providerId: "example", url: "https://api.example.test/data?token=secret", cacheScope: "none", retryCount: 0, circuitThreshold: 2,
+            urlPolicy: { trustClass: "builtin-public", hosts: ["example.test"] },
+        };
+        await expect(service.request(options)).rejects.toMatchObject({ code: "CF_BLOCKED", details: { domain: "api.example.test", status: 503 } });
+        await expect(service.request(options)).rejects.toMatchObject({ code: "CF_BLOCKED" });
+        await expect(service.request(options)).rejects.toMatchObject({ code: "CIRCUIT_OPEN", details: { domain: "api.example.test" } });
+        expect(request).toHaveBeenCalledTimes(2);
+        expect(JSON.stringify(service.getCircuitBreakerStatus())).not.toContain("secret");
     });
 
     it("can constrain builtin requests and redirects to an exact origin", () => {

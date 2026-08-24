@@ -82,6 +82,16 @@ export class OtherSitePlugin extends BasePlugin {
     getName() {
         return "OtherSitePlugin";
     }
+    /** 返回外部站点检测使用的精确 origin 信任策略。 */
+    getSiteUrlPolicy(config, url) {
+        const target = new URL(url), builtinHosts = {
+            javTrailersBtn: "javtrailers.com", jableBtn: "jable.tv", avgleBtn: "jav.rs", missAvBtn: "missav.live",
+            supJavBtn: "supjav.com", javDbBtn: "javdb.com", javBusBtn: "javbus.com",
+        }, builtinHost = builtinHosts[config.id], isBuiltin = builtinHost && (target.hostname === builtinHost || target.hostname.endsWith(`.${builtinHost}`));
+        return isBuiltin
+            ? { trustClass: "builtin-public", hosts: [builtinHost], expectedOrigin: target.origin }
+            : { trustClass: "custom-public", expectedOrigin: target.origin };
+    }
     async initCss() {
         return `
             <style>
@@ -180,13 +190,10 @@ export class OtherSitePlugin extends BasePlugin {
             if (o && o.time && m - o.time < 864e5) return void (n.attr("href", o.url), "multiple" === o.type && n.append('<span class="site-tag">多结果</span>'), this.setSiteState(n, "available"));
             const r = await t.getBaseUrl(), l = t.searchPath(r, e);
             n.attr("href", l);
-            /* 预检查仅用于 UI 展示，实际拦截依赖 gmRequest 内部熔断检查 */
-            const _breaker = gmHttp.isDomainCircuitBroken(l);
-            if (_breaker) {
-                n.attr("title", `站点已熔断，${_breaker.remaining}秒后重试`), this.setSiteState(n, "domain-error");
-                return;
-            }
-            const c = await storageManager.cachedRequest(`other-site:${t.id}:${e}`, 864e5, (() => gmHttp.get(l, null, t.headers, !0, t.requestOptions || {})));
+            const scope = await this.getRuntimeService("scope")(), response = await this.getRuntimeService("http").request({
+                providerId: `other-site:${t.id}`, method: "GET", url: l, headers: t.headers, responseType: "text",
+                cacheScope: "public", ttlMs: 864e5, requestOptions: t.requestOptions || {}, urlPolicy: this.getSiteUrlPolicy(t, l),
+            }, scope), c = response.data;
             if (!view.isActive()) return;
             const d = utils.htmlTo$dom(c), h = [];
             d.find(t.itemSelector).each(((n, a) => {
@@ -217,10 +224,10 @@ export class OtherSitePlugin extends BasePlugin {
             g && n.append(g);
         } catch (a) {
             const e = String(a), i = t.id.replace("Btn", "");
-            a._circuitBroken ? (n.attr("title", e), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源跳过, ${i} 已熔断`)) :
-            a?._cfBlocked ? (n.attr("title", "请求失败：Cloudflare 安全检查。"), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源失败, ${i} 需Cloudflare安全检查`)) :
-            e.includes("重定向") ? (n.attr("title", "域名失效"), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源失败, ${i} 域名被重定向`)) :
-            e.includes("404 Page Not Found") ? (n.attr("title", "未查询到, 点击前往搜索页"), this.setSiteState(n, "unavailable")) :
+            "CIRCUIT_OPEN" === a?.code ? (n.attr("title", e), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源跳过, ${i} 已熔断`)) :
+            "CF_BLOCKED" === a?.code ? (n.attr("title", "请求失败：Cloudflare 安全检查。"), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源失败, ${i} 需Cloudflare安全检查`)) :
+            "INVALID_URL" === a?.code ? (n.attr("title", "域名失效"), this.setSiteState(n, "domain-error"), clog.warn(`检测第三方资源失败, ${i} 域名或重定向无效`)) :
+            "NOT_FOUND" === a?.code ? (n.attr("title", "未查询到, 点击前往搜索页"), this.setSiteState(n, "unavailable")) :
             (clog.error(a), n.attr("title", "请求失败。"), this.setSiteState(n, "unavailable"), clog.warn(`检测第三方资源失败, ${i}`));
         }
     }

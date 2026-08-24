@@ -62,7 +62,11 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
   const parsers = ["src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js"].map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
   const source = `${parsers}\n${readTestFile(join(repoRoot, "src/plugins/new-video/task.js"), "utf8")}\nglobalThis.TestTaskPlugin = TaskPlugin;`;
   vm.runInContext(source, context);
-  return new context.TestTaskPlugin();
+  const task = new context.TestTaskPlugin();
+  task.getRuntimeService = name => name === "actressInfo" ? {
+    collection: async (_integrationId, input) => gmHttp.get(input.pageUrl)
+  } : name === "scope" ? async () => null : null;
+  return task;
 }
 
 function loadStorageQueue() {

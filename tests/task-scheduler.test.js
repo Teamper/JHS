@@ -41,14 +41,30 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         })
     };
     const locks = { request: vi.fn(async (key, options, callback) => callback({ name: key })) };
-    const gmHttp = { get: vi.fn() }, beans = {
+    const gmHttp = { get: vi.fn() }, http = {
+        request: vi.fn(async request => ({ data: await gmHttp.get(request.url), finalUrl: request.url }))
+    }, actressInfo = {
+        collection: vi.fn(async (_integrationId, input) => {
+            const html = await gmHttp.get(input.pageUrl), page = $(new JSDOM(html, { url: input.pageUrl }).window.document);
+            return context.parseJavDbActorList(page, input.pageUrl);
+        }),
+        movies: vi.fn(async (_integrationId, input) => {
+            const url = `${input.baseUrl}/actors/${input.actorId}?t=d`, html = await gmHttp.get(url), page = $(new JSDOM(html, { url }).window.document);
+            return page.find(".movie-list .item").toArray().map(element => {
+                const item = $(element), parsed = context.readListItem(item);
+                return { ...parsed, coverUrl: item.find("img").attr("src") || "", score: 0, voteCount: 0 };
+            });
+        })
+    }, beans = {
         OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com"), getJavBusUrl: vi.fn(async () => "https://www.javbus.com") },
         NewVideoPlugin: { loadData: vi.fn(async () => {}), resetBtnTip: vi.fn(async () => {}) },
         BlacklistPlugin: { resetBtnTip: vi.fn(async () => {}) }
     };
     class BasePlugin {
         getBean(name) { return beans[name]; }
-        getRuntimeService(name) { return "storage" === name ? storage : "scope" === name ? () => scope : null; }
+        getRuntimeService(name) {
+            return "storage" === name ? storage : "scope" === name ? () => scope : "http" === name ? http : "actressInfo" === name ? actressInfo : null;
+        }
         getSelector(site = "javdb") { return site === "javbus" ? { boxSelector: ".masonry", itemSelector: ".masonry .item", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" } : { boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }; }
     }
     class StorageQueue { async addTask(task) { return task(); } async waitAllFinished() {} }
@@ -70,7 +86,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
     const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js", "src/plugins/new-video/task.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n");
     vm.runInContext(`${source};globalThis.Task=TaskPlugin`, context);
     const plugin = new context.Task;
-    return { plugin, clock, values, settings, favorites, blacklistItems, storageManager, gmHttp, beans, locks, jhsEventBus, scope, $, htmlToPage: context.utils.htmlTo$dom };
+    return { plugin, clock, values, settings, favorites, blacklistItems, storageManager, gmHttp, http, actressInfo, beans, locks, jhsEventBus, scope, $, htmlToPage: context.utils.htmlTo$dom };
 }
 
 describe("task scheduler state machine", () => {
@@ -204,7 +220,7 @@ describe("task scheduler state machine", () => {
         harness.plugin.javDbUrl = "https://javdb.com";
         harness.gmHttp.get.mockImplementation(async url => (calls.push(url), "<div class=\"movie-list\"></div>"));
         let failB = true;
-        harness.plugin.parsePage = vi.fn(async (page, site, starId) => {
+        harness.plugin.parseActorMovies = vi.fn(async (movies, starId) => {
             if ("b" === starId && failB) throw new Error("parse failed");
             harness.favorites.find(item => item.starId === starId).lastCheckTime = harness.plugin.taskConfig ? "2026-08-23 13:00:00" : null;
         });

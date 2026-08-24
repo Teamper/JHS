@@ -29,4 +29,27 @@ export class ActressInfoService {
         }
         return null;
     }
+    /** @param {string} providerId @param {Record<string, any>} actorRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope, ttlMs?: number}} [options] */
+    async movies(providerId, actorRef, options = {}) {
+        const manifest = this.integrations.list("actor.movies").find((item) => item.id === providerId);
+        if (!manifest) return [];
+        const adapter = this.integrations.getAdapter(manifest.id);
+        return typeof adapter?.listActorMovies === "function" ? adapter.listActorMovies(actorRef, options) : [];
+    }
+    /** @param {string} providerId @param {Record<string, any>} query @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async collection(providerId, query, options = {}) {
+        const manifest = this.integrations.list("actor.collection").find((item) => item.id === providerId);
+        if (!manifest) throw new TypeError(`Actor collection provider is unavailable: ${providerId}`);
+        const adapter = this.integrations.getAdapter(manifest.id);
+        if (typeof adapter?.listActorCollection !== "function") throw new TypeError(`Actor collection is unavailable: ${providerId}`);
+        return adapter.listActorCollection(query, options);
+    }
+    /** @param {string} providerId @param {Record<string, any>} actorRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async uncollect(providerId, actorRef, options = {}) {
+        const manifest = this.integrations.list("actor.uncollect").find((item) => item.id === providerId);
+        if (!manifest) throw new TypeError(`Actor provider is unavailable: ${providerId}`);
+        const adapter = this.integrations.getAdapter(manifest.id);
+        if (typeof adapter?.uncollectActor !== "function") throw new TypeError(`Actor uncollect is unavailable: ${providerId}`);
+        return adapter.uncollectActor(actorRef, options);
+    }
 }

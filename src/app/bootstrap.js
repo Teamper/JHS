@@ -92,12 +92,13 @@ export async function bootstrapJhs() {
         const disabled = await migrateDisabledPluginSettings();
         const localOriginSettings = await prepareLocalOrigins();
         const siteContext = detectSite(window.location);
-        const hostAdapter = r ? new JavDbHostAdapter() : l ? new JavBusHostAdapter() : null;
+        const javdbHostAdapter = new JavDbHostAdapter(), javbusHostAdapter = new JavBusHostAdapter();
+        const hostAdapter = r ? javdbHostAdapter : l ? javbusHostAdapter : null;
         const route = hostAdapter?.detectRoute() ?? "other";
         const context = createAppContext({
             gmRequest: globalThis.GM_xmlhttpRequest, gmGetValue: globalThis.GM_getValue, gmSetValue: globalThis.GM_setValue,
             legacyHttp: gmHttp, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
-            layer: vendors.layer, hostAdapter, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
+            layer: vendors.layer, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
         });
         const settingsSnapshot = await context.services.settings.load();
         const legacySortMethod = localStorage.getItem("jhs_sortMethod");

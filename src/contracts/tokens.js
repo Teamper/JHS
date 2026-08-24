@@ -12,6 +12,8 @@ export const PORT = Object.freeze({
     dialog: createToken("port", "dialog"),
     style: createToken("port", "style"),
     host: createToken("port", "host"),
+    javdbHost: createToken("port", "javdb-host"),
+    javbusHost: createToken("port", "javbus-host"),
 });
 
 export const SERVICE = Object.freeze({

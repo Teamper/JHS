@@ -1,12 +1,18 @@
+// @vitest-environment jsdom
 import jquery from "jquery";
 import { JSDOM } from "jsdom";
 import { expect, it } from "vitest";
 import { parseJavDbActorList } from "../../src/integrations/javdb/parser.js";
 import { createJavDbAdapter } from "../../src/integrations/javdb/manifest.js";
+import { JavDbHostAdapter } from "../../src/platform/hosts/javdb-host-adapter.js";
 
 it("classifies malformed JavDB actor pages", () => {
     const dom = new JSDOM("<main></main>");
-    expect(parseJavDbActorList(jquery(dom.window)(dom.window.document), "https://javdb.com").state).toBe("invalid");
+    expect(parseJavDbActorList(jquery(dom.window.document), "https://javdb.com").state).toBe("invalid");
+});
+
+it("rejects JavDB actor challenge pages", () => {
+    expect(() => new JavDbHostAdapter().parseActorMovies("<title>Just a moment...</title>", "https://javdb.com")).toThrow(/challenge/);
 });
 
 it("rejects malformed JavDB API contracts", async () => {

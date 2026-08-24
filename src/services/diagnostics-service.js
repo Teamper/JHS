@@ -31,6 +31,7 @@ export class DiagnosticsService {
         /** @type {Array<Record<string, unknown>>} */
         this.legacyTimings = [];
         this.legacyHttp = options.legacyHttp ?? null;
+        this.networkController = null;
     }
 
     /** @param {string} id @param {number} durationMs */
@@ -64,16 +65,19 @@ export class DiagnosticsService {
         this.legacyTimings = timings.map((item) => Object.freeze({ ...item }));
     }
     clearErrors() { this.errors = []; }
+    /** @param {any} controller */
+    setNetworkController(controller) { this.networkController = controller; }
     getNetworkDiagnostics() {
+        const controller = this.networkController ?? this.legacyHttp;
         return Object.freeze({
-            circuitBreakers: this.legacyHttp?.getCircuitBreakerStatus?.() ?? {},
-            domainStats: this.legacyHttp?.getDomainStats?.() ?? {},
+            circuitBreakers: controller?.getCircuitBreakerStatus?.() ?? {},
+            domainStats: controller?.getDomainStats?.() ?? {},
         });
     }
     /** @param {string} domain */
-    resetCircuitBreaker(domain) { this.legacyHttp?.resetCircuitBreaker?.(domain); }
-    resetAllCircuitBreakers() { this.legacyHttp?.resetAllCircuitBreakers?.(); }
-    clearDomainStats() { this.legacyHttp?.clearDomainStats?.(); }
+    resetCircuitBreaker(domain) { (this.networkController ?? this.legacyHttp)?.resetCircuitBreaker?.(domain); }
+    resetAllCircuitBreakers() { (this.networkController ?? this.legacyHttp)?.resetAllCircuitBreakers?.(); }
+    clearDomainStats() { (this.networkController ?? this.legacyHttp)?.clearDomainStats?.(); }
 
     exportSnapshot() {
         const scopes = [...this.scopes.values()];

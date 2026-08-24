@@ -210,6 +210,10 @@ describe("list toolbar and UI cleanup contracts", () => {
 
     it("keeps external-site compatibility caches behind StorageService", () => {
         expect(otherSite).not.toContain("localStorage.");
+        expect(otherSite).not.toContain("gmHttp");
+        expect(otherSite).toContain('getRuntimeService("http").request');
+        expect(otherSite).toContain('trustClass: "custom-public"');
+        expect(otherSite).toContain('trustClass: "builtin-public"');
         expect(otherSite).toContain('getLocal("jhs_enabled_sites")');
         expect(otherSite).toContain('setLocal("jhs_enabled_sites"');
         expect(otherSite).toContain("const latestRaw = storage.getLocal(a)");
@@ -247,6 +251,9 @@ describe("list toolbar and UI cleanup contracts", () => {
 
     it("keeps NewVideo module import free of local storage side effects", () => {
         expect(newVideo).not.toContain("localStorage.");
+        expect(newVideo).not.toContain("gmHttp");
+        expect(newVideo).toContain('getRuntimeService("actressInfo").movies');
+        expect(newVideo).toContain('getRuntimeService("actressInfo").uncollect');
         expect(newVideo).toContain("initializeLocalState()");
         expect(newVideo).toContain('getLocal("jhs_newVideoViewMode")');
         expect(newVideo).toContain('setLocal("jhs_newVideoViewMode", mode)');

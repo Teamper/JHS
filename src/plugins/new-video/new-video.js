@@ -491,12 +491,10 @@ export class NewVideoPlugin extends BasePlugin {
             e.preventDefault();
             const t = $(e.currentTarget).attr("data-starId"), n = sortedActresses.find((e => e.starId === t));
             utils.q(e, `是否取消收藏 ${n.name}?`, (async () => {
-                let e = `${await this.getDependency("OtherSitePlugin").getJavDbUrl()}/actors/${t}/uncollect`;
-                const n = document.querySelector("meta[name=csrf-token]").content, a = await gmHttp.post(e, null, {
-                    "x-csrf-token": n
-                });
-                a.includes("removeClass") ? (await storageManager.removeFavoriteActress(t), await jhsEventBus.emit("new-video-changed", { reason: "favorite-actress-removed" })) : (show.error("移除失败"),
-                clog.error("移除失败,返回值:", a));
+                const baseUrl = await this.getDependency("OtherSitePlugin").getJavDbUrl(), csrfToken = document.querySelector("meta[name=csrf-token]").content;
+                const result = await this.getRuntimeService("actressInfo").uncollect("javdb", { actorId: t, baseUrl, csrfToken }, { scope: await this.getRuntimeService("scope")() });
+                result.success ? (await storageManager.removeFavoriteActress(t), await jhsEventBus.emit("new-video-changed", { reason: "favorite-actress-removed" })) : (show.error("移除失败"),
+                clog.error("移除失败,返回值:", result));
             }));
         })), $(".btn-edit-actress").off("click").on("click", (e => {
             e.preventDefault();
@@ -528,14 +526,9 @@ export class NewVideoPlugin extends BasePlugin {
     getActorCoverRequest(starId, requestMap) {
         const existing = requestMap.get(starId);
         if (existing) return existing;
-        const request = gmHttp.get(`${this.nvJavDbUrl}/actors/${starId}?t=d`).then((html => {
-            const page = utils.htmlTo$dom(html), covers = new Map;
-            page.find(".movie-list .item").each(((index, element) => {
-                const item = $(element), rawCarNum = item.find(".video-title strong").text().trim(), carNum = normalizeCarNum(rawCarNum), rawCover = item.find("img").attr("src") || "";
-                if (!carNum || !rawCover) return;
-                const coverUrl = new URL(rawCover, this.nvJavDbUrl).href.replace("thumbs", "covers"), title = item.find(".video-title").text().replace(rawCarNum, "").trim();
-                covers.set(carNum, { coverUrl, title });
-            }));
+        const request = this.getRuntimeService("scope")().then((scope => this.getRuntimeService("actressInfo").movies("javdb", { actorId: starId, baseUrl: this.nvJavDbUrl }, { scope }))).then((movies => {
+            const covers = new Map;
+            movies.forEach((movie => movie.carNum && movie.coverUrl && covers.set(normalizeCarNum(movie.carNum), { coverUrl: movie.coverUrl, title: movie.title })));
             return covers;
         })).finally((() => {
             requestMap.get(starId) === request && requestMap.delete(starId);
