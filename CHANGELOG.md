@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - Utils、Storage、GM HTTP 与 StateService 的 legacy 实例改由 Bootstrap Composition Root 在 Vendor/GM 运行时验证后统一创建；Feature 通过 manifest 显式声明 `SERVICE.state`，不再直接导入模块级状态单例。
 - Legacy GM HTTP 的真实实现进入 strict checkJs，明确请求参数、熔断状态、Cloudflare 诊断和 Userscript 回调边界；生产源码类型覆盖率提升至 91.0%，最低覆盖门禁同步上调至 90.9%。
 - StateService 的真实事务实现进入 strict checkJs，删除同名宽泛声明遮蔽，并显式约束状态字段、活动日志、新作决策、journal 恢复与撤销数据边界；生产源码类型覆盖率提升至 91.5%，最低覆盖门禁同步上调至 91.5%。
+- History 真实运行时进入 strict checkJs，明确仓储记录、跨页选择、Tabulator 回调与状态编辑边界；生产源码类型覆盖率提升至 92.1%，最低覆盖门禁同步上调至 92%。
 - 新增可单测的 Bootstrap Purity 架构门禁，禁止除 Composition Root 外的生产模块在导入阶段启动 DOM、网络、Storage、监听器、Observer 或定时器；原隐藏导航样式改为 Bootstrap 注入时才读取地址。
 - strict checkJs 继续覆盖自动翻页、设置样式/模板和 123AV-FC2 入口，并补齐分页空值、DOM 容器与 Integration 返回数据的显式契约。
 - 截图、宿主详情工作区、兼容增强与统一离线模块进入 strict checkJs；Provider availability、宿主资源边界、Observer 和 jQuery 兼容句柄均补充显式类型，覆盖率门禁同步上调至 84%。

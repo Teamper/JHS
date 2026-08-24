@@ -85,6 +85,7 @@
     "src/plugins/status/detail-workspace.js",
     "src/plugins/status/fold-category.js",
     "src/plugins/status/highlight-magnet.js",
+    "src/plugins/status/history.js",
     "src/plugins/status/nav-bar.js",
     "src/plugins/status/want-and-watched-videos.js",
     "src/plugins/subtitle/subtitle-cat.js",

@@ -15457,7 +15457,20 @@ ${failure.stack}` : "");
   // src/plugins/status/history.js
   var _HistoryPlugin = class _HistoryPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectionModel", new HistorySelectionModel()), i(this, "_historyRepository", null), i(this, "historySorters", []), i(this, "historyFilteredCount", 0), i(this, "historySelectionSyncing", false);
+      super(...arguments);
+      this.tableObj = null;
+      this.historyRoot = null;
+      this.historySelectionModel = new HistorySelectionModel();
+      this._historyRepository = null;
+      this.historySorters = [];
+      this.historyFilteredCount = 0;
+      this.historySelectionSyncing = false;
+      this.allCount = 0;
+      this.filterCount = 0;
+      this.favoriteCount = 0;
+      this.hasDownCount = 0;
+      this.hasWatchCount = 0;
+      this.waitCheckCount = 0;
     }
     getName() {
       return "HistoryPlugin";
@@ -15493,12 +15506,12 @@ ${failure.stack}` : "");
       })), $("#historyBtn,#miniHistoryBtn").on("click", ((e2) => this.openHistory()))), l && await this.createBusButton();
     }
     async createBusButton() {
-      const ready = await new Promise(((resolve) => {
+      const ready = await new Promise((resolve) => {
         const startedAt = Date.now(), timer = setInterval((() => {
           if ($("#setting-btn").length && $("#top-right-box").length) return clearInterval(timer), resolve(true);
           Date.now() - startedAt >= 2500 && (clearInterval(timer), resolve(false));
         }), 25);
-      }));
+      });
       if (!ready) return void clog.warn("鉴定记录入口未创建：JavBus 顶部工具区未就绪");
       $("#top-right-box").append('<button type="button" id="historyBtn" class="jhs-btn jhs-btn--secondary">鉴定记录</button>'), $("#historyBtn,#miniHistoryBtn").on("click", ((e2) => this.openHistory()));
     }
@@ -15559,10 +15572,10 @@ ${failure.stack}` : "");
           })).on("click", ".jhs-copy-offline", (async (event) => {
             await utils.copyToClipboard("离线资源", $(event.currentTarget).data("resource"));
           })).on("click", ".jhs-retry-offline", (async (event) => {
-            const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find(((entry) => entry.id === id));
+            const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((entry) => entry.id === id);
             item && await this.getDependency("UnifiedOfflinePlugin").submitResource(event, item.resource, $(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: true, preferredProviderId: item.providerId }), await this.renderOfflineHistory();
           })).on("click", ".jhs-open-offline", (async (event) => {
-            const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find(((entry) => entry.id === id)), provider = this.getDependency("UnifiedOfflinePlugin").registry.providers.get(item?.providerId), url = provider?.openUrl?.();
+            const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((entry) => entry.id === id), provider = this.getDependency("UnifiedOfflinePlugin").registry.providers.get(item?.providerId), url = provider?.openUrl?.();
             url && window.open(url, "_blank", "noopener,noreferrer");
           })).on("click", ".jhs-delete-offline", (async (event) => {
             await this.historyRepository.removeOffline($(event.currentTarget).data("id")), await this.renderOfflineHistory();
@@ -15581,18 +15594,18 @@ ${failure.stack}` : "");
     async renderActivityHistory() {
       const log = await this.historyRepository.activity(), host = this.historyRoot.find("#table-container").empty();
       if (!log.entries.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无操作记录</div>');
-      log.entries.slice().reverse().forEach(((entry) => {
-        const reverted = entry.changes.filter(((change) => "reverted" === change.undoState)).length, conflicts = entry.changes.filter(((change) => "conflict" === change.undoState)).length;
-        host.append($('<article class="jhs-card"></article>').append($("<strong></strong>").text(`${entry.type} · ${entry.changes.length} 项`), $("<p></p>").text(`${new Date(entry.createdAt).toLocaleString()} · 已撤销 ${reverted} · 冲突 ${conflicts}`), $("<p></p>").text(entry.changes.map(((change) => change.carNum)).join("、")), $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-undo-activity">撤销可恢复项</button>').attr("data-transaction", entry.id).prop("disabled", "committed" !== entry.commitState || reverted === entry.changes.length)));
-      }));
+      log.entries.slice().reverse().forEach((entry) => {
+        const reverted = entry.changes.filter((change) => "reverted" === change.undoState).length, conflicts = entry.changes.filter((change) => "conflict" === change.undoState).length;
+        host.append($('<article class="jhs-card"></article>').append($("<strong></strong>").text(`${entry.type} · ${entry.changes.length} 项`), $("<p></p>").text(`${new Date(entry.createdAt).toLocaleString()} · 已撤销 ${reverted} · 冲突 ${conflicts}`), $("<p></p>").text(entry.changes.map((change) => change.carNum).join("、")), $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-undo-activity">撤销可恢复项</button>').attr("data-transaction", entry.id).prop("disabled", "committed" !== entry.commitState || reverted === entry.changes.length)));
+      });
     }
     async renderOfflineHistory() {
       const history = await this.historyRepository.offline(), host = this.historyRoot.find("#table-container").empty();
       if (!history.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无离线任务</div>');
-      history.slice().reverse().forEach(((item) => {
+      history.slice().reverse().forEach((item) => {
         const actions = $('<div class="jhs-toolbar"></div>').append($('<button type="button" class="jhs-btn jhs-copy-offline">复制资源</button>').attr("data-resource", item.resource), $('<button type="button" class="jhs-btn jhs-retry-offline">重试</button>').attr("data-id", item.id), $('<button type="button" class="jhs-btn jhs-open-offline">打开服务</button>').attr("data-id", item.id), $('<button type="button" class="jhs-btn jhs-btn--danger jhs-delete-offline">移除记录</button>').attr("data-id", item.id));
         host.append($('<article class="jhs-card"></article>').append($("<strong></strong>").text(`${item.providerName || item.providerId} · ${item.status}`), $("<p></p>").text(`${item.carNum || "未关联番号"} · ${new Date(item.createdAt).toLocaleString()}${item.retryOf ? ` · 重试自 ${item.retryOf}` : ""}`), $("<p></p>").text(item.errorMessage || item.resource), actions));
-      }));
+      });
     }
     async reloadTable(resetSelection = true) {
       resetSelection && this.resetHistorySelection(), await this.tableObj?.setPage(1);
@@ -15661,7 +15674,7 @@ ${failure.stack}` : "");
     }
     async getHistoryBatchSelection() {
       if (!this.isHistoryAllFiltered()) return this.historySelectionModel.values(this.tableObj?.getData?.() || []);
-      const rows = await this.getFilteredHistoryData(this.historySorters), available = new Set(rows.map(((item) => this.normalizeHistoryCarNum(item.carNum))));
+      const rows = await this.getFilteredHistoryData(this.historySorters), available = new Set(rows.map((item) => this.normalizeHistoryCarNum(item.carNum)));
       for (const carNum of this.historySelectionModel.excluded) available.has(carNum) || this.historySelectionModel.excluded.delete(carNum);
       return this.historyFilteredCount = rows.length, this.historySelectionModel.values(rows);
     }
@@ -15687,6 +15700,7 @@ ${failure.stack}` : "");
         const t2 = $(e2.currentTarget), n2 = t2.closest(".action-btns"), a2 = n2.attr("data-car-num"), i2 = n2.attr("data-href"), s2 = /* @__PURE__ */ __name(async (actionType) => {
           try {
             const flag = legacyActionToFlag(actionType);
+            if (!flag) throw new TypeError(`无效历史状态操作: ${actionType}`);
             await this.historyRepository.toggle(a2, flag, { type: "history-state", record: { carNum: a2, url: i2 } }), await this.reloadTable();
           } catch (s3) {
             clog.error("历史记录操作失败:", s3), show.error("操作失败");
@@ -15702,7 +15716,8 @@ ${failure.stack}` : "");
       })), root.on("click.jhsHistory", ".multiple-history-deleteBtn, .multiple-history-filterBtn, .multiple-history-favoriteBtn, .multiple-history-hasDownBtn, .multiple-history-hasWatchBtn", (async (e2) => {
         e2.preventDefault(), e2.stopPropagation();
         const t2 = $(e2.currentTarget);
-        let n2 = await this.getHistoryBatchSelection(), a2 = "", i2 = "";
+        let n2 = await this.getHistoryBatchSelection();
+        let a2 = "", i2 = "";
         t2.hasClass("multiple-history-filterBtn") ? (a2 = "屏蔽", i2 = d) : t2.hasClass("multiple-history-favoriteBtn") ? (a2 = "收藏", i2 = h) : t2.hasClass("multiple-history-hasDownBtn") ? (a2 = "已下载", i2 = g) : t2.hasClass("multiple-history-hasWatchBtn") ? (a2 = "已观看", i2 = p) : t2.hasClass("multiple-history-deleteBtn") && (a2 = "移除", i2 = "delete");
         if (!n2.length) return void show.info("请先选择要处理的记录");
         const selectionText = this.isHistoryAllFiltered() ? this.historySelectionModel.excluded.size ? `当前筛选结果中已选择 ${n2.length} 条，排除 ${this.historySelectionModel.excluded.size} 条` : `当前筛选结果中已选择全部 ${n2.length} 条` : `当前页已选择 ${n2.length} 条`;
@@ -15710,11 +15725,12 @@ ${failure.stack}` : "");
           let e3 = loading();
           try {
             if ("delete" === i2) {
-              const e4 = n2.map(((e5) => e5.carNum)), t3 = await this.historyRepository.remove(e4);
+              const e4 = n2.map((e5) => e5.carNum), t3 = await this.historyRepository.remove(e4);
               if (!t3.changed.length) return void show.error("提供的番号中没有一个存在于列表中。");
               show.ok(`已成功删除 ${t3.changed.length} 个番号`);
             } else {
               const flag = legacyActionToFlag(i2);
+              if (!flag) throw new TypeError(`无效历史批量操作: ${i2}`);
               await this.historyRepository.patch(n2.map(((item) => item.carNum)), { [flag]: true }, { type: "history-batch-state", records: n2 }), show.ok("操作成功");
             }
             this.resetHistorySelection(), await this.reloadTable(false);
@@ -15728,21 +15744,22 @@ ${failure.stack}` : "");
     }
     async getFilteredHistoryData(sorters = this.historySorters) {
       let a2 = await this.historyRepository.list();
-      this.allCount = a2.length, this.filterCount = 0, this.favoriteCount = 0, this.hasDownCount = 0, this.hasWatchCount = 0, this.waitCheckCount = 0, a2.forEach(((e2) => {
+      this.allCount = a2.length, this.filterCount = 0, this.favoriteCount = 0, this.hasDownCount = 0, this.hasWatchCount = 0, this.waitCheckCount = 0, a2.forEach((e2) => {
         const flags = normalizeStateFlags(e2.stateFlags);
         flags.blocked && this.filterCount++, flags.favorite && this.favoriteCount++, flags.downloaded && this.hasDownCount++, flags.watched && this.hasWatchCount++, hasAnyState(flags) || this.waitCheckCount++;
-      })), this.historyRoot.find('#dataType option[value="all"]').text(`所有 (${this.allCount})`), this.historyRoot.find('#dataType option[value="waitCheck"]').text(`待鉴定 (${this.waitCheckCount})`), this.historyRoot.find('#dataType option[value="filter"]').text(`${u} (${this.filterCount})`), this.historyRoot.find('#dataType option[value="favorite"]').text(`${b} (${this.favoriteCount})`), this.historyRoot.find('#dataType option[value="hasDown"]').text(`${y} (${this.hasDownCount})`), this.historyRoot.find('#dataType option[value="hasWatch"]').text(`${k} (${this.hasWatchCount})`);
-      const i2 = this.historyRoot.find("#dataType").val();
+      }), this.historyRoot.find('#dataType option[value="all"]').text(`所有 (${this.allCount})`), this.historyRoot.find('#dataType option[value="waitCheck"]').text(`待鉴定 (${this.waitCheckCount})`), this.historyRoot.find('#dataType option[value="filter"]').text(`${u} (${this.filterCount})`), this.historyRoot.find('#dataType option[value="favorite"]').text(`${b} (${this.favoriteCount})`), this.historyRoot.find('#dataType option[value="hasDown"]').text(`${y} (${this.hasDownCount})`), this.historyRoot.find('#dataType option[value="hasWatch"]').text(`${k} (${this.hasWatchCount})`);
+      const i2 = String(this.historyRoot.find("#dataType").val() || "all");
       const flagByFilter = { filter: "blocked", favorite: "favorite", hasDown: "downloaded", hasWatch: "watched" };
-      let s2 = "all" === i2 ? a2 : "waitCheck" === i2 ? a2.filter(((e2) => !hasAnyState(e2.stateFlags))) : a2.filter(((e2) => normalizeStateFlags(e2.stateFlags)[flagByFilter[i2]]));
-      const o2 = this.historyRoot.find("#searchCarNum").val().trim();
+      const selectedFlag = flagByFilter[i2];
+      let s2 = "all" === i2 ? a2 : "waitCheck" === i2 ? a2.filter(((e2) => !hasAnyState(e2.stateFlags))) : selectedFlag ? a2.filter(((e2) => normalizeStateFlags(e2.stateFlags)[selectedFlag])) : a2;
+      const o2 = String(this.historyRoot.find("#searchCarNum").val() || "").trim();
       if (o2) {
         let e2 = o2.toLowerCase().replace("-c", "").replace("-uc", "").replace("-4k", "");
-        s2 = s2.filter(((t2) => {
+        s2 = s2.filter((t2) => {
           const n2 = t2.carNum.toLowerCase().includes(e2);
           const a3 = (t2.names ? t2.names : "").toLowerCase().includes(e2);
           return n2 || a3;
-        }));
+        });
       }
       if (sorters && sorters.length > 0) {
         const e2 = sorters[0], t2 = e2.field, a3 = e2.dir;
@@ -15754,9 +15771,9 @@ ${failure.stack}` : "");
       return s2;
     }
     async getDataList(e2, t2, n2) {
-      this.historySorters = Array.isArray(n2) ? n2.map(((sorter) => ({
+      this.historySorters = Array.isArray(n2) ? n2.map((sorter) => ({
         ...sorter
-      }))) : [];
+      })) : [];
       const rows = await this.getFilteredHistoryData(this.historySorters), r2 = rows.length, l2 = Math.ceil(r2 / t2), c2 = (e2 - 1) * t2, m2 = c2 + t2;
       return this.historyFilteredCount = r2, {
         maxPage: l2,
@@ -15765,7 +15782,7 @@ ${failure.stack}` : "");
       };
     }
     async loadTableData() {
-      this.tableObj = createJhsTable(Tabulator, this.historyRoot.find("#table-container").get(0), {
+      this.tableObj = createJhsTable(globalThis.Tabulator, this.historyRoot.find("#table-container").get(0), {
         layout: "fitColumns",
         placeholder: "暂无数据",
         virtualDom: true,
@@ -15822,7 +15839,7 @@ ${failure.stack}` : "");
           sorter: "string",
           responsive: 5,
           headerSort: true,
-          formatter: /* @__PURE__ */ __name((e2, t2, n2) => (e2.getData().names || "").split(" ").filter(((e3) => "" !== e3.trim())).map(((e3) => `<button type="button" class="jhs-btn jhs-btn--ghost jhs-btn--sm table-link-param">${e3}</button>`)).join(" "), "formatter")
+          formatter: /* @__PURE__ */ __name((e2, t2, n2) => (e2.getData().names || "").split(" ").filter((e3) => "" !== e3.trim()).map((e3) => `<button type="button" class="jhs-btn jhs-btn--ghost jhs-btn--sm table-link-param">${e3}</button>`).join(" "), "formatter")
         }, {
           title: "创建时间",
           field: "createDate",
@@ -15860,7 +15877,9 @@ ${failure.stack}` : "");
           responsive: 1,
           headerSort: false,
           formatter: /* @__PURE__ */ __name((e2, t2, n2) => {
-            const flags = normalizeStateFlags(e2.getData().stateFlags), badges = [[flags.blocked, "filter", u], [flags.favorite, "fav", b], [flags.downloaded, "down", y], [flags.watched, "watch", k]].filter(((item) => item[0])).map(((item) => `<span class="jhs-badge jhs-badge--soft jhs-badge--${item[1]}">${item[2]}</span>`));
+            const flags = normalizeStateFlags(e2.getData().stateFlags);
+            const badgeItems = [[flags.blocked, "filter", u], [flags.favorite, "fav", b], [flags.downloaded, "down", y], [flags.watched, "watch", k]];
+            const badges = badgeItems.filter(((item) => item[0])).map(((item) => `<span class="jhs-badge jhs-badge--soft jhs-badge--${item[1]}">${item[2]}</span>`));
             return badges.join(" ") || '<span class="jhs-badge jhs-badge--neutral">待鉴定</span>';
           }, "formatter")
         }, {
@@ -15998,16 +16017,12 @@ ${failure.stack}` : "");
           const n3 = /* @__PURE__ */ __name((e4) => {
             e4.css("height", "auto"), e4.css("height", e4[0].scrollHeight + 15 + "px");
           }, "n"), a3 = editRoot.find("#edit-names");
-          a3.on("input", (function() {
-            n3($(this));
-          })), n3(a3);
+          a3.on("input", ((event) => n3($(event.currentTarget)))), n3(a3);
           const i2 = editRoot.find("#edit-remark");
-          i2.on("input", (function() {
-            n3($(this));
-          })), n3(i2);
+          i2.on("input", ((event) => n3($(event.currentTarget)))), n3(i2);
         }, "success"),
         yes: /* @__PURE__ */ __name(async (t3) => {
-          const n3 = editRoot.find("#edit-names").val().trim(), i2 = editRoot.find("#edit-url").val().trim(), s3 = editRoot.find("#edit-remark").val().trim(), nextFlags = {
+          const n3 = String(editRoot.find("#edit-names").val() || "").trim(), i2 = String(editRoot.find("#edit-url").val() || "").trim(), s3 = String(editRoot.find("#edit-remark").val() || "").trim(), nextFlags = {
             favorite: editRoot.find("#edit-favorite").prop("checked"),
             downloaded: editRoot.find("#edit-downloaded").prop("checked"),
             watched: editRoot.find("#edit-watched").prop("checked"),

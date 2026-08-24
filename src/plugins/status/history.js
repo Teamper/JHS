@@ -1,4 +1,6 @@
-import { b, d, g, h, i, k, l, m, normalizeCarNum, p, r, u, v, y } from "../../core/constants.js";
+// @ts-check
+
+import { b, d, g, h, k, l, m, normalizeCarNum, p, r, u, v, y } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
@@ -6,12 +8,26 @@ import { HistorySelectionModel } from "../../features/history/history-selection-
 import { HistoryRepository } from "../../features/history/history-repository.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 
+/** @typedef {Record<string, any>} HistoryRecord */
+/** @typedef {any} JQueryHandle */
+/** @typedef {any} TableHandle */
+
 export class HistoryPlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectionModel", new HistorySelectionModel),
-        i(this, "_historyRepository", null),
-        i(this, "historySorters", []), i(this, "historyFilteredCount", 0),
-        i(this, "historySelectionSyncing", !1);
+        super(...arguments);
+        /** @type {TableHandle | null} */ this.tableObj = null;
+        /** @type {JQueryHandle | null} */ this.historyRoot = null;
+        this.historySelectionModel = new HistorySelectionModel();
+        /** @type {HistoryRepository | null} */ this._historyRepository = null;
+        /** @type {HistoryRecord[]} */ this.historySorters = [];
+        this.historyFilteredCount = 0;
+        this.historySelectionSyncing = !1;
+        this.allCount = 0;
+        this.filterCount = 0;
+        this.favoriteCount = 0;
+        this.hasDownCount = 0;
+        this.hasWatchCount = 0;
+        this.waitCheckCount = 0;
     }
     getName() {
         return "HistoryPlugin";
@@ -47,18 +63,18 @@ export class HistoryPlugin extends BasePlugin {
         $(".navbar-search").css("margin-left", "0").before('\n                <div class="navbar-item miniHistoryBtnBox">\n                    <button type="button" id="miniHistoryBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>\n            '),
         this.handleResize(), $(window).resize((() => {
             this.handleResize();
-        })), $("#historyBtn,#miniHistoryBtn").on("click", (e => this.openHistory()))), l && await this.createBusButton();
+        })), $("#historyBtn,#miniHistoryBtn").on("click", ((/** @type {any} */ e) => this.openHistory()))), l && await this.createBusButton();
     }
     async createBusButton() {
-        const ready = await new Promise((resolve => {
+        const ready = await new Promise((/** @type {(value: boolean) => void} */ resolve) => {
             const startedAt = Date.now(), timer = setInterval((() => {
                 if ($("#setting-btn").length && $("#top-right-box").length) return clearInterval(timer), resolve(!0);
                 Date.now() - startedAt >= 2500 && (clearInterval(timer), resolve(!1));
             }), 25);
-        }));
+        });
         if (!ready) return void clog.warn("鉴定记录入口未创建：JavBus 顶部工具区未就绪");
         $("#top-right-box").append('<button type="button" id="historyBtn" class="jhs-btn jhs-btn--secondary">鉴定记录</button>'),
-        $("#historyBtn,#miniHistoryBtn").on("click", (e => this.openHistory()));
+        $("#historyBtn,#miniHistoryBtn").on("click", ((/** @type {any} */ e) => this.openHistory()));
     }
     openHistory() {
         let e = `\n            <div class="jhs-layout-7cb3f981"> \n                 <div id="filterBox" class="jhs-layout-53809f1e">\n                    <select id="dataType" class="jhs-select-source">\n                        <option value="all" selected>所有</option>\n                        <option value="filter">${u}</option>\n                        <option value="favorite">${b}</option>\n                        <option value="hasDown">${y}</option>\n                        <option value="hasWatch">${k}</option>\n                    </select>\n                    <input id="searchCarNum" type="text" placeholder="搜索番号|演员" class="jhs-field">\n                    <button type="button" id="clearSearchbtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                </div>\n                <div id="allSelectBox" class="jhs-layout-66253c00">\n                    <button type="button" class="jhs-btn jhs-btn--dark multiple-history-deleteBtn jhs-layout-7daea5fa"> <span>移除</span> </button>\n                    <button type="button" class="jhs-btn jhs-btn--watch multiple-history-hasWatchBtn jhs-layout-2e003268">标记观看</button>\n                    <button type="button" class="jhs-btn jhs-btn--down multiple-history-hasDownBtn jhs-layout-2e003268">标记下载</button>\n                    <button type="button" class="jhs-btn jhs-btn--fav multiple-history-favoriteBtn jhs-layout-2e003268">标记收藏</button>\n                    <button type="button" class="jhs-btn jhs-btn--filter multiple-history-filterBtn jhs-layout-2e003268">标记屏蔽</button>\n                </div>\n                <div id="table-container" class="jhs-layout-81eaab28"></div>\n            </div>\n        `;
@@ -71,38 +87,38 @@ export class HistoryPlugin extends BasePlugin {
             shadeClose: !0,
             area: utils.getDialogArea("xl"),
             anim: -1,
-            success: async e => {
+            success: async (/** @type {any} */ e) => {
                 const root = $(e);
                 this.historyRoot = root, root.find("#allSelectBox").prepend('<span id="historySelectionSummary" class="jhs-history-selection-summary" role="status" aria-live="polite"></span>'),
                 this.resetHistorySelection(!1), JhsSelect.enhance(root);
-                await this.loadTableData(), root.on("click.jhsHistory", "#clearSearchbtn", (async e => {
+                await this.loadTableData(), root.on("click.jhsHistory", "#clearSearchbtn", (async (/** @type {any} */ e) => {
                     root.find("#searchCarNum").val(""), JhsSelect.setValue(root.find("#dataType"), "all"), await this.reloadTable(),
                     root.find("#allSelectBox").hide();
-                })).on("focusout keydown", "#searchCarNum", (async e => {
+                })).on("focusout keydown", "#searchCarNum", (async (/** @type {any} */ e) => {
                     if ("focusout" === e.type || "Enter" === e.key) {
                         if ("Enter" === e.key && e.preventDefault(), "keydown" === e.type && "Enter" !== e.key) return;
                         await this.reloadTable();
                     }
-                })).on("click", ".table-link-param", (async e => {
+                })).on("click", ".table-link-param", (async (/** @type {any} */ e) => {
                     let t = $(e.currentTarget);
                     root.find("#searchCarNum").val(t.text()), await this.reloadTable();
                 })).on("change", "#dataType", (async () => {
                     await this.reloadTable();
-                })).on("click", "[data-history-view]", (async event => {
+                })).on("click", "[data-history-view]", (async (/** @type {any} */ event) => {
                     const view = $(event.currentTarget).data("history-view");
                     root.find("[data-history-view]").removeClass("active"), $(event.currentTarget).addClass("active"), await this.showHistoryView(view);
-                })).on("click", ".jhs-undo-activity", (async event => {
+                })).on("click", ".jhs-undo-activity", (async (/** @type {any} */ event) => {
                     const result = await this.historyRepository.undo($(event.currentTarget).data("transaction"));
                     show.info(`撤销完成：${result.reverted.length} 项成功，${result.conflicts.length} 项冲突`), await this.renderActivityHistory();
-                })).on("click", ".jhs-copy-offline", (async event => {
+                })).on("click", ".jhs-copy-offline", (async (/** @type {any} */ event) => {
                     await utils.copyToClipboard("离线资源", $(event.currentTarget).data("resource"));
-                })).on("click", ".jhs-retry-offline", (async event => {
-                    const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((entry => entry.id === id));
+                })).on("click", ".jhs-retry-offline", (async (/** @type {any} */ event) => {
+                    const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id);
                     item && await this.getDependency("UnifiedOfflinePlugin").submitResource(event, item.resource, $(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: !0, preferredProviderId: item.providerId }), await this.renderOfflineHistory();
-                })).on("click", ".jhs-open-offline", (async event => {
-                    const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((entry => entry.id === id)), provider = this.getDependency("UnifiedOfflinePlugin").registry.providers.get(item?.providerId), url = provider?.openUrl?.();
+                })).on("click", ".jhs-open-offline", (async (/** @type {any} */ event) => {
+                    const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id), provider = this.getDependency("UnifiedOfflinePlugin").registry.providers.get(item?.providerId), url = provider?.openUrl?.();
                     url && window.open(url, "_blank", "noopener,noreferrer");
-                })).on("click", ".jhs-delete-offline", (async event => {
+                })).on("click", ".jhs-delete-offline", (async (/** @type {any} */ event) => {
                     await this.historyRepository.removeOffline($(event.currentTarget).data("id")), await this.renderOfflineHistory();
                 })), this.bindHistoryActions(root);
             },
@@ -111,6 +127,7 @@ export class HistoryPlugin extends BasePlugin {
             }
         });
     }
+    /** @param {string} view */
     async showHistoryView(view) {
         const stateView = "state" === view;
         this.resetHistorySelection(), this.historyRoot?.find("#filterBox,#allSelectBox").toggle(stateView), this.tableObj?.destroy(), this.tableObj = null;
@@ -119,22 +136,23 @@ export class HistoryPlugin extends BasePlugin {
     async renderActivityHistory() {
         const log = await this.historyRepository.activity(), host = this.historyRoot.find("#table-container").empty();
         if (!log.entries.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无操作记录</div>');
-        log.entries.slice().reverse().forEach((entry => {
-            const reverted = entry.changes.filter((change => "reverted" === change.undoState)).length, conflicts = entry.changes.filter((change => "conflict" === change.undoState)).length;
-            host.append($("<article class=\"jhs-card\"></article>").append($("<strong></strong>").text(`${entry.type} · ${entry.changes.length} 项`), $("<p></p>").text(`${new Date(entry.createdAt).toLocaleString()} · 已撤销 ${reverted} · 冲突 ${conflicts}`), $("<p></p>").text(entry.changes.map((change => change.carNum)).join("、")), $("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary jhs-undo-activity\">撤销可恢复项</button>").attr("data-transaction", entry.id).prop("disabled", "committed" !== entry.commitState || reverted === entry.changes.length)));
-        }));
+        log.entries.slice().reverse().forEach((/** @type {HistoryRecord} */ entry) => {
+            const reverted = entry.changes.filter((/** @type {HistoryRecord} */ change) => "reverted" === change.undoState).length, conflicts = entry.changes.filter((/** @type {HistoryRecord} */ change) => "conflict" === change.undoState).length;
+            host.append($("<article class=\"jhs-card\"></article>").append($("<strong></strong>").text(`${entry.type} · ${entry.changes.length} 项`), $("<p></p>").text(`${new Date(entry.createdAt).toLocaleString()} · 已撤销 ${reverted} · 冲突 ${conflicts}`), $("<p></p>").text(entry.changes.map((/** @type {HistoryRecord} */ change) => change.carNum).join("、")), $("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary jhs-undo-activity\">撤销可恢复项</button>").attr("data-transaction", entry.id).prop("disabled", "committed" !== entry.commitState || reverted === entry.changes.length)));
+        });
     }
     async renderOfflineHistory() {
         const history = await this.historyRepository.offline(), host = this.historyRoot.find("#table-container").empty();
         if (!history.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无离线任务</div>');
-        history.slice().reverse().forEach((item => {
+        history.slice().reverse().forEach((/** @type {HistoryRecord} */ item) => {
             const actions = $("<div class=\"jhs-toolbar\"></div>").append($("<button type=\"button\" class=\"jhs-btn jhs-copy-offline\">复制资源</button>").attr("data-resource", item.resource), $("<button type=\"button\" class=\"jhs-btn jhs-retry-offline\">重试</button>").attr("data-id", item.id), $("<button type=\"button\" class=\"jhs-btn jhs-open-offline\">打开服务</button>").attr("data-id", item.id), $("<button type=\"button\" class=\"jhs-btn jhs-btn--danger jhs-delete-offline\">移除记录</button>").attr("data-id", item.id));
             host.append($("<article class=\"jhs-card\"></article>").append($("<strong></strong>").text(`${item.providerName || item.providerId} · ${item.status}`), $("<p></p>").text(`${item.carNum || "未关联番号"} · ${new Date(item.createdAt).toLocaleString()}${item.retryOf ? ` · 重试自 ${item.retryOf}` : ""}`), $("<p></p>").text(item.errorMessage || item.resource), actions));
-        }));
+        });
     }
     async reloadTable(resetSelection = !0) {
         resetSelection && this.resetHistorySelection(), await this.tableObj?.setPage(1);
     }
+    /** @param {unknown} carNum */
     normalizeHistoryCarNum(carNum) {
         return normalizeCarNum(carNum) || String(carNum || "").trim().toUpperCase();
     }
@@ -163,7 +181,7 @@ export class HistoryPlugin extends BasePlugin {
     }
     syncHistoryPageSelection() {
         if (!this.tableObj || !this.isHistoryAllFiltered()) return void this.updateHistorySelectionUi();
-        const currentRows = this.tableObj.getData?.() || [], selectedIds = currentRows.filter((item => this.historySelectionModel.has(item))).map((item => item.carNum));
+        const currentRows = /** @type {HistoryRecord[]} */ (this.tableObj.getData?.() || []), selectedIds = currentRows.filter((item => this.historySelectionModel.has(item))).map((item => item.carNum));
         this.historySelectionSyncing = !0;
         try {
             this.tableObj.deselectRow(), selectedIds.length && this.tableObj.selectRow(selectedIds);
@@ -172,6 +190,7 @@ export class HistoryPlugin extends BasePlugin {
         }
         this.updateHistorySelectionUi();
     }
+    /** @param {TableHandle} row @param {boolean} selected */
     updateHistoryRowSelection(row, selected) {
         if (this.historySelectionSyncing) return void this.updateHistorySelectionUi();
         const item = row?.getData?.();
@@ -195,39 +214,41 @@ export class HistoryPlugin extends BasePlugin {
         if (!this.historyRoot) return;
         const summary = this.getHistorySelectionSummary(), batchBox = this.historyRoot.find("#allSelectBox"), filterBox = this.historyRoot.find("#filterBox");
         this.historyRoot.find("#historySelectionSummary").text(summary.text), summary.count > 0 ? (filterBox.hide(), batchBox.show()) : (filterBox.show(), batchBox.hide());
-        this.historyRoot.find(".jhs-history-select-all").each(((index, element) => {
+        this.historyRoot.find(".jhs-history-select-all").each(((/** @type {number} */ index, /** @type {HTMLInputElement} */ element) => {
             element.checked = this.isHistoryAllFiltered(), element.indeterminate = this.isHistoryAllFiltered() ? this.historySelectionModel.excluded.size > 0 : summary.count > 0;
         }));
     }
     /** 解析批量操作实际要处理的当前页或完整筛选结果。 */
     async getHistoryBatchSelection() {
         if (!this.isHistoryAllFiltered()) return this.historySelectionModel.values(this.tableObj?.getData?.() || []);
-        const rows = await this.getFilteredHistoryData(this.historySorters), available = new Set(rows.map((item => this.normalizeHistoryCarNum(item.carNum))));
+        const rows = await this.getFilteredHistoryData(this.historySorters), available = new Set(rows.map((/** @type {HistoryRecord} */ item) => this.normalizeHistoryCarNum(item.carNum)));
         for (const carNum of this.historySelectionModel.excluded) available.has(carNum) || this.historySelectionModel.excluded.delete(carNum);
         return this.historyFilteredCount = rows.length, this.historySelectionModel.values(rows);
     }
+    /** @param {JQueryHandle} root */
     bindHistoryActions(root) {
-        root.on("click.jhsHistory", (function(e) {
+        root.on("click.jhsHistory", (function(/** @type {any} */ e) {
             if (e.target.closest(".sub-btns-toggle")) {
                 const button = e.target.closest(".sub-btns-toggle"), t = button.closest(".sub-btns").querySelector(".sub-btns-menu");
-                root.find(".sub-btns-menu.show").each(((index, e) => {
+                root.find(".sub-btns-menu.show").each(((/** @type {number} */ index, /** @type {HTMLElement} */ e) => {
                     e !== t && (e.classList.remove("show"), e.previousElementSibling?.setAttribute("aria-expanded", "false"));
                 })), t.classList.toggle("show"), button.setAttribute("aria-expanded", String(t.classList.contains("show")));
-            } else root.find(".sub-btns-menu.show").each(((index, e) => {
+            } else root.find(".sub-btns-menu.show").each(((/** @type {number} */ index, /** @type {HTMLElement} */ e) => {
                 e.classList.remove("show"), e.previousElementSibling?.setAttribute("aria-expanded", "false");
             }));
-        })), root.on("keydown.jhsHistory", ".sub-btns", (e => {
+        })), root.on("keydown.jhsHistory", ".sub-btns", ((/** @type {any} */ e) => {
             const menu = $(e.currentTarget).find(".sub-btns-menu"), items = menu.find('[role="menuitem"]'), current = items.index(document.activeElement);
             if ("Escape" === e.key) return e.preventDefault(), menu.removeClass("show"), $(e.currentTarget).find(".sub-btns-toggle").attr("aria-expanded", "false").trigger("focus");
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(e.key) || !menu.hasClass("show")) return;
             e.preventDefault();
             const next = "Home" === e.key ? 0 : "End" === e.key ? items.length - 1 : "ArrowDown" === e.key ? (current + 1 + items.length) % items.length : (current - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
-        })), root.on("click.jhsHistory", ".history-deleteBtn, .history-filterBtn, .history-favoriteBtn, .history-hasDownBtn, .history-hasWatchBtn, .history-detailBtn", (e => {
+        })), root.on("click.jhsHistory", ".history-deleteBtn, .history-filterBtn, .history-favoriteBtn, .history-hasDownBtn, .history-hasWatchBtn, .history-detailBtn", ((/** @type {any} */ e) => {
             e.preventDefault(), e.stopPropagation();
-            const t = $(e.currentTarget), n = t.closest(".action-btns"), a = n.attr("data-car-num"), i = n.attr("data-href"), s = async actionType => {
+            const t = $(e.currentTarget), n = t.closest(".action-btns"), a = /** @type {string} */ (n.attr("data-car-num")), i = /** @type {string} */ (n.attr("data-href")), s = async (/** @type {string} */ actionType) => {
                 try {
                     const flag = legacyActionToFlag(actionType);
+                    if (!flag) throw new TypeError(`无效历史状态操作: ${actionType}`);
                     await this.historyRepository.toggle(a, flag, { type: "history-state", record: { carNum: a, url: i } }), await this.reloadTable();
                 } catch (s) { clog.error("历史记录操作失败:", s), show.error("操作失败"); }
             };
@@ -238,10 +259,12 @@ export class HistoryPlugin extends BasePlugin {
                 carNum: a,
                 url: i
             }).catch((error => clog.error("历史详情打开失败", error)));
-        })), root.on("click.jhsHistory", ".multiple-history-deleteBtn, .multiple-history-filterBtn, .multiple-history-favoriteBtn, .multiple-history-hasDownBtn, .multiple-history-hasWatchBtn", (async e => {
+        })), root.on("click.jhsHistory", ".multiple-history-deleteBtn, .multiple-history-filterBtn, .multiple-history-favoriteBtn, .multiple-history-hasDownBtn, .multiple-history-hasWatchBtn", (async (/** @type {any} */ e) => {
             e.preventDefault(), e.stopPropagation();
             const t = $(e.currentTarget);
-            let n = await this.getHistoryBatchSelection(), a = "", i = "";
+            /** @type {HistoryRecord[]} */
+            let n = await this.getHistoryBatchSelection();
+            let a = "", i = "";
             t.hasClass("multiple-history-filterBtn") ? (a = "屏蔽", i = d) : t.hasClass("multiple-history-favoriteBtn") ? (a = "收藏",
             i = h) : t.hasClass("multiple-history-hasDownBtn") ? (a = "已下载", i = g) : t.hasClass("multiple-history-hasWatchBtn") ? (a = "已观看",
             i = p) : t.hasClass("multiple-history-deleteBtn") && (a = "移除", i = "delete");
@@ -251,11 +274,12 @@ export class HistoryPlugin extends BasePlugin {
                 let e = loading();
                 try {
                     if ("delete" === i) {
-                        const e = n.map((e => e.carNum)), t = await this.historyRepository.remove(e);
+                        const e = n.map((/** @type {HistoryRecord} */ e) => e.carNum), t = await this.historyRepository.remove(e);
                         if (!t.changed.length) return void show.error("提供的番号中没有一个存在于列表中。");
                         show.ok(`已成功删除 ${t.changed.length} 个番号`);
                     } else {
                         const flag = legacyActionToFlag(i);
+                        if (!flag) throw new TypeError(`无效历史批量操作: ${i}`);
                         await this.historyRepository.patch(n.map((item => item.carNum)), { [flag]: !0 }, { type: "history-batch-state", records: n }), show.ok("操作成功");
                     }
                     this.resetHistorySelection(), await this.reloadTable(!1);
@@ -268,41 +292,46 @@ export class HistoryPlugin extends BasePlugin {
         }));
     }
     /** 返回应用当前搜索、状态筛选和排序后的完整 History 数据。 */
+    /** @param {HistoryRecord[]} [sorters] @returns {Promise<HistoryRecord[]>} */
     async getFilteredHistoryData(sorters = this.historySorters) {
+        /** @type {HistoryRecord[]} */
         let a = await this.historyRepository.list();
         this.allCount = a.length, this.filterCount = 0, this.favoriteCount = 0, this.hasDownCount = 0,
-        this.hasWatchCount = 0, this.waitCheckCount = 0, a.forEach((e => {
+        this.hasWatchCount = 0, this.waitCheckCount = 0, a.forEach((/** @type {HistoryRecord} */ e) => {
             const flags = normalizeStateFlags(e.stateFlags);
             flags.blocked && this.filterCount++, flags.favorite && this.favoriteCount++, flags.downloaded && this.hasDownCount++, flags.watched && this.hasWatchCount++, hasAnyState(flags) || this.waitCheckCount++;
-        })), this.historyRoot.find('#dataType option[value="all"]').text(`所有 (${this.allCount})`), this.historyRoot.find('#dataType option[value="waitCheck"]').text(`待鉴定 (${this.waitCheckCount})`),
+        }), this.historyRoot.find('#dataType option[value="all"]').text(`所有 (${this.allCount})`), this.historyRoot.find('#dataType option[value="waitCheck"]').text(`待鉴定 (${this.waitCheckCount})`),
         this.historyRoot.find('#dataType option[value="filter"]').text(`${u} (${this.filterCount})`),
         this.historyRoot.find('#dataType option[value="favorite"]').text(`${b} (${this.favoriteCount})`), this.historyRoot.find('#dataType option[value="hasDown"]').text(`${y} (${this.hasDownCount})`),
         this.historyRoot.find('#dataType option[value="hasWatch"]').text(`${k} (${this.hasWatchCount})`);
-        const i = this.historyRoot.find("#dataType").val();
+        const i = String(this.historyRoot.find("#dataType").val() || "all");
+        /** @type {Record<string, keyof import("../../core/state-model.js").StateFlags>} */
         const flagByFilter = { filter: "blocked", favorite: "favorite", hasDown: "downloaded", hasWatch: "watched" };
-        let s = "all" === i ? a : "waitCheck" === i ? a.filter((e => !hasAnyState(e.stateFlags))) : a.filter((e => normalizeStateFlags(e.stateFlags)[flagByFilter[i]]));
-        const o = this.historyRoot.find("#searchCarNum").val().trim();
+        const selectedFlag = flagByFilter[i];
+        let s = "all" === i ? a : "waitCheck" === i ? a.filter((e => !hasAnyState(e.stateFlags))) : selectedFlag ? a.filter((e => normalizeStateFlags(e.stateFlags)[selectedFlag])) : a;
+        const o = String(this.historyRoot.find("#searchCarNum").val() || "").trim();
         if (o) {
             let e = o.toLowerCase().replace("-c", "").replace("-uc", "").replace("-4k", "");
-            s = s.filter((t => {
+            s = s.filter((/** @type {HistoryRecord} */ t) => {
                 const n = t.carNum.toLowerCase().includes(e);
                 const a = (t.names ? t.names : "").toLowerCase().includes(e);
                 return n || a;
-            }));
+            });
         }
         if (sorters && sorters.length > 0) {
-            const e = sorters[0], t = e.field, a = e.dir;
-            s.sort(((e, n) => {
+            const e = /** @type {HistoryRecord} */ (sorters[0]), t = e.field, a = e.dir;
+            s.sort(((/** @type {HistoryRecord} */ e, /** @type {HistoryRecord} */ n) => {
                 const i = e[t], s = n[t], o = null == i || "" === i, r = null == s || "" === s;
                 return o && !r ? 1 : !o && r ? -1 : o && r ? 0 : i < s ? "asc" === a ? -1 : 1 : i > s ? "asc" === a ? 1 : -1 : 0;
             }));
         }
         return s;
     }
+    /** @param {number} e @param {number} t @param {HistoryRecord[]} n */
     async getDataList(e, t, n) {
-        this.historySorters = Array.isArray(n) ? n.map((sorter => ({
+        this.historySorters = Array.isArray(n) ? n.map((/** @type {HistoryRecord} */ sorter) => ({
             ...sorter
-        }))) : [];
+        })) : [];
         const rows = await this.getFilteredHistoryData(this.historySorters), r = rows.length, l = Math.ceil(r / t), c = (e - 1) * t, m = c + t;
         return this.historyFilteredCount = r, {
             maxPage: l,
@@ -311,7 +340,7 @@ export class HistoryPlugin extends BasePlugin {
         };
     }
     async loadTableData() {
-        this.tableObj = createJhsTable(Tabulator, this.historyRoot.find("#table-container").get(0), {
+        this.tableObj = createJhsTable((/** @type {any} */ (globalThis)).Tabulator, this.historyRoot.find("#table-container").get(0), {
             layout: "fitColumns",
             placeholder: "暂无数据",
             virtualDom: !0,
@@ -320,7 +349,7 @@ export class HistoryPlugin extends BasePlugin {
             sortMode: "remote",
             ajaxURL: "queryRealm",
             dataLoader: !1,
-            ajaxRequestFunc: async (e, t, n) => {
+            ajaxRequestFunc: async (/** @type {any} */ e, /** @type {any} */ t, /** @type {HistoryRecord} */ n) => {
                 const a = n.page, i = n.size, s = n.sort;
                 return await this.getDataList(a, i, s);
             },
@@ -331,7 +360,7 @@ export class HistoryPlugin extends BasePlugin {
             },
             paginationSize: 50,
             paginationSizeSelector: [ 50, 100, 1e3 ],
-            paginationCounter: (e, t, n, a, i) => `共 ${a} 条记录`,
+            paginationCounter: (/** @type {any} */ e, /** @type {any} */ t, /** @type {any} */ n, /** @type {number} */ a, /** @type {any} */ i) => `共 ${a} 条记录`,
             responsiveLayout: "collapse",
             responsiveLayoutCollapse: !0,
             columnDefaults: {
@@ -347,7 +376,7 @@ export class HistoryPlugin extends BasePlugin {
                 headerSort: !1,
                 responsive: 0,
                 width: 40,
-                cellClick: (e, t) => {
+                cellClick: (/** @type {any} */ e, /** @type {TableHandle} */ t) => {
                     t.getRow().toggleSelect();
                 }
             }, {
@@ -356,7 +385,7 @@ export class HistoryPlugin extends BasePlugin {
                 width: 120,
                 sorter: "string",
                 responsive: 0,
-                formatter: (e, t, n) => {
+                formatter: (/** @type {TableHandle} */ e, /** @type {any} */ t, /** @type {any} */ n) => {
                     const a = e.getData().carNum, i = a.indexOf("-");
                     if (-1 === i) return a;
                     return `<button type="button" class="jhs-btn jhs-btn--ghost jhs-btn--sm table-link-param">${a.substring(0, i + 1)}</button>${a.substring(i + 1)}`;
@@ -368,7 +397,7 @@ export class HistoryPlugin extends BasePlugin {
                 sorter: "string",
                 responsive: 5,
                 headerSort: !0,
-                formatter: (e, t, n) => (e.getData().names || "").split(" ").filter((e => "" !== e.trim())).map((e => `<button type="button" class="jhs-btn jhs-btn--ghost jhs-btn--sm table-link-param">${e}</button>`)).join(" ")
+                formatter: (/** @type {TableHandle} */ e, /** @type {any} */ t, /** @type {any} */ n) => (e.getData().names || "").split(" ").filter((/** @type {string} */ e) => "" !== e.trim()).map((/** @type {string} */ e) => `<button type="button" class="jhs-btn jhs-btn--ghost jhs-btn--sm table-link-param">${e}</button>`).join(" ")
             }, {
                 title: "创建时间",
                 field: "createDate",
@@ -394,7 +423,7 @@ export class HistoryPlugin extends BasePlugin {
                 sorter: "string",
                 responsive: 5,
                 hozAlign: "left",
-                formatter: (e, t, n) => {
+                formatter: (/** @type {TableHandle} */ e, /** @type {any} */ t, /** @type {any} */ n) => {
                     let a = e.getData().url;
                     return a ? `<span class="jhs-badge jhs-badge--neutral">${a.includes("javdb") ? "JavDB" : a.includes("javbus") ? "JavBus" : a.includes("123av") ? "123AV" : "其他"}</span>` : "";
                 }
@@ -405,8 +434,11 @@ export class HistoryPlugin extends BasePlugin {
                 sorter: !1,
                 responsive: 1,
                 headerSort: !1,
-                formatter: (e, t, n) => {
-                    const flags = normalizeStateFlags(e.getData().stateFlags), badges = [ [ flags.blocked, "filter", u ], [ flags.favorite, "fav", b ], [ flags.downloaded, "down", y ], [ flags.watched, "watch", k ] ].filter((item => item[0])).map((item => `<span class="jhs-badge jhs-badge--soft jhs-badge--${item[1]}">${item[2]}</span>`));
+                formatter: (/** @type {TableHandle} */ e, /** @type {any} */ t, /** @type {any} */ n) => {
+                    const flags = normalizeStateFlags(e.getData().stateFlags);
+                    /** @type {Array<[boolean, string, string]>} */
+                    const badgeItems = [ [ flags.blocked, "filter", u ], [ flags.favorite, "fav", b ], [ flags.downloaded, "down", y ], [ flags.watched, "watch", k ] ];
+                    const badges = badgeItems.filter((item => item[0])).map((item => `<span class="jhs-badge jhs-badge--soft jhs-badge--${item[1]}">${item[2]}</span>`));
                     return badges.join(" ") || '<span class="jhs-badge jhs-badge--neutral">待鉴定</span>';
                 }
             }, {
@@ -422,11 +454,11 @@ export class HistoryPlugin extends BasePlugin {
                 cssClass: "action-cell-dropdown",
                 responsive: 0,
                 headerSort: !1,
-                formatter: (e, t, n) => {
+                formatter: (/** @type {TableHandle} */ e, /** @type {any} */ t, /** @type {(callback: () => void) => void} */ n) => {
                     const a = e.getData();
                     return n((() => {
                         var t;
-                        null == (t = e.getElement().querySelector(".history-editBtn")) || t.addEventListener("click", (e => {
+                        null == (t = e.getElement().querySelector(".history-editBtn")) || t.addEventListener("click", ((/** @type {Event} */ e) => {
                             this.editRecord(a);
                         }));
                     })), `
@@ -469,22 +501,24 @@ export class HistoryPlugin extends BasePlugin {
             }
         }), this.tableObj.on("dataProcessed", (() => {
             this.isHistoryAllFiltered() ? this.syncHistoryPageSelection() : this.updateHistorySelectionUi();
-        })), this.tableObj.on("rowSelected", (row => {
+        })), this.tableObj.on("rowSelected", ((/** @type {TableHandle} */ row) => {
             this.updateHistoryRowSelection(row, !0);
-        })), this.tableObj.on("rowDeselected", (row => {
+        })), this.tableObj.on("rowDeselected", ((/** @type {TableHandle} */ row) => {
             this.updateHistoryRowSelection(row, !1);
         })), this.tableObj.on("rowSelectionChanged", (() => {
             this.updateHistorySelectionUi();
-        })), this.tableObj.on("rowDblClick", (function(e, t) {
+        })), this.tableObj.on("rowDblClick", (function(/** @type {any} */ e, /** @type {TableHandle} */ t) {
             t.toggleSelect();
         }));
     }
+    /** @param {any} e @param {string} t */
     handleDelete(e, t) {
         utils.q(e, `是否移除${t}?`, (async () => {
             await this.historyRepository.remove(t), this.getDependency("ListPagePlugin").showCarNumBox(t),
             await this.reloadTable();
         }));
     }
+    /** @param {any} e @param {HistoryRecord} t */
     async handleClickDetail(e, t) {
         if (r) if (t.carNum.includes("FC2-")) {
             const e = this.parseMovieId(t.url);
@@ -503,6 +537,7 @@ export class HistoryPlugin extends BasePlugin {
             } else window.open(n, "_blank"); else utils.openPage(t.url, t.carNum, !1, e);
         }
     }
+    /** @param {HistoryRecord} e */
     async editRecord(e) {
         const t = e.carNum, n = e.names || "", a = e.url || "", flags = normalizeStateFlags(e.stateFlags), s = e.remark || "";
         let editRoot = $();
@@ -514,21 +549,17 @@ export class HistoryPlugin extends BasePlugin {
             area: utils.getDialogArea("sm"),
             content: c,
             btn: [ "保存", "取消" ],
-            success: (e, t) => {
+            success: (/** @type {any} */ e, /** @type {number} */ t) => {
                 editRoot = $(e);
-                const n = e => {
+                const n = (/** @type {JQueryHandle} */ e) => {
                     e.css("height", "auto"), e.css("height", e[0].scrollHeight + 15 + "px");
                 }, a = editRoot.find("#edit-names");
-                a.on("input", (function() {
-                    n($(this));
-                })), n(a);
+                a.on("input", ((/** @type {any} */ event) => n($(event.currentTarget)))), n(a);
                 const i = editRoot.find("#edit-remark");
-                i.on("input", (function() {
-                    n($(this));
-                })), n(i);
+                i.on("input", ((/** @type {any} */ event) => n($(event.currentTarget)))), n(i);
             },
-            yes: async t => {
-                const n = editRoot.find("#edit-names").val().trim(), i = editRoot.find("#edit-url").val().trim(), s = editRoot.find("#edit-remark").val().trim(), nextFlags = {
+            yes: async (/** @type {number} */ t) => {
+                const n = String(editRoot.find("#edit-names").val() || "").trim(), i = String(editRoot.find("#edit-url").val() || "").trim(), s = String(editRoot.find("#edit-remark").val() || "").trim(), nextFlags = {
                     favorite: editRoot.find("#edit-favorite").prop("checked"), downloaded: editRoot.find("#edit-downloaded").prop("checked"), watched: editRoot.find("#edit-watched").prop("checked"), blocked: editRoot.find("#edit-blocked").prop("checked")
                 };
                 const save = async () => {
