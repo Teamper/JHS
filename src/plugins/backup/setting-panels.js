@@ -4,8 +4,8 @@ import { getPluginCategories } from "./setting-templates.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 
 /** Render the network/external requests panel: circuit breaker status, domain stats. */
-export async function renderNetworkPanel() {
-    const e = gmHttp.getCircuitBreakerStatus(), t = gmHttp.getDomainStats(), n = await storageManager.getSetting("circuitBreakerThreshold", 3), a = await storageManager.getSetting("circuitBreakerCooldown", 6e4);
+export async function renderNetworkPanel(diagnostics) {
+    const network = diagnostics.getNetworkDiagnostics(), e = network.circuitBreakers, t = network.domainStats, n = await storageManager.getSetting("circuitBreakerThreshold", 3), a = await storageManager.getSetting("circuitBreakerCooldown", 6e4);
     $("#circuitBreakerThreshold").val(n), $("#circuitBreakerCooldownSec").val(Math.round(a / 1e3));
     const i = Object.entries(e);
     if (i.length) {
@@ -27,11 +27,11 @@ export async function renderNetworkPanel() {
     } else $("#domain-stats-table").html('<p class="jhs-empty-note">暂无统计数据</p>');
     $(".reset-breaker").off("click").on("click", (e => {
         const t = $(e.target).data("domain");
-        gmHttp.resetCircuitBreaker(t), show.ok(`已重置 ${t} 的熔断状态`), renderNetworkPanel();
+        diagnostics.resetCircuitBreaker(t), show.ok(`已重置 ${t} 的熔断状态`), renderNetworkPanel(diagnostics);
     })), $("#resetAllBreakersBtn").off("click").on("click", (() => {
-        gmHttp.resetAllCircuitBreakers(), show.ok("已重置全部熔断状态"), renderNetworkPanel();
+        diagnostics.resetAllCircuitBreakers(), show.ok("已重置全部熔断状态"), renderNetworkPanel(diagnostics);
     })), $("#clearDomainStatsBtn").off("click").on("click", (() => {
-        gmHttp.clearDomainStats(), show.ok("已清空域名统计"), renderNetworkPanel();
+        diagnostics.clearDomainStats(), show.ok("已清空域名统计"), renderNetworkPanel(diagnostics);
     }));
 }
 

@@ -73,4 +73,23 @@ describe("HTTP, URL and settings contracts", () => {
         expect(settings.snapshot()).toEqual({ existing: true, sortMethod: "date", theme: "dark" });
         expect(values.get("setting")).toEqual(settings.snapshot());
     });
+
+    it("proxies legacy network controls through DiagnosticsService", () => {
+        const legacyHttp = {
+            getCircuitBreakerStatus: vi.fn(() => ({ "api.example": { state: "open" } })),
+            getDomainStats: vi.fn(() => ({ "api.example": { count: 2, errors: 1 } })),
+            resetCircuitBreaker: vi.fn(), resetAllCircuitBreakers: vi.fn(), clearDomainStats: vi.fn(),
+        };
+        const diagnostics = new DiagnosticsService({ legacyHttp });
+        expect(diagnostics.getNetworkDiagnostics()).toEqual({
+            circuitBreakers: { "api.example": { state: "open" } },
+            domainStats: { "api.example": { count: 2, errors: 1 } },
+        });
+        diagnostics.resetCircuitBreaker("api.example");
+        diagnostics.resetAllCircuitBreakers();
+        diagnostics.clearDomainStats();
+        expect(legacyHttp.resetCircuitBreaker).toHaveBeenCalledWith("api.example");
+        expect(legacyHttp.resetAllCircuitBreakers).toHaveBeenCalledOnce();
+        expect(legacyHttp.clearDomainStats).toHaveBeenCalledOnce();
+    });
 });

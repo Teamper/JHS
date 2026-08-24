@@ -237,7 +237,7 @@ export class SettingPlugin extends BasePlugin {
         });
     }
     bindClick() {
-        const settingPlugin = this, webdav = this.getRuntimeService("webdav"), dialog = this.getRuntimeService("dialog"), previewDiff = (diff, imported, restored = null) => showDiffPreview(diff, imported, restored, dialog);
+        const settingPlugin = this, webdav = this.getRuntimeService("webdav"), dialog = this.getRuntimeService("dialog"), diagnostics = this.getRuntimeService("diagnostics"), storage = this.getRuntimeService("storage"), previewDiff = (diff, imported, restored = null) => showDiffPreview(diff, imported, restored, dialog);
         $(".side-menu-item").on("click", (function() {
             $(".side-menu-item").removeClass("active").attr("aria-current", "false"), $(this).addClass("active").attr("aria-current", "page"), $(".content-panel").hide();
             const e = $(this).data("panel");
@@ -245,7 +245,7 @@ export class SettingPlugin extends BasePlugin {
             $("#clean-all").addClass("jhs-is-hidden")), "health-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderDataHealthPanel()),
             "plugin-mgmt-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderPluginMgmtPanel(settingPlugin.getRuntimeService("diagnostics"))),
             "snapshot-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderSnapshotPanel()),
-            "network-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderNetworkPanel());
+            "network-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderNetworkPanel(diagnostics));
         })), $("#importBtn").on("click", (e => importSettingData(previewDiff))), $("#exportBtn").on("click", (e => exportSettingData())),
         $("#preview-car-number-import").on("click", (() => this.previewCarNumbers())), $("#confirm-car-number-import").on("click", (async e => this.confirmCarNumbers(e))),
         $("#webdavBackupBtn").on("click", (e => backupDataByWebDav(this.folderName, webdav))), $("#webdavBackupListBtn").on("click", (e => backupListBtnByWebDav(this.folderName, (files, client, label) => openFileListDialog(files, client, label, this.folderName, previewDiff, dialog), webdav))),
@@ -263,19 +263,19 @@ export class SettingPlugin extends BasePlugin {
             } finally { e.close(); }
         })), $(".clean-btn").on("click", (async e => {
             const t = $(e.currentTarget).data("key"), n = this.cacheItems.find((e => e.key === t));
-            t === storageManager.third_party_cache_key ? await storageManager.clearThirdPartyCache() : "_circuitBreaker" === t ? gmHttp.resetAllCircuitBreakers() : "_domainStats" === t ? gmHttp.clearDomainStats() : localStorage.removeItem(t),
+            t === storageManager.third_party_cache_key ? await storageManager.clearThirdPartyCache() : "_circuitBreaker" === t ? diagnostics.resetAllCircuitBreakers() : "_domainStats" === t ? diagnostics.clearDomainStats() : storage.removeLocal(t),
             show.ok(`${n.text} 清理成功`), $("#cache-data-display").addClass("jhs-is-hidden"),
-            "jhs_dmm_video" === t && localStorage.removeItem("jhs_other_site_dmm");
+            "jhs_dmm_video" === t && storage.removeLocal("jhs_other_site_dmm");
         })), $("#clean-all").on("click", (async () => {
-            this.cacheItems.forEach((e => localStorage.removeItem(e.key))), show.ok("全部缓存已清理"),
-            $("#cache-data-display").addClass("jhs-is-hidden"), localStorage.removeItem("jhs_other_site_dmm"), await storageManager.clearThirdPartyCache();
+            this.cacheItems.forEach((e => storage.removeLocal(e.key))), show.ok("全部缓存已清理"),
+            $("#cache-data-display").addClass("jhs-is-hidden"), storage.removeLocal("jhs_other_site_dmm"), await storageManager.clearThirdPartyCache();
         })), $(".view-btn").on("click", (async e => {
             const t = $(e.currentTarget).data("key");
             let n;
             if (t === storageManager.third_party_cache_key) n = JSON.stringify(await storageManager.getThirdPartyCache());
-            else if ("_circuitBreaker" === t) n = JSON.stringify(gmHttp.getCircuitBreakerStatus());
-            else if ("_domainStats" === t) n = JSON.stringify(gmHttp.getDomainStats());
-            else n = localStorage.getItem(t);
+            else if ("_circuitBreaker" === t) n = JSON.stringify(diagnostics.getNetworkDiagnostics().circuitBreakers);
+            else if ("_domainStats" === t) n = JSON.stringify(diagnostics.getNetworkDiagnostics().domainStats);
+            else n = storage.getLocal(t);
             const a = $("#cache-data-display"), i = a.find("pre");
             if (a.removeClass("jhs-is-hidden"), n) try {
                 const e = JSON.parse(n);

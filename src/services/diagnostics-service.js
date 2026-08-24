@@ -12,7 +12,8 @@ function sanitize(value, key = "") {
 }
 
 export class DiagnosticsService {
-    constructor() {
+    /** @param {{legacyHttp?: any}} [options] */
+    constructor(options = {}) {
         this.startedAt = performance.now();
         this.activeFeatures = new Set();
         this.activeContributions = new Set();
@@ -29,6 +30,7 @@ export class DiagnosticsService {
         this.legacyStartup = null;
         /** @type {Array<Record<string, unknown>>} */
         this.legacyTimings = [];
+        this.legacyHttp = options.legacyHttp ?? null;
     }
 
     /** @param {string} id @param {number} durationMs */
@@ -62,6 +64,16 @@ export class DiagnosticsService {
         this.legacyTimings = timings.map((item) => Object.freeze({ ...item }));
     }
     clearErrors() { this.errors = []; }
+    getNetworkDiagnostics() {
+        return Object.freeze({
+            circuitBreakers: this.legacyHttp?.getCircuitBreakerStatus?.() ?? {},
+            domainStats: this.legacyHttp?.getDomainStats?.() ?? {},
+        });
+    }
+    /** @param {string} domain */
+    resetCircuitBreaker(domain) { this.legacyHttp?.resetCircuitBreaker?.(domain); }
+    resetAllCircuitBreakers() { this.legacyHttp?.resetAllCircuitBreakers?.(); }
+    clearDomainStats() { this.legacyHttp?.clearDomainStats?.(); }
 
     exportSnapshot() {
         const scopes = [...this.scopes.values()];

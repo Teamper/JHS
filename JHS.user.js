@@ -6970,8 +6970,8 @@
   __name(buildQuickSettingHtml, "buildQuickSettingHtml");
 
   // src/plugins/backup/setting-panels.js
-  async function renderNetworkPanel() {
-    const e2 = gmHttp.getCircuitBreakerStatus(), t2 = gmHttp.getDomainStats(), n2 = await storageManager.getSetting("circuitBreakerThreshold", 3), a2 = await storageManager.getSetting("circuitBreakerCooldown", 6e4);
+  async function renderNetworkPanel(diagnostics) {
+    const network = diagnostics.getNetworkDiagnostics(), e2 = network.circuitBreakers, t2 = network.domainStats, n2 = await storageManager.getSetting("circuitBreakerThreshold", 3), a2 = await storageManager.getSetting("circuitBreakerCooldown", 6e4);
     $("#circuitBreakerThreshold").val(n2), $("#circuitBreakerCooldownSec").val(Math.round(a2 / 1e3));
     const i2 = Object.entries(e2);
     if (i2.length) {
@@ -6993,11 +6993,11 @@
     } else $("#domain-stats-table").html('<p class="jhs-empty-note">暂无统计数据</p>');
     $(".reset-breaker").off("click").on("click", ((e3) => {
       const t3 = $(e3.target).data("domain");
-      gmHttp.resetCircuitBreaker(t3), show.ok(`已重置 ${t3} 的熔断状态`), renderNetworkPanel();
+      diagnostics.resetCircuitBreaker(t3), show.ok(`已重置 ${t3} 的熔断状态`), renderNetworkPanel(diagnostics);
     })), $("#resetAllBreakersBtn").off("click").on("click", (() => {
-      gmHttp.resetAllCircuitBreakers(), show.ok("已重置全部熔断状态"), renderNetworkPanel();
+      diagnostics.resetAllCircuitBreakers(), show.ok("已重置全部熔断状态"), renderNetworkPanel(diagnostics);
     })), $("#clearDomainStatsBtn").off("click").on("click", (() => {
-      gmHttp.clearDomainStats(), show.ok("已清空域名统计"), renderNetworkPanel();
+      diagnostics.clearDomainStats(), show.ok("已清空域名统计"), renderNetworkPanel(diagnostics);
     }));
   }
   __name(renderNetworkPanel, "renderNetworkPanel");
@@ -7549,11 +7549,11 @@
       });
     }
     bindClick() {
-      const settingPlugin = this, webdav = this.getRuntimeService("webdav"), dialog = this.getRuntimeService("dialog"), previewDiff = /* @__PURE__ */ __name((diff, imported, restored = null) => showDiffPreview(diff, imported, restored, dialog), "previewDiff");
+      const settingPlugin = this, webdav = this.getRuntimeService("webdav"), dialog = this.getRuntimeService("dialog"), diagnostics = this.getRuntimeService("diagnostics"), storage = this.getRuntimeService("storage"), previewDiff = /* @__PURE__ */ __name((diff, imported, restored = null) => showDiffPreview(diff, imported, restored, dialog), "previewDiff");
       $(".side-menu-item").on("click", (function() {
         $(".side-menu-item").removeClass("active").attr("aria-current", "false"), $(this).addClass("active").attr("aria-current", "page"), $(".content-panel").hide();
         const e3 = $(this).data("panel");
-        $("#" + e3).show(), "cache-panel" === e3 ? ($("#saveBtn").hide(), $("#clean-all").removeClass("jhs-is-hidden")) : ($("#saveBtn").show(), $("#clean-all").addClass("jhs-is-hidden")), "health-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderDataHealthPanel()), "plugin-mgmt-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderPluginMgmtPanel(settingPlugin.getRuntimeService("diagnostics"))), "snapshot-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderSnapshotPanel()), "network-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderNetworkPanel());
+        $("#" + e3).show(), "cache-panel" === e3 ? ($("#saveBtn").hide(), $("#clean-all").removeClass("jhs-is-hidden")) : ($("#saveBtn").show(), $("#clean-all").addClass("jhs-is-hidden")), "health-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderDataHealthPanel()), "plugin-mgmt-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderPluginMgmtPanel(settingPlugin.getRuntimeService("diagnostics"))), "snapshot-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderSnapshotPanel()), "network-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderNetworkPanel(diagnostics));
       })), $("#importBtn").on("click", ((e3) => importSettingData(previewDiff))), $("#exportBtn").on("click", ((e3) => exportSettingData())), $("#preview-car-number-import").on("click", (() => this.previewCarNumbers())), $("#confirm-car-number-import").on("click", (async (e3) => this.confirmCarNumbers(e3))), $("#webdavBackupBtn").on("click", ((e3) => backupDataByWebDav(this.folderName, webdav))), $("#webdavBackupListBtn").on("click", ((e3) => backupListBtnByWebDav(this.folderName, (files, client, label) => openFileListDialog(files, client, label, this.folderName, previewDiff, dialog), webdav))), $("#saveBtn").on("click", (() => saveSettingForm(this.getFormDependencies()))), $("#runHealthCheckBtn").on("click", (() => renderDataHealthPanel())), $("#repairHealthBtn").on("click", ((e3) => {
         utils.q(e3, "修复前会自动下载备份，是否继续?", (() => repairDataHealthWithBackup()));
       })), $("#pm-clear-log").on("click", (() => {
@@ -7569,16 +7569,16 @@
         }
       })), $(".clean-btn").on("click", (async (e3) => {
         const t3 = $(e3.currentTarget).data("key"), n3 = this.cacheItems.find(((e4) => e4.key === t3));
-        t3 === storageManager.third_party_cache_key ? await storageManager.clearThirdPartyCache() : "_circuitBreaker" === t3 ? gmHttp.resetAllCircuitBreakers() : "_domainStats" === t3 ? gmHttp.clearDomainStats() : localStorage.removeItem(t3), show.ok(`${n3.text} 清理成功`), $("#cache-data-display").addClass("jhs-is-hidden"), "jhs_dmm_video" === t3 && localStorage.removeItem("jhs_other_site_dmm");
+        t3 === storageManager.third_party_cache_key ? await storageManager.clearThirdPartyCache() : "_circuitBreaker" === t3 ? diagnostics.resetAllCircuitBreakers() : "_domainStats" === t3 ? diagnostics.clearDomainStats() : storage.removeLocal(t3), show.ok(`${n3.text} 清理成功`), $("#cache-data-display").addClass("jhs-is-hidden"), "jhs_dmm_video" === t3 && storage.removeLocal("jhs_other_site_dmm");
       })), $("#clean-all").on("click", (async () => {
-        this.cacheItems.forEach(((e3) => localStorage.removeItem(e3.key))), show.ok("全部缓存已清理"), $("#cache-data-display").addClass("jhs-is-hidden"), localStorage.removeItem("jhs_other_site_dmm"), await storageManager.clearThirdPartyCache();
+        this.cacheItems.forEach(((e3) => storage.removeLocal(e3.key))), show.ok("全部缓存已清理"), $("#cache-data-display").addClass("jhs-is-hidden"), storage.removeLocal("jhs_other_site_dmm"), await storageManager.clearThirdPartyCache();
       })), $(".view-btn").on("click", (async (e3) => {
         const t3 = $(e3.currentTarget).data("key");
         let n3;
         if (t3 === storageManager.third_party_cache_key) n3 = JSON.stringify(await storageManager.getThirdPartyCache());
-        else if ("_circuitBreaker" === t3) n3 = JSON.stringify(gmHttp.getCircuitBreakerStatus());
-        else if ("_domainStats" === t3) n3 = JSON.stringify(gmHttp.getDomainStats());
-        else n3 = localStorage.getItem(t3);
+        else if ("_circuitBreaker" === t3) n3 = JSON.stringify(diagnostics.getNetworkDiagnostics().circuitBreakers);
+        else if ("_domainStats" === t3) n3 = JSON.stringify(diagnostics.getNetworkDiagnostics().domainStats);
+        else n3 = storage.getLocal(t3);
         const a3 = $("#cache-data-display"), i2 = a3.find("pre");
         if (a3.removeClass("jhs-is-hidden"), n3) try {
           const e4 = JSON.parse(n3);
@@ -15514,7 +15514,7 @@ ${error.stack}` : "");
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog]),
-    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog]),
+    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [SERVICE.dialog]),
@@ -15833,7 +15833,7 @@ ${error.stack}` : "");
   }
   __name(sanitize, "sanitize");
   var _DiagnosticsService = class _DiagnosticsService {
-    constructor() {
+    constructor(options = {}) {
       this.startedAt = performance.now();
       this.activeFeatures = /* @__PURE__ */ new Set();
       this.activeContributions = /* @__PURE__ */ new Set();
@@ -15847,6 +15847,7 @@ ${error.stack}` : "");
       this.legacyPlugins = [];
       this.legacyStartup = null;
       this.legacyTimings = [];
+      this.legacyHttp = options.legacyHttp ?? null;
     }
     recordStartup(id, durationMs) {
       this.startupTimings.set(id, durationMs);
@@ -15884,6 +15885,21 @@ ${error.stack}` : "");
     }
     clearErrors() {
       this.errors = [];
+    }
+    getNetworkDiagnostics() {
+      return Object.freeze({
+        circuitBreakers: this.legacyHttp?.getCircuitBreakerStatus?.() ?? {},
+        domainStats: this.legacyHttp?.getDomainStats?.() ?? {}
+      });
+    }
+    resetCircuitBreaker(domain) {
+      this.legacyHttp?.resetCircuitBreaker?.(domain);
+    }
+    resetAllCircuitBreakers() {
+      this.legacyHttp?.resetAllCircuitBreakers?.();
+    }
+    clearDomainStats() {
+      this.legacyHttp?.clearDomainStats?.();
     }
     exportSnapshot() {
       const scopes = [...this.scopes.values()];
@@ -16815,7 +16831,7 @@ ${error.stack}` : "");
 
   // src/app/create-app-context.js
   function createAppContext(runtime) {
-    const diagnostics = new DiagnosticsService();
+    const diagnostics = new DiagnosticsService({ legacyHttp: runtime.legacyHttp });
     const rootScope = new LifecycleScope("app:root", { onChange: /* @__PURE__ */ __name((snapshot) => diagnostics.updateScope(snapshot), "onChange") });
     const container = new DependencyContainer(diagnostics);
     const navigationPort = new BrowserNavigationAdapter();
@@ -17706,6 +17722,7 @@ ${error.stack}` : "");
       const route = hostAdapter?.detectRoute() ?? "other";
       const context = createAppContext({
         gmRequest: globalThis.GM_xmlhttpRequest,
+        legacyHttp: gmHttp2,
         storageForage: storageManager2.forage,
         localStorage: globalThis.localStorage,
         layer: vendors.layer,

@@ -95,7 +95,7 @@ export async function bootstrapJhs() {
         const hostAdapter = r ? new JavDbHostAdapter() : l ? new JavBusHostAdapter() : null;
         const route = hostAdapter?.detectRoute() ?? "other";
         const context = createAppContext({
-            gmRequest: globalThis.GM_xmlhttpRequest, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
+            gmRequest: globalThis.GM_xmlhttpRequest, legacyHttp: gmHttp, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
             layer: vendors.layer, hostAdapter, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
         });
         const settingsSnapshot = await context.services.settings.load();
