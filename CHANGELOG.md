@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 新增可单测的 Bootstrap Purity 架构门禁，禁止除 Composition Root 外的生产模块在导入阶段启动 DOM、网络、Storage、监听器、Observer 或定时器；原隐藏导航样式改为 Bootstrap 注入时才读取地址。
 - strict checkJs 继续覆盖自动翻页、设置样式/模板和 123AV-FC2 入口，并补齐分页空值、DOM 容器与 Integration 返回数据的显式契约。
 - 截图、宿主详情工作区、兼容增强与统一离线模块进入 strict checkJs；Provider availability、宿主资源边界、Observer 和 jQuery 兼容句柄均补充显式类型，覆盖率门禁同步上调至 84%。
+- FC2 详情、外部站点入口和详情操作栏进入 strict checkJs，明确宿主工作区、影片/磁力数据与遗留 Vendor 句柄边界，生产源码类型覆盖率提升至 86.4%。
 
 ### Fixed
 
@@ -21,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - FC2 详情重新提供 JavDB 账号的“想看”操作，并与 JHS 本地收藏分开；剧照放大后支持左右切换并默认居中显示。
 - 修复鉴定记录表头全选只处理当前分页的问题；现在会选择当前搜索和筛选条件下的全部记录，支持跨页保留、逐项排除，并让批量提示与实际处理数量一致。
 - 修复列表页“全部”仍被旧状态显示设置二次过滤的问题；收藏、已下载和已看作品会正常出现在“全部”中，硬屏蔽内容仍统一收在“屏蔽项”。
+- 修复 DMM/FANZA 外部链接检测分支因缓存键变量遮蔽站点配置而触发 TDZ 异常的问题，并增加构建产物回归测试。
 
 ## [6.4.1](../../compare/v6.4.0...v6.4.1) - 2026-08-23
 

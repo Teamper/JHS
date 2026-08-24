@@ -75,6 +75,18 @@ describe("6.2.0 audit remediation", () => {
         expect(externalSites).toHaveBeenCalledWith({ javBusUrl: "configured" });
     });
 
+    it("builds the DMM external link without shadowing its site config", async () => {
+        const dom = new JSDOM('<a data-jhs-site-id="fanzaBtn"></a>'), $ = jqueryFactory(dom.window);
+        const { Class } = loadClass("src/plugins/external-search/other-site.js", "OtherSitePlugin", {
+            window: dom.window, document: dom.window.document, $, normalizeCarNum: value => value
+        });
+        const plugin = new Class(), searchUrl = vi.fn(() => "https://www.dmm.co.jp/search/ABC-1");
+        plugin.getRuntimeService = name => "movie" === name ? { searchUrl } : { getLocal: () => null };
+        await expect(plugin.handleSite("ABC-1", { id: "fanzaBtn", providerId: "dmm", noHandle: true }, { root: $(dom.window.document), configs: [], isActive: () => true })).resolves.toBeUndefined();
+        expect(searchUrl).toHaveBeenCalledWith("dmm", { carNum: "ABC-1" });
+        expect($("[data-jhs-site-id='fanzaBtn']").attr("href")).toBe("https://www.dmm.co.jp/search/ABC-1");
+    });
+
     it("keeps all JHS UI layout decisions on mobileMode", () => {
         const setting = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8"), search = readTestFile(join(process.cwd(), "src/plugins/avatar/search-by-image.js"), "utf8"), mobile = readTestFile(join(process.cwd(), "src/plugins/status/mobile-bottom-bar.js"), "utf8");
         expect(setting).not.toContain("utils.isMobile()");

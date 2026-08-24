@@ -172,7 +172,7 @@ describe("FC2 owned detail workspace", () => {
     it("keeps asynchronous error variables inside their catch callbacks", () => {
         expect(fc2Source).not.toMatch(/catch\(\(error => [^{\n]*\), clog\.error/);
         expect(fc2By123AvSource).not.toMatch(/catch\(\(error => [^{\n]*\), clog\.error/);
-        expect(fc2Source).toContain('catch((error => {\n            context.isAlive() && sitesGroup.remove()');
+        expect(fc2Source).toMatch(/catch\(\((?:\/\*\*[^\n]+\*\/\s*)?error\) => \{\n\s+context\.isAlive\(\) && sitesGroup\.remove\(\)/);
         expect(fc2Source).toContain('catch((error => {\n            context.isAlive() && renderFc2State');
     });
 

@@ -26,7 +26,8 @@ describe("123AV Chinese adapter contract", () => {
     });
 
     it("classifies Cloudflare failures by normalized code and preserves request context", () => {
-        expect(otherSiteSource).toContain('"CF_BLOCKED" === a?.code');
+        expect(otherSiteSource).toContain('const code = /** @type {{ code?: string }} */ (a)?.code');
+        expect(otherSiteSource).toContain('"CF_BLOCKED" === code');
         expect(otherSiteSource).not.toContain("a?._cfBlocked");
         expect(otherSiteSource).not.toContain('includes("Just a moment")');
         expect(httpSource).toContain("Cloudflare challenge blocked: ${t}");

@@ -10720,8 +10720,9 @@ ${value}\r
       $('.navbar-item:contains("FC2")').attr("href", fc2Href), $('.tabs a:contains("FC2")').attr("href", fc2Href);
       if (o.includes("advanced_search?type=3")) $("h2.section-title").contents().first().replaceWith("Fc2PPV"), $(".section .container > .box").remove();
       if (!o.includes("collection_codes?movieId")) return;
-      const params = new URLSearchParams(window.location.search), movieId = params.get("movieId"), carNum = params.get("carNum"), url = params.get("url"), explicitSource = params.get("source"), source = ["fc2", "123av"].includes(explicitSource) ? explicitSource : await this.resolveFc2Source({ url }), host = $("section").first().empty();
+      const params = new URLSearchParams(window.location.search), movieId = params.get("movieId"), carNum = params.get("carNum"), url = params.get("url"), explicitSource = params.get("source"), host = $("section").first().empty();
       if (!carNum || !url) return void host.append($('<div class="jhs-fc2-state is-error"></div>').text("FC2 详情参数不完整"));
+      const source = ["fc2", "123av"].includes(explicitSource || "") ? explicitSource : await this.resolveFc2Source({ url });
       const context = this.mountFc2Detail(host, { movieId, carNum, url, source, mode: "page" });
       $(window).off("pagehide.jhsFc2Detail").one("pagehide.jhsFc2Detail", (() => context.destroy()));
     }
@@ -10755,7 +10756,7 @@ ${value}\r
       const gallery = $('<div class="jhs-fc2-gallery-grid" data-jhs-role="gallery-grid"></div>'), screenshot = $('<div class="jhs-fc2-screenshot" data-jhs-role="screenshot"></div>');
       gallery.on(`click${context.namespace}`, ".jhs-fc2-gallery-item", ((event) => {
         const image = $(event.currentTarget).find("img")[0];
-        image && showImageViewer(image, "", { galleryRoot: gallery[0] });
+        image && globalThis.showImageViewer(image, "", { galleryRoot: gallery[0] });
       }));
       context.getSlot("gallery").append(gallery, screenshot);
       const resources = $('<div class="jhs-fc2-resource-stack"></div>'), nativeGroup = this.createResourceGroup("站内磁力", "native-magnets"), sitesGroup = this.createResourceGroup("第三方站点", "other-sites"), hubGroup = this.createResourceGroup("更多磁力来源", "magnet-hub"), hubButton = $('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="magnet-hub" aria-expanded="false">展开磁力搜索</button>');
@@ -10776,22 +10777,22 @@ ${value}\r
       }));
       detailStateController.bind({ root: context.root, layerIndex: context.layerIndex ?? null, carNum: context.carNum, activityType: "fc2-state", getRecord: /* @__PURE__ */ __name(() => ({ carNum: context.carNum, url: context.url, fc2Source: context.source, names: context.root.find('[data-jhs-role="actress-data"]').text(), publishTime: context.root.find('[data-jhs-role="publish-time"]').text() }), "getRecord") });
       void this.getDependency("FilterTitleKeywordPlugin").bindDetailRoot(context.root, { layerIndex: context.layerIndex ?? null });
-      void this.getDependency("OtherSitePlugin").loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: false, isActive: context.isAlive }).then(((box) => {
+      void this.getDependency("OtherSitePlugin").loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: false, isActive: context.isAlive }).then((box) => {
         if (context.isAlive() && !box) sitesGroup.remove();
-      })).catch(((error) => {
+      }).catch((error) => {
         context.isAlive() && sitesGroup.remove(), clog.error("FC2 外部站点加载失败", error);
-      }));
+      });
       const scopePromise = this.getRuntimeService("scope")();
-      void scopePromise.then(((scope) => renderScreenshotPanel({
+      void scopePromise.then((scope) => renderScreenshotPanel({
         target: screenshot,
         carNum: context.carNum.replace("FC2-", ""),
         screenshot: this.getRuntimeService("screenshot"),
         settings: this.getRuntimeService("settings").snapshot(),
         scope,
         isActive: context.isAlive
-      }))).then(((result) => {
+      })).then((result) => {
         if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove();
-      }));
+      });
       "123av" === context.source ? void this.load123AvDetail(context) : void this.loadNativeDetail(context);
     }
     createResourceGroup(title, role) {
@@ -10803,7 +10804,9 @@ ${value}\r
     }
     async load123AvDetail(context) {
       const source = this.getDependency("Fc2By123AvPlugin"), movieIdPromise = source.resolveMovieId(context.carNum);
-      void this.configureJavDbWantButton(context, movieIdPromise), void this.mountPanels(context, movieIdPromise), void movieIdPromise.then(((movieId) => context.isAlive() && this.fetchAndRenderNativeMagnets(context, movieId))).catch(((error) => {
+      void this.configureJavDbWantButton(context, movieIdPromise), void this.mountPanels(context, movieIdPromise), void movieIdPromise.then(((movieId) => {
+        if (context.isAlive()) return this.fetchAndRenderNativeMagnets(context, movieId);
+      })).catch(((error) => {
         context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.load123AvMagnets(context))), clog.error("123AV 磁力关联失败", error);
       }));
       await source.loadDetail(context, context.url);
@@ -10832,12 +10835,13 @@ ${value}\r
         button.attr({ "aria-pressed": "true", "aria-disabled": "false" }).text("已加入 JavDB 想看"), show.ok("已加入 JavDB 想看");
       } catch (error) {
         if (!context.isAlive()) return;
-        if ("LOGIN_REQUIRED" === error?.code) {
+        const normalizedError = error;
+        if ("LOGIN_REQUIRED" === normalizedError?.code) {
           button.attr("aria-disabled", "false").text("JavDB 想看");
           const loginPlugin = this.getDependency("TOP250Plugin");
           return loginPlugin?.openLoginDialog({ onSuccess: /* @__PURE__ */ __name(() => this.submitJavDbWant(context, movieId, button), "onSuccess") });
         }
-        button.attr("aria-disabled", "false").text("JavDB 想看"), show.error(error?.message || "加入 JavDB 想看失败"), clog.error("加入 JavDB 想看失败", error);
+        button.attr("aria-disabled", "false").text("JavDB 想看"), show.error(normalizedError?.message || "加入 JavDB 想看失败"), clog.error("加入 JavDB 想看失败", error);
       } finally {
         context.isAlive() && button.removeData("jhsBusy").removeAttr("aria-busy");
       }
@@ -10859,7 +10863,8 @@ ${value}\r
       title.find("strong").text(movie.title || "无标题"), body.append(title);
       const meta = $('<div class="jhs-fc2-meta"></div>');
       [`番号：${movie.carNum || context.carNum}`, `发行：${movie.releaseDate || "未知"}`, `评分：${Number.isFinite(Number(movie.score)) ? movie.score : "无"}`, `时长：${Number.isFinite(Number(movie.duration)) ? movie.duration + " 分钟" : "无"}`].forEach(((value) => meta.append($("<span></span>").text(value)))), body.append(meta);
-      const actors = $('<div class="jhs-fc2-actors"><strong>主演：</strong></div>'), actressNames = [];
+      const actressNames = [];
+      const actors = $('<div class="jhs-fc2-actors"><strong>主演：</strong></div>');
       (movie.actors || []).forEach(((actor) => {
         actors.append($("<a></a>").addClass("jhs-fc2-actor").attr({ href: `/actors/${encodeURIComponent(actor.id)}`, target: "_blank", rel: "noopener noreferrer" }).text(actor.name || "未知演员")), 0 === actor.gender && actressNames.push(actor.name);
       }));
@@ -10875,7 +10880,8 @@ ${value}\r
         if (!context.isAlive()) return;
         host.empty();
         if (!magnets.length) return renderFc2State(host, "暂无站内磁力");
-        const magnetService = this.getRuntimeService("magnet"), assessments = [];
+        const assessments = [];
+        const magnetService = this.getRuntimeService("magnet");
         magnets.forEach(((item) => {
           const hash = normalizeBtihHash(item.hash);
           if (!hash) return;
@@ -10921,7 +10927,7 @@ ${value}\r
       context.getSlot(name).empty(), context.getSection(name).find(".jhs-fc2-section__actions").empty();
     }
     async resolveFc2Source(record = {}) {
-      if (["fc2", "123av"].includes(record.fc2Source)) return record.fc2Source;
+      if (record.fc2Source && ["fc2", "123av"].includes(record.fc2Source)) return record.fc2Source;
       try {
         return this.getRuntimeService("movie").matchesProviderUrl("av123", new URL(record.url, window.location.origin).href) ? "123av" : "fc2";
       } catch {
@@ -11439,7 +11445,8 @@ ${failure.stack}` : "");
   var StorageQueue = _StorageQueue;
   var _OtherSitePlugin = class _OtherSitePlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "siteConfigs", [
+      super(...arguments);
+      this.siteConfigs = [
         { id: "javTrailersBtn" },
         { id: "123AvBtn", providerId: "av123" },
         { id: "jableBtn" },
@@ -11447,16 +11454,18 @@ ${failure.stack}` : "");
         { id: "missAvBtn" },
         { id: "supJavBtn" },
         { id: "javDbBtn", condition: /* @__PURE__ */ __name(() => l, "condition") },
-        { id: "javBusBtn", condition: /* @__PURE__ */ __name((e2) => r && e2 && !e2.includes("FC2"), "condition") },
-        { id: "fanzaBtn", providerId: "dmm", noHandle: true, condition: /* @__PURE__ */ __name((e2) => e2 && !e2.includes("FC2"), "condition") }
-      ]), i(this, "settingCache", null), i(this, "lastFetchTime", 0), i(this, "CACHE_DURATION", 1e4);
+        { id: "javBusBtn", condition: /* @__PURE__ */ __name((e2) => Boolean(r && e2 && !e2.includes("FC2")), "condition") },
+        { id: "fanzaBtn", providerId: "dmm", noHandle: true, condition: /* @__PURE__ */ __name((e2) => Boolean(e2 && !e2.includes("FC2")), "condition") }
+      ];
+      this.settingCache = null;
+      this.lastFetchTime = 0, this.CACHE_DURATION = 1e4;
     }
     getName() {
       return "OtherSitePlugin";
     }
     async getSiteConfigs() {
       const settings = await this.getSettingCache(), definitions = this.getRuntimeService("movie").externalSites(settings);
-      return this.siteConfigs.map((config) => ({ ...definitions.find((item) => item.id === config.id) || {}, ...config }));
+      return this.siteConfigs.map((config) => ({ ...definitions.find(((item) => item.id === config.id)) || {}, ...config }));
     }
     async initCss() {
       return `
@@ -11508,7 +11517,7 @@ ${failure.stack}` : "");
       })), n2.autoDetect && await this.detectOtherSites(e2, view);
       return box;
     }
-    async prepareSiteLink(e2, t2, view = { root: $(document), isActive: /* @__PURE__ */ __name(() => true, "isActive") }) {
+    async prepareSiteLink(e2, t2, view = { root: $(document), configs: [], isActive: /* @__PURE__ */ __name(() => true, "isActive") }) {
       const n2 = view.root.find(`[data-jhs-site-id="${t2.id}"],#${t2.id}`).first();
       if (!(e2 = normalizeCarNum(e2))) return n2.removeAttr("href").attr({ "aria-disabled": "true", title: "番号不可用" }), void this.setSiteState(n2, "idle");
       if (t2.providerId) {
@@ -11516,9 +11525,9 @@ ${failure.stack}` : "");
         return void (url ? (n2.attr("href", url), n2.attr("title", "点击前往外部搜索页"), this.setSiteState(n2, "idle")) : (n2.attr("title", "外部站点地址不可用"), this.setSiteState(n2, "domain-error")));
       }
       try {
-        view.isActive() && (n2.attr("href", t2.searchUrl(e2)), n2.attr("title", "点击前往外部搜索页；点击检测按钮后才自动检测"), this.setSiteState(n2, "idle"));
+        view.isActive?.() !== false && t2.searchUrl && (n2.attr("href", t2.searchUrl(e2)), n2.attr("title", "点击前往外部搜索页；点击检测按钮后才自动检测"), this.setSiteState(n2, "idle"));
       } catch (a2) {
-        view.isActive() && (n2.attr("title", "外部站点地址未配置或不可用"), this.setSiteState(n2, "domain-error"));
+        view.isActive?.() !== false && (n2.attr("title", "外部站点地址未配置或不可用"), this.setSiteState(n2, "domain-error"));
       }
     }
     async detectOtherSites(e2, view = { root: $(document), configs: this.siteConfigs, isActive: /* @__PURE__ */ __name(() => true, "isActive") }) {
@@ -11526,28 +11535,28 @@ ${failure.stack}` : "");
       if (!(e2 = normalizeCarNum(e2))) return t2.prop("disabled", true), void clog.warn("跳过第三方站点检测：番号不可用");
       return t2.text("检测中").prop("disabled", true).addClass("is-checking"), await Promise.all(view.configs.map((async (t3) => {
         t3.condition && false === t3.condition(t3.sourceCarNum) || await this.handleSite(e2, t3, view);
-      }))), view.isActive() && t2.text(n2).prop("disabled", false).removeClass("is-checking");
+      }))), view.isActive?.() !== false && t2.text(n2).prop("disabled", false).removeClass("is-checking");
     }
     setSiteState(e2, t2) {
       e2.removeClass("is-checking is-available is-unavailable is-domain-error"), "idle" !== t2 && e2.addClass(`is-${t2}`);
     }
-    async handleSite(e2, t2, view = { root: $(document), isActive: /* @__PURE__ */ __name(() => true, "isActive") }) {
+    async handleSite(e2, t2, view = { root: $(document), configs: [], isActive: /* @__PURE__ */ __name(() => true, "isActive") }) {
       const n2 = view.root.find(`[data-jhs-site-id="${t2.id}"],#${t2.id}`).first();
       n2.removeAttr("href").find(".site-tag").remove(), this.setSiteState(n2, "checking");
       if (t2.noHandle && true === t2.noHandle) {
-        n2.attr("href", this.getRuntimeService("movie").searchUrl(t3.providerId, { carNum: e2 }) || "");
-        const t3 = "jhs_other_site_dmm", raw = this.getRuntimeService("storage").getLocal(t3), a2 = (raw ? JSON.parse(raw) : {})[e2];
+        n2.attr("href", this.getRuntimeService("movie").searchUrl(t2.providerId, { carNum: e2 }) || "");
+        const cacheKey = "jhs_other_site_dmm", raw = this.getRuntimeService("storage").getLocal(cacheKey), a2 = (raw ? JSON.parse(raw) : {})[e2];
         a2 ? (n2.attr("href", a2.url), "multiple" === a2.type && n2.append('<span class="site-tag">多结果</span>'), this.setSiteState(n2, "available")) : this.setSiteState(n2, "idle");
       } else if (t2.providerId) try {
         const scope = await this.getRuntimeService("scope")();
         const result = await this.getRuntimeService("movie").resolve({ carNum: e2, providerId: t2.providerId }, { scope });
-        if (!view.isActive()) return;
+        if (view.isActive?.() === false) return;
         const searchUrl = this.getRuntimeService("movie").searchUrl(t2.providerId, { carNum: e2 });
         n2.attr("href", result?.url || searchUrl || "");
         this.setSiteState(n2, result?.url ? "available" : "unavailable");
         if (!result?.url) n2.attr("title", "未查询到, 点击前往搜索页");
       } catch (error) {
-        if (view.isActive()) n2.attr("title", "请求失败。"), this.setSiteState(n2, "unavailable"), clog.warn(`检测第三方资源失败, ${t2.id.replace("Btn", "")}`);
+        if (view.isActive?.() !== false) n2.attr("title", "请求失败。"), this.setSiteState(n2, "unavailable"), clog.warn(`检测第三方资源失败, ${t2.id.replace("Btn", "")}`);
       }
       else try {
         if (n2.attr("href")) return void this.setSiteState(n2, "idle");
@@ -11556,7 +11565,7 @@ ${failure.stack}` : "");
         if (o2 && o2.time && m2 - o2.time < 864e5) return void (n2.attr("href", o2.url), "multiple" === o2.type && n2.append('<span class="site-tag">多结果</span>'), this.setSiteState(n2, "available"));
         const scope = await this.getRuntimeService("scope")(), result = await this.getRuntimeService("movie").searchExternalSite(t2.id, e2, { settings: await this.getSettingCache(), scope }), l2 = result.searchUrl;
         n2.attr("href", l2);
-        if (!view.isActive()) return;
+        if (view.isActive?.() === false) return;
         const h2 = result.matches;
         let g2 = "", p2 = null;
         if (1 === h2.length) {
@@ -11578,7 +11587,8 @@ ${failure.stack}` : "");
         g2 && n2.append(g2);
       } catch (a2) {
         const e3 = String(a2), i2 = t2.id.replace("Btn", "");
-        "CIRCUIT_OPEN" === a2?.code ? (n2.attr("title", e3), this.setSiteState(n2, "domain-error"), clog.warn(`检测第三方资源跳过, ${i2} 已熔断`)) : "CF_BLOCKED" === a2?.code ? (n2.attr("title", "请求失败：Cloudflare 安全检查。"), this.setSiteState(n2, "domain-error"), clog.warn(`检测第三方资源失败, ${i2} 需Cloudflare安全检查`)) : "INVALID_URL" === a2?.code ? (n2.attr("title", "域名失效"), this.setSiteState(n2, "domain-error"), clog.warn(`检测第三方资源失败, ${i2} 域名或重定向无效`)) : "NOT_FOUND" === a2?.code ? (n2.attr("title", "未查询到, 点击前往搜索页"), this.setSiteState(n2, "unavailable")) : (clog.error(a2), n2.attr("title", "请求失败。"), this.setSiteState(n2, "unavailable"), clog.warn(`检测第三方资源失败, ${i2}`));
+        const code = a2?.code;
+        "CIRCUIT_OPEN" === code ? (n2.attr("title", e3), this.setSiteState(n2, "domain-error"), clog.warn(`检测第三方资源跳过, ${i2} 已熔断`)) : "CF_BLOCKED" === code ? (n2.attr("title", "请求失败：Cloudflare 安全检查。"), this.setSiteState(n2, "domain-error"), clog.warn(`检测第三方资源失败, ${i2} 需Cloudflare安全检查`)) : "INVALID_URL" === code ? (n2.attr("title", "域名失效"), this.setSiteState(n2, "domain-error"), clog.warn(`检测第三方资源失败, ${i2} 域名或重定向无效`)) : "NOT_FOUND" === code ? (n2.attr("title", "未查询到, 点击前往搜索页"), this.setSiteState(n2, "unavailable")) : (clog.error(a2), n2.attr("title", "请求失败。"), this.setSiteState(n2, "unavailable"), clog.warn(`检测第三方资源失败, ${i2}`));
       }
     }
     async getSettingCache() {
@@ -14861,7 +14871,8 @@ ${failure.stack}` : "");
       return "DetailPageButtonPlugin";
     }
     constructor() {
-      super(), this.answerCount = 1, this.stateBinding = null;
+      super(), this.answerCount = 1;
+      this.stateBinding = null;
     }
     async handle() {
       this.hideVideoControls(), window.isDetailPage && (await this.createMenuBtn(), await this.autoRemoveNewVideoMark());
@@ -14973,7 +14984,7 @@ ${failure.stack}` : "");
           area: utils.getResponsiveArea(["60%", "70%"]),
           anim: -1,
           success: /* @__PURE__ */ __name((t3, a2) => {
-            createJhsTable(Tabulator, "#xunlei-table-container", {
+            createJhsTable(globalThis.Tabulator, "#xunlei-table-container", {
               pagination: false,
               layout: "fitColumns",
               placeholder: "暂无数据",
@@ -15044,8 +15055,8 @@ ${failure.stack}` : "");
       return detailStateController.requestToggle(this.getStateBinding(), "blocked", e2);
     }
     hideVideoControls() {
-      $(document).on("mouseenter", "#preview-video", (function() {
-        $(this).prop("controls", true);
+      $(document).on("mouseenter", "#preview-video", ((event) => {
+        $(event.currentTarget).prop("controls", true);
       }));
     }
     async previewSubtitle(subtitle, t2) {
@@ -15077,7 +15088,7 @@ ${failure.stack}` : "");
           }, "btn1")
         });
       } catch (a2) {
-        show.error(`预览失败: ${a2.message}`), clog.error("预览字幕文件出错:", a2);
+        show.error(`预览失败: ${a2 instanceof Error ? a2.message : String(a2)}`), clog.error("预览字幕文件出错:", a2);
       }
       else show.error("仅支持预览ASS和SRT字幕文件");
     }

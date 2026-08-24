@@ -1,15 +1,21 @@
+// @ts-check
+
 import { C, _, escapeHtml, k, l, m, normalizeCarNum, r, v, y } from "../../core/constants.js";
 import { detailStateController } from "../../core/detail-state-controller.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { stateService } from "../../core/state-service.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 
+/** @typedef {MouseEvent} ActionEvent */
+/** @typedef {{ url?: string, extension?: string, [key: string]: any }} SubtitleRecord */
+
 export class DetailPageButtonPlugin extends BasePlugin {
     getName() {
         return "DetailPageButtonPlugin";
     }
     constructor() {
-        super(), this.answerCount = 1, this.stateBinding = null;
+        super(), this.answerCount = 1;
+        /** @type {any} */ this.stateBinding = null;
     }
     async handle() {
         this.hideVideoControls(), window.isDetailPage && (await this.createMenuBtn(), await this.autoRemoveNewVideoMark());
@@ -41,11 +47,11 @@ export class DetailPageButtonPlugin extends BasePlugin {
         }));
         const a = this.getDependency("HighlightMagnetPlugin"), i = await storageManager.getSetting("enableMagnetsFilter", _);
         $("#magnets-span").text(i === _ ? "关闭磁力过滤" : "开启磁力过滤"), i === _ && a.doFilterMagnet(),
-        $("#enable-magnets-filter").on("click", (e => {
+        $("#enable-magnets-filter").on("click", ((/** @type {ActionEvent} */ e) => {
             let t = $("#magnets-span");
             "关闭磁力过滤" === t.text() ? (a.showAll(), t.text("开启磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", C)) : (a.doFilterMagnet(),
             t.text("关闭磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", _));
-        })), $("#search-subtitle-btn").on("click", (e => {
+        })), $("#search-subtitle-btn").on("click", ((/** @type {ActionEvent} */ e) => {
             const target = this.getRuntimeService("movie").sourceUrls({ carNum: t }, ["subtitlecat"])[0]?.url;
             if (target) utils.openPage(target, t, !1, e);
         })),
@@ -56,6 +62,7 @@ export class DetailPageButtonPlugin extends BasePlugin {
         }
         this.stateBinding = detailStateController.bind({ root: document, carNum: t, activityType: "detail-state", getRecord: () => this.getStateRecord() });
     }
+    /** @param {string} e */
     async showStatus(e) {
         return detailStateController.render({ root: document, carNum: e });
     }
@@ -68,15 +75,19 @@ export class DetailPageButtonPlugin extends BasePlugin {
         const info = this.getPageInfo();
         return this.stateBinding = { root: document, layerIndex: null, carNum: normalizeCarNum(info.carNum), getRecord: () => this.getStateRecord(), activityType: "detail-state", selectors: {} };
     }
+    /** @param {ActionEvent} event */
     async favoriteOne(event) {
         return detailStateController.requestToggle(this.getStateBinding(), "favorite", event);
     }
+    /** @param {ActionEvent} event */
     async hasDownOne(event) {
         return detailStateController.requestToggle(this.getStateBinding(), "downloaded", event);
     }
+    /** @param {ActionEvent} event */
     async hasWatchOne(event) {
         return detailStateController.requestToggle(this.getStateBinding(), "watched", event);
     }
+    /** @param {string} e */
     async searchXunLeiSubtitle(e) {
         const dialog = this.getRuntimeService("dialog"), subtitle = this.getRuntimeService("subtitle"), scope = await this.getRuntimeService("scope")();
         let t = loading();
@@ -89,8 +100,8 @@ export class DetailPageButtonPlugin extends BasePlugin {
                 scrollbar: !1,
                 area: utils.getResponsiveArea([ "60%", "70%" ]),
                 anim: -1,
-                success: (t, a) => {
-                    createJhsTable(Tabulator, "#xunlei-table-container", {
+                success: (/** @type {unknown} */ t, /** @type {number} */ a) => {
+                    createJhsTable((/** @type {any} */ (globalThis)).Tabulator, "#xunlei-table-container", {
                         pagination: !1,
                         layout: "fitColumns",
                         placeholder: "暂无数据",
@@ -116,14 +127,14 @@ export class DetailPageButtonPlugin extends BasePlugin {
                             title: "操作",
                             responsive: 0,
                             headerSort: !1,
-                            formatter: (t, n, a) => {
+                            formatter: (/** @type {any} */ t, /** @type {any} */ n, /** @type {(callback: () => void) => void} */ a) => {
                                 const i = t.getData();
                                 return a((() => {
                                     const n = t.getElement().querySelector(".subtitle-preview-btn"), a = t.getElement().querySelector(".subtitle-download-btn");
-                                    n && n.addEventListener("click", (async t => {
+                                    n && n.addEventListener("click", (async (/** @type {Event} */ t) => {
                                         const a = e + "." + i.extension;
                                         this.previewSubtitle(i, a);
-                                    })), a && a.addEventListener("click", (async t => {
+                                    })), a && a.addEventListener("click", (async (/** @type {Event} */ t) => {
                                         const a = e + "." + i.extension, s = await subtitle.download("xunlei", i, { scope });
                                         utils.download(s, a);
                                     }));
@@ -156,15 +167,17 @@ export class DetailPageButtonPlugin extends BasePlugin {
             t.close();
         }
     }
+    /** @param {ActionEvent | null} e @param {unknown} t */
     async filterOne(e, t) {
         e && e.preventDefault();
         return detailStateController.requestToggle(this.getStateBinding(), "blocked", e);
     }
     hideVideoControls() {
-        $(document).on("mouseenter", "#preview-video", (function() {
-            $(this).prop("controls", !0);
+        $(document).on("mouseenter", "#preview-video", ((/** @type {Event} */ event) => {
+            $(event.currentTarget).prop("controls", !0);
         }));
     }
+    /** @param {SubtitleRecord} subtitle @param {string} t */
     async previewSubtitle(subtitle, t) {
         if (!subtitle?.url) return void clog.error("未提供文件URL");
         const n = String(subtitle.extension || "").toLowerCase();
@@ -176,7 +189,7 @@ export class DetailPageButtonPlugin extends BasePlugin {
             const s = a.split("\n");
             let o = "";
             const r = String(s.length).length;
-            s.forEach(((e, t) => {
+            s.forEach(((/** @type {string} */ e, /** @type {number} */ t) => {
                 const n = String(t + 1).padStart(r, " ");
                 o += `<span class="jhs-code-line-number">${n}. </span>${escapeHtml(e)}\n`;
             }));
@@ -188,12 +201,12 @@ export class DetailPageButtonPlugin extends BasePlugin {
                 scrollbar: !1,
                 content: `<div class="jhs-code-viewer">${l}</div>`,
                 btn: [ "下载", "关闭" ],
-                btn1: function(e, n, i) {
+                btn1: function(/** @type {number} */ e, /** @type {unknown} */ n, /** @type {unknown} */ i) {
                     return utils.download(a, t), !1;
                 }
             });
         } catch (a) {
-            show.error(`预览失败: ${a.message}`), clog.error("预览字幕文件出错:", a);
+            show.error(`预览失败: ${a instanceof Error ? a.message : String(a)}`), clog.error("预览字幕文件出错:", a);
         } else show.error("仅支持预览ASS和SRT字幕文件");
     }
 }
