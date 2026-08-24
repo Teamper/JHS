@@ -13,8 +13,8 @@ export const Z = (e, t) => {
 }, ee = "jhs_dmm_video";
 
 class DmmPreviewParser {
-    constructor(e, storage) {
-        this.carNum = e, this.storage = storage, this.lastError = null;
+    constructor(e, storage, movie, scope) {
+        this.carNum = e, this.storage = storage, this.movie = movie, this.scope = scope, this.lastError = null;
     }
     _checkCache() {
         const cached = this.storage.getLocal(ee), e = cached ? JSON.parse(cached) : {};
@@ -24,118 +24,20 @@ class DmmPreviewParser {
         const cached = this.storage.getLocal(ee), t = cached ? JSON.parse(cached) : {};
         t[this.carNum] = e, clog.debug("成功解析出预览视频并已缓存:", e), this.storage.setLocal(ee, JSON.stringify(t));
     }
-    async _searchContentIds() {
-        const e = this.carNum, t = e.replace(/-/g, ""), n = [ {
-            keyword: e.replace("-", "00"),
-            name: "00-替换关键词"
-        }, {
-            keyword: e,
-            name: "原始番号关键词"
-        }, {
-            keyword: t,
-            name: "无连字符关键词"
-        } ], a = e.toLowerCase();
-        let hadSuccessfulRequest = !1;
-        for (const o of n) {
-            const {keyword: e, name: n} = o, i = e.toLowerCase();
-            clog.debug(`--- 尝试使用 ${n} (${e}) 进行 API 搜索 ---`);
-            const r = `https://api.dmm.com/affiliate/v3/ItemList?${new URLSearchParams({
-                api_id: "UrwskPfkqQ0DuVry2gYL",
-                affiliate_id: "10278-996",
-                output: "json",
-                site: "FANZA",
-                sort: "match",
-                keyword: e
-            }).toString()}`;
-            let l;
-            try {
-                l = await gmHttp.get(r);
-                hadSuccessfulRequest = !0;
-            } catch (s) {
-                this.lastError = new ProviderError("dmm", "HTTP_ERROR", `DMM API 请求失败: ${s.message || s}`, {
-                    cause: s,
-                    url: r,
-                    status: s?.status,
-                    retryable: !0
-                }), clog.error(`API 请求失败，跳过 ${n}:`, this.lastError);
-                continue;
-            }
-            if (!l || !l.result || !l.result.result_count) {
-                clog.debug("API 返回无结果，尝试下一个关键词。");
-                continue;
-            }
-            const c = [];
-            for (const s of l.result.items) {
-                if (c.length >= 2) break;
-                const e = s.content_id || "", o = s.maker_product || "";
-                (e.includes(i.replace("-", "")) || a === o.toLowerCase() || e.includes(t.toLowerCase())) && (c.push({
-                    serviceCode: s.service_code,
-                    floorCode: s.floor_code,
-                    contentId: e,
-                    pageUrl: s.URL
-                }), clog.debug(`[${n}] cid|makerProduct 匹配成功:`, e, o));
-            }
-            if (c.length > 0) {
-                clog.debug(`--- 成功通过 ${n} 找到 Content IDs ---`);
-                const t = $("#fanzaBtn");
-                let a = `https://www.dmm.co.jp/search/=/searchstr=${e}`, i = "single";
-                c.length > 1 ? (t.attr("href", a), t.append('<span class="site-tag jhs-layout-294497f1">多结果</span>'),
-                t.css("backgroundColor", "var(--jhs-status-down)"), i = "multiple") : (a = c[0].pageUrl, t.attr("href", a),
-                t.css("backgroundColor", "var(--jhs-status-down)"));
-                const s = "jhs_other_site_dmm", cached = this.storage.getLocal(s), o = cached ? JSON.parse(cached) : {};
-                return o[this.carNum] = {
-                    type: i,
-                    url: a
-                }, this.storage.setLocal(s, JSON.stringify(o)), c;
-            }
-            clog.debug(`[${n}] API 返回结果数 ${l.result.result_count}，但无精确匹配的 Content ID。`);
+    async _fetchRemote() {
+        const result = await this.movie.preview("dmm", { carNum: this.carNum }, { scope: this.scope });
+        const button = $("#fanzaBtn");
+        if (!result.sources) {
+            clog.warn("所有关键词尝试均未找到匹配的Content ID, 解析Dmm视频失败");
+            button.attr("href", result.searchUrl).attr("title", "未查询到, 点击前往搜索页").css("backgroundColor", "var(--jhs-status-filter)");
+            return null;
         }
-        hadSuccessfulRequest && (this.lastError = null);
-        clog.warn("所有关键词尝试均未找到匹配的Content ID, 解析Dmm视频失败");
-        const i = $("#fanzaBtn");
-        return i.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`),
-        i.attr("title", "未查询到, 点击前往搜索页"), i.css("backgroundColor", "var(--jhs-status-filter)"), null;
-    }
-    async _extractTrailerLinks({contentId: e, serviceCode: t, floorCode: n}) {
-        const a = `https://www.dmm.co.jp/service/digitalapi/-/html5_player/=/cid=${e}/mtype=AhRVShI_/service=${t}/floor=${n}/mode=/`, i = await gmHttp.get(a, null, {
-            "accept-language": "ja-JP,ja;q=0.9",
-            Cookie: "age_check_done=1"
-        });
-        if ("string" != typeof i) throw clog.error(i), new ProviderError("dmm", "PARSE_ERROR", "解析播放页内容失败, 非文本内容", {
-            url: a
-        });
-        if (i.includes("このサービスはお住まいの地域からは")) throw new ProviderError("dmm", "REGION_BLOCKED", "DMM 预览源不可用，请将 DMM 域名分流到日本 IP", {
-            url: a
-        });
-        const s = i.match(/const\s+args\s+=\s+(.*);/);
-        if (!s) throw new ProviderError("dmm", "PARSE_ERROR", "未在脚本中找到 const args = ... 变量", {
-            url: a
-        });
-        let o;
-        try {
-            ({bitrates: o} = JSON.parse(s[1]));
-        } catch (d) {
-            throw new ProviderError("dmm", "PARSE_ERROR", `解析播放器脚本 JSON 失败: ${d.message}`, {
-                cause: d,
-                url: a
-            });
-        }
-        const r = {}, l = L.map((e => e.quality)).join("|"), c = new RegExp(`(${l})\\.mp4$`);
-        if (!Array.isArray(o)) throw clog.error("解析画质链接失败: bitrates 字段不是一个数组或不存在"), new ProviderError("dmm", "PARSE_ERROR", "解析画质链接失败: bitrates 字段不是一个数组或不存在", {
-            url: a
-        });
-        clog.debug("原始数据返回:", o);
-        for (const h of o) {
-            const e = null == h ? void 0 : h.src;
-            if (!e || "string" != typeof e || !e.endsWith(".mp4")) continue;
-            const t = e.match(c);
-            let n = "";
-            t && t[1] && (n = t[1]), n && !r[n] && (r[n] = e);
-        }
-        if (0 === Object.keys(r).length) throw new ProviderError("dmm", "PARSE_ERROR", "未找到匹配要求的预览画质视频", {
-            url: a
-        });
-        return r;
+        button.attr("href", result.pageUrl).css("backgroundColor", "var(--jhs-status-down)");
+        if (result.matchType === "multiple") button.append('<span class="site-tag jhs-layout-294497f1">多结果</span>');
+        const cacheKey = "jhs_other_site_dmm", cached = this.storage.getLocal(cacheKey), cache = cached ? JSON.parse(cached) : {};
+        cache[this.carNum] = { type: result.matchType, url: result.pageUrl };
+        this.storage.setLocal(cacheKey, JSON.stringify(cache));
+        return result.sources;
     }
     async fetchVideo() {
         const carNum = normalizeCarNum(this.carNum);
@@ -143,39 +45,28 @@ class DmmPreviewParser {
         this.carNum = carNum;
         const e = this._checkCache();
         if (e) return e;
-        let t;
         try {
             const e = this.carNum.toLowerCase();
             if (e.startsWith("heyzo") || /^(n\d+|\d+(-\d+)*)$/.test(e) || /^n\d+$/.test(e)) return clog.debug("无码番号类型，取消 DMM 解析"), null;
             if (this.carNum.includes("VR-")) return clog.debug("VR 类型，取消 DMM 解析"), null;
-            t = await this._searchContentIds();
+            const sources = await this._fetchRemote();
+            if (!sources) return null;
+            return this._updateCache(sources), sources;
         } catch (n) {
-            this.lastError = n instanceof ProviderError ? n : new ProviderError("dmm", "PARSE_ERROR", n.message || String(n), {
-                cause: n
+            this.lastError = n instanceof ProviderError ? n : new ProviderError("dmm", n?.code || "PARSE_ERROR", n.message || String(n), {
+                cause: n,
+                retryable: n?.retryable === true
             }), clog.error("DMM API 搜索失败:", this.lastError);
             const e = $("#fanzaBtn");
-            return e.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`),
+            return e.attr("href", this.movie.searchUrl("dmm", { carNum: this.carNum })),
             e.attr("title", "未查询到, 点击前往搜索页"), e.css("backgroundColor", "var(--jhs-status-filter)"), null;
-        }
-        if (!t || 0 === t.length) return null;
-        try {
-            const e = await Promise.any(t.map((e => this._extractTrailerLinks(e))));
-            return this._updateCache(e), e;
-        } catch (a) {
-            const e = a.errors || [ a ];
-            this.lastError = e.find((e => "REGION_BLOCKED" === e?.code)) || e.find((e => e instanceof ProviderError)) || new ProviderError("dmm", "PARSE_ERROR", e[0]?.message || String(e[0]), {
-                cause: e[0]
-            }), clog.error(`解析失败: ${this.lastError.message}`, e);
-            const t = $("#fanzaBtn");
-            return t.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`),
-            t.attr("title", "未查询到, 点击前往搜索页"), t.css("backgroundColor", "var(--jhs-status-filter)"), null;
         }
     }
 }
 
 /** 获取 DMM 预览源及可供界面判断的失败原因。 */
-export async function fetchDmmPreview(carNum, storage) {
-    const parser = new DmmPreviewParser(carNum, storage), sources = await parser.fetchVideo();
+export async function fetchDmmPreview(carNum, storage, movie, scope) {
+    const parser = new DmmPreviewParser(carNum, storage, movie, scope), sources = await parser.fetchVideo();
     return {
         sources,
         error: parser.lastError
@@ -219,7 +110,7 @@ export class PreviewVideoPlugin extends BasePlugin {
     /** 复用单次 DMM 请求，避免预加载和点击处理重复抓取。 */
     getDmmPreview() {
         if (this.dmmPreviewPromise) return this.dmmPreviewPromise;
-        this.dmmPreviewPromise = fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage")).then((result => {
+        this.dmmPreviewPromise = fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), this.getRuntimeService("scope")()).then((result => {
             (result.error?.retryable || "HTTP_ERROR" === result.error?.code) && (this.dmmPreviewPromise = null);
             return result;
         }), (error => {

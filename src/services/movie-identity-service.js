@@ -73,6 +73,14 @@ export class MovieIdentityService {
         const adapter = this.integrations?.getAdapter(manifest.id);
         return typeof adapter?.getImages === "function" ? adapter.getImages(movieRef, options) : [];
     }
+    /** @param {string} providerId @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async preview(providerId, movieRef, options = {}) {
+        const manifest = (this.integrations?.list("movie.preview") ?? []).find((item) => item.id === providerId);
+        if (!manifest) throw new TypeError(`Movie preview provider is unavailable: ${providerId}`);
+        const adapter = this.integrations?.getAdapter(manifest.id);
+        if (typeof adapter?.getPreviewForMovie !== "function") throw new TypeError(`Movie preview operation is unavailable: ${providerId}`);
+        return adapter.getPreviewForMovie(movieRef, options);
+    }
     /** @param {Record<string, unknown>} movieRef @param {string[]} providerIds */
     sourceUrls(movieRef, providerIds) {
         return Object.freeze(providerIds.map((providerId) => {

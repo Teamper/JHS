@@ -43,6 +43,14 @@ describe("MovieIdentityService", () => {
         expect(listCatalog).toHaveBeenCalledWith({ page: 1 }, { scope: "scope" });
     });
 
+    it("routes preview requests through the selected Integration", async () => {
+        const getPreviewForMovie = vi.fn(async () => ({ sources: { hhb: "https://cdn.example/preview.mp4" } }));
+        const integrations = { list: vi.fn(() => [{ id: "dmm" }]), getAdapter: vi.fn(() => ({ getPreviewForMovie })) };
+        await expect(new MovieIdentityService(integrations).preview("dmm", { carNum: "ABC-123" }, { scope: "scope" })).resolves.toMatchObject({ sources: { hhb: "https://cdn.example/preview.mp4" } });
+        expect(integrations.list).toHaveBeenCalledWith("movie.preview");
+        expect(getPreviewForMovie).toHaveBeenCalledWith({ carNum: "ABC-123" }, { scope: "scope" });
+    });
+
     it("builds provider-owned source URLs without leaking hosts into features", () => {
         const integrations = { getAdapter: vi.fn(id => ({ detailUrl: ({ carNum }) => `${id}:${carNum}` })) };
         expect(new MovieIdentityService(integrations).sourceUrls({ carNum: "FC2-1" }, ["fc2ppvdb", "fc2content"])).toEqual([

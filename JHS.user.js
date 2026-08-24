@@ -10605,8 +10605,8 @@ ${error.stack}` : "");
   }, "Z");
   var ee = "jhs_dmm_video";
   var _DmmPreviewParser = class _DmmPreviewParser {
-    constructor(e2, storage) {
-      this.carNum = e2, this.storage = storage, this.lastError = null;
+    constructor(e2, storage, movie, scope) {
+      this.carNum = e2, this.storage = storage, this.movie = movie, this.scope = scope, this.lastError = null;
     }
     _checkCache() {
       const cached = this.storage.getLocal(ee), e2 = cached ? JSON.parse(cached) : {};
@@ -10616,115 +10616,20 @@ ${error.stack}` : "");
       const cached = this.storage.getLocal(ee), t2 = cached ? JSON.parse(cached) : {};
       t2[this.carNum] = e2, clog.debug("成功解析出预览视频并已缓存:", e2), this.storage.setLocal(ee, JSON.stringify(t2));
     }
-    async _searchContentIds() {
-      const e2 = this.carNum, t2 = e2.replace(/-/g, ""), n2 = [{
-        keyword: e2.replace("-", "00"),
-        name: "00-替换关键词"
-      }, {
-        keyword: e2,
-        name: "原始番号关键词"
-      }, {
-        keyword: t2,
-        name: "无连字符关键词"
-      }], a2 = e2.toLowerCase();
-      let hadSuccessfulRequest = false;
-      for (const o2 of n2) {
-        const { keyword: e3, name: n3 } = o2, i3 = e3.toLowerCase();
-        clog.debug(`--- 尝试使用 ${n3} (${e3}) 进行 API 搜索 ---`);
-        const r2 = `https://api.dmm.com/affiliate/v3/ItemList?${new URLSearchParams({
-          api_id: "UrwskPfkqQ0DuVry2gYL",
-          affiliate_id: "10278-996",
-          output: "json",
-          site: "FANZA",
-          sort: "match",
-          keyword: e3
-        }).toString()}`;
-        let l2;
-        try {
-          l2 = await gmHttp.get(r2);
-          hadSuccessfulRequest = true;
-        } catch (s2) {
-          this.lastError = new ProviderError("dmm", "HTTP_ERROR", `DMM API 请求失败: ${s2.message || s2}`, {
-            cause: s2,
-            url: r2,
-            status: s2?.status,
-            retryable: true
-          }), clog.error(`API 请求失败，跳过 ${n3}:`, this.lastError);
-          continue;
-        }
-        if (!l2 || !l2.result || !l2.result.result_count) {
-          clog.debug("API 返回无结果，尝试下一个关键词。");
-          continue;
-        }
-        const c2 = [];
-        for (const s2 of l2.result.items) {
-          if (c2.length >= 2) break;
-          const e4 = s2.content_id || "", o3 = s2.maker_product || "";
-          (e4.includes(i3.replace("-", "")) || a2 === o3.toLowerCase() || e4.includes(t2.toLowerCase())) && (c2.push({
-            serviceCode: s2.service_code,
-            floorCode: s2.floor_code,
-            contentId: e4,
-            pageUrl: s2.URL
-          }), clog.debug(`[${n3}] cid|makerProduct 匹配成功:`, e4, o3));
-        }
-        if (c2.length > 0) {
-          clog.debug(`--- 成功通过 ${n3} 找到 Content IDs ---`);
-          const t3 = $("#fanzaBtn");
-          let a3 = `https://www.dmm.co.jp/search/=/searchstr=${e3}`, i4 = "single";
-          c2.length > 1 ? (t3.attr("href", a3), t3.append('<span class="site-tag jhs-layout-294497f1">多结果</span>'), t3.css("backgroundColor", "var(--jhs-status-down)"), i4 = "multiple") : (a3 = c2[0].pageUrl, t3.attr("href", a3), t3.css("backgroundColor", "var(--jhs-status-down)"));
-          const s2 = "jhs_other_site_dmm", cached = this.storage.getLocal(s2), o3 = cached ? JSON.parse(cached) : {};
-          return o3[this.carNum] = {
-            type: i4,
-            url: a3
-          }, this.storage.setLocal(s2, JSON.stringify(o3)), c2;
-        }
-        clog.debug(`[${n3}] API 返回结果数 ${l2.result.result_count}，但无精确匹配的 Content ID。`);
+    async _fetchRemote() {
+      const result = await this.movie.preview("dmm", { carNum: this.carNum }, { scope: this.scope });
+      const button = $("#fanzaBtn");
+      if (!result.sources) {
+        clog.warn("所有关键词尝试均未找到匹配的Content ID, 解析Dmm视频失败");
+        button.attr("href", result.searchUrl).attr("title", "未查询到, 点击前往搜索页").css("backgroundColor", "var(--jhs-status-filter)");
+        return null;
       }
-      hadSuccessfulRequest && (this.lastError = null);
-      clog.warn("所有关键词尝试均未找到匹配的Content ID, 解析Dmm视频失败");
-      const i2 = $("#fanzaBtn");
-      return i2.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`), i2.attr("title", "未查询到, 点击前往搜索页"), i2.css("backgroundColor", "var(--jhs-status-filter)"), null;
-    }
-    async _extractTrailerLinks({ contentId: e2, serviceCode: t2, floorCode: n2 }) {
-      const a2 = `https://www.dmm.co.jp/service/digitalapi/-/html5_player/=/cid=${e2}/mtype=AhRVShI_/service=${t2}/floor=${n2}/mode=/`, i2 = await gmHttp.get(a2, null, {
-        "accept-language": "ja-JP,ja;q=0.9",
-        Cookie: "age_check_done=1"
-      });
-      if ("string" != typeof i2) throw clog.error(i2), new ProviderError("dmm", "PARSE_ERROR", "解析播放页内容失败, 非文本内容", {
-        url: a2
-      });
-      if (i2.includes("このサービスはお住まいの地域からは")) throw new ProviderError("dmm", "REGION_BLOCKED", "DMM 预览源不可用，请将 DMM 域名分流到日本 IP", {
-        url: a2
-      });
-      const s2 = i2.match(/const\s+args\s+=\s+(.*);/);
-      if (!s2) throw new ProviderError("dmm", "PARSE_ERROR", "未在脚本中找到 const args = ... 变量", {
-        url: a2
-      });
-      let o2;
-      try {
-        ({ bitrates: o2 } = JSON.parse(s2[1]));
-      } catch (d2) {
-        throw new ProviderError("dmm", "PARSE_ERROR", `解析播放器脚本 JSON 失败: ${d2.message}`, {
-          cause: d2,
-          url: a2
-        });
-      }
-      const r2 = {}, l2 = L.map(((e3) => e3.quality)).join("|"), c2 = new RegExp(`(${l2})\\.mp4$`);
-      if (!Array.isArray(o2)) throw clog.error("解析画质链接失败: bitrates 字段不是一个数组或不存在"), new ProviderError("dmm", "PARSE_ERROR", "解析画质链接失败: bitrates 字段不是一个数组或不存在", {
-        url: a2
-      });
-      clog.debug("原始数据返回:", o2);
-      for (const h2 of o2) {
-        const e3 = null == h2 ? void 0 : h2.src;
-        if (!e3 || "string" != typeof e3 || !e3.endsWith(".mp4")) continue;
-        const t3 = e3.match(c2);
-        let n3 = "";
-        t3 && t3[1] && (n3 = t3[1]), n3 && !r2[n3] && (r2[n3] = e3);
-      }
-      if (0 === Object.keys(r2).length) throw new ProviderError("dmm", "PARSE_ERROR", "未找到匹配要求的预览画质视频", {
-        url: a2
-      });
-      return r2;
+      button.attr("href", result.pageUrl).css("backgroundColor", "var(--jhs-status-down)");
+      if (result.matchType === "multiple") button.append('<span class="site-tag jhs-layout-294497f1">多结果</span>');
+      const cacheKey = "jhs_other_site_dmm", cached = this.storage.getLocal(cacheKey), cache = cached ? JSON.parse(cached) : {};
+      cache[this.carNum] = { type: result.matchType, url: result.pageUrl };
+      this.storage.setLocal(cacheKey, JSON.stringify(cache));
+      return result.sources;
     }
     async fetchVideo() {
       const carNum = normalizeCarNum(this.carNum);
@@ -10732,37 +10637,27 @@ ${error.stack}` : "");
       this.carNum = carNum;
       const e2 = this._checkCache();
       if (e2) return e2;
-      let t2;
       try {
         const e3 = this.carNum.toLowerCase();
         if (e3.startsWith("heyzo") || /^(n\d+|\d+(-\d+)*)$/.test(e3) || /^n\d+$/.test(e3)) return clog.debug("无码番号类型，取消 DMM 解析"), null;
         if (this.carNum.includes("VR-")) return clog.debug("VR 类型，取消 DMM 解析"), null;
-        t2 = await this._searchContentIds();
+        const sources = await this._fetchRemote();
+        if (!sources) return null;
+        return this._updateCache(sources), sources;
       } catch (n2) {
-        this.lastError = n2 instanceof ProviderError ? n2 : new ProviderError("dmm", "PARSE_ERROR", n2.message || String(n2), {
-          cause: n2
+        this.lastError = n2 instanceof ProviderError ? n2 : new ProviderError("dmm", n2?.code || "PARSE_ERROR", n2.message || String(n2), {
+          cause: n2,
+          retryable: n2?.retryable === true
         }), clog.error("DMM API 搜索失败:", this.lastError);
         const e3 = $("#fanzaBtn");
-        return e3.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`), e3.attr("title", "未查询到, 点击前往搜索页"), e3.css("backgroundColor", "var(--jhs-status-filter)"), null;
-      }
-      if (!t2 || 0 === t2.length) return null;
-      try {
-        const e3 = await Promise.any(t2.map(((e4) => this._extractTrailerLinks(e4))));
-        return this._updateCache(e3), e3;
-      } catch (a2) {
-        const e3 = a2.errors || [a2];
-        this.lastError = e3.find(((e4) => "REGION_BLOCKED" === e4?.code)) || e3.find(((e4) => e4 instanceof ProviderError)) || new ProviderError("dmm", "PARSE_ERROR", e3[0]?.message || String(e3[0]), {
-          cause: e3[0]
-        }), clog.error(`解析失败: ${this.lastError.message}`, e3);
-        const t3 = $("#fanzaBtn");
-        return t3.attr("href", `https://www.dmm.co.jp/search/=/searchstr=${this.carNum}`), t3.attr("title", "未查询到, 点击前往搜索页"), t3.css("backgroundColor", "var(--jhs-status-filter)"), null;
+        return e3.attr("href", this.movie.searchUrl("dmm", { carNum: this.carNum })), e3.attr("title", "未查询到, 点击前往搜索页"), e3.css("backgroundColor", "var(--jhs-status-filter)"), null;
       }
     }
   };
   __name(_DmmPreviewParser, "DmmPreviewParser");
   var DmmPreviewParser = _DmmPreviewParser;
-  async function fetchDmmPreview(carNum, storage) {
-    const parser = new DmmPreviewParser(carNum, storage), sources = await parser.fetchVideo();
+  async function fetchDmmPreview(carNum, storage, movie, scope) {
+    const parser = new DmmPreviewParser(carNum, storage, movie, scope), sources = await parser.fetchVideo();
     return {
       sources,
       error: parser.lastError
@@ -10810,7 +10705,7 @@ ${error.stack}` : "");
     }
     getDmmPreview() {
       if (this.dmmPreviewPromise) return this.dmmPreviewPromise;
-      this.dmmPreviewPromise = fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage")).then(((result) => {
+      this.dmmPreviewPromise = fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), this.getRuntimeService("scope")()).then(((result) => {
         (result.error?.retryable || "HTTP_ERROR" === result.error?.code) && (this.dmmPreviewPromise = null);
         return result;
       }), ((error) => {
@@ -15486,7 +15381,7 @@ ${error.stack}` : "");
     manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related, SERVICE.settings]),
     manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog]),
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [SERVICE.settings]),
-    manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings]),
+    manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie]),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
     manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo]),
     manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie, SERVICE.storage]),
@@ -16215,6 +16110,13 @@ ${error.stack}` : "");
       if (!manifest2) return [];
       const adapter = this.integrations?.getAdapter(manifest2.id);
       return typeof adapter?.getImages === "function" ? adapter.getImages(movieRef, options) : [];
+    }
+    async preview(providerId, movieRef, options = {}) {
+      const manifest2 = (this.integrations?.list("movie.preview") ?? []).find((item) => item.id === providerId);
+      if (!manifest2) throw new TypeError(`Movie preview provider is unavailable: ${providerId}`);
+      const adapter = this.integrations?.getAdapter(manifest2.id);
+      if (typeof adapter?.getPreviewForMovie !== "function") throw new TypeError(`Movie preview operation is unavailable: ${providerId}`);
+      return adapter.getPreviewForMovie(movieRef, options);
     }
     sourceUrls(movieRef, providerIds) {
       return Object.freeze(providerIds.map((providerId) => {
@@ -17060,11 +16962,60 @@ ${error.stack}` : "");
     return Object.freeze({ url: url.href });
   }
   __name(parseDmmPreview, "parseDmmPreview");
+  function parseDmmItemCandidates(payload, carNum, keyword) {
+    if (payload?.result?.result_count === 0 && !Array.isArray(payload.result.items)) return Object.freeze([]);
+    if (!payload || typeof payload !== "object" || !payload.result || !Array.isArray(payload.result.items)) {
+      throw new ProviderError("dmm", "INVALID_RESPONSE", "DMM API 返回结构无效");
+    }
+    const normalizedCarNum = carNum.toLowerCase(), compactCarNum = normalizedCarNum.replace(/-/g, ""), compactKeyword = keyword.toLowerCase().replace(/-/g, "");
+    return Object.freeze(payload.result.items.flatMap((item) => {
+      const contentId = String(item?.content_id ?? ""), makerProduct = String(item?.maker_product ?? "");
+      if (!contentId.toLowerCase().includes(compactKeyword) && makerProduct.toLowerCase() !== normalizedCarNum && !contentId.toLowerCase().includes(compactCarNum)) return [];
+      return [Object.freeze({
+        serviceCode: String(item.service_code ?? ""),
+        floorCode: String(item.floor_code ?? ""),
+        contentId,
+        pageUrl: new URL(String(item.URL)).href
+      })];
+    }).slice(0, 2));
+  }
+  __name(parseDmmItemCandidates, "parseDmmItemCandidates");
+  function parseDmmPlayerSources(html, url) {
+    if (typeof html !== "string") throw new ProviderError("dmm", "PARSE_ERROR", "解析播放页内容失败, 非文本内容", { url });
+    if (html.includes("このサービスはお住まいの地域からは")) {
+      throw new ProviderError("dmm", "REGION_BLOCKED", "DMM 预览源不可用，请将 DMM 域名分流到日本 IP", { url });
+    }
+    const args = html.match(/const\s+args\s+=\s+(.*);/);
+    if (!args) throw new ProviderError("dmm", "PARSE_ERROR", "未在脚本中找到 const args = ... 变量", { url });
+    let bitrates;
+    try {
+      ({ bitrates } = JSON.parse(args[1]));
+    } catch (cause) {
+      throw new ProviderError("dmm", "PARSE_ERROR", `解析播放器脚本 JSON 失败: ${cause instanceof Error ? cause.message : String(cause)}`, { cause, url });
+    }
+    if (!Array.isArray(bitrates)) throw new ProviderError("dmm", "PARSE_ERROR", "解析画质链接失败: bitrates 字段不是一个数组或不存在", { url });
+    const sources = {};
+    for (const item of bitrates) {
+      const source = item?.src;
+      if (typeof source !== "string" || !source.endsWith(".mp4")) continue;
+      const resolved = new URL(source, url);
+      if (resolved.protocol !== "https:") continue;
+      const quality = resolved.pathname.match(/\/([^/]+)\.mp4$/)?.[1];
+      if (quality && !sources[quality]) sources[quality] = resolved.href;
+    }
+    if (Object.keys(sources).length === 0) throw new ProviderError("dmm", "PARSE_ERROR", "未找到匹配要求的预览画质视频", { url });
+    return Object.freeze(sources);
+  }
+  __name(parseDmmPlayerSources, "parseDmmPlayerSources");
 
   // src/integrations/dmm/manifest.js
+  var DMM_HOSTS = ["dmm.co.jp", "dmm.com"];
   function createDmmAdapter(http) {
     return Object.freeze({
       contracts: ["MoviePreview"],
+      searchUrl(movieRef) {
+        return `https://www.dmm.co.jp/search/=/searchstr=${encodeURIComponent(String(movieRef.carNum ?? ""))}`;
+      },
       async getPreview(movieRef, options = {}) {
         const url = new URL(movieRef.url);
         const response = await http.request({
@@ -17077,6 +17028,68 @@ ${error.stack}` : "");
           urlPolicy: { trustClass: "builtin-public", hosts: ["dmm.co.jp"] }
         }, options.scope);
         return parseDmmPreview(response.data, response.finalUrl || url.href);
+      },
+      async getPreviewForMovie(movieRef, options = {}) {
+        const carNum = String(movieRef.carNum), compact2 = carNum.replace(/-/g, ""), keywords = [carNum.replace("-", "00"), carNum, compact2];
+        const searchUrl = this.searchUrl(movieRef);
+        let candidates = [], lastError = null, hadSuccessfulRequest = false;
+        for (const keyword of keywords) {
+          const url = `https://api.dmm.com/affiliate/v3/ItemList?${new URLSearchParams({
+            api_id: "UrwskPfkqQ0DuVry2gYL",
+            affiliate_id: "10278-996",
+            output: "json",
+            site: "FANZA",
+            sort: "match",
+            keyword
+          })}`;
+          try {
+            const response = await http.request({
+              providerId: "dmm",
+              method: "GET",
+              url,
+              responseType: "json",
+              cacheScope: "public",
+              ttlMs: 6048e5,
+              urlPolicy: { trustClass: "builtin-public", hosts: DMM_HOSTS }
+            }, options.scope);
+            candidates = parseDmmItemCandidates(response.data, carNum, keyword);
+            hadSuccessfulRequest = true;
+            if (candidates.length) break;
+          } catch (error) {
+            lastError = error;
+          }
+        }
+        if (!candidates.length) {
+          if (!hadSuccessfulRequest && lastError) throw lastError;
+          return Object.freeze({ sources: null, pageUrl: searchUrl, searchUrl, matchType: "none" });
+        }
+        const tasks = candidates.map(async (candidate) => {
+          const url = `https://www.dmm.co.jp/service/digitalapi/-/html5_player/=/cid=${encodeURIComponent(candidate.contentId)}/mtype=AhRVShI_/service=${encodeURIComponent(candidate.serviceCode)}/floor=${encodeURIComponent(candidate.floorCode)}/mode=/`;
+          const response = await http.request({
+            providerId: "dmm",
+            method: "GET",
+            url,
+            responseType: "text",
+            cacheScope: "public",
+            ttlMs: 6048e5,
+            headers: { "accept-language": "ja-JP,ja;q=0.9", Cookie: "age_check_done=1" },
+            urlPolicy: { trustClass: "builtin-public", hosts: DMM_HOSTS }
+          }, options.scope);
+          return parseDmmPlayerSources(response.data, response.finalUrl || url);
+        });
+        let sources;
+        try {
+          sources = await Promise.any(tasks);
+        } catch (error) {
+          const errors = error instanceof AggregateError ? error.errors : [error];
+          throw errors.find((item) => item?.code === "REGION_BLOCKED") ?? errors[0] ?? error;
+        }
+        return Object.freeze({
+          sources,
+          pageUrl: candidates.length > 1 ? searchUrl : candidates[0].pageUrl,
+          searchUrl,
+          matchType: candidates.length > 1 ? "multiple" : "single"
+        });
       }
     });
   }
@@ -17084,7 +17097,7 @@ ${error.stack}` : "");
   var manifest_default3 = defineIntegration({
     id: "dmm",
     trustClass: "builtin-public",
-    hosts: ["dmm.co.jp"],
+    hosts: DMM_HOSTS,
     capabilities: ["movie.preview"],
     requires: [SERVICE.http],
     createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
