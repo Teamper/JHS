@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - DMM 预览、备份文件操作和设置诊断面板进入真实 strict checkJs，移除遮蔽生产实现的同名声明文件；生产源码类型覆盖率提升至 89.2%，最低覆盖门禁同步上调至 89%。
 - PluginManager 与 BasePlugin 的真实运行时实现进入 strict checkJs，移除宽泛的同名声明文件，并显式约束插件注册、启动时序、错误诊断、宿主信息读取与共享图标状态；生产源码类型覆盖率提升至 89.8%。
 - UI primitive 与 JhsSelect 的真实实现进入 strict checkJs，移除同名宽泛声明文件并明确动态容器、原生 Select、可访问性 Observer 和事件边界；生产源码类型覆盖率提升至 90.3%，最低覆盖门禁同步上调至 90%。
+- RC 发布门禁新增 Tampermonkey 人工 Smoke 记录校验；从 6.5.0 起必须记录实际 Edge/Chrome、Tampermonkey、六项真实页面检查和精确 UserScript SHA256，缺失或产物不匹配会阻止发布。
 
 ### Fixed
 

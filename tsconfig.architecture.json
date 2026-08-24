@@ -23,6 +23,7 @@
     "src/core/detail-state-controller.js",
     "src/core/event-bus.js",
     "src/core/feature-helpers.js",
+    "src/core/host-page-request.js",
     "src/core/javdb-api.js",
     "src/core/legacy-plugin-contributions.js",
     "src/core/lifecycle-scope.js",
