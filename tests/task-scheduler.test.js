@@ -5,6 +5,7 @@ import vm from "node:vm";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 
@@ -28,6 +29,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         addFavoriteActressList: vi.fn(async () => {}), updateFavoriteActress: vi.fn(async () => true), updateBlacklistItem: vi.fn(async update => Object.assign(blacklistItems.find(item => item.starId === update.starId), update)), getCarMap: vi.fn(async () => new Map)
     };
     const localStorage = { getItem: vi.fn(key => values.has(key) ? values.get(key) : null), setItem: vi.fn((key, value) => values.set(key, String(value))), removeItem: vi.fn(key => values.delete(key)) };
+    const storage = { getLocal: localStorage.getItem, setLocal: localStorage.setItem, removeLocal: localStorage.removeItem }, scope = new LifecycleScope("feature:discovery");
     const eventHandlers = new Map, jhsEventBus = {
         on: vi.fn((type, handler) => {
             const handlers = eventHandlers.get(type) || [];
@@ -46,6 +48,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
     };
     class BasePlugin {
         getBean(name) { return beans[name]; }
+        getRuntimeService(name) { return "storage" === name ? storage : "scope" === name ? () => scope : null; }
         getSelector(site = "javdb") { return site === "javbus" ? { boxSelector: ".masonry", itemSelector: ".masonry .item", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" } : { boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }; }
     }
     class StorageQueue { async addTask(task) { return task(); } async waitAllFinished() {} }
@@ -67,7 +70,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
     const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js", "src/plugins/new-video/task.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n");
     vm.runInContext(`${source};globalThis.Task=TaskPlugin`, context);
     const plugin = new context.Task;
-    return { plugin, clock, values, settings, favorites, blacklistItems, storageManager, gmHttp, beans, locks, jhsEventBus, $, htmlToPage: context.utils.htmlTo$dom };
+    return { plugin, clock, values, settings, favorites, blacklistItems, storageManager, gmHttp, beans, locks, jhsEventBus, scope, $, htmlToPage: context.utils.htmlTo$dom };
 }
 
 describe("task scheduler state machine", () => {
@@ -166,6 +169,9 @@ describe("task scheduler state machine", () => {
         await harness.plugin.handle();
         await harness.jhsEventBus.emit("settings-changed", {});
         expect(recalculate).toHaveBeenCalledOnce();
+        expect(harness.scope.snapshot().listeners).toBe(2);
+        harness.scope.dispose();
+        expect(harness.scope.snapshot()).toMatchObject({ listeners: 0, disposed: true });
     });
 
     it("reports only current-tab execution as running and cleans active state on failure", async () => {

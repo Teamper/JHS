@@ -12360,7 +12360,7 @@ ${error.stack}` : "");
   // src/plugins/new-video/task.js
   var _TaskPlugin = class _TaskPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "singleTaskKey", "checkNewActressActorFilterCar"), i(this, "taskConfig", null), i(this, "storageQueue", new StorageQueue()), i(this, "lastCheckFavoriteActressTimeKey", "jhs_time_checkFavoriteActress"), i(this, "lastCheckBlacklistTimeKey", "jhs_time_checkBlacklist"), i(this, "lastCheckNewVideoTimeKey", "jhs_time_checkNewVideo"), i(this, "lastCheckFavoriteActressAttemptKey", "jhs_time_checkFavoriteActress_attempt"), i(this, "lastCheckFavoriteActressNextKey", "jhs_time_checkFavoriteActress_next"), i(this, "lastCheckBlacklistAttemptKey", "jhs_time_checkBlacklist_attempt"), i(this, "lastCheckBlacklistNextKey", "jhs_time_checkBlacklist_next"), i(this, "lastCheckNewVideoAttemptKey", "jhs_time_checkNewVideo_attempt"), i(this, "lastCheckNewVideoNextKey", "jhs_time_checkNewVideo_next"), i(this, "taskTimer", null), i(this, "taskRunning", false), i(this, "visibilityHandler", null), i(this, "pageHideHandler", null), i(this, "settingsHandler", null), i(this, "taskConfigDirty", false), i(this, "configLoadPromise", null), i(this, "configLoadQueued", false), i(this, "configRefreshPromise", null), i(this, "configRefreshQueued", false), i(this, "activeTasks", /* @__PURE__ */ new Set());
+      super(...arguments), i(this, "singleTaskKey", "checkNewActressActorFilterCar"), i(this, "taskConfig", null), i(this, "storageQueue", new StorageQueue()), i(this, "lastCheckFavoriteActressTimeKey", "jhs_time_checkFavoriteActress"), i(this, "lastCheckBlacklistTimeKey", "jhs_time_checkBlacklist"), i(this, "lastCheckNewVideoTimeKey", "jhs_time_checkNewVideo"), i(this, "lastCheckFavoriteActressAttemptKey", "jhs_time_checkFavoriteActress_attempt"), i(this, "lastCheckFavoriteActressNextKey", "jhs_time_checkFavoriteActress_next"), i(this, "lastCheckBlacklistAttemptKey", "jhs_time_checkBlacklist_attempt"), i(this, "lastCheckBlacklistNextKey", "jhs_time_checkBlacklist_next"), i(this, "lastCheckNewVideoAttemptKey", "jhs_time_checkNewVideo_attempt"), i(this, "lastCheckNewVideoNextKey", "jhs_time_checkNewVideo_next"), i(this, "taskTimer", null), i(this, "taskRunning", false), i(this, "visibilityHandler", null), i(this, "pageHideHandler", null), i(this, "lifecycleScope", null), i(this, "settingsHandler", null), i(this, "taskConfigDirty", false), i(this, "configLoadPromise", null), i(this, "configLoadQueued", false), i(this, "configRefreshPromise", null), i(this, "configRefreshQueued", false), i(this, "activeTasks", /* @__PURE__ */ new Set());
     }
     getName() {
       return "TaskPlugin";
@@ -12416,11 +12416,11 @@ ${error.stack}` : "");
       return schedules[name];
     }
     getTaskScheduleState(name) {
-      const schedule = this.getTaskSchedule(name), completed = parseTaskTimestamp(localStorage.getItem(schedule.completedKey)), attempt = parseTaskTimestamp(localStorage.getItem(schedule.attemptKey));
+      const storage = this.getRuntimeService("storage"), schedule = this.getTaskSchedule(name), completed = parseTaskTimestamp(storage.getLocal(schedule.completedKey)), attempt = parseTaskTimestamp(storage.getLocal(schedule.attemptKey));
       return { ...schedule, completed, attempt, pending: null != attempt && (null == completed || attempt > completed) };
     }
     getTaskStatusSnapshot(name) {
-      const state = this.getTaskScheduleState(name), storedNext = parseTaskTimestamp(localStorage.getItem(state.nextKey));
+      const state = this.getTaskScheduleState(name), storedNext = parseTaskTimestamp(this.getRuntimeService("storage").getLocal(state.nextKey));
       const nextAt = null == storedNext ? state.pending && null != state.attempt ? state.attempt + 3e5 : 0 : storedNext, now = Date.now();
       let status = "idle";
       if (this.activeTasks.has(name)) status = "running";
@@ -12458,34 +12458,34 @@ ${error.stack}` : "");
     }
     async shouldStartTask(name, force = false) {
       if (force) return true;
-      const schedule = this.getTaskSchedule(name), interval = await this.getLatestTaskInterval(name);
-      const completed = parseTaskTimestamp(localStorage.getItem(schedule.completedKey)), attempt = parseTaskTimestamp(localStorage.getItem(schedule.attemptKey));
-      let next = parseTaskTimestamp(localStorage.getItem(schedule.nextKey));
+      const storage = this.getRuntimeService("storage"), schedule = this.getTaskSchedule(name), interval = await this.getLatestTaskInterval(name);
+      const completed = parseTaskTimestamp(storage.getLocal(schedule.completedKey)), attempt = parseTaskTimestamp(storage.getLocal(schedule.attemptKey));
+      let next = parseTaskTimestamp(storage.getLocal(schedule.nextKey));
       if (null == next) {
         const pending = null != attempt && (null == completed || attempt > completed);
         next = pending ? attempt + 3e5 : null == completed ? 0 : completed + 36e5 * interval;
-        localStorage.setItem(schedule.nextKey, String(next));
+        storage.setLocal(schedule.nextKey, String(next));
       }
       return Date.now() >= next;
     }
     beginTaskAttempt(name) {
-      const schedule = this.getTaskSchedule(name), completed = parseTaskTimestamp(localStorage.getItem(schedule.completedKey));
+      const storage = this.getRuntimeService("storage"), schedule = this.getTaskSchedule(name), completed = parseTaskTimestamp(storage.getLocal(schedule.completedKey));
       const now = Math.floor(Date.now() / 1e3) * 1e3, attempt = null == completed ? now : Math.max(now, completed + 1e3);
-      localStorage.setItem(schedule.attemptKey, String(attempt)), localStorage.setItem(schedule.nextKey, String(attempt + 3e5));
+      storage.setLocal(schedule.attemptKey, String(attempt)), storage.setLocal(schedule.nextKey, String(attempt + 3e5));
       return attempt;
     }
     async finalizeTask(name, completed) {
-      const schedule = this.getTaskSchedule(name);
-      if (!completed) return localStorage.setItem(schedule.nextKey, String(Date.now() + 3e5));
-      const attempt = parseTaskTimestamp(localStorage.getItem(schedule.attemptKey)) || 0, completedAt = Math.max(Math.floor(Date.now() / 1e3) * 1e3, attempt), interval = await this.getLatestTaskInterval(name);
-      localStorage.setItem(schedule.completedKey, utils.getNowStr("-", ":", completedAt)), localStorage.setItem(schedule.nextKey, String(completedAt + 36e5 * interval));
+      const storage = this.getRuntimeService("storage"), schedule = this.getTaskSchedule(name);
+      if (!completed) return storage.setLocal(schedule.nextKey, String(Date.now() + 3e5));
+      const attempt = parseTaskTimestamp(storage.getLocal(schedule.attemptKey)) || 0, completedAt = Math.max(Math.floor(Date.now() / 1e3) * 1e3, attempt), interval = await this.getLatestTaskInterval(name);
+      storage.setLocal(schedule.completedKey, utils.getNowStr("-", ":", completedAt)), storage.setLocal(schedule.nextKey, String(completedAt + 36e5 * interval));
     }
     async recalculateSchedules() {
       await this.loadConfig();
       for (const [name, interval] of [["blacklist", this.taskConfig.checkBlacklist_intervalTime], ["favoriteActress", this.taskConfig.checkFavoriteActress_IntervalTime], ["newVideo", this.taskConfig.checkNewVideo_intervalTime]]) {
         const state = this.getTaskScheduleState(name);
         if (state.pending) continue;
-        localStorage.setItem(state.nextKey, String(null == state.completed ? Date.now() : state.completed + 36e5 * interval));
+        this.getRuntimeService("storage").setLocal(state.nextKey, String(null == state.completed ? Date.now() : state.completed + 36e5 * interval));
       }
     }
     async invalidateConfig(recalculate = false) {
@@ -12500,18 +12500,20 @@ ${error.stack}` : "");
         this.configRefreshPromise = null;
       })), this.configRefreshPromise;
     }
-    handle() {
+    async handle() {
       if (!window.isListPage) return;
+      this.lifecycleScope || (this.lifecycleScope = await this.getRuntimeService("scope")());
       this.visibilityHandler || (this.visibilityHandler = () => {
         document.hidden ? this.clearSchedule() : this.scheduleTask(0);
-      }, this.pageHideHandler = () => this.clearSchedule(), document.addEventListener("visibilitychange", this.visibilityHandler), window.addEventListener("pagehide", this.pageHideHandler));
+      }, this.pageHideHandler = () => this.clearSchedule(), this.lifecycleScope.listen(document, "visibilitychange", this.visibilityHandler), this.lifecycleScope.listen(window, "pagehide", this.pageHideHandler), this.lifecycleScope.addCleanup((() => this.clearSchedule())));
       this.settingsHandler || (this.settingsHandler = async () => {
         try {
           storageManager._invalidateCache?.(storageManager.setting_key), await this.invalidateConfig(true), this.scheduleTask(0);
         } catch (error) {
           clog.error("任务设置刷新失败", error);
         }
-      }, globalThis.jhsEventBus?.on?.("settings-changed", this.settingsHandler));
+      }, this.lifecycleScope.addCleanup(globalThis.jhsEventBus?.on?.("settings-changed", this.settingsHandler) || (() => {
+      })));
       return document.hidden ? void 0 : this.runAndSchedule();
     }
     clearSchedule() {
@@ -15539,7 +15541,7 @@ ${error.stack}` : "");
     manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [SERVICE.dialog, SERVICE.storage, SERVICE.http]),
     manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }),
     manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog]),
-    manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }),
+    manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }, [SERVICE.storage]),
     manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics, SERVICE.dialog]),
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings]),
     manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }, [PORT.host, SERVICE.dialog]),

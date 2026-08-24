@@ -9,16 +9,21 @@ import { describe, expect, it, vi } from "vitest";
 const repoRoot = join(import.meta.dirname, "..");
 
 function loadTaskLifecycle({ isListPage = false, hidden = false } = {}) {
-    const listeners = new Map(), documentListeners = new Map(), setTimeoutSpy = vi.fn(() => 1), clearTimeoutSpy = vi.fn();
+    const listeners = new Map(), documentListeners = new Map(), setTimeoutSpy = vi.fn(() => 1), clearTimeoutSpy = vi.fn(), cleanups = [];
     const location = new URL("https://javdb.com/v/test"), window = {
-        location, isListPage, addEventListener: (type, listener) => listeners.set(type, listener)
+        location, isListPage, addEventListener: (type, listener) => listeners.set(type, listener), removeEventListener: type => listeners.delete(type)
     }, document = {
-        hidden, addEventListener: (type, listener) => documentListeners.set(type, listener)
+        hidden, addEventListener: (type, listener) => documentListeners.set(type, listener), removeEventListener: type => documentListeners.delete(type)
     }, locks = { request: vi.fn(async (key, options, callback) => callback({ key })) };
+    const storage = { getLocal: vi.fn(), setLocal: vi.fn() }, scope = {
+        listen(target, type, listener) { target.addEventListener(type, listener); cleanups.push(() => target.removeEventListener(type, listener)); },
+        addCleanup(cleanup) { cleanups.push(cleanup); },
+        dispose() { [...cleanups].reverse().forEach(cleanup => cleanup()); }
+    };
     const context = vm.createContext({
         console, URL, window, document, navigator: { locks }, setTimeout: setTimeoutSpy, clearTimeout: clearTimeoutSpy,
         localStorage: { getItem: vi.fn(), setItem: vi.fn() }, $: () => ({ length: 0 }), l: true, _: "yes",
-        T: "javdb", I: "javbus", D: "censored", A: "uncensored", BasePlugin: class {},
+        T: "javdb", I: "javbus", D: "censored", A: "uncensored", BasePlugin: class { getRuntimeService(name) { return "storage" === name ? storage : "scope" === name ? () => scope : null; } },
         StorageQueue: class { constructor() { this.queue = Promise.resolve(); } },
         storageManager: {}, utils: { sleep: vi.fn(), getNowStr: vi.fn(), getHourDifference: vi.fn() },
         clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() }, show: { info: vi.fn(), error: vi.fn() },
@@ -32,7 +37,7 @@ function loadTaskLifecycle({ isListPage = false, hidden = false } = {}) {
         "globalThis.TestTaskPlugin=TaskPlugin;"
     ].join("\n");
     vm.runInContext(source, context);
-    return { plugin: new context.TestTaskPlugin(), window, document, listeners, documentListeners, locks, setTimeoutSpy };
+    return { plugin: new context.TestTaskPlugin(), window, document, listeners, documentListeners, locks, setTimeoutSpy, scope };
 }
 
 function loadListObserver() {
@@ -75,11 +80,16 @@ describe("background task lifecycle", () => {
     });
 
     it("runs once on a visible list page and schedules the next visible check", async () => {
-        const { plugin, setTimeoutSpy } = loadTaskLifecycle({ isListPage: true });
+        const { plugin, setTimeoutSpy, scope, listeners, documentListeners } = loadTaskLifecycle({ isListPage: true });
         plugin.doTask = vi.fn(async () => {});
         await plugin.handle();
         expect(plugin.doTask).toHaveBeenCalledTimes(1);
         expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 3e5);
+        expect(listeners.has("pagehide")).toBe(true);
+        expect(documentListeners.has("visibilitychange")).toBe(true);
+        scope.dispose();
+        expect(listeners.size).toBe(0);
+        expect(documentListeners.size).toBe(0);
     });
 
     it("keeps hidden list pages dormant and retains the cross-tab lock", async () => {
