@@ -1,13 +1,15 @@
 import { _, l, r } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { calcMagnetScore } from "../external-search/magnet-hub.js";
+import { calcMagnetScore, getMagnetQualitySignals } from "../../core/magnet-quality.js";
 
 export class HighlightMagnetPlugin extends BasePlugin {
     async handle() {
-        window.isDetailPage && jhsEventBus.on("magnet-items-updated", (() => {
-            void storageManager.getSetting("enableMagnetsFilter", _).then((enabled => enabled === _ ? this.doFilterMagnet() : this.showAll()));
-        }));
+        if (!window.isDetailPage) return;
+        const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
+        scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => {
+            (settings.snapshot().enableMagnetsFilter ?? _) === _ ? this.doFilterMagnet() : this.showAll();
+        })));
     }
     async initCss() {
         return `<style>.jhs-magnet-score{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:600;vertical-align:middle;cursor:help}</style>`;
@@ -33,14 +35,7 @@ export class HighlightMagnetPlugin extends BasePlugin {
         } catch (e) { clog.debug("磁力评分徽章注入失败，已忽略", e); }
     }
     getQualitySignals(title, hasSubtitleTag = !1) {
-        const value = String(title || "").toLowerCase(), resolution = /(?:4k|2160p|1080p|720p)/.exec(value)?.[0] || "", subtitle = hasSubtitleTag || /(?:-c\b|-u(?:c)?\b|chinese|中字|字幕)/.test(value);
-        return { resolution, subtitle, recognized: !!resolution || subtitle, highQuality: "4k" === resolution || "2160p" === resolution || subtitle };
-    }
-    /** 返回与 DOM 无关的磁力质量结果，供自有详情工作区复用。 */
-    assessMagnet({ title = "", hasHdTag = !1, hasSubtitleTag = !1, date = null, seeders = 0 } = {}) {
-        const signals = this.getQualitySignals(title, hasSubtitleTag), highQuality = hasHdTag || signals.highQuality;
-        const score = calcMagnetScore({ title, date, seeders, resolution: hasHdTag && !signals.resolution ? "1080p" : signals.resolution, hasSubtitle: signals.subtitle });
-        return { ...signals, highQuality, score, grade: score.total >= 70 ? "高" : score.total >= 40 ? "中" : "低" };
+        return getMagnetQualitySignals(title, hasSubtitleTag);
     }
     updateFilterHint(hasMatch) {
         $("#enable-magnets-filter").removeClass("do-hide").attr("data-tip", hasMatch ? "仅显示识别到的高质量或字幕磁力" : "未识别到可过滤项，当前未隐藏磁力");

@@ -36,7 +36,9 @@ export class UnifiedOfflinePlugin extends BasePlugin {
     async initCss() { return '<style>.jhs-offline-btn.loading{cursor:wait;opacity:.65}.jhs-offline-native{margin-left:6px;padding:3px 8px}</style>'; }
     async handle() {
         if (!(r || l)) return;
-        this.registerProviders(), this.bindSubmit(), window.isDetailPage && (this.injectNativeButtons(), jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
+        const scope = await this.getRuntimeService("scope")();
+        this.registerProviders(), this.bindSubmit(), scope.addCleanup((() => $(document).off(".jhsUnifiedOffline")));
+        if (window.isDetailPage) this.injectNativeButtons(), scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
     }
     registerProviders() {
         const one23 = this.getDependency("OneTwoThreeOfflinePlugin");

@@ -9,6 +9,7 @@ import { createJavDbAdapter } from "../src/integrations/javdb/manifest.js";
 import { HttpService } from "../src/services/http-service.js";
 import { ExternalUrlPolicy } from "../src/services/external-url-policy.js";
 import { CacheService } from "../src/services/cache-service.js";
+import { assessMagnetQuality } from "../src/core/magnet-quality.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 const fc2Source = readTestFile(join(repoRoot, "src/plugins/external-search/fc2.js"), "utf8");
@@ -21,7 +22,6 @@ const stateServiceSource = readTestFile(join(repoRoot, "src/core/state-service.j
 const titleFilterSource = readTestFile(join(repoRoot, "src/plugins/blacklist/filter-title-keyword.js"), "utf8");
 const highlightMagnetSource = readTestFile(join(repoRoot, "src/plugins/status/highlight-magnet.js"), "utf8");
 const primitivesSource = readTestFile(join(repoRoot, "src/core/ui-primitives.js"), "utf8");
-const magnetHubSource = readTestFile(join(repoRoot, "src/plugins/external-search/magnet-hub.js"), "utf8");
 const loggerSource = readTestFile(join(repoRoot, "src/core/logger.js"), "utf8");
 const top250Source = readTestFile(join(repoRoot, "src/plugins/external-search/top250.js"), "utf8");
 
@@ -134,13 +134,11 @@ describe("FC2 owned detail workspace", () => {
         expect(fc2Source).toContain("item.hasSubtitleTag && tags.append");
         expect(fc2Source).toContain("item.createdAt");
         expect(fc2Source).toContain('data-jhs-action="filter-native-magnets"');
-        expect(highlightMagnetSource).toContain("assessMagnet({");
+        expect(fc2Source).toContain("magnetService.assess({");
     });
 
     it("assesses explicit HD and subtitle tags even when the title has no marker", () => {
-        const context = vm.createContext({ BasePlugin: class {}, clog: { debug: vi.fn() } });
-        vm.runInContext(`${magnetHubSource.slice(0, magnetHubSource.indexOf("class MagnetHubPlugin"))}\n${highlightMagnetSource};globalThis.Highlighter=HighlightMagnetPlugin`, context);
-        const highlighter = Object.create(context.Highlighter.prototype), assessed = highlighter.assessMagnet({ title: "FC2-123", hasHdTag: true, hasSubtitleTag: true, seeders: 0 });
+        const assessed = assessMagnetQuality({ title: "FC2-123", hasHdTag: true, hasSubtitleTag: true, seeders: 0 });
         expect(assessed.highQuality).toBe(true), expect(assessed.subtitle).toBe(true), expect(assessed.score.resolution).toBe(20), expect(assessed.score.subtitle).toBe(20);
     });
 

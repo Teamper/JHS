@@ -1,5 +1,7 @@
 // @ts-check
 
+import { assessMagnetQuality } from "../core/magnet-quality.js";
+
 export class MagnetService {
     /** @param {import("../app/provider-registry.js").ProviderRegistry} providers @param {import("../app/integration-registry.js").IntegrationRegistry | null} [integrations] */
     constructor(providers, integrations = null) { this.providers = providers; this.integrations = integrations; }
@@ -23,4 +25,6 @@ export class MagnetService {
         const adapter = this.integrations?.getAdapter(manifest.id);
         return typeof adapter?.listMagnets === "function" ? adapter.listMagnets(movieRef, context) : [];
     }
+    /** @param {Parameters<typeof assessMagnetQuality>[0]} magnet */
+    assess(magnet) { return assessMagnetQuality(magnet); }
 }

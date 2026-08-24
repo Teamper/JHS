@@ -1,35 +1,10 @@
 import { CACHE_TTL, ProviderError } from "../../core/cache-policy.js";
 import { escapeHtml, i, l, r } from "../../core/constants.js";
 import { mapLimit } from "../../core/feature-helpers.js";
+import { calcMagnetScore } from "../../core/magnet-quality.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { BUILT_IN_MAGNET_SOURCES, ResourceSettingsService } from "../backup/resource-settings.js";
 import { MagnetSourceRegistry, applyMagnetRules, deduplicateMagnetResults, normalizeMagnetResult, parseCustomMagnetResponse, parseNativeMagnets, validateCustomMagnetSource } from "./magnet-source-registry.js";
-
-/** 磁力评分：基于做种数/分辨率/字幕/新鲜度/完整性，返回 0-100 分 */
-export function calcMagnetScore(e) {
-    let t = 0;
-    const n = (e.seeders || 0);
-    const seedersScore = n >= 50 ? 35 : n >= 10 ? 25 : n >= 1 ? 15 : 3;
-    t += seedersScore;
-    const a = (e.title || "").toLowerCase(), resolution = String(e.resolution || "").toLowerCase();
-    const resolutionScore = /4k|2160p/.test(resolution) || /4k|2160p/.test(a) ? 25 : /1080p/.test(resolution) || /1080p/.test(a) ? 20 : /720p/.test(resolution) || /720p/.test(a) ? 15 : 5;
-    t += resolutionScore;
-    const subtitleScore = e.hasSubtitle || /-c\b|-uc\b|chinese|中字|字幕/.test(a) ? 20 : 0;
-    t += subtitleScore;
-    const i = e.date ? _daysSince(e.date) : 999;
-    const freshnessScore = i <= 7 ? 15 : i <= 30 ? 12 : i <= 90 ? 8 : 3;
-    t += freshnessScore;
-    const completenessScore = /sample|预告|trailer/.test(a) ? -15 : 0;
-    t += completenessScore;
-    return { total: Math.max(0, Math.min(100, t)), seeders: seedersScore, resolution: resolutionScore, subtitle: subtitleScore, freshness: freshnessScore, completeness: completenessScore };
-}
-function _daysSince(e) {
-    try {
-        const t = new Date(e);
-        if (isNaN(t.getTime())) return 999;
-        return Math.max(0, Math.floor((Date.now() - t.getTime()) / 864e5));
-    } catch (t) { return 999; }
-}
 
 export class MagnetHubPlugin extends BasePlugin {
     constructor() {

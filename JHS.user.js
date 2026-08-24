@@ -3918,8 +3918,7 @@
       "FilterTitleKeywordPlugin",
       "OtherSitePlugin",
       "Fc2By123AvPlugin",
-      "TOP250Plugin",
-      "HighlightMagnetPlugin"
+      "TOP250Plugin"
     ],
     HistoryPlugin: ["UnifiedOfflinePlugin", "ListPagePlugin", "Fc2Plugin"],
     HitShowPlugin: ["ListPageButtonPlugin", "ListPagePlugin", "CoverButtonPlugin"],
@@ -9296,11 +9295,11 @@ ${value}\r
         if (!context.isAlive()) return;
         host.empty();
         if (!magnets.length) return renderFc2State(host, "暂无站内磁力");
-        const highlighter = this.getDependency("HighlightMagnetPlugin"), assessments = [];
+        const magnetService = this.getRuntimeService("magnet"), assessments = [];
         magnets.forEach(((item) => {
           const hash = normalizeBtihHash(item.hash);
           if (!hash) return;
-          const magnet = `magnet:?xt=urn:btih:${hash}`, assessment = highlighter.assessMagnet({ title: item.title, hasHdTag: item.hasHdTag, hasSubtitleTag: item.hasSubtitleTag, date: item.createdAt, seeders: item.seeders }), row = $('<div class="jhs-fc2-magnet-item"></div>').attr("data-jhs-high-quality", String(assessment.highQuality)), info = $('<div class="jhs-fc2-magnet-name"></div>'), actions = $('<div class="jhs-toolbar"></div>'), tags = $('<div class="jhs-fc2-magnet-tags"></div>');
+          const magnet = `magnet:?xt=urn:btih:${hash}`, assessment = magnetService.assess({ title: item.title, hasHdTag: item.hasHdTag, hasSubtitleTag: item.hasSubtitleTag, date: item.createdAt, seeders: item.seeders }), row = $('<div class="jhs-fc2-magnet-item"></div>').attr("data-jhs-high-quality", String(assessment.highQuality)), info = $('<div class="jhs-fc2-magnet-name"></div>'), actions = $('<div class="jhs-toolbar"></div>'), tags = $('<div class="jhs-fc2-magnet-tags"></div>');
           assessments.push(assessment), tags.append($("<span></span>").addClass("jhs-badge").attr("title", `磁力质量评分 ${assessment.score.total}`).text(`${assessment.grade} ${assessment.score.total}`)), item.hasHdTag && tags.append('<span class="jhs-badge">高清</span>'), item.hasSubtitleTag && tags.append('<span class="jhs-badge">字幕</span>');
           info.append($("<a></a>").attr("href", magnet).text(item.title || magnet), $("<div></div>").addClass("jhs-fc2-meta").text(`${(Number(item.sizeMb || 0) / 1024).toFixed(2)} GB · ${Number(item.fileCount) || 0} 个文件${item.createdAt ? ` · ${item.createdAt}` : ""}`), tags), actions.append($('<button type="button" class="jhs-btn jhs-btn--secondary copy-to-clipboard">复制</button>').attr("data-clipboard-text", magnet), $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn">离线</button>').attr({ "data-resource": magnet, "data-jhs-offline-owner": "fc2" })), host.append(row.append(info, actions));
         }));
@@ -9570,35 +9569,46 @@ ${error.stack}` : "");
   __name(_JavTrailersPlugin, "JavTrailersPlugin");
   var JavTrailersPlugin = _JavTrailersPlugin;
 
-  // src/plugins/external-search/magnet-hub.js
-  function calcMagnetScore(e2) {
-    let t2 = 0;
-    const n2 = e2.seeders || 0;
-    const seedersScore = n2 >= 50 ? 35 : n2 >= 10 ? 25 : n2 >= 1 ? 15 : 3;
-    t2 += seedersScore;
-    const a2 = (e2.title || "").toLowerCase(), resolution = String(e2.resolution || "").toLowerCase();
-    const resolutionScore = /4k|2160p/.test(resolution) || /4k|2160p/.test(a2) ? 25 : /1080p/.test(resolution) || /1080p/.test(a2) ? 20 : /720p/.test(resolution) || /720p/.test(a2) ? 15 : 5;
-    t2 += resolutionScore;
-    const subtitleScore = e2.hasSubtitle || /-c\b|-uc\b|chinese|中字|字幕/.test(a2) ? 20 : 0;
-    t2 += subtitleScore;
-    const i2 = e2.date ? _daysSince(e2.date) : 999;
-    const freshnessScore = i2 <= 7 ? 15 : i2 <= 30 ? 12 : i2 <= 90 ? 8 : 3;
-    t2 += freshnessScore;
-    const completenessScore = /sample|预告|trailer/.test(a2) ? -15 : 0;
-    t2 += completenessScore;
-    return { total: Math.max(0, Math.min(100, t2)), seeders: seedersScore, resolution: resolutionScore, subtitle: subtitleScore, freshness: freshnessScore, completeness: completenessScore };
+  // src/core/magnet-quality.js
+  function calcMagnetScore(magnet) {
+    let total = 0;
+    const seeders = Number(magnet.seeders) || 0;
+    const seedersScore = seeders >= 50 ? 35 : seeders >= 10 ? 25 : seeders >= 1 ? 15 : 3;
+    total += seedersScore;
+    const title = String(magnet.title || "").toLowerCase(), resolution = String(magnet.resolution || "").toLowerCase();
+    const resolutionScore = /4k|2160p/.test(resolution) || /4k|2160p/.test(title) ? 25 : /1080p/.test(resolution) || /1080p/.test(title) ? 20 : /720p/.test(resolution) || /720p/.test(title) ? 15 : 5;
+    total += resolutionScore;
+    const subtitleScore = magnet.hasSubtitle || /-c\b|-uc\b|chinese|中字|字幕/.test(title) ? 20 : 0;
+    total += subtitleScore;
+    const days = daysSince(magnet.date), freshnessScore = days <= 7 ? 15 : days <= 30 ? 12 : days <= 90 ? 8 : 3;
+    total += freshnessScore;
+    const completenessScore = /sample|预告|trailer/.test(title) ? -15 : 0;
+    total += completenessScore;
+    return { total: Math.max(0, Math.min(100, total)), seeders: seedersScore, resolution: resolutionScore, subtitle: subtitleScore, freshness: freshnessScore, completeness: completenessScore };
   }
   __name(calcMagnetScore, "calcMagnetScore");
-  function _daysSince(e2) {
+  function daysSince(value) {
     try {
-      const t2 = new Date(e2);
-      if (isNaN(t2.getTime())) return 999;
-      return Math.max(0, Math.floor((Date.now() - t2.getTime()) / 864e5));
-    } catch (t2) {
+      const date = new Date(String(value || ""));
+      return Number.isNaN(date.getTime()) ? 999 : Math.max(0, Math.floor((Date.now() - date.getTime()) / 864e5));
+    } catch {
       return 999;
     }
   }
-  __name(_daysSince, "_daysSince");
+  __name(daysSince, "daysSince");
+  function getMagnetQualitySignals(title, hasSubtitleTag = false) {
+    const value = String(title || "").toLowerCase(), resolution = /(?:4k|2160p|1080p|720p)/.exec(value)?.[0] || "", subtitle = hasSubtitleTag || /(?:-c\b|-u(?:c)?\b|chinese|中字|字幕)/.test(value);
+    return { resolution, subtitle, recognized: Boolean(resolution) || subtitle, highQuality: resolution === "4k" || resolution === "2160p" || subtitle };
+  }
+  __name(getMagnetQualitySignals, "getMagnetQualitySignals");
+  function assessMagnetQuality({ title = "", hasHdTag = false, hasSubtitleTag = false, date = null, seeders = 0 } = {}) {
+    const signals = getMagnetQualitySignals(title, hasSubtitleTag), highQuality = hasHdTag || signals.highQuality;
+    const score = calcMagnetScore({ title, date, seeders, resolution: hasHdTag && !signals.resolution ? "1080p" : signals.resolution, hasSubtitle: signals.subtitle });
+    return { ...signals, highQuality, score, grade: score.total >= 70 ? "高" : score.total >= 40 ? "中" : "低" };
+  }
+  __name(assessMagnetQuality, "assessMagnetQuality");
+
+  // src/plugins/external-search/magnet-hub.js
   var _MagnetHubPlugin = class _MagnetHubPlugin extends BasePlugin {
     constructor() {
       super(...arguments), i(this, "sourceRegistry", new MagnetSourceRegistry()), i(this, "searchEngines", []);
@@ -12838,7 +12848,9 @@ ${error.stack}` : "");
     }
     async handle() {
       if (!(r || l)) return;
-      this.registerProviders(), this.bindSubmit(), window.isDetailPage && (this.injectNativeButtons(), jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
+      const scope = await this.getRuntimeService("scope")();
+      this.registerProviders(), this.bindSubmit(), scope.addCleanup((() => $(document).off(".jhsUnifiedOffline")));
+      if (window.isDetailPage) this.injectNativeButtons(), scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
     }
     registerProviders() {
       const one23 = this.getDependency("OneTwoThreeOfflinePlugin");
@@ -13866,9 +13878,11 @@ ${error.stack}` : "");
   // src/plugins/status/highlight-magnet.js
   var _HighlightMagnetPlugin = class _HighlightMagnetPlugin extends BasePlugin {
     async handle() {
-      window.isDetailPage && jhsEventBus.on("magnet-items-updated", (() => {
-        void storageManager.getSetting("enableMagnetsFilter", _).then(((enabled) => enabled === _ ? this.doFilterMagnet() : this.showAll()));
-      }));
+      if (!window.isDetailPage) return;
+      const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
+      scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => {
+        (settings.snapshot().enableMagnetsFilter ?? _) === _ ? this.doFilterMagnet() : this.showAll();
+      })));
     }
     async initCss() {
       return `<style>.jhs-magnet-score{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:600;vertical-align:middle;cursor:help}</style>`;
@@ -13895,13 +13909,7 @@ ${error.stack}` : "");
       }
     }
     getQualitySignals(title, hasSubtitleTag = false) {
-      const value = String(title || "").toLowerCase(), resolution = /(?:4k|2160p|1080p|720p)/.exec(value)?.[0] || "", subtitle = hasSubtitleTag || /(?:-c\b|-u(?:c)?\b|chinese|中字|字幕)/.test(value);
-      return { resolution, subtitle, recognized: !!resolution || subtitle, highQuality: "4k" === resolution || "2160p" === resolution || subtitle };
-    }
-    assessMagnet({ title = "", hasHdTag = false, hasSubtitleTag = false, date = null, seeders = 0 } = {}) {
-      const signals = this.getQualitySignals(title, hasSubtitleTag), highQuality = hasHdTag || signals.highQuality;
-      const score = calcMagnetScore({ title, date, seeders, resolution: hasHdTag && !signals.resolution ? "1080p" : signals.resolution, hasSubtitle: signals.subtitle });
-      return { ...signals, highQuality, score, grade: score.total >= 70 ? "高" : score.total >= 40 ? "中" : "低" };
+      return getMagnetQualitySignals(title, hasSubtitleTag);
     }
     updateFilterHint(hasMatch) {
       $("#enable-magnets-filter").removeClass("do-hide").attr("data-tip", hasMatch ? "仅显示识别到的高质量或字幕磁力" : "未识别到可过滤项，当前未隐藏磁力");
@@ -15403,7 +15411,7 @@ ${error.stack}` : "");
     manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage]),
     manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related, SERVICE.settings]),
     manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie]),
-    manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }),
+    manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [SERVICE.settings]),
     manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
     manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo]),
@@ -16009,6 +16017,9 @@ ${error.stack}` : "");
       if (!manifest2) return [];
       const adapter = this.integrations?.getAdapter(manifest2.id);
       return typeof adapter?.listMagnets === "function" ? adapter.listMagnets(movieRef, context) : [];
+    }
+    assess(magnet) {
+      return assessMagnetQuality(magnet);
     }
   };
   __name(_MagnetService, "MagnetService");

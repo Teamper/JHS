@@ -14,8 +14,7 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     DetailPageButtonPlugin: ["DetailWorkspacePlugin", "MagnetHubPlugin", "HighlightMagnetPlugin"],
     Fc2Plugin: [
         "DetailPageButtonPlugin", "MagnetHubPlugin", "FilterTitleKeywordPlugin", "OtherSitePlugin",
-        "Fc2By123AvPlugin", "TOP250Plugin",
-        "HighlightMagnetPlugin"
+        "Fc2By123AvPlugin", "TOP250Plugin"
     ],
     HistoryPlugin: ["UnifiedOfflinePlugin", "ListPagePlugin", "Fc2Plugin"],
     HitShowPlugin: ["ListPageButtonPlugin", "ListPagePlugin", "CoverButtonPlugin"],
