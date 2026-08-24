@@ -7141,119 +7141,7 @@
   }
   __name(applyImageMode, "applyImageMode");
 
-  // src/core/host-page-request.js
-  async function requestHostPage(http, input, scope) {
-    const url = new URL(input, window.location.href);
-    const response = await http.request({
-      providerId: "host-page",
-      method: "GET",
-      url: url.href,
-      responseType: "text",
-      cacheScope: "none",
-      urlPolicy: { trustClass: "builtin-public", hosts: [window.location.hostname], expectedOrigin: window.location.origin }
-    }, scope);
-    return String(response.data ?? response.responseText ?? "");
-  }
-  __name(requestHostPage, "requestHostPage");
-
-  // src/core/list-item-reader.js
-  function readListItem(item) {
-    const jq = globalThis.$, element = item?.jquery ? item : jq(item);
-    const anchor = element.find("a"), url = anchor.attr("href"), titleNode = element.find(".video-title");
-    let carNum, title, publishTime;
-    if (titleNode.length) {
-      const strong = titleNode.find("strong");
-      if (strong.length) carNum = strong.text().trim();
-      title = anchor.attr("title") ? anchor.attr("title").trim() : carNum ? titleNode.text().replace(carNum, "").trim() : titleNode.text().trim();
-      publishTime = element.find(".meta").text().trim();
-    }
-    if (!carNum) {
-      const image = element.find("img");
-      if (image.length) title = image.attr("title")?.trim() || image.attr("data-title")?.trim() || title;
-      const dates = element.find("date").map((_index, node) => jq(node).text().trim()).get();
-      publishTime = dates.find((value) => /^\d{4}-\d{1,2}-\d{1,2}$/.test(value));
-      carNum = dates.find((value) => !/^\d{4}-\d{1,2}-\d{1,2}$/.test(value));
-    }
-    const normalized = normalizeMovieCarNum(carNum);
-    if (!normalized) throw new TypeError("提取番号信息失败");
-    return Object.freeze({
-      carNum: normalized,
-      aHref: url,
-      url,
-      title,
-      publishTime,
-      fc2Source: ["fc2", "123av"].includes(element.attr("data-jhs-fc2-source")) ? element.attr("data-jhs-fc2-source") : "fc2"
-    });
-  }
-  __name(readListItem, "readListItem");
-
-  // src/plugins/status/list-page.js
-  var Te = {
-    IS_FILTERED: {
-      text: u,
-      color: "var(--jhs-status-filter)",
-      on: "var(--jhs-status-filter-on)",
-      reasonType: "单番号屏蔽",
-      isCounted: true,
-      countKey: "currentPageFilterCount"
-    },
-    IS_FAVORITE: {
-      text: b,
-      color: "var(--jhs-status-fav)",
-      on: "var(--jhs-status-fav-on)",
-      reasonType: "",
-      isCounted: true,
-      countKey: "currentPageFavoriteCount"
-    },
-    IS_HAS_DOWN: {
-      text: y,
-      color: "var(--jhs-status-down)",
-      on: "var(--jhs-status-down-on)",
-      reasonType: "",
-      isCounted: true,
-      countKey: "currentPageHasDownCount"
-    },
-    IS_HAS_WATCH: {
-      text: k,
-      color: "var(--jhs-status-watch)",
-      on: "var(--jhs-status-watch-on)",
-      reasonType: "",
-      isCounted: true,
-      countKey: "currentPageHasWatchCount"
-    },
-    IS_KEYWORD_FILTER: {
-      text: "关键词屏蔽",
-      color: "var(--jhs-status-filter)",
-      on: "var(--jhs-status-filter-on)",
-      reasonType: "",
-      isCounted: true,
-      countKey: "currentPageKeywordFilterCount"
-    },
-    IS_ACTOR_FILTER: {
-      text: "男演员屏蔽",
-      color: "var(--jhs-status-filter)",
-      on: "var(--jhs-status-filter-on)",
-      reasonType: "",
-      isCounted: true,
-      countKey: "currentPageActorFilterCount"
-    },
-    IS_ACTRESS_FILTER: {
-      text: "女演员屏蔽",
-      color: "var(--jhs-status-filter)",
-      on: "var(--jhs-status-filter-on)",
-      reasonType: "",
-      isCounted: true,
-      countKey: "currentPageActorFilterCount"
-    },
-    IS_WAIT_CHECK: {
-      text: "",
-      color: "",
-      on: "",
-      reasonType: "",
-      isCounted: true,
-      countKey: "currentPageWaitCheckCount"
-    }
-  };
+  // src/features/list/list-filters.js
   var QUICK_FILTER_LABELS = Object.freeze({
     all: "全部",
     waitCheck: "待鉴定",
@@ -7271,7 +7159,7 @@
   var VALID_QUICK_FILTERS = /* @__PURE__ */ new Set([...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS]);
   function normalizeQuickFilterKey(value) {
     if ("filter" === value) return "blockedItems";
-    return VALID_QUICK_FILTERS.has(value) ? value : "waitCheck";
+    return "string" === typeof value && VALID_QUICK_FILTERS.has(value) ? value : "waitCheck";
   }
   __name(normalizeQuickFilterKey, "normalizeQuickFilterKey");
   function isHardHidden(flags, visibilityReasons = {}) {
@@ -7297,514 +7185,9 @@
     return matchesQuickFilter(filter, flags, { visibilityReasons, recent });
   }
   __name(shouldShowItem, "shouldShowItem");
-  var _ListPagePlugin = class _ListPagePlugin extends BasePlugin {
-    async initCss() {
-      return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}</style>`;
-    }
-    constructor() {
-      super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0), i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0), i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0), i(this, "currentPageTotalCount", 0), i(this, "filterContext", null), i(this, "pendingItems", /* @__PURE__ */ new Set()), i(this, "processTimer", null), i(this, "hdImageObserver", null), i(this, "hdEagerRemaining", 12), i(this, "writeQueue", Promise.resolve()), i(this, "itemIndex", /* @__PURE__ */ new Map()), i(this, "recountFrame", null);
-    }
-    getName() {
-      return "ListPagePlugin";
-    }
-    async handle() {
-      if (!window.isListPage || isHitShowPage()) return;
-      const scope = await this.getRuntimeService("scope")();
-      const refreshAll = /* @__PURE__ */ __name(async () => {
-        this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
-        const e2 = this.getDependency("HistoryPlugin");
-        e2.tableObj && e2.tableObj.setData();
-      }, "refreshAll");
-      ["legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed"].forEach(((type) => scope.addCleanup(jhsEventBus.on(type, refreshAll)))), scope.addCleanup(jhsEventBus.on("car-state-changed", (async (payload) => {
-        this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key);
-        const items = this.getIndexedItems(payload.carNums || []);
-        items.length && (await this.doFilterItems(items), this.applyVisibility(items));
-        const history = this.getDependency("HistoryPlugin");
-        history.tableObj && history.tableObj.setData();
-      }))), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(), this.rememberTagExpand(), $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await jhsEventBus.emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: false }), this.checkDom(scope), scope.addCleanup((() => {
-        this.processTimer && clearTimeout(this.processTimer), this.processTimer = null, this.pendingItems.clear();
-        this.hdImageObserver?.disconnect(), this.hdImageObserver = null;
-        this.recountFrame && (globalThis.cancelAnimationFrame?.(this.recountFrame) ?? clearTimeout(this.recountFrame)), this.recountFrame = null;
-        $(this.getSelector().boxSelector).off(".jhsMovieDetail"), $("#jhs-quick-filter").off(), this.itemIndex.clear();
-      }));
-    }
-    async createQuickFilter() {
-      if ($("#jhs-quick-filter").length) return;
-      const e2 = this.getSelector(), primaryHtml = PRIMARY_QUICK_FILTERS.map(((filter) => `<button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""), secondaryHtml = SECONDARY_QUICK_FILTERS.map(((filter, index) => `${1 === index ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-filter-option" aria-checked="false" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""), t2 = `<div id="jhs-quick-filter" class="jhs-quick-filter">
-                <div class="jhs-quick-filter__primary jhs-segmented" role="tablist" aria-label="状态筛选">${primaryHtml}</div>
-                <div class="jhs-quick-filter__more">
-                    <button type="button" class="jhs-btn jhs-btn--secondary jhs-quick-filter__toggle" aria-haspopup="menu" aria-expanded="false"><span class="jhs-quick-filter__label">更多筛选</span> ▾</button>
-                    <div class="jhs-popover jhs-commandbar__menu jhs-quick-filter__menu" role="menu" aria-label="更多筛选">${secondaryHtml}</div>
-                </div>
-            </div>`;
-      r ? $(e2.boxSelector).before(t2) : l && $(".masonry").before(t2);
-      const root = $("#jhs-quick-filter"), toggle = root.find(".jhs-quick-filter__toggle"), menu = root.find(".jhs-quick-filter__menu"), closeMenu = /* @__PURE__ */ __name((restoreFocus = false) => {
-        menu.removeClass("is-open"), toggle.attr("aria-expanded", "false"), restoreFocus && toggle.trigger("focus");
-      }, "closeMenu");
-      root.on("click", ".jhs-segmented__item", ((event) => this.setQuickFilter($(event.currentTarget).data("jhs-filter")))).on("keydown", ".jhs-segmented__item", ((event) => {
-        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-        event.preventDefault();
-        const tabs = root.find(".jhs-segmented__item"), index = tabs.index(event.currentTarget), next = "Home" === event.key ? 0 : "End" === event.key ? tabs.length - 1 : "ArrowRight" === event.key ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
-        tabs.eq(next).trigger("click").trigger("focus");
-      })).on("click", ".jhs-filter-option", ((event) => {
-        this.setQuickFilter($(event.currentTarget).data("jhs-filter")), closeMenu(true);
-      })).on("keydown", ".jhs-filter-option", ((event) => {
-        const items = menu.find(".jhs-filter-option"), index = items.index(event.currentTarget);
-        if ("Escape" === event.key) return event.preventDefault(), closeMenu(true);
-        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-        event.preventDefault();
-        const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
-        items.eq(next).trigger("focus");
-      }));
-      toggle.on("click", ((event) => {
-        event.preventDefault(), event.stopPropagation();
-        const open = !menu.hasClass("is-open");
-        menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && (menu.find('[aria-checked="true"]').first().length ? menu.find('[aria-checked="true"]').first() : menu.find(".jhs-filter-option").first()).trigger("focus");
-      })), $(document).off("click.jhsQuickFilter").on("click.jhsQuickFilter", ((event) => {
-        $(event.target).closest(root).length || closeMenu();
-      }));
-      this.setQuickFilter(await storageManager.getSetting("defaultQuickFilterTab", "waitCheck"));
-    }
-    applyVisibility(items = null) {
-      const e2 = this.activeQuickFilter || "waitCheck", t2 = this.getSelector().itemSelector;
-      (items ? $(items) : $(t2)).each((function() {
-        const t3 = $(this), flags = normalizeStateFlags(JSON.parse(t3.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(t3.attr("data-jhs-visibility") || "{}"), recent = "yes" === t3.attr("data-jhs-recent");
-        shouldShowItem({ filter: e2, flags, visibilityReasons, recent }) ? t3.show() : t3.hide();
-      }));
-    }
-    setQuickFilter(filter, { syncUi = true } = {}) {
-      this.activeQuickFilter = normalizeQuickFilterKey(filter), this.applyVisibility(), syncUi && this.syncQuickFilterUi();
-    }
-    syncQuickFilterUi() {
-      const filter = normalizeQuickFilterKey(this.activeQuickFilter), isPrimary = PRIMARY_QUICK_FILTERS.includes(filter), root = $("#jhs-quick-filter"), tabs = root.find(".jhs-segmented__item"), options = root.find(".jhs-filter-option");
-      tabs.removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" });
-      isPrimary ? tabs.filter(`[data-jhs-filter="${filter}"]`).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }) : tabs.first().attr("tabindex", "0");
-      options.attr("aria-checked", "false").filter(`[data-jhs-filter="${filter}"]`).attr("aria-checked", "true");
-      root.find(".jhs-quick-filter__label").text(isPrimary ? "更多筛选" : `筛选：${QUICK_FILTER_LABELS[filter]}`);
-      $(".jhs-mobile-filter-label").text(`筛选：${QUICK_FILTER_LABELS[filter]}`), $(".jhs-mobile-filter-option").attr("aria-checked", "false").filter(`[data-jhs-filter="${filter}"]`).attr("aria-checked", "true");
-    }
-    rememberTagExpand() {
-      if (!window.location.href.includes("actors")) return;
-      const e2 = $(".tag-expand");
-      if (0 === e2.length) return;
-      const storage = this.getRuntimeService("storage"), t2 = "jhs_tag_expand", n2 = "true" === storage.getLocal(t2), a2 = $(".actor-tags .content");
-      n2 && a2.hasClass("collapse") && e2[0].click(), e2.on("click", (function() {
-        const e3 = !$(".actor-tags .content").hasClass("collapse");
-        clog.debug("触发"), storage.setLocal(t2, e3.toString());
-      }));
-    }
-    checkDom(scope = null) {
-      if (!window.isListPage || isHitShowPage()) return;
-      const e2 = this.getSelector(), t2 = document.querySelector(e2.boxSelector);
-      if (!t2) return void clog.error("没有找到容器节点!");
-      if (!scope) return;
-      scope.observe(t2, ((records) => {
-        for (const record of records) {
-          this.removeIndexedItems(record.removedNodes);
-          for (const node of record.addedNodes) {
-            if (node.nodeType !== Node.ELEMENT_NODE) continue;
-            node.matches?.(e2.itemSelector) && "true" !== node.dataset.jhsProcessed && this.pendingItems.add(node), node.querySelectorAll?.(e2.itemSelector).forEach(((item) => {
-              "true" !== item.dataset.jhsProcessed && this.pendingItems.add(item);
-            }));
-          }
-        }
-        this.pendingItems.size && (this.processTimer && clearTimeout(this.processTimer), this.processTimer = setTimeout((() => {
-          const items = [...this.pendingItems].filter(((item) => item.isConnected && "true" !== item.dataset.jhsProcessed));
-          this.pendingItems.clear(), this.processTimer = null, items.length && void this.processAddedItems(items).catch(((error) => clog.error("列表增量处理失败", error)));
-        }), 100));
-      }), {
-        childList: true,
-        subtree: false
-      });
-    }
-    async processAddedItems(items) {
-      const selector = this.getSelector(), covers = items.flatMap(((item) => [...item.querySelectorAll(selector.coverImgSelector)]));
-      this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items), await this.doFilterItems(items), this.applyVisibility(items), await this.getDependency("ListPageButtonPlugin").sortItems(), await this.getDependency("CoverButtonPlugin").addSvgBtn(items), items.forEach(((item) => item.dataset.jhsProcessed = "true")), this.indexItems(items), await jhsEventBus.emit("list-items-added", { items }, { broadcast: false }), this.getDependency("AutoPagePlugin").checkLoad();
-    }
-    rebuildItemIndex() {
-      this.itemIndex.clear(), this.indexItems($(this.getSelector().itemSelector).toArray());
-    }
-    indexItems(items) {
-      items.forEach(((item) => {
-        try {
-          const key = normalizeCarNum(this.findCarNumAndHref($(item)).carNum);
-          if (!key) return;
-          const indexed = this.itemIndex.get(key) || /* @__PURE__ */ new Set();
-          indexed.add(item), this.itemIndex.set(key, indexed);
-        } catch (error) {
-          clog.debug("列表项索引跳过无效卡片", error);
-        }
-      }));
-    }
-    removeIndexedItems(nodes) {
-      const removed = /* @__PURE__ */ new Set();
-      Array.from(nodes || []).forEach(((node) => {
-        node.nodeType === Node.ELEMENT_NODE && (removed.add(node), node.querySelectorAll?.(this.getSelector().itemSelector).forEach(((item) => removed.add(item))));
-      }));
-      if (!removed.size) return;
-      this.itemIndex.forEach(((items, key) => {
-        items.forEach(((item) => {
-          removed.has(item) && items.delete(item);
-        })), items.size || this.itemIndex.delete(key);
-      }));
-    }
-    getIndexedItems(carNums) {
-      const result = /* @__PURE__ */ new Set();
-      carNums.map(normalizeCarNum).forEach(((key) => {
-        const items = this.itemIndex.get(key);
-        items?.forEach(((item) => item.isConnected ? result.add(item) : items.delete(item))), items && !items.size && this.itemIndex.delete(key);
-      }));
-      return [...result];
-    }
-    fixBusTitleBox(items = null) {
-      if (!l) return;
-      (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach(((e2) => {
-        var t2;
-        let n2 = $(e2);
-        if (n2.find(".avatar-box").length > 0) return;
-        const a2 = (null == (t2 = n2.find("img").attr("title")) ? void 0 : t2.trim()) || "";
-        n2.find(".photo-info span:first").contents().first().wrap(`<span class="video-title" title="${a2}">${a2}</span>`), n2.find("br").remove();
-      }));
-    }
-    cleanRepeatId() {
-      if (!l) return;
-      $("#waterfall_h").removeAttr("id").attr("id", "no-page");
-      const e2 = $('[id="waterfall"]');
-      0 !== e2.length && e2.each((function() {
-        const e3 = $(this);
-        if (!e3.hasClass("masonry")) {
-          e3.children().insertAfter(e3), e3.remove();
-        }
-      }));
-    }
-    async doFilter() {
-      return this.doFilterItems();
-    }
-    async doFilterItems(items = null) {
-      if (!window.isListPage) return;
-      let e2 = items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray();
-      e2.length && (await this.filterMovieList(e2), l && setTimeout((() => {
-        this.getDependency("BusImgPlugin").logImageHeightsByRow().catch(((e3) => clog.error("JavBus图片高度修正失败", e3)));
-      })));
-    }
-    async yieldListFrame() {
-      await new Promise(((e2) => {
-        window.requestAnimationFrame ? window.requestAnimationFrame((() => setTimeout(e2))) : setTimeout(e2);
-      }));
-    }
-    findMatchedTitleKeyword(e2, t2, n2) {
-      for (const a2 of e2) if (t2.includes(a2) || n2.startsWith(a2)) return a2;
-      return null;
-    }
-    async getFilterContext() {
-      if (this.filterContext) return this.filterContext;
-      const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), this.getRuntimeService("state").getActivityLog()]), actorCarNumToNameMap = /* @__PURE__ */ new Map(), actressCarNumToNameMap = /* @__PURE__ */ new Map(), recentCarNums = /* @__PURE__ */ new Set();
-      const cutoff = Date.now() - 7 * 864e5;
-      activity.entries.filter(((entry) => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)).forEach(((entry) => entry.changes.filter(((change) => "reverted" !== change.undoState && change.fields?.some(((field) => field.startsWith("stateFlags."))))).forEach(((change) => recentCarNums.add(change.carNum)))));
-      for (const item of blacklistCars) {
-        const role = blacklistMap.get(item.starId)?.role;
-        if (!role) {
-          clog.error("黑名单数据源丢失演员信息", item);
-          continue;
-        }
-        const target = role === B ? actorCarNumToNameMap : actressCarNumToNameMap, carNum = normalizeCarNum(item.carNum);
-        target.has(carNum) || target.set(carNum, item.names);
-      }
-      return this.filterContext = { titleKeywords, settings, carMap, recentCarNums, actorCarNumToNameMap, actressCarNumToNameMap };
-    }
-    collectCurrentPageSummary() {
-      const summary = { total: 0, pending: 0, blockedItems: 0, favorite: 0, downloaded: 0, watched: 0, debug: { manualBlocked: 0, keywordBlocked: 0, actorBlocked: 0, actressBlocked: 0 } };
-      $(this.getSelector().itemSelector).each(((e2, item) => {
-        const card = $(item);
-        if (l && card.find(".avatar-box").length > 0) return;
-        const flags = normalizeStateFlags(JSON.parse(card.attr("data-jhs-flags") || "{}")), reasons = JSON.parse(card.attr("data-jhs-visibility") || "{}"), hardHidden = isHardHidden(flags, reasons);
-        summary.total++, flags.favorite && summary.favorite++, flags.downloaded && summary.downloaded++, flags.watched && summary.watched++, hardHidden && summary.blockedItems++, !hasAnyState(flags) && !hardHidden && summary.pending++, flags.blocked && summary.debug.manualBlocked++, reasons.keyword && summary.debug.keywordBlocked++, reasons.actorBlacklist && summary.debug.actorBlocked++, reasons.actressBlacklist && summary.debug.actressBlocked++;
-      }));
-      return summary;
-    }
-    getCurrentPageSummary() {
-      return this.collectCurrentPageSummary();
-    }
-    recountStatuses() {
-      const summary = this.collectCurrentPageSummary();
-      this.currentPageFilterCount = summary.debug.manualBlocked, this.currentPageFavoriteCount = summary.favorite, this.currentPageHasDownCount = summary.downloaded, this.currentPageHasWatchCount = summary.watched, this.currentPageKeywordFilterCount = summary.debug.keywordBlocked, this.currentPageActorFilterCount = summary.debug.actorBlocked + summary.debug.actressBlocked, this.currentPageWaitCheckCount = summary.pending, this.currentPageTotalCount = summary.total;
-      return summary;
-    }
-    scheduleRecount() {
-      if (this.recountFrame) return;
-      const schedule = window.requestAnimationFrame || ((callback) => setTimeout(callback, 0));
-      this.recountFrame = schedule((() => {
-        this.recountFrame = null, this.recountStatuses();
-      }));
-    }
-    async translateListItems(e2) {
-      if (await storageManager.getSetting("translateTitle", _) !== _) return;
-      await mapLimit(e2, 3, (async (item, index) => {
-        try {
-          index > 0 && index % 8 == 0 && await this.yieldListFrame(), await this.translate(item);
-        } catch (error) {
-          clog.error("列表标题翻译失败", error);
-        }
-      }));
-    }
-    async filterMovieList(e2) {
-      utils.time("累计耗费时间"), utils.time("读取数据耗时");
-      const { titleKeywords: n2, settings: s2, carMap: m2, recentCarNums: recent, actorCarNumToNameMap: f, actressCarNumToNameMap: v2 } = await this.getFilterContext(), o2 = utils.time("读取数据耗时");
-      utils.time("组装数据耗时");
-      const b2 = utils.time("组装数据耗时"), P2 = (null == s2 ? void 0 : s2.tagPosition) || "rightTop";
-      const O2 = n2.filter(((e3) => e3));
-      this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0, this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0, this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时");
-      const R = [];
-      for (let n3 = 0; n3 < e2.length; n3++) {
-        n3 > 0 && n3 % 12 == 0 && await this.yieldListFrame();
-        let t2 = $(e2[n3]);
-        if (l && t2.find(".avatar-box").length > 0) continue;
-        const { carNum: a2, title: i2 } = this.findCarNumAndHref(t2), record = m2.get(a2), flags = normalizeStateFlags(record?.stateFlags), actorFiltered = f.has(a2), actressFiltered = v2.has(a2), keyword = this.findMatchedTitleKeyword(O2, i2, a2), visibilityReasons = { keyword: !!keyword, actorBlacklist: actorFiltered, actressBlacklist: actressFiltered };
-        const hardHidden = isHardHidden(flags, visibilityReasons);
-        t2.attr("data-jhs-flags", JSON.stringify(flags)).attr("data-jhs-visibility", JSON.stringify(visibilityReasons)).attr("data-jhs-recent", recent.has(a2) ? _ : C).attr("data-jhs-tag-position", P2);
-        const signature = JSON.stringify({ flags, visibilityReasons, P: P2 });
-        if (t2.attr("data-jhs-state-signature") !== signature) {
-          t2.attr("data-jhs-state-signature", signature), t2.find(".jhs-status-tags").remove();
-          const badgeDefs = [
-            [flags.blocked, Te.IS_FILTERED, "单番号屏蔽"],
-            [flags.favorite, Te.IS_FAVORITE, ""],
-            [flags.downloaded, Te.IS_HAS_DOWN, ""],
-            [flags.watched, Te.IS_HAS_WATCH, ""],
-            [visibilityReasons.keyword, Te.IS_KEYWORD_FILTER, keyword || "未知"],
-            [visibilityReasons.actorBlacklist, Te.IS_ACTOR_FILTER, f.get(a2) || ""],
-            [visibilityReasons.actressBlacklist, Te.IS_ACTRESS_FILTER, v2.get(a2) || ""]
-          ].filter(((item) => item[0]));
-          if (badgeDefs.length) {
-            const box = $(`<span class="jhs-status-tags ${"rightTop" === P2 ? "jhs-status-tags--right" : "jhs-status-tags--left"}"></span>`);
-            badgeDefs.forEach((([, definition, tip]) => {
-              const badge = $(`<span class="jhs-badge ${r ? "jhs-badge--success" : "jhs-badge--neutral"} status-tag" data-tip="${escapeHtml(tip)}" title="">${escapeHtml(definition.text)}</span>`);
-              badge.css({ color: definition.on, backgroundColor: definition.color }), box.append(badge);
-            }));
-            if (r) t2.find(".tags").append(box);
-            else if (l) {
-              const host = t2.find(".item-tag");
-              host.length ? host.append(box) : t2.find(".photo-info > span > div").append(box);
-            }
-          }
-        }
-        hardHidden || R.push(t2);
-      }
-      this.scheduleRecount(), void this.translateListItems(R).catch(((e3) => clog.error("列表页翻译任务失败", e3)));
-      const D2 = utils.time("处理页面耗时"), A2 = utils.time("累计耗费时间");
-      clog.log(`
-            <table class="countTable jhs-layout-b12542a5">
-                <tr>
-                    <td colspan="2" class="jhs-count-table__cell">${o2}</td>
-                    <td colspan="2" class="jhs-count-table__cell">${b2}</td>
-                </tr>
-
-                <tr>
-                    <td colspan="2" class="jhs-count-table__cell">${D2}</td>
-                    <td colspan="2" class="jhs-count-table__cell">${A2}</td>
-                </tr>
-                <tr>
-                    <td class="jhs-count-table__head">项目</td>
-                    <td class="jhs-count-table__head">数量</td>
-                    <td class="jhs-count-table__head">项目</td>
-                    <td class="jhs-count-table__head">数量</td>
-                </tr>
-
-                <tr>
-                    <td class="jhs-count-table__cell">屏蔽单番号</td>
-                    <td class="jhs-count-table__cell"><strong>${this.currentPageFilterCount}</strong></td>
-                     <td class="jhs-count-table__cell">收藏</td>
-                    <td class="jhs-count-table__cell"><strong>${this.currentPageFavoriteCount}</strong></td>
-                </tr>
-
-                <tr>
-                    <td class="jhs-count-table__cell">屏蔽演员</td>
-                    <td class="jhs-count-table__cell"><strong>${this.currentPageActorFilterCount}</strong></td>
-                    <td class="jhs-count-table__cell">已下载</td>
-                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasDownCount}</strong></td>
-                </tr>
-
-                <tr>
-                    <td class="jhs-count-table__cell">屏蔽关键词</td>
-                    <td class="jhs-count-table__cell"><strong>${this.currentPageKeywordFilterCount}</strong></td>
-                    <td class="jhs-count-table__cell">已观看</td>
-                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasWatchCount}</strong></td>
-                </tr>
-
-                <tr>
-                    <td class="jhs-count-table__cell">待鉴定</td>
-                    <td class="jhs-count-table__cell"><strong>${this.currentPageWaitCheckCount}</strong></td>
-                    <td class="jhs-count-table__cell"></td>
-                    <td class="jhs-count-table__cell"></td>
-                </tr>
-
-                <tr>
-                    <td class="jhs-count-table__cell"><strong>总数</strong></td>
-                    <td class="jhs-count-table__cell"><strong>${this.currentPageTotalCount}</strong></td>
-                </tr>
-            </table>
-        `);
-    }
-    async bindClick() {
-      let e2 = this.getSelector();
-      this.bindMovieDetailNavigation(e2.boxSelector), $(e2.boxSelector).on("click", ".item video", (async (e3) => {
-        const t2 = e3.currentTarget;
-        t2.paused ? await safePlay(t2, {
-          context: "列表视频",
-          notify: true
-        }) : t2.pause(), e3.preventDefault(), e3.stopPropagation();
-      })), $(e2.boxSelector).on("contextmenu", ".item img, .item video", (async (e3) => {
-        try {
-          e3.preventDefault();
-          const t2 = $(e3.target).closest(".item"), { carNum: n2, url: a2, publishTime: i2, fc2Source } = this.findCarNumAndHref(t2);
-          let s2 = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10"), o2 = "";
-          s2.length && (o2 = s2.text().trim().split(",")[0].replace("(無碼)", "")), utils.q(e3, `是否屏蔽番号 ${n2}?`, (async () => {
-            try {
-              o2 || (o2 = await this.parseActressName(a2)), await this.getRuntimeService("state").patch(n2, { blocked: true }, { record: { carNum: n2, url: a2, names: o2, publishTime: i2, fc2Source } }), show.ok("操作成功");
-            } catch (s3) {
-              clog.error("屏蔽操作失败:", s3), show.error("操作失败");
-            }
-          }));
-        } catch (t2) {
-          clog.error("右键菜单处理失败:", t2);
-        }
-      }));
-    }
-    async openMovieDetail(item, { event = null, autoplay = false, newTab = false } = {}) {
-      const card = item?.jquery ? item : $(item), { carNum, aHref, fc2Source } = this.findCarNumAndHref(card);
-      if (!carNum || !aHref) return;
-      const shouldOpenTab = newTab || !!event && (event.ctrlKey || event.metaKey || 1 === event.button);
-      if (carNum.includes("FC2-")) {
-        const movieId = this.parseMovieId(aHref);
-        return shouldOpenTab ? this.getDependency("Fc2Plugin").openFc2Page(movieId, carNum, aHref, { event, newTab: true }, { source: fc2Source }) : this.getDependency("Fc2Plugin").openFc2Dialog(movieId, carNum, aHref, { source: fc2Source });
-      }
-      const destination = new URL(aHref, window.location.origin);
-      autoplay && destination.searchParams.set("autoPlay", "1"), utils.openPage(destination.href, carNum, true, { event, newTab: shouldOpenTab }), this.$currentImage = null;
-    }
-    bindMovieDetailNavigation(container) {
-      const root = $(container), selector = ".item img, .item .video-title";
-      root.off("click.jhsMovieDetail auxclick.jhsMovieDetail", selector).on("click.jhsMovieDetail auxclick.jhsMovieDetail", selector, ((event) => {
-        if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
-        if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
-        event.preventDefault(), event.stopPropagation();
-        void this.openMovieDetail($(event.currentTarget).closest(".item"), { event }).catch(((error) => clog.error("打开影片详情失败", error)));
-      }));
-    }
-    async parseActressName(e2) {
-      let t2 = null;
-      if (await storageManager.getSetting("enableSaveActressCarInfo", C) === _) {
-        clog.debug("鉴定补录演员信息-已启用, 开始解析详情页"), clog.debug("开始解析演员详情页", e2);
-        const scope = await this.getRuntimeService("scope")();
-        const n2 = await requestHostPage(this.getRuntimeService("http"), e2, scope), a2 = utils.htmlTo$dom(n2);
-        r ? t2 = a2.find(".female").prev().map(((e3, t3) => $(t3).text())).get().join(" ") : l && (t2 = a2.find('span[onmouseover*="star_"] a').map(((e3, t3) => $(t3).text())).get().join(" ")), clog.debug("解析到名称:", t2);
-      }
-      return t2;
-    }
-    findCarNumAndHref(e2) {
-      try {
-        return readListItem(e2);
-      } catch (error) {
-        show.error("提取番号信息失败");
-        throw error;
-      }
-    }
-    showCarNumBox(e2) {
-      const t2 = this.getRuntimeService("host").locateListItems().find(((t3) => $(t3).find(".video-title strong").text() === e2));
-      if (t2) {
-        const n2 = $(t2);
-        n2.attr("data-hide") === "yes" && (n2.show(), n2.removeAttr("data-hide"));
-      }
-    }
-    _replaceSingleHdImg(e2) {
-      if ("true" === e2.dataset.hdReplaced) return;
-      if (r) {
-        const isJavdbCdn = /jdbstatic\.com|javdb\.com/i.test(e2.src);
-        if (isJavdbCdn) {
-          const originalSrc = e2.src;
-          e2.src = e2.src.replace("thumbs", "covers");
-          e2.dataset.hdReplaced = "true";
-          e2.title = "";
-          e2.onerror = function() {
-            if (this.src !== originalSrc) {
-              this.src = originalSrc;
-              this.onerror = null;
-            }
-          };
-        }
-      } else if (l) {
-        const t2 = /\/(imgs|pics)\/(thumb|thumbs)\//, n2 = /(\.jpg|\.jpeg|\.png)$/i;
-        t2.test(e2.src) ? (e2.src = e2.src.replace(t2, "/$1/cover/").replace(n2, "_b$1"), e2.dataset.hdReplaced = "true", e2.dataset.title = e2.title, e2.title = "") : /ps(\.jpg|\.jpeg|\.png)$/i.test(e2.src) && (e2.src = e2.src.replace(/ps(\.jpg|\.jpeg|\.png)$/i, "pl$1"), e2.dataset.hdReplaced = "true", e2.dataset.title = e2.title, e2.title = "");
-      }
-    }
-    replaceHdImg(e2) {
-      if (e2 && "string" == typeof e2.jquery && (e2 = e2.toArray()), e2 || (e2 = document.querySelectorAll(this.getSelector().coverImgSelector)), !e2.length) return;
-      const t2 = Array.from(e2).filter(((e3) => "true" !== e3.dataset.hdReplaced && "true" !== e3.dataset.jhsHdObserved));
-      if ("IntersectionObserver" in window && !this.hdImageObserver) this.hdImageObserver = new IntersectionObserver(((entries) => {
-        entries.forEach(((entry) => {
-          entry.isIntersecting && (this.hdImageObserver.unobserve(entry.target), delete entry.target.dataset.jhsHdObserved, this._replaceSingleHdImg(entry.target));
-        }));
-      }), { rootMargin: "200px" });
-      for (const image of t2) this.hdEagerRemaining > 0 ? (this.hdEagerRemaining--, this._replaceSingleHdImg(image)) : this.hdImageObserver ? (image.dataset.jhsHdObserved = "true", this.hdImageObserver.observe(image)) : this._replaceSingleHdImg(image);
-      storageManager.getSetting("hoverBigImg", C).then(((e3) => {
-        e3 === _ && (window.imageHoverPreviewObj ? window.imageHoverPreviewObj.bindEvents() : window.imageHoverPreviewObj = new ImageHoverPreview({
-          selector: this.getSelector().coverImgSelector
-        }));
-      }));
-    }
-    applyTranslatedTitle(e2, t2, n2) {
-      const a2 = e2.find(".video-title");
-      r ? (a2.contents().each((function() {
-        3 !== this.nodeType || "" === this.textContent.trim() || this.textContent.includes(n2) || (this.textContent = " " + t2 + " ");
-      })), a2.attr("title", t2)) : a2.text(t2), e2.attr("data-jhs-translation-key", n2);
-    }
-    async translate(e2) {
-      let t2, n2, a2 = e2.find(".video-title");
-      if (r ? (t2 = a2.contents().filter(((e3, t3) => 3 === t3.nodeType && "" !== t3.textContent.trim())).text().trim(), n2 = e2.find(".video-title strong").text().trim()) : (t2 = (e2.find("img").attr("data-title") || "").trim(), n2 = (e2.find("a").attr("href") || "").split("/").filter(Boolean).pop()?.trim()), !t2 || !n2) return;
-      const scope = await this.getRuntimeService("scope")();
-      const translated = await this.getRuntimeService("translation").translate(t2, { scope });
-      this.applyTranslatedTitle(e2, translated, n2);
-    }
-    async revertTranslation() {
-      $(this.getSelector().itemSelector).toArray().forEach(((e2) => {
-        let t2 = $(e2);
-        const n2 = t2.find(".box").attr("title") || t2.find(".video-title").attr("title") || t2.find("img").attr("data-title");
-        let a2;
-        r && (a2 = t2.find(".video-title strong").text().trim());
-        const i2 = t2.find(".video-title");
-        i2.contents().each((function() {
-          3 !== this.nodeType || "" === this.textContent.trim() || this.textContent.includes(a2) || (this.textContent = " " + n2 + " ");
-        })), i2.removeAttr("title");
-      }));
-    }
-    addJumpPageControl() {
-      const e2 = "gemini-jump-page-control";
-      if ($("#" + e2).length > 0) return;
-      if (0 === $(".pagination-link.is-current").length) return;
-      const t2 = utils.getUrlParam(o, "page") || 1, n2 = $('<input type="number" class="jhs-field jhs-jump-page-input">', {
-        id: "jumpPageInput",
-        placeholder: "页码",
-        min: "1",
-        value: t2 + 1
-      }), a2 = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-jump-page-btn">', {
-        text: "跳转"
-      }), i2 = $("<li>", {
-        id: e2
-      }).append(n2).append(a2);
-      $(".pagination-list").append(i2);
-      const s2 = /* @__PURE__ */ __name(() => {
-        const e3 = parseInt(n2.val(), 10);
-        if (isNaN(e3) || e3 < 1) return void n2.focus();
-        const t3 = new URL(window.location.href);
-        t3.searchParams.set("page", e3.toString()), window.location.href = t3.toString();
-      }, "s");
-      a2.on("click", s2), n2.on("keypress", (function(e3) {
-        13 === e3.which && (s2(), e3.preventDefault());
-      }));
-    }
-  };
-  __name(_ListPagePlugin, "ListPagePlugin");
-  var ListPagePlugin = _ListPagePlugin;
 
   // src/plugins/backup/setting-forms.js
+  var settingsEventBus = jhsEventBus;
   async function loadSettingForm(dependencies) {
     let e2 = await storageManager.getSetting();
     $("#videoQuality").val(e2.videoQuality), $("#reviewCount").val(e2.reviewCount || 20), $("#tagPosition").val(e2.tagPosition || "rightTop"), $("#defaultQuickFilterTab").val(normalizeQuickFilterKey(e2.defaultQuickFilterTab)), $("#needClosePageBasic").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e2.autoRemoveNewVideoMarkAfterBrowse && e2.autoRemoveNewVideoMarkAfterBrowse === _), $("#waitCheckCount").val(e2.waitCheckCount || 5), $("#checkConcurrencyCount").val(parseNumberSetting(e2.checkConcurrencyCount, 2, { min: 2, max: 5 })), $("#checkRequestSleep").val(parseNumberSetting(e2.checkRequestSleep, 100, { min: 0, max: 3e3 })), $("#enableCheckBlacklist").val(e2.enableCheckBlacklist || _), $("#checkBlacklist_intervalTime").val(e2.checkBlacklist_intervalTime || 12), $("#checkBlacklist_ruleTime").val(parseNumberSetting(e2.checkBlacklist_ruleTime, 8760, { min: 0 })), $("#enableCheckFavoriteActress").val(e2.enableCheckFavoriteActress || _), $("#checkFavoriteActress_IntervalTime").val(e2.checkFavoriteActress_IntervalTime || 24), $("#enableCheckNewVideo").val(e2.enableCheckNewVideo || _), $("#checkNewVideo_intervalTime").val(e2.checkNewVideo_intervalTime || 12), $("#checkNewVideo_ruleTime").val(parseNumberSetting(e2.checkNewVideo_ruleTime, 8760, { min: 0 }));
@@ -7813,15 +7196,15 @@
     const a2 = dependencies.otherSite, i2 = await a2.getMissAvUrl(), s2 = await a2.getjableUrl(), o2 = await a2.getAvgleUrl(), r2 = await a2.getJavTrailersUrl(), l2 = await a2.getAv123Url(), c2 = await a2.getJavDbUrl(), d2 = await a2.getJavBusUrl(), h2 = await a2.getSupJavUrl();
     $("#missAvUrl").val(i2), $("#jableUrl").val(s2), $("#avgleUrl").val(o2), $("#javTrailersUrl").val(r2), $("#av123Url").val(l2), $("#javDbUrl").val(c2), $("#javBusUrl").val(d2), $("#supJavUrl").val(h2);
     let g2 = await storageManager.getReviewFilterKeywordList(), p2 = await storageManager.getTitleFilterKeyword();
-    g2 && g2.forEach(((e3) => {
+    g2 && g2.forEach((e3) => {
       addLabelTag("#reviewKeywordContainer", e3);
-    })), p2 && p2.forEach(((e3) => {
+    }), p2 && p2.forEach((e3) => {
       addLabelTag("#filterKeywordContainer", e3);
-    })), ["#reviewKeywordContainer", "#filterKeywordContainer"].forEach(((e3) => {
+    }), ["#reviewKeywordContainer", "#filterKeywordContainer"].forEach((e3) => {
       $(`${e3} .add-tag-btn`).on("click", ((t3) => addKeyword(t3, e3))), $(`${e3} .keyword-input`).on("keypress", ((t3) => {
         "Enter" === t3.key && addKeyword(t3, e3);
       }));
-    }));
+    });
     bindLayoutRangeEvents(dependencies.busImg, dependencies.host);
   }
   __name(loadSettingForm, "loadSettingForm");
@@ -7845,7 +7228,7 @@
   async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn) {
     let e2 = await storageManager.getSetting();
     $("#needClosePage").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoPage").prop("checked", !e2.autoPage || e2.autoPage === _), $("#translateTitle").prop("checked", !e2.translateTitle || e2.translateTitle === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableLoadOtherSite").prop("checked", !e2.enableLoadOtherSite || e2.enableLoadOtherSite === _), $("#needClosePage").on("change", (async (t2) => {
-      await storageManager.saveSettingItem("needClosePage", $("#needClosePage").is(":checked") ? _ : C), await jhsEventBus.emit("filter-rules-changed");
+      await storageManager.saveSettingItem("needClosePage", $("#needClosePage").is(":checked") ? _ : C), await settingsEventBus.emit("filter-rules-changed");
     })), $("#autoPage").on("change", (async (t2) => {
       const n2 = $("#autoPage").is(":checked") ? _ : C;
       await storageManager.saveSettingItem("autoPage", n2), $("#sort-toggle-btn").prop("disabled", n2 === _).attr("title", n2 === _ ? "瀑布流模式仅支持默认排序" : "选择列表排序方式");
@@ -7854,7 +7237,8 @@
       await storageManager.saveSettingItem("translateTitle", n2), n2 === _ ? (await dependencies.listPage.doFilter(), isDetailPage && await dependencies.translate?.translate()) : (await dependencies.listPage.revertTranslation(), $(".translated-title").remove());
     })), $("#hoverBigImg").prop("checked", !!e2.hoverBigImg && e2.hoverBigImg === _), $("#hoverBigImg").on("change", (async (t2) => {
       const n2 = $("#hoverBigImg").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("hoverBigImg", n2), window.imageHoverPreviewObj && (window.imageHoverPreviewObj.destroy(), window.imageHoverPreviewObj = null), n2 === _ && (window.imageHoverPreviewObj = new ImageHoverPreview({
+      const runtimeWindow = window;
+      await storageManager.saveSettingItem("hoverBigImg", n2), runtimeWindow.imageHoverPreviewObj && (runtimeWindow.imageHoverPreviewObj.destroy(), runtimeWindow.imageHoverPreviewObj = null), n2 === _ && (runtimeWindow.imageHoverPreviewObj = new ImageHoverPreview({
         selector: getSelector().coverImgSelector
       }));
     })), $("#enableLoadActressInfo").on("change", (async (t2) => {
@@ -7898,15 +7282,15 @@
     }
     e2.videoQuality = $("#videoQuality").val(), e2.reviewCount = $("#reviewCount").val(), e2.tagPosition = $("#tagPosition").val(), e2.defaultQuickFilterTab = normalizeQuickFilterKey($("#defaultQuickFilterTab").val()), e2.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e2.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e2.waitCheckCount = $("#waitCheckCount").val(), e2.highlightedTagNumber = $("#highlightedTagNumber").val(), e2.highlightedTagColor = $("#highlightedTagColor").val(), e2.checkConcurrencyCount = $("#checkConcurrencyCount").val(), e2.checkRequestSleep = $("#checkRequestSleep").val(), e2.enableCheckBlacklist = $("#enableCheckBlacklist").val(), e2.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e2.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(), e2.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e2.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(), e2.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e2.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(), e2.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e2.httpTimeout = Number($("#httpTimeout").val()) || 5e3, e2.httpRetryCount = Number($("#httpRetryCount").val()) || 3, e2.circuitBreakerThreshold = Number($("#circuitBreakerThreshold").val()) || 3, e2.circuitBreakerCooldown = Number($("#circuitBreakerCooldownSec").val()) * 1e3, e2.enableClog = $("#enableClog").val(), e2.enableClog === _ ? clog.show() : clog.hide(), e2.clogMsgCount = $("#clogMsgCount").val(), e2.mobileMode = $("#mobileMode").val(), e2.themeMode = $("#themeMode").val(), e2.webDavUrl = nextWebDavUrl, e2.trustedLocalOrigins = [...trustedOrigins], e2.webDavUsername = $("#webDavUsername").val(), e2.webDavPassword = await encryptCredential($("#webDavPassword").val()), e2.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""), e2.jableUrl = $("#jableUrl").val().replace(/\/$/, ""), e2.avgleUrl = $("#avgleUrl").val().replace(/\/$/, ""), e2.javTrailersUrl = $("#javTrailersUrl").val().replace(/\/$/, ""), e2.av123Url = $("#av123Url").val().replace(/\/$/, ""), e2.javDbUrl = $("#javDbUrl").val().replace(/\/$/, ""), e2.javBusUrl = $("#javBusUrl").val().replace(/\/$/, ""), e2.supJavUrl = $("#supJavUrl").val().replace(/\/$/, ""), e2.enableTitleSelectFilter = $("#enableTitleSelectFilter").is(":checked") ? _ : C, e2.enableFavoriteActresses = $("#enableFavoriteActresses").is(":checked") ? _ : C, e2.enableSaveActressCarInfo = $("#enableSaveActressCarInfo").is(":checked") ? _ : C, e2.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e2.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C, e2.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e2.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C, e2.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C, e2.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e2.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C, e2.containerColumns = Number($("#containerColumns").val()) || 5, e2.containerWidth = Number($("#containerWidth").val()) + 70 || 100, await storageManager.saveSetting(e2);
     let t2 = [];
-    $("#reviewKeywordContainer .keyword-label").toArray().forEach(((e3) => {
+    $("#reviewKeywordContainer .keyword-label").toArray().forEach((e3) => {
       let n3 = $(e3).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
       t2.push(n3);
-    })), await storageManager.saveReviewFilterKeyword(t2);
+    }), await storageManager.saveReviewFilterKeyword(t2);
     let n2 = [];
-    $("#filterKeywordContainer .keyword-label").toArray().forEach(((e3) => {
+    $("#filterKeywordContainer .keyword-label").toArray().forEach((e3) => {
       let t3 = $(e3).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
       n2.push(t3);
-    })), await storageManager.saveTitleFilterKeyword(n2), show.ok("保存成功"), await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" });
+    }), await storageManager.saveTitleFilterKeyword(n2), show.ok("保存成功"), await settingsEventBus.emit("filter-rules-changed", { scope: "title-keyword" });
     const a2 = dependencies.newVideo;
     a2 && a2.resetBtnTip(), dependencies.blacklist.resetBtnTip(), dependencies.blacklist.reloadTable();
   }
@@ -9370,6 +8754,52 @@
   };
   __name(_SettingPlugin, "SettingPlugin");
   var SettingPlugin = _SettingPlugin;
+
+  // src/core/host-page-request.js
+  async function requestHostPage(http, input, scope) {
+    const url = new URL(input, window.location.href);
+    const response = await http.request({
+      providerId: "host-page",
+      method: "GET",
+      url: url.href,
+      responseType: "text",
+      cacheScope: "none",
+      urlPolicy: { trustClass: "builtin-public", hosts: [window.location.hostname], expectedOrigin: window.location.origin }
+    }, scope);
+    return String(response.data ?? response.responseText ?? "");
+  }
+  __name(requestHostPage, "requestHostPage");
+
+  // src/core/list-item-reader.js
+  function readListItem(item) {
+    const jq = globalThis.$, element = item?.jquery ? item : jq(item);
+    const anchor = element.find("a"), url = anchor.attr("href"), titleNode = element.find(".video-title");
+    let carNum, title, publishTime;
+    if (titleNode.length) {
+      const strong = titleNode.find("strong");
+      if (strong.length) carNum = strong.text().trim();
+      title = anchor.attr("title") ? anchor.attr("title").trim() : carNum ? titleNode.text().replace(carNum, "").trim() : titleNode.text().trim();
+      publishTime = element.find(".meta").text().trim();
+    }
+    if (!carNum) {
+      const image = element.find("img");
+      if (image.length) title = image.attr("title")?.trim() || image.attr("data-title")?.trim() || title;
+      const dates = element.find("date").map((_index, node) => jq(node).text().trim()).get();
+      publishTime = dates.find((value) => /^\d{4}-\d{1,2}-\d{1,2}$/.test(value));
+      carNum = dates.find((value) => !/^\d{4}-\d{1,2}-\d{1,2}$/.test(value));
+    }
+    const normalized = normalizeMovieCarNum(carNum);
+    if (!normalized) throw new TypeError("提取番号信息失败");
+    return Object.freeze({
+      carNum: normalized,
+      aHref: url,
+      url,
+      title,
+      publishTime,
+      fc2Source: ["fc2", "123av"].includes(element.attr("data-jhs-fc2-source")) ? element.attr("data-jhs-fc2-source") : "fc2"
+    });
+  }
+  __name(readListItem, "readListItem");
 
   // src/integrations/host-list/parser.js
   function parseDetailPage($page, selectors) {
@@ -16059,14 +15489,14 @@ ${failure.stack}` : "");
         if (e2) {
           t2 = $(".toolbar, .section-addition").filter(":last");
           const e3 = await storageManager.getBlacklist(), i2 = this.getActressPageInfo();
-          e3.find(((e4) => e4.starId === i2.starId)) && (n2 = "已加入黑名单", a2 = "jhs-btn--muted");
+          e3.find((e4) => e4.starId === i2.starId) && (n2 = "已加入黑名单", a2 = "jhs-btn--muted");
         } else o.includes("/tags") && utils.loopDetector((() => $("#jhs-check-tag").text().trim()), (async () => {
           const e3 = $("#addBlacklistBtn");
           e3.attr("data-tip", "将当前分类标签加入到黑名单, 后续有作品更新也会纳入屏蔽中");
           const t3 = $("#jhs-check-tag").text().trim();
           if (!t3) return;
           const n3 = "no-" + t3, a3 = await storageManager.getBlacklist();
-          s2 = a3.find(((e4) => e4.starId === n3)), s2 && (e3.addClass("jhs-btn--muted").removeClass("jhs-btn--filter"), $("#addBlacklistBtn span").text("已加入黑名单"));
+          s2 = a3.find((e4) => e4.starId === n3), s2 && (e3.addClass("jhs-btn--muted").removeClass("jhs-btn--filter"), $("#addBlacklistBtn span").text("已加入黑名单"));
         }), 20, 1e4, true, scope);
         const r2 = o.includes("advanced_search");
         r2 && (t2 = $("h2.section-title"));
@@ -16096,7 +15526,7 @@ ${failure.stack}` : "");
         let t2 = "加入黑名单", n2 = "jhs-btn--filter";
         if (e2) {
           const e3 = await storageManager.getBlacklist(), a3 = this.getActressPageInfo();
-          e3.find(((e4) => e4.starId === a3.starId)) && (t2 = "已加入黑名单", n2 = "jhs-btn--muted");
+          e3.find((e4) => e4.starId === a3.starId) && (t2 = "已加入黑名单", n2 = "jhs-btn--muted");
         }
         const a2 = this.getRuntimeService("settings").snapshot().sortMethod || "default";
         $(".masonry").parent().prepend(`
@@ -16117,12 +15547,12 @@ ${failure.stack}` : "");
       newVideoLabel.length && newVideoLabel.empty().append(document.createTextNode("新作品 ("), newVideoCount, document.createTextNode(")"));
     }
     sortMenuHtml(method, title = "选择列表排序方式") {
-      const labels = { default: "默认", rateCount: "评价人数", date: "时间" }, current = labels[method] || labels.default;
+      const labels = { default: "默认", rateCount: "评价人数", date: "时间" }, key = "string" === typeof method && method in labels ? method : "default", current = labels[key];
       return `<div class="jhs-sort-control"><button type="button" id="sort-toggle-btn" class="jhs-btn jhs-btn--secondary" aria-haspopup="menu" aria-expanded="false" title="${title}"><span id="jhs-sort-current">${current}</span></button><div class="jhs-popover jhs-sort-menu" role="menu" aria-label="排序方式">${Object.entries(labels).map((([value, label]) => `<button type="button" class="jhs-btn jhs-btn--ghost jhs-sort-option" role="menuitemradio" aria-checked="${value === method ? "true" : "false"}" data-sort-method="${value}" tabindex="-1">${label}</button>`)).join("")}</div></div>`;
     }
     bindEvent() {
       $("#waitCheckBtn").on("click", ((e3) => {
-        void this.openWaitCheck(e3).catch(((error) => clog.error("待鉴定列表打开失败", error)));
+        void this.openWaitCheck().catch(((error) => clog.error("待鉴定列表打开失败", error)));
       })), $("#newVideoBtn").on("click", ((e3) => {
         this.getDependency("NewVideoPlugin").openDialog();
       })), $("#blacklistBtn").on("click", ((e3) => {
@@ -16210,8 +15640,8 @@ ${failure.stack}` : "");
       const t2 = this.getRuntimeService("settings").snapshot().sortMethod;
       if (!t2) return;
       const i2 = this.getSelector(), d2 = $(i2.boxSelector), h2 = $(i2.itemSelector);
-      h2.each((function(e3) {
-        $(this).attr("data-original-index") || $(this).attr("data-original-index", e3);
+      h2.each(((e3, element) => {
+        $(element).attr("data-original-index") || $(element).attr("data-original-index", e3);
       }));
       const items = h2.get().map(((element, index) => {
         const card = $(element), originalIndex = Number(card.attr("data-original-index")) || 0;
@@ -16220,13 +15650,11 @@ ${failure.stack}` : "");
           const explicit = Number(card.attr("data-jhs-rate-count")), match = card.find(".score").text().replaceAll(",", "").match(/(?:由\s*)?(\d+)\s*人(?:评价)?/);
           return { element, key: Number.isFinite(explicit) ? explicit : match ? Number(match[1]) : 0, originalIndex, index };
         }
-        const value = card.attr("data-jhs-publish-time") || card.find(".meta").text().trim() || card.find("date").filter((function() {
-          return /^\d{4}-\d{1,2}-\d{1,2}$/.test($(this).text().trim());
-        })).first().text().trim(), timestamp = Date.parse(value);
+        const value = card.attr("data-jhs-publish-time") || card.find(".meta").text().trim() || card.find("date").filter(((index2, element2) => /^\d{4}-\d{1,2}-\d{1,2}$/.test($(element2).text().trim()))).first().text().trim(), timestamp = Date.parse(value);
         return { element, key: Number.isFinite(timestamp) ? timestamp : 0, originalIndex, index };
       }));
       items.sort(((e3, n2) => "default" === t2 ? e3.key - n2.key : n2.key - e3.key || e3.originalIndex - n2.originalIndex || e3.index - n2.index));
-      const sortedElements = items.map(((item) => item.element));
+      const sortedElements = items.map((item) => item.element);
       "default" === t2 ? $(sortedElements).appendTo(d2) : d2.empty().append(sortedElements);
     }
     isHitShowPage() {
@@ -16254,6 +15682,580 @@ ${failure.stack}` : "");
   };
   __name(_ListPageButtonPlugin, "ListPageButtonPlugin");
   var ListPageButtonPlugin = _ListPageButtonPlugin;
+
+  // src/plugins/status/list-page.js
+  var Te = {
+    IS_FILTERED: {
+      text: u,
+      color: "var(--jhs-status-filter)",
+      on: "var(--jhs-status-filter-on)",
+      reasonType: "单番号屏蔽",
+      isCounted: true,
+      countKey: "currentPageFilterCount"
+    },
+    IS_FAVORITE: {
+      text: b,
+      color: "var(--jhs-status-fav)",
+      on: "var(--jhs-status-fav-on)",
+      reasonType: "",
+      isCounted: true,
+      countKey: "currentPageFavoriteCount"
+    },
+    IS_HAS_DOWN: {
+      text: y,
+      color: "var(--jhs-status-down)",
+      on: "var(--jhs-status-down-on)",
+      reasonType: "",
+      isCounted: true,
+      countKey: "currentPageHasDownCount"
+    },
+    IS_HAS_WATCH: {
+      text: k,
+      color: "var(--jhs-status-watch)",
+      on: "var(--jhs-status-watch-on)",
+      reasonType: "",
+      isCounted: true,
+      countKey: "currentPageHasWatchCount"
+    },
+    IS_KEYWORD_FILTER: {
+      text: "关键词屏蔽",
+      color: "var(--jhs-status-filter)",
+      on: "var(--jhs-status-filter-on)",
+      reasonType: "",
+      isCounted: true,
+      countKey: "currentPageKeywordFilterCount"
+    },
+    IS_ACTOR_FILTER: {
+      text: "男演员屏蔽",
+      color: "var(--jhs-status-filter)",
+      on: "var(--jhs-status-filter-on)",
+      reasonType: "",
+      isCounted: true,
+      countKey: "currentPageActorFilterCount"
+    },
+    IS_ACTRESS_FILTER: {
+      text: "女演员屏蔽",
+      color: "var(--jhs-status-filter)",
+      on: "var(--jhs-status-filter-on)",
+      reasonType: "",
+      isCounted: true,
+      countKey: "currentPageActorFilterCount"
+    },
+    IS_WAIT_CHECK: {
+      text: "",
+      color: "",
+      on: "",
+      reasonType: "",
+      isCounted: true,
+      countKey: "currentPageWaitCheckCount"
+    }
+  };
+  var _ListPagePlugin = class _ListPagePlugin extends BasePlugin {
+    async initCss() {
+      return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}</style>`;
+    }
+    constructor() {
+      super(...arguments), i(this, "currentPageFilterCount", 0), i(this, "currentPageFavoriteCount", 0), i(this, "currentPageHasDownCount", 0), i(this, "currentPageHasWatchCount", 0), i(this, "currentPageKeywordFilterCount", 0), i(this, "currentPageActorFilterCount", 0), i(this, "currentPageWaitCheckCount", 0), i(this, "currentPageTotalCount", 0), i(this, "filterContext", null), i(this, "pendingItems", /* @__PURE__ */ new Set()), i(this, "processTimer", null), i(this, "hdImageObserver", null), i(this, "hdEagerRemaining", 12), i(this, "writeQueue", Promise.resolve()), i(this, "itemIndex", /* @__PURE__ */ new Map()), i(this, "recountFrame", null);
+    }
+    getName() {
+      return "ListPagePlugin";
+    }
+    async handle() {
+      if (!window.isListPage || isHitShowPage()) return;
+      const scope = await this.getRuntimeService("scope")();
+      const refreshAll = /* @__PURE__ */ __name(async () => {
+        this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
+        const e2 = this.getDependency("HistoryPlugin");
+        e2.tableObj && e2.tableObj.setData();
+      }, "refreshAll");
+      ["legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed"].forEach(((type) => scope.addCleanup(jhsEventBus.on(type, refreshAll)))), scope.addCleanup(jhsEventBus.on("car-state-changed", (async (payload) => {
+        this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key);
+        const items = this.getIndexedItems(payload.carNums || []);
+        items.length && (await this.doFilterItems(items), this.applyVisibility(items));
+        const history = this.getDependency("HistoryPlugin");
+        history.tableObj && history.tableObj.setData();
+      }))), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(), this.rememberTagExpand(), $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await jhsEventBus.emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: false }), this.checkDom(scope), scope.addCleanup((() => {
+        this.processTimer && clearTimeout(this.processTimer), this.processTimer = null, this.pendingItems.clear();
+        this.hdImageObserver?.disconnect(), this.hdImageObserver = null;
+        this.recountFrame && (globalThis.cancelAnimationFrame?.(this.recountFrame) ?? clearTimeout(this.recountFrame)), this.recountFrame = null;
+        $(this.getSelector().boxSelector).off(".jhsMovieDetail"), $("#jhs-quick-filter").off(), this.itemIndex.clear();
+      }));
+    }
+    async createQuickFilter() {
+      if ($("#jhs-quick-filter").length) return;
+      const e2 = this.getSelector(), primaryHtml = PRIMARY_QUICK_FILTERS.map(((filter) => `<button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""), secondaryHtml = SECONDARY_QUICK_FILTERS.map(((filter, index) => `${1 === index ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-filter-option" aria-checked="false" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""), t2 = `<div id="jhs-quick-filter" class="jhs-quick-filter">
+                <div class="jhs-quick-filter__primary jhs-segmented" role="tablist" aria-label="状态筛选">${primaryHtml}</div>
+                <div class="jhs-quick-filter__more">
+                    <button type="button" class="jhs-btn jhs-btn--secondary jhs-quick-filter__toggle" aria-haspopup="menu" aria-expanded="false"><span class="jhs-quick-filter__label">更多筛选</span> ▾</button>
+                    <div class="jhs-popover jhs-commandbar__menu jhs-quick-filter__menu" role="menu" aria-label="更多筛选">${secondaryHtml}</div>
+                </div>
+            </div>`;
+      r ? $(e2.boxSelector).before(t2) : l && $(".masonry").before(t2);
+      const root = $("#jhs-quick-filter"), toggle = root.find(".jhs-quick-filter__toggle"), menu = root.find(".jhs-quick-filter__menu"), closeMenu = /* @__PURE__ */ __name((restoreFocus = false) => {
+        menu.removeClass("is-open"), toggle.attr("aria-expanded", "false"), restoreFocus && toggle.trigger("focus");
+      }, "closeMenu");
+      root.on("click", ".jhs-segmented__item", ((event) => this.setQuickFilter($(event.currentTarget).data("jhs-filter")))).on("keydown", ".jhs-segmented__item", ((event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const tabs = root.find(".jhs-segmented__item"), index = tabs.index(event.currentTarget), next = "Home" === event.key ? 0 : "End" === event.key ? tabs.length - 1 : "ArrowRight" === event.key ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
+        tabs.eq(next).trigger("click").trigger("focus");
+      })).on("click", ".jhs-filter-option", ((event) => {
+        this.setQuickFilter($(event.currentTarget).data("jhs-filter")), closeMenu(true);
+      })).on("keydown", ".jhs-filter-option", ((event) => {
+        const items = menu.find(".jhs-filter-option"), index = items.index(event.currentTarget);
+        if ("Escape" === event.key) return event.preventDefault(), closeMenu(true);
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+        items.eq(next).trigger("focus");
+      }));
+      toggle.on("click", ((event) => {
+        event.preventDefault(), event.stopPropagation();
+        const open = !menu.hasClass("is-open");
+        menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && (menu.find('[aria-checked="true"]').first().length ? menu.find('[aria-checked="true"]').first() : menu.find(".jhs-filter-option").first()).trigger("focus");
+      })), $(document).off("click.jhsQuickFilter").on("click.jhsQuickFilter", ((event) => {
+        $(event.target).closest(root).length || closeMenu();
+      }));
+      this.setQuickFilter(await storageManager.getSetting("defaultQuickFilterTab", "waitCheck"));
+    }
+    applyVisibility(items = null) {
+      const e2 = this.activeQuickFilter || "waitCheck", t2 = this.getSelector().itemSelector;
+      (items ? $(items) : $(t2)).each((function() {
+        const t3 = $(this), flags = normalizeStateFlags(JSON.parse(t3.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(t3.attr("data-jhs-visibility") || "{}"), recent = "yes" === t3.attr("data-jhs-recent");
+        shouldShowItem({ filter: e2, flags, visibilityReasons, recent }) ? t3.show() : t3.hide();
+      }));
+    }
+    setQuickFilter(filter, { syncUi = true } = {}) {
+      this.activeQuickFilter = normalizeQuickFilterKey(filter), this.applyVisibility(), syncUi && this.syncQuickFilterUi();
+    }
+    syncQuickFilterUi() {
+      const filter = normalizeQuickFilterKey(this.activeQuickFilter), isPrimary = PRIMARY_QUICK_FILTERS.includes(filter), root = $("#jhs-quick-filter"), tabs = root.find(".jhs-segmented__item"), options = root.find(".jhs-filter-option");
+      tabs.removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" });
+      isPrimary ? tabs.filter(`[data-jhs-filter="${filter}"]`).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }) : tabs.first().attr("tabindex", "0");
+      options.attr("aria-checked", "false").filter(`[data-jhs-filter="${filter}"]`).attr("aria-checked", "true");
+      root.find(".jhs-quick-filter__label").text(isPrimary ? "更多筛选" : `筛选：${QUICK_FILTER_LABELS[filter]}`);
+      $(".jhs-mobile-filter-label").text(`筛选：${QUICK_FILTER_LABELS[filter]}`), $(".jhs-mobile-filter-option").attr("aria-checked", "false").filter(`[data-jhs-filter="${filter}"]`).attr("aria-checked", "true");
+    }
+    rememberTagExpand() {
+      if (!window.location.href.includes("actors")) return;
+      const e2 = $(".tag-expand");
+      if (0 === e2.length) return;
+      const storage = this.getRuntimeService("storage"), t2 = "jhs_tag_expand", n2 = "true" === storage.getLocal(t2), a2 = $(".actor-tags .content");
+      n2 && a2.hasClass("collapse") && e2[0].click(), e2.on("click", (function() {
+        const e3 = !$(".actor-tags .content").hasClass("collapse");
+        clog.debug("触发"), storage.setLocal(t2, e3.toString());
+      }));
+    }
+    checkDom(scope = null) {
+      if (!window.isListPage || isHitShowPage()) return;
+      const e2 = this.getSelector(), t2 = document.querySelector(e2.boxSelector);
+      if (!t2) return void clog.error("没有找到容器节点!");
+      if (!scope) return;
+      scope.observe(t2, ((records) => {
+        for (const record of records) {
+          this.removeIndexedItems(record.removedNodes);
+          for (const node of record.addedNodes) {
+            if (node.nodeType !== Node.ELEMENT_NODE) continue;
+            node.matches?.(e2.itemSelector) && "true" !== node.dataset.jhsProcessed && this.pendingItems.add(node), node.querySelectorAll?.(e2.itemSelector).forEach(((item) => {
+              "true" !== item.dataset.jhsProcessed && this.pendingItems.add(item);
+            }));
+          }
+        }
+        this.pendingItems.size && (this.processTimer && clearTimeout(this.processTimer), this.processTimer = setTimeout((() => {
+          const items = [...this.pendingItems].filter(((item) => item.isConnected && "true" !== item.dataset.jhsProcessed));
+          this.pendingItems.clear(), this.processTimer = null, items.length && void this.processAddedItems(items).catch(((error) => clog.error("列表增量处理失败", error)));
+        }), 100));
+      }), {
+        childList: true,
+        subtree: false
+      });
+    }
+    async processAddedItems(items) {
+      const selector = this.getSelector(), covers = items.flatMap(((item) => [...item.querySelectorAll(selector.coverImgSelector)]));
+      this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items), await this.doFilterItems(items), this.applyVisibility(items), await this.getDependency("ListPageButtonPlugin").sortItems(), await this.getDependency("CoverButtonPlugin").addSvgBtn(items), items.forEach(((item) => item.dataset.jhsProcessed = "true")), this.indexItems(items), await jhsEventBus.emit("list-items-added", { items }, { broadcast: false }), this.getDependency("AutoPagePlugin").checkLoad();
+    }
+    rebuildItemIndex() {
+      this.itemIndex.clear(), this.indexItems($(this.getSelector().itemSelector).toArray());
+    }
+    indexItems(items) {
+      items.forEach(((item) => {
+        try {
+          const key = normalizeCarNum(this.findCarNumAndHref($(item)).carNum);
+          if (!key) return;
+          const indexed = this.itemIndex.get(key) || /* @__PURE__ */ new Set();
+          indexed.add(item), this.itemIndex.set(key, indexed);
+        } catch (error) {
+          clog.debug("列表项索引跳过无效卡片", error);
+        }
+      }));
+    }
+    removeIndexedItems(nodes) {
+      const removed = /* @__PURE__ */ new Set();
+      Array.from(nodes || []).forEach(((node) => {
+        node.nodeType === Node.ELEMENT_NODE && (removed.add(node), node.querySelectorAll?.(this.getSelector().itemSelector).forEach(((item) => removed.add(item))));
+      }));
+      if (!removed.size) return;
+      this.itemIndex.forEach(((items, key) => {
+        items.forEach(((item) => {
+          removed.has(item) && items.delete(item);
+        })), items.size || this.itemIndex.delete(key);
+      }));
+    }
+    getIndexedItems(carNums) {
+      const result = /* @__PURE__ */ new Set();
+      carNums.map(normalizeCarNum).forEach(((key) => {
+        const items = this.itemIndex.get(key);
+        items?.forEach(((item) => item.isConnected ? result.add(item) : items.delete(item))), items && !items.size && this.itemIndex.delete(key);
+      }));
+      return [...result];
+    }
+    fixBusTitleBox(items = null) {
+      if (!l) return;
+      (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach(((e2) => {
+        var t2;
+        let n2 = $(e2);
+        if (n2.find(".avatar-box").length > 0) return;
+        const a2 = (null == (t2 = n2.find("img").attr("title")) ? void 0 : t2.trim()) || "";
+        n2.find(".photo-info span:first").contents().first().wrap(`<span class="video-title" title="${a2}">${a2}</span>`), n2.find("br").remove();
+      }));
+    }
+    cleanRepeatId() {
+      if (!l) return;
+      $("#waterfall_h").removeAttr("id").attr("id", "no-page");
+      const e2 = $('[id="waterfall"]');
+      0 !== e2.length && e2.each((function() {
+        const e3 = $(this);
+        if (!e3.hasClass("masonry")) {
+          e3.children().insertAfter(e3), e3.remove();
+        }
+      }));
+    }
+    async doFilter() {
+      return this.doFilterItems();
+    }
+    async doFilterItems(items = null) {
+      if (!window.isListPage) return;
+      let e2 = items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray();
+      e2.length && (await this.filterMovieList(e2), l && setTimeout((() => {
+        this.getDependency("BusImgPlugin").logImageHeightsByRow().catch(((e3) => clog.error("JavBus图片高度修正失败", e3)));
+      })));
+    }
+    async yieldListFrame() {
+      await new Promise(((e2) => {
+        window.requestAnimationFrame ? window.requestAnimationFrame((() => setTimeout(e2))) : setTimeout(e2);
+      }));
+    }
+    findMatchedTitleKeyword(e2, t2, n2) {
+      for (const a2 of e2) if (t2.includes(a2) || n2.startsWith(a2)) return a2;
+      return null;
+    }
+    async getFilterContext() {
+      if (this.filterContext) return this.filterContext;
+      const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), this.getRuntimeService("state").getActivityLog()]), actorCarNumToNameMap = /* @__PURE__ */ new Map(), actressCarNumToNameMap = /* @__PURE__ */ new Map(), recentCarNums = /* @__PURE__ */ new Set();
+      const cutoff = Date.now() - 7 * 864e5;
+      activity.entries.filter(((entry) => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)).forEach(((entry) => entry.changes.filter(((change) => "reverted" !== change.undoState && change.fields?.some(((field) => field.startsWith("stateFlags."))))).forEach(((change) => recentCarNums.add(change.carNum)))));
+      for (const item of blacklistCars) {
+        const role = blacklistMap.get(item.starId)?.role;
+        if (!role) {
+          clog.error("黑名单数据源丢失演员信息", item);
+          continue;
+        }
+        const target = role === B ? actorCarNumToNameMap : actressCarNumToNameMap, carNum = normalizeCarNum(item.carNum);
+        target.has(carNum) || target.set(carNum, item.names);
+      }
+      return this.filterContext = { titleKeywords, settings, carMap, recentCarNums, actorCarNumToNameMap, actressCarNumToNameMap };
+    }
+    collectCurrentPageSummary() {
+      const summary = { total: 0, pending: 0, blockedItems: 0, favorite: 0, downloaded: 0, watched: 0, debug: { manualBlocked: 0, keywordBlocked: 0, actorBlocked: 0, actressBlocked: 0 } };
+      $(this.getSelector().itemSelector).each(((e2, item) => {
+        const card = $(item);
+        if (l && card.find(".avatar-box").length > 0) return;
+        const flags = normalizeStateFlags(JSON.parse(card.attr("data-jhs-flags") || "{}")), reasons = JSON.parse(card.attr("data-jhs-visibility") || "{}"), hardHidden = isHardHidden(flags, reasons);
+        summary.total++, flags.favorite && summary.favorite++, flags.downloaded && summary.downloaded++, flags.watched && summary.watched++, hardHidden && summary.blockedItems++, !hasAnyState(flags) && !hardHidden && summary.pending++, flags.blocked && summary.debug.manualBlocked++, reasons.keyword && summary.debug.keywordBlocked++, reasons.actorBlacklist && summary.debug.actorBlocked++, reasons.actressBlacklist && summary.debug.actressBlocked++;
+      }));
+      return summary;
+    }
+    getCurrentPageSummary() {
+      return this.collectCurrentPageSummary();
+    }
+    recountStatuses() {
+      const summary = this.collectCurrentPageSummary();
+      this.currentPageFilterCount = summary.debug.manualBlocked, this.currentPageFavoriteCount = summary.favorite, this.currentPageHasDownCount = summary.downloaded, this.currentPageHasWatchCount = summary.watched, this.currentPageKeywordFilterCount = summary.debug.keywordBlocked, this.currentPageActorFilterCount = summary.debug.actorBlocked + summary.debug.actressBlocked, this.currentPageWaitCheckCount = summary.pending, this.currentPageTotalCount = summary.total;
+      return summary;
+    }
+    scheduleRecount() {
+      if (this.recountFrame) return;
+      const schedule = window.requestAnimationFrame || ((callback) => setTimeout(callback, 0));
+      this.recountFrame = schedule((() => {
+        this.recountFrame = null, this.recountStatuses();
+      }));
+    }
+    async translateListItems(e2) {
+      if (await storageManager.getSetting("translateTitle", _) !== _) return;
+      await mapLimit(e2, 3, (async (item, index) => {
+        try {
+          index > 0 && index % 8 == 0 && await this.yieldListFrame(), await this.translate(item);
+        } catch (error) {
+          clog.error("列表标题翻译失败", error);
+        }
+      }));
+    }
+    async filterMovieList(e2) {
+      utils.time("累计耗费时间"), utils.time("读取数据耗时");
+      const { titleKeywords: n2, settings: s2, carMap: m2, recentCarNums: recent, actorCarNumToNameMap: f, actressCarNumToNameMap: v2 } = await this.getFilterContext(), o2 = utils.time("读取数据耗时");
+      utils.time("组装数据耗时");
+      const b2 = utils.time("组装数据耗时"), P2 = (null == s2 ? void 0 : s2.tagPosition) || "rightTop";
+      const O2 = n2.filter(((e3) => e3));
+      this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0, this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0, this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时");
+      const R = [];
+      for (let n3 = 0; n3 < e2.length; n3++) {
+        n3 > 0 && n3 % 12 == 0 && await this.yieldListFrame();
+        let t2 = $(e2[n3]);
+        if (l && t2.find(".avatar-box").length > 0) continue;
+        const { carNum: a2, title: i2 } = this.findCarNumAndHref(t2), record = m2.get(a2), flags = normalizeStateFlags(record?.stateFlags), actorFiltered = f.has(a2), actressFiltered = v2.has(a2), keyword = this.findMatchedTitleKeyword(O2, i2, a2), visibilityReasons = { keyword: !!keyword, actorBlacklist: actorFiltered, actressBlacklist: actressFiltered };
+        const hardHidden = isHardHidden(flags, visibilityReasons);
+        t2.attr("data-jhs-flags", JSON.stringify(flags)).attr("data-jhs-visibility", JSON.stringify(visibilityReasons)).attr("data-jhs-recent", recent.has(a2) ? _ : C).attr("data-jhs-tag-position", P2);
+        const signature = JSON.stringify({ flags, visibilityReasons, P: P2 });
+        if (t2.attr("data-jhs-state-signature") !== signature) {
+          t2.attr("data-jhs-state-signature", signature), t2.find(".jhs-status-tags").remove();
+          const badgeDefs = [
+            [flags.blocked, Te.IS_FILTERED, "单番号屏蔽"],
+            [flags.favorite, Te.IS_FAVORITE, ""],
+            [flags.downloaded, Te.IS_HAS_DOWN, ""],
+            [flags.watched, Te.IS_HAS_WATCH, ""],
+            [visibilityReasons.keyword, Te.IS_KEYWORD_FILTER, keyword || "未知"],
+            [visibilityReasons.actorBlacklist, Te.IS_ACTOR_FILTER, f.get(a2) || ""],
+            [visibilityReasons.actressBlacklist, Te.IS_ACTRESS_FILTER, v2.get(a2) || ""]
+          ].filter(((item) => item[0]));
+          if (badgeDefs.length) {
+            const box = $(`<span class="jhs-status-tags ${"rightTop" === P2 ? "jhs-status-tags--right" : "jhs-status-tags--left"}"></span>`);
+            badgeDefs.forEach((([, definition, tip]) => {
+              const badge = $(`<span class="jhs-badge ${r ? "jhs-badge--success" : "jhs-badge--neutral"} status-tag" data-tip="${escapeHtml(tip)}" title="">${escapeHtml(definition.text)}</span>`);
+              badge.css({ color: definition.on, backgroundColor: definition.color }), box.append(badge);
+            }));
+            if (r) t2.find(".tags").append(box);
+            else if (l) {
+              const host = t2.find(".item-tag");
+              host.length ? host.append(box) : t2.find(".photo-info > span > div").append(box);
+            }
+          }
+        }
+        hardHidden || R.push(t2);
+      }
+      this.scheduleRecount(), void this.translateListItems(R).catch(((e3) => clog.error("列表页翻译任务失败", e3)));
+      const D2 = utils.time("处理页面耗时"), A2 = utils.time("累计耗费时间");
+      clog.log(`
+            <table class="countTable jhs-layout-b12542a5">
+                <tr>
+                    <td colspan="2" class="jhs-count-table__cell">${o2}</td>
+                    <td colspan="2" class="jhs-count-table__cell">${b2}</td>
+                </tr>
+
+                <tr>
+                    <td colspan="2" class="jhs-count-table__cell">${D2}</td>
+                    <td colspan="2" class="jhs-count-table__cell">${A2}</td>
+                </tr>
+                <tr>
+                    <td class="jhs-count-table__head">项目</td>
+                    <td class="jhs-count-table__head">数量</td>
+                    <td class="jhs-count-table__head">项目</td>
+                    <td class="jhs-count-table__head">数量</td>
+                </tr>
+
+                <tr>
+                    <td class="jhs-count-table__cell">屏蔽单番号</td>
+                    <td class="jhs-count-table__cell"><strong>${this.currentPageFilterCount}</strong></td>
+                     <td class="jhs-count-table__cell">收藏</td>
+                    <td class="jhs-count-table__cell"><strong>${this.currentPageFavoriteCount}</strong></td>
+                </tr>
+
+                <tr>
+                    <td class="jhs-count-table__cell">屏蔽演员</td>
+                    <td class="jhs-count-table__cell"><strong>${this.currentPageActorFilterCount}</strong></td>
+                    <td class="jhs-count-table__cell">已下载</td>
+                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasDownCount}</strong></td>
+                </tr>
+
+                <tr>
+                    <td class="jhs-count-table__cell">屏蔽关键词</td>
+                    <td class="jhs-count-table__cell"><strong>${this.currentPageKeywordFilterCount}</strong></td>
+                    <td class="jhs-count-table__cell">已观看</td>
+                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasWatchCount}</strong></td>
+                </tr>
+
+                <tr>
+                    <td class="jhs-count-table__cell">待鉴定</td>
+                    <td class="jhs-count-table__cell"><strong>${this.currentPageWaitCheckCount}</strong></td>
+                    <td class="jhs-count-table__cell"></td>
+                    <td class="jhs-count-table__cell"></td>
+                </tr>
+
+                <tr>
+                    <td class="jhs-count-table__cell"><strong>总数</strong></td>
+                    <td class="jhs-count-table__cell"><strong>${this.currentPageTotalCount}</strong></td>
+                </tr>
+            </table>
+        `);
+    }
+    async bindClick() {
+      let e2 = this.getSelector();
+      this.bindMovieDetailNavigation(e2.boxSelector), $(e2.boxSelector).on("click", ".item video", (async (e3) => {
+        const t2 = e3.currentTarget;
+        t2.paused ? await safePlay(t2, {
+          context: "列表视频",
+          notify: true
+        }) : t2.pause(), e3.preventDefault(), e3.stopPropagation();
+      })), $(e2.boxSelector).on("contextmenu", ".item img, .item video", (async (e3) => {
+        try {
+          e3.preventDefault();
+          const t2 = $(e3.target).closest(".item"), { carNum: n2, url: a2, publishTime: i2, fc2Source } = this.findCarNumAndHref(t2);
+          let s2 = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10"), o2 = "";
+          s2.length && (o2 = s2.text().trim().split(",")[0].replace("(無碼)", "")), utils.q(e3, `是否屏蔽番号 ${n2}?`, (async () => {
+            try {
+              o2 || (o2 = await this.parseActressName(a2)), await this.getRuntimeService("state").patch(n2, { blocked: true }, { record: { carNum: n2, url: a2, names: o2, publishTime: i2, fc2Source } }), show.ok("操作成功");
+            } catch (s3) {
+              clog.error("屏蔽操作失败:", s3), show.error("操作失败");
+            }
+          }));
+        } catch (t2) {
+          clog.error("右键菜单处理失败:", t2);
+        }
+      }));
+    }
+    async openMovieDetail(item, { event = null, autoplay = false, newTab = false } = {}) {
+      const card = item?.jquery ? item : $(item), { carNum, aHref, fc2Source } = this.findCarNumAndHref(card);
+      if (!carNum || !aHref) return;
+      const shouldOpenTab = newTab || !!event && (event.ctrlKey || event.metaKey || 1 === event.button);
+      if (carNum.includes("FC2-")) {
+        const movieId = this.parseMovieId(aHref);
+        return shouldOpenTab ? this.getDependency("Fc2Plugin").openFc2Page(movieId, carNum, aHref, { event, newTab: true }, { source: fc2Source }) : this.getDependency("Fc2Plugin").openFc2Dialog(movieId, carNum, aHref, { source: fc2Source });
+      }
+      const destination = new URL(aHref, window.location.origin);
+      autoplay && destination.searchParams.set("autoPlay", "1"), utils.openPage(destination.href, carNum, true, { event, newTab: shouldOpenTab }), this.$currentImage = null;
+    }
+    bindMovieDetailNavigation(container) {
+      const root = $(container), selector = ".item img, .item .video-title";
+      root.off("click.jhsMovieDetail auxclick.jhsMovieDetail", selector).on("click.jhsMovieDetail auxclick.jhsMovieDetail", selector, ((event) => {
+        if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
+        if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
+        event.preventDefault(), event.stopPropagation();
+        void this.openMovieDetail($(event.currentTarget).closest(".item"), { event }).catch(((error) => clog.error("打开影片详情失败", error)));
+      }));
+    }
+    async parseActressName(e2) {
+      let t2 = null;
+      if (await storageManager.getSetting("enableSaveActressCarInfo", C) === _) {
+        clog.debug("鉴定补录演员信息-已启用, 开始解析详情页"), clog.debug("开始解析演员详情页", e2);
+        const scope = await this.getRuntimeService("scope")();
+        const n2 = await requestHostPage(this.getRuntimeService("http"), e2, scope), a2 = utils.htmlTo$dom(n2);
+        r ? t2 = a2.find(".female").prev().map(((e3, t3) => $(t3).text())).get().join(" ") : l && (t2 = a2.find('span[onmouseover*="star_"] a').map(((e3, t3) => $(t3).text())).get().join(" ")), clog.debug("解析到名称:", t2);
+      }
+      return t2;
+    }
+    findCarNumAndHref(e2) {
+      try {
+        return readListItem(e2);
+      } catch (error) {
+        show.error("提取番号信息失败");
+        throw error;
+      }
+    }
+    showCarNumBox(e2) {
+      const t2 = this.getRuntimeService("host").locateListItems().find(((t3) => $(t3).find(".video-title strong").text() === e2));
+      if (t2) {
+        const n2 = $(t2);
+        n2.attr("data-hide") === "yes" && (n2.show(), n2.removeAttr("data-hide"));
+      }
+    }
+    _replaceSingleHdImg(e2) {
+      if ("true" === e2.dataset.hdReplaced) return;
+      if (r) {
+        const isJavdbCdn = /jdbstatic\.com|javdb\.com/i.test(e2.src);
+        if (isJavdbCdn) {
+          const originalSrc = e2.src;
+          e2.src = e2.src.replace("thumbs", "covers");
+          e2.dataset.hdReplaced = "true";
+          e2.title = "";
+          e2.onerror = function() {
+            if (this.src !== originalSrc) {
+              this.src = originalSrc;
+              this.onerror = null;
+            }
+          };
+        }
+      } else if (l) {
+        const t2 = /\/(imgs|pics)\/(thumb|thumbs)\//, n2 = /(\.jpg|\.jpeg|\.png)$/i;
+        t2.test(e2.src) ? (e2.src = e2.src.replace(t2, "/$1/cover/").replace(n2, "_b$1"), e2.dataset.hdReplaced = "true", e2.dataset.title = e2.title, e2.title = "") : /ps(\.jpg|\.jpeg|\.png)$/i.test(e2.src) && (e2.src = e2.src.replace(/ps(\.jpg|\.jpeg|\.png)$/i, "pl$1"), e2.dataset.hdReplaced = "true", e2.dataset.title = e2.title, e2.title = "");
+      }
+    }
+    replaceHdImg(e2) {
+      if (e2 && "string" == typeof e2.jquery && (e2 = e2.toArray()), e2 || (e2 = document.querySelectorAll(this.getSelector().coverImgSelector)), !e2.length) return;
+      const t2 = Array.from(e2).filter(((e3) => "true" !== e3.dataset.hdReplaced && "true" !== e3.dataset.jhsHdObserved));
+      if ("IntersectionObserver" in window && !this.hdImageObserver) this.hdImageObserver = new IntersectionObserver(((entries) => {
+        entries.forEach(((entry) => {
+          entry.isIntersecting && (this.hdImageObserver.unobserve(entry.target), delete entry.target.dataset.jhsHdObserved, this._replaceSingleHdImg(entry.target));
+        }));
+      }), { rootMargin: "200px" });
+      for (const image of t2) this.hdEagerRemaining > 0 ? (this.hdEagerRemaining--, this._replaceSingleHdImg(image)) : this.hdImageObserver ? (image.dataset.jhsHdObserved = "true", this.hdImageObserver.observe(image)) : this._replaceSingleHdImg(image);
+      storageManager.getSetting("hoverBigImg", C).then(((e3) => {
+        e3 === _ && (window.imageHoverPreviewObj ? window.imageHoverPreviewObj.bindEvents() : window.imageHoverPreviewObj = new ImageHoverPreview({
+          selector: this.getSelector().coverImgSelector
+        }));
+      }));
+    }
+    applyTranslatedTitle(e2, t2, n2) {
+      const a2 = e2.find(".video-title");
+      r ? (a2.contents().each((function() {
+        3 !== this.nodeType || "" === this.textContent.trim() || this.textContent.includes(n2) || (this.textContent = " " + t2 + " ");
+      })), a2.attr("title", t2)) : a2.text(t2), e2.attr("data-jhs-translation-key", n2);
+    }
+    async translate(e2) {
+      let t2, n2, a2 = e2.find(".video-title");
+      if (r ? (t2 = a2.contents().filter(((e3, t3) => 3 === t3.nodeType && "" !== t3.textContent.trim())).text().trim(), n2 = e2.find(".video-title strong").text().trim()) : (t2 = (e2.find("img").attr("data-title") || "").trim(), n2 = (e2.find("a").attr("href") || "").split("/").filter(Boolean).pop()?.trim()), !t2 || !n2) return;
+      const scope = await this.getRuntimeService("scope")();
+      const translated = await this.getRuntimeService("translation").translate(t2, { scope });
+      this.applyTranslatedTitle(e2, translated, n2);
+    }
+    async revertTranslation() {
+      $(this.getSelector().itemSelector).toArray().forEach(((e2) => {
+        let t2 = $(e2);
+        const n2 = t2.find(".box").attr("title") || t2.find(".video-title").attr("title") || t2.find("img").attr("data-title");
+        let a2;
+        r && (a2 = t2.find(".video-title strong").text().trim());
+        const i2 = t2.find(".video-title");
+        i2.contents().each((function() {
+          3 !== this.nodeType || "" === this.textContent.trim() || this.textContent.includes(a2) || (this.textContent = " " + n2 + " ");
+        })), i2.removeAttr("title");
+      }));
+    }
+    addJumpPageControl() {
+      const e2 = "gemini-jump-page-control";
+      if ($("#" + e2).length > 0) return;
+      if (0 === $(".pagination-link.is-current").length) return;
+      const t2 = utils.getUrlParam(o, "page") || 1, n2 = $('<input type="number" class="jhs-field jhs-jump-page-input">', {
+        id: "jumpPageInput",
+        placeholder: "页码",
+        min: "1",
+        value: t2 + 1
+      }), a2 = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-jump-page-btn">', {
+        text: "跳转"
+      }), i2 = $("<li>", {
+        id: e2
+      }).append(n2).append(a2);
+      $(".pagination-list").append(i2);
+      const s2 = /* @__PURE__ */ __name(() => {
+        const e3 = parseInt(n2.val(), 10);
+        if (isNaN(e3) || e3 < 1) return void n2.focus();
+        const t3 = new URL(window.location.href);
+        t3.searchParams.set("page", e3.toString()), window.location.href = t3.toString();
+      }, "s");
+      a2.on("click", s2), n2.on("keypress", (function(e3) {
+        13 === e3.which && (s2(), e3.preventDefault());
+      }));
+    }
+  };
+  __name(_ListPagePlugin, "ListPagePlugin");
+  var ListPagePlugin = _ListPagePlugin;
 
   // src/plugins/status/mobile-bottom-bar.js
   var _MobileBottomBarPlugin = class _MobileBottomBarPlugin extends BasePlugin {
@@ -16489,22 +16491,20 @@ ${failure.stack}` : "");
         item.length && item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batch.find(".jhs-commandbar__menu"));
       }));
       batch.find(".jhs-commandbar__menu").children().length && right.append(batch);
-      $(".jhs-list-btn-row").filter((function() {
-        return !$(this).children().length;
-      })).remove();
-      commandbar.find(".jhs-commandbar__more, .jhs-commandbar__batch").each((function() {
-        const container = $(this), toggle = container.find(".jhs-commandbar__menu-toggle"), menu = container.find(".jhs-commandbar__menu");
+      $(".jhs-list-btn-row").filter(((index, element) => !$(element).children().length)).remove();
+      commandbar.find(".jhs-commandbar__more, .jhs-commandbar__batch").each(((index, element) => {
+        const container = $(element), toggle = container.find(".jhs-commandbar__menu-toggle"), menu = container.find(".jhs-commandbar__menu");
         toggle.on("click", ((event) => {
           event.stopPropagation();
           const open = !menu.hasClass("is-open");
           commandbar.find(".jhs-commandbar__menu").removeClass("is-open"), commandbar.find(".jhs-commandbar__menu-toggle").attr("aria-expanded", "false"), menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && menu.children().first().trigger("focus");
         })), menu.on("keydown", "[role='menuitem']", ((event) => {
-          const items = menu.find("[role='menuitem']"), index = items.index(event.currentTarget);
+          const items = menu.find("[role='menuitem']"), index2 = items.index(event.currentTarget);
           if ("Escape" === event.key) return event.preventDefault(), menu.removeClass("is-open"), toggle.attr("aria-expanded", "false").trigger("focus");
           if ("Tab" === event.key) return menu.removeClass("is-open"), void toggle.attr("aria-expanded", "false");
           if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
           event.preventDefault();
-          const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+          const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index2 + 1) % items.length : (index2 - 1 + items.length) % items.length;
           items.eq(next).trigger("focus");
         })).on("click", "[role='menuitem']", (() => {
           menu.removeClass("is-open"), toggle.attr("aria-expanded", "false").trigger("focus");
@@ -16530,7 +16530,7 @@ ${failure.stack}` : "");
       const item = /* @__PURE__ */ __name((action, label, attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, "item"), group = /* @__PURE__ */ __name((content) => `<div class="jhs-fab-group">${content}</div>`, "group"), divider = '<div class="jhs-fab-divider" role="separator"></div>';
       let items;
       if (window.isListPage) {
-        const sortMethod = this.getRuntimeService("settings").snapshot().sortMethod || "default", sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getDependency("ListPagePlugin")?.activeQuickFilter), filterOptions = [...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""), sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
+        const requestedSortMethod = this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? requestedSortMethod : "default", sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getDependency("ListPagePlugin")?.activeQuickFilter), filterOptions = [...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""), sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
         items = group(item("check", "开始鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort", `排序: ${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') + item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"')) + divider + group(item("logger", "运行日志") + item("setting", "设置")) + `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div><div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>`;
       } else if (window.isDetailPage) {
         const statusDefs = [{ action: "filter", icon: m, label: "屏蔽", key: "filter" }, { action: "fav", icon: v, label: "收藏", key: "fav" }, { action: "down", icon: y, label: "已下载", key: "down" }, { action: "watch", icon: k, label: "已观看", key: "watch" }];
@@ -16545,21 +16545,16 @@ ${failure.stack}` : "");
         const car = await storageManager.getCar(carNum);
         const menu = $(".jhs-fab-menu");
         const colors = { filter: "var(--jhs-status-filter)", fav: "var(--jhs-status-fav)", down: "var(--jhs-status-down)", watch: "var(--jhs-status-watch)" };
-        const flags = normalizeStateFlags(car?.stateFlags), activeKeys = new Set([
-          flags.blocked && "filter",
-          flags.favorite && "fav",
-          flags.downloaded && "down",
-          flags.watched && "watch"
-        ].filter(Boolean));
-        menu.find(".jhs-fab-status-dot").each(function() {
-          const key = $(this).data("status-key");
-          const item = $(this).closest(".jhs-fab-menu-item");
+        const flags = normalizeStateFlags(car?.stateFlags), activeKeys = /* @__PURE__ */ new Set();
+        flags.blocked && activeKeys.add("filter"), flags.favorite && activeKeys.add("fav"), flags.downloaded && activeKeys.add("down"), flags.watched && activeKeys.add("watch");
+        menu.find(".jhs-fab-status-dot").each(((index, element) => {
+          const key = String($(element).data("status-key") || ""), item = $(element).closest(".jhs-fab-menu-item");
           if (activeKeys.has(key)) {
-            $(this).css({ background: colors[key] || "var(--jhs-border-strong)" }), item.attr("aria-pressed", "true");
+            $(element).css({ background: colors[key] || "var(--jhs-border-strong)" }), item.attr("aria-pressed", "true");
           } else {
-            $(this).css({ background: "var(--jhs-border-strong)" }), item.attr("aria-pressed", "false");
+            $(element).css({ background: "var(--jhs-border-strong)" }), item.attr("aria-pressed", "false");
           }
-        });
+        }));
       } catch (e2) {
         clog.warn("移动端详情状态刷新失败", e2);
       }
@@ -16588,8 +16583,8 @@ ${failure.stack}` : "");
           menu.addClass("jhs-fab-menu-open").attr("aria-hidden", "false");
           backdrop.addClass("jhs-fab-backdrop-visible");
           if (window.isListPage) {
-            const sortMethod = this.getRuntimeService("settings").snapshot().sortMethod || "default";
-            const sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
+            const requestedSortMethod = this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" };
+            const sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? requestedSortMethod : "default", sortLabel = sortLabels[sortMethod];
             menu.find('[data-action="sort"]').text(`排序: ${sortLabel}`);
             this.getDependency("ListPagePlugin")?.syncQuickFilterUi();
           }
@@ -16598,12 +16593,12 @@ ${failure.stack}` : "");
           const self = this;
           const items = menu.find(".jhs-fab-menu-item");
           items.first().trigger("focus");
-          items.each(function(i2) {
-            const el = $(this);
+          items.each(((i2, element) => {
+            const el = $(element);
             setTimeout(() => {
               if (gen === self._fabGeneration) el.addClass("jhs-fab-item-visible");
             }, 30 + i2 * 35);
-          });
+          }));
         }
       }, "toggleMenu");
       fab.on("click", toggleMenu);

@@ -53,6 +53,7 @@ const javDbHostAdapter = await read("src/platform/hosts/javdb-host-adapter.js");
 const unifiedOffline = await read("src/plugins/offline/unified-offline.js");
 const hitShow = await read("src/plugins/external-search/hit-show.js");
 const listPageButton = await read("src/plugins/status/list-page-button.js");
+const listFiltersSource = await read("src/features/list/list-filters.js");
 const fc2 = await read("src/plugins/external-search/fc2.js");
 const fc2By123Av = await read("src/plugins/external-search/fc2-by-123av.js");
 const uiPrimitives = await read("src/core/ui-primitives.js");
@@ -209,12 +210,12 @@ for (const retiredSetting of [ "showAllItem", "showFavoriteItem", "showHasDownIt
   assert(!listPageSource.includes(retiredSetting) && !settingFormsSource.includes(retiredSetting) && !settingTemplatesSource.includes(retiredSetting), `retired list visibility setting returned: ${retiredSetting}`);
 assertIncludes(listPageSource, "getIndexedItems(payload.carNums || [])", "precise list DOM index lookup");
 assertIncludes(listPageSource, "scheduleRecount()", "frame-coalesced status recount");
-assertIncludes(listPageSource, "normalizeQuickFilterKey", "quick filter compatibility boundary");
+assertIncludes(listFiltersSource, "normalizeQuickFilterKey", "quick filter compatibility boundary");
 assertIncludes(listPageSource, "collectCurrentPageSummary", "single current-page summary collector");
 assertIncludes(listPageSource, "hardHidden || R.push(t)", "hard-hidden cards must stay out of the default translation queue");
-assert((listPageSource.match(/"filter"/g) || []).length === 1, "legacy quick-filter key must only appear in normalizeQuickFilterKey");
+assert((listFiltersSource.match(/"filter"/g) || []).length === 1, "legacy quick-filter key must only appear in normalizeQuickFilterKey");
 for (const forbidden of [ 'data-jhs-filter="filter"', 'setQuickFilter("filter")', 'filter === "filter"', '"filter" === filter' ])
-  assert(!listPageSource.includes(forbidden) && !mobileSource.includes(forbidden) && !statsSource.includes(forbidden), `legacy quick-filter business key returned: ${forbidden}`);
+  assert(!listFiltersSource.includes(forbidden) && !listPageSource.includes(forbidden) && !mobileSource.includes(forbidden) && !statsSource.includes(forbidden), `legacy quick-filter business key returned: ${forbidden}`);
 assert(!statsSource.includes("#jhs-quick-filter"), "Stats must use ListPagePlugin.setQuickFilter instead of filter DOM");
 for (const filter of [ "all", "favorite", "hasDown", "hasWatch", "blockedItems", "waitCheck" ])
   assert(!statsSource.includes(`data-filter="${filter}"`), `full-library Stats metric must not navigate to current-page filter ${filter}`);

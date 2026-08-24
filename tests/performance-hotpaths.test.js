@@ -57,7 +57,12 @@ function loadListObserver() {
         normalizeStateFlags: flags => Object.fromEntries([ "favorite", "downloaded", "watched", "blocked" ].map((key => [ key, !0 === flags?.[key] ]))),
         hasAnyState: flags => [ "favorite", "downloaded", "watched", "blocked" ].some((key => !0 === flags?.[key]))
     });
-    vm.runInContext(`${readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8")};globalThis.TestListPagePlugin=ListPagePlugin;`, context);
+    const source = [
+        readTestFile(join(repoRoot, "src/features/list/list-filters.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8"),
+        "globalThis.TestListPagePlugin=ListPagePlugin;"
+    ].join("\n");
+    vm.runInContext(source, context);
     return { dom, plugin: new context.TestListPagePlugin(), $, translate, mapLimit, storageManager, clog: context.clog };
 }
 

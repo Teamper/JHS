@@ -1,7 +1,9 @@
+// @ts-check
+
 import { k, m, r, v, y } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { normalizeStateFlags } from "../../core/state-model.js";
-import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, normalizeQuickFilterKey } from "./list-page.js";
+import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, normalizeQuickFilterKey } from "../../features/list/list-filters.js";
 
 export class MobileBottomBarPlugin extends BasePlugin {
     constructor() {
@@ -240,15 +242,15 @@ export class MobileBottomBarPlugin extends BasePlugin {
             item.length && item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batch.find(".jhs-commandbar__menu"));
         }));
         batch.find(".jhs-commandbar__menu").children().length && right.append(batch);
-        $(".jhs-list-btn-row").filter((function() { return !$(this).children().length; })).remove();
-        commandbar.find(".jhs-commandbar__more, .jhs-commandbar__batch").each((function() {
-            const container = $(this), toggle = container.find(".jhs-commandbar__menu-toggle"), menu = container.find(".jhs-commandbar__menu");
-            toggle.on("click", (event => {
+        $(".jhs-list-btn-row").filter(((/** @type {number} */ index, /** @type {Element} */ element) => !$(element).children().length)).remove();
+        commandbar.find(".jhs-commandbar__more, .jhs-commandbar__batch").each(((/** @type {number} */ index, /** @type {Element} */ element) => {
+            const container = $(element), toggle = container.find(".jhs-commandbar__menu-toggle"), menu = container.find(".jhs-commandbar__menu");
+            toggle.on("click", ((/** @type {any} */ event) => {
                 event.stopPropagation();
                 const open = !menu.hasClass("is-open");
                 commandbar.find(".jhs-commandbar__menu").removeClass("is-open"), commandbar.find(".jhs-commandbar__menu-toggle").attr("aria-expanded", "false"),
                 menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && menu.children().first().trigger("focus");
-            })), menu.on("keydown", "[role='menuitem']", (event => {
+            })), menu.on("keydown", "[role='menuitem']", ((/** @type {any} */ event) => {
                 const items = menu.find("[role='menuitem']"), index = items.index(event.currentTarget);
                 if ("Escape" === event.key) return event.preventDefault(), menu.removeClass("is-open"), toggle.attr("aria-expanded", "false").trigger("focus");
                 if ("Tab" === event.key) return menu.removeClass("is-open"), void toggle.attr("aria-expanded", "false");
@@ -260,7 +262,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
                 menu.removeClass("is-open"), toggle.attr("aria-expanded", "false").trigger("focus");
             }));
         }));
-        $(document).off("click.jhsCommandbar").on("click.jhsCommandbar", (event => {
+        $(document).off("click.jhsCommandbar").on("click.jhsCommandbar", ((/** @type {any} */ event) => {
             $(event.target).closest(".jhs-commandbar__more, .jhs-commandbar__batch").length || (commandbar.find(".jhs-commandbar__menu").removeClass("is-open"), commandbar.find(".jhs-commandbar__menu-toggle").attr("aria-expanded", "false"));
         }));
         this.getDependency("ListPagePlugin")?.syncQuickFilterUi();
@@ -276,10 +278,10 @@ export class MobileBottomBarPlugin extends BasePlugin {
         return null;
     }
     createMenu() {
-        const item = (action, label, attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = content => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
+        const item = (/** @type {string} */ action, /** @type {string} */ label, /** @type {string} */ attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = (/** @type {string} */ content) => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
         let items;
         if (window.isListPage) {
-            const sortMethod = this.getRuntimeService("settings").snapshot().sortMethod || "default", sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getDependency("ListPagePlugin")?.activeQuickFilter),
+            const requestedSortMethod = this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? /** @type {keyof typeof sortLabels} */ (requestedSortMethod) : "default", sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getDependency("ListPagePlugin")?.activeQuickFilter),
                 filterOptions = [ ...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS ].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""),
                 sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
             items = group(item("check", "开始鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort", `排序: ${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') + item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"')) + divider + group(item("logger", "运行日志") + item("setting", "设置")) + `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div><div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>`;
@@ -297,20 +299,19 @@ export class MobileBottomBarPlugin extends BasePlugin {
             const car = await storageManager.getCar(carNum);
             const menu = $(".jhs-fab-menu");
             const colors = { filter: "var(--jhs-status-filter)", fav: "var(--jhs-status-fav)", down: "var(--jhs-status-down)", watch: "var(--jhs-status-watch)" };
-            const flags = normalizeStateFlags(car?.stateFlags), activeKeys = new Set([
-                flags.blocked && "filter", flags.favorite && "fav", flags.downloaded && "down", flags.watched && "watch"
-            ].filter(Boolean));
-            menu.find(".jhs-fab-status-dot").each(function () {
-                const key = $(this).data("status-key");
-                const item = $(this).closest(".jhs-fab-menu-item");
+            const flags = normalizeStateFlags(car?.stateFlags), activeKeys = new Set();
+            flags.blocked && activeKeys.add("filter"), flags.favorite && activeKeys.add("fav"), flags.downloaded && activeKeys.add("down"), flags.watched && activeKeys.add("watch");
+            menu.find(".jhs-fab-status-dot").each(((/** @type {number} */ index, /** @type {HTMLElement} */ element) => {
+                const key = String($(element).data("status-key") || ""), item = $(element).closest(".jhs-fab-menu-item");
                 if (activeKeys.has(key)) {
-                    $(this).css({ background: colors[key] || "var(--jhs-border-strong)" }), item.attr("aria-pressed", "true");
+                    $(element).css({ background: colors[/** @type {keyof typeof colors} */ (key)] || "var(--jhs-border-strong)" }), item.attr("aria-pressed", "true");
                 } else {
-                    $(this).css({ background: "var(--jhs-border-strong)" }), item.attr("aria-pressed", "false");
+                    $(element).css({ background: "var(--jhs-border-strong)" }), item.attr("aria-pressed", "false");
                 }
-            });
+            }));
         } catch (e) { clog.warn("移动端详情状态刷新失败", e); }
     }
+    /** @param {any} fab @param {any} backdrop */
     bindEvents(fab, backdrop) {
         const menu = $(".jhs-fab-menu"), filterMenu = menu.find(".jhs-mobile-filter-menu"), sortMenu = menu.find(".jhs-mobile-sort-menu"), filterTrigger = menu.find('[data-action="quickFilter"]'), sortTrigger = menu.find('[data-action="sort"]'), closeFilterMenu = (returnFocus = !1) => {
             menu.removeClass("jhs-fab-filter-open"), filterTrigger.attr("aria-expanded", "false"), returnFocus && filterTrigger.trigger("focus");
@@ -336,8 +337,8 @@ export class MobileBottomBarPlugin extends BasePlugin {
                 backdrop.addClass("jhs-fab-backdrop-visible");
                 // 刷新排序标签
                 if (window.isListPage) {
-                    const sortMethod = this.getRuntimeService("settings").snapshot().sortMethod || "default";
-                    const sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
+                    const requestedSortMethod = this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" };
+                    const sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? /** @type {keyof typeof sortLabels} */ (requestedSortMethod) : "default", sortLabel = sortLabels[sortMethod];
                     menu.find('[data-action="sort"]').text(`排序: ${sortLabel}`);
                     this.getDependency("ListPagePlugin")?.syncQuickFilterUi();
                 }
@@ -348,19 +349,19 @@ export class MobileBottomBarPlugin extends BasePlugin {
                 const self = this;
                 const items = menu.find(".jhs-fab-menu-item");
                 items.first().trigger("focus");
-                items.each(function (i) {
-                    const el = $(this);
+                items.each(((/** @type {number} */ i, /** @type {Element} */ element) => {
+                    const el = $(element);
                     setTimeout(() => {
                         if (gen === self._fabGeneration) el.addClass("jhs-fab-item-visible");
                     }, 30 + i * 35);
-                });
+                }));
             }
         };
         // FAB 点击切换
         fab.on("click", toggleMenu);
         // 遮罩点击关闭
         backdrop.on("click", (() => closeMenu(!0)));
-        menu.on("keydown", ".jhs-fab-menu-item", (event => {
+        menu.on("keydown", ".jhs-fab-menu-item", ((/** @type {any} */ event) => {
             const items = menu.find(".jhs-fab-menu-item"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), closeMenu(!0);
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
@@ -368,30 +369,30 @@ export class MobileBottomBarPlugin extends BasePlugin {
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
         }));
-        filterMenu.on("keydown", ".jhs-mobile-filter-option", (event => {
+        filterMenu.on("keydown", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
             const items = filterMenu.find(".jhs-mobile-filter-option"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), closeFilterMenu(!0);
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
-        })).on("click", ".jhs-mobile-filter-option", (event => {
+        })).on("click", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
             event.stopPropagation(), this.getDependency("ListPagePlugin").setQuickFilter($(event.currentTarget).data("jhs-filter")), closeMenu(!0);
         }));
-        sortMenu.on("keydown", ".jhs-mobile-sort-option", (event => {
+        sortMenu.on("keydown", ".jhs-mobile-sort-option", ((/** @type {any} */ event) => {
             const items = sortMenu.find(".jhs-mobile-sort-option"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), closeSortMenu(!0);
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
-        })).on("click", ".jhs-mobile-sort-option", (async event => {
+        })).on("click", ".jhs-mobile-sort-option", (async (/** @type {any} */ event) => {
             event.stopPropagation();
             const value = $(event.currentTarget).data("jhs-sort");
             await this.getRuntimeService("settings").set("sortMethod", value), sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true"), await this.getDependency("ListPageButtonPlugin")?.sortItems?.(), closeMenu(!0);
         }));
         // 菜单项点击
-        menu.on("click", ".jhs-fab-menu-item", (e) => {
+        menu.on("click", ".jhs-fab-menu-item", (/** @type {any} */ e) => {
             const action = $(e.currentTarget).data("action");
             if ("quickFilter" === action) {
                 e.stopPropagation(), menu.addClass("jhs-fab-filter-open"), filterTrigger.attr("aria-expanded", "true");
@@ -407,6 +408,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
             void this.handleAction(action).catch((error => clog.error(`移动端操作 ${action || "unknown"} 失败`, error)));
         });
     }
+    /** @param {unknown} action */
     async handleAction(action) {
         switch (action) {
             // 列表页操作

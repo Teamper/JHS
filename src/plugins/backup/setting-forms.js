@@ -1,11 +1,17 @@
+// @ts-check
+
 import { C, _, r } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { parseNumberSetting } from "../../core/feature-helpers.js";
 import { applyImageMode } from "./setting-styles.js";
 import { decryptCredential, encryptCredential } from "../../core/credential-crypto.js";
-import { normalizeQuickFilterKey } from "../status/list-page.js";
+import { normalizeQuickFilterKey } from "../../features/list/list-filters.js";
+
+/** @typedef {Record<string, any>} SettingDependencies */
+const settingsEventBus = /** @type {NonNullable<typeof jhsEventBus>} */ (jhsEventBus);
 
 /** Load all settings from storage into the main settings dialog form fields. */
+/** @param {SettingDependencies} dependencies */
 export async function loadSettingForm(dependencies) {
     let e = await storageManager.getSetting();
     $("#videoQuality").val(e.videoQuality), $("#reviewCount").val(e.reviewCount || 20),
@@ -39,77 +45,80 @@ export async function loadSettingForm(dependencies) {
     $("#missAvUrl").val(i), $("#jableUrl").val(s), $("#avgleUrl").val(o), $("#javTrailersUrl").val(r),
     $("#av123Url").val(l), $("#javDbUrl").val(c), $("#javBusUrl").val(d), $("#supJavUrl").val(h);
     let g = await storageManager.getReviewFilterKeywordList(), p = await storageManager.getTitleFilterKeyword();
-    g && g.forEach((e => {
+    g && g.forEach((/** @type {string} */ e) => {
         addLabelTag("#reviewKeywordContainer", e);
-    })), p && p.forEach((e => {
+    }), p && p.forEach((/** @type {string} */ e) => {
         addLabelTag("#filterKeywordContainer", e);
-    })), [ "#reviewKeywordContainer", "#filterKeywordContainer" ].forEach((e => {
-        $(`${e} .add-tag-btn`).on("click", (t => addKeyword(t, e))), $(`${e} .keyword-input`).on("keypress", (t => {
+    }), [ "#reviewKeywordContainer", "#filterKeywordContainer" ].forEach((/** @type {string} */ e) => {
+        $(`${e} .add-tag-btn`).on("click", ((/** @type {any} */ t) => addKeyword(t, e))), $(`${e} .keyword-input`).on("keypress", ((/** @type {any} */ t) => {
             "Enter" === t.key && addKeyword(t, e);
         }));
-    }));
+    });
     bindLayoutRangeEvents(dependencies.busImg, dependencies.host);
 }
 
 /** Bind the shared layout range controls without accumulating handlers. */
+/** @param {any} busImgPlugin @param {any} hostAdapter */
 function bindLayoutRangeEvents(busImgPlugin, hostAdapter) {
     $("#containerColumns").off(".jhsSetting").on("input.jhsSetting", (() => {
         const columns = $("#containerColumns").val();
         $("#showContainerColumns").text(columns);
         const listRoot = hostAdapter?.locateListRoot?.();
         listRoot && (listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
-    })).on("change.jhsSetting", (async event => {
+    })).on("change.jhsSetting", (async (/** @type {any} */ event) => {
         await storageManager.saveSettingItem("containerColumns", $(event.currentTarget).val()), await applyImageMode(busImgPlugin);
     }));
-    $("#containerWidth").off(".jhsSetting").on("input.jhsSetting", (event => {
+    $("#containerWidth").off(".jhsSetting").on("input.jhsSetting", ((/** @type {any} */ event) => {
         const width = parseInt($(event.target).val()) + 70, widthText = `${width}%`;
         $("#showContainerWidth").text(widthText);
         const layoutContainer = hostAdapter?.getListLayoutContainer?.();
         layoutContainer && (layoutContainer.style.minWidth = widthText);
-    })).on("change.jhsSetting", (event => storageManager.saveSettingItem("containerWidth", parseInt($(event.currentTarget).val()) + 70)));
+    })).on("change.jhsSetting", ((/** @type {any} */ event) => storageManager.saveSettingItem("containerWidth", parseInt($(event.currentTarget).val()) + 70)));
 }
 
 /** Initialize quick settings in either the desktop popover or mobile layer. */
+/** @param {SettingDependencies} dependencies @param {() => any} getSelector @param {(panel: string) => void} openSettingDialogFn */
 export async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn) {
     let e = await storageManager.getSetting();
     $("#needClosePage").prop("checked", !e.needClosePage || e.needClosePage === _),
     $("#autoPage").prop("checked", !e.autoPage || e.autoPage === _), $("#translateTitle").prop("checked", !e.translateTitle || e.translateTitle === _),
     $("#enableLoadActressInfo").prop("checked", !e.enableLoadActressInfo || e.enableLoadActressInfo === _),
     $("#enableLoadOtherSite").prop("checked", !e.enableLoadOtherSite || e.enableLoadOtherSite === _),
-    $("#needClosePage").on("change", (async t => {
+    $("#needClosePage").on("change", (async (/** @type {any} */ t) => {
         await storageManager.saveSettingItem("needClosePage", $("#needClosePage").is(":checked") ? _ : C),
-        await jhsEventBus.emit("filter-rules-changed");
-    })), $("#autoPage").on("change", (async t => {
+        await settingsEventBus.emit("filter-rules-changed");
+    })), $("#autoPage").on("change", (async (/** @type {any} */ t) => {
         const n = $("#autoPage").is(":checked") ? _ : C;
         await storageManager.saveSettingItem("autoPage", n), $("#sort-toggle-btn").prop("disabled", n === _).attr("title", n === _ ? "瀑布流模式仅支持默认排序" : "选择列表排序方式");
-    })), $("#translateTitle").on("change", (async t => {
+    })), $("#translateTitle").on("change", (async (/** @type {any} */ t) => {
         const n = $("#translateTitle").is(":checked") ? _ : C;
         await storageManager.saveSettingItem("translateTitle", n), n === _ ? (await dependencies.listPage.doFilter(),
         isDetailPage && await dependencies.translate?.translate()) : (await dependencies.listPage.revertTranslation(),
         $(".translated-title").remove());
     })), $("#hoverBigImg").prop("checked", !!e.hoverBigImg && e.hoverBigImg === _),
-    $("#hoverBigImg").on("change", (async t => {
+    $("#hoverBigImg").on("change", (async (/** @type {any} */ t) => {
         const n = $("#hoverBigImg").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("hoverBigImg", n), window.imageHoverPreviewObj && (window.imageHoverPreviewObj.destroy(),
-        window.imageHoverPreviewObj = null), n === _ && (window.imageHoverPreviewObj = new ImageHoverPreview({
+        const runtimeWindow = /** @type {any} */ (window);
+        await storageManager.saveSettingItem("hoverBigImg", n), runtimeWindow.imageHoverPreviewObj && (runtimeWindow.imageHoverPreviewObj.destroy(),
+        runtimeWindow.imageHoverPreviewObj = null), n === _ && (runtimeWindow.imageHoverPreviewObj = new ImageHoverPreview({
             selector: getSelector().coverImgSelector
         }));
-    })), $("#enableLoadActressInfo").on("change", (async t => {
+    })), $("#enableLoadActressInfo").on("change", (async (/** @type {any} */ t) => {
         const n = $("#enableLoadActressInfo").is(":checked") ? _ : C;
         await storageManager.saveSettingItem("enableLoadActressInfo", n), n === _ ? dependencies.actressInfo?.loadActressInfo() : $(".actress-info").remove();
-    })), $("#enableLoadOtherSite").on("change", (async t => {
+    })), $("#enableLoadOtherSite").on("change", (async (/** @type {any} */ t) => {
         const n = $("#enableLoadOtherSite").is(":checked") ? _ : C;
         await storageManager.saveSettingItem("enableLoadOtherSite", n), n === _ ? await dependencies.otherSite.loadOtherSite() : $("#otherSiteBox").remove();
     })), $("#enableLoadScreenShot").prop("checked", !e.enableLoadScreenShot || e.enableLoadScreenShot === _),
-    $("#enableLoadScreenShot").on("change", (async t => {
+    $("#enableLoadScreenShot").on("change", (async (/** @type {any} */ t) => {
         const n = $("#enableLoadScreenShot").is(":checked") ? _ : C;
         await storageManager.saveSettingItem("enableLoadScreenShot", n), n === _ ? await dependencies.screenshot.loadScreenShot() : $(".screen-container").remove();
     })), $("#enableLoadPreviewVideo").prop("checked", !e.enableLoadPreviewVideo || e.enableLoadPreviewVideo === _),
-    $("#enableLoadPreviewVideo").on("change", (async t => {
+    $("#enableLoadPreviewVideo").on("change", (async (/** @type {any} */ t) => {
         const n = $("#enableLoadPreviewVideo").is(":checked") ? _ : C;
         await storageManager.saveSettingItem("enableLoadPreviewVideo", n);
     })), $("#enableVerticalModel").prop("checked", !!e.enableVerticalModel && e.enableVerticalModel === _),
-    $("#enableVerticalModel").on("change", (async t => {
+    $("#enableVerticalModel").on("change", (async (/** @type {any} */ t) => {
         const n = $("#enableVerticalModel").is(":checked") ? _ : C;
         await storageManager.saveSettingItem("enableVerticalModel", n), applyImageMode(dependencies.busImg);
     })), $("#moreBtn").on("click", (() => {
@@ -118,6 +127,7 @@ export async function initQuickSettingForm(dependencies, getSelector, openSettin
 }
 
 /** Read all form values and save to storage. */
+/** @param {SettingDependencies} dependencies */
 export async function saveSettingForm(dependencies) {
     let e = await storageManager.getSetting();
     const nextWebDavUrl = String($("#webDavUrl").val() || "").trim();
@@ -163,21 +173,24 @@ export async function saveSettingForm(dependencies) {
     e.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C,
     e.containerColumns = Number($("#containerColumns").val()) || 5, e.containerWidth = Number($("#containerWidth").val()) + 70 || 100,
     await storageManager.saveSetting(e);
+    /** @type {string[]} */
     let t = [];
-    $("#reviewKeywordContainer .keyword-label").toArray().forEach((e => {
+    $("#reviewKeywordContainer .keyword-label").toArray().forEach((/** @type {Element} */ e) => {
         let n = $(e).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
         t.push(n);
-    })), await storageManager.saveReviewFilterKeyword(t);
+    }), await storageManager.saveReviewFilterKeyword(t);
+    /** @type {string[]} */
     let n = [];
-    $("#filterKeywordContainer .keyword-label").toArray().forEach((e => {
+    $("#filterKeywordContainer .keyword-label").toArray().forEach((/** @type {Element} */ e) => {
         let t = $(e).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
         n.push(t);
-    })), await storageManager.saveTitleFilterKeyword(n), show.ok("保存成功"), await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" });
+    }), await storageManager.saveTitleFilterKeyword(n), show.ok("保存成功"), await settingsEventBus.emit("filter-rules-changed", { scope: "title-keyword" });
     const a = dependencies.newVideo;
     a && a.resetBtnTip(), dependencies.blacklist.resetBtnTip(), dependencies.blacklist.reloadTable();
 }
 
 /** Create a removable keyword label tag in the filter panel. */
+/** @param {string} e @param {string} t */
 function addLabelTag(e, t) {
     const n = $(`${e} .tag-box`);
     let a;
@@ -192,7 +205,7 @@ function addLabelTag(e, t) {
                     <span class="keyword-remove">×</span>
                 </div>
             `),
-    a.find(".keyword-remove").click((e => {
+    a.find(".keyword-remove").click(((/** @type {any} */ e) => {
         e.stopPropagation(), e.preventDefault();
         const t = $(e.currentTarget);
         const n = t.closest(".keyword-label").attr("data-keyword").split(" ")[0];
@@ -203,6 +216,7 @@ function addLabelTag(e, t) {
 }
 
 /** Add a keyword from the input field to the tag box. */
+/** @param {any} e @param {string} t */
 function addKeyword(e, t) {
     let n = $(`${t} .keyword-input`);
     const a = n.val().trim();

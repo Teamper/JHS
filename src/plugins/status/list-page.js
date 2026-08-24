@@ -6,6 +6,7 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { isHitShowPage } from "../../core/site-context.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
+import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isHardHidden, matchesQuickFilter, normalizeQuickFilterKey, shouldShowItem } from "../../features/list/list-filters.js";
 
 const Te = {
     IS_FILTERED: {
@@ -73,44 +74,6 @@ const Te = {
         countKey: "currentPageWaitCheckCount"
     }
 };
-
-export const QUICK_FILTER_LABELS = Object.freeze({
-    all: "全部", waitCheck: "待鉴定", favorite: "收藏", hasDown: "下载", hasWatch: "已看",
-    blockedItems: "屏蔽项", favoriteUndownloaded: "收藏未下载", favoriteUnwatched: "收藏未观看",
-    downloadedUnwatched: "下载未观看", recent7d: "最近 7 天"
-}), PRIMARY_QUICK_FILTERS = Object.freeze([ "all", "waitCheck", "favorite", "hasDown", "hasWatch" ]),
-SECONDARY_QUICK_FILTERS = Object.freeze([ "blockedItems", "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d" ]),
-VALID_QUICK_FILTERS = new Set([ ...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS ]);
-
-/** 将旧筛选键收敛为当前唯一业务键。 */
-export function normalizeQuickFilterKey(value) {
-    if ("filter" === value) return "blockedItems";
-    return VALID_QUICK_FILTERS.has(value) ? value : "waitCheck";
-}
-
-/** 判断列表卡片是否因状态或规则被硬屏蔽。 */
-export function isHardHidden(flags, visibilityReasons = {}) {
-    return Boolean(flags.blocked || visibilityReasons.keyword || visibilityReasons.actorBlacklist || visibilityReasons.actressBlacklist);
-}
-
-function matchesQuickFilter(filter, flags, { visibilityReasons = {}, recent = !1 } = {}) {
-    const normalizedFilter = normalizeQuickFilterKey(filter), hardHidden = isHardHidden(flags, visibilityReasons);
-    if ("blockedItems" === normalizedFilter) return hardHidden;
-    if (hardHidden) return !1;
-    if ("all" === normalizedFilter) return !0;
-    if ("waitCheck" === normalizedFilter) return !hasAnyState(flags);
-    if ("favorite" === normalizedFilter) return !!flags.favorite;
-    if ("hasDown" === normalizedFilter) return !!flags.downloaded;
-    if ("hasWatch" === normalizedFilter) return !!flags.watched;
-    if ("favoriteUndownloaded" === normalizedFilter) return !!flags.favorite && !flags.downloaded;
-    if ("favoriteUnwatched" === normalizedFilter) return !!flags.favorite && !flags.watched;
-    if ("downloadedUnwatched" === normalizedFilter) return !!flags.downloaded && !flags.watched;
-    return "recent7d" === normalizedFilter && recent;
-}
-
-function shouldShowItem({ filter, flags, visibilityReasons, recent }) {
-    return matchesQuickFilter(filter, flags, { visibilityReasons, recent });
-}
 
 export class ListPagePlugin extends BasePlugin {
     async initCss() {

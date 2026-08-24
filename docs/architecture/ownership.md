@@ -14,6 +14,7 @@ Ownership 描述的是唯一职责归属，不是人员归属。新增行为必�
 | Hosted 详情布局 | HostedDetailSurface |
 | FC2/123AV 自有详情布局 | OwnedDetailSurface |
 | History 跨页选择 | HistorySelectionModel |
+| List 快速筛选键、硬屏蔽判定与匹配规则 | List Filters Feature |
 | 外部 URL 信任与 redirect 复验 | ExternalUrlPolicy |
 | 请求合并、缓存与取消 | HttpService / CacheService / LifecycleScope |
 | 设置 snapshot 与本 runtime 事件 | SettingsService |

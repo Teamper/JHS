@@ -1,21 +1,10 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
 import { describe, expect, it } from "vitest";
-
-function loadVisibility() {
-    const source = readTestFile(join(process.cwd(), "src/plugins/status/list-page.js"), "utf8"), start = source.indexOf("const QUICK_FILTER_LABELS"), end = source.indexOf("class ListPagePlugin", start), context = vm.createContext({ _: "yes", C: "no", hasAnyState: flags => Object.values(flags).some(Boolean) });
-    vm.runInContext(`${source.slice(start, end)};globalThis.api={normalizeQuickFilterKey,isHardHidden,matchesQuickFilter,shouldShowItem,PRIMARY_QUICK_FILTERS,SECONDARY_QUICK_FILTERS}`, context);
-    return context.api;
-}
+import * as api from "../src/features/list/list-filters.js";
 
 const flags = (...active) => Object.fromEntries(["favorite", "downloaded", "watched", "blocked"].map(key => [key, active.includes(key)]));
 const reasons = (...active) => Object.fromEntries(["keyword", "actorBlacklist", "actressBlacklist"].map(key => [key, active.includes(key)]));
 
 describe("multi-state list visibility", () => {
-    const api = loadVisibility();
-
     it("normalizes legacy and invalid quick-filter keys at the boundary", () => {
         expect(api.normalizeQuickFilterKey("filter")).toBe("blockedItems");
         expect(api.normalizeQuickFilterKey("recent7d")).toBe("recent7d");
