@@ -1,3 +1,5 @@
+// @ts-check
+
 import { L } from "../../core/constants.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
@@ -14,25 +16,25 @@ export class BusPreviewVideoPlugin extends BasePlugin {
         if (0 === $("#bus-preview-modal").length) {
             $("body").append('\n                <div id="bus-preview-modal" class="bus-preview-modal">\n                    <div class="bus-preview-modal-content">\n                        </div>\n                </div>\n            ');
             const e = $("#bus-preview-modal");
-            e.on("click", (e => {
-                "bus-preview-modal" === e.target.id && this.closeVideoModal();
-            })), $(document).on("keydown", (t => {
+            e.on("click", ((/** @type {MouseEvent} */ e) => {
+                e.target instanceof Element && "bus-preview-modal" === e.target.id && this.closeVideoModal();
+            })), $(document).on("keydown", ((/** @type {KeyboardEvent} */ t) => {
                 "Escape" === t.key && e.hasClass("is-open") && this.closeVideoModal();
             }));
         }
     }
     closeVideoModal() {
         const e = $("#preview-video");
-        e.length > 0 && e[0].pause(), $("#bus-preview-modal").removeClass("is-open");
+        e.length > 0 && /** @type {HTMLVideoElement} */ (e[0]).pause(), $("#bus-preview-modal").removeClass("is-open");
     }
     async handle() {
         if (!isDetailPage) return;
         this.initModal();
         const e = $("#sample-waterfall .sample-box .photo-frame img:first").attr("src"), t = $(`\n            <button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65">\n                <div class="photo-frame jhs-layout-87db2275">\n                    <img src="${e}" class="video-cover" alt="">\n                    <div class="play-icon jhs-play-overlay">\n                        ▶\n                    </div>\n                </div>\n            </button>`);
         $("#sample-waterfall").prepend(t);
-        "yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes") && fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage")).catch((e => clog.warn("预加载 DMM 失败", e)));
+        "yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes") && fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage")).catch((error => clog.warn("预加载 DMM 失败", error)));
         let n = !1, a = $(".preview-video-container");
-        a.on("click", (async e => {
+        a.on("click", (async (/** @type {MouseEvent} */ e) => {
             if (e.preventDefault(), e.stopPropagation(), n) show.info("正在加载中, 勿重复点击"); else {
                 n = !0;
                 try {
@@ -59,19 +61,19 @@ export class BusPreviewVideoPlugin extends BasePlugin {
             message: "REGION_BLOCKED" === previewError?.code ? previewError.message : "当前视频源无法播放"
         })) : show.error("视频播放器创建失败。")) : show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未找到可用的视频源。");
     }
-    async createVideoPlayerAndControls(e, t) {
+    async createVideoPlayerAndControls(/** @type {Record<string, string>} */ e, /** @type {any} */ t) {
         let n = await storageManager.getSetting("videoQuality");
         n = Z(Object.keys(e), n);
         let a = e[n];
         t.html(`\n            <div class="video-player-wrapper">\n                <video id="preview-video" class="jhs-video-player" controls playsinline>\n                    <source src="${a}" />\n                </video>\n            </div>\n            <div class="jhs-video-toolbar jhs-video-quality-list" role="group" aria-label="视频画质">\n                </div>\n        `);
         const i = $("#preview-video"), s = i.find("source"), o = t.find(".jhs-video-quality-list");
         if (!i.length || !s.length) return;
-        const settings = this.getRuntimeService("settings"), r = i[0], muted = settings.snapshot().videoMuted;
+        const settings = this.getRuntimeService("settings"), r = /** @type {HTMLVideoElement} */ (i[0]), muted = settings.snapshot().videoMuted;
         r.muted = muted == null || muted === !0, i.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {
-            void settings.set("videoMuted", r.muted).catch((error => clog.error("保存视频静音设置失败", error)));
+            void settings.set("videoMuted", r.muted).catch(((/** @type {unknown} */ error) => clog.error("保存视频静音设置失败", error)));
         }));
         let c = "";
-        L.forEach((t => {
+        L.forEach(((/** @type {{quality: string, text: string}} */ t) => {
             let a = e[t.quality];
             if (a) {
                 const e = n === t.quality;
@@ -79,7 +81,7 @@ export class BusPreviewVideoPlugin extends BasePlugin {
             }
         })), o.html(c);
         const d = o.find(".jhs-video-quality-btn");
-        o.off("click.jhsVideo").on("click.jhsVideo", ".jhs-video-quality-btn", (async e => {
+        o.off("click.jhsVideo").on("click.jhsVideo", ".jhs-video-quality-btn", (async (/** @type {MouseEvent} */ e) => {
             try {
                 const t = $(e.currentTarget);
                 if (t.hasClass("active")) return;

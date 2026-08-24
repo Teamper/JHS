@@ -68,6 +68,8 @@
 // @downloadURL https://github.com/Teamper/JHS/releases/latest/download/JHS.user.js
 // @updateURL https://raw.githubusercontent.com/Teamper/JHS/main/JHS.user.js
 // ==/UserScript==
+// @ts-check
+
 import { bootstrapJhs, mountBootstrapError } from "./app/bootstrap.js";
 
 void bootstrapJhs().catch(mountBootstrapError);

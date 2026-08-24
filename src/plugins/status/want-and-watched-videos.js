@@ -1,3 +1,5 @@
+// @ts-check
+
 import { i } from "../../core/constants.js";
 import { requestHostPage } from "../../core/host-page-request.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
@@ -12,26 +14,27 @@ export class WantAndWatchedVideosPlugin extends BasePlugin {
     }
     async handle() {
         window.location.href.includes("/want_watch_videos") && ($("h3").append('<button type="button" class="jhs-btn jhs-btn--primary jhs-layout-481ed7e7" id="wantWatchBtn">导入至 JHS</button>'),
-        $("#wantWatchBtn").on("click", (e => {
+        $("#wantWatchBtn").on("click", ((/** @type {MouseEvent} */ e) => {
             this.flag = "favorite", this.importWantWatchVideos(e, "是否将想看的影片导入到 JHS 收藏？");
         }))), window.location.href.includes("/watched_videos") && ($("h3").append('<button type="button" class="jhs-btn jhs-btn--primary jhs-layout-481ed7e7" id="wantWatchBtn">导入至 JHS</button>'),
-        $("#wantWatchBtn").on("click", (e => {
+        $("#wantWatchBtn").on("click", ((/** @type {MouseEvent} */ e) => {
             this.flag = "watched", this.importWantWatchVideos(e, "是否将看过的影片导入到 JHS 已观看？");
         })));
     }
-    importWantWatchVideos(e, t) {
+    importWantWatchVideos(/** @type {MouseEvent} */ e, /** @type {string} */ t) {
         utils.q(null, `${t} <br/> <span class="jhs-task-emphasis">执行此功能前请记得备份数据</span>`, (async () => {
             let e = loading();
             try {
                 const result = await this.parseMovieList();
                 show.ok(`导入完成：成功 ${result.imported}，失败 ${result.failed}，共 ${result.pages} 页`);
             } catch (t) {
-                clog.error(t), show.error(`导入失败：${t.message || t}`);
+                clog.error(t), show.error(`导入失败：${t instanceof Error ? t.message : String(t)}`);
             } finally {
                 e.close();
             }
         }));
     }
+    /** @param {any} [e] @param {{imported: number, failed: number, pages: number}} [result] @returns {Promise<{imported: number, failed: number, pages: number}>} */
     async parseMovieList(e = null, result = { imported: 0, failed: 0, pages: 0 }) {
         let t, n;
         e ? (t = e.find(this.getSelector().itemSelector), n = e.find(".pagination-next").attr("href")) : (t = $(this.getSelector().itemSelector),

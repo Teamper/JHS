@@ -1,8 +1,12 @@
+// @ts-check
+
 import { escapeHtml } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
 import { stateService } from "../../core/state-service.js";
 import { StatsRepository } from "../../features/stats/stats-repository.js";
+
+/** @typedef {Record<string, any>} StatsRecord */
 
 export class StatsPlugin extends BasePlugin {
     constructor() {
@@ -39,9 +43,9 @@ export class StatsPlugin extends BasePlugin {
         const diagnostics = this.getRuntimeService("diagnostics").exportSnapshot();
         const { cars, actresses, blacklist, activity } = await this.statsRepository.loadLibrarySnapshot(), total = cars.length;
         const counts = { manualBlocked: 0, favorite: 0, hasDown: 0, hasWatch: 0, pending: 0 };
-        cars.forEach((car => { const flags = normalizeStateFlags(car.stateFlags); flags.blocked && counts.manualBlocked++, flags.favorite && counts.favorite++, flags.downloaded && counts.hasDown++, flags.watched && counts.hasWatch++, hasAnyState(flags) || counts.pending++; }));
+        cars.forEach(((/** @type {StatsRecord} */ car) => { const flags = normalizeStateFlags(car.stateFlags); flags.blocked && counts.manualBlocked++, flags.favorite && counts.favorite++, flags.downloaded && counts.hasDown++, flags.watched && counts.hasWatch++, hasAnyState(flags) || counts.pending++; }));
         const actressCounts = new Map;
-        cars.forEach((car => {
+        cars.forEach(((/** @type {StatsRecord} */ car) => {
             const names = String(car.names || "").split(/[\s,，、]+/).filter(Boolean);
             if (car.starId) {
                 const key = `id:${car.starId}`, current = actressCounts.get(key) || { starId: car.starId, name: names[0] || car.starId, count: 0 };
@@ -63,11 +67,12 @@ export class StatsPlugin extends BasePlugin {
             , { label: "活跃功能", value: diagnostics.activeFeatures.length, action: null }
             , { label: "运行错误", value: diagnostics.errors.length, action: null }
         ];
+        /** @type {Array<[string, number, string]>} */
         const statusRows = [ [ "收藏", counts.favorite, "var(--jhs-status-fav)" ], [ "下载", counts.hasDown, "var(--jhs-status-down)" ], [ "已看", counts.hasWatch, "var(--jhs-status-watch)" ], [ "手动屏蔽", counts.manualBlocked, "var(--jhs-status-filter)" ], [ "未鉴定", pending, "var(--jhs-border-strong)" ] ];
-        const row = (label, value, max, color, href = "") => `<div class="jhs-stats__row">${href ? `<a class="jhs-stats__label" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(label)}">${escapeHtml(label)}</a>` : `<span class="jhs-stats__label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`}<span class="jhs-stats__track"><span class="jhs-stats__bar" data-width="${max ? Math.round(value / max * 100) : 0}" data-color="${color}"></span></span><span class="jhs-stats__value">${value}${max === total && total ? ` (${Math.round(value / total * 100)}%)` : ""}</span></div>`;
-        const trend = days => { const cutoff = Date.now() - days * 864e5, result = { identified: 0, downloaded: 0, watched: 0 }; activity.entries.filter((entry => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)).forEach((entry => entry.changes.filter((change => "reverted" !== change.undoState)).forEach((change => { const before = normalizeStateFlags(change.before?.stateFlags), after = normalizeStateFlags(change.after?.stateFlags); !hasAnyState(before) && hasAnyState(after) && result.identified++, !before.downloaded && after.downloaded && result.downloaded++, !before.watched && after.watched && result.watched++; })))); return result; }, trend7 = trend(7), trend30 = trend(30);
+        const row = (/** @type {string} */ label, /** @type {number} */ value, /** @type {number} */ max, /** @type {string} */ color, /** @type {string} */ href = "") => `<div class="jhs-stats__row">${href ? `<a class="jhs-stats__label" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(label)}">${escapeHtml(label)}</a>` : `<span class="jhs-stats__label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`}<span class="jhs-stats__track"><span class="jhs-stats__bar" data-width="${max ? Math.round(value / max * 100) : 0}" data-color="${color}"></span></span><span class="jhs-stats__value">${value}${max === total && total ? ` (${Math.round(value / total * 100)}%)` : ""}</span></div>`;
+        const trend = (/** @type {number} */ days) => { const cutoff = Date.now() - days * 864e5, result = { identified: 0, downloaded: 0, watched: 0 }; activity.entries.filter(((/** @type {StatsRecord} */ entry) => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)).forEach(((/** @type {StatsRecord} */ entry) => entry.changes.filter(((/** @type {StatsRecord} */ change) => "reverted" !== change.undoState)).forEach(((/** @type {StatsRecord} */ change) => { const before = normalizeStateFlags(change.before?.stateFlags), after = normalizeStateFlags(change.after?.stateFlags); !hasAnyState(before) && hasAnyState(after) && result.identified++, !before.downloaded && after.downloaded && result.downloaded++, !before.watched && after.watched && result.watched++; })))); return result; }, trend7 = trend(7), trend30 = trend(30);
         const coverageNote = activity.coverageStart ? `活动记录仅覆盖自 ${escapeHtml(activity.coverageStart)} 起` : "仅统计 6.4.0 及之后产生的操作记录";
-        const renderMetric = metric => metric.action
+        const renderMetric = (/** @type {StatsRecord} */ metric) => metric.action
             ? `<button type="button" class="jhs-btn jhs-stats__metric" data-action="${metric.action}"${metric.filter ? ` data-filter="${metric.filter}"` : ""}><strong>${metric.value}</strong><span>${metric.label}</span></button>`
             : `<div class="jhs-stats__metric"><strong>${metric.value}</strong><span>${metric.label}</span></div>`;
         const dialogHtml = `<div class="jhs-stats jhs-scrollbar jhs-ui">
@@ -78,9 +83,9 @@ export class StatsPlugin extends BasePlugin {
             ${topActresses.length ? `<section class="jhs-stats__group"><h3>Top 10 演员</h3><div class="jhs-stats__rows">${topActresses.map((item => row(item.name, item.count, topValue, "var(--jhs-accent)", new URL(item.starId ? `/actors/${encodeURIComponent(item.starId)}` : `/search?q=${encodeURIComponent(item.name)}`, javDbUrl).href))).join("")}</div></section>` : ""}
         </div>`;
         const dialog = this.getRuntimeService("dialog");
-        dialog.open({ type: 1, title: "统计", content: dialogHtml, scrollbar: !1, area: utils.getDialogArea("lg"), anim: -1, success: (layerElement, layerIndex) => {
-            $(layerElement).find(".jhs-stats__bar").each((function() { $(this).css({ "--jhs-value": `${$(this).data("width")}%`, "--jhs-bar": $(this).data("color") }); }));
-            $(layerElement).find("button.jhs-stats__metric[data-action]").on("click", (event => {
+        dialog.open({ type: 1, title: "统计", content: dialogHtml, scrollbar: !1, area: utils.getDialogArea("lg"), anim: -1, success: (/** @type {Element} */ layerElement, /** @type {number} */ layerIndex) => {
+            $(layerElement).find(".jhs-stats__bar").each(((/** @type {number} */ _index, /** @type {Element} */ element) => { $(element).css({ "--jhs-value": `${$(element).data("width")}%`, "--jhs-bar": $(element).data("color") }); }));
+            $(layerElement).find("button.jhs-stats__metric[data-action]").on("click", ((/** @type {MouseEvent} */ event) => {
                 const metric = $(event.currentTarget), action = metric.data("action");
                 dialog.close(layerIndex);
                 if ("new-video" === action) return this.getDependency("NewVideoPlugin").openDialog();

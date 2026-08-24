@@ -63,7 +63,8 @@ describe("list toolbar and UI cleanup contracts", () => {
     const listButtons = readTestFile(join(process.cwd(), "src/plugins/status/list-page-button.js"), "utf8");
     const coverButtons = readTestFile(join(process.cwd(), "src/plugins/image-viewer/cover-button.js"), "utf8");
     const previewVideo = readTestFile(join(process.cwd(), "src/plugins/image-viewer/preview-video.js"), "utf8");
-    const injection = readTestFile(join(process.cwd(), "src/core/css-injection.js"), "utf8");
+    const injection = readFileSync(join(process.cwd(), "src/core/css-injection.js"), "utf8");
+    const bootstrap = readFileSync(join(process.cwd(), "src/app/bootstrap.js"), "utf8");
     const detailButtons = readTestFile(join(process.cwd(), "src/plugins/status/detail-page-button.js"), "utf8");
     const top250 = readTestFile(join(process.cwd(), "src/plugins/external-search/top250.js"), "utf8");
 
@@ -292,6 +293,13 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(testSource).toContain('trustClass: "custom-public"');
         expect(testSource).toContain('trustClass: "builtin-public"');
         expect(testSource).not.toContain("gmHttp");
+    });
+
+    it("defers core CSS side effects to Bootstrap and injects them once", () => {
+        expect(injection).toContain("export function injectCoreCss()");
+        expect(injection).toMatch(/export function injectCoreCss\(\) \{[\s\S]*H\(buildThemeCss\(\)\)[\s\S]*H\(buildUiPrimitivesCss\(\)\)/);
+        expect(bootstrap).toContain('import { injectCoreCss } from "../core/css-injection.js"');
+        expect(bootstrap).toContain("injectCoreCss();");
     });
 
     it("resets host cover animation without touching hover preview lifecycle", () => {

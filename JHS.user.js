@@ -238,6 +238,1640 @@
   window.location.href.includes("hideNav=1") && (M = "\n         .navbar-default {\n            display: none !important;\n        }\n        body {\n            padding-top:0px!important;\n        }\n    ");
   var j = "";
   window.location.href.includes("hideNav=1") && (j = "\n        .main-nav,#search-bar-container {\n            display: none !important;\n        }\n        \n        html {\n            padding-top:0px!important;\n        }\n    ");
+  function H(e2) {
+    if (e2) if (e2.includes("<style>")) document.head.insertAdjacentHTML("beforeend", e2);
+    else {
+      const t2 = document.createElement("style");
+      t2.textContent = e2, document.head.appendChild(t2);
+    }
+  }
+  __name(H, "H");
+
+  // src/core/theme.js
+  var JHS_Z_INDEX = Object.freeze({
+    content: 10,
+    elevated: 20,
+    localPopover: 30,
+    popover: 100,
+    dropdown: 1e3,
+    fabBackdrop: 1e4,
+    fabMenu: 10001,
+    fab: 10002,
+    debugLow: 12345678,
+    hostNav: 12345679,
+    hostTopbar: 12345689,
+    modal: 12345699,
+    sheetBackdrop: 12345789,
+    sheet: 12345790,
+    loading: 99999999,
+    viewer: 999999990,
+    layer: 999999991,
+    debug: 999999999,
+    tooltip: 9999999999
+  });
+  function buildThemeCss() {
+    return `
+<style>
+    :root {
+        /* 字体 */
+        --jhs-font: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+
+        /* 中性色 */
+        --jhs-bg: #f4f6f9;
+        --jhs-surface: #ffffff;
+        --jhs-surface-2: #f2f4f8;
+        --jhs-border: #e3e7ee;
+        --jhs-border-strong: #8a94a6;
+        --jhs-text: #1f2733;
+        --jhs-text-muted: #5b6b7c;
+        --jhs-text-faint: #637183;
+        --jhs-input-bg: #f2f4f8;
+        --jhs-placeholder: #637183;
+        --jhs-disabled-bg: #f2f4f8;
+        --jhs-disabled-text: #637183;
+
+        /* 间距 / 排版 / 控件尺寸 */
+        --jhs-space-1: 4px;
+        --jhs-space-2: 8px;
+        --jhs-space-3: 12px;
+        --jhs-space-4: 16px;
+        --jhs-space-5: 24px;
+        --jhs-space-6: 32px;
+        --jhs-font-size-xs: 12px;
+        --jhs-font-size-sm: 13px;
+        --jhs-font-size-md: 14px;
+        --jhs-font-size-lg: 16px;
+        --jhs-font-size-xl: 18px;
+        --jhs-control-height-sm: 32px;
+        --jhs-control-height: 36px;
+        --jhs-touch-target: 44px;
+        --jhs-motion-fast: 120ms;
+        --jhs-motion-base: 180ms;
+        --jhs-ease: cubic-bezier(.2, 0, 0, 1);
+
+        /* 层级：业务模块只消费语义令牌，不自行发明数值 */
+        --jhs-z-content: ${JHS_Z_INDEX.content};
+        --jhs-z-elevated: ${JHS_Z_INDEX.elevated};
+        --jhs-z-local-popover: ${JHS_Z_INDEX.localPopover};
+        --jhs-z-popover: ${JHS_Z_INDEX.popover};
+        --jhs-z-dropdown: ${JHS_Z_INDEX.dropdown};
+        --jhs-z-fab-backdrop: ${JHS_Z_INDEX.fabBackdrop};
+        --jhs-z-fab-menu: ${JHS_Z_INDEX.fabMenu};
+        --jhs-z-fab: ${JHS_Z_INDEX.fab};
+        --jhs-z-debug-low: ${JHS_Z_INDEX.debugLow};
+        --jhs-z-host-nav: ${JHS_Z_INDEX.hostNav};
+        --jhs-z-host-topbar: ${JHS_Z_INDEX.hostTopbar};
+        --jhs-z-modal: ${JHS_Z_INDEX.modal};
+        --jhs-z-sheet-backdrop: ${JHS_Z_INDEX.sheetBackdrop};
+        --jhs-z-sheet: ${JHS_Z_INDEX.sheet};
+        --jhs-z-loading: ${JHS_Z_INDEX.loading};
+        --jhs-z-viewer: ${JHS_Z_INDEX.viewer};
+        --jhs-z-layer: ${JHS_Z_INDEX.layer};
+        --jhs-z-debug: ${JHS_Z_INDEX.debug};
+        --jhs-z-tooltip: ${JHS_Z_INDEX.tooltip};
+
+        /* 主操作色 (中性蓝灰; 状态色仅表达数据语义) */
+        --jhs-accent: #3b6ea5;
+        --jhs-accent-hover: #2f5b8a;
+        --jhs-accent-tint: #e7eef6;
+        --jhs-accent-text-on: #ffffff;
+
+        /* 通用反馈语义（不得代替影片状态色） */
+        --jhs-danger: #c02b2b;
+        --jhs-danger-tint: #fde8e8;
+        --jhs-danger-text-on: #ffffff;
+        --jhs-warning: #826207;
+        --jhs-warning-tint: #faf3df;
+        --jhs-warning-text-on: #ffffff;
+
+        /* 状态语义色 (品牌, 保持可辨识): red=屏蔽 cyan=收藏 green=下载 amber=观看
+         * -on   实色背景上的文字 (filter 用白字, 其余深字)
+         * -text tint 背景上的文字 / 彩色文字落 surface 的正文色 */
+        --jhs-status-filter: #de3333;
+        --jhs-status-filter-tint: #fde8e8;
+        --jhs-status-filter-hover: #c02b2b;
+        --jhs-status-filter-text: #c02b2b;
+        --jhs-status-filter-on: #ffffff;
+        --jhs-status-fav: #25b1dc;
+        --jhs-status-fav-tint: #e5f6fc;
+        --jhs-status-fav-hover: #1e93b8;
+        --jhs-status-fav-text: #15728b;
+        --jhs-status-fav-on: #14181d;
+        --jhs-status-down: #7bc73b;
+        --jhs-status-down-tint: #eff8e6;
+        --jhs-status-down-hover: #66ac2d;
+        --jhs-status-down-text: #387213;
+        --jhs-status-down-on: #14181d;
+        --jhs-status-watch: #d7a80c;
+        --jhs-status-watch-tint: #faf3df;
+        --jhs-status-watch-hover: #b58b09;
+        --jhs-status-watch-text: #826207;
+        --jhs-status-watch-on: #14181d;
+
+        /* 品牌色 (第三方站点来源标识, 保持可辨识) */
+        --jhs-brand-javdb: #c23a85;
+        --jhs-brand-javbus: #967004;
+
+        /* 代码查看器 (终端语义, 亮暗一致, 不随主题) */
+        --jhs-code-bg: #1e1e1e;
+        --jhs-code-text: #ffffff;
+        --jhs-code-line: #aaaaaa;
+
+        /* 圆角: 唯一一套 */
+        --jhs-radius-xs: 6px;
+        --jhs-radius-sm: 8px;
+        --jhs-radius-md: 12px;
+        --jhs-radius-lg: 14px;
+        --jhs-radius-pill: 999px;
+
+        /* 阴影: 与背景同色相 */
+        --jhs-shadow-xs: 0 1px 2px rgba(31, 39, 51, .06);
+        --jhs-shadow-sm: 0 1px 3px rgba(31, 39, 51, .08), 0 1px 2px rgba(31, 39, 51, .04);
+        --jhs-shadow-md: 0 4px 14px rgba(31, 39, 51, .10);
+        --jhs-shadow-lg: 0 12px 32px rgba(31, 39, 51, .16);
+
+        /* 图标 */
+        --jhs-icon-color: #5b6b7c;
+    }
+
+    :root[data-jhs-theme="dark"] {
+        --jhs-bg: #14181d;
+        --jhs-surface: #1d232b;
+        --jhs-surface-2: #262d37;
+        --jhs-border: #333c47;
+        --jhs-border-strong: #64728a;
+        --jhs-text: #e6ebf1;
+        --jhs-text-muted: #9aa7b6;
+        --jhs-text-faint: #9cacbd;
+        --jhs-input-bg: #262d37;
+        --jhs-placeholder: #9cacbd;
+        --jhs-disabled-bg: #262d37;
+        --jhs-disabled-text: #9cacbd;
+
+        --jhs-accent: #7ca6d4;
+        --jhs-accent-hover: #8db3de;
+        --jhs-accent-tint: #25354a;
+        --jhs-accent-text-on: #14181d;
+
+        --jhs-danger: #e87171;
+        --jhs-danger-tint: #3a2323;
+        --jhs-danger-text-on: #14181d;
+        --jhs-warning: #e0b32e;
+        --jhs-warning-tint: #362f18;
+        --jhs-warning-text-on: #14181d;
+
+        --jhs-status-filter: #e05a5a;
+        --jhs-status-filter-tint: #3a2323;
+        --jhs-status-filter-hover: #f07171;
+        --jhs-status-filter-text: #e87171;
+        --jhs-status-filter-on: #14181d;
+        --jhs-status-fav: #4dbbe0;
+        --jhs-status-fav-tint: #1f3340;
+        --jhs-status-fav-hover: #6fcbe8;
+        --jhs-status-fav-text: #4dbbe0;
+        --jhs-status-fav-on: #14181d;
+        --jhs-status-down: #93d357;
+        --jhs-status-down-tint: #25341a;
+        --jhs-status-down-hover: #a8de73;
+        --jhs-status-down-text: #93d357;
+        --jhs-status-down-on: #14181d;
+        --jhs-status-watch: #e0b32e;
+        --jhs-status-watch-tint: #362f18;
+        --jhs-status-watch-hover: #ecc347;
+        --jhs-status-watch-text: #e0b32e;
+        --jhs-status-watch-on: #14181d;
+
+        /* 品牌色 */
+        --jhs-brand-javdb: #e37ab6;
+        --jhs-brand-javbus: #f0c040;
+
+        /* 代码查看器 (终端语义, 亮暗一致, 不随主题) */
+        --jhs-code-bg: #1e1e1e;
+        --jhs-code-text: #ffffff;
+        --jhs-code-line: #aaaaaa;
+
+        --jhs-shadow-xs: 0 1px 2px rgba(0, 0, 0, .40);
+        --jhs-shadow-sm: 0 1px 3px rgba(0, 0, 0, .50);
+        --jhs-shadow-md: 0 4px 14px rgba(0, 0, 0, .55);
+        --jhs-shadow-lg: 0 12px 36px rgba(0, 0, 0, .60);
+
+        --jhs-icon-color: #9aa7b6;
+    }
+
+    /* JHS 表面输入框基座 + placeholder + 禁用态 (亮暗一致, 作用域限定 JHS 表面) */
+    .jhs-ui input[type="text"],
+    .jhs-ui input[type="number"],
+    .jhs-ui textarea,
+    .jhs-ui select,
+    .layui-layer-content input[type="text"],
+    .layui-layer-content input[type="number"],
+    .layui-layer-content textarea,
+    .layui-layer-content select {
+        background-color: var(--jhs-input-bg);
+        color: var(--jhs-text);
+        border: 1px solid var(--jhs-border);
+    }
+    .jhs-ui ::placeholder,
+    .layui-layer-content ::placeholder {
+        color: var(--jhs-placeholder);
+        opacity: 1;
+    }
+    .jhs-ui button:disabled,
+    .jhs-ui input:disabled,
+    .jhs-ui select:disabled,
+    .layui-layer-content button:disabled,
+    .layui-layer-content input:disabled,
+    .layui-layer-content select:disabled {
+        background-color: var(--jhs-disabled-bg);
+        color: var(--jhs-disabled-text);
+        border-color: var(--jhs-border);
+        cursor: not-allowed;
+        opacity: 1;
+    }
+
+    /* JHS 表面基础字体 */
+    .jhs-ui, .layui-layer-content, .tabulator, .toastify, .jhs-fab, .menu-box {
+        font-family: var(--jhs-font);
+    }
+
+    /* 焦点环 */
+    :where(.jhs-ui) :focus-visible,
+    :where(.layui-layer-content) :focus-visible,
+    :where(.tabulator) :focus-visible {
+        outline: 2px solid var(--jhs-accent);
+        outline-offset: 2px;
+    }
+
+    /* 滚动条 (JHS 表面) */
+    .jhs-scrollbar::-webkit-scrollbar,
+    .content-panel::-webkit-scrollbar,
+    .tabulator-tableholder::-webkit-scrollbar,
+    .has-navbar-fixed-top::-webkit-scrollbar,
+    .layui-layer-content::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    .jhs-scrollbar::-webkit-scrollbar-track,
+    .content-panel::-webkit-scrollbar-track,
+    .tabulator-tableholder::-webkit-scrollbar-track,
+    .has-navbar-fixed-top::-webkit-scrollbar-track,
+    .layui-layer-content::-webkit-scrollbar-track {
+        background: var(--jhs-surface-2);
+        border-radius: 10px;
+    }
+    .jhs-scrollbar::-webkit-scrollbar-thumb,
+    .content-panel::-webkit-scrollbar-thumb,
+    .tabulator-tableholder::-webkit-scrollbar-thumb,
+    .has-navbar-fixed-top::-webkit-scrollbar-thumb,
+    .layui-layer-content::-webkit-scrollbar-thumb {
+        background: var(--jhs-border-strong);
+        border-radius: 10px;
+    }
+    .jhs-scrollbar::-webkit-scrollbar-thumb:hover,
+    .content-panel::-webkit-scrollbar-thumb:hover,
+    .tabulator-tableholder::-webkit-scrollbar-thumb:hover,
+    .has-navbar-fixed-top::-webkit-scrollbar-thumb:hover,
+    .layui-layer-content::-webkit-scrollbar-thumb:hover {
+        background: var(--jhs-text-faint);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .jhs-ui, .layui-layer-content, .tabulator, .toastify, .jhs-fab, .menu-box,
+        .jhs-ui *, .layui-layer-content *, .tabulator *, .toastify *, .jhs-fab *, .menu-box * {
+            transition: none !important;
+            animation: none !important;
+        }
+    }
+
+    /* 暗色下覆盖 layui-layer 弹层 chrome (外部 layui.css 为亮色主题) */
+    :root[data-jhs-theme="dark"] .layui-layer {
+        background-color: var(--jhs-surface);
+        color: var(--jhs-text);
+        box-shadow: var(--jhs-shadow-lg);
+    }
+    :root[data-jhs-theme="dark"] .layui-layer-title {
+        background-color: var(--jhs-surface-2);
+        color: var(--jhs-text);
+        border-bottom: 1px solid var(--jhs-border);
+    }
+    :root[data-jhs-theme="dark"] .layui-layer-content {
+        color: var(--jhs-text);
+    }
+    :root[data-jhs-theme="dark"] .layui-layer-btn a {
+        background-color: var(--jhs-surface-2);
+        border: 1px solid var(--jhs-border);
+        color: var(--jhs-text);
+    }
+    :root[data-jhs-theme="dark"] .layui-layer-btn .layui-layer-btn0 {
+        background-color: var(--jhs-accent);
+        border-color: transparent;
+        color: var(--jhs-accent-text-on);
+    }
+    .layui-layer-setwin .layui-layer-close {
+        width: 36px!important;
+        height: 36px!important;
+        background: none!important;
+        color: var(--jhs-text-muted)!important;
+        font-size: 0!important;
+        opacity: 1!important;
+    }
+    .layui-layer-setwin .layui-layer-close::before,
+    .layui-layer-setwin .layui-layer-close::after {
+        content: "";
+        position: absolute;
+        top: 17px;
+        left: 9px;
+        width: 18px;
+        height: 2px;
+        border-radius: 1px;
+        background: currentColor;
+    }
+    .layui-layer-setwin .layui-layer-close::before { transform: rotate(45deg); }
+    .layui-layer-setwin .layui-layer-close::after { transform: rotate(-45deg); }
+    .layui-layer-setwin .layui-layer-close:hover,
+    .layui-layer-setwin .layui-layer-close:focus-visible { color: var(--jhs-text)!important; }
+    :root[data-jhs-theme="dark"] .layui-input,
+    :root[data-jhs-theme="dark"] .layui-layer-content input[type="text"],
+    :root[data-jhs-theme="dark"] .layui-layer-content input[type="number"],
+    :root[data-jhs-theme="dark"] .layui-layer-content textarea,
+    :root[data-jhs-theme="dark"] .layui-layer-content select {
+        background-color: var(--jhs-input-bg);
+        color: var(--jhs-text);
+        border: 1px solid var(--jhs-border);
+    }
+
+    /* 暗色下覆盖 Tabulator 表格 chrome (semanticui 主题为亮色) */
+    :root[data-jhs-theme="dark"] .tabulator {
+        background-color: var(--jhs-surface);
+        color: var(--jhs-text);
+        border: 1px solid var(--jhs-border);
+    }
+    :root[data-jhs-theme="dark"] .tabulator .tabulator-header {
+        background-color: var(--jhs-surface-2);
+        color: var(--jhs-text);
+        border-bottom: 1px solid var(--jhs-border);
+    }
+    :root[data-jhs-theme="dark"] .tabulator .tabulator-header .tabulator-col {
+        background-color: var(--jhs-surface-2);
+        color: var(--jhs-text);
+        border-right: 1px solid var(--jhs-border);
+    }
+    :root[data-jhs-theme="dark"] .tabulator .tabulator-row {
+        background-color: var(--jhs-surface);
+        color: var(--jhs-text);
+        border-bottom: 1px solid var(--jhs-border);
+    }
+    :root[data-jhs-theme="dark"] .tabulator .tabulator-row.tabulator-row-even {
+        background-color: var(--jhs-surface-2);
+    }
+    :root[data-jhs-theme="dark"] .tabulator .tabulator-cell {
+        color: var(--jhs-text);
+        border-right: 1px solid var(--jhs-border);
+    }
+    :root[data-jhs-theme="dark"] .tabulator .tabulator-footer {
+        background-color: var(--jhs-surface-2);
+        color: var(--jhs-text);
+        border-top: 1px solid var(--jhs-border);
+    }
+    :root[data-jhs-theme="dark"] .tabulator .tabulator-responsive-collapse {
+        background-color: var(--jhs-surface-2);
+        color: var(--jhs-text);
+        border-top: 1px solid var(--jhs-border);
+    }
+
+    /* 暗色下图标翻转为单色, 避免深色 path 在暗表面上不可见 */
+    :root[data-jhs-theme="dark"] .jhs-icon path {
+        fill: var(--jhs-icon-color);
+    }
+</style>
+`;
+  }
+  __name(buildThemeCss, "buildThemeCss");
+  async function applyTheme() {
+    const mode = await storageManager.getSetting("themeMode", "light");
+    let resolved = "light";
+    if ("dark" === mode) resolved = "dark";
+    else if ("auto" === mode) resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.setAttribute("data-jhs-theme", resolved);
+  }
+  __name(applyTheme, "applyTheme");
+  function initializeThemeRuntime(scope) {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    scope.listen(media, "change", () => {
+      storageManager.getSetting("themeMode", "light").then(((mode) => {
+        if ("auto" === mode) void applyTheme();
+      }));
+    });
+  }
+  __name(initializeThemeRuntime, "initializeThemeRuntime");
+
+  // src/core/ui-primitives.js
+  function buildUiPrimitivesCss() {
+    return `
+<style id="jhs-ui-primitives">
+    :where(.jhs-ui, .layui-layer-content, .menu-box, .jhs-fab-menu) {
+        color: var(--jhs-text);
+        font-family: var(--jhs-font);
+        font-size: var(--jhs-font-size-md);
+        line-height: 1.5;
+    }
+
+    :is(.jhs-btn, .jhs-filter-btn, .site-btn, .magnet-hub-btn, .pagination-btn) {
+        box-sizing: border-box;
+        display: inline-flex;
+        min-height: var(--jhs-control-height);
+        align-items: center;
+        justify-content: center;
+        gap: var(--jhs-space-2);
+        padding: 0 var(--jhs-space-3);
+        margin: 0;
+        border: 1px solid var(--jhs-border);
+        border-radius: var(--jhs-radius-sm);
+        background: var(--jhs-surface);
+        color: var(--jhs-text);
+        box-shadow: none;
+        font: inherit;
+        font-size: var(--jhs-font-size-sm);
+        font-weight: 600;
+        line-height: 1;
+        text-align: center;
+        text-decoration: none;
+        text-shadow: none;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background-color var(--jhs-motion-fast) var(--jhs-ease),
+                    border-color var(--jhs-motion-fast) var(--jhs-ease),
+                    color var(--jhs-motion-fast) var(--jhs-ease),
+                    transform var(--jhs-motion-fast) var(--jhs-ease);
+    }
+
+    :is(.jhs-btn, .jhs-filter-btn, .site-btn, .magnet-hub-btn, .pagination-btn):hover {
+        border-color: var(--jhs-accent);
+        background: var(--jhs-surface-2);
+        color: var(--jhs-accent);
+        box-shadow: none;
+        filter: none;
+        transform: none;
+    }
+
+    :is(.jhs-btn, .jhs-filter-btn, .site-btn, .magnet-hub-btn, .pagination-btn):active {
+        transform: translateY(1px);
+    }
+
+    :is(.jhs-btn, .jhs-filter-btn, .site-btn, .magnet-hub-btn, .pagination-btn):disabled,
+    :is(.jhs-btn, .jhs-filter-btn, .site-btn, .magnet-hub-btn, .pagination-btn)[aria-disabled="true"] {
+        border-color: var(--jhs-border);
+        background: var(--jhs-disabled-bg);
+        color: var(--jhs-disabled-text);
+        cursor: not-allowed;
+        opacity: 1;
+        transform: none;
+    }
+
+    :is(.jhs-btn--primary, .jhs-btn--accent) {
+        border-color: var(--jhs-accent);
+        background: var(--jhs-accent);
+        color: var(--jhs-accent-text-on);
+    }
+    :is(.jhs-btn--primary, .jhs-btn--accent):hover {
+        border-color: var(--jhs-accent-hover);
+        background: var(--jhs-accent-hover);
+        color: var(--jhs-accent-text-on);
+    }
+
+    :is(.jhs-btn--secondary, .jhs-btn--muted, .site-btn) {
+        border-color: var(--jhs-border);
+        background: var(--jhs-surface);
+        color: var(--jhs-text);
+    }
+    .jhs-btn--danger {
+        border-color: var(--jhs-danger);
+        background: var(--jhs-danger);
+        color: var(--jhs-danger-text-on);
+    }
+    .jhs-btn--danger:hover {
+        border-color: var(--jhs-danger);
+        background: var(--jhs-danger);
+        color: var(--jhs-danger-text-on);
+        filter: brightness(.92);
+    }
+    .jhs-btn--ghost {
+        border-color: transparent;
+        background: transparent;
+        color: var(--jhs-text-muted);
+    }
+    .jhs-btn--ghost:hover {
+        border-color: transparent;
+        background: var(--jhs-surface-2);
+        color: var(--jhs-text);
+    }
+
+    .jhs-video-player {
+        display: block;
+        width: 100%;
+        height: 100%;
+        background: #000;
+    }
+    .jhs-video-toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--jhs-space-2);
+        padding-block: var(--jhs-space-2);
+    }
+    .jhs-video-toolbar > .jhs-toolbar {
+        margin-left: auto;
+    }
+    .jhs-video-quality-list {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--jhs-space-2);
+    }
+    .jhs-video-quality-btn {
+        min-width: 80px;
+    }
+    .jhs-video-quality-btn.active,
+    .jhs-video-quality-btn[aria-pressed="true"] {
+        border-color: var(--jhs-accent);
+        background: var(--jhs-accent);
+        color: var(--jhs-accent-text-on);
+    }
+    .jhs-btn--soft {
+        border-color: transparent;
+        background: var(--jhs-accent-tint);
+        color: var(--jhs-accent);
+    }
+    .jhs-btn--filter {
+        border-color: transparent;
+        background: var(--jhs-status-filter-tint);
+        color: var(--jhs-status-filter-text);
+    }
+    .jhs-btn--fav {
+        border-color: transparent;
+        background: var(--jhs-status-fav-tint);
+        color: var(--jhs-status-fav-text);
+    }
+    .jhs-btn--down {
+        border-color: transparent;
+        background: var(--jhs-status-down-tint);
+        color: var(--jhs-status-down-text);
+    }
+    .jhs-btn--watch {
+        border-color: transparent;
+        background: var(--jhs-status-watch-tint);
+        color: var(--jhs-status-watch-text);
+    }
+    :is(.jhs-btn--filter, .jhs-btn--fav, .jhs-btn--down, .jhs-btn--watch):hover {
+        border-color: var(--jhs-border-strong);
+        background: var(--jhs-surface-2);
+        color: var(--jhs-text);
+    }
+    .jhs-btn--sm {
+        min-height: var(--jhs-control-height-sm);
+        padding-inline: var(--jhs-space-2);
+        font-size: var(--jhs-font-size-xs);
+    }
+    .jhs-icon-btn, .card-btn {
+        width: var(--jhs-control-height);
+        min-width: var(--jhs-control-height);
+        height: var(--jhs-control-height);
+        min-height: var(--jhs-control-height);
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: var(--jhs-radius-sm);
+        background: transparent;
+        color: var(--jhs-icon-color);
+        box-shadow: none;
+    }
+    :where(.jhs-icon-btn, .card-btn):hover {
+        border-color: var(--jhs-border);
+        background: var(--jhs-surface-2);
+        color: var(--jhs-text);
+        box-shadow: none;
+        transform: none;
+    }
+    :where(.jhs-icon-btn, .card-btn) svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    :where(.jhs-field, .jhs-select, .jhs-textarea,
+        .jhs-ui input:not([type]), .jhs-ui input[type="text"], .jhs-ui input[type="number"], .jhs-ui input[type="url"], .jhs-ui input[type="password"],
+        .jhs-ui select, .jhs-ui textarea,
+        .layui-layer-content input:not([type]), .layui-layer-content input[type="text"], .layui-layer-content input[type="number"],
+        .layui-layer-content input[type="url"], .layui-layer-content input[type="password"], .layui-layer-content select, .layui-layer-content textarea) {
+        box-sizing: border-box;
+        min-height: var(--jhs-control-height);
+        padding: var(--jhs-space-2) var(--jhs-space-3);
+        border: 1px solid var(--jhs-border);
+        border-radius: var(--jhs-radius-sm);
+        background: var(--jhs-input-bg);
+        color: var(--jhs-text);
+        font: inherit;
+        font-size: var(--jhs-font-size-sm);
+        line-height: 1.35;
+        transition: background-color var(--jhs-motion-fast) var(--jhs-ease),
+                    border-color var(--jhs-motion-fast) var(--jhs-ease),
+                    box-shadow var(--jhs-motion-fast) var(--jhs-ease);
+    }
+    :where(.jhs-field, .jhs-select, .jhs-textarea,
+        .jhs-ui input, .jhs-ui select, .jhs-ui textarea,
+        .layui-layer-content input, .layui-layer-content select, .layui-layer-content textarea):hover:not(:disabled) {
+        border-color: var(--jhs-accent);
+    }
+    :where(.jhs-field, .jhs-select, .jhs-textarea,
+        .jhs-ui input, .jhs-ui select, .jhs-ui textarea,
+        .layui-layer-content input, .layui-layer-content select, .layui-layer-content textarea):focus-visible {
+        border-color: var(--jhs-accent);
+        outline: 2px solid var(--jhs-accent-tint);
+        outline-offset: 1px;
+        box-shadow: 0 0 0 1px var(--jhs-accent);
+    }
+    :where(.jhs-field, .jhs-select, .jhs-textarea,
+        .jhs-ui input[type="text"], .jhs-ui input[type="number"], .jhs-ui input[type="url"],
+        .jhs-ui select, .jhs-ui textarea,
+        .layui-layer-content input[type="text"], .layui-layer-content input[type="number"],
+        .layui-layer-content input[type="url"], .layui-layer-content select, .layui-layer-content textarea):hover:not(:focus) {
+        border-color: var(--jhs-border-strong);
+    }
+    :where(.jhs-textarea, .jhs-ui textarea, .layui-layer-content textarea) {
+        min-height: 76px;
+        resize: vertical;
+    }
+
+    .jhs-switch, .mini-switch {
+        appearance: none;
+        box-sizing: border-box;
+        width: 40px;
+        min-width: 40px;
+        height: 22px;
+        min-height: 22px;
+        padding: 2px;
+        border: 1px solid var(--jhs-border);
+        border-radius: var(--jhs-radius-pill);
+        background: var(--jhs-surface-2);
+        cursor: pointer;
+        transition: background-color var(--jhs-motion-fast) var(--jhs-ease), border-color var(--jhs-motion-fast) var(--jhs-ease);
+    }
+    :where(.jhs-switch, .mini-switch)::before {
+        display: block;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--jhs-surface);
+        box-shadow: var(--jhs-shadow-xs);
+        content: "";
+        transition: transform var(--jhs-motion-fast) var(--jhs-ease);
+    }
+    :where(.jhs-switch, .mini-switch):checked {
+        border-color: var(--jhs-accent);
+        background: var(--jhs-accent);
+    }
+    :where(.jhs-switch, .mini-switch):checked::before {
+        transform: translateX(18px);
+    }
+
+    :where(.jhs-range, .jhs-ui input[type="range"], .layui-layer-content input[type="range"]) {
+        appearance: none;
+        width: 100%;
+        height: 22px;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+    }
+    :where(.jhs-range, .jhs-ui input[type="range"], .layui-layer-content input[type="range"])::-webkit-slider-runnable-track {
+        height: 4px;
+        border-radius: var(--jhs-radius-pill);
+        background: var(--jhs-border);
+    }
+    :where(.jhs-range, .jhs-ui input[type="range"], .layui-layer-content input[type="range"])::-webkit-slider-thumb {
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        margin-top: -7px;
+        border: 2px solid var(--jhs-surface);
+        border-radius: 50%;
+        background: var(--jhs-accent);
+        box-shadow: 0 0 0 1px var(--jhs-accent), var(--jhs-shadow-xs);
+    }
+    :where(.jhs-range, .jhs-ui input[type="range"], .layui-layer-content input[type="range"]):disabled {
+        cursor: not-allowed;
+        opacity: .55;
+    }
+
+    .jhs-toolbar {
+        display: flex;
+        align-items: center;
+        gap: var(--jhs-space-2);
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+    .jhs-toolbar--between {
+        justify-content: space-between;
+    }
+    .jhs-toolbar__group {
+        display: flex;
+        align-items: center;
+        gap: var(--jhs-space-2);
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+    .jhs-section {
+        display: grid;
+        gap: var(--jhs-space-3);
+        margin-block: 0 var(--jhs-space-4);
+    }
+    .jhs-section__heading {
+        margin: 0;
+        color: var(--jhs-text);
+        font-size: var(--jhs-font-size-lg);
+        font-weight: 700;
+        line-height: 1.3;
+    }
+    .jhs-section__description, .jhs-helper-text {
+        margin: 0;
+        color: var(--jhs-text-muted);
+        font-size: var(--jhs-font-size-xs);
+        line-height: 1.5;
+    }
+    .jhs-card, .jhs-setting-group {
+        box-sizing: border-box;
+        border: 1px solid var(--jhs-border);
+        border-radius: var(--jhs-radius-md);
+        background: var(--jhs-surface);
+        box-shadow: none;
+    }
+    .jhs-card {
+        padding: var(--jhs-space-4);
+    }
+    .jhs-setting-group {
+        overflow: hidden;
+    }
+    .jhs-setting-row {
+        box-sizing: border-box;
+        display: grid;
+        grid-template-columns: minmax(180px, 1fr) minmax(180px, 280px);
+        gap: var(--jhs-space-4);
+        align-items: center;
+        min-height: 52px;
+        margin: 0;
+        padding: var(--jhs-space-3) var(--jhs-space-4);
+        border-bottom: 1px solid var(--jhs-border);
+    }
+    :where(.jhs-setting-group, .content-panel) > .jhs-setting-row:last-child {
+        border-bottom: 0;
+    }
+    .jhs-setting-row__label, .setting-label {
+        min-width: 0;
+        margin: 0;
+        color: var(--jhs-text);
+        font-size: var(--jhs-font-size-sm);
+        font-weight: 600;
+        line-height: 1.4;
+    }
+    .jhs-setting-row__description {
+        display: block;
+        margin-top: var(--jhs-space-1);
+        color: var(--jhs-text-muted);
+        font-size: var(--jhs-font-size-xs);
+        font-weight: 400;
+    }
+    .jhs-setting-row__control, .form-content {
+        display: flex;
+        min-width: 0;
+        max-width: none;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--jhs-space-2);
+    }
+    :where(.jhs-setting-row__control, .form-content) > :where(input, select, textarea) {
+        width: min(100%, 280px);
+        margin: 0;
+    }
+
+    .jhs-segmented, .magnet-tabs__options {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--jhs-space-1);
+        padding: var(--jhs-space-1);
+        border: 1px solid var(--jhs-border);
+        border-radius: var(--jhs-radius-md);
+        background: var(--jhs-surface-2);
+    }
+    .jhs-segmented__item, .magnet-tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: var(--jhs-control-height-sm);
+        padding: 0 var(--jhs-space-3);
+        border: 0;
+        border-radius: var(--jhs-radius-xs);
+        background: transparent;
+        color: var(--jhs-text-muted);
+        font-size: var(--jhs-font-size-sm);
+        font-weight: 600;
+        line-height: 1;
+        cursor: pointer;
+    }
+    :where(.jhs-segmented__item, .magnet-tab):hover {
+        background: var(--jhs-surface);
+        color: var(--jhs-text);
+    }
+    :where(.jhs-segmented__item, .magnet-tab).active,
+    :where(.jhs-segmented__item, .magnet-tab)[aria-selected="true"] {
+        background: var(--jhs-surface);
+        color: var(--jhs-text);
+        box-shadow: var(--jhs-shadow-xs);
+    }
+
+    .jhs-popover {
+        position: absolute;
+        top: calc(100% + var(--jhs-space-2));
+        right: 0;
+        z-index: var(--jhs-z-local-popover);
+        display: none;
+        min-width: 152px;
+        padding: var(--jhs-space-2);
+        border: 1px solid var(--jhs-border);
+        border-radius: var(--jhs-radius-md);
+        background: var(--jhs-surface);
+        box-shadow: var(--jhs-shadow-md);
+    }
+    .jhs-popover.is-open { display: grid; gap: var(--jhs-space-1); }
+    .jhs-popover [role="menuitem"], .jhs-popover [role="menuitemradio"] { width: 100%; justify-content: flex-start; }
+
+    .jhs-select-control { position:relative; display:inline-flex; min-width:140px; max-width:100%; }
+    .jhs-select-source-native { display:none!important; }
+    .jhs-select-trigger { width:100%; justify-content:space-between; }
+    .jhs-select-trigger::after { content:"▾"; margin-left:var(--jhs-space-2); color:var(--jhs-text-muted); font-size:11px; }
+    .jhs-select-control.is-open .jhs-select-trigger::after { content:"▴"; }
+    .jhs-select-menu { left:0; right:auto; min-width:100%; max-height:320px; overflow-y:auto; }
+    .jhs-select-group { display:grid; gap:var(--jhs-space-1); }
+    .jhs-select-group__label { padding:var(--jhs-space-1) var(--jhs-space-2); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); font-weight:600; }
+    .jhs-select-option[aria-checked="true"] { background:var(--jhs-accent-tint); color:var(--jhs-accent); }
+
+    .jhs-task-emphasis { color:var(--jhs-status-filter-text); }
+    .jhs-code-viewer { height:100%; overflow:auto; padding:15px 5px; background:var(--jhs-code-bg); color:var(--jhs-code-text); font-family:Consolas,Monaco,monospace; white-space:pre-wrap; }
+    .jhs-code-line-number { color:var(--jhs-code-line); }
+    .jhs-count-table__cell { padding:3px; border:1px solid var(--jhs-border); }
+    .jhs-count-table__head { padding:3px; border:1px solid var(--jhs-border); font-weight:700; }
+    .jhs-play-overlay { position:absolute; inset:50% auto auto 50%; transform:translate(-50%,-50%); color:#fff; font-size:40px; text-shadow:0 0 10px rgba(0,0,0,.5); }
+    .jhs-image-preview { max-width:100%; max-height:300px; border-radius:var(--jhs-radius-xs); box-shadow:var(--jhs-shadow-xs); }
+
+    .jhs-badge, .jhs-chip, .card-tag, .card-new-count-tag, .magnet-score {
+        box-sizing: border-box;
+        display: inline-flex;
+        min-height: 24px;
+        align-items: center;
+        justify-content: center;
+        gap: var(--jhs-space-1);
+        padding: 2px var(--jhs-space-2);
+        border: 1px solid transparent;
+        border-radius: var(--jhs-radius-pill);
+        background: var(--jhs-surface-2);
+        color: var(--jhs-text-muted);
+        font-size: var(--jhs-font-size-xs);
+        font-weight: 600;
+        line-height: 1.2;
+        white-space: nowrap;
+    }
+    .jhs-badge--accent, .card-new-count-tag {
+        background: var(--jhs-accent-tint);
+        color: var(--jhs-accent);
+    }
+    .jhs-badge--danger, .card-tag {
+        background: var(--jhs-status-filter-tint);
+        color: var(--jhs-status-filter-text);
+    }
+    .jhs-badge--success {
+        background: var(--jhs-status-down-tint);
+        color: var(--jhs-status-down-text);
+    }
+    .jhs-badge--neutral { border-color: var(--jhs-border); background: var(--jhs-surface-2); color: var(--jhs-text-muted); }
+    .jhs-badge--filter { background: var(--jhs-status-filter-tint); color: var(--jhs-status-filter-text); }
+    .jhs-badge--fav { background: var(--jhs-status-fav-tint); color: var(--jhs-status-fav-text); }
+    .jhs-badge--down { background: var(--jhs-status-down-tint); color: var(--jhs-status-down-text); }
+    .jhs-badge--watch { background: var(--jhs-status-watch-tint); color: var(--jhs-status-watch-text); }
+
+    .jhs-pagination, #actress-pagination, #nv-pagination-bar {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--jhs-space-1);
+        flex-wrap: wrap;
+        padding-top: var(--jhs-space-3);
+        border-top: 1px solid var(--jhs-border);
+    }
+    :where(.jhs-pagination, #actress-pagination, #nv-pagination-bar) .pagination-btn {
+        min-width: var(--jhs-control-height-sm);
+        min-height: var(--jhs-control-height-sm);
+        padding-inline: var(--jhs-space-2);
+    }
+    :where(.jhs-pagination, #actress-pagination, #nv-pagination-bar) .pagination-btn.active,
+    :where(.jhs-pagination, #actress-pagination, #nv-pagination-bar) .pagination-btn[aria-current="page"] {
+        border-color: var(--jhs-accent);
+        background: var(--jhs-accent);
+        color: var(--jhs-accent-text-on);
+    }
+
+    .jhs-state, .magnet-loading, .magnet-error {
+        box-sizing: border-box;
+        display: grid;
+        min-height: 120px;
+        place-items: center;
+        gap: var(--jhs-space-2);
+        padding: var(--jhs-space-5);
+        border: 1px dashed var(--jhs-border-strong);
+        border-radius: var(--jhs-radius-md);
+        background: var(--jhs-surface-2);
+        color: var(--jhs-text-muted);
+        text-align: center;
+    }
+    .jhs-state--error, .magnet-error {
+        border-color: var(--jhs-status-filter-text);
+        background: var(--jhs-status-filter-tint);
+        color: var(--jhs-status-filter-text);
+    }
+    .jhs-state__content { display:grid; gap:var(--jhs-space-1); justify-items:center; }
+    .jhs-state__title { margin:0; color:inherit; font-size:var(--jhs-font-size-md); font-weight:700; }
+    .jhs-state__description { margin:0; color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
+    .jhs-is-hidden { display: none !important; }
+    .jhs-dialog-title { padding: 0 var(--jhs-space-2); }
+    .jhs-pagination__summary { margin-left: var(--jhs-space-3); color: var(--jhs-text-muted); font-size: var(--jhs-font-size-sm); }
+    .jhs-skeleton {
+        overflow: hidden;
+        border-radius: var(--jhs-radius-xs);
+        background: var(--jhs-surface-2);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+        .jhs-skeleton {
+            background: linear-gradient(90deg, var(--jhs-surface-2) 25%, var(--jhs-border) 50%, var(--jhs-surface-2) 75%);
+            background-size: 200% 100%;
+            animation: jhs-skeleton-shimmer 1.4s ease-in-out infinite;
+        }
+        @keyframes jhs-skeleton-shimmer {
+            to { background-position-x: -200%; }
+        }
+    }
+
+    .layui-layer {
+        overflow: hidden;
+        border: 1px solid var(--jhs-border);
+        border-radius: var(--jhs-radius-lg) !important;
+        background: var(--jhs-surface);
+        color: var(--jhs-text);
+        box-shadow: var(--jhs-shadow-lg) !important;
+    }
+    .layui-layer-title {
+        min-height: 48px;
+        padding: 0 52px 0 var(--jhs-space-4);
+        border-bottom: 1px solid var(--jhs-border);
+        background: var(--jhs-surface);
+        color: var(--jhs-text);
+        font-size: var(--jhs-font-size-lg);
+        font-weight: 700;
+        line-height: 48px;
+    }
+    .layui-layer-btn {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--jhs-space-2);
+        padding: var(--jhs-space-3) var(--jhs-space-4) !important;
+        border-top: 1px solid var(--jhs-border);
+        background: var(--jhs-surface);
+    }
+    .layui-layer-btn a {
+        min-height: var(--jhs-control-height);
+        margin: 0 !important;
+        padding: 0 var(--jhs-space-3) !important;
+        border: 1px solid var(--jhs-border-strong) !important;
+        border-radius: var(--jhs-radius-sm) !important;
+        background: var(--jhs-surface) !important;
+        color: var(--jhs-text) !important;
+        line-height: var(--jhs-control-height) !important;
+    }
+    .layui-layer-btn .layui-layer-btn0 {
+        border-color: var(--jhs-accent) !important;
+        background: var(--jhs-accent) !important;
+        color: var(--jhs-accent-text-on) !important;
+    }
+
+    .tabulator {
+        overflow: hidden;
+        border: 1px solid var(--jhs-border) !important;
+        border-radius: var(--jhs-radius-md);
+        background: var(--jhs-surface) !important;
+        color: var(--jhs-text) !important;
+        font-family: var(--jhs-font);
+        font-size: var(--jhs-font-size-sm);
+    }
+    .tabulator .tabulator-header,
+    .tabulator .tabulator-header .tabulator-col {
+        min-height: 40px;
+        border-color: var(--jhs-border) !important;
+        background: var(--jhs-surface-2) !important;
+        color: var(--jhs-text) !important;
+    }
+    .tabulator .tabulator-row {
+        min-height: 44px;
+        border-color: var(--jhs-border) !important;
+        background: var(--jhs-surface) !important;
+        color: var(--jhs-text) !important;
+    }
+    .tabulator .tabulator-row:hover {
+        background: var(--jhs-surface-2) !important;
+    }
+    .tabulator .tabulator-cell {
+        display: inline-flex;
+        min-height: 44px;
+        align-items: center;
+        border-right: 0 !important;
+        color: var(--jhs-text) !important;
+    }
+    .tabulator .tabulator-row { border-bottom: 1px solid var(--jhs-border) !important; }
+    .tabulator .tabulator-header .tabulator-col { border-right-color: color-mix(in srgb, var(--jhs-border) 55%, transparent) !important; }
+    .tabulator .tabulator-footer {
+        border-color: var(--jhs-border) !important;
+        background: var(--jhs-surface-2) !important;
+        color: var(--jhs-text) !important;
+    }
+
+    /* 新作品列表卡保留轻边框，结构布局由插件自身样式负责。 */
+    .nv-card {
+        border: 1px solid var(--jhs-border) !important;
+        border-radius: var(--jhs-radius-md) !important;
+        background: var(--jhs-surface) !important;
+        box-shadow: none !important;
+        transform: none !important;
+        transition: border-color var(--jhs-motion-fast) var(--jhs-ease) !important;
+    }
+    .nv-card:hover {
+        border-color: var(--jhs-accent) !important;
+        box-shadow: none !important;
+        transform: none !important;
+    }
+    /* 磁力搜索：分段控件、紧凑结果行和明确反馈状态。 */
+    .magnet-container {
+        width: 100%;
+        margin: var(--jhs-space-3) auto !important;
+        color: var(--jhs-text);
+        font-family: var(--jhs-font) !important;
+    }
+    .magnet-tabs {
+        display: flex;
+        align-items: center;
+        justify-content: space-between !important;
+        gap: var(--jhs-space-3);
+        margin-bottom: var(--jhs-space-3) !important;
+        padding: 0 !important;
+        border-bottom: 0 !important;
+    }
+    .magnet-tabs > div {
+        display: inline-flex !important;
+        gap: var(--jhs-space-1);
+        padding: var(--jhs-space-1);
+        border: 1px solid var(--jhs-border);
+        border-radius: var(--jhs-radius-md);
+        background: var(--jhs-surface-2);
+    }
+    .magnet-tab {
+        min-height: var(--jhs-control-height-sm);
+        margin: 0 !important;
+        padding: 0 var(--jhs-space-3) !important;
+        border: 0 !important;
+        border-radius: var(--jhs-radius-xs) !important;
+        background: transparent !important;
+        color: var(--jhs-text-muted);
+        line-height: var(--jhs-control-height-sm);
+    }
+    .magnet-tab.active {
+        margin: 0 !important;
+        border: 0 !important;
+        background: var(--jhs-surface) !important;
+        color: var(--jhs-text);
+        box-shadow: var(--jhs-shadow-xs);
+    }
+    .magnet-results {
+        min-height: 200px;
+        overflow: hidden;
+        border: 1px solid var(--jhs-border);
+        border-radius: var(--jhs-radius-md);
+        background: var(--jhs-surface);
+    }
+    .magnet-result {
+        min-height: 68px;
+        padding: var(--jhs-space-3) 190px var(--jhs-space-3) var(--jhs-space-4) !important;
+        border-bottom: 1px solid var(--jhs-border) !important;
+        background: var(--jhs-surface);
+    }
+    .magnet-result:last-child {
+        border-bottom: 0 !important;
+    }
+    .magnet-result:hover {
+        background: var(--jhs-surface-2) !important;
+    }
+    .magnet-title {
+        margin-bottom: var(--jhs-space-1) !important;
+        padding-right: 0 !important;
+        font-weight: 600 !important;
+    }
+    .magnet-title a {
+        display: inline-block;
+        max-width: calc(100% - 52px);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        vertical-align: bottom;
+        white-space: nowrap;
+    }
+    .magnet-score { margin-right: var(--jhs-space-1); font-size: var(--jhs-font-size-sm); cursor: help; }
+    .magnet-info {
+        justify-content: flex-start !important;
+        gap: var(--jhs-space-4);
+        margin: 0 !important;
+        color: var(--jhs-text-muted) !important;
+    }
+    .magnet-copy {
+        top: 50% !important;
+        right: var(--jhs-space-3) !important;
+        display: flex;
+        flex: 0 0 auto;
+        flex-wrap: nowrap;
+        gap: var(--jhs-space-2);
+        transform: translateY(-50%);
+    }
+    .magnet-hub-btn {
+        flex: 0 0 auto;
+        min-height: var(--jhs-control-height-sm) !important;
+        margin: 0 !important;
+        padding: 0 var(--jhs-space-2) !important;
+        border-radius: var(--jhs-radius-sm) !important;
+        font-size: var(--jhs-font-size-xs) !important;
+        white-space: nowrap;
+    }
+    .magnet-hub-btn.copied {
+        border-color: transparent !important;
+        background: var(--jhs-status-down-tint) !important;
+        color: var(--jhs-status-down-text) !important;
+    }
+
+    @media (max-width: 768px) {
+        :is(.jhs-btn, .jhs-filter-btn, .site-btn, .magnet-hub-btn, .pagination-btn, .jhs-icon-btn, .card-btn) {
+            min-height: var(--jhs-touch-target);
+        }
+        :where(.jhs-icon-btn, .card-btn) {
+            width: var(--jhs-touch-target);
+            min-width: var(--jhs-touch-target);
+            height: var(--jhs-touch-target);
+        }
+        .jhs-setting-row {
+            grid-template-columns: 1fr;
+            gap: var(--jhs-space-2);
+            padding: var(--jhs-space-3);
+        }
+        .jhs-setting-row__control, .form-content {
+            justify-content: stretch;
+        }
+        :where(.jhs-setting-row__control, .form-content) > :where(input, select, textarea, button, a) {
+            width: 100%;
+            max-width: none;
+        }
+        .jhs-toolbar--between {
+            align-items: stretch;
+            flex-direction: column;
+        }
+        .magnet-tabs {
+            align-items: stretch;
+            flex-direction: column;
+        }
+        .magnet-tabs > div {
+            width: 100%;
+            min-width: 0;
+            max-width: 100%;
+            box-sizing: border-box;
+            overflow-x: auto;
+        }
+        .magnet-result {
+            padding-right: var(--jhs-space-4) !important;
+        }
+        .magnet-copy {
+            position: static !important;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            margin-top: var(--jhs-space-2);
+            transform: none;
+        }
+        .magnet-copy .magnet-hub-btn { width: 100%; min-height: var(--jhs-touch-target) !important; }
+        .jhs-segmented {
+            max-width: 100%;
+            overflow-x: auto;
+        }
+    }
+
+        /* migrated template layout utilities */
+
+        .jhs-layout-06cf30c0 { margin-top:15px;display:flex;justify-content:center;gap:10px; }
+
+
+
+        .jhs-layout-186f17ef { padding:18px 18px !important; }
+
+
+        .jhs-layout-1b3790ef { display:flex;margin-bottom:10px; }
+
+        .jhs-layout-1e90930a { display:flex;gap:10px;flex-wrap:wrap; }
+
+
+
+        .jhs-layout-2100e73d { margin-left:20px; }
+
+        .jhs-layout-21a4fe43 { margin-left:0 }
+
+        .jhs-layout-2335597e { padding:18px 18px !important;margin-left:50px }
+
+        .jhs-layout-27f87d75 { display:block;margin-bottom:5px; }
+
+
+        .jhs-layout-294497f1 { top:-15px }
+
+        .jhs-layout-2afc43dc { min-width:120px; }
+
+        .jhs-layout-2e003268 { margin-bottom:5px }
+
+        .jhs-layout-31a824a2 { display:flex;gap:5px }
+
+
+
+        .jhs-layout-3536a853 { margin-top:30px;cursor:auto }
+
+
+
+
+        .jhs-layout-3b6a3a65 { cursor:pointer }
+
+        .jhs-layout-3f0d74e1 { min-width:120px; }
+
+        .jhs-layout-3fed2a7e { margin-left:5px; }
+
+        .jhs-layout-3fefafab { overflow-y:auto;height:calc(100% - 40px); }
+
+        .jhs-layout-44293084 { width:120px;text-align:center;padding:8px 0; }
+
+
+
+        .jhs-layout-481ed7e7 { padding:10px; }
+
+        .jhs-layout-53809f1e { display:flex;gap:5px; }
+
+        .jhs-layout-583c2485 { height:100%;padding-bottom:20px }
+
+        .jhs-layout-598afa5a { margin-bottom:25px; }
+
+
+        .jhs-layout-5c319329 { min-width:120px; }
+
+
+        .jhs-layout-5f3e3549 { width:140px;text-align:center;padding:8px 0; }
+
+
+
+
+
+        .jhs-layout-66253c00 { margin-top:8px;display:none }
+
+
+        .jhs-layout-6b99de8b { display:none }
+
+
+        .jhs-layout-6d489fc7 { margin:0 0.75rem }
+
+        .jhs-layout-701bf0f9 { margin-bottom:0!important; }
+
+
+        .jhs-layout-761d3add { margin-bottom:10px }
+
+        .jhs-layout-769fed37 { padding:20px }
+
+        .jhs-layout-78fa54ea { margin-left:10px }
+
+        .jhs-layout-7cb3f981 { padding:10px 20px;height:100%;overflow:hidden; }
+
+        .jhs-layout-7daea5fa { margin-bottom:5px; }
+
+        .jhs-layout-81eaab28 { height:calc(100% - 50px);overflow-x:hidden; }
+
+        .jhs-layout-8453d189 { display:flex;align-items:center;flex-grow:1;justify-content:flex-end; }
+
+
+
+        .jhs-layout-8896c95d { margin-right:5px }
+
+        .jhs-layout-8cddc29a { padding:20px; }
+
+        .jhs-layout-8cf76fd7 { width:150px;height:auto; }
+
+
+
+
+        .jhs-layout-9813a0dd { margin-left:5px }
+
+        .jhs-layout-9db87399 { margin-top:50px;cursor:auto }
+
+        .jhs-layout-9e3c853e { margin-bottom:15px; }
+
+        .jhs-layout-9ea2322d { margin:20px auto }
+
+        .jhs-layout-9fe45cd8 { width:120px; }
+
+        .jhs-layout-a38a0e50 { max-height:100%;max-width:100%;object-fit:contain }
+
+
+
+
+        .jhs-layout-b12542a5 { width:100% }
+
+        .jhs-layout-b5c4e4f7 { overflow:hidden;height:110px;text-align:center; }
+
+        .jhs-layout-ba4750c8 { margin:30px 0 }
+
+        .jhs-layout-bd59a2e1 { text-align:center;margin-bottom:15px; }
+
+        .jhs-layout-c0d4a511 { margin-top:5px; }
+
+        .jhs-layout-c4eb15bf { width:100%;padding:12px;
+ cursor:pointer;
+  }
+
+
+        .jhs-layout-cad980f4 { width:100%; }
+
+        .jhs-layout-cd9d5db1 { overflow:hidden;max-height:215px;text-align:center; }
+
+        .jhs-layout-d10a577d { margin-bottom:20px;text-align:center;display:none; }
+
+        .jhs-layout-d2c171b1 { margin-top:10px }
+
+        .jhs-layout-d44e70c7 { height:calc(100% - 50px); }
+
+        .jhs-layout-d4a09a0d { width:200px; }
+
+        .jhs-layout-d4a575e8 { height:inherit;width:100%; }
+
+        .jhs-layout-d50e4f09 { margin-top:15px;display:none; }
+
+        .jhs-layout-d543acf8 { display:flex;justify-content:center;align-items:center;position:absolute;top:0;left:0;height:100%;width:100%;z-index:var(--jhs-z-content);overflow:hidden }
+
+
+
+
+        .jhs-layout-d9caa2c0 { display:flex;align-items:center;gap:5px; }
+
+        .jhs-layout-da303dcf { margin-bottom:15px; }
+
+        .jhs-layout-da5a4919 { display:flex;justify-content:space-between; }
+
+        .jhs-layout-dd5a75f6 { width:300px; }
+
+        .jhs-layout-e2965a97 { margin:10px auto;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:20px; }
+
+        .jhs-layout-e32cff7f { padding:30px; }
+
+        .jhs-layout-e5d57abb { overflow:hidden;max-height:150px;max-width:150px;text-align:center; }
+
+
+
+
+
+
+        .jhs-layout-f43f0d6d { width:160px;text-align:center;padding:8px 0; }
+
+        .jhs-layout-f4e719ae { margin:10px 0 }
+
+        .jhs-layout-f5f47b30 { margin-left:100px;width:400px; }
+
+    @media (prefers-reduced-motion: reduce) {
+        :where(.jhs-ui, .layui-layer-content, .menu-box, .jhs-fab-menu) *,
+        :where(.jhs-ui, .layui-layer-content, .menu-box, .jhs-fab-menu) *::before,
+        :where(.jhs-ui, .layui-layer-content, .menu-box, .jhs-fab-menu) *::after {
+            scroll-behavior: auto !important;
+            transition-duration: 0.01ms !important;
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+        }
+    }
+</style>`;
+  }
+  __name(buildUiPrimitivesCss, "buildUiPrimitivesCss");
+  function renderStateView(container, { type = "empty", title = "", description = "", actionLabel = "", onAction = null } = {}) {
+    const root = container?.jquery ? container : $(container), state = $('<div class="jhs-state"></div>').addClass(`jhs-state--${type}`).attr("role", "error" === type ? "alert" : "status"), content = $('<div class="jhs-state__content"></div>');
+    title && content.append($('<p class="jhs-state__title"></p>').text(title)), description && content.append($('<p class="jhs-state__description"></p>').text(description));
+    if (actionLabel && "function" == typeof onAction) content.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').text(actionLabel).on("click", onAction));
+    return state.append(content), root.empty().append(state), state;
+  }
+  __name(renderStateView, "renderStateView");
+  function initializeUiAccessibility(lifecycleScope) {
+    if (!lifecycleScope || "function" != typeof lifecycleScope.observe) throw new TypeError("UI accessibility requires an app LifecycleScope");
+    const selector = "button.jhs-btn, a.jhs-btn[role='button'], .card-btn, .jhs-icon-btn, [class*='jhs-'] button, [class*='jhs-'] a[role='button']";
+    const enhance = /* @__PURE__ */ __name((e2) => {
+      const t2 = e2.nodeType === Node.ELEMENT_NODE && e2.matches?.(selector) ? [e2] : [];
+      const n2 = e2.querySelectorAll ? [...e2.querySelectorAll(selector)] : [];
+      [...t2, ...n2].forEach(((e3) => {
+        if (e3.hasAttribute("aria-label") || e3.hasAttribute("aria-labelledby") || e3.textContent.trim()) return;
+        const t3 = e3.getAttribute("title") || e3.getAttribute("data-tip");
+        t3 && e3.setAttribute("aria-label", t3);
+      }));
+    }, "enhance");
+    enhance(document);
+    const pending = /* @__PURE__ */ new Set();
+    let scheduled = false;
+    const flush = /* @__PURE__ */ __name(() => {
+      scheduled = false;
+      const all = [...pending], roots = all.filter(((e2) => !all.some(((t2) => t2 !== e2 && t2.contains?.(e2)))));
+      pending.clear(), roots.forEach(enhance);
+    }, "flush");
+    return lifecycleScope.observe(document.documentElement, ((records) => {
+      records.forEach(((record) => record.addedNodes.forEach(((node) => {
+        node.nodeType === Node.ELEMENT_NODE && pending.add(node);
+      }))));
+      pending.size && !scheduled && (scheduled = true, queueMicrotask(flush));
+    }), {
+      childList: true,
+      subtree: true
+    });
+  }
+  __name(initializeUiAccessibility, "initializeUiAccessibility");
+  var _JhsSelect = class _JhsSelect {
+    constructor(select) {
+      this.source = $(select);
+      if (!this.source.length || _JhsSelect.instances.has(this.source[0])) return _JhsSelect.instances.get(this.source[0]);
+      const initiallyHidden = this.source.hasClass("jhs-is-hidden") || "none" === this.source[0].style.display;
+      this.control = $('<div class="jhs-select-control"></div>');
+      this.trigger = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-select-trigger" aria-haspopup="menu" aria-expanded="false"><span class="jhs-select-value"></span></button>');
+      this.menu = $('<div class="jhs-popover jhs-select-menu" role="menu"></div>');
+      this.source.wrap(this.control), this.control = this.source.parent(), this.control.append(this.trigger, this.menu), this.source.addClass("jhs-select-source-native").attr({ "aria-hidden": "true", tabindex: "-1" }), initiallyHidden && this.control.addClass("jhs-is-hidden"), _JhsSelect.instances.set(this.source[0], this), this.render(), this.bind(), this.refresh();
+    }
+    static enhance(root = document) {
+      const scope = $(root), selects = scope.is("select.jhs-select-source") ? scope : scope.find("select.jhs-select-source");
+      selects.each(((_2, select) => new _JhsSelect(select)));
+      return selects;
+    }
+    static get(select) {
+      const element = $(select)[0];
+      return element ? _JhsSelect.instances.get(element) || new _JhsSelect(element) : null;
+    }
+    static setValue(select, value, emit = false) {
+      const instance = _JhsSelect.get(select);
+      if (!instance) return;
+      instance.source.val(value), emit ? instance.emitChange() : instance.refresh();
+    }
+    static refresh(select) {
+      _JhsSelect.get(select)?.refresh();
+    }
+    static refreshAll(root = document) {
+      _JhsSelect.enhance(root), $(root).find("select.jhs-select-source").each(((_2, select) => _JhsSelect.refresh(select)));
+    }
+    static setVisible(select, visible) {
+      const instance = _JhsSelect.get(select);
+      instance?.control.toggleClass("jhs-is-hidden", !visible);
+    }
+    static closeAll(except = null) {
+      $(".jhs-select-control.is-open").each(((_2, control) => {
+        const source = $(control).children("select.jhs-select-source")[0], instance = source && _JhsSelect.instances.get(source);
+        instance && instance !== except && instance.close();
+      }));
+    }
+    render() {
+      this.menu.empty();
+      const appendOption = /* @__PURE__ */ __name((option, target) => {
+        const button = $('<button type="button" class="jhs-btn jhs-btn--ghost jhs-select-option" role="menuitemradio" tabindex="-1"></button>');
+        button.attr({ "data-value": option.value, "aria-checked": option.selected ? "true" : "false" }).prop("disabled", option.disabled).text(option.text), target.append(button);
+      }, "appendOption");
+      this.source.children().each(((_2, child) => {
+        if ("OPTGROUP" === child.tagName) {
+          const group = $('<div class="jhs-select-group" role="group"></div>').attr("aria-label", child.label), label = $('<div class="jhs-select-group__label"></div>').text(child.label);
+          group.append(label), $(child).children("option").each(((_3, option) => appendOption(option, group))), this.menu.append(group);
+        } else "OPTION" === child.tagName && appendOption(child, this.menu);
+      }));
+    }
+    bind() {
+      this.trigger.on("click", ((event) => {
+        event.preventDefault(), event.stopPropagation(), this.source.prop("disabled") || (this.control.hasClass("is-open") ? this.close() : this.open());
+      })).on("keydown", ((event) => {
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        event.preventDefault(), this.open("ArrowUp" === event.key || "End" === event.key ? "last" : "selected");
+      }));
+      this.menu.on("click", ".jhs-select-option", ((event) => {
+        event.preventDefault(), this.choose($(event.currentTarget));
+      })).on("keydown", ".jhs-select-option", ((event) => {
+        const items = this.options(), index = items.index(event.currentTarget);
+        if ("Escape" === event.key) return event.preventDefault(), this.close(true);
+        if ("Tab" === event.key) return void this.close();
+        if (["Enter", " "].includes(event.key)) return event.preventDefault(), this.choose($(event.currentTarget));
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+        items.eq(next).trigger("focus");
+      }));
+      this.source.on("change.jhsSelect", (() => this.refresh())), $(document).on("click.jhsSelect", ((event) => {
+        $(event.target).closest(this.control).length || this.close();
+      }));
+    }
+    options() {
+      return this.menu.find(".jhs-select-option:not(:disabled)");
+    }
+    open(focus = "selected") {
+      _JhsSelect.closeAll(this), this.control.addClass("is-open"), this.menu.addClass("is-open"), this.trigger.attr("aria-expanded", "true");
+      const items = this.options(), selected = items.filter('[aria-checked="true"]');
+      ("last" === focus ? items.last() : selected.length ? selected.first() : items.first()).trigger("focus");
+    }
+    close(focus = false) {
+      this.control.removeClass("is-open"), this.menu.removeClass("is-open"), this.trigger.attr("aria-expanded", "false"), focus && this.trigger.trigger("focus");
+    }
+    choose(item) {
+      if (item.prop("disabled")) return;
+      this.source.val(item.attr("data-value")), this.emitChange(), this.close(true);
+    }
+    emitChange() {
+      this.source[0]?.dispatchEvent(new Event("change", {
+        bubbles: true
+      }));
+    }
+    refresh() {
+      const selected = this.source.find("option:selected").first(), value = this.source.val();
+      this.trigger.find(".jhs-select-value").text(selected.text()), this.trigger.prop("disabled", this.source.prop("disabled")), this.menu.find(".jhs-select-option").attr("aria-checked", "false").filter(((_2, item) => $(item).attr("data-value") === String(value ?? ""))).attr("aria-checked", "true");
+    }
+  };
+  __name(_JhsSelect, "JhsSelect");
+  __publicField(_JhsSelect, "instances", /* @__PURE__ */ new WeakMap());
+  var JhsSelect = _JhsSelect;
+
+  // src/core/css-injection.js
+  var N = `
+<style>
+    .top-bar { z-index:var(--jhs-z-host-topbar)!important; }
+    ${M}
+    .masonry { display:grid; width:100%!important; height:100%!important; padding:0 15px!important; column-gap:10px; row-gap:10px; grid-template-columns:repeat(4,minmax(0,1fr)); align-items:start; }
+    .masonry .item { top:initial!important; left:initial!important; float:none!important; position:relative!important; background-color:var(--jhs-surface-2); }
+    .masonry .movie-box { width:100%!important; height:100%!important; margin:0!important; overflow:inherit!important; }
+    .masonry .movie-box .photo-frame { height:auto!important; margin:0!important; position:relative; }
+    .masonry .movie-box img { max-height:500px; height:100%!important; object-fit:contain; object-position:top; transform:none!important; transition:none!important; }
+    .masonry .photo-info span { display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .photo-frame .mheyzo, .photo-frame .mcaribbeancom2 { margin-left:0!important; }
+    .avatar-box { display:flex!important; width:100%!important; margin:0!important; }
+    .avatar-box .photo-info { display:flex; align-items:center; justify-content:center; gap:30px; flex-direction:row; background-color:var(--jhs-surface)!important; }
+    footer { display:none!important; }
+    .video-title { display:-webkit-box!important; height:75px; white-space:normal!important; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
+</style>`;
+  var E = `
+<style>
+    ${j}
+    .navbar { z-index:var(--jhs-z-host-nav)!important; padding:0; }
+    .navbar-link:not(.is-arrowless) { padding-right:33px; }
+    .sub-header, #footer, .app-desktop-banner,
+    div[data-controller="movie-tab"] .tabs, h3.main-title,
+    div.video-detail > div:nth-child(4) > div > div.tabs.no-bottom > ul > li:nth-child(3),
+    div.video-detail > div:nth-child(4) > div > div.tabs.no-bottom > ul > li:nth-child(2),
+    div.video-detail > div:nth-child(4) > div > div.tabs.no-bottom > ul > li:nth-child(1),
+    .top-meta, .float-buttons { display:none!important; }
+    div.tabs.no-bottom, .tabs ul { border-bottom:none!important; }
+    .movie-list .item { position:relative!important; }
+    .movie-list .item .cover img { transform:none!important; transition:none!important; }
+    .video-title { display:-webkit-box; height:80px; white-space:normal!important; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
+    .main-tabs, .tabs { overflow-x:hidden; flex-wrap:wrap; justify-content:flex-start; }
+    .main-tabs ul, .tabs ul { flex-wrap:wrap; flex-grow:0; }
+    .toolbar { display:flex; }
+</style>`;
+  var F = `
+<style>
+    .fr-btn { float:right; margin-left:4px!important; }
+    .menu-box { position:fixed; right:10px; top:50%; display:flex; flex-direction:column; gap:6px; z-index:var(--jhs-z-dropdown); transform:translateY(-50%); }
+    .do-hide { display:none!important; }
+    .jhs-icon { width:16px; height:16px; }
+    .tool-box .jhs-icon { width:1.5rem; height:1.5rem; }
+    .jhs-nav-btn { color:var(--jhs-accent)!important; font-weight:600; }
+    .jhs-nav-btn:hover { color:var(--jhs-accent-hover)!important; }
+    .tabulator .tabulator-row .action-cell-dropdown { overflow:visible!important; }
+    .tabulator .tabulator-row.tabulator-selectable:hover { cursor:default!important; }
+    .tabulator .tabulator-col.tabulator-sortable[aria-sort="ascending"] .tabulator-arrow { border-bottom-color:var(--jhs-accent)!important; }
+    .tabulator .tabulator-col.tabulator-sortable[aria-sort="descending"] .tabulator-arrow { border-top-color:var(--jhs-accent)!important; }
+    .tabulator-responsive-collapse { border-top:none!important; }
+    .tabulator-responsive-collapse table { margin-left:50px!important; }
+    .tabulator-cell { height:auto!important; }
+    .tabulator .tabulator-cell { white-space:normal!important; text-overflow:clip!important; }
+    .tabulator-tableholder { overflow-x:hidden!important; }
+</style>`;
+  var coreCssInjected = false;
+  function injectCoreCss() {
+    if (coreCssInjected) return;
+    H(buildThemeCss());
+    l && H(N), r && H(E);
+    H(F);
+    H(buildUiPrimitivesCss());
+    coreCssInjected = true;
+  }
+  __name(injectCoreCss, "injectCoreCss");
 
   // src/core/jhs-error.js
   var JHS_ERROR_CODES = Object.freeze([
@@ -907,46 +2541,6 @@
     return jhsEventBus;
   }
   __name(initializeEventBus, "initializeEventBus");
-
-  // src/core/theme.js
-  var JHS_Z_INDEX = Object.freeze({
-    content: 10,
-    elevated: 20,
-    localPopover: 30,
-    popover: 100,
-    dropdown: 1e3,
-    fabBackdrop: 1e4,
-    fabMenu: 10001,
-    fab: 10002,
-    debugLow: 12345678,
-    hostNav: 12345679,
-    hostTopbar: 12345689,
-    modal: 12345699,
-    sheetBackdrop: 12345789,
-    sheet: 12345790,
-    loading: 99999999,
-    viewer: 999999990,
-    layer: 999999991,
-    debug: 999999999,
-    tooltip: 9999999999
-  });
-  async function applyTheme() {
-    const mode = await storageManager.getSetting("themeMode", "light");
-    let resolved = "light";
-    if ("dark" === mode) resolved = "dark";
-    else if ("auto" === mode) resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-    document.documentElement.setAttribute("data-jhs-theme", resolved);
-  }
-  __name(applyTheme, "applyTheme");
-  function initializeThemeRuntime(scope) {
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    scope.listen(media, "change", () => {
-      storageManager.getSetting("themeMode", "light").then(((mode) => {
-        if ("auto" === mode) void applyTheme();
-      }));
-    });
-  }
-  __name(initializeThemeRuntime, "initializeThemeRuntime");
 
   // src/core/utils.js
   var _Utils = class _Utils {
@@ -3564,150 +5158,6 @@
   }
   __name(initializeLoggerRuntime, "initializeLoggerRuntime");
 
-  // src/core/ui-primitives.js
-  function renderStateView(container, { type = "empty", title = "", description = "", actionLabel = "", onAction = null } = {}) {
-    const root = container?.jquery ? container : $(container), state = $('<div class="jhs-state"></div>').addClass(`jhs-state--${type}`).attr("role", "error" === type ? "alert" : "status"), content = $('<div class="jhs-state__content"></div>');
-    title && content.append($('<p class="jhs-state__title"></p>').text(title)), description && content.append($('<p class="jhs-state__description"></p>').text(description));
-    if (actionLabel && "function" == typeof onAction) content.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').text(actionLabel).on("click", onAction));
-    return state.append(content), root.empty().append(state), state;
-  }
-  __name(renderStateView, "renderStateView");
-  function initializeUiAccessibility(lifecycleScope) {
-    if (!lifecycleScope || "function" != typeof lifecycleScope.observe) throw new TypeError("UI accessibility requires an app LifecycleScope");
-    const selector = "button.jhs-btn, a.jhs-btn[role='button'], .card-btn, .jhs-icon-btn, [class*='jhs-'] button, [class*='jhs-'] a[role='button']";
-    const enhance = /* @__PURE__ */ __name((e2) => {
-      const t2 = e2.nodeType === Node.ELEMENT_NODE && e2.matches?.(selector) ? [e2] : [];
-      const n2 = e2.querySelectorAll ? [...e2.querySelectorAll(selector)] : [];
-      [...t2, ...n2].forEach(((e3) => {
-        if (e3.hasAttribute("aria-label") || e3.hasAttribute("aria-labelledby") || e3.textContent.trim()) return;
-        const t3 = e3.getAttribute("title") || e3.getAttribute("data-tip");
-        t3 && e3.setAttribute("aria-label", t3);
-      }));
-    }, "enhance");
-    enhance(document);
-    const pending = /* @__PURE__ */ new Set();
-    let scheduled = false;
-    const flush = /* @__PURE__ */ __name(() => {
-      scheduled = false;
-      const all = [...pending], roots = all.filter(((e2) => !all.some(((t2) => t2 !== e2 && t2.contains?.(e2)))));
-      pending.clear(), roots.forEach(enhance);
-    }, "flush");
-    return lifecycleScope.observe(document.documentElement, ((records) => {
-      records.forEach(((record) => record.addedNodes.forEach(((node) => {
-        node.nodeType === Node.ELEMENT_NODE && pending.add(node);
-      }))));
-      pending.size && !scheduled && (scheduled = true, queueMicrotask(flush));
-    }), {
-      childList: true,
-      subtree: true
-    });
-  }
-  __name(initializeUiAccessibility, "initializeUiAccessibility");
-  var _JhsSelect = class _JhsSelect {
-    constructor(select) {
-      this.source = $(select);
-      if (!this.source.length || _JhsSelect.instances.has(this.source[0])) return _JhsSelect.instances.get(this.source[0]);
-      const initiallyHidden = this.source.hasClass("jhs-is-hidden") || "none" === this.source[0].style.display;
-      this.control = $('<div class="jhs-select-control"></div>');
-      this.trigger = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-select-trigger" aria-haspopup="menu" aria-expanded="false"><span class="jhs-select-value"></span></button>');
-      this.menu = $('<div class="jhs-popover jhs-select-menu" role="menu"></div>');
-      this.source.wrap(this.control), this.control = this.source.parent(), this.control.append(this.trigger, this.menu), this.source.addClass("jhs-select-source-native").attr({ "aria-hidden": "true", tabindex: "-1" }), initiallyHidden && this.control.addClass("jhs-is-hidden"), _JhsSelect.instances.set(this.source[0], this), this.render(), this.bind(), this.refresh();
-    }
-    static enhance(root = document) {
-      const scope = $(root), selects = scope.is("select.jhs-select-source") ? scope : scope.find("select.jhs-select-source");
-      selects.each(((_2, select) => new _JhsSelect(select)));
-      return selects;
-    }
-    static get(select) {
-      const element = $(select)[0];
-      return element ? _JhsSelect.instances.get(element) || new _JhsSelect(element) : null;
-    }
-    static setValue(select, value, emit = false) {
-      const instance = _JhsSelect.get(select);
-      if (!instance) return;
-      instance.source.val(value), emit ? instance.emitChange() : instance.refresh();
-    }
-    static refresh(select) {
-      _JhsSelect.get(select)?.refresh();
-    }
-    static refreshAll(root = document) {
-      _JhsSelect.enhance(root), $(root).find("select.jhs-select-source").each(((_2, select) => _JhsSelect.refresh(select)));
-    }
-    static setVisible(select, visible) {
-      const instance = _JhsSelect.get(select);
-      instance?.control.toggleClass("jhs-is-hidden", !visible);
-    }
-    static closeAll(except = null) {
-      $(".jhs-select-control.is-open").each(((_2, control) => {
-        const source = $(control).children("select.jhs-select-source")[0], instance = source && _JhsSelect.instances.get(source);
-        instance && instance !== except && instance.close();
-      }));
-    }
-    render() {
-      this.menu.empty();
-      const appendOption = /* @__PURE__ */ __name((option, target) => {
-        const button = $('<button type="button" class="jhs-btn jhs-btn--ghost jhs-select-option" role="menuitemradio" tabindex="-1"></button>');
-        button.attr({ "data-value": option.value, "aria-checked": option.selected ? "true" : "false" }).prop("disabled", option.disabled).text(option.text), target.append(button);
-      }, "appendOption");
-      this.source.children().each(((_2, child) => {
-        if ("OPTGROUP" === child.tagName) {
-          const group = $('<div class="jhs-select-group" role="group"></div>').attr("aria-label", child.label), label = $('<div class="jhs-select-group__label"></div>').text(child.label);
-          group.append(label), $(child).children("option").each(((_3, option) => appendOption(option, group))), this.menu.append(group);
-        } else "OPTION" === child.tagName && appendOption(child, this.menu);
-      }));
-    }
-    bind() {
-      this.trigger.on("click", ((event) => {
-        event.preventDefault(), event.stopPropagation(), this.source.prop("disabled") || (this.control.hasClass("is-open") ? this.close() : this.open());
-      })).on("keydown", ((event) => {
-        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-        event.preventDefault(), this.open("ArrowUp" === event.key || "End" === event.key ? "last" : "selected");
-      }));
-      this.menu.on("click", ".jhs-select-option", ((event) => {
-        event.preventDefault(), this.choose($(event.currentTarget));
-      })).on("keydown", ".jhs-select-option", ((event) => {
-        const items = this.options(), index = items.index(event.currentTarget);
-        if ("Escape" === event.key) return event.preventDefault(), this.close(true);
-        if ("Tab" === event.key) return void this.close();
-        if (["Enter", " "].includes(event.key)) return event.preventDefault(), this.choose($(event.currentTarget));
-        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-        event.preventDefault();
-        const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
-        items.eq(next).trigger("focus");
-      }));
-      this.source.on("change.jhsSelect", (() => this.refresh())), $(document).on("click.jhsSelect", ((event) => {
-        $(event.target).closest(this.control).length || this.close();
-      }));
-    }
-    options() {
-      return this.menu.find(".jhs-select-option:not(:disabled)");
-    }
-    open(focus = "selected") {
-      _JhsSelect.closeAll(this), this.control.addClass("is-open"), this.menu.addClass("is-open"), this.trigger.attr("aria-expanded", "true");
-      const items = this.options(), selected = items.filter('[aria-checked="true"]');
-      ("last" === focus ? items.last() : selected.length ? selected.first() : items.first()).trigger("focus");
-    }
-    close(focus = false) {
-      this.control.removeClass("is-open"), this.menu.removeClass("is-open"), this.trigger.attr("aria-expanded", "false"), focus && this.trigger.trigger("focus");
-    }
-    choose(item) {
-      if (item.prop("disabled")) return;
-      this.source.val(item.attr("data-value")), this.emitChange(), this.close(true);
-    }
-    emitChange() {
-      this.source[0]?.dispatchEvent(new Event("change", {
-        bubbles: true
-      }));
-    }
-    refresh() {
-      const selected = this.source.find("option:selected").first(), value = this.source.val();
-      this.trigger.find(".jhs-select-value").text(selected.text()), this.trigger.prop("disabled", this.source.prop("disabled")), this.menu.find(".jhs-select-option").attr("aria-checked", "false").filter(((_2, item) => $(item).attr("data-value") === String(value ?? ""))).attr("aria-checked", "true");
-    }
-  };
-  __name(_JhsSelect, "JhsSelect");
-  __publicField(_JhsSelect, "instances", /* @__PURE__ */ new WeakMap());
-  var JhsSelect = _JhsSelect;
-
   // src/platform/userscript/vendor-runtime.js
   function getVendorRuntime(runtimeWindow = window) {
     const values = {
@@ -4393,7 +5843,8 @@
       })), n2.on("click", (() => {
         t2.trigger("click");
       })), t2.on("change", ((e3) => {
-        e3.target.files && e3.target.files[0] && (this.handleImageFile(e3.target.files[0]), this.resetSearchUI());
+        const input = e3.target;
+        input.files && input.files[0] && (this.handleImageFile(input.files[0]), this.resetSearchUI());
       })), $(document).on("paste.searchImg", (async (e3) => {
         const t3 = e3.originalEvent.clipboardData.items;
         for (let a3 = 0; a3 < t3.length; a3++) if (-1 !== t3[a3].type.indexOf("image")) {
@@ -4416,9 +5867,9 @@
                 const i3 = false !== a3[e4.name], anchor = $('<a class="search-img-site-btn" target="_blank" rel="noopener noreferrer"></a>').attr({ href: e4.url, title: e4.name });
                 const checkbox = $('<input type="checkbox" class="site-checkbox jhs-layout-8896c95d">').attr("data-site-name", e4.name).prop("checked", i3);
                 anchor.append(checkbox, $("<img>").attr({ src: e4.iconUrl, alt: e4.name }), $("<span></span>").text(e4.name)), h2.append(anchor);
-              })), h2.on("change", ".site-checkbox", (function() {
-                const e4 = $(this).data("site-name");
-                a3[e4] = $(this).is(":checked"), storage.setLocal(n3, JSON.stringify(a3));
+              })), h2.on("change", ".site-checkbox", ((event) => {
+                const checkbox = $(event.currentTarget), e4 = checkbox.data("site-name");
+                a3[e4] = checkbox.is(":checked"), storage.setLocal(n3, JSON.stringify(a3));
               })), h2.show();
             } finally {
               this.isUploading = false;
@@ -4430,8 +5881,8 @@
       })), c2.on("change", (() => {
         utils.isUrl(c2.val()) && (i2.attr("src", c2.val()), a2.show());
       })), $("#openAll").on("click", (() => {
-        $(".search-img-site-btn").each((function() {
-          $(this).find(".site-checkbox").is(":checked") && window.open($(this).attr("href"));
+        $(".search-img-site-btn").each(((_index, element) => {
+          $(element).find(".site-checkbox").is(":checked") && window.open($(element).attr("href"));
         }));
       }));
     }
@@ -4440,10 +5891,11 @@
     }
     handleImageFile(e2) {
       const t2 = document.getElementById("preview-image"), n2 = document.getElementById("preview-area"), a2 = document.getElementById("url-input-container");
+      if (!t2 || !n2 || !a2) return;
       if (!e2.type.match("image.*")) return void show.info("请选择图片文件");
       const i2 = new FileReader();
       i2.onload = (e3) => {
-        t2.src = e3.target.result, n2.style.display = "block", a2.style.display = "none", $("#handle-btn")[0].click();
+        t2.src = String(e3.target?.result || ""), n2.style.display = "block", a2.style.display = "none", $("#handle-btn")[0]?.click();
       }, i2.readAsDataURL(e2);
     }
     async searchByImage(e2) {
@@ -4453,7 +5905,7 @@
         const scope = await this.getRuntimeService("scope")();
         return await this.getRuntimeService("imageSearch").resolve(e2, { scope });
       } catch (n2) {
-        show.error(`搜索失败: ${n2.message}`), clog.error("搜索失败:", n2);
+        show.error(`搜索失败: ${n2 instanceof Error ? n2.message : String(n2)}`), clog.error("搜索失败:", n2);
       } finally {
         t2.close();
       }
@@ -8531,10 +9983,14 @@
     downloaded: { selector: "#hasDownBtn", inactive: /* @__PURE__ */ __name(() => y, "inactive"), active: /* @__PURE__ */ __name(() => "已标记下载", "active") },
     watched: { selector: "#hasWatchBtn", inactive: /* @__PURE__ */ __name(() => k, "inactive"), active: /* @__PURE__ */ __name(() => "已标记观看", "active") }
   };
+  function stateButtonEntries() {
+    return Object.entries(DETAIL_STATE_BUTTONS);
+  }
+  __name(stateButtonEntries, "stateButtonEntries");
   var _DetailStateController = class _DetailStateController {
-    bind({ root = document, layerIndex = null, carNum, getRecord, activityType = "detail-state", selectors = {} }) {
+    bind({ root = document, layerIndex = null, carNum, getRecord = null, activityType = "detail-state", selectors = {} }) {
       const config = { root, layerIndex, carNum: normalizeCarNum(carNum), getRecord, activityType, selectors };
-      for (const [flag, definition] of Object.entries(DETAIL_STATE_BUTTONS)) {
+      for (const [flag, definition] of stateButtonEntries()) {
         const selector = selectors[flag] || definition.selector;
         $(root).find(selector).off("click.jhsDetailState").on("click.jhsDetailState", ((event) => {
           event.preventDefault(), event.stopPropagation(), void this.requestToggle(config, flag, event);
@@ -8550,6 +10006,7 @@
       return this.toggle(config, flag, event);
     }
     async toggle(config, flag, event = null) {
+      if (!config.carNum) return void show.error("番号不可用，无法更新状态");
       const selector = config.selectors[flag] || DETAIL_STATE_BUTTONS[flag].selector, button = event?.currentTarget ? $(event.currentTarget) : $(config.root).find(selector);
       if (button.prop("disabled")) return;
       button.prop("disabled", true).attr("aria-busy", "true");
@@ -8564,7 +10021,7 @@
     }
     async render({ root = document, carNum, selectors = {} }) {
       const record = await storageManager.getCar(normalizeCarNum(carNum)), flags = normalizeStateFlags(record?.stateFlags);
-      for (const [flag, definition] of Object.entries(DETAIL_STATE_BUTTONS)) {
+      for (const [flag, definition] of stateButtonEntries()) {
         const button = $(root).find(selectors[flag] || definition.selector), active = !!flags[flag];
         button.attr("aria-pressed", String(active)).find("span").first().text(active ? definition.active() : definition.inactive());
       }
@@ -9551,15 +11008,17 @@ ${value}\r
           this.appendScore(id, score, watchedCount), cache[id] = { score: Number.isFinite(score) ? score : 0, watchedCount: Number.isFinite(watchedCount) ? watchedCount : 0 };
         } catch (error) {
           const id = movie.movieId ?? movie.id, carNum = movie.carNum ?? movie.number;
+          const failure = error instanceof Error ? error : new Error(String(error));
           $(`#${id}`).attr("data-jhs-rate-count", "0"), clog.error(`解析评分数据失败 | 编号: ${carNum}
-`, `错误详情: ${error.message}
-`, error.stack ? `调用栈:
-${error.stack}` : "");
+`, `错误详情: ${failure.message}
+`, failure.stack ? `调用栈:
+${failure.stack}` : "");
         }
       }
     }
     normalizeScoreData(value) {
-      const html = "string" == typeof value ? value : String(value?.html || ""), score = Number(value?.score ?? (html.match(/([\d.]+)分/) || [0, 0])[1]), watchedCount = Number(value?.watchedCount ?? (html.match(/由(\d+)人/) || [0, 0])[1]);
+      const record = value && "object" == typeof value ? value : {};
+      const html = "string" == typeof value ? value : String(record.html || ""), score = Number(record.score ?? (html.match(/([\d.]+)分/) || [0, 0])[1]), watchedCount = Number(record.watchedCount ?? (html.match(/由(\d+)人/) || [0, 0])[1]);
       return { score: Number.isFinite(score) ? score : 0, watchedCount: Number.isFinite(watchedCount) ? watchedCount : 0 };
     }
     appendScore(e2, score, watchedCount = 0) {
@@ -10268,6 +11727,7 @@ ${error.stack}` : "");
       $('.main-tabs ul li:contains("猜你喜歡")').html('<a href="/rankings/top"><span>Top250</span></a>'), $('a[href*="rankings/top"]').on("click", ((e2) => {
         e2.preventDefault(), e2.stopPropagation();
         const t2 = $(e2.target), n2 = (t2.is("a") ? t2 : t2.closest("a")).attr("href");
+        if (!n2) return;
         let a2 = n2.includes("?") ? n2.split("?")[1] : n2;
         const i2 = new URLSearchParams(a2);
         this.checkLogin(e2, i2);
@@ -10281,7 +11741,7 @@ ${error.stack}` : "");
     }
     renderPagination() {
       const e2 = new URLSearchParams(window.location.search);
-      let t2 = parseInt(e2.get("page")) || 1;
+      let t2 = parseInt(e2.get("page") || "", 10) || 1;
       this.$contentBox.append(((e3) => {
         const t3 = e3 >= 5;
         let n2 = "";
@@ -10300,9 +11760,9 @@ ${error.stack}` : "");
             `;
       })(t2)), this.$contentBox.on("click", ".pagination-link, .pagination-previous, .pagination-next", ((t3) => {
         t3.preventDefault();
-        const n2 = parseInt($(t3.currentTarget).data("page"));
+        const n2 = parseInt(String($(t3.currentTarget).data("page")), 10);
         !isNaN(n2) && n2 > 0 && ((t4) => {
-          e2.set("page", t4), window.history.pushState({}, "", "?" + e2.toString()), window.location.reload();
+          e2.set("page", String(t4)), window.history.pushState({}, "", "?" + e2.toString()), window.location.reload();
         })(n2);
       }));
     }
@@ -10311,7 +11771,7 @@ ${error.stack}` : "");
       const e2 = new URLSearchParams(window.location.search);
       let t2 = e2.get("handleType") || "all", n2 = e2.get("type_value") || "";
       this.has_cnsub = e2.get("has_cnsub") || "";
-      let a2 = e2.get("page") || 1;
+      let a2 = Number(e2.get("page")) || 1;
       this.toolBar(t2, n2, a2), this.hookPage();
       let i2 = this.$listRoot;
       i2.html("");
@@ -10335,8 +11795,8 @@ ${error.stack}` : "");
       }
     }
     toolBar(e2, t2, n2) {
-      "5" === n2.toString() && $(".pagination-next").remove(), $(".pagination-ellipsis").closest("li").remove(), $(".pagination-list li .pagination-link").each((function() {
-        parseInt($(this).text()) > 5 && $(this).closest("li").remove();
+      "5" === n2.toString() && $(".pagination-next").remove(), $(".pagination-ellipsis").closest("li").remove(), $(".pagination-list li .pagination-link").each(((_index, element) => {
+        parseInt($(element).text(), 10) > 5 && $(element).closest("li").remove();
       }));
       let years = "";
       for (let year = (/* @__PURE__ */ new Date()).getFullYear(); year >= 2008; year--) years += `<a class="jhs-segmented__item jhs-layout-186f17ef ${t2 === String(year) ? "active" : ""}" aria-current="${t2 === String(year) ? "page" : "false"}" href="/advanced_search?handleTop=1&handleType=year&type_value=${year}&has_cnsub=${this.has_cnsub}">${year}</a>`;
@@ -10396,7 +11856,7 @@ ${error.stack}` : "");
                 </div>
             `,
         success: /* @__PURE__ */ __name((e2, t2) => {
-          $("#loginBtn").click((async function() {
+          $("#loginBtn").click((async () => {
             const e3 = $("#username").val(), n2 = $("#password").val();
             if (!e3 || !n2) return void show.error("请输入用户名和密码");
             let a2 = loading();
@@ -10405,8 +11865,8 @@ ${error.stack}` : "");
               else {
                 await storeEncryptedCredential(me, result.token), show.ok("登录成功"), dialog.close(t2), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
               }
-            })).catch(((e4) => {
-              clog.error("登录异常:", e4), show.error(e4.message);
+            })).catch(((error) => {
+              clog.error("登录异常:", error), show.error(error instanceof Error ? error.message : String(error));
             })).finally((() => {
               a2.close();
             }));
@@ -10457,7 +11917,8 @@ ${error.stack}` : "");
         i2 && await this.removeActorFromStorage(i2);
       })), $("#button-collect-actor").click((async (t2) => {
         const n2 = $("#button-collect-actor").attr("href").match(e2), a2 = n2 ? n2[1] : null;
-        let i2 = [], s2 = $(".actor-section-name");
+        let i2 = [];
+        let s2 = $(".actor-section-name");
         s2.length && s2.text().trim().split(",").forEach(((e3) => {
           i2.push(e3.trim());
         }));
@@ -10776,7 +12237,7 @@ ${error.stack}` : "");
         $("body").append('\n                <div id="bus-preview-modal" class="bus-preview-modal">\n                    <div class="bus-preview-modal-content">\n                        </div>\n                </div>\n            ');
         const e2 = $("#bus-preview-modal");
         e2.on("click", ((e3) => {
-          "bus-preview-modal" === e3.target.id && this.closeVideoModal();
+          e3.target instanceof Element && "bus-preview-modal" === e3.target.id && this.closeVideoModal();
         })), $(document).on("keydown", ((t2) => {
           "Escape" === t2.key && e2.hasClass("is-open") && this.closeVideoModal();
         }));
@@ -10799,7 +12260,7 @@ ${error.stack}` : "");
                 </div>
             </button>`);
       $("#sample-waterfall").prepend(t2);
-      "yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes") && fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage")).catch(((e3) => clog.warn("预加载 DMM 失败", e3)));
+      "yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes") && fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage")).catch(((error) => clog.warn("预加载 DMM 失败", error)));
       let n2 = false, a2 = $(".preview-video-container");
       a2.on("click", (async (e3) => {
         if (e3.preventDefault(), e3.stopPropagation(), n2) show.info("正在加载中, 勿重复点击");
@@ -12800,6 +14261,7 @@ ${error.stack}` : "");
       }
     }
     async setupListMatching(hostAdapter) {
+      if (!jhsEventBus) throw new Error("JHS EventBus 尚未初始化");
       this.concurrency = Math.max(1, Math.min(10, Number(await storageManager.getSetting("oneOneFiveConcurrency", 4)) || 4)), this.cacheMinutes = Math.max(1, Number(await storageManager.getSetting("oneOneFiveCacheMinutes", 60)) || 60);
       this.observer = new IntersectionObserver(((entries) => {
         entries.forEach(((entry) => entry.isIntersecting && (this.observer.unobserve(entry.target), this.pendingCards.add(entry.target))));
@@ -12809,7 +14271,7 @@ ${error.stack}` : "");
     }
     registerCards(cards) {
       cards.forEach(((card) => {
-        "true" !== card.dataset.jhs115Observed && "matched" !== card.dataset.jhs115State && (card.dataset.jhs115Observed = "true", this.observer.observe(card));
+        "true" !== card.dataset.jhs115Observed && "matched" !== card.dataset.jhs115State && (card.dataset.jhs115Observed = "true", this.observer?.observe(card));
       }));
     }
     scheduleFlush() {
@@ -13039,8 +14501,8 @@ ${error.stack}` : "");
         </div>`;
       const dialog = this.getRuntimeService("dialog");
       dialog.open({ type: 1, title: "统计", content: dialogHtml, scrollbar: false, area: utils.getDialogArea("lg"), anim: -1, success: /* @__PURE__ */ __name((layerElement, layerIndex) => {
-        $(layerElement).find(".jhs-stats__bar").each((function() {
-          $(this).css({ "--jhs-value": `${$(this).data("width")}%`, "--jhs-bar": $(this).data("color") });
+        $(layerElement).find(".jhs-stats__bar").each(((_index, element) => {
+          $(element).css({ "--jhs-value": `${$(element).data("width")}%`, "--jhs-bar": $(element).data("color") });
         }));
         $(layerElement).find("button.jhs-stats__metric[data-action]").on("click", ((event) => {
           const metric = $(event.currentTarget), action = metric.data("action");
@@ -13646,16 +15108,15 @@ ${error.stack}` : "");
         e2 && e2.forEach(((e3) => {
           $(`#tags a.tag:contains(${e3})`).addClass("highlighted"), $(`.tags a.tag:contains(${e3})`).addClass("highlighted");
         }));
-      })().catch(((error) => clog.error("分类高亮恢复失败", error))), $("#tags a.tag, .tags a.tag").hover((function() {
-        const e2 = $(this), t2 = $('<button class="jhs-btn highlight-btn" title="高亮显示">★</button>');
+      })().catch(((error) => clog.error("分类高亮恢复失败", error))), $("#tags a.tag, .tags a.tag").hover(((event) => {
+        const e2 = $(event.currentTarget), t2 = $('<button class="jhs-btn highlight-btn" title="高亮显示">★</button>');
         e2.append(t2), t2.fadeIn(0);
-      }), (function() {
-        $(this).find(".highlight-btn").fadeOut(0, (function() {
-          $(this).remove();
-        }));
-      })), $(document).on("click", ".highlight-btn", (async function(e2) {
+      }), ((event) => {
+        const button = $(event.currentTarget).find(".highlight-btn");
+        button.fadeOut(0, (() => button.remove()));
+      })), $(document).on("click", ".highlight-btn", (async (e2) => {
         e2.stopPropagation(), e2.preventDefault();
-        const t2 = $(this).closest("a.tag"), n2 = t2.clone();
+        const t2 = $(e2.currentTarget).closest("a.tag"), n2 = t2.clone();
         n2.find(".highlight-btn").remove();
         const a2 = n2.text().trim().replace(/\s*\(\d+\)$/, "");
         let i2 = await storageManager.getHighlightedTags();
@@ -13663,8 +15124,8 @@ ${error.stack}` : "");
       }));
     }
     async createFoldBtn() {
-      let t2 = $("#tags"), n2 = $("#tags dl div.tag.is-info").map((function() {
-        return $(this).text().replaceAll("\n", "").replaceAll(" ", "");
+      let t2 = $("#tags"), n2 = $("#tags dl div.tag.is-info").map(((_index, element) => {
+        return $(element).text().replaceAll("\n", "").replaceAll(" ", "");
       })).get().join(" ");
       if (!n2) return;
       $(".tabs").append(`
@@ -15086,14 +16547,14 @@ ${error.stack}` : "");
       const t2 = e2.trim();
       if (!t2) return;
       const n2 = t2.toLowerCase();
-      $(".video-title strong, .actor-box strong").each((function() {
-        const e3 = $(this);
+      $(".video-title strong, .actor-box strong").each(((_index, element) => {
+        const e3 = $(element);
         e3.text().toLowerCase().includes(n2) && e3.addClass("highlight-red");
       }));
     }
     hookSearch() {
       $("#navbar-menu-hero").after('\n            <div class="navbar-menu jhs-ui" id="search-box">\n                <div class="navbar-start jhs-layout-d9caa2c0">\n                    <select id="search-type" class="jhs-select-source">\n                        <option value="all">影片</option>\n                        <option value="actor">演员</option>\n                        <option value="series">系列</option>\n                        <option value="maker">片商</option>\n                        <option value="director">导演</option>\n                        <option value="code">番号</option>\n                        <option value="list">清单</option>\n                    </select>\n                    <input id="search-keyword" type="text" placeholder="输入影片番号、演员名等关键词进行检索" class="jhs-field">\n                    <a href="/advanced_search?noFold=1" title="高级检索" class="jhs-btn jhs-btn--secondary"><span>...</span></a>\n                    <button type="button" id="search-img-btn" class="jhs-btn jhs-btn--secondary">识图</button>\n                    <button type="button" id="search-btn" class="jhs-btn jhs-btn--primary">检索</button>\n                </div>\n            </div>\n        '), $("#search-keyword").on("paste", ((e2) => {
-        const t2 = e2.originalEvent.clipboardData.items;
+        const t2 = e2.originalEvent?.clipboardData?.items || [];
         for (let n2 = 0; n2 < t2.length; n2++) if (-1 !== t2[n2].type.indexOf("image")) {
           const e3 = t2[n2].getAsFile();
           $("#search-keyword").blur();
@@ -15117,7 +16578,7 @@ ${error.stack}` : "");
       const e2 = document.querySelector(".search-image");
       if (!e2) return;
       const t2 = e2.cloneNode(true);
-      e2.parentNode.replaceChild(t2, e2), $("#button-search-image").attr("data-tooltip", "以图识图"), $(".search-image").on("click", ((e3) => {
+      e2.parentNode?.replaceChild(t2, e2), $("#button-search-image").attr("data-tooltip", "以图识图"), $(".search-image").on("click", ((e3) => {
         this.getDependency("SearchByImagePlugin").open();
       }));
     }
@@ -15158,7 +16619,7 @@ ${error.stack}` : "");
           const result = await this.parseMovieList();
           show.ok(`导入完成：成功 ${result.imported}，失败 ${result.failed}，共 ${result.pages} 页`);
         } catch (t3) {
-          clog.error(t3), show.error(`导入失败：${t3.message || t3}`);
+          clog.error(t3), show.error(`导入失败：${t3 instanceof Error ? t3.message : String(t3)}`);
         } finally {
           e3.close();
         }
@@ -18486,6 +19947,7 @@ ${error.stack}` : "");
       Object.assign(globalThis, { utils: utils2, gmHttp: gmHttp2, storageManager: storageManager2, stateService, jhsEventBus: jhsEventBus2 });
       patchLayerRuntime(vendors.layer);
       importVendorStyles();
+      injectCoreCss();
       const disabled = await migrateDisabledPluginSettings();
       const localOriginSettings = await prepareLocalOrigins();
       const siteContext2 = detectSite(window.location);

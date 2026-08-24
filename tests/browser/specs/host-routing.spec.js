@@ -11,6 +11,7 @@ for (const [label, url, expectedPlugin] of [
     await page.goto(url, { waitUntil: "domcontentloaded" });
     await injectUserscriptRuntime(page);
     await expect.poll(() => page.evaluate((name) => window.unsafeWindow.pluginManager.getPluginNames().includes(name), expectedPlugin)).toBe(true);
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--jhs-accent").trim()), "Bootstrap must inject the core theme tokens").not.toBe("");
     await expect(page.locator("body")).toBeVisible();
     await assertNoHorizontalOverflow(page);
     await page.waitForTimeout(250);

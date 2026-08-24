@@ -9,6 +9,7 @@ declare const utils: any;
 declare const ImageHoverPreview: any;
 declare const gmHttp: any;
 declare const md5: (value: string) => string;
+declare const GM_openInTab: (url: string, options?: Record<string, unknown>) => unknown;
 declare const isDetailPage: boolean;
 declare const isListPage: boolean;
 

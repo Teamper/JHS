@@ -1,6 +1,7 @@
 // @ts-check
 
 import { l, r } from "../core/constants.js";
+import { injectCoreCss } from "../core/css-injection.js";
 import { detectSite } from "../core/site-context.js";
 import { JhsError } from "../core/jhs-error.js";
 import { runDataMigrations } from "../core/migration.js";
@@ -90,6 +91,7 @@ export async function bootstrapJhs() {
         Object.assign(globalThis, { utils, gmHttp, storageManager, stateService, jhsEventBus });
         patchLayerRuntime(vendors.layer);
         importVendorStyles();
+        injectCoreCss();
         const disabled = await migrateDisabledPluginSettings();
         const localOriginSettings = await prepareLocalOrigins();
         const siteContext = detectSite(window.location);

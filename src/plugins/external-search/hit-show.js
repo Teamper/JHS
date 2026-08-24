@@ -1,7 +1,11 @@
+// @ts-check
+
 import { escapeHtml, i } from "../../core/constants.js";
 import { normalizeHttpUrl } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { isHitShowPage } from "../../core/site-context.js";
+
+/** @typedef {Record<string, any>} HitMovie */
 
 export class HitShowPlugin extends BasePlugin {
     constructor() {
@@ -14,7 +18,7 @@ export class HitShowPlugin extends BasePlugin {
         return `<style>.jhs-hitshow-heading{display:flex;align-items:center;justify-content:space-between;gap:var(--jhs-space-3);flex-wrap:wrap}.jhs-hitshow-title{margin:0!important}.jhs-hitshow-list{margin-top:var(--jhs-space-3)}</style>`;
     }
     async handle() {
-        $('a[href*="rankings/playback"]').on("click", (e => {
+        $('a[href*="rankings/playback"]').on("click", ((/** @type {MouseEvent} */ e) => {
             e.preventDefault(), e.stopPropagation(), window.location.href = "/advanced_search?handlePlayback=1&period=daily";
         })), await this.handlePlayback();
     }
@@ -48,7 +52,7 @@ export class HitShowPlugin extends BasePlugin {
             loadingClosed || loadingObj.close();
         }
     }
-    async fetchPlaybackWithRetry(period) {
+    async fetchPlaybackWithRetry(/** @type {string | null} */ period) {
         let lastError;
         for (let attempt = 1; attempt <= 3; attempt++) try {
             const scope = await this.getRuntimeService("scope")();
@@ -64,19 +68,19 @@ export class HitShowPlugin extends BasePlugin {
         listPage.replaceHdImg(), await listPage.doFilter(), listPage.applyVisibility(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector);
         this.getDependency("CoverButtonPlugin").addSvgBtn();
     }
-    toolBar(e) {
+    toolBar(/** @type {string | null} */ e) {
         $("#jhs-hitshow-period").remove();
         let t = `\n            <nav id="jhs-hitshow-period" class="jhs-segmented" role="tablist" aria-label="热播周期">\n                <a role="tab" class="jhs-segmented__item ${"daily" === e ? "active" : ""}" aria-selected="${"daily" === e ? "true" : "false"}" tabindex="${"daily" === e ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=daily">日榜</a>\n                <a role="tab" class="jhs-segmented__item ${"weekly" === e ? "active" : ""}" aria-selected="${"weekly" === e ? "true" : "false"}" tabindex="${"weekly" === e ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=weekly">周榜</a>\n                <a role="tab" class="jhs-segmented__item ${"monthly" === e ? "active" : ""}" aria-selected="${"monthly" === e ? "true" : "false"}" tabindex="${"monthly" === e ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=monthly">月榜</a>\n            </nav>\n        `;
         $(".jhs-hitshow-heading").append(t);
     }
-    getStarRating(e) {
+    getStarRating(/** @type {number} */ e) {
         let t = "";
         const n = Math.floor(e);
         for (let a = 0; a < n; a++) t += '<i class="icon-star"></i>';
         for (let a = 0; a < 5 - n; a++) t += '<i class="icon-star gray"></i>';
         return t;
     }
-    async loadScore(movies, generation = this.loadGeneration) {
+    async loadScore(/** @type {HitMovie[]} */ movies, /** @type {number} */ generation = this.loadGeneration) {
         if (0 === movies.length) return;
         const cacheKey = "jhs_score_info";
         const cacheService = this.getRuntimeService("cache"), cached = cacheService.get(cacheKey, { scope: "public" });
@@ -84,7 +88,7 @@ export class HitShowPlugin extends BasePlugin {
         const queue = [ ...movies ], workers = Array.from({ length: Math.min(4, queue.length) }, (() => this.scoreWorker(queue, cache, generation)));
         await Promise.all(workers), cacheService.set(cacheKey, cache, { scope: "public", ttlMs: 604_800_000 });
     }
-    async scoreWorker(queue, cache, generation) {
+    async scoreWorker(/** @type {HitMovie[]} */ queue, /** @type {Record<string, any>} */ cache, /** @type {number} */ generation) {
         for (;;) {
             const movie = queue.shift();
             if (!movie) return;
@@ -105,22 +109,24 @@ export class HitShowPlugin extends BasePlugin {
                 this.appendScore(id, score, watchedCount), cache[id] = { score: Number.isFinite(score) ? score : 0, watchedCount: Number.isFinite(watchedCount) ? watchedCount : 0 };
             } catch (error) {
                 const id = movie.movieId ?? movie.id, carNum = movie.carNum ?? movie.number;
-                $(`#${id}`).attr("data-jhs-rate-count", "0"), clog.error(`解析评分数据失败 | 编号: ${carNum}\n`, `错误详情: ${error.message}\n`, error.stack ? `调用栈:\n${error.stack}` : "");
+                const failure = error instanceof Error ? error : new Error(String(error));
+                $(`#${id}`).attr("data-jhs-rate-count", "0"), clog.error(`解析评分数据失败 | 编号: ${carNum}\n`, `错误详情: ${failure.message}\n`, failure.stack ? `调用栈:\n${failure.stack}` : "");
             }
         }
     }
-    normalizeScoreData(value) {
-        const html = "string" == typeof value ? value : String(value?.html || ""), score = Number(value?.score ?? (html.match(/([\d.]+)分/) || [ 0, 0 ])[1]), watchedCount = Number(value?.watchedCount ?? (html.match(/由(\d+)人/) || [ 0, 0 ])[1]);
+    normalizeScoreData(/** @type {unknown} */ value) {
+        const record = value && "object" == typeof value ? /** @type {HitMovie} */ (value) : {};
+        const html = "string" == typeof value ? value : String(record.html || ""), score = Number(record.score ?? (html.match(/([\d.]+)分/) || [ 0, 0 ])[1]), watchedCount = Number(record.watchedCount ?? (html.match(/由(\d+)人/) || [ 0, 0 ])[1]);
         return { score: Number.isFinite(score) ? score : 0, watchedCount: Number.isFinite(watchedCount) ? watchedCount : 0 };
     }
-    appendScore(e, score, watchedCount = 0) {
+    appendScore(/** @type {string | number} */ e, /** @type {unknown} */ score, /** @type {unknown} */ watchedCount = 0) {
         const safeScore = Math.min(5, Math.max(0, Number(score) || 0)), safeCount = Math.max(0, Number(watchedCount) || 0), card = $(`#${e}`), target = $(`#score_${e}`);
         card.attr("data-jhs-rate-count", String(safeCount));
         if (!target.length || "" !== target.text().trim()) return;
         const value = $('<span class="value"></span>'), stars = $('<span class="score-stars"></span>').html(this.getStarRating(safeScore));
         value.append(stars, document.createTextNode(`  ${safeScore}分，由${safeCount}人评价`)), target.hide().empty().append(value).slideDown(500);
     }
-    markDataListHtml(e) {
+    markDataListHtml(/** @type {HitMovie[]} */ e) {
         let t = "";
         return e.forEach(((e, index) => {
             const id = e.movieId ?? e.id, carNum = e.carNum ?? e.number, title = e.title ?? e.origin_title,

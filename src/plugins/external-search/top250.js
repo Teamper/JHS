@@ -1,9 +1,12 @@
+// @ts-check
+
 import { escapeHtml, i } from "../../core/constants.js";
 import { q } from "../../core/javdb-api.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { hasStoredEncryptedCredential, removeStoredEncryptedCredential, storeEncryptedCredential } from "../../core/credential-crypto.js";
 
 const me = "jhs_appAuthorization";
+/** @typedef {Record<string, any>} TopMovie */
 
 export class Top250Plugin extends BasePlugin {
     constructor() {
@@ -14,9 +17,10 @@ export class Top250Plugin extends BasePlugin {
     }
     async handle() {
         $('.main-tabs ul li:contains("猜你喜歡")').html('<a href="/rankings/top"><span>Top250</span></a>'),
-        $('a[href*="rankings/top"]').on("click", (e => {
+        $('a[href*="rankings/top"]').on("click", ((/** @type {MouseEvent} */ e) => {
             e.preventDefault(), e.stopPropagation();
             const t = $(e.target), n = (t.is("a") ? t : t.closest("a")).attr("href");
+            if (!n) return;
             let a = n.includes("?") ? n.split("?")[1] : n;
             const i = new URLSearchParams(a);
             this.checkLogin(e, i);
@@ -33,7 +37,7 @@ export class Top250Plugin extends BasePlugin {
     }
     renderPagination() {
         const e = new URLSearchParams(window.location.search);
-        let t = parseInt(e.get("page")) || 1;
+        let t = parseInt(e.get("page") || "", 10) || 1;
         this.$contentBox.append((e => {
             const t = e >= 5;
             let n = "";
@@ -41,11 +45,11 @@ export class Top250Plugin extends BasePlugin {
                 n += `<li><button type="button" class="jhs-btn pagination-link ${e === a ? "is-current" : ""}" data-page="${a}">${a}</button></li>`;
             }
             return `\n                <nav class="pagination">\n                    <button type="button" class="jhs-btn pagination-previous ${e <= 1 ? "do-hide" : ""}" data-page="${e - 1}">上一页</button>\n                    <button type="button" class="jhs-btn pagination-next ${t ? "do-hide" : ""}" data-page="${e + 1}">下一页</button>\n                    \n                    <ul class="pagination-list">\n                        ${n}\n                    </ul>\n                </nav>\n            `;
-        })(t)), this.$contentBox.on("click", ".pagination-link, .pagination-previous, .pagination-next", (t => {
+        })(t)), this.$contentBox.on("click", ".pagination-link, .pagination-previous, .pagination-next", ((/** @type {MouseEvent} */ t) => {
             t.preventDefault();
-            const n = parseInt($(t.currentTarget).data("page"));
+            const n = parseInt(String($(t.currentTarget).data("page")), 10);
             !isNaN(n) && n > 0 && (t => {
-                e.set("page", t), window.history.pushState({}, "", "?" + e.toString()), window.location.reload();
+                e.set("page", String(t)), window.history.pushState({}, "", "?" + e.toString()), window.location.reload();
             })(n);
         }));
     }
@@ -54,7 +58,7 @@ export class Top250Plugin extends BasePlugin {
         const e = new URLSearchParams(window.location.search);
         let t = e.get("handleType") || "all", n = e.get("type_value") || "";
         this.has_cnsub = e.get("has_cnsub") || "";
-        let a = e.get("page") || 1;
+        let a = Number(e.get("page")) || 1;
         this.toolBar(t, n, a), this.hookPage();
         let i = this.$listRoot;
         i.html("");
@@ -67,7 +71,7 @@ export class Top250Plugin extends BasePlugin {
                 let t = e.data.movies;
                 if (0 === t.length) return show.error("无数据"), void s.close();
                 this.movies = t;
-                const n = t.filter((e => "1" === this.has_cnsub ? e.has_cnsub : "0" !== this.has_cnsub || !e.has_cnsub)), a = this.getDependency("HitShowPlugin");
+                const n = t.filter(((/** @type {TopMovie} */ e) => "1" === this.has_cnsub ? e.has_cnsub : "0" !== this.has_cnsub || !e.has_cnsub)), a = this.getDependency("HitShowPlugin");
                 let r = a.markDataListHtml(n);
                 i.html(r), await a.initializeRenderedList(), await a.loadScore(n), o = !0;
             } else clog.error(e), i.html(`<h3>${escapeHtml(l)}</h3>`), show.error(l), "JWTVerificationError" === c && (removeStoredEncryptedCredential(me),
@@ -79,25 +83,25 @@ export class Top250Plugin extends BasePlugin {
             (o || 3 === l) && s.close();
         }
     }
-    toolBar(e, t, n) {
+    toolBar(/** @type {string} */ e, /** @type {string} */ t, /** @type {string | number} */ n) {
         "5" === n.toString() && $(".pagination-next").remove(), $(".pagination-ellipsis").closest("li").remove(),
-        $(".pagination-list li .pagination-link").each((function() { parseInt($(this).text()) > 5 && $(this).closest("li").remove(); }));
+        $(".pagination-list li .pagination-link").each(((/** @type {number} */ _index, /** @type {Element} */ element) => { parseInt($(element).text(), 10) > 5 && $(element).closest("li").remove(); }));
         let years = "";
         for (let year = (new Date).getFullYear(); year >= 2008; year--) years += `<a class="jhs-segmented__item jhs-layout-186f17ef ${t === String(year) ? "active" : ""}" aria-current="${t === String(year) ? "page" : "false"}" href="/advanced_search?handleTop=1&handleType=year&type_value=${year}&has_cnsub=${this.has_cnsub}">${year}</a>`;
-        const typeLink = (value, label, type = "video_type") => `<a class="jhs-segmented__item jhs-layout-186f17ef ${value === ("all" === value ? e : t) ? "active" : ""}" aria-current="${value === ("all" === value ? e : t) ? "page" : "false"}" href="/advanced_search?handleTop=1&handleType=${type}&type_value=${"all" === value ? "" : value}&has_cnsub=${this.has_cnsub}">${label}</a>`;
+        const typeLink = (/** @type {string} */ value, /** @type {string} */ label, /** @type {string} */ type = "video_type") => `<a class="jhs-segmented__item jhs-layout-186f17ef ${value === ("all" === value ? e : t) ? "active" : ""}" aria-current="${value === ("all" === value ? e : t) ? "page" : "false"}" href="/advanced_search?handleTop=1&handleType=${type}&type_value=${"all" === value ? "" : value}&has_cnsub=${this.has_cnsub}">${label}</a>`;
         const html = `<div class="jhs-top250-filters"><nav class="jhs-segmented jhs-layout-701bf0f9" aria-label="类型条件">${typeLink("all", "全部", "all")}${typeLink("0", "有码")}${typeLink("1", "无码")}${typeLink("2", "欧美")}${typeLink("3", "Fc2")}<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-2335597e ${"1" === this.has_cnsub ? "active" : ""}" aria-pressed="${"1" === this.has_cnsub}" data-cnsub-value="1">含中字磁力</button><button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-186f17ef ${"0" === this.has_cnsub ? "active" : ""}" aria-pressed="${"0" === this.has_cnsub}" data-cnsub-value="0">无字幕</button><button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-186f17ef" aria-pressed="false" data-cnsub-value="">重置</button></nav><nav class="jhs-segmented" aria-label="年份条件">${years}</nav></div>`;
-        this.$contentBox.append(html), $("button[data-cnsub-value]").on("click", (async event => {
+        this.$contentBox.append(html), $("button[data-cnsub-value]").on("click", (async (/** @type {MouseEvent} */ event) => {
             const value = $(event.currentTarget).data("cnsub-value");
             this.has_cnsub = value.toString(), $("button[data-cnsub-value]").removeClass("active").attr("aria-pressed", "false"),
-            $(event.currentTarget).addClass("active").attr("aria-pressed", "true"), $(".jhs-top250-filters a").each(((index, element) => {
+            $(event.currentTarget).addClass("active").attr("aria-pressed", "true"), $(".jhs-top250-filters a").each(((/** @type {number} */ index, /** @type {HTMLAnchorElement} */ element) => {
                 const link = $(element), url = new URL(link.attr("href"), window.location.origin);
                 url.searchParams.set("has_cnsub", value), link.attr("href", url.toString());
             }));
-            const movies = this.movies.filter((movie => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), hitShow = this.getDependency("HitShowPlugin");
-            this.$listRoot.html(hitShow.markDataListHtml(movies)), await hitShow.initializeRenderedList(), void hitShow.loadScore(movies).catch((error => clog.error("Top250 评分加载失败", error)));
+            const movies = this.movies.filter(((/** @type {TopMovie} */ movie) => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), hitShow = this.getDependency("HitShowPlugin");
+            this.$listRoot.html(hitShow.markDataListHtml(movies)), await hitShow.initializeRenderedList(), void hitShow.loadScore(movies).catch(((/** @type {unknown} */ error) => clog.error("Top250 评分加载失败", error)));
         }));
     }
-    async checkLogin(e, t) {
+    async checkLogin(/** @type {MouseEvent | null} */ e, /** @type {URLSearchParams} */ t) {
         if (!hasStoredEncryptedCredential(me)) return show.error("该类别依赖移动端接口，请先完成登录"), void this.openLoginDialog();
         let n = "all", a = "", i = t.get("t") || "";
         /^y\d+$/.test(i) ? (n = "year", a = i.substring(1)) : "" !== i && (n = "video_type",
@@ -107,6 +111,7 @@ export class Top250Plugin extends BasePlugin {
             insert: 0
         }) : window.location.href = s;
     }
+    /** @param {{onSuccess?: (() => unknown | Promise<unknown>) | null}} [options] */
     openLoginDialog({ onSuccess = null } = {}) {
         const dialog = this.getRuntimeService("dialog"), account = this.getRuntimeService("account"), getScope = this.getRuntimeService("scope");
         dialog.open({
@@ -116,17 +121,17 @@ export class Top250Plugin extends BasePlugin {
             area: utils.getResponsiveArea([ "360px", "auto" ]),
             shadeClose: !1,
             content: '\n                <style>#loginBtn:hover{background:var(--jhs-accent-hover)}</style>\n                <div class="jhs-layout-e32cff7f">\n                    <div class="jhs-layout-598afa5a">\n                        <input type="text" id="username" name="username" \n                           \n                            placeholder="用户名 | 邮箱"\n                            onfocus="this.style.borderColor=\'var(--jhs-accent)\'; this.style.background=\'var(--jhs-surface)\'"\n                            onblur="this.style.borderColor=\'var(--jhs-border-strong)\'; this.style.background=\'var(--jhs-surface-2)\'" class="jhs-field">\n                    </div>\n                    \n                    <div class="jhs-layout-da303dcf">\n                        <input type="password" id="password" name="password" \n                           \n                            placeholder="密码"\n                            onfocus="this.style.borderColor=\'var(--jhs-accent)\'; this.style.background=\'var(--jhs-surface)\'"\n                            onblur="this.style.borderColor=\'var(--jhs-border-strong)\'; this.style.background=\'var(--jhs-surface-2)\'" class="jhs-field">\n                    </div>\n                    \n                    <button id="loginBtn" \n                           \n                             class="jhs-btn jhs-layout-c4eb15bf">\n                        登录\n                    </button>\n                </div>\n            ',
-            success: (e, t) => {
-                $("#loginBtn").click((async function() {
+            success: (/** @type {Element} */ e, /** @type {number} */ t) => {
+                $("#loginBtn").click((async () => {
                     const e = $("#username").val(), n = $("#password").val();
                     if (!e || !n) return void show.error("请输入用户名和密码");
                     let a = loading();
-                    account.login("javdb", { username: e, password: n }, { scope: await getScope() }).then((async result => {
+                    account.login("javdb", { username: e, password: n }, { scope: await getScope() }).then((async (/** @type {any} */ result) => {
                         if (!result.success) show.error(result.message); else {
                             await storeEncryptedCredential(me, result.token), show.ok("登录成功"), dialog.close(t), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
                         }
-                    })).catch((e => {
-                        clog.error("登录异常:", e), show.error(e.message);
+                    })).catch(((/** @type {unknown} */ error) => {
+                        clog.error("登录异常:", error), show.error(error instanceof Error ? error.message : String(error));
                     })).finally((() => {
                         a.close();
                     }));

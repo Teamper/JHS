@@ -1,3 +1,5 @@
+// @ts-check
+
 import { H, M, j, l, r } from "./constants.js";
 import { buildThemeCss } from "./theme.js";
 import { buildUiPrimitivesCss } from "./ui-primitives.js";
@@ -61,7 +63,14 @@ const F = `
     .tabulator-tableholder { overflow-x:hidden!important; }
 </style>`;
 
-H(buildThemeCss());
-l && H(N), r && H(E);
-H(F);
-H(buildUiPrimitivesCss());
+let coreCssInjected = false;
+
+/** 在 Bootstrap 阶段一次性注入核心、宿主和 UI primitive 样式。 */
+export function injectCoreCss() {
+    if (coreCssInjected) return;
+    H(buildThemeCss());
+    l && H(N), r && H(E);
+    H(F);
+    H(buildUiPrimitivesCss());
+    coreCssInjected = true;
+}
