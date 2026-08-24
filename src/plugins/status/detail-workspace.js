@@ -51,7 +51,7 @@ export class DetailWorkspacePlugin extends BasePlugin {
     async handle() {
         if (!window.isDetailPage) return;
         this.lifecycleScope = await this.getRuntimeService("scope")();
-        const cancel = utils.loopDetector((() => !!this.getHostAdapter()), (() => this.ensureWorkspace()), 40, 2500, !0);
+        const cancel = utils.loopDetector((() => !!this.getHostAdapter()), (() => this.ensureWorkspace()), 40, 2500, !0, this.lifecycleScope);
         this.lifecycleScope.addCleanup(cancel);
         this.lifecycleScope.addCleanup((() => {
             this.cancelScheduledResourceFrame?.(), this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null;

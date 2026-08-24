@@ -10,12 +10,13 @@ export class ListPageButtonPlugin extends BasePlugin {
     }
     async handle() {
         if (!window.isListPage) return;
-        await this.createMenuBtn(), this.bindEvent();
+        const scope = await this.getRuntimeService("scope")();
+        await this.createMenuBtn(scope), this.bindEvent();
         const e = await storageManager.getSetting("autoPage"), t = this.supportsLiveSorting();
         $("#sort-toggle-btn").prop("disabled", e === _ && !t).attr("title", e === _ && !t ? "瀑布流模式仅支持默认排序" : "选择列表排序方式"),
         (e !== _ || t) && await this.sortItems();
     }
-    async createMenuBtn() {
+    async createMenuBtn(scope) {
         if (r) {
             const e = o.includes("/actors/");
             let t = $(".main-tabs, .tabs"), n = "加入黑名单", a = "jhs-btn--filter", s = null;
@@ -30,7 +31,7 @@ export class ListPageButtonPlugin extends BasePlugin {
                 if (!t) return;
                 const n = "no-" + t, a = await storageManager.getBlacklist();
                 s = a.find((e => e.starId === n)), s && (e.addClass("jhs-btn--muted").removeClass("jhs-btn--filter"), $("#addBlacklistBtn span").text("已加入黑名单"));
-            }));
+            }), 20, 1e4, !0, scope);
             const r = o.includes("advanced_search");
             r && (t = $("h2.section-title"));
             const l = this.getRuntimeService("settings").snapshot().sortMethod || "default", d = "当前排序方式: " + ("rateCount" === l ? "评价人数" : "date" === l ? "时间" : "默认");

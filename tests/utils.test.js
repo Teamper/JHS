@@ -18,7 +18,11 @@ function loadUtilsWithObserver() {
         i: (target, key, value) => (target[key] = value)
     });
     vm.runInContext(`${readTestFile(join(process.cwd(), "src/core/utils.js"), "utf8")};globalThis.TestUtils=Utils;`, context);
-    return { utils: new context.TestUtils(), getObserver: () => observer };
+    const scope = {
+        observe(target, callback, options) { const value = new FakeMutationObserver(callback); value.observe(target, options); return value; },
+        releaseObserver(value) { value.disconnect(); },
+    };
+    return { utils: new context.TestUtils(), getObserver: () => observer, scope };
 }
 
 afterEach(() => vi.useRealTimers());
@@ -293,8 +297,8 @@ describe("loopDetector", () => {
     it("reacts to DOM mutation and cleans up its observer", () => {
         vi.useFakeTimers();
         let ready = false;
-        const callback = vi.fn(), { utils, getObserver } = loadUtilsWithObserver();
-        utils.loopDetector(() => ready, callback, 20, 1e4, false);
+        const callback = vi.fn(), { utils, getObserver, scope } = loadUtilsWithObserver();
+        utils.loopDetector(() => ready, callback, 20, 1e4, false, scope);
         ready = true, getObserver().emit(), vi.advanceTimersByTime(20);
         expect(callback).toHaveBeenCalledTimes(1);
         expect(getObserver().disconnected).toBe(true);
@@ -303,8 +307,8 @@ describe("loopDetector", () => {
 
     it("honors a timeout without invoking a disabled timeout callback", () => {
         vi.useFakeTimers();
-        const callback = vi.fn(), { utils, getObserver } = loadUtilsWithObserver();
-        utils.loopDetector(() => false, callback, 1, 50, false), vi.advanceTimersByTime(50);
+        const callback = vi.fn(), { utils, getObserver, scope } = loadUtilsWithObserver();
+        utils.loopDetector(() => false, callback, 1, 50, false, scope), vi.advanceTimersByTime(50);
         expect(callback).not.toHaveBeenCalled();
         expect(getObserver().disconnected).toBe(true);
         expect(Object.keys(utils.intervalContainer)).toHaveLength(0);
@@ -313,7 +317,7 @@ describe("loopDetector", () => {
     it("supports lifecycle cancellation before the condition becomes ready", () => {
         vi.useFakeTimers();
         let ready = false;
-        const callback = vi.fn(), { utils, getObserver } = loadUtilsWithObserver(), cancel = utils.loopDetector(() => ready, callback, 20, 1e4, false);
+        const callback = vi.fn(), { utils, getObserver, scope } = loadUtilsWithObserver(), cancel = utils.loopDetector(() => ready, callback, 20, 1e4, false, scope);
         cancel(), ready = true, getObserver().emit(), vi.advanceTimersByTime(20);
         expect(callback).not.toHaveBeenCalled();
         expect(getObserver().disconnected).toBe(true);

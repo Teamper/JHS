@@ -10,9 +10,10 @@ export class FoldCategoryPlugin extends BasePlugin {
         return `\n            <style>\n                #tags a.tag, .tags a.tag {\n                    position:relative;\n                }\n                .highlight-btn {\n                    position: absolute;\n                    top: -10px;\n                    right: -10px;\n                    background-color: var(--jhs-status-down);\n                    color: var(--jhs-status-down-on);\n                    border: none;\n                    border-radius: 50%;\n                    width: 24px;\n                    height: 24px;\n                    font-size: 14px;\n                    line-height: 24px;\n                    text-align: center;\n                    cursor: pointer;\n                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);\n                    display: none;\n                    z-index: var(--jhs-z-dropdown);\n                }\n                /* 当父元素被高亮时，按钮变为其他颜色 */\n                .highlighted .highlight-btn {\n                    background-color: var(--jhs-status-watch);\n                }\n                /* 高亮状态下的标签样式 */\n                .highlighted {\n                    /* 浅黄色 */\n                    border: ${e.highlightedTagNumber || 1}px solid ${e.highlightedTagColor || "var(--jhs-status-filter)"};\n                }\n            </style>\n        `;
     }
     async handle() {
+        const scope = await this.getRuntimeService("scope")();
         window.isListPage && (o.includes("advanced_search") || (this.highlightTag(), utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
             this.createFoldBtn();
-        }), 1, 1e4, !0), $("#tags .tag-category .tag-expand").each(((e, t) => {
+        }), 1, 1e4, !0, scope), $("#tags .tag-category .tag-expand").each(((e, t) => {
             $(t).parent().hasClass("collapse") && t.click();
         }))));
     }

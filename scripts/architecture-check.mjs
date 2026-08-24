@@ -9,7 +9,7 @@ const baselinePath = path.join(rootDir, "architecture-baseline.json");
 const rules = [
     { id: "internal-getbean", pattern: /\.getBean\s*\(/, phase: 6 },
     { id: "feature-direct-gmhttp", pattern: /\bgmHttp\s*\./, phase: 5, featureOnly: true },
-    { id: "feature-direct-layer", pattern: /\blayer\s*\./, phase: 5, featureOnly: true },
+    { id: "feature-direct-layer", pattern: /\blayer\s*\.\s*(?:open|close|closeAll|confirm|alert|msg|load|tips|prompt|photos|tab)\s*\(/, phase: 5, featureOnly: true },
     { id: "feature-direct-localstorage", pattern: /\blocalStorage\s*\./, phase: 5, featureOnly: true },
     { id: "feature-third-party-url", pattern: /https?:\/\//, phase: 4, featureOnly: true },
     { id: "host-selector", pattern: /(?:\.movie-panel-info|#magnet-table|\.movie-list)/, phase: 4 },

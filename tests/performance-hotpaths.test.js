@@ -65,7 +65,8 @@ function initializeAccessibilityDom(html) {
     const dom = new JSDOM(html), source = readTestFile(join(repoRoot, "src/core/ui-primitives.js"), "utf8"), start = source.indexOf("function initializeUiAccessibility"), end = source.indexOf("class JhsSelect", start), context = vm.createContext({
         document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver, queueMicrotask
     });
-    vm.runInContext(`${source.slice(start, end)};initializeUiAccessibility();`, context);
+    context.lifecycleScope = { observe(target, callback, options) { const observer = new dom.window.MutationObserver(callback); return observer.observe(target, options), observer; } };
+    vm.runInContext(`${source.slice(start, end)};initializeUiAccessibility(lifecycleScope);`, context);
     return dom;
 }
 

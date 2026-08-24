@@ -90,7 +90,7 @@ const primitivesIndex = injection.indexOf('from "./ui-primitives.js"');
 if (themeIndex < 0 || primitivesIndex < 0 || primitivesIndex < themeIndex)
   failures.push("css-injection.js must import theme before UI primitives");
 requireMatch(injection, /H\(buildUiPrimitivesCss\(\)\)/, "shared UI CSS is not injected");
-requireMatch(injection, /initializeUiAccessibility\(\)/, "dynamic UI accessibility enhancer is not initialized");
+requireMatch(await readFile(join(srcRoot, "app", "bootstrap.js"), "utf8"), /initializeUiAccessibility\(context\.rootScope\)/, "dynamic UI accessibility enhancer must use the App Root Lifecycle");
 requireMatch(injection, /H\(F\)/, "clean global support CSS must be injected");
 forbidMatch(injection, /cleanGlobalCss/, "legacy regex CSS cleanup layer must be deleted");
 

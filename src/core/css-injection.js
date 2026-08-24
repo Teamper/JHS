@@ -1,6 +1,6 @@
 import { H, M, j, l, r } from "./constants.js";
 import { buildThemeCss } from "./theme.js";
-import { buildUiPrimitivesCss, initializeUiAccessibility } from "./ui-primitives.js";
+import { buildUiPrimitivesCss } from "./ui-primitives.js";
 
 /** CSS injection for site-specific layouts, global UI, and responsive behavior. */
 
@@ -65,4 +65,3 @@ H(buildThemeCss());
 l && H(N), r && H(E);
 H(F);
 H(buildUiPrimitivesCss());
-initializeUiAccessibility();

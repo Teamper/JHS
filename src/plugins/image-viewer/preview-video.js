@@ -82,35 +82,37 @@ export class PreviewVideoPlugin extends BasePlugin {
     }
     async handle() {
         if (!isDetailPage) return;
+        this.lifecycleScope = await this.getRuntimeService("scope")();
         const trigger = $(".preview-video-container"), openVideo = () => {
             utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => {
                 this.handleVideo().catch((error => clog.error("预览视频处理失败", error)));
-            }));
+            }), 20, 1e4, !0, this.lifecycleScope);
         };
         trigger.off("click.jhsVideo").on("click.jhsVideo", openVideo);
-        await storageManager.getSetting("enableLoadPreviewVideo", _) !== _ || o.includes("autoPlay=1") || this.initDmm();
+        this.lifecycleScope.addCleanup((() => trigger.off("click.jhsVideo", openVideo)));
+        await storageManager.getSetting("enableLoadPreviewVideo", _) !== _ || o.includes("autoPlay=1") || this.initDmm(this.lifecycleScope);
         const url = window.location.href;
         (url.includes("gallery-1") || url.includes("gallery-2")) && openVideo(), url.includes("autoPlay=1") && trigger.length > 0 && trigger[0].click();
     }
-    async initDmm() {
+    async initDmm(scope) {
         try {
-            const {sources} = await this.getDmmPreview();
+            const {sources} = await this.getDmmPreview(scope);
             if (!sources) return;
             const $video = $("#preview-video"), video = $video[0];
             if (video) return;
             clog.debug("JavDB没有视频播放元素, 开始创建...");
             const cover = $(".column-video-cover img").attr("src");
             $(".preview-images").prepend(`\n                <a class="preview-video-container" data-fancybox="gallery" href="#preview-video">\n                    <span>预告片</span>\n                    <img src="${cover}" class="video-cover jhs-layout-8cf76fd7" alt="">\n                </a>\n            `), $(".preview-video-container").off("click.jhsVideo").on("click.jhsVideo", (() => {
-                utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => this.handleVideo().catch((error => clog.error("预览视频处理失败", error)))));
+                utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => this.handleVideo().catch((error => clog.error("预览视频处理失败", error)))), 20, 1e4, !0, scope);
             }));
         } catch (error) {
             clog.error("预加载 DMM 失败:", error);
         }
     }
     /** 复用单次 DMM 请求，避免预加载和点击处理重复抓取。 */
-    getDmmPreview() {
+    getDmmPreview(scope = this.lifecycleScope) {
         if (this.dmmPreviewPromise) return this.dmmPreviewPromise;
-        this.dmmPreviewPromise = fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), this.getRuntimeService("scope")()).then((result => {
+        this.dmmPreviewPromise = Promise.resolve(scope || this.getRuntimeService("scope")()).then((requestScope => fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), requestScope))).then((result => {
             (result.error?.retryable || "HTTP_ERROR" === result.error?.code) && (this.dmmPreviewPromise = null);
             return result;
         }), (error => {

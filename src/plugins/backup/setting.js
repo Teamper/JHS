@@ -75,6 +75,7 @@ export class SettingPlugin extends BasePlugin {
     async handle() {
         await storageManager.getSetting("enableClog", _) === _ && clog.show();
         if (utils.isMobileMode()) return;
+        const scope = await this.getRuntimeService("scope")();
         if (r) {
             let e = function() {
                 $(".navbar-search").is(":hidden") ? ($(".mini-setting-box").hide(), $(".setting-box").show()) : ($(".mini-setting-box").show(),
@@ -84,11 +85,11 @@ export class SettingPlugin extends BasePlugin {
             utils.loopDetector((() => $("#miniHistoryBtn").length > 0), (() => {
                 $(".miniHistoryBtnBox").before('\n                    <div class="navbar-item mini-setting-box jhs-mini-setting-box">\n                        <button type="button" id="mini-setting-btn" class="jhs-btn navbar-link nav-btn jhs-nav-btn jhs-mini-setting-trigger">\n                            设置\n                        </button>\n                        <div class="mini-simple-setting"></div>\n                    </div>\n                '),
                 e();
-            })), $(window).resize(e);
+            }), 20, 1e4, !0, scope), scope.listen(window, "resize", e);
         }
         l && (isDetailPage ? $("h3").before('\n                    <div class="container-fluid jhs-setting-detail-anchor">\n                        <div id="top-right-box" class="jhs-setting-anchor">\n                            <div class="setting-box">\n                                <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                    <span>设置</span>\n                                </button>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ') : window.isListPage && utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
             $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" class="jhs-setting-anchor">\n                        <div class="setting-box">\n                            <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                <span>设置</span>\n                            </button>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
-        }), 1, 1e4, !1)),
+        }), 1, 1e4, !1, scope)),
         $(".main-nav, .container-fluid").on("click", "#setting-btn, #mini-setting-btn", (() => {
             $(".simple-setting, .mini-simple-setting").html("").hide(), clog.lowZIndex(), void this.openSettingDialog().catch((error => clog.error("设置中心打开失败", error)));
         })), $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (async () => {

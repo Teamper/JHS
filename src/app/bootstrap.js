@@ -11,6 +11,7 @@ import { initializeEventBus } from "../core/event-bus.js";
 import { migrateDisabledPlugins, parseDisabledPlugins } from "../core/legacy-plugin-contributions.js";
 import { initializeLoggerRuntime } from "../core/logger.js";
 import { applyTheme, initializeThemeRuntime } from "../core/theme.js";
+import { initializeUiAccessibility } from "../core/ui-primitives.js";
 import { getVendorRuntime } from "../platform/userscript/vendor-runtime.js";
 import { JavBusHostAdapter } from "../platform/hosts/javbus-host-adapter.js";
 import { JavDbHostAdapter } from "../platform/hosts/javdb-host-adapter.js";
@@ -115,6 +116,7 @@ export async function bootstrapJhs() {
         }
         const logger = initializeLoggerRuntime(context.rootScope);
         initializeThemeRuntime(context.rootScope);
+        initializeUiAccessibility(context.rootScope);
         context.services.diagnostics.setBrowserMetadata({
             userAgent: navigator.userAgent,
             platform: navigator.platform,

@@ -56,7 +56,7 @@ export class JavTrailersPlugin extends BasePlugin {
                     zIndex: String(JHS_Z_INDEX.debug)
                 });
             }), 100));
-        })), canvasWait = utils.loopDetector((() => $("#vjs_video_3 canvas").length > 0), (() => {
+        }), 20, 1e4, !0, scope), canvasWait = utils.loopDetector((() => $("#vjs_video_3 canvas").length > 0), (() => {
             if (scope.signal.aborted) return;
             0 !== $("#vjs_video_3 canvas").length && $("#vjs_video_3 canvas").css({
                 position: "fixed",
@@ -67,7 +67,7 @@ export class JavTrailersPlugin extends BasePlugin {
                 right: "0",
                 zIndex: String(JHS_Z_INDEX.debug - 1)
             });
-        }));
+        }), 20, 1e4, !0, scope);
         scope.addCleanup(playerWait), scope.addCleanup(canvasWait);
     }
 }

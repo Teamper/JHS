@@ -1056,11 +1056,11 @@
       if (window.opener && !window.opener.closed) return window.close(), true;
       return false;
     }
-    loopDetector(e2, t2, n2 = 20, a2 = 1e4, i2 = true) {
+    loopDetector(e2, t2, n2 = 20, a2 = 1e4, i2 = true, scope = null) {
       const s2 = ++this.waitSequence;
       let o2 = null, r2 = null, l2 = null, c2 = false;
       const d2 = /* @__PURE__ */ __name(() => {
-        o2?.disconnect(), clearTimeout(r2), clearTimeout(l2), clearInterval(this.intervalContainer[s2]?.fallback), delete this.intervalContainer[s2];
+        o2 && (scope?.releaseObserver ? scope.releaseObserver(o2) : o2.disconnect()), clearTimeout(r2), clearTimeout(l2), clearInterval(this.intervalContainer[s2]?.fallback), delete this.intervalContainer[s2];
       }, "d"), h2 = /* @__PURE__ */ __name((e3) => {
         if (c2) return;
         c2 = true, d2(), e3 && t2 && t2();
@@ -1075,7 +1075,7 @@
       }, "cancel");
       this.intervalContainer[s2] = {};
       if (e2()) return h2(true), cancel;
-      if ("function" == typeof MutationObserver && document.documentElement) o2 = new MutationObserver(p2), o2.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+      if (scope?.observe && document.documentElement) o2 = scope.observe(document.documentElement, p2, { childList: true, subtree: true, characterData: true });
       else this.intervalContainer[s2].fallback = setInterval(g2, Math.max(100, n2));
       l2 = setTimeout((() => {
         if (c2) return;
@@ -3558,6 +3558,150 @@
   }
   __name(initializeLoggerRuntime, "initializeLoggerRuntime");
 
+  // src/core/ui-primitives.js
+  function renderStateView(container, { type = "empty", title = "", description = "", actionLabel = "", onAction = null } = {}) {
+    const root = container?.jquery ? container : $(container), state = $('<div class="jhs-state"></div>').addClass(`jhs-state--${type}`).attr("role", "error" === type ? "alert" : "status"), content = $('<div class="jhs-state__content"></div>');
+    title && content.append($('<p class="jhs-state__title"></p>').text(title)), description && content.append($('<p class="jhs-state__description"></p>').text(description));
+    if (actionLabel && "function" == typeof onAction) content.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').text(actionLabel).on("click", onAction));
+    return state.append(content), root.empty().append(state), state;
+  }
+  __name(renderStateView, "renderStateView");
+  function initializeUiAccessibility(lifecycleScope) {
+    if (!lifecycleScope || "function" != typeof lifecycleScope.observe) throw new TypeError("UI accessibility requires an app LifecycleScope");
+    const selector = "button.jhs-btn, a.jhs-btn[role='button'], .card-btn, .jhs-icon-btn, [class*='jhs-'] button, [class*='jhs-'] a[role='button']";
+    const enhance = /* @__PURE__ */ __name((e2) => {
+      const t2 = e2.nodeType === Node.ELEMENT_NODE && e2.matches?.(selector) ? [e2] : [];
+      const n2 = e2.querySelectorAll ? [...e2.querySelectorAll(selector)] : [];
+      [...t2, ...n2].forEach(((e3) => {
+        if (e3.hasAttribute("aria-label") || e3.hasAttribute("aria-labelledby") || e3.textContent.trim()) return;
+        const t3 = e3.getAttribute("title") || e3.getAttribute("data-tip");
+        t3 && e3.setAttribute("aria-label", t3);
+      }));
+    }, "enhance");
+    enhance(document);
+    const pending = /* @__PURE__ */ new Set();
+    let scheduled = false;
+    const flush = /* @__PURE__ */ __name(() => {
+      scheduled = false;
+      const all = [...pending], roots = all.filter(((e2) => !all.some(((t2) => t2 !== e2 && t2.contains?.(e2)))));
+      pending.clear(), roots.forEach(enhance);
+    }, "flush");
+    return lifecycleScope.observe(document.documentElement, ((records) => {
+      records.forEach(((record) => record.addedNodes.forEach(((node) => {
+        node.nodeType === Node.ELEMENT_NODE && pending.add(node);
+      }))));
+      pending.size && !scheduled && (scheduled = true, queueMicrotask(flush));
+    }), {
+      childList: true,
+      subtree: true
+    });
+  }
+  __name(initializeUiAccessibility, "initializeUiAccessibility");
+  var _JhsSelect = class _JhsSelect {
+    constructor(select) {
+      this.source = $(select);
+      if (!this.source.length || _JhsSelect.instances.has(this.source[0])) return _JhsSelect.instances.get(this.source[0]);
+      const initiallyHidden = this.source.hasClass("jhs-is-hidden") || "none" === this.source[0].style.display;
+      this.control = $('<div class="jhs-select-control"></div>');
+      this.trigger = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-select-trigger" aria-haspopup="menu" aria-expanded="false"><span class="jhs-select-value"></span></button>');
+      this.menu = $('<div class="jhs-popover jhs-select-menu" role="menu"></div>');
+      this.source.wrap(this.control), this.control = this.source.parent(), this.control.append(this.trigger, this.menu), this.source.addClass("jhs-select-source-native").attr({ "aria-hidden": "true", tabindex: "-1" }), initiallyHidden && this.control.addClass("jhs-is-hidden"), _JhsSelect.instances.set(this.source[0], this), this.render(), this.bind(), this.refresh();
+    }
+    static enhance(root = document) {
+      const scope = $(root), selects = scope.is("select.jhs-select-source") ? scope : scope.find("select.jhs-select-source");
+      selects.each(((_2, select) => new _JhsSelect(select)));
+      return selects;
+    }
+    static get(select) {
+      const element = $(select)[0];
+      return element ? _JhsSelect.instances.get(element) || new _JhsSelect(element) : null;
+    }
+    static setValue(select, value, emit = false) {
+      const instance = _JhsSelect.get(select);
+      if (!instance) return;
+      instance.source.val(value), emit ? instance.emitChange() : instance.refresh();
+    }
+    static refresh(select) {
+      _JhsSelect.get(select)?.refresh();
+    }
+    static refreshAll(root = document) {
+      _JhsSelect.enhance(root), $(root).find("select.jhs-select-source").each(((_2, select) => _JhsSelect.refresh(select)));
+    }
+    static setVisible(select, visible) {
+      const instance = _JhsSelect.get(select);
+      instance?.control.toggleClass("jhs-is-hidden", !visible);
+    }
+    static closeAll(except = null) {
+      $(".jhs-select-control.is-open").each(((_2, control) => {
+        const source = $(control).children("select.jhs-select-source")[0], instance = source && _JhsSelect.instances.get(source);
+        instance && instance !== except && instance.close();
+      }));
+    }
+    render() {
+      this.menu.empty();
+      const appendOption = /* @__PURE__ */ __name((option, target) => {
+        const button = $('<button type="button" class="jhs-btn jhs-btn--ghost jhs-select-option" role="menuitemradio" tabindex="-1"></button>');
+        button.attr({ "data-value": option.value, "aria-checked": option.selected ? "true" : "false" }).prop("disabled", option.disabled).text(option.text), target.append(button);
+      }, "appendOption");
+      this.source.children().each(((_2, child) => {
+        if ("OPTGROUP" === child.tagName) {
+          const group = $('<div class="jhs-select-group" role="group"></div>').attr("aria-label", child.label), label = $('<div class="jhs-select-group__label"></div>').text(child.label);
+          group.append(label), $(child).children("option").each(((_3, option) => appendOption(option, group))), this.menu.append(group);
+        } else "OPTION" === child.tagName && appendOption(child, this.menu);
+      }));
+    }
+    bind() {
+      this.trigger.on("click", ((event) => {
+        event.preventDefault(), event.stopPropagation(), this.source.prop("disabled") || (this.control.hasClass("is-open") ? this.close() : this.open());
+      })).on("keydown", ((event) => {
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        event.preventDefault(), this.open("ArrowUp" === event.key || "End" === event.key ? "last" : "selected");
+      }));
+      this.menu.on("click", ".jhs-select-option", ((event) => {
+        event.preventDefault(), this.choose($(event.currentTarget));
+      })).on("keydown", ".jhs-select-option", ((event) => {
+        const items = this.options(), index = items.index(event.currentTarget);
+        if ("Escape" === event.key) return event.preventDefault(), this.close(true);
+        if ("Tab" === event.key) return void this.close();
+        if (["Enter", " "].includes(event.key)) return event.preventDefault(), this.choose($(event.currentTarget));
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+        items.eq(next).trigger("focus");
+      }));
+      this.source.on("change.jhsSelect", (() => this.refresh())), $(document).on("click.jhsSelect", ((event) => {
+        $(event.target).closest(this.control).length || this.close();
+      }));
+    }
+    options() {
+      return this.menu.find(".jhs-select-option:not(:disabled)");
+    }
+    open(focus = "selected") {
+      _JhsSelect.closeAll(this), this.control.addClass("is-open"), this.menu.addClass("is-open"), this.trigger.attr("aria-expanded", "true");
+      const items = this.options(), selected = items.filter('[aria-checked="true"]');
+      ("last" === focus ? items.last() : selected.length ? selected.first() : items.first()).trigger("focus");
+    }
+    close(focus = false) {
+      this.control.removeClass("is-open"), this.menu.removeClass("is-open"), this.trigger.attr("aria-expanded", "false"), focus && this.trigger.trigger("focus");
+    }
+    choose(item) {
+      if (item.prop("disabled")) return;
+      this.source.val(item.attr("data-value")), this.emitChange(), this.close(true);
+    }
+    emitChange() {
+      this.source[0]?.dispatchEvent(new Event("change", {
+        bubbles: true
+      }));
+    }
+    refresh() {
+      const selected = this.source.find("option:selected").first(), value = this.source.val();
+      this.trigger.find(".jhs-select-value").text(selected.text()), this.trigger.prop("disabled", this.source.prop("disabled")), this.menu.find(".jhs-select-option").attr("aria-checked", "false").filter(((_2, item) => $(item).attr("data-value") === String(value ?? ""))).attr("aria-checked", "true");
+    }
+  };
+  __name(_JhsSelect, "JhsSelect");
+  __publicField(_JhsSelect, "instances", /* @__PURE__ */ new WeakMap());
+  var JhsSelect = _JhsSelect;
+
   // src/platform/userscript/vendor-runtime.js
   function getVendorRuntime(runtimeWindow = window) {
     const values = {
@@ -4379,119 +4523,6 @@
     }
   }
   __name(safePlay, "safePlay");
-
-  // src/core/ui-primitives.js
-  function renderStateView(container, { type = "empty", title = "", description = "", actionLabel = "", onAction = null } = {}) {
-    const root = container?.jquery ? container : $(container), state = $('<div class="jhs-state"></div>').addClass(`jhs-state--${type}`).attr("role", "error" === type ? "alert" : "status"), content = $('<div class="jhs-state__content"></div>');
-    title && content.append($('<p class="jhs-state__title"></p>').text(title)), description && content.append($('<p class="jhs-state__description"></p>').text(description));
-    if (actionLabel && "function" == typeof onAction) content.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').text(actionLabel).on("click", onAction));
-    return state.append(content), root.empty().append(state), state;
-  }
-  __name(renderStateView, "renderStateView");
-  var _JhsSelect = class _JhsSelect {
-    constructor(select) {
-      this.source = $(select);
-      if (!this.source.length || _JhsSelect.instances.has(this.source[0])) return _JhsSelect.instances.get(this.source[0]);
-      const initiallyHidden = this.source.hasClass("jhs-is-hidden") || "none" === this.source[0].style.display;
-      this.control = $('<div class="jhs-select-control"></div>');
-      this.trigger = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-select-trigger" aria-haspopup="menu" aria-expanded="false"><span class="jhs-select-value"></span></button>');
-      this.menu = $('<div class="jhs-popover jhs-select-menu" role="menu"></div>');
-      this.source.wrap(this.control), this.control = this.source.parent(), this.control.append(this.trigger, this.menu), this.source.addClass("jhs-select-source-native").attr({ "aria-hidden": "true", tabindex: "-1" }), initiallyHidden && this.control.addClass("jhs-is-hidden"), _JhsSelect.instances.set(this.source[0], this), this.render(), this.bind(), this.refresh();
-    }
-    static enhance(root = document) {
-      const scope = $(root), selects = scope.is("select.jhs-select-source") ? scope : scope.find("select.jhs-select-source");
-      selects.each(((_2, select) => new _JhsSelect(select)));
-      return selects;
-    }
-    static get(select) {
-      const element = $(select)[0];
-      return element ? _JhsSelect.instances.get(element) || new _JhsSelect(element) : null;
-    }
-    static setValue(select, value, emit = false) {
-      const instance = _JhsSelect.get(select);
-      if (!instance) return;
-      instance.source.val(value), emit ? instance.emitChange() : instance.refresh();
-    }
-    static refresh(select) {
-      _JhsSelect.get(select)?.refresh();
-    }
-    static refreshAll(root = document) {
-      _JhsSelect.enhance(root), $(root).find("select.jhs-select-source").each(((_2, select) => _JhsSelect.refresh(select)));
-    }
-    static setVisible(select, visible) {
-      const instance = _JhsSelect.get(select);
-      instance?.control.toggleClass("jhs-is-hidden", !visible);
-    }
-    static closeAll(except = null) {
-      $(".jhs-select-control.is-open").each(((_2, control) => {
-        const source = $(control).children("select.jhs-select-source")[0], instance = source && _JhsSelect.instances.get(source);
-        instance && instance !== except && instance.close();
-      }));
-    }
-    render() {
-      this.menu.empty();
-      const appendOption = /* @__PURE__ */ __name((option, target) => {
-        const button = $('<button type="button" class="jhs-btn jhs-btn--ghost jhs-select-option" role="menuitemradio" tabindex="-1"></button>');
-        button.attr({ "data-value": option.value, "aria-checked": option.selected ? "true" : "false" }).prop("disabled", option.disabled).text(option.text), target.append(button);
-      }, "appendOption");
-      this.source.children().each(((_2, child) => {
-        if ("OPTGROUP" === child.tagName) {
-          const group = $('<div class="jhs-select-group" role="group"></div>').attr("aria-label", child.label), label = $('<div class="jhs-select-group__label"></div>').text(child.label);
-          group.append(label), $(child).children("option").each(((_3, option) => appendOption(option, group))), this.menu.append(group);
-        } else "OPTION" === child.tagName && appendOption(child, this.menu);
-      }));
-    }
-    bind() {
-      this.trigger.on("click", ((event) => {
-        event.preventDefault(), event.stopPropagation(), this.source.prop("disabled") || (this.control.hasClass("is-open") ? this.close() : this.open());
-      })).on("keydown", ((event) => {
-        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-        event.preventDefault(), this.open("ArrowUp" === event.key || "End" === event.key ? "last" : "selected");
-      }));
-      this.menu.on("click", ".jhs-select-option", ((event) => {
-        event.preventDefault(), this.choose($(event.currentTarget));
-      })).on("keydown", ".jhs-select-option", ((event) => {
-        const items = this.options(), index = items.index(event.currentTarget);
-        if ("Escape" === event.key) return event.preventDefault(), this.close(true);
-        if ("Tab" === event.key) return void this.close();
-        if (["Enter", " "].includes(event.key)) return event.preventDefault(), this.choose($(event.currentTarget));
-        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-        event.preventDefault();
-        const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
-        items.eq(next).trigger("focus");
-      }));
-      this.source.on("change.jhsSelect", (() => this.refresh())), $(document).on("click.jhsSelect", ((event) => {
-        $(event.target).closest(this.control).length || this.close();
-      }));
-    }
-    options() {
-      return this.menu.find(".jhs-select-option:not(:disabled)");
-    }
-    open(focus = "selected") {
-      _JhsSelect.closeAll(this), this.control.addClass("is-open"), this.menu.addClass("is-open"), this.trigger.attr("aria-expanded", "true");
-      const items = this.options(), selected = items.filter('[aria-checked="true"]');
-      ("last" === focus ? items.last() : selected.length ? selected.first() : items.first()).trigger("focus");
-    }
-    close(focus = false) {
-      this.control.removeClass("is-open"), this.menu.removeClass("is-open"), this.trigger.attr("aria-expanded", "false"), focus && this.trigger.trigger("focus");
-    }
-    choose(item) {
-      if (item.prop("disabled")) return;
-      this.source.val(item.attr("data-value")), this.emitChange(), this.close(true);
-    }
-    emitChange() {
-      this.source[0]?.dispatchEvent(new Event("change", {
-        bubbles: true
-      }));
-    }
-    refresh() {
-      const selected = this.source.find("option:selected").first(), value = this.source.val();
-      this.trigger.find(".jhs-select-value").text(selected.text()), this.trigger.prop("disabled", this.source.prop("disabled")), this.menu.find(".jhs-select-option").attr("aria-checked", "false").filter(((_2, item) => $(item).attr("data-value") === String(value ?? ""))).attr("aria-checked", "true");
-    }
-  };
-  __name(_JhsSelect, "JhsSelect");
-  __publicField(_JhsSelect, "instances", /* @__PURE__ */ new WeakMap());
-  var JhsSelect = _JhsSelect;
 
   // src/plugins/external-search/magnet-source-registry.js
   var MAGNET_SOURCE_IDS = Object.freeze(["native-javdb", "native-javbus", "u9a9", "u3c3", "sukebei", "btsow"]);
@@ -7371,17 +7402,18 @@
     async handle() {
       await storageManager.getSetting("enableClog", _) === _ && clog.show();
       if (utils.isMobileMode()) return;
+      const scope = await this.getRuntimeService("scope")();
       if (r) {
         let e2 = /* @__PURE__ */ __name(function() {
           $(".navbar-search").is(":hidden") ? ($(".mini-setting-box").hide(), $(".setting-box").show()) : ($(".mini-setting-box").show(), $(".setting-box").hide());
         }, "e");
         $("#navbar-menu-user .navbar-end").prepend('<div class="navbar-item has-dropdown is-hoverable setting-box jhs-setting-nav-item">\n                    <button type="button" id="setting-btn" class="jhs-btn navbar-link nav-btn jhs-nav-btn jhs-nav-button">\n                        设置\n                    </button>\n                    <div class="simple-setting"></div>\n                </div>'), utils.loopDetector((() => $("#miniHistoryBtn").length > 0), (() => {
           $(".miniHistoryBtnBox").before('\n                    <div class="navbar-item mini-setting-box jhs-mini-setting-box">\n                        <button type="button" id="mini-setting-btn" class="jhs-btn navbar-link nav-btn jhs-nav-btn jhs-mini-setting-trigger">\n                            设置\n                        </button>\n                        <div class="mini-simple-setting"></div>\n                    </div>\n                '), e2();
-        })), $(window).resize(e2);
+        }), 20, 1e4, true, scope), scope.listen(window, "resize", e2);
       }
       l && (isDetailPage ? $("h3").before('\n                    <div class="container-fluid jhs-setting-detail-anchor">\n                        <div id="top-right-box" class="jhs-setting-anchor">\n                            <div class="setting-box">\n                                <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                    <span>设置</span>\n                                </button>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ') : window.isListPage && utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
         $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" class="jhs-setting-anchor">\n                        <div class="setting-box">\n                            <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                <span>设置</span>\n                            </button>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
-      }), 1, 1e4, false)), $(".main-nav, .container-fluid").on("click", "#setting-btn, #mini-setting-btn", (() => {
+      }), 1, 1e4, false, scope)), $(".main-nav, .container-fluid").on("click", "#setting-btn, #mini-setting-btn", (() => {
         $(".simple-setting, .mini-simple-setting").html("").hide(), clog.lowZIndex(), void this.openSettingDialog().catch(((error) => clog.error("设置中心打开失败", error)));
       })), $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (async () => {
         $(".simple-setting").html(buildQuickSettingHtml()).show();
@@ -8946,7 +8978,7 @@ ${value}\r
     async handle() {
       if (!window.isDetailPage) return;
       this.lifecycleScope = await this.getRuntimeService("scope")();
-      const cancel = utils.loopDetector((() => !!this.getHostAdapter()), (() => this.ensureWorkspace()), 40, 2500, true);
+      const cancel = utils.loopDetector((() => !!this.getHostAdapter()), (() => this.ensureWorkspace()), 40, 2500, true, this.lifecycleScope);
       this.lifecycleScope.addCleanup(cancel);
       this.lifecycleScope.addCleanup((() => {
         this.cancelScheduledResourceFrame?.(), this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null;
@@ -9575,7 +9607,7 @@ ${error.stack}` : "");
             zIndex: String(JHS_Z_INDEX.debug)
           });
         }), 100));
-      })), canvasWait = utils.loopDetector((() => $("#vjs_video_3 canvas").length > 0), (() => {
+      }), 20, 1e4, true, scope), canvasWait = utils.loopDetector((() => $("#vjs_video_3 canvas").length > 0), (() => {
         if (scope.signal.aborted) return;
         0 !== $("#vjs_video_3 canvas").length && $("#vjs_video_3 canvas").css({
           position: "fixed",
@@ -9586,7 +9618,7 @@ ${error.stack}` : "");
           right: "0",
           zIndex: String(JHS_Z_INDEX.debug - 1)
         });
-      }));
+      }), 20, 1e4, true, scope);
       scope.addCleanup(playerWait), scope.addCleanup(canvasWait);
     }
   };
@@ -10675,19 +10707,21 @@ ${error.stack}` : "");
     }
     async handle() {
       if (!isDetailPage) return;
+      this.lifecycleScope = await this.getRuntimeService("scope")();
       const trigger = $(".preview-video-container"), openVideo = /* @__PURE__ */ __name(() => {
         utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => {
           this.handleVideo().catch(((error) => clog.error("预览视频处理失败", error)));
-        }));
+        }), 20, 1e4, true, this.lifecycleScope);
       }, "openVideo");
       trigger.off("click.jhsVideo").on("click.jhsVideo", openVideo);
-      await storageManager.getSetting("enableLoadPreviewVideo", _) !== _ || o.includes("autoPlay=1") || this.initDmm();
+      this.lifecycleScope.addCleanup((() => trigger.off("click.jhsVideo", openVideo)));
+      await storageManager.getSetting("enableLoadPreviewVideo", _) !== _ || o.includes("autoPlay=1") || this.initDmm(this.lifecycleScope);
       const url = window.location.href;
       (url.includes("gallery-1") || url.includes("gallery-2")) && openVideo(), url.includes("autoPlay=1") && trigger.length > 0 && trigger[0].click();
     }
-    async initDmm() {
+    async initDmm(scope) {
       try {
-        const { sources } = await this.getDmmPreview();
+        const { sources } = await this.getDmmPreview(scope);
         if (!sources) return;
         const $video = $("#preview-video"), video = $video[0];
         if (video) return;
@@ -10699,15 +10733,15 @@ ${error.stack}` : "");
                     <img src="${cover}" class="video-cover jhs-layout-8cf76fd7" alt="">
                 </a>
             `), $(".preview-video-container").off("click.jhsVideo").on("click.jhsVideo", (() => {
-          utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => this.handleVideo().catch(((error) => clog.error("预览视频处理失败", error)))));
+          utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => this.handleVideo().catch(((error) => clog.error("预览视频处理失败", error)))), 20, 1e4, true, scope);
         }));
       } catch (error) {
         clog.error("预加载 DMM 失败:", error);
       }
     }
-    getDmmPreview() {
+    getDmmPreview(scope = this.lifecycleScope) {
       if (this.dmmPreviewPromise) return this.dmmPreviewPromise;
-      this.dmmPreviewPromise = fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), this.getRuntimeService("scope")()).then(((result) => {
+      this.dmmPreviewPromise = Promise.resolve(scope || this.getRuntimeService("scope")()).then(((requestScope) => fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), requestScope))).then(((result) => {
         (result.error?.retryable || "HTTP_ERROR" === result.error?.code) && (this.dmmPreviewPromise = null);
         return result;
       }), ((error) => {
@@ -13783,9 +13817,10 @@ ${error.stack}` : "");
         `;
     }
     async handle() {
+      const scope = await this.getRuntimeService("scope")();
       window.isListPage && (o.includes("advanced_search") || (this.highlightTag(), utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
         this.createFoldBtn();
-      }), 1, 1e4, true), $("#tags .tag-category .tag-expand").each(((e2, t2) => {
+      }), 1, 1e4, true, scope), $("#tags .tag-category .tag-expand").each(((e2, t2) => {
         $(t2).parent().hasClass("collapse") && t2.click();
       }))));
     }
@@ -14558,11 +14593,12 @@ ${error.stack}` : "");
     }
     async handle() {
       if (!window.isListPage) return;
-      await this.createMenuBtn(), this.bindEvent();
+      const scope = await this.getRuntimeService("scope")();
+      await this.createMenuBtn(scope), this.bindEvent();
       const e2 = await storageManager.getSetting("autoPage"), t2 = this.supportsLiveSorting();
       $("#sort-toggle-btn").prop("disabled", e2 === _ && !t2).attr("title", e2 === _ && !t2 ? "瀑布流模式仅支持默认排序" : "选择列表排序方式"), (e2 !== _ || t2) && await this.sortItems();
     }
-    async createMenuBtn() {
+    async createMenuBtn(scope) {
       if (r) {
         const e2 = o.includes("/actors/");
         let t2 = $(".main-tabs, .tabs"), n2 = "加入黑名单", a2 = "jhs-btn--filter", s2 = null;
@@ -14577,7 +14613,7 @@ ${error.stack}` : "");
           if (!t3) return;
           const n3 = "no-" + t3, a3 = await storageManager.getBlacklist();
           s2 = a3.find(((e4) => e4.starId === n3)), s2 && (e3.addClass("jhs-btn--muted").removeClass("jhs-btn--filter"), $("#addBlacklistBtn span").text("已加入黑名单"));
-        }));
+        }), 20, 1e4, true, scope);
         const r2 = o.includes("advanced_search");
         r2 && (t2 = $("h2.section-title"));
         const l2 = this.getRuntimeService("settings").snapshot().sortMethod || "default", d2 = "当前排序方式: " + ("rateCount" === l2 ? "评价人数" : "date" === l2 ? "时间" : "默认");
@@ -18396,6 +18432,7 @@ ${error.stack}` : "");
       }
       const logger = initializeLoggerRuntime(context.rootScope);
       initializeThemeRuntime(context.rootScope);
+      initializeUiAccessibility(context.rootScope);
       context.services.diagnostics.setBrowserMetadata({
         userAgent: navigator.userAgent,
         platform: navigator.platform,

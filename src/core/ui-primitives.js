@@ -1004,7 +1004,9 @@ export function renderStateView(container, { type = "empty", title = "", descrip
 }
 
 /** 为动态注入的 JHS 控件补齐可访问名称与图标按钮语义。 */
-export function initializeUiAccessibility() {
+/** @param {import("./lifecycle-scope.js").LifecycleScope} lifecycleScope */
+export function initializeUiAccessibility(lifecycleScope) {
+    if (!lifecycleScope || "function" != typeof lifecycleScope.observe) throw new TypeError("UI accessibility requires an app LifecycleScope");
     const selector = "button.jhs-btn, a.jhs-btn[role='button'], .card-btn, .jhs-icon-btn, [class*='jhs-'] button, [class*='jhs-'] a[role='button']";
     const enhance = (e) => {
         const t = e.nodeType === Node.ELEMENT_NODE && e.matches?.(selector) ? [ e ] : [];
@@ -1023,12 +1025,12 @@ export function initializeUiAccessibility() {
         const all = [ ...pending ], roots = all.filter((e => !all.some((t => t !== e && t.contains?.(e)))));
         pending.clear(), roots.forEach(enhance);
     };
-    new MutationObserver((records => {
+    return lifecycleScope.observe(document.documentElement, (records => {
         records.forEach((record => record.addedNodes.forEach((node => {
             node.nodeType === Node.ELEMENT_NODE && pending.add(node);
         }))));
         pending.size && !scheduled && (scheduled = !0, queueMicrotask(flush));
-    })).observe(document.documentElement, {
+    }), {
         childList: true,
         subtree: true
     });

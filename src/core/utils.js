@@ -115,11 +115,11 @@ export class Utils {
         if (window.opener && !window.opener.closed) return window.close(), !0;
         return !1;
     }
-    loopDetector(e, t, n = 20, a = 1e4, i = !0) {
+    loopDetector(e, t, n = 20, a = 1e4, i = !0, scope = null) {
         const s = ++this.waitSequence;
         let o = null, r = null, l = null, c = !1;
         const d = () => {
-            o?.disconnect(), clearTimeout(r), clearTimeout(l), clearInterval(this.intervalContainer[s]?.fallback),
+            o && (scope?.releaseObserver ? scope.releaseObserver(o) : o.disconnect()), clearTimeout(r), clearTimeout(l), clearInterval(this.intervalContainer[s]?.fallback),
             delete this.intervalContainer[s];
         }, h = e => {
             if (c) return;
@@ -133,8 +133,7 @@ export class Utils {
         const cancel = () => { c = !0, d(); };
         this.intervalContainer[s] = {};
         if (e()) return h(!0), cancel;
-        if ("function" == typeof MutationObserver && document.documentElement) o = new MutationObserver(p),
-        o.observe(document.documentElement, { childList: !0, subtree: !0, characterData: !0 }); else this.intervalContainer[s].fallback = setInterval(g, Math.max(100, n));
+        if (scope?.observe && document.documentElement) o = scope.observe(document.documentElement, p, { childList: !0, subtree: !0, characterData: !0 }); else this.intervalContainer[s].fallback = setInterval(g, Math.max(100, n));
         l = setTimeout((() => {
             if (c) return;
             let t = !1;
