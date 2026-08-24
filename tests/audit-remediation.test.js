@@ -50,12 +50,16 @@ describe("6.2.0 audit remediation", () => {
     it("binds OtherSite settings idempotently and recovers malformed storage", () => {
         const dom = new JSDOM('<button id="settingSiteBtn"></button><div id="settingsArea" class="jhs-is-hidden"><input type="checkbox" data-site-id="javDbBtn"></div>'), $ = jqueryFactory(dom.window), warn = vi.fn();
         const storage = new Map([["jhs_enabled_sites", "broken-json"]]);
+        const storageService = { getLocal: key => storage.get(key) ?? null, setLocal: (key, value) => storage.set(key, value) };
         const { Class } = loadClass("src/plugins/external-search/other-site.js", "OtherSitePlugin", {
-            window: dom.window, document: dom.window.document, $, localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) }, clog: { warn }, normalizeCarNum: value => value
+            window: dom.window, document: dom.window.document, $, clog: { warn }, normalizeCarNum: value => value
         });
         const plugin = new Class();
+        plugin.getRuntimeService = name => "storage" === name ? storageService : {};
         expect(Array.from(plugin.getEnabledSites())).toEqual(Array.from(plugin.siteConfigs, site => site.id));
         expect(warn).toHaveBeenCalledOnce();
+        plugin.saveEnabledSites(["javDbBtn"]);
+        expect(storage.get("jhs_enabled_sites")).toBe('["javDbBtn"]');
         plugin.setupEventListeners(); plugin.setupEventListeners();
         $("#settingSiteBtn").trigger("click");
         expect($("#settingsArea").hasClass("jhs-is-hidden")).toBe(false);

@@ -10069,7 +10069,7 @@ ${error.stack}` : "");
       const n2 = view.root.find(`[data-jhs-site-id="${t2.id}"],#${t2.id}`).first();
       n2.removeAttr("href").find(".site-tag").remove(), this.setSiteState(n2, "checking");
       if (t2.initUrl && n2.attr("href", t2.initUrl(e2)), t2.noHandle && true === t2.noHandle) {
-        const t3 = "jhs_other_site_dmm", a2 = (localStorage.getItem(t3) ? JSON.parse(localStorage.getItem(t3)) : {})[e2];
+        const t3 = "jhs_other_site_dmm", raw = this.getRuntimeService("storage").getLocal(t3), a2 = (raw ? JSON.parse(raw) : {})[e2];
         a2 ? (n2.attr("href", a2.url), "multiple" === a2.type && n2.append('<span class="site-tag">多结果</span>'), this.setSiteState(n2, "available")) : this.setSiteState(n2, "idle");
       } else if (t2.providerId) try {
         const scope = await this.getRuntimeService("scope")();
@@ -10085,7 +10085,7 @@ ${error.stack}` : "");
       else try {
         if (n2.attr("href")) return void this.setSiteState(n2, "idle");
         if (utils.isHidden(n2)) return;
-        const a2 = "jhs_other_site", i2 = localStorage.getItem(a2) ? JSON.parse(localStorage.getItem(a2)) : {}, s2 = e2 + "_" + t2.id.replace("Btn", ""), o2 = i2[s2], m2 = Date.now();
+        const a2 = "jhs_other_site", storage = this.getRuntimeService("storage"), raw = storage.getLocal(a2), i2 = raw ? JSON.parse(raw) : {}, s2 = e2 + "_" + t2.id.replace("Btn", ""), o2 = i2[s2], m2 = Date.now();
         if (o2 && o2.time && m2 - o2.time < 864e5) return void (n2.attr("href", o2.url), "multiple" === o2.type && n2.append('<span class="site-tag">多结果</span>'), this.setSiteState(n2, "available"));
         const r2 = await t2.getBaseUrl(), l2 = t2.searchPath(r2, e2);
         n2.attr("href", l2);
@@ -10119,8 +10119,8 @@ ${error.stack}` : "");
           time: m2
         }) : (n2.attr("href", l2), n2.attr("title", "未查询到, 点击前往搜索页"), this.setSiteState(n2, "unavailable"));
         if (p2) {
-          const e3 = localStorage.getItem(a2) ? JSON.parse(localStorage.getItem(a2)) : {};
-          e3[s2] = p2, localStorage.setItem(a2, JSON.stringify(e3));
+          const latestRaw = storage.getLocal(a2), e3 = latestRaw ? JSON.parse(latestRaw) : {};
+          e3[s2] = p2, storage.setLocal(a2, JSON.stringify(e3));
         }
         g2 && n2.append(g2);
       } catch (a2) {
@@ -10156,7 +10156,7 @@ ${error.stack}` : "");
     getEnabledSites() {
       const fallback = this.siteConfigs.map(((site) => site.id));
       try {
-        const raw = localStorage.getItem("jhs_enabled_sites");
+        const raw = this.getRuntimeService("storage").getLocal("jhs_enabled_sites");
         if (!raw) return fallback;
         const parsed = JSON.parse(raw);
         return Array.isArray(parsed) ? parsed.filter(((id) => fallback.includes(id))) : fallback;
@@ -10165,7 +10165,7 @@ ${error.stack}` : "");
       }
     }
     saveEnabledSites(e2) {
-      localStorage.setItem("jhs_enabled_sites", JSON.stringify(e2));
+      this.getRuntimeService("storage").setLocal("jhs_enabled_sites", JSON.stringify(e2));
     }
     renderSettingsArea(view = { root: $(document), configs: this.siteConfigs }) {
       const enabled = this.getEnabledSites(), target = view.root.find('[data-jhs-role="site-checkboxes"],#siteCheckboxes').first().empty();
@@ -15489,7 +15489,7 @@ ${error.stack}` : "");
     manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings]),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
     manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo]),
-    manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie]),
+    manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie, SERVICE.storage]),
     manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings]),
     manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }, [SERVICE.http]),
     manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage]),

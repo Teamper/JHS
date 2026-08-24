@@ -161,7 +161,7 @@ export class OtherSitePlugin extends BasePlugin {
         const n = view.root.find(`[data-jhs-site-id="${t.id}"],#${t.id}`).first();
         n.removeAttr("href").find(".site-tag").remove(), this.setSiteState(n, "checking");
         if (t.initUrl && n.attr("href", t.initUrl(e)), t.noHandle && !0 === t.noHandle) {
-            const t = "jhs_other_site_dmm", a = (localStorage.getItem(t) ? JSON.parse(localStorage.getItem(t)) : {})[e];
+            const t = "jhs_other_site_dmm", raw = this.getRuntimeService("storage").getLocal(t), a = (raw ? JSON.parse(raw) : {})[e];
             a ? (n.attr("href", a.url), "multiple" === a.type && n.append('<span class="site-tag">多结果</span>'), this.setSiteState(n, "available")) : this.setSiteState(n, "idle");
         } else if (t.providerId) try {
             const scope = await this.getRuntimeService("scope")();
@@ -176,7 +176,7 @@ export class OtherSitePlugin extends BasePlugin {
         } else try {
             if (n.attr("href")) return void this.setSiteState(n, "idle");
             if (utils.isHidden(n)) return;
-            const a = "jhs_other_site", i = localStorage.getItem(a) ? JSON.parse(localStorage.getItem(a)) : {}, s = e + "_" + t.id.replace("Btn", ""), o = i[s], m = Date.now();
+            const a = "jhs_other_site", storage = this.getRuntimeService("storage"), raw = storage.getLocal(a), i = raw ? JSON.parse(raw) : {}, s = e + "_" + t.id.replace("Btn", ""), o = i[s], m = Date.now();
             if (o && o.time && m - o.time < 864e5) return void (n.attr("href", o.url), "multiple" === o.type && n.append('<span class="site-tag">多结果</span>'), this.setSiteState(n, "available"));
             const r = await t.getBaseUrl(), l = t.searchPath(r, e);
             n.attr("href", l);
@@ -211,8 +211,8 @@ export class OtherSitePlugin extends BasePlugin {
                 time: m
             }) : (n.attr("href", l), n.attr("title", "未查询到, 点击前往搜索页"), this.setSiteState(n, "unavailable"));
             if (p) {
-                const e = localStorage.getItem(a) ? JSON.parse(localStorage.getItem(a)) : {};
-                e[s] = p, localStorage.setItem(a, JSON.stringify(e));
+                const latestRaw = storage.getLocal(a), e = latestRaw ? JSON.parse(latestRaw) : {};
+                e[s] = p, storage.setLocal(a, JSON.stringify(e));
             }
             g && n.append(g);
         } catch (a) {
@@ -253,7 +253,7 @@ export class OtherSitePlugin extends BasePlugin {
     getEnabledSites() {
         const fallback = this.siteConfigs.map((site => site.id));
         try {
-            const raw = localStorage.getItem("jhs_enabled_sites");
+            const raw = this.getRuntimeService("storage").getLocal("jhs_enabled_sites");
             if (!raw) return fallback;
             const parsed = JSON.parse(raw);
             return Array.isArray(parsed) ? parsed.filter((id => fallback.includes(id))) : fallback;
@@ -262,7 +262,7 @@ export class OtherSitePlugin extends BasePlugin {
         }
     }
     saveEnabledSites(e) {
-        localStorage.setItem("jhs_enabled_sites", JSON.stringify(e));
+        this.getRuntimeService("storage").setLocal("jhs_enabled_sites", JSON.stringify(e));
     }
     renderSettingsArea(view = { root: $(document), configs: this.siteConfigs }) {
         const enabled = this.getEnabledSites(), target = view.root.find('[data-jhs-role="site-checkboxes"],#siteCheckboxes').first().empty();
