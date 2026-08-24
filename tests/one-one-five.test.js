@@ -33,6 +33,8 @@ describe("115 domain", () => {
         expect(source).toContain('jhsEventBus.on("list-items-added"');
         expect(source).not.toContain("new MutationObserver");
         expect(source).not.toContain("gmHttp");
+        expect(source).toContain('getRuntimeService("dialog").open');
+        expect(source).not.toContain("layer.open");
     });
     it("classifies addOffline errors", () => {
         const api = load115();

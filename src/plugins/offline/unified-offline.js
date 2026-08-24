@@ -72,9 +72,10 @@ export class UnifiedOfflinePlugin extends BasePlugin {
         const mode = await storageManager.getSetting("offlineProviderMode", "ask"), preferred = candidates.find((candidate => candidate.provider.id === mode));
         if (preferred) return preferred;
         return new Promise((resolve => {
+            const dialog = this.getRuntimeService("dialog");
             const content = $('<div class="jhs-form-dialog"><p>选择离线服务</p><div class="jhs-toolbar"></div></div>'), toolbar = content.find(".jhs-toolbar");
-            candidates.forEach((candidate => toolbar.append($("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary\"></button>").text(`${candidate.provider.name} · ${"ready" === candidate.availability.authState ? "已就绪" : "状态未知"}`).on("click", (() => { layer.close(index), resolve(candidate); })))));
-            const index = layer.open({ type: 1, title: "选择离线服务", content, area: utils.getDialogArea("sm"), cancel: () => resolve(null) });
+            candidates.forEach((candidate => toolbar.append($("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary\"></button>").text(`${candidate.provider.name} · ${"ready" === candidate.availability.authState ? "已就绪" : "状态未知"}`).on("click", (() => { dialog.close(index), resolve(candidate); })))));
+            const index = dialog.open({ type: 1, title: "选择离线服务", content, area: utils.getDialogArea("sm"), cancel: () => resolve(null) });
         }));
     }
     getVideoInfo(button) {

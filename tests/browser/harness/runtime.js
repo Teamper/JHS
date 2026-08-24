@@ -34,6 +34,8 @@ export async function injectUserscriptRuntime(page, options = {}) {
     const forage = window.localforage.createInstance({ driver: window.localforage.INDEXEDDB, name: "JAV-JHS", version: 1, storeName: "appData" });
     await forage.setItem("setting", {
       translateTitle: "no",
+      httpRetryCount: 1,
+      circuitBreakerThreshold: 1,
       ...(disabledPlugins?.length ? { disabledPlugins: JSON.stringify(disabledPlugins) } : {}),
     });
   }, options.disabledPlugins || []);

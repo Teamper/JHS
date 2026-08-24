@@ -14,19 +14,23 @@ function loadRegistry() {
 
 function loadOfflinePlugin(submit, history = vi.fn(async () => {})) {
     const dom = new JSDOM('<button class="jhs-offline-btn">离线</button>'), $ = jqueryFactory(dom.window);
-    class BasePlugin {}
+    const layer = {
+        close: vi.fn(),
+        open: vi.fn(options => { options.content.appendTo("body"); return 7; }),
+    };
+    class BasePlugin { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : null; } }
     const context = vm.createContext({
         window: dom.window, document: dom.window.document, $, BasePlugin, Map, Array, Date, TypeError,
         r: true, l: false, setTimeout, clearTimeout,
         stateService: { appendOfflineHistory: history, patch: vi.fn() },
-        show: { ok: vi.fn(), error: vi.fn() }, utils: { q: vi.fn() }, storageManager: {}, layer: {},
+        show: { ok: vi.fn(), error: vi.fn() }, utils: { q: vi.fn(), getDialogArea: vi.fn(() => []) }, storageManager: { getSetting: vi.fn(async () => "ask") }, layer,
         OneOneFiveClient: class {}, getDetailResourceAdapter: vi.fn(), jhsEventBus: { on: vi.fn() }, readListItem: vi.fn()
     });
     const source = readTestFile(join(import.meta.dirname, "../src/plugins/offline/unified-offline.js"), "utf8");
     vm.runInContext(`${source};globalThis.TestOfflinePlugin=UnifiedOfflinePlugin;`, context);
     const plugin = new context.TestOfflinePlugin(), provider = { id: "115", name: "115", submit };
     plugin.registry = { getCandidates: vi.fn(async () => [ { provider, availability: { authState: "ready" } } ]), updateAvailability: vi.fn() };
-    return { $, button: $("button"), context, history, plugin };
+    return { $, button: $("button"), context, history, layer, plugin };
 }
 
 describe("offline provider registry", () => {
@@ -62,6 +66,19 @@ describe("offline provider registry", () => {
 });
 
 describe("unified offline button state", () => {
+    it("uses the declared dialog service when the user must select a provider", async () => {
+        const { $, layer, plugin } = loadOfflinePlugin(vi.fn());
+        const candidates = [
+            { provider: { id: "123", name: "123 云盘" }, availability: { authState: "ready" } },
+            { provider: { id: "115", name: "115" }, availability: { authState: "unknown" } },
+        ];
+        const selected = plugin.chooseCandidate({}, candidates);
+        await vi.waitFor(() => expect(layer.open).toHaveBeenCalledOnce());
+        $(".jhs-toolbar button").eq(1).trigger("click");
+        await expect(selected).resolves.toBe(candidates[1]);
+        expect(layer.close).toHaveBeenCalledWith(7);
+    });
+
     it("keeps focusable success feedback busy and then restores the original idle state", async () => {
         vi.useFakeTimers();
         try {

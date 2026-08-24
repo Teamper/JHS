@@ -28,7 +28,7 @@ export class DetailPageButtonPlugin extends BasePlugin {
         const workspaceSlot = this.getDependency("DetailWorkspacePlugin")?.getSlot("summary-actions");
         workspaceSlot?.length ? workspaceSlot.append(n) : r ? $(".tabs").after(n) : l && $("#mag-submit-show").before(n), $("#magnetSearchBtn").on("click", (async () => {
             let t = await this.getDependency("MagnetHubPlugin").createMagnetHub(e.carNum);
-            layer.open({
+            this.getRuntimeService("dialog").open({
                 type: 1,
                 title: "磁力搜索 " + e.carNum,
                 content: '<div id="magnetHubBox"></div>',
@@ -78,10 +78,11 @@ export class DetailPageButtonPlugin extends BasePlugin {
         return detailStateController.requestToggle(this.getStateBinding(), "watched", event);
     }
     searchXunLeiSubtitle(e) {
+        const dialog = this.getRuntimeService("dialog");
         let t = loading();
         gmHttp.get(`https://api-shoulei-ssl.xunlei.com/oracle/subtitle?gcid=&cid=&name=${e}`).then((t => {
             let n = t.data;
-            n && 0 !== n.length ? layer.open({
+            n && 0 !== n.length ? dialog.open({
                 type: 1,
                 title: "迅雷字幕",
                 content: '\n                    <div class="jhs-layout-8ddc7c91"> \n                        <div id="xunlei-table-container" class="jhs-layout-583c2485"></div>\n                    </div>\n                ',
@@ -168,6 +169,7 @@ export class DetailPageButtonPlugin extends BasePlugin {
         if (!e) return void clog.error("未提供文件URL");
         const n = e.split(".").pop().toLowerCase();
         if ("ass" === n || "srt" === n) try {
+            const dialog = this.getRuntimeService("dialog");
             let a = await gmHttp.get(e), i = "字幕预览";
             "ass" === n ? i = "ASS字幕预览 - " + t : "srt" === n && (i = "SRT字幕预览 - " + t);
             const s = a.split("\n");
@@ -178,7 +180,7 @@ export class DetailPageButtonPlugin extends BasePlugin {
                 o += `<span class="jhs-code-line-number">${n}. </span>${e}\n`;
             }));
             const l = o;
-            layer.open({
+            dialog.open({
                 type: 1,
                 title: i,
                 area: utils.getResponsiveArea([ "80%", "80%" ]),

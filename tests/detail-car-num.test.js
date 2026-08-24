@@ -227,6 +227,12 @@ describe("source regression contracts", () => {
         expect(translate).not.toContain("getPageInfo()?.carNum");
     });
 
+    it("routes detail state-action dialogs through the declared DialogService", () => {
+        const source = readTestFile(join(repoRoot, "src/plugins/status/detail-page-button.js"), "utf8");
+        expect(source).toContain('getRuntimeService("dialog")');
+        expect(source).not.toContain("layer.open");
+    });
+
     it("treats opted-in HTTP 404 responses as neutral results before retry accounting", () => {
         const source = readTestFile(join(repoRoot, "src/core/http.js"), "utf8");
         expect(source).toMatch(/404 === e\.status && requestOptions\.ignoreNotFound[\s\S]{0,80}a\(null\)/);

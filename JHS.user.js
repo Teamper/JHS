@@ -12909,11 +12909,12 @@ ${error.stack}` : "");
       const mode = await storageManager.getSetting("offlineProviderMode", "ask"), preferred = candidates.find(((candidate) => candidate.provider.id === mode));
       if (preferred) return preferred;
       return new Promise(((resolve) => {
+        const dialog = this.getRuntimeService("dialog");
         const content = $('<div class="jhs-form-dialog"><p>选择离线服务</p><div class="jhs-toolbar"></div></div>'), toolbar = content.find(".jhs-toolbar");
         candidates.forEach(((candidate) => toolbar.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').text(`${candidate.provider.name} · ${"ready" === candidate.availability.authState ? "已就绪" : "状态未知"}`).on("click", (() => {
-          layer.close(index), resolve(candidate);
+          dialog.close(index), resolve(candidate);
         })))));
-        const index = layer.open({ type: 1, title: "选择离线服务", content, area: utils.getDialogArea("sm"), cancel: /* @__PURE__ */ __name(() => resolve(null), "cancel") });
+        const index = dialog.open({ type: 1, title: "选择离线服务", content, area: utils.getDialogArea("sm"), cancel: /* @__PURE__ */ __name(() => resolve(null), "cancel") });
       }));
     }
     getVideoInfo(button) {
@@ -13022,7 +13023,7 @@ ${error.stack}` : "");
           if (!matches.length) return this.matchCard(element, true);
           if (1 === matches.length) return window.open(build115PlayUrl(matches[0]), "_blank");
           const links = matches.map(((match) => `<a href="${escapeHtml(build115PlayUrl(match))}" target="_blank">${escapeHtml(match.name)}</a>`)).join("<br>");
-          layer.open({ type: 1, title: `${carNum} 115匹配`, content: `<div class="jhs-dialog-content">${links}</div>`, area: utils.getResponsiveArea(["560px", "auto"]) });
+          this.getRuntimeService("dialog").open({ type: 1, title: `${carNum} 115匹配`, content: `<div class="jhs-dialog-content">${links}</div>`, area: utils.getResponsiveArea(["560px", "auto"]) });
         }));
       } catch (error) {
         element.dataset.jhs115State = "failed", card.find(".jhs-115-list-match").remove(), card.find(".video-title").first().prepend($('<button type="button" class="jhs-btn jhs-btn--ghost jhs-115-list-match">失败·重试</button>').one("click", (() => this.matchCard(element, true)))), clog.warn("115 单卡匹配失败", error);
@@ -13642,7 +13643,7 @@ ${error.stack}` : "");
       const workspaceSlot = this.getDependency("DetailWorkspacePlugin")?.getSlot("summary-actions");
       workspaceSlot?.length ? workspaceSlot.append(n2) : r ? $(".tabs").after(n2) : l && $("#mag-submit-show").before(n2), $("#magnetSearchBtn").on("click", (async () => {
         let t3 = await this.getDependency("MagnetHubPlugin").createMagnetHub(e2.carNum);
-        layer.open({
+        this.getRuntimeService("dialog").open({
           type: 1,
           title: "磁力搜索 " + e2.carNum,
           content: '<div id="magnetHubBox"></div>',
@@ -13689,10 +13690,11 @@ ${error.stack}` : "");
       return detailStateController.requestToggle(this.getStateBinding(), "watched", event);
     }
     searchXunLeiSubtitle(e2) {
+      const dialog = this.getRuntimeService("dialog");
       let t2 = loading();
       gmHttp.get(`https://api-shoulei-ssl.xunlei.com/oracle/subtitle?gcid=&cid=&name=${e2}`).then(((t3) => {
         let n2 = t3.data;
-        n2 && 0 !== n2.length ? layer.open({
+        n2 && 0 !== n2.length ? dialog.open({
           type: 1,
           title: "迅雷字幕",
           content: '\n                    <div class="jhs-layout-8ddc7c91"> \n                        <div id="xunlei-table-container" class="jhs-layout-583c2485"></div>\n                    </div>\n                ',
@@ -13779,6 +13781,7 @@ ${error.stack}` : "");
       if (!e2) return void clog.error("未提供文件URL");
       const n2 = e2.split(".").pop().toLowerCase();
       if ("ass" === n2 || "srt" === n2) try {
+        const dialog = this.getRuntimeService("dialog");
         let a2 = await gmHttp.get(e2), i2 = "字幕预览";
         "ass" === n2 ? i2 = "ASS字幕预览 - " + t2 : "srt" === n2 && (i2 = "SRT字幕预览 - " + t2);
         const s2 = a2.split("\n");
@@ -13790,7 +13793,7 @@ ${error.stack}` : "");
 `;
         }));
         const l2 = o2;
-        layer.open({
+        dialog.open({
           type: 1,
           title: i2,
           area: utils.getResponsiveArea(["80%", "80%"]),
@@ -15498,7 +15501,7 @@ ${error.stack}` : "");
     manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }),
     manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage]),
     manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related, SERVICE.settings]),
-    manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie]),
+    manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog]),
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [SERVICE.settings]),
     manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
@@ -15514,8 +15517,8 @@ ${error.stack}` : "");
     manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }),
     manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics, SERVICE.dialog]),
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings]),
-    manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }, [PORT.host]),
-    manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }),
+    manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }, [PORT.host, SERVICE.dialog]),
+    manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [SERVICE.dialog]),
     manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }),
     manifest("identity.javbus-navigation", "identity", BusNavBarPlugin, ["javbus"], { javbus: 7 }),
     manifest("detail.gallery", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),
