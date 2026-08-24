@@ -253,6 +253,8 @@
     "INVALID_URL",
     "CF_BLOCKED",
     "CIRCUIT_OPEN",
+    "TASK_EXISTS",
+    "OPERATION_FAILED",
     "MISSING_DEPENDENCY",
     "DUPLICATE_TOKEN",
     "BOOTSTRAP_FAILED"
@@ -7282,102 +7284,6 @@
   }
   __name(repairDataHealthWithBackup, "repairDataHealthWithBackup");
 
-  // src/core/cache-policy.js
-  var HOUR = 60 * 60 * 1e3;
-  var DAY = 24 * HOUR;
-  var CACHE_TTL = Object.freeze({ magnet: 6 * HOUR, screenshot: 7 * DAY, screenshotNegative: 12 * HOUR, match115: HOUR, externalDetail: DAY });
-  var _ProviderError = class _ProviderError extends Error {
-    constructor(provider, code, message, options = {}) {
-      super(message, { cause: options.cause });
-      this.name = "ProviderError";
-      this.provider = provider;
-      this.code = code;
-      this.status = options.status || 0;
-      this.url = options.url || "";
-      this.retryable = Boolean(options.retryable);
-    }
-  };
-  __name(_ProviderError, "ProviderError");
-  var ProviderError = _ProviderError;
-
-  // src/plugins/one-one-five/client.js
-  var _OneOneFiveClient = class _OneOneFiveClient {
-    constructor(http = gmHttp) {
-      this.http = http;
-    }
-    async checkLogin() {
-      try {
-        const result = await this.http.get("https://webapi.115.com/offine/downpath");
-        return Boolean(result?.state && result?.data?.length);
-      } catch (cause) {
-        throw new ProviderError("115", "LOGIN_REQUIRED", "115 未登录", { cause });
-      }
-    }
-    async search(keyword, offset = 0, limit = 50) {
-      const result = await this.http.get(`https://webapi.115.com/files/search?search_value=${encodeURIComponent(keyword)}&offset=${offset}&limit=${limit}`);
-      return (result?.data || []).map(((item) => ({ folderId: item.pid || item.cid || "", fileId: item.fid || null, videoId: item.pc || item.pick_code || "", name: item.n || item.file_name || "", size: Number(item.s || item.size) || 0, createTime: item.t || item.create_time || "", isVideo: /\.(mp4|mkv|avi|mov|flv|wmv|ts|m2ts)$/i.test(item.n || item.file_name || "") }))).filter(((item) => item.isVideo));
-    }
-    async getOfflineInfo() {
-      return this.http.get(`https://115.com/?ct=offline&ac=space&_=${Date.now()}`);
-    }
-    async addOffline(magnet, folderId = "") {
-      if (!/^magnet:/i.test(magnet) && !/^ed2k:/i.test(magnet)) throw new TypeError("Unsupported offline URL");
-      const info = await this.getOfflineInfo();
-      if (!info || !info.sign) throw new ProviderError("115", "LOGIN_REQUIRED", "115 未登录或离线空间信息获取失败");
-      const body = new URLSearchParams({ url: magnet, wp_path_id: folderId, uid: String(info.uid || ""), sign: info.sign || "", time: String(info.time || "") }).toString();
-      const result = await this.http.gmRequest("POST", "https://115.com/web/lixian/?ct=lixian&ac=add_task_url", body, {}, { "Content-Type": "application/x-www-form-urlencoded" });
-      const parsed = "string" == typeof result ? (() => {
-        try {
-          return JSON.parse(result);
-        } catch {
-          return { state: false, error_msg: /login|登录|sign in|未授权|授权|expire|expired|token|cookie/i.test(result) ? "115 未登录" : "115 返回异常响应" };
-        }
-      })() : result;
-      if (!parsed || parsed.state === false) {
-        const message = String(parsed?.error_msg || parsed?.error || parsed?.msg || "");
-        const code = this.classifyAddOfflineError(message);
-        throw new ProviderError("115", code, message || "115 离线任务创建失败", { response: parsed });
-      }
-      return parsed;
-    }
-    classifyAddOfflineError(message) {
-      const text = String(message).toLowerCase();
-      if (/未登录|请登录|登录|login|sign|授权|过期|token|cookie|uid|身份|auth|expire|needlogin|need login/i.test(text)) return "LOGIN_REQUIRED";
-      if (/已存在|重复|exists|duplicate|already|same|conflict|exist/i.test(text)) return "TASK_EXISTS";
-      return "ADD_TASK_FAILED";
-    }
-    async rename(fileId, newName) {
-      const body = new URLSearchParams({ fid: fileId, file_name: newName }).toString();
-      return this.http.gmRequest("POST", "https://webapi.115.com/files/edit", body, {}, { "Content-Type": "application/x-www-form-urlencoded" });
-    }
-  };
-  __name(_OneOneFiveClient, "OneOneFiveClient");
-  var OneOneFiveClient = _OneOneFiveClient;
-  function normalize115Keyword(carNum) {
-    const normalized = normalizeCarNum(carNum);
-    return normalized?.replace(/^FC2-/i, "") || null;
-  }
-  __name(normalize115Keyword, "normalize115Keyword");
-  function build115PlayUrl(match) {
-    return match?.videoId ? `https://115.com/?ct=play&pickcode=${encodeURIComponent(match.videoId)}` : null;
-  }
-  __name(build115PlayUrl, "build115PlayUrl");
-  function format115Size(bytes) {
-    const value = Number(bytes) || 0;
-    if (!value) return "0 B";
-    const units = ["B", "KB", "MB", "GB", "TB"], index = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024)));
-    return `${(value / 1024 ** index).toFixed(index ? 2 : 0)} ${units[index]}`;
-  }
-  __name(format115Size, "format115Size");
-  function preview115Rename(fileName, carNum, options = {}) {
-    const extension = fileName.match(/\.[^.]+$/)?.[0] || "", tags = fileName.match(/-(?:U|UC|C|4K|8K|H265|HEVC|CN|CHS|CHT)\b/gi) || [];
-    let base = options.uppercase === false ? carNum : carNum.toUpperCase();
-    if (options.keepTitle) base += ` ${fileName.replace(extension, "").replace(/^.*?\s+/, "")}`;
-    if (options.keepSuffix !== false) base += [...new Set(tags.map(((tag) => tag.toUpperCase())))].join("");
-    return `${base.slice(0, options.maxLength || 180)}${extension}`;
-  }
-  __name(preview115Rename, "preview115Rename");
-
   // src/plugins/backup/setting.js
   var _SettingPlugin = class _SettingPlugin extends BasePlugin {
     constructor() {
@@ -7797,7 +7703,8 @@
     async checkOneOneFiveLogin() {
       const badge = $("#one-one-five-state").text("检测中");
       try {
-        badge.text(await new OneOneFiveClient().checkLogin() ? "已登录" : "未登录");
+        const scope = await this.getRuntimeService("scope")(), result = await this.getRuntimeService("offline").checkAccount("one115", { scope });
+        badge.text(result.authenticated ? "已登录" : "未登录");
       } catch {
         badge.text("检测失败");
       }
@@ -9687,6 +9594,24 @@ ${error.stack}` : "");
   };
   __name(_JavTrailersPlugin, "JavTrailersPlugin");
   var JavTrailersPlugin = _JavTrailersPlugin;
+
+  // src/core/cache-policy.js
+  var HOUR = 60 * 60 * 1e3;
+  var DAY = 24 * HOUR;
+  var CACHE_TTL = Object.freeze({ magnet: 6 * HOUR, screenshot: 7 * DAY, screenshotNegative: 12 * HOUR, match115: HOUR, externalDetail: DAY });
+  var _ProviderError = class _ProviderError extends Error {
+    constructor(provider, code, message, options = {}) {
+      super(message, { cause: options.cause });
+      this.name = "ProviderError";
+      this.provider = provider;
+      this.code = code;
+      this.status = options.status || 0;
+      this.url = options.url || "";
+      this.retryable = Boolean(options.retryable);
+    }
+  };
+  __name(_ProviderError, "ProviderError");
+  var ProviderError = _ProviderError;
 
   // src/core/magnet-quality.js
   function calcMagnetScore(magnet) {
@@ -12898,7 +12823,7 @@ ${error.stack}` : "");
         if (!token) throw Object.assign(new Error("尚未同步 123 授权"), { code: "TOKEN_MISSING" });
         return offline.submitWithIntegration("pan123", resource, { token, scope });
       }, "submit"), openUrl: /* @__PURE__ */ __name(() => offline.getIntegrationHomeUrl("pan123"), "openUrl") });
-      this.registry.register({ id: "115", name: "115", capabilities: ["magnet", "ed2k"], retryPolicy: { automaticAttempts: 0 }, isEnabled: /* @__PURE__ */ __name(() => storageManager.getSetting("enable115Offline", false), "isEnabled"), getAvailability: /* @__PURE__ */ __name(async () => ({ available: true, authState: "unknown", reason: "提交时确认登录状态" }), "getAvailability"), submit: /* @__PURE__ */ __name((resource) => new OneOneFiveClient().addOffline(resource), "submit"), openUrl: /* @__PURE__ */ __name(() => "https://115.com", "openUrl") });
+      this.registry.register({ id: "115", name: "115", capabilities: ["magnet", "ed2k"], retryPolicy: { automaticAttempts: 0 }, isEnabled: /* @__PURE__ */ __name(() => storageManager.getSetting("enable115Offline", false), "isEnabled"), getAvailability: /* @__PURE__ */ __name(async () => ({ available: true, authState: "unknown", reason: "提交时确认登录状态" }), "getAvailability"), submit: /* @__PURE__ */ __name((resource) => offline.submitWithIntegration("one115", resource, { scope }), "submit"), openUrl: /* @__PURE__ */ __name(() => offline.getIntegrationHomeUrl("one115"), "openUrl") });
       window.offlineProviderRegistry = this.registry;
     }
     bindSubmit() {
@@ -12967,20 +12892,42 @@ ${error.stack}` : "");
   __name(_UnifiedOfflinePlugin, "UnifiedOfflinePlugin");
   var UnifiedOfflinePlugin = _UnifiedOfflinePlugin;
 
+  // src/plugins/one-one-five/client.js
+  function normalize115Keyword(carNum) {
+    const normalized = normalizeCarNum(carNum);
+    return normalized?.replace(/^FC2-/i, "") || null;
+  }
+  __name(normalize115Keyword, "normalize115Keyword");
+  function format115Size(bytes) {
+    const value = Number(bytes) || 0;
+    if (!value) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB"], index = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024)));
+    return `${(value / 1024 ** index).toFixed(index ? 2 : 0)} ${units[index]}`;
+  }
+  __name(format115Size, "format115Size");
+  function preview115Rename(fileName, carNum, options = {}) {
+    const extension = fileName.match(/\.[^.]+$/)?.[0] || "", tags = fileName.match(/-(?:U|UC|C|4K|8K|H265|HEVC|CN|CHS|CHT)\b/gi) || [];
+    let base = options.uppercase === false ? carNum : carNum.toUpperCase();
+    if (options.keepTitle) base += ` ${fileName.replace(extension, "").replace(/^.*?\s+/, "")}`;
+    if (options.keepSuffix !== false) base += [...new Set(tags.map(((tag) => tag.toUpperCase())))].join("");
+    return `${base.slice(0, options.maxLength || 180)}${extension}`;
+  }
+  __name(preview115Rename, "preview115Rename");
+
   // src/plugins/one-one-five/plugins.js
   var _OneOneFiveMatchPlugin = class _OneOneFiveMatchPlugin extends BasePlugin {
     constructor() {
-      super(), this.observer = null, this.unsubscribeItems = null, this.pendingCards = /* @__PURE__ */ new Set(), this.flushTimer = null, this.client = new OneOneFiveClient(), this.concurrency = 4, this.cacheMinutes = 60;
+      super(), this.observer = null, this.unsubscribeItems = null, this.pendingCards = /* @__PURE__ */ new Set(), this.flushTimer = null, this.lifecycleScope = null, this.concurrency = 4, this.cacheMinutes = 60;
     }
     getName() {
       return "OneOneFiveMatchPlugin";
     }
     async handle() {
       if (!await storageManager.getSetting("enable115Match", false)) return;
-      const hostAdapter = this.getRuntimeService("host");
+      const hostAdapter = this.getRuntimeService("host"), offline = this.getRuntimeService("offline");
+      this.lifecycleScope = await this.getRuntimeService("scope")();
       if (!isDetailPage) {
-        const scope = await this.getRuntimeService("scope")();
-        await this.setupListMatching(hostAdapter), scope.ownObserver(this.observer), scope.addCleanup((() => {
+        await this.setupListMatching(hostAdapter), this.lifecycleScope.ownObserver(this.observer), this.lifecycleScope.addCleanup((() => {
           this.unsubscribeItems?.(), this.unsubscribeItems = null, this.flushTimer && clearTimeout(this.flushTimer), this.flushTimer = null, this.pendingCards.clear();
         }));
         return;
@@ -12990,11 +12937,11 @@ ${error.stack}` : "");
       const host = $(hostAdapter.locateDetailSlots().summary);
       host.append('<div class="panel-block jhs-115-match"><strong>115匹配：</strong><span>匹配中</span></div>');
       try {
-        const cacheMinutes = Math.max(1, Number(await storageManager.getSetting("oneOneFiveCacheMinutes", 60)) || 60), matches = await storageManager.cachedRequest(`115match:${carNum}`, cacheMinutes * 6e4, (() => new OneOneFiveClient().search(keyword)));
+        const cacheMinutes = Math.max(1, Number(await storageManager.getSetting("oneOneFiveCacheMinutes", 60)) || 60), matches = await offline.searchFiles("one115", keyword, { scope: this.lifecycleScope, ttlMs: cacheMinutes * 6e4 });
         const box = $(".jhs-115-match").empty().append("<strong>115匹配：</strong>");
         if (!matches.length) return void box.append(document.createTextNode("未匹配 "), $('<button type="button" class="jhs-btn jhs-btn--ghost">重试</button>').on("click", (() => location.reload())));
         matches.forEach(((match) => {
-          const row = $('<span class="jhs-115-match-row"></span>'), playUrl = build115PlayUrl(match);
+          const row = $('<span class="jhs-115-match-row"></span>'), playUrl = offline.getPlayUrl("one115", match);
           playUrl ? row.append($("<a></a>").addClass("jhs-btn jhs-btn--secondary").attr({ href: playUrl, target: "_blank" }).text(`${match.name} (${format115Size(match.size)})`)) : row.append($("<span></span>").text(`${match.name} (${format115Size(match.size)}) · 不可播放`));
           match.fileId && row.append($('<button type="button" class="jhs-btn jhs-btn--ghost jhs-115-rename">重命名</button>').data("match", match));
           box.append(row);
@@ -13002,7 +12949,7 @@ ${error.stack}` : "");
         box.on("click", ".jhs-115-rename", ((event) => this.renameWithPreview(event, $(event.currentTarget).data("match"), carNum)));
       } catch (error) {
         const box = $(".jhs-115-match").empty().append("<strong>115匹配：</strong>", document.createTextNode("未登录或请求失败 "));
-        box.append('<a class="jhs-btn jhs-btn--ghost" href="https://115.com" target="_blank">去登录</a>', $('<button type="button" class="jhs-btn jhs-btn--ghost">重试</button>').on("click", (() => location.reload())));
+        box.append($("<a></a>").addClass("jhs-btn jhs-btn--ghost").attr({ href: offline.getIntegrationHomeUrl("one115"), target: "_blank" }).text("去登录"), $('<button type="button" class="jhs-btn jhs-btn--ghost">重试</button>').on("click", (() => location.reload())));
         clog.error("115 匹配失败", error);
       }
     }
@@ -13028,17 +12975,16 @@ ${error.stack}` : "");
     async matchCard(element, force = false) {
       const card = $(element), carNum = normalizeCarNum(card.find(".video-title strong").first().text());
       if (!carNum || "pending" === element.dataset.jhs115State && !force) return;
-      const cacheKey = `115match:${carNum}`;
       try {
-        element.dataset.jhs115State = "pending", force && await storageManager.deleteCachedRequest(cacheKey);
-        const matches = await storageManager.cachedRequest(cacheKey, this.cacheMinutes * 6e4, (() => this.client.search(normalize115Keyword(carNum))));
+        element.dataset.jhs115State = "pending";
+        const offline = this.getRuntimeService("offline"), matches = await offline.searchFiles("one115", normalize115Keyword(carNum), { scope: this.lifecycleScope, ttlMs: this.cacheMinutes * 6e4, force });
         card.find(".jhs-115-list-match").remove();
         const badge = $('<button type="button" class="jhs-btn jhs-btn--ghost jhs-115-list-match"></button>').text(matches.length ? `匹配${matches.length}个` : "未匹配").data("matches", matches);
         card.find(".video-title").first().prepend(badge), element.dataset.jhs115State = "matched";
         badge.on("click", (() => {
           if (!matches.length) return this.matchCard(element, true);
-          if (1 === matches.length) return window.open(build115PlayUrl(matches[0]), "_blank");
-          const links = matches.map(((match) => `<a href="${escapeHtml(build115PlayUrl(match))}" target="_blank">${escapeHtml(match.name)}</a>`)).join("<br>");
+          if (1 === matches.length) return window.open(offline.getPlayUrl("one115", matches[0]), "_blank");
+          const links = matches.map(((match) => `<a href="${escapeHtml(offline.getPlayUrl("one115", match))}" target="_blank">${escapeHtml(match.name)}</a>`)).join("<br>");
           this.getRuntimeService("dialog").open({ type: 1, title: `${carNum} 115匹配`, content: `<div class="jhs-dialog-content">${links}</div>`, area: utils.getResponsiveArea(["560px", "auto"]) });
         }));
       } catch (error) {
@@ -13051,7 +12997,7 @@ ${error.stack}` : "");
     renameWithPreview(event, match, carNum) {
       const nextName = preview115Rename(match.name, carNum, { uppercase: true, keepSuffix: true });
       utils.q(event, `确认重命名？<br>${escapeHtml(match.name)}<br>→ ${escapeHtml(nextName)}`, (async () => {
-        await new OneOneFiveClient().rename(match.fileId, nextName);
+        await this.getRuntimeService("offline").renameFile("one115", match.fileId, nextName, { scope: this.lifecycleScope });
         show.ok("重命名完成");
       }));
     }
@@ -15450,7 +15396,7 @@ ${error.stack}` : "");
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog]),
-    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.http]),
+    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.offline]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [SERVICE.dialog, SERVICE.account]),
@@ -15477,7 +15423,7 @@ ${error.stack}` : "");
     manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }, [SERVICE.storage, SERVICE.http, SERVICE.actressInfo]),
     manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics, SERVICE.dialog]),
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings]),
-    manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }, [PORT.host, SERVICE.dialog]),
+    manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }, [PORT.host, SERVICE.dialog, SERVICE.offline]),
     manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [SERVICE.dialog, SERVICE.offline]),
     manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }),
     manifest("identity.javbus-navigation", "identity", BusNavBarPlugin, ["javbus"], { javbus: 7 }),
@@ -16368,6 +16314,25 @@ ${error.stack}` : "");
       const adapter = this.integrations.getAdapter(integrationId);
       if (typeof adapter.submit !== "function") throw new TypeError(`Integration ${integrationId} does not support offline submission`);
       return adapter.submit(resource, context);
+    }
+    checkAccount(integrationId, context = {}) {
+      const adapter = this.integrations.getAdapter(integrationId);
+      if (typeof adapter.checkAccount !== "function") throw new TypeError(`Integration ${integrationId} does not support account checks`);
+      return adapter.checkAccount(context);
+    }
+    searchFiles(integrationId, keyword, context = {}) {
+      const adapter = this.integrations.getAdapter(integrationId);
+      if (typeof adapter.searchFiles !== "function") throw new TypeError(`Integration ${integrationId} does not support file search`);
+      return adapter.searchFiles(keyword, context);
+    }
+    renameFile(integrationId, fileId, newName, context = {}) {
+      const adapter = this.integrations.getAdapter(integrationId);
+      if (typeof adapter.renameFile !== "function") throw new TypeError(`Integration ${integrationId} does not support file rename`);
+      return adapter.renameFile(fileId, newName, context);
+    }
+    getPlayUrl(integrationId, match) {
+      const adapter = this.integrations.getAdapter(integrationId);
+      return typeof adapter.getPlayUrl === "function" ? adapter.getPlayUrl(match) : null;
     }
     getIntegrationHomeUrl(integrationId) {
       const adapter = this.integrations.getAdapter(integrationId);
@@ -17883,8 +17848,104 @@ ${error.stack}` : "");
   // src/integrations/javtrailers/manifest.js
   var manifest_default11 = defineIntegration({ id: "javtrailers", trustClass: "builtin-public", hosts: ["javtrailers.com"], capabilities: ["movie.preview"], requires: [PORT.http, SERVICE.urlPolicy], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "javtrailers" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MoviePreview"] }), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
 
+  // src/integrations/one115/manifest.js
+  var HOME_URL = "https://115.com";
+  var SESSION_SCOPE_ID = "one115-browser-session";
+  var URL_POLICY = Object.freeze({ trustClass: "builtin-public", hosts: ["115.com"] });
+  function parsePayload(value) {
+    if (typeof value !== "string") return value;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return { state: false, error_msg: /login|登录|sign in|未授权|授权|expire|expired|token|cookie/i.test(value) ? "115 未登录" : "115 返回异常响应" };
+    }
+  }
+  __name(parsePayload, "parsePayload");
+  function classify115OfflineError(message) {
+    const text = String(message).toLowerCase();
+    if (/未登录|请登录|登录|login|sign|授权|过期|token|cookie|uid|身份|auth|expire|needlogin|need login/i.test(text)) return "AUTH_REQUIRED";
+    if (/已存在|重复|exists|duplicate|already|same|conflict|exist/i.test(text)) return "TASK_EXISTS";
+    return "OPERATION_FAILED";
+  }
+  __name(classify115OfflineError, "classify115OfflineError");
+  function normalize115SearchResults(payload) {
+    const value = payload;
+    if (!value || !Array.isArray(value.data)) throw new JhsError("INVALID_RESPONSE", "115 文件搜索响应无效", { source: "one115" });
+    return Object.freeze(value.data.map((item) => {
+      const name = String(item.n || item.file_name || "");
+      return Object.freeze({ folderId: String(item.pid || item.cid || ""), fileId: item.fid ? String(item.fid) : null, videoId: String(item.pc || item.pick_code || ""), name, size: Number(item.s || item.size) || 0, createTime: String(item.t || item.create_time || ""), isVideo: /\.(mp4|mkv|avi|mov|flv|wmv|ts|m2ts)$/i.test(name) });
+    }).filter((item) => item.isVideo));
+  }
+  __name(normalize115SearchResults, "normalize115SearchResults");
+  function createOne115Adapter(http) {
+    const request = /* @__PURE__ */ __name((url, options = {}) => http.request({
+      providerId: "one115",
+      method: options.method || "GET",
+      url,
+      body: options.body,
+      headers: options.headers,
+      responseType: options.responseType || "json",
+      cacheScope: options.cacheScope || "none",
+      ttlMs: options.ttlMs,
+      sessionScopeId: options.cacheScope === "session" ? SESSION_SCOPE_ID : void 0,
+      urlPolicy: URL_POLICY
+    }, options.scope), "request");
+    return Object.freeze({
+      contracts: ["AccountStatus", "CloudFile", "OfflineSubmission"],
+      homeUrl: HOME_URL,
+      async checkAccount(options = {}) {
+        const response = await request("https://webapi.115.com/offine/downpath", { scope: options.scope });
+        const payload = response.data;
+        return Object.freeze({ authenticated: Boolean(payload?.state && payload?.data?.length) });
+      },
+      async searchFiles(keyword, options = {}) {
+        const url = new URL("https://webapi.115.com/files/search");
+        url.searchParams.set("search_value", keyword), url.searchParams.set("offset", String(options.offset ?? 0)), url.searchParams.set("limit", String(options.limit ?? 50));
+        const response = await request(url.href, { scope: options.scope, cacheScope: options.force ? "none" : "session", ttlMs: options.ttlMs ?? 36e5 });
+        return normalize115SearchResults(response.data);
+      },
+      async submit(resource, options = {}) {
+        if (!/^magnet:/i.test(resource) && !/^ed2k:/i.test(resource)) throw new JhsError("UNSUPPORTED", "Unsupported offline URL", { source: "one115" });
+        const infoResponse = await request(`https://115.com/?ct=offline&ac=space&_=${Date.now()}`, { scope: options.scope });
+        const info = infoResponse.data;
+        if (!info?.sign) throw new JhsError("AUTH_REQUIRED", "115 未登录或离线空间信息获取失败", { source: "one115" });
+        const body = new URLSearchParams({ url: resource, wp_path_id: options.folderId || "", uid: String(info.uid || ""), sign: info.sign, time: String(info.time || "") }).toString();
+        const response = await request("https://115.com/web/lixian/?ct=lixian&ac=add_task_url", { scope: options.scope, method: "POST", body, responseType: "text", headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        const payload = parsePayload(response.data);
+        if (!payload || payload.state === false || payload.state === 0) {
+          const message = String(payload?.error_msg || payload?.error || payload?.msg || "115 离线任务创建失败"), code = classify115OfflineError(message);
+          throw new JhsError(code, message, { source: "one115", details: { state: payload?.state ?? null } });
+        }
+        return Object.freeze({ success: true, taskId: String(payload.task_id || payload.info_hash || "") });
+      },
+      async renameFile(fileId, newName, options = {}) {
+        const body = new URLSearchParams({ fid: fileId, file_name: newName }).toString();
+        const response = await request("https://webapi.115.com/files/edit", { scope: options.scope, method: "POST", body, responseType: "json", headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+        const payload = response.data;
+        if (!payload || payload.state === false || payload.state === 0) throw new JhsError("OPERATION_FAILED", String(payload?.error || payload?.error_msg || "115 重命名失败"), { source: "one115" });
+        return Object.freeze({ success: true });
+      },
+      getPlayUrl(match) {
+        return match?.videoId ? `https://115.com/?ct=play&pickcode=${encodeURIComponent(match.videoId)}` : null;
+      }
+    });
+  }
+  __name(createOne115Adapter, "createOne115Adapter");
+  var manifest_default12 = defineIntegration({
+    id: "one115",
+    trustClass: "builtin-public",
+    hosts: ["115.com"],
+    capabilities: ["account.status", "file.search", "file.rename", "offline.submit"],
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createOne115Adapter(client.http), "createAdapter"),
+    createHostAdapter: null,
+    cachePolicy: { "account.status": "none", "file.search": "session-configured", "file.rename": "none", "offline.submit": "none" },
+    quality: "silver"
+  });
+
   // src/integrations/pan123/manifest.js
-  var URL_POLICY = Object.freeze({ trustClass: "builtin-public", hosts: ["123pan.com"] });
+  var URL_POLICY2 = Object.freeze({ trustClass: "builtin-public", hosts: ["123pan.com"] });
   function crc32(value) {
     const table = new Uint32Array(256);
     for (let index = 0; index < 256; index += 1) {
@@ -17913,7 +17974,7 @@ ${error.stack}` : "");
     return url.href;
   }
   __name(signPan123Url, "signPan123Url");
-  function parsePayload(value) {
+  function parsePayload2(value) {
     if (typeof value !== "string") return value;
     try {
       return JSON.parse(value);
@@ -17921,7 +17982,7 @@ ${error.stack}` : "");
       throw new JhsError("PARSE_ERROR", "123 云盘响应不是有效 JSON", { source: "pan123", cause });
     }
   }
-  __name(parsePayload, "parsePayload");
+  __name(parsePayload2, "parsePayload");
   function assertSuccess(payload, action) {
     if (!payload || typeof payload !== "object") throw new JhsError("INVALID_RESPONSE", `123 云盘${action}响应无效`, { source: "pan123" });
     if (payload.code === 0) return payload;
@@ -17942,7 +18003,7 @@ ${error.stack}` : "");
         cacheScope: "none",
         timeout: runtime.getTimeout?.() ?? 5e3,
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "App-Version": "3", platform: "web", Origin: "https://yun.123pan.com", Referer: "https://yun.123pan.com/" },
-        urlPolicy: URL_POLICY
+        urlPolicy: URL_POLICY2
       }, scope);
     }, "request");
     return Object.freeze({
@@ -17951,7 +18012,7 @@ ${error.stack}` : "");
       async resolve(resource, context = {}) {
         const { token, scope } = context;
         if (!token) throw new JhsError("AUTH_REQUIRED", "尚未同步 123 授权", { source: "pan123" });
-        const response = await request("/b/api/v2/offline_download/task/resolve", { urls: resource }, token, scope), payload = assertSuccess(parsePayload(response.data), "解析"), item = payload.data?.list?.[0];
+        const response = await request("/b/api/v2/offline_download/task/resolve", { urls: resource }, token, scope), payload = assertSuccess(parsePayload2(response.data), "解析"), item = payload.data?.list?.[0];
         if (!item?.id || !Array.isArray(item.files)) throw new JhsError("INVALID_RESPONSE", "123 云盘解析结果缺少资源文件", { source: "pan123" });
         return Object.freeze({ id: item.id, files: Object.freeze(item.files.map((file) => Object.freeze({ id: file.id, size: Number(file.size || 0) }))) });
       },
@@ -17961,7 +18022,7 @@ ${error.stack}` : "");
         if (!resource?.id || !Array.isArray(resource.files) || resource.files.length === 0) throw new JhsError("INVALID_RESPONSE", "没有可建立离线的文件", { source: "pan123" });
         const fileIds = resource.files.map((file) => file.id), totalSize = resource.files.reduce((sum, file) => sum + Number(file.size || 0), 0);
         const response = await request("/b/api/v2/offline_download/task/submit", { resource_list: [{ resource_id: resource.id, select_file_id: fileIds }] }, token, scope);
-        assertSuccess(parsePayload(response.data), "提交");
+        assertSuccess(parsePayload2(response.data), "提交");
         return Object.freeze({ fileCount: fileIds.length, totalSize });
       },
       async submit(resource, context = {}) {
@@ -17971,7 +18032,7 @@ ${error.stack}` : "");
     });
   }
   __name(createPan123Adapter, "createPan123Adapter");
-  var manifest_default12 = defineIntegration({
+  var manifest_default13 = defineIntegration({
     id: "pan123",
     trustClass: "builtin-public",
     hosts: ["123pan.com"],
@@ -17998,7 +18059,7 @@ ${error.stack}` : "");
     });
   }
   __name(createSubtitleCatAdapter, "createSubtitleCatAdapter");
-  var manifest_default13 = defineIntegration({ id: "subtitlecat", trustClass: "builtin-public", hosts: ["subtitlecat.com"], capabilities: ["subtitle.search"], requires: [], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "subtitlecat" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => createSubtitleCatAdapter(), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
+  var manifest_default14 = defineIntegration({ id: "subtitlecat", trustClass: "builtin-public", hosts: ["subtitlecat.com"], capabilities: ["subtitle.search"], requires: [], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "subtitlecat" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => createSubtitleCatAdapter(), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
 
   // src/integrations/wikipedia/parser.js
   function compact(value) {
@@ -18053,7 +18114,7 @@ ${error.stack}` : "");
     });
   }
   __name(createWikipediaAdapter, "createWikipediaAdapter");
-  var manifest_default14 = defineIntegration({
+  var manifest_default15 = defineIntegration({
     id: "wikipedia",
     trustClass: "builtin-public",
     hosts: ["ja.wikipedia.org"],
@@ -18121,7 +18182,7 @@ ${error.stack}` : "");
     });
   }
   __name(createXunleiAdapter, "createXunleiAdapter");
-  var manifest_default15 = defineIntegration({
+  var manifest_default16 = defineIntegration({
     id: "xunlei",
     trustClass: "builtin-public",
     hosts: XUNLEI_HOSTS,
@@ -18135,7 +18196,7 @@ ${error.stack}` : "");
   });
 
   // src/app/integration-catalog.js
-  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default7, manifest_default8, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13, manifest_default14, manifest_default15]);
+  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default7, manifest_default8, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13, manifest_default14, manifest_default15, manifest_default16]);
 
   // src/app/bootstrap.js
   function patchLayerRuntime(layerRuntime) {

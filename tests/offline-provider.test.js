@@ -24,7 +24,7 @@ function loadOfflinePlugin(submit, history = vi.fn(async () => {})) {
         r: true, l: false, setTimeout, clearTimeout,
         stateService: { appendOfflineHistory: history, patch: vi.fn() },
         show: { ok: vi.fn(), error: vi.fn() }, utils: { q: vi.fn(), getDialogArea: vi.fn(() => []) }, storageManager: { getSetting: vi.fn(async () => "ask") }, layer,
-        OneOneFiveClient: class {}, getDetailResourceAdapter: vi.fn(), jhsEventBus: { on: vi.fn() }, readListItem: vi.fn()
+        getDetailResourceAdapter: vi.fn(), jhsEventBus: { on: vi.fn() }, readListItem: vi.fn()
     });
     const source = readTestFile(join(import.meta.dirname, "../src/plugins/offline/unified-offline.js"), "utf8");
     vm.runInContext(`${source};globalThis.TestOfflinePlugin=UnifiedOfflinePlugin;`, context);
