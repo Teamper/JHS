@@ -54,7 +54,7 @@ export class UnifiedOfflinePlugin extends BasePlugin {
         }));
     }
     injectNativeButtons() {
-        const adapter = getDetailResourceAdapter();
+        const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
         if (!adapter) return;
         adapter.rows().forEach((row => {
             const resource = adapter.getResource(row), target = adapter.getActionTarget(row);

@@ -1,51 +1,28 @@
-import { l, normalizeCarNum, r } from "../../core/constants.js";
+import { normalizeCarNum } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
 
 /** 返回当前详情页的宿主资源边界；调用者不得重挂载这些节点。 */
-export function getDetailResourceAdapter() {
-    if (!window.isDetailPage) return null;
-    if (r) {
-        const hostRoot = $(".video-detail").first(), controller = hostRoot.find('[data-controller="magnet-sort"]').first(), resourceRoot = controller.find("#magnets-content").first();
-        if (!hostRoot.length || !controller.length || !resourceRoot.length) return null;
-        const resourceRegion = controller.closest(hostRoot.children()).first();
-        return {
-            site: "javdb", hostRoot, controller, observeRoot: controller, resourceRoot, resourceRegion,
-            rows: () => resourceRoot.children(".item").toArray(),
-            sortSelect: controller.find('select[data-action*="magnet-sort#sort"]').first(),
-            getResource(row) {
-                const item = $(row);
-                return item.find('.copy-to-clipboard[data-clipboard-text^="magnet:"]').first().attr("data-clipboard-text") || item.find('.magnet-name a[href^="magnet:"]').first().attr("href") || "";
-            },
-            getActionTarget: row => $(row).children(".buttons").first()
-        };
-    }
-    if (l) {
-        const hostRoot = $(".container").filter(((_, element) => $(element).find("#magnet-table").length > 0)).first(), resourceRoot = hostRoot.find("#magnet-table").first();
-        if (!hostRoot.length || !resourceRoot.length) return null;
-        const resourceRegion = resourceRoot.closest(hostRoot.children()).first(), observeRoot = resourceRoot.parent();
-        return {
-            site: "javbus", hostRoot, controller: resourceRoot, observeRoot, resourceRoot, resourceRegion,
-            rows: () => resourceRoot.find("tr").filter(((_, row) => $(row).find('td a[href^="magnet:"],td a[href^="ed2k:"]').length > 0)).toArray(),
-            sortSelect: $(),
-            getResource: row => $(row).find('td a[href^="magnet:"],td a[href^="ed2k:"]').first().attr("href") || "",
-            getActionTarget(row) {
-                const item = $(row), stableActions = item.find(".buttons,.actions,.btn-group").filter(((_, element) => $(element).closest("td").length > 0)).last();
-                if (stableActions.length) return stableActions;
-                const resourceCell = item.find('td:has(a[href^="magnet:"]),td:has(a[href^="ed2k:"])').first();
-                let actions = resourceCell.children(".jhs-offline-actions").first();
-                return actions.length || (actions = $('<span class="jhs-offline-actions"></span>').appendTo(resourceCell)), actions;
-            }
-        };
-    }
-    return null;
+export function getDetailResourceAdapter(hostAdapter) {
+    if (!window.isDetailPage || typeof hostAdapter?.getDetailResourceBoundary !== "function") return null;
+    const boundary = hostAdapter.getDetailResourceBoundary();
+    if (!boundary) return null;
+    return {
+        ...boundary, hostRoot: $(boundary.hostRoot), controller: $(boundary.controller), observeRoot: $(boundary.observeRoot), resourceRoot: $(boundary.resourceRoot), resourceRegion: $(boundary.resourceRegion),
+        sortSelect: $(boundary.sortSelect), getActionTarget(row) {
+            const target = $(boundary.getActionTarget(row));
+            if (!target.length || !boundary.actionTargetRequiresWrapper?.(row)) return target;
+            let actions = target.children(".jhs-offline-actions").first();
+            return actions.length || (actions = $('<span class="jhs-offline-actions"></span>').appendTo(target)), actions;
+        },
+    };
 }
 
 /** 非破坏性详情工作区：仅标记宿主稳定块，并为 JHS 自有内容提供固定插槽。 */
 export class DetailWorkspacePlugin extends BasePlugin {
     constructor() {
-        super(), this.hostRoot = null, this.resourceObserver = null, this.scheduledResourceFrame = null;
+        super(), this.hostRoot = null, this.resourceObserver = null, this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null, this.lifecycleScope = null;
     }
     getName() { return "DetailWorkspacePlugin"; }
     async initCss() {
@@ -73,18 +50,17 @@ export class DetailWorkspacePlugin extends BasePlugin {
     }
     async handle() {
         if (!window.isDetailPage) return;
-        utils.loopDetector((() => !!this.getHostAdapter()), (() => this.ensureWorkspace()), 40, 2500, !0);
+        this.lifecycleScope = await this.getRuntimeService("scope")();
+        const cancel = utils.loopDetector((() => !!this.getHostAdapter()), (() => this.ensureWorkspace()), 40, 2500, !0);
+        this.lifecycleScope.addCleanup(cancel);
+        this.lifecycleScope.addCleanup((() => {
+            this.cancelScheduledResourceFrame?.(), this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null;
+        }));
     }
     getHostAdapter() {
-        if (r) {
-            const root = $(".video-detail").first();
-            return root.length ? { site: "javdb", root } : null;
-        }
-        if (l) {
-            const root = $(".container").filter(((_, element) => $(element).find("#magnet-table,.screencap,.info").length > 0)).first();
-            return root.length ? { site: "javbus", root } : null;
-        }
-        return null;
+        const host = this.getRuntimeService("host"), root = host?.locateDetailRoot?.();
+        if (!root) return null;
+        return { site: host.site || "unknown", root: $(root) };
     }
     ensureWorkspace() {
         const adapter = this.getHostAdapter();
@@ -99,7 +75,8 @@ export class DetailWorkspacePlugin extends BasePlugin {
                 this.normalizeHostActions(root.find(".video-meta-panel").first());
             } else {
                 root.children("h3,.row.movie").attr("data-jhs-host-region", "summary");
-                root.children().filter(((_, element) => $(element).is("#mag-submit-show,#mag-submit") || $(element).find("#magnet-table").length > 0)).attr("data-jhs-host-region", "resources");
+                const resource = getDetailResourceAdapter(this.getRuntimeService("host"));
+                resource?.resourceRegion?.attr("data-jhs-host-region", "resources");
                 root.children().filter(((_, element) => $(element).is("#sample-waterfall") || $(element).find("#sample-waterfall").length > 0)).attr("data-jhs-host-region", "gallery");
                 this.normalizeHostActions(root.find(".info").first());
             }
@@ -121,7 +98,7 @@ export class DetailWorkspacePlugin extends BasePlugin {
     }
     /** 只移动 JHS 自有插槽，将其固定在稳定宿主锚点旁。 */
     placeOwnedSlots() {
-        const root = this.hostRoot, resource = getDetailResourceAdapter();
+        const root = this.hostRoot, resource = getDetailResourceAdapter(this.getRuntimeService("host"));
         if (!root?.length) return;
         this.ensureOwnedSlots(root);
         const summaryActions = root.children('[data-jhs-slot="summary-actions"]').first(), postResource = root.children('[data-jhs-slot-group="post-resource"]').first();
@@ -145,25 +122,30 @@ export class DetailWorkspacePlugin extends BasePlugin {
         return nodes.length > 0 && nodes.every((node => node.matches?.(".jhs-offline-btn,.jhs-offline-actions,.jhs-magnet-score,.jhs-select-control") || node.closest?.(".jhs-offline-actions,.jhs-select-control")));
     }
     bindResourceLifecycle() {
-        const adapter = getDetailResourceAdapter();
+        const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
         if (!adapter) return;
         if (this.resourceObserver && this.resourceObserver.root === adapter.observeRoot[0]) return void this.scheduleResourceUpdate();
-        this.resourceObserver?.disconnect?.();
-        const observer = new MutationObserver((records => { records.every((record => this.isJhsOnlyMutation(record))) || this.scheduleResourceUpdate(); }));
-        observer.root = adapter.observeRoot[0], observer.observe(adapter.observeRoot[0], { childList: !0, subtree: !0 }), this.resourceObserver = observer,
+        this.resourceObserver && this.lifecycleScope?.releaseObserver(this.resourceObserver);
+        if (!this.lifecycleScope) return;
+        const observer = this.lifecycleScope.observe(adapter.observeRoot[0], (records => { records.every((record => this.isJhsOnlyMutation(record))) || this.scheduleResourceUpdate(); }), { childList: !0, subtree: !0 });
+        observer.root = adapter.observeRoot[0], this.resourceObserver = observer,
         adapter.sortSelect.length && adapter.sortSelect.addClass("jhs-select-source") && JhsSelect.enhance(adapter.controller), this.scheduleResourceUpdate();
     }
     scheduleResourceUpdate() {
-        if (this.scheduledResourceFrame) return;
-        const schedule = window.requestAnimationFrame || (callback => setTimeout(callback));
+        if (null !== this.scheduledResourceFrame) return;
+        const usesAnimationFrame = "function" == typeof window.requestAnimationFrame;
+        const schedule = usesAnimationFrame ? window.requestAnimationFrame.bind(window) : callback => setTimeout(callback);
         this.scheduledResourceFrame = schedule((() => {
-            this.scheduledResourceFrame = null;
-            const adapter = getDetailResourceAdapter();
+            this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null;
+            const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
             if (!adapter) return;
             this.placeOwnedSlots();
             adapter.sortSelect.length && (adapter.sortSelect.addClass("jhs-select-source"), JhsSelect.enhance(adapter.controller), JhsSelect.refresh(adapter.sortSelect));
             void jhsEventBus.emit("magnet-items-updated", { site: adapter.site, resourceRoot: adapter.resourceRoot[0], rows: adapter.rows() }, { broadcast: !1 });
         }));
+        this.cancelScheduledResourceFrame = () => {
+            null !== this.scheduledResourceFrame && (usesAnimationFrame ? window.cancelAnimationFrame?.(this.scheduledResourceFrame) : clearTimeout(this.scheduledResourceFrame));
+        };
     }
 }
 

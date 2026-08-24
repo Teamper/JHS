@@ -110,7 +110,7 @@ describe("list mutation hot path", () => {
     it("processes an appended card once and ignores later sort-style moves", async () => {
         const { dom, plugin } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
         plugin.processAddedItems = vi.fn(async (items) => items.forEach((item => item.dataset.jhsProcessed = "true")));
-        plugin.checkDom();
+        plugin.checkDom({ observe(target, callback, options) { const observer = new dom.window.MutationObserver(callback); observer.observe(target, options); return observer; } });
         const item = dom.window.document.createElement("div");
         item.className = "item", container.append(item);
         await new Promise((resolve => setTimeout(resolve, 140)));

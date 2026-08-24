@@ -227,7 +227,8 @@ export class ListPagePlugin extends BasePlugin {
         if (!window.isListPage || isHitShowPage()) return;
         const e = this.getSelector(), t = document.querySelector(e.boxSelector);
         if (!t) return void clog.error("没有找到容器节点!");
-        const a = new MutationObserver((records => {
+        if (!scope) return;
+        scope.observe(t, (records => {
             for (const record of records) {
                 this.removeIndexedItems(record.removedNodes);
                 for (const node of record.addedNodes) {
@@ -242,12 +243,10 @@ export class ListPagePlugin extends BasePlugin {
                 const items = [ ...this.pendingItems ].filter((item => item.isConnected && "true" !== item.dataset.jhsProcessed));
                 this.pendingItems.clear(), this.processTimer = null, items.length && void this.processAddedItems(items).catch((error => clog.error("列表增量处理失败", error)));
             }), 100));
-        }));
-        a.observe(t, {
+        }), {
             childList: !0,
             subtree: !1
         });
-        scope?.ownObserver(a);
     }
     async processAddedItems(items) {
         const selector = this.getSelector(), covers = items.flatMap((item => [ ...item.querySelectorAll(selector.coverImgSelector) ]));

@@ -20,17 +20,21 @@ describe("dialog preset sizing", () => {
 
 describe("detail workspace adapters", () => {
     const source = readTestFile(join(process.cwd(), "src/plugins/status/detail-workspace.js"), "utf8");
+    const javdbHost = readTestFile(join(process.cwd(), "src/platform/hosts/javdb-host-adapter.js"), "utf8");
+    const javbusHost = readTestFile(join(process.cwd(), "src/platform/hosts/javbus-host-adapter.js"), "utf8");
     it("keeps the protected JavDB controller and resource root as an adapter boundary", () => {
-        expect(source).toContain('[data-controller="magnet-sort"]');
-        expect(source).toContain('controller.find("#magnets-content")');
-        expect(source).toContain("#magnet-table");
+        expect(javdbHost).toContain('[data-controller="magnet-sort"]');
+        expect(javdbHost).toContain('querySelector("#magnets-content")');
+        expect(javbusHost).toContain('querySelector("#magnet-table")');
+        expect(source).not.toContain("#magnet-table");
     });
     it("declares only JHS-owned host slots", () => {
         for (const name of [ "summary-actions", "related", "reviews" ]) expect(source).toContain(`data-jhs-slot="${name}"`);
     });
     it("adopts owned panels once and observes only resource lifecycle changes", () => {
         expect(source).toContain("adoptExistingOwnedPanels(root)");
-        expect(source).toContain("observer.observe(adapter.observeRoot[0]");
+        expect(source).toContain("this.lifecycleScope.observe(adapter.observeRoot[0]");
+        expect(source).toContain("releaseObserver(this.resourceObserver)");
         expect(source).toContain('jhsEventBus.emit("magnet-items-updated"');
         expect(source).not.toContain("observer.observe(document.body");
         for (const legacy of [ "routeSections", "moveToSection", "movePanelToSection" ]) expect(source).not.toContain(legacy);

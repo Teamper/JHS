@@ -23,7 +23,7 @@ async function listJavaScriptFiles(dir) {
   return files;
 }
 
-const [theme, primitives, build, injection, magnet, settings, utils, detail, commandbar, newVideo, manager, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, reviewUi, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, screenshot, parsers, javstoreIntegration, otherSite, builtSource] = await Promise.all([
+const [theme, primitives, build, injection, magnet, settings, utils, detail, commandbar, newVideo, manager, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, reviewUi, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, screenshot, parsers, javstoreIntegration, otherSite, javDbHostAdapter, builtSource] = await Promise.all([
   readFile(join(srcRoot, "core", "theme.js"), "utf8"),
   readFile(join(srcRoot, "core", "ui-primitives.js"), "utf8"),
   readFile(join(repoRoot, "scripts", "build.mjs"), "utf8"),
@@ -58,6 +58,7 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(srcRoot, "integrations", "javstore", "parser.js"), "utf8"),
   readFile(join(srcRoot, "integrations", "javstore", "manifest.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "external-search", "other-site.js"), "utf8"),
+  readFile(join(srcRoot, "platform", "hosts", "javdb-host-adapter.js"), "utf8"),
   readFile(join(repoRoot, "JHS.user.js"), "utf8")
 ]);
 
@@ -158,9 +159,9 @@ forbidMatch(logger, /\.image-hover-preview\s*\{[^}]*display:\s*none/, "image pre
 forbidMatch(logger, /boundElements/, "image preview must not retain rendered elements");
 requireMatch(logger, /this\.placement = this\.choosePlacement/, "image preview must lock one viewport placement per hover");
 forbidMatch(detail, /observer\.observe\(document\.body/, "detail workspace must not observe the entire document body");
-requireMatch(detail, /controller\.find\("#magnets-content"\)/, "JavDB resource adapter must preserve the magnet controller boundary");
+requireMatch(javDbHostAdapter, /querySelector\("#magnets-content"\)/, "JavDB resource adapter must preserve the magnet controller boundary");
 requireMatch(detail, /data-jhs-slot="summary-actions"[\s\S]*data-jhs-slot="reviews"[\s\S]*data-jhs-slot="related"/, "host workspace must expose summary actions and reviews-before-related post-resource slots");
-requireMatch(detail, /observer\.observe\(adapter\.observeRoot\[0\]/, "detail resource lifecycle must stay scoped to the resource observe root");
+requireMatch(detail, /this\.lifecycleScope\.observe\(adapter\.observeRoot\[0\]/, "detail resource lifecycle must stay scoped to the resource observe root");
 forbidMatch(detail, /\.jhs-detail-host-workspace\s*\{[^}]*display\s*:\s*flex|data-jhs-host-region[^}]*order\s*:/, "host details must not be converted to an ordered flex layout");
 forbidMatch(detail, /routeSections|moveToSection|movePanelToSection/, "detail workspace must not continuously remount panels");
 for (const [source, label] of [[reviews, "reviews"], [related, "related lists"]]) {

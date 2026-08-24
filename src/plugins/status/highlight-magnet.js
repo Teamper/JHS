@@ -1,4 +1,4 @@
-import { _, l, r } from "../../core/constants.js";
+import { _ } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { calcMagnetScore, getMagnetQualitySignals } from "../../core/magnet-quality.js";
@@ -18,7 +18,18 @@ export class HighlightMagnetPlugin extends BasePlugin {
         return "HighlightMagnetPlugin";
     }
     doFilterMagnet() {
-        this.handleDb(), this.handleBus();
+        const boundary = this.getRuntimeService("host")?.getDetailResourceBoundary?.();
+        if (!boundary) return void this.updateFilterHint(!1);
+        const rows = boundary.rows(), validRows = [];
+        let hasMatch = !1;
+        rows.forEach((row => {
+            const titleTarget = boundary.getTitleTarget(row);
+            if (!titleTarget) return;
+            const target = $(titleTarget), title = target.text().toLowerCase(), signals = this.getQualitySignals(title, boundary.hasSubtitleTag(row));
+            $(row).removeClass("high-quality").show().addClass("magnet-row"), title.includes("4k") && target.css("color", "var(--jhs-status-filter-text)"),
+            signals.highQuality && (hasMatch = !0, $(row).addClass("high-quality")), this.injectScoreBadge(target, target.text()), validRows.push(row);
+        }));
+        hasMatch && validRows.forEach((row => $(row).hasClass("high-quality") || $(row).hide())), this.updateFilterHint(hasMatch);
     }
     /** 给磁力行注入评分徽章（幂等：已有则跳过） */
     injectScoreBadge(el, title) {
@@ -40,43 +51,8 @@ export class HighlightMagnetPlugin extends BasePlugin {
     updateFilterHint(hasMatch) {
         $("#enable-magnets-filter").removeClass("do-hide").attr("data-tip", hasMatch ? "仅显示识别到的高质量或字幕磁力" : "未识别到可过滤项，当前未隐藏磁力");
     }
-    handleDb() {
-        if (!r) return;
-        let e = $("#magnets-content .name");
-        if (0 === e.length) return void this.updateFilterHint(!1);
-        let n = !1;
-        e.each(((e, a) => {
-            const i = $(a), s = i.text().toLowerCase(), o = this.getQualitySignals(s);
-            const row = i.parent().parent().parent();
-            row.removeClass("high-quality").show();
-            row.addClass("magnet-row"), s.includes("4k") && i.css("color", "var(--jhs-status-filter-text)"),
-            o.highQuality && (n = !0, row.addClass("high-quality"));
-            this.injectScoreBadge(i, i.text());
-        })), n && $("#magnets-content .magnet-row").not(".high-quality").hide(), this.updateFilterHint(n);
-    }
-    handleBus() {
-        if (l && isDetailPage) {
-            const e = $("#magnet-table tr");
-            let n = !1;
-            e.each(((e, a) => {
-                const i = $(a), s = i.find("td:first-child"), o = s.find("a:first-child"), r = s.find("a:nth-child(2)"), l = o.text().toLowerCase();
-                i.removeClass("high-quality").show();
-                l.includes("4k") && o.css("color", "var(--jhs-status-filter-text)");
-                this.getQualitySignals(l, r.length > 0 && r.text().includes("字幕")).highQuality && (n = !0,
-                i.addClass("high-quality"));
-                this.injectScoreBadge(o, o.text());
-            }));
-            n && e.each(((e, t) => {
-                const n = $(t);
-                n.hasClass("high-quality") || n.hide();
-            })), this.updateFilterHint(n);
-        }
-    }
     showAll() {
         $("#enable-magnets-filter").removeClass("do-hide").removeAttr("data-tip");
-        if (r) {
-            $("#magnets-content .item").toArray().forEach((e => $(e).show()));
-        }
-        l && $("#magnet-table tr").toArray().forEach((e => $(e).show()));
+        this.getRuntimeService("host")?.getDetailResourceBoundary?.()?.rows().forEach((row => $(row).show()));
     }
 }

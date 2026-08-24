@@ -8,6 +8,7 @@ export class LifecycleScope {
         this.controller = new AbortController();
         this.cleanups = new Set();
         this.requestConsumers = new Set();
+        this.observerCleanups = new Map();
         this.listenerCount = 0;
         this.observerCount = 0;
         this.disposed = false;
@@ -31,11 +32,28 @@ export class LifecycleScope {
     /** @param {{disconnect: () => void}} observer */
     ownObserver(observer) {
         this.assertActive();
+        const existing = this.observerCleanups.get(observer);
+        if (existing) return existing;
         this.observerCount += 1;
-        return this.addCleanup(() => {
+        const cleanup = this.addCleanup(() => {
             observer.disconnect();
             this.observerCount -= 1;
+            this.observerCleanups.delete(observer);
         });
+        this.observerCleanups.set(observer, cleanup);
+        return cleanup;
+    }
+
+    /** @param {{disconnect: () => void}} observer */
+    releaseObserver(observer) { this.observerCleanups.get(observer)?.(); }
+
+    /** @param {Node} target @param {MutationCallback} callback @param {MutationObserverInit} options */
+    observe(target, callback, options) {
+        this.assertActive();
+        const observer = new MutationObserver(callback);
+        observer.observe(target, options);
+        this.ownObserver(observer);
+        return observer;
     }
 
     /** @param {number} timerId */

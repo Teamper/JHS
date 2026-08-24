@@ -2574,6 +2574,7 @@
       this.controller = new AbortController();
       this.cleanups = /* @__PURE__ */ new Set();
       this.requestConsumers = /* @__PURE__ */ new Set();
+      this.observerCleanups = /* @__PURE__ */ new Map();
       this.listenerCount = 0;
       this.observerCount = 0;
       this.disposed = false;
@@ -2594,11 +2595,26 @@
     }
     ownObserver(observer) {
       this.assertActive();
+      const existing = this.observerCleanups.get(observer);
+      if (existing) return existing;
       this.observerCount += 1;
-      return this.addCleanup(() => {
+      const cleanup = this.addCleanup(() => {
         observer.disconnect();
         this.observerCount -= 1;
+        this.observerCleanups.delete(observer);
       });
+      this.observerCleanups.set(observer, cleanup);
+      return cleanup;
+    }
+    releaseObserver(observer) {
+      this.observerCleanups.get(observer)?.();
+    }
+    observe(target, callback, options) {
+      this.assertActive();
+      const observer = new MutationObserver(callback);
+      observer.observe(target, options);
+      this.ownObserver(observer);
+      return observer;
     }
     ownTimeout(timerId) {
       return this.addCleanup(() => clearTimeout(timerId));
@@ -3562,6 +3578,7 @@
   // src/platform/hosts/javbus-host-adapter.js
   var _JavBusHostAdapter = class _JavBusHostAdapter {
     constructor(documentRuntime = document, locationRuntime = window.location) {
+      this.site = "javbus";
       this.document = documentRuntime;
       this.location = locationRuntime;
     }
@@ -3593,6 +3610,30 @@
     locateNativeMagnets() {
       return this.document.querySelector("#magnet-table");
     }
+    getDetailResourceBoundary() {
+      const resourceRoot = this.locateNativeMagnets(), hostRoot = this.locateDetailRoot();
+      if (!hostRoot || !resourceRoot) return null;
+      return Object.freeze({
+        site: "javbus",
+        hostRoot,
+        controller: resourceRoot,
+        observeRoot: resourceRoot.parentElement,
+        resourceRoot,
+        resourceRegion: [...hostRoot.children].find((child) => child === resourceRoot || child.contains(resourceRoot)) || resourceRoot,
+        rows: /* @__PURE__ */ __name(() => [...resourceRoot.querySelectorAll("tr")].filter((row) => row.querySelector('td a[href^="magnet:"],td a[href^="ed2k:"]')), "rows"),
+        sortSelect: null,
+        getResource: /* @__PURE__ */ __name((row) => row.querySelector('td a[href^="magnet:"],td a[href^="ed2k:"]')?.getAttribute("href") || "", "getResource"),
+        getTitleTarget: /* @__PURE__ */ __name((row) => row.querySelector("td:first-child a:first-child"), "getTitleTarget"),
+        hasSubtitleTag: /* @__PURE__ */ __name((row) => [...row.querySelectorAll("td:first-child a")].slice(1).some((anchor) => anchor.textContent?.includes("字幕")), "hasSubtitleTag"),
+        getActionTarget(row) {
+          const stable = [...row.querySelectorAll(".buttons,.actions,.btn-group")].filter((element) => element.closest("td")).at(-1);
+          if (stable) return stable;
+          const resourceLink = row.querySelector('td a[href^="magnet:"],td a[href^="ed2k:"]'), resourceCell = resourceLink?.closest("td");
+          return resourceCell || null;
+        },
+        actionTargetRequiresWrapper: /* @__PURE__ */ __name((row) => ![...row.querySelectorAll(".buttons,.actions,.btn-group")].some((element) => element.closest("td")), "actionTargetRequiresWrapper")
+      });
+    }
   };
   __name(_JavBusHostAdapter, "JavBusHostAdapter");
   var JavBusHostAdapter = _JavBusHostAdapter;
@@ -3612,6 +3653,7 @@
   // src/platform/hosts/javdb-host-adapter.js
   var _JavDbHostAdapter = class _JavDbHostAdapter {
     constructor(documentRuntime = document, locationRuntime = window.location) {
+      this.site = "javdb";
       this.document = documentRuntime;
       this.location = locationRuntime;
     }
@@ -3644,6 +3686,28 @@
     }
     locateNativeMagnets() {
       return this.document.querySelector("#magnets-content");
+    }
+    getDetailResourceBoundary() {
+      const resourceRoot = this.locateNativeMagnets(), controller = resourceRoot?.closest('[data-controller="magnet-sort"]'), hostRoot = this.locateDetailRoot();
+      if (!hostRoot || !controller || !resourceRoot) return null;
+      const resourceRegion = [...hostRoot.children].find((child) => child === controller || child.contains(controller)) || controller;
+      return Object.freeze({
+        site: "javdb",
+        hostRoot,
+        controller,
+        observeRoot: controller,
+        resourceRoot,
+        resourceRegion,
+        rows: /* @__PURE__ */ __name(() => [...resourceRoot.children].filter((row) => row.matches(".item")), "rows"),
+        sortSelect: controller.querySelector('select[data-action*="magnet-sort#sort"]'),
+        getResource(row) {
+          return row.querySelector('.copy-to-clipboard[data-clipboard-text^="magnet:"]')?.getAttribute("data-clipboard-text") || row.querySelector('.magnet-name a[href^="magnet:"]')?.getAttribute("href") || "";
+        },
+        getActionTarget: /* @__PURE__ */ __name((row) => row.querySelector(":scope > .buttons"), "getActionTarget"),
+        actionTargetRequiresWrapper: /* @__PURE__ */ __name(() => false, "actionTargetRequiresWrapper"),
+        getTitleTarget: /* @__PURE__ */ __name((row) => row.querySelector(".name"), "getTitleTarget"),
+        hasSubtitleTag: /* @__PURE__ */ __name(() => false, "hasSubtitleTag")
+      });
     }
     parseActorMovies(html, baseUrl) {
       if (typeof html !== "string") throw new TypeError("JavDB actor page must be HTML text");
@@ -5780,7 +5844,8 @@
       if (!window.isListPage || isHitShowPage()) return;
       const e2 = this.getSelector(), t2 = document.querySelector(e2.boxSelector);
       if (!t2) return void clog.error("没有找到容器节点!");
-      const a2 = new MutationObserver(((records) => {
+      if (!scope) return;
+      scope.observe(t2, ((records) => {
         for (const record of records) {
           this.removeIndexedItems(record.removedNodes);
           for (const node of record.addedNodes) {
@@ -5794,12 +5859,10 @@
           const items = [...this.pendingItems].filter(((item) => item.isConnected && "true" !== item.dataset.jhsProcessed));
           this.pendingItems.clear(), this.processTimer = null, items.length && void this.processAddedItems(items).catch(((error) => clog.error("列表增量处理失败", error)));
         }), 100));
-      }));
-      a2.observe(t2, {
+      }), {
         childList: true,
         subtree: false
       });
-      scope?.ownObserver(a2);
     }
     async processAddedItems(items) {
       const selector = this.getSelector(), covers = items.flatMap(((item) => [...item.querySelectorAll(selector.coverImgSelector)]));
@@ -8872,57 +8935,30 @@ ${value}\r
   var ReviewPanel = _ReviewPanel;
 
   // src/plugins/status/detail-workspace.js
-  function getDetailResourceAdapter() {
-    if (!window.isDetailPage) return null;
-    if (r) {
-      const hostRoot = $(".video-detail").first(), controller = hostRoot.find('[data-controller="magnet-sort"]').first(), resourceRoot = controller.find("#magnets-content").first();
-      if (!hostRoot.length || !controller.length || !resourceRoot.length) return null;
-      const resourceRegion = controller.closest(hostRoot.children()).first();
-      return {
-        site: "javdb",
-        hostRoot,
-        controller,
-        observeRoot: controller,
-        resourceRoot,
-        resourceRegion,
-        rows: /* @__PURE__ */ __name(() => resourceRoot.children(".item").toArray(), "rows"),
-        sortSelect: controller.find('select[data-action*="magnet-sort#sort"]').first(),
-        getResource(row) {
-          const item = $(row);
-          return item.find('.copy-to-clipboard[data-clipboard-text^="magnet:"]').first().attr("data-clipboard-text") || item.find('.magnet-name a[href^="magnet:"]').first().attr("href") || "";
-        },
-        getActionTarget: /* @__PURE__ */ __name((row) => $(row).children(".buttons").first(), "getActionTarget")
-      };
-    }
-    if (l) {
-      const hostRoot = $(".container").filter(((_2, element) => $(element).find("#magnet-table").length > 0)).first(), resourceRoot = hostRoot.find("#magnet-table").first();
-      if (!hostRoot.length || !resourceRoot.length) return null;
-      const resourceRegion = resourceRoot.closest(hostRoot.children()).first(), observeRoot = resourceRoot.parent();
-      return {
-        site: "javbus",
-        hostRoot,
-        controller: resourceRoot,
-        observeRoot,
-        resourceRoot,
-        resourceRegion,
-        rows: /* @__PURE__ */ __name(() => resourceRoot.find("tr").filter(((_2, row) => $(row).find('td a[href^="magnet:"],td a[href^="ed2k:"]').length > 0)).toArray(), "rows"),
-        sortSelect: $(),
-        getResource: /* @__PURE__ */ __name((row) => $(row).find('td a[href^="magnet:"],td a[href^="ed2k:"]').first().attr("href") || "", "getResource"),
-        getActionTarget(row) {
-          const item = $(row), stableActions = item.find(".buttons,.actions,.btn-group").filter(((_2, element) => $(element).closest("td").length > 0)).last();
-          if (stableActions.length) return stableActions;
-          const resourceCell = item.find('td:has(a[href^="magnet:"]),td:has(a[href^="ed2k:"])').first();
-          let actions = resourceCell.children(".jhs-offline-actions").first();
-          return actions.length || (actions = $('<span class="jhs-offline-actions"></span>').appendTo(resourceCell)), actions;
-        }
-      };
-    }
-    return null;
+  function getDetailResourceAdapter(hostAdapter) {
+    if (!window.isDetailPage || typeof hostAdapter?.getDetailResourceBoundary !== "function") return null;
+    const boundary = hostAdapter.getDetailResourceBoundary();
+    if (!boundary) return null;
+    return {
+      ...boundary,
+      hostRoot: $(boundary.hostRoot),
+      controller: $(boundary.controller),
+      observeRoot: $(boundary.observeRoot),
+      resourceRoot: $(boundary.resourceRoot),
+      resourceRegion: $(boundary.resourceRegion),
+      sortSelect: $(boundary.sortSelect),
+      getActionTarget(row) {
+        const target = $(boundary.getActionTarget(row));
+        if (!target.length || !boundary.actionTargetRequiresWrapper?.(row)) return target;
+        let actions = target.children(".jhs-offline-actions").first();
+        return actions.length || (actions = $('<span class="jhs-offline-actions"></span>').appendTo(target)), actions;
+      }
+    };
   }
   __name(getDetailResourceAdapter, "getDetailResourceAdapter");
   var _DetailWorkspacePlugin = class _DetailWorkspacePlugin extends BasePlugin {
     constructor() {
-      super(), this.hostRoot = null, this.resourceObserver = null, this.scheduledResourceFrame = null;
+      super(), this.hostRoot = null, this.resourceObserver = null, this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null, this.lifecycleScope = null;
     }
     getName() {
       return "DetailWorkspacePlugin";
@@ -8952,18 +8988,17 @@ ${value}\r
     }
     async handle() {
       if (!window.isDetailPage) return;
-      utils.loopDetector((() => !!this.getHostAdapter()), (() => this.ensureWorkspace()), 40, 2500, true);
+      this.lifecycleScope = await this.getRuntimeService("scope")();
+      const cancel = utils.loopDetector((() => !!this.getHostAdapter()), (() => this.ensureWorkspace()), 40, 2500, true);
+      this.lifecycleScope.addCleanup(cancel);
+      this.lifecycleScope.addCleanup((() => {
+        this.cancelScheduledResourceFrame?.(), this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null;
+      }));
     }
     getHostAdapter() {
-      if (r) {
-        const root = $(".video-detail").first();
-        return root.length ? { site: "javdb", root } : null;
-      }
-      if (l) {
-        const root = $(".container").filter(((_2, element) => $(element).find("#magnet-table,.screencap,.info").length > 0)).first();
-        return root.length ? { site: "javbus", root } : null;
-      }
-      return null;
+      const host = this.getRuntimeService("host"), root = host?.locateDetailRoot?.();
+      if (!root) return null;
+      return { site: host.site || "unknown", root: $(root) };
     }
     ensureWorkspace() {
       const adapter = this.getHostAdapter();
@@ -8978,7 +9013,8 @@ ${value}\r
           this.normalizeHostActions(root.find(".video-meta-panel").first());
         } else {
           root.children("h3,.row.movie").attr("data-jhs-host-region", "summary");
-          root.children().filter(((_2, element) => $(element).is("#mag-submit-show,#mag-submit") || $(element).find("#magnet-table").length > 0)).attr("data-jhs-host-region", "resources");
+          const resource = getDetailResourceAdapter(this.getRuntimeService("host"));
+          resource?.resourceRegion?.attr("data-jhs-host-region", "resources");
           root.children().filter(((_2, element) => $(element).is("#sample-waterfall") || $(element).find("#sample-waterfall").length > 0)).attr("data-jhs-host-region", "gallery");
           this.normalizeHostActions(root.find(".info").first());
         }
@@ -8999,7 +9035,7 @@ ${value}\r
       group.children('[data-jhs-slot="related"]').length || group.append('<section class="jhs-detail-owned-slot jhs-detail-owned-slot--related" data-jhs-slot="related"></section>');
     }
     placeOwnedSlots() {
-      const root = this.hostRoot, resource = getDetailResourceAdapter();
+      const root = this.hostRoot, resource = getDetailResourceAdapter(this.getRuntimeService("host"));
       if (!root?.length) return;
       this.ensureOwnedSlots(root);
       const summaryActions = root.children('[data-jhs-slot="summary-actions"]').first(), postResource = root.children('[data-jhs-slot-group="post-resource"]').first();
@@ -9025,26 +9061,31 @@ ${value}\r
       return nodes.length > 0 && nodes.every(((node) => node.matches?.(".jhs-offline-btn,.jhs-offline-actions,.jhs-magnet-score,.jhs-select-control") || node.closest?.(".jhs-offline-actions,.jhs-select-control")));
     }
     bindResourceLifecycle() {
-      const adapter = getDetailResourceAdapter();
+      const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
       if (!adapter) return;
       if (this.resourceObserver && this.resourceObserver.root === adapter.observeRoot[0]) return void this.scheduleResourceUpdate();
-      this.resourceObserver?.disconnect?.();
-      const observer = new MutationObserver(((records) => {
+      this.resourceObserver && this.lifecycleScope?.releaseObserver(this.resourceObserver);
+      if (!this.lifecycleScope) return;
+      const observer = this.lifecycleScope.observe(adapter.observeRoot[0], ((records) => {
         records.every(((record) => this.isJhsOnlyMutation(record))) || this.scheduleResourceUpdate();
-      }));
-      observer.root = adapter.observeRoot[0], observer.observe(adapter.observeRoot[0], { childList: true, subtree: true }), this.resourceObserver = observer, adapter.sortSelect.length && adapter.sortSelect.addClass("jhs-select-source") && JhsSelect.enhance(adapter.controller), this.scheduleResourceUpdate();
+      }), { childList: true, subtree: true });
+      observer.root = adapter.observeRoot[0], this.resourceObserver = observer, adapter.sortSelect.length && adapter.sortSelect.addClass("jhs-select-source") && JhsSelect.enhance(adapter.controller), this.scheduleResourceUpdate();
     }
     scheduleResourceUpdate() {
-      if (this.scheduledResourceFrame) return;
-      const schedule = window.requestAnimationFrame || ((callback) => setTimeout(callback));
+      if (null !== this.scheduledResourceFrame) return;
+      const usesAnimationFrame = "function" == typeof window.requestAnimationFrame;
+      const schedule = usesAnimationFrame ? window.requestAnimationFrame.bind(window) : (callback) => setTimeout(callback);
       this.scheduledResourceFrame = schedule((() => {
-        this.scheduledResourceFrame = null;
-        const adapter = getDetailResourceAdapter();
+        this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null;
+        const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
         if (!adapter) return;
         this.placeOwnedSlots();
         adapter.sortSelect.length && (adapter.sortSelect.addClass("jhs-select-source"), JhsSelect.enhance(adapter.controller), JhsSelect.refresh(adapter.sortSelect));
         void jhsEventBus.emit("magnet-items-updated", { site: adapter.site, resourceRoot: adapter.resourceRoot[0], rows: adapter.rows() }, { broadcast: false });
       }));
+      this.cancelScheduledResourceFrame = () => {
+        null !== this.scheduledResourceFrame && (usesAnimationFrame ? window.cancelAnimationFrame?.(this.scheduledResourceFrame) : clearTimeout(this.scheduledResourceFrame));
+      };
     }
   };
   __name(_DetailWorkspacePlugin, "DetailWorkspacePlugin");
@@ -12834,7 +12875,7 @@ ${error.stack}` : "");
       }));
     }
     injectNativeButtons() {
-      const adapter = getDetailResourceAdapter();
+      const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
       if (!adapter) return;
       adapter.rows().forEach(((row) => {
         const resource = adapter.getResource(row), target = adapter.getActionTarget(row);
@@ -13852,7 +13893,17 @@ ${error.stack}` : "");
       return "HighlightMagnetPlugin";
     }
     doFilterMagnet() {
-      this.handleDb(), this.handleBus();
+      const boundary = this.getRuntimeService("host")?.getDetailResourceBoundary?.();
+      if (!boundary) return void this.updateFilterHint(false);
+      const rows = boundary.rows(), validRows = [];
+      let hasMatch = false;
+      rows.forEach(((row) => {
+        const titleTarget = boundary.getTitleTarget(row);
+        if (!titleTarget) return;
+        const target = $(titleTarget), title = target.text().toLowerCase(), signals = this.getQualitySignals(title, boundary.hasSubtitleTag(row));
+        $(row).removeClass("high-quality").show().addClass("magnet-row"), title.includes("4k") && target.css("color", "var(--jhs-status-filter-text)"), signals.highQuality && (hasMatch = true, $(row).addClass("high-quality")), this.injectScoreBadge(target, target.text()), validRows.push(row);
+      }));
+      hasMatch && validRows.forEach(((row) => $(row).hasClass("high-quality") || $(row).hide())), this.updateFilterHint(hasMatch);
     }
     injectScoreBadge(el, title) {
       try {
@@ -13875,42 +13926,9 @@ ${error.stack}` : "");
     updateFilterHint(hasMatch) {
       $("#enable-magnets-filter").removeClass("do-hide").attr("data-tip", hasMatch ? "仅显示识别到的高质量或字幕磁力" : "未识别到可过滤项，当前未隐藏磁力");
     }
-    handleDb() {
-      if (!r) return;
-      let e2 = $("#magnets-content .name");
-      if (0 === e2.length) return void this.updateFilterHint(false);
-      let n2 = false;
-      e2.each(((e3, a2) => {
-        const i2 = $(a2), s2 = i2.text().toLowerCase(), o2 = this.getQualitySignals(s2);
-        const row = i2.parent().parent().parent();
-        row.removeClass("high-quality").show();
-        row.addClass("magnet-row"), s2.includes("4k") && i2.css("color", "var(--jhs-status-filter-text)"), o2.highQuality && (n2 = true, row.addClass("high-quality"));
-        this.injectScoreBadge(i2, i2.text());
-      })), n2 && $("#magnets-content .magnet-row").not(".high-quality").hide(), this.updateFilterHint(n2);
-    }
-    handleBus() {
-      if (l && isDetailPage) {
-        const e2 = $("#magnet-table tr");
-        let n2 = false;
-        e2.each(((e3, a2) => {
-          const i2 = $(a2), s2 = i2.find("td:first-child"), o2 = s2.find("a:first-child"), r2 = s2.find("a:nth-child(2)"), l2 = o2.text().toLowerCase();
-          i2.removeClass("high-quality").show();
-          l2.includes("4k") && o2.css("color", "var(--jhs-status-filter-text)");
-          this.getQualitySignals(l2, r2.length > 0 && r2.text().includes("字幕")).highQuality && (n2 = true, i2.addClass("high-quality"));
-          this.injectScoreBadge(o2, o2.text());
-        }));
-        n2 && e2.each(((e3, t2) => {
-          const n3 = $(t2);
-          n3.hasClass("high-quality") || n3.hide();
-        })), this.updateFilterHint(n2);
-      }
-    }
     showAll() {
       $("#enable-magnets-filter").removeClass("do-hide").removeAttr("data-tip");
-      if (r) {
-        $("#magnets-content .item").toArray().forEach(((e2) => $(e2).show()));
-      }
-      l && $("#magnet-table tr").toArray().forEach(((e2) => $(e2).show()));
+      this.getRuntimeService("host")?.getDetailResourceBoundary?.()?.rows().forEach(((row) => $(row).show()));
     }
   };
   __name(_HighlightMagnetPlugin, "HighlightMagnetPlugin");
@@ -15404,11 +15422,11 @@ ${error.stack}` : "");
     manifest("detail.state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage]),
     manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [SERVICE.movie, SERVICE.translation, SERVICE.settings]),
     manifest("detail.native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }),
-    manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }),
+    manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }, [PORT.host]),
     manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage]),
     manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related, SERVICE.settings]),
     manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle]),
-    manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [SERVICE.settings]),
+    manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [PORT.host, SERVICE.settings]),
     manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie]),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
     manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo]),
@@ -15424,7 +15442,7 @@ ${error.stack}` : "");
     manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics, SERVICE.dialog]),
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings]),
     manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }, [PORT.host, SERVICE.dialog, SERVICE.offline]),
-    manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [SERVICE.dialog, SERVICE.offline]),
+    manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [PORT.host, SERVICE.dialog, SERVICE.offline]),
     manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }),
     manifest("identity.javbus-navigation", "identity", BusNavBarPlugin, ["javbus"], { javbus: 7 }),
     manifest("detail.gallery", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),

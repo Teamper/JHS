@@ -4,7 +4,7 @@ import { normalizeMovieCarNum } from "../../core/movie-identity.js";
 
 export class JavDbHostAdapter {
     /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] */
-    constructor(documentRuntime = document, locationRuntime = window.location) { this.document = documentRuntime; this.location = locationRuntime; }
+    constructor(documentRuntime = document, locationRuntime = window.location) { this.site = "javdb"; this.document = documentRuntime; this.location = locationRuntime; }
     detectRoute() {
         if (this.location.pathname.startsWith("/v/") || this.location.pathname.startsWith("/movies/")) return "detail";
         const listPath = /^\/(?:$|search|tags|actors|users\/|lists|series)/.test(this.location.pathname);
@@ -27,6 +27,20 @@ export class JavDbHostAdapter {
     }
     locateNativeGallery() { return this.document.querySelector(".tile-images, .preview-images"); }
     locateNativeMagnets() { return this.document.querySelector("#magnets-content"); }
+    getDetailResourceBoundary() {
+        const resourceRoot = this.locateNativeMagnets(), controller = resourceRoot?.closest('[data-controller="magnet-sort"]'), hostRoot = this.locateDetailRoot();
+        if (!hostRoot || !controller || !resourceRoot) return null;
+        const resourceRegion = [...hostRoot.children].find((child) => child === controller || child.contains(controller)) || controller;
+        return Object.freeze({
+            site: "javdb", hostRoot, controller, observeRoot: controller, resourceRoot, resourceRegion,
+            rows: () => [...resourceRoot.children].filter((row) => row.matches(".item")),
+            sortSelect: controller.querySelector('select[data-action*="magnet-sort#sort"]'),
+            getResource(/** @type {Element} */ row) { return row.querySelector('.copy-to-clipboard[data-clipboard-text^="magnet:"]')?.getAttribute("data-clipboard-text") || row.querySelector('.magnet-name a[href^="magnet:"]')?.getAttribute("href") || ""; },
+            getActionTarget: (/** @type {Element} */ row) => row.querySelector(":scope > .buttons"),
+            actionTargetRequiresWrapper: () => false,
+            getTitleTarget: (/** @type {Element} */ row) => row.querySelector(".name"), hasSubtitleTag: () => false,
+        });
+    }
     /** @param {string} html @param {string} baseUrl */
     parseActorMovies(html, baseUrl) {
         if (typeof html !== "string") throw new TypeError("JavDB actor page must be HTML text");

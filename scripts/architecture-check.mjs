@@ -51,6 +51,7 @@ async function scan() {
             if (rule.featureOnly && !isFeature) continue;
             lines.forEach((line, index) => {
                 if (rule.id === "host-selector" && /host-adapter\.js$/.test(relativeFile)) return;
+                if (rule.id === "app-global-observer" && relativeFile === "src/core/lifecycle-scope.js") return;
                 if (!rule.pattern.test(line)) return;
                 const symbol = normalizeLine(line);
                 findings.push({
