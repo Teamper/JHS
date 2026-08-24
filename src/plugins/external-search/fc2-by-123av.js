@@ -1,6 +1,7 @@
 import { _, escapeHtml, i, o } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { renderTranslatedTitle } from "../../ui/translation/title-translation.js";
+import { createFc2SourceLinks, renderFc2Gallery, renderFc2State } from "../../ui/detail/fc2-workspace-view.js";
 
 export class Fc2By123AvPlugin extends BasePlugin {
     constructor() {
@@ -79,19 +80,15 @@ export class Fc2By123AvPlugin extends BasePlugin {
             e.close();
         }
     }
-    async open123AvFc2Dialog(carNum, url) { return this.getDependency("Fc2Plugin").openFc2Dialog(null, carNum, url, { source: "123av" }); }
     /** 将 123AV 数据填入 Fc2Plugin 创建的固定工作区。 */
     async loadDetail(context, url) {
-        const infoPromise = this.loadSummary(context, url), imagesPromise = this.getImgList(context.carNum), actressPromise = this.getActressInfo(context.carNum), movieIdPromise = this.resolveMovieId(context.carNum), fc2Plugin = this.getDependency("Fc2Plugin");
-        void fc2Plugin.configureJavDbWantButton(context, movieIdPromise), void fc2Plugin.mountPanels(context, movieIdPromise), void movieIdPromise.then((movieId => context.isAlive() && fc2Plugin.fetchAndRenderNativeMagnets(context, movieId))).catch((error => {
-            context.isAlive() && fc2Plugin.setState(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.retryResolvedMagnets(context))), clog.error("123AV 磁力关联失败", error);
-        }));
-        imagesPromise.then((images => context.isAlive() && this.getDependency("Fc2Plugin").renderGallery(context, images))).catch((error => context.isAlive() && this.getDependency("Fc2Plugin").setState(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)))));
+        const infoPromise = this.loadSummary(context, url), imagesPromise = this.getImgList(context.carNum), actressPromise = this.getActressInfo(context.carNum);
+        imagesPromise.then((images => context.isAlive() && renderFc2Gallery(context, images))).catch((error => context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)))));
         actressPromise.then((async data => {
             await infoPromise.catch((() => null));
             context.isAlive() && this.render123AvActress(context, data);
         })).catch((error => clog.error("FC2 演员信息加载失败", error)));
-        await Promise.allSettled([ infoPromise, imagesPromise, actressPromise, movieIdPromise ]);
+        await Promise.allSettled([ infoPromise, imagesPromise, actressPromise ]);
     }
     async loadSummary(context, url) {
         try {
@@ -102,16 +99,13 @@ export class Fc2By123AvPlugin extends BasePlugin {
             if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) === _) await renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope });
             return info;
         } catch (error) {
-            context.isAlive() && this.getDependency("Fc2Plugin").setState(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.loadSummary(context, url))), clog.error("123AV 详情加载失败", error);
+            context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.loadSummary(context, url))), clog.error("123AV 详情加载失败", error);
             throw error;
         }
     }
-    async retryResolvedMagnets(context) {
-        try { return await this.getDependency("Fc2Plugin").fetchAndRenderNativeMagnets(context, await this.resolveMovieId(context.carNum)); } catch (error) { context.isAlive() && this.getDependency("Fc2Plugin").setState(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.retryResolvedMagnets(context))); }
-    }
     render123AvSummary(context, info) {
         const body = context.root.find('[data-jhs-role="summary-content"]').empty(), title = $('<h1 class="jhs-fc2-title"><strong class="current-title"></strong></h1>');
-        title.find("strong").text(info.title || "无标题"), body.append(title, $('<div class="jhs-fc2-meta"></div>').append($("<span></span>").text(`番号：${context.carNum}`), $("<span></span>").text(`发行：${info.publishDate || "未知"}`)), '<div class="jhs-fc2-actors" data-jhs-role="actors"><strong>主演：</strong><span>正在加载演员…</span></div>', '<div class="jhs-fc2-meta" data-jhs-role="seller"></div>', this.getDependency("Fc2Plugin").createSourceLinks(context), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(info.publishDate || ""));
+        title.find("strong").text(info.title || "无标题"), body.append(title, $('<div class="jhs-fc2-meta"></div>').append($("<span></span>").text(`番号：${context.carNum}`), $("<span></span>").text(`发行：${info.publishDate || "未知"}`)), '<div class="jhs-fc2-actors" data-jhs-role="actors"><strong>主演：</strong><span>正在加载演员…</span></div>', '<div class="jhs-fc2-meta" data-jhs-role="seller"></div>', createFc2SourceLinks(context, this.getRuntimeService("movie")), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(info.publishDate || ""));
     }
     async get123AvVideoInfo(carNum, e) {
         const scope = await this.getRuntimeService("scope")();
@@ -129,9 +123,9 @@ export class Fc2By123AvPlugin extends BasePlugin {
     async reloadImages(context) {
         try {
             const images = await this.getImgList(context.carNum);
-            context.isAlive() && this.getDependency("Fc2Plugin").renderGallery(context, images);
+            context.isAlive() && renderFc2Gallery(context, images);
         } catch (error) {
-            context.isAlive() && this.getDependency("Fc2Plugin").setState(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)));
+            context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)));
         }
     }
     render123AvActress(context, data) {

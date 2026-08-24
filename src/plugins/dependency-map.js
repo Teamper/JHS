@@ -12,11 +12,10 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     CompatibilityEnhancementsPlugin: ["ListPagePlugin"],
     CoverButtonPlugin: ["ListPagePlugin", "ScreenShotPlugin", "OtherSitePlugin"],
     DetailPageButtonPlugin: ["DetailWorkspacePlugin", "MagnetHubPlugin", "HighlightMagnetPlugin"],
-    Fc2By123AvPlugin: ["OtherSitePlugin", "Fc2Plugin"],
     Fc2Plugin: [
         "DetailPageButtonPlugin", "MagnetHubPlugin", "FilterTitleKeywordPlugin", "OtherSitePlugin",
         "Fc2By123AvPlugin", "TOP250Plugin",
-        "HighlightMagnetPlugin", "ReviewPlugin", "RelatedPlugin"
+        "HighlightMagnetPlugin"
     ],
     HistoryPlugin: ["UnifiedOfflinePlugin", "ListPagePlugin", "Fc2Plugin"],
     HitShowPlugin: ["ListPageButtonPlugin", "ListPagePlugin", "CoverButtonPlugin"],

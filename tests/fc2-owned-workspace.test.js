@@ -12,6 +12,7 @@ import { CacheService } from "../src/services/cache-service.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 const fc2Source = readTestFile(join(repoRoot, "src/plugins/external-search/fc2.js"), "utf8");
+const fc2ViewSource = readTestFile(join(repoRoot, "src/ui/detail/fc2-workspace-view.js"), "utf8");
 const fc2By123AvSource = readTestFile(join(repoRoot, "src/plugins/external-search/fc2-by-123av.js"), "utf8");
 const screenshotSource = readTestFile(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
 const listPageSource = readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8");
@@ -82,7 +83,7 @@ describe("FC2 owned detail workspace", () => {
     it("lets sections keep their content height and opens gallery thumbnails in the viewer", () => {
         expect(fc2Source).toMatch(/\.jhs-fc2-workspace \{[^}]*grid-auto-rows:max-content;[^}]*align-content:start;/);
         expect(fc2Source).toMatch(/\.jhs-fc2-gallery-grid \{[^}]*minmax\(112px,144px\)/);
-        expect(fc2Source).toContain('class=\\"jhs-btn jhs-fc2-gallery-item\\"');
+        expect(fc2ViewSource).toContain('class="jhs-btn jhs-fc2-gallery-item"');
         expect(fc2Source).toContain('showImageViewer(image, "", { galleryRoot: gallery[0] })');
         expect(fc2Source).not.toContain('"data-fancybox"');
         expect(loggerSource).toContain("initialViewIndex");
@@ -127,8 +128,8 @@ describe("FC2 owned detail workspace", () => {
     });
 
     it("restores source links, magnet metadata and scoped quality filtering", () => {
-        expect(fc2Source).toContain("FC2PPVDB");
-        expect(fc2Source).toContain("FC2 市场");
+        expect(fc2ViewSource).toContain("FC2PPVDB");
+        expect(fc2ViewSource).toContain("FC2 市场");
         expect(fc2Source).toContain("item.hasHdTag && tags.append");
         expect(fc2Source).toContain("item.hasSubtitleTag && tags.append");
         expect(fc2Source).toContain("item.createdAt");
@@ -144,9 +145,12 @@ describe("FC2 owned detail workspace", () => {
     });
 
     it("shares the 123AV movie resolver and keeps summary retry local", () => {
-        expect(fc2By123AvSource).toContain("fc2Plugin.mountPanels(context, movieIdPromise)");
-        expect(fc2By123AvSource).toContain("fc2Plugin.configureJavDbWantButton(context, movieIdPromise)");
-        expect(fc2By123AvSource).toContain("movieIdPromise.then");
+        expect(fc2Source).toContain("this.mountPanels(context, movieIdPromise)");
+        expect(fc2Source).toContain("this.configureJavDbWantButton(context, movieIdPromise)");
+        expect(fc2Source).toContain("movieIdPromise.then");
+        expect(fc2By123AvSource).not.toContain("mountPanels(context");
+        expect(fc2By123AvSource).not.toContain("configureJavDbWantButton(context");
+        expect(fc2By123AvSource).not.toContain('getBean("Fc2Plugin")');
         expect(fc2By123AvSource).toContain("loadSummary(context, url)");
         expect(fc2By123AvSource).not.toContain("() => void this.loadDetail(context, url)");
     });
@@ -171,7 +175,7 @@ describe("FC2 owned detail workspace", () => {
         expect(fc2Source).not.toMatch(/catch\(\(error => [^{\n]*\), clog\.error/);
         expect(fc2By123AvSource).not.toMatch(/catch\(\(error => [^{\n]*\), clog\.error/);
         expect(fc2Source).toContain('catch((error => {\n            context.isAlive() && sitesGroup.remove()');
-        expect(fc2By123AvSource).toContain('catch((error => {\n            context.isAlive() && fc2Plugin.setState');
+        expect(fc2Source).toContain('catch((error => {\n            context.isAlive() && renderFc2State');
     });
 
     it("initializes screenshot providers once per owned render and removes empty spacing", () => {

@@ -256,7 +256,6 @@
     "BOOTSTRAP_FAILED"
   ]);
   var _JhsError = class _JhsError extends Error {
-    /** @param {string} code @param {string} message @param {{source?: string, retryable?: boolean, cause?: unknown, details?: Record<string, unknown>}} [options] */
     constructor(code, message, options = {}) {
       super(message, { cause: options.cause });
       if (!JHS_ERROR_CODES.includes(code)) throw new TypeError(`Unknown JhsError code: ${code}`);
@@ -266,7 +265,6 @@
       this.retryable = options.retryable ?? false;
       this.details = options.details ? Object.freeze({ ...options.details }) : null;
     }
-    /** @param {unknown} error @param {string} [source] */
     static from(error, source = "jhs") {
       if (error instanceof _JhsError) return error;
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -473,18 +471,12 @@
   });
   function migrateDisabledPlugins(value) {
     const input = Array.isArray(value) ? value : [];
-    const mapping = (
-      /** @type {Record<string, string>} */
-      LEGACY_PLUGIN_CONTRIBUTION_MAP
-    );
+    const mapping = LEGACY_PLUGIN_CONTRIBUTION_MAP;
     return [...new Set(input.filter((id) => typeof id === "string").map((id) => mapping[id] ?? id))];
   }
   __name(migrateDisabledPlugins, "migrateDisabledPlugins");
   function disabledIdForPlugin(pluginName) {
-    return (
-      /** @type {Record<string, string>} */
-      LEGACY_PLUGIN_CONTRIBUTION_MAP[pluginName] ?? pluginName
-    );
+    return LEGACY_PLUGIN_CONTRIBUTION_MAP[pluginName] ?? pluginName;
   }
   __name(disabledIdForPlugin, "disabledIdForPlugin");
   function parseDisabledPlugins(serialized) {
@@ -865,32 +857,26 @@
 
   // src/core/event-bus.js
   var _JhsEventBus = class _JhsEventBus {
-    /** @param {string} [channelName] */
     constructor(channelName = "channel-refresh") {
       this.originId = globalThis.crypto?.randomUUID?.() || `tab_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       this.listeners = /* @__PURE__ */ new Map(), this.seen = /* @__PURE__ */ new Set(), this.channel = new BroadcastChannel(channelName);
       this.channel.addEventListener("message", ((event) => this._receive(event.data)));
     }
-    /** @param {string} type @param {(payload: any, event: any) => unknown} handler */
     on(type, handler) {
       const handlers = this.listeners.get(type) || /* @__PURE__ */ new Set();
       return handlers.add(handler), this.listeners.set(type, handlers), () => handlers.delete(handler);
     }
-    /** @param {any} event */
     async _dispatch(event) {
       for (const handler of [...this.listeners.get(event.type) || []]) await handler(event.payload, event);
     }
-    /** @param {string} eventId */
     _remember(eventId) {
       this.seen.add(eventId), this.seen.size > 256 && this.seen.delete(this.seen.values().next().value);
     }
-    /** @param {string} type @param {any} [payload] @param {{broadcast?: boolean}} [options] */
     async emit(type, payload = {}, options = {}) {
       const event = { eventId: globalThis.crypto?.randomUUID?.() || `event_${Date.now()}_${Math.random().toString(36).slice(2)}`, originId: this.originId, type, payload, timestamp: Date.now() };
       this._remember(event.eventId), await this._dispatch(event), false !== options.broadcast && this.channel.postMessage(event);
       return event;
     }
-    /** @param {any} event */
     async _receive(event) {
       if (!event || event.originId === this.originId || event.eventId && this.seen.has(event.eventId)) return;
       if (!event.eventId) {
@@ -906,10 +892,7 @@
   function initializeEventBus() {
     if (jhsEventBus) return jhsEventBus;
     jhsEventBus = new JhsEventBus();
-    const runtimeWindow = (
-      /** @type {any} */
-      window
-    );
+    const runtimeWindow = window;
     runtimeWindow.refresh = () => jhsEventBus?.emit("legacy-refresh");
     runtimeWindow.cleanCache_filter_actor_actress_car_list = () => jhsEventBus?.emit("blacklist-rules-changed");
     runtimeWindow.clean_cacheSettingObj = () => jhsEventBus?.emit("settings-changed");
@@ -1207,7 +1190,6 @@
       const t2 = window.innerWidth;
       return this.isMobileMode() ? ["100%", "90%"] : t2 >= 1200 ? e2 || this.getDefaultArea() : ["70%", "90%"];
     }
-    /** 按用途返回具有固定上限和安全边距的弹窗尺寸。 */
     getDialogArea(e2 = "md") {
       const t2 = {
         sm: [480, 640],
@@ -1272,7 +1254,6 @@
     sleep(e2 = 1e3) {
       return new Promise(((t2) => setTimeout(t2, e2)));
     }
-    /** 创建可取消的尾沿防抖函数。 */
     debounce(callback, wait = 200) {
       let timer = null;
       const debounced = /* @__PURE__ */ __name(function(...args) {
@@ -1425,7 +1406,6 @@
       this._cacheGenerations.set(e2, this._getCacheGeneration(e2) + 1);
       this._pendingReads.delete(e2);
     }
-    /** 合并同一存储键的并发读取，并阻止失效前的旧读取回填缓存。 */
     async _readCached(e2, t2, n2) {
       if (null !== this[e2]) return this[e2];
       const a2 = this._pendingReads.get(t2);
@@ -1935,7 +1915,6 @@
         report: await this.inspectDataHealth()
       };
     }
-    /** 数据迁移: 将旧版扁平键名重命名为新格式 */
     async merge_table_name() {
       let e2 = "filter_actor_actress_info_list", t2 = await this.forage.getItem(e2) || [];
       t2 && t2.length > 0 && (clog.debug("更正", e2), await this._setItemAndInvalidate(this.blacklist_key, t2)), await this.forage.removeItem(e2), e2 = "favorite_actresses_info_list", t2 = await this.forage.getItem(e2) || [], t2 && t2.length > 0 && (clog.debug("更正", e2), await this._setItemAndInvalidate(this.favorite_actresses_key, t2)), await this.forage.removeItem(e2), e2 = "car_list_filter_actor_actress", t2 = await this.forage.getItem(e2) || [], t2 && t2.length > 0 && (clog.debug("更正", e2), await this._setItemAndInvalidate(this.blacklist_car_list_key, t2)), await this.forage.removeItem(e2), e2 = "title_filter_keyword", t2 = await this.forage.getItem(e2) || [], t2 && t2.length > 0 && (clog.debug("更正", e2), await this._setItemAndInvalidate(this.filter_keyword_title_key, t2)), await this.forage.removeItem(e2), e2 = "review_filter_keyword", t2 = await this.forage.getItem(e2) || [], t2 && t2.length > 0 && (clog.debug("更正", e2), await this._setItemAndInvalidate(this.filter_keyword_review_key, t2)), await this.forage.removeItem(e2), e2 = "highlightedTags", t2 = await this.forage.getItem(e2) || [], t2 && t2.length > 0 && (clog.debug("更正", e2), await this._setItemAndInvalidate(this.highlighted_tags_key, t2)), await this.forage.removeItem(e2);
@@ -1968,7 +1947,6 @@
       }
       e2.checkFilterTime && (delete e2.checkFilterTime, t2 = true), e2.checkFilterConcurrencyCount && (delete e2.checkFilterConcurrencyCount, t2 = true), e2.checkFilterSleep && (delete e2.checkFilterSleep, t2 = true), t2 && (await this.saveSetting(e2), clog.debug("配置数据已更正"));
     }
-    /** 数据迁移: 补全黑名单条目缺失的 role/starId/allName/movieType 字段 */
     async merge_blacklist() {
       const e2 = await this.getBlacklist();
       if (!e2 || 0 === e2.length) return;
@@ -2582,7 +2560,6 @@
 
   // src/core/lifecycle-scope.js
   var _LifecycleScope = class _LifecycleScope {
-    /** @param {string} id @param {{onChange?: (snapshot: ReturnType<LifecycleScope["snapshot"]>) => void}} [options] */
     constructor(id, options = {}) {
       if (!id) throw new TypeError("LifecycleScope id is required");
       this.id = id;
@@ -2598,7 +2575,6 @@
     get signal() {
       return this.controller.signal;
     }
-    /** @param {EventTarget} target @param {string} type @param {EventListenerOrEventListenerObject} listener @param {AddEventListenerOptions | boolean} [options] */
     listen(target, type, listener, options) {
       this.assertActive();
       target.addEventListener(type, listener, options);
@@ -2608,7 +2584,6 @@
         this.listenerCount -= 1;
       });
     }
-    /** @param {{disconnect: () => void}} observer */
     ownObserver(observer) {
       this.assertActive();
       this.observerCount += 1;
@@ -2617,11 +2592,9 @@
         this.observerCount -= 1;
       });
     }
-    /** @param {number} timerId */
     ownTimeout(timerId) {
       return this.addCleanup(() => clearTimeout(timerId));
     }
-    /** @param {{release: () => void}} consumer */
     ownRequestConsumer(consumer) {
       this.assertActive();
       this.requestConsumers.add(consumer);
@@ -2631,7 +2604,6 @@
         consumer.release();
       });
     }
-    /** @param {() => void} cleanup */
     addCleanup(cleanup) {
       this.assertActive();
       let active = true;
@@ -2651,7 +2623,6 @@
       this.generation += 1;
       return this.generation;
     }
-    /** @param {number} generation */
     canCommit(generation) {
       return !this.disposed && generation === this.generation;
     }
@@ -3564,10 +3535,7 @@
   __name(initializeLoggerRuntime, "initializeLoggerRuntime");
 
   // src/platform/userscript/vendor-runtime.js
-  function getVendorRuntime(runtimeWindow = (
-    /** @type {any} */
-    window
-  )) {
+  function getVendorRuntime(runtimeWindow = window) {
     const values = {
       $: runtimeWindow.jQuery,
       Tabulator: runtimeWindow.Tabulator,
@@ -3585,7 +3553,6 @@
 
   // src/platform/hosts/javbus-host-adapter.js
   var _JavBusHostAdapter = class _JavBusHostAdapter {
-    /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] */
     constructor(documentRuntime = document, locationRuntime = window.location) {
       this.document = documentRuntime;
       this.location = locationRuntime;
@@ -3624,7 +3591,6 @@
 
   // src/platform/hosts/javdb-host-adapter.js
   var _JavDbHostAdapter = class _JavDbHostAdapter {
-    /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] */
     constructor(documentRuntime = document, locationRuntime = window.location) {
       this.document = documentRuntime;
       this.location = locationRuntime;
@@ -3694,8 +3660,7 @@
     requireArray(manifest2.requires, "requires");
     if (typeof manifest2.plugin !== "function") throw new TypeError("Contribution plugin must be a class");
     if (!manifest2.order || typeof manifest2.order !== "object") throw new TypeError("Contribution order must be explicit");
-    return Object.freeze({ ...manifest2, sites: Object.freeze([.../** @type {unknown[]} */
-    manifest2.sites]), order: Object.freeze({ ...manifest2.order }) });
+    return Object.freeze({ ...manifest2, sites: Object.freeze([...manifest2.sites]), order: Object.freeze({ ...manifest2.order }) });
   }
   __name(defineContribution, "defineContribution");
   function defineIntegration(manifest2) {
@@ -3703,14 +3668,8 @@
     if (!TRUST_CLASSES.has(String(manifest2.trustClass))) throw new TypeError("Integration trustClass is invalid");
     if (!QUALITY_LEVELS.has(String(manifest2.quality))) throw new TypeError("Integration quality is invalid");
     for (const field of ["hosts", "capabilities", "requires"]) requireArray(manifest2[field], field);
-    const hosts = (
-      /** @type {unknown[]} */
-      manifest2.hosts
-    );
-    const capabilities = (
-      /** @type {unknown[]} */
-      manifest2.capabilities
-    );
+    const hosts = manifest2.hosts;
+    const capabilities = manifest2.capabilities;
     if (hosts.length === 0 || capabilities.length === 0) throw new TypeError("Integration hosts and capabilities cannot be empty");
     if (manifest2.cachePolicy === void 0) throw new TypeError("Integration cachePolicy must be explicit");
     if (typeof manifest2.createClient !== "function" || typeof manifest2.createAdapter !== "function") {
@@ -3767,7 +3726,6 @@
 
   // src/ui/detail/hosted-detail-surface.js
   var _HostedDetailSurface = class _HostedDetailSurface {
-    /** @param {{locateDetailRoot: () => Element | null, locateDetailSlots: () => Record<string, Element | null>}} hostAdapter */
     constructor(hostAdapter) {
       this.hostAdapter = hostAdapter;
       this.root = null;
@@ -3809,7 +3767,6 @@
         this.created.add(slot);
       }
     }
-    /** @param {string} slot @param {Element} element */
     mountPanel(slot, element) {
       const target = this.slots[slot];
       if (!target) return false;
@@ -3831,7 +3788,6 @@
 
   // src/features/detail/detail-controller.js
   var _DetailController = class _DetailController {
-    /** @param {{hostAdapter: any, scope: import("../../core/lifecycle-scope.js").LifecycleScope, enabledContributions: readonly string[]}} options */
     constructor(options) {
       this.hostAdapter = options.hostAdapter;
       this.scope = options.scope;
@@ -3956,7 +3912,6 @@
     CompatibilityEnhancementsPlugin: ["ListPagePlugin"],
     CoverButtonPlugin: ["ListPagePlugin", "ScreenShotPlugin", "OtherSitePlugin"],
     DetailPageButtonPlugin: ["DetailWorkspacePlugin", "MagnetHubPlugin", "HighlightMagnetPlugin"],
-    Fc2By123AvPlugin: ["OtherSitePlugin", "Fc2Plugin"],
     Fc2Plugin: [
       "DetailPageButtonPlugin",
       "MagnetHubPlugin",
@@ -3964,9 +3919,7 @@
       "OtherSitePlugin",
       "Fc2By123AvPlugin",
       "TOP250Plugin",
-      "HighlightMagnetPlugin",
-      "ReviewPlugin",
-      "RelatedPlugin"
+      "HighlightMagnetPlugin"
     ],
     HistoryPlugin: ["UnifiedOfflinePlugin", "ListPagePlugin", "Fc2Plugin"],
     HitShowPlugin: ["ListPageButtonPlugin", "ListPagePlugin", "CoverButtonPlugin"],
@@ -4434,7 +4387,6 @@
       if (item.prop("disabled")) return;
       this.source.val(item.attr("data-value")), this.emitChange(), this.close(true);
     }
-    /** 派发一次真实原生 change，同时兼容宿主与 jQuery 监听器。 */
     emitChange() {
       this.source[0]?.dispatchEvent(new Event("change", {
         bubbles: true
@@ -5965,7 +5917,6 @@
         }
       }));
     }
-    /** 从任意列表卡片进入统一详情导航。 */
     async openMovieDetail(item, { event = null, autoplay = false, newTab = false } = {}) {
       const card = item?.jquery ? item : $(item), { carNum, aHref, fc2Source } = this.findCarNumAndHref(card);
       if (!carNum || !aHref) return;
@@ -5977,7 +5928,6 @@
       const destination = new URL(aHref, window.location.origin);
       autoplay && destination.searchParams.set("autoPlay", "1"), utils.openPage(destination.href, carNum, true, { event, newTab: shouldOpenTab }), this.$currentImage = null;
     }
-    /** 为宿主与合成列表统一绑定左键、修饰键和中键导航。 */
     bindMovieDetailNavigation(container) {
       const root = $(container), selector = ".item img, .item .video-title";
       root.off("click.jhsMovieDetail auxclick.jhsMovieDetail", selector).on("click.jhsMovieDetail auxclick.jhsMovieDetail", selector, ((event) => {
@@ -7220,7 +7170,6 @@
   var DAY = 24 * HOUR;
   var CACHE_TTL = Object.freeze({ magnet: 6 * HOUR, screenshot: 7 * DAY, screenshotNegative: 12 * HOUR, match115: HOUR, externalDetail: DAY });
   var _ProviderError = class _ProviderError extends Error {
-    /** @param {string} provider @param {string} code @param {string} message @param {{cause?: unknown, status?: number, url?: string, retryable?: boolean}} [options] */
     constructor(provider, code, message, options = {}) {
       super(message, { cause: options.cause });
       this.name = "ProviderError";
@@ -7413,7 +7362,6 @@
         $(".mini-simple-setting").html("").hide();
       }));
     }
-    /** Open shared quick settings in the mobile bottom sheet. */
     async openQuickSetting() {
       $("#jhs-quick-setting-backdrop, #jhs-quick-setting-sheet").remove();
       const previousFocus = document.activeElement;
@@ -8278,10 +8226,7 @@
 
   // src/ui/translation/title-translation.js
   async function renderTranslatedTitle(options) {
-    const jq = (
-      /** @type {any} */
-      globalThis.$
-    );
+    const jq = globalThis.$;
     const root = options.root ? jq(options.root) : jq(document);
     let title = root.find(".origin-title").first();
     if (!title.length) title = root.find(".current-title").first();
@@ -8303,6 +8248,41 @@
     }
   }
   __name(renderTranslatedTitle, "renderTranslatedTitle");
+
+  // src/ui/detail/fc2-workspace-view.js
+  function normalizeUrl(value) {
+    try {
+      const url = new URL(String(value || ""));
+      return ["http:", "https:"].includes(url.protocol) ? url.href : null;
+    } catch {
+      return null;
+    }
+  }
+  __name(normalizeUrl, "normalizeUrl");
+  function renderFc2State(target, message, retry = null) {
+    const jq = globalThis.$, host = jq(target).empty(), state = jq('<div class="jhs-fc2-state"></div>').text(message);
+    if (retry) state.addClass("is-error").append(" ", jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry));
+    host.append(state);
+  }
+  __name(renderFc2State, "renderFc2State");
+  function renderFc2Gallery(context, images) {
+    const jq = globalThis.$;
+    const urls = [...new Set((images || []).map(normalizeUrl).filter(Boolean))];
+    const grid = context.root.find('[data-jhs-role="gallery-grid"]').empty(), preview = context.root.find('[data-jhs-role="main-preview"]').empty();
+    if (!urls.length) return renderFc2State(grid, "暂无剧照");
+    preview.append(jq("<img>").attr({ src: urls[0], alt: `${context.carNum} 预览`, loading: "eager" }));
+    urls.forEach((url, index) => grid.append(jq('<button type="button" class="jhs-btn jhs-fc2-gallery-item"></button>').attr("aria-label", `查看剧照 ${index + 1}`).append(jq("<img>").addClass("jhs-fc2-gallery__image").attr({ src: url, alt: `剧照 ${index + 1}`, loading: "lazy" }))));
+  }
+  __name(renderFc2Gallery, "renderFc2Gallery");
+  function createFc2SourceLinks(context, movieService) {
+    const jq = globalThis.$;
+    const links = jq('<div class="jhs-fc2-source-links" aria-label="影片来源"></div>');
+    const providerLinks = movieService.sourceUrls({ carNum: context.carNum }, ["fc2ppvdb", "fc2content"]);
+    const values = [["123av" === context.source ? "123AV 原页面" : "JavDB 原页面", normalizeUrl(context.url)], ...providerLinks.map((item) => [item.providerId === "fc2ppvdb" ? "FC2PPVDB" : "FC2 市场", item.url])];
+    values.forEach(([label, href]) => href && links.append(jq("<a></a>").addClass("jhs-btn jhs-btn--ghost jhs-btn--sm").attr({ href, target: "_blank", rel: "noopener noreferrer" }).text(label)));
+    return links;
+  }
+  __name(createFc2SourceLinks, "createFc2SourceLinks");
 
   // src/plugins/external-search/fc2-by-123av.js
   var _Fc2By123AvPlugin = class _Fc2By123AvPlugin extends BasePlugin {
@@ -8367,21 +8347,14 @@
         e2.close();
       }
     }
-    async open123AvFc2Dialog(carNum, url) {
-      return this.getDependency("Fc2Plugin").openFc2Dialog(null, carNum, url, { source: "123av" });
-    }
-    /** 将 123AV 数据填入 Fc2Plugin 创建的固定工作区。 */
     async loadDetail(context, url) {
-      const infoPromise = this.loadSummary(context, url), imagesPromise = this.getImgList(context.carNum), actressPromise = this.getActressInfo(context.carNum), movieIdPromise = this.resolveMovieId(context.carNum), fc2Plugin = this.getDependency("Fc2Plugin");
-      void fc2Plugin.configureJavDbWantButton(context, movieIdPromise), void fc2Plugin.mountPanels(context, movieIdPromise), void movieIdPromise.then(((movieId) => context.isAlive() && fc2Plugin.fetchAndRenderNativeMagnets(context, movieId))).catch(((error) => {
-        context.isAlive() && fc2Plugin.setState(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.retryResolvedMagnets(context))), clog.error("123AV 磁力关联失败", error);
-      }));
-      imagesPromise.then(((images) => context.isAlive() && this.getDependency("Fc2Plugin").renderGallery(context, images))).catch(((error) => context.isAlive() && this.getDependency("Fc2Plugin").setState(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)))));
+      const infoPromise = this.loadSummary(context, url), imagesPromise = this.getImgList(context.carNum), actressPromise = this.getActressInfo(context.carNum);
+      imagesPromise.then(((images) => context.isAlive() && renderFc2Gallery(context, images))).catch(((error) => context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)))));
       actressPromise.then((async (data) => {
         await infoPromise.catch((() => null));
         context.isAlive() && this.render123AvActress(context, data);
       })).catch(((error) => clog.error("FC2 演员信息加载失败", error)));
-      await Promise.allSettled([infoPromise, imagesPromise, actressPromise, movieIdPromise]);
+      await Promise.allSettled([infoPromise, imagesPromise, actressPromise]);
     }
     async loadSummary(context, url) {
       try {
@@ -8392,20 +8365,13 @@
         if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) === _) await renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope });
         return info;
       } catch (error) {
-        context.isAlive() && this.getDependency("Fc2Plugin").setState(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.loadSummary(context, url))), clog.error("123AV 详情加载失败", error);
+        context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.loadSummary(context, url))), clog.error("123AV 详情加载失败", error);
         throw error;
-      }
-    }
-    async retryResolvedMagnets(context) {
-      try {
-        return await this.getDependency("Fc2Plugin").fetchAndRenderNativeMagnets(context, await this.resolveMovieId(context.carNum));
-      } catch (error) {
-        context.isAlive() && this.getDependency("Fc2Plugin").setState(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.retryResolvedMagnets(context)));
       }
     }
     render123AvSummary(context, info) {
       const body = context.root.find('[data-jhs-role="summary-content"]').empty(), title = $('<h1 class="jhs-fc2-title"><strong class="current-title"></strong></h1>');
-      title.find("strong").text(info.title || "无标题"), body.append(title, $('<div class="jhs-fc2-meta"></div>').append($("<span></span>").text(`番号：${context.carNum}`), $("<span></span>").text(`发行：${info.publishDate || "未知"}`)), '<div class="jhs-fc2-actors" data-jhs-role="actors"><strong>主演：</strong><span>正在加载演员…</span></div>', '<div class="jhs-fc2-meta" data-jhs-role="seller"></div>', this.getDependency("Fc2Plugin").createSourceLinks(context), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(info.publishDate || ""));
+      title.find("strong").text(info.title || "无标题"), body.append(title, $('<div class="jhs-fc2-meta"></div>').append($("<span></span>").text(`番号：${context.carNum}`), $("<span></span>").text(`发行：${info.publishDate || "未知"}`)), '<div class="jhs-fc2-actors" data-jhs-role="actors"><strong>主演：</strong><span>正在加载演员…</span></div>', '<div class="jhs-fc2-meta" data-jhs-role="seller"></div>', createFc2SourceLinks(context, this.getRuntimeService("movie")), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(info.publishDate || ""));
     }
     async get123AvVideoInfo(carNum, e2) {
       const scope = await this.getRuntimeService("scope")();
@@ -8423,9 +8389,9 @@
     async reloadImages(context) {
       try {
         const images = await this.getImgList(context.carNum);
-        context.isAlive() && this.getDependency("Fc2Plugin").renderGallery(context, images);
+        context.isAlive() && renderFc2Gallery(context, images);
       } catch (error) {
-        context.isAlive() && this.getDependency("Fc2Plugin").setState(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)));
+        context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)));
       }
     }
     render123AvActress(context, data) {
@@ -8575,10 +8541,7 @@ ${value}\r
   }
   __name(normalizeImageUrl, "normalizeImageUrl");
   function renderImage(host, url, alt) {
-    const jq = (
-      /** @type {any} */
-      globalThis.$
-    );
+    const jq = globalThis.$;
     const normalized = normalizeImageUrl(url);
     if (!normalized) return null;
     const image = jq("<img>").attr({ src: normalized, alt, loading: "lazy" }).addClass("jhs-fc2-gallery__image");
@@ -8592,10 +8555,7 @@ ${value}\r
   }
   __name(renderImage, "renderImage");
   async function renderScreenshotPanel(options) {
-    const jq = (
-      /** @type {any} */
-      globalThis.$
-    );
+    const jq = globalThis.$;
     const host = jq(options.target), isActive = options.isActive ?? (() => true);
     if (!host.length || options.settings.enableLoadScreenShot === "no") return host.empty(), null;
     const load = /* @__PURE__ */ __name(async (resultHost = host) => {
@@ -8627,6 +8587,272 @@ ${value}\r
     return host;
   }
   __name(renderScreenshotPanel, "renderScreenshotPanel");
+
+  // src/ui/detail/related-panel.js
+  var _RelatedPanel = class _RelatedPanel {
+    constructor(dependencies) {
+      this.related = dependencies.related;
+      this.settings = dependencies.settings;
+      this.scope = dependencies.scope;
+    }
+    async show(target, movieId, options = {}) {
+      const jq = globalThis.$, isActive = options.isActive ?? (() => true);
+      if (!movieId) throw new TypeError("未传入movieId");
+      if (!isActive() || !target?.length) return jq();
+      const existing = target.children('[data-jhs-panel="related"]').filter((_index, element) => jq(element).attr("data-jhs-movie-id") === String(movieId)).first();
+      if (existing.length) return existing;
+      const panel = jq('<section class="jhs-related-panel" data-jhs-panel="related"></section>').attr("data-jhs-movie-id", String(movieId));
+      const header = jq('<header class="jhs-panel-header"><h3>相关清单</h3></header>');
+      const toggle = jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-panel-toggle jhs-related-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>');
+      const state = { movieId, panel, floorIndex: 1, loaded: false, loading: false, page: 1, isActive };
+      header.append(toggle);
+      if (options.ownedSection) options.ownedSection.find('[data-jhs-section-actions="related"]').first().append(toggle);
+      else panel.append(header);
+      panel.append('<div class="jhs-related-list jhs-related-container"></div>', '<div class="jhs-panel-footer jhs-related-footer"></div>');
+      target.append(panel);
+      const enabled = (this.settings.snapshot().enableLoadRelated ?? "no") === "yes";
+      this.updateToggle(toggle, enabled);
+      toggle.on("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const expanded = toggle.find(".toggle-text").text() === "展开";
+        this.updateToggle(toggle, expanded);
+        panel.find(".jhs-related-container, .jhs-related-footer").toggle(expanded);
+        if (expanded && !state.loaded && !state.loading) void this.fetch(state);
+        void this.settings.set("enableLoadRelated", expanded ? "yes" : "no");
+      });
+      if (enabled) await this.fetch(state);
+      else panel.find(".jhs-related-container, .jhs-related-footer").hide();
+      return panel;
+    }
+    updateToggle(toggle, expanded) {
+      toggle.attr("aria-expanded", String(expanded));
+      toggle.find(".toggle-text").text(expanded ? "折叠" : "展开");
+      toggle.find(".toggle-icon").text(expanded ? "▲" : "▼");
+    }
+    async fetch(state) {
+      if (state.loading || !state.isActive()) return;
+      state.loading = true;
+      const container = state.panel.find(".jhs-related-container"), footer = state.panel.find(".jhs-related-footer");
+      container.empty().append(globalThis.$("<div></div>").addClass("jhs-panel-state").text("获取清单中..."));
+      footer.empty();
+      let scope;
+      try {
+        scope = await this.scope();
+        const related = await this.related.list({ movieId: state.movieId }, { page: 1, limit: 20, scope });
+        if (!state.isActive() || scope?.signal?.aborted) return;
+        state.loading = false;
+        state.loaded = true;
+        container.empty();
+        if (!related.length) return void container.append(globalThis.$("<div></div>").addClass("jhs-panel-state").text("无清单"));
+        this.display(state, related, container);
+        if (related.length === 20) this.bindLoadMore(state, container, footer);
+        else footer.append(globalThis.$("<div></div>").addClass("jhs-panel-end").text("已加载全部清单"));
+      } catch (error) {
+        state.loading = false;
+        if (!state.isActive() || scope?.signal?.aborted) return;
+        globalThis.clog?.error("获取清单失败:", error);
+        this.renderRetry(container, () => void this.fetch(state));
+      }
+    }
+    renderRetry(container, retry) {
+      const jq = globalThis.$;
+      container.empty().append(jq('<div class="jhs-panel-state"></div>').append(document.createTextNode("获取清单失败 "), jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry)));
+    }
+    bindLoadMore(state, container, footer) {
+      const jq = globalThis.$, button = jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-related-load-more">加载更多清单</button>'), end = jq('<div class="jhs-panel-end jhs-related-end">已加载全部清单</div>').hide();
+      footer.empty().append(button, end);
+      button.on("click", async () => {
+        const nextPage = state.page + 1;
+        let scope;
+        button.text("加载中...").prop("disabled", true);
+        try {
+          scope = await this.scope();
+          const related = await this.related.list({ movieId: state.movieId }, { page: nextPage, limit: 20, scope });
+          if (!state.isActive() || scope?.signal?.aborted) return;
+          state.page = nextPage;
+          this.display(state, related, container);
+          if (related.length < 20) button.remove(), end.show();
+          else button.text("加载更多清单").prop("disabled", false);
+        } catch (error) {
+          if (!state.isActive() || scope?.signal?.aborted) return;
+          globalThis.clog?.error("加载更多清单失败:", error);
+          button.text("加载失败，请重试").prop("disabled", false);
+        }
+      });
+    }
+    display(state, related, container) {
+      const jq = globalThis.$;
+      related.forEach((item) => {
+        const title = jq("<a></a>").addClass("jhs-related-title").attr({ href: `/lists/${encodeURIComponent(item.id)}`, target: "_blank", rel: "noopener noreferrer" }).text(item.name || "未命名清单");
+        const heading = jq('<div class="jhs-related-heading"></div>').append(jq("<span></span>").addClass("jhs-related-index").text(`#${state.floorIndex++}`), title);
+        const meta = jq('<div class="jhs-related-meta"></div>');
+        const formatted = item.createdAt ? globalThis.utils.formatDate(item.createdAt) : "未知";
+        meta.append(jq("<span></span>").text(`视频：${Number(item.movieCount) || 0}`), jq("<span></span>").text(`收藏：${Number(item.collectionCount) || 0}`), jq("<span></span>").text(`查看：${Number(item.viewCount) || 0}`), jq('<time class="jhs-related-time"></time>').text(`创建时间：${formatted}`));
+        container.append(jq('<article class="jhs-related-item"></article>').append(heading, meta));
+      });
+    }
+  };
+  __name(_RelatedPanel, "RelatedPanel");
+  var RelatedPanel = _RelatedPanel;
+
+  // src/ui/detail/review-panel.js
+  var FILTER_KEY = "review_filter_keyword";
+  var _ReviewPanel = class _ReviewPanel {
+    constructor(dependencies) {
+      this.review = dependencies.review;
+      this.settings = dependencies.settings;
+      this.storage = dependencies.storage;
+      this.scope = dependencies.scope;
+    }
+    async show(movieId, target, options = {}) {
+      const jq = globalThis.$, isActive = options.isActive ?? (() => true);
+      if (!isActive() || !target?.length) return jq();
+      const existing = target.children('[data-jhs-panel="reviews"]').filter((_index, element) => jq(element).attr("data-jhs-movie-id") === String(movieId)).first();
+      if (existing.length) return existing;
+      const panel = jq('<section class="jhs-review-panel" data-jhs-panel="reviews"></section>').attr("data-jhs-movie-id", String(movieId));
+      const header = jq('<header class="jhs-panel-header"><h3>评论</h3></header>');
+      const toggle = jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-panel-toggle jhs-review-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>');
+      const state = { movieId, panel, floorIndex: 1, loaded: false, loading: false, page: 1, isActive };
+      header.append(toggle);
+      if (options.ownedSection) options.ownedSection.find('[data-jhs-section-actions="reviews"]').first().append(toggle);
+      else panel.append(header);
+      panel.append('<div class="jhs-review-list jhs-review-container"></div>', '<div class="jhs-panel-footer jhs-review-footer"></div>');
+      target.append(panel);
+      this.bindFilter(panel);
+      const enabled = (this.settings.snapshot().enableLoadReview ?? "no") === "yes";
+      this.updateToggle(toggle, enabled);
+      toggle.on("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const expanded = toggle.find(".toggle-text").text() === "展开";
+        this.updateToggle(toggle, expanded);
+        panel.find(".jhs-review-container, .jhs-review-footer").toggle(expanded);
+        if (expanded && !state.loaded && !state.loading) void this.fetch(state);
+        void this.settings.set("enableLoadReview", expanded ? "yes" : "no");
+      });
+      if (enabled) await this.fetch(state);
+      else panel.find(".jhs-review-container, .jhs-review-footer").hide();
+      return panel;
+    }
+    updateToggle(toggle, expanded) {
+      toggle.attr("aria-expanded", String(expanded));
+      toggle.find(".toggle-text").text(expanded ? "折叠" : "展开");
+      toggle.find(".toggle-icon").text(expanded ? "▲" : "▼");
+    }
+    async fetch(state) {
+      if (state.loading || !state.isActive()) return;
+      const jq = globalThis.$, container = state.panel.find(".jhs-review-container"), footer = state.panel.find(".jhs-review-footer");
+      state.loading = true;
+      container.empty().append(jq('<div class="jhs-panel-state"></div>').text("获取评论中..."));
+      footer.empty();
+      const pageSize = Number(this.settings.snapshot().reviewCount) || 20;
+      let scope;
+      try {
+        scope = await this.scope();
+        const reviews = await this.review.list({ movieId: state.movieId }, { page: 1, limit: pageSize, scope });
+        if (!state.isActive() || scope?.signal?.aborted) return;
+        state.loading = false;
+        state.loaded = true;
+        container.empty();
+        if (!reviews.length) return void container.append(jq('<div class="jhs-panel-state"></div>').text("无评论"));
+        const keywords = await this.getKeywords();
+        await this.display(state, reviews, container, keywords);
+        if (reviews.length === pageSize) this.bindLoadMore(state, pageSize, keywords, container, footer);
+        else footer.append(jq('<div class="jhs-panel-end"></div>').text("已加载全部评论"));
+      } catch (error) {
+        state.loading = false;
+        if (!state.isActive() || scope?.signal?.aborted) return;
+        globalThis.clog?.error("获取评论失败:", error);
+        this.renderRetry(container, "获取评论失败", () => void this.fetch(state));
+      }
+    }
+    async getKeywords() {
+      const value = await this.storage.get(FILTER_KEY);
+      return Array.isArray(value) ? value.map(String) : [];
+    }
+    async saveKeyword(text) {
+      const values = await this.getKeywords();
+      if (!values.includes(text)) await this.storage.set(FILTER_KEY, [...values, text]);
+    }
+    renderRetry(container, message, retry) {
+      const jq = globalThis.$;
+      container.empty().append(jq('<div class="jhs-panel-state"></div>').append(document.createTextNode(`${message} `), jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry)));
+    }
+    bindLoadMore(state, pageSize, keywords, container, footer) {
+      const jq = globalThis.$, button = jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-review-load-more">加载更多评论</button>'), end = jq('<div class="jhs-panel-end jhs-review-end">已加载全部评论</div>').hide();
+      footer.empty().append(button, end);
+      button.on("click", async () => {
+        const nextPage = state.page + 1;
+        let scope;
+        button.text("加载中...").prop("disabled", true);
+        try {
+          scope = await this.scope();
+          const reviews = await this.review.list({ movieId: state.movieId }, { page: nextPage, limit: pageSize, scope });
+          if (!state.isActive() || scope?.signal?.aborted) return;
+          state.page = nextPage;
+          await this.display(state, reviews, container, keywords);
+          if (reviews.length < pageSize) button.remove(), end.show();
+          else button.text("加载更多评论").prop("disabled", false);
+        } catch (error) {
+          if (!state.isActive() || scope?.signal?.aborted) return;
+          globalThis.clog?.error("加载更多评论失败:", error);
+          button.text("加载失败，请重试").prop("disabled", false);
+        }
+      });
+    }
+    async display(state, reviews, container, keywords) {
+      const jq = globalThis.$;
+      const filter = keywords.length ? new RegExp(keywords.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")) : null;
+      for (const review of reviews) {
+        const content = String(review.content || "");
+        if (filter?.test(content)) continue;
+        const item = jq('<article class="jhs-review-item"></article>'), meta = jq('<div class="jhs-review-meta"></div>'), body = jq('<div class="review-content jhs-review-content"></div>');
+        meta.append(jq("<span></span>").addClass("jhs-review-author").text(review.author || "匿名用户"));
+        const stars = jq('<span class="score-stars" aria-label="评分"></span>'), score = Math.max(0, Math.min(5, Number(review.score) || 0));
+        for (let index = 0; index < score; index++) stars.append('<i class="icon-star"></i>');
+        const formatted = globalThis.utils.formatDate(review.createdAt);
+        meta.append(stars, jq("<time></time>").text(formatted), jq("<span></span>").text(`点赞：${Number(review.likes) || 0}`), jq("<span></span>").addClass("jhs-review-floor").text(`#${state.floorIndex++}楼`));
+        this.appendContent(body, content);
+        item.append(meta, body);
+        container.append(item);
+      }
+    }
+    appendContent(container, content) {
+      const pattern = /ed2k:\/\/\|file\|[^|]+\|\d+\|[a-fA-F0-9]{32}\|\/|magnet:\?[^\s"'<>`,;\u4e00-\u9fa5，。？！（）【】]+|https?:\/\/[^\s"'<>`,;\u4e00-\u9fa5，。？！（）【】]+/g;
+      let cursor = 0, match;
+      while (match = pattern.exec(content)) {
+        if (match.index > cursor) container.append(document.createTextNode(content.slice(cursor, match.index)));
+        this.appendLink(container, match[0]);
+        cursor = match.index + match[0].length;
+      }
+      if (cursor < content.length) container.append(document.createTextNode(content.slice(cursor)));
+    }
+    appendLink(container, value) {
+      const jq = globalThis.$, isEd2k = value.startsWith("ed2k://"), isMagnet = value.startsWith("magnet:"), label = isEd2k ? "ED2K 链接" : isMagnet ? "Magnet 链接" : "打开链接", isResource = isEd2k || isMagnet;
+      const wrapper = jq(isResource ? '<span class="jhs-review-link-wrap"></span>' : '<span class="jhs-review-inline-controls"></span>'), main = jq('<span class="jhs-review-link-main"></span>');
+      const open = isEd2k ? jq('<button type="button" class="jhs-btn jhs-review-link"></button>').text(label).on("click", () => globalThis.utils.copyToClipboard(label, value)) : jq("<a></a>").addClass("jhs-review-link").attr({ href: value, target: "_blank", rel: "noopener noreferrer" }).text(label);
+      const copy = jq('<button type="button" class="jhs-btn jhs-review-link jhs-review-link-copy">复制</button>').on("click", () => globalThis.utils.copyToClipboard(label, value));
+      main.append(open, copy);
+      wrapper.append(main);
+      if (isResource) wrapper.append(jq('<span class="jhs-review-link-actions"></span>').append(jq('<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn jhs-offline-btn">离线</button>').attr("data-resource", value)));
+      container.append(wrapper);
+    }
+    bindFilter(panel) {
+      panel.off("contextmenu.jhsReviewFilter", ".review-content").on("contextmenu.jhsReviewFilter", ".review-content", async (event) => {
+        if ((this.settings.snapshot().enableTitleSelectFilter ?? "yes") !== "yes") return;
+        const text = String(window.getSelection()?.toString() || "");
+        if (!text) return;
+        event.preventDefault();
+        await globalThis.utils.q(event, `是否将 '${text}' 加入评论区关键词?`, async () => {
+          await this.saveKeyword(text);
+          globalThis.show.ok("操作成功, 刷新页面后生效");
+        });
+      });
+    }
+  };
+  __name(_ReviewPanel, "ReviewPanel");
+  var ReviewPanel = _ReviewPanel;
 
   // src/plugins/status/detail-workspace.js
   function getDetailResourceAdapter() {
@@ -8755,7 +8981,6 @@ ${value}\r
       group.children('[data-jhs-slot="reviews"]').length || group.append('<section class="jhs-detail-owned-slot jhs-detail-owned-slot--reviews" data-jhs-slot="reviews"></section>');
       group.children('[data-jhs-slot="related"]').length || group.append('<section class="jhs-detail-owned-slot jhs-detail-owned-slot--related" data-jhs-slot="related"></section>');
     }
-    /** 只移动 JHS 自有插槽，将其固定在稳定宿主锚点旁。 */
     placeOwnedSlots() {
       const root = this.hostRoot, resource = getDetailResourceAdapter();
       if (!root?.length) return;
@@ -8937,7 +9162,6 @@ ${value}\r
         end: /* @__PURE__ */ __name(() => context?.destroy(), "end")
       });
     }
-    /** 统一挂载 FC2 与 123AV-FC2 详情。 */
     mountFc2Detail(host, options) {
       const target = $(host), previous = target.data("jhsFc2Context");
       previous?.destroy?.(), target.empty();
@@ -8989,20 +9213,26 @@ ${value}\r
       }))).then(((result) => {
         if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove();
       }));
-      "123av" === context.source ? void this.getDependency("Fc2By123AvPlugin").loadDetail(context, context.url) : void this.loadNativeDetail(context);
+      "123av" === context.source ? void this.load123AvDetail(context) : void this.loadNativeDetail(context);
     }
     createResourceGroup(title, role) {
       return $('<section class="jhs-fc2-resource-group"><h3 class="jhs-fc2-resource-title"></h3><div></div></section>').find("h3").text(title).end().find("div").attr("data-jhs-role", role).end();
-    }
-    setState(target, message, retry = null) {
-      const host = $(target).empty(), state = $('<div class="jhs-fc2-state"></div>').text(message);
-      retry && state.addClass("is-error").append(" ", $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry)), host.append(state);
     }
     async loadNativeDetail(context) {
       const movieIdPromise = Promise.resolve(context.movieId);
       this.configureJavDbWantButton(context, movieIdPromise), await Promise.allSettled([this.fetchAndRenderNativeDetail(context), this.fetchAndRenderNativeMagnets(context), this.mountPanels(context, movieIdPromise)]);
     }
-    /** 绑定当前工作区自己的 JavDB“想看”操作。 */
+    async load123AvDetail(context) {
+      const source = this.getDependency("Fc2By123AvPlugin"), movieIdPromise = source.resolveMovieId(context.carNum);
+      void this.configureJavDbWantButton(context, movieIdPromise), void this.mountPanels(context, movieIdPromise), void movieIdPromise.then(((movieId) => context.isAlive() && this.fetchAndRenderNativeMagnets(context, movieId))).catch(((error) => {
+        context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.load123AvMagnets(context))), clog.error("123AV 磁力关联失败", error);
+      }));
+      await source.loadDetail(context, context.url);
+    }
+    async load123AvMagnets(context) {
+      const movieId = await this.getDependency("Fc2By123AvPlugin").resolveMovieId(context.carNum);
+      return this.fetchAndRenderNativeMagnets(context, movieId);
+    }
     async configureJavDbWantButton(context, movieIdPromise) {
       const button = context.root.find('[data-jhs-action="javdb-want"]');
       try {
@@ -9039,10 +9269,10 @@ ${value}\r
         const movie = await this.getRuntimeService("movie").detail({ movieId: context.movieId, carNum: context.carNum, providerId: "javdb" }, { scope });
         if (!movie) throw new Error("JavDB 影片详情不存在");
         if (!context.isAlive()) return;
-        this.renderSummary(context, movie), this.renderGallery(context, movie.imageUrls || []);
+        this.renderSummary(context, movie), renderFc2Gallery(context, movie.imageUrls || []);
         if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) === _) await renderTranslatedTitle({ root: context.root, carNum: movie.carNum || context.carNum, translation: this.getRuntimeService("translation"), scope });
       } catch (error) {
-        context.isAlive() && this.setState(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.fetchAndRenderNativeDetail(context))), clog.error("FC2 详情加载失败", error);
+        context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.fetchAndRenderNativeDetail(context))), clog.error("FC2 详情加载失败", error);
       }
     }
     renderSummary(context, movie) {
@@ -9054,29 +9284,18 @@ ${value}\r
       (movie.actors || []).forEach(((actor) => {
         actors.append($("<a></a>").addClass("jhs-fc2-actor").attr({ href: `/actors/${encodeURIComponent(actor.id)}`, target: "_blank", rel: "noopener noreferrer" }).text(actor.name || "未知演员")), 0 === actor.gender && actressNames.push(actor.name);
       }));
-      movie.actors?.length || actors.append($("<span></span>").text("暂无演员信息")), body.append(actors, this.createSourceLinks(context), $('<span class="jhs-is-hidden" data-jhs-role="actress-data"></span>').text(actressNames.join(" ")), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(movie.releaseDate || ""));
-    }
-    createSourceLinks(context) {
-      const links = $('<div class="jhs-fc2-source-links" aria-label="影片来源"></div>'), providerLinks = this.getRuntimeService("movie").sourceUrls({ carNum: context.carNum }, ["fc2ppvdb", "fc2content"]), values = [["123av" === context.source ? "123AV 原页面" : "JavDB 原页面", normalizeHttpUrl(context.url)], ...providerLinks.map(((item) => [item.providerId === "fc2ppvdb" ? "FC2PPVDB" : "FC2 市场", item.url]))];
-      values.forEach((([label, href]) => href && links.append($("<a></a>").addClass("jhs-btn jhs-btn--ghost jhs-btn--sm").attr({ href, target: "_blank", rel: "noopener noreferrer" }).text(label))));
-      return links;
-    }
-    renderGallery(context, images) {
-      const urls = [...new Set((images || []).map(((url) => normalizeHttpUrl(url))).filter(Boolean))], grid = context.root.find('[data-jhs-role="gallery-grid"]').empty(), preview = context.root.find('[data-jhs-role="main-preview"]').empty();
-      if (!urls.length) return this.setState(grid, "暂无剧照");
-      preview.append($("<img>").attr({ src: urls[0], alt: `${context.carNum} 预览`, loading: "eager" }));
-      urls.forEach(((url, index) => grid.append($('<button type="button" class="jhs-btn jhs-fc2-gallery-item"></button>').attr("aria-label", `查看剧照 ${index + 1}`).append($("<img>").addClass("jhs-fc2-gallery__image").attr({ src: url, alt: `剧照 ${index + 1}`, loading: "lazy" })))));
+      movie.actors?.length || actors.append($("<span></span>").text("暂无演员信息")), body.append(actors, createFc2SourceLinks(context, this.getRuntimeService("movie")), $('<span class="jhs-is-hidden" data-jhs-role="actress-data"></span>').text(actressNames.join(" ")), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(movie.releaseDate || ""));
     }
     async fetchAndRenderNativeMagnets(context, movieId = context.movieId) {
       const host = context.root.find('[data-jhs-role="native-magnets"]');
-      this.setState(host, "正在加载站内磁力…");
+      renderFc2State(host, "正在加载站内磁力…");
       try {
-        if (!movieId) return this.setState(host, "JavDB 暂无对应作品");
+        if (!movieId) return renderFc2State(host, "JavDB 暂无对应作品");
         const scope = await this.getRuntimeService("scope")();
         const magnets = await this.getRuntimeService("magnet").listNative({ movieId, providerId: "javdb" }, { scope });
         if (!context.isAlive()) return;
         host.empty();
-        if (!magnets.length) return this.setState(host, "暂无站内磁力");
+        if (!magnets.length) return renderFc2State(host, "暂无站内磁力");
         const highlighter = this.getDependency("HighlightMagnetPlugin"), assessments = [];
         magnets.forEach(((item) => {
           const hash = normalizeBtihHash(item.hash);
@@ -9087,7 +9306,7 @@ ${value}\r
         }));
         await this.bindNativeMagnetFilter(context, host, assessments.some(((item) => item.highQuality)));
       } catch (error) {
-        context.isAlive() && this.setState(host, "站内磁力加载失败", (() => void this.fetchAndRenderNativeMagnets(context, movieId))), clog.error("FC2 磁力加载失败", error);
+        context.isAlive() && renderFc2State(host, "站内磁力加载失败", (() => void this.fetchAndRenderNativeMagnets(context, movieId))), clog.error("FC2 磁力加载失败", error);
       }
     }
     async bindNativeMagnetFilter(context, host, hasMatch) {
@@ -9098,23 +9317,25 @@ ${value}\r
         enabled && hasMatch && host.find('.jhs-fc2-magnet-item[data-jhs-high-quality="false"]').hide();
         button.attr("aria-pressed", String(enabled && hasMatch)).text(hasMatch ? enabled ? "显示全部磁力" : "过滤低质量" : "暂无可过滤项").prop("disabled", !hasMatch);
       }, "apply");
-      actions.append(button), apply(await storageManager.getSetting("enableMagnetsFilter", _) === _), button.on(`click${context.namespace}`, (async () => {
+      const settings = this.getRuntimeService("settings");
+      actions.append(button), apply((settings.snapshot().enableMagnetsFilter ?? _) === _), button.on(`click${context.namespace}`, (async () => {
         const enabled = "true" !== button.attr("aria-pressed");
-        apply(enabled), await storageManager.saveSettingItem("enableMagnetsFilter", enabled ? _ : C);
+        apply(enabled), await settings.set("enableMagnetsFilter", enabled ? _ : "no");
       }));
     }
     async mountPanels(context, movieIdPromise) {
       try {
         const movieId = await movieIdPromise;
         if (!context.isAlive()) return;
-        if (!movieId) return this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related"), this.setState(context.getSlot("reviews"), "JavDB 暂无对应作品"), this.setState(context.getSlot("related"), "JavDB 暂无对应作品");
+        if (!movieId) return this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related"), renderFc2State(context.getSlot("reviews"), "JavDB 暂无对应作品"), renderFc2State(context.getSlot("related"), "JavDB 暂无对应作品");
         this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related");
-        await Promise.allSettled([this.getDependency("ReviewPlugin").showReview(movieId, context.getSlot("reviews"), { ownedSection: context.getSection("reviews"), isActive: context.isAlive }), this.getDependency("RelatedPlugin").showRelated(context.getSlot("related"), movieId, { ownedSection: context.getSection("related"), isActive: context.isAlive })]);
+        const scope = /* @__PURE__ */ __name(() => this.getRuntimeService("scope")(), "scope"), relatedPanel = new RelatedPanel({ related: this.getRuntimeService("related"), settings: this.getRuntimeService("settings"), scope }), reviewPanel = new ReviewPanel({ review: this.getRuntimeService("review"), settings: this.getRuntimeService("settings"), storage: this.getRuntimeService("storage"), scope });
+        await Promise.allSettled([reviewPanel.show(movieId, context.getSlot("reviews"), { ownedSection: context.getSection("reviews"), isActive: context.isAlive }), relatedPanel.show(context.getSlot("related"), movieId, { ownedSection: context.getSection("related"), isActive: context.isAlive })]);
       } catch (error) {
         if (!context.isAlive()) return;
         this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related");
         const retry = /* @__PURE__ */ __name(() => void this.mountPanels(context, this.resolveMovieId(context.carNum)), "retry");
-        this.setState(context.getSlot("reviews"), "评论关联失败", retry), this.setState(context.getSlot("related"), "相关清单关联失败", retry), clog.error("FC2 JavDB 关联失败", error);
+        renderFc2State(context.getSlot("reviews"), "评论关联失败", retry), renderFc2State(context.getSlot("related"), "相关清单关联失败", retry), clog.error("FC2 JavDB 关联失败", error);
       }
     }
     clearOwnedPanel(context, name) {
@@ -9929,85 +10150,8 @@ ${error.stack}` : "");
       return element ? $(element) : $();
     }
     async showRelated(target, movieId, options = {}) {
-      const isActive = "function" === typeof options.isActive ? options.isActive : () => true;
-      const enabled = await storageManager.getSetting("enableLoadRelated", C), host = target?.length ? target : this.getHostedSlot("related");
-      if (!movieId) return void show.error("未传入movieId");
-      if (!isActive() || !host?.length) return $();
-      const existing = host.children('[data-jhs-panel="related"]').filter(((_2, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
-      if (existing.length) return existing;
-      const panel = $('<section class="jhs-related-panel" data-jhs-panel="related"></section>').attr("data-jhs-movie-id", String(movieId)), header = $('<header class="jhs-panel-header"><h3>相关清单</h3></header>'), toggle = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-panel-toggle jhs-related-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>'), state = { movieId, panel, floorIndex: 1, loaded: false, loading: false, page: 1 };
-      header.append(toggle), options.ownedSection ? options.ownedSection.find('[data-jhs-section-actions="related"]').first().append(toggle) : panel.append(header), panel.append('<div class="jhs-related-list jhs-related-container"></div>', '<div class="jhs-panel-footer jhs-related-footer"></div>'), host.append(panel), state.isActive = isActive;
-      this.updateToggle(toggle, enabled === _);
-      toggle.on("click", ((event) => {
-        event.preventDefault(), event.stopPropagation();
-        const expanded = "展开" === toggle.find(".toggle-text").text();
-        this.updateToggle(toggle, expanded), panel.find(".jhs-related-container, .jhs-related-footer").toggle(expanded), expanded && !state.loaded && !state.loading && void this.fetchAndDisplayRelateds(state), storageManager.saveSettingItem("enableLoadRelated", expanded ? _ : C);
-      }));
-      enabled === _ ? await this.fetchAndDisplayRelateds(state) : panel.find(".jhs-related-container, .jhs-related-footer").hide();
-      return panel;
-    }
-    updateToggle(toggle, expanded) {
-      toggle.attr("aria-expanded", String(expanded)), toggle.find(".toggle-text").text(expanded ? "折叠" : "展开"), toggle.find(".toggle-icon").text(expanded ? "▲" : "▼");
-    }
-    async fetchAndDisplayRelateds(state) {
-      if (state.loading || !state.isActive?.()) return;
-      state.loading = true;
-      const { movieId, panel } = state, container = panel.find(".jhs-related-container"), footer = panel.find(".jhs-related-footer");
-      container.empty().append($('<div class="jhs-panel-state"></div>').text("获取清单中...")), footer.empty();
-      let related, scope;
-      try {
-        scope = await this.getRuntimeService("scope")();
-        related = await this.getRuntimeService("related").list({ movieId }, { page: 1, limit: 20, scope });
-      } catch (error) {
-        if (!state.isActive?.() || scope?.signal?.aborted) return void (state.loading = false);
-        clog.error("获取清单失败:", error);
-        state.loading = false;
-        return void this.renderRetry(container, (() => this.fetchAndDisplayRelateds(state)));
-      }
-      if (!state.isActive?.() || scope?.signal?.aborted) return void (state.loading = false);
-      state.loading = false, state.loaded = true;
-      container.empty();
-      if (!related.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无清单"));
-      this.displayRelateds(state, related, container), 20 === related.length ? this.bindLoadMore(state, container, footer) : footer.append($('<div class="jhs-panel-end"></div>').text("已加载全部清单"));
-    }
-    renderRetry(container, retry) {
-      container.empty();
-      const state = $('<div class="jhs-panel-state"></div>').append(document.createTextNode("获取清单失败 "));
-      state.append($('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry)), container.append(state);
-    }
-    bindLoadMore(state, container, footer) {
-      const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-related-load-more">加载更多清单</button>'), end = $('<div class="jhs-panel-end jhs-related-end">已加载全部清单</div>').hide();
-      footer.empty().append(button, end);
-      button.on("click", (async () => {
-        const nextPage = state.page + 1;
-        let scope;
-        button.text("加载中...").prop("disabled", true);
-        try {
-          scope = await this.getRuntimeService("scope")();
-          const related = await this.getRuntimeService("related").list({ movieId: state.movieId }, { page: nextPage, limit: 20, scope });
-          if (!state.isActive?.() || scope?.signal?.aborted) return;
-          state.page = nextPage;
-          this.displayRelateds(state, related, container), related.length < 20 ? (button.remove(), end.show()) : button.text("加载更多清单").prop("disabled", false);
-        } catch (error) {
-          if (!state.isActive?.() || scope?.signal?.aborted) return;
-          clog.error("加载更多清单失败:", error), button.text("加载失败，请重试").prop("disabled", false);
-        }
-      }));
-    }
-    displayRelateds(state, related, container) {
-      related.forEach(((item) => {
-        const row = $('<article class="jhs-related-item"></article>'), title = $("<a></a>").addClass("jhs-related-title").attr({
-          href: `/lists/${encodeURIComponent(item.id)}`,
-          target: "_blank",
-          rel: "noopener noreferrer"
-        }).text(item.name || "未命名清单"), heading = $('<div class="jhs-related-heading"></div>').append($("<span></span>").addClass("jhs-related-index").text(`#${state.floorIndex++}`), title), meta = $('<div class="jhs-related-meta"></div>'), time = $('<time class="jhs-related-time"></time>').text(`创建时间：${item.createdAt ? utils.formatDate(item.createdAt) : "未知"}`);
-        meta.append(
-          $("<span></span>").text(`视频：${Number(item.movieCount) || 0}`),
-          $("<span></span>").text(`收藏：${Number(item.collectionCount) || 0}`),
-          $("<span></span>").text(`查看：${Number(item.viewCount) || 0}`),
-          time
-        ), row.append(heading, meta), container.append(row);
-      }));
+      const panel = new RelatedPanel({ related: this.getRuntimeService("related"), settings: this.getRuntimeService("settings"), scope: /* @__PURE__ */ __name(() => this.getRuntimeService("scope")(), "scope") });
+      return panel.show(target?.length ? target : this.getHostedSlot("related"), movieId, options);
     }
   };
   __name(_RelatedPlugin, "RelatedPlugin");
@@ -10064,133 +10208,8 @@ ${error.stack}` : "");
       return element ? $(element) : $();
     }
     async showReview(movieId, target, options = {}) {
-      const isActive = "function" === typeof options.isActive ? options.isActive : () => true;
-      const settings = await storageManager.getSetting();
-      const enabled = settings.enableLoadReview === _ ? _ : C, host = target?.length ? target : this.getHostedSlot("reviews");
-      if (!isActive() || !host?.length) return $();
-      const existing = host.children('[data-jhs-panel="reviews"]').filter(((_2, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
-      if (existing.length) return existing;
-      const panel = $('<section class="jhs-review-panel" data-jhs-panel="reviews"></section>').attr("data-jhs-movie-id", String(movieId));
-      const header = $('<header class="jhs-panel-header"><h3>评论</h3></header>');
-      const toggle = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-panel-toggle jhs-review-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>');
-      const state = { movieId, panel, floorIndex: 1, loaded: false, loading: false, page: 1 };
-      header.append(toggle), options.ownedSection ? options.ownedSection.find('[data-jhs-section-actions="reviews"]').first().append(toggle) : panel.append(header), panel.append('<div class="jhs-review-list jhs-review-container"></div>', '<div class="jhs-panel-footer jhs-review-footer"></div>'), host.append(panel), this.bindRightClickFilter();
-      state.isActive = isActive;
-      this.updateToggle(toggle, enabled === _);
-      toggle.on("click", ((event) => {
-        event.preventDefault(), event.stopPropagation();
-        const expanded = "展开" === toggle.find(".toggle-text").text();
-        this.updateToggle(toggle, expanded), panel.find(".jhs-review-container, .jhs-review-footer").toggle(expanded), expanded && !state.loaded && !state.loading && void this.fetchAndDisplayReviews(state), storageManager.saveSettingItem("enableLoadReview", expanded ? _ : C);
-      }));
-      enabled === _ ? await this.fetchAndDisplayReviews(state) : panel.find(".jhs-review-container, .jhs-review-footer").hide();
-      return panel;
-    }
-    updateToggle(toggle, expanded) {
-      toggle.attr("aria-expanded", String(expanded)), toggle.find(".toggle-text").text(expanded ? "折叠" : "展开"), toggle.find(".toggle-icon").text(expanded ? "▲" : "▼");
-    }
-    async fetchAndDisplayReviews(state) {
-      if (state.loading || !state.isActive?.()) return;
-      state.loading = true;
-      const { movieId, panel } = state, container = panel.find(".jhs-review-container"), footer = panel.find(".jhs-review-footer");
-      container.empty().append($('<div class="jhs-panel-state"></div>').text("获取评论中...")), footer.empty();
-      const pageSize = await storageManager.getSetting("reviewCount", 20);
-      let reviews, scope;
-      try {
-        scope = await this.getRuntimeService("scope")();
-        reviews = await this.getRuntimeService("review").list({ movieId }, { page: 1, limit: pageSize, scope });
-      } catch (error) {
-        if (!state.isActive?.() || scope?.signal?.aborted) return void (state.loading = false);
-        error.toString().includes("簽名已過期") && show.error("生成签名失败, 请检查系统时间及时区是否正确!"), clog.error("获取评论失败:", error), clog.error("获取评论失败:", error);
-        state.loading = false;
-        return void this.renderRetry(container, "获取评论失败", (() => this.fetchAndDisplayReviews(state)));
-      }
-      if (!state.isActive?.() || scope?.signal?.aborted) return void (state.loading = false);
-      state.loading = false, state.loaded = true;
-      container.empty();
-      if (!reviews.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无评论"));
-      const keywords = await storageManager.getReviewFilterKeywordList();
-      await this.displayReviews(state, reviews, container, keywords);
-      reviews.length === pageSize ? this.bindLoadMore(state, pageSize, keywords, container, footer) : footer.append($('<div class="jhs-panel-end"></div>').text("已加载全部评论"));
-    }
-    renderRetry(container, message, retry) {
-      container.empty();
-      const state = $('<div class="jhs-panel-state"></div>').append(document.createTextNode(`${message} `));
-      const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry);
-      state.append(button), container.append(state);
-    }
-    bindLoadMore(state, pageSize, keywords, container, footer) {
-      const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-review-load-more">加载更多评论</button>'), end = $('<div class="jhs-panel-end jhs-review-end">已加载全部评论</div>').hide();
-      footer.empty().append(button, end);
-      button.on("click", (async () => {
-        const nextPage = state.page + 1;
-        let scope;
-        button.text("加载中...").prop("disabled", true);
-        try {
-          scope = await this.getRuntimeService("scope")();
-          const reviews = await this.getRuntimeService("review").list({ movieId: state.movieId }, { page: nextPage, limit: pageSize, scope });
-          if (!state.isActive?.() || scope?.signal?.aborted) return;
-          state.page = nextPage;
-          await this.displayReviews(state, reviews, container, keywords), reviews.length < pageSize ? (button.remove(), end.show()) : button.text("加载更多评论").prop("disabled", false);
-        } catch (error) {
-          if (!state.isActive?.() || scope?.signal?.aborted) return;
-          clog.error("加载更多评论失败:", error), button.text("加载失败，请重试").prop("disabled", false);
-        }
-      }));
-    }
-    async displayReviews(state, reviews, container, keywords) {
-      if (!reviews.length) return;
-      const filter = keywords.length > 0 ? new RegExp(keywords.map(((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).join("|")) : null;
-      for (const review of reviews) {
-        const content = String(review.content || "");
-        if (filter?.test(content)) continue;
-        const item = $('<article class="jhs-review-item"></article>'), meta = $('<div class="jhs-review-meta"></div>'), body = $('<div class="review-content jhs-review-content"></div>');
-        meta.append($("<span></span>").addClass("jhs-review-author").text(review.author || "匿名用户"));
-        const stars = $('<span class="score-stars" aria-label="评分"></span>'), score = Math.max(0, Math.min(5, Number(review.score) || 0));
-        for (let index = 0; index < score; index++) stars.append('<i class="icon-star"></i>');
-        meta.append(
-          stars,
-          $("<time></time>").text(utils.formatDate(review.createdAt)),
-          $("<span></span>").text(`点赞：${Number(review.likes) || 0}`),
-          $("<span></span>").addClass("jhs-review-floor").text(`#${state.floorIndex++}楼`)
-        );
-        await this.appendReviewContent(body, content), item.append(meta, body), container.append(item);
-      }
-    }
-    appendReviewContent(container, content) {
-      const linkPattern = /ed2k:\/\/\|file\|[^|]+\|\d+\|[a-fA-F0-9]{32}\|\/|magnet:\?[^\s"'<>`,;\u4e00-\u9fa5，。？！（）【】]+|https?:\/\/[^\s"'<>`,;\u4e00-\u9fa5，。？！（）【】]+/g;
-      let cursor = 0, match;
-      while (match = linkPattern.exec(content)) {
-        match.index > cursor && container.append(document.createTextNode(content.slice(cursor, match.index)));
-        this.appendLinkControls(container, match[0]), cursor = match.index + match[0].length;
-      }
-      cursor < content.length && container.append(document.createTextNode(content.slice(cursor)));
-    }
-    appendLinkControls(container, value) {
-      const isEd2k = value.startsWith("ed2k://"), isMagnet = value.startsWith("magnet:"), label = isEd2k ? "ED2K 链接" : isMagnet ? "Magnet 链接" : "打开链接";
-      const isResource = isMagnet || isEd2k, wrapper = $(isResource ? '<span class="jhs-review-link-wrap"></span>' : '<span class="jhs-review-inline-controls"></span>');
-      const main = $('<span class="jhs-review-link-main"></span>');
-      const open = isEd2k ? $('<button type="button" class="jhs-btn jhs-review-link"></button>').text(label).on("click", (() => utils.copyToClipboard(label, value))) : $("<a></a>").addClass("jhs-review-link").attr({
-        href: value,
-        target: "_blank",
-        rel: "noopener noreferrer"
-      }).text(label);
-      const copy = $('<button type="button" class="jhs-btn jhs-review-link jhs-review-link-copy">复制</button>').on("click", (() => utils.copyToClipboard(label, value)));
-      main.append(open, copy), wrapper.append(main);
-      if (isResource) {
-        const actions = $('<span class="jhs-review-link-actions"></span>');
-        actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn jhs-offline-btn" data-resource="${escapeHtml(value)}">离线</button>`);
-        wrapper.append(actions);
-      }
-      container.append(wrapper);
-    }
-    bindRightClickFilter() {
-      $(document).off("contextmenu.jhsReviewFilter", ".review-content").on("contextmenu.jhsReviewFilter", ".review-content", (async (event) => {
-        if (await storageManager.getSetting("enableTitleSelectFilter", _) !== _) return;
-        const text = window.getSelection().toString();
-        text && (event.preventDefault(), await utils.q(event, `是否将 '${text}' 加入评论区关键词?`, (async () => {
-          await storageManager.saveReviewFilterKeyword(text), show.ok("操作成功, 刷新页面后生效");
-        })));
-      }));
+      const panel = new ReviewPanel({ review: this.getRuntimeService("review"), settings: this.getRuntimeService("settings"), storage: this.getRuntimeService("storage"), scope: /* @__PURE__ */ __name(() => this.getRuntimeService("scope")(), "scope") });
+      return panel.show(movieId, target?.length ? target : this.getHostedSlot("reviews"), options);
     }
   };
   __name(_ReviewPlugin, "ReviewPlugin");
@@ -10713,7 +10732,6 @@ ${error.stack}` : "");
         clog.error("预加载 DMM 失败:", error);
       }
     }
-    /** 复用单次 DMM 请求，避免预加载和点击处理重复抓取。 */
     getDmmPreview() {
       if (this.dmmPreviewPromise) return this.dmmPreviewPromise;
       this.dmmPreviewPromise = fetchDmmPreview(this.getPageInfo().carNum).then(((result) => {
@@ -10725,14 +10743,12 @@ ${error.stack}` : "");
       }));
       return this.dmmPreviewPromise;
     }
-    /** 创建与 JavDB HLS 生命周期完全隔离的 DMM 播放器。 */
     createDmmPlayer($nativeVideo) {
       const $host = $nativeVideo.parent(), existing = $host.find("#jhs-preview-video");
       if (existing.length) return existing;
       const $player = $('<video id="jhs-preview-video" class="jhs-video-player jhs-dmm-preview-player" controls playsinline></video>');
       return $nativeVideo.after($player), $player;
     }
-    /** 销毁 JHS 播放器并把播放权完整交回 JavDB。 */
     async restoreNativePlayer($nativeVideo, nativeVideo, notify = false) {
       const $dmmVideo = $nativeVideo.parent().find("#jhs-preview-video"), dmmVideo = $dmmVideo[0];
       dmmVideo && (dmmVideo.pause(), $dmmVideo.removeAttr("src"), dmmVideo.load(), $dmmVideo.remove());
@@ -10969,7 +10985,6 @@ ${error.stack}` : "");
     async handle() {
       window.isListPage && (this.addSvgBtn(), await this.bindClick());
     }
-    /** 构建卡片工具和三个卡片内 popover。 */
     buildToolBox() {
       return `
             <div class="tool-box jhs-cover-tools">
@@ -11174,11 +11189,7 @@ ${error.stack}` : "");
     const normalizedCarNum = normalizeMovieCarNum(carNum);
     if (!normalizedCarNum) return [];
     if (typeof $searchPage?.find === "function") {
-      const wrap = (
-        /** @type {any} */
-        globalThis.jQuery ?? /** @type {any} */
-        globalThis.$ ?? $searchPage.constructor
-      );
+      const wrap = globalThis.jQuery ?? globalThis.$ ?? $searchPage.constructor;
       return $searchPage.find('a[href$="-pn.html"]').filter(((index, element) => wrap(element).text().trim().toUpperCase().includes(normalizedCarNum.toUpperCase()))).map(((index, element) => new URL(wrap(element).attr("href"), baseUrl).href)).get();
     }
     return [...resolveDocument($searchPage).querySelectorAll('a[href$="-pn.html"]')].filter((element) => element.textContent?.trim().toUpperCase().includes(normalizedCarNum.toUpperCase())).map((element) => new URL(element.getAttribute("href") || "", baseUrl).href);
@@ -11186,11 +11197,7 @@ ${error.stack}` : "");
   __name(parseJavStoreSearch, "parseJavStoreSearch");
   function parseJavStorePreview($detailPage, detailUrl) {
     if (typeof $detailPage?.find === "function") {
-      const wrap = (
-        /** @type {any} */
-        globalThis.jQuery ?? /** @type {any} */
-        globalThis.$ ?? $detailPage.constructor
-      );
+      const wrap = globalThis.jQuery ?? globalThis.$ ?? $detailPage.constructor;
       const link = $detailPage.find("a").filter(((index, element) => "CLICK HERE!" === wrap(element).text().trim())).first();
       const previewHref2 = link.attr("href");
       if (!previewHref2) return null;
@@ -11206,25 +11213,21 @@ ${error.stack}` : "");
 
   // src/plugins/image-viewer/screenshot-provider-registry.js
   var _ScreenshotProviderRegistry = class _ScreenshotProviderRegistry {
-    /** @param {Array<{id: string, name: string, enabled?: boolean, priority?: number, getScreenshot: (carNum: string) => Promise<any>}>} [providers] */
     constructor(providers = []) {
       this.providers = /* @__PURE__ */ new Map();
       providers.forEach(((provider) => this.register(provider)));
     }
-    /** @param {{id: string, name: string, enabled?: boolean, priority?: number, getScreenshot: (carNum: string) => Promise<any>}} provider */
     register(provider) {
       if (!provider?.id || !provider.name || "function" !== typeof provider.getScreenshot) throw new TypeError("Invalid screenshot provider");
       this.providers.set(provider.id, { enabled: true, priority: 100, ...provider });
       return this;
     }
-    /** @param {string} id */
     get(id) {
       return this.providers.get(id) || null;
     }
     getEnabledProviders() {
       return [...this.providers.values()].filter(((provider) => provider.enabled)).sort(((a2, b2) => a2.priority - b2.priority));
     }
-    /** @param {string} carNum */
     async first(carNum) {
       for (const provider of this.getEnabledProviders()) {
         try {
@@ -11342,7 +11345,6 @@ ${error.stack}` : "");
         t3.stopPropagation(), t3.preventDefault(), window.open(searchUrl, "_blank");
       }));
     }
-    /** 将截图状态与结果限制在指定容器内，供自有详情工作区使用。 */
     async loadInto(target, carNum, { isActive = /* @__PURE__ */ __name(() => true, "isActive") } = {}) {
       const host = $(target);
       if (!host.length || "yes" !== await storageManager.getSetting("enableLoadScreenShot", "yes")) return host.empty(), null;
@@ -12274,11 +12276,7 @@ ${error.stack}` : "");
     const container = $page.find("#actors").first();
     if (!container.length) return { state: "invalid", isEmpty: false, actors: [], nextUrl: null };
     const actors = [], boxes = container.find(".actor-box").toArray();
-    const wrap = (
-      /** @type {any} */
-      globalThis.jQuery ?? /** @type {any} */
-      globalThis.$ ?? $page.constructor
-    );
+    const wrap = globalThis.jQuery ?? globalThis.$ ?? $page.constructor;
     const normalizeName = /* @__PURE__ */ __name((name) => name.trim(), "normalizeName");
     try {
       for (const box of boxes) {
@@ -12367,7 +12365,6 @@ ${error.stack}` : "");
       const schedule = this.getTaskSchedule(name), completed = parseTaskTimestamp(localStorage.getItem(schedule.completedKey)), attempt = parseTaskTimestamp(localStorage.getItem(schedule.attemptKey));
       return { ...schedule, completed, attempt, pending: null != attempt && (null == completed || attempt > completed) };
     }
-    /** 返回当前标签页可证明的任务状态，不写入调度数据。 */
     getTaskStatusSnapshot(name) {
       const state = this.getTaskScheduleState(name), storedNext = parseTaskTimestamp(localStorage.getItem(state.nextKey));
       const nextAt = null == storedNext ? state.pending && null != state.attempt ? state.attempt + 3e5 : 0 : storedNext, now = Date.now();
@@ -12523,7 +12520,6 @@ ${error.stack}` : "");
         this.configLoadPromise = null;
       })), this.configLoadPromise;
     }
-    /** 确保所有任务入口均已具备配置和站点地址。 */
     async ensureReady() {
       (!this.taskConfig || this.taskConfigDirty) && await this.loadConfig(), this.javDbUrl || (this.javDbUrl = await this.getDependency("OtherSitePlugin").getJavDbUrl());
       if (!this.javDbUrl) throw new Error("JavDB 地址未配置");
@@ -13115,7 +13111,6 @@ ${error.stack}` : "");
         throw this.isTokenExpiredError(i2) ? "TOKEN_EXPIRED" : i2.message ? "响应解析失败: " + i2.message : String(i2);
       }
     }
-    /** CRC32-IEEE (poly 0xEDB88320) — 与 Go crc32.ChecksumIEEE 一致 */
     _crc32(e2) {
       const t2 = new Array(256);
       for (let n3 = 0; n3 < 256; n3++) {
@@ -13127,7 +13122,6 @@ ${error.stack}` : "");
       for (let a2 = 0; a2 < e2.length; a2++) n2 = t2[(n2 ^ e2.charCodeAt(a2)) & 255] ^ n2 >>> 8;
       return (n2 ^ 4294967295) >>> 0;
     }
-    /** 为 123 云盘 API URL 附加签名查询参数（与 Go signPath 算法一致） */
     _signUrl(e2) {
       const t2 = ["a", "d", "e", "f", "g", "h", "l", "m", "y", "i", "j", "n", "o", "p", "k", "q", "r", "s", "t", "u", "b", "c", "v", "w", "s", "z"];
       const n2 = Math.round(1e7 * Math.random());
@@ -13885,7 +13879,6 @@ ${error.stack}` : "");
     doFilterMagnet() {
       this.handleDb(), this.handleBus();
     }
-    /** 给磁力行注入评分徽章（幂等：已有则跳过） */
     injectScoreBadge(el, title) {
       try {
         if (el.find(".jhs-magnet-score").length > 0) return;
@@ -13905,7 +13898,6 @@ ${error.stack}` : "");
       const value = String(title || "").toLowerCase(), resolution = /(?:4k|2160p|1080p|720p)/.exec(value)?.[0] || "", subtitle = hasSubtitleTag || /(?:-c\b|-u(?:c)?\b|chinese|中字|字幕)/.test(value);
       return { resolution, subtitle, recognized: !!resolution || subtitle, highQuality: "4k" === resolution || "2160p" === resolution || subtitle };
     }
-    /** 返回与 DOM 无关的磁力质量结果，供自有详情工作区复用。 */
     assessMagnet({ title = "", hasHdTag = false, hasSubtitleTag = false, date = null, seeders = 0 } = {}) {
       const signals = this.getQualitySignals(title, hasSubtitleTag), highQuality = hasHdTag || signals.highQuality;
       const score = calcMagnetScore({ title, date, seeders, resolution: hasHdTag && !signals.resolution ? "1080p" : signals.resolution, hasSubtitle: signals.subtitle });
@@ -13957,7 +13949,6 @@ ${error.stack}` : "");
 
   // src/core/selection-model.js
   var _SelectionModel = class _SelectionModel extends EventTarget {
-    /** @param {(item: any) => string} keyOf */
     constructor(keyOf) {
       super();
       this.keyOf = keyOf;
@@ -13965,7 +13956,6 @@ ${error.stack}` : "");
       this.selected = /* @__PURE__ */ new Set();
       this.excluded = /* @__PURE__ */ new Set();
     }
-    /** @param {any} item @param {boolean} selected */
     set(item, selected) {
       const key = this.keyOf(item), target = this.mode === "all-filtered" ? this.excluded : this.selected;
       this.mode === "all-filtered" ? selected ? target.delete(key) : target.add(key) : selected ? target.add(key) : target.delete(key);
@@ -13983,12 +13973,10 @@ ${error.stack}` : "");
       this.excluded.clear();
       this.emit();
     }
-    /** @param {any} item */
     has(item) {
       const key = this.keyOf(item);
       return this.mode === "all-filtered" ? !this.excluded.has(key) : this.selected.has(key);
     }
-    /** @param {any[]} filteredItems */
     values(filteredItems) {
       return this.mode === "all-filtered" ? filteredItems.filter((item) => !this.excluded.has(this.keyOf(item))) : filteredItems.filter((item) => this.selected.has(this.keyOf(item)));
     }
@@ -14157,7 +14145,6 @@ ${error.stack}` : "");
     isHistoryAllFiltered() {
       return "all-filtered" === this.historySelectionModel.mode;
     }
-    /** 清空 History 的全选、排除项和当前页选择。 */
     resetHistorySelection(deselectRows = true) {
       this.historySelectionModel.clear();
       if (deselectRows && this.tableObj) {
@@ -14214,7 +14201,6 @@ ${error.stack}` : "");
         element.checked = this.isHistoryAllFiltered(), element.indeterminate = this.isHistoryAllFiltered() ? this.historySelectionModel.excluded.size > 0 : summary.count > 0;
       }));
     }
-    /** 解析批量操作实际要处理的当前页或完整筛选结果。 */
     async getHistoryBatchSelection() {
       if (!this.isHistoryAllFiltered()) return this.historySelectionModel.values(this.tableObj?.getData?.() || []);
       const rows = await this.getFilteredHistoryData(this.historySorters), available = new Set(rows.map(((item) => this.normalizeHistoryCarNum(item.carNum))));
@@ -14282,7 +14268,6 @@ ${error.stack}` : "");
         }));
       }));
     }
-    /** 返回应用当前搜索、状态筛选和排序后的完整 History 数据。 */
     async getFilteredHistoryData(sorters = this.historySorters) {
       let a2 = await storageManager.getCarList();
       this.allCount = a2.length, this.filterCount = 0, this.favoriteCount = 0, this.hasDownCount = 0, this.hasWatchCount = 0, this.waitCheckCount = 0, a2.forEach(((e2) => {
@@ -14656,7 +14641,6 @@ ${error.stack}` : "");
       const newVideoCount = $("#newVideoCount").detach(), newVideoLabel = $("#newVideoBtn > span");
       newVideoLabel.length && newVideoLabel.empty().append(document.createTextNode("新作品 ("), newVideoCount, document.createTextNode(")"));
     }
-    /** 构建与原排序值兼容的 JHS 菜单。 */
     sortMenuHtml(method, title = "选择列表排序方式") {
       const labels = { default: "默认", rateCount: "评价人数", date: "时间" }, current = labels[method] || labels.default;
       return `<div class="jhs-sort-control"><button type="button" id="sort-toggle-btn" class="jhs-btn jhs-btn--secondary" aria-haspopup="menu" aria-expanded="false" title="${title}"><span id="jhs-sort-current">${current}</span></button><div class="jhs-popover jhs-sort-menu" role="menu" aria-label="排序方式">${Object.entries(labels).map((([value, label]) => `<button type="button" class="jhs-btn jhs-btn--ghost jhs-sort-option" role="menuitemradio" aria-checked="${value === method ? "true" : "false"}" data-sort-method="${value}" tabindex="-1">${label}</button>`)).join("")}</div></div>`;
@@ -14719,7 +14703,6 @@ ${error.stack}` : "");
         }));
       }));
     }
-    /** 绑定排序 popover 的选择与键盘交互。 */
     bindSortMenu() {
       const control = $(".jhs-sort-control"), toggle = control.find("#sort-toggle-btn"), menu = control.find(".jhs-sort-menu"), close = /* @__PURE__ */ __name((focus = false) => {
         menu.removeClass("is-open"), toggle.attr("aria-expanded", "false"), focus && toggle.trigger("focus");
@@ -14993,7 +14976,6 @@ ${error.stack}` : "");
     async afterPluginsReady() {
       this.buildCommandBar();
     }
-    /** 将列表页分散的 JHS 控件收敛为单一命令栏。 */
     buildCommandBar() {
       if (!window.isListPage || $("#jhs-page-commandbar").length) return;
       const commandbar = $(`
@@ -15058,7 +15040,6 @@ ${error.stack}` : "");
       }));
       this.getDependency("ListPagePlugin")?.syncQuickFilterUi();
     }
-    /** 获取详情页番号 */
     getCarNum() {
       try {
         const basePlugin = this.getDependency("DetailPageButtonPlugin");
@@ -15082,7 +15063,6 @@ ${error.stack}` : "");
       } else items = group(item("logger", "运行日志") + item("setting", "设置"));
       return $(`<div id="jhs-fab-menu" class="jhs-fab-menu" role="menu" aria-hidden="true">${items}</div>`);
     }
-    /** 刷新详情页菜单的状态指示 */
     async refreshDetailStatus() {
       try {
         const carNum = this.getCarNum();
@@ -15407,7 +15387,7 @@ ${error.stack}` : "");
   var legacyContributionManifests = Object.freeze([
     manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [SERVICE.translation]),
     manifest("list.auto-page", "list", AutoPagePlugin, ["javdb", "javbus"], { javdb: 2, javbus: 5 }),
-    manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.screenshot]),
+    manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related]),
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }),
@@ -15420,8 +15400,8 @@ ${error.stack}` : "");
     manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [SERVICE.movie, SERVICE.translation, SERVICE.settings]),
     manifest("detail.native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }),
     manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }),
-    manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie]),
-    manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related]),
+    manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage]),
+    manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related, SERVICE.settings]),
     manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie]),
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }),
     manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }),
@@ -15468,6 +15448,7 @@ ${error.stack}` : "");
         [SERVICE.screenshot, "screenshot"],
         [SERVICE.translation, "translation"],
         [SERVICE.webdav, "webdav"],
+        [SERVICE.storage, "storage"],
         [SERVICE.dialog, "dialog"]
       ]);
       for (const token of item.requires) {
@@ -15494,9 +15475,7 @@ ${error.stack}` : "");
   function assertPort(implementation, name, methods) {
     if (!implementation || typeof implementation !== "object") throw new TypeError(`${name} implementation is required`);
     for (const method of methods) {
-      if (typeof /** @type {Record<string, unknown>} */
-      /** @type {unknown} */
-      implementation[method] !== "function") throw new TypeError(`${name}.${method} is required`);
+      if (typeof implementation[method] !== "function") throw new TypeError(`${name}.${method} is required`);
     }
     return implementation;
   }
@@ -15511,21 +15490,17 @@ ${error.stack}` : "");
 
   // src/platform/browser/browser-navigation-adapter.js
   var _BrowserNavigationAdapter = class _BrowserNavigationAdapter {
-    /** @param {{location?: Location, open?: typeof window.open}} [runtime] */
     constructor(runtime = {}) {
       this.location = runtime.location ?? window.location;
       this.openWindow = runtime.open ?? window.open.bind(window);
       assertPort(this, "NavigationPort", PORT_METHODS.navigation);
     }
-    /** @param {string} url @param {{newTab?: boolean}} [options] */
     open(url, options = {}) {
       return options.newTab ? this.openWindow(url, "_blank", "noopener") : this.assign(url);
     }
-    /** @param {string} url */
     assign(url) {
       this.location.assign(url);
     }
-    /** @param {string} url */
     replace(url) {
       this.location.replace(url);
     }
@@ -15535,11 +15510,9 @@ ${error.stack}` : "");
 
   // src/platform/browser/browser-style-adapter.js
   var _BrowserStyleAdapter = class _BrowserStyleAdapter {
-    /** @param {Document} [documentRuntime] */
     constructor(documentRuntime = document) {
       this.document = documentRuntime;
     }
-    /** @param {string} id @param {string} css */
     register(id, css) {
       if (this.document.getElementById(id)) throw new Error(`Duplicate style: ${id}`);
       const style = this.document.createElement("style");
@@ -15548,7 +15521,6 @@ ${error.stack}` : "");
       this.document.head.append(style);
       return () => style.remove();
     }
-    /** @param {string} id */
     remove(id) {
       this.document.getElementById(id)?.remove();
     }
@@ -15558,19 +15530,15 @@ ${error.stack}` : "");
 
   // src/platform/userscript/indexeddb-storage-adapter.js
   var _IndexedDbStorageAdapter = class _IndexedDbStorageAdapter {
-    /** @param {{getItem: (key: string) => Promise<unknown>, setItem: (key: string, value: unknown) => Promise<unknown>, removeItem: (key: string) => Promise<unknown>}} forage */
     constructor(forage) {
       this.forage = forage;
     }
-    /** @param {string} key */
     get(key) {
       return this.forage.getItem(key);
     }
-    /** @param {string} key @param {unknown} value */
     async set(key, value) {
       await this.forage.setItem(key, value);
     }
-    /** @param {string} key */
     async remove(key) {
       await this.forage.removeItem(key);
     }
@@ -15580,15 +15548,12 @@ ${error.stack}` : "");
 
   // src/platform/userscript/layer-dialog-adapter.js
   var _LayerDialogAdapter = class _LayerDialogAdapter {
-    /** @param {{open: (options: Record<string, unknown>) => number, close: (id: number) => void}} layerRuntime */
     constructor(layerRuntime) {
       this.layer = layerRuntime;
     }
-    /** @param {Record<string, unknown>} options */
     open(options) {
       return this.layer.open(options);
     }
-    /** @param {number} id */
     close(id) {
       this.layer.close(id);
     }
@@ -15598,12 +15563,10 @@ ${error.stack}` : "");
 
   // src/platform/userscript/userscript-http-adapter.js
   var _UserscriptHttpAdapter = class _UserscriptHttpAdapter {
-    /** @param {(options: Record<string, any>) => {abort?: () => void} | void} requestImplementation */
     constructor(requestImplementation) {
       if (typeof requestImplementation !== "function") throw new TypeError("GM_xmlhttpRequest is required");
       this.requestImplementation = requestImplementation;
     }
-    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, timeout?: number, signal?: AbortSignal, requestOptions?: Record<string, unknown>}} options */
     request(options) {
       return new Promise((resolve, reject) => {
         let settled = false;
@@ -15647,14 +15610,12 @@ ${error.stack}` : "");
 
   // src/services/cache-service.js
   var _CacheService = class _CacheService {
-    /** @param {{namespaceVersion?: number, diagnostics?: import("./diagnostics-service.js").DiagnosticsService}} [options] */
     constructor(options = {}) {
       this.namespaceVersion = options.namespaceVersion ?? 1;
       this.diagnostics = options.diagnostics ?? null;
       this.publicCache = /* @__PURE__ */ new Map();
       this.sessionCaches = /* @__PURE__ */ new Map();
     }
-    /** @param {string} scope @param {string} sessionScopeId */
     storeFor(scope, sessionScopeId = "") {
       if (scope === "public") return this.publicCache;
       if (scope === "session") {
@@ -15665,7 +15626,6 @@ ${error.stack}` : "");
       }
       return null;
     }
-    /** @param {string} key @param {{scope: string, sessionScopeId?: string}} policy */
     get(key, policy) {
       const store = this.storeFor(policy.scope, policy.sessionScopeId);
       const entry = store?.get(`${this.namespaceVersion}:${key}`);
@@ -15677,7 +15637,6 @@ ${error.stack}` : "");
       this.diagnostics?.recordCache(true);
       return { hit: true, value: entry.value, negative: entry.negative };
     }
-    /** @param {string} key @param {unknown} value @param {{scope: string, sessionScopeId?: string, ttlMs: number, negative?: boolean}} policy */
     set(key, value, policy) {
       const store = this.storeFor(policy.scope, policy.sessionScopeId);
       if (!store) return;
@@ -15693,12 +15652,10 @@ ${error.stack}` : "");
 
   // src/services/actress-info-service.js
   var _ActressInfoService = class _ActressInfoService {
-    /** @param {import("../app/integration-registry.js").IntegrationRegistry} integrations @param {import("./cache-service.js").CacheService} cache */
     constructor(integrations, cache) {
       this.integrations = integrations;
       this.cache = cache;
     }
-    /** @param {string} name */
     profileUrl(name) {
       for (const manifest2 of this.integrations.list("person.actress-info")) {
         const adapter = this.integrations.getAdapter(manifest2.id);
@@ -15706,7 +15663,6 @@ ${error.stack}` : "");
       }
       return "";
     }
-    /** @param {string} name @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async lookup(name, options = {}) {
       const normalized = String(name).trim() === "三上悠亞" ? "三上悠亜" : String(name).trim();
       if (!normalized) return null;
@@ -15752,46 +15708,35 @@ ${error.stack}` : "");
       this.legacyStartup = null;
       this.legacyTimings = [];
     }
-    /** @param {string} id @param {number} durationMs */
     recordStartup(id, durationMs) {
       this.startupTimings.set(id, durationMs);
     }
-    /** @param {string} id @param {boolean} active */
     setFeature(id, active) {
       active ? this.activeFeatures.add(id) : this.activeFeatures.delete(id);
     }
-    /** @param {string} id @param {boolean} active */
     setContribution(id, active) {
       active ? this.activeContributions.add(id) : this.activeContributions.delete(id);
     }
-    /** @param {{id: string}} snapshot */
     updateScope(snapshot) {
       this.scopes.set(snapshot.id, Object.freeze({ ...snapshot }));
     }
-    /** @param {number} consumers @param {number} underlying */
     updateRequests(consumers, underlying) {
       this.requestStats = { consumers, underlying };
     }
-    /** @param {boolean} hit */
     recordCache(hit) {
       hit ? this.cacheStats.hits += 1 : this.cacheStats.misses += 1;
     }
-    /** @param {string} id @param {Record<string, unknown>} health */
     updateProvider(id, health) {
       this.providerHealth.set(id, Object.freeze({ ...health }));
     }
-    /** @param {unknown} error */
     recordError(error) {
       const value = error && typeof error === "object" && "toJSON" in error && typeof error.toJSON === "function" ? error.toJSON() : error instanceof Error ? { message: error.message } : error && typeof error === "object" ? { ...error } : { message: String(error) };
-      this.errors.push({ .../** @type {Record<string, any>} */
-      sanitize(value), timestamp: (/* @__PURE__ */ new Date()).toISOString() });
+      this.errors.push({ ...sanitize(value), timestamp: (/* @__PURE__ */ new Date()).toISOString() });
       if (this.errors.length > 100) this.errors.shift();
     }
-    /** @param {Record<string, unknown>} metadata */
     setBrowserMetadata(metadata) {
       this.browserMetadata = Object.freeze({ ...metadata });
     }
-    /** @param {string[]} names @param {Record<string, unknown>} startup @param {Array<Record<string, unknown>>} timings */
     setLegacyRuntime(names, startup, timings) {
       this.legacyPlugins = [...names];
       this.legacyStartup = Object.freeze({ ...startup });
@@ -15828,15 +15773,12 @@ ${error.stack}` : "");
 
   // src/services/dialog-service.js
   var _DialogService = class _DialogService {
-    /** @param {any} dialogPort */
     constructor(dialogPort) {
       this.port = assertPort(dialogPort, "DialogPort", PORT_METHODS.dialog);
     }
-    /** @param {Record<string, unknown>} options */
     open(options) {
       return this.port.open(options);
     }
-    /** @param {number} id */
     close(id) {
       return this.port.close(id);
     }
@@ -15861,15 +15803,12 @@ ${error.stack}` : "");
   }
   __name(isPrivateLiteral, "isPrivateLiteral");
   var _ExternalUrlPolicy = class _ExternalUrlPolicy {
-    /** @param {{localOrigins?: string[]}} [options] */
     constructor(options = {}) {
       this.localOrigins = new Set((options.localOrigins ?? []).map((origin) => new URL(origin).origin));
     }
-    /** @param {string} origin */
     authorizeLocalOrigin(origin) {
       this.localOrigins.add(new URL(origin).origin);
     }
-    /** @param {string | URL} input @param {{trustClass: string, hosts?: string[], expectedOrigin?: string}} policy */
     assertAllowed(input, policy) {
       let url;
       try {
@@ -15890,7 +15829,6 @@ ${error.stack}` : "");
       } else throw new JhsError("INVALID_URL", "未知 URL trust class", { source: "ExternalUrlPolicy" });
       return url;
     }
-    /** @param {string | URL} finalUrl @param {{trustClass: string, hosts?: string[], expectedOrigin?: string}} policy */
     assertFinalUrl(finalUrl, policy) {
       return this.assertAllowed(finalUrl, policy);
     }
@@ -15902,10 +15840,7 @@ ${error.stack}` : "");
   function stableSerialize(value) {
     if (value == null || typeof value !== "object") return JSON.stringify(value);
     if (Array.isArray(value)) return `[${value.map(stableSerialize).join(",")}]`;
-    const object = (
-      /** @type {Record<string, unknown>} */
-      value
-    );
+    const object = value;
     return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableSerialize(object[key])}`).join(",")}}`;
   }
   __name(stableSerialize, "stableSerialize");
@@ -15944,7 +15879,6 @@ ${error.stack}` : "");
   }
   __name(createRequestKey, "createRequestKey");
   var _HttpService = class _HttpService {
-    /** @param {{request: (options: any) => Promise<any>}} port @param {import("./external-url-policy.js").ExternalUrlPolicy} urlPolicy @param {{diagnostics?: import("./diagnostics-service.js").DiagnosticsService, cache?: import("./cache-service.js").CacheService}} [options] */
     constructor(port, urlPolicy, options = {}) {
       this.port = port;
       this.urlPolicy = urlPolicy;
@@ -15952,15 +15886,11 @@ ${error.stack}` : "");
       this.cache = options.cache ?? null;
       this.inflight = /* @__PURE__ */ new Map();
     }
-    /** @param {Record<string, any>} options @param {import("../core/lifecycle-scope.js").LifecycleScope} [scope] */
     async request(options, scope) {
       const method = String(options.method ?? "GET").toUpperCase();
       const cacheScope = options.cacheScope ?? "none";
       if (method !== "GET" && cacheScope !== "none") throw new TypeError("Mutation requests cannot use generic cache/dedupe");
-      const urlPolicy = (
-        /** @type {{trustClass: string, hosts?: string[], expectedOrigin?: string}} */
-        options.urlPolicy
-      );
+      const urlPolicy = options.urlPolicy;
       const initialUrl = this.urlPolicy.assertAllowed(options.url, urlPolicy);
       const requestKey = await createRequestKey({ ...options, method, url: initialUrl.href, cacheScope });
       const serializedKey = stableSerialize(requestKey);
@@ -15985,7 +15915,6 @@ ${error.stack}` : "");
       }
       return this.consume(entry, scope);
     }
-    /** @param {Record<string, any>} options @param {{trustClass: string, hosts?: string[], expectedOrigin?: string}} urlPolicy */
     async executeUnderlying(options, urlPolicy) {
       try {
         const response = await this.port.request(options);
@@ -15998,7 +15927,6 @@ ${error.stack}` : "");
         throw normalized;
       }
     }
-    /** @param {{promise: Promise<any>, controller: AbortController, consumers: number}} entry @param {import("../core/lifecycle-scope.js").LifecycleScope} [scope] */
     consume(entry, scope) {
       entry.consumers += 1;
       let released = false;
@@ -16027,12 +15955,8 @@ ${error.stack}` : "");
         consumer.release();
       });
     }
-    /** @param {{promise: Promise<any>}} entry */
     isSettled(entry) {
-      return ![...this.inflight.values()].includes(
-        /** @type {any} */
-        entry
-      );
+      return ![...this.inflight.values()].includes(entry);
     }
     updateDiagnostics() {
       const consumers = [...this.inflight.values()].reduce((sum, entry) => sum + entry.consumers, 0);
@@ -16044,19 +15968,15 @@ ${error.stack}` : "");
 
   // src/services/navigation-service.js
   var _NavigationService = class _NavigationService {
-    /** @param {any} navigationPort */
     constructor(navigationPort) {
       this.port = assertPort(navigationPort, "NavigationPort", PORT_METHODS.navigation);
     }
-    /** @param {string | URL} url @param {{newTab?: boolean}} [options] */
     open(url, options) {
       return this.port.open(String(url), options);
     }
-    /** @param {string | URL} url */
     assign(url) {
       return this.port.assign(String(url));
     }
-    /** @param {string | URL} url */
     replace(url) {
       return this.port.replace(String(url));
     }
@@ -16066,12 +15986,10 @@ ${error.stack}` : "");
 
   // src/services/magnet-service.js
   var _MagnetService = class _MagnetService {
-    /** @param {import("../app/provider-registry.js").ProviderRegistry} providers @param {import("../app/integration-registry.js").IntegrationRegistry | null} [integrations] */
     constructor(providers, integrations = null) {
       this.providers = providers;
       this.integrations = integrations;
     }
-    /** @param {Record<string, unknown>} movieRef @param {Record<string, unknown>} [context] */
     async search(movieRef, context = {}) {
       const results = [];
       for (const provider of await this.providers.getAvailable("magnet", context)) {
@@ -16085,7 +16003,6 @@ ${error.stack}` : "");
       }
       return results;
     }
-    /** @param {Record<string, unknown>} movieRef @param {Record<string, any>} [context] */
     async listNative(movieRef, context = {}) {
       const providerId = typeof movieRef.providerId === "string" ? movieRef.providerId : "javdb";
       const manifest2 = (this.integrations?.list("movie.magnets") ?? []).find((item) => item.id === providerId);
@@ -16099,15 +16016,12 @@ ${error.stack}` : "");
 
   // src/services/movie-identity-service.js
   var _MovieIdentityService = class _MovieIdentityService {
-    /** @param {import("../app/integration-registry.js").IntegrationRegistry | null} [integrations] */
     constructor(integrations = null) {
       this.integrations = integrations;
     }
-    /** @param {unknown} value */
     normalize(value) {
       return normalizeMovieCarNum(value);
     }
-    /** @param {...unknown} candidates */
     firstValid(...candidates) {
       for (const candidate of candidates) {
         const carNum = this.normalize(candidate);
@@ -16115,7 +16029,6 @@ ${error.stack}` : "");
       }
       return null;
     }
-    /** @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async resolve(movieRef, options = {}) {
       const carNum = this.normalize(movieRef.carNum);
       if (!carNum) return null;
@@ -16130,7 +16043,6 @@ ${error.stack}` : "");
       }
       return Object.freeze({ ...movieRef, carNum });
     }
-    /** @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async detail(movieRef, options = {}) {
       const candidates = this.integrations?.list("movie.detail") ?? [];
       const providerId = typeof movieRef.providerId === "string" ? movieRef.providerId : movieRef.movieId ? "javdb" : null;
@@ -16141,7 +16053,6 @@ ${error.stack}` : "");
       }
       return null;
     }
-    /** @param {{period?: string, filter?: string, scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async rankings(options = {}) {
       for (const manifest2 of this.integrations?.list("movie.ranking") ?? []) {
         const adapter = this.integrations?.getAdapter(manifest2.id);
@@ -16149,7 +16060,6 @@ ${error.stack}` : "");
       }
       return [];
     }
-    /** @param {string} providerId @param {Record<string, unknown>} query @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async catalog(providerId, query = {}, options = {}) {
       const manifest2 = (this.integrations?.list("movie.catalog") ?? []).find((item) => item.id === providerId);
       if (!manifest2) throw new TypeError(`Movie catalog provider is unavailable: ${providerId}`);
@@ -16157,21 +16067,18 @@ ${error.stack}` : "");
       if (typeof adapter?.listCatalog !== "function") throw new TypeError(`Movie catalog operation is unavailable: ${providerId}`);
       return adapter.listCatalog(query, options);
     }
-    /** @param {string} providerId @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async people(providerId, movieRef, options = {}) {
       const manifest2 = (this.integrations?.list("movie.credits") ?? []).find((item) => item.id === providerId);
       if (!manifest2) return Object.freeze({ actors: Object.freeze([]), seller: null });
       const adapter = this.integrations?.getAdapter(manifest2.id);
       return typeof adapter?.getPeople === "function" ? adapter.getPeople(movieRef, options) : Object.freeze({ actors: Object.freeze([]), seller: null });
     }
-    /** @param {string} providerId @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async images(providerId, movieRef, options = {}) {
       const manifest2 = (this.integrations?.list("movie.images") ?? []).find((item) => item.id === providerId);
       if (!manifest2) return [];
       const adapter = this.integrations?.getAdapter(manifest2.id);
       return typeof adapter?.getImages === "function" ? adapter.getImages(movieRef, options) : [];
     }
-    /** @param {Record<string, unknown>} movieRef @param {string[]} providerIds */
     sourceUrls(movieRef, providerIds) {
       return Object.freeze(providerIds.map((providerId) => {
         try {
@@ -16183,7 +16090,6 @@ ${error.stack}` : "");
         }
       }).filter(Boolean));
     }
-    /** @param {string} providerId @param {Record<string, unknown>} movieRef */
     searchUrl(providerId, movieRef) {
       try {
         const adapter = this.integrations?.getAdapter(providerId);
@@ -16192,7 +16098,6 @@ ${error.stack}` : "");
         return null;
       }
     }
-    /** @param {string} providerId @param {string} url */
     matchesProviderUrl(providerId, url) {
       try {
         const adapter = this.integrations?.getAdapter(providerId);
@@ -16207,11 +16112,9 @@ ${error.stack}` : "");
 
   // src/services/offline-service.js
   var _OfflineService = class _OfflineService {
-    /** @param {import("../app/provider-registry.js").ProviderRegistry} providers */
     constructor(providers) {
       this.providers = providers;
     }
-    /** @param {Record<string, unknown>} resource @param {Record<string, unknown>} [context] */
     async submit(resource, context = {}) {
       const providers = await this.providers.getAvailable("offline", context);
       const failures = [];
@@ -16233,7 +16136,6 @@ ${error.stack}` : "");
 
   // src/services/profile-service.js
   var _ProfileService = class _ProfileService extends EventTarget {
-    /** @param {{windowRuntime?: Window, scope: import("../core/lifecycle-scope.js").LifecycleScope}} options */
     constructor(options) {
       super();
       this.window = options.windowRuntime ?? window;
@@ -16272,11 +16174,9 @@ ${error.stack}` : "");
 
   // src/services/related-service.js
   var _RelatedService = class _RelatedService {
-    /** @param {import("../app/integration-registry.js").IntegrationRegistry} integrations */
     constructor(integrations) {
       this.integrations = integrations;
     }
-    /** @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope, page?: number, limit?: number}} [options] */
     async list(movieRef, options = {}) {
       for (const manifest2 of this.integrations.list("movie.related")) {
         const adapter = this.integrations.getAdapter(manifest2.id);
@@ -16290,11 +16190,9 @@ ${error.stack}` : "");
 
   // src/services/review-service.js
   var _ReviewService = class _ReviewService {
-    /** @param {import("../app/integration-registry.js").IntegrationRegistry} integrations */
     constructor(integrations) {
       this.integrations = integrations;
     }
-    /** @param {Record<string, unknown>} movieRef @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope, page?: number, limit?: number}} [options] */
     async list(movieRef, options = {}) {
       for (const manifest2 of this.integrations.list("movie.reviews")) {
         const adapter = this.integrations.getAdapter(manifest2.id);
@@ -16308,12 +16206,10 @@ ${error.stack}` : "");
 
   // src/services/screenshot-service.js
   var _ScreenshotService = class _ScreenshotService {
-    /** @param {import("../app/provider-registry.js").ProviderRegistry} providers @param {import("../app/integration-registry.js").IntegrationRegistry | null} [integrations] */
     constructor(providers, integrations = null) {
       this.providers = providers;
       this.integrations = integrations;
     }
-    /** @param {Record<string, unknown>} movieRef @param {Record<string, unknown>} [context] */
     async resolve(movieRef, context = {}) {
       for (const provider of await this.providers.getAvailable("screenshot", context)) {
         try {
@@ -16338,11 +16234,9 @@ ${error.stack}` : "");
 
   // src/services/translation-service.js
   var _TranslationService = class _TranslationService {
-    /** @param {import("../app/integration-registry.js").IntegrationRegistry} integrations */
     constructor(integrations) {
       this.integrations = integrations;
     }
-    /** @param {string} text @param {{sourceLanguage?: string, targetLanguage?: string, scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async translate(text, options = {}) {
       const manifest2 = this.integrations.list("text.translate")[0];
       if (!manifest2) throw new TypeError("Translation provider is unavailable");
@@ -16356,7 +16250,6 @@ ${error.stack}` : "");
 
   // src/services/settings-service.js
   var _SettingsService = class _SettingsService extends EventTarget {
-    /** @param {{get: (key: string) => Promise<unknown>, set: (key: string, value: unknown) => Promise<void>}} storage @param {{validators?: Record<string, (value: unknown) => boolean>}} [options] */
     constructor(storage, options = {}) {
       super();
       this.storage = storage;
@@ -16364,7 +16257,6 @@ ${error.stack}` : "");
       this.snapshotValue = Object.freeze({});
       this.writeChain = Promise.resolve();
     }
-    /** @param {string} key */
     async load(key = "setting") {
       const stored = await this.storage.get(key);
       this.snapshotValue = Object.freeze(stored && typeof stored === "object" && !Array.isArray(stored) ? { ...stored } : {});
@@ -16373,7 +16265,6 @@ ${error.stack}` : "");
     snapshot() {
       return this.snapshotValue;
     }
-    /** @param {string} name @param {unknown} value @param {string} [storageKey] */
     async set(name, value, storageKey = "setting") {
       const validator = this.validators[name];
       if (validator && !validator(value)) throw new TypeError(`Invalid setting: ${name}`);
@@ -16393,19 +16284,15 @@ ${error.stack}` : "");
 
   // src/services/storage-service.js
   var _StorageService = class _StorageService {
-    /** @param {any} storagePort */
     constructor(storagePort) {
       this.port = assertPort(storagePort, "StoragePort", PORT_METHODS.storage);
     }
-    /** @param {string} key */
     get(key) {
       return this.port.get(key);
     }
-    /** @param {string} key @param {unknown} value */
     set(key, value) {
       return this.port.set(key, value);
     }
-    /** @param {string} key */
     remove(key) {
       return this.port.remove(key);
     }
@@ -16415,7 +16302,6 @@ ${error.stack}` : "");
 
   // src/services/webdav-service.js
   var _WebDavClient = class _WebDavClient {
-    /** @param {import("./http-service.js").HttpService} http @param {string} davUrl @param {string} username @param {string} password */
     constructor(http, davUrl, username, password) {
       this.http = http;
       this.baseUrl = new URL(davUrl.endsWith("/") ? davUrl : `${davUrl}/`);
@@ -16426,7 +16312,6 @@ ${error.stack}` : "");
     authHeaders() {
       return { Authorization: `Basic ${btoa(`${this.username}:${this.password}`)}`, Depth: "1" };
     }
-    /** @param {string} method @param {string} path @param {Record<string, string>} [headers] @param {unknown} [body] */
     async request(method, path, headers = {}, body) {
       const url = new URL(path.replace(/^\/+/, ""), this.baseUrl);
       const response = await this.http.request({
@@ -16441,7 +16326,6 @@ ${error.stack}` : "");
       });
       return response.data ?? response.responseText ?? "";
     }
-    /** @param {string} folder */
     async ensureFolder(folder) {
       try {
         await this.request("MKCOL", folder);
@@ -16449,12 +16333,10 @@ ${error.stack}` : "");
         if (!(error instanceof Error) || !/HTTP (405|409)/.test(error.message)) throw error;
       }
     }
-    /** @param {string} folder @param {string} name @param {string} content */
     async backup(folder, name, content) {
       await this.ensureFolder(folder);
       await this.request("PUT", `${folder}/${name}`, { "Content-Type": "text/plain" }, content);
     }
-    /** @param {string} folder */
     async getFileList(folder) {
       const xml = String(await this.request("PROPFIND", folder, { "Content-Type": "application/xml" }, '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:displayname/><d:getcontentlength/><d:creationdate/><d:getlastmodified/><d:iscollection/></d:prop></d:propfind>'));
       const responses = new DOMParser().parseFromString(xml, "text/xml").getElementsByTagNameNS("DAV:", "response"), files = [];
@@ -16465,17 +16347,14 @@ ${error.stack}` : "");
       }
       return files.reverse();
     }
-    /** @param {string} name */
     async deleteFile(name) {
       await this.request("DELETE", `${this.folderName}/${encodeURI(name)}`, { "Cache-Control": "no-cache" });
     }
-    /** @param {string} folder */
     async getBackupList(folder) {
       this.folderName = folder;
       await this.ensureFolder(folder);
       return this.getFileList(folder);
     }
-    /** @param {string} name */
     async getFileContent(name) {
       return String(await this.request("GET", `${this.folderName}/${name}`, { Accept: "application/octet-stream" }));
     }
@@ -16483,11 +16362,9 @@ ${error.stack}` : "");
   __name(_WebDavClient, "WebDavClient");
   var WebDavClient = _WebDavClient;
   var _WebDavService = class _WebDavService {
-    /** @param {import("./http-service.js").HttpService} http */
     constructor(http) {
       this.http = http;
     }
-    /** @param {{url: string, username: string, password: string}} config */
     createClient(config) {
       return new WebDavClient(this.http, config.url, config.username, config.password);
     }
@@ -16497,15 +16374,12 @@ ${error.stack}` : "");
 
   // src/services/style-registry.js
   var _StyleRegistry = class _StyleRegistry {
-    /** @param {any} stylePort */
     constructor(stylePort) {
       this.port = assertPort(stylePort, "StylePort", PORT_METHODS.style);
     }
-    /** @param {string} id @param {string} css */
     register(id, css) {
       return this.port.register(id, css);
     }
-    /** @param {string} id */
     remove(id) {
       return this.port.remove(id);
     }
@@ -16520,23 +16394,19 @@ ${error.stack}` : "");
       this.handlers = /* @__PURE__ */ new Map();
       this.activateOwner = null;
     }
-    /** @param {(featureId: string) => Promise<void>} activator */
     setActivator(activator) {
       this.activateOwner = activator;
     }
-    /** @param {string} command @param {string} featureId */
     registerOwner(command, featureId) {
       const owner = this.owners.get(command);
       if (owner && owner !== featureId) throw new Error(`Duplicate command owner: ${command}`);
       this.owners.set(command, featureId);
     }
-    /** @param {string} command @param {(...args: any[]) => any} handler @param {string} featureId */
     registerHandler(command, handler, featureId) {
       if (this.owners.get(command) !== featureId) throw new Error(`Feature ${featureId} does not own command ${command}`);
       if (this.handlers.has(command)) throw new Error(`Duplicate command handler: ${command}`);
       this.handlers.set(command, handler);
     }
-    /** @param {string} command @param  {...any} args */
     async execute(command, ...args) {
       const owner = this.owners.get(command);
       if (!owner) throw new Error(`Unknown command: ${command}`);
@@ -16554,12 +16424,10 @@ ${error.stack}` : "");
 
   // src/app/dependency-container.js
   var _DependencyContainer = class _DependencyContainer {
-    /** @param {{recordError?: (error: unknown) => void} | null} [diagnostics] */
     constructor(diagnostics = null) {
       this.values = /* @__PURE__ */ new Map();
       this.diagnostics = diagnostics;
     }
-    /** @param {symbol} token @param {unknown} value */
     register(token, value) {
       if (typeof token !== "symbol") throw new TypeError("Dependency token must be a symbol");
       if (this.values.has(token)) {
@@ -16570,7 +16438,6 @@ ${error.stack}` : "");
       this.values.set(token, value);
       return this;
     }
-    /** @param {readonly symbol[]} requiredTokens */
     resolveDeclared(requiredTokens) {
       const dependencies = /* @__PURE__ */ Object.create(null);
       for (const token of requiredTokens) {
@@ -16592,7 +16459,6 @@ ${error.stack}` : "");
 
   // src/app/feature-runtime.js
   var _FeatureRuntime = class _FeatureRuntime {
-    /** @param {{container: import("./dependency-container.js").DependencyContainer, commands: import("./command-registry.js").CommandRegistry, diagnostics: import("../services/diagnostics-service.js").DiagnosticsService, disabled?: string[], site?: string, route?: string}} options */
     constructor(options) {
       this.container = options.container;
       this.commands = options.commands;
@@ -16604,24 +16470,18 @@ ${error.stack}` : "");
       this.activations = /* @__PURE__ */ new Map();
       this.commands.setActivator((featureId) => this.activate(featureId).then(() => void 0));
     }
-    /** @param {Record<string, any>} manifest */
     register(manifest2) {
-      const validated = (
-        /** @type {Record<string, any>} */
-        defineFeature(manifest2)
-      );
+      const validated = defineFeature(manifest2);
       if (this.manifests.has(validated.id)) throw new Error(`Duplicate feature: ${validated.id}`);
       this.manifests.set(validated.id, validated);
       for (const command of validated.providesCommands) this.commands.registerOwner(command, validated.id);
     }
-    /** @param {Record<string, any>} manifest */
     isEligible(manifest2) {
       if (manifest2.kind !== "system" && this.disabled.has(manifest2.id)) return false;
       if (manifest2.sites.length && !manifest2.sites.includes(this.site)) return false;
       if (manifest2.routes.length && !manifest2.routes.includes(this.route)) return false;
       return true;
     }
-    /** @param {string} featureId @param {string} contributionId @param {string} legacyPluginId */
     isContributionEnabled(featureId, contributionId, legacyPluginId) {
       const manifest2 = this.manifests.get(featureId);
       if (!manifest2) return false;
@@ -16631,15 +16491,12 @@ ${error.stack}` : "");
       if (manifest2.kind === "system") return true;
       return !this.disabled.has(contributionId) && !this.disabled.has(legacyPluginId);
     }
-    /** @param {symbol[]} tokens */
     resolveDeclaredDependencies(tokens) {
       return this.container.resolveDeclared(tokens);
     }
-    /** @param {string} featureId */
     async getScope(featureId) {
       return (await this.activate(featureId)).scope;
     }
-    /** @param {string} id */
     activate(id) {
       const existing = this.activations.get(id);
       if (existing) return existing;
@@ -16651,7 +16508,6 @@ ${error.stack}` : "");
       activation.catch(() => this.activations.delete(id));
       return activation;
     }
-    /** @param {Record<string, any>} manifest */
     async activateManifest(manifest2) {
       const started = performance.now();
       const scope = new LifecycleScope(`feature:${manifest2.id}`, { onChange: /* @__PURE__ */ __name((snapshot) => this.diagnostics.updateScope(snapshot), "onChange") });
@@ -16699,13 +16555,11 @@ ${error.stack}` : "");
 
   // src/app/provider-registry.js
   var _ProviderRegistry = class _ProviderRegistry {
-    /** @param {import("../services/diagnostics-service.js").DiagnosticsService | null} [diagnostics] */
     constructor(diagnostics = null) {
       this.providers = /* @__PURE__ */ new Map();
       this.health = /* @__PURE__ */ new Map();
       this.diagnostics = diagnostics;
     }
-    /** @param {Record<string, any>} provider */
     register(provider) {
       if (!provider || typeof provider.id !== "string" || !Array.isArray(provider.capabilities)) {
         throw new TypeError("Provider requires id and capabilities");
@@ -16714,15 +16568,12 @@ ${error.stack}` : "");
       this.providers.set(provider.id, Object.freeze({ priority: 0, enabled: true, ...provider }));
       return provider;
     }
-    /** @param {string} id */
     get(id) {
       return this.providers.get(id) ?? null;
     }
-    /** @param {string} capability */
     list(capability) {
       return [...this.providers.values()].filter((provider) => provider.enabled !== false && provider.capabilities.includes(capability)).sort((left, right) => Number(right.priority ?? 0) - Number(left.priority ?? 0));
     }
-    /** @param {string} capability @param {unknown} context */
     async getAvailable(capability, context) {
       const result = [];
       for (const provider of this.list(capability)) {
@@ -16730,13 +16581,11 @@ ${error.stack}` : "");
       }
       return result;
     }
-    /** @param {string} id @param {Record<string, unknown>} result */
     updateHealth(id, result) {
       if (!this.providers.has(id)) throw new Error(`Unknown provider: ${id}`);
       this.health.set(id, Object.freeze({ ...result, updatedAt: Date.now() }));
       this.diagnostics?.updateProvider(id, result);
     }
-    /** @param {string} id */
     getHealth(id) {
       return this.health.get(id) ?? null;
     }
@@ -16746,20 +16595,15 @@ ${error.stack}` : "");
 
   // src/app/integration-registry.js
   var _IntegrationRegistry = class _IntegrationRegistry {
-    /** @param {import("./dependency-container.js").DependencyContainer} container @param {import("../services/diagnostics-service.js").DiagnosticsService} diagnostics */
     constructor(container, diagnostics) {
       this.container = container;
       this.diagnostics = diagnostics;
       this.manifests = /* @__PURE__ */ new Map();
       this.adapters = /* @__PURE__ */ new Map();
     }
-    /** @param {Record<string, any>} manifest */
     register(manifest2) {
       try {
-        const validated = (
-          /** @type {Record<string, any>} */
-          defineIntegration(manifest2)
-        );
+        const validated = defineIntegration(manifest2);
         if (this.manifests.has(validated.id)) throw new Error(`Duplicate integration: ${validated.id}`);
         this.manifests.set(validated.id, validated);
       } catch (error) {
@@ -16767,11 +16611,9 @@ ${error.stack}` : "");
         throw error;
       }
     }
-    /** @param {string} capability */
     list(capability) {
       return [...this.manifests.values()].filter((manifest2) => manifest2.capabilities.includes(capability));
     }
-    /** @param {string} id */
     getAdapter(id) {
       const cached = this.adapters.get(id);
       if (cached) return cached;
@@ -16797,17 +16639,14 @@ ${error.stack}` : "");
     constructor() {
       this.descriptors = /* @__PURE__ */ new Map();
     }
-    /** @param {{id: string, owner: string, contribution?: string, validate?: (value: unknown) => boolean} & Record<string, any>} descriptor */
     register(descriptor) {
       if (!descriptor?.id || !descriptor.owner) throw new TypeError("Setting descriptor requires id and owner");
       if (this.descriptors.has(descriptor.id)) throw new Error(`Duplicate setting descriptor: ${descriptor.id}`);
       this.descriptors.set(descriptor.id, Object.freeze({ ...descriptor }));
     }
-    /** @param {{disabledContributions?: Set<string>}} [options] */
     list(options = {}) {
       return [...this.descriptors.values()].filter((descriptor) => !descriptor.contribution || !options.disabledContributions?.has(descriptor.contribution));
     }
-    /** @param {string} id */
     get(id) {
       return this.descriptors.get(id) ?? null;
     }
@@ -16898,11 +16737,7 @@ ${error.stack}` : "");
       }
       return [...items.values()];
     }
-    const wrap = (
-      /** @type {any} */
-      globalThis.jQuery ?? /** @type {any} */
-      globalThis.$ ?? $page.constructor
-    );
+    const wrap = globalThis.jQuery ?? globalThis.$ ?? $page.constructor;
     $page.find(".card").each(((index, element) => {
       const $card = wrap(element);
       const $link = $card.find('a.card__link[href*="/cn/v/fc2-ppv-"]').first();
@@ -16925,10 +16760,7 @@ ${error.stack}` : "");
   __name(parse123AvCards, "parse123AvCards");
   function merge123AvCards(cardLists) {
     const items = /* @__PURE__ */ new Map();
-    cardLists.flat().forEach(
-      /** @type {Record<string, any>} */
-      ((item) => items.set(item.carNum, item))
-    );
+    cardLists.flat().forEach(((item) => items.set(item.carNum, item)));
     return [...items.values()];
   }
   __name(merge123AvCards, "merge123AvCards");
@@ -16982,17 +16814,14 @@ ${error.stack}` : "");
     }, scope), "request");
     return Object.freeze({
       contracts: ["MovieRef", "MovieDetail"],
-      /** @param {{carNum?: unknown}} movieRef */
       searchUrl(movieRef) {
         const carNum = normalizeMovieCarNum(movieRef?.carNum);
         return carNum ? `https://123av.com/cn/search?keyword=${encodeURIComponent(carNum)}` : null;
       },
-      /** @param {{carNum: string, url?: string}} movieRef */
       detailUrl(movieRef) {
         const id = normalizeMovieCarNum(movieRef.carNum)?.match(/^FC2-(\d+)$/)?.[1];
         return movieRef.url ? new URL(movieRef.url).href : id ? `https://123av.com/cn/v/fc2-ppv-${id}` : null;
       },
-      /** @param {string} value */
       matchesUrl(value) {
         try {
           return new URL(value).hostname === "123av.com";
@@ -17000,7 +16829,6 @@ ${error.stack}` : "");
           return false;
         }
       },
-      /** @param {{page?: number, keyword?: string}} query @param {{scope?: any}} [options] */
       async listCatalog(query = {}, options = {}) {
         const page = Math.max(1, Number(query.page) || 1), keyword = String(query.keyword || "").trim();
         const sourcePages = keyword ? [1] : [page * 2 - 1, page * 2];
@@ -17018,7 +16846,6 @@ ${error.stack}` : "");
         const sourceMaxPage = keyword || !responses.length ? null : parse123AvSourceMaxPage(responses[0].data, responses[0].finalUrl || urls[0]);
         return Object.freeze({ items, maxPage: sourceMaxPage ? Math.ceil(sourceMaxPage / 2) : null });
       },
-      /** @param {{carNum: string}} movieRef @param {{scope?: any}} [options] */
       async resolveMovie(movieRef, options = {}) {
         const carNum = normalizeMovieCarNum(movieRef.carNum);
         if (!carNum) return null;
@@ -17028,7 +16855,6 @@ ${error.stack}` : "");
         const match = parse123AvCards(response.data, response.finalUrl || url).find((item) => normalizeMovieCarNum(item.carNum) === carNum);
         return match ? defineMovieRef({ carNum, url: match.href, providerId: "av123" }) : null;
       },
-      /** @param {{carNum: string, url?: string}} movieRef @param {{scope?: any}} [options] */
       async getDetail(movieRef, options = {}) {
         const carNum = normalizeMovieCarNum(movieRef.carNum), id = carNum?.match(/^FC2-(\d+)$/)?.[1];
         if (!carNum || !movieRef.url && !id) throw new TypeError("123AV movie reference is invalid");
@@ -17076,7 +16902,6 @@ ${error.stack}` : "");
   function createDmmAdapter(http) {
     return Object.freeze({
       contracts: ["MoviePreview"],
-      /** @param {{url: string}} movieRef @param {{scope?: any}} [options] */
       async getPreview(movieRef, options = {}) {
         const url = new URL(movieRef.url);
         const response = await http.request({
@@ -17156,16 +16981,13 @@ ${error.stack}` : "");
     }, scope), "request");
     return Object.freeze({
       contracts: ["MovieDetail", "MovieCredits"],
-      /** @param {{carNum: string, url?: string}} movieRef */
       detailUrl(movieRef) {
         return resolveUrl(movieRef).href;
       },
-      /** @param {{carNum: string, url?: string}} movieRef @param {{scope?: any}} [options] */
       async getDetail(movieRef, options = {}) {
         const url = resolveUrl(movieRef), response = await request(url, options.scope);
         return parseFc2PpvDbDetail(response.data, response.finalUrl || url.href);
       },
-      /** @param {{carNum: string, url?: string}} movieRef @param {{scope?: any}} [options] */
       async getPeople(movieRef, options = {}) {
         const url = resolveUrl(movieRef), response = await request(url, options.scope);
         return parseFc2PpvDbPeople(response.data, response.finalUrl || url.href);
@@ -17201,12 +17023,10 @@ ${error.stack}` : "");
   function createFc2ContentAdapter(http) {
     return Object.freeze({
       contracts: ["Screenshot"],
-      /** @param {{carNum: string}} movieRef */
       detailUrl(movieRef) {
         const id = String(movieRef.carNum || "").match(/^(?:FC2-)?(?:PPV-)?(\d+)$/i)?.[1];
         return id ? `https://adult.contents.fc2.com/article/${id}/` : null;
       },
-      /** @param {{carNum: string}} movieRef @param {{scope?: any}} [options] */
       async getImages(movieRef, options = {}) {
         const id = String(movieRef.carNum || "").match(/^(?:FC2-)?(?:PPV-)?(\d+)$/i)?.[1];
         if (!id) return [];
@@ -17242,10 +17062,7 @@ ${error.stack}` : "");
   // src/integrations/google-translate/parser.js
   function parseGoogleTranslation(payload) {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new TypeError("Translation response is invalid");
-    const translation = (
-      /** @type {{translation?: unknown}} */
-      payload.translation
-    );
+    const translation = payload.translation;
     if (typeof translation !== "string" || !translation.trim()) throw new TypeError("Translation text is missing");
     return translation;
   }
@@ -17256,7 +17073,6 @@ ${error.stack}` : "");
   function createGoogleTranslateAdapter(http) {
     return Object.freeze({
       contracts: ["Translation"],
-      /** @param {string} text @param {{sourceLanguage?: string, targetLanguage?: string, scope?: any}} [options] */
       async translate(text, options = {}) {
         if (!String(text || "").trim()) throw new TypeError("Translation text cannot be empty");
         const url = new URL(ENDPOINT);
@@ -17315,10 +17131,7 @@ ${error.stack}` : "");
   function createJavDbSignature() {
     const now = Math.floor(Date.now() / 1e3);
     if (signatureValue2 && now - signatureSecond2 <= 20) return signatureValue2;
-    const md5Runtime = (
-      /** @type {any} */
-      globalThis.md5
-    );
+    const md5Runtime = globalThis.md5;
     if (typeof md5Runtime !== "function") throw new Error("Missing userscript vendor runtime: md5");
     signatureSecond2 = now;
     signatureValue2 = `${now}.lpw6vgqzsp.${md5Runtime(`${now}71cf27bb3c0bcdf207b64abecddc970098c7421ee7203b9cdae54478478a199e7d5a6e1a57691123c1a931c057842fb73ba3b3c83bcd69c17ccf174081e3d8aa`)}`;
@@ -17346,7 +17159,6 @@ ${error.stack}` : "");
     }, "request");
     return Object.freeze({
       contracts: ["MovieRef", "MovieDetail", "Actor", "Magnet", "Review", "RelatedList"],
-      /** @param {Record<string, unknown>} movieRef @param {{scope?: any}} [options] */
       async resolveMovie(movieRef, options = {}) {
         const carNum = normalizeMovieCarNum(movieRef.carNum);
         if (!carNum) return null;
@@ -17355,7 +17167,6 @@ ${error.stack}` : "");
         const match = payload.data.movies.find((movie) => normalizeMovieCarNum(movie.number) === carNum);
         return match?.id ? Object.freeze({ carNum, movieId: String(match.id), providerId: "javdb" }) : null;
       },
-      /** @param {Record<string, unknown>} movieRef @param {{scope?: any}} [options] */
       async getDetail(movieRef, options = {}) {
         const movieId = String(movieRef.movieId || "").trim();
         if (!movieId) throw new TypeError("JavDB movie id is required");
@@ -17376,7 +17187,6 @@ ${error.stack}` : "");
           providerId: "javdb"
         });
       },
-      /** @param {Record<string, unknown>} movieRef @param {{scope?: any}} [options] */
       async listMagnets(movieRef, options = {}) {
         const movieId = String(movieRef.movieId || "").trim();
         if (!movieId) return [];
@@ -17394,7 +17204,6 @@ ${error.stack}` : "");
           providerId: "javdb"
         }));
       },
-      /** @param {{period?: string, filter?: string, scope?: any}} [options] */
       async listRankings(options = {}) {
         const payload = await request("/api/v1/rankings/playback", { period: options.period || "daily", filter_by: options.filter || "high_score" }, options);
         if (!Array.isArray(payload?.data?.movies)) throw new Error(payload?.message || "JavDB ranking response is invalid");
@@ -17410,7 +17219,6 @@ ${error.stack}` : "");
           providerId: "javdb"
         }));
       },
-      /** @param {Record<string, unknown>} movieRef @param {{scope?: any, page?: number, limit?: number}} [options] */
       async listReviews(movieRef, options = {}) {
         const movieId = String(movieRef.movieId || "").trim();
         if (!movieId) return [];
@@ -17424,7 +17232,6 @@ ${error.stack}` : "");
           likes: Number(review.likes_count) || 0
         }));
       },
-      /** @param {Record<string, unknown>} movieRef @param {{scope?: any, page?: number, limit?: number}} [options] */
       async listRelated(movieRef, options = {}) {
         const movieId = String(movieRef.movieId || "").trim();
         if (!movieId) return [];
@@ -17492,7 +17299,6 @@ ${error.stack}` : "");
   function createJavBusAdapter(http) {
     return Object.freeze({
       contracts: ["MovieDetail", "Screenshot"],
-      /** @param {{carNum: string, url?: string}} movieRef @param {{scope?: any}} [options] */
       async getDetail(movieRef, options = {}) {
         const carNum = normalizeMovieCarNum(movieRef.carNum);
         if (!carNum) throw new TypeError("JavBus movie reference is invalid");
@@ -17508,7 +17314,6 @@ ${error.stack}` : "");
         }, options.scope);
         return parseJavBusMovieDetail(response.data, response.finalUrl || url);
       },
-      /** @param {{carNum: string, url?: string}} movieRef @param {{scope?: any}} [options] */
       async getImages(movieRef, options = {}) {
         const detail = await this.getDetail(movieRef, options);
         return detail.coverUrl ? [Object.freeze({ url: detail.coverUrl, providerId: "javbus" })] : [];
@@ -17542,7 +17347,6 @@ ${error.stack}` : "");
     }, scope), "request");
     return Object.freeze({
       contracts: ["Screenshot"],
-      /** @param {{carNum: string}} movieRef @param {{scope?: any}} [options] */
       async getImages(movieRef, options = {}) {
         const searchUrl = `https://javstore.net/search?q=${encodeURIComponent(movieRef.carNum || "")}`;
         const search = await request(searchUrl, options.scope);
@@ -17582,7 +17386,6 @@ ${error.stack}` : "");
   function createSubtitleCatAdapter() {
     return Object.freeze({
       contracts: ["Subtitle"],
-      /** @param {{carNum?: unknown}} movieRef */
       detailUrl(movieRef) {
         const carNum = String(movieRef?.carNum || "").trim();
         if (!carNum) return null;
@@ -17629,11 +17432,9 @@ ${error.stack}` : "");
   function createWikipediaAdapter(http) {
     return Object.freeze({
       contracts: ["ActressInfo"],
-      /** @param {string} name */
       profileUrl(name) {
         return new URL(`/wiki/${encodeURIComponent(String(name))}`, "https://ja.wikipedia.org").href;
       },
-      /** @param {string} name @param {{scope?: any}} [options] */
       async lookup(name, options = {}) {
         const url = this.profileUrl(name);
         const response = await http.request({

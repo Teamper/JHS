@@ -131,6 +131,7 @@ assertIncludes(buildScript, "keepNames: true", "readable bundled build");
 assertIncludes(buildScript, "minifySyntax: false", "readable bundled build");
 assertIncludes(buildScript, "minifyWhitespace: false", "readable bundled build");
 assertIncludes(buildScript, "minifyIdentifiers: false", "readable bundled build");
+assertIncludes(buildScript, 'contents.replace(/\\/\\*\\*[\\s\\S]*?\\*\\//g, "")', "production bundle strips source-only JSDoc");
 
 const stableReleaseChecks = [
   ["storage database identity", storage, 'name: "JAV-JHS"'],
@@ -187,7 +188,8 @@ for (const [label, source] of [["FC2", fc2], ["FC2/123AV", fc2By123Av]]) {
   assert(!source.includes("stateService.patch("), `${label} state actions must use toggle semantics`);
 }
 assertIncludes(fc2, "detailStateController.bind", "shared FC2 detail state controller");
-assertIncludes(fc2By123Av, 'this.getDependency("Fc2Plugin").openFc2Dialog', "123AV must reuse FC2 state and shell ownership");
+assertIncludes(fc2, '"123av" === context.source ? void this.load123AvDetail(context)', "FC2 controller must own 123AV detail orchestration");
+assert(!fc2By123Av.includes('getDependency("Fc2Plugin")'), "123AV data source must not depend on the FC2 UI plugin");
 assert(!uiPrimitives.includes('.trigger("change")'), "JhsSelect must dispatch one native change without jQuery double fire");
 for (const [label, source] of [["123", one23Offline], ["115", one115Offline]]) {
   assert(!source.includes("injectJavDbButtons"), `${label} provider must not inject JavDB UI`);

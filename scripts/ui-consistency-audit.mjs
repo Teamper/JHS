@@ -23,7 +23,7 @@ async function listJavaScriptFiles(dir) {
   return files;
 }
 
-const [theme, primitives, build, injection, magnet, settings, utils, detail, commandbar, newVideo, manager, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, screenshot, parsers, javstoreIntegration, otherSite, builtSource] = await Promise.all([
+const [theme, primitives, build, injection, magnet, settings, utils, detail, commandbar, newVideo, manager, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, reviewUi, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, screenshot, parsers, javstoreIntegration, otherSite, builtSource] = await Promise.all([
   readFile(join(srcRoot, "core", "theme.js"), "utf8"),
   readFile(join(srcRoot, "core", "ui-primitives.js"), "utf8"),
   readFile(join(repoRoot, "scripts", "build.mjs"), "utf8"),
@@ -43,6 +43,7 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(repoRoot, "package.json"), "utf8"),
   readFile(join(srcRoot, "core", "logger.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "external-search", "review.js"), "utf8"),
+  readFile(join(srcRoot, "ui", "detail", "review-panel.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "external-search", "related.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "backup", "setting-panels.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "backup", "setting-forms.js"), "utf8"),
@@ -165,8 +166,8 @@ forbidMatch(detail, /routeSections|moveToSection|movePanelToSection/, "detail wo
 for (const [source, label] of [[reviews, "reviews"], [related, "related lists"]]) {
   forbidMatch(source, /item columns is-desktop|jhs-layout-[a-f0-9]{8}/, `${label} must not reuse host or migration layout classes`);
 }
-requireMatch(reviews, /document\.createTextNode/, "review external content must be rendered as text nodes");
-requireMatch(reviews, /appendLinkControls/, "review links must use compact semantic controls");
+requireMatch(reviewUi, /document\.createTextNode/, "review external content must be rendered as text nodes");
+requireMatch(reviewUi, /appendLink/, "review links must use compact semantic controls");
 requireMatch(reviews, /font-size:15px[\s\S]*font-weight:600/, "review author must use 15px semibold text");
 requireMatch(reviews, /jhs-review-content[^}]*font-size:16px[^}]*line-height:1\.7/, "review body readability contract is missing");
 forbidMatch(reviews, /jhs-review-content[^}]*max-width/, "review body must use the full available width");

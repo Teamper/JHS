@@ -46,9 +46,11 @@ describe("list toolbar and UI cleanup contracts", () => {
     const settingStyles = readTestFile(join(process.cwd(), "src/plugins/backup/setting-styles.js"), "utf8");
     const pluginPanels = readTestFile(join(process.cwd(), "src/plugins/backup/setting-panels.js"), "utf8");
     const reviews = readTestFile(join(process.cwd(), "src/plugins/external-search/review.js"), "utf8");
+    const reviewUi = readTestFile(join(process.cwd(), "src/ui/detail/review-panel.js"), "utf8");
     const oneTwoThreeOffline = readTestFile(join(process.cwd(), "src/plugins/one-two-three/offline.js"), "utf8");
     const newVideo = readTestFile(join(process.cwd(), "src/plugins/new-video/new-video.js"), "utf8");
     const related = readTestFile(join(process.cwd(), "src/plugins/external-search/related.js"), "utf8");
+    const relatedUi = readTestFile(join(process.cwd(), "src/ui/detail/related-panel.js"), "utf8");
     const settingForms = readTestFile(join(process.cwd(), "src/plugins/backup/setting-forms.js"), "utf8");
     const listButtons = readTestFile(join(process.cwd(), "src/plugins/status/list-page-button.js"), "utf8");
     const coverButtons = readTestFile(join(process.cwd(), "src/plugins/image-viewer/cover-button.js"), "utf8");
@@ -175,21 +177,22 @@ describe("list toolbar and UI cleanup contracts", () => {
 
     it("uses semantic review and related layouts with safe external text", () => {
         expect(reviews).toContain("jhs-review-item");
-        expect(reviews).toContain("document.createTextNode");
-        expect(reviews).toContain("appendLinkControls");
+        expect(reviewUi).toContain("document.createTextNode");
+        expect(reviewUi).toContain("appendLink");
         expect(reviews).not.toContain("item columns is-desktop");
         expect(reviews).not.toContain("jhs-layout-");
         expect(related).toContain("jhs-related-item");
-        expect(related).toContain("encodeURIComponent(item.id)");
+        expect(relatedUi).toContain("encodeURIComponent(item.id)");
         expect(related).not.toContain("item columns is-desktop");
         expect(related).not.toContain("jhs-layout-");
         expect(reviews).toMatch(/jhs-review-content[^}]*font-size:16px[^}]*line-height:1\.7/);
         expect(reviews).not.toMatch(/jhs-review-content[^}]*max-width/);
         expect(related).toContain("jhs-related-heading");
+        expect(relatedUi).not.toMatch(/\.html\(/);
     });
 
     it("keeps 123 as an auth/API provider without legacy submission UI", () => {
-        expect(reviews).toContain('jhs-review-offline-btn jhs-offline-btn');
+        expect(reviewUi).toContain('jhs-review-offline-btn jhs-offline-btn');
         expect(oneTwoThreeOffline).toContain("startTokenSync()");
         expect(oneTwoThreeOffline).toContain("async resolveMagnet");
         expect(oneTwoThreeOffline).toContain("async submitTask");

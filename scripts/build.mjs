@@ -39,12 +39,13 @@ export async function buildUserscript({ outputPaths = [distPath, rootPath], tran
     write: false,
     logLevel: "silent",
     plugins: [{
-      name: "strip-userscript-metadata",
+      name: "strip-build-comments",
       setup(build) {
-        build.onLoad({ filter: /src[\\/]main\.js$/ }, async (args) => ({
-          contents: (await readFile(args.path, "utf8")).replace(/^\/\/ ==UserScript==[\s\S]*?^\/\/ ==\/UserScript==\r?\n?/m, ""),
-          loader: "js"
-        }));
+        build.onLoad({ filter: /src[\\/].*\.js$/ }, async (args) => {
+          let contents = await readFile(args.path, "utf8");
+          if (args.path === srcPath) contents = contents.replace(/^\/\/ ==UserScript==[\s\S]*?^\/\/ ==\/UserScript==\r?\n?/m, "");
+          return { contents: contents.replace(/\/\*\*[\s\S]*?\*\//g, ""), loader: "js" };
+        });
       }
     }]
   });

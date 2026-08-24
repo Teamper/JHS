@@ -10,16 +10,19 @@ function loadPanels({ settings = { enableLoadReview: "yes", enableLoadRelated: "
     const dom = new JSDOM('<div id="review-a"></div><div id="review-b"></div><div id="related-a"></div><div id="related-b"></div>', { url: "https://javdb.com/v/a" }), $ = jqueryFactory(dom.window);
     const reviewFetch = vi.fn(async movieRef => [{ author: movieRef.movieId, score: 1, createdAt: "2026-08-22", likes: 0, content: "ok" }]);
     const relatedFetch = vi.fn(async movieRef => [{ id: movieRef.movieId, name: movieRef.movieId, movieCount: 1, collectionCount: 0, viewCount: 0, createdAt: "today" }]);
-    const runtimeServices = { review: { list: reviewFetch }, related: { list: relatedFetch }, scope: async () => null };
+    const reviewKeywords = [];
+    const runtimeServices = { review: { list: reviewFetch }, related: { list: relatedFetch }, settings: { snapshot: () => settings, set: vi.fn(async (name, value) => settings[name] = value) }, storage: { get: vi.fn(async () => reviewKeywords), set: vi.fn(async (_key, value) => { reviewKeywords.splice(0, reviewKeywords.length, ...value); }) }, scope: async () => null };
     const context = vm.createContext({
         document: dom.window.document, window: dom.window, $, BasePlugin: class { getBean() { return null; } getRuntimeService(name) { return runtimeServices[name]; } }, _: "yes", C: "no", r: false, l: false,
         storageManager: { getSetting: vi.fn(async (key, fallback) => null == key ? settings : "reviewCount" === key ? 20 : settings[key] ?? fallback), getReviewFilterKeywordList: vi.fn(async () => []), saveReviewFilterKeyword: vi.fn(), saveSettingItem: vi.fn() },
         utils: { formatDate: value => value, q: (event, message, callback) => callback() }, show: { error: vi.fn(), ok: vi.fn() }, clog: { error: vi.fn(), warn: vi.fn() }, escapeHtml: String,
         i: (target, key, value) => (target[key] = value)
     });
+    vm.runInContext(readTestFile(join(process.cwd(), "src/ui/detail/related-panel.js"), "utf8"), context);
+    vm.runInContext(readTestFile(join(process.cwd(), "src/ui/detail/review-panel.js"), "utf8"), context);
     vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/external-search/review.js"), "utf8")};globalThis.Review=ReviewPlugin`, context);
     vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/external-search/related.js"), "utf8")};globalThis.Related=RelatedPlugin`, context);
-    return { $, Review: context.Review, Related: context.Related, reviewFetch, relatedFetch, storageManager: context.storageManager, window: dom.window };
+    return { $, Review: context.Review, Related: context.Related, reviewFetch, relatedFetch, storage: runtimeServices.storage, window: dom.window };
 }
 
 describe("detail panel instance lifecycle", () => {
@@ -54,11 +57,11 @@ describe("detail panel instance lifecycle", () => {
     });
 
     it("binds the review context-menu handler exactly once across multiple panels", async () => {
-        const { $, Review, storageManager, window } = loadPanels(), plugin = new Review;
+        const { $, Review, storage, window } = loadPanels(), plugin = new Review;
         await plugin.showReview("A", $("#review-a")), await plugin.showReview("B", $("#review-b"));
         window.getSelection = () => ({ toString: () => "keyword" });
         $("#review-a .review-content").trigger("contextmenu");
-        await vi.waitFor((() => expect(storageManager.saveReviewFilterKeyword).toHaveBeenCalledOnce()));
+        await vi.waitFor((() => expect(storage.set).toHaveBeenCalledOnce()));
     });
 
     it("adopts owned workspace headers and does not prefetch the second review page", async () => {

@@ -1,5 +1,6 @@
-import { C, _, escapeHtml, l, r } from "../../core/constants.js";
+import { l, r } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
+import { ReviewPanel } from "../../ui/detail/review-panel.js";
 
 export class ReviewPlugin extends BasePlugin {
     getName() {
@@ -51,130 +52,7 @@ export class ReviewPlugin extends BasePlugin {
         return element ? $(element) : $();
     }
     async showReview(movieId, target, options = {}) {
-        const isActive = "function" === typeof options.isActive ? options.isActive : () => !0;
-        const settings = await storageManager.getSetting();
-        const enabled = settings.enableLoadReview === _ ? _ : C, host = target?.length ? target : this.getHostedSlot("reviews");
-        if (!isActive() || !host?.length) return $();
-        const existing = host.children('[data-jhs-panel="reviews"]').filter(((_, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
-        if (existing.length) return existing;
-        const panel = $('<section class="jhs-review-panel" data-jhs-panel="reviews"></section>').attr("data-jhs-movie-id", String(movieId));
-        const header = $('<header class="jhs-panel-header"><h3>评论</h3></header>');
-        const toggle = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-panel-toggle jhs-review-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>');
-        const state = { movieId, panel, floorIndex: 1, loaded: !1, loading: !1, page: 1 };
-        header.append(toggle), options.ownedSection ? options.ownedSection.find('[data-jhs-section-actions="reviews"]').first().append(toggle) : panel.append(header), panel.append('<div class="jhs-review-list jhs-review-container"></div>', '<div class="jhs-panel-footer jhs-review-footer"></div>'), host.append(panel), this.bindRightClickFilter();
-        state.isActive = isActive;
-        this.updateToggle(toggle, enabled === _);
-        toggle.on("click", (event => {
-            event.preventDefault(), event.stopPropagation();
-            const expanded = "展开" === toggle.find(".toggle-text").text();
-            this.updateToggle(toggle, expanded), panel.find(".jhs-review-container, .jhs-review-footer").toggle(expanded), expanded && !state.loaded && !state.loading && void this.fetchAndDisplayReviews(state), storageManager.saveSettingItem("enableLoadReview", expanded ? _ : C);
-        }));
-        enabled === _ ? await this.fetchAndDisplayReviews(state) : panel.find(".jhs-review-container, .jhs-review-footer").hide();
-        return panel;
-    }
-    updateToggle(toggle, expanded) {
-        toggle.attr("aria-expanded", String(expanded)), toggle.find(".toggle-text").text(expanded ? "折叠" : "展开"),
-        toggle.find(".toggle-icon").text(expanded ? "▲" : "▼");
-    }
-    async fetchAndDisplayReviews(state) {
-        if (state.loading || !state.isActive?.()) return;
-        state.loading = !0;
-        const { movieId, panel } = state, container = panel.find(".jhs-review-container"), footer = panel.find(".jhs-review-footer");
-        container.empty().append($('<div class="jhs-panel-state"></div>').text("获取评论中...")), footer.empty();
-        const pageSize = await storageManager.getSetting("reviewCount", 20);
-        let reviews, scope;
-        try {
-            scope = await this.getRuntimeService("scope")();
-            reviews = await this.getRuntimeService("review").list({ movieId }, { page: 1, limit: pageSize, scope });
-        } catch (error) {
-            if (!state.isActive?.() || scope?.signal?.aborted) return void (state.loading = !1);
-            error.toString().includes("簽名已過期") && show.error("生成签名失败, 请检查系统时间及时区是否正确!"), clog.error("获取评论失败:", error),
-            clog.error("获取评论失败:", error);
-            state.loading = !1;
-            return void this.renderRetry(container, "获取评论失败", (() => this.fetchAndDisplayReviews(state)));
-        }
-        if (!state.isActive?.() || scope?.signal?.aborted) return void (state.loading = !1);
-        state.loading = !1, state.loaded = !0;
-        container.empty();
-        if (!reviews.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无评论"));
-        const keywords = await storageManager.getReviewFilterKeywordList();
-        await this.displayReviews(state, reviews, container, keywords);
-        reviews.length === pageSize ? this.bindLoadMore(state, pageSize, keywords, container, footer) : footer.append($('<div class="jhs-panel-end"></div>').text("已加载全部评论"));
-    }
-    renderRetry(container, message, retry) {
-        container.empty();
-        const state = $('<div class="jhs-panel-state"></div>').append(document.createTextNode(`${message} `));
-        const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry);
-        state.append(button), container.append(state);
-    }
-    bindLoadMore(state, pageSize, keywords, container, footer) {
-        const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-review-load-more">加载更多评论</button>'), end = $('<div class="jhs-panel-end jhs-review-end">已加载全部评论</div>').hide();
-        footer.empty().append(button, end);
-        button.on("click", (async () => {
-            const nextPage = state.page + 1;
-            let scope;
-            button.text("加载中...").prop("disabled", !0);
-            try {
-                scope = await this.getRuntimeService("scope")();
-                const reviews = await this.getRuntimeService("review").list({ movieId: state.movieId }, { page: nextPage, limit: pageSize, scope });
-                if (!state.isActive?.() || scope?.signal?.aborted) return;
-                state.page = nextPage;
-                await this.displayReviews(state, reviews, container, keywords), reviews.length < pageSize ? (button.remove(), end.show()) : button.text("加载更多评论").prop("disabled", !1);
-            } catch (error) {
-                if (!state.isActive?.() || scope?.signal?.aborted) return;
-                clog.error("加载更多评论失败:", error), button.text("加载失败，请重试").prop("disabled", !1);
-            }
-        }));
-    }
-    async displayReviews(state, reviews, container, keywords) {
-        if (!reviews.length) return;
-        const filter = keywords.length > 0 ? new RegExp(keywords.map((value => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).join("|")) : null;
-        for (const review of reviews) {
-            const content = String(review.content || "");
-            if (filter?.test(content)) continue;
-            const item = $('<article class="jhs-review-item"></article>'), meta = $('<div class="jhs-review-meta"></div>'), body = $('<div class="review-content jhs-review-content"></div>');
-            meta.append($("<span></span>").addClass("jhs-review-author").text(review.author || "匿名用户"));
-            const stars = $('<span class="score-stars" aria-label="评分"></span>'), score = Math.max(0, Math.min(5, Number(review.score) || 0));
-            for (let index = 0; index < score; index++) stars.append('<i class="icon-star"></i>');
-            meta.append(stars, $("<time></time>").text(utils.formatDate(review.createdAt)), $("<span></span>").text(`点赞：${Number(review.likes) || 0}`),
-            $("<span></span>").addClass("jhs-review-floor").text(`#${state.floorIndex++}楼`));
-            await this.appendReviewContent(body, content), item.append(meta, body), container.append(item);
-        }
-    }
-    appendReviewContent(container, content) {
-        const linkPattern = /ed2k:\/\/\|file\|[^|]+\|\d+\|[a-fA-F0-9]{32}\|\/|magnet:\?[^\s"'<>`,;\u4e00-\u9fa5，。？！（）【】]+|https?:\/\/[^\s"'<>`,;\u4e00-\u9fa5，。？！（）【】]+/g;
-        let cursor = 0, match;
-        while ((match = linkPattern.exec(content))) {
-            match.index > cursor && container.append(document.createTextNode(content.slice(cursor, match.index)));
-            this.appendLinkControls(container, match[0]), cursor = match.index + match[0].length;
-        }
-        cursor < content.length && container.append(document.createTextNode(content.slice(cursor)));
-    }
-    appendLinkControls(container, value) {
-        const isEd2k = value.startsWith("ed2k://"), isMagnet = value.startsWith("magnet:"), label = isEd2k ? "ED2K 链接" : isMagnet ? "Magnet 链接" : "打开链接";
-        const isResource = isMagnet || isEd2k, wrapper = $(isResource ? '<span class="jhs-review-link-wrap"></span>' : '<span class="jhs-review-inline-controls"></span>');
-        const main = $('<span class="jhs-review-link-main"></span>');
-        const open = isEd2k ? $('<button type="button" class="jhs-btn jhs-review-link"></button>').text(label).on("click", (() => utils.copyToClipboard(label, value))) : $("<a></a>").addClass("jhs-review-link").attr({
-            href: value,
-            target: "_blank",
-            rel: "noopener noreferrer"
-        }).text(label);
-        const copy = $('<button type="button" class="jhs-btn jhs-review-link jhs-review-link-copy">复制</button>').on("click", (() => utils.copyToClipboard(label, value)));
-        main.append(open, copy), wrapper.append(main);
-        if (isResource) {
-            const actions = $('<span class="jhs-review-link-actions"></span>');
-            actions.append(`<button type="button" class="jhs-btn jhs-review-link jhs-review-offline-btn jhs-offline-btn" data-resource="${escapeHtml(value)}">离线</button>`);
-            wrapper.append(actions);
-        }
-        container.append(wrapper);
-    }
-    bindRightClickFilter() {
-        $(document).off("contextmenu.jhsReviewFilter", ".review-content").on("contextmenu.jhsReviewFilter", ".review-content", (async event => {
-            if (await storageManager.getSetting("enableTitleSelectFilter", _) !== _) return;
-            const text = window.getSelection().toString();
-            text && (event.preventDefault(), await utils.q(event, `是否将 '${text}' 加入评论区关键词?`, (async () => {
-                await storageManager.saveReviewFilterKeyword(text), show.ok("操作成功, 刷新页面后生效");
-            })));
-        }));
+        const panel = new ReviewPanel({ review: this.getRuntimeService("review"), settings: this.getRuntimeService("settings"), storage: this.getRuntimeService("storage"), scope: () => this.getRuntimeService("scope")() });
+        return panel.show(movieId, target?.length ? target : this.getHostedSlot("reviews"), options);
     }
 }
