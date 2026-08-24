@@ -30,7 +30,7 @@
     "src/core/magnet-quality.js",
     "src/core/migration.js",
     "src/core/movie-identity.js",
-    "src/core/plugin-manager.d.ts",
+    "src/core/plugin-manager.js",
     "src/core/selection-model.js",
     "src/core/site-context.js",
     "src/core/state-model.js",

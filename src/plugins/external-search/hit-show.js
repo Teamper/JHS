@@ -1,6 +1,6 @@
 // @ts-check
 
-import { escapeHtml, i } from "../../core/constants.js";
+import { escapeHtml } from "../../core/constants.js";
 import { normalizeHttpUrl } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { isHitShowPage } from "../../core/site-context.js";
@@ -9,7 +9,10 @@ import { isHitShowPage } from "../../core/site-context.js";
 
 export class HitShowPlugin extends BasePlugin {
     constructor() {
-        super(), i(this, "$contentBox", null), i(this, "$listRoot", null), i(this, "loadGeneration", 0);
+        super();
+        /** @type {any} */ this.$contentBox = null;
+        /** @type {any} */ this.$listRoot = null;
+        this.loadGeneration = 0;
     }
     getName() {
         return "HitShowPlugin";

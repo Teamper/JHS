@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - FC2 详情、外部站点入口和详情操作栏进入 strict checkJs，明确宿主工作区、影片/磁力数据与遗留 Vendor 句柄边界，生产源码类型覆盖率提升至 86.4%。
 - 磁力聚合中心与列表封面操作进入 strict checkJs，补齐来源、磁力结果、卡片事件和媒体句柄契约，生产源码类型覆盖率提升至 87.5%，最低覆盖门禁同步上调至 87%。
 - DMM 预览、备份文件操作和设置诊断面板进入真实 strict checkJs，移除遮蔽生产实现的同名声明文件；生产源码类型覆盖率提升至 89.2%，最低覆盖门禁同步上调至 89%。
+- PluginManager 与 BasePlugin 的真实运行时实现进入 strict checkJs，移除宽泛的同名声明文件，并显式约束插件注册、启动时序、错误诊断、宿主信息读取与共享图标状态；生产源码类型覆盖率提升至 89.8%。
 
 ### Fixed
 
