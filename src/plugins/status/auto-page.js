@@ -29,6 +29,7 @@ export class AutoPagePlugin extends BasePlugin {
     }
     async waterfall() {
         if (await this.shouldDisablePaging()) return;
+        const scope = await this.getRuntimeService("scope")();
         const e = this.getSelector();
         if (this.container = document.querySelector(e.boxSelector), !this.container) return void clog.error("没有找到容器节点,停止瀑布流!");
         this.loader = document.createElement("div"), this.loader.className = "jhs-scroll",
@@ -41,16 +42,16 @@ export class AutoPagePlugin extends BasePlugin {
             this.loader.classList.contains("waterfall-error") && void this.loadNextPage().catch((error => clog.error("瀑布流重试失败", error)));
         })), (() => {
             let t = !1;
-            window.addEventListener("scroll", (() => {
+            scope.listen(window, "scroll", (() => {
                 t || (t = !0, requestAnimationFrame((() => {
                     this.checkLoad(), this.checkScrollPosition(), t = !1;
                 })));
             }));
         })();
         const t = document.querySelector(e.nextPageSelector);
-        this.nextUrl = null == t ? void 0 : t.href, this.hasMore = !!this.nextUrl, setTimeout((() => {
+        this.nextUrl = null == t ? void 0 : t.href, this.hasMore = !!this.nextUrl, scope.ownTimeout(setTimeout((() => {
             this.checkLoad();
-        }), 1e3), this.hasMore || this.setState("waterfall-no-more", "已经到底了");
+        }), 1e3)), this.hasMore || this.setState("waterfall-no-more", "已经到底了");
     }
     async loadNextPage() {
         var e;

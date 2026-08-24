@@ -13356,6 +13356,7 @@ ${error.stack}` : "");
     }
     async waterfall() {
       if (await this.shouldDisablePaging()) return;
+      const scope = await this.getRuntimeService("scope")();
       const e2 = this.getSelector();
       if (this.container = document.querySelector(e2.boxSelector), !this.container) return void clog.error("没有找到容器节点,停止瀑布流!");
       this.loader = document.createElement("div"), this.loader.className = "jhs-scroll", this.container.parentNode.insertBefore(this.loader, this.container.nextSibling), this.pageItems.push({
@@ -13366,16 +13367,16 @@ ${error.stack}` : "");
         this.loader.classList.contains("waterfall-error") && void this.loadNextPage().catch(((error) => clog.error("瀑布流重试失败", error)));
       })), (() => {
         let t3 = false;
-        window.addEventListener("scroll", (() => {
+        scope.listen(window, "scroll", (() => {
           t3 || (t3 = true, requestAnimationFrame((() => {
             this.checkLoad(), this.checkScrollPosition(), t3 = false;
           })));
         }));
       })();
       const t2 = document.querySelector(e2.nextPageSelector);
-      this.nextUrl = null == t2 ? void 0 : t2.href, this.hasMore = !!this.nextUrl, setTimeout((() => {
+      this.nextUrl = null == t2 ? void 0 : t2.href, this.hasMore = !!this.nextUrl, scope.ownTimeout(setTimeout((() => {
         this.checkLoad();
-      }), 1e3), this.hasMore || this.setState("waterfall-no-more", "已经到底了");
+      }), 1e3)), this.hasMore || this.setState("waterfall-no-more", "已经到底了");
     }
     async loadNextPage() {
       var e2;

@@ -5,6 +5,7 @@ import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 
 function loadClass(file, className, extras = {}) {
     const source = readTestFile(join(process.cwd(), file), "utf8"), start = source.indexOf(`class ${className}`);
@@ -24,6 +25,26 @@ describe("6.2.0 audit remediation", () => {
         expect(querySelector).not.toHaveBeenCalled();
         expect(addEventListener).not.toHaveBeenCalled();
         expect(plugin.loader).toBeUndefined();
+    });
+
+    it("owns AutoPage global listeners and startup timer in its Feature scope", async () => {
+        const dom = new JSDOM('<div id="list"></div><a class="next" href="/page/2"></a>', { url: "https://javdb.com/" });
+        const add = vi.spyOn(dom.window, "addEventListener"), remove = vi.spyOn(dom.window, "removeEventListener"), scope = new LifecycleScope("feature:list");
+        const { Class } = loadClass("src/plugins/status/auto-page.js", "AutoPagePlugin", {
+            window: dom.window, document: dom.window.document, requestAnimationFrame: callback => callback(), setTimeout: vi.fn(() => 1),
+            storageManager: { getSetting: vi.fn().mockResolvedValue("yes") }, _: "yes", C: "no", clog: { error: vi.fn() },
+        });
+        const plugin = new Class();
+        plugin.shouldDisablePaging = vi.fn().mockResolvedValue(false);
+        plugin.getSelector = () => ({ boxSelector: "#list", nextPageSelector: ".next" });
+        plugin.getRuntimeService = name => "scope" === name ? () => scope : {};
+        plugin.checkLoad = vi.fn();
+        await plugin.waterfall();
+        expect(scope.snapshot().listeners).toBe(1);
+        expect(add).toHaveBeenCalledWith("scroll", expect.any(Function), undefined);
+        scope.dispose();
+        expect(scope.snapshot()).toMatchObject({ listeners: 0, disposed: true });
+        expect(remove).toHaveBeenCalledWith("scroll", expect.any(Function), undefined);
     });
 
     it("binds OtherSite settings idempotently and recovers malformed storage", () => {
