@@ -60,6 +60,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     const coverButtons = readTestFile(join(process.cwd(), "src/plugins/image-viewer/cover-button.js"), "utf8");
     const previewVideo = readTestFile(join(process.cwd(), "src/plugins/image-viewer/preview-video.js"), "utf8");
     const injection = readTestFile(join(process.cwd(), "src/core/css-injection.js"), "utf8");
+    const detailButtons = readTestFile(join(process.cwd(), "src/plugins/status/detail-page-button.js"), "utf8");
 
     it("builds the command bar after plugin initialization and keeps semantic actions separate", () => {
         expect(commandbar).toContain("async afterPluginsReady()");
@@ -219,6 +220,15 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(magnetHub).toContain('getRuntimeService("scope")');
         expect(magnetHub).toContain('trustClass: "custom-public"');
         expect(magnetHub).toContain('trustClass: "builtin-public"');
+    });
+
+    it("routes Xunlei subtitle work through normalized service contracts", () => {
+        expect(detailButtons).not.toContain("gmHttp");
+        expect(detailButtons).not.toContain("api-shoulei-ssl.xunlei.com");
+        expect(detailButtons).toContain('getRuntimeService("subtitle")');
+        expect(detailButtons).toContain('subtitle.search("xunlei"');
+        expect(detailButtons).toContain('subtitle.download("xunlei"');
+        expect(detailButtons).toContain("escapeHtml(e)");
     });
 
     it("uses an explicit unknown category without conflating it with all", () => {

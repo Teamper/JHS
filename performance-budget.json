@@ -1,9 +1,9 @@
 {
   "version": 1,
   "bundle": {
-    "baselineBytes": 1008305,
+    "baselineBytes": 1113377,
     "maximumGrowthRatio": 0.1,
-    "reason": "v6.5 architecture baseline from f73a1e1 before implementation"
+    "reason": "Reviewed v6.5 architecture baseline after scoped HTTP, DMM, Pan123, JavTrailers and Xunlei Integration migrations"
   },
   "browserFixture": {
     "maximumInitialRequests": {

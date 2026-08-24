@@ -1,4 +1,4 @@
-import { C, _, k, l, m, normalizeCarNum, r, v, y } from "../../core/constants.js";
+import { C, _, escapeHtml, k, l, m, normalizeCarNum, r, v, y } from "../../core/constants.js";
 import { detailStateController } from "../../core/detail-state-controller.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { stateService } from "../../core/state-service.js";
@@ -77,11 +77,11 @@ export class DetailPageButtonPlugin extends BasePlugin {
     async hasWatchOne(event) {
         return detailStateController.requestToggle(this.getStateBinding(), "watched", event);
     }
-    searchXunLeiSubtitle(e) {
-        const dialog = this.getRuntimeService("dialog");
+    async searchXunLeiSubtitle(e) {
+        const dialog = this.getRuntimeService("dialog"), subtitle = this.getRuntimeService("subtitle"), scope = await this.getRuntimeService("scope")();
         let t = loading();
-        gmHttp.get(`https://api-shoulei-ssl.xunlei.com/oracle/subtitle?gcid=&cid=&name=${e}`).then((t => {
-            let n = t.data;
+        try {
+            const n = await subtitle.search("xunlei", { carNum: e }, { scope });
             n && 0 !== n.length ? dialog.open({
                 type: 1,
                 title: "迅雷字幕",
@@ -109,7 +109,7 @@ export class DetailPageButtonPlugin extends BasePlugin {
                             responsive: 0
                         }, {
                             title: "类型",
-                            field: "ext",
+                            field: "extension",
                             headerSort: !1,
                             responsive: 0
                         }, {
@@ -121,10 +121,10 @@ export class DetailPageButtonPlugin extends BasePlugin {
                                 return a((() => {
                                     const n = t.getElement().querySelector(".subtitle-preview-btn"), a = t.getElement().querySelector(".subtitle-download-btn");
                                     n && n.addEventListener("click", (async t => {
-                                        let n = i.url, a = e + "." + i.ext;
-                                        this.previewSubtitle(n, a);
+                                        const a = e + "." + i.extension;
+                                        this.previewSubtitle(i, a);
                                     })), a && a.addEventListener("click", (async t => {
-                                        let n = i.url, a = e + "." + i.ext, s = await gmHttp.get(n);
+                                        const a = e + "." + i.extension, s = await subtitle.download("xunlei", i, { scope });
                                         utils.download(s, a);
                                     }));
                                 })), '\n                                        <button type="button" class="jhs-btn jhs-btn--secondary subtitle-preview-btn">预览</button>\n                                        <button type="button" class="jhs-btn jhs-btn--primary subtitle-download-btn">下载</button>\n                                    ';
@@ -150,11 +150,11 @@ export class DetailPageButtonPlugin extends BasePlugin {
                     }), utils.setupEscClose(a);
                 }
             }) : show.error("迅雷中找不到相关字幕!");
-        })).catch((e => {
+        } catch (e) {
             clog.error(e), show.error(e);
-        })).finally((() => {
+        } finally {
             t.close();
-        }));
+        }
     }
     async filterOne(e, t) {
         e && e.preventDefault();
@@ -165,19 +165,20 @@ export class DetailPageButtonPlugin extends BasePlugin {
             $(this).prop("controls", !0);
         }));
     }
-    async previewSubtitle(e, t) {
-        if (!e) return void clog.error("未提供文件URL");
-        const n = e.split(".").pop().toLowerCase();
+    async previewSubtitle(subtitle, t) {
+        if (!subtitle?.url) return void clog.error("未提供文件URL");
+        const n = String(subtitle.extension || "").toLowerCase();
         if ("ass" === n || "srt" === n) try {
             const dialog = this.getRuntimeService("dialog");
-            let a = await gmHttp.get(e), i = "字幕预览";
+            const scope = await this.getRuntimeService("scope")();
+            let a = await this.getRuntimeService("subtitle").download("xunlei", subtitle, { scope }), i = "字幕预览";
             "ass" === n ? i = "ASS字幕预览 - " + t : "srt" === n && (i = "SRT字幕预览 - " + t);
             const s = a.split("\n");
             let o = "";
             const r = String(s.length).length;
             s.forEach(((e, t) => {
                 const n = String(t + 1).padStart(r, " ");
-                o += `<span class="jhs-code-line-number">${n}. </span>${e}\n`;
+                o += `<span class="jhs-code-line-number">${n}. </span>${escapeHtml(e)}\n`;
             }));
             const l = o;
             dialog.open({

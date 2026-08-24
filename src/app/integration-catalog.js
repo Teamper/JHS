@@ -13,5 +13,6 @@ import javtrailers from "../integrations/javtrailers/manifest.js";
 import pan123 from "../integrations/pan123/manifest.js";
 import subtitlecat from "../integrations/subtitlecat/manifest.js";
 import wikipedia from "../integrations/wikipedia/manifest.js";
+import xunlei from "../integrations/xunlei/manifest.js";
 
-export const integrationManifests = Object.freeze([av123, dmm, fc2ppvdb, fc2content, googleTranslate, hostList, javdb, javbus, javstore, javtrailers, pan123, subtitlecat, wikipedia]);
+export const integrationManifests = Object.freeze([av123, dmm, fc2ppvdb, fc2content, googleTranslate, hostList, javdb, javbus, javstore, javtrailers, pan123, subtitlecat, wikipedia, xunlei]);

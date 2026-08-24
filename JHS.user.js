@@ -3712,6 +3712,7 @@
     magnet: createToken("service", "magnet"),
     screenshot: createToken("service", "screenshot"),
     translation: createToken("service", "translation"),
+    subtitle: createToken("service", "subtitle"),
     offline: createToken("service", "offline"),
     cache: createToken("service", "cache"),
     state: createToken("service", "state"),
@@ -13587,11 +13588,11 @@ ${error.stack}` : "");
     async hasWatchOne(event) {
       return detailStateController.requestToggle(this.getStateBinding(), "watched", event);
     }
-    searchXunLeiSubtitle(e2) {
-      const dialog = this.getRuntimeService("dialog");
+    async searchXunLeiSubtitle(e2) {
+      const dialog = this.getRuntimeService("dialog"), subtitle = this.getRuntimeService("subtitle"), scope = await this.getRuntimeService("scope")();
       let t2 = loading();
-      gmHttp.get(`https://api-shoulei-ssl.xunlei.com/oracle/subtitle?gcid=&cid=&name=${e2}`).then(((t3) => {
-        let n2 = t3.data;
+      try {
+        const n2 = await subtitle.search("xunlei", { carNum: e2 }, { scope });
         n2 && 0 !== n2.length ? dialog.open({
           type: 1,
           title: "迅雷字幕",
@@ -13599,7 +13600,7 @@ ${error.stack}` : "");
           scrollbar: false,
           area: utils.getResponsiveArea(["60%", "70%"]),
           anim: -1,
-          success: /* @__PURE__ */ __name((t4, a2) => {
+          success: /* @__PURE__ */ __name((t3, a2) => {
             createJhsTable(Tabulator, "#xunlei-table-container", {
               pagination: false,
               layout: "fitColumns",
@@ -13619,22 +13620,22 @@ ${error.stack}` : "");
                 responsive: 0
               }, {
                 title: "类型",
-                field: "ext",
+                field: "extension",
                 headerSort: false,
                 responsive: 0
               }, {
                 title: "操作",
                 responsive: 0,
                 headerSort: false,
-                formatter: /* @__PURE__ */ __name((t5, n3, a3) => {
-                  const i2 = t5.getData();
+                formatter: /* @__PURE__ */ __name((t4, n3, a3) => {
+                  const i2 = t4.getData();
                   return a3((() => {
-                    const n4 = t5.getElement().querySelector(".subtitle-preview-btn"), a4 = t5.getElement().querySelector(".subtitle-download-btn");
-                    n4 && n4.addEventListener("click", (async (t6) => {
-                      let n5 = i2.url, a5 = e2 + "." + i2.ext;
-                      this.previewSubtitle(n5, a5);
-                    })), a4 && a4.addEventListener("click", (async (t6) => {
-                      let n5 = i2.url, a5 = e2 + "." + i2.ext, s2 = await gmHttp.get(n5);
+                    const n4 = t4.getElement().querySelector(".subtitle-preview-btn"), a4 = t4.getElement().querySelector(".subtitle-download-btn");
+                    n4 && n4.addEventListener("click", (async (t5) => {
+                      const a5 = e2 + "." + i2.extension;
+                      this.previewSubtitle(i2, a5);
+                    })), a4 && a4.addEventListener("click", (async (t5) => {
+                      const a5 = e2 + "." + i2.extension, s2 = await subtitle.download("xunlei", i2, { scope });
                       utils.download(s2, a5);
                     }));
                   })), '\n                                        <button type="button" class="jhs-btn jhs-btn--secondary subtitle-preview-btn">预览</button>\n                                        <button type="button" class="jhs-btn jhs-btn--primary subtitle-download-btn">下载</button>\n                                    ';
@@ -13660,11 +13661,11 @@ ${error.stack}` : "");
             }), utils.setupEscClose(a2);
           }, "success")
         }) : show.error("迅雷中找不到相关字幕!");
-      })).catch(((e3) => {
+      } catch (e3) {
         clog.error(e3), show.error(e3);
-      })).finally((() => {
+      } finally {
         t2.close();
-      }));
+      }
     }
     async filterOne(e2, t2) {
       e2 && e2.preventDefault();
@@ -13675,19 +13676,20 @@ ${error.stack}` : "");
         $(this).prop("controls", true);
       }));
     }
-    async previewSubtitle(e2, t2) {
-      if (!e2) return void clog.error("未提供文件URL");
-      const n2 = e2.split(".").pop().toLowerCase();
+    async previewSubtitle(subtitle, t2) {
+      if (!subtitle?.url) return void clog.error("未提供文件URL");
+      const n2 = String(subtitle.extension || "").toLowerCase();
       if ("ass" === n2 || "srt" === n2) try {
         const dialog = this.getRuntimeService("dialog");
-        let a2 = await gmHttp.get(e2), i2 = "字幕预览";
+        const scope = await this.getRuntimeService("scope")();
+        let a2 = await this.getRuntimeService("subtitle").download("xunlei", subtitle, { scope }), i2 = "字幕预览";
         "ass" === n2 ? i2 = "ASS字幕预览 - " + t2 : "srt" === n2 && (i2 = "SRT字幕预览 - " + t2);
         const s2 = a2.split("\n");
         let o2 = "";
         const r2 = String(s2.length).length;
-        s2.forEach(((e3, t3) => {
+        s2.forEach(((e2, t3) => {
           const n3 = String(t3 + 1).padStart(r2, " ");
-          o2 += `<span class="jhs-code-line-number">${n3}. </span>${e3}
+          o2 += `<span class="jhs-code-line-number">${n3}. </span>${escapeHtml(e2)}
 `;
         }));
         const l2 = o2;
@@ -13698,7 +13700,7 @@ ${error.stack}` : "");
           scrollbar: false,
           content: `<div class="jhs-code-viewer">${l2}</div>`,
           btn: ["下载", "关闭"],
-          btn1: /* @__PURE__ */ __name(function(e3, n3, i3) {
+          btn1: /* @__PURE__ */ __name(function(e2, n3, i3) {
             return utils.download(a2, t2), false;
           }, "btn1")
         });
@@ -15400,7 +15402,7 @@ ${error.stack}` : "");
     manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }),
     manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage]),
     manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related, SERVICE.settings]),
-    manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog]),
+    manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle]),
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [SERVICE.settings]),
     manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie]),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
@@ -15446,6 +15448,7 @@ ${error.stack}` : "");
         [SERVICE.actressInfo, "actressInfo"],
         [SERVICE.screenshot, "screenshot"],
         [SERVICE.translation, "translation"],
+        [SERVICE.subtitle, "subtitle"],
         [SERVICE.webdav, "webdav"],
         [SERVICE.storage, "storage"],
         [SERVICE.offline, "offline"],
@@ -16319,6 +16322,28 @@ ${error.stack}` : "");
   __name(_TranslationService, "TranslationService");
   var TranslationService = _TranslationService;
 
+  // src/services/subtitle-service.js
+  var _SubtitleService = class _SubtitleService {
+    constructor(integrations) {
+      this.integrations = integrations;
+    }
+    async search(providerId, movieRef, options = {}) {
+      const manifest2 = this.integrations.list("subtitle.search").find((item) => item.id === providerId);
+      if (!manifest2) return [];
+      const adapter = this.integrations.getAdapter(manifest2.id);
+      return typeof adapter?.search === "function" ? adapter.search(movieRef, options) : [];
+    }
+    async download(providerId, subtitle, options = {}) {
+      const manifest2 = this.integrations.list("subtitle.download").find((item) => item.id === providerId);
+      if (!manifest2) throw new TypeError(`Subtitle provider is unavailable: ${providerId}`);
+      const adapter = this.integrations.getAdapter(manifest2.id);
+      if (typeof adapter?.download !== "function") throw new TypeError(`Subtitle download is unavailable: ${providerId}`);
+      return adapter.download(subtitle, options);
+    }
+  };
+  __name(_SubtitleService, "SubtitleService");
+  var SubtitleService = _SubtitleService;
+
   // src/services/settings-service.js
   var _SettingsService = class _SettingsService extends EventTarget {
     constructor(storage, options = {}) {
@@ -16772,12 +16797,13 @@ ${error.stack}` : "");
     const magnet = new MagnetService(providers, integrations);
     const screenshot = new ScreenshotService(providers, integrations);
     const translation = new TranslationService(integrations);
+    const subtitle = new SubtitleService(integrations);
     const offline = new OfflineService(providers, integrations);
-    container.register(PORT.navigation, navigationPort).register(PORT.http, httpPort).register(PORT.storage, storagePort).register(PORT.dialog, dialogPort).register(PORT.style, stylePort).register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy).register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.webdav, webdav).register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile).register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet).register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline).register(SERVICE.translation, translation).register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
+    container.register(PORT.navigation, navigationPort).register(PORT.http, httpPort).register(PORT.storage, storagePort).register(PORT.dialog, dialogPort).register(PORT.style, stylePort).register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy).register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.webdav, webdav).register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile).register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet).register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline).register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
     if (runtime.hostAdapter) container.register(PORT.host, runtime.hostAdapter);
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, movie, actressInfo, review, related, magnet, screenshot, translation, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, movie, actressInfo, review, related, magnet, screenshot, translation, subtitle, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
   }
   __name(createAppContext, "createAppContext");
 
@@ -17762,8 +17788,76 @@ ${error.stack}` : "");
     quality: "silver"
   });
 
+  // src/integrations/xunlei/parser.js
+  function parseXunleiSubtitles(payload) {
+    if (!payload || typeof payload !== "object" || !Array.isArray(payload.data)) throw new JhsError("INVALID_RESPONSE", "迅雷字幕响应结构无效", { source: "xunlei" });
+    return Object.freeze(payload.data.flatMap((item) => {
+      try {
+        const url = new URL(String(item?.url ?? ""));
+        if (url.protocol !== "https:") return [];
+        const extension = String(item?.ext ?? "").toLowerCase().replace(/^\./, "");
+        if (!extension) return [];
+        return [Object.freeze({ name: String(item?.name ?? ""), extension, url: url.href, providerId: "xunlei" })];
+      } catch {
+        return [];
+      }
+    }));
+  }
+  __name(parseXunleiSubtitles, "parseXunleiSubtitles");
+
+  // src/integrations/xunlei/manifest.js
+  var XUNLEI_HOSTS = ["xunlei.com"];
+  function createXunleiAdapter(http) {
+    return Object.freeze({
+      contracts: ["Subtitle"],
+      async search(movieRef, options = {}) {
+        const carNum = String(movieRef.carNum ?? "").trim();
+        if (!carNum) return [];
+        const url = new URL("https://api-shoulei-ssl.xunlei.com/oracle/subtitle");
+        url.searchParams.set("gcid", ""), url.searchParams.set("cid", ""), url.searchParams.set("name", carNum);
+        const response = await http.request({
+          providerId: "xunlei",
+          method: "GET",
+          url: url.href,
+          responseType: "json",
+          cacheScope: "public",
+          ttlMs: 864e5,
+          urlPolicy: { trustClass: "builtin-public", hosts: XUNLEI_HOSTS }
+        }, options.scope);
+        return parseXunleiSubtitles(response.data);
+      },
+      async download(subtitle, options = {}) {
+        const url = new URL(String(subtitle.url ?? ""));
+        const response = await http.request({
+          providerId: "xunlei",
+          method: "GET",
+          url: url.href,
+          responseType: "text",
+          cacheScope: "public",
+          ttlMs: 864e5,
+          urlPolicy: { trustClass: "custom-public" }
+        }, options.scope);
+        if (typeof response.data !== "string") throw new TypeError("迅雷字幕正文不是文本");
+        return response.data;
+      }
+    });
+  }
+  __name(createXunleiAdapter, "createXunleiAdapter");
+  var manifest_default15 = defineIntegration({
+    id: "xunlei",
+    trustClass: "builtin-public",
+    hosts: XUNLEI_HOSTS,
+    capabilities: ["subtitle.search", "subtitle.download"],
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createXunleiAdapter(client.http), "createAdapter"),
+    createHostAdapter: null,
+    cachePolicy: { "subtitle.search": "public-1d", "subtitle.download": "public-1d" },
+    quality: "silver"
+  });
+
   // src/app/integration-catalog.js
-  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default7, manifest_default8, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13, manifest_default14]);
+  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default7, manifest_default8, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13, manifest_default14, manifest_default15]);
 
   // src/app/bootstrap.js
   function patchLayerRuntime(layerRuntime) {

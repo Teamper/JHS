@@ -30,6 +30,7 @@ export const SERVICE = Object.freeze({
     magnet: createToken("service", "magnet"),
     screenshot: createToken("service", "screenshot"),
     translation: createToken("service", "translation"),
+    subtitle: createToken("service", "subtitle"),
     offline: createToken("service", "offline"),
     cache: createToken("service", "cache"),
     state: createToken("service", "state"),
