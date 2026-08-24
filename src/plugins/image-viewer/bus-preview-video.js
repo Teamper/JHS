@@ -1,3 +1,8 @@
+import { L } from "../../core/constants.js";
+import { safePlay } from "../../core/feature-helpers.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { Z, fetchDmmPreview } from "./preview-video.js";
+
 const ENCRYPTION_SALT = "x7k9p3";
 
 async function getEncryptionKey() {
@@ -29,7 +34,7 @@ function base64ToArrayBuffer(e) {
     return n;
 }
 
-async function encryptData(e) {
+export async function encryptData(e) {
     const t = await getEncryptionKey(), n = crypto.getRandomValues(new Uint8Array(12)), a = new TextEncoder(), i = await crypto.subtle.encrypt({
         name: "AES-GCM",
         iv: n
@@ -37,7 +42,7 @@ async function encryptData(e) {
     return s.set(n), s.set(new Uint8Array(i), n.length), arrayBufferToBase64(s);
 }
 
-async function decryptData(e) {
+export async function decryptData(e) {
     const t = await getEncryptionKey(), n = base64ToArrayBuffer(e), a = n.slice(0, 12), i = n.slice(12), s = await crypto.subtle.decrypt({
         name: "AES-GCM",
         iv: a
@@ -47,15 +52,15 @@ async function decryptData(e) {
 
 const CREDENTIAL_PREFIX = "AES:";
 
-async function encryptCredential(e) {
+export async function encryptCredential(e) {
     return e && !e.startsWith(CREDENTIAL_PREFIX) ? CREDENTIAL_PREFIX + await encryptData(e) : e;
 }
 
-async function decryptCredential(e) {
+export async function decryptCredential(e) {
     return e && e.startsWith(CREDENTIAL_PREFIX) ? await decryptData(e.slice(CREDENTIAL_PREFIX.length)) : e;
 }
 
-class BusPreviewVideoPlugin extends BasePlugin {
+export class BusPreviewVideoPlugin extends BasePlugin {
     getName() {
         return "BusPreviewVideoPlugin";
     }

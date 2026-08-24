@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "bundle": {
+    "baselineBytes": 1008305,
+    "maximumGrowthRatio": 0.1,
+    "reason": "v6.5 architecture baseline from f73a1e1 before implementation"
+  },
+  "browserFixture": {
+    "maximumInitialRequests": {
+      "JavDB": 0,
+      "JavBus": 3
+    },
+    "startupRegressionRatio": 0.1
+  }
+}

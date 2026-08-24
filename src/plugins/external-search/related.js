@@ -1,4 +1,8 @@
-class RelatedPlugin extends BasePlugin {
+import { C, _ } from "../../core/constants.js";
+import { K } from "../../core/javdb-api.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class RelatedPlugin extends BasePlugin {
     getName() {
         return "RelatedPlugin";
     }
@@ -18,7 +22,7 @@ class RelatedPlugin extends BasePlugin {
     }
     async showRelated(target, movieId, options = {}) {
         const isActive = "function" === typeof options.isActive ? options.isActive : () => !0;
-        const enabled = await storageManager.getSetting("enableLoadRelated", C), host = target?.length ? target : this.getBean("DetailWorkspacePlugin")?.getSlot("related");
+        const enabled = await storageManager.getSetting("enableLoadRelated", C), host = target?.length ? target : this.getDependency("DetailWorkspacePlugin")?.getSlot("related");
         if (!movieId) return void show.error("未传入movieId");
         if (!isActive() || !host?.length) return $();
         const existing = host.children('[data-jhs-panel="related"]').filter(((_, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();

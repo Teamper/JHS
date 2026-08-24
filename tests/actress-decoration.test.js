@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -5,7 +6,7 @@ import jquery from "jquery";
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 
-const source = readFileSync(join(import.meta.dirname, "../src/plugins/status/compat-enhancements.js"), "utf8");
+const source = readTestFile(join(import.meta.dirname, "../src/plugins/status/compat-enhancements.js"), "utf8");
 async function render(html, url, favorites = [], blacklist = []) {
     const dom = new JSDOM(html, { url }), $ = jquery(dom.window);
     const context = vm.createContext({ window: dom.window, document: dom.window.document, URL, decodeURIComponent, $, BasePlugin: class { getPageInfo() { return {}; } }, storageManager: { getFavoriteActressList: async () => favorites, getBlacklist: async () => blacklist }, isDetailPage: false });

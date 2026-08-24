@@ -1,10 +1,13 @@
+import { d, g, h, p } from "./constants.js";
+import { normalizeStateFlags } from "./state-model.js";
+
 /** 按字段为数组数据构建运行时索引。 */
-function createIndexedMap(items, key) {
+export function createIndexedMap(items, key) {
     return new Map(items.filter((item => item && item[key])).map((item => [ item[key], item ])));
 }
 
 /** 为番号组合状态构建运行时 Set 索引。 */
-function createStatusMap(items) {
+export function createStatusMap(items) {
     const statusMap = {
         [d]: new Set,
         [h]: new Set,
@@ -21,7 +24,7 @@ function createStatusMap(items) {
 }
 
 /** 统计指定字段的重复值。 */
-function groupDuplicateItems(items, key) {
+export function groupDuplicateItems(items, key) {
     const counts = new Map;
     items.forEach((item => {
         const value = item && item[key];
@@ -31,7 +34,7 @@ function groupDuplicateItems(items, key) {
 }
 
 /** 按字段去重，保留第一条记录并合并后续字段。 */
-function dedupeByKey(items, key) {
+export function dedupeByKey(items, key) {
     const seen = new Map, list = [];
     let changed = !1;
     for (const item of items) {

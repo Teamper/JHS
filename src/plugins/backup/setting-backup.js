@@ -1,5 +1,9 @@
+import { escapeHtml } from "../../core/constants.js";
+import { WebDavClient } from "./webdav-client.js";
+import { decryptCredential, decryptData, encryptData } from "../image-viewer/bus-preview-video.js";
+
 /** Handle JSON file import via file input, run diff analysis, show preview. */
-async function importSettingData(showDiffPreviewFn) {
+export async function importSettingData(showDiffPreviewFn) {
     try {
         const input = document.createElement("input");
         input.type = "file", input.accept = ".json";
@@ -34,7 +38,7 @@ async function importSettingData(showDiffPreviewFn) {
 }
 
 /** Create encrypted backup and upload via WebDAV. */
-async function backupDataByWebDav(folderName) {
+export async function backupDataByWebDav(folderName) {
     const t = await storageManager.getSetting(), n = t.webDavUrl;
     if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
     const a = t.webDavUsername;
@@ -55,7 +59,7 @@ async function backupDataByWebDav(folderName) {
 }
 
 /** List WebDAV backups and open the file list dialog. */
-async function backupListBtnByWebDav(folderName, openFileListDialogFn) {
+export async function backupListBtnByWebDav(folderName, openFileListDialogFn) {
     const t = await storageManager.getSetting(), n = t.webDavUrl;
     if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
     const a = t.webDavUsername;
@@ -155,7 +159,7 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn) {
 }
 
 /** Desktop backup file list dialog using Tabulator table. */
-function openFileListDialog(e, t, n, folderName, showDiffPreviewFn) {
+export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn) {
     if (utils.isMobileMode()) {
         openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn);
         return;
@@ -278,7 +282,7 @@ function openFileListDialog(e, t, n, folderName, showDiffPreviewFn) {
 }
 
 /** Export all data as a downloadable JSON file. */
-async function exportSettingData() {
+export async function exportSettingData() {
     try {
         const e = JSON.stringify(await storageManager.exportData()), t = `${utils.getNowStr("_", "_")}.json`;
         utils.download(e, t), show.ok("数据导出成功");

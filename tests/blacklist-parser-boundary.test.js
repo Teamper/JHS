@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -21,14 +22,14 @@ function loadBlacklist(html, save = vi.fn(async () => {}), pageUrl = "https://ja
         console, URL, Date, window: dom.window, document: dom.window.document, $, BasePlugin, storageManager: { batchSaveBlacklistCarList: save },
         T: "javdb", I: "javbus", d: "filter", r: true, l: false, o: "", _: "yes", gmHttp, clog: { error: vi.fn(), log: vi.fn() }, show: { info: vi.fn(), ok: vi.fn() }, utils: { htmlTo$dom: source => $(new JSDOM(source, { url: pageUrl }).window.document) }, i: (target, key, value) => target[key] = value
     });
-    const source = [ "src/core/feature-helpers.js", "src/parsers/third-party-parsers.js", "src/plugins/blacklist/blacklist.js" ].map(file => readFileSync(join(repoRoot, file), "utf8")).join("\n");
+    const source = [ "src/core/feature-helpers.js", "src/integrations/host-list/parser.js", "src/plugins/blacklist/blacklist.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n");
     vm.runInContext(`${source};globalThis.Plugin=BlacklistPlugin`, context);
     return { plugin: new context.Plugin, $page: $(dom.window.document), save, gmHttp };
 }
 
 describe("blacklist parser boundaries", () => {
     it("uses the full-batch label for initial and refreshed tooltips", () => {
-        const source = readFileSync(join(repoRoot, "src/plugins/blacklist/blacklist.js"), "utf8");
+        const source = readTestFile(join(repoRoot, "src/plugins/blacklist/blacklist.js"), "utf8");
         expect(source).not.toContain("上次检测时间");
         expect(source.match(/上次整批检测/g)).toHaveLength(2);
     });

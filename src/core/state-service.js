@@ -1,3 +1,8 @@
+import { normalizeCarNum } from "./constants.js";
+import { jhsEventBus } from "./event-bus.js";
+import { storageManager } from "./http.js";
+import { STATE_FLAG_NAMES, createEmptyStateFlags, normalizeStateFlags, syncLegacyStatus } from "./state-model.js";
+
 const ACTIVITY_SOFT_LIMIT = 1e3, ACTIVITY_HARD_LIMIT = 1e4, ACTIVITY_RETENTION_MS = 30 * 864e5;
 
 function cloneStateValue(value) {
@@ -265,4 +270,5 @@ class StateService {
     }
 }
 
-const stateService = unsafeWindow.stateService = window.stateService = new StateService(storageManager, jhsEventBus);
+export const stateService = new StateService(storageManager, jhsEventBus);
+storageManager.stateService = stateService;

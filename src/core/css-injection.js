@@ -1,3 +1,7 @@
+import { H, M, j, l, r } from "./constants.js";
+import { buildThemeCss } from "./theme.js";
+import { buildUiPrimitivesCss, initializeUiAccessibility } from "./ui-primitives.js";
+
 /** CSS injection for site-specific layouts, global UI, and responsive behavior. */
 
 const N = `

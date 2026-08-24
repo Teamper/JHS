@@ -1,8 +1,12 @@
-const PORTABLE_DATA_KEYS = Object.freeze([ "car_list", "filter_keyword_title", "filter_keyword_review", "setting", "blacklist", "blacklist_car_list", "third_party_ttl_cache", "favorite_actresses", "highlighted_tags", "activity_log", "offline_history", "new_video_decisions" ]);
+import { CURRENT_DATA_VERSION, normalizeCarNum } from "./constants.js";
+import { mergeCanonicalCarRecords } from "./state-model.js";
+
+export const PORTABLE_DATA_KEYS = Object.freeze([ "car_list", "filter_keyword_title", "filter_keyword_review", "setting", "blacklist", "blacklist_car_list", "favorite_actresses", "highlighted_tags", "activity_log", "offline_history", "new_video_decisions" ]);
+export const IMPORTABLE_DATA_KEYS = Object.freeze([ ...PORTABLE_DATA_KEYS, "third_party_ttl_cache" ]);
 const PORTABLE_ARRAY_KEYS = new Set([ "car_list", "filter_keyword_title", "filter_keyword_review", "blacklist", "blacklist_car_list", "favorite_actresses", "highlighted_tags", "offline_history" ]);
 const PORTABLE_OBJECT_KEYS = new Set([ "setting", "third_party_ttl_cache", "activity_log", "new_video_decisions" ]);
 
-function validatePortableData(data) {
+export function validatePortableData(data) {
     if (!data || "object" != typeof data || Array.isArray(data)) throw new TypeError("备份数据格式无效");
     const version = Number(data.data_version || 0);
     if (!Number.isInteger(version) || version < 0) throw new TypeError("备份数据版本无效");
@@ -12,7 +16,7 @@ function validatePortableData(data) {
     return version;
 }
 
-async function hasPortableUserData(storage) {
+export async function hasPortableUserData(storage) {
     for (const key of PORTABLE_DATA_KEYS) {
         const value = await storage.forage.getItem(key);
         if (Array.isArray(value) ? value.length : value && "object" == typeof value ? Object.keys(value).length : null != value) return !0;
@@ -66,7 +70,7 @@ async function migrateStateFlags(storage) {
 
 const DATA_MIGRATIONS = Object.freeze({ 1: migrateLegacyStorage, 2: migrateStateFlags });
 
-async function runDataMigrations(storage) {
+export async function runDataMigrations(storage) {
     let version = await storage.getDataVersion();
     if (version > CURRENT_DATA_VERSION) throw new Error("数据来自更新版本的 JHS，当前版本无法安全读取");
     for (let target = version + 1; target <= CURRENT_DATA_VERSION; target++) {

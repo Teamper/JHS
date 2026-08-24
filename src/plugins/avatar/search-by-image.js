@@ -1,4 +1,7 @@
-class SearchByImagePlugin extends BasePlugin {
+import { i } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class SearchByImagePlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "siteList", [ {
             name: "Google旧版",

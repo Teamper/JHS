@@ -1,4 +1,6 @@
-class DetailPagePlugin extends BasePlugin {
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class DetailPagePlugin extends BasePlugin {
     getName() {
         return "DetailPagePlugin";
     }

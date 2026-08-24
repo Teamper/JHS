@@ -1,8 +1,9 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const read = file => readFileSync(join(process.cwd(), file), "utf8");
+const read = file => readTestFile(join(process.cwd(), file), "utf8");
 
 describe("v6.4.1 frozen UI contracts", () => {
     const newVideo = read("src/plugins/new-video/new-video.js");

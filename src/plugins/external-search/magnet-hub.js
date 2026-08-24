@@ -1,5 +1,12 @@
+import { CACHE_TTL, ProviderError } from "../../core/cache-policy.js";
+import { escapeHtml, i, l, r } from "../../core/constants.js";
+import { mapLimit } from "../../core/feature-helpers.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { BUILT_IN_MAGNET_SOURCES, ResourceSettingsService } from "../backup/resource-settings.js";
+import { MagnetSourceRegistry, applyMagnetRules, deduplicateMagnetResults, normalizeMagnetResult, parseCustomMagnetResponse, parseNativeMagnets, validateCustomMagnetSource } from "./magnet-source-registry.js";
+
 /** 磁力评分：基于做种数/分辨率/字幕/新鲜度/完整性，返回 0-100 分 */
-function calcMagnetScore(e) {
+export function calcMagnetScore(e) {
     let t = 0;
     const n = (e.seeders || 0);
     const seedersScore = n >= 50 ? 35 : n >= 10 ? 25 : n >= 1 ? 15 : 3;
@@ -24,7 +31,7 @@ function _daysSince(e) {
     } catch (t) { return 999; }
 }
 
-class MagnetHubPlugin extends BasePlugin {
+export class MagnetHubPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "sourceRegistry", new MagnetSourceRegistry()), i(this, "searchEngines", []);
     }

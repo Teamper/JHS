@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { describe, expect, it, vi } from "vitest";
 import { JSDOM } from "jsdom";
 import jquery from "jquery";
@@ -5,9 +6,9 @@ import vm from "node:vm";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const workspaceSource = readFileSync(join(process.cwd(), "src/plugins/status/detail-workspace.js"), "utf8");
-const unifiedSource = readFileSync(join(process.cwd(), "src/plugins/offline/unified-offline.js"), "utf8");
-const selectSource = readFileSync(join(process.cwd(), "src/core/ui-primitives.js"), "utf8").slice(readFileSync(join(process.cwd(), "src/core/ui-primitives.js"), "utf8").indexOf("class JhsSelect"));
+const workspaceSource = readTestFile(join(process.cwd(), "src/plugins/status/detail-workspace.js"), "utf8");
+const unifiedSource = readTestFile(join(process.cwd(), "src/plugins/offline/unified-offline.js"), "utf8");
+const selectSource = readTestFile(join(process.cwd(), "src/core/ui-primitives.js"), "utf8").slice(readTestFile(join(process.cwd(), "src/core/ui-primitives.js"), "utf8").indexOf("class JhsSelect"));
 
 class BasePlugin {
     getBean() { return null; }

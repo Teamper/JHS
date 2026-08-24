@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -20,7 +21,7 @@ function loadPluginClasses() {
     clog: { error: vi.fn() },
     i: (target, key, value) => (target[key] = value)
   });
-  const source = `${readFileSync(join(repoRoot, "src/core/plugin-manager.js"), "utf8")}\nglobalThis.TestPluginManager = PluginManager; globalThis.TestBasePlugin = BasePlugin;`;
+  const source = `${readTestFile(join(repoRoot, "src/core/plugin-manager.js"), "utf8")}\nglobalThis.TestPluginManager = PluginManager; globalThis.TestBasePlugin = BasePlugin;`;
   vm.runInContext(source, context);
   return { PluginManager: context.TestPluginManager, BasePlugin: context.TestBasePlugin, idleCallbacks, insertStyle };
 }
@@ -34,7 +35,7 @@ function loadStorageManager(forage) {
     },
     i: (target, key, value) => (target[key] = value)
   });
-  const source = `${readFileSync(join(repoRoot, "src/core/storage.js"), "utf8")}\nglobalThis.TestStorageManager = StorageManager;`;
+  const source = `${readTestFile(join(repoRoot, "src/core/storage.js"), "utf8")}\nglobalThis.TestStorageManager = StorageManager;`;
   vm.runInContext(source, context);
   return new context.TestStorageManager();
 }
@@ -58,15 +59,15 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
     storageManager: overrides.storageManager || {},
     $: () => ({ text: vi.fn() })
   });
-  const parsers = readFileSync(join(repoRoot, "src/parsers/third-party-parsers.js"), "utf8");
-  const source = `${parsers}\n${readFileSync(join(repoRoot, "src/plugins/new-video/task.js"), "utf8")}\nglobalThis.TestTaskPlugin = TaskPlugin;`;
+  const parsers = ["src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js"].map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
+  const source = `${parsers}\n${readTestFile(join(repoRoot, "src/plugins/new-video/task.js"), "utf8")}\nglobalThis.TestTaskPlugin = TaskPlugin;`;
   vm.runInContext(source, context);
   return new context.TestTaskPlugin();
 }
 
 function loadStorageQueue() {
   const context = vm.createContext({ clog: { error: vi.fn() } });
-  const queueSource = readFileSync(join(repoRoot, "src/plugins/external-search/other-site.js"), "utf8").split("class OtherSitePlugin")[0];
+  const queueSource = readTestFile(join(repoRoot, "src/plugins/external-search/other-site.js"), "utf8").split("class OtherSitePlugin")[0];
   vm.runInContext(`${queueSource}\nglobalThis.TestStorageQueue = StorageQueue;`, context);
   return { Queue: context.TestStorageQueue, error: context.clog.error };
 }
@@ -98,8 +99,8 @@ function loadHttpManager(requestHandler) {
   };
   context.window = context;
   context.unsafeWindow = context;
-  vm.runInContext(readFileSync(join(repoRoot, "src/core/http.js"), "utf8"), vm.createContext(context));
-  return context.gmHttp;
+  vm.runInContext(`${readTestFile(join(repoRoot, "src/core/http.js"), "utf8")};globalThis.testGmHttp=gmHttp`, vm.createContext(context));
+  return context.testGmHttp;
 }
 
 describe("startup scheduling", () => {
@@ -190,9 +191,9 @@ describe("startup scheduling", () => {
   });
 
   it("does not include removed legacy service integrations", () => {
-    const mainSource = readFileSync(join(repoRoot, "src/main.js"), "utf8");
-    const registrySource = readFileSync(join(repoRoot, "src/plugins/registry.js"), "utf8");
-    const utilsSource = readFileSync(join(repoRoot, "src/core/utils.js"), "utf8");
+    const mainSource = readTestFile(join(repoRoot, "src/main.js"), "utf8");
+    const registrySource = readTestFile(join(repoRoot, "src/plugins/registry.js"), "utf8");
+    const utilsSource = readTestFile(join(repoRoot, "src/core/utils.js"), "utf8");
 
     expect(mainSource).not.toContain("parallel_GM_xmlhttpRequest.js");
     expect(mainSource).not.toContain("@connect      127.0.0.1");
@@ -210,7 +211,7 @@ describe("startup scheduling", () => {
       "src/plugins/image-viewer/screenshot.js",
       "src/plugins/status/auto-page.js"
     ];
-    const source = sourceFiles.map((file) => readFileSync(join(repoRoot, file), "utf8")).join("\n");
+    const source = sourceFiles.map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
     const removedMethods = [
       "getUsedDomains", "postForm", "postFileFormData", "downloadFileInChunks",
       "getActressMap", "getThirdPartyCacheStats", "resetCacheHitStats",

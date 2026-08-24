@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -16,7 +17,7 @@ function loadUtilsWithObserver() {
         setTimeout, clearTimeout, setInterval, clearInterval, clog: { error: vi.fn() },
         i: (target, key, value) => (target[key] = value)
     });
-    vm.runInContext(`${readFileSync(join(process.cwd(), "src/core/utils.js"), "utf8")};globalThis.TestUtils=Utils;`, context);
+    vm.runInContext(`${readTestFile(join(process.cwd(), "src/core/utils.js"), "utf8")};globalThis.TestUtils=Utils;`, context);
     return { utils: new context.TestUtils(), getObserver: () => observer };
 }
 

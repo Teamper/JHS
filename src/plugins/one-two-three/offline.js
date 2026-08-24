@@ -1,4 +1,6 @@
-class OneTwoThreeOfflinePlugin extends BasePlugin {
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class OneTwoThreeOfflinePlugin extends BasePlugin {
     constructor() {
         super(...arguments), this.tokenKey = "jhs_123pan_author_token", this.tokenMetaKey = "jhs_123pan_author_token_meta",
         this.syncTimer = null, this.syncFallbackMs = 3e5;

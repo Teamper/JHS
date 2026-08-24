@@ -1,5 +1,12 @@
+import { C, _, r } from "../../core/constants.js";
+import { jhsEventBus } from "../../core/event-bus.js";
+import { parseNumberSetting } from "../../core/feature-helpers.js";
+import { applyImageMode } from "./setting-styles.js";
+import { decryptCredential, encryptCredential } from "../image-viewer/bus-preview-video.js";
+import { normalizeQuickFilterKey } from "../status/list-page.js";
+
 /** Load all settings from storage into the main settings dialog form fields. */
-async function loadSettingForm(getBean) {
+export async function loadSettingForm(getBean) {
     let e = await storageManager.getSetting();
     $("#videoQuality").val(e.videoQuality), $("#reviewCount").val(e.reviewCount || 20),
     $("#tagPosition").val(e.tagPosition || "rightTop"), $("#defaultQuickFilterTab").val(normalizeQuickFilterKey(e.defaultQuickFilterTab)), $("#needClosePageBasic").prop("checked", !e.needClosePage || e.needClosePage === _), $("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e.autoRemoveNewVideoMarkAfterBrowse && e.autoRemoveNewVideoMarkAfterBrowse === _), $("#waitCheckCount").val(e.waitCheckCount || 5),
@@ -65,7 +72,7 @@ function bindLayoutRangeEvents() {
 }
 
 /** Initialize quick settings in either the desktop popover or mobile layer. */
-async function initQuickSettingForm(getBean, getSelector, openSettingDialogFn) {
+export async function initQuickSettingForm(getBean, getSelector, openSettingDialogFn) {
     let e = await storageManager.getSetting();
     $("#needClosePage").prop("checked", !e.needClosePage || e.needClosePage === _),
     $("#autoPage").prop("checked", !e.autoPage || e.autoPage === _), $("#translateTitle").prop("checked", !e.translateTitle || e.translateTitle === _),
@@ -113,8 +120,25 @@ async function initQuickSettingForm(getBean, getSelector, openSettingDialogFn) {
 }
 
 /** Read all form values and save to storage. */
-async function saveSettingForm(getBean) {
+export async function saveSettingForm(getBean) {
     let e = await storageManager.getSetting();
+    const nextWebDavUrl = String($("#webDavUrl").val() || "").trim();
+    let nextWebDavOrigin = null;
+    if (nextWebDavUrl) {
+        try {
+            const parsed = new URL(nextWebDavUrl);
+            if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("protocol");
+            nextWebDavOrigin = parsed.origin;
+        } catch {
+            return void show.error("WebDAV 地址必须是有效的 HTTP/HTTPS URL");
+        }
+    }
+    const trustedOrigins = new Set(Array.isArray(e.trustedLocalOrigins) ? e.trustedLocalOrigins : []);
+    if (nextWebDavOrigin && !trustedOrigins.has(nextWebDavOrigin)) {
+        const authorized = await new Promise((resolve) => utils.q(null, `仅授权 WebDAV 精确来源：${nextWebDavOrigin}，是否继续？`, () => resolve(true), () => resolve(false)));
+        if (!authorized) return void show.info("已取消 WebDAV 来源授权");
+        trustedOrigins.add(nextWebDavOrigin);
+    }
     e.videoQuality = $("#videoQuality").val(), e.reviewCount = $("#reviewCount").val(),
     e.tagPosition = $("#tagPosition").val(), e.defaultQuickFilterTab = normalizeQuickFilterKey($("#defaultQuickFilterTab").val()), e.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e.waitCheckCount = $("#waitCheckCount").val(), e.highlightedTagNumber = $("#highlightedTagNumber").val(),
     e.highlightedTagColor = $("#highlightedTagColor").val(), e.checkConcurrencyCount = $("#checkConcurrencyCount").val(),
@@ -127,7 +151,7 @@ async function saveSettingForm(getBean) {
     e.circuitBreakerCooldown = Number($("#circuitBreakerCooldownSec").val()) * 1e3, e.enableClog = $("#enableClog").val(),
     e.enableClog === _ ? clog.show() : clog.hide(), e.clogMsgCount = $("#clogMsgCount").val(),
     e.mobileMode = $("#mobileMode").val(), e.themeMode = $("#themeMode").val(),
-    e.webDavUrl = $("#webDavUrl").val(), e.webDavUsername = $("#webDavUsername").val(),
+    e.webDavUrl = nextWebDavUrl, e.trustedLocalOrigins = [...trustedOrigins], e.webDavUsername = $("#webDavUsername").val(),
     e.webDavPassword = await encryptCredential($("#webDavPassword").val()), e.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""),
     e.jableUrl = $("#jableUrl").val().replace(/\/$/, ""), e.avgleUrl = $("#avgleUrl").val().replace(/\/$/, ""),
     e.javTrailersUrl = $("#javTrailersUrl").val().replace(/\/$/, ""), e.av123Url = $("#av123Url").val().replace(/\/$/, ""),

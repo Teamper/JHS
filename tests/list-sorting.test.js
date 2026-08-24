@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -13,7 +14,7 @@ function loadPlugin(url, html) {
         BasePlugin: class { getSelector() { return { boxSelector: ".movie-list", itemSelector: ".movie-list > .item" }; } },
         clog: { error: vi.fn() }
     });
-    const source = readFileSync(join(import.meta.dirname, "../src/plugins/status/list-page-button.js"), "utf8");
+    const source = readTestFile(join(import.meta.dirname, "../src/plugins/status/list-page-button.js"), "utf8");
     vm.runInContext(`${source};globalThis.Plugin=ListPageButtonPlugin`, context);
     return { $, plugin: new context.Plugin(), localStorage: dom.window.localStorage };
 }

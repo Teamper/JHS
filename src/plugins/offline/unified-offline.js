@@ -1,3 +1,10 @@
+import { l, r } from "../../core/constants.js";
+import { jhsEventBus } from "../../core/event-bus.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { stateService } from "../../core/state-service.js";
+import { OneOneFiveClient } from "../one-one-five/client.js";
+import { getDetailResourceAdapter } from "../status/detail-workspace.js";
+
 class OfflineProviderRegistry {
     constructor() { this.providers = new Map, this.availabilityCache = new Map, this.positiveTtl = 3e5, this.negativeTtl = 2e4; }
     register(provider) {
@@ -23,7 +30,7 @@ class OfflineProviderRegistry {
     updateAvailability(id, value) { this.availabilityCache.set(id, { time: Date.now(), value }); }
 }
 
-class UnifiedOfflinePlugin extends BasePlugin {
+export class UnifiedOfflinePlugin extends BasePlugin {
     constructor() { super(), this.registry = new OfflineProviderRegistry, this.BUTTON_COOLDOWN_MS = 1800; }
     getName() { return "UnifiedOfflinePlugin"; }
     async initCss() { return '<style>.jhs-offline-btn.loading{cursor:wait;opacity:.65}.jhs-offline-native{margin-left:6px;padding:3px 8px}</style>'; }
@@ -32,7 +39,7 @@ class UnifiedOfflinePlugin extends BasePlugin {
         this.registerProviders(), this.bindSubmit(), window.isDetailPage && (this.injectNativeButtons(), jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
     }
     registerProviders() {
-        const one23 = this.getBean("OneTwoThreeOfflinePlugin");
+        const one23 = this.getDependency("OneTwoThreeOfflinePlugin");
         one23 && this.registry.register({ id: "123", name: "123 云盘", capabilities: [ "magnet" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: () => storageManager.getSetting("enable123Offline", !0), getAvailability: async () => one23.getStoredToken() ? { available: !0, authState: "ready", reason: "授权已同步" } : { available: !1, authState: "token-missing", reason: "尚未同步 123 授权" }, submit: async resource => { const token = one23.getStoredToken(); if (!token) throw Object.assign(new Error("尚未同步 123 授权"), { code: "TOKEN_MISSING" }); const resolved = await one23.resolveMagnet(resource, token); return one23.submitTask(resolved, token); }, openUrl: () => "https://yun.123pan.com" });
         this.registry.register({ id: "115", name: "115", capabilities: [ "magnet", "ed2k" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: () => storageManager.getSetting("enable115Offline", !1), getAvailability: async () => ({ available: !0, authState: "unknown", reason: "提交时确认登录状态" }), submit: resource => new OneOneFiveClient().addOffline(resource), openUrl: () => "https://115.com" });
         window.offlineProviderRegistry = this.registry;
@@ -70,7 +77,7 @@ class UnifiedOfflinePlugin extends BasePlugin {
     getVideoInfo(button) {
         if (window.isDetailPage) return this.getPageInfo();
         const item = button?.closest?.(".item");
-        return item?.length ? this.getBean("ListPagePlugin").findCarNumAndHref(item) : this.getPageInfo();
+        return item?.length ? this.getDependency("ListPagePlugin").findCarNumAndHref(item) : this.getPageInfo();
     }
     async submitResource(event, resource, button = $(), context = null, retryOf = null, options = {}) {
         if (button.hasClass("loading")) return;

@@ -1,4 +1,7 @@
-class Utils {
+import { i, normalizeCarNum } from "./constants.js";
+import { JHS_Z_INDEX } from "./theme.js";
+
+export class Utils {
     constructor() {
         return i(this, "intervalContainer", {}), i(this, "waitSequence", 0), i(this, "mimeTypes", {
             txt: "text/plain",

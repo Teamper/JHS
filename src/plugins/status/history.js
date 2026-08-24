@@ -1,4 +1,10 @@
-class HistoryPlugin extends BasePlugin {
+import { b, d, g, h, i, k, l, m, normalizeCarNum, p, r, u, v, y } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
+import { stateService } from "../../core/state-service.js";
+import { JhsSelect } from "../../core/ui-primitives.js";
+
+export class HistoryPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectAll", !1),
         i(this, "historyExcludedCarNums", new Set), i(this, "historySorters", []), i(this, "historyFilteredCount", 0),
@@ -86,9 +92,9 @@ class HistoryPlugin extends BasePlugin {
                     await utils.copyToClipboard("离线资源", $(event.currentTarget).data("resource"));
                 })).on("click", ".jhs-retry-offline", (async event => {
                     const id = $(event.currentTarget).data("id"), item = (await stateService.getOfflineHistory()).find((entry => entry.id === id));
-                    item && await this.getBean("UnifiedOfflinePlugin").submitResource(event, item.resource, $(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: !0, preferredProviderId: item.providerId }), await this.renderOfflineHistory();
+                    item && await this.getDependency("UnifiedOfflinePlugin").submitResource(event, item.resource, $(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: !0, preferredProviderId: item.providerId }), await this.renderOfflineHistory();
                 })).on("click", ".jhs-open-offline", (async event => {
-                    const id = $(event.currentTarget).data("id"), item = (await stateService.getOfflineHistory()).find((entry => entry.id === id)), provider = this.getBean("UnifiedOfflinePlugin").registry.providers.get(item?.providerId), url = provider?.openUrl?.();
+                    const id = $(event.currentTarget).data("id"), item = (await stateService.getOfflineHistory()).find((entry => entry.id === id)), provider = this.getDependency("UnifiedOfflinePlugin").registry.providers.get(item?.providerId), url = provider?.openUrl?.();
                     url && window.open(url, "_blank", "noopener,noreferrer");
                 })).on("click", ".jhs-delete-offline", (async event => {
                     await stateService.removeOfflineHistory($(event.currentTarget).data("id")), await this.renderOfflineHistory();
@@ -466,14 +472,14 @@ class HistoryPlugin extends BasePlugin {
     }
     handleDelete(e, t) {
         utils.q(e, `是否移除${t}?`, (async () => {
-            await stateService.remove(t), this.getBean("ListPagePlugin").showCarNumBox(t),
+            await stateService.remove(t), this.getDependency("ListPagePlugin").showCarNumBox(t),
             await this.reloadTable();
         }));
     }
     async handleClickDetail(e, t) {
         if (r) if (t.carNum.includes("FC2-")) {
             const e = this.parseMovieId(t.url);
-            const plugin = this.getBean("Fc2Plugin"), source = await plugin.resolveFc2Source(t);
+            const plugin = this.getDependency("Fc2Plugin"), source = await plugin.resolveFc2Source(t);
             plugin.openFc2Dialog(e, t.carNum, t.url, { source });
         } else {
             if (!t.url) return void window.open("/search?q=" + t.carNum, "_blank");
@@ -483,7 +489,7 @@ class HistoryPlugin extends BasePlugin {
             let n = t.url;
             if (n.includes("javdb")) if (t.carNum.includes("FC2-")) {
                 const e = this.parseMovieId(n);
-                const plugin = this.getBean("Fc2Plugin"), source = await plugin.resolveFc2Source(t);
+                const plugin = this.getDependency("Fc2Plugin"), source = await plugin.resolveFc2Source(t);
                 await plugin.openFc2Page(e, t.carNum, n, { newTab: !0 }, { source });
             } else window.open(n, "_blank"); else utils.openPage(t.url, t.carNum, !1, e);
         }

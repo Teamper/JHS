@@ -1,7 +1,9 @@
-const STATE_FLAG_NAMES = Object.freeze([ "favorite", "downloaded", "watched", "blocked" ]);
+import { d, g, h, normalizeCarNum, p } from "./constants.js";
+
+export const STATE_FLAG_NAMES = Object.freeze([ "favorite", "downloaded", "watched", "blocked" ]);
 const LEGACY_STATUS_TO_FLAG = Object.freeze({ [h]: "favorite", [g]: "downloaded", [p]: "watched", [d]: "blocked" });
 
-function createEmptyStateFlags() {
+export function createEmptyStateFlags() {
     return { favorite: !1, downloaded: !1, watched: !1, blocked: !1 };
 }
 
@@ -11,7 +13,7 @@ function stateFlagsFromLegacyStatus(status) {
     return flag && (flags[flag] = !0), flags;
 }
 
-function normalizeStateFlags(flags) {
+export function normalizeStateFlags(flags) {
     const normalized = createEmptyStateFlags();
     return STATE_FLAG_NAMES.forEach((name => normalized[name] = !0 === flags?.[name])), normalized;
 }
@@ -22,20 +24,20 @@ function projectLegacyStatus(flags) {
 }
 
 /** legacy status 只能由此函数生成，避免双源漂移。 */
-function syncLegacyStatus(record) {
+export function syncLegacyStatus(record) {
     return record.stateFlags = normalizeStateFlags(record.stateFlags), record.status = projectLegacyStatus(record.stateFlags), record;
 }
 
-function hasAnyState(flags) {
+export function hasAnyState(flags) {
     const normalized = normalizeStateFlags(flags);
     return STATE_FLAG_NAMES.some((name => normalized[name]));
 }
 
-function legacyActionToFlag(actionType) {
+export function legacyActionToFlag(actionType) {
     return LEGACY_STATUS_TO_FLAG[actionType] || null;
 }
 
-function mergeCanonicalCarRecords(records) {
+export function mergeCanonicalCarRecords(records) {
     const groups = new Map, collisions = [], unknownStatuses = [];
     records.filter(Boolean).forEach((record => {
         const original = record.carNum, carNum = normalizeCarNum(original);

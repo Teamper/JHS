@@ -1,4 +1,8 @@
-class ReviewPlugin extends BasePlugin {
+import { C, _, escapeHtml, l, r } from "../../core/constants.js";
+import { R, resolveJavDbMovieId } from "../../core/javdb-api.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class ReviewPlugin extends BasePlugin {
     getName() {
         return "ReviewPlugin";
     }
@@ -33,19 +37,19 @@ class ReviewPlugin extends BasePlugin {
         if (!window.isDetailPage) return;
         if (r) {
             const movieId = this.parseMovieId(window.location.href);
-            const workspace = this.getBean("DetailWorkspacePlugin");
-            await Promise.all([ this.showReview(movieId, workspace?.getSlot("reviews")), this.getBean("RelatedPlugin").showRelated(workspace?.getSlot("related"), movieId) ]);
+            const workspace = this.getDependency("DetailWorkspacePlugin");
+            await Promise.all([ this.showReview(movieId, workspace?.getSlot("reviews")), this.getDependency("RelatedPlugin").showRelated(workspace?.getSlot("related"), movieId) ]);
         }
         if (l) {
             const carNumber = this.getPageInfo().carNum;
             if (!carNumber) return void clog.warn("跳过 JavBus 评论解析：番号不可用");
             const movieId = await resolveJavDbMovieId(carNumber);
-            movieId && await this.showReview(movieId, this.getBean("DetailWorkspacePlugin")?.getSlot("reviews"));
+            movieId && await this.showReview(movieId, this.getDependency("DetailWorkspacePlugin")?.getSlot("reviews"));
         }
     }
     async showReview(movieId, target, options = {}) {
         const isActive = "function" === typeof options.isActive ? options.isActive : () => !0;
-        const enabled = await storageManager.getSetting("enableLoadReview", _), host = target?.length ? target : this.getBean("DetailWorkspacePlugin")?.getSlot("reviews") || $("#magnets-content");
+        const enabled = await storageManager.getSetting("enableLoadReview", _), host = target?.length ? target : this.getDependency("DetailWorkspacePlugin")?.getSlot("reviews") || $("#magnets-content");
         if (!isActive() || !host?.length) return $();
         const existing = host.children('[data-jhs-panel="reviews"]').filter(((_, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
         if (existing.length) return existing;

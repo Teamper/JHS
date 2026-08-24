@@ -1,4 +1,9 @@
-e = new WeakSet, t = async function(e, t, n) {
+import { A, B, D, P, a, d, escapeHtml, g, h, i, normalizeCarNum, p, s } from "./constants.js";
+import { IMPORTABLE_DATA_KEYS, PORTABLE_DATA_KEYS, hasPortableUserData, runDataMigrations, validatePortableData } from "./migration.js";
+import { legacyActionToFlag, normalizeStateFlags } from "./state-model.js";
+import { createIndexedMap, createStatusMap, dedupeByKey, groupDuplicateItems } from "./storage-index.js";
+
+let e = new WeakSet, t = async function(e, t, n) {
     let a;
     if (Array.isArray(e)) a = [ ...e ]; else {
         if (a = await this.forage.getItem(t) || [], a.includes(e)) {
@@ -10,8 +15,9 @@ e = new WeakSet, t = async function(e, t, n) {
     return await this._setItemAndInvalidate(t, a), a;
 };
 
-class StorageManager {
+export class StorageManager {
     constructor() {
+        this.stateService = globalThis.stateService ?? null;
         var t, s, o;
         if (t = this, (s = e).has(t) ? a("Cannot add the same private member more than once") : s instanceof WeakSet ? s.add(t) : s.set(t, o),
         i(this, "car_list_key", "car_list"), i(this, "filter_keyword_title_key", "filter_keyword_title"),
@@ -167,7 +173,7 @@ class StorageManager {
             const messages = { blocked: "已在屏蔽列表中", favorite: "已在收藏列表中", downloaded: "已标记为已下载", watched: "已标记为已观看" }, message = `${carNum} ${messages[flag]}`;
             throw show.error(message), new Error(message);
         }
-        return stateService.patch(carNum, { [flag]: !0 }, { type: "legacy-save", record: { ...e, carNum } });
+        return this.stateService.patch(carNum, { [flag]: !0 }, { type: "legacy-save", record: { ...e, carNum } });
     }
     async updateCarInfo(e) {
         let {carNum: t, url: n, names: a, actionType: i, publishTime: s, remark: o} = e;
@@ -182,7 +188,7 @@ class StorageManager {
         }
         const flag = legacyActionToFlag(i);
         if (!flag) { const e = "actionType错误, 请联系作者更正: " + i; throw show.error(e), new Error(e); }
-        return stateService.patch(t, { [flag]: !0 }, { type: "legacy-update", record: { carNum: t, names: a, url: n, remark: o, publishTime: s } });
+        return this.stateService.patch(t, { [flag]: !0 }, { type: "legacy-update", record: { carNum: t, names: a, url: n, remark: o, publishTime: s } });
     }
     async saveCarList(e) {
         if (!e || !Array.isArray(e) || 0 === e.length) throw show.error("记录列表为空!"), new Error("记录列表为空!");
@@ -198,7 +204,7 @@ class StorageManager {
             const group = groups.get(flag) || [];
             group.push({ ...item, carNum }), groups.set(flag, group);
         }
-        for (const [flag, records] of groups) await stateService.patch(records.map((item => item.carNum)), { [flag]: !0 }, { type: "legacy-batch-save", records });
+        for (const [flag, records] of groups) await this.stateService.patch(records.map((item => item.carNum)), { [flag]: !0 }, { type: "legacy-batch-save", records });
     }
     async removeNewVideoList(e) {
         return this.withActressLock(async () => {
@@ -217,11 +223,11 @@ class StorageManager {
         });
     }
     async removeCar(e) {
-        const result = await stateService.remove(e);
+        const result = await this.stateService.remove(e);
         return result.changed.length ? !0 : (show.error(`${e} 不存在`), !1);
     }
     async batchRemoveCars(e) {
-        const result = await stateService.remove(e);
+        const result = await this.stateService.remove(e);
         return result.changed.length || !1;
     }
     async getBlacklist() {
@@ -402,9 +408,10 @@ class StorageManager {
     async importData(e) {
         validatePortableData(e);
         await hasPortableUserData(this) && await this.createSnapshot("导入前自动备份", "auto-import");
-        const validKeys = new Set([ ...PORTABLE_DATA_KEYS, "data_version" ]), writes = [];
+        const validKeys = new Set([ ...IMPORTABLE_DATA_KEYS, "data_version" ]), writes = [];
         for (const key in e) {
             if (!validKeys.has(key)) { clog.warn(`[导入] 跳过未知数据键: ${key}`); continue; }
+            if ("third_party_ttl_cache" === key) continue;
             writes.push("data_version" === key ? this.setDataVersion(e[key]) : this._setItemAndInvalidate(key, e[key]));
         }
         await Promise.all(writes), this._invalidateCache(), await runDataMigrations(this), await window.stateService?.recoverPendingTransaction();

@@ -1,4 +1,9 @@
-const Z = (e, t) => {
+import { ProviderError } from "../../core/cache-policy.js";
+import { C, L, _, normalizeCarNum, o } from "../../core/constants.js";
+import { safePlay } from "../../core/feature-helpers.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export const Z = (e, t) => {
     if (!e || 0 === e.length) return null;
     const n = new Set(e);
     if (n.has(t)) return t;
@@ -169,7 +174,7 @@ class DmmPreviewParser {
 }
 
 /** 获取 DMM 预览源及可供界面判断的失败原因。 */
-async function fetchDmmPreview(carNum) {
+export async function fetchDmmPreview(carNum) {
     const parser = new DmmPreviewParser(carNum), sources = await parser.fetchVideo();
     return {
         sources,
@@ -177,7 +182,7 @@ async function fetchDmmPreview(carNum) {
     };
 }
 
-class PreviewVideoPlugin extends BasePlugin {
+export class PreviewVideoPlugin extends BasePlugin {
     getName() {
         return "PreviewVideoPlugin";
     }
@@ -316,8 +321,8 @@ class PreviewVideoPlugin extends BasePlugin {
             dmmVideo && (dmmVideo.currentTime += 10);
         })),
         $toolbar.off("contextmenu.jhsVideo").on("contextmenu.jhsVideo", "#speed-btn", (event => (event.preventDefault(),
-        this.getBean("DetailPageButtonPlugin").filterOne(event)))),
-        $("#video-filterBtn").off("click.jhsVideo").on("click.jhsVideo", (event => this.getBean("DetailPageButtonPlugin").filterOne(event))),
-        $("#video-favoriteBtn").off("click.jhsVideo").on("click.jhsVideo", (event => this.getBean("DetailPageButtonPlugin").favoriteOne(event)));
+        this.getDependency("DetailPageButtonPlugin").filterOne(event)))),
+        $("#video-filterBtn").off("click.jhsVideo").on("click.jhsVideo", (event => this.getDependency("DetailPageButtonPlugin").filterOne(event))),
+        $("#video-favoriteBtn").off("click.jhsVideo").on("click.jhsVideo", (event => this.getDependency("DetailPageButtonPlugin").favoriteOne(event)));
     }
 }

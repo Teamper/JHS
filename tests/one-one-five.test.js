@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -5,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 function load115(http = {}) {
     const context = vm.createContext({ URLSearchParams, encodeURIComponent, gmHttp: http, normalizeCarNum: value => typeof value === "string" && value.trim() ? value.trim() : null, ProviderError: class extends Error { constructor(provider, code, message, options) { super(message); Object.assign(this, { provider, code, ...options }); } } });
-    const source = readFileSync(join(import.meta.dirname, "../src/plugins/one-one-five/client.js"), "utf8");
+    const source = readTestFile(join(import.meta.dirname, "../src/plugins/one-one-five/client.js"), "utf8");
     vm.runInContext(`${source};globalThis.api={OneOneFiveClient,normalize115Keyword,build115PlayUrl,preview115Rename}`, context);
     return context.api;
 }
@@ -23,7 +24,7 @@ describe("115 domain", () => {
         expect(api.preview115Rename("old-4K-U.mkv", "abc-1")).toBe("ABC-1-4K-U.mkv");
     });
     it("keeps disabled plugins request-free", () => {
-        const source = readFileSync(join(import.meta.dirname, "../src/plugins/one-one-five/plugins.js"), "utf8");
+        const source = readTestFile(join(import.meta.dirname, "../src/plugins/one-one-five/plugins.js"), "utf8");
         expect(source).toContain('getSetting("enable115Match", !1)');
         expect(source).toContain("return this.setupListMatching()");
         expect(source).toContain('jhsEventBus.on("list-items-added"');

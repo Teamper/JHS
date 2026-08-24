@@ -1,4 +1,6 @@
-class SubTitleCatPlugin extends BasePlugin {
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class SubTitleCatPlugin extends BasePlugin {
     getName() {
         return "SubTitleCatPlugin";
     }

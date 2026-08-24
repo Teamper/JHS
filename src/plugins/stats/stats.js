@@ -1,4 +1,9 @@
-class StatsPlugin extends BasePlugin {
+import { escapeHtml } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
+import { stateService } from "../../core/state-service.js";
+
+export class StatsPlugin extends BasePlugin {
     getName() { return "StatsPlugin"; }
     async initCss() {
         return `
@@ -37,8 +42,8 @@ class StatsPlugin extends BasePlugin {
                 current.count++, actressCounts.set(key, current);
             } else names.forEach((name => { const key = `name:${name}`, current = actressCounts.get(key) || { starId: "", name, count: 0 }; current.count++, actressCounts.set(key, current); }));
         }));
-        const topActresses = [ ...actressCounts.values() ].sort(((left, right) => right.count - left.count || left.name.localeCompare(right.name))).slice(0, 10), topValue = topActresses[0]?.count || 1, javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl();
-        const pending = counts.pending, counter = this.getBean("NewVideoPlugin"), newVideos = counter ? await counter.getPendingNewVideoTotal() : 0, pageSummary = this.getBean("ListPagePlugin").getCurrentPageSummary();
+        const topActresses = [ ...actressCounts.values() ].sort(((left, right) => right.count - left.count || left.name.localeCompare(right.name))).slice(0, 10), topValue = topActresses[0]?.count || 1, javDbUrl = await this.getDependency("OtherSitePlugin").getJavDbUrl();
+        const pending = counts.pending, counter = this.getDependency("NewVideoPlugin"), newVideos = counter ? await counter.getPendingNewVideoTotal() : 0, pageSummary = this.getDependency("ListPagePlugin").getCurrentPageSummary();
         const metrics = [
             { label: "总记录", value: total, action: null },
             { label: "收藏", value: counts.favorite, action: null },
@@ -69,8 +74,8 @@ class StatsPlugin extends BasePlugin {
             $(layerElement).find("button.jhs-stats__metric[data-action]").on("click", (event => {
                 const metric = $(event.currentTarget), action = metric.data("action");
                 layer.close(layerIndex);
-                if ("new-video" === action) return this.getBean("NewVideoPlugin").openDialog();
-                if ("filter" === action) this.getBean("ListPagePlugin").setQuickFilter(metric.data("filter"));
+                if ("new-video" === action) return this.getDependency("NewVideoPlugin").openDialog();
+                if ("filter" === action) this.getDependency("ListPagePlugin").setQuickFilter(metric.data("filter"));
             }));
             utils.setupEscClose(layerIndex);
         } });

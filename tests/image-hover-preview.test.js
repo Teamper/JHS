@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -58,13 +59,18 @@ function loadPreviewClass() {
         set src(value) { this.value = value; }
         get src() { return this.value; }
     }
-    const context = { console, document, Image: FakeImage, JHS_Z_INDEX: { tooltip: 9999999999 }, utils: { isMobileMode: () => false }, setTimeout, clearTimeout };
+    class FakeLifecycleScope {
+        constructor() { this.cleanups = []; }
+        listen(target, type, listener) { target.addEventListener(type, listener); this.cleanups.push(() => target.removeEventListener(type, listener)); }
+        dispose() { this.cleanups.splice(0).reverse().forEach((cleanup) => cleanup()); }
+    }
+    const context = { console, document, Image: FakeImage, LifecycleScope: FakeLifecycleScope, Date, JHS_Z_INDEX: { tooltip: 9999999999 }, utils: { isMobileMode: () => false }, setTimeout, clearTimeout };
     context.window = context;
     context.innerWidth = 800;
     context.innerHeight = 600;
     context.requestAnimationFrame = (callback) => (frames.push(callback), frames.length);
     context.cancelAnimationFrame = () => {};
-    const source = readFileSync(join(process.cwd(), "src/core/logger.js"), "utf8"), start = source.indexOf("window.ImageHoverPreview = class"), end = source.indexOf("}, async function()", start);
+    const source = readTestFile(join(process.cwd(), "src/core/logger.js"), "utf8"), start = source.indexOf("window.ImageHoverPreview = class"), end = source.indexOf("}, async function()", start);
     vm.runInContext(`${source.slice(start, end + 1)}; globalThis.TestImageHoverPreview = window.ImageHoverPreview;`, vm.createContext(context));
     const flushFrames = () => { while (frames.length) frames.shift()(); };
     return { Preview: context.TestImageHoverPreview, document, firstCover, createCover, head, images, flushFrames };

@@ -1,4 +1,9 @@
-class HighlightMagnetPlugin extends BasePlugin {
+import { _, l, r } from "../../core/constants.js";
+import { jhsEventBus } from "../../core/event-bus.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { calcMagnetScore } from "../external-search/magnet-hub.js";
+
+export class HighlightMagnetPlugin extends BasePlugin {
     async handle() {
         window.isDetailPage && jhsEventBus.on("magnet-items-updated", (() => {
             void storageManager.getSetting("enableMagnetsFilter", _).then((enabled => enabled === _ ? this.doFilterMagnet() : this.showAll()));

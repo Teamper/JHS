@@ -1,4 +1,8 @@
-class FilterTitleKeywordPlugin extends BasePlugin {
+import { _, l, r } from "../../core/constants.js";
+import { jhsEventBus } from "../../core/event-bus.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class FilterTitleKeywordPlugin extends BasePlugin {
     getName() {
         return "FilterTitleKeywordPlugin";
     }

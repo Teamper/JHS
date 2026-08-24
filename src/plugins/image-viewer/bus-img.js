@@ -1,4 +1,7 @@
-class BusImgPlugin extends BasePlugin {
+import { C, _ } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class BusImgPlugin extends BasePlugin {
     getName() {
         return "BusImgPlugin";
     }

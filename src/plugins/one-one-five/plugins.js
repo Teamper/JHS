@@ -1,4 +1,10 @@
-class OneOneFiveMatchPlugin extends BasePlugin {
+import { escapeHtml, normalizeCarNum } from "../../core/constants.js";
+import { jhsEventBus } from "../../core/event-bus.js";
+import { mapLimit } from "../../core/feature-helpers.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { OneOneFiveClient, build115PlayUrl, format115Size, normalize115Keyword, preview115Rename } from "./client.js";
+
+export class OneOneFiveMatchPlugin extends BasePlugin {
     constructor() { super(), this.observer = null, this.unsubscribeItems = null, this.pendingCards = new Set, this.flushTimer = null, this.client = new OneOneFiveClient, this.concurrency = 4, this.cacheMinutes = 60; }
     getName() { return "OneOneFiveMatchPlugin"; }
     async handle() {

@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -20,7 +21,7 @@ function loadController() {
         storageManager: { getCar: async carNum => records.get(carNum) }, stateService: { toggle },
         utils: { q: confirm, closePage }, show: { error: vi.fn() }, clog: { error: vi.fn() }
     });
-    const source = readFileSync(join(repoRoot, "src/core/detail-state-controller.js"), "utf8");
+    const source = readTestFile(join(repoRoot, "src/core/detail-state-controller.js"), "utf8");
     vm.runInContext(`${source};globalThis.Controller=DetailStateController`, context);
     return { controller: new context.Controller(), dom, $, records, toggle, confirm, closePage };
 }
@@ -60,7 +61,7 @@ describe("Utils.closePage", () => {
             i: (target, key, value) => (target[key] = value)
         });
         dom.window.layer = context.layer;
-        vm.runInContext(`${readFileSync(join(repoRoot, "src/core/utils.js"), "utf8")};globalThis.TestUtils=Utils`, context);
+        vm.runInContext(`${readTestFile(join(repoRoot, "src/core/utils.js"), "utf8")};globalThis.TestUtils=Utils`, context);
         await new context.TestUtils().closePage({ root: dom.window.document.querySelector("#detail") });
         expect(close).toHaveBeenCalledOnce();
         expect(close).toHaveBeenCalledWith(7);

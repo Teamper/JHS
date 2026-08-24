@@ -8,7 +8,7 @@ function normalizeLocation(locationLike = window.location) {
     return new URL(locationLike.href || `${locationLike.protocol}//${locationLike.hostname}${locationLike.pathname || "/"}${locationLike.search || ""}`);
 }
 /** 仅按 hostname 识别脚本运行站点，避免 URL 查询串造成误判。 */
-function detectSite(locationLike = window.location) {
+export function detectSite(locationLike = window.location) {
     const locationUrl = normalizeLocation(locationLike);
     const hostname = locationUrl.hostname.toLowerCase().replace(/\.$/, "");
     const isJavDB = JAVDB_HOST_PATTERN.test(hostname);
@@ -21,7 +21,7 @@ function detectSite(locationLike = window.location) {
 }
 
 /** 识别由 JHS 接管渲染的 JavDB 热播榜页面。 */
-function isHitShowPage(locationLike = window.location) {
+export function isHitShowPage(locationLike = window.location) {
     const locationUrl = normalizeLocation(locationLike);
     return "/advanced_search" === locationUrl.pathname && "1" === locationUrl.searchParams.get("handlePlayback");
 }
@@ -34,6 +34,6 @@ function isNormalListPage(locationLike = window.location, hasMovieList = null) {
 }
 
 /** 识别所有具备列表页能力的页面，包括 JHS 热播榜。 */
-function isListPage(locationLike = window.location, hasMovieList = null) {
+export function isListPage(locationLike = window.location, hasMovieList = null) {
     return isHitShowPage(locationLike) || isNormalListPage(locationLike, hasMovieList);
 }

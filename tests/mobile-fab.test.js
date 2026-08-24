@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -20,7 +21,7 @@ function loadMobilePlugin() {
         r: true, l: false, m: "屏蔽", v: "收藏", y: "下载", k: "观看", normalizeStateFlags: value => value || {},
         storageManager: {}, stateService: {}, show: { info: vi.fn() }, utils: {}, clog: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() }, setTimeout, clearTimeout
     });
-    const source = readFileSync(join(import.meta.dirname, "../src/plugins/status/mobile-bottom-bar.js"), "utf8");
+    const source = readTestFile(join(import.meta.dirname, "../src/plugins/status/mobile-bottom-bar.js"), "utf8");
     vm.runInContext(`${source};globalThis.TestMobilePlugin=MobileBottomBarPlugin`, context);
     return { $, listButtons, listPage, plugin: new context.TestMobilePlugin() };
 }

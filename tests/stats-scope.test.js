@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -30,7 +31,7 @@ function loadStatsPlugin() {
         normalizeStateFlags: flags => ({ blocked: !!flags?.blocked, favorite: !!flags?.favorite, downloaded: !!flags?.downloaded, watched: !!flags?.watched }),
         hasAnyState: flags => Object.values(flags).some(Boolean), escapeHtml: value => String(value), r: true, l: false
     });
-    const source = readFileSync(join(import.meta.dirname, "../src/plugins/stats/stats.js"), "utf8");
+    const source = readTestFile(join(import.meta.dirname, "../src/plugins/stats/stats.js"), "utf8");
     vm.runInContext(`${source};globalThis.TestStatsPlugin=StatsPlugin`, context);
     return { $, layer, listPage, newVideo, plugin: new context.TestStatsPlugin() };
 }

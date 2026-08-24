@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, refactor/6.5]
   pull_request:
-    branches: [main]
+    branches: [main, refactor/6.5]
   workflow_dispatch:
 
 permissions:
@@ -30,9 +30,9 @@ jobs:
     name: Node 22 full check
     runs-on: ubuntu-latest
     outputs:
-      should_release: ${{ steps.push_release.outputs.should_release || steps.manual_release.outputs.should_release }}
-      version: ${{ steps.push_release.outputs.version || steps.manual_release.outputs.version }}
-      tag: ${{ steps.push_release.outputs.tag || steps.manual_release.outputs.tag }}
+      should_release: ${{ steps.push_release.outputs.should_release }}
+      version: ${{ steps.push_release.outputs.version }}
+      tag: ${{ steps.push_release.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -42,6 +42,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Verify 6.5 integration branch contains current main
+        if: github.ref == 'refs/heads/refactor/6.5' || github.base_ref == 'refactor/6.5'
+        run: node scripts/check-refactor-sync.mjs
       - run: npm run check
       - name: Verify tracked userscript is current
         run: git diff --exit-code -- JHS.user.js
@@ -52,15 +55,37 @@ jobs:
         id: push_release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: node scripts/release-contract.mjs --base-ref "${{ github.event.before }}" --github-output "$GITHUB_OUTPUT"
-      - name: Select recovery release
-        id: manual_release
-        if: github.event_name == 'workflow_dispatch'
-        run: node scripts/release-contract.mjs --force-release --github-output "$GITHUB_OUTPUT"
+
+  browser-smoke:
+    name: Browser smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Install browser test dependencies
+        working-directory: tests/browser
+        run: npm ci
+      - name: Install ephemeral Chromium
+        working-directory: tests/browser
+        run: npx playwright install chromium --with-deps
+      - name: Run deterministic browser smoke
+        run: npm run check:browser
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: output/playwright/
+          retention-days: 14
 
   release:
     name: Publish immutable release
-    needs: [node20, check]
-    if: needs.check.outputs.should_release == 'true'
+    needs: [node20, check, browser-smoke]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.check.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -76,11 +101,7 @@ jobs:
         with:
           node-version: 22
       - name: Revalidate release identity and extract notes
-        if: github.event_name == 'push'
         run: node scripts/release-contract.mjs --base-ref "${{ github.event.before }}" --notes-file /tmp/release-body.md
-      - name: Revalidate recovery identity and extract notes
-        if: github.event_name == 'workflow_dispatch'
-        run: node scripts/release-contract.mjs --force-release --notes-file /tmp/release-body.md
       - name: Validate immutable tag and release state
         id: release_state
         env:

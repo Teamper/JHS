@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -6,24 +7,24 @@ import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
 
 const repoRoot = join(import.meta.dirname, "..");
-const fc2Source = readFileSync(join(repoRoot, "src/plugins/external-search/fc2.js"), "utf8");
-const fc2By123AvSource = readFileSync(join(repoRoot, "src/plugins/external-search/fc2-by-123av.js"), "utf8");
-const screenshotSource = readFileSync(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
-const listPageSource = readFileSync(join(repoRoot, "src/plugins/status/list-page.js"), "utf8");
-const historySource = readFileSync(join(repoRoot, "src/plugins/status/history.js"), "utf8");
-const stateServiceSource = readFileSync(join(repoRoot, "src/core/state-service.js"), "utf8");
-const titleFilterSource = readFileSync(join(repoRoot, "src/plugins/blacklist/filter-title-keyword.js"), "utf8");
-const highlightMagnetSource = readFileSync(join(repoRoot, "src/plugins/status/highlight-magnet.js"), "utf8");
-const primitivesSource = readFileSync(join(repoRoot, "src/core/ui-primitives.js"), "utf8");
-const magnetHubSource = readFileSync(join(repoRoot, "src/plugins/external-search/magnet-hub.js"), "utf8");
-const loggerSource = readFileSync(join(repoRoot, "src/core/logger.js"), "utf8");
-const top250Source = readFileSync(join(repoRoot, "src/plugins/external-search/top250.js"), "utf8");
+const fc2Source = readTestFile(join(repoRoot, "src/plugins/external-search/fc2.js"), "utf8");
+const fc2By123AvSource = readTestFile(join(repoRoot, "src/plugins/external-search/fc2-by-123av.js"), "utf8");
+const screenshotSource = readTestFile(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
+const listPageSource = readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8");
+const historySource = readTestFile(join(repoRoot, "src/plugins/status/history.js"), "utf8");
+const stateServiceSource = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8");
+const titleFilterSource = readTestFile(join(repoRoot, "src/plugins/blacklist/filter-title-keyword.js"), "utf8");
+const highlightMagnetSource = readTestFile(join(repoRoot, "src/plugins/status/highlight-magnet.js"), "utf8");
+const primitivesSource = readTestFile(join(repoRoot, "src/core/ui-primitives.js"), "utf8");
+const magnetHubSource = readTestFile(join(repoRoot, "src/plugins/external-search/magnet-hub.js"), "utf8");
+const loggerSource = readTestFile(join(repoRoot, "src/core/logger.js"), "utf8");
+const top250Source = readTestFile(join(repoRoot, "src/plugins/external-search/top250.js"), "utf8");
 
 function loadWorkspace() {
     const dom = new JSDOM('<main id="host"></main>', { url: "https://javdb.com/users/collection_codes" }), $ = jqueryFactory(dom.window);
     const context = vm.createContext({ window: dom.window, document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver, $, BasePlugin: class {}, r: true, l: false,
         normalizeCarNum: value => String(value || "").trim().toUpperCase() || null, jhsEventBus: { emit: vi.fn() }, utils: {}, JhsSelect: {} });
-    const source = readFileSync(join(repoRoot, "src/plugins/status/detail-workspace.js"), "utf8");
+    const source = readTestFile(join(repoRoot, "src/plugins/status/detail-workspace.js"), "utf8");
     vm.runInContext(`${source};globalThis.createShell=createFc2DetailShell;globalThis.createContext=createFc2DetailContext`, context);
     return { $, context };
 }
@@ -40,7 +41,7 @@ function loadResolver(responseFactory) {
         normalizeCarNum: value => String(value || "").trim().toUpperCase().replace("FC2-PPV-", "FC2-") || null,
         utils: { formatDate: String }, show: { error: vi.fn() }
     });
-    const source = readFileSync(join(repoRoot, "src/core/javdb-api.js"), "utf8");
+    const source = readTestFile(join(repoRoot, "src/core/javdb-api.js"), "utf8");
     vm.runInContext(`${source};globalThis.resolveId=resolveJavDbMovieId`, context);
     return { resolveId: context.resolveId, get, cacheCalls };
 }
@@ -50,7 +51,7 @@ function loadWantApi({ encryptedToken = "encrypted", response = { success: 1 } }
         storageManager: { deleteCachedRequest }, gmHttp: { gmRequest }, localStorage: { getItem: key => local.get(key) || null, setItem: (key, value) => local.set(key, value), removeItem: key => local.delete(key) }, decryptData: vi.fn(async value => `token:${value}`), md5: String,
         normalizeCarNum: String, utils: { formatDate: String }, show: { error: vi.fn() }
     });
-    const source = readFileSync(join(repoRoot, "src/core/javdb-api.js"), "utf8");
+    const source = readTestFile(join(repoRoot, "src/core/javdb-api.js"), "utf8");
     vm.runInContext(`${source};globalThis.markWant=markJavDbWantWatch`, context);
     return { markWant: context.markWant, gmRequest, deleteCachedRequest };
 }

@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -6,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 const repoRoot = join(import.meta.dirname, "..");
 
 function loadCarNumHelpers() {
-    const source = readFileSync(join(repoRoot, "src/core/constants.js"), "utf8"), start = source.indexOf("function normalizeCarNum"), end = source.indexOf("let M =", start);
+    const source = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), start = source.indexOf("function normalizeCarNum"), end = source.indexOf("let M =", start);
     const context = vm.createContext({});
     vm.runInContext(`${source.slice(start, end)}; globalThis.normalize = normalizeCarNum; globalThis.first = firstValidCarNum; globalThis.assertContract = assertPageInfoContract;`, context);
     return context;
@@ -53,7 +54,7 @@ function getPageInfo({ url, javdb = false, javbus = false, copyCarNum = null, fa
         assertPageInfoContract: helpers.assertContract,
         i: (target, key, value) => (target[key] = value)
     });
-    const source = readFileSync(join(repoRoot, "src/core/plugin-manager.js"), "utf8");
+    const source = readTestFile(join(repoRoot, "src/core/plugin-manager.js"), "utf8");
     vm.runInContext(`${source}; globalThis.TestBasePlugin = BasePlugin;`, context);
     return context.TestBasePlugin.prototype.getPageInfo.call({});
 }
@@ -69,7 +70,7 @@ function loadUtils(url = "https://javdb.example/search?q=ABF-142") {
         normalizeCarNum: loadCarNumHelpers().normalize,
         i: (target, key, value) => (target[key] = value)
     });
-    const source = readFileSync(join(repoRoot, "src/core/utils.js"), "utf8");
+    const source = readTestFile(join(repoRoot, "src/core/utils.js"), "utf8");
     vm.runInContext(`${source}; globalThis.TestUtils = Utils;`, context);
     return { utils: new context.TestUtils(), layer, openTab };
 }
@@ -86,7 +87,7 @@ function loadDmmParser() {
         $: () => ({ attr: vi.fn().mockReturnThis(), css: vi.fn().mockReturnThis(), append: vi.fn().mockReturnThis() }),
         show: { error: vi.fn() }
     });
-    const source = readFileSync(join(repoRoot, "src/plugins/image-viewer/preview-video.js"), "utf8"), start = source.indexOf("const Z ="), end = source.indexOf("async function fetchDmmPreview", start);
+    const source = readTestFile(join(repoRoot, "src/plugins/image-viewer/preview-video.js"), "utf8"), start = source.indexOf("const Z ="), end = source.indexOf("async function fetchDmmPreview", start);
     vm.runInContext(`${source.slice(start, end)}; globalThis.TestDmmParser = DmmPreviewParser;`, context);
     return { Parser: context.TestDmmParser, warn, error, request };
 }
@@ -107,9 +108,9 @@ function loadScreenshotPlugin(overrides = {}) {
         l: false
     });
     context.CACHE_TTL = { screenshot: 6048e5 };
-    const parserSource = readFileSync(join(repoRoot, "src/parsers/third-party-parsers.js"), "utf8");
-    const registrySource = readFileSync(join(repoRoot, "src/plugins/image-viewer/screenshot-provider-registry.js"), "utf8");
-    const source = readFileSync(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
+    const parserSource = readTestFile(join(repoRoot, "src/integrations/javstore/parser.js"), "utf8");
+    const registrySource = readTestFile(join(repoRoot, "src/plugins/image-viewer/screenshot-provider-registry.js"), "utf8");
+    const source = readTestFile(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
     vm.runInContext(`${parserSource}\n${registrySource}\n${source}; globalThis.TestScreenshotPlugin = ScreenShotPlugin;`, context);
     return { Plugin: context.TestScreenshotPlugin, warn, debug, error, cachedRequest };
 }
@@ -282,20 +283,20 @@ describe("source regression contracts", () => {
             "src/plugins/image-viewer/preview-video.js",
             "src/plugins/image-viewer/screenshot.js"
         ]) {
-            const source = readFileSync(join(repoRoot, file), "utf8");
+            const source = readTestFile(join(repoRoot, file), "utf8");
             expect(source).toContain("getPageInfo()");
             expect(source).not.toContain("getPageInfo()?.carNum");
         }
     });
 
     it("treats opted-in HTTP 404 responses as neutral results before retry accounting", () => {
-        const source = readFileSync(join(repoRoot, "src/core/http.js"), "utf8");
+        const source = readTestFile(join(repoRoot, "src/core/http.js"), "utf8");
         expect(source).toMatch(/404 === e\.status && requestOptions\.ignoreNotFound[\s\S]{0,80}a\(null\)/);
         expect(source.indexOf("404 === e.status && requestOptions.ignoreNotFound")).toBeLessThan(source.indexOf("this._isCloudflareChallenge(e.responseText, e.status)"));
     });
 
     it("uses readable non-shadowing variables for actress profile links", () => {
-        const source = readFileSync(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8");
+        const source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8");
         expect(source).toContain("const profileUrl = normalizeHttpUrl(`/actors/${encodeURIComponent(starId)}?t=d`, javDbUrl)");
         expect(source).toContain("noteText = isPaused");
         expect(source).not.toContain("`${c}/actors/${e.starId}?t=d`");

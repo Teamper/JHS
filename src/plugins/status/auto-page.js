@@ -1,4 +1,7 @@
-class AutoPagePlugin extends BasePlugin {
+import { C, _, i, l, o, r } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class AutoPagePlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "preloadDistance", 500), i(this, "currentPage", this.getInitialPageNumber()),
         i(this, "pageItems", []);
@@ -69,7 +72,7 @@ class AutoPagePlugin extends BasePlugin {
                 top: g,
                 url: this.nextUrl
             });
-            const p = this.getBean("ListPagePlugin");
+            const p = this.getDependency("ListPagePlugin");
             let m = s.find(this.getSelector().coverImgSelector);
             p.replaceHdImg(m), $(this.getSelector().boxSelector).append(c), this.nextUrl = null == (e = s.find(t.nextPageSelector)) ? void 0 : e.attr("href"),
             this.hasMore = !!this.nextUrl;

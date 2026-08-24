@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -13,7 +14,7 @@ function loadHistory() {
         utils: { getDialogArea: () => [], q: confirm }, show: { error: vi.fn() }, clog: { debug: vi.fn() }, i: (target, key, value) => (target[key] = value),
         r: true, l: false, d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", m: "屏蔽", v: "收藏", y: "下载", k: "观看"
     });
-    vm.runInContext(`${readFileSync(join(process.cwd(), "src/plugins/status/history.js"), "utf8")};globalThis.History=HistoryPlugin`, context);
+    vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/status/history.js"), "utf8")};globalThis.History=HistoryPlugin`, context);
     const plugin = new context.History;
     plugin.tableObj = { setData: vi.fn() };
     return { plugin, $, patch, toggle, layer, confirm };

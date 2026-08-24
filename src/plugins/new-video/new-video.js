@@ -1,3 +1,11 @@
+import { A, C, D, _, escapeHtml, i, normalizeCarNum } from "../../core/constants.js";
+import { jhsEventBus } from "../../core/event-bus.js";
+import { mapLimit, normalizeHttpUrl, parseNumberSetting, shouldSkipStopped } from "../../core/feature-helpers.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
+import { stateService } from "../../core/state-service.js";
+import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
+
 const tt = [ {
     name: "jsDelivr (全球CDN)",
     json: "https://cdn.jsdelivr.net/gh/gfriends/gfriends/Filetree.json",
@@ -129,7 +137,7 @@ function aggregateNewVideoRecords(actresses, carMap, decisions, now = Date.now()
     }));
 }
 
-class NewVideoPlugin extends BasePlugin {
+export class NewVideoPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", new Map), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", new Map), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", new Map), i(this, "nvActorCoverRequests", new Map), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", !1), i(this, "nvWorkspaceMounted", !1), i(this, "nvEventUnsubscribe", null), i(this, "taskStatusUnsubscribe", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760);
     }
@@ -264,12 +272,12 @@ class NewVideoPlugin extends BasePlugin {
         $("#newVideoCount").text(`${e}`);
     }
     async resetBtnTip() {
-        const e = this.getBean("TaskPlugin"), t = await storageManager.getSetting(), n = localStorage.getItem(e.lastCheckFavoriteActressTimeKey) || "无", a = t.checkFavoriteActress_IntervalTime, i = localStorage.getItem(e.lastCheckNewVideoTimeKey) || "无", s = t.checkNewVideo_intervalTime;
+        const e = this.getDependency("TaskPlugin"), t = await storageManager.getSetting(), n = localStorage.getItem(e.lastCheckFavoriteActressTimeKey) || "无", a = t.checkFavoriteActress_IntervalTime, i = localStorage.getItem(e.lastCheckNewVideoTimeKey) || "无", s = t.checkNewVideo_intervalTime;
         $("#checkFavoriteActress").attr("data-tip", `上次完整同步: ${n}; 检测间隔时间: ${a}小时`), $("#checkNewVideo").attr("data-tip", `上次整批检测: ${i}; 检测间隔时间: ${s}小时`);
     }
     async openDialog() {
         this.cleanupNewVideoWorkspace(), this._viewMode = "list" === localStorage.getItem("jhs_newVideoViewMode") ? "list" : "actress", this.currentPage = 1, this.nvCurrentPage = 1, this.nvSelected = new Set, this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map, this.nvRenderGeneration++;
-        const e = this.getBean("TaskPlugin"), t = await storageManager.getSetting(), n = localStorage.getItem(e.lastCheckFavoriteActressTimeKey) || "无", a = t.checkFavoriteActress_IntervalTime, i = localStorage.getItem(e.lastCheckNewVideoTimeKey) || "无", s = t.checkNewVideo_intervalTime;
+        const e = this.getDependency("TaskPlugin"), t = await storageManager.getSetting(), n = localStorage.getItem(e.lastCheckFavoriteActressTimeKey) || "无", a = t.checkFavoriteActress_IntervalTime, i = localStorage.getItem(e.lastCheckNewVideoTimeKey) || "无", s = t.checkNewVideo_intervalTime;
         let o = `
             <div class="newVideoToolBox jhs-ui">
                 <div class="jhs-new-video-toolbar" role="toolbar" aria-label="新作品工作区工具">
@@ -320,7 +328,7 @@ class NewVideoPlugin extends BasePlugin {
         this.nvAllItemsMap.clear(), this.nvFlatListCache = [], this.nvActressesCache = [], this.nvCarMapCache = new Map, this.nvDecisionsCache = {}, this.nvCurrentPageItems = [];
     }
     bindClick() {
-        const taskPlugin = this.getBean("TaskPlugin");
+        const taskPlugin = this.getDependency("TaskPlugin");
         $("#reLoad").on("click", (() => {
             void this.reloadNewVideoWorkspaceData(), $("#checkNewVideoMsg").text("");
         })), $("#new-video-list-container").on("click", ".nv-card__link", (async e => {
@@ -334,7 +342,7 @@ class NewVideoPlugin extends BasePlugin {
                 clog.error("移除新作品标记失败:", n);
             }
         })), $("#toSetting").on("click", (e => {
-            this.getBean("SettingPlugin").openSettingDialog("task-panel", (() => {
+            this.getDependency("SettingPlugin").openSettingDialog("task-panel", (() => {
                 $("#setting-checkFavoriteActress").css({
                     border: "1px solid var(--jhs-status-filter)"
                 }), $("#setting-checkNewVideo").css({
@@ -373,12 +381,12 @@ class NewVideoPlugin extends BasePlugin {
         const label = button.find("span").last(), previous = label.text();
         button.attr("aria-busy", "true").prop("disabled", !0), label.text(busyLabel);
         try {
-            await navigator.locks.request(this.getBean("TaskPlugin").singleTaskKey, { ifAvailable: !0 }, (async lock => {
+            await navigator.locks.request(this.getDependency("TaskPlugin").singleTaskKey, { ifAvailable: !0 }, (async lock => {
                 if (!lock) return void show.error("后台任务正在运行，请稍后再试");
                 await runner();
             }));
         } catch (error) {
-            clog.error("手动任务执行失败", error), this.getBean("TaskPlugin").isNetworkBlocked(error) && show.error(error.message || "任务执行失败");
+            clog.error("手动任务执行失败", error), this.getDependency("TaskPlugin").isNetworkBlocked(error) && show.error(error.message || "任务执行失败");
         } finally {
             button.removeAttr("aria-busy").prop("disabled", !1), label.text(previous), this.renderTaskStatuses();
         }
@@ -406,7 +414,7 @@ class NewVideoPlugin extends BasePlugin {
         const generation = ++this.nvRenderGeneration, container = "list" === this._viewMode ? $("#new-video-list-container") : $("#actress-card-container");
         renderStateView(container, { type: "loading", title: "加载中" });
         try {
-            const [ actresses, carMap, decisions, javDbUrl, ruleTime ] = await Promise.all([ storageManager.getFavoriteActressList(), storageManager.getCarMap(), stateService.getNewVideoDecisions(), this.getBean("OtherSitePlugin").getJavDbUrl(), storageManager.getSetting("checkNewVideo_ruleTime", 8760) ]);
+            const [ actresses, carMap, decisions, javDbUrl, ruleTime ] = await Promise.all([ storageManager.getFavoriteActressList(), storageManager.getCarMap(), stateService.getNewVideoDecisions(), this.getDependency("OtherSitePlugin").getJavDbUrl(), storageManager.getSetting("checkNewVideo_ruleTime", 8760) ]);
             if (!this.isWorkspaceMounted() || generation !== this.nvRenderGeneration) return;
             this.nvActressesCache = actresses, this.nvCarMapCache = carMap, this.nvDecisionsCache = decisions, this.nvJavDbUrl = javDbUrl, this.nvRuleTime = parseNumberSetting(ruleTime, 8760, { min: 0 });
             const items = aggregateNewVideoRecords(actresses, carMap, decisions), nextMap = new Map;
@@ -421,7 +429,7 @@ class NewVideoPlugin extends BasePlugin {
     renderTaskStatuses() {
         const container = $("#jhs-task-status-list");
         if (!container.length) return;
-        const taskPlugin = this.getBean("TaskPlugin"), names = { favoriteActress: "演员同步", newVideo: "新作品", blacklist: "黑名单" }, labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = value => value ? new Date(value).toLocaleString() : "无";
+        const taskPlugin = this.getDependency("TaskPlugin"), names = { favoriteActress: "演员同步", newVideo: "新作品", blacklist: "黑名单" }, labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = value => value ? new Date(value).toLocaleString() : "无";
         container.empty(), [ "favoriteActress", "newVideo", "blacklist" ].forEach((name => {
             const snapshot = taskPlugin.getTaskStatusSnapshot(name), item = $('<div class="jhs-task-status"></div>');
             item.append($('<span class="jhs-task-status__name"></span>').text(`${names[name]}：${labels[snapshot.state]}`)), item.append($('<span class="jhs-task-status__meta"></span>').text(`上次完成 ${format(snapshot.completedAt)}；下次检查 ${snapshot.nextAt ? format(snapshot.nextAt) : "立即"}`)), container.append(item);
@@ -454,7 +462,7 @@ class NewVideoPlugin extends BasePlugin {
         const sortedActresses = utils.genericSort(t, sortMap[sortBy] || defaultSort);
         const totalCount = sortedActresses.length, totalPages = Math.ceil(totalCount / this.pageSize), pageStart = (this.currentPage - 1) * this.pageSize, pageEnd = pageStart + this.pageSize;
         totalPages > 0 && this.currentPage > totalPages && (this.currentPage = totalPages);
-        const safePageStart = (this.currentPage - 1) * this.pageSize, pageActresses = sortedActresses.slice(safePageStart, safePageStart + this.pageSize), javDbUrl = this.nvJavDbUrl, taskPlugin = this.getBean("TaskPlugin"), ruleTime = this.nvRuleTime;
+        const safePageStart = (this.currentPage - 1) * this.pageSize, pageActresses = sortedActresses.slice(safePageStart, safePageStart + this.pageSize), javDbUrl = this.nvJavDbUrl, taskPlugin = this.getDependency("TaskPlugin"), ruleTime = this.nvRuleTime;
         if (0 === pageActresses.length) {
             renderStateView(e, { type: "empty", title: this.nvActressesCache.length ? "没有符合当前筛选条件的演员" : "暂无收藏演员" });
             return void this.renderPagination(totalCount, totalPages);
@@ -481,7 +489,7 @@ class NewVideoPlugin extends BasePlugin {
             e.preventDefault();
             const t = $(e.currentTarget).attr("data-starId"), n = sortedActresses.find((e => e.starId === t));
             utils.q(e, `是否取消收藏 ${n.name}?`, (async () => {
-                let e = `${await this.getBean("OtherSitePlugin").getJavDbUrl()}/actors/${t}/uncollect`;
+                let e = `${await this.getDependency("OtherSitePlugin").getJavDbUrl()}/actors/${t}/uncollect`;
                 const n = document.querySelector("meta[name=csrf-token]").content, a = await gmHttp.post(e, null, {
                     "x-csrf-token": n
                 });

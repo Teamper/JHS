@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -24,9 +25,10 @@ function loadTaskLifecycle({ isListPage = false, hidden = false } = {}) {
         i: (target, key, value) => (target[key] = value)
     });
     const source = [
-        readFileSync(join(repoRoot, "src/core/site-context.js"), "utf8"),
-        readFileSync(join(repoRoot, "src/parsers/third-party-parsers.js"), "utf8"),
-        readFileSync(join(repoRoot, "src/plugins/new-video/task.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/core/site-context.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/integrations/javdb/parser.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/integrations/host-list/parser.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/plugins/new-video/task.js"), "utf8"),
         "globalThis.TestTaskPlugin=TaskPlugin;"
     ].join("\n");
     vm.runInContext(source, context);
@@ -49,12 +51,12 @@ function loadListObserver() {
         normalizeStateFlags: flags => Object.fromEntries([ "favorite", "downloaded", "watched", "blocked" ].map((key => [ key, !0 === flags?.[key] ]))),
         hasAnyState: flags => [ "favorite", "downloaded", "watched", "blocked" ].some((key => !0 === flags?.[key]))
     });
-    vm.runInContext(`${readFileSync(join(repoRoot, "src/plugins/status/list-page.js"), "utf8")};globalThis.TestListPagePlugin=ListPagePlugin;`, context);
+    vm.runInContext(`${readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8")};globalThis.TestListPagePlugin=ListPagePlugin;`, context);
     return { dom, plugin: new context.TestListPagePlugin(), $, fetch, mapLimit, storageManager, clog: context.clog };
 }
 
 function initializeAccessibilityDom(html) {
-    const dom = new JSDOM(html), source = readFileSync(join(repoRoot, "src/core/ui-primitives.js"), "utf8"), start = source.indexOf("function initializeUiAccessibility"), end = source.indexOf("class JhsSelect", start), context = vm.createContext({
+    const dom = new JSDOM(html), source = readTestFile(join(repoRoot, "src/core/ui-primitives.js"), "utf8"), start = source.indexOf("function initializeUiAccessibility"), end = source.indexOf("class JhsSelect", start), context = vm.createContext({
         document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver, queueMicrotask
     });
     vm.runInContext(`${source.slice(start, end)};initializeUiAccessibility();`, context);

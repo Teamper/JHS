@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -6,8 +7,8 @@ import { describe, expect, it } from "vitest";
 const repoRoot = join(import.meta.dirname, "..");
 
 function loadStateModel() {
-    const constants = readFileSync(join(repoRoot, "src/core/constants.js"), "utf8"), normalizeStart = constants.indexOf("function normalizeCarNum"), normalizeEnd = constants.indexOf("function assertPageInfoContract", normalizeStart);
-    const source = readFileSync(join(repoRoot, "src/core/state-model.js"), "utf8"), context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch" });
+    const constants = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), normalizeStart = constants.indexOf("function normalizeCarNum"), normalizeEnd = constants.indexOf("function assertPageInfoContract", normalizeStart);
+    const source = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch" });
     vm.runInContext(`${constants.slice(normalizeStart, normalizeEnd)}\n${source}; globalThis.api = { normalizeCarNum, createEmptyStateFlags, stateFlagsFromLegacyStatus, normalizeStateFlags, projectLegacyStatus, syncLegacyStatus, hasAnyState, mergeCanonicalCarRecords };`, context);
     return context.api;
 }

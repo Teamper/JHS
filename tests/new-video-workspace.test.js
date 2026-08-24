@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -48,7 +49,7 @@ function createHarness() {
         T: "javdb", I: "javbus", D: "filter", A: "uncensored", _: "yes", l: false
     });
     context.globalThis = context;
-    const source = readFileSync(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8"), start = source.indexOf("function aggregateNewVideoRecords");
+    const source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8"), start = source.indexOf("function aggregateNewVideoRecords");
     vm.runInContext(`${source.slice(start)};globalThis.TestPlugin=NewVideoPlugin`, context);
     const plugin = new context.TestPlugin;
     plugin.nvWorkspaceMounted = true, plugin._viewMode = "list";

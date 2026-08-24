@@ -1,9 +1,10 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const storage = readFileSync(join(process.cwd(), "src/core/storage.js"), "utf8");
-const settingForms = readFileSync(join(process.cwd(), "src/plugins/backup/setting-forms.js"), "utf8");
+const storage = readTestFile(join(process.cwd(), "src/core/storage.js"), "utf8");
+const settingForms = readTestFile(join(process.cwd(), "src/plugins/backup/setting-forms.js"), "utf8");
 
 function methodBody(source, start, end) {
     return source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));

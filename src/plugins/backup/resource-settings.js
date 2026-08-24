@@ -1,4 +1,6 @@
-const BUILT_IN_MAGNET_SOURCES = Object.freeze([
+import { MAGNET_SOURCE_IDS, validateCustomMagnetSource, validateHttpsBaseUrl } from "../external-search/magnet-source-registry.js";
+
+export const BUILT_IN_MAGNET_SOURCES = Object.freeze([
     { id: "native-javdb", name: "JavDB 本站", type: "本站资源", domain: "javdb.com", priority: 10, enabled: true },
     { id: "native-javbus", name: "JavBus 本站", type: "本站资源", domain: "javbus.com", priority: 11, enabled: true },
     { id: "u9a9", name: "U9A9", type: "网页来源", domain: "u9a9.com", baseUrl: "https://u9a9.com", priority: 20, enabled: true },
@@ -6,19 +8,19 @@ const BUILT_IN_MAGNET_SOURCES = Object.freeze([
     { id: "sukebei", name: "Sukebei", type: "网页来源", domain: "sukebei.nyaa.si", baseUrl: "https://sukebei.nyaa.si", priority: 40, enabled: true },
     { id: "btsow", name: "BTSOW", type: "API 来源", domain: "btsow.lol", baseUrl: "https://btsow.lol", priority: 50, enabled: true }
 ]);
-const BUILT_IN_SCREENSHOT_SOURCES = Object.freeze([
+export const BUILT_IN_SCREENSHOT_SOURCES = Object.freeze([
     { id: "javstore", name: "JavStore", domain: "javstore.net", priority: 10, enabled: true },
     { id: "projectjav", name: "ProjectJav", domain: "projectjav.com", priority: 20, enabled: false, implemented: false },
     { id: "18av", name: "18AV", domain: "18av.mm-cg.com", priority: 30, enabled: false, implemented: false }
 ]);
 
-function validateRule(rule) {
+export function validateRule(rule) {
     if (!rule.name?.trim() || !rule.pattern?.trim()) throw new TypeError("规则名称和匹配内容不能为空");
     if ("regex" === rule.type) try { new RegExp(rule.pattern); } catch { throw new TypeError("正则表达式无效"); }
     return { ...rule, name: rule.name.trim(), pattern: rule.pattern.trim() };
 }
 
-function buildCustomMagnetSource(form, existing = null) {
+export function buildCustomMagnetSource(form, existing = null) {
     const parserType = form.parserType || "magnet-links";
     const config = { id: existing?.id || `source-${Date.now()}`, name: String(form.name || "").trim(), enabled: Boolean(form.enabled), priority: Number(form.priority) || 100, searchUrlTemplate: String(form.searchUrlTemplate || "").trim(), targetUrlTemplate: String(form.targetUrlTemplate || form.searchUrlTemplate || "").trim(), parserType };
     if (!config.name) throw new TypeError("来源名称不能为空");
@@ -27,7 +29,7 @@ function buildCustomMagnetSource(form, existing = null) {
     return validateCustomMagnetSource(config);
 }
 
-class ResourceSettingsService {
+export class ResourceSettingsService {
     constructor(storage = storageManager) { this.storage = storage; }
     async getArray(key) { const value = await this.storage.getSetting(key, "[]"); if (Array.isArray(value)) return value; try { const parsed = JSON.parse(value || "[]"); return Array.isArray(parsed) ? parsed : []; } catch { return []; } }
     async saveArray(key, value) { if (!Array.isArray(value)) throw new TypeError("配置必须是数组"); await this.storage.saveSettingItem(key, JSON.stringify(value)); return value; }

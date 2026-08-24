@@ -1,4 +1,12 @@
-const _e = async (e, t = "ja", n = "zh-CN") => {
+import { B, C, _, b, escapeHtml, i, k, l, normalizeCarNum, o, r, u, y } from "../../core/constants.js";
+import { jhsEventBus } from "../../core/event-bus.js";
+import { mapLimit, safePlay } from "../../core/feature-helpers.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { isHitShowPage } from "../../core/site-context.js";
+import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
+import { stateService } from "../../core/state-service.js";
+
+export const _e = async (e, t = "ja", n = "zh-CN") => {
     if (!e) throw new Error("翻译文本不能为空");
     const a = "https://translate-pa.googleapis.com/v1/translate?" + new URLSearchParams({
         "params.client": "gtx",
@@ -77,7 +85,7 @@ const _e = async (e, t = "ja", n = "zh-CN") => {
     }
 };
 
-const QUICK_FILTER_LABELS = Object.freeze({
+export const QUICK_FILTER_LABELS = Object.freeze({
     all: "全部", waitCheck: "待鉴定", favorite: "收藏", hasDown: "下载", hasWatch: "已看",
     blockedItems: "屏蔽项", favoriteUndownloaded: "收藏未下载", favoriteUnwatched: "收藏未观看",
     downloadedUnwatched: "下载未观看", recent7d: "最近 7 天"
@@ -86,13 +94,13 @@ SECONDARY_QUICK_FILTERS = Object.freeze([ "blockedItems", "favoriteUndownloaded"
 VALID_QUICK_FILTERS = new Set([ ...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS ]);
 
 /** 将旧筛选键收敛为当前唯一业务键。 */
-function normalizeQuickFilterKey(value) {
+export function normalizeQuickFilterKey(value) {
     if ("filter" === value) return "blockedItems";
     return VALID_QUICK_FILTERS.has(value) ? value : "waitCheck";
 }
 
 /** 判断列表卡片是否因状态或规则被硬屏蔽。 */
-function isHardHidden(flags, visibilityReasons = {}) {
+export function isHardHidden(flags, visibilityReasons = {}) {
     return Boolean(flags.blocked || visibilityReasons.keyword || visibilityReasons.actorBlacklist || visibilityReasons.actressBlacklist);
 }
 
@@ -115,7 +123,7 @@ function shouldShowItem({ filter, flags, visibilityReasons, recent }) {
     return matchesQuickFilter(filter, flags, { visibilityReasons, recent });
 }
 
-class ListPagePlugin extends BasePlugin {
+export class ListPagePlugin extends BasePlugin {
     async initCss() {
         return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}</style>`;
     }
@@ -135,7 +143,7 @@ class ListPagePlugin extends BasePlugin {
         if (!window.isListPage || isHitShowPage()) return;
         const refreshAll = async () => {
                 this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
-                const e = this.getBean("HistoryPlugin");
+                const e = this.getDependency("HistoryPlugin");
                 e.tableObj && e.tableObj.setData();
         };
         jhsEventBus.on("legacy-refresh", refreshAll), jhsEventBus.on("blacklist-rules-changed", refreshAll), jhsEventBus.on("filter-rules-changed", refreshAll), jhsEventBus.on("settings-changed", refreshAll),
@@ -143,7 +151,7 @@ class ListPagePlugin extends BasePlugin {
             this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key);
             const items = this.getIndexedItems(payload.carNums || []);
             items.length && (await this.doFilterItems(items), this.applyVisibility(items));
-            const history = this.getBean("HistoryPlugin");
+            const history = this.getDependency("HistoryPlugin");
             history.tableObj && history.tableObj.setData();
         })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
         await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(),
@@ -247,8 +255,8 @@ class ListPagePlugin extends BasePlugin {
     async processAddedItems(items) {
         const selector = this.getSelector(), covers = items.flatMap((item => [ ...item.querySelectorAll(selector.coverImgSelector) ]));
         this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items), await this.doFilterItems(items), this.applyVisibility(items),
-        await this.getBean("ListPageButtonPlugin").sortItems(), await this.getBean("CoverButtonPlugin").addSvgBtn(items),
-        items.forEach((item => item.dataset.jhsProcessed = "true")), this.indexItems(items), await jhsEventBus.emit("list-items-added", { items }, { broadcast: !1 }), this.getBean("AutoPagePlugin").checkLoad();
+        await this.getDependency("ListPageButtonPlugin").sortItems(), await this.getDependency("CoverButtonPlugin").addSvgBtn(items),
+        items.forEach((item => item.dataset.jhsProcessed = "true")), this.indexItems(items), await jhsEventBus.emit("list-items-added", { items }, { broadcast: !1 }), this.getDependency("AutoPagePlugin").checkLoad();
     }
     rebuildItemIndex() {
         this.itemIndex.clear(), this.indexItems($(this.getSelector().itemSelector).toArray());
@@ -312,7 +320,7 @@ class ListPagePlugin extends BasePlugin {
         if (!window.isListPage) return;
         let e = items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray();
         e.length && (await this.filterMovieList(e), l && setTimeout((() => {
-            this.getBean("BusImgPlugin").logImageHeightsByRow().catch((e => clog.error("JavBus图片高度修正失败", e)));
+            this.getDependency("BusImgPlugin").logImageHeightsByRow().catch((e => clog.error("JavBus图片高度修正失败", e)));
         })));
     }
     async yieldListFrame() {
@@ -443,7 +451,7 @@ class ListPagePlugin extends BasePlugin {
         const shouldOpenTab = newTab || !!event && (event.ctrlKey || event.metaKey || 1 === event.button);
         if (carNum.includes("FC2-")) {
             const movieId = this.parseMovieId(aHref);
-            return shouldOpenTab ? this.getBean("Fc2Plugin").openFc2Page(movieId, carNum, aHref, { event, newTab: !0 }, { source: fc2Source }) : this.getBean("Fc2Plugin").openFc2Dialog(movieId, carNum, aHref, { source: fc2Source });
+            return shouldOpenTab ? this.getDependency("Fc2Plugin").openFc2Page(movieId, carNum, aHref, { event, newTab: !0 }, { source: fc2Source }) : this.getDependency("Fc2Plugin").openFc2Dialog(movieId, carNum, aHref, { source: fc2Source });
         }
         const destination = new URL(aHref, window.location.origin);
         autoplay && destination.searchParams.set("autoPlay", "1"), utils.openPage(destination.href, carNum, !0, { event, newTab: shouldOpenTab }), this.$currentImage = null;

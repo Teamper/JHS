@@ -1,4 +1,8 @@
-class WantAndWatchedVideosPlugin extends BasePlugin {
+import { i } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { stateService } from "../../core/state-service.js";
+
+export class WantAndWatchedVideosPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "flag", null);
     }

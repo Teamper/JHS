@@ -1,4 +1,8 @@
-unsafeWindow.utils = window.utils = new Utils, unsafeWindow.gmHttp = window.gmHttp = new class {
+import { Utils } from "./utils.js";
+import { StorageManager } from "./storage.js";
+
+export const utils = globalThis.utils ?? new Utils;
+export const gmHttp = new class {
     constructor() {
         this._circuitBreakers = new Map();
         this._domainStats = new Map();
@@ -151,4 +155,5 @@ unsafeWindow.utils = window.utils = new Utils, unsafeWindow.gmHttp = window.gmHt
         }));
         }, r);
     }
-}, unsafeWindow.storageManager = window.storageManager = new StorageManager;
+};
+export const storageManager = globalThis.storageManager ?? new StorageManager;

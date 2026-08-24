@@ -1,6 +1,11 @@
+import { escapeHtml, i } from "../../core/constants.js";
+import { O, U, q } from "../../core/javdb-api.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { encryptData } from "../image-viewer/bus-preview-video.js";
+
 const me = "jhs_appAuthorization";
 
-class Top250Plugin extends BasePlugin {
+export class Top250Plugin extends BasePlugin {
     constructor() {
         super(), i(this, "has_cnsub", ""), i(this, "$contentBox", $(".section .container")),
         i(this, "movies", []);
@@ -60,7 +65,7 @@ class Top250Plugin extends BasePlugin {
                 let t = e.data.movies;
                 if (0 === t.length) return show.error("无数据"), void s.close();
                 this.movies = t;
-                const n = t.filter((e => "1" === this.has_cnsub ? e.has_cnsub : "0" !== this.has_cnsub || !e.has_cnsub)), a = this.getBean("HitShowPlugin");
+                const n = t.filter((e => "1" === this.has_cnsub ? e.has_cnsub : "0" !== this.has_cnsub || !e.has_cnsub)), a = this.getDependency("HitShowPlugin");
                 let r = a.markDataListHtml(n);
                 i.html(r), await a.initializeRenderedList(), await a.loadScore(n), o = !0;
             } else clog.error(e), i.html(`<h3>${escapeHtml(l)}</h3>`), show.error(l), "JWTVerificationError" === c && (await localStorage.removeItem(me),
@@ -86,7 +91,7 @@ class Top250Plugin extends BasePlugin {
                 const link = $(element), url = new URL(link.attr("href"), window.location.origin);
                 url.searchParams.set("has_cnsub", value), link.attr("href", url.toString());
             }));
-            const movies = this.movies.filter((movie => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), hitShow = this.getBean("HitShowPlugin");
+            const movies = this.movies.filter((movie => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), hitShow = this.getDependency("HitShowPlugin");
             $(".movie-list").html(hitShow.markDataListHtml(movies)), await hitShow.initializeRenderedList(), void hitShow.loadScore(movies).catch((error => clog.error("Top250 评分加载失败", error)));
         }));
     }

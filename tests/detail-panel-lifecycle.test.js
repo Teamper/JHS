@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -15,8 +16,8 @@ function loadPanels() {
         R: reviewFetch, K: relatedFetch, utils: { formatDate: value => value, q: (event, message, callback) => callback() }, show: { error: vi.fn(), ok: vi.fn() }, clog: { error: vi.fn(), warn: vi.fn() }, escapeHtml: String,
         i: (target, key, value) => (target[key] = value)
     });
-    vm.runInContext(`${readFileSync(join(process.cwd(), "src/plugins/external-search/review.js"), "utf8")};globalThis.Review=ReviewPlugin`, context);
-    vm.runInContext(`${readFileSync(join(process.cwd(), "src/plugins/external-search/related.js"), "utf8")};globalThis.Related=RelatedPlugin`, context);
+    vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/external-search/review.js"), "utf8")};globalThis.Review=ReviewPlugin`, context);
+    vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/external-search/related.js"), "utf8")};globalThis.Related=RelatedPlugin`, context);
     return { $, Review: context.Review, Related: context.Related, reviewFetch, relatedFetch, storageManager: context.storageManager, window: dom.window };
 }
 

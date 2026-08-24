@@ -1,4 +1,6 @@
-var e, t, n = Object.defineProperty, a = e => {
+import { detectSite } from "./site-context.js";
+
+export var e, t, n = Object.defineProperty, a = e => {
     throw TypeError(e);
 }, i = (e, t, a) => ((e, t, a) => t in e ? n(e, t, {
     enumerable: !0,
@@ -9,7 +11,7 @@ var e, t, n = Object.defineProperty, a = e => {
     t.has(e) || a("Cannot " + n);
 })(e, t, "access private method"), n);
 
-const o = window.location.href, siteContext = detectSite(window.location), r = siteContext.isJavDB, l = siteContext.isJavBus, c = o.includes("/search?q") || o.includes("/search/") || o.includes("/users/"), d = "filter", h = "favorite", g = "hasDown", p = "hasWatch", m = "屏蔽", u = "已屏蔽", f = "var(--jhs-status-filter-text)", v = "收藏", b = "已收藏", w = "var(--jhs-status-fav-text)", y = "已下载", x = "var(--jhs-status-down-text)", k = "已观看", S = "var(--jhs-status-watch-text)", C = "no", _ = "yes", T = "javdb", I = "javbus", B = "actor", P = "actress", D = "censored", A = "uncensored", L = [ {
+export const o = window.location.href, siteContext = detectSite(window.location), r = siteContext.isJavDB, l = siteContext.isJavBus, c = o.includes("/search?q") || o.includes("/search/") || o.includes("/users/"), d = "filter", h = "favorite", g = "hasDown", p = "hasWatch", m = "屏蔽", u = "已屏蔽", f = "var(--jhs-status-filter-text)", v = "收藏", b = "已收藏", w = "var(--jhs-status-fav-text)", y = "已下载", x = "var(--jhs-status-down-text)", k = "已观看", S = "var(--jhs-status-watch-text)", C = "no", _ = "yes", T = "javdb", I = "javbus", B = "actor", P = "actress", D = "censored", A = "uncensored", L = [ {
     id: "video-mhb",
     quality: "dmb_w",
     text: "旧视频源-中画质宽版 (404p)",
@@ -71,12 +73,12 @@ const o = window.location.href, siteContext = detectSite(window.location), r = s
     canSelect: !0
 } ];
 
-function escapeHtml(e) { const t = document.createElement("span"); return t.textContent = e, t.innerHTML; }
+export function escapeHtml(e) { const t = document.createElement("span"); return t.textContent = e, t.innerHTML; }
 
-const CURRENT_DATA_VERSION = 2;
+export const CURRENT_DATA_VERSION = 2;
 
 /** 规范化内部番号输入，无效值统一返回 null。 */
-function normalizeCarNum(value) {
+export function normalizeCarNum(value) {
     if ("string" != typeof value) return null;
     let carNum = value.trim();
     if (!carNum || [ "undefined", "null" ].includes(carNum.toLowerCase())) return null;
@@ -93,7 +95,7 @@ function tryCanonicalizeSimpleCarNum(value) {
 }
 
 /** 按调用方给定的可靠性顺序选择第一个有效番号。 */
-function firstValidCarNum(...candidates) {
+export function firstValidCarNum(...candidates) {
     for (const candidate of candidates) {
         const carNum = normalizeCarNum(candidate);
         if (carNum) return carNum;
@@ -102,19 +104,19 @@ function firstValidCarNum(...candidates) {
 }
 
 /** 断言详情信息解析器始终履行对象返回契约。 */
-function assertPageInfoContract(pageInfo) {
+export function assertPageInfoContract(pageInfo) {
     if (!pageInfo || "object" != typeof pageInfo || Array.isArray(pageInfo))
         throw new TypeError("getPageInfo() contract broken: expected object");
     return pageInfo;
 }
 
-let M = "";
+export let M = "";
 
 window.location.href.includes("hideNav=1") && (M = "\n         .navbar-default {\n            display: none !important;\n        }\n        body {\n            padding-top:0px!important;\n        }\n    ");
 
 /* N (JavBus CSS) moved to css-injection.js */
 
-let j = "";
+export let j = "";
 
 window.location.href.includes("hideNav=1") && (j = "\n        .main-nav,#search-bar-container {\n            display: none !important;\n        }\n        \n        html {\n            padding-top:0px!important;\n        }\n    ");
 
@@ -122,7 +124,7 @@ window.location.href.includes("hideNav=1") && (j = "\n        .main-nav,#search-
 
 /* F (global UI CSS) moved to css-injection.js */
 
-function H(e) {
+export function H(e) {
     if (e) if (e.includes("<style>")) document.head.insertAdjacentHTML("beforeend", e); else {
         const t = document.createElement("style");
         t.textContent = e, document.head.appendChild(t);

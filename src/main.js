@@ -68,51 +68,6 @@
 // @downloadURL https://github.com/Teamper/JHS/releases/latest/download/JHS.user.js
 // @updateURL https://raw.githubusercontent.com/Teamper/JHS/main/JHS.user.js
 // ==/UserScript==
+import { bootstrapJhs, mountBootstrapError } from "./app/bootstrap.js";
 
-const originalLayerClose = layer.close;
-
-layer.close = function(e) {
-    const t = originalLayerClose.call(this, e);
-    return function(e = 10) {
-        setTimeout((() => {
-            const e = document.querySelectorAll(".layui-layer-shade").length;
-            document.documentElement.style.overflow = e > 0 ? "hidden" : "";
-        }), e);
-    }(), t;
-};
-
-const originalLayerOpen = layer.open;
-
-layer.open = function(e) {
-    const t = (e = e || {}).success;
-    return e.success = function(e, n) {
-        "function" == typeof t && t.call(this, e, n), utils.setupEscClose(n);
-    }, originalLayerOpen.call(this, e);
-}, utils.importResource("https://cdn.jsdelivr.net/npm/layui-layer@1.0.9/layer.min.css"),
-utils.importResource("https://cdn.jsdelivr.net/npm/toastify-js@1.12.0/src/toastify.min.css"),
-utils.importResource("https://cdn.jsdelivr.net/npm/viewerjs@1.11.1/dist/viewer.min.css"),
-utils.importResource("https://cdn.jsdelivr.net/npm/tabulator-tables@6.3.1/dist/css/tabulator_semanticui.min.css");
-
-/** 插件注册中心: 按站点注册所有插件, 暴露到 unsafeWindow.pluginManager */
-const pluginManager = function() {
-    const manager = new PluginManager;
-    unsafeWindow.pluginManager = manager;
-    registerSitePlugins(manager);
-    return manager;
-}();
-
-(async function() {
-    window.isDetailPage = function() {
-        let e = window.location.href;
-        return r ? e.split("?")[0].includes("/v/") : !!l && $("#magnet-table").length > 0;
-    }(), window.isListPage = r ? isListPage(window.location, $(".movie-list").length > 0) : !!l && $(".masonry > div .item").length > 0;
-    const e = (async () => {
-        await runDataMigrations(storageManager), await stateService.recoverPendingTransaction();
-    })();
-    await e, await Promise.all([ pluginManager.processCss(), applyTheme() ]),
-    r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie) && show.error("请切换到中文语言下才可正常使用本脚本", {
-        duration: -1
-    }), await pluginManager.processPlugins();
-})().catch((e => {
-    console.error("[JHS] bootstrap failed:", e), show.error(e?.message || "JHS 启动失败", { duration: -1 });
-}));
+void bootstrapJhs().catch(mountBootstrapError);

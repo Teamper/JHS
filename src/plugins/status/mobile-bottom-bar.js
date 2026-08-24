@@ -1,4 +1,9 @@
-class MobileBottomBarPlugin extends BasePlugin {
+import { k, m, r, v, y } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { normalizeStateFlags } from "../../core/state-model.js";
+import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, normalizeQuickFilterKey } from "./list-page.js";
+
+export class MobileBottomBarPlugin extends BasePlugin {
     constructor() {
         super(...arguments);
         this._fabGeneration = 0;
@@ -258,12 +263,12 @@ class MobileBottomBarPlugin extends BasePlugin {
         $(document).off("click.jhsCommandbar").on("click.jhsCommandbar", (event => {
             $(event.target).closest(".jhs-commandbar__more, .jhs-commandbar__batch").length || (commandbar.find(".jhs-commandbar__menu").removeClass("is-open"), commandbar.find(".jhs-commandbar__menu-toggle").attr("aria-expanded", "false"));
         }));
-        this.getBean("ListPagePlugin")?.syncQuickFilterUi();
+        this.getDependency("ListPagePlugin")?.syncQuickFilterUi();
     }
     /** 获取详情页番号 */
     getCarNum() {
         try {
-            const basePlugin = this.getBean("DetailPageButtonPlugin");
+            const basePlugin = this.getDependency("DetailPageButtonPlugin");
             if (basePlugin?.parseMovieId) return basePlugin.parseMovieId(location.href);
             const el = document.querySelector(".header, #video_id, .video-id");
             if (el) return el.textContent.trim();
@@ -274,7 +279,7 @@ class MobileBottomBarPlugin extends BasePlugin {
         const item = (action, label, attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = content => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
         let items;
         if (window.isListPage) {
-            const sortMethod = localStorage.getItem("jhs_sortMethod") || "default", sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getBean("ListPagePlugin")?.activeQuickFilter),
+            const sortMethod = localStorage.getItem("jhs_sortMethod") || "default", sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getDependency("ListPagePlugin")?.activeQuickFilter),
                 filterOptions = [ ...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS ].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""),
                 sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
             items = group(item("check", "开始鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort", `排序: ${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') + item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"')) + divider + group(item("logger", "运行日志") + item("setting", "设置")) + `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div><div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>`;
@@ -334,7 +339,7 @@ class MobileBottomBarPlugin extends BasePlugin {
                     const sortMethod = localStorage.getItem("jhs_sortMethod") || "default";
                     const sortLabel = { default: "默认", rateCount: "评价人数", date: "时间" }[sortMethod];
                     menu.find('[data-action="sort"]').text(`排序: ${sortLabel}`);
-                    this.getBean("ListPagePlugin")?.syncQuickFilterUi();
+                    this.getDependency("ListPagePlugin")?.syncQuickFilterUi();
                 }
                 // 刷新详情页状态
                 if (window.isDetailPage) void this.refreshDetailStatus().catch((error => clog.warn("移动端详情状态刷新失败", error)));
@@ -371,7 +376,7 @@ class MobileBottomBarPlugin extends BasePlugin {
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
         })).on("click", ".jhs-mobile-filter-option", (event => {
-            event.stopPropagation(), this.getBean("ListPagePlugin").setQuickFilter($(event.currentTarget).data("jhs-filter")), closeMenu(!0);
+            event.stopPropagation(), this.getDependency("ListPagePlugin").setQuickFilter($(event.currentTarget).data("jhs-filter")), closeMenu(!0);
         }));
         sortMenu.on("keydown", ".jhs-mobile-sort-option", (event => {
             const items = sortMenu.find(".jhs-mobile-sort-option"), index = items.index(event.currentTarget);
@@ -383,7 +388,7 @@ class MobileBottomBarPlugin extends BasePlugin {
         })).on("click", ".jhs-mobile-sort-option", (event => {
             event.stopPropagation();
             const value = $(event.currentTarget).data("jhs-sort");
-            localStorage.setItem("jhs_sortMethod", value), sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true"), void this.getBean("ListPageButtonPlugin")?.sortItems?.(), closeMenu(!0);
+            localStorage.setItem("jhs_sortMethod", value), sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true"), void this.getDependency("ListPageButtonPlugin")?.sortItems?.(), closeMenu(!0);
         }));
         // 菜单项点击
         menu.on("click", ".jhs-fab-menu-item", (e) => {
@@ -406,13 +411,13 @@ class MobileBottomBarPlugin extends BasePlugin {
         switch (action) {
             // 列表页操作
             case "check":
-                await this.getBean("ListPageButtonPlugin")?.openWaitCheck?.();
+                await this.getDependency("ListPageButtonPlugin")?.openWaitCheck?.();
                 break;
             case "newVideo":
-                this.getBean("NewVideoPlugin")?.openDialog();
+                this.getDependency("NewVideoPlugin")?.openDialog();
                 break;
             case "blacklist":
-                this.getBean("BlacklistPlugin")?.openBlacklistDialog();
+                this.getDependency("BlacklistPlugin")?.openBlacklistDialog();
                 break;
             case "sort":
                 break;
@@ -440,7 +445,7 @@ class MobileBottomBarPlugin extends BasePlugin {
                 break;
             // 通用
             case "setting":
-                await this.getBean("SettingPlugin")?.openQuickSetting();
+                await this.getDependency("SettingPlugin")?.openQuickSetting();
                 break;
             case "logger":
                 clog.openDialog?.();

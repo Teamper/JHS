@@ -1,4 +1,7 @@
-class OneOneFiveClient {
+import { ProviderError } from "../../core/cache-policy.js";
+import { normalizeCarNum } from "../../core/constants.js";
+
+export class OneOneFiveClient {
     constructor(http = gmHttp) { this.http = http; }
     async checkLogin() {
         try { const result = await this.http.get("https://webapi.115.com/offine/downpath"); return Boolean(result?.state && result?.data?.length); } catch (cause) { throw new ProviderError("115", "LOGIN_REQUIRED", "115 未登录", { cause }); }
@@ -34,10 +37,10 @@ class OneOneFiveClient {
     }
 }
 
-function normalize115Keyword(carNum) { const normalized = normalizeCarNum(carNum); return normalized?.replace(/^FC2-/i, "") || null; }
-function build115PlayUrl(match) { return match?.videoId ? `https://115.com/?ct=play&pickcode=${encodeURIComponent(match.videoId)}` : null; }
-function format115Size(bytes) { const value = Number(bytes) || 0; if (!value) return "0 B"; const units = ["B", "KB", "MB", "GB", "TB"], index = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024))); return `${(value / 1024 ** index).toFixed(index ? 2 : 0)} ${units[index]}`; }
-function preview115Rename(fileName, carNum, options = {}) {
+export function normalize115Keyword(carNum) { const normalized = normalizeCarNum(carNum); return normalized?.replace(/^FC2-/i, "") || null; }
+export function build115PlayUrl(match) { return match?.videoId ? `https://115.com/?ct=play&pickcode=${encodeURIComponent(match.videoId)}` : null; }
+export function format115Size(bytes) { const value = Number(bytes) || 0; if (!value) return "0 B"; const units = ["B", "KB", "MB", "GB", "TB"], index = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024))); return `${(value / 1024 ** index).toFixed(index ? 2 : 0)} ${units[index]}`; }
+export function preview115Rename(fileName, carNum, options = {}) {
     const extension = fileName.match(/\.[^.]+$/)?.[0] || "", tags = fileName.match(/-(?:U|UC|C|4K|8K|H265|HEVC|CN|CHS|CHT)\b/gi) || [];
     let base = options.uppercase === false ? carNum : carNum.toUpperCase();
     if (options.keepTitle) base += ` ${fileName.replace(extension, "").replace(/^.*?\s+/, "")}`;

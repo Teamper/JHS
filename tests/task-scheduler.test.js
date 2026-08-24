@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -63,7 +64,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         setTimeout, clearTimeout
     });
     context.globalThis = context;
-    const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/parsers/third-party-parsers.js", "src/plugins/new-video/task.js" ].map(file => readFileSync(join(repoRoot, file), "utf8")).join("\n");
+    const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js", "src/plugins/new-video/task.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n");
     vm.runInContext(`${source};globalThis.Task=TaskPlugin`, context);
     const plugin = new context.Task;
     return { plugin, clock, values, settings, favorites, blacklistItems, storageManager, gmHttp, beans, locks, jhsEventBus, $, htmlToPage: context.utils.htmlTo$dom };

@@ -1,5 +1,9 @@
+import { escapeHtml } from "../../core/constants.js";
+import { disabledIdForPlugin, parseDisabledPlugins } from "../../core/legacy-plugin-contributions.js";
+import { getPluginCategories } from "./setting-templates.js";
+
 /** Render the network/external requests panel: circuit breaker status, domain stats. */
-async function renderNetworkPanel() {
+export async function renderNetworkPanel() {
     const e = gmHttp.getCircuitBreakerStatus(), t = gmHttp.getDomainStats(), n = await storageManager.getSetting("circuitBreakerThreshold", 3), a = await storageManager.getSetting("circuitBreakerCooldown", 6e4);
     $("#circuitBreakerThreshold").val(n), $("#circuitBreakerCooldownSec").val(Math.round(a / 1e3));
     const i = Object.entries(e);
@@ -31,7 +35,7 @@ async function renderNetworkPanel() {
 }
 
 /** Render the snapshot list as a Tabulator table with restore/download/delete actions. */
-async function renderSnapshotPanel() {
+export async function renderSnapshotPanel() {
     const e = await storageManager.getSnapshotList(), t = {
         "manual": "手动创建",
         "auto-import": "导入前自动",
@@ -87,7 +91,7 @@ async function renderSnapshotPanel() {
 }
 
 /** Show a data diff preview dialog before importing data. */
-function showDiffPreview(e, t, n = null) {
+export function showDiffPreview(e, t, n = null) {
     const a = e.summary, i = [];
     for (const [s, o] of Object.entries(e.stores)) {
         if ("unchanged" === o.status) continue;
@@ -132,9 +136,9 @@ function showDiffPreview(e, t, n = null) {
 }
 
 /** Render the plugin management panel: categorized plugin list, timing, errors, cache stats. */
-async function renderPluginMgmtPanel() {
-    const disabled = JSON.parse(await storageManager.getSetting("disabledPlugins", "[]"));
-    const allNames = unsafeWindow.pluginManager.getPluginNames();
+export async function renderPluginMgmtPanel(pluginManager) {
+    const disabled = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
+    const allNames = pluginManager.getPluginNames();
     const { categories, corePlugins, pluginMeta } = getPluginCategories();
     const registeredSet = new Set(allNames);
     let html = "";
@@ -145,7 +149,7 @@ async function renderPluginMgmtPanel() {
         html += `<h4 class="jhs-plugin-group__title">${escapeHtml(cat.label)}</h4>`;
         for (const pName of visiblePlugins) {
             const isCore = corePlugins.includes(pName);
-            const isDisabled = disabled.includes(pName);
+            const isDisabled = disabled.includes(disabledIdForPlugin(pName));
             const productName = pluginMeta[pName]?.[0] || pName;
             html += '<div class="jhs-plugin-row">';
             html += `<span class="jhs-plugin-copy" title="内部插件名：${escapeHtml(pName)}"><strong>${escapeHtml(productName)}</strong></span>`;
@@ -165,20 +169,21 @@ async function renderPluginMgmtPanel() {
     $("#pm-disabled").text(disabled.length);
     $(".pm-toggle").off("change").on("change", async (e) => {
         const name = $(e.target).data("plugin");
-        let list = JSON.parse(await storageManager.getSetting("disabledPlugins", "[]"));
+        let list = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
+        const disabledId = disabledIdForPlugin(name);
         if ($(e.target).is(":checked")) {
-            list = list.filter(x => x !== name);
+            list = list.filter(x => x !== name && x !== disabledId);
         } else {
-            if (!list.includes(name)) list.push(name);
+            if (!list.includes(disabledId)) list.push(disabledId);
         }
         await storageManager.saveSettingItem("disabledPlugins", JSON.stringify(list));
-        const all = unsafeWindow.pluginManager.getPluginNames();
+        const all = pluginManager.getPluginNames();
         $("#pm-total").text(all.length);
         $("#pm-enabled").text(all.length - list.length);
         $("#pm-disabled").text(list.length);
         show.ok(`插件 "${name}" 已${$(e.target).is(":checked") ? "启用" : "禁用"}，刷新后生效`);
     });
-    const startup = unsafeWindow.pluginManager.getStartupReport?.(), timings = unsafeWindow.pluginManager.getTimings();
+    const startup = pluginManager.getStartupReport?.(), timings = pluginManager.getTimings();
     const formatMs = value => Number.isFinite(value) ? value.toFixed(1) : "0.0";
     let startupHtml = startup ? `<div class="jhs-inline-metrics"><span>就绪: <strong>${formatMs(startup.readyMs)} ms</strong></span><span>注册: ${formatMs(startup.registrationMs)} ms</span><span>样式: ${formatMs(startup.cssMs)} ms</span><span>即时插件: ${formatMs(startup.immediateMs)} ms</span><span>空闲任务: ${startup.idleCompleted}/${startup.idleCompleted + startup.idlePending}</span></div><p class="jhs-caption">就绪耗时不包含 @require 下载及浏览器脚本解析时间。</p>` : "";
     if (timings.length) {
@@ -194,7 +199,7 @@ async function renderPluginMgmtPanel() {
     } else {
         $("#plugin-timing-table").html(startupHtml + '<p class="jhs-empty-note">暂无数据，刷新页面后自动采集。</p>');
     }
-    const errorLog = unsafeWindow.pluginManager.getErrorLog();
+    const errorLog = pluginManager.getErrorLog();
     if (errorLog.length) {
         let eHtml = '<table class="jhs-data-table"><tr><th>时间</th><th>插件</th><th>阶段</th><th>错误信息</th></tr>';
         for (const err of [...errorLog].reverse()) {
@@ -210,7 +215,7 @@ async function renderPluginMgmtPanel() {
 }
 
 /** Render the data health check panel with totals and issue breakdown. */
-async function renderDataHealthPanel() {
+export async function renderDataHealthPanel() {
     const e = $("#health-data-display");
     if (!e.length) return;
     e.text("体检中...");
@@ -235,7 +240,7 @@ async function renderDataHealthPanel() {
 }
 
 /** Repair data health issues after auto-backing up current data. */
-async function repairDataHealthWithBackup() {
+export async function repairDataHealthWithBackup() {
     const e = JSON.stringify(await storageManager.exportData()), t = `health-backup-${utils.getNowStr("_", "_")}.json`;
     utils.download(e, t);
     const n = await storageManager.repairDataHealth();

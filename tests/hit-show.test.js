@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -21,7 +22,7 @@ function loadHitShow({ movies = [], fetchScore = vi.fn(), cache = {}, sortMethod
         escapeHtml: value => $("<span></span>").text(String(value ?? "")).html(),
         normalizeHttpUrl: value => value
     });
-    const source = readFileSync(join(process.cwd(), "src/plugins/external-search/hit-show.js"), "utf8");
+    const source = readTestFile(join(process.cwd(), "src/plugins/external-search/hit-show.js"), "utf8");
     vm.runInContext(`${source};globalThis.HitShowPlugin=HitShowPlugin`, context);
     return { plugin: new context.HitShowPlugin(), context, dom, $, storage, loadingClose, sortItems, listPage, coverButton };
 }

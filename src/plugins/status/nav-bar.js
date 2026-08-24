@@ -1,4 +1,7 @@
-class NavBarPlugin extends BasePlugin {
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { JhsSelect } from "../../core/ui-primitives.js";
+
+export class NavBarPlugin extends BasePlugin {
     getName() {
         return "NavBarPlugin";
     }
@@ -29,7 +32,7 @@ class NavBarPlugin extends BasePlugin {
             for (let n = 0; n < t.length; n++) if (-1 !== t[n].type.indexOf("image")) {
                 const e = t[n].getAsFile();
                 $("#search-keyword").blur();
-                const a = this.getBean("SearchByImagePlugin");
+                const a = this.getDependency("SearchByImagePlugin");
                 return void a.open((() => {
                     a.handleImageFile(e), a.resetSearchUI();
                 }));
@@ -42,7 +45,7 @@ class NavBarPlugin extends BasePlugin {
             let t = $("#search-keyword").val(), n = $("#search-type").val();
             "" !== t && (window.location.href.includes("/search") ? window.location.href = "/search?q=" + t + "&f=" + n : window.open("/search?q=" + t + "&f=" + n));
         })), $("#search-img-btn").on("click", (() => {
-            this.getBean("SearchByImagePlugin").open();
+            this.getDependency("SearchByImagePlugin").open();
         }));
     }
     hookOldSearch() {
@@ -51,7 +54,7 @@ class NavBarPlugin extends BasePlugin {
         const t = e.cloneNode(!0);
         e.parentNode.replaceChild(t, e), $("#button-search-image").attr("data-tooltip", "以图识图"),
         $(".search-image").on("click", (e => {
-            this.getBean("SearchByImagePlugin").open();
+            this.getDependency("SearchByImagePlugin").open();
         }));
     }
     margeNav() {

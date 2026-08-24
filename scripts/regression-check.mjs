@@ -111,13 +111,13 @@ for (const legacyBrand of legacyBrands) {
 
 assertIncludes(ciWorkflow, "npm run check", "CI workflow");
 assertIncludes(ciWorkflow, "git diff --exit-code -- JHS.user.js", "CI tracked artifact check");
-assertIncludes(ciWorkflow, "workflow_dispatch:", "release recovery trigger");
+assertIncludes(ciWorkflow, "workflow_dispatch:", "manual CI trigger");
 assertIncludes(ciWorkflow, "node-version: 20", "minimum Node compatibility check");
 assertIncludes(ciWorkflow, "node-version: 22", "full Node check");
-assertIncludes(ciWorkflow, "needs: [node20, check]", "release check dependency");
+assertIncludes(ciWorkflow, "needs: [node20, check, browser-smoke]", "release check dependency");
 assertIncludes(ciWorkflow, "contents: write", "release write permission");
 assertIncludes(ciWorkflow, "--base-ref", "version-change release detection");
-assertIncludes(ciWorkflow, "--force-release", "release recovery contract");
+assertIncludes(ciWorkflow, "github.ref == 'refs/heads/main'", "release restricted to main pushes");
 assertIncludes(ciWorkflow, "queue: max", "release concurrency queue");
 assertIncludes(ciWorkflow, "cancel-in-progress: false", "release concurrency preservation");
 assertIncludes(ciWorkflow, "git tag -a", "annotated release tag");
@@ -145,14 +145,12 @@ const stableReleaseChecks = [
   ["export format compatibility", storage, "async exportData()"],
   ["export format compatibility", storage, "exportPortableData"],
   ["build source chain", buildScript, 'const srcPath = join(repoRoot, "src", "main.js")'],
-  ["build source chain", buildScript, "const corePaths = ["],
-  ["build source chain", buildScript, 'join(repoRoot, "src", "core", file)'],
-  ["build source chain", buildScript, "const pluginPaths = ["],
-  ["build source chain", buildScript, 'join(repoRoot, "src", "plugins", file)'],
+  ["build source chain", buildScript, "entryPoints: [srcPath]"],
+  ["build source chain", buildScript, "bundle: true"],
   ["build output chain", buildScript, 'const distPath = join(distDir, "JHS.user.js")'],
   ["build output chain", buildScript, 'const rootPath = join(repoRoot, "JHS.user.js")'],
-  ["build output chain", buildScript, 'writeFile(distPath, output, "utf8")'],
-  ["build output chain", buildScript, 'writeFile(rootPath, output, "utf8")']
+  ["build output chain", buildScript, "for (const outputPath of outputPaths)"],
+  ["build output chain", buildScript, 'writeFile(outputPath, output, "utf8")']
 ];
 
 for (const [label, source, token] of stableReleaseChecks) {
@@ -188,7 +186,7 @@ for (const [label, source] of [["FC2", fc2], ["FC2/123AV", fc2By123Av]]) {
   assert(!source.includes("stateService.patch("), `${label} state actions must use toggle semantics`);
 }
 assertIncludes(fc2, "detailStateController.bind", "shared FC2 detail state controller");
-assertIncludes(fc2By123Av, 'this.getBean("Fc2Plugin").openFc2Dialog', "123AV must reuse FC2 state and shell ownership");
+assertIncludes(fc2By123Av, 'this.getDependency("Fc2Plugin").openFc2Dialog', "123AV must reuse FC2 state and shell ownership");
 assert(!uiPrimitives.includes('.trigger("change")'), "JhsSelect must dispatch one native change without jQuery double fire");
 for (const [label, source] of [["123", one23Offline], ["115", one115Offline]]) {
   assert(!source.includes("injectJavDbButtons"), `${label} provider must not inject JavDB UI`);
@@ -218,7 +216,7 @@ assertIncludes(statsSource, 'action: "filter", filter: "blockedItems"', "Stats c
 assertIncludes(statsSource, 'title: "统计"', "Stats dialog title");
 assert(!mobileSource.includes("activeQuickFilter ="), "mobile filter actions must use ListPagePlugin.setQuickFilter");
 assert(!mobileSource.includes('$("#waitCheckBtn").click()'), "mobile identification must call ListPageButtonPlugin.openWaitCheck directly");
-assertIncludes(mobileSource, 'await this.getBean("ListPageButtonPlugin")?.openWaitCheck?.()', "mobile identification API");
+assertIncludes(mobileSource, 'await this.getDependency("ListPageButtonPlugin")?.openWaitCheck?.()', "mobile identification API");
 assert(!/\.jhs-commandbar__filters\s*\{[^}]*overflow-x\s*:\s*auto/.test(mobileSource), "command-bar filters must not clip popovers with horizontal overflow");
 assert(!/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*overflow-x\s*:\s*auto/.test(mobileSource), "tablet command bar must wrap instead of scrolling horizontally");
 assert(/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*flex-wrap\s*:\s*wrap[^}]*overflow\s*:\s*visible/.test(mobileSource), "tablet command bar must wrap with visible overflow");

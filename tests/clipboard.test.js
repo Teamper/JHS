@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -8,7 +9,7 @@ function loadClipboard({ writeText, execResult = true } = {}) {
     const textarea = { value: "", style: {}, setAttribute: vi.fn(), select: vi.fn(), remove };
     const document = { body: { appendChild }, activeElement: { focus }, createElement: vi.fn(() => textarea), execCommand: vi.fn(() => execResult) };
     const context = vm.createContext({ URL, navigator: { clipboard: writeText ? { writeText } : null }, document, window: { location: new URL("https://javdb.com/"), innerWidth: 1280, innerHeight: 720 }, show: { info, error }, clog: { error: logError }, JHS_Z_INDEX: { layer: 1 }, i: (target, key, value) => (target[key] = value) });
-    const source = readFileSync(join(import.meta.dirname, "../src/core/utils.js"), "utf8");
+    const source = readTestFile(join(import.meta.dirname, "../src/core/utils.js"), "utf8");
     vm.runInContext(`${source};globalThis.TestUtils=Utils`, context);
     return { utils: new context.TestUtils(), info, error, logError, document, textarea, focus };
 }

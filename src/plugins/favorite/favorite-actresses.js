@@ -1,4 +1,7 @@
-class FavoriteActressesPlugin extends BasePlugin {
+import { _ } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class FavoriteActressesPlugin extends BasePlugin {
     getName() {
         return "FavoriteActressesPlugin";
     }

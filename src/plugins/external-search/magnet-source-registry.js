@@ -1,6 +1,6 @@
-const MAGNET_SOURCE_IDS = Object.freeze(["native-javdb", "native-javbus", "u9a9", "u3c3", "sukebei", "btsow"]);
+export const MAGNET_SOURCE_IDS = Object.freeze(["native-javdb", "native-javbus", "u9a9", "u3c3", "sukebei", "btsow"]);
 
-function normalizeMagnetResult(result, source) {
+export function normalizeMagnetResult(result, source) {
     if (!result || !String(result.magnet || "").startsWith("magnet:")) return null;
     return { title: String(result.title || ""), magnet: result.magnet, size: result.size || "", date: result.date || "", seeders: Number(result.seeders) || 0, leechers: Number(result.leechers) || 0, source, files: Array.isArray(result.files) ? result.files : [] };
 }
@@ -10,7 +10,7 @@ function extractInfoHash(magnet) {
     return hash ? hash.toUpperCase() : null;
 }
 
-function deduplicateMagnetResults(results) {
+export function deduplicateMagnetResults(results) {
     const unique = new Map();
     results.forEach((result => {
         const key = extractInfoHash(result.magnet) || `${result.source}:${result.magnet}`;
@@ -20,7 +20,7 @@ function deduplicateMagnetResults(results) {
     return [...unique.values()];
 }
 
-class MagnetSourceRegistry {
+export class MagnetSourceRegistry {
     constructor(sources = []) { this.sources = new Map(); sources.forEach((source => this.register(source))); }
     register(source) {
         if (!source?.id || !source.name || "function" !== typeof source.search || "function" !== typeof source.targetUrl) throw new TypeError("Invalid magnet provider");
@@ -31,13 +31,13 @@ class MagnetSourceRegistry {
     getEnabledSources() { return [...this.sources.values()].filter((source => source.enabled)).sort(((a, b) => a.priority - b.priority)); }
 }
 
-function validateHttpsBaseUrl(value) {
+export function validateHttpsBaseUrl(value) {
     const url = new URL(value);
     if ("https:" !== url.protocol) throw new TypeError("Source URL must use https");
     return url.origin;
 }
 
-function validateCustomMagnetSource(config) {
+export function validateCustomMagnetSource(config) {
     const allowed = ["id", "name", "enabled", "priority", "searchUrlTemplate", "targetUrlTemplate", "parserType", "rowSelector", "titleSelector", "magnetSelector", "sizeSelector", "dateSelector", "seedersSelector", "leechersSelector", "resultsPath", "titlePath", "hashPath", "magnetPath", "sizePath", "datePath", "seedersPath"];
     if (Object.keys(config).some((key => !allowed.includes(key)))) throw new TypeError("Unsupported custom source field");
     if (!["torrent-table", "magnet-links", "json"].includes(config.parserType)) throw new TypeError("Unsupported parser type");
@@ -49,7 +49,7 @@ function validateCustomMagnetSource(config) {
     return { ...config, name: config.name.trim(), targetUrlTemplate: config.targetUrlTemplate || config.searchUrlTemplate };
 }
 
-function applyMagnetRules(result, tagRules = [], titleFilters = [], fileFilters = []) {
+export function applyMagnetRules(result, tagRules = [], titleFilters = [], fileFilters = []) {
     const text = `${result.title || ""} ${(result.files || []).join(" ")}`;
     const matches = (rule, value) => "regex" === rule.type ? new RegExp(rule.pattern, "i").test(value) : value.toLowerCase().includes(rule.pattern.toLowerCase());
     const tags = tagRules.filter((rule => rule.enabled && matches(rule, text)));
@@ -60,7 +60,7 @@ function applyMagnetRules(result, tagRules = [], titleFilters = [], fileFilters 
     return { ...result, tags: tags.map((rule => rule.name)), customTagWeight: tags.reduce(((sum, rule) => sum + (Number(rule.weight) || 0)), 0), hidden, filterPenalty: penalty, filteredReasons };
 }
 
-function parseNativeMagnets(root, source) {
+export function parseNativeMagnets(root, source) {
     const results = new Map();
     $(root).find('a[href^="magnet:"],[data-clipboard-text^="magnet:"]').each(((index, element) => {
         const node = $(element), magnet = node.attr("href") || node.attr("data-clipboard-text");
@@ -73,7 +73,7 @@ function parseNativeMagnets(root, source) {
 }
 
 function readJsonPath(value, path) { return String(path || "").split(".").filter(Boolean).reduce(((current, key) => current?.[key]), value); }
-function parseCustomMagnetResponse(config, payload, sourceId) {
+export function parseCustomMagnetResponse(config, payload, sourceId) {
     config = validateCustomMagnetSource(config);
     if ("json" === config.parserType) return (readJsonPath(payload, config.resultsPath) || []).map((item => normalizeMagnetResult({ title: readJsonPath(item, config.titlePath), magnet: config.magnetPath ? readJsonPath(item, config.magnetPath) : `magnet:?xt=urn:btih:${readJsonPath(item, config.hashPath)}`, size: readJsonPath(item, config.sizePath), date: readJsonPath(item, config.datePath), seeders: readJsonPath(item, config.seedersPath) }, `custom:${sourceId}`))).filter(Boolean);
     const root = utils.htmlTo$dom(payload), rows = "magnet-links" === config.parserType ? root.find('a[href^="magnet:"]') : root.find(config.rowSelector);

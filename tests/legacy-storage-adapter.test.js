@@ -1,10 +1,11 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
 function createAdapter(existing = null) {
-    const source = readFileSync(join(import.meta.dirname, "../src/core/storage.js"), "utf8"), show = { error: vi.fn() }, patch = vi.fn(async () => ({ changed: [ "ABC-1" ], transactionId: "tx" })), context = vm.createContext({
+    const source = readTestFile(join(import.meta.dirname, "../src/core/storage.js"), "utf8"), show = { error: vi.fn() }, patch = vi.fn(async () => ({ changed: [ "ABC-1" ], transactionId: "tx" })), context = vm.createContext({
         WeakSet, WeakMap, Map, Set, Promise, Date, JSON, Object, Array, Math,
         a: message => { throw new TypeError(message); },
         i: (target, key, value) => (target[key] = value),

@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -5,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 const warnings = [], notices = [];
 const context = vm.createContext({ URL, window: { location: { href: "https://javdb.com/" } }, encodeURIComponent, normalizeCarNum: value => typeof value === "string" && value.trim() && !["null", "undefined"].includes(value.trim().toLowerCase()) ? value.trim() : null, escapeHtml: value => value, clog: { warn: (...args) => warnings.push(args), debug: () => {} }, show: { error: message => notices.push(message) } });
-const source = readFileSync(join(import.meta.dirname, "../src/core/feature-helpers.js"), "utf8");
+const source = readTestFile(join(import.meta.dirname, "../src/core/feature-helpers.js"), "utf8");
 vm.runInContext(`${source};globalThis.api={mapLimit,parseNumberSetting,parseTaskTimestamp,shouldSkipStopped,selectLatestPublishTime,normalizeDmmCid,normalizeHttpUrl,normalizeBtihHash,resolveHighResCover,parseCarNumberText,buildFallbackCarUrl,linkCommentImageReferences,safePlay}`, context);
 const api = context.api;
 

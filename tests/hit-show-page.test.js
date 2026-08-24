@@ -1,9 +1,10 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 
-const source = readFileSync(join(process.cwd(), "src/core/site-context.js"), "utf8");
+const source = readTestFile(join(process.cwd(), "src/core/site-context.js"), "utf8");
 const context = vm.createContext({ URL });
 vm.runInContext(`${source};globalThis.helpers={isHitShowPage,isNormalListPage,isListPage}`, context);
 

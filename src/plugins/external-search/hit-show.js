@@ -1,4 +1,10 @@
-class HitShowPlugin extends BasePlugin {
+import { escapeHtml, i } from "../../core/constants.js";
+import { normalizeHttpUrl } from "../../core/feature-helpers.js";
+import { V, W } from "../../core/javdb-api.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { isHitShowPage } from "../../core/site-context.js";
+
+export class HitShowPlugin extends BasePlugin {
     constructor() {
         super(), i(this, "$contentBox", $(".section .container")), i(this, "loadGeneration", 0);
     }
@@ -29,10 +35,10 @@ class HitShowPlugin extends BasePlugin {
             if (generation !== this.loadGeneration) return;
             $(".movie-list").html(this.markDataListHtml(movies));
             await this.initializeRenderedList();
-            await this.getBean("ListPageButtonPlugin").sortItems();
+            await this.getDependency("ListPageButtonPlugin").sortItems();
             loadingObj.close(), loadingClosed = !0;
             void this.loadScore(movies, generation).then((async () => {
-                if (generation === this.loadGeneration && "rateCount" === localStorage.getItem("jhs_sortMethod")) await this.getBean("ListPageButtonPlugin").sortItems();
+                if (generation === this.loadGeneration && "rateCount" === localStorage.getItem("jhs_sortMethod")) await this.getDependency("ListPageButtonPlugin").sortItems();
             })).catch((error => clog.error("热播评分补全失败", error)));
         } catch (error) {
             clog.error("所有重试尝试均失败，无法获取数据。", error);
@@ -51,9 +57,9 @@ class HitShowPlugin extends BasePlugin {
         throw lastError;
     }
     async initializeRenderedList() {
-        const listPage = this.getBean("ListPagePlugin");
+        const listPage = this.getDependency("ListPagePlugin");
         listPage.replaceHdImg(), await listPage.doFilter(), listPage.applyVisibility(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector);
-        this.getBean("CoverButtonPlugin").addSvgBtn();
+        this.getDependency("CoverButtonPlugin").addSvgBtn();
     }
     toolBar(e) {
         $("#jhs-hitshow-period").remove();

@@ -1,0 +1,3 @@
+// @vitest-environment jsdom
+import { readFileSync } from "node:fs"; import { join } from "node:path"; import jquery from "jquery"; import { expect, it } from "vitest"; import { parseSubtitleCatResults } from "../../src/integrations/subtitlecat/parser.js";
+it("normalizes SubtitleCat results", () => { document.documentElement.innerHTML = readFileSync(join(import.meta.dirname, "../fixtures/integrations/subtitlecat/results.html"), "utf8"); expect(parseSubtitleCatResults(jquery(document), "https://subtitlecat.com/")[0]).toEqual({ language: "Chinese", url: "https://subtitlecat.com/subtitles/test-zh" }); });

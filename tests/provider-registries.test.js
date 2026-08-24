@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -5,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 function load(path, exports, extra = {}) {
     const context = vm.createContext({ URL, console, clog: { warn() {} }, ...extra });
-    vm.runInContext(`${readFileSync(join(import.meta.dirname, "..", path), "utf8")};globalThis.result={${exports.join(",")}}`, context);
+    vm.runInContext(`${readTestFile(join(import.meta.dirname, "..", path), "utf8")};globalThis.result={${exports.join(",")}}`, context);
     return context.result;
 }
 

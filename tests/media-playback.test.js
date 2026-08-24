@@ -1,9 +1,10 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const preview = readFileSync(join(import.meta.dirname, "../src/plugins/image-viewer/preview-video.js"), "utf8");
-const bus = readFileSync(join(import.meta.dirname, "../src/plugins/image-viewer/bus-preview-video.js"), "utf8");
+const preview = readTestFile(join(import.meta.dirname, "../src/plugins/image-viewer/preview-video.js"), "utf8");
+const bus = readTestFile(join(import.meta.dirname, "../src/plugins/image-viewer/bus-preview-video.js"), "utf8");
 
 describe("preview playback contracts", () => {
     it("starts the native JavDB preview before awaiting DMM without taking over its source", () => {
@@ -48,7 +49,7 @@ describe("preview playback contracts", () => {
         }
     });
     it("keeps native play calls inside safePlay only", () => {
-        const allRuntime = [ preview, bus, readFileSync(join(import.meta.dirname, "../src/plugins/image-viewer/cover-button.js"), "utf8"), readFileSync(join(import.meta.dirname, "../src/plugins/status/list-page.js"), "utf8") ].join("\n");
+        const allRuntime = [ preview, bus, readTestFile(join(import.meta.dirname, "../src/plugins/image-viewer/cover-button.js"), "utf8"), readTestFile(join(import.meta.dirname, "../src/plugins/status/list-page.js"), "utf8") ].join("\n");
         expect(allRuntime).not.toMatch(/\.play\s*\(/);
     });
 });

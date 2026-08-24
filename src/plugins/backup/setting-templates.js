@@ -1,8 +1,10 @@
+import { L, r } from "../../core/constants.js";
+
 /**
  * Build the plugin categories configuration shared between inject and render.
  * Returns { categories, corePlugins }.
  */
-function getPluginCategories() {
+export function getPluginCategories() {
     const pluginMeta = {
         SettingPlugin:["设置中心","core"], StatsPlugin:["统计中心","core"], MobileBottomBarPlugin:["工具栏与移动操作","core"],
         ListPagePlugin:["列表状态处理","list"], NavBarPlugin:["JavDB 导航","list"], BusNavBarPlugin:["JavBus 导航","list"], ListPageButtonPlugin:["列表操作","list"], HighlightMagnetPlugin:["磁力标记","list"], FoldCategoryPlugin:["分类折叠","list"], AutoPagePlugin:["自动翻页","list"], HitShowPlugin:["热播榜单","list"], TOP250Plugin:["TOP 250","list"],
@@ -48,7 +50,7 @@ function buildVideoQualityOptions() {
 }
 
 /** Build the main settings dialog HTML template. */
-function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
+export function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
     const n = buildCacheItemsHtml(cacheItems);
     const a = buildVideoQualityOptions();
     return `
@@ -565,7 +567,7 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
 }
 
 /** Inject the Data Health sidebar item and panel HTML into the dialog. */
-function injectHealthPanel() {
+export function injectHealthPanel() {
     const e = $(".side-menu-item").parent();
     e.length && !e.find('[data-panel="health-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="health-panel" aria-controls="health-panel">数据体检</button>');
     const t = $(".content-panel").parent();
@@ -583,7 +585,7 @@ function injectHealthPanel() {
 }
 
 /** Inject the Plugin Management sidebar item and panel HTML into the dialog. */
-function injectPluginMgmtPanel() {
+export function injectPluginMgmtPanel() {
     const e = $(".side-menu-item").parent();
     e.length && !e.find('[data-panel="plugin-mgmt-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="plugin-mgmt-panel" aria-controls="plugin-mgmt-panel">插件管理</button>');
     const t = $(".content-panel").parent();
@@ -607,7 +609,7 @@ function injectPluginMgmtPanel() {
 }
 
 /** Inject the Snapshot sidebar item and panel HTML into the dialog. */
-function injectSnapshotPanel() {
+export function injectSnapshotPanel() {
     const e = $(".side-menu-item").parent();
     e.length && !e.find('[data-panel="snapshot-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="snapshot-panel" aria-controls="snapshot-panel">恢复点</button>');
     const t = $(".content-panel").parent();
@@ -617,7 +619,7 @@ function injectSnapshotPanel() {
 }
 
 /** Inject the Network/External Requests sidebar item and panel HTML into the dialog. */
-function injectNetworkPanel() {
+export function injectNetworkPanel() {
     const e = $(".side-menu-item").parent();
     e.length && !e.find('[data-panel="network-panel"]').length && e.append('<button type="button" class="jhs-btn side-menu-item" data-panel="network-panel" aria-controls="network-panel">外部请求</button>');
     const t = $(".content-panel").parent();
@@ -634,7 +636,7 @@ function injectNetworkPanel() {
     t.append(n);
 }
 
-function injectResourceSourcesPanel() {
+export function injectResourceSourcesPanel() {
     if ($("#resource-sources-panel").length) return;
     $(".content-panel").last().after(`<div id="resource-sources-panel" class="content-panel">
       <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>磁力来源</h3><p>聚合多个来源搜索磁力结果，优先级数字越小越靠前。</p></header><div id="builtin-magnet-source-list" class="jhs-resource-card-list"></div><div class="jhs-toolbar"><h4>自定义来源</h4><button type="button" id="add-custom-magnet-source" class="jhs-btn jhs-btn--primary">+ 添加来源</button></div><div id="custom-magnet-source-list" class="jhs-resource-card-list"></div></section>
@@ -649,7 +651,7 @@ function injectResourceSourcesPanel() {
 }
 
 /** Build the shared quick-settings content for desktop and mobile. */
-function buildQuickSettingHtml() {
+export function buildQuickSettingHtml() {
     const rows = [
         [ "鉴定后立即关闭", "needClosePage", "完成鉴定后关闭当前详情窗口。" ],
         [ "瀑布流", "autoPage", "连续加载列表；启用后普通列表只支持默认排序。" ],

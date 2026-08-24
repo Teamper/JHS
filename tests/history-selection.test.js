@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -71,7 +72,7 @@ function loadHistory(records = createRecords()) {
         y: "下载",
         k: "观看"
     });
-    vm.runInContext(`${readFileSync(join(process.cwd(), "src/plugins/status/history.js"), "utf8")};globalThis.History=HistoryPlugin`, context);
+    vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/status/history.js"), "utf8")};globalThis.History=HistoryPlugin`, context);
     const plugin = new context.History, root = $("#history");
     const table = {
         currentData: records.slice(0, 50),

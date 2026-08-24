@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -5,8 +6,8 @@ import jquery from "jquery";
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 
-const fixture = (name) => readFileSync(join(import.meta.dirname, "fixtures", name), "utf8");
-const source = readFileSync(join(import.meta.dirname, "../src/parsers/third-party-parsers.js"), "utf8");
+const fixture = (name) => readTestFile(join(import.meta.dirname, "fixtures", name), "utf8");
+const source = ["javstore", "javdb", "host-list", "av123"].map((id) => readTestFile(join(import.meta.dirname, `../src/integrations/${id}/parser.js`), "utf8")).join("\n");
 
 function loadParsers(html) {
     const dom = new JSDOM(html, { url: "https://javdb.com/" }), $ = jquery(dom.window);

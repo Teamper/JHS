@@ -1,4 +1,8 @@
-class JavTrailersPlugin extends BasePlugin {
+import { safePlay } from "../../core/feature-helpers.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { JHS_Z_INDEX } from "../../core/theme.js";
+
+export class JavTrailersPlugin extends BasePlugin {
     getName() {
         return "JavTrailersPlugin";
     }

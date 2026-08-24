@@ -1,4 +1,11 @@
-class CoverButtonPlugin extends BasePlugin {
+import { _, d, g, h, k, l, m, p, r, v, y } from "../../core/constants.js";
+import { safePlay } from "../../core/feature-helpers.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { legacyActionToFlag } from "../../core/state-model.js";
+import { stateService } from "../../core/state-service.js";
+import { Z, fetchDmmPreview } from "./preview-video.js";
+
+export class CoverButtonPlugin extends BasePlugin {
     getName() {
         return "CoverButtonPlugin";
     }
@@ -82,7 +89,7 @@ class CoverButtonPlugin extends BasePlugin {
     }
     async bindClick() {
         this.getSelector();
-        const e = this.getBean("ListPagePlugin");
+        const e = this.getDependency("ListPagePlugin");
         $(document).on("click", ".jhs-card-menu-trigger", (event => {
             event.preventDefault(), event.stopPropagation();
             const trigger = $(event.currentTarget), menu = trigger.siblings(".jhs-card-menu"), open = !menu.hasClass("is-open");
@@ -117,7 +124,7 @@ class CoverButtonPlugin extends BasePlugin {
                 const a = $(t.currentTarget).closest(".item");
                 let {carNum: i} = e.findCarNumAndHref(a);
                 i = i.replace("FC2-", "");
-                const s = await this.getBean("ScreenShotPlugin").getScreenshot(i);
+                const s = await this.getDependency("ScreenShotPlugin").getScreenshot(i);
                 n.close(), showImageViewer(s);
             } catch (a) {
                 clog.error("图片预览出错:", a), show.error("图片预览出错:" + a);
@@ -136,7 +143,7 @@ class CoverButtonPlugin extends BasePlugin {
                 n.hasClass("filterBtn") ? utils.q(t, `是否屏蔽${i}?`, (() => r(d))) : n.hasClass("favoriteBtn") ? void r(h) : n.hasClass("hasDownBtn") ? void r(g) : n.hasClass("hasWatchBtn") && void r(p), this.closeCardMenus();
             } catch (t) { clog.error("按钮点击处理失败:", t); }
         }));
-        const t = this.getBean("OtherSitePlugin"), n = await t.getMissAvUrl(), a = await t.getjableUrl(), i = await t.getAvgleUrl(), s = await t.getAv123Url();
+        const t = this.getDependency("OtherSitePlugin"), n = await t.getMissAvUrl(), a = await t.getjableUrl(), i = await t.getAvgleUrl(), s = await t.getAv123Url();
         $(this.getSelector().itemSelector).each(((t, o) => {
             const r = $(o), {carNum: l} = e.findCarNumAndHref(r);
             r.find(".site-jable").attr({ href: `${a}/search/${l}/`, target: "_blank", rel: "noopener noreferrer" }),

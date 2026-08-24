@@ -53,7 +53,7 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(srcRoot, "core", "constants.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "image-viewer", "preview-video.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "image-viewer", "screenshot.js"), "utf8"),
-  readFile(join(srcRoot, "parsers", "third-party-parsers.js"), "utf8"),
+  readFile(join(srcRoot, "integrations", "javstore", "parser.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "external-search", "other-site.js"), "utf8"),
   readFile(join(repoRoot, "JHS.user.js"), "utf8")
 ]);
@@ -80,10 +80,11 @@ for (const token of ["class JhsSelect", "menuitemradio", "OPTGROUP", "ArrowDown"
 requireMatch(primitives, /\.jhs-segmented__item[^}]*\{[^}]*display:\s*inline-flex[^}]*align-items:\s*center[^}]*justify-content:\s*center[^}]*line-height:\s*1/, "segmented items must be centered on both axes");
 requireMatch(theme, /\.layui-layer-close[\s\S]*::before[\s\S]*::after/, "layer close control must draw its own themed BasePlugin");
 
-const themeIndex = build.indexOf('"theme.js"');
-const primitivesIndex = build.indexOf('"ui-primitives.js"');
+requireMatch(build, /entryPoints:\s*\[srcPath\]/, "build must use the ESM main entry point");
+const themeIndex = injection.indexOf('from "./theme.js"');
+const primitivesIndex = injection.indexOf('from "./ui-primitives.js"');
 if (themeIndex < 0 || primitivesIndex < 0 || primitivesIndex < themeIndex)
-  failures.push("ui-primitives.js must be bundled after theme.js");
+  failures.push("css-injection.js must import theme before UI primitives");
 requireMatch(injection, /H\(buildUiPrimitivesCss\(\)\)/, "shared UI CSS is not injected");
 requireMatch(injection, /initializeUiAccessibility\(\)/, "dynamic UI accessibility enhancer is not initialized");
 requireMatch(injection, /H\(F\)/, "clean global support CSS must be injected");
@@ -144,8 +145,8 @@ forbidMatch(settings, /helpBtn|\(\?\)|tooltip-icon/, "quick settings help and qu
 forbidMatch(settingForms, /help-container|常见问题|使用说明|helpBtn/, "settings help implementation must be fully removed");
 requireMatch(settings, /id="moreBtn" class="jhs-btn jhs-btn--ghost"/, "quick settings footer must only retain the ghost more-settings action");
 requireMatch(settingPanels, /html \+= `<\/section>`/, "plugin groups must close with section");
-requireMatch(logger, /document\.addEventListener\("mouseover", this\.onDocumentOver\)/, "image preview must use delegated target handling");
-requireMatch(logger, /document\.removeEventListener\("mouseover", this\.onDocumentOver\)/, "image preview must remove delegated listeners");
+requireMatch(logger, /this\.scope\.listen\(document, "mouseover", this\.onDocumentOver\)/, "image preview must use lifecycle-owned delegated target handling");
+requireMatch(logger, /this\.scope\.dispose\(\)/, "image preview must remove delegated listeners through LifecycleScope");
 requireMatch(logger, /currentUrl = null[\s\S]*loadedUrls = new Map/, "image preview must cache loaded URLs");
 requireMatch(logger, /hideDelay:\s*100/, "image preview must debounce hiding for 100ms");
 requireMatch(logger, /\.image-hover-preview\s*\{[^}]*display:\s*block[^}]*visibility:\s*hidden/, "image preview must remain mounted while hidden");
@@ -227,7 +228,7 @@ requireMatch(parsers, /"javstore\.net" === hostname \|\| hostname\.endsWith\("\.
 requireMatch(parsers, /previewUrl\.replace\("\.th", ""\)/, "JavStore preview URLs must retain .th compatibility");
 requireMatch(screenshot, /"javstore" === provider \? normalizeJavStoreAssetUrl\(cachedUrl\) : cachedUrl/, "legacy JavStore screenshot cache reads must normalize asset URLs");
 requireMatch(screenshot, /addImg\(e, t\)[\s\S]{0,100}normalizeJavStoreAssetUrl\(t\)/, "screenshot rendering must normalize JavStore asset URLs at the final boundary");
-requireMatch(parsers, /"CLICK HERE!" === \$\(element\)\.text\(\)\.trim\(\)/, "JavStore detail parsing must retain the CLICK HERE! link contract");
+requireMatch(parsers, /"CLICK HERE!" === wrap\(element\)\.text\(\)\.trim\(\)/, "JavStore detail parsing must retain the CLICK HERE! link contract");
 requireMatch(screenshot, /详情页没有 CLICK HERE![\s\S]{0,80}continue/, "JavStore must continue after a candidate without CLICK HERE!");
 forbidMatch(screenshot, /javstore\.net\/search\/|img\[src\*=['"]_s\.jpg/, "legacy JavStore search or detail fallback must not return");
 requireMatch(otherSite, /跳过第三方站点解析：番号不可用/, "external sites must fail fast without a car number");
@@ -279,7 +280,7 @@ for (const file of sourceFiles) {
     `${relative(repoRoot, file)} contains a banned ribbon or neumorphic treatment`);
   if (path !== "src/core/feature-helpers.js") forbidMatch(source, /\.play\s*\(/, `${path} contains a naked media play call`);
   if (path !== "src/core/utils.js") forbidMatch(source, /navigator\.clipboard|execCommand\s*\(\s*["']copy["']/, `${path} bypasses the clipboard helper`);
-  if (path !== "src/core/logger.js" && path !== "src/main.js") forbidMatch(source, /\bconsole\.(?:log|warn|error)\s*\(/, `${path} bypasses clog`);
+  if (!["src/core/logger.js", "src/main.js", "src/app/bootstrap.js"].includes(path)) forbidMatch(source, /\bconsole\.(?:log|warn|error)\s*\(/, `${path} bypasses clog`);
   for (const reference of source.matchAll(/JHS_Z_INDEX\.([A-Za-z][\w]*)/g)) if (!zIndexKeys.has(reference[1])) failures.push(`${path} references unknown z-index token ${reference[1]}`);
   forbidMatch(source, /\.then\(\s*\)/, `${path} contains an unobserved empty then call`);
   forbidMatch(source, /catch\s*\([^)]*\)\s*\{\s*\}/, `${path} contains an empty catch block`);

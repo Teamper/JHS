@@ -1,5 +1,7 @@
+import { escapeHtml, normalizeCarNum } from "./constants.js";
+
 /** 以固定并发执行任务，保持输入顺序。 */
-async function mapLimit(items, concurrency = 4, mapper) {
+export async function mapLimit(items, concurrency = 4, mapper) {
     const results = new Array(items.length); let cursor = 0;
     const worker = async () => { while (cursor < items.length) { const index = cursor++; results[index] = await mapper(items[index], index); } };
     await Promise.all(Array.from({ length: Math.min(Math.max(1, concurrency), items.length) }, worker));
@@ -7,14 +9,14 @@ async function mapLimit(items, concurrency = 4, mapper) {
 }
 
 /** 读取数值配置，保留合法的 0 并按范围回退默认值。 */
-function parseNumberSetting(value, fallback, { min = -Infinity, max = Infinity } = {}) {
+export function parseNumberSetting(value, fallback, { min = -Infinity, max = Infinity } = {}) {
     if (null == value || "" === String(value).trim()) return fallback;
     const number = Number(value);
     return Number.isFinite(number) && number >= min && number <= max ? number : fallback;
 }
 
 /** 将旧日期字符串或毫秒时间戳统一解析为 Unix 毫秒。 */
-function parseTaskTimestamp(value) {
+export function parseTaskTimestamp(value) {
     if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : null;
     if ("number" == typeof value) return Number.isFinite(value) && value >= 0 ? value : null;
     if ("string" != typeof value) return null;
@@ -35,13 +37,13 @@ function parseTaskTimestamp(value) {
 }
 
 /** 判断最近发行时间是否已超出停更规则窗口。 */
-function shouldSkipStopped(lastPublishTime, ruleHours, now = Date.now()) {
+export function shouldSkipStopped(lastPublishTime, ruleHours, now = Date.now()) {
     const hours = parseNumberSetting(ruleHours, 0, { min: 0 }), publishedAt = parseTaskTimestamp(lastPublishTime), nowAt = parseTaskTimestamp(now);
     return hours > 0 && null != publishedAt && null != nowAt && nowAt >= publishedAt && nowAt - publishedAt >= 36e5 * hours;
 }
 
 /** 从一组发行日期中选择真实时间最大的原始值。 */
-function selectLatestPublishTime(values) {
+export function selectLatestPublishTime(values) {
     let latestValue = null, latestAt = -Infinity;
     for (const value of values) {
         const timestamp = parseTaskTimestamp(value);
@@ -60,7 +62,7 @@ function normalizeDmmCid(carNum) {
 }
 
 /** 将外部地址规范为可安全写入链接或媒体属性的 HTTP(S) URL。 */
-function normalizeHttpUrl(value, baseUrl = window.location.href) {
+export function normalizeHttpUrl(value, baseUrl = window.location.href) {
     if (!value) return null;
     try {
         const url = new URL(String(value), baseUrl);
@@ -72,7 +74,7 @@ function normalizeHttpUrl(value, baseUrl = window.location.href) {
 }
 
 /** 规范 BTIH，兼容 40 位十六进制与 32 位 Base32。 */
-function normalizeBtihHash(value) {
+export function normalizeBtihHash(value) {
     const hash = String(value || "").trim();
     return /^(?:[a-f\d]{40}|[a-z2-7]{32})$/i.test(hash) ? hash.toUpperCase() : null;
 }
@@ -84,13 +86,13 @@ function resolveHighResCover(value) {
     return url.href;
 }
 
-function parseCarNumberText(text) {
+export function parseCarNumberText(text) {
     const tokens = String(text || "").split(/[\s,，;；]+/).map((item => normalizeCarNum(item))).filter(Boolean);
     const valid = tokens.filter((item => /^(?:FC2-)?[A-Z\d]+(?:-[A-Z\d]+)+$/i.test(item)));
     return { recognized: tokens.length, values: [...new Set(valid.map((item => item.toUpperCase())))], invalid: tokens.filter((item => !valid.includes(item))) };
 }
 
-function buildFallbackCarUrl(carNum, baseUrl = "https://javdb.com") { return `${baseUrl}/search?q=${encodeURIComponent(carNum)}`; }
+export function buildFallbackCarUrl(carNum, baseUrl = "https://javdb.com") { return `${baseUrl}/search?q=${encodeURIComponent(carNum)}`; }
 
 function linkCommentImageReferences(text, imageCount) {
     const chinese = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
@@ -101,7 +103,7 @@ function linkCommentImageReferences(text, imageCount) {
 }
 
 /** 安全播放媒体，统一处理浏览器播放拒绝并返回是否成功。 */
-async function safePlay(mediaElement, { context = "视频", notify = !1, message = "当前视频源无法播放" } = {}) {
+export async function safePlay(mediaElement, { context = "视频", notify = !1, message = "当前视频源无法播放" } = {}) {
     if (!mediaElement || "function" != typeof mediaElement.play) {
         clog.warn(`${context}播放失败：媒体元素不可用`);
         notify && show.error(message);

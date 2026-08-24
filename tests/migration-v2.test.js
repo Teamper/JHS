@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -6,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 const repoRoot = join(import.meta.dirname, "..");
 
 function loadMigration() {
-    const constants = readFileSync(join(repoRoot, "src/core/constants.js"), "utf8"), start = constants.indexOf("function normalizeCarNum"), end = constants.indexOf("function assertPageInfoContract", start), state = readFileSync(join(repoRoot, "src/core/state-model.js"), "utf8"), migration = readFileSync(join(repoRoot, "src/core/migration.js"), "utf8"), context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", CURRENT_DATA_VERSION: 2, Date, Object, Array, Map, Set, JSON, utils: { getNowStr: () => "2026-08-22" } });
+    const constants = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), start = constants.indexOf("function normalizeCarNum"), end = constants.indexOf("function assertPageInfoContract", start), state = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), migration = readTestFile(join(repoRoot, "src/core/migration.js"), "utf8"), context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", CURRENT_DATA_VERSION: 2, Date, Object, Array, Map, Set, JSON, utils: { getNowStr: () => "2026-08-22" } });
     vm.runInContext(`${constants.slice(start, end)}\n${state}\n${migration}; globalThis.api = { run: runDataMigrations, validate: validatePortableData };`, context);
     return context.api;
 }

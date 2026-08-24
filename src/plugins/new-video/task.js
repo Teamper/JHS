@@ -1,4 +1,12 @@
-class TaskPlugin extends BasePlugin {
+import { I, T, _, i, l, normalizeCarNum } from "../../core/constants.js";
+import { parseNumberSetting, parseTaskTimestamp, selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { detectSite } from "../../core/site-context.js";
+import { parseJavDbActorList } from "../../integrations/javdb/parser.js";
+import { parseDetailPage } from "../../integrations/host-list/parser.js";
+import { StorageQueue } from "../external-search/other-site.js";
+
+export class TaskPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "singleTaskKey", "checkNewActressActorFilterCar"),
         i(this, "taskConfig", null), i(this, "storageQueue", new StorageQueue), i(this, "lastCheckFavoriteActressTimeKey", "jhs_time_checkFavoriteActress"),
@@ -182,7 +190,7 @@ class TaskPlugin extends BasePlugin {
     }
     async doTask() {
         if (!window.isListPage) return;
-        await this.loadConfig(), this.javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl();
+        await this.loadConfig(), this.javDbUrl = await this.getDependency("OtherSitePlugin").getJavDbUrl();
         return navigator.locks.request(this.singleTaskKey, {
             ifAvailable: !0
         }, (async e => {
@@ -225,12 +233,12 @@ class TaskPlugin extends BasePlugin {
     }
     /** 确保所有任务入口均已具备配置和站点地址。 */
     async ensureReady() {
-        (!this.taskConfig || this.taskConfigDirty) && await this.loadConfig(), this.javDbUrl || (this.javDbUrl = await this.getBean("OtherSitePlugin").getJavDbUrl());
+        (!this.taskConfig || this.taskConfigDirty) && await this.loadConfig(), this.javDbUrl || (this.javDbUrl = await this.getDependency("OtherSitePlugin").getJavDbUrl());
         if (!this.javDbUrl) throw new Error("JavDB 地址未配置");
     }
     async resolveBlacklistSite(url) {
         try {
-            const target = new URL(url), otherSite = this.getBean("OtherSitePlugin"), [ javDbUrl, javBusUrl ] = await Promise.all([ otherSite?.getJavDbUrl?.(), otherSite?.getJavBusUrl?.() ]);
+            const target = new URL(url), otherSite = this.getDependency("OtherSitePlugin"), [ javDbUrl, javBusUrl ] = await Promise.all([ otherSite?.getJavDbUrl?.(), otherSite?.getJavBusUrl?.() ]);
             for (const [ configuredUrl, site ] of [ [ javDbUrl, T ], [ javBusUrl, I ] ]) {
                 try {
                     if (configuredUrl && target.hostname === new URL(configuredUrl).hostname) return site;
@@ -276,7 +284,7 @@ class TaskPlugin extends BasePlugin {
                 }
             }
             clog.log(`<span class="jhs-task-emphasis">检测屏蔽黑名单, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
-            const blacklistPlugin = this.getBean("BlacklistPlugin");
+            const blacklistPlugin = this.getDependency("BlacklistPlugin");
             try {
                 await this.limitConcurrency(eligible, concurrency, sleep, (async entry => {
                     const {item, site} = entry;
@@ -305,7 +313,7 @@ class TaskPlugin extends BasePlugin {
             }
             const completed = 0 === result.parseFailed + result.networkFailed + result.aborted;
             result.completed = completed, result.fatal = !!blockedError, await this.finalizeTask("blacklist", completed), finalized = !0, this.renderBlacklistResult(result, completed);
-            try { await this.getBean("BlacklistPlugin").resetBtnTip(); } catch (error) { clog.error("刷新黑名单检测提示失败", error); }
+            try { await this.getDependency("BlacklistPlugin").resetBtnTip(); } catch (error) { clog.error("刷新黑名单检测提示失败", error); }
             if (blockedError) throw blockedError;
             return result;
             } catch (error) {
@@ -439,7 +447,7 @@ class TaskPlugin extends BasePlugin {
         let c = [];
         const publishTimes = [];
         for (const m of s) {
-            const e = $(m), {carNum: s, url: o, title: r, publishTime: l} = this.getBean("ListPagePlugin").findCarNumAndHref(e);
+            const e = $(m), {carNum: s, url: o, title: r, publishTime: l} = this.getDependency("ListPagePlugin").findCarNumAndHref(e);
             l && publishTimes.push(l);
             if (!s) continue;
             a.find((e => r.includes(e) || s.includes(e))) || (i.has(s) || (() => {

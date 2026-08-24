@@ -1,4 +1,10 @@
-class ListPageButtonPlugin extends BasePlugin {
+import { _, c, g, h, l, o, r } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { isHitShowPage } from "../../core/site-context.js";
+import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
+import { isHardHidden } from "./list-page.js";
+
+export class ListPageButtonPlugin extends BasePlugin {
     getName() {
         return "ListPageButtonPlugin";
     }
@@ -53,11 +59,11 @@ class ListPageButtonPlugin extends BasePlugin {
         $("#waitCheckBtn").on("click", (e => {
             void this.openWaitCheck(e).catch((error => clog.error("待鉴定列表打开失败", error)));
         })), $("#newVideoBtn").on("click", (e => {
-            this.getBean("NewVideoPlugin").openDialog();
+            this.getDependency("NewVideoPlugin").openDialog();
         })), $("#blacklistBtn").on("click", (e => {
-            this.getBean("BlacklistPlugin").openBlacklistDialog();
+            this.getDependency("BlacklistPlugin").openBlacklistDialog();
         })), this.bindSortMenu();
-        const e = this.getBean("BlacklistPlugin");
+        const e = this.getDependency("BlacklistPlugin");
         $("#addBlacklistBtn").on("click", (async t => {
             await e.addBlacklist(t);
         })), $("#filterAllVideo").on("click", (async t => {
@@ -157,7 +163,7 @@ class ListPageButtonPlugin extends BasePlugin {
         let e = this.getSelector();
         const t = await storageManager.getSetting("waitCheckCount", 5);
         let a = 0;
-        const listPage = this.getBean("ListPagePlugin");
+        const listPage = this.getDependency("ListPagePlugin");
         for (const element of $(e.itemSelector).toArray()) {
             if (a >= t) break;
             const item = $(element), flags = normalizeStateFlags(JSON.parse(item.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(item.attr("data-jhs-visibility") || "{}");

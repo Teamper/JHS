@@ -1,4 +1,4 @@
-class ScreenshotProviderRegistry {
+export class ScreenshotProviderRegistry {
     constructor(providers = []) { this.providers = new Map(); providers.forEach((provider => this.register(provider))); }
     register(provider) {
         if (!provider?.id || !provider.name || "function" !== typeof provider.getScreenshot) throw new TypeError("Invalid screenshot provider");

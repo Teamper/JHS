@@ -1,4 +1,11 @@
-class Fc2Plugin extends BasePlugin {
+import { C, _, k, m, o, v, y } from "../../core/constants.js";
+import { detailStateController } from "../../core/detail-state-controller.js";
+import { normalizeBtihHash, normalizeHttpUrl } from "../../core/feature-helpers.js";
+import { O, U, V, markJavDbWantWatch, resolveJavDbMovieId } from "../../core/javdb-api.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { createFc2DetailContext, createFc2DetailShell } from "../status/detail-workspace.js";
+
+export class Fc2Plugin extends BasePlugin {
     getName() { return "Fc2Plugin"; }
     async initCss() {
         return `<style>
@@ -91,23 +98,23 @@ class Fc2Plugin extends BasePlugin {
         const resources = $('<div class="jhs-fc2-resource-stack"></div>'), nativeGroup = this.createResourceGroup("站内磁力", "native-magnets"), sitesGroup = this.createResourceGroup("第三方站点", "other-sites"), hubGroup = this.createResourceGroup("更多磁力来源", "magnet-hub"), hubButton = $('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="magnet-hub" aria-expanded="false">展开磁力搜索</button>');
         let magnetHubPromise = null;
         hubGroup.find('[data-jhs-role="magnet-hub"]').append(hubButton, '<div data-jhs-role="magnet-hub-content"></div>'), resources.append(nativeGroup, sitesGroup, hubGroup), context.getSlot("resources").append(resources);
-        toolbar.on(`click${context.namespace}`, '[data-jhs-action="subtitlecat"]', (event => utils.openPage(`https://subtitlecat.com/index.php?search=${encodeURIComponent(context.carNum)}`, context.carNum, !1, event))), toolbar.on(`click${context.namespace}`, '[data-jhs-action="xunlei"]', (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(context.carNum)));
+        toolbar.on(`click${context.namespace}`, '[data-jhs-action="subtitlecat"]', (event => utils.openPage(`https://subtitlecat.com/index.php?search=${encodeURIComponent(context.carNum)}`, context.carNum, !1, event))), toolbar.on(`click${context.namespace}`, '[data-jhs-action="xunlei"]', (() => this.getDependency("DetailPageButtonPlugin").searchXunLeiSubtitle(context.carNum)));
         hubButton.on(`click${context.namespace}`, (async () => {
             if (!context.isAlive()) return;
             const box = hubGroup.find('[data-jhs-role="magnet-hub-content"]'), expanded = "true" === hubButton.attr("aria-expanded");
             if (expanded) return hubGroup.addClass("is-collapsed"), void hubButton.attr("aria-expanded", "false").text("展开磁力搜索");
-            magnetHubPromise ||= this.getBean("MagnetHubPlugin").createMagnetHub(context.carNum, { root: context.root });
+            magnetHubPromise ||= this.getDependency("MagnetHubPlugin").createMagnetHub(context.carNum, { root: context.root });
             const hub = await magnetHubPromise;
             if (context.isAlive() && !box.children().length) box.append(hub);
             if (context.isAlive()) hubGroup.removeClass("is-collapsed"), hubButton.attr("aria-expanded", "true").text("收起磁力搜索"), box[0]?.scrollIntoView?.({ block: "nearest" });
         }));
         detailStateController.bind({ root: context.root, layerIndex: context.layerIndex ?? null, carNum: context.carNum, activityType: "fc2-state", getRecord: () => ({ carNum: context.carNum, url: context.url, fc2Source: context.source, names: context.root.find('[data-jhs-role="actress-data"]').text(), publishTime: context.root.find('[data-jhs-role="publish-time"]').text() }) });
-        void this.getBean("FilterTitleKeywordPlugin").bindDetailRoot(context.root, { layerIndex: context.layerIndex ?? null });
-        void this.getBean("OtherSitePlugin").loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: !1, isActive: context.isAlive }).then((box => { if (context.isAlive() && !box) sitesGroup.remove(); })).catch((error => {
+        void this.getDependency("FilterTitleKeywordPlugin").bindDetailRoot(context.root, { layerIndex: context.layerIndex ?? null });
+        void this.getDependency("OtherSitePlugin").loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: !1, isActive: context.isAlive }).then((box => { if (context.isAlive() && !box) sitesGroup.remove(); })).catch((error => {
             context.isAlive() && sitesGroup.remove(), clog.error("FC2 外部站点加载失败", error);
         }));
-        void this.getBean("ScreenShotPlugin").loadInto(screenshot, context.carNum.replace("FC2-", ""), { isActive: context.isAlive }).then((result => { if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove(); }));
-        "123av" === context.source ? void this.getBean("Fc2By123AvPlugin").loadDetail(context, context.url) : void this.loadNativeDetail(context);
+        void this.getDependency("ScreenShotPlugin").loadInto(screenshot, context.carNum.replace("FC2-", ""), { isActive: context.isAlive }).then((result => { if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove(); }));
+        "123av" === context.source ? void this.getDependency("Fc2By123AvPlugin").loadDetail(context, context.url) : void this.loadNativeDetail(context);
     }
     createResourceGroup(title, role) { return $('<section class="jhs-fc2-resource-group"><h3 class="jhs-fc2-resource-title"></h3><div></div></section>').find("h3").text(title).end().find("div").attr("data-jhs-role", role).end(); }
     setState(target, message, retry = null) {
@@ -141,7 +148,7 @@ class Fc2Plugin extends BasePlugin {
             if (!context.isAlive()) return;
             if ("LOGIN_REQUIRED" === error?.code) {
                 button.attr("aria-disabled", "false").text("JavDB 想看");
-                const loginPlugin = this.getBean("TOP250Plugin");
+                const loginPlugin = this.getDependency("TOP250Plugin");
                 return loginPlugin?.openLoginDialog({ onSuccess: () => this.submitJavDbWant(context, movieId, button) });
             }
             button.attr("aria-disabled", "false").text("JavDB 想看"), show.error(error?.message || "加入 JavDB 想看失败"), clog.error("加入 JavDB 想看失败", error);
@@ -153,7 +160,7 @@ class Fc2Plugin extends BasePlugin {
         try {
             const movie = await V(context.movieId);
             if (!context.isAlive()) return;
-            this.renderSummary(context, movie), this.renderGallery(context, movie.imgList || []), await this.getBean("TranslatePlugin").translate(movie.carNum || context.carNum, !1, { root: context.root });
+            this.renderSummary(context, movie), this.renderGallery(context, movie.imgList || []), await this.getDependency("TranslatePlugin").translate(movie.carNum || context.carNum, !1, { root: context.root });
         } catch (error) {
             context.isAlive() && this.setState(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.fetchAndRenderNativeDetail(context))), clog.error("FC2 详情加载失败", error);
         }
@@ -187,7 +194,7 @@ class Fc2Plugin extends BasePlugin {
             if (!context.isAlive()) return;
             host.empty();
             if (!magnets.length) return this.setState(host, "暂无站内磁力");
-            const highlighter = this.getBean("HighlightMagnetPlugin"), assessments = [];
+            const highlighter = this.getDependency("HighlightMagnetPlugin"), assessments = [];
             magnets.forEach((item => {
                 const hash = normalizeBtihHash(item.hash);
                 if (!hash) return;
@@ -210,7 +217,7 @@ class Fc2Plugin extends BasePlugin {
             if (!context.isAlive()) return;
             if (!movieId) return this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related"), this.setState(context.getSlot("reviews"), "JavDB 暂无对应作品"), this.setState(context.getSlot("related"), "JavDB 暂无对应作品");
             this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related");
-            await Promise.allSettled([ this.getBean("ReviewPlugin").showReview(movieId, context.getSlot("reviews"), { ownedSection: context.getSection("reviews"), isActive: context.isAlive }), this.getBean("RelatedPlugin").showRelated(context.getSlot("related"), movieId, { ownedSection: context.getSection("related"), isActive: context.isAlive }) ]);
+            await Promise.allSettled([ this.getDependency("ReviewPlugin").showReview(movieId, context.getSlot("reviews"), { ownedSection: context.getSection("reviews"), isActive: context.isAlive }), this.getDependency("RelatedPlugin").showRelated(context.getSlot("related"), movieId, { ownedSection: context.getSection("related"), isActive: context.isAlive }) ]);
         } catch (error) {
             if (!context.isAlive()) return;
             this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related");
@@ -221,10 +228,10 @@ class Fc2Plugin extends BasePlugin {
     clearOwnedPanel(context, name) { context.getSlot(name).empty(), context.getSection(name).find(".jhs-fc2-section__actions").empty(); }
     async resolveFc2Source(record = {}) {
         if ([ "fc2", "123av" ].includes(record.fc2Source)) return record.fc2Source;
-        try { return new URL(record.url, window.location.origin).hostname === new URL(await this.getBean("OtherSitePlugin").getAv123Url()).hostname ? "123av" : "fc2"; } catch (error) { return "fc2"; }
+        try { return new URL(record.url, window.location.origin).hostname === new URL(await this.getDependency("OtherSitePlugin").getAv123Url()).hostname ? "123av" : "fc2"; } catch (error) { return "fc2"; }
     }
     async openFc2Page(movieId, carNum, url, navigation = { newTab: !0 }, { source = "fc2" } = {}) {
-        const baseUrl = await this.getBean("OtherSitePlugin").getJavDbUrl();
+        const baseUrl = await this.getDependency("OtherSitePlugin").getJavDbUrl();
         utils.openPage(`${baseUrl}/users/collection_codes?movieId=${movieId || ""}&carNum=${encodeURIComponent(carNum)}&url=${encodeURIComponent(url)}&source=${encodeURIComponent(source)}`, carNum, !0, navigation);
     }
 }

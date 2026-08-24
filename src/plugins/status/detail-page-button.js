@@ -1,4 +1,9 @@
-class DetailPageButtonPlugin extends BasePlugin {
+import { C, _, k, l, m, normalizeCarNum, r, v, y } from "../../core/constants.js";
+import { detailStateController } from "../../core/detail-state-controller.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { stateService } from "../../core/state-service.js";
+
+export class DetailPageButtonPlugin extends BasePlugin {
     getName() {
         return "DetailPageButtonPlugin";
     }
@@ -19,9 +24,9 @@ class DetailPageButtonPlugin extends BasePlugin {
     }
     async createMenuBtn() {
         const e = this.getPageInfo(), t = e.carNum, n = `\n            <div class="jhs-detail-btn-row jhs-layout-e2965a97">\n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="filterBtn" class="jhs-btn jhs-btn--filter jhs-layout-44293084">\n                        <span>${m}</span>\n                    </button>\n                    <button type="button" id="favoriteBtn" class="jhs-btn jhs-btn--fav jhs-layout-44293084">\n                        <span>${v}</span>\n                    </button>\n                    <button type="button" id="hasDownBtn" class="jhs-btn jhs-btn--down jhs-layout-44293084">\n                        <span>${y}</span>\n                    </button>\n                    <button type="button" id="hasWatchBtn" class="jhs-btn jhs-btn--watch jhs-layout-44293084">\n                        <span>${k}</span>\n                    </button>\n                </div>\n        \n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="enable-magnets-filter" class="jhs-btn jhs-btn--watch jhs-layout-5f3e3549">\n                        <span id="magnets-span">关闭磁力过滤</span>\n                    </button>\n                    <button type="button" id="magnetSearchBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>磁力搜索</span>\n                    </button>\n                    <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>字幕 (迅雷)</span>\n                    </button>\n                    <button type="button" id="search-subtitle-btn" class="jhs-btn jhs-btn--accent jhs-layout-f43f0d6d">\n                        <span>字幕 (SubTitleCat)</span>\n                    </button>\n                </div>\n            </div>\n        `;
-        const workspaceSlot = this.getBean("DetailWorkspacePlugin")?.getSlot("summary-actions");
+        const workspaceSlot = this.getDependency("DetailWorkspacePlugin")?.getSlot("summary-actions");
         workspaceSlot?.length ? workspaceSlot.append(n) : r ? $(".tabs").after(n) : l && $("#mag-submit-show").before(n), $("#magnetSearchBtn").on("click", (async () => {
-            let t = await this.getBean("MagnetHubPlugin").createMagnetHub(e.carNum);
+            let t = await this.getDependency("MagnetHubPlugin").createMagnetHub(e.carNum);
             layer.open({
                 type: 1,
                 title: "磁力搜索 " + e.carNum,
@@ -33,7 +38,7 @@ class DetailPageButtonPlugin extends BasePlugin {
                 }
             });
         }));
-        const a = this.getBean("HighlightMagnetPlugin"), i = await storageManager.getSetting("enableMagnetsFilter", _);
+        const a = this.getDependency("HighlightMagnetPlugin"), i = await storageManager.getSetting("enableMagnetsFilter", _);
         $("#magnets-span").text(i === _ ? "关闭磁力过滤" : "开启磁力过滤"), i === _ && a.doFilterMagnet(),
         $("#enable-magnets-filter").on("click", (e => {
             let t = $("#magnets-span");

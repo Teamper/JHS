@@ -1,4 +1,7 @@
-class FoldCategoryPlugin extends BasePlugin {
+import { C, _, o } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class FoldCategoryPlugin extends BasePlugin {
     getName() {
         return "FoldCategoryPlugin";
     }

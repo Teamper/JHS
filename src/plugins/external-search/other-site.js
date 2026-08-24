@@ -1,4 +1,7 @@
-class StorageQueue {
+import { i, l, normalizeCarNum, r } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class StorageQueue {
     constructor() {
         this.queue = Promise.resolve();
     }
@@ -13,7 +16,7 @@ class StorageQueue {
     }
 }
 
-class OtherSitePlugin extends BasePlugin {
+export class OtherSitePlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "siteConfigs", [ {
             id: "javTrailersBtn",

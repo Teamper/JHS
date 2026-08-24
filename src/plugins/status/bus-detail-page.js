@@ -1,4 +1,6 @@
-class BusDetailPagePlugin extends BasePlugin {
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class BusDetailPagePlugin extends BasePlugin {
     getName() {
         return "BusDetailPagePlugin";
     }

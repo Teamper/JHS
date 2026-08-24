@@ -1,3 +1,7 @@
+import { b, k, m, normalizeCarNum, u, v, y } from "./constants.js";
+import { normalizeStateFlags } from "./state-model.js";
+import { stateService } from "./state-service.js";
+
 const DETAIL_STATE_BUTTONS = {
     blocked: { selector: "#filterBtn", inactive: () => m, active: () => u },
     favorite: { selector: "#favoriteBtn", inactive: () => v, active: () => b },
@@ -47,4 +51,4 @@ class DetailStateController {
     }
 }
 
-const detailStateController = new DetailStateController;
+export const detailStateController = new DetailStateController;

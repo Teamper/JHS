@@ -1,7 +1,7 @@
 /** 设计令牌层 (Design tokens): 全部 --jhs-* 变量, 亮色(:root) + 暗色(:root[data-jhs-theme="dark"])。
  * 在 css-injection.js 最先注入, 供所有后续插件 CSS 通过 var(--jhs-*) 消费。 */
 
-const JHS_Z_INDEX = Object.freeze({
+export const JHS_Z_INDEX = Object.freeze({
     content: 10,
     elevated: 20,
     localPopover: 30,
@@ -23,7 +23,7 @@ const JHS_Z_INDEX = Object.freeze({
     tooltip: 9999999999
 });
 
-function buildThemeCss() {
+export function buildThemeCss() {
   return `\n<style>\n    :root {\n        /* 字体 */
         --jhs-font: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 
@@ -398,7 +398,7 @@ function buildThemeCss() {
 }
 
 /** 将 themeMode 设置(light/dark/auto)解析为具体主题并应用到 documentElement。 */
-async function applyTheme() {
+export async function applyTheme() {
     const mode = await storageManager.getSetting("themeMode", "light");
     let resolved = "light";
     if ("dark" === mode) resolved = "dark";

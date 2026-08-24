@@ -1,5 +1,10 @@
+import { l, normalizeCarNum, r } from "../../core/constants.js";
+import { jhsEventBus } from "../../core/event-bus.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { JhsSelect } from "../../core/ui-primitives.js";
+
 /** 返回当前详情页的宿主资源边界；调用者不得重挂载这些节点。 */
-function getDetailResourceAdapter() {
+export function getDetailResourceAdapter() {
     if (!window.isDetailPage) return null;
     if (r) {
         const hostRoot = $(".video-detail").first(), controller = hostRoot.find('[data-controller="magnet-sort"]').first(), resourceRoot = controller.find("#magnets-content").first();
@@ -38,7 +43,7 @@ function getDetailResourceAdapter() {
 }
 
 /** 非破坏性详情工作区：仅标记宿主稳定块，并为 JHS 自有内容提供固定插槽。 */
-class DetailWorkspacePlugin extends BasePlugin {
+export class DetailWorkspacePlugin extends BasePlugin {
     constructor() {
         super(), this.hostRoot = null, this.resourceObserver = null, this.scheduledResourceFrame = null;
     }
@@ -163,7 +168,7 @@ class DetailWorkspacePlugin extends BasePlugin {
 }
 
 /** 创建 FC2 自有详情壳，所有异步模块只写入固定插槽。 */
-function createFc2DetailShell({ carNum = "", source = "fc2", mode = "dialog" } = {}) {
+export function createFc2DetailShell({ carNum = "", source = "fc2", mode = "dialog" } = {}) {
     const workspace = $('<div class="jhs-fc2-workspace jhs-ui"></div>').attr({
         "data-jhs-fc2-source": source,
         "data-jhs-fc2-mode": mode,
@@ -179,7 +184,7 @@ function createFc2DetailShell({ carNum = "", source = "fc2", mode = "dialog" } =
 }
 
 /** 创建只属于单个 FC2 详情实例的生命周期和插槽上下文。 */
-function createFc2DetailContext(root, options = {}) {
+export function createFc2DetailContext(root, options = {}) {
     const workspace = $(root).is(".jhs-fc2-workspace") ? $(root) : $(root).find(".jhs-fc2-workspace").first();
     let destroyed = !1;
     const namespace = `.jhsFc2Detail${Date.now()}${Math.random().toString(36).slice(2)}`, observers = new Set();

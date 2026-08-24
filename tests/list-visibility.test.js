@@ -1,10 +1,11 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 
 function loadVisibility() {
-    const source = readFileSync(join(process.cwd(), "src/plugins/status/list-page.js"), "utf8"), start = source.indexOf("const QUICK_FILTER_LABELS"), end = source.indexOf("class ListPagePlugin", start), context = vm.createContext({ _: "yes", C: "no", hasAnyState: flags => Object.values(flags).some(Boolean) });
+    const source = readTestFile(join(process.cwd(), "src/plugins/status/list-page.js"), "utf8"), start = source.indexOf("const QUICK_FILTER_LABELS"), end = source.indexOf("class ListPagePlugin", start), context = vm.createContext({ _: "yes", C: "no", hasAnyState: flags => Object.values(flags).some(Boolean) });
     vm.runInContext(`${source.slice(start, end)};globalThis.api={normalizeQuickFilterKey,isHardHidden,matchesQuickFilter,shouldShowItem,PRIMARY_QUICK_FILTERS,SECONDARY_QUICK_FILTERS}`, context);
     return context.api;
 }

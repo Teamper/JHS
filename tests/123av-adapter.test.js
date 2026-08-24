@@ -1,8 +1,9 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const readSource = (path) => readFileSync(join(import.meta.dirname, "..", path), "utf8");
+const readSource = (path) => readTestFile(join(import.meta.dirname, "..", path), "utf8");
 const fc2Source = readSource("src/plugins/external-search/fc2-by-123av.js");
 const otherSiteSource = readSource("src/plugins/external-search/other-site.js");
 const httpSource = readSource("src/core/http.js");

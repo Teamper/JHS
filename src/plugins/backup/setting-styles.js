@@ -1,5 +1,7 @@
+import { C, _, l } from "../../core/constants.js";
+
 /** Generate the settings page CSS based on container config and site type. */
-function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
+export function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
     let base;
     if (isJavBus) {
         base = `
@@ -397,7 +399,7 @@ function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
 }
 
 /** Toggle between vertical (cover-fit) and normal (contain) image display modes. */
-async function applyImageMode() {
+export async function applyImageMode() {
     $("#verticalImgStyle").remove();
     if (await storageManager.getSetting("enableVerticalModel", C) === _) {
         let e = "100% 50% !important";

@@ -1,5 +1,5 @@
 /** Standalone WebDAV client for remote backup/restore operations. */
-class WebDavClient {
+export class WebDavClient {
     constructor(e, t, n) {
         this.davUrl = e.endsWith("/") ? e : e + "/", this.username = t, this.password = n,
         this.folderName = null;

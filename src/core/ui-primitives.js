@@ -1,5 +1,5 @@
 /** JHS 原生 UI 组件基座：现代桌面工具风格，不依赖宿主站点或第三方框架。 */
-function buildUiPrimitivesCss() {
+export function buildUiPrimitivesCss() {
     return `
 <style id="jhs-ui-primitives">
     :where(.jhs-ui, .layui-layer-content, .menu-box, .jhs-fab-menu) {
@@ -996,7 +996,7 @@ function buildUiPrimitivesCss() {
 }
 
 /** 在现有容器内渲染安全的 loading、empty 或 error 状态。 */
-function renderStateView(container, { type = "empty", title = "", description = "", actionLabel = "", onAction = null } = {}) {
+export function renderStateView(container, { type = "empty", title = "", description = "", actionLabel = "", onAction = null } = {}) {
     const root = container?.jquery ? container : $(container), state = $('<div class="jhs-state"></div>').addClass(`jhs-state--${type}`).attr("role", "error" === type ? "alert" : "status"), content = $('<div class="jhs-state__content"></div>');
     title && content.append($('<p class="jhs-state__title"></p>').text(title)), description && content.append($('<p class="jhs-state__description"></p>').text(description));
     if (actionLabel && "function" == typeof onAction) content.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').text(actionLabel).on("click", onAction));
@@ -1004,7 +1004,7 @@ function renderStateView(container, { type = "empty", title = "", description = 
 }
 
 /** 为动态注入的 JHS 控件补齐可访问名称与图标按钮语义。 */
-function initializeUiAccessibility() {
+export function initializeUiAccessibility() {
     const selector = "button.jhs-btn, a.jhs-btn[role='button'], .card-btn, .jhs-icon-btn, [class*='jhs-'] button, [class*='jhs-'] a[role='button']";
     const enhance = (e) => {
         const t = e.nodeType === Node.ELEMENT_NODE && e.matches?.(selector) ? [ e ] : [];
@@ -1035,7 +1035,7 @@ function initializeUiAccessibility() {
 }
 
 /** 以隐藏原生 select 为值源的统一 JHS 选择器。 */
-class JhsSelect {
+export class JhsSelect {
     static instances = new WeakMap;
     constructor(select) {
         this.source = $(select);

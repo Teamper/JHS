@@ -1,4 +1,11 @@
-class ScreenShotPlugin extends BasePlugin {
+import { CACHE_TTL } from "../../core/cache-policy.js";
+import { l, normalizeCarNum, r } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { normalizeJavStoreAssetUrl, parseJavStorePreview, parseJavStoreSearch } from "../../integrations/javstore/parser.js";
+import { ResourceSettingsService } from "../backup/resource-settings.js";
+import { ScreenshotProviderRegistry } from "./screenshot-provider-registry.js";
+
+export class ScreenShotPlugin extends BasePlugin {
     constructor() {
         super(...arguments), this.providerRegistry = new ScreenshotProviderRegistry();
     }

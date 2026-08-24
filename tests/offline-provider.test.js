@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -6,7 +7,7 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 
 function loadRegistry() {
-    const source = readFileSync(join(import.meta.dirname, "../src/plugins/offline/unified-offline.js"), "utf8"), end = source.indexOf("class UnifiedOfflinePlugin"), context = vm.createContext({ Map, Array, Date, TypeError });
+    const source = readTestFile(join(import.meta.dirname, "../src/plugins/offline/unified-offline.js"), "utf8"), end = source.indexOf("class UnifiedOfflinePlugin"), context = vm.createContext({ Map, Array, Date, TypeError });
     vm.runInContext(`${source.slice(0, end)}; globalThis.Registry = OfflineProviderRegistry;`, context);
     return context.Registry;
 }
@@ -21,7 +22,7 @@ function loadOfflinePlugin(submit, history = vi.fn(async () => {})) {
         show: { ok: vi.fn(), error: vi.fn() }, utils: { q: vi.fn() }, storageManager: {}, layer: {},
         OneOneFiveClient: class {}, getDetailResourceAdapter: vi.fn(), jhsEventBus: { on: vi.fn() }
     });
-    const source = readFileSync(join(import.meta.dirname, "../src/plugins/offline/unified-offline.js"), "utf8");
+    const source = readTestFile(join(import.meta.dirname, "../src/plugins/offline/unified-offline.js"), "utf8");
     vm.runInContext(`${source};globalThis.TestOfflinePlugin=UnifiedOfflinePlugin;`, context);
     const plugin = new context.TestOfflinePlugin(), provider = { id: "115", name: "115", submit };
     plugin.registry = { getCandidates: vi.fn(async () => [ { provider, availability: { authState: "ready" } } ]), updateAvailability: vi.fn() };

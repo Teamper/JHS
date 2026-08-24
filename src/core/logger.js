@@ -1,6 +1,16 @@
+import { escapeHtml } from "./constants.js";
+import { JHS_Z_INDEX } from "./theme.js";
+import { LifecycleScope } from "./lifecycle-scope.js";
+
+let loggerRuntime;
+
+/** @param {import("./lifecycle-scope.js").LifecycleScope} scope */
+export function initializeLoggerRuntime(scope) {
+if (loggerRuntime) return loggerRuntime;
+
 document.head.insertAdjacentHTML("beforeend", '\n        <style>\n            .loading-container {\n                position: fixed;\n                top: 0;\n                left: 0;\n                width: 100%;\n                height: 100%;\n                display: flex;\n                justify-content: center;\n                align-items: center;\n                background-color: rgba(0, 0, 0, 0.1);\n                z-index: var(--jhs-z-loading);\n            }\n    \n            .loading-animation {\n                position: relative;\n                width: 60px;\n                height: 12px;\n                background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);\n                border-radius: 6px;\n                animation: loading-animate 1.8s ease-in-out infinite;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before,\n            .loading-animation:after {\n                position: absolute;\n                display: block;\n                content: "";\n                animation: loading-animate 1.8s ease-in-out infinite;\n                height: 12px;\n                border-radius: 6px;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before {\n                top: -20px;\n                left: 10px;\n                width: 40px;\n                background: linear-gradient(90deg, #ff758c 0%, #ff7eb3 100%);\n            }\n    \n            .loading-animation:after {\n                bottom: -20px;\n                width: 35px;\n                background: linear-gradient(90deg, #ff9a9e 0%, #fad0c4 100%);\n            }\n    \n            @keyframes loading-animate {\n                0% {\n                    transform: translateX(40px);\n                }\n                50% {\n                    transform: translateX(-30px);\n                }\n                100% {\n                    transform: translateX(40px);\n                }\n            }\n        </style>\n    ');
 
-unsafeWindow.loading = window.loading = function() {
+window.loading = function() {
     const e = document.createElement("div");
     e.className = "loading-container";
     const t = document.createElement("div");
@@ -57,7 +67,7 @@ unsafeWindow.loading = window.loading = function() {
             m.toastElement.remove();
         }, m;
     };
-    unsafeWindow.show = window.show = {
+    window.show = {
         ok: (t, n = "center", a, i) => e(t, "success", n, a, i),
         error: (t, n = "center", a, i) => e(t, "error", n, a, i),
         info: (t, n = "center", a, i) => e(t, "info", n, a, i)
@@ -108,7 +118,7 @@ unsafeWindow.loading = window.loading = function() {
                     "Escape" !== t.key && " " !== t.key || (t.preventDefault(), t.stopPropagation(),
                     o.destroy(), document.removeEventListener("keydown", o.handleKeydown), document.documentElement.style.overflow = "",
                     document.body.style.overflow = "", e());
-                }, document.addEventListener("keydown", o.handleKeydown);
+                }, scope.listen(document, "keydown", o.handleKeydown);
             },
             hidden() {
                 o && o.handleKeydown && document.removeEventListener("keydown", o.handleKeydown),
@@ -120,6 +130,7 @@ unsafeWindow.loading = window.loading = function() {
     };
 }(), window.ImageHoverPreview = class {
     constructor(config = {}) {
+        this.scope = new LifecycleScope(`ui:image-hover:${Date.now()}`);
         this.config = {
             selector: ".hover-preview",
             dataAttribute: "data-full",
@@ -210,8 +221,8 @@ unsafeWindow.loading = window.loading = function() {
     }
     bindEvents() {
         if (this.eventsBound || this.destroyed) return;
-        document.addEventListener("mouseover", this.onDocumentOver), document.addEventListener("mouseout", this.onDocumentOut),
-        document.addEventListener("mousemove", this.onDocumentMove), this.eventsBound = !0;
+        this.scope.listen(document, "mouseover", this.onDocumentOver), this.scope.listen(document, "mouseout", this.onDocumentOut),
+        this.scope.listen(document, "mousemove", this.onDocumentMove), this.eventsBound = !0;
     }
     findTarget(event) {
         const target = event.target;
@@ -356,8 +367,7 @@ unsafeWindow.loading = window.loading = function() {
         this.animationFrame = null;
         this.pendingImage && (this.pendingImage.onload = null, this.pendingImage.onerror = null);
         this.pendingImage = null;
-        this.eventsBound && (document.removeEventListener("mouseover", this.onDocumentOver), document.removeEventListener("mouseout", this.onDocumentOut),
-        document.removeEventListener("mousemove", this.onDocumentMove), this.eventsBound = !1);
+        this.eventsBound && (this.scope.dispose(), this.eventsBound = !1);
         this.loadedUrls.clear();
         this.preview?.remove();
         this.preview = null;
@@ -615,16 +625,16 @@ unsafeWindow.loading = window.loading = function() {
         }
     }
     try {
-        unsafeWindow.parent !== unsafeWindow && unsafeWindow.parent.clog && "function" == typeof unsafeWindow.parent.clog.log ? window.clog = unsafeWindow.clog = unsafeWindow.parent.clog : window.clog = unsafeWindow.clog = new o;
+        unsafeWindow.parent !== unsafeWindow && unsafeWindow.parent.clog && "function" == typeof unsafeWindow.parent.clog.log ? window.clog = unsafeWindow.parent.clog : window.clog = new o;
     } catch (r) {
-        console.error("创建日志控制台出现异常", r), window.clog = unsafeWindow.clog = new o;
+        console.error("创建日志控制台出现异常", r), window.clog = new o;
     }
     !function() {
         const e = window.clog || console;
-        window.addEventListener("error", (function(t) {
+        scope.listen(window, "error", (function(t) {
             const n = t.filename, a = t.message;
             n.includes("javdb") || n.includes("javbus") || e.error(`[全局 Error 异常捕获] ${a} 来源: ${n}`);
-        })), window.addEventListener("unhandledrejection", (function(t) {
+        })), scope.listen(window, "unhandledrejection", (function(t) {
             const n = t.reason, a = (null == n ? void 0 : n.message) ?? "";
             if ([ "NotAllowedError", "AbortError", "NotSupportedError" ].includes(n?.name) || a.includes("play()") || a.includes("The element has no supported sources")) return e.warn("[全局媒体播放异常] 当前媒体源无法播放", n),
             void t.preventDefault();
@@ -632,7 +642,7 @@ unsafeWindow.loading = window.loading = function() {
             const i = `[全局 Promise 异常捕获] ${n.message || n}`;
             e.error(i, n), t.preventDefault();
         }));
-    }(), document.addEventListener("mousedown", (e => {
+    }(), scope.listen(document, "mousedown", (e => {
         const t = window.clog;
         if (!t.isInitialized || !t.container) return;
         const n = e.target, a = [ ".console-logger-container", ".layui-layer-shade", ".loading-container" ].join(",");
@@ -677,7 +687,7 @@ unsafeWindow.loading = window.loading = function() {
     }
     document.head.insertAdjacentHTML("beforeend", "\n        <style>\n            .js-tooltip {\n                position: fixed;\n                padding: 8px 12px;\n                border: 1px solid var(--jhs-border);\n                border-radius: var(--jhs-radius-sm);\n                white-space: normal;\n                max-width: 600px;\n                pointer-events: none;\n                font-size: 14px;\n                line-height: 1.5;\n                z-index: var(--jhs-z-tooltip);\n                background: var(--jhs-surface-2);\n                color: var(--jhs-text);\n                box-shadow: var(--jhs-shadow-md);\n                display: none;\n            }\n            .js-tooltip.is-active {\n                display: block !important;\n            }\n        </style>\n    ");
     const t = "[data-tip-top], [data-tip-bottom], [data-tip-left], [data-tip-right], [data-tip]";
-    document.addEventListener("mouseover", (n => {
+    scope.listen(document, "mouseover", (n => {
         const a = n.target.closest(t);
         if (a && !a.tooltipElement) {
             let t, n = "top";
@@ -691,10 +701,13 @@ unsafeWindow.loading = window.loading = function() {
                 a.matches(":hover") && !a.tooltipElement && e(a, t, n);
             }), 50);
         }
-    })), document.addEventListener("mouseout", (e => {
+    })), scope.listen(document, "mouseout", (e => {
         const n = e.target.closest(t);
         var a;
         n && (n.hoverTimeout && (clearTimeout(n.hoverTimeout), n.hoverTimeout = null), n.contains(e.relatedTarget) || n.tooltipElement && ((a = n.tooltipElement) && a.parentNode && a.remove(),
         n.tooltipElement = null));
     }));
 }();
+loggerRuntime = Object.freeze({ loading: window.loading, show: window.show, clog: window.clog });
+return loggerRuntime;
+}

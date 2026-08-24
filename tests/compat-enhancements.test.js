@@ -1,9 +1,10 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it } from "vitest";
-const source = readFileSync(join(import.meta.dirname, "../src/plugins/status/compat-enhancements.js"), "utf8");
-const nav = readFileSync(join(import.meta.dirname, "../src/plugins/status/nav-bar.js"), "utf8");
+const source = readTestFile(join(import.meta.dirname, "../src/plugins/status/compat-enhancements.js"), "utf8");
+const nav = readTestFile(join(import.meta.dirname, "../src/plugins/status/nav-bar.js"), "utf8");
 describe("status and media UX contracts", () => {
     it("injects the single confirmed ad-container rule only on JavDB", async () => {
         const loadCss = async siteContext => {
@@ -24,5 +25,5 @@ describe("status and media UX contracts", () => {
     it("loads actress state once into sets", () => { expect(source).toContain("new Set((await storageManager.getFavoriteActressList())"); expect(source).toContain("new Set((await storageManager.getBlacklist())"); });
     it("links bounded comment images without rebuilding review DOM", () => { expect(source).toContain("createTreeWalker"); expect(source).toContain("SHOW_TEXT"); expect(source).toContain("showImageViewer"); expect(source).not.toContain("node.html("); });
     it("intercepts image paste only on the navigation search input", () => { expect(nav).toContain('$("#search-keyword").on("paste"'); expect(nav).toContain('type.indexOf("image")'); });
-    it("uses configured 115 concurrency and cache lifetime", () => { const one15 = readFileSync(join(import.meta.dirname, "../src/plugins/one-one-five/plugins.js"), "utf8"); expect(one15).toContain("mapLimit(cards, this.concurrency"); expect(one15).toContain('getSetting("oneOneFiveConcurrency"'); expect(one15).toContain('getSetting("oneOneFiveCacheMinutes"'); expect(one15).toContain('rootMargin: "200px"'); });
+    it("uses configured 115 concurrency and cache lifetime", () => { const one15 = readTestFile(join(import.meta.dirname, "../src/plugins/one-one-five/plugins.js"), "utf8"); expect(one15).toContain("mapLimit(cards, this.concurrency"); expect(one15).toContain('getSetting("oneOneFiveConcurrency"'); expect(one15).toContain('getSetting("oneOneFiveCacheMinutes"'); expect(one15).toContain('rootMargin: "200px"'); });
 });

@@ -1,3 +1,4 @@
+import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
@@ -12,7 +13,7 @@ function loadImporter(html = '<div class="movie-list"><div class="item"><a href=
         document: dom.window.document, window: dom.window, DOMParser: dom.window.DOMParser, $,
         BasePlugin: class { getSelector() { return { itemSelector: ".movie-list .item" }; } }, stateService: { patch }, gmHttp: { get }, utils: { q: vi.fn(), sleep: vi.fn(), htmlTo$dom: value => jqueryFactory(dom.window)(new dom.window.DOMParser().parseFromString(value, "text/html")) }, show: { info: vi.fn(), ok: vi.fn(), error: vi.fn() }, clog: { error: vi.fn() }, loading: () => ({ close() {} }), i: (target, key, value) => (target[key] = value), setTimeout, URL
     });
-    vm.runInContext(`${readFileSync(join(process.cwd(), "src/plugins/status/want-and-watched-videos.js"), "utf8")};globalThis.Importer=WantAndWatchedVideosPlugin`, context);
+    vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/status/want-and-watched-videos.js"), "utf8")};globalThis.Importer=WantAndWatchedVideosPlugin`, context);
     return { plugin: new context.Importer, patch, get };
 }
 

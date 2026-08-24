@@ -1,8 +1,11 @@
-const U = "https://jdforrepam.com/api";
+import { normalizeCarNum } from "./constants.js";
+import { decryptData } from "../plugins/image-viewer/bus-preview-video.js";
+
+export const U = "https://jdforrepam.com/api";
 const javDbMovieIdRequests = new Map();
 
 /** 生成 JavDB API 请求签名 (HMAC-时间戳+盐+MD5, 20秒缓存) */
-function O() {
+export function O() {
     const e = "jhs_review_ts", t = "jhs_review_sign", n = Math.floor(Date.now() / 1e3);
     if (n - (localStorage.getItem(e) || 0) <= 20) return localStorage.getItem(t);
     const a = `${n}.lpw6vgqzsp.${md5(`${n}71cf27bb3c0bcdf207b64abecddc970098c7421ee7203b9cdae54478478a199e7d5a6e1a57691123c1a931c057842fb73ba3b3c83bcd69c17ccf174081e3d8aa`)}`;
@@ -10,7 +13,7 @@ function O() {
 }
 
 /** 按规范化番号精确解析 JavDB movieId，并合并同番号并发请求。 */
-async function resolveJavDbMovieId(carNum) {
+export async function resolveJavDbMovieId(carNum) {
     const normalized = normalizeCarNum(carNum);
     if (!normalized) return null;
     if (javDbMovieIdRequests.has(normalized)) return javDbMovieIdRequests.get(normalized);
@@ -43,7 +46,7 @@ async function resolveJavDbMovieId(carNum) {
 }
 
 /** 将影片加入当前 JavDB 账号的“想看”，使用与移动端功能相同的登录凭据。 */
-async function markJavDbWantWatch(movieId) {
+export async function markJavDbWantWatch(movieId) {
     const id = String(movieId || "").trim(), encryptedToken = localStorage.getItem("jhs_appAuthorization"), token = encryptedToken ? await decryptData(encryptedToken) : "";
     if (!token) {
         const error = new Error("请先登录 JavDB 账号");
@@ -72,7 +75,7 @@ async function markJavDbWantWatch(movieId) {
     }
 }
 
-const R = async (e, t = 1, n = 20) => {
+export const R = async (e, t = 1, n = 20) => {
     let a = `${U}/v1/movies/${e}/reviews`, i = {
         jdSignature: await O()
     };

@@ -1,4 +1,8 @@
-class TranslatePlugin extends BasePlugin {
+import { _, l } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+import { _e } from "../status/list-page.js";
+
+export class TranslatePlugin extends BasePlugin {
     getName() {
         return "TranslatePlugin";
     }

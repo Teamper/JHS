@@ -1,4 +1,7 @@
-class ActressInfoPlugin extends BasePlugin {
+import { i } from "../../core/constants.js";
+import { BasePlugin } from "../../core/plugin-manager.js";
+
+export class ActressInfoPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "apiUrl", "https://ja.wikipedia.org/wiki/");
     }
