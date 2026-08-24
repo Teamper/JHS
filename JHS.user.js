@@ -11726,7 +11726,7 @@ ${error.stack}` : "");
                 <div id="new-video-list-footer"></div>
                 <div id="actress-pagination"></div>
             </div>`;
-      layer.open({
+      this.getRuntimeService("dialog").open({
         type: 1,
         title: '<span class="jhs-dialog-title" data-tip="数据来源: 女优页面首页,含磁链分类">新作品检测</span>',
         content: o2,
@@ -12106,6 +12106,7 @@ ${error.stack}` : "");
       }), void this.hydrateVisibleCovers(s2, generation);
     }
     async editActress(e2) {
+      const dialog = this.getRuntimeService("dialog");
       const t2 = String(e2.name || ""), n2 = normalizeHttpUrl(e2.avatar, this.nvJavDbUrl) || "", a2 = String(e2.remark || ""), i2 = Array.isArray(e2.allName) ? e2.allName.join("，") : "", s2 = Array.isArray(e2.newVideoList) ? e2.newVideoList.map(((e3) => "string" == typeof e3 ? e3 : e3.carNum)).join("，") : "", o2 = String(e2.starId || ""), l2 = e2.actressType || "", safe = /* @__PURE__ */ __name((value) => escapeHtml(String(value || "")), "safe"), c2 = `
             <div class="jhs-form-dialog">
                 <div class="jhs-avatar-editor">
@@ -12154,7 +12155,7 @@ ${error.stack}` : "");
                 </div>
             </div>
         `;
-      layer.open({
+      dialog.open({
         type: 1,
         title: `编辑女优: ${safe(t2)} (${safe(o2)})`,
         area: utils.getDialogArea("sm"),
@@ -12192,7 +12193,7 @@ ${error.stack}` : "");
             <p class="jhs-helper-text">切换源会清除本地缓存的数据，并在下次搜索时重新加载。</p>
         </div>
     `;
-              layer.open({
+              dialog.open({
                 type: 1,
                 title: "选择 CDN 源",
                 area: utils.getResponsiveArea(["400px", "auto"]),
@@ -12210,8 +12211,8 @@ ${error.stack}` : "");
                     } catch (a4) {
                       clog.error("清除 IndexedDB 缓存失败:", a4);
                     }
-                    show.ok(`CDN 源已切换为: ${tt[n5].name}`), layer.close(e5);
-                  } else layer.close(e5);
+                    show.ok(`CDN 源已切换为: ${tt[n5].name}`), dialog.close(e5);
+                  } else dialog.close(e5);
                 }, "yes")
               });
             })();
@@ -12226,7 +12227,7 @@ ${error.stack}` : "");
             await storageManager.updateFavoriteActress(e2);
             await jhsEventBus.emit("new-video-changed", { reason: "favorite-actress-edited" });
             show.ok(`女优 ${a3} 信息已更新`);
-            layer.close(t3);
+            dialog.close(t3);
           } catch (err) {
             show.error("修改失败: " + (err.message || err));
           }
@@ -12251,6 +12252,7 @@ ${error.stack}` : "");
       }));
     }
     async searchAvatar() {
+      const dialog = this.getRuntimeService("dialog");
       const e2 = $("#edit-actress-name"), t2 = $("#edit-actress-allname"), n2 = e2.val().trim(), a2 = t2.val().trim().split(/[\uff0c,]/).map(((e3) => e3.trim())).filter(((e3) => e3.length > 0));
       if (n2 && a2.unshift(n2), 0 === a2.length) return void show.error("请先填写女优主名称或别名进行搜索。");
       const i2 = loading("正在搜索头像...");
@@ -12271,7 +12273,7 @@ ${error.stack}` : "");
         candidate.append($('<img class="gfriends-selectable-img" alt="">').attr("src", url)), candidate.append($('<span class="gfriends-size-tag">载入中</span>')), avatarList.append(candidate);
       }));
       let l2 = 0;
-      layer.open({
+      dialog.open({
         type: 1,
         title: `选择女优头像 (${s2.length} 张)`,
         area: utils.getResponsiveArea(["900px", "85%"]),
@@ -12286,12 +12288,12 @@ ${error.stack}` : "");
             })), image.on("error", (function() {
               wrapper.remove(), l2++;
               const e4 = s2.length - l2;
-              i3.text(`点击图片即可选择（已移除 ${l2} 张错误图片，剩余 ${e4} 张）`), 0 === e4 && (show.error("所有搜索到的头像链接均已失效，无法选择。"), layer.close(t3));
+              i3.text(`点击图片即可选择（已移除 ${l2} 张错误图片，剩余 ${e4} 张）`), 0 === e4 && (show.error("所有搜索到的头像链接均已失效，无法选择。"), dialog.close(t3));
             })), this.complete && (this.naturalWidth > 0 ? image.trigger("load") : image.trigger("error"));
           })), candidates.on("click", (function() {
             const candidate = $(this), url = candidate.attr("data-url");
             $("#edit-actress-avatar").val(url), $("#edit-avatar-preview").attr("src", url), candidates.attr("aria-pressed", "false"), candidate.attr("aria-pressed", "true"), setTimeout((() => {
-              layer.close(t3);
+              dialog.close(t3);
             }), 150);
           })), utils.setupEscClose(t3);
         }, "success")
@@ -15513,7 +15515,7 @@ ${error.stack}` : "");
     manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot]),
     manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [SERVICE.dialog]),
     manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }),
-    manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }),
+    manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog]),
     manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }),
     manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics, SERVICE.dialog]),
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings]),

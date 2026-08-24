@@ -310,7 +310,7 @@ export class NewVideoPlugin extends BasePlugin {
                 <div id="new-video-list-footer"></div>
                 <div id="actress-pagination"></div>
             </div>`;
-        layer.open({
+        this.getRuntimeService("dialog").open({
             type: 1,
             title: '<span class="jhs-dialog-title" data-tip="数据来源: 女优页面首页,含磁链分类">新作品检测</span>',
             content: o,
@@ -684,8 +684,9 @@ export class NewVideoPlugin extends BasePlugin {
             }), void this.hydrateVisibleCovers(s, generation);
     }
     async editActress(e) {
+        const dialog = this.getRuntimeService("dialog");
         const t = String(e.name || ""), n = normalizeHttpUrl(e.avatar, this.nvJavDbUrl) || "", a = String(e.remark || ""), i = Array.isArray(e.allName) ? e.allName.join("，") : "", s = Array.isArray(e.newVideoList) ? e.newVideoList.map((e => "string" == typeof e ? e : e.carNum)).join("，") : "", o = String(e.starId || ""), l = e.actressType || "", safe = value => escapeHtml(String(value || "")), c = `\n            <div class="jhs-form-dialog">\n                <div class="jhs-avatar-editor">\n                    <img id="edit-avatar-preview" src="${safe(n)}" alt="Avatar Preview" \n                         class="jhs-avatar-editor__preview">\n                    <div class="jhs-form-dialog__body">\n                        <label class="jhs-form-label">头像链接:</label>\n                        <input type="text" id="edit-actress-avatar" value="${safe(n)}" \n                               class="jhs-field">\n                       <div class="jhs-toolbar jhs-avatar-editor__actions">\n                            <button type="button" id="search-avatar-btn" \n                                class="jhs-btn jhs-btn--secondary">\n                                搜索头像\n                            </button>\n                            <button type="button" id="select-cdn-btn" \n                                class="jhs-btn jhs-btn--secondary">\n                                选择 CDN 源\n                            </button>\n                        </div>\n                    </div>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">主名称:</label>\n                    <input type="text" id="edit-actress-name" value="${safe(t)}" \n                           class="jhs-field">\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">所有别名(用逗号隔开):</label>\n                    <textarea id="edit-actress-allname" class="jhs-textarea">${safe(i)}</textarea>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">演员类别:</label>\n                    <select id="actressType" class="jhs-select-source">\n                        <option value="" ${"" === l ? "selected" : ""}>未知</option>\n                        <option value="censored" ${"censored" === l ? "selected" : ""}>有码</option>\n                        <option value="uncensored" ${"uncensored" === l ? "selected" : ""}>无码</option>\n                    </select>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">最新作品(用逗号隔开):</label>\n                    <textarea id="edit-actress-newvideolist" class="jhs-textarea">${safe(s)}</textarea>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">备注:</label>\n                   <textarea id="edit-remark" class="jhs-textarea">${safe(a)}</textarea>\n                </div>\n            </div>\n        `;
-        layer.open({
+        dialog.open({
             type: 1,
             title: `编辑女优: ${safe(t)} (${safe(o)})`,
             area: utils.getDialogArea("sm"),
@@ -712,7 +713,7 @@ export class NewVideoPlugin extends BasePlugin {
                 })), $("#select-cdn-btn").on("click", (async () => {
                     await async function() {
                         const e = at, t = tt.map(((t, n) => `\n        <label class="jhs-option-row" for="cdn-${n}">\n            <input type="radio" id="cdn-${n}" name="cdn-source" value="${n}" ${n === e ? "checked" : ""}>\n            <span>${t.name} ${t.json.includes("jsdelivr") ? "(推荐)" : ""}</span>\n        </label>\n    `)).join(""), n = `\n        <div class="jhs-form-dialog">\n            <p class="jhs-form-dialog__title">请选择头像数据源 (当前: ${tt[e].name}):</p>\n            ${t}\n            <p class="jhs-helper-text">切换源会清除本地缓存的数据，并在下次搜索时重新加载。</p>\n        </div>\n    `;
-                        layer.open({
+                        dialog.open({
                             type: 1,
                             title: "选择 CDN 源",
                             area: utils.getResponsiveArea([ "400px", "auto" ]),
@@ -731,8 +732,8 @@ export class NewVideoPlugin extends BasePlugin {
                                     } catch (a) {
                                         clog.error("清除 IndexedDB 缓存失败:", a);
                                     }
-                                    show.ok(`CDN 源已切换为: ${tt[n].name}`), layer.close(e);
-                                } else layer.close(e);
+                                    show.ok(`CDN 源已切换为: ${tt[n].name}`), dialog.close(e);
+                                } else dialog.close(e);
                             }
                         });
                     }();
@@ -748,7 +749,7 @@ export class NewVideoPlugin extends BasePlugin {
                     await storageManager.updateFavoriteActress(e);
                     await jhsEventBus.emit("new-video-changed", { reason: "favorite-actress-edited" });
                     show.ok(`女优 ${a} 信息已更新`);
-                    layer.close(t);
+                    dialog.close(t);
                 } catch(err) {
                     show.error("修改失败: " + (err.message || err));
                 }
@@ -777,6 +778,7 @@ export class NewVideoPlugin extends BasePlugin {
         }));
     }
     async searchAvatar() {
+        const dialog = this.getRuntimeService("dialog");
         const e = $("#edit-actress-name"), t = $("#edit-actress-allname"), n = e.val().trim(), a = t.val().trim().split(/[\uff0c,]/).map((e => e.trim())).filter((e => e.length > 0));
         if (n && a.unshift(n), 0 === a.length) return void show.error("请先填写女优主名称或别名进行搜索。");
         const i = loading("正在搜索头像...");
@@ -797,7 +799,7 @@ export class NewVideoPlugin extends BasePlugin {
             candidate.append($("<img class=\"gfriends-selectable-img\" alt=\"\">").attr("src", url)), candidate.append($('<span class="gfriends-size-tag">载入中</span>')), avatarList.append(candidate);
         }));
         let l = 0;
-        layer.open({
+        dialog.open({
             type: 1,
             title: `选择女优头像 (${s.length} 张)`,
             area: utils.getResponsiveArea([ "900px", "85%" ]),
@@ -813,13 +815,13 @@ export class NewVideoPlugin extends BasePlugin {
                         wrapper.remove(), l++;
                         const e = s.length - l;
                         i.text(`点击图片即可选择（已移除 ${l} 张错误图片，剩余 ${e} 张）`), 0 === e && (show.error("所有搜索到的头像链接均已失效，无法选择。"),
-                        layer.close(t));
+                        dialog.close(t));
                     })), this.complete && (this.naturalWidth > 0 ? image.trigger("load") : image.trigger("error"));
                 })), candidates.on("click", (function() {
                     const candidate = $(this), url = candidate.attr("data-url");
                     $("#edit-actress-avatar").val(url), $("#edit-avatar-preview").attr("src", url), candidates.attr("aria-pressed", "false"),
                     candidate.attr("aria-pressed", "true"), setTimeout((() => {
-                        layer.close(t);
+                        dialog.close(t);
                     }), 150);
                 })), utils.setupEscClose(t);
             }

@@ -59,6 +59,13 @@ function createHarness() {
 afterEach(() => vi.useRealTimers());
 
 describe("new video workspace snapshot", () => {
+    it("routes workspace, editor, CDN and avatar dialogs through DialogService", () => {
+        const source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8");
+        expect(source).toContain('getRuntimeService("dialog")');
+        expect(source).not.toContain("layer.open");
+        expect(source).not.toContain("layer.close");
+    });
+
     it("reads each source once and keeps view-only filtering in memory", async () => {
         const harness = createHarness();
         harness.plugin.renderCurrentView = vi.fn(async () => {}), harness.plugin.renderTaskStatuses = vi.fn();
