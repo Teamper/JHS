@@ -106,7 +106,9 @@ export class Top250Plugin extends BasePlugin {
         }) : window.location.href = s;
     }
     openLoginDialog({ onSuccess = null } = {}) {
-        layer.open({
+        const dialog = this.getRuntimeService("dialog");
+        const layer = { close: index => dialog.close(index) };
+        dialog.open({
             type: 1,
             title: "JavDB",
             closeBtn: 1,

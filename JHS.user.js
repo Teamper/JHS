@@ -10361,7 +10361,9 @@ ${error.stack}` : "");
       }) : window.location.href = s2;
     }
     openLoginDialog({ onSuccess = null } = {}) {
-      layer.open({
+      const dialog = this.getRuntimeService("dialog");
+      const layer2 = { close: /* @__PURE__ */ __name((index) => dialog.close(index), "close") };
+      dialog.open({
         type: 1,
         title: "JavDB",
         closeBtn: 1,
@@ -10413,7 +10415,7 @@ ${error.stack}` : "");
                 if (1 !== n3) throw clog.error("登录失败", e4), new Error(e4.message);
                 {
                   let n4 = e4.data.token;
-                  await localStorage.setItem(me, await encryptData(n4)), show.ok("登录成功"), layer.close(t2), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
+                  await localStorage.setItem(me, await encryptData(n4)), show.ok("登录成功"), layer2.close(t2), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
                 }
               }
             })).catch(((e4) => {
@@ -15488,7 +15490,7 @@ ${error.stack}` : "");
     manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [SERVICE.diagnostics, SERVICE.webdav]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [SERVICE.movie, SERVICE.settings, SERVICE.cache]),
-    manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }),
+    manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [SERVICE.dialog]),
     manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog]),
     manifest("detail.state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }),
     manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [SERVICE.movie, SERVICE.translation, SERVICE.settings]),
