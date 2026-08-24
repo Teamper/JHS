@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - List 快速筛选规则迁入独立 Feature owner，List 按钮、MobileBottomBar 与 Settings 表单不再依赖页面插件实现并进入 strict checkJs；生产源码类型覆盖率提升至 93.8%，最低覆盖门禁同步上调至 93.5%。
 - Blacklist 真实运行时进入 strict checkJs，明确任务状态订阅、筛选记录、Tabulator 回调和跨页批量状态写入边界；生产源码类型覆盖率提升至 94.4%，最低覆盖门禁同步上调至 94%。
 - TaskPlugin 与 ListPagePlugin 真实运行时进入 strict checkJs，明确调度状态/结果、配置刷新、网络分页、列表增量索引、筛选视图和媒体导航边界；生产源码类型覆盖率提升至 95.5%，RC 最低覆盖门禁上调至 95%。
+- RC checkJs 剩余文件改为精确 allowlist，仅允许登记 compatibility/vendor glue、原因与清理版本；新增、移动或已消除但未移除的豁免都会失败。
 - Detail 的 legacy Contribution 改为一插件一 ID；封面状态按钮、详情状态按钮、JavDB 预览以及 JavBus 原生详情/图片/预览现在保持各自独立的旧版禁用语义。
 - Transitional PluginManager 的不可禁用属性改由 system Feature manifest 下发，删除 Settings、Stats 与移动工具栏的名称硬编码保护名单。
 - MobileBottomBar Contribution 显式依赖 ProfileService，并以 compact profile 取代 legacy User-Agent/宽度判断，触屏横屏设备可按 any-pointer 与短边规则正确激活。
