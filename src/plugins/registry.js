@@ -90,7 +90,7 @@ export const legacyContributionManifests = Object.freeze([
     manifest("detail.gallery", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),
     manifest("detail.native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }),
     manifest("detail.gallery", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings]),
-    manifest("external-bridge.123pan", "external-bridge", OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"], { javdb: 0, javbus: 0, "123pan": 1 }),
+    manifest("external-bridge.123pan", "external-bridge", OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"], { javdb: 0, javbus: 0, "123pan": 1 }, [SERVICE.storage]),
     manifest("external-bridge.javtrailers", "external-bridge", JavTrailersPlugin, ["javtrailers"], { javtrailers: 1 }),
     manifest("detail.subtitle", "external-bridge", SubTitleCatPlugin, ["subtitlecat"], { subtitlecat: 1 }),
 ]);

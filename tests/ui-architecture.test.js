@@ -193,7 +193,7 @@ describe("list toolbar and UI cleanup contracts", () => {
 
     it("keeps 123 as an auth/API provider without legacy submission UI", () => {
         expect(reviewUi).toContain('jhs-review-offline-btn jhs-offline-btn');
-        expect(oneTwoThreeOffline).toContain("startTokenSync()");
+        expect(oneTwoThreeOffline).toContain("startTokenSync(scope)");
         expect(oneTwoThreeOffline).toContain("async resolveMagnet");
         expect(oneTwoThreeOffline).toContain("async submitTask");
         expect(oneTwoThreeOffline).not.toContain("async submitMagnet");

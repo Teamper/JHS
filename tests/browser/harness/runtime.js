@@ -43,8 +43,8 @@ export async function injectUserscriptRuntime(page, options = {}) {
     window.__jhsBrowserTestMetadata = { fixture: true, version };
     window.__jhsBrowserDiagnostics = { requests: [], startedAt: performance.now() };
     window.unsafeWindow = window;
-    window.GM_getValue = async (_key, fallback) => fallback;
-    window.GM_setValue = async () => undefined;
+    window.GM_getValue = (_key, fallback) => fallback;
+    window.GM_setValue = () => undefined;
     window.GM_openInTab = () => ({ close() {} });
     window.GM_xmlhttpRequest = (options) => {
       window.__jhsBrowserDiagnostics.requests.push({ method: options.method || "GET", url: String(options.url || "") });

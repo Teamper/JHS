@@ -13076,23 +13076,28 @@ ${error.stack}` : "");
       return "OneTwoThreeOfflinePlugin";
     }
     async handle() {
-      "yun.123pan.com" === window.location.hostname && this.startTokenSync();
+      if ("yun.123pan.com" !== window.location.hostname) return;
+      this.startTokenSync(await this.getRuntimeService("scope")());
     }
-    startTokenSync() {
+    startTokenSync(scope) {
       this.syncTokenOnce(), this.syncTimer && clearInterval(this.syncTimer), this.syncTimer = setInterval((() => this.syncTokenOnce()), this.syncFallbackMs);
       const e2 = /* @__PURE__ */ __name(() => this.syncTokenOnce(), "e");
-      window.addEventListener("storage", e2), window.addEventListener("focus", e2), document.addEventListener("visibilitychange", (() => {
+      scope.addCleanup((() => {
+        this.syncTimer && clearInterval(this.syncTimer), this.syncTimer = null;
+      }));
+      scope.listen(window, "storage", e2), scope.listen(window, "focus", e2), scope.listen(document, "visibilitychange", (() => {
         document.hidden || this.syncTokenOnce();
       }));
     }
     getTokenFrom123Pan() {
-      let e2 = (localStorage.getItem("authorToken") || "").trim();
+      const storage = this.getRuntimeService("storage");
+      let e2 = (storage.getLocal("authorToken") || "").trim();
       if (e2) return {
         token: e2,
         source: "authorToken"
       };
       try {
-        const t3 = JSON.parse(localStorage.getItem("userInfo") || "{}");
+        const t3 = JSON.parse(storage.getLocal("userInfo") || "{}");
         if (t3.authorToken || t3.token) return {
           token: (t3.authorToken || t3.token || "").trim(),
           source: t3.authorToken ? "userInfo.authorToken" : "userInfo.token"
@@ -13116,20 +13121,21 @@ ${error.stack}` : "");
       };
     }
     syncTokenOnce() {
-      const e2 = this.getTokenFrom123Pan();
+      const storage = this.getRuntimeService("storage"), e2 = this.getTokenFrom123Pan();
       if (!e2.token) return;
-      const t2 = GM_getValue(this.tokenKey, ""), n2 = GM_getValue(this.tokenMetaKey, null);
+      const t2 = storage.getValue(this.tokenKey, ""), n2 = storage.getValue(this.tokenMetaKey, null);
       if (t2 === e2.token && n2 && n2.source === e2.source) return;
-      GM_setValue(this.tokenKey, e2.token), GM_setValue(this.tokenMetaKey, {
+      storage.setValue(this.tokenKey, e2.token), storage.setValue(this.tokenMetaKey, {
         source: e2.source,
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       }), t2 !== e2.token && show.info(`123 云盘授权已更新：${e2.source}`);
     }
     getStoredToken() {
-      return GM_getValue(this.tokenKey, "");
+      return this.getRuntimeService("storage").getValue(this.tokenKey, "");
     }
     clearStoredToken(e2) {
-      GM_setValue(this.tokenKey, ""), GM_setValue(this.tokenMetaKey, {
+      const storage = this.getRuntimeService("storage");
+      storage.setValue(this.tokenKey, ""), storage.setValue(this.tokenMetaKey, {
         source: "cleared",
         reason: e2,
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
@@ -15551,7 +15557,7 @@ ${error.stack}` : "");
     manifest("detail.gallery", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),
     manifest("detail.native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }),
     manifest("detail.gallery", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings]),
-    manifest("external-bridge.123pan", "external-bridge", OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"], { javdb: 0, javbus: 0, "123pan": 1 }),
+    manifest("external-bridge.123pan", "external-bridge", OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"], { javdb: 0, javbus: 0, "123pan": 1 }, [SERVICE.storage]),
     manifest("external-bridge.javtrailers", "external-bridge", JavTrailersPlugin, ["javtrailers"], { javtrailers: 1 }),
     manifest("detail.subtitle", "external-bridge", SubTitleCatPlugin, ["subtitlecat"], { subtitlecat: 1 })
   ]);
@@ -15610,7 +15616,7 @@ ${error.stack}` : "");
   var PORT_METHODS = Object.freeze({
     navigation: ["open", "assign", "replace"],
     http: ["request"],
-    storage: ["get", "set", "remove", "getLocal", "setLocal", "removeLocal"],
+    storage: ["get", "set", "remove", "getLocal", "setLocal", "removeLocal", "getValue", "setValue"],
     dialog: ["open", "close", "confirm", "alert"],
     style: ["register", "remove"]
   });
@@ -15657,9 +15663,11 @@ ${error.stack}` : "");
 
   // src/platform/userscript/indexeddb-storage-adapter.js
   var _IndexedDbStorageAdapter = class _IndexedDbStorageAdapter {
-    constructor(forage, localStore) {
+    constructor(forage, localStore, gmGetValue, gmSetValue) {
       this.forage = forage;
       this.localStore = localStore;
+      this.gmGetValue = gmGetValue;
+      this.gmSetValue = gmSetValue;
     }
     get(key) {
       return this.forage.getItem(key);
@@ -15678,6 +15686,12 @@ ${error.stack}` : "");
     }
     removeLocal(key) {
       this.localStore.removeItem(key);
+    }
+    getValue(key, fallback) {
+      return this.gmGetValue(key, fallback);
+    }
+    setValue(key, value) {
+      this.gmSetValue(key, value);
     }
   };
   __name(_IndexedDbStorageAdapter, "IndexedDbStorageAdapter");
@@ -16474,6 +16488,12 @@ ${error.stack}` : "");
     removeLocal(key) {
       return this.port.removeLocal(key);
     }
+    getValue(key, fallback) {
+      return this.port.getValue(key, fallback);
+    }
+    setValue(key, value) {
+      return this.port.setValue(key, value);
+    }
   };
   __name(_StorageService, "StorageService");
   var StorageService = _StorageService;
@@ -16839,7 +16859,7 @@ ${error.stack}` : "");
     const container = new DependencyContainer(diagnostics);
     const navigationPort = new BrowserNavigationAdapter();
     const httpPort = new UserscriptHttpAdapter(runtime.gmRequest);
-    const storagePort = new IndexedDbStorageAdapter(runtime.storageForage, runtime.localStorage);
+    const storagePort = new IndexedDbStorageAdapter(runtime.storageForage, runtime.localStorage, runtime.gmGetValue, runtime.gmSetValue);
     const dialogPort = new LayerDialogAdapter(runtime.layer);
     const stylePort = new BrowserStyleAdapter();
     const urlPolicy = new ExternalUrlPolicy({ localOrigins: runtime.localOrigins });
@@ -17725,6 +17745,8 @@ ${error.stack}` : "");
       const route = hostAdapter?.detectRoute() ?? "other";
       const context = createAppContext({
         gmRequest: globalThis.GM_xmlhttpRequest,
+        gmGetValue: globalThis.GM_getValue,
+        gmSetValue: globalThis.GM_setValue,
         legacyHttp: gmHttp2,
         storageForage: storageManager2.forage,
         localStorage: globalThis.localStorage,

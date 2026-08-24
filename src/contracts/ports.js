@@ -12,7 +12,7 @@ export function assertPort(implementation, name, methods) {
 export const PORT_METHODS = Object.freeze({
     navigation: ["open", "assign", "replace"],
     http: ["request"],
-    storage: ["get", "set", "remove", "getLocal", "setLocal", "removeLocal"],
+    storage: ["get", "set", "remove", "getLocal", "setLocal", "removeLocal", "getValue", "setValue"],
     dialog: ["open", "close", "confirm", "alert"],
     style: ["register", "remove"],
 });

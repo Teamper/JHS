@@ -9,23 +9,26 @@ export class OneTwoThreeOfflinePlugin extends BasePlugin {
         return "OneTwoThreeOfflinePlugin";
     }
     async handle() {
-        "yun.123pan.com" === window.location.hostname && this.startTokenSync();
+        if ("yun.123pan.com" !== window.location.hostname) return;
+        this.startTokenSync(await this.getRuntimeService("scope")());
     }
-    startTokenSync() {
+    startTokenSync(scope) {
         this.syncTokenOnce(), this.syncTimer && clearInterval(this.syncTimer), this.syncTimer = setInterval((() => this.syncTokenOnce()), this.syncFallbackMs);
         const e = () => this.syncTokenOnce();
-        window.addEventListener("storage", e), window.addEventListener("focus", e), document.addEventListener("visibilitychange", (() => {
+        scope.addCleanup((() => { this.syncTimer && clearInterval(this.syncTimer), this.syncTimer = null; }));
+        scope.listen(window, "storage", e), scope.listen(window, "focus", e), scope.listen(document, "visibilitychange", (() => {
             document.hidden || this.syncTokenOnce();
         }));
     }
     getTokenFrom123Pan() {
-        let e = (localStorage.getItem("authorToken") || "").trim();
+        const storage = this.getRuntimeService("storage");
+        let e = (storage.getLocal("authorToken") || "").trim();
         if (e) return {
             token: e,
             source: "authorToken"
         };
         try {
-            const t = JSON.parse(localStorage.getItem("userInfo") || "{}");
+            const t = JSON.parse(storage.getLocal("userInfo") || "{}");
             if (t.authorToken || t.token) return {
                 token: (t.authorToken || t.token || "").trim(),
                 source: t.authorToken ? "userInfo.authorToken" : "userInfo.token"
@@ -47,20 +50,21 @@ export class OneTwoThreeOfflinePlugin extends BasePlugin {
         };
     }
     syncTokenOnce() {
-        const e = this.getTokenFrom123Pan();
+        const storage = this.getRuntimeService("storage"), e = this.getTokenFrom123Pan();
         if (!e.token) return;
-        const t = GM_getValue(this.tokenKey, ""), n = GM_getValue(this.tokenMetaKey, null);
+        const t = storage.getValue(this.tokenKey, ""), n = storage.getValue(this.tokenMetaKey, null);
         if (t === e.token && n && n.source === e.source) return;
-        GM_setValue(this.tokenKey, e.token), GM_setValue(this.tokenMetaKey, {
+        storage.setValue(this.tokenKey, e.token), storage.setValue(this.tokenMetaKey, {
             source: e.source,
             updatedAt: (new Date).toISOString()
         }), t !== e.token && show.info(`123 云盘授权已更新：${e.source}`);
     }
     getStoredToken() {
-        return GM_getValue(this.tokenKey, "");
+        return this.getRuntimeService("storage").getValue(this.tokenKey, "");
     }
     clearStoredToken(e) {
-        GM_setValue(this.tokenKey, ""), GM_setValue(this.tokenMetaKey, {
+        const storage = this.getRuntimeService("storage");
+        storage.setValue(this.tokenKey, ""), storage.setValue(this.tokenMetaKey, {
             source: "cleared",
             reason: e,
             updatedAt: (new Date).toISOString()
