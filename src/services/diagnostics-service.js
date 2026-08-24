@@ -27,6 +27,8 @@ export class DiagnosticsService {
         this.browserMetadata = null;
         /** @type {string[]} */
         this.legacyPlugins = [];
+        /** @type {Array<{name: string, disableable: boolean}>} */
+        this.legacyPluginDescriptors = [];
         this.legacyStartup = null;
         /** @type {Array<Record<string, unknown>>} */
         this.legacyTimings = [];
@@ -58,9 +60,10 @@ export class DiagnosticsService {
     }
     /** @param {Record<string, unknown>} metadata */
     setBrowserMetadata(metadata) { this.browserMetadata = Object.freeze({ ...metadata }); }
-    /** @param {string[]} names @param {Record<string, unknown>} startup @param {Array<Record<string, unknown>>} timings */
-    setLegacyRuntime(names, startup, timings) {
-        this.legacyPlugins = [...names];
+    /** @param {Array<{name: string, disableable: boolean}>} descriptors @param {Record<string, unknown>} startup @param {Array<Record<string, unknown>>} timings */
+    setLegacyRuntime(descriptors, startup, timings) {
+        this.legacyPluginDescriptors = descriptors.map((item) => Object.freeze({ ...item }));
+        this.legacyPlugins = descriptors.map((item) => item.name);
         this.legacyStartup = Object.freeze({ ...startup });
         this.legacyTimings = timings.map((item) => Object.freeze({ ...item }));
     }
@@ -89,7 +92,7 @@ export class DiagnosticsService {
             requestConsumers: this.requestStats.consumers, underlyingRequests: this.requestStats.underlying,
             cacheHits: this.cacheStats.hits, cacheMisses: this.cacheStats.misses,
             providerHealth: Object.fromEntries(this.providerHealth), errors: this.errors.map((error) => ({ ...error })),
-            legacyPlugins: [...this.legacyPlugins], legacyStartup: this.legacyStartup, legacyTimings: this.legacyTimings.map((item) => ({ ...item })),
+            legacyPlugins: [...this.legacyPlugins], legacyPluginDescriptors: this.legacyPluginDescriptors.map((item) => ({ ...item })), legacyStartup: this.legacyStartup, legacyTimings: this.legacyTimings.map((item) => ({ ...item })),
             browser: this.browserMetadata, uptimeMs: performance.now() - this.startedAt,
         });
     }

@@ -14,17 +14,17 @@ export const LEGACY_PLUGIN_CONTRIBUTION_MAP = Object.freeze({
     TOP250Plugin: "discovery.top250",
     SearchByImagePlugin: "identity.image-search",
     Fc2By123AvPlugin: "detail.fc2-lookup",
-    DetailPagePlugin: "detail.native",
-    BusDetailPagePlugin: "detail.native",
+    DetailPagePlugin: "detail.javdb-native",
+    BusDetailPagePlugin: "detail.javbus-native",
     DetailWorkspacePlugin: "detail.workspace",
     ReviewPlugin: "detail.reviews",
     RelatedPlugin: "detail.related",
     ScreenShotPlugin: "detail.screenshot",
     ScreenshotPlugin: "detail.screenshot",
     MagnetHubPlugin: "detail.external-magnets",
-    PreviewVideoPlugin: "detail.gallery",
-    CoverButtonPlugin: "detail.state-actions",
-    DetailPageButtonPlugin: "detail.state-actions",
+    PreviewVideoPlugin: "detail.javdb-preview",
+    CoverButtonPlugin: "detail.cover-state-actions",
+    DetailPageButtonPlugin: "detail.page-state-actions",
     HighlightMagnetPlugin: "detail.native-magnets",
     OtherSitePlugin: "detail.external-sites",
     SubTitleCatPlugin: "detail.subtitle",
@@ -41,17 +41,24 @@ export const LEGACY_PLUGIN_CONTRIBUTION_MAP = Object.freeze({
     OneOneFiveMatchPlugin: "external-bridge.115-match",
     UnifiedOfflinePlugin: "external-bridge.offline",
     CompatibilityEnhancementsPlugin: "compatibility.enhancements",
-    BusImgPlugin: "detail.gallery",
-    BusPreviewVideoPlugin: "detail.gallery",
+    BusImgPlugin: "detail.javbus-images",
+    BusPreviewVideoPlugin: "detail.javbus-preview",
     OneTwoThreeOfflinePlugin: "external-bridge.123pan",
     JavTrailersPlugin: "external-bridge.javtrailers",
+});
+
+const LEGACY_SHARED_CONTRIBUTION_MAP = Object.freeze({
+    "detail.native": ["detail.javdb-native", "detail.javbus-native"],
+    "detail.state-actions": ["detail.cover-state-actions", "detail.page-state-actions"],
+    "detail.gallery": ["detail.javdb-preview", "detail.javbus-images", "detail.javbus-preview"],
 });
 
 /** @param {unknown} value */
 export function migrateDisabledPlugins(value) {
     const input = Array.isArray(value) ? value : [];
     const mapping = /** @type {Record<string, string>} */ (LEGACY_PLUGIN_CONTRIBUTION_MAP);
-    return [...new Set(input.filter((id) => typeof id === "string").map((id) => mapping[id] ?? id))];
+    const shared = /** @type {Record<string, string[]>} */ (LEGACY_SHARED_CONTRIBUTION_MAP);
+    return [...new Set(input.filter((id) => typeof id === "string").flatMap((id) => shared[id] ?? [mapping[id] ?? id]))];
 }
 
 /** @param {string} pluginName */

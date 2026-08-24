@@ -47,7 +47,9 @@ describe("v6.5 architecture runtime contracts", () => {
         vi.stubGlobal("jQuery", $);
         vi.stubGlobal("localforage", { INDEXEDDB: "indexeddb", createInstance: () => ({}) });
         Object.assign(globalThis, { utils: {}, storageManager: {} });
-        const { registerSitePlugins } = await import("../src/plugins/registry.js");
+        const { legacyContributionManifests, registerSitePlugins } = await import("../src/plugins/registry.js");
+        expect(new Set(legacyContributionManifests.map((item) => item.id)).size).toBe(legacyContributionManifests.length);
+        expect(new Set(legacyContributionManifests.map((item) => item.legacyPluginId)).size).toBe(legacyContributionManifests.length);
         const createRuntime = (site, disabled = []) => {
             const diagnostics = new DiagnosticsService();
             const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {}).register(SERVICE.state, {});
@@ -69,6 +71,27 @@ describe("v6.5 architecture runtime contracts", () => {
         registerSitePlugins(javbus, createRuntime("javbus", ["ReviewPlugin"]), "javbus");
         expect(javbus.getPluginNames()).not.toContain("ReviewPlugin");
         expect(javbus.getPluginNames()).toContain("DetailWorkspacePlugin");
+
+        const javdbWithCoverDisabled = new PluginManager();
+        registerSitePlugins(javdbWithCoverDisabled, createRuntime("javdb", ["CoverButtonPlugin"]), "javdb");
+        expect(javdbWithCoverDisabled.getPluginNames()).not.toContain("CoverButtonPlugin");
+        expect(javdbWithCoverDisabled.getPluginNames()).toContain("DetailPageButtonPlugin");
+
+        const javbusWithImagesDisabled = new PluginManager();
+        registerSitePlugins(javbusWithImagesDisabled, createRuntime("javbus", ["BusImgPlugin"]), "javbus");
+        expect(javbusWithImagesDisabled.getPluginNames()).not.toContain("BusImgPlugin");
+        expect(javbusWithImagesDisabled.getPluginNames()).toContain("BusPreviewVideoPlugin");
+
+        const legacyDiagnostics = new DiagnosticsService();
+        const javdbWithStaleSystemDisables = new PluginManager({ diagnostics: legacyDiagnostics });
+        registerSitePlugins(javdbWithStaleSystemDisables, createRuntime("javdb", ["settings.core", "stats.dashboard", "responsive-shell.bottom-bar"]), "javdb");
+        expect(javdbWithStaleSystemDisables.getPluginNames()).toEqual(expect.arrayContaining(["SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin"]));
+        expect(javdbWithStaleSystemDisables.getPluginDescriptors().filter((plugin) => plugin.disableable === false).map((plugin) => plugin.name)).toEqual([
+            "SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin",
+        ]);
+        expect(legacyDiagnostics.exportSnapshot().legacyPluginDescriptors.filter((plugin) => plugin.disableable === false).map((plugin) => plugin.name)).toEqual([
+            "SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin",
+        ]);
     }, 15_000);
 
     it("exports measured and redacted diagnostics", () => {
@@ -102,6 +125,13 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(activate).toHaveBeenCalledOnce();
         expect(diagnostics.exportSnapshot().activeContributions).toEqual(["detail.related"]);
         expect(migrateDisabledPlugins(["ReviewPlugin", "UnknownPlugin"])).toEqual(["detail.reviews", "UnknownPlugin"]);
+        expect(migrateDisabledPlugins(["CoverButtonPlugin", "DetailPageButtonPlugin", "BusImgPlugin", "BusPreviewVideoPlugin"])).toEqual([
+            "detail.cover-state-actions", "detail.page-state-actions", "detail.javbus-images", "detail.javbus-preview",
+        ]);
+        expect(migrateDisabledPlugins(["detail.native", "detail.state-actions", "detail.gallery"])).toEqual([
+            "detail.javdb-native", "detail.javbus-native", "detail.cover-state-actions", "detail.page-state-actions",
+            "detail.javdb-preview", "detail.javbus-images", "detail.javbus-preview",
+        ]);
     });
 
     it("disposes all scope-owned resources and blocks stale generations", () => {

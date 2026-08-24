@@ -49,6 +49,13 @@ export class FeatureRuntime {
         return !this.disabled.has(contributionId) && !this.disabled.has(legacyPluginId);
     }
 
+    /** @param {string} featureId */
+    isFeatureDisableable(featureId) {
+        const manifest = this.manifests.get(featureId);
+        if (!manifest) throw new Error(`Unknown feature: ${featureId}`);
+        return manifest.kind !== "system" && manifest.disableable !== false;
+    }
+
     /** @param {symbol[]} tokens */
     resolveDeclaredDependencies(tokens) {
         return this.container.resolveDeclared(tokens);

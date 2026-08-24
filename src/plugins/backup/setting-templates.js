@@ -4,7 +4,7 @@ import { L, r } from "../../core/constants.js";
 
 /**
  * Build the plugin categories configuration shared between inject and render.
- * Returns { categories, corePlugins }.
+ * Returns the presentation categories; disableability comes from Feature manifests through Diagnostics.
  */
 export function getPluginCategories() {
     /** @type {Record<string, [string, string]>} */
@@ -22,7 +22,7 @@ export function getPluginCategories() {
             core:group("core", "基础核心"), list:group("list", "列表页"), detail:group("detail", "详情页"),
             media:group("media", "媒体"), data:group("data", "数据"), network:group("network", "网络")
         },
-        corePlugins: ["SettingPlugin","StatsPlugin","MobileBottomBarPlugin"], pluginMeta
+        pluginMeta
     };
 }
 

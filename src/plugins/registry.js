@@ -61,15 +61,15 @@ export const legacyContributionManifests = Object.freeze([
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account]),
     manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch]),
-    manifest("detail.state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage, SERVICE.state]),
+    manifest("detail.cover-state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage, SERVICE.state]),
     manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [PORT.host, SERVICE.movie, SERVICE.translation, SERVICE.settings]),
-    manifest("detail.native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }),
+    manifest("detail.javdb-native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }),
     manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }, [PORT.host]),
     manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage]),
     manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related, SERVICE.settings]),
-    manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle, SERVICE.state]),
+    manifest("detail.page-state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle, SERVICE.state]),
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [PORT.host, SERVICE.settings]),
-    manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie]),
+    manifest("detail.javdb-preview", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie]),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
     manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo]),
     manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie, SERVICE.storage]),
@@ -87,13 +87,22 @@ export const legacyContributionManifests = Object.freeze([
     manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [PORT.host, SERVICE.dialog, SERVICE.offline, SERVICE.state]),
     manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }, [SERVICE.state]),
     manifest("identity.javbus-navigation", "identity", BusNavBarPlugin, ["javbus"], { javbus: 7 }),
-    manifest("detail.gallery", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),
-    manifest("detail.native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }),
-    manifest("detail.gallery", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings, SERVICE.storage]),
+    manifest("detail.javbus-images", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),
+    manifest("detail.javbus-native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }),
+    manifest("detail.javbus-preview", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings, SERVICE.storage]),
     manifest("external-bridge.123pan", "external-bridge", OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"], { javdb: 0, javbus: 0, "123pan": 1 }, [SERVICE.storage]),
     manifest("external-bridge.javtrailers", "external-bridge", JavTrailersPlugin, ["javtrailers"], { javtrailers: 1 }),
     manifest("detail.subtitle", "external-bridge", SubTitleCatPlugin, ["subtitlecat"], { subtitlecat: 1 }),
 ]);
+
+const contributionIds = new Set();
+const legacyPluginIds = new Set();
+for (const contribution of legacyContributionManifests) {
+    if (contributionIds.has(contribution.id)) throw new Error(`Duplicate contribution id: ${contribution.id}`);
+    if (legacyPluginIds.has(contribution.legacyPluginId)) throw new Error(`Duplicate legacy plugin contribution: ${contribution.legacyPluginId}`);
+    contributionIds.add(contribution.id);
+    legacyPluginIds.add(contribution.legacyPluginId);
+}
 
 /** @param {import("../core/plugin-manager.js").PluginManager} pluginManager @param {import("../app/feature-runtime.js").FeatureRuntime} featureRuntime @param {string} site */
 export function registerSitePlugins(pluginManager, featureRuntime, site) {
@@ -126,6 +135,6 @@ export function registerSitePlugins(pluginManager, featureRuntime, site) {
                 if (!name) throw new Error(`Legacy contribution ${item.id} has no runtime name for ${String(token)}`);
                 runtimeServices[name] = dependencies[token];
             }
-            pluginManager.register(item.plugin, runtimeServices);
+            pluginManager.register(item.plugin, runtimeServices, { disableable: featureRuntime.isFeatureDisableable(item.featureId) });
         });
 }

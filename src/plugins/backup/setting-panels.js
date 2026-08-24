@@ -153,7 +153,8 @@ export async function renderPluginMgmtPanel(diagnostics) {
     const diagnosticSnapshot = diagnostics.exportSnapshot();
     const disabled = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
     const allNames = diagnosticSnapshot.legacyPlugins;
-    const { categories, corePlugins, pluginMeta } = getPluginCategories();
+    const { categories, pluginMeta } = getPluginCategories();
+    const pluginDescriptors = new Map((diagnosticSnapshot.legacyPluginDescriptors || []).map((/** @type {{name: string, disableable: boolean}} */ item) => [item.name, item]));
     const registeredSet = new Set(allNames);
     let html = "";
     for (const [catKey, cat] of Object.entries(categories)) {
@@ -162,7 +163,7 @@ export async function renderPluginMgmtPanel(diagnostics) {
         html += '<section class="jhs-plugin-group">';
         html += `<h4 class="jhs-plugin-group__title">${escapeHtml(cat.label)}</h4>`;
         for (const pName of visiblePlugins) {
-            const isCore = corePlugins.includes(pName);
+            const isCore = pluginDescriptors.get(pName)?.disableable === false;
             const isDisabled = disabled.includes(disabledIdForPlugin(pName));
             const productName = pluginMeta[pName]?.[0] || pName;
             html += '<div class="jhs-plugin-row">';

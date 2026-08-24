@@ -29,8 +29,8 @@ export class PluginManager {
         if (this.plugins.size) throw new Error("依赖声明必须在插件注册前配置");
         this._dependencyDeclarations = declarations || Object.freeze({});
     }
-    /** @param {new (...args: any[]) => any} e @param {Record<string, any>} [runtimeServices] */
-    register(e, runtimeServices = {}) {
+    /** @param {new (...args: any[]) => any} e @param {Record<string, any>} [runtimeServices] @param {{disableable?: boolean}} [options] */
+    register(e, runtimeServices = {}, options = {}) {
         if ("function" != typeof e) throw new Error("插件必须是一个类");
         const a = performance.now();
         const t = new e;
@@ -39,6 +39,7 @@ export class PluginManager {
         if (this.plugins.has(n)) throw new Error(`插件"${n}"已注册`);
         t.declaredDependencies = new Set(this._dependencyDeclarations[n] || []);
         t.runtimeServices = Object.freeze({ ...runtimeServices });
+        t.disableable = options.disableable ?? true;
         this.plugins.set(n, t);
         this._registrationMs += performance.now() - a;
         this._syncDiagnostics();
@@ -69,6 +70,7 @@ export class PluginManager {
     clearErrorLog() { this._errorLog = []; this.diagnostics?.clearErrors(); }
     getTimings() { return [...this._lastTimings]; }
     getPluginNames() { return Array.from(this.plugins.keys()); }
+    getPluginDescriptors() { return [...this.plugins].map(([name, plugin]) => Object.freeze({ name, disableable: plugin.disableable !== false })); }
     getStartupReport() {
         return {
             registeredPlugins: this.plugins.size,
@@ -80,12 +82,12 @@ export class PluginManager {
             idleCompleted: this._idleCompleted
         };
     }
-    _syncDiagnostics() { this.diagnostics?.setLegacyRuntime(this.getPluginNames(), this.getStartupReport(), this.getTimings()); }
+    _syncDiagnostics() { this.diagnostics?.setLegacyRuntime(this.getPluginDescriptors(), this.getStartupReport(), this.getTimings()); }
     async _getDisabledPlugins() {
         return this._disabledPluginsPromise || (this._disabledPluginsPromise = (async () => { try {
             const e = await storageManager.getSetting("disabledPlugins", "[]");
             const configured = new Set(parseDisabledPlugins(e));
-            return new Set(this.getPluginNames().filter((name => ![ "SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin" ].includes(name) && configured.has(disabledIdForPlugin(name)))));
+            return new Set([...this.plugins].filter((([name, plugin]) => plugin.disableable !== false && configured.has(disabledIdForPlugin(name)))).map((([name]) => name)));
         } catch (e) { return new Set; } })());
     }
     async processCss() {

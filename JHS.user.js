@@ -2101,17 +2101,17 @@
     TOP250Plugin: "discovery.top250",
     SearchByImagePlugin: "identity.image-search",
     Fc2By123AvPlugin: "detail.fc2-lookup",
-    DetailPagePlugin: "detail.native",
-    BusDetailPagePlugin: "detail.native",
+    DetailPagePlugin: "detail.javdb-native",
+    BusDetailPagePlugin: "detail.javbus-native",
     DetailWorkspacePlugin: "detail.workspace",
     ReviewPlugin: "detail.reviews",
     RelatedPlugin: "detail.related",
     ScreenShotPlugin: "detail.screenshot",
     ScreenshotPlugin: "detail.screenshot",
     MagnetHubPlugin: "detail.external-magnets",
-    PreviewVideoPlugin: "detail.gallery",
-    CoverButtonPlugin: "detail.state-actions",
-    DetailPageButtonPlugin: "detail.state-actions",
+    PreviewVideoPlugin: "detail.javdb-preview",
+    CoverButtonPlugin: "detail.cover-state-actions",
+    DetailPageButtonPlugin: "detail.page-state-actions",
     HighlightMagnetPlugin: "detail.native-magnets",
     OtherSitePlugin: "detail.external-sites",
     SubTitleCatPlugin: "detail.subtitle",
@@ -2128,15 +2128,21 @@
     OneOneFiveMatchPlugin: "external-bridge.115-match",
     UnifiedOfflinePlugin: "external-bridge.offline",
     CompatibilityEnhancementsPlugin: "compatibility.enhancements",
-    BusImgPlugin: "detail.gallery",
-    BusPreviewVideoPlugin: "detail.gallery",
+    BusImgPlugin: "detail.javbus-images",
+    BusPreviewVideoPlugin: "detail.javbus-preview",
     OneTwoThreeOfflinePlugin: "external-bridge.123pan",
     JavTrailersPlugin: "external-bridge.javtrailers"
+  });
+  var LEGACY_SHARED_CONTRIBUTION_MAP = Object.freeze({
+    "detail.native": ["detail.javdb-native", "detail.javbus-native"],
+    "detail.state-actions": ["detail.cover-state-actions", "detail.page-state-actions"],
+    "detail.gallery": ["detail.javdb-preview", "detail.javbus-images", "detail.javbus-preview"]
   });
   function migrateDisabledPlugins(value) {
     const input = Array.isArray(value) ? value : [];
     const mapping = LEGACY_PLUGIN_CONTRIBUTION_MAP;
-    return [...new Set(input.filter((id) => typeof id === "string").map((id) => mapping[id] ?? id))];
+    const shared = LEGACY_SHARED_CONTRIBUTION_MAP;
+    return [...new Set(input.filter((id) => typeof id === "string").flatMap((id) => shared[id] ?? [mapping[id] ?? id]))];
   }
   __name(migrateDisabledPlugins, "migrateDisabledPlugins");
   function disabledIdForPlugin(pluginName) {
@@ -2174,7 +2180,7 @@
       if (this.plugins.size) throw new Error("依赖声明必须在插件注册前配置");
       this._dependencyDeclarations = declarations || Object.freeze({});
     }
-    register(e2, runtimeServices = {}) {
+    register(e2, runtimeServices = {}, options = {}) {
       if ("function" != typeof e2) throw new Error("插件必须是一个类");
       const a2 = performance.now();
       const t2 = new e2();
@@ -2183,6 +2189,7 @@
       if (this.plugins.has(n2)) throw new Error(`插件"${n2}"已注册`);
       t2.declaredDependencies = new Set(this._dependencyDeclarations[n2] || []);
       t2.runtimeServices = Object.freeze({ ...runtimeServices });
+      t2.disableable = options.disableable ?? true;
       this.plugins.set(n2, t2);
       this._registrationMs += performance.now() - a2;
       this._syncDiagnostics();
@@ -2219,6 +2226,9 @@
     getPluginNames() {
       return Array.from(this.plugins.keys());
     }
+    getPluginDescriptors() {
+      return [...this.plugins].map(([name, plugin]) => Object.freeze({ name, disableable: plugin.disableable !== false }));
+    }
     getStartupReport() {
       return {
         registeredPlugins: this.plugins.size,
@@ -2231,14 +2241,14 @@
       };
     }
     _syncDiagnostics() {
-      this.diagnostics?.setLegacyRuntime(this.getPluginNames(), this.getStartupReport(), this.getTimings());
+      this.diagnostics?.setLegacyRuntime(this.getPluginDescriptors(), this.getStartupReport(), this.getTimings());
     }
     async _getDisabledPlugins() {
       return this._disabledPluginsPromise || (this._disabledPluginsPromise = (async () => {
         try {
           const e2 = await storageManager.getSetting("disabledPlugins", "[]");
           const configured = new Set(parseDisabledPlugins(e2));
-          return new Set(this.getPluginNames().filter(((name) => !["SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin"].includes(name) && configured.has(disabledIdForPlugin(name)))));
+          return new Set([...this.plugins].filter((([name, plugin]) => plugin.disableable !== false && configured.has(disabledIdForPlugin(name)))).map((([name]) => name)));
         } catch (e2) {
           return /* @__PURE__ */ new Set();
         }
@@ -5663,7 +5673,7 @@
     routes: ["detail"],
     startup: "eager",
     requires: [PORT.host, SERVICE.movie, SERVICE.review, SERVICE.related, SERVICE.magnet, SERVICE.screenshot],
-    contributes: ["detail.native", "detail.workspace", "detail.fc2-owned", "detail.fc2-lookup", "detail.state-actions", "detail.gallery", "detail.reviews", "detail.related", "detail.native-magnets", "detail.external-magnets", "detail.screenshot", "detail.subtitle", "detail.external-sites"],
+    contributes: ["detail.javdb-native", "detail.javbus-native", "detail.workspace", "detail.fc2-owned", "detail.fc2-lookup", "detail.cover-state-actions", "detail.page-state-actions", "detail.javdb-preview", "detail.javbus-images", "detail.javbus-preview", "detail.reviews", "detail.related", "detail.native-magnets", "detail.external-magnets", "detail.screenshot", "detail.subtitle", "detail.external-sites"],
     providesCommands: [],
     activate: /* @__PURE__ */ __name((deps, runtime) => {
       const controller = new DetailController({ hostAdapter: deps[PORT.host], scope: runtime.scope, enabledContributions: runtime.enabledContributions });
@@ -7378,7 +7388,6 @@
         data: group("data", "数据"),
         network: group("network", "网络")
       },
-      corePlugins: ["SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin"],
       pluginMeta
     };
   }
@@ -8175,7 +8184,8 @@
     const diagnosticSnapshot = diagnostics.exportSnapshot();
     const disabled = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
     const allNames = diagnosticSnapshot.legacyPlugins;
-    const { categories, corePlugins, pluginMeta } = getPluginCategories();
+    const { categories, pluginMeta } = getPluginCategories();
+    const pluginDescriptors = new Map((diagnosticSnapshot.legacyPluginDescriptors || []).map((item) => [item.name, item]));
     const registeredSet = new Set(allNames);
     let html = "";
     for (const [catKey, cat] of Object.entries(categories)) {
@@ -8184,7 +8194,7 @@
       html += '<section class="jhs-plugin-group">';
       html += `<h4 class="jhs-plugin-group__title">${escapeHtml(cat.label)}</h4>`;
       for (const pName of visiblePlugins) {
-        const isCore = corePlugins.includes(pName);
+        const isCore = pluginDescriptors.get(pName)?.disableable === false;
         const isDisabled = disabled.includes(disabledIdForPlugin(pName));
         const productName = pluginMeta[pName]?.[0] || pName;
         html += '<div class="jhs-plugin-row">';
@@ -16936,15 +16946,15 @@ ${failure.stack}` : "");
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account]),
     manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch]),
-    manifest("detail.state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage, SERVICE.state]),
+    manifest("detail.cover-state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage, SERVICE.state]),
     manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [PORT.host, SERVICE.movie, SERVICE.translation, SERVICE.settings]),
-    manifest("detail.native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }),
+    manifest("detail.javdb-native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }),
     manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }, [PORT.host]),
     manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage]),
     manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related, SERVICE.settings]),
-    manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle, SERVICE.state]),
+    manifest("detail.page-state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle, SERVICE.state]),
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [PORT.host, SERVICE.settings]),
-    manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie]),
+    manifest("detail.javdb-preview", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie]),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
     manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo]),
     manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie, SERVICE.storage]),
@@ -16962,13 +16972,21 @@ ${failure.stack}` : "");
     manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [PORT.host, SERVICE.dialog, SERVICE.offline, SERVICE.state]),
     manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }, [SERVICE.state]),
     manifest("identity.javbus-navigation", "identity", BusNavBarPlugin, ["javbus"], { javbus: 7 }),
-    manifest("detail.gallery", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),
-    manifest("detail.native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }),
-    manifest("detail.gallery", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings, SERVICE.storage]),
+    manifest("detail.javbus-images", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),
+    manifest("detail.javbus-native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }),
+    manifest("detail.javbus-preview", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings, SERVICE.storage]),
     manifest("external-bridge.123pan", "external-bridge", OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"], { javdb: 0, javbus: 0, "123pan": 1 }, [SERVICE.storage]),
     manifest("external-bridge.javtrailers", "external-bridge", JavTrailersPlugin, ["javtrailers"], { javtrailers: 1 }),
     manifest("detail.subtitle", "external-bridge", SubTitleCatPlugin, ["subtitlecat"], { subtitlecat: 1 })
   ]);
+  var contributionIds = /* @__PURE__ */ new Set();
+  var legacyPluginIds = /* @__PURE__ */ new Set();
+  for (const contribution of legacyContributionManifests) {
+    if (contributionIds.has(contribution.id)) throw new Error(`Duplicate contribution id: ${contribution.id}`);
+    if (legacyPluginIds.has(contribution.legacyPluginId)) throw new Error(`Duplicate legacy plugin contribution: ${contribution.legacyPluginId}`);
+    contributionIds.add(contribution.id);
+    legacyPluginIds.add(contribution.legacyPluginId);
+  }
   function registerSitePlugins(pluginManager, featureRuntime, site) {
     pluginManager.setDependencyDeclarations(LEGACY_PLUGIN_DEPENDENCY_MAP);
     legacyContributionManifests.filter((item) => item.sites.includes(site) && featureRuntime.isContributionEnabled(item.featureId, item.id, item.legacyPluginId)).sort((left, right) => Number(left.order[site]) - Number(right.order[site])).forEach((item) => {
@@ -17002,7 +17020,7 @@ ${failure.stack}` : "");
         if (!name) throw new Error(`Legacy contribution ${item.id} has no runtime name for ${String(token)}`);
         runtimeServices[name] = dependencies[token];
       }
-      pluginManager.register(item.plugin, runtimeServices);
+      pluginManager.register(item.plugin, runtimeServices, { disableable: featureRuntime.isFeatureDisableable(item.featureId) });
     });
   }
   __name(registerSitePlugins, "registerSitePlugins");
@@ -17312,6 +17330,7 @@ ${failure.stack}` : "");
       this.errors = [];
       this.browserMetadata = null;
       this.legacyPlugins = [];
+      this.legacyPluginDescriptors = [];
       this.legacyStartup = null;
       this.legacyTimings = [];
       this.legacyHttp = options.legacyHttp ?? null;
@@ -17346,8 +17365,9 @@ ${failure.stack}` : "");
     setBrowserMetadata(metadata) {
       this.browserMetadata = Object.freeze({ ...metadata });
     }
-    setLegacyRuntime(names, startup, timings) {
-      this.legacyPlugins = [...names];
+    setLegacyRuntime(descriptors, startup, timings) {
+      this.legacyPluginDescriptors = descriptors.map((item) => Object.freeze({ ...item }));
+      this.legacyPlugins = descriptors.map((item) => item.name);
       this.legacyStartup = Object.freeze({ ...startup });
       this.legacyTimings = timings.map((item) => Object.freeze({ ...item }));
     }
@@ -17389,6 +17409,7 @@ ${failure.stack}` : "");
         providerHealth: Object.fromEntries(this.providerHealth),
         errors: this.errors.map((error) => ({ ...error })),
         legacyPlugins: [...this.legacyPlugins],
+        legacyPluginDescriptors: this.legacyPluginDescriptors.map((item) => ({ ...item })),
         legacyStartup: this.legacyStartup,
         legacyTimings: this.legacyTimings.map((item) => ({ ...item })),
         browser: this.browserMetadata,
@@ -18388,6 +18409,11 @@ ${failure.stack}` : "");
       if (manifest2.kind !== "system" && this.disabled.has(manifest2.id)) return false;
       if (manifest2.kind === "system") return true;
       return !this.disabled.has(contributionId) && !this.disabled.has(legacyPluginId);
+    }
+    isFeatureDisableable(featureId) {
+      const manifest2 = this.manifests.get(featureId);
+      if (!manifest2) throw new Error(`Unknown feature: ${featureId}`);
+      return manifest2.kind !== "system" && manifest2.disableable !== false;
     }
     resolveDeclaredDependencies(tokens) {
       return this.container.resolveDeclared(tokens);
