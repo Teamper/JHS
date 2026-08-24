@@ -14034,10 +14034,44 @@ ${error.stack}` : "");
   __name(_HistorySelectionModel, "HistorySelectionModel");
   var HistorySelectionModel = _HistorySelectionModel;
 
+  // src/features/history/history-repository.js
+  var _HistoryRepository = class _HistoryRepository {
+    constructor(dependencies) {
+      this.storage = dependencies.storage;
+      this.state = dependencies.state;
+    }
+    list() {
+      return this.storage.getCarList();
+    }
+    activity() {
+      return this.state.getActivityLog();
+    }
+    offline() {
+      return this.state.getOfflineHistory();
+    }
+    undo(transactionId) {
+      return this.state.undoTransaction(transactionId);
+    }
+    remove(carNums) {
+      return this.state.remove(carNums);
+    }
+    toggle(carNum, flag, options) {
+      return this.state.toggle(carNum, flag, options);
+    }
+    patch(carNums, flags, options) {
+      return this.state.patch(carNums, flags, options);
+    }
+    removeOffline(id) {
+      return this.state.removeOfflineHistory(id);
+    }
+  };
+  __name(_HistoryRepository, "HistoryRepository");
+  var HistoryRepository = _HistoryRepository;
+
   // src/plugins/status/history.js
   var _HistoryPlugin = class _HistoryPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectionModel", new HistorySelectionModel()), i(this, "historySorters", []), i(this, "historyFilteredCount", 0), i(this, "historySelectionSyncing", false);
+      super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectionModel", new HistorySelectionModel()), i(this, "historyRepository", new HistoryRepository({ storage: storageManager, state: stateService })), i(this, "historySorters", []), i(this, "historyFilteredCount", 0), i(this, "historySelectionSyncing", false);
     }
     getName() {
       return "HistoryPlugin";
@@ -14104,7 +14138,7 @@ ${error.stack}` : "");
             </div>
         `;
       e2 = e2.replace('<div id="filterBox"', '<div id="historyViewTabs" class="jhs-segmented" role="tablist"><button type="button" class="jhs-btn jhs-segmented__item active" data-history-view="state">作品状态</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="activity">操作记录</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="offline">离线任务</button></div><div id="filterBox"');
-      layer.open({
+      this.getRuntimeService("dialog").open({
         type: 1,
         title: "鉴定记录",
         content: e2,
@@ -14131,18 +14165,18 @@ ${error.stack}` : "");
             const view = $(event.currentTarget).data("history-view");
             root.find("[data-history-view]").removeClass("active"), $(event.currentTarget).addClass("active"), await this.showHistoryView(view);
           })).on("click", ".jhs-undo-activity", (async (event) => {
-            const result = await stateService.undoTransaction($(event.currentTarget).data("transaction"));
+            const result = await this.historyRepository.undo($(event.currentTarget).data("transaction"));
             show.info(`撤销完成：${result.reverted.length} 项成功，${result.conflicts.length} 项冲突`), await this.renderActivityHistory();
           })).on("click", ".jhs-copy-offline", (async (event) => {
             await utils.copyToClipboard("离线资源", $(event.currentTarget).data("resource"));
           })).on("click", ".jhs-retry-offline", (async (event) => {
-            const id = $(event.currentTarget).data("id"), item = (await stateService.getOfflineHistory()).find(((entry) => entry.id === id));
+            const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find(((entry) => entry.id === id));
             item && await this.getDependency("UnifiedOfflinePlugin").submitResource(event, item.resource, $(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: true, preferredProviderId: item.providerId }), await this.renderOfflineHistory();
           })).on("click", ".jhs-open-offline", (async (event) => {
-            const id = $(event.currentTarget).data("id"), item = (await stateService.getOfflineHistory()).find(((entry) => entry.id === id)), provider = this.getDependency("UnifiedOfflinePlugin").registry.providers.get(item?.providerId), url = provider?.openUrl?.();
+            const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find(((entry) => entry.id === id)), provider = this.getDependency("UnifiedOfflinePlugin").registry.providers.get(item?.providerId), url = provider?.openUrl?.();
             url && window.open(url, "_blank", "noopener,noreferrer");
           })).on("click", ".jhs-delete-offline", (async (event) => {
-            await stateService.removeOfflineHistory($(event.currentTarget).data("id")), await this.renderOfflineHistory();
+            await this.historyRepository.removeOffline($(event.currentTarget).data("id")), await this.renderOfflineHistory();
           })), this.bindHistoryActions(root);
         }, "success"),
         end: /* @__PURE__ */ __name(() => {
@@ -14156,7 +14190,7 @@ ${error.stack}` : "");
       return stateView ? this.loadTableData() : "activity" === view ? this.renderActivityHistory() : this.renderOfflineHistory();
     }
     async renderActivityHistory() {
-      const log = await stateService.getActivityLog(), host = this.historyRoot.find("#table-container").empty();
+      const log = await this.historyRepository.activity(), host = this.historyRoot.find("#table-container").empty();
       if (!log.entries.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无操作记录</div>');
       log.entries.slice().reverse().forEach(((entry) => {
         const reverted = entry.changes.filter(((change) => "reverted" === change.undoState)).length, conflicts = entry.changes.filter(((change) => "conflict" === change.undoState)).length;
@@ -14164,7 +14198,7 @@ ${error.stack}` : "");
       }));
     }
     async renderOfflineHistory() {
-      const history = await stateService.getOfflineHistory(), host = this.historyRoot.find("#table-container").empty();
+      const history = await this.historyRepository.offline(), host = this.historyRoot.find("#table-container").empty();
       if (!history.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无离线任务</div>');
       history.slice().reverse().forEach(((item) => {
         const actions = $('<div class="jhs-toolbar"></div>').append($('<button type="button" class="jhs-btn jhs-copy-offline">复制资源</button>').attr("data-resource", item.resource), $('<button type="button" class="jhs-btn jhs-retry-offline">重试</button>').attr("data-id", item.id), $('<button type="button" class="jhs-btn jhs-open-offline">打开服务</button>').attr("data-id", item.id), $('<button type="button" class="jhs-btn jhs-btn--danger jhs-delete-offline">移除记录</button>').attr("data-id", item.id));
@@ -14264,7 +14298,7 @@ ${error.stack}` : "");
         const t2 = $(e2.currentTarget), n2 = t2.closest(".action-btns"), a2 = n2.attr("data-car-num"), i2 = n2.attr("data-href"), s2 = /* @__PURE__ */ __name(async (actionType) => {
           try {
             const flag = legacyActionToFlag(actionType);
-            await stateService.toggle(a2, flag, { type: "history-state", record: { carNum: a2, url: i2 } }), await this.reloadTable();
+            await this.historyRepository.toggle(a2, flag, { type: "history-state", record: { carNum: a2, url: i2 } }), await this.reloadTable();
           } catch (s3) {
             clog.error("历史记录操作失败:", s3), show.error("操作失败");
           }
@@ -14287,12 +14321,12 @@ ${error.stack}` : "");
           let e3 = loading();
           try {
             if ("delete" === i2) {
-              const e4 = n2.map(((e5) => e5.carNum)), t3 = await stateService.remove(e4);
+              const e4 = n2.map(((e5) => e5.carNum)), t3 = await this.historyRepository.remove(e4);
               if (!t3.changed.length) return void show.error("提供的番号中没有一个存在于列表中。");
               show.ok(`已成功删除 ${t3.changed.length} 个番号`);
             } else {
               const flag = legacyActionToFlag(i2);
-              await stateService.patch(n2.map(((item) => item.carNum)), { [flag]: true }, { type: "history-batch-state", records: n2 }), show.ok("操作成功");
+              await this.historyRepository.patch(n2.map(((item) => item.carNum)), { [flag]: true }, { type: "history-batch-state", records: n2 }), show.ok("操作成功");
             }
             this.resetHistorySelection(), await this.reloadTable(false);
           } catch (t3) {
@@ -14304,7 +14338,7 @@ ${error.stack}` : "");
       }));
     }
     async getFilteredHistoryData(sorters = this.historySorters) {
-      let a2 = await storageManager.getCarList();
+      let a2 = await this.historyRepository.list();
       this.allCount = a2.length, this.filterCount = 0, this.favoriteCount = 0, this.hasDownCount = 0, this.hasWatchCount = 0, this.waitCheckCount = 0, a2.forEach(((e2) => {
         const flags = normalizeStateFlags(e2.stateFlags);
         flags.blocked && this.filterCount++, flags.favorite && this.favoriteCount++, flags.downloaded && this.hasDownCount++, flags.watched && this.hasWatchCount++, hasAnyState(flags) || this.waitCheckCount++;
@@ -14512,7 +14546,7 @@ ${error.stack}` : "");
     }
     handleDelete(e2, t2) {
       utils.q(e2, `是否移除${t2}?`, (async () => {
-        await stateService.remove(t2), this.getDependency("ListPagePlugin").showCarNumBox(t2), await this.reloadTable();
+        await this.historyRepository.remove(t2), this.getDependency("ListPagePlugin").showCarNumBox(t2), await this.reloadTable();
       }));
     }
     async handleClickDetail(e2, t2) {
@@ -14563,7 +14597,8 @@ ${error.stack}` : "");
                 </div>
             </div>
         `;
-      layer.open({
+      const dialog = this.getRuntimeService("dialog");
+      dialog.open({
         type: 1,
         title: `编辑记录: ${t2}`,
         area: utils.getDialogArea("sm"),
@@ -14590,7 +14625,7 @@ ${error.stack}` : "");
             blocked: editRoot.find("#edit-blocked").prop("checked")
           };
           const save = /* @__PURE__ */ __name(async () => {
-            await stateService.patch(e2.carNum, nextFlags, { type: "history-edit", replaceMetadata: true, record: { ...e2, names: n3, url: i2, remark: s3 } }), this.tableObj.setData(), layer.close(t3);
+            await this.historyRepository.patch(e2.carNum, nextFlags, { type: "history-edit", replaceMetadata: true, record: { ...e2, names: n3, url: i2, remark: s3 } }), this.tableObj.setData(), dialog.close(t3);
           }, "save");
           if (!flags.blocked && nextFlags.blocked) return utils.q(null, `是否屏蔽${e2.carNum}?`, (() => void save())), false;
           await save();
@@ -15425,7 +15460,7 @@ ${error.stack}` : "");
     manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related]),
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
-    manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }),
+    manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog]),
     manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [SERVICE.diagnostics, SERVICE.webdav]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [SERVICE.movie, SERVICE.settings, SERVICE.cache]),

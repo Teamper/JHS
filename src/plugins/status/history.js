@@ -4,11 +4,13 @@ import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core
 import { stateService } from "../../core/state-service.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
 import { HistorySelectionModel } from "../../features/history/history-selection-model.js";
+import { HistoryRepository } from "../../features/history/history-repository.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 
 export class HistoryPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectionModel", new HistorySelectionModel),
+        i(this, "historyRepository", new HistoryRepository({ storage: storageManager, state: stateService })),
         i(this, "historySorters", []), i(this, "historyFilteredCount", 0),
         i(this, "historySelectionSyncing", !1);
     }
@@ -59,7 +61,7 @@ export class HistoryPlugin extends BasePlugin {
     openHistory() {
         let e = `\n            <div class="jhs-layout-7cb3f981"> \n                 <div id="filterBox" class="jhs-layout-53809f1e">\n                    <select id="dataType" class="jhs-select-source">\n                        <option value="all" selected>所有</option>\n                        <option value="filter">${u}</option>\n                        <option value="favorite">${b}</option>\n                        <option value="hasDown">${y}</option>\n                        <option value="hasWatch">${k}</option>\n                    </select>\n                    <input id="searchCarNum" type="text" placeholder="搜索番号|演员" class="jhs-field">\n                    <button type="button" id="clearSearchbtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                </div>\n                <div id="allSelectBox" class="jhs-layout-66253c00">\n                    <button type="button" class="jhs-btn jhs-btn--dark multiple-history-deleteBtn jhs-layout-7daea5fa"> <span>移除</span> </button>\n                    <button type="button" class="jhs-btn jhs-btn--watch multiple-history-hasWatchBtn jhs-layout-2e003268">标记观看</button>\n                    <button type="button" class="jhs-btn jhs-btn--down multiple-history-hasDownBtn jhs-layout-2e003268">标记下载</button>\n                    <button type="button" class="jhs-btn jhs-btn--fav multiple-history-favoriteBtn jhs-layout-2e003268">标记收藏</button>\n                    <button type="button" class="jhs-btn jhs-btn--filter multiple-history-filterBtn jhs-layout-2e003268">标记屏蔽</button>\n                </div>\n                <div id="table-container" class="jhs-layout-81eaab28"></div>\n            </div>\n        `;
         e = e.replace('<div id="filterBox"', '<div id="historyViewTabs" class="jhs-segmented" role="tablist"><button type="button" class="jhs-btn jhs-segmented__item active" data-history-view="state">作品状态</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="activity">操作记录</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="offline">离线任务</button></div><div id="filterBox"');
-        layer.open({
+        this.getRuntimeService("dialog").open({
             type: 1,
             title: "鉴定记录",
             content: e,
@@ -88,18 +90,18 @@ export class HistoryPlugin extends BasePlugin {
                     const view = $(event.currentTarget).data("history-view");
                     root.find("[data-history-view]").removeClass("active"), $(event.currentTarget).addClass("active"), await this.showHistoryView(view);
                 })).on("click", ".jhs-undo-activity", (async event => {
-                    const result = await stateService.undoTransaction($(event.currentTarget).data("transaction"));
+                    const result = await this.historyRepository.undo($(event.currentTarget).data("transaction"));
                     show.info(`撤销完成：${result.reverted.length} 项成功，${result.conflicts.length} 项冲突`), await this.renderActivityHistory();
                 })).on("click", ".jhs-copy-offline", (async event => {
                     await utils.copyToClipboard("离线资源", $(event.currentTarget).data("resource"));
                 })).on("click", ".jhs-retry-offline", (async event => {
-                    const id = $(event.currentTarget).data("id"), item = (await stateService.getOfflineHistory()).find((entry => entry.id === id));
+                    const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((entry => entry.id === id));
                     item && await this.getDependency("UnifiedOfflinePlugin").submitResource(event, item.resource, $(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: !0, preferredProviderId: item.providerId }), await this.renderOfflineHistory();
                 })).on("click", ".jhs-open-offline", (async event => {
-                    const id = $(event.currentTarget).data("id"), item = (await stateService.getOfflineHistory()).find((entry => entry.id === id)), provider = this.getDependency("UnifiedOfflinePlugin").registry.providers.get(item?.providerId), url = provider?.openUrl?.();
+                    const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((entry => entry.id === id)), provider = this.getDependency("UnifiedOfflinePlugin").registry.providers.get(item?.providerId), url = provider?.openUrl?.();
                     url && window.open(url, "_blank", "noopener,noreferrer");
                 })).on("click", ".jhs-delete-offline", (async event => {
-                    await stateService.removeOfflineHistory($(event.currentTarget).data("id")), await this.renderOfflineHistory();
+                    await this.historyRepository.removeOffline($(event.currentTarget).data("id")), await this.renderOfflineHistory();
                 })), this.bindHistoryActions(root);
             },
             end: () => {
@@ -113,7 +115,7 @@ export class HistoryPlugin extends BasePlugin {
         return stateView ? this.loadTableData() : "activity" === view ? this.renderActivityHistory() : this.renderOfflineHistory();
     }
     async renderActivityHistory() {
-        const log = await stateService.getActivityLog(), host = this.historyRoot.find("#table-container").empty();
+        const log = await this.historyRepository.activity(), host = this.historyRoot.find("#table-container").empty();
         if (!log.entries.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无操作记录</div>');
         log.entries.slice().reverse().forEach((entry => {
             const reverted = entry.changes.filter((change => "reverted" === change.undoState)).length, conflicts = entry.changes.filter((change => "conflict" === change.undoState)).length;
@@ -121,7 +123,7 @@ export class HistoryPlugin extends BasePlugin {
         }));
     }
     async renderOfflineHistory() {
-        const history = await stateService.getOfflineHistory(), host = this.historyRoot.find("#table-container").empty();
+        const history = await this.historyRepository.offline(), host = this.historyRoot.find("#table-container").empty();
         if (!history.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无离线任务</div>');
         history.slice().reverse().forEach((item => {
             const actions = $("<div class=\"jhs-toolbar\"></div>").append($("<button type=\"button\" class=\"jhs-btn jhs-copy-offline\">复制资源</button>").attr("data-resource", item.resource), $("<button type=\"button\" class=\"jhs-btn jhs-retry-offline\">重试</button>").attr("data-id", item.id), $("<button type=\"button\" class=\"jhs-btn jhs-open-offline\">打开服务</button>").attr("data-id", item.id), $("<button type=\"button\" class=\"jhs-btn jhs-btn--danger jhs-delete-offline\">移除记录</button>").attr("data-id", item.id));
@@ -224,7 +226,7 @@ export class HistoryPlugin extends BasePlugin {
             const t = $(e.currentTarget), n = t.closest(".action-btns"), a = n.attr("data-car-num"), i = n.attr("data-href"), s = async actionType => {
                 try {
                     const flag = legacyActionToFlag(actionType);
-                    await stateService.toggle(a, flag, { type: "history-state", record: { carNum: a, url: i } }), await this.reloadTable();
+                    await this.historyRepository.toggle(a, flag, { type: "history-state", record: { carNum: a, url: i } }), await this.reloadTable();
                 } catch (s) { clog.error("历史记录操作失败:", s), show.error("操作失败"); }
             };
             if (t.hasClass("history-filterBtn")) {
@@ -247,12 +249,12 @@ export class HistoryPlugin extends BasePlugin {
                 let e = loading();
                 try {
                     if ("delete" === i) {
-                        const e = n.map((e => e.carNum)), t = await stateService.remove(e);
+                        const e = n.map((e => e.carNum)), t = await this.historyRepository.remove(e);
                         if (!t.changed.length) return void show.error("提供的番号中没有一个存在于列表中。");
                         show.ok(`已成功删除 ${t.changed.length} 个番号`);
                     } else {
                         const flag = legacyActionToFlag(i);
-                        await stateService.patch(n.map((item => item.carNum)), { [flag]: !0 }, { type: "history-batch-state", records: n }), show.ok("操作成功");
+                        await this.historyRepository.patch(n.map((item => item.carNum)), { [flag]: !0 }, { type: "history-batch-state", records: n }), show.ok("操作成功");
                     }
                     this.resetHistorySelection(), await this.reloadTable(!1);
                 } catch (t) {
@@ -265,7 +267,7 @@ export class HistoryPlugin extends BasePlugin {
     }
     /** 返回应用当前搜索、状态筛选和排序后的完整 History 数据。 */
     async getFilteredHistoryData(sorters = this.historySorters) {
-        let a = await storageManager.getCarList();
+        let a = await this.historyRepository.list();
         this.allCount = a.length, this.filterCount = 0, this.favoriteCount = 0, this.hasDownCount = 0,
         this.hasWatchCount = 0, this.waitCheckCount = 0, a.forEach((e => {
             const flags = normalizeStateFlags(e.stateFlags);
@@ -477,7 +479,7 @@ export class HistoryPlugin extends BasePlugin {
     }
     handleDelete(e, t) {
         utils.q(e, `是否移除${t}?`, (async () => {
-            await stateService.remove(t), this.getDependency("ListPagePlugin").showCarNumBox(t),
+            await this.historyRepository.remove(t), this.getDependency("ListPagePlugin").showCarNumBox(t),
             await this.reloadTable();
         }));
     }
@@ -503,7 +505,8 @@ export class HistoryPlugin extends BasePlugin {
         const t = e.carNum, n = e.names || "", a = e.url || "", flags = normalizeStateFlags(e.stateFlags), s = e.remark || "";
         let editRoot = $();
         const c = `\n            <div class="jhs-layout-8cddc29a">\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">番号:</label>\n                    <input type="text" id="edit-carNum" value="${t}" class="jhs-field jhs-history-edit-field" readonly>\n                </div>\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">演员 (用空格隔开):</label>\n                    <textarea id="edit-names" class="jhs-textarea jhs-history-edit-field">${n}</textarea>\n                </div>\n                <fieldset class="jhs-layout-da303dcf"><legend class="jhs-layout-27f87d75">状态:</legend>\n                    <label class="jhs-option-row">收藏 <input type="checkbox" id="edit-favorite" class="mini-switch" ${flags.favorite ? "checked" : ""}></label>\n                    <label class="jhs-option-row">已下载 <input type="checkbox" id="edit-downloaded" class="mini-switch" ${flags.downloaded ? "checked" : ""}></label>\n                    <label class="jhs-option-row">已观看 <input type="checkbox" id="edit-watched" class="mini-switch" ${flags.watched ? "checked" : ""}></label>\n                    <label class="jhs-option-row">屏蔽 <input type="checkbox" id="edit-blocked" class="mini-switch" ${flags.blocked ? "checked" : ""}></label>\n                </fieldset>\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">链接:</label>\n                    <input type="text" id="edit-url" value="${a}" class="jhs-field jhs-history-edit-field">\n                </div>\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">备注:</label>\n                    <textarea id="edit-remark" class="jhs-textarea jhs-history-edit-field">${s}</textarea>\n                </div>\n            </div>\n        `;
-        layer.open({
+        const dialog = this.getRuntimeService("dialog");
+        dialog.open({
             type: 1,
             title: `编辑记录: ${t}`,
             area: utils.getDialogArea("sm"),
@@ -527,7 +530,7 @@ export class HistoryPlugin extends BasePlugin {
                     favorite: editRoot.find("#edit-favorite").prop("checked"), downloaded: editRoot.find("#edit-downloaded").prop("checked"), watched: editRoot.find("#edit-watched").prop("checked"), blocked: editRoot.find("#edit-blocked").prop("checked")
                 };
                 const save = async () => {
-                    await stateService.patch(e.carNum, nextFlags, { type: "history-edit", replaceMetadata: !0, record: { ...e, names: n, url: i, remark: s } }), this.tableObj.setData(), layer.close(t);
+                    await this.historyRepository.patch(e.carNum, nextFlags, { type: "history-edit", replaceMetadata: !0, record: { ...e, names: n, url: i, remark: s } }), this.tableObj.setData(), dialog.close(t);
                 };
                 if (!flags.blocked && nextFlags.blocked) return utils.q(null, `是否屏蔽${e.carNum}?`, (() => void save())), !1;
                 await save();

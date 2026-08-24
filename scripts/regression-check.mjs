@@ -249,7 +249,7 @@ assertIncludes(unifiedOffline, "preferredProviderId", "offline retries must pref
 assert(!statusImport.includes("$.ajax("), "multi-page import must use one awaited promise chain");
 assertIncludes(statusImport, "return this.parseMovieList(nextPage, result)", "multi-page import recursion must be awaited by return");
 assert(!history.includes('$(".layui-layer-content")'), "history events must be scoped to their own layer");
-assertIncludes(history, "stateService.toggle(a, flag", "single history actions must toggle state");
+assertIncludes(history, "this.historyRepository.toggle(a, flag", "single history actions must toggle state through HistoryRepository");
 assert(!review.includes('id="reviews'), "review panels must not expose fixed instance ids");
 assert(!related.includes('id="related'), "related panels must not expose fixed instance ids");
 assertIncludes(statusImport, 'this.flag = "watched"', "JavDB watched import mapping");

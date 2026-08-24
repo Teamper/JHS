@@ -6,6 +6,7 @@ import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
 import { HistorySelectionModel } from "../src/features/history/history-selection-model.js";
+import { HistoryRepository } from "../src/features/history/history-repository.js";
 
 function createRecords(count = 120) {
     return Array.from({ length: count }, ((_, index) => ({
@@ -39,7 +40,7 @@ function loadHistory(records = createRecords()) {
     </body>`, { url: "https://javdb.com/users/collection_codes" });
     const $ = jqueryFactory(dom.window), getCarList = vi.fn().mockImplementation((async () => records.map((item => ({ ...item }))))),
         patch = vi.fn().mockResolvedValue({ changed: records.map((item => item.carNum)) }), remove = vi.fn().mockResolvedValue({ changed: [] }),
-        confirmation = vi.fn(((event, message, callback) => callback())), close = vi.fn(), show = {
+        confirmation = vi.fn(((event, message, callback) => callback())), close = vi.fn(), layer = { open: vi.fn(), close }, show = {
             ok: vi.fn(),
             info: vi.fn(),
             error: vi.fn()
@@ -48,10 +49,10 @@ function loadHistory(records = createRecords()) {
         document: dom.window.document,
         window: dom.window,
         $,
-        BasePlugin: class {},
-        HistorySelectionModel,
+        BasePlugin: class { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : null; } },
+        HistorySelectionModel, HistoryRepository,
         Tabulator: class {},
-        layer: {},
+        layer,
         storageManager: { getCarList },
         stateService: { patch, remove, toggle: vi.fn() },
         normalizeCarNum: value => String(value || "").trim().toUpperCase(),
