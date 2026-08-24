@@ -14,13 +14,18 @@ function loadHitShow({ movies = [], fetchScore = vi.fn(), cache = {}, sortMethod
         get: vi.fn(() => ({ hit: Object.keys(runtimeCache).length > 0, value: runtimeCache })),
         set: vi.fn((key, value) => Object.assign(runtimeCache, value)),
     }, settings = { snapshot: () => ({ sortMethod }) };
+    const host = {
+        locateListRoot: () => dom.window.document.querySelector(".movie-list") || dom.window.document.querySelector(".container"),
+        getListContainer: () => dom.window.document.querySelector(".container"),
+        createOwnedListRoot(classes = []) { const root = dom.window.document.createElement("div"); root.classList.add("movie-list", ...classes); return root; },
+    };
     const loadingClose = vi.fn(), sortItems = vi.fn().mockResolvedValue(), listPage = {
         replaceHdImg: vi.fn(), doFilter: vi.fn().mockResolvedValue(), applyVisibility: vi.fn(), bindMovieDetailNavigation: vi.fn(), getSelector: () => ({ itemSelector: ".movie-list .item" })
     }, coverButton = { addSvgBtn: vi.fn() };
     const context = vm.createContext({
         BasePlugin: class {
             getBean(name) { return { ListPagePlugin: listPage, ListPageButtonPlugin: { sortItems }, CoverButtonPlugin: coverButton }[name]; }
-            getRuntimeService(name) { return { scope: async () => ({ signal: { aborted: false } }), movie: { rankings: async () => movies, detail: async ({ movieId }) => fetchScore(movieId) }, settings, cache: cacheService }[name]; }
+            getRuntimeService(name) { return { host, scope: async () => ({ signal: { aborted: false } }), movie: { rankings: async () => movies, detail: async ({ movieId }) => fetchScore(movieId) }, settings, cache: cacheService }[name]; }
         },
         i: (target, key, value) => (target[key] = value), $, document: dom.window.document, window: dom.window,
         URLSearchParams, isHitShowPage: () => true,

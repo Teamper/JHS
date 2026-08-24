@@ -61,7 +61,7 @@ export class SettingPlugin extends BasePlugin {
             otherSite: this.getDependency("OtherSitePlugin"), listPage: this.getDependency("ListPagePlugin"),
             translate: this.getDependency("TranslatePlugin"), actressInfo: this.getDependency("ActressInfoPlugin"),
             screenshot: this.getDependency("ScreenShotPlugin"), newVideo: this.getDependency("NewVideoPlugin"),
-            blacklist: this.getDependency("BlacklistPlugin"), busImg: this.getDependency("BusImgPlugin"),
+            blacklist: this.getDependency("BlacklistPlugin"), busImg: this.getDependency("BusImgPlugin"), host: this.getRuntimeService("host"),
         });
     }
     async initCss() {

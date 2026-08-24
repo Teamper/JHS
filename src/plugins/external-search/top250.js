@@ -7,8 +7,7 @@ const me = "jhs_appAuthorization";
 
 export class Top250Plugin extends BasePlugin {
     constructor() {
-        super(), i(this, "has_cnsub", ""), i(this, "$contentBox", $(".section .container")),
-        i(this, "movies", []);
+        super(), i(this, "has_cnsub", ""), i(this, "$contentBox", null), i(this, "$listRoot", null), i(this, "movies", []);
     }
     getName() {
         return "TOP250Plugin";
@@ -24,9 +23,12 @@ export class Top250Plugin extends BasePlugin {
         })), await this.handleTop();
     }
     hookPage() {
+        const host = this.getRuntimeService("host"), listRoot = host.locateListRoot?.(), contentBox = host.getListContainer?.();
+        if (!listRoot || !contentBox) throw new Error("JavDB 列表容器不可用");
+        this.$contentBox = $(contentBox), this.$listRoot = $(host.createOwnedListRoot([ "jhs-top250-list", "jhs-layout-d2c171b1" ]));
         $("h2.section-title").contents().first().replaceWith("Top250"), $(".empty-message").remove(),
-        $(".section .container .box").remove(), $("#sort-toggle-btn").remove(), this.$contentBox.append('<div class="tool-box jhs-layout-d2c171b1"></div>'),
-        this.$contentBox.append('<div class="movie-list h cols-4 vcols-8 jhs-layout-d2c171b1"></div>'),
+        this.$contentBox.children(".box").remove(), $("#sort-toggle-btn").remove(), this.$contentBox.append('<div class="tool-box jhs-layout-d2c171b1"></div>'),
+        this.$contentBox.append(this.$listRoot),
         this.renderPagination();
     }
     renderPagination() {
@@ -54,7 +56,7 @@ export class Top250Plugin extends BasePlugin {
         this.has_cnsub = e.get("has_cnsub") || "";
         let a = e.get("page") || 1;
         this.toolBar(t, n, a), this.hookPage();
-        let i = $(".movie-list");
+        let i = this.$listRoot;
         i.html("");
         let s = loading();
         let o = !1;
@@ -92,7 +94,7 @@ export class Top250Plugin extends BasePlugin {
                 url.searchParams.set("has_cnsub", value), link.attr("href", url.toString());
             }));
             const movies = this.movies.filter((movie => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), hitShow = this.getDependency("HitShowPlugin");
-            $(".movie-list").html(hitShow.markDataListHtml(movies)), await hitShow.initializeRenderedList(), void hitShow.loadScore(movies).catch((error => clog.error("Top250 评分加载失败", error)));
+            this.$listRoot.html(hitShow.markDataListHtml(movies)), await hitShow.initializeRenderedList(), void hitShow.loadScore(movies).catch((error => clog.error("Top250 评分加载失败", error)));
         }));
     }
     async checkLogin(e, t) {

@@ -14,6 +14,16 @@ it("normalizes JavDB actor contracts", () => {
     expect(parseJavDbActorList(jquery(dom.window.document), "https://javdb.com")).toMatchObject({ state: "valid", actors: [{ starId: "a1", name: "Actor" }] });
 });
 
+it("owns JavDB list roots and creates host-compatible JHS list surfaces", () => {
+    document.body.innerHTML = '<section><div class="container"><div class="movie-list"><article class="item"></article></div></div></section>';
+    const host = new JavDbHostAdapter(document, window.location), owned = host.createOwnedListRoot(["jhs-owned-list"]);
+    expect(host.locateListItems()).toHaveLength(1);
+    expect(host.getListContainer()).toBe(document.querySelector(".container"));
+    expect(host.getListLayoutContainer()).toBe(document.querySelector("section .container"));
+    expect(owned.classList.contains("movie-list")).toBe(true);
+    expect(owned.classList.contains("jhs-owned-list")).toBe(true);
+});
+
 it("normalizes JavDB host actor movies and uncollect mutations", async () => {
     const html = readFileSync(join(import.meta.dirname, "../fixtures/integrations/javdb/actor-movies.html"), "utf8");
     const hostAdapter = new JavDbHostAdapter();

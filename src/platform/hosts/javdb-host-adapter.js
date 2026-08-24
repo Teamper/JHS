@@ -15,6 +15,15 @@ export class JavDbHostAdapter {
         return carNum ? Object.freeze({ carNum, url: this.location.href, site: "javdb" }) : null;
     }
     locateListRoot() { return this.document.querySelector(".movie-list"); }
+    locateListItems() { return [...(this.locateListRoot()?.querySelectorAll(":scope > .item") ?? [])]; }
+    getListContainer() { return this.locateListRoot()?.parentElement ?? null; }
+    getListLayoutContainer() { return this.document.querySelector("section .container"); }
+    /** @param {string[]} [classes] */
+    createOwnedListRoot(classes = []) {
+        const root = this.document.createElement("div");
+        root.classList.add("movie-list", "h", "cols-4", "vcols-8", ...classes);
+        return root;
+    }
     locateDetailRoot() { return this.document.querySelector(".video-detail") ?? this.document.querySelector(".movie-panel-info")?.closest(".container") ?? this.document.querySelector("main"); }
     locateDetailSlots() {
         const root = this.locateDetailRoot();

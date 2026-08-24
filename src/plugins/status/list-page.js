@@ -477,7 +477,7 @@ export class ListPagePlugin extends BasePlugin {
         try { return readListItem(e); } catch (error) { show.error("提取番号信息失败"); throw error; }
     }
     showCarNumBox(e) {
-        const t = $(".movie-list .item").toArray().find((t => $(t).find(".video-title strong").text() === e));
+        const t = this.getRuntimeService("host").locateListItems().find((t => $(t).find(".video-title strong").text() === e));
         if (t) {
             const n = $(t);
             n.attr("data-hide") === "yes" && (n.show(), n.removeAttr("data-hide"));

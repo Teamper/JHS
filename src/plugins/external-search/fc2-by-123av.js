@@ -5,7 +5,7 @@ import { createFc2SourceLinks, renderFc2Gallery, renderFc2State } from "../../ui
 
 export class Fc2By123AvPlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "$contentBox", $(".section .container")), i(this, "urlParams", new URLSearchParams(window.location.search)),
+        super(...arguments), i(this, "$contentBox", null), i(this, "$listRoot", null), i(this, "urlParams", new URLSearchParams(window.location.search)),
         i(this, "currentPage", this.urlParams.get("page") ? parseInt(this.urlParams.get("page")) : 1),
         i(this, "maxPage", null), i(this, "keyword", this.urlParams.get("keyword") || null);
     }
@@ -22,6 +22,9 @@ export class Fc2By123AvPlugin extends BasePlugin {
         o.includes("/advanced_search?type=100") && (this.hookPage(), await this.handleQuery());
     }
     hookPage() {
+        const host = this.getRuntimeService("host"), listRoot = host.locateListRoot?.(), contentBox = host.getListContainer?.();
+        if (!listRoot || !contentBox) throw new Error("JavDB 列表容器不可用");
+        this.$contentBox = $(contentBox), this.$listRoot = $(host.createOwnedListRoot([ "jhs-123av-list", "jhs-layout-d2c171b1" ]));
         let e = $("h2.section-title");
         e.contents().first().replaceWith("123Av"), e.css("marginBottom", "0"), e.append('\n            <div class="jhs-layout-f5f47b30">\n                <input id="search-123av-keyword" type="text" placeholder="搜索123Av Fc2ppv内容" class="jhs-field">\n                <button type="button" id="search-123av-btn" class="jhs-btn jhs-btn--primary jhs-layout-21a4fe43">搜索</button>\n                <button type="button" id="clear-123av-btn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n            </div>\n        '),
         $("#search-123av-keyword").val(this.keyword), $("#search-123av-btn").on("click", (async () => {
@@ -30,9 +33,9 @@ export class Fc2By123AvPlugin extends BasePlugin {
         })), $("#clear-123av-btn").on("click", (async () => {
             $("#search-123av-keyword").val(""), this.keyword = "", utils.setHrefParam("keyword", ""),
             $(".page-box").show(), await this.handleQuery();
-        })), $(".empty-message").remove(), $("#foldCategoryBtn").remove(), $(".section .container .box").remove(),
+        })), $(".empty-message").remove(), $("#foldCategoryBtn").remove(), this.$contentBox.children(".box").remove(),
         $("#sort-toggle-btn").remove(),
-        this.$contentBox.append('<div class="movie-list h cols-4 vcols-8 jhs-layout-d2c171b1"></div>'),
+        this.$contentBox.append(this.$listRoot),
         this.$contentBox.append('<div class="page-box"></div>');
         utils.setHrefParam("page", this.currentPage);
         $(".page-box").append('\n            <nav class="pagination">\n                <button type="button" class="jhs-btn pagination-previous">上一页</button>\n                <ul class="pagination-list"></ul>\n                <button type="button" class="jhs-btn pagination-next">下一页</button>\n            </nav>\n        '),
@@ -73,7 +76,7 @@ export class Fc2By123AvPlugin extends BasePlugin {
                 clog.error("123AV 获取数据失败");
             }
             let s = this.markDataListHtml(i);
-            $(".movie-list").html(s), await utils.smoothScrollToTop();
+            this.$listRoot.html(s), await utils.smoothScrollToTop();
         } catch (t) {
             clog.error(t);
         } finally {

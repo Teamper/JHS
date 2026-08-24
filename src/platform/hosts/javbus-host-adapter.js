@@ -9,6 +9,15 @@ export class JavBusHostAdapter {
         return carNum ? Object.freeze({ carNum, url: this.location.href, site: "javbus" }) : null;
     }
     locateListRoot() { return this.document.querySelector(".masonry"); }
+    locateListItems() { return [...(this.locateListRoot()?.querySelectorAll(":scope > .item, :scope > .movie-box") ?? [])]; }
+    getListContainer() { return this.locateListRoot()?.parentElement ?? null; }
+    getListLayoutContainer() { return this.document.querySelector(".container-fluid .row"); }
+    /** @param {string[]} [classes] */
+    createOwnedListRoot(classes = []) {
+        const root = this.document.createElement("div");
+        root.classList.add("masonry", ...classes);
+        return root;
+    }
     locateDetailRoot() { return this.locateNativeMagnets()?.closest(".container") ?? this.document.querySelector(".container .row.movie")?.parentElement ?? null; }
     locateDetailSlots() {
         const root = this.locateDetailRoot();

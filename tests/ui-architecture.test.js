@@ -171,7 +171,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     });
 
     it("binds full-settings layout ranges idempotently after loading the form", () => {
-        expect(settingForms).toContain("bindLayoutRangeEvents(dependencies.busImg);");
+        expect(settingForms).toContain("bindLayoutRangeEvents(dependencies.busImg, dependencies.host);");
         expect(settingForms).toContain('.off(".jhsSetting")');
         expect(settingForms).toContain('.on("input.jhsSetting"');
         expect(settingForms).toContain('.on("change.jhsSetting"');

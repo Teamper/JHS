@@ -3736,6 +3736,20 @@
     locateListRoot() {
       return this.document.querySelector(".masonry");
     }
+    locateListItems() {
+      return [...this.locateListRoot()?.querySelectorAll(":scope > .item, :scope > .movie-box") ?? []];
+    }
+    getListContainer() {
+      return this.locateListRoot()?.parentElement ?? null;
+    }
+    getListLayoutContainer() {
+      return this.document.querySelector(".container-fluid .row");
+    }
+    createOwnedListRoot(classes = []) {
+      const root = this.document.createElement("div");
+      root.classList.add("masonry", ...classes);
+      return root;
+    }
     locateDetailRoot() {
       return this.locateNativeMagnets()?.closest(".container") ?? this.document.querySelector(".container .row.movie")?.parentElement ?? null;
     }
@@ -3812,6 +3826,20 @@
     }
     locateListRoot() {
       return this.document.querySelector(".movie-list");
+    }
+    locateListItems() {
+      return [...this.locateListRoot()?.querySelectorAll(":scope > .item") ?? []];
+    }
+    getListContainer() {
+      return this.locateListRoot()?.parentElement ?? null;
+    }
+    getListLayoutContainer() {
+      return this.document.querySelector("section .container");
+    }
+    createOwnedListRoot(classes = []) {
+      const root = this.document.createElement("div");
+      root.classList.add("movie-list", "h", "cols-4", "vcols-8", ...classes);
+      return root;
     }
     locateDetailRoot() {
       return this.document.querySelector(".video-detail") ?? this.document.querySelector(".movie-panel-info")?.closest(".container") ?? this.document.querySelector("main");
@@ -6143,7 +6171,7 @@
       }
     }
     showCarNumBox(e2) {
-      const t2 = $(".movie-list .item").toArray().find(((t3) => $(t3).find(".video-title strong").text() === e2));
+      const t2 = this.getRuntimeService("host").locateListItems().find(((t3) => $(t3).find(".video-title strong").text() === e2));
       if (t2) {
         const n2 = $(t2);
         n2.attr("data-hide") === "yes" && (n2.show(), n2.removeAttr("data-hide"));
@@ -6257,25 +6285,23 @@
         "Enter" === t3.key && addKeyword(t3, e3);
       }));
     }));
-    bindLayoutRangeEvents(dependencies.busImg);
+    bindLayoutRangeEvents(dependencies.busImg, dependencies.host);
   }
   __name(loadSettingForm, "loadSettingForm");
-  function bindLayoutRangeEvents(busImgPlugin) {
+  function bindLayoutRangeEvents(busImgPlugin, hostAdapter) {
     $("#containerColumns").off(".jhsSetting").on("input.jhsSetting", (() => {
       const columns = $("#containerColumns").val();
       $("#showContainerColumns").text(columns);
-      const movieList = document.querySelector(".movie-list"), masonry = document.querySelector(".masonry");
-      movieList && (movieList.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
-      masonry && (masonry.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
+      const listRoot = hostAdapter?.locateListRoot?.();
+      listRoot && (listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
     })).on("change.jhsSetting", (async (event) => {
       await storageManager.saveSettingItem("containerColumns", $(event.currentTarget).val()), await applyImageMode(busImgPlugin);
     }));
     $("#containerWidth").off(".jhsSetting").on("input.jhsSetting", ((event) => {
       const width = parseInt($(event.target).val()) + 70, widthText = `${width}%`;
       $("#showContainerWidth").text(widthText);
-      const javdbContainer = document.querySelector("section .container"), javbusContainer = document.querySelector(".container-fluid .row");
-      javdbContainer && (javdbContainer.style.minWidth = widthText);
-      javbusContainer && (javbusContainer.style.minWidth = widthText);
+      const layoutContainer = hostAdapter?.getListLayoutContainer?.();
+      layoutContainer && (layoutContainer.style.minWidth = widthText);
     })).on("change.jhsSetting", ((event) => storageManager.saveSettingItem("containerWidth", parseInt($(event.currentTarget).val()) + 70)));
   }
   __name(bindLayoutRangeEvents, "bindLayoutRangeEvents");
@@ -7388,7 +7414,8 @@
         screenshot: this.getDependency("ScreenShotPlugin"),
         newVideo: this.getDependency("NewVideoPlugin"),
         blacklist: this.getDependency("BlacklistPlugin"),
-        busImg: this.getDependency("BusImgPlugin")
+        busImg: this.getDependency("BusImgPlugin"),
+        host: this.getRuntimeService("host")
       });
     }
     async initCss() {
@@ -8356,7 +8383,7 @@
   // src/plugins/external-search/fc2-by-123av.js
   var _Fc2By123AvPlugin = class _Fc2By123AvPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "$contentBox", $(".section .container")), i(this, "urlParams", new URLSearchParams(window.location.search)), i(this, "currentPage", this.urlParams.get("page") ? parseInt(this.urlParams.get("page")) : 1), i(this, "maxPage", null), i(this, "keyword", this.urlParams.get("keyword") || null);
+      super(...arguments), i(this, "$contentBox", null), i(this, "$listRoot", null), i(this, "urlParams", new URLSearchParams(window.location.search)), i(this, "currentPage", this.urlParams.get("page") ? parseInt(this.urlParams.get("page")) : 1), i(this, "maxPage", null), i(this, "keyword", this.urlParams.get("keyword") || null);
     }
     getName() {
       return "Fc2By123AvPlugin";
@@ -8369,13 +8396,16 @@
       $("#navbar-menu-hero > div > div:nth-child(1) > div > a:nth-child(4)").after('<a class="navbar-item" href="/advanced_search?type=100&released_start=2099-09">123Av-Fc2</a>'), $('.tabs li:contains("FC2")').after('<li><a href="/advanced_search?type=100&released_start=2099-09"><span>123Av-Fc2</span></a></li>'), o.includes("/advanced_search?type=100") && (this.hookPage(), await this.handleQuery());
     }
     hookPage() {
+      const host = this.getRuntimeService("host"), listRoot = host.locateListRoot?.(), contentBox = host.getListContainer?.();
+      if (!listRoot || !contentBox) throw new Error("JavDB 列表容器不可用");
+      this.$contentBox = $(contentBox), this.$listRoot = $(host.createOwnedListRoot(["jhs-123av-list", "jhs-layout-d2c171b1"]));
       let e2 = $("h2.section-title");
       e2.contents().first().replaceWith("123Av"), e2.css("marginBottom", "0"), e2.append('\n            <div class="jhs-layout-f5f47b30">\n                <input id="search-123av-keyword" type="text" placeholder="搜索123Av Fc2ppv内容" class="jhs-field">\n                <button type="button" id="search-123av-btn" class="jhs-btn jhs-btn--primary jhs-layout-21a4fe43">搜索</button>\n                <button type="button" id="clear-123av-btn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n            </div>\n        '), $("#search-123av-keyword").val(this.keyword), $("#search-123av-btn").on("click", (async () => {
         let e3 = $("#search-123av-keyword").val().trim();
         e3 && (this.keyword = e3, utils.setHrefParam("keyword", e3), await this.handleQuery());
       })), $("#clear-123av-btn").on("click", (async () => {
         $("#search-123av-keyword").val(""), this.keyword = "", utils.setHrefParam("keyword", ""), $(".page-box").show(), await this.handleQuery();
-      })), $(".empty-message").remove(), $("#foldCategoryBtn").remove(), $(".section .container .box").remove(), $("#sort-toggle-btn").remove(), this.$contentBox.append('<div class="movie-list h cols-4 vcols-8 jhs-layout-d2c171b1"></div>'), this.$contentBox.append('<div class="page-box"></div>');
+      })), $(".empty-message").remove(), $("#foldCategoryBtn").remove(), this.$contentBox.children(".box").remove(), $("#sort-toggle-btn").remove(), this.$contentBox.append(this.$listRoot), this.$contentBox.append('<div class="page-box"></div>');
       utils.setHrefParam("page", this.currentPage);
       $(".page-box").append('\n            <nav class="pagination">\n                <button type="button" class="jhs-btn pagination-previous">上一页</button>\n                <ul class="pagination-list"></ul>\n                <button type="button" class="jhs-btn pagination-next">下一页</button>\n            </nav>\n        '), $(document).on("click", ".pagination-link", ((e3) => {
         e3.preventDefault(), this.currentPage = parseInt($(e3.target).data("page")), utils.setHrefParam("page", this.currentPage), this.renderPagination(), this.handleQuery();
@@ -8409,7 +8439,7 @@
           clog.error("123AV 获取数据失败");
         }
         let s2 = this.markDataListHtml(i2);
-        $(".movie-list").html(s2), await utils.smoothScrollToTop();
+        this.$listRoot.html(s2), await utils.smoothScrollToTop();
       } catch (t2) {
         clog.error(t2);
       } finally {
@@ -9408,7 +9438,7 @@ ${value}\r
   // src/plugins/external-search/hit-show.js
   var _HitShowPlugin = class _HitShowPlugin extends BasePlugin {
     constructor() {
-      super(), i(this, "$contentBox", $(".section .container")), i(this, "loadGeneration", 0);
+      super(), i(this, "$contentBox", null), i(this, "$listRoot", null), i(this, "loadGeneration", 0);
     }
     getName() {
       return "HitShowPlugin";
@@ -9422,8 +9452,11 @@ ${value}\r
       })), await this.handlePlayback();
     }
     hookPage() {
+      const host = this.getRuntimeService("host"), listRoot = host.locateListRoot?.(), contentBox = host.getListContainer?.();
+      if (!listRoot || !contentBox) throw new Error("JavDB 列表容器不可用");
+      this.$contentBox = $(contentBox), this.$listRoot = $(host.createOwnedListRoot(["jhs-hitshow-list"]));
       let e2 = $("h2.section-title");
-      e2.contents().first().replaceWith("热播"), e2.addClass("jhs-hitshow-title"), e2.parent(".jhs-hitshow-heading").length || e2.wrap('<header class="jhs-hitshow-heading"></header>'), $(".empty-message").remove(), $(".section .container .box").remove(), $(".movie-list.jhs-hitshow-list").remove(), this.$contentBox.append('<div class="movie-list h cols-4 vcols-8 jhs-hitshow-list"></div>');
+      e2.contents().first().replaceWith("热播"), e2.addClass("jhs-hitshow-title"), e2.parent(".jhs-hitshow-heading").length || e2.wrap('<header class="jhs-hitshow-heading"></header>'), $(".empty-message").remove(), this.$contentBox.children(".box").remove(), this.$contentBox.children(".jhs-hitshow-list").remove(), this.$contentBox.append(this.$listRoot);
     }
     async handlePlayback() {
       if (!isHitShowPage()) return;
@@ -9434,7 +9467,7 @@ ${value}\r
       try {
         const movies = await this.fetchPlaybackWithRetry(period);
         if (generation !== this.loadGeneration) return;
-        $(".movie-list").html(this.markDataListHtml(movies));
+        this.$listRoot.html(this.markDataListHtml(movies));
         await this.initializeRenderedList();
         await this.getDependency("ListPageButtonPlugin").sortItems();
         loadingObj.close(), loadingClosed = true;
@@ -10341,7 +10374,7 @@ ${error.stack}` : "");
   var me = "jhs_appAuthorization";
   var _Top250Plugin = class _Top250Plugin extends BasePlugin {
     constructor() {
-      super(), i(this, "has_cnsub", ""), i(this, "$contentBox", $(".section .container")), i(this, "movies", []);
+      super(), i(this, "has_cnsub", ""), i(this, "$contentBox", null), i(this, "$listRoot", null), i(this, "movies", []);
     }
     getName() {
       return "TOP250Plugin";
@@ -10356,7 +10389,10 @@ ${error.stack}` : "");
       })), await this.handleTop();
     }
     hookPage() {
-      $("h2.section-title").contents().first().replaceWith("Top250"), $(".empty-message").remove(), $(".section .container .box").remove(), $("#sort-toggle-btn").remove(), this.$contentBox.append('<div class="tool-box jhs-layout-d2c171b1"></div>'), this.$contentBox.append('<div class="movie-list h cols-4 vcols-8 jhs-layout-d2c171b1"></div>'), this.renderPagination();
+      const host = this.getRuntimeService("host"), listRoot = host.locateListRoot?.(), contentBox = host.getListContainer?.();
+      if (!listRoot || !contentBox) throw new Error("JavDB 列表容器不可用");
+      this.$contentBox = $(contentBox), this.$listRoot = $(host.createOwnedListRoot(["jhs-top250-list", "jhs-layout-d2c171b1"]));
+      $("h2.section-title").contents().first().replaceWith("Top250"), $(".empty-message").remove(), this.$contentBox.children(".box").remove(), $("#sort-toggle-btn").remove(), this.$contentBox.append('<div class="tool-box jhs-layout-d2c171b1"></div>'), this.$contentBox.append(this.$listRoot), this.renderPagination();
     }
     renderPagination() {
       const e2 = new URLSearchParams(window.location.search);
@@ -10392,7 +10428,7 @@ ${error.stack}` : "");
       this.has_cnsub = e2.get("has_cnsub") || "";
       let a2 = e2.get("page") || 1;
       this.toolBar(t2, n2, a2), this.hookPage();
-      let i2 = $(".movie-list");
+      let i2 = this.$listRoot;
       i2.html("");
       let s2 = loading();
       let o2 = false;
@@ -10428,7 +10464,7 @@ ${error.stack}` : "");
           url.searchParams.set("has_cnsub", value), link.attr("href", url.toString());
         }));
         const movies = this.movies.filter(((movie) => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), hitShow = this.getDependency("HitShowPlugin");
-        $(".movie-list").html(hitShow.markDataListHtml(movies)), await hitShow.initializeRenderedList(), void hitShow.loadScore(movies).catch(((error) => clog.error("Top250 评分加载失败", error)));
+        this.$listRoot.html(hitShow.markDataListHtml(movies)), await hitShow.initializeRenderedList(), void hitShow.loadScore(movies).catch(((error) => clog.error("Top250 评分加载失败", error)));
       }));
     }
     async checkLogin(e2, t2) {
@@ -15407,19 +15443,19 @@ ${error.stack}` : "");
   // src/plugins/registry.js
   var manifest = /* @__PURE__ */ __name((id, featureId, plugin, sites, order, requires = []) => defineContribution({ id, featureId, legacyPluginId: plugin.name, plugin, sites, order, requires }), "manifest");
   var legacyContributionManifests = Object.freeze([
-    manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [SERVICE.translation, SERVICE.http, SERVICE.storage]),
+    manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [PORT.host, SERVICE.translation, SERVICE.http, SERVICE.storage]),
     manifest("list.auto-page", "list", AutoPagePlugin, ["javdb", "javbus"], { javdb: 2, javbus: 5 }, [SERVICE.http]),
     manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related]),
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog]),
-    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.offline]),
+    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.offline]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }),
-    manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [SERVICE.movie, SERVICE.settings, SERVICE.cache]),
-    manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [SERVICE.dialog, SERVICE.account]),
+    manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache]),
+    manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account]),
     manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch]),
     manifest("detail.state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage]),
-    manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [SERVICE.movie, SERVICE.translation, SERVICE.settings]),
+    manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [PORT.host, SERVICE.movie, SERVICE.translation, SERVICE.settings]),
     manifest("detail.native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }),
     manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }, [PORT.host]),
     manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage]),

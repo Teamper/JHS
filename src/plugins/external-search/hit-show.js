@@ -5,7 +5,7 @@ import { isHitShowPage } from "../../core/site-context.js";
 
 export class HitShowPlugin extends BasePlugin {
     constructor() {
-        super(), i(this, "$contentBox", $(".section .container")), i(this, "loadGeneration", 0);
+        super(), i(this, "$contentBox", null), i(this, "$listRoot", null), i(this, "loadGeneration", 0);
     }
     getName() {
         return "HitShowPlugin";
@@ -19,9 +19,12 @@ export class HitShowPlugin extends BasePlugin {
         })), await this.handlePlayback();
     }
     hookPage() {
+        const host = this.getRuntimeService("host"), listRoot = host.locateListRoot?.(), contentBox = host.getListContainer?.();
+        if (!listRoot || !contentBox) throw new Error("JavDB 列表容器不可用");
+        this.$contentBox = $(contentBox), this.$listRoot = $(host.createOwnedListRoot([ "jhs-hitshow-list" ]));
         let e = $("h2.section-title");
         e.contents().first().replaceWith("热播"), e.addClass("jhs-hitshow-title"), e.parent(".jhs-hitshow-heading").length || e.wrap('<header class="jhs-hitshow-heading"></header>'), $(".empty-message").remove(),
-        $(".section .container .box").remove(), $(".movie-list.jhs-hitshow-list").remove(), this.$contentBox.append('<div class="movie-list h cols-4 vcols-8 jhs-hitshow-list"></div>');
+        this.$contentBox.children(".box").remove(), this.$contentBox.children(".jhs-hitshow-list").remove(), this.$contentBox.append(this.$listRoot);
     }
     async handlePlayback() {
         if (!isHitShowPage()) return;
@@ -32,7 +35,7 @@ export class HitShowPlugin extends BasePlugin {
         try {
             const movies = await this.fetchPlaybackWithRetry(period);
             if (generation !== this.loadGeneration) return;
-            $(".movie-list").html(this.markDataListHtml(movies));
+            this.$listRoot.html(this.markDataListHtml(movies));
             await this.initializeRenderedList();
             await this.getDependency("ListPageButtonPlugin").sortItems();
             loadingObj.close(), loadingClosed = !0;

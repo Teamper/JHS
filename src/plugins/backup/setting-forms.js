@@ -48,26 +48,24 @@ export async function loadSettingForm(dependencies) {
             "Enter" === t.key && addKeyword(t, e);
         }));
     }));
-    bindLayoutRangeEvents(dependencies.busImg);
+    bindLayoutRangeEvents(dependencies.busImg, dependencies.host);
 }
 
 /** Bind the shared layout range controls without accumulating handlers. */
-function bindLayoutRangeEvents(busImgPlugin) {
+function bindLayoutRangeEvents(busImgPlugin, hostAdapter) {
     $("#containerColumns").off(".jhsSetting").on("input.jhsSetting", (() => {
         const columns = $("#containerColumns").val();
         $("#showContainerColumns").text(columns);
-        const movieList = document.querySelector(".movie-list"), masonry = document.querySelector(".masonry");
-        movieList && (movieList.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
-        masonry && (masonry.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
+        const listRoot = hostAdapter?.locateListRoot?.();
+        listRoot && (listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
     })).on("change.jhsSetting", (async event => {
         await storageManager.saveSettingItem("containerColumns", $(event.currentTarget).val()), await applyImageMode(busImgPlugin);
     }));
     $("#containerWidth").off(".jhsSetting").on("input.jhsSetting", (event => {
         const width = parseInt($(event.target).val()) + 70, widthText = `${width}%`;
         $("#showContainerWidth").text(widthText);
-        const javdbContainer = document.querySelector("section .container"), javbusContainer = document.querySelector(".container-fluid .row");
-        javdbContainer && (javdbContainer.style.minWidth = widthText);
-        javbusContainer && (javbusContainer.style.minWidth = widthText);
+        const layoutContainer = hostAdapter?.getListLayoutContainer?.();
+        layoutContainer && (layoutContainer.style.minWidth = widthText);
     })).on("change.jhsSetting", (event => storageManager.saveSettingItem("containerWidth", parseInt($(event.currentTarget).val()) + 70)));
 }
 
