@@ -38,7 +38,8 @@ describe("preview playback contracts", () => {
     });
     it("shows DMM before playback and uses a muted autoplay fallback", () => {
         const handle = preview.slice(preview.indexOf("async handleVideo()"));
-        expect(handle).toContain('dmmVideo.muted = !muted || "yes" === muted');
+        expect(handle).toContain('dmmVideo.muted = muted == null || muted === !0');
+        expect(handle).toContain('settings.set("videoMuted", dmmVideo.muted)');
         expect(handle.indexOf('$dmmVideo.addClass("is-active")')).toBeLessThan(handle.indexOf("dmmPlayed = await safePlay(dmmVideo"));
         expect(handle).toMatch(/if \(!dmmPlayed && !dmmVideo\.muted\)[\s\S]+JavDB 高画质预览静音重试/);
         expect(handle.indexOf("高画质预览静音重试")).toBeLessThan(handle.indexOf("await this.restoreNativePlayer"));

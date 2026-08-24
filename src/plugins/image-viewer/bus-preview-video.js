@@ -30,7 +30,7 @@ export class BusPreviewVideoPlugin extends BasePlugin {
         this.initModal();
         const e = $("#sample-waterfall .sample-box .photo-frame img:first").attr("src"), t = $(`\n            <button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65">\n                <div class="photo-frame jhs-layout-87db2275">\n                    <img src="${e}" class="video-cover" alt="">\n                    <div class="play-icon jhs-play-overlay">\n                        ▶\n                    </div>\n                </div>\n            </button>`);
         $("#sample-waterfall").prepend(t);
-        "yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes") && fetchDmmPreview(this.getPageInfo().carNum).catch((e => clog.warn("预加载 DMM 失败", e)));
+        "yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes") && fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage")).catch((e => clog.warn("预加载 DMM 失败", e)));
         let n = !1, a = $(".preview-video-container");
         a.on("click", (async e => {
             if (e.preventDefault(), e.stopPropagation(), n) show.info("正在加载中, 勿重复点击"); else {
@@ -51,7 +51,7 @@ export class BusPreviewVideoPlugin extends BasePlugin {
             notify: !0
         });
         let a = this.getPageInfo().carNum;
-        const {sources: i, error: previewError} = await fetchDmmPreview(a);
+        const {sources: i, error: previewError} = await fetchDmmPreview(a, this.getRuntimeService("storage"));
         i && 0 !== Object.keys(i).length ? (await this.createVideoPlayerAndControls(i, t),
         n = $("#preview-video"), n.length > 0 ? (e.addClass("is-open"), await safePlay(n[0], {
             context: "JavBus 预览视频",

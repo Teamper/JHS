@@ -13,16 +13,16 @@ export const Z = (e, t) => {
 }, ee = "jhs_dmm_video";
 
 class DmmPreviewParser {
-    constructor(e) {
-        this.carNum = e, this.lastError = null;
+    constructor(e, storage) {
+        this.carNum = e, this.storage = storage, this.lastError = null;
     }
     _checkCache() {
-        const e = localStorage.getItem(ee) ? JSON.parse(localStorage.getItem(ee)) : {};
+        const cached = this.storage.getLocal(ee), e = cached ? JSON.parse(cached) : {};
         return e[this.carNum] ? (clog.debug("缓存中存在预览视频信息", e[this.carNum]), e[this.carNum]) : null;
     }
     _updateCache(e) {
-        const t = localStorage.getItem(ee) ? JSON.parse(localStorage.getItem(ee)) : {};
-        t[this.carNum] = e, clog.debug("成功解析出预览视频并已缓存:", e), localStorage.setItem(ee, JSON.stringify(t));
+        const cached = this.storage.getLocal(ee), t = cached ? JSON.parse(cached) : {};
+        t[this.carNum] = e, clog.debug("成功解析出预览视频并已缓存:", e), this.storage.setLocal(ee, JSON.stringify(t));
     }
     async _searchContentIds() {
         const e = this.carNum, t = e.replace(/-/g, ""), n = [ {
@@ -82,11 +82,11 @@ class DmmPreviewParser {
                 c.length > 1 ? (t.attr("href", a), t.append('<span class="site-tag jhs-layout-294497f1">多结果</span>'),
                 t.css("backgroundColor", "var(--jhs-status-down)"), i = "multiple") : (a = c[0].pageUrl, t.attr("href", a),
                 t.css("backgroundColor", "var(--jhs-status-down)"));
-                const s = "jhs_other_site_dmm", o = localStorage.getItem(s) ? JSON.parse(localStorage.getItem(s)) : {};
+                const s = "jhs_other_site_dmm", cached = this.storage.getLocal(s), o = cached ? JSON.parse(cached) : {};
                 return o[this.carNum] = {
                     type: i,
                     url: a
-                }, localStorage.setItem(s, JSON.stringify(o)), c;
+                }, this.storage.setLocal(s, JSON.stringify(o)), c;
             }
             clog.debug(`[${n}] API 返回结果数 ${l.result.result_count}，但无精确匹配的 Content ID。`);
         }
@@ -174,8 +174,8 @@ class DmmPreviewParser {
 }
 
 /** 获取 DMM 预览源及可供界面判断的失败原因。 */
-export async function fetchDmmPreview(carNum) {
-    const parser = new DmmPreviewParser(carNum), sources = await parser.fetchVideo();
+export async function fetchDmmPreview(carNum, storage) {
+    const parser = new DmmPreviewParser(carNum, storage), sources = await parser.fetchVideo();
     return {
         sources,
         error: parser.lastError
@@ -219,7 +219,7 @@ export class PreviewVideoPlugin extends BasePlugin {
     /** 复用单次 DMM 请求，避免预加载和点击处理重复抓取。 */
     getDmmPreview() {
         if (this.dmmPreviewPromise) return this.dmmPreviewPromise;
-        this.dmmPreviewPromise = fetchDmmPreview(this.getPageInfo().carNum).then((result => {
+        this.dmmPreviewPromise = fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage")).then((result => {
             (result.error?.retryable || "HTTP_ERROR" === result.error?.code) && (this.dmmPreviewPromise = null);
             return result;
         }), (error => {
@@ -248,7 +248,7 @@ export class PreviewVideoPlugin extends BasePlugin {
     async handleVideo() {
         const $nativeVideo = $("#preview-video");
         if (!$nativeVideo.length) return;
-        const $host = $nativeVideo.parent().css("position", "relative"), nativeVideo = $nativeVideo[0], muted = localStorage.getItem("jhs_videoMuted");
+        const settings = this.getRuntimeService("settings"), $host = $nativeVideo.parent().css("position", "relative"), nativeVideo = $nativeVideo[0], muted = settings.snapshot().videoMuted;
         void safePlay(nativeVideo, {
             context: "JavDB 原生预览",
             notify: !1
@@ -265,9 +265,9 @@ export class PreviewVideoPlugin extends BasePlugin {
         if (sources) {
             const preferredQuality = await storageManager.getSetting("videoQuality"), selectedQuality = Z(Object.keys(sources), preferredQuality), source = sources[selectedQuality];
             const currentTime = nativeVideo.currentTime;
-            $dmmVideo = this.createDmmPlayer($nativeVideo), dmmVideo = $dmmVideo[0], dmmVideo.muted = !muted || "yes" === muted,
+            $dmmVideo = this.createDmmPlayer($nativeVideo), dmmVideo = $dmmVideo[0], dmmVideo.muted = muted == null || muted === !0,
             $dmmVideo.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {
-                localStorage.setItem("jhs_videoMuted", dmmVideo.muted ? "yes" : "no");
+                void settings.set("videoMuted", dmmVideo.muted).catch((error => clog.error("保存视频静音设置失败", error)));
             })), $dmmVideo.attr("src", source), dmmVideo.load(), dmmVideo.currentTime = currentTime, $dmmVideo.addClass("is-active");
             dmmPlayed = await safePlay(dmmVideo, {
                 context: "JavDB 高画质预览",

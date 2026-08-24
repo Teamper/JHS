@@ -55,6 +55,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     const settingForms = readTestFile(join(process.cwd(), "src/plugins/backup/setting-forms.js"), "utf8");
     const listButtons = readTestFile(join(process.cwd(), "src/plugins/status/list-page-button.js"), "utf8");
     const coverButtons = readTestFile(join(process.cwd(), "src/plugins/image-viewer/cover-button.js"), "utf8");
+    const previewVideo = readTestFile(join(process.cwd(), "src/plugins/image-viewer/preview-video.js"), "utf8");
     const injection = readTestFile(join(process.cwd(), "src/core/css-injection.js"), "utf8");
 
     it("builds the command bar after plugin initialization and keeps semantic actions separate", () => {
@@ -216,6 +217,13 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(coverButtons).toContain("width:152px");
         expect(coverButtons).toContain("jhs-card-menu__dot");
         expect(coverButtons).not.toMatch(/elastic|jelly|right:\s*-/);
+    });
+
+    it("keeps DMM preview persistence behind StorageService and SettingsService", () => {
+        expect(previewVideo).not.toContain("localStorage.");
+        expect(previewVideo).toContain('this.getRuntimeService("storage")');
+        expect(previewVideo).toContain('this.getRuntimeService("settings")');
+        expect(previewVideo).toContain('settings.set("videoMuted"');
     });
 
     it("resets host cover animation without touching hover preview lifecycle", () => {

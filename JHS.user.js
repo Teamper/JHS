@@ -10605,16 +10605,16 @@ ${error.stack}` : "");
   }, "Z");
   var ee = "jhs_dmm_video";
   var _DmmPreviewParser = class _DmmPreviewParser {
-    constructor(e2) {
-      this.carNum = e2, this.lastError = null;
+    constructor(e2, storage) {
+      this.carNum = e2, this.storage = storage, this.lastError = null;
     }
     _checkCache() {
-      const e2 = localStorage.getItem(ee) ? JSON.parse(localStorage.getItem(ee)) : {};
+      const cached = this.storage.getLocal(ee), e2 = cached ? JSON.parse(cached) : {};
       return e2[this.carNum] ? (clog.debug("缓存中存在预览视频信息", e2[this.carNum]), e2[this.carNum]) : null;
     }
     _updateCache(e2) {
-      const t2 = localStorage.getItem(ee) ? JSON.parse(localStorage.getItem(ee)) : {};
-      t2[this.carNum] = e2, clog.debug("成功解析出预览视频并已缓存:", e2), localStorage.setItem(ee, JSON.stringify(t2));
+      const cached = this.storage.getLocal(ee), t2 = cached ? JSON.parse(cached) : {};
+      t2[this.carNum] = e2, clog.debug("成功解析出预览视频并已缓存:", e2), this.storage.setLocal(ee, JSON.stringify(t2));
     }
     async _searchContentIds() {
       const e2 = this.carNum, t2 = e2.replace(/-/g, ""), n2 = [{
@@ -10672,11 +10672,11 @@ ${error.stack}` : "");
           const t3 = $("#fanzaBtn");
           let a3 = `https://www.dmm.co.jp/search/=/searchstr=${e3}`, i4 = "single";
           c2.length > 1 ? (t3.attr("href", a3), t3.append('<span class="site-tag jhs-layout-294497f1">多结果</span>'), t3.css("backgroundColor", "var(--jhs-status-down)"), i4 = "multiple") : (a3 = c2[0].pageUrl, t3.attr("href", a3), t3.css("backgroundColor", "var(--jhs-status-down)"));
-          const s2 = "jhs_other_site_dmm", o3 = localStorage.getItem(s2) ? JSON.parse(localStorage.getItem(s2)) : {};
+          const s2 = "jhs_other_site_dmm", cached = this.storage.getLocal(s2), o3 = cached ? JSON.parse(cached) : {};
           return o3[this.carNum] = {
             type: i4,
             url: a3
-          }, localStorage.setItem(s2, JSON.stringify(o3)), c2;
+          }, this.storage.setLocal(s2, JSON.stringify(o3)), c2;
         }
         clog.debug(`[${n3}] API 返回结果数 ${l2.result.result_count}，但无精确匹配的 Content ID。`);
       }
@@ -10761,8 +10761,8 @@ ${error.stack}` : "");
   };
   __name(_DmmPreviewParser, "DmmPreviewParser");
   var DmmPreviewParser = _DmmPreviewParser;
-  async function fetchDmmPreview(carNum) {
-    const parser = new DmmPreviewParser(carNum), sources = await parser.fetchVideo();
+  async function fetchDmmPreview(carNum, storage) {
+    const parser = new DmmPreviewParser(carNum, storage), sources = await parser.fetchVideo();
     return {
       sources,
       error: parser.lastError
@@ -10810,7 +10810,7 @@ ${error.stack}` : "");
     }
     getDmmPreview() {
       if (this.dmmPreviewPromise) return this.dmmPreviewPromise;
-      this.dmmPreviewPromise = fetchDmmPreview(this.getPageInfo().carNum).then(((result) => {
+      this.dmmPreviewPromise = fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage")).then(((result) => {
         (result.error?.retryable || "HTTP_ERROR" === result.error?.code) && (this.dmmPreviewPromise = null);
         return result;
       }), ((error) => {
@@ -10837,7 +10837,7 @@ ${error.stack}` : "");
     async handleVideo() {
       const $nativeVideo = $("#preview-video");
       if (!$nativeVideo.length) return;
-      const $host = $nativeVideo.parent().css("position", "relative"), nativeVideo = $nativeVideo[0], muted = localStorage.getItem("jhs_videoMuted");
+      const settings = this.getRuntimeService("settings"), $host = $nativeVideo.parent().css("position", "relative"), nativeVideo = $nativeVideo[0], muted = settings.snapshot().videoMuted;
       void safePlay(nativeVideo, {
         context: "JavDB 原生预览",
         notify: false
@@ -10854,8 +10854,8 @@ ${error.stack}` : "");
       if (sources) {
         const preferredQuality = await storageManager.getSetting("videoQuality"), selectedQuality = Z(Object.keys(sources), preferredQuality), source = sources[selectedQuality];
         const currentTime = nativeVideo.currentTime;
-        $dmmVideo = this.createDmmPlayer($nativeVideo), dmmVideo = $dmmVideo[0], dmmVideo.muted = !muted || "yes" === muted, $dmmVideo.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {
-          localStorage.setItem("jhs_videoMuted", dmmVideo.muted ? "yes" : "no");
+        $dmmVideo = this.createDmmPlayer($nativeVideo), dmmVideo = $dmmVideo[0], dmmVideo.muted = muted == null || muted === true, $dmmVideo.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {
+          void settings.set("videoMuted", dmmVideo.muted).catch(((error2) => clog.error("保存视频静音设置失败", error2)));
         })), $dmmVideo.attr("src", source), dmmVideo.load(), dmmVideo.currentTime = currentTime, $dmmVideo.addClass("is-active");
         dmmPlayed = await safePlay(dmmVideo, {
           context: "JavDB 高画质预览",
@@ -10947,7 +10947,7 @@ ${error.stack}` : "");
                 </div>
             </button>`);
       $("#sample-waterfall").prepend(t2);
-      "yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes") && fetchDmmPreview(this.getPageInfo().carNum).catch(((e3) => clog.warn("预加载 DMM 失败", e3)));
+      "yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes") && fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage")).catch(((e3) => clog.warn("预加载 DMM 失败", e3)));
       let n2 = false, a2 = $(".preview-video-container");
       a2.on("click", (async (e3) => {
         if (e3.preventDefault(), e3.stopPropagation(), n2) show.info("正在加载中, 勿重复点击");
@@ -10969,7 +10969,7 @@ ${error.stack}` : "");
         notify: true
       });
       let a2 = this.getPageInfo().carNum;
-      const { sources: i2, error: previewError } = await fetchDmmPreview(a2);
+      const { sources: i2, error: previewError } = await fetchDmmPreview(a2, this.getRuntimeService("storage"));
       i2 && 0 !== Object.keys(i2).length ? (await this.createVideoPlayerAndControls(i2, t2), n2 = $("#preview-video"), n2.length > 0 ? (e2.addClass("is-open"), await safePlay(n2[0], {
         context: "JavBus 预览视频",
         notify: true,
@@ -11208,7 +11208,7 @@ ${error.stack}` : "");
         notify: true
       }), void t2.hide();
       t2.addClass("loading"), t2.after('<div class="loading-spinner"></div>');
-      const s2 = t2.attr("src"), { sources: o2, error: previewError } = await fetchDmmPreview(n2);
+      const s2 = t2.attr("src"), { sources: o2, error: previewError } = await fetchDmmPreview(n2, this.getRuntimeService("storage"));
       if (!o2) return show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未解析到视频"), void this.showImg(e2, t2, n2);
       let r2 = await storageManager.getSetting("videoQuality");
       r2 = Z(Object.keys(o2), r2);
@@ -15473,7 +15473,7 @@ ${error.stack}` : "");
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [SERVICE.dialog]),
     manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog, SERVICE.storage]),
-    manifest("detail.state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }),
+    manifest("detail.state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage]),
     manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [SERVICE.movie, SERVICE.translation, SERVICE.settings]),
     manifest("detail.native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }),
     manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }),
@@ -15481,7 +15481,7 @@ ${error.stack}` : "");
     manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related, SERVICE.settings]),
     manifest("detail.state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog]),
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [SERVICE.settings]),
-    manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }),
+    manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings]),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
     manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo]),
     manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie]),
@@ -15501,7 +15501,7 @@ ${error.stack}` : "");
     manifest("identity.javbus-navigation", "identity", BusNavBarPlugin, ["javbus"], { javbus: 7 }),
     manifest("detail.gallery", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),
     manifest("detail.native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }),
-    manifest("detail.gallery", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings]),
+    manifest("detail.gallery", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings, SERVICE.storage]),
     manifest("external-bridge.123pan", "external-bridge", OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"], { javdb: 0, javbus: 0, "123pan": 1 }, [SERVICE.storage]),
     manifest("external-bridge.javtrailers", "external-bridge", JavTrailersPlugin, ["javtrailers"], { javtrailers: 1 }),
     manifest("detail.subtitle", "external-bridge", SubTitleCatPlugin, ["subtitlecat"], { subtitlecat: 1 })
