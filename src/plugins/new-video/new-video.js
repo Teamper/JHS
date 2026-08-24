@@ -16,11 +16,7 @@ const tt = [ {
     base: "https://raw.githubusercontent.com/gfriends/gfriends/master/Content/"
 } ], nt = "jhs_img_cdn_index";
 
-let at = parseInt(localStorage.getItem(nt) || "0", 10);
-
-(at >= tt.length || at < 0) && (at = 0);
-
-let it = tt[at].json, st = tt[at].base;
+let at = 0, it = tt[0].json, st = tt[0].base;
 
 const ot = "filetreeStore", rt = "filetree_data", lt = {
     db: null,
@@ -226,9 +222,14 @@ export class NewVideoPlugin extends BasePlugin {
         `;
     }
     async handle() {
+        this.initializeLocalState();
         this.nvEventUnsubscribe || (this.nvEventUnsubscribe = jhsEventBus.on("new-video-changed", (() => this.scheduleWorkspaceReload())));
         this.taskStatusUnsubscribe || (this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.isWorkspaceMounted() && this.renderTaskStatuses())));
         await this.showNewVideoCount();
+    }
+    initializeLocalState() {
+        const value = parseInt(this.getRuntimeService("storage").getLocal(nt) || "0", 10);
+        at = Number.isInteger(value) && value >= 0 && value < tt.length ? value : 0, it = tt[at].json, st = tt[at].base;
     }
     isWorkspaceMounted() {
         return this.nvWorkspaceMounted && $(".newVideoToolBox").length > 0;
@@ -272,12 +273,13 @@ export class NewVideoPlugin extends BasePlugin {
         $("#newVideoCount").text(`${e}`);
     }
     async resetBtnTip() {
-        const e = this.getDependency("TaskPlugin"), t = await storageManager.getSetting(), n = localStorage.getItem(e.lastCheckFavoriteActressTimeKey) || "无", a = t.checkFavoriteActress_IntervalTime, i = localStorage.getItem(e.lastCheckNewVideoTimeKey) || "无", s = t.checkNewVideo_intervalTime;
+        const storage = this.getRuntimeService("storage"), e = this.getDependency("TaskPlugin"), t = await storageManager.getSetting(), n = storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无", a = t.checkFavoriteActress_IntervalTime, i = storage.getLocal(e.lastCheckNewVideoTimeKey) || "无", s = t.checkNewVideo_intervalTime;
         $("#checkFavoriteActress").attr("data-tip", `上次完整同步: ${n}; 检测间隔时间: ${a}小时`), $("#checkNewVideo").attr("data-tip", `上次整批检测: ${i}; 检测间隔时间: ${s}小时`);
     }
     async openDialog() {
-        this.cleanupNewVideoWorkspace(), this._viewMode = "list" === localStorage.getItem("jhs_newVideoViewMode") ? "list" : "actress", this.currentPage = 1, this.nvCurrentPage = 1, this.nvSelected = new Set, this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map, this.nvRenderGeneration++;
-        const e = this.getDependency("TaskPlugin"), t = await storageManager.getSetting(), n = localStorage.getItem(e.lastCheckFavoriteActressTimeKey) || "无", a = t.checkFavoriteActress_IntervalTime, i = localStorage.getItem(e.lastCheckNewVideoTimeKey) || "无", s = t.checkNewVideo_intervalTime;
+        const storage = this.getRuntimeService("storage");
+        this.cleanupNewVideoWorkspace(), this._viewMode = "list" === storage.getLocal("jhs_newVideoViewMode") ? "list" : "actress", this.currentPage = 1, this.nvCurrentPage = 1, this.nvSelected = new Set, this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map, this.nvRenderGeneration++;
+        const e = this.getDependency("TaskPlugin"), t = await storageManager.getSetting(), n = storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无", a = t.checkFavoriteActress_IntervalTime, i = storage.getLocal(e.lastCheckNewVideoTimeKey) || "无", s = t.checkNewVideo_intervalTime;
         let o = `
             <div class="newVideoToolBox jhs-ui">
                 <div class="jhs-new-video-toolbar" role="toolbar" aria-label="新作品工作区工具">
@@ -393,7 +395,7 @@ export class NewVideoPlugin extends BasePlugin {
     }
     setViewMode(mode) {
         if (![ "actress", "list" ].includes(mode) || mode === this._viewMode) return;
-        this._viewMode = mode, localStorage.setItem("jhs_newVideoViewMode", mode), "list" === mode ? this.nvCurrentPage = 1 : this.currentPage = 1, this.nvRenderGeneration++, this.applyViewMode(), this.renderCurrentView();
+        this._viewMode = mode, this.getRuntimeService("storage").setLocal("jhs_newVideoViewMode", mode), "list" === mode ? this.nvCurrentPage = 1 : this.currentPage = 1, this.nvRenderGeneration++, this.applyViewMode(), this.renderCurrentView();
     }
     applyViewMode() {
         const list = "list" === this._viewMode;
@@ -711,7 +713,7 @@ export class NewVideoPlugin extends BasePlugin {
                 })), n(i), $("#search-avatar-btn").on("click", (async () => {
                     await this.searchAvatar();
                 })), $("#select-cdn-btn").on("click", (async () => {
-                    await async function() {
+                    await (async () => {
                         const e = at, t = tt.map(((t, n) => `\n        <label class="jhs-option-row" for="cdn-${n}">\n            <input type="radio" id="cdn-${n}" name="cdn-source" value="${n}" ${n === e ? "checked" : ""}>\n            <span>${t.name} ${t.json.includes("jsdelivr") ? "(推荐)" : ""}</span>\n        </label>\n    `)).join(""), n = `\n        <div class="jhs-form-dialog">\n            <p class="jhs-form-dialog__title">请选择头像数据源 (当前: ${tt[e].name}):</p>\n            ${t}\n            <p class="jhs-helper-text">切换源会清除本地缓存的数据，并在下次搜索时重新加载。</p>\n        </div>\n    `;
                         dialog.open({
                             type: 1,
@@ -725,7 +727,7 @@ export class NewVideoPlugin extends BasePlugin {
                             yes: async e => {
                                 const t = $('input[name="cdn-source"]:checked').val(), n = parseInt(t, 10);
                                 if (n !== at) {
-                                    at = n, localStorage.setItem(nt, n.toString()), it = tt[n].json, st = tt[n].base,
+                                    at = n, this.getRuntimeService("storage").setLocal(nt, n.toString()), it = tt[n].json, st = tt[n].base,
                                     ct = null, dt = null;
                                     try {
                                         await lt.set(rt, null);
@@ -736,7 +738,7 @@ export class NewVideoPlugin extends BasePlugin {
                                 } else dialog.close(e);
                             }
                         });
-                    }();
+                    })();
                 })), utils.setupEscClose(t);
             },
             yes: async t => {

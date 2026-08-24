@@ -11465,10 +11465,9 @@ ${error.stack}` : "");
     base: "https://raw.githubusercontent.com/gfriends/gfriends/master/Content/"
   }];
   var nt = "jhs_img_cdn_index";
-  var at = parseInt(localStorage.getItem(nt) || "0", 10);
-  (at >= tt.length || at < 0) && (at = 0);
-  var it = tt[at].json;
-  var st = tt[at].base;
+  var at = 0;
+  var it = tt[0].json;
+  var st = tt[0].base;
   var ot = "filetreeStore";
   var rt = "filetree_data";
   var lt = {
@@ -11674,9 +11673,14 @@ ${error.stack}` : "");
         `;
     }
     async handle() {
+      this.initializeLocalState();
       this.nvEventUnsubscribe || (this.nvEventUnsubscribe = jhsEventBus.on("new-video-changed", (() => this.scheduleWorkspaceReload())));
       this.taskStatusUnsubscribe || (this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.isWorkspaceMounted() && this.renderTaskStatuses())));
       await this.showNewVideoCount();
+    }
+    initializeLocalState() {
+      const value = parseInt(this.getRuntimeService("storage").getLocal(nt) || "0", 10);
+      at = Number.isInteger(value) && value >= 0 && value < tt.length ? value : 0, it = tt[at].json, st = tt[at].base;
     }
     isWorkspaceMounted() {
       return this.nvWorkspaceMounted && $(".newVideoToolBox").length > 0;
@@ -11720,12 +11724,13 @@ ${error.stack}` : "");
       $("#newVideoCount").text(`${e2}`);
     }
     async resetBtnTip() {
-      const e2 = this.getDependency("TaskPlugin"), t2 = await storageManager.getSetting(), n2 = localStorage.getItem(e2.lastCheckFavoriteActressTimeKey) || "无", a2 = t2.checkFavoriteActress_IntervalTime, i2 = localStorage.getItem(e2.lastCheckNewVideoTimeKey) || "无", s2 = t2.checkNewVideo_intervalTime;
+      const storage = this.getRuntimeService("storage"), e2 = this.getDependency("TaskPlugin"), t2 = await storageManager.getSetting(), n2 = storage.getLocal(e2.lastCheckFavoriteActressTimeKey) || "无", a2 = t2.checkFavoriteActress_IntervalTime, i2 = storage.getLocal(e2.lastCheckNewVideoTimeKey) || "无", s2 = t2.checkNewVideo_intervalTime;
       $("#checkFavoriteActress").attr("data-tip", `上次完整同步: ${n2}; 检测间隔时间: ${a2}小时`), $("#checkNewVideo").attr("data-tip", `上次整批检测: ${i2}; 检测间隔时间: ${s2}小时`);
     }
     async openDialog() {
-      this.cleanupNewVideoWorkspace(), this._viewMode = "list" === localStorage.getItem("jhs_newVideoViewMode") ? "list" : "actress", this.currentPage = 1, this.nvCurrentPage = 1, this.nvSelected = /* @__PURE__ */ new Set(), this.nvCoverCache = /* @__PURE__ */ new Map(), this.nvActorCoverRequests = /* @__PURE__ */ new Map(), this.nvRenderGeneration++;
-      const e2 = this.getDependency("TaskPlugin"), t2 = await storageManager.getSetting(), n2 = localStorage.getItem(e2.lastCheckFavoriteActressTimeKey) || "无", a2 = t2.checkFavoriteActress_IntervalTime, i2 = localStorage.getItem(e2.lastCheckNewVideoTimeKey) || "无", s2 = t2.checkNewVideo_intervalTime;
+      const storage = this.getRuntimeService("storage");
+      this.cleanupNewVideoWorkspace(), this._viewMode = "list" === storage.getLocal("jhs_newVideoViewMode") ? "list" : "actress", this.currentPage = 1, this.nvCurrentPage = 1, this.nvSelected = /* @__PURE__ */ new Set(), this.nvCoverCache = /* @__PURE__ */ new Map(), this.nvActorCoverRequests = /* @__PURE__ */ new Map(), this.nvRenderGeneration++;
+      const e2 = this.getDependency("TaskPlugin"), t2 = await storageManager.getSetting(), n2 = storage.getLocal(e2.lastCheckFavoriteActressTimeKey) || "无", a2 = t2.checkFavoriteActress_IntervalTime, i2 = storage.getLocal(e2.lastCheckNewVideoTimeKey) || "无", s2 = t2.checkNewVideo_intervalTime;
       let o2 = `
             <div class="newVideoToolBox jhs-ui">
                 <div class="jhs-new-video-toolbar" role="toolbar" aria-label="新作品工作区工具">
@@ -11840,7 +11845,7 @@ ${error.stack}` : "");
     }
     setViewMode(mode) {
       if (!["actress", "list"].includes(mode) || mode === this._viewMode) return;
-      this._viewMode = mode, localStorage.setItem("jhs_newVideoViewMode", mode), "list" === mode ? this.nvCurrentPage = 1 : this.currentPage = 1, this.nvRenderGeneration++, this.applyViewMode(), this.renderCurrentView();
+      this._viewMode = mode, this.getRuntimeService("storage").setLocal("jhs_newVideoViewMode", mode), "list" === mode ? this.nvCurrentPage = 1 : this.currentPage = 1, this.nvRenderGeneration++, this.applyViewMode(), this.renderCurrentView();
     }
     applyViewMode() {
       const list = "list" === this._viewMode;
@@ -12212,7 +12217,7 @@ ${error.stack}` : "");
           })), n3(i3), $("#search-avatar-btn").on("click", (async () => {
             await this.searchAvatar();
           })), $("#select-cdn-btn").on("click", (async () => {
-            await (async function() {
+            await (async () => {
               const e4 = at, t4 = tt.map(((t5, n5) => `
         <label class="jhs-option-row" for="cdn-${n5}">
             <input type="radio" id="cdn-${n5}" name="cdn-source" value="${n5}" ${n5 === e4 ? "checked" : ""}>
@@ -12237,7 +12242,7 @@ ${error.stack}` : "");
                 yes: /* @__PURE__ */ __name(async (e5) => {
                   const t5 = $('input[name="cdn-source"]:checked').val(), n5 = parseInt(t5, 10);
                   if (n5 !== at) {
-                    at = n5, localStorage.setItem(nt, n5.toString()), it = tt[n5].json, st = tt[n5].base, ct = null, dt = null;
+                    at = n5, this.getRuntimeService("storage").setLocal(nt, n5.toString()), it = tt[n5].json, st = tt[n5].base, ct = null, dt = null;
                     try {
                       await lt.set(rt, null);
                     } catch (a4) {
@@ -15491,7 +15496,7 @@ ${error.stack}` : "");
     manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot]),
     manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [SERVICE.dialog, SERVICE.storage, SERVICE.http]),
     manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }),
-    manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog]),
+    manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog, SERVICE.storage]),
     manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }, [SERVICE.storage]),
     manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics, SERVICE.dialog]),
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings]),

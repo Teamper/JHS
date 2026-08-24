@@ -209,6 +209,14 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(flatList).toContain('"unknown" === category ? 0 === item.categories.length');
     });
 
+    it("keeps NewVideo module import free of local storage side effects", () => {
+        expect(newVideo).not.toContain("localStorage.");
+        expect(newVideo).toContain("initializeLocalState()");
+        expect(newVideo).toContain('getLocal("jhs_newVideoViewMode")');
+        expect(newVideo).toContain('setLocal("jhs_newVideoViewMode", mode)');
+        expect(newVideo).toContain('setLocal(nt, n.toString())');
+    });
+
     it("uses semantic keyboard popovers and stable sort storage", () => {
         expect(listButtons).toContain('role="menuitemradio"');
         expect(listButtons).toContain('getRuntimeService("settings").set("sortMethod"');
