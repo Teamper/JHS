@@ -38,6 +38,14 @@ describe("HTTP, URL and settings contracts", () => {
         await expect(service.request({ providerId: "example", url: "https://api.example.test/data", urlPolicy: { trustClass: "builtin-public", hosts: ["api.example.test"] }, cacheScope: "none" })).rejects.toMatchObject({ code: "INVALID_URL" });
     });
 
+    it("normalizes authentication and rate-limit HTTP statuses", async () => {
+        const policy = new ExternalUrlPolicy(), options = { providerId: "example", url: "https://api.example.test/data", urlPolicy: { trustClass: "builtin-public", hosts: ["api.example.test"] }, cacheScope: "none" };
+        const unauthorized = new HttpService({ request: async () => ({ status: 401, finalUrl: options.url }) }, policy);
+        await expect(unauthorized.request(options)).rejects.toMatchObject({ code: "AUTH_REQUIRED", retryable: false, details: { status: 401 } });
+        const limited = new HttpService({ request: async () => ({ status: 429, finalUrl: options.url }) }, policy);
+        await expect(limited.request(options)).rejects.toMatchObject({ code: "RATE_LIMITED", retryable: true, details: { status: 429 } });
+    });
+
     it("can constrain builtin requests and redirects to an exact origin", () => {
         const policy = new ExternalUrlPolicy(), contract = { trustClass: "builtin-public", hosts: ["example.test"], expectedOrigin: "https://example.test" };
         expect(policy.assertAllowed("https://example.test/page", contract).pathname).toBe("/page");

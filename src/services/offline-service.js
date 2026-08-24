@@ -1,8 +1,20 @@
 // @ts-check
 
 export class OfflineService {
-    /** @param {import("../app/provider-registry.js").ProviderRegistry} providers */
-    constructor(providers) { this.providers = providers; }
+    /** @param {import("../app/provider-registry.js").ProviderRegistry} providers @param {import("../app/integration-registry.js").IntegrationRegistry} integrations */
+    constructor(providers, integrations) { this.providers = providers; this.integrations = integrations; }
+    /** @param {string} integrationId @param {unknown} resource @param {Record<string, any>} [context] */
+    submitWithIntegration(integrationId, resource, context = {}) {
+        const adapter = this.integrations.getAdapter(integrationId);
+        if (typeof adapter.submit !== "function") throw new TypeError(`Integration ${integrationId} does not support offline submission`);
+        return adapter.submit(resource, context);
+    }
+    /** @param {string} integrationId */
+    getIntegrationHomeUrl(integrationId) {
+        const adapter = this.integrations.getAdapter(integrationId);
+        if (typeof adapter.homeUrl !== "string") throw new TypeError(`Integration ${integrationId} does not declare a home URL`);
+        return adapter.homeUrl;
+    }
     /** @param {Record<string, unknown>} resource @param {Record<string, unknown>} [context] */
     async submit(resource, context = {}) {
         const providers = await this.providers.getAvailable("offline", context);

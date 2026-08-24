@@ -84,7 +84,7 @@ export const legacyContributionManifests = Object.freeze([
     manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics, SERVICE.dialog]),
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings]),
     manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }, [PORT.host, SERVICE.dialog]),
-    manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [SERVICE.dialog]),
+    manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [SERVICE.dialog, SERVICE.offline]),
     manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }),
     manifest("identity.javbus-navigation", "identity", BusNavBarPlugin, ["javbus"], { javbus: 7 }),
     manifest("detail.gallery", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),
@@ -114,6 +114,7 @@ export function registerSitePlugins(pluginManager, featureRuntime, site) {
                 [SERVICE.translation, "translation"],
                 [SERVICE.webdav, "webdav"],
                 [SERVICE.storage, "storage"],
+                [SERVICE.offline, "offline"],
                 [SERVICE.dialog, "dialog"],
             ]);
             for (const token of item.requires) {

@@ -93,7 +93,10 @@ export class HttpService {
         try {
             const response = await this.port.request(options);
             this.urlPolicy.assertFinalUrl(response.finalUrl || options.url, urlPolicy);
-            if (response.status >= 400) throw new JhsError(response.status === 404 ? "NOT_FOUND" : "NETWORK_ERROR", `HTTP ${response.status}`, { source: options.providerId, retryable: response.status >= 500 });
+            if (response.status >= 400) {
+                const code = [401, 403].includes(response.status) ? "AUTH_REQUIRED" : response.status === 404 ? "NOT_FOUND" : response.status === 429 ? "RATE_LIMITED" : "NETWORK_ERROR";
+                throw new JhsError(code, `HTTP ${response.status}`, { source: options.providerId, retryable: response.status === 429 || response.status >= 500, details: { status: response.status } });
+            }
             return response;
         } catch (error) {
             const normalized = JhsError.from(error, options.providerId);

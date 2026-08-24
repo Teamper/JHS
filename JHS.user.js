@@ -12907,17 +12907,16 @@ ${error.stack}` : "");
     async handle() {
       if (!(r || l)) return;
       const scope = await this.getRuntimeService("scope")();
-      this.registerProviders(), this.bindSubmit(), scope.addCleanup((() => $(document).off(".jhsUnifiedOffline")));
+      this.registerProviders(scope), this.bindSubmit(), scope.addCleanup((() => $(document).off(".jhsUnifiedOffline")));
       if (window.isDetailPage) this.injectNativeButtons(), scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
     }
-    registerProviders() {
-      const one23 = this.getDependency("OneTwoThreeOfflinePlugin");
+    registerProviders(scope) {
+      const one23 = this.getDependency("OneTwoThreeOfflinePlugin"), offline = this.getRuntimeService("offline");
       one23 && this.registry.register({ id: "123", name: "123 云盘", capabilities: ["magnet"], retryPolicy: { automaticAttempts: 0 }, isEnabled: /* @__PURE__ */ __name(() => storageManager.getSetting("enable123Offline", true), "isEnabled"), getAvailability: /* @__PURE__ */ __name(async () => one23.getStoredToken() ? { available: true, authState: "ready", reason: "授权已同步" } : { available: false, authState: "token-missing", reason: "尚未同步 123 授权" }, "getAvailability"), submit: /* @__PURE__ */ __name(async (resource) => {
         const token = one23.getStoredToken();
         if (!token) throw Object.assign(new Error("尚未同步 123 授权"), { code: "TOKEN_MISSING" });
-        const resolved = await one23.resolveMagnet(resource, token);
-        return one23.submitTask(resolved, token);
-      }, "submit"), openUrl: /* @__PURE__ */ __name(() => "https://yun.123pan.com", "openUrl") });
+        return offline.submitWithIntegration("pan123", resource, { token, scope });
+      }, "submit"), openUrl: /* @__PURE__ */ __name(() => offline.getIntegrationHomeUrl("pan123"), "openUrl") });
       this.registry.register({ id: "115", name: "115", capabilities: ["magnet", "ed2k"], retryPolicy: { automaticAttempts: 0 }, isEnabled: /* @__PURE__ */ __name(() => storageManager.getSetting("enable115Offline", false), "isEnabled"), getAvailability: /* @__PURE__ */ __name(async () => ({ available: true, authState: "unknown", reason: "提交时确认登录状态" }), "getAvailability"), submit: /* @__PURE__ */ __name((resource) => new OneOneFiveClient().addOffline(resource), "submit"), openUrl: /* @__PURE__ */ __name(() => "https://115.com", "openUrl") });
       window.offlineProviderRegistry = this.registry;
     }
@@ -12976,7 +12975,7 @@ ${error.stack}` : "");
         }));
       } catch (error) {
         const code = error?.code || ("TOKEN_EXPIRED" === error ? "TOKEN_EXPIRED" : "SUBMIT_FAILED");
-        ["LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING"].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: false, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: error.message || String(error) });
+        ["AUTH_REQUIRED", "LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING"].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: false, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: error.message || String(error) });
         restoreButton();
         submitted || await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "failed", errorCode: code, errorMessage: error?.message || String(error), retryOf }), show.error(`${selected.provider.name} 离线失败：${error?.message || error}`);
       } finally {
@@ -13152,72 +13151,6 @@ ${error.stack}` : "");
         reason: e2,
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       });
-    }
-    isTokenExpiredError(e2) {
-      const msg = e2 instanceof Error ? e2.message : "object" == typeof e2 && e2 ? e2.message || "" : String(e2 || "");
-      return "TOKEN_EXPIRED" === e2 || "TOKEN_EXPIRED" === msg || msg.toLowerCase().includes("token is expired");
-    }
-    assertApiResult(e2, t2) {
-      if (0 === e2.code) return;
-      const n2 = e2.message || e2.msg || t2 || "请求失败";
-      throw /token is expired/i.test(n2) ? "TOKEN_EXPIRED" : n2;
-    }
-    /* 依赖 gmRequest 在非 2xx 时 reject 对象上附加 status 属性 */
-    async resolveMagnet(e2, t2) {
-      try {
-        const n2 = await gmHttp.post(this._signUrl("https://yun.123pan.com/b/api/v2/offline_download/task/resolve"), { urls: e2 }, {
-          Authorization: "Bearer " + t2,
-          "App-Version": "3",
-          platform: "web",
-          Origin: "https://yun.123pan.com",
-          Referer: "https://yun.123pan.com/"
-        });
-        return this.assertApiResult(n2, "解析失败"), n2.data && n2.data.list && n2.data.list.length > 0 ? n2.data.list[0] : Promise.reject(n2.message || `解析失败 (${n2.code})`);
-      } catch (a2) {
-        if (a2 && 401 === a2.status) throw "TOKEN_EXPIRED";
-        throw this.isTokenExpiredError(a2) ? "TOKEN_EXPIRED" : a2.message ? "响应解析失败: " + a2.message : String(a2);
-      }
-    }
-    async submitTask(e2, t2) {
-      if (!e2.files || 0 === e2.files.length) throw "没有可建立离线的文件";
-      const n2 = e2.files.map(((e3) => e3.id)), a2 = e2.files.reduce(((e3, t3) => e3 + (t3.size || 0)), 0);
-      try {
-        const i2 = await gmHttp.post(this._signUrl("https://yun.123pan.com/b/api/v2/offline_download/task/submit"), {
-          resource_list: [{ resource_id: e2.id, select_file_id: n2 }]
-        }, {
-          Authorization: "Bearer " + t2,
-          "App-Version": "3",
-          platform: "web"
-        });
-        return this.assertApiResult(i2, "提交失败"), { fileCount: n2.length, totalSize: a2 };
-      } catch (i2) {
-        if (i2 && 401 === i2.status) throw "TOKEN_EXPIRED";
-        throw this.isTokenExpiredError(i2) ? "TOKEN_EXPIRED" : i2.message ? "响应解析失败: " + i2.message : String(i2);
-      }
-    }
-    _crc32(e2) {
-      const t2 = new Array(256);
-      for (let n3 = 0; n3 < 256; n3++) {
-        let a2 = n3;
-        for (let i2 = 0; i2 < 8; i2++) a2 = 1 & a2 ? 3988292384 ^ a2 >>> 1 : a2 >>> 1;
-        t2[n3] = a2;
-      }
-      let n2 = 4294967295;
-      for (let a2 = 0; a2 < e2.length; a2++) n2 = t2[(n2 ^ e2.charCodeAt(a2)) & 255] ^ n2 >>> 8;
-      return (n2 ^ 4294967295) >>> 0;
-    }
-    _signUrl(e2) {
-      const t2 = ["a", "d", "e", "f", "g", "h", "l", "m", "y", "i", "j", "n", "o", "p", "k", "q", "r", "s", "t", "u", "b", "c", "v", "w", "s", "z"];
-      const n2 = Math.round(1e7 * Math.random());
-      const a2 = /* @__PURE__ */ new Date();
-      const i2 = new Date(a2.getTime() + 6e4 * a2.getTimezoneOffset() + 288e5);
-      const s2 = `${i2.getFullYear()}${String(i2.getMonth() + 1).padStart(2, "0")}${String(i2.getDate()).padStart(2, "0")}${String(i2.getHours()).padStart(2, "0")}${String(i2.getMinutes()).padStart(2, "0")}`;
-      let o2 = "";
-      for (let r3 = 0; r3 < s2.length; r3++) o2 += t2[parseInt(s2[r3])];
-      const r2 = this._crc32(o2), l2 = Math.floor(i2.getTime() / 1e3);
-      const c2 = `${l2}|${n2}|${new URL(e2).pathname}|web|3|${r2}`;
-      const u2 = this._crc32(c2), d2 = new URL(e2);
-      return d2.searchParams.set(String(r2), `${l2}-${n2}-${u2}`), d2.toString();
     }
   };
   __name(_OneTwoThreeOfflinePlugin, "OneTwoThreeOfflinePlugin");
@@ -15563,7 +15496,7 @@ ${error.stack}` : "");
     manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics, SERVICE.dialog]),
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings]),
     manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }, [PORT.host, SERVICE.dialog]),
-    manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [SERVICE.dialog]),
+    manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [SERVICE.dialog, SERVICE.offline]),
     manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }),
     manifest("identity.javbus-navigation", "identity", BusNavBarPlugin, ["javbus"], { javbus: 7 }),
     manifest("detail.gallery", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),
@@ -15594,6 +15527,7 @@ ${error.stack}` : "");
         [SERVICE.translation, "translation"],
         [SERVICE.webdav, "webdav"],
         [SERVICE.storage, "storage"],
+        [SERVICE.offline, "offline"],
         [SERVICE.dialog, "dialog"]
       ]);
       for (const token of item.requires) {
@@ -16111,7 +16045,10 @@ ${error.stack}` : "");
       try {
         const response = await this.port.request(options);
         this.urlPolicy.assertFinalUrl(response.finalUrl || options.url, urlPolicy);
-        if (response.status >= 400) throw new JhsError(response.status === 404 ? "NOT_FOUND" : "NETWORK_ERROR", `HTTP ${response.status}`, { source: options.providerId, retryable: response.status >= 500 });
+        if (response.status >= 400) {
+          const code = [401, 403].includes(response.status) ? "AUTH_REQUIRED" : response.status === 404 ? "NOT_FOUND" : response.status === 429 ? "RATE_LIMITED" : "NETWORK_ERROR";
+          throw new JhsError(code, `HTTP ${response.status}`, { source: options.providerId, retryable: response.status === 429 || response.status >= 500, details: { status: response.status } });
+        }
         return response;
       } catch (error) {
         const normalized = JhsError.from(error, options.providerId);
@@ -16307,8 +16244,19 @@ ${error.stack}` : "");
 
   // src/services/offline-service.js
   var _OfflineService = class _OfflineService {
-    constructor(providers) {
+    constructor(providers, integrations) {
       this.providers = providers;
+      this.integrations = integrations;
+    }
+    submitWithIntegration(integrationId, resource, context = {}) {
+      const adapter = this.integrations.getAdapter(integrationId);
+      if (typeof adapter.submit !== "function") throw new TypeError(`Integration ${integrationId} does not support offline submission`);
+      return adapter.submit(resource, context);
+    }
+    getIntegrationHomeUrl(integrationId) {
+      const adapter = this.integrations.getAdapter(integrationId);
+      if (typeof adapter.homeUrl !== "string") throw new TypeError(`Integration ${integrationId} does not declare a home URL`);
+      return adapter.homeUrl;
     }
     async submit(resource, context = {}) {
       const providers = await this.providers.getAvailable("offline", context);
@@ -16896,7 +16844,7 @@ ${error.stack}` : "");
     const magnet = new MagnetService(providers, integrations);
     const screenshot = new ScreenshotService(providers, integrations);
     const translation = new TranslationService(integrations);
-    const offline = new OfflineService(providers);
+    const offline = new OfflineService(providers, integrations);
     container.register(PORT.navigation, navigationPort).register(PORT.http, httpPort).register(PORT.storage, storagePort).register(PORT.dialog, dialogPort).register(PORT.style, stylePort).register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy).register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.webdav, webdav).register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile).register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet).register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline).register(SERVICE.translation, translation).register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
     if (runtime.hostAdapter) container.register(PORT.host, runtime.hostAdapter);
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
@@ -17592,6 +17540,107 @@ ${error.stack}` : "");
   // src/integrations/javtrailers/manifest.js
   var manifest_default11 = defineIntegration({ id: "javtrailers", trustClass: "builtin-public", hosts: ["javtrailers.com"], capabilities: ["movie.preview"], requires: [PORT.http, SERVICE.urlPolicy], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "javtrailers" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MoviePreview"] }), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
 
+  // src/integrations/pan123/manifest.js
+  var URL_POLICY = Object.freeze({ trustClass: "builtin-public", hosts: ["123pan.com"] });
+  function crc32(value) {
+    const table = new Uint32Array(256);
+    for (let index = 0; index < 256; index += 1) {
+      let entry = index;
+      for (let bit = 0; bit < 8; bit += 1) entry = entry & 1 ? 3988292384 ^ entry >>> 1 : entry >>> 1;
+      table[index] = entry;
+    }
+    let result = 4294967295;
+    for (let index = 0; index < value.length; index += 1) result = table[(result ^ value.charCodeAt(index)) & 255] ^ result >>> 8;
+    return (result ^ 4294967295) >>> 0;
+  }
+  __name(crc32, "crc32");
+  function secureNonce() {
+    const value = new Uint32Array(1);
+    crypto.getRandomValues(value);
+    return value[0] % 1e7;
+  }
+  __name(secureNonce, "secureNonce");
+  function signPan123Url(input, options = {}) {
+    const alphabet = ["a", "d", "e", "f", "g", "h", "l", "m", "y", "i", "j", "n", "o", "p", "k", "q", "r", "s", "t", "u", "b", "c", "v", "w", "s", "z"];
+    const nonce = options.nonce ?? secureNonce(), current = options.now ?? /* @__PURE__ */ new Date(), chinaTime = new Date(current.getTime() + 6e4 * current.getTimezoneOffset() + 288e5);
+    const dateKey = `${chinaTime.getFullYear()}${String(chinaTime.getMonth() + 1).padStart(2, "0")}${String(chinaTime.getDate()).padStart(2, "0")}${String(chinaTime.getHours()).padStart(2, "0")}${String(chinaTime.getMinutes()).padStart(2, "0")}`;
+    const encodedDate = [...dateKey].map((digit) => alphabet[Number(digit)]).join(""), pathKey = crc32(encodedDate), timestamp = Math.floor(chinaTime.getTime() / 1e3);
+    const url = new URL(input), signature = crc32(`${timestamp}|${nonce}|${url.pathname}|web|3|${pathKey}`);
+    url.searchParams.set(String(pathKey), `${timestamp}-${nonce}-${signature}`);
+    return url.href;
+  }
+  __name(signPan123Url, "signPan123Url");
+  function parsePayload(value) {
+    if (typeof value !== "string") return value;
+    try {
+      return JSON.parse(value);
+    } catch (cause) {
+      throw new JhsError("PARSE_ERROR", "123 云盘响应不是有效 JSON", { source: "pan123", cause });
+    }
+  }
+  __name(parsePayload, "parsePayload");
+  function assertSuccess(payload, action) {
+    if (!payload || typeof payload !== "object") throw new JhsError("INVALID_RESPONSE", `123 云盘${action}响应无效`, { source: "pan123" });
+    if (payload.code === 0) return payload;
+    const message = String(payload.message || payload.msg || `${action}失败`);
+    if (/token is expired|unauthorized|登录|授权/i.test(message)) throw new JhsError("AUTH_REQUIRED", message, { source: "pan123" });
+    throw new JhsError("INVALID_RESPONSE", message, { source: "pan123" });
+  }
+  __name(assertSuccess, "assertSuccess");
+  function createPan123Adapter(http, runtime = {}) {
+    const request = /* @__PURE__ */ __name(async (path, body, token, scope) => {
+      const url = signPan123Url(`https://yun.123pan.com${path}`, { now: runtime.now?.(), nonce: runtime.nonce?.() });
+      return http.request({
+        providerId: "pan123",
+        method: "POST",
+        url,
+        body: JSON.stringify(body),
+        responseType: "json",
+        cacheScope: "none",
+        timeout: runtime.getTimeout?.() ?? 5e3,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "App-Version": "3", platform: "web", Origin: "https://yun.123pan.com", Referer: "https://yun.123pan.com/" },
+        urlPolicy: URL_POLICY
+      }, scope);
+    }, "request");
+    return Object.freeze({
+      contracts: ["OfflineResolvedResource", "OfflineSubmission"],
+      homeUrl: "https://yun.123pan.com",
+      async resolve(resource, context = {}) {
+        const { token, scope } = context;
+        if (!token) throw new JhsError("AUTH_REQUIRED", "尚未同步 123 授权", { source: "pan123" });
+        const response = await request("/b/api/v2/offline_download/task/resolve", { urls: resource }, token, scope), payload = assertSuccess(parsePayload(response.data), "解析"), item = payload.data?.list?.[0];
+        if (!item?.id || !Array.isArray(item.files)) throw new JhsError("INVALID_RESPONSE", "123 云盘解析结果缺少资源文件", { source: "pan123" });
+        return Object.freeze({ id: item.id, files: Object.freeze(item.files.map((file) => Object.freeze({ id: file.id, size: Number(file.size || 0) }))) });
+      },
+      async submitResolved(resource, context = {}) {
+        const { token, scope } = context;
+        if (!token) throw new JhsError("AUTH_REQUIRED", "尚未同步 123 授权", { source: "pan123" });
+        if (!resource?.id || !Array.isArray(resource.files) || resource.files.length === 0) throw new JhsError("INVALID_RESPONSE", "没有可建立离线的文件", { source: "pan123" });
+        const fileIds = resource.files.map((file) => file.id), totalSize = resource.files.reduce((sum, file) => sum + Number(file.size || 0), 0);
+        const response = await request("/b/api/v2/offline_download/task/submit", { resource_list: [{ resource_id: resource.id, select_file_id: fileIds }] }, token, scope);
+        assertSuccess(parsePayload(response.data), "提交");
+        return Object.freeze({ fileCount: fileIds.length, totalSize });
+      },
+      async submit(resource, context = {}) {
+        const resolved = await this.resolve(resource, context);
+        return this.submitResolved(resolved, context);
+      }
+    });
+  }
+  __name(createPan123Adapter, "createPan123Adapter");
+  var manifest_default12 = defineIntegration({
+    id: "pan123",
+    trustClass: "builtin-public",
+    hosts: ["123pan.com"],
+    capabilities: ["offline.resolve", "offline.submit"],
+    requires: [SERVICE.http, SERVICE.settings],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http], settings: dependencies[SERVICE.settings] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createPan123Adapter(client.http, { getTimeout: /* @__PURE__ */ __name(() => Number(client.settings.snapshot().httpTimeout ?? 5e3), "getTimeout") }), "createAdapter"),
+    createHostAdapter: null,
+    cachePolicy: { "offline.resolve": "none", "offline.submit": "none" },
+    quality: "silver"
+  });
+
   // src/integrations/subtitlecat/manifest.js
   function createSubtitleCatAdapter() {
     return Object.freeze({
@@ -17606,7 +17655,7 @@ ${error.stack}` : "");
     });
   }
   __name(createSubtitleCatAdapter, "createSubtitleCatAdapter");
-  var manifest_default12 = defineIntegration({ id: "subtitlecat", trustClass: "builtin-public", hosts: ["subtitlecat.com"], capabilities: ["subtitle.search"], requires: [], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "subtitlecat" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => createSubtitleCatAdapter(), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
+  var manifest_default13 = defineIntegration({ id: "subtitlecat", trustClass: "builtin-public", hosts: ["subtitlecat.com"], capabilities: ["subtitle.search"], requires: [], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "subtitlecat" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => createSubtitleCatAdapter(), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
 
   // src/integrations/wikipedia/parser.js
   function compact(value) {
@@ -17661,7 +17710,7 @@ ${error.stack}` : "");
     });
   }
   __name(createWikipediaAdapter, "createWikipediaAdapter");
-  var manifest_default13 = defineIntegration({
+  var manifest_default14 = defineIntegration({
     id: "wikipedia",
     trustClass: "builtin-public",
     hosts: ["ja.wikipedia.org"],
@@ -17675,7 +17724,7 @@ ${error.stack}` : "");
   });
 
   // src/app/integration-catalog.js
-  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default7, manifest_default8, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13]);
+  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default7, manifest_default8, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13, manifest_default14]);
 
   // src/app/bootstrap.js
   function patchLayerRuntime(layerRuntime) {

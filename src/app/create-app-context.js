@@ -65,7 +65,7 @@ export function createAppContext(runtime) {
     const magnet = new MagnetService(providers, integrations);
     const screenshot = new ScreenshotService(providers, integrations);
     const translation = new TranslationService(integrations);
-    const offline = new OfflineService(providers);
+    const offline = new OfflineService(providers, integrations);
 
     container
         .register(PORT.navigation, navigationPort).register(PORT.http, httpPort).register(PORT.storage, storagePort)

@@ -38,12 +38,12 @@ export class UnifiedOfflinePlugin extends BasePlugin {
     async handle() {
         if (!(r || l)) return;
         const scope = await this.getRuntimeService("scope")();
-        this.registerProviders(), this.bindSubmit(), scope.addCleanup((() => $(document).off(".jhsUnifiedOffline")));
+        this.registerProviders(scope), this.bindSubmit(), scope.addCleanup((() => $(document).off(".jhsUnifiedOffline")));
         if (window.isDetailPage) this.injectNativeButtons(), scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
     }
-    registerProviders() {
-        const one23 = this.getDependency("OneTwoThreeOfflinePlugin");
-        one23 && this.registry.register({ id: "123", name: "123 云盘", capabilities: [ "magnet" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: () => storageManager.getSetting("enable123Offline", !0), getAvailability: async () => one23.getStoredToken() ? { available: !0, authState: "ready", reason: "授权已同步" } : { available: !1, authState: "token-missing", reason: "尚未同步 123 授权" }, submit: async resource => { const token = one23.getStoredToken(); if (!token) throw Object.assign(new Error("尚未同步 123 授权"), { code: "TOKEN_MISSING" }); const resolved = await one23.resolveMagnet(resource, token); return one23.submitTask(resolved, token); }, openUrl: () => "https://yun.123pan.com" });
+    registerProviders(scope) {
+        const one23 = this.getDependency("OneTwoThreeOfflinePlugin"), offline = this.getRuntimeService("offline");
+        one23 && this.registry.register({ id: "123", name: "123 云盘", capabilities: [ "magnet" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: () => storageManager.getSetting("enable123Offline", !0), getAvailability: async () => one23.getStoredToken() ? { available: !0, authState: "ready", reason: "授权已同步" } : { available: !1, authState: "token-missing", reason: "尚未同步 123 授权" }, submit: async resource => { const token = one23.getStoredToken(); if (!token) throw Object.assign(new Error("尚未同步 123 授权"), { code: "TOKEN_MISSING" }); return offline.submitWithIntegration("pan123", resource, { token, scope }); }, openUrl: () => offline.getIntegrationHomeUrl("pan123") });
         this.registry.register({ id: "115", name: "115", capabilities: [ "magnet", "ed2k" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: () => storageManager.getSetting("enable115Offline", !1), getAvailability: async () => ({ available: !0, authState: "unknown", reason: "提交时确认登录状态" }), submit: resource => new OneOneFiveClient().addOffline(resource), openUrl: () => "https://115.com" });
         window.offlineProviderRegistry = this.registry;
     }
@@ -100,7 +100,7 @@ export class UnifiedOfflinePlugin extends BasePlugin {
             button.text("已提交"), show.ok(`${selected.provider.name} 离线任务已创建`), utils.q(event, "是否将该作品标记为已下载？", (async () => { info?.carNum && await stateService.patch(info.carNum, { downloaded: !0 }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } }); }));
         } catch (error) {
             const code = error?.code || ("TOKEN_EXPIRED" === error ? "TOKEN_EXPIRED" : "SUBMIT_FAILED");
-            [ "LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING" ].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: !1, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: error.message || String(error) });
+            [ "AUTH_REQUIRED", "LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING" ].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: !1, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: error.message || String(error) });
             restoreButton();
             submitted || await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "failed", errorCode: code, errorMessage: error?.message || String(error), retryOf }), show.error(`${selected.provider.name} 离线失败：${error?.message || error}`);
         } finally { submitted ? setTimeout(restoreButton, this.BUTTON_COOLDOWN_MS) : restoreButton(); }
