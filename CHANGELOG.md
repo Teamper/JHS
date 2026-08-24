@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - strict checkJs 继续覆盖自动翻页、设置样式/模板和 123AV-FC2 入口，并补齐分页空值、DOM 容器与 Integration 返回数据的显式契约。
 - 截图、宿主详情工作区、兼容增强与统一离线模块进入 strict checkJs；Provider availability、宿主资源边界、Observer 和 jQuery 兼容句柄均补充显式类型，覆盖率门禁同步上调至 84%。
 - FC2 详情、外部站点入口和详情操作栏进入 strict checkJs，明确宿主工作区、影片/磁力数据与遗留 Vendor 句柄边界，生产源码类型覆盖率提升至 86.4%。
+- 磁力聚合中心与列表封面操作进入 strict checkJs，补齐来源、磁力结果、卡片事件和媒体句柄契约，生产源码类型覆盖率提升至 87.5%，最低覆盖门禁同步上调至 87%。
 
 ### Fixed
 

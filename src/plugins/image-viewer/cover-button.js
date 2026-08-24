@@ -1,9 +1,14 @@
+// @ts-check
+
 import { _, d, g, h, k, l, m, p, r, v, y } from "../../core/constants.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
 import { stateService } from "../../core/state-service.js";
 import { Z, fetchDmmPreview } from "./preview-video.js";
+
+/** @typedef {any} JQueryHandle */
+/** @typedef {MouseEvent & { ctrlKey?: boolean, metaKey?: boolean }} CardActionEvent */
 
 export class CoverButtonPlugin extends BasePlugin {
     getName() {
@@ -68,14 +73,16 @@ export class CoverButtonPlugin extends BasePlugin {
                 </div>
             </div>`;
     }
+    /** @param {JQueryHandle | Element | null} [items] */
     async addSvgBtn(items = null) {
-        (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach((element => {
+        (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach(((/** @type {Element} */ element) => {
             const item = $(element);
             if (item.find(".tool-box").length || l && item.find(".avatar-box").length) return;
             const host = r ? item.find(".tags").first() : item.find(".photo-info").first();
             host.length && host.append(this.buildToolBox());
         })), this.enableSvgBtn(items);
     }
+    /** @param {JQueryHandle | Element | null} [items] */
     async enableSvgBtn(items = null) {
         const e = await storageManager.getSetting(), {enableScreenSvg: t = _, enableVideoSvg: n = _, enableHandleSvg: a = _, enableSiteSvg: i = _, enableCopySvg: s = _} = e;
         const scope = items ? $(items) : $(document);
@@ -90,21 +97,21 @@ export class CoverButtonPlugin extends BasePlugin {
     async bindClick() {
         this.getSelector();
         const e = this.getDependency("ListPagePlugin");
-        $(document).on("click", ".jhs-card-menu-trigger", (event => {
+        $(document).on("click", ".jhs-card-menu-trigger", ((/** @type {CardActionEvent} */ event) => {
             event.preventDefault(), event.stopPropagation();
             const trigger = $(event.currentTarget), menu = trigger.siblings(".jhs-card-menu"), open = !menu.hasClass("is-open");
             this.closeCardMenus(), menu.toggleClass("is-open", open), trigger.attr("aria-expanded", String(open)), open && menu.children().first().trigger("focus");
-        })).on("keydown", ".jhs-card-menu [role='menuitem']", (event => {
+        })).on("keydown", ".jhs-card-menu [role='menuitem']", ((/** @type {KeyboardEvent} */ event) => {
             const menu = $(event.currentTarget).closest(".jhs-card-menu"), items = menu.find("[role='menuitem']"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), this.closeCardMenus(!0);
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
-        })).on("click", (event => {
+        })).on("click", ((/** @type {CardActionEvent} */ event) => {
             $(event.target).closest(".more-tools-container").length || this.closeCardMenus();
-        })), $(document).on("click", ".videoSvg", (t => {
-            t.preventDefault(), $('.videoSvg[title!="播放视频"]').each(((t, n) => {
+        })), $(document).on("click", ".videoSvg", ((/** @type {CardActionEvent} */ t) => {
+            t.preventDefault(), $('.videoSvg[title!="播放视频"]').each(((/** @type {number} */ t, /** @type {HTMLElement} */ n) => {
                 const a = $(n);
                 let i = a.closest(".item"), s = i.find("img"), {carNum: o} = e.findCarNumAndHref(i);
                 this.showImg(a, s, o), a.html(this.videoSvg).attr({ title: "播放视频", "aria-label": "播放视频" });
@@ -117,7 +124,7 @@ export class CoverButtonPlugin extends BasePlugin {
                 if (!i.length) return void show.error("没有找到图片");
                 void this.showVideo(a, i, t).catch((error => clog.error("卡片预览视频打开失败", error)));
             }
-        })), $(document).on("click", ".screenSvg", (async t => {
+        })), $(document).on("click", ".screenSvg", (async (/** @type {CardActionEvent} */ t) => {
             t.preventDefault();
             let n = loading();
             try {
@@ -125,14 +132,14 @@ export class CoverButtonPlugin extends BasePlugin {
                 let {carNum: i} = e.findCarNumAndHref(a);
                 i = i.replace("FC2-", "");
                 const s = await this.getDependency("ScreenShotPlugin").getScreenshot(i);
-                n.close(), showImageViewer(s);
+                n.close(), (/** @type {any} */ (globalThis)).showImageViewer(s);
             } catch (a) {
                 clog.error("图片预览出错:", a), show.error("图片预览出错:" + a);
             } finally { n.close(); }
-        })), $(document).on("click", ".filterBtn, .favoriteBtn, .hasDownBtn, .hasWatchBtn", (t => {
+        })), $(document).on("click", ".filterBtn, .favoriteBtn, .hasDownBtn, .hasWatchBtn", ((/** @type {CardActionEvent} */ t) => {
             t.preventDefault(), t.stopPropagation();
             try {
-                const n = $(t.currentTarget), a = n.closest(".item"), {carNum: i, url: s, publishTime: o, fc2Source} = e.findCarNumAndHref(a), r = async t => {
+                const n = $(t.currentTarget), a = n.closest(".item"), {carNum: i, url: s, publishTime: o, fc2Source} = e.findCarNumAndHref(a), r = async (/** @type {string} */ t) => {
                     try {
                         let n = await e.parseActressName(s);
                         const flag = legacyActionToFlag(t);
@@ -144,32 +151,35 @@ export class CoverButtonPlugin extends BasePlugin {
             } catch (t) { clog.error("按钮点击处理失败:", t); }
         }));
         const t = this.getDependency("OtherSitePlugin"), n = await t.getMissAvUrl(), a = await t.getjableUrl(), i = await t.getAvgleUrl(), s = await t.getAv123Url();
-        $(this.getSelector().itemSelector).each(((t, o) => {
+        $(this.getSelector().itemSelector).each(((/** @type {number} */ t, /** @type {HTMLElement} */ o) => {
             const r = $(o), {carNum: l} = e.findCarNumAndHref(r);
             r.find(".site-jable").attr({ href: `${a}/search/${l}/`, target: "_blank", rel: "noopener noreferrer" }),
             r.find(".site-avgle").attr({ href: `${i}/vod/search.html?wd=${l}`, target: "_blank", rel: "noopener noreferrer" }),
             r.find(".site-miss-av").attr({ href: `${n}/search/${l}`, target: "_blank", rel: "noopener noreferrer" }),
             r.find(".site-123-av").attr({ href: `${s}/cn/search?keyword=${encodeURIComponent(l)}`, target: "_blank", rel: "noopener noreferrer" });
         }));
-        $(document).on("click", ".site-jable, .site-avgle, .site-miss-av, .site-123-av", (t => {
+        $(document).on("click", ".site-jable, .site-avgle, .site-miss-av, .site-123-av", ((/** @type {CardActionEvent} */ t) => {
             try {
                 t.preventDefault(), t.stopPropagation();
                 const o = $(t.currentTarget), r = o.closest(".item"), {carNum: l} = e.findCarNumAndHref(r);
                 let c = null;
-                o.hasClass("site-jable") ? c = `${a}/search/${l}/` : o.hasClass("site-avgle") ? c = `${i}/vod/search.html?wd=${l}` : o.hasClass("site-miss-av") ? c = `${n}/search/${l}` : o.hasClass("site-123-av") && (c = `${s}/cn/search?keyword=${encodeURIComponent(l)}`),
-                t && (t.ctrlKey || t.metaKey) ? GM_openInTab(c, { insert: 0 }) : window.open(c), this.closeCardMenus();
+                o.hasClass("site-jable") ? c = `${a}/search/${l}/` : o.hasClass("site-avgle") ? c = `${i}/vod/search.html?wd=${l}` : o.hasClass("site-miss-av") ? c = `${n}/search/${l}` : o.hasClass("site-123-av") && (c = `${s}/cn/search?keyword=${encodeURIComponent(l)}`);
+                if (!c) return;
+                t.ctrlKey || t.metaKey ? GM_openInTab(c, { insert: 0 }) : window.open(c), this.closeCardMenus();
             } catch (t) { clog.error("站点按钮处理失败:", t); }
-        })), $(document).on("click", ".titleSvg, .carNumSvg, .downSvg", (t => {
+        })), $(document).on("click", ".titleSvg, .carNumSvg, .downSvg", ((/** @type {CardActionEvent} */ t) => {
             t.preventDefault(), t.stopPropagation();
             const n = $(t.currentTarget).closest(".item"), {carNum: a, title: i} = e.findCarNumAndHref(n), s = n.find(l ? ".photo-frame img" : ".cover img");
             $(t.currentTarget).hasClass("titleSvg") ? utils.copyToClipboard("标题", i) : $(t.currentTarget).hasClass("carNumSvg") ? utils.copyToClipboard("番号", a) : $(t.currentTarget).hasClass("downSvg") && fetch(s.attr("src")).then((e => e.blob())).then((e => utils.download(e, a + " " + i + ".jpg"))), this.closeCardMenus();
         }));
     }
+    /** @param {JQueryHandle} e @param {JQueryHandle} t @param {string} n */
     showImg(e, t, n) {
         e.html(this.videoSvg).attr({ title: "播放视频", "aria-label": "播放视频" });
         let a = $(`#${`${n}_preview_video`}`);
         a.length > 0 && (a[0].pause(), a.parent().hide()), t.show(), t.removeClass("loading"), t.next(".loading-spinner").remove();
     }
+    /** @param {JQueryHandle} e @param {JQueryHandle} t @param {string} n */
     async showVideo(e, t, n) {
         const a = `${n}_preview_video`;
         let i = $(`#${a}`);

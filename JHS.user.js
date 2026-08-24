@@ -11229,12 +11229,14 @@ ${failure.stack}` : "");
   // src/plugins/external-search/magnet-hub.js
   var _MagnetHubPlugin = class _MagnetHubPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "sourceRegistry", new MagnetSourceRegistry()), i(this, "searchEngines", []);
+      super(...arguments);
+      this.sourceRegistry = new MagnetSourceRegistry();
+      this.searchEngines = [];
     }
     async initializeSources() {
       const settings = new ResourceSettingsService(), magnet = this.getRuntimeService("magnet"), overrides = await settings.getBuiltInSources(), custom = await settings.getMagnetSources();
       const integrationSources = magnet.getBuiltInSources(), catalog = [...BUILT_IN_NATIVE_MAGNET_SOURCES, ...integrationSources];
-      const configured = /* @__PURE__ */ __name((id) => ({ ...catalog.find(((source) => source.id === id)) || {}, ...overrides.find(((source) => source.id === id)) || {} }), "configured");
+      const configured = /* @__PURE__ */ __name((id) => ({ ...catalog.find((source) => source.id === id) || {}, ...overrides.find((source) => source.id === id) || {} }), "configured");
       const externalSources = integrationSources.map(((source) => {
         const config = configured(source.id), baseUrl = String(config.baseUrl || source.baseUrl).replace(/\/$/, "");
         return {
@@ -11268,9 +11270,9 @@ ${failure.stack}` : "");
         const config = configured(source.id), applicable = source.applicable ?? true;
         return { ...source, ...config, enabled: applicable && (config.enabled ?? source.enabled ?? true), search: source.search, targetUrl: source.targetUrl };
       })));
-      custom.filter(((source) => source.enabled)).forEach(((config) => this.sourceRegistry.register({ ...config, id: `custom:${config.id}`, search: /* @__PURE__ */ __name((keyword) => this.searchCustomSource(config, keyword), "search"), targetUrl: /* @__PURE__ */ __name((keyword) => config.targetUrlTemplate.replaceAll("{keyword}", encodeURIComponent(keyword)), "targetUrl") })));
+      custom.filter((source) => source.enabled).forEach((config) => this.sourceRegistry.register({ ...config, id: `custom:${config.id}`, search: /* @__PURE__ */ __name((keyword) => this.searchCustomSource(config, keyword), "search"), targetUrl: /* @__PURE__ */ __name((keyword) => config.targetUrlTemplate.replaceAll("{keyword}", encodeURIComponent(keyword)), "targetUrl") }));
       const enabled = this.sourceRegistry.getEnabledSources().map(((source) => ({ ...source, targetPage: source.targetUrl("{keyword}").replace("%7Bkeyword%7D", "{keyword}") })));
-      this.searchEngines = enabled.length ? [{ id: "all", name: "全部", priority: 0, targetPage: "#", search: /* @__PURE__ */ __name((keyword) => this.searchAllSources(enabled, keyword), "search") }, ...enabled] : [];
+      this.searchEngines = enabled.length ? [{ id: "all", name: "全部", priority: 0, targetPage: "#", targetUrl: /* @__PURE__ */ __name(() => "#", "targetUrl"), search: /* @__PURE__ */ __name((keyword) => this.searchAllSources(enabled, keyword), "search") }, ...enabled] : [];
     }
     getName() {
       return "MagnetHubPlugin";
@@ -11295,15 +11297,18 @@ ${failure.stack}` : "");
       const root = options.root ? $(options.root) : $(document), engines = [...this.searchEngines];
       const storage = this.getRuntimeService("storage"), t2 = $('<div class="magnet-container jhs-ui"></div>'), n2 = $('<div class="magnet-tabs"></div>'), a2 = "jhs_magnetHub_selectedEngine", i2 = storage.getLocal(a2);
       const o2 = $('<div class="magnet-tabs__options" role="tablist" aria-label="磁力来源"></div>');
-      let currentEngine = engines.find(((engine) => engine.id === i2)) || engines[0] || null;
-      if (!currentEngine) return t2.append($('<div class="magnet-error"></div>').text("暂无可用磁力来源，请前往设置启用来源"));
+      const initialEngine = engines.find(((engine) => engine.id === i2)) || engines[0];
+      if (!initialEngine) return t2.append($('<div class="magnet-error"></div>').text("暂无可用磁力来源，请前往设置启用来源"));
+      let currentEngine = initialEngine;
       engines.forEach(((engine) => o2.append($('<button type="button" class="jhs-btn magnet-tab" role="tab" aria-selected="false" tabindex="-1"></button>').attr("data-engine", engine.id).text(engine.name).toggleClass("active", engine.id === currentEngine.id))));
-      const target = $('<a class="jhs-btn jhs-btn--ghost" data-jhs-role="magnet-target" target="_blank" rel="noopener noreferrer">原网页</a>').attr("href", currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e2))).toggle("all" !== currentEngine.id);
+      const target = $('<a class="jhs-btn jhs-btn--ghost" data-jhs-role="magnet-target" target="_blank" rel="noopener noreferrer">原网页</a>').attr("href", (currentEngine.targetPage || "#").replace("{keyword}", encodeURIComponent(e2))).toggle("all" !== currentEngine.id);
       n2.append(o2), n2.append(target), o2.find(".magnet-tab.active").attr({ "aria-selected": "true", tabindex: "0" }), t2.append(n2);
       const r2 = $('<div class="magnet-results"></div>');
       return t2.append(r2), t2.on("click", ".magnet-tab", ((n3) => {
         const i3 = $(n3.target).data("engine");
-        currentEngine = engines.find(((e3) => e3.id === i3)), t2.find('[data-jhs-role="magnet-target"]').attr("href", currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e2))).toggle("all" !== currentEngine.id), storage.setLocal(a2, i3), t2.find(".magnet-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), $(n3.target).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }), this.searchEngine(r2, currentEngine, e2, root);
+        currentEngine = engines.find(((engine) => engine.id === i3)) || currentEngine;
+        if (!currentEngine) return;
+        t2.find('[data-jhs-role="magnet-target"]').attr("href", (currentEngine.targetPage || "#").replace("{keyword}", encodeURIComponent(e2))).toggle("all" !== currentEngine.id), storage.setLocal(a2, i3), t2.find(".magnet-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), $(n3.target).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }), this.searchEngine(r2, currentEngine, e2, root);
       })), t2.on("keydown", ".magnet-tab", ((e3) => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e3.key)) return;
         e3.preventDefault();
@@ -11325,13 +11330,13 @@ ${failure.stack}` : "");
         const i2 = t2.url.replace("{keyword}", encodeURIComponent(n2)), payload = await this.requestSource(t2.id, i2, { ttlMs: 216e5 }), s2 = t2.parseHtml.call(this, payload, n2);
         return void this.displayResults(e2, s2, t2.name);
       } catch (s2) {
-        return void e2.html(`<div class="magnet-error">解析 ${escapeHtml(t2.name)} 结果失败: ${escapeHtml(s2.message)}</div>`);
+        return void e2.html(`<div class="magnet-error">解析 ${escapeHtml(t2.name)} 结果失败: ${escapeHtml(s2 instanceof Error ? s2.message : String(s2))}</div>`);
       }
       t2.parseJson && await t2.parseJson.call(this, e2, t2, n2, a2);
     }
     async searchCustomSources(keyword) {
       const configs = JSON.parse(await storageManager.getSetting("customMagnetSources", "[]"));
-      const enabled = configs.filter(((config) => config.enabled)).map(validateCustomMagnetSource);
+      const enabled = configs.filter((config) => config.enabled).map(validateCustomMagnetSource);
       const groups = await mapLimit(enabled, 4, (async (config) => {
         const url = config.searchUrlTemplate.replaceAll("{keyword}", encodeURIComponent(keyword));
         try {
@@ -11339,7 +11344,8 @@ ${failure.stack}` : "");
           const parsed = "json" === config.parserType && "string" === typeof payload ? JSON.parse(payload) : payload;
           return parseCustomMagnetResponse(config, parsed, config.id);
         } catch (cause) {
-          clog.error(`自定义磁力源 ${config.name} 失败`, new ProviderError(config.id, cause.code || "HTTP_ERROR", cause.message, { cause, url, status: cause.status, retryable: cause.retryable }));
+          const error = cause;
+          clog.error(`自定义磁力源 ${config.name} 失败`, new ProviderError(config.id, error.code || "HTTP_ERROR", error.message || String(cause), { cause, url, status: error.status, retryable: error.retryable }));
           return [];
         }
       }));
@@ -11414,8 +11420,8 @@ ${failure.stack}` : "");
         item.find(".copy-btn").removeClass("magnet-hub-btn").addClass("jhs-btn--secondary");
         copyBox.append(`<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn" data-resource="${safeMagnet}">离线</button>`);
         item.appendTo(e2);
-      })), e2.on("click", ".copy-btn", (async function() {
-        const e3 = $(this), t3 = e3.data("magnet");
+      })), e2.on("click", ".copy-btn", (async (event) => {
+        const e3 = $(event.currentTarget), t3 = e3.data("magnet");
         await utils.copyToClipboard("磁力链接", t3) && a2(e3);
       }))) : e2.append('<div class="magnet-error">没有找到相关结果</div>');
     }
@@ -12511,7 +12517,7 @@ ${failure.stack}` : "");
           let { carNum: i3 } = e2.findCarNumAndHref(a3);
           i3 = i3.replace("FC2-", "");
           const s3 = await this.getDependency("ScreenShotPlugin").getScreenshot(i3);
-          n3.close(), showImageViewer(s3);
+          n3.close(), globalThis.showImageViewer(s3);
         } catch (a3) {
           clog.error("图片预览出错:", a3), show.error("图片预览出错:" + a3);
         } finally {
@@ -12545,7 +12551,9 @@ ${failure.stack}` : "");
           t3.preventDefault(), t3.stopPropagation();
           const o2 = $(t3.currentTarget), r2 = o2.closest(".item"), { carNum: l2 } = e2.findCarNumAndHref(r2);
           let c2 = null;
-          o2.hasClass("site-jable") ? c2 = `${a2}/search/${l2}/` : o2.hasClass("site-avgle") ? c2 = `${i2}/vod/search.html?wd=${l2}` : o2.hasClass("site-miss-av") ? c2 = `${n2}/search/${l2}` : o2.hasClass("site-123-av") && (c2 = `${s2}/cn/search?keyword=${encodeURIComponent(l2)}`), t3 && (t3.ctrlKey || t3.metaKey) ? GM_openInTab(c2, { insert: 0 }) : window.open(c2), this.closeCardMenus();
+          o2.hasClass("site-jable") ? c2 = `${a2}/search/${l2}/` : o2.hasClass("site-avgle") ? c2 = `${i2}/vod/search.html?wd=${l2}` : o2.hasClass("site-miss-av") ? c2 = `${n2}/search/${l2}` : o2.hasClass("site-123-av") && (c2 = `${s2}/cn/search?keyword=${encodeURIComponent(l2)}`);
+          if (!c2) return;
+          t3.ctrlKey || t3.metaKey ? GM_openInTab(c2, { insert: 0 }) : window.open(c2), this.closeCardMenus();
         } catch (t4) {
           clog.error("站点按钮处理失败:", t4);
         }
