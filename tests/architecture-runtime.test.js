@@ -133,6 +133,12 @@ describe("v6.5 architecture runtime contracts", () => {
             "detail.javdb-native", "detail.javbus-native", "detail.cover-state-actions", "detail.page-state-actions",
             "detail.javdb-preview", "detail.javbus-images", "detail.javbus-preview",
         ]);
+        expect(migrateDisabledPlugins(["SubTitleCatPlugin", "detail.subtitle"])).toEqual(["external-bridge.subtitle"]);
+
+        expect(() => runtime.register(defineFeature({
+            id: "duplicate-owner", kind: "feature", disableable: true, sites: ["javdb"], routes: ["detail"],
+            startup: "on-demand", requires: [], contributes: ["detail.related"], providesCommands: [], activate: () => ({}),
+        }))).toThrow(/Duplicate contribution ownership/);
     });
 
     it("disposes all scope-owned resources and blocks stale generations", () => {

@@ -27,7 +27,7 @@ export const LEGACY_PLUGIN_CONTRIBUTION_MAP = Object.freeze({
     DetailPageButtonPlugin: "detail.page-state-actions",
     HighlightMagnetPlugin: "detail.native-magnets",
     OtherSitePlugin: "detail.external-sites",
-    SubTitleCatPlugin: "detail.subtitle",
+    SubTitleCatPlugin: "external-bridge.subtitle",
     FilterTitleKeywordPlugin: "library.keyword-filter",
     ActressInfoPlugin: "identity.actress-info",
     TranslatePlugin: "external-bridge.translation",
@@ -48,6 +48,7 @@ export const LEGACY_PLUGIN_CONTRIBUTION_MAP = Object.freeze({
 });
 
 const LEGACY_SHARED_CONTRIBUTION_MAP = Object.freeze({
+    "detail.subtitle": ["external-bridge.subtitle"],
     "detail.native": ["detail.javdb-native", "detail.javbus-native"],
     "detail.state-actions": ["detail.cover-state-actions", "detail.page-state-actions"],
     "detail.gallery": ["detail.javdb-preview", "detail.javbus-images", "detail.javbus-preview"],

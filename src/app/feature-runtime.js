@@ -17,6 +17,8 @@ export class FeatureRuntime {
         this.route = options.route ?? "unknown";
         /** @type {Map<string, Record<string, any>>} */
         this.manifests = new Map();
+        /** @type {Map<string, string>} */
+        this.contributionOwners = new Map();
         /** @type {Map<string, Promise<Record<string, any>>>} */
         this.activations = new Map();
         this.commands.setActivator((featureId) => this.activate(featureId).then(() => undefined));
@@ -26,7 +28,12 @@ export class FeatureRuntime {
     register(manifest) {
         const validated = /** @type {Record<string, any>} */ (defineFeature(manifest));
         if (this.manifests.has(validated.id)) throw new Error(`Duplicate feature: ${validated.id}`);
+        for (const contributionId of validated.contributes) {
+            const owner = this.contributionOwners.get(contributionId);
+            if (owner) throw new Error(`Duplicate contribution ownership: ${contributionId} (${owner}, ${validated.id})`);
+        }
         this.manifests.set(validated.id, validated);
+        for (const contributionId of validated.contributes) this.contributionOwners.set(contributionId, validated.id);
         for (const command of validated.providesCommands) this.commands.registerOwner(command, validated.id);
     }
 

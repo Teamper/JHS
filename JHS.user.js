@@ -2114,7 +2114,7 @@
     DetailPageButtonPlugin: "detail.page-state-actions",
     HighlightMagnetPlugin: "detail.native-magnets",
     OtherSitePlugin: "detail.external-sites",
-    SubTitleCatPlugin: "detail.subtitle",
+    SubTitleCatPlugin: "external-bridge.subtitle",
     FilterTitleKeywordPlugin: "library.keyword-filter",
     ActressInfoPlugin: "identity.actress-info",
     TranslatePlugin: "external-bridge.translation",
@@ -2134,6 +2134,7 @@
     JavTrailersPlugin: "external-bridge.javtrailers"
   });
   var LEGACY_SHARED_CONTRIBUTION_MAP = Object.freeze({
+    "detail.subtitle": ["external-bridge.subtitle"],
     "detail.native": ["detail.javdb-native", "detail.javbus-native"],
     "detail.state-actions": ["detail.cover-state-actions", "detail.page-state-actions"],
     "detail.gallery": ["detail.javdb-preview", "detail.javbus-images", "detail.javbus-preview"]
@@ -5703,7 +5704,7 @@
     routes: ["detail"],
     startup: "eager",
     requires: [PORT.host, SERVICE.movie, SERVICE.review, SERVICE.related, SERVICE.magnet, SERVICE.screenshot],
-    contributes: ["detail.javdb-native", "detail.javbus-native", "detail.workspace", "detail.fc2-owned", "detail.fc2-lookup", "detail.cover-state-actions", "detail.page-state-actions", "detail.javdb-preview", "detail.javbus-images", "detail.javbus-preview", "detail.reviews", "detail.related", "detail.native-magnets", "detail.external-magnets", "detail.screenshot", "detail.subtitle", "detail.external-sites"],
+    contributes: ["detail.javdb-native", "detail.javbus-native", "detail.workspace", "detail.fc2-owned", "detail.fc2-lookup", "detail.cover-state-actions", "detail.page-state-actions", "detail.javdb-preview", "detail.javbus-images", "detail.javbus-preview", "detail.reviews", "detail.related", "detail.native-magnets", "detail.external-magnets", "detail.screenshot", "detail.external-sites"],
     providesCommands: [],
     activate: /* @__PURE__ */ __name((deps, runtime) => {
       const controller = new DetailController({ hostAdapter: deps[PORT.host], scope: runtime.scope, enabledContributions: runtime.enabledContributions });
@@ -5729,7 +5730,7 @@
     feature("list", ["javdb", "javbus"], ["list.core", "list.auto-page", "list.fold-category", "list.actions"]),
     feature("library", ["javdb", "javbus"], ["library.history", "library.keyword-filter", "library.state-actions", "library.blacklist", "library.favorite-actresses"]),
     feature("discovery", ["javdb", "javbus"], ["discovery.hit-show", "discovery.top250", "discovery.new-video", "discovery.scheduler"]),
-    feature("external-bridge", ["javdb", "javbus", "123pan", "javtrailers", "subtitlecat"], ["external-bridge.translation", "external-bridge.115-match", "external-bridge.offline", "external-bridge.123pan", "external-bridge.javtrailers", "detail.subtitle"]),
+    feature("external-bridge", ["javdb", "javbus", "123pan", "javtrailers", "subtitlecat"], ["external-bridge.translation", "external-bridge.115-match", "external-bridge.offline", "external-bridge.123pan", "external-bridge.javtrailers", "external-bridge.subtitle"]),
     feature("identity", ["javdb", "javbus"], ["identity.javdb-navigation", "identity.javbus-navigation", "identity.image-search", "identity.actress-info"]),
     feature("compatibility", ["javdb", "javbus"], ["compatibility.enhancements"])
   ]);
@@ -17007,7 +17008,7 @@ ${failure.stack}` : "");
     manifest("detail.javbus-preview", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings, SERVICE.storage]),
     manifest("external-bridge.123pan", "external-bridge", OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"], { javdb: 0, javbus: 0, "123pan": 1 }, [SERVICE.storage]),
     manifest("external-bridge.javtrailers", "external-bridge", JavTrailersPlugin, ["javtrailers"], { javtrailers: 1 }),
-    manifest("detail.subtitle", "external-bridge", SubTitleCatPlugin, ["subtitlecat"], { subtitlecat: 1 })
+    manifest("external-bridge.subtitle", "external-bridge", SubTitleCatPlugin, ["subtitlecat"], { subtitlecat: 1 })
   ]);
   var contributionIds = /* @__PURE__ */ new Set();
   var legacyPluginIds = /* @__PURE__ */ new Set();
@@ -18424,13 +18425,19 @@ ${failure.stack}` : "");
       this.site = options.site ?? "unknown";
       this.route = options.route ?? "unknown";
       this.manifests = /* @__PURE__ */ new Map();
+      this.contributionOwners = /* @__PURE__ */ new Map();
       this.activations = /* @__PURE__ */ new Map();
       this.commands.setActivator((featureId) => this.activate(featureId).then(() => void 0));
     }
     register(manifest2) {
       const validated = defineFeature(manifest2);
       if (this.manifests.has(validated.id)) throw new Error(`Duplicate feature: ${validated.id}`);
+      for (const contributionId of validated.contributes) {
+        const owner = this.contributionOwners.get(contributionId);
+        if (owner) throw new Error(`Duplicate contribution ownership: ${contributionId} (${owner}, ${validated.id})`);
+      }
       this.manifests.set(validated.id, validated);
+      for (const contributionId of validated.contributes) this.contributionOwners.set(contributionId, validated.id);
       for (const command of validated.providesCommands) this.commands.registerOwner(command, validated.id);
     }
     isEligible(manifest2) {

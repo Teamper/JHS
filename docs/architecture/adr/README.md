@@ -2,6 +2,8 @@
 
 本目录记录 v6.5 已冻结的架构决策。实施中只允许补充已定义决策的实现细节；改变决策须新增 superseding ADR。
 
+能力与路由基线见 [Feature Matrix](../feature-matrix.md)，代码职责边界见 [Ownership](../ownership.md)。
+
 1. [模块边界与依赖反转](001-module-boundaries.md)
 2. [Feature 与 Contribution](002-feature-contribution.md)
 3. [Integration Manifest 与质量等级](003-integration-manifest.md)

@@ -17,7 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - Blacklist 真实运行时进入 strict checkJs，明确任务状态订阅、筛选记录、Tabulator 回调和跨页批量状态写入边界；生产源码类型覆盖率提升至 94.4%，最低覆盖门禁同步上调至 94%。
 - TaskPlugin 与 ListPagePlugin 真实运行时进入 strict checkJs，明确调度状态/结果、配置刷新、网络分页、列表增量索引、筛选视图和媒体导航边界；生产源码类型覆盖率提升至 95.5%，RC 最低覆盖门禁上调至 95%。
 - RC checkJs 剩余文件改为精确 allowlist，仅允许登记 compatibility/vendor glue、原因与清理版本；新增、移动或已消除但未移除的豁免都会失败。
+- 固化 11 个 Feature 的 kind、站点、启动方式、Contribution owner 与 List/Detail/compact 验证矩阵。
 - Detail 的 legacy Contribution 改为一插件一 ID；封面状态按钮、详情状态按钮、JavDB 预览以及 JavBus 原生详情/图片/预览现在保持各自独立的旧版禁用语义。
+- SubtitleCat Contribution 统一归属 `external-bridge`，并兼容开发期 `detail.subtitle`；FeatureRuntime 注册时拒绝跨 Feature 重复 Contribution owner。
 - Transitional PluginManager 的不可禁用属性改由 system Feature manifest 下发，删除 Settings、Stats 与移动工具栏的名称硬编码保护名单。
 - MobileBottomBar Contribution 显式依赖 ProfileService，并以 compact profile 取代 legacy User-Agent/宽度判断，触屏横屏设备可按 any-pointer 与短边规则正确激活。
 - Feature/Contribution/Integration manifest schema 现在拒绝空值、重复 ID/token 和非法 host；Integration cache policy 必须精确覆盖全部 capability，Adapter 必须声明 normalized contract，JavDB 补齐四项显式 no-cache 声明。
