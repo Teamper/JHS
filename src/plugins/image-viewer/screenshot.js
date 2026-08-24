@@ -67,8 +67,7 @@ export class ScreenShotPlugin extends BasePlugin {
             throw clog.error("获取缩略图资源失败:", n, i), i;
         }
         if (!n) return null;
-        let url = n.url, a = url.indexOf("https://");
-        return -1 !== a && (url = url.substring(a)), clog.log(`缩略图获取成功 (${n.source}):`, url), url;
+        return clog.log(`缩略图获取成功 (${n.source}):`, n.url), n.url;
     }
     async getServiceScreenshot(carNum) {
         const scope = await this.getRuntimeService("scope")();
@@ -78,27 +77,32 @@ export class ScreenShotPlugin extends BasePlugin {
     }
     addImg(e, t) {
         const url = normalizeJavStoreAssetUrl(t);
-        url && (r && $(".screen-container").html(`<img src="${url}" alt="${e}" loading="lazy" class="jhs-layout-cad980f4">`),
-        l && $(".screen-container").html(`<div class="photo-frame"><img src="${url}" title="${e}" alt="${e}" class="jhs-layout-d4a575e8"></div>`),
-        $(".screen-container").on("click", (e => {
+        if (!url) return;
+        const container = $(".screen-container").empty(), image = $("<img>").attr({ src: url, alt: e, loading: "lazy" });
+        r && container.append(image.addClass("jhs-layout-cad980f4"));
+        l && container.append($('<div class="photo-frame"></div>').append(image.attr("title", e).addClass("jhs-layout-d4a575e8")));
+        container.on("click", (e => {
             e.stopPropagation(), e.preventDefault(), showImageViewer(e.currentTarget);
-        })));
+        }));
     }
     showErrorFallback(e, t) {
         var n;
         clog.error("获取缩略图失败:", null == (n = null == t ? void 0 : t.message) ? void 0 : n.substring(0, 100));
         const a = `jhs-screenshot-message${l ? " jhs-screenshot-message--bus" : ""}`;
         if (!(e = normalizeCarNum(e))) return void $(".screen-container").empty().append($("<div></div>").addClass(a).text("无法获取番号，缩略图未加载"));
-        const searchUrl = `https://javstore.net/search?q=${encodeURIComponent(e)}`;
-        $(".screen-container").html(`<div class="${a}">获取缩略图失败</div><br/><a href='#' class='retry-link'>点击重试</a> 或 <a class="check-link" href='${searchUrl}' target='_blank'>前往确认</a>`).off("click", ".retry-link").off("click", ".check-link").on("click", ".retry-link", (async t => {
-            t.stopPropagation(), t.preventDefault(), $(".screen-container").html(`<div class="${a}">正在重新加载...</div>`);
+        const searchUrl = this.getRuntimeService("screenshot").getSearchUrl({ carNum: e }), container = $(".screen-container").empty();
+        const message = $("<div></div>").addClass(a).text("获取缩略图失败"), retry = $('<a href="#" class="retry-link">点击重试</a>');
+        container.append(message, $("<br>"), retry);
+        searchUrl && container.append(document.createTextNode(" 或 "), $('<a class="check-link" target="_blank" rel="noopener noreferrer">前往确认</a>').attr("href", searchUrl));
+        container.off("click", ".retry-link").off("click", ".check-link").on("click", ".retry-link", (async t => {
+            t.stopPropagation(), t.preventDefault(), container.empty().append($("<div></div>").addClass(a).text("正在重新加载..."));
             try {
                 const t = await this.getScreenshot(e);
                 this.addImg("缩略图", t);
             } catch (n) {
                 this.showErrorFallback(e, n);
             }
-        })).on("click", ".check-link", (async t => {
+        })).on("click", ".check-link", (t => {
             t.stopPropagation(), t.preventDefault(), window.open(searchUrl, "_blank");
         }));
     }

@@ -3,19 +3,7 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class SearchByImagePlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "siteList", [ {
-            name: "Google旧版",
-            url: "https://www.google.com/searchbyimage?image_url={占位符}&client=firefox-b-d",
-            ico: "https://www.google.com/favicon.ico"
-        }, {
-            name: "Google",
-            url: "https://lens.google.com/uploadbyurl?url={占位符}",
-            ico: "https://www.google.com/favicon.ico"
-        }, {
-            name: "Yandex",
-            url: "https://yandex.ru/images/search?rpt=imageview&url={占位符}",
-            ico: "https://yandex.ru/favicon.ico"
-        } ]), i(this, "isUploading", !1);
+        super(...arguments), i(this, "isUploading", !1);
     }
     getName() {
         return "SearchByImagePlugin";
@@ -66,11 +54,13 @@ export class SearchByImagePlugin extends BasePlugin {
                     this.isUploading = !0;
                     try {
                         const t = await this.searchByImage(e);
+                        if (!t) return;
                         s.hide(), d.show(), h.empty();
                         const storage = this.getRuntimeService("storage"), n = "jhs_selectedSites", a = JSON.parse(storage.getLocal(n) || "{}");
-                        this.siteList.forEach((e => {
-                            const n = e.url.replace("{占位符}", encodeURIComponent(t)), i = !1 !== a[e.name];
-                            h.append(`\n                        <a href="${n}" class="search-img-site-btn" target="_blank" title="${e.name}">\n                        <input type="checkbox" \n                               class="site-checkbox jhs-layout-8896c95d" \n                               data-site-name="${e.name}" \n                              \n                               ${i ? "checked" : ""}>\n                            <img src="${e.ico}" alt="${e.name}">\n                            <span>${e.name}</span>\n                        </a>\n                    `);
+                        t.targets.forEach((e => {
+                            const i = !1 !== a[e.name], anchor = $('<a class="search-img-site-btn" target="_blank" rel="noopener noreferrer"></a>').attr({ href: e.url, title: e.name });
+                            const checkbox = $('<input type="checkbox" class="site-checkbox jhs-layout-8896c95d">').attr("data-site-name", e.name).prop("checked", i);
+                            anchor.append(checkbox, $("<img>").attr({ src: e.iconUrl, alt: e.name }), $("<span></span>").text(e.name)), h.append(anchor);
                         })), h.on("change", ".site-checkbox", (function() {
                             const e = $(this).data("site-name");
                             a[e] = $(this).is(":checked"), storage.setLocal(n, JSON.stringify(a));
@@ -104,33 +94,9 @@ export class SearchByImagePlugin extends BasePlugin {
     async searchByImage(e) {
         let t = loading();
         try {
-            let t = e;
-            if (e.startsWith("data:")) {
-                show.info("开始上传图片...");
-                const n = await async function(e) {
-                    var t;
-                    const n = e.match(/^data:(.+);base64,(.+)$/);
-                    if (!n || n.length < 3) throw new Error("无效的Base64图片数据");
-                    const a = n[1], i = n[2], s = atob(i), o = new Array(s.length);
-                    for (let g = 0; g < s.length; g++) o[g] = s.charCodeAt(g);
-                    const r = new Uint8Array(o), l = new Blob([ r ], {
-                        type: a
-                    }), c = new FormData;
-                    c.append("image", l);
-                    const d = await fetch("https://api.imgur.com/3/image", {
-                        method: "POST",
-                        headers: {
-                            Authorization: "Client-ID d70305e7c3ac5c6"
-                        },
-                        body: c
-                    }), h = await d.json();
-                    if (h.success && h.data && h.data.link) return h.data.link;
-                    throw new Error((null == (t = h.data) ? void 0 : t.error) || "上传到Imgur失败");
-                }(e);
-                if (!n) return void show.error("上传失败");
-                t = n;
-            }
-            return t;
+            e.startsWith("data:") && show.info("开始上传图片...");
+            const scope = await this.getRuntimeService("scope")();
+            return await this.getRuntimeService("imageSearch").resolve(e, { scope });
         } catch (n) {
             show.error(`搜索失败: ${n.message}`), clog.error("搜索失败:", n);
         } finally {

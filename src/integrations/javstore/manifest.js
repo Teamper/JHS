@@ -12,9 +12,11 @@ export function createJavStoreAdapter(http) {
     }, scope);
     return Object.freeze({
         contracts: ["Screenshot"],
+        /** @param {{carNum?: string}} movieRef */
+        getSearchUrl(movieRef) { return `https://javstore.net/search?q=${encodeURIComponent(movieRef.carNum || "")}`; },
         /** @param {{carNum: string}} movieRef @param {{scope?: any}} [options] */
         async getImages(movieRef, options = {}) {
-            const searchUrl = `https://javstore.net/search?q=${encodeURIComponent(movieRef.carNum || "")}`;
+            const searchUrl = this.getSearchUrl(movieRef);
             const search = await request(searchUrl, options.scope);
             const candidates = parseJavStoreSearch(search.data, movieRef.carNum, search.finalUrl || searchUrl);
             if (!candidates.length) return [];

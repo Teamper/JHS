@@ -20,4 +20,12 @@ export class ScreenshotService {
         }
         return null;
     }
+    /** @param {Record<string, unknown>} movieRef */
+    getSearchUrl(movieRef) {
+        for (const manifest of this.integrations?.list("movie.images") ?? []) {
+            const adapter = this.integrations?.getAdapter(manifest.id);
+            if (typeof adapter?.getSearchUrl === "function") return adapter.getSearchUrl(movieRef);
+        }
+        return null;
+    }
 }

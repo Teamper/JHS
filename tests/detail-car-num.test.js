@@ -203,11 +203,12 @@ describe("detail car number propagation", () => {
     });
 
     it("normalizes a legacy JavStore URL again at the image rendering boundary", () => {
-        const html = vi.fn(), container = { html, on: vi.fn().mockReturnThis() };
-        const { Plugin } = loadScreenshotPlugin({ $: vi.fn(() => container) });
+        const append = vi.fn(), container = { empty: vi.fn().mockReturnThis(), append, on: vi.fn().mockReturnThis() };
+        const image = { attributes: {}, attr(values) { Object.assign(this.attributes, values); return this; }, addClass: vi.fn().mockReturnThis() };
+        const { Plugin } = loadScreenshotPlugin({ $: vi.fn(value => value === ".screen-container" ? container : image) });
         new Plugin().addImg("缩略图", "http://img.javstore.net/legacy.jpg");
-        expect(html).toHaveBeenCalledWith(expect.stringContaining('src="https://img.javstore.net/legacy.jpg"'));
-        expect(html).not.toHaveBeenCalledWith(expect.stringContaining('src="http://img.javstore.net'));
+        expect(image.attributes.src).toBe("https://img.javstore.net/legacy.jpg");
+        expect(append).toHaveBeenCalledWith(image);
     });
 });
 

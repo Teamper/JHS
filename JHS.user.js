@@ -3837,6 +3837,7 @@
     settings: createToken("service", "settings"),
     movie: createToken("service", "movie"),
     actressInfo: createToken("service", "actress-info"),
+    imageSearch: createToken("service", "image-search"),
     review: createToken("service", "review"),
     related: createToken("service", "related"),
     magnet: createToken("service", "magnet"),
@@ -4180,19 +4181,7 @@
   // src/plugins/avatar/search-by-image.js
   var _SearchByImagePlugin = class _SearchByImagePlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "siteList", [{
-        name: "Google旧版",
-        url: "https://www.google.com/searchbyimage?image_url={占位符}&client=firefox-b-d",
-        ico: "https://www.google.com/favicon.ico"
-      }, {
-        name: "Google",
-        url: "https://lens.google.com/uploadbyurl?url={占位符}",
-        ico: "https://www.google.com/favicon.ico"
-      }, {
-        name: "Yandex",
-        url: "https://yandex.ru/images/search?rpt=imageview&url={占位符}",
-        ico: "https://yandex.ru/favicon.ico"
-      }]), i(this, "isUploading", false);
+      super(...arguments), i(this, "isUploading", false);
     }
     getName() {
       return "SearchByImagePlugin";
@@ -4241,21 +4230,13 @@
             this.isUploading = true;
             try {
               const t3 = await this.searchByImage(e3);
+              if (!t3) return;
               s2.hide(), d2.show(), h2.empty();
               const storage = this.getRuntimeService("storage"), n3 = "jhs_selectedSites", a3 = JSON.parse(storage.getLocal(n3) || "{}");
-              this.siteList.forEach(((e4) => {
-                const n4 = e4.url.replace("{占位符}", encodeURIComponent(t3)), i3 = false !== a3[e4.name];
-                h2.append(`
-                        <a href="${n4}" class="search-img-site-btn" target="_blank" title="${e4.name}">
-                        <input type="checkbox"
-                               class="site-checkbox jhs-layout-8896c95d"
-                               data-site-name="${e4.name}"
-
-                               ${i3 ? "checked" : ""}>
-                            <img src="${e4.ico}" alt="${e4.name}">
-                            <span>${e4.name}</span>
-                        </a>
-                    `);
+              t3.targets.forEach(((e4) => {
+                const i3 = false !== a3[e4.name], anchor = $('<a class="search-img-site-btn" target="_blank" rel="noopener noreferrer"></a>').attr({ href: e4.url, title: e4.name });
+                const checkbox = $('<input type="checkbox" class="site-checkbox jhs-layout-8896c95d">').attr("data-site-name", e4.name).prop("checked", i3);
+                anchor.append(checkbox, $("<img>").attr({ src: e4.iconUrl, alt: e4.name }), $("<span></span>").text(e4.name)), h2.append(anchor);
               })), h2.on("change", ".site-checkbox", (function() {
                 const e4 = $(this).data("site-name");
                 a3[e4] = $(this).is(":checked"), storage.setLocal(n3, JSON.stringify(a3));
@@ -4289,33 +4270,9 @@
     async searchByImage(e2) {
       let t2 = loading();
       try {
-        let t3 = e2;
-        if (e2.startsWith("data:")) {
-          show.info("开始上传图片...");
-          const n2 = await (async function(e3) {
-            var t4;
-            const n3 = e3.match(/^data:(.+);base64,(.+)$/);
-            if (!n3 || n3.length < 3) throw new Error("无效的Base64图片数据");
-            const a2 = n3[1], i2 = n3[2], s2 = atob(i2), o2 = new Array(s2.length);
-            for (let g2 = 0; g2 < s2.length; g2++) o2[g2] = s2.charCodeAt(g2);
-            const r2 = new Uint8Array(o2), l2 = new Blob([r2], {
-              type: a2
-            }), c2 = new FormData();
-            c2.append("image", l2);
-            const d2 = await fetch("https://api.imgur.com/3/image", {
-              method: "POST",
-              headers: {
-                Authorization: "Client-ID d70305e7c3ac5c6"
-              },
-              body: c2
-            }), h2 = await d2.json();
-            if (h2.success && h2.data && h2.data.link) return h2.data.link;
-            throw new Error((null == (t4 = h2.data) ? void 0 : t4.error) || "上传到Imgur失败");
-          })(e2);
-          if (!n2) return void show.error("上传失败");
-          t3 = n2;
-        }
-        return t3;
+        e2.startsWith("data:") && show.info("开始上传图片...");
+        const scope = await this.getRuntimeService("scope")();
+        return await this.getRuntimeService("imageSearch").resolve(e2, { scope });
       } catch (n2) {
         show.error(`搜索失败: ${n2.message}`), clog.error("搜索失败:", n2);
       } finally {
@@ -11316,8 +11273,7 @@ ${error.stack}` : "");
         throw clog.error("获取缩略图资源失败:", n2, i2), i2;
       }
       if (!n2) return null;
-      let url = n2.url, a2 = url.indexOf("https://");
-      return -1 !== a2 && (url = url.substring(a2)), clog.log(`缩略图获取成功 (${n2.source}):`, url), url;
+      return clog.log(`缩略图获取成功 (${n2.source}):`, n2.url), n2.url;
     }
     async getServiceScreenshot(carNum) {
       const scope = await this.getRuntimeService("scope")();
@@ -11327,25 +11283,32 @@ ${error.stack}` : "");
     }
     addImg(e2, t2) {
       const url = normalizeJavStoreAssetUrl(t2);
-      url && (r && $(".screen-container").html(`<img src="${url}" alt="${e2}" loading="lazy" class="jhs-layout-cad980f4">`), l && $(".screen-container").html(`<div class="photo-frame"><img src="${url}" title="${e2}" alt="${e2}" class="jhs-layout-d4a575e8"></div>`), $(".screen-container").on("click", ((e3) => {
+      if (!url) return;
+      const container = $(".screen-container").empty(), image = $("<img>").attr({ src: url, alt: e2, loading: "lazy" });
+      r && container.append(image.addClass("jhs-layout-cad980f4"));
+      l && container.append($('<div class="photo-frame"></div>').append(image.attr("title", e2).addClass("jhs-layout-d4a575e8")));
+      container.on("click", ((e3) => {
         e3.stopPropagation(), e3.preventDefault(), showImageViewer(e3.currentTarget);
-      })));
+      }));
     }
     showErrorFallback(e2, t2) {
       var n2;
       clog.error("获取缩略图失败:", null == (n2 = null == t2 ? void 0 : t2.message) ? void 0 : n2.substring(0, 100));
       const a2 = `jhs-screenshot-message${l ? " jhs-screenshot-message--bus" : ""}`;
       if (!(e2 = normalizeCarNum(e2))) return void $(".screen-container").empty().append($("<div></div>").addClass(a2).text("无法获取番号，缩略图未加载"));
-      const searchUrl = `https://javstore.net/search?q=${encodeURIComponent(e2)}`;
-      $(".screen-container").html(`<div class="${a2}">获取缩略图失败</div><br/><a href='#' class='retry-link'>点击重试</a> 或 <a class="check-link" href='${searchUrl}' target='_blank'>前往确认</a>`).off("click", ".retry-link").off("click", ".check-link").on("click", ".retry-link", (async (t3) => {
-        t3.stopPropagation(), t3.preventDefault(), $(".screen-container").html(`<div class="${a2}">正在重新加载...</div>`);
+      const searchUrl = this.getRuntimeService("screenshot").getSearchUrl({ carNum: e2 }), container = $(".screen-container").empty();
+      const message = $("<div></div>").addClass(a2).text("获取缩略图失败"), retry = $('<a href="#" class="retry-link">点击重试</a>');
+      container.append(message, $("<br>"), retry);
+      searchUrl && container.append(document.createTextNode(" 或 "), $('<a class="check-link" target="_blank" rel="noopener noreferrer">前往确认</a>').attr("href", searchUrl));
+      container.off("click", ".retry-link").off("click", ".check-link").on("click", ".retry-link", (async (t3) => {
+        t3.stopPropagation(), t3.preventDefault(), container.empty().append($("<div></div>").addClass(a2).text("正在重新加载..."));
         try {
           const t4 = await this.getScreenshot(e2);
           this.addImg("缩略图", t4);
         } catch (n3) {
           this.showErrorFallback(e2, n3);
         }
-      })).on("click", ".check-link", (async (t3) => {
+      })).on("click", ".check-link", ((t3) => {
         t3.stopPropagation(), t3.preventDefault(), window.open(searchUrl, "_blank");
       }));
     }
@@ -15418,7 +15381,7 @@ ${error.stack}` : "");
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [SERVICE.dialog, SERVICE.account]),
-    manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog, SERVICE.storage]),
+    manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch]),
     manifest("detail.state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage]),
     manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [SERVICE.movie, SERVICE.translation, SERVICE.settings]),
     manifest("detail.native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }),
@@ -15469,6 +15432,7 @@ ${error.stack}` : "");
         [SERVICE.cache, "cache"],
         [SERVICE.http, "http"],
         [SERVICE.actressInfo, "actressInfo"],
+        [SERVICE.imageSearch, "imageSearch"],
         [SERVICE.screenshot, "screenshot"],
         [SERVICE.translation, "translation"],
         [SERVICE.subtitle, "subtitle"],
@@ -16168,6 +16132,33 @@ ${error.stack}` : "");
   __name(_HttpService, "HttpService");
   var HttpService = _HttpService;
 
+  // src/services/image-search-service.js
+  var _ImageSearchService = class _ImageSearchService {
+    constructor(integrations) {
+      this.integrations = integrations;
+    }
+    async resolve(source, options = {}) {
+      const manifest2 = this.integrations.list("image.search-targets")[0];
+      if (!manifest2) throw new JhsError("UNSUPPORTED", "以图识图 Integration 不可用", { source: "ImageSearchService" });
+      const adapter = this.integrations.getAdapter(manifest2.id);
+      let imageUrl = String(source || "");
+      if (imageUrl.startsWith("data:")) imageUrl = await adapter.upload(imageUrl, options);
+      else {
+        let parsed;
+        try {
+          parsed = new URL(imageUrl);
+        } catch (cause) {
+          throw new JhsError("INVALID_URL", "图片 URL 无效", { source: "ImageSearchService", cause });
+        }
+        if (!["http:", "https:"].includes(parsed.protocol)) throw new JhsError("INVALID_URL", "图片 URL 必须使用 HTTP/HTTPS", { source: "ImageSearchService" });
+        imageUrl = parsed.href;
+      }
+      return Object.freeze({ imageUrl, targets: adapter.createTargets(imageUrl) });
+    }
+  };
+  __name(_ImageSearchService, "ImageSearchService");
+  var ImageSearchService = _ImageSearchService;
+
   // src/services/navigation-service.js
   var _NavigationService = class _NavigationService {
     constructor(navigationPort) {
@@ -16467,6 +16458,13 @@ ${error.stack}` : "");
         if (typeof adapter?.getImages !== "function") continue;
         const result = await adapter.getImages(movieRef, context);
         if (Array.isArray(result) && result.length) return result;
+      }
+      return null;
+    }
+    getSearchUrl(movieRef) {
+      for (const manifest2 of this.integrations?.list("movie.images") ?? []) {
+        const adapter = this.integrations?.getAdapter(manifest2.id);
+        if (typeof adapter?.getSearchUrl === "function") return adapter.getSearchUrl(movieRef);
       }
       return null;
     }
@@ -16977,6 +16975,7 @@ ${error.stack}` : "");
     const integrations = new IntegrationRegistry(container, diagnostics);
     const movie = new MovieIdentityService(integrations);
     const actressInfo = new ActressInfoService(integrations, cache);
+    const imageSearch = new ImageSearchService(integrations);
     const review = new ReviewService(integrations);
     const related = new RelatedService(integrations);
     const magnet = new MagnetService(providers, integrations);
@@ -16985,13 +16984,13 @@ ${error.stack}` : "");
     const subtitle = new SubtitleService(integrations);
     const account = new AccountService(integrations);
     const offline = new OfflineService(providers, integrations);
-    container.register(PORT.navigation, navigationPort).register(PORT.http, httpPort).register(PORT.storage, storagePort).register(PORT.dialog, dialogPort).register(PORT.style, stylePort).register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy).register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.webdav, webdav).register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile).register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet).register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline).register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.account, account).register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
+    container.register(PORT.navigation, navigationPort).register(PORT.http, httpPort).register(PORT.storage, storagePort).register(PORT.dialog, dialogPort).register(PORT.style, stylePort).register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy).register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.webdav, webdav).register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile).register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.imageSearch, imageSearch).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet).register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline).register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.account, account).register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
     if (runtime.hostAdapter) container.register(PORT.host, runtime.hostAdapter);
     if (runtime.hostAdapters?.javdb) container.register(PORT.javdbHost, runtime.hostAdapters.javdb);
     if (runtime.hostAdapters?.javbus) container.register(PORT.javbusHost, runtime.hostAdapters.javbus);
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, movie, actressInfo, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
   }
   __name(createAppContext, "createAppContext");
 
@@ -17536,6 +17535,75 @@ ${error.stack}` : "");
     quality: "bronze"
   });
 
+  // src/integrations/image-search/manifest.js
+  var IMGUR_UPLOAD_URL = "https://api.imgur.com/3/image";
+  var IMGUR_CLIENT_ID = "d70305e7c3ac5c6";
+  var URL_POLICY = Object.freeze({ trustClass: "builtin-public", hosts: ["imgur.com", "google.com", "yandex.ru"] });
+  var TARGETS = Object.freeze([
+    Object.freeze({ id: "google-legacy", name: "Google旧版", urlTemplate: "https://www.google.com/searchbyimage?image_url={imageUrl}&client=firefox-b-d", iconUrl: "https://www.google.com/favicon.ico" }),
+    Object.freeze({ id: "google-lens", name: "Google", urlTemplate: "https://lens.google.com/uploadbyurl?url={imageUrl}", iconUrl: "https://www.google.com/favicon.ico" }),
+    Object.freeze({ id: "yandex", name: "Yandex", urlTemplate: "https://yandex.ru/images/search?rpt=imageview&url={imageUrl}", iconUrl: "https://yandex.ru/favicon.ico" })
+  ]);
+  function parseImgurUpload(payload) {
+    let value = payload;
+    if (typeof value === "string") {
+      try {
+        value = JSON.parse(value);
+      } catch (cause) {
+        throw new JhsError("INVALID_RESPONSE", "Imgur 返回了无效 JSON", { source: "image-search", cause });
+      }
+    }
+    const result = value;
+    if (result?.success && typeof result?.data?.link === "string" && /^https:\/\//i.test(result.data.link)) return result.data.link;
+    throw new JhsError("INVALID_RESPONSE", String(result?.data?.error || "Imgur 上传响应无效"), { source: "image-search" });
+  }
+  __name(parseImgurUpload, "parseImgurUpload");
+  function dataUrlToFormData(dataUrl) {
+    const match = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);base64,([a-z0-9+/=\s]+)$/i);
+    if (!match) throw new JhsError("INVALID_RESPONSE", "无效的 Base64 图片数据", { source: "image-search" });
+    const binary = atob(match[2].replace(/\s/g, "")), bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    const form = new FormData();
+    form.append("image", new Blob([bytes], { type: match[1] }), "jhs-image");
+    return form;
+  }
+  __name(dataUrlToFormData, "dataUrlToFormData");
+  function createImageSearchAdapter(http) {
+    return Object.freeze({
+      contracts: ["ImageUrl", "ImageSearchTarget"],
+      async upload(dataUrl, options = {}) {
+        const response = await http.request({
+          providerId: "image-search",
+          method: "POST",
+          url: IMGUR_UPLOAD_URL,
+          body: dataUrlToFormData(dataUrl),
+          headers: { Authorization: `Client-ID ${IMGUR_CLIENT_ID}` },
+          responseType: "json",
+          cacheScope: "none",
+          urlPolicy: URL_POLICY
+        }, options.scope);
+        return parseImgurUpload(response.data);
+      },
+      createTargets(imageUrl) {
+        const encoded = encodeURIComponent(imageUrl);
+        return Object.freeze(TARGETS.map((target) => Object.freeze({ id: target.id, name: target.name, url: target.urlTemplate.replace("{imageUrl}", encoded), iconUrl: target.iconUrl })));
+      }
+    });
+  }
+  __name(createImageSearchAdapter, "createImageSearchAdapter");
+  var manifest_default8 = defineIntegration({
+    id: "image-search",
+    trustClass: "builtin-public",
+    hosts: ["imgur.com", "google.com", "yandex.ru"],
+    capabilities: ["image.upload", "image.search-targets"],
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createImageSearchAdapter(client.http), "createAdapter"),
+    createHostAdapter: null,
+    cachePolicy: { "image.upload": "none", "image.search-targets": "none" },
+    quality: "silver"
+  });
+
   // src/integrations/javdb/signature.js
   var signatureSecond2 = 0;
   var signatureValue2 = "";
@@ -17733,7 +17801,7 @@ ${error.stack}` : "");
     });
   }
   __name(createJavDbAdapter, "createJavDbAdapter");
-  var manifest_default8 = defineIntegration({
+  var manifest_default9 = defineIntegration({
     id: "javdb",
     trustClass: "builtin-public",
     hosts: ["javdb.com", "jdforrepam.com"],
@@ -17805,7 +17873,7 @@ ${error.stack}` : "");
     });
   }
   __name(createJavBusAdapter, "createJavBusAdapter");
-  var manifest_default9 = defineIntegration({
+  var manifest_default10 = defineIntegration({
     id: "javbus",
     trustClass: "builtin-public",
     hosts: ["javbus.com"],
@@ -17831,8 +17899,11 @@ ${error.stack}` : "");
     }, scope), "request");
     return Object.freeze({
       contracts: ["Screenshot"],
+      getSearchUrl(movieRef) {
+        return `https://javstore.net/search?q=${encodeURIComponent(movieRef.carNum || "")}`;
+      },
       async getImages(movieRef, options = {}) {
-        const searchUrl = `https://javstore.net/search?q=${encodeURIComponent(movieRef.carNum || "")}`;
+        const searchUrl = this.getSearchUrl(movieRef);
         const search = await request(searchUrl, options.scope);
         const candidates = parseJavStoreSearch(search.data, movieRef.carNum, search.finalUrl || searchUrl);
         if (!candidates.length) return [];
@@ -17850,7 +17921,7 @@ ${error.stack}` : "");
     });
   }
   __name(createJavStoreAdapter, "createJavStoreAdapter");
-  var manifest_default10 = defineIntegration({
+  var manifest_default11 = defineIntegration({
     id: "javstore",
     trustClass: "builtin-public",
     hosts: ["javstore.net"],
@@ -17864,12 +17935,12 @@ ${error.stack}` : "");
   });
 
   // src/integrations/javtrailers/manifest.js
-  var manifest_default11 = defineIntegration({ id: "javtrailers", trustClass: "builtin-public", hosts: ["javtrailers.com"], capabilities: ["movie.preview"], requires: [PORT.http, SERVICE.urlPolicy], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "javtrailers" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MoviePreview"] }), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
+  var manifest_default12 = defineIntegration({ id: "javtrailers", trustClass: "builtin-public", hosts: ["javtrailers.com"], capabilities: ["movie.preview"], requires: [PORT.http, SERVICE.urlPolicy], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "javtrailers" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => Object.freeze({ contracts: ["MoviePreview"] }), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
 
   // src/integrations/one115/manifest.js
   var HOME_URL = "https://115.com";
   var SESSION_SCOPE_ID = "one115-browser-session";
-  var URL_POLICY = Object.freeze({ trustClass: "builtin-public", hosts: ["115.com"] });
+  var URL_POLICY2 = Object.freeze({ trustClass: "builtin-public", hosts: ["115.com"] });
   function parsePayload(value) {
     if (typeof value !== "string") return value;
     try {
@@ -17906,7 +17977,7 @@ ${error.stack}` : "");
       cacheScope: options.cacheScope || "none",
       ttlMs: options.ttlMs,
       sessionScopeId: options.cacheScope === "session" ? SESSION_SCOPE_ID : void 0,
-      urlPolicy: URL_POLICY
+      urlPolicy: URL_POLICY2
     }, options.scope), "request");
     return Object.freeze({
       contracts: ["AccountStatus", "CloudFile", "OfflineSubmission"],
@@ -17949,7 +18020,7 @@ ${error.stack}` : "");
     });
   }
   __name(createOne115Adapter, "createOne115Adapter");
-  var manifest_default12 = defineIntegration({
+  var manifest_default13 = defineIntegration({
     id: "one115",
     trustClass: "builtin-public",
     hosts: ["115.com"],
@@ -17963,7 +18034,7 @@ ${error.stack}` : "");
   });
 
   // src/integrations/pan123/manifest.js
-  var URL_POLICY2 = Object.freeze({ trustClass: "builtin-public", hosts: ["123pan.com"] });
+  var URL_POLICY3 = Object.freeze({ trustClass: "builtin-public", hosts: ["123pan.com"] });
   function crc32(value) {
     const table = new Uint32Array(256);
     for (let index = 0; index < 256; index += 1) {
@@ -18021,7 +18092,7 @@ ${error.stack}` : "");
         cacheScope: "none",
         timeout: runtime.getTimeout?.() ?? 5e3,
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "App-Version": "3", platform: "web", Origin: "https://yun.123pan.com", Referer: "https://yun.123pan.com/" },
-        urlPolicy: URL_POLICY2
+        urlPolicy: URL_POLICY3
       }, scope);
     }, "request");
     return Object.freeze({
@@ -18050,7 +18121,7 @@ ${error.stack}` : "");
     });
   }
   __name(createPan123Adapter, "createPan123Adapter");
-  var manifest_default13 = defineIntegration({
+  var manifest_default14 = defineIntegration({
     id: "pan123",
     trustClass: "builtin-public",
     hosts: ["123pan.com"],
@@ -18077,7 +18148,7 @@ ${error.stack}` : "");
     });
   }
   __name(createSubtitleCatAdapter, "createSubtitleCatAdapter");
-  var manifest_default14 = defineIntegration({ id: "subtitlecat", trustClass: "builtin-public", hosts: ["subtitlecat.com"], capabilities: ["subtitle.search"], requires: [], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "subtitlecat" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => createSubtitleCatAdapter(), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
+  var manifest_default15 = defineIntegration({ id: "subtitlecat", trustClass: "builtin-public", hosts: ["subtitlecat.com"], capabilities: ["subtitle.search"], requires: [], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "subtitlecat" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => createSubtitleCatAdapter(), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
 
   // src/integrations/wikipedia/parser.js
   function compact(value) {
@@ -18132,7 +18203,7 @@ ${error.stack}` : "");
     });
   }
   __name(createWikipediaAdapter, "createWikipediaAdapter");
-  var manifest_default15 = defineIntegration({
+  var manifest_default16 = defineIntegration({
     id: "wikipedia",
     trustClass: "builtin-public",
     hosts: ["ja.wikipedia.org"],
@@ -18200,7 +18271,7 @@ ${error.stack}` : "");
     });
   }
   __name(createXunleiAdapter, "createXunleiAdapter");
-  var manifest_default16 = defineIntegration({
+  var manifest_default17 = defineIntegration({
     id: "xunlei",
     trustClass: "builtin-public",
     hosts: XUNLEI_HOSTS,
@@ -18214,7 +18285,7 @@ ${error.stack}` : "");
   });
 
   // src/app/integration-catalog.js
-  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default7, manifest_default8, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13, manifest_default14, manifest_default15, manifest_default16]);
+  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default7, manifest_default8, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13, manifest_default14, manifest_default15, manifest_default16, manifest_default17]);
 
   // src/app/bootstrap.js
   function patchLayerRuntime(layerRuntime) {

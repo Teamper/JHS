@@ -7,6 +7,10 @@ it("normalizes JavStore search results", () => {
     expect(parseJavStoreSearch('<a href="/ABC-123-pn.html">ABC-123</a>', "ABC-123")).toEqual(["https://javstore.net/ABC-123-pn.html"]);
 });
 
+it("owns the JavStore confirmation URL", () => {
+    expect(createJavStoreAdapter({ request: async () => ({}) }).getSearchUrl({ carNum: "ABC 123" })).toBe("https://javstore.net/search?q=ABC%20123");
+});
+
 it("loads normalized images through the declared HTTP boundary", async () => {
     const request = vi.fn(async options => ({
         status: 200,

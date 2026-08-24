@@ -12,6 +12,7 @@ import { DiagnosticsService } from "../services/diagnostics-service.js";
 import { DialogService } from "../services/dialog-service.js";
 import { ExternalUrlPolicy } from "../services/external-url-policy.js";
 import { HttpService } from "../services/http-service.js";
+import { ImageSearchService } from "../services/image-search-service.js";
 import { NavigationService } from "../services/navigation-service.js";
 import { MagnetService } from "../services/magnet-service.js";
 import { MovieIdentityService } from "../services/movie-identity-service.js";
@@ -63,6 +64,7 @@ export function createAppContext(runtime) {
     const integrations = new IntegrationRegistry(container, diagnostics);
     const movie = new MovieIdentityService(integrations);
     const actressInfo = new ActressInfoService(integrations, cache);
+    const imageSearch = new ImageSearchService(integrations);
     const review = new ReviewService(integrations);
     const related = new RelatedService(integrations);
     const magnet = new MagnetService(providers, integrations);
@@ -78,7 +80,7 @@ export function createAppContext(runtime) {
         .register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy)
         .register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.webdav, webdav)
         .register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile)
-        .register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet)
+        .register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.imageSearch, imageSearch).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet)
         .register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline)
         .register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.account, account)
         .register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
@@ -88,5 +90,5 @@ export function createAppContext(runtime) {
 
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, movie, actressInfo, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
 }

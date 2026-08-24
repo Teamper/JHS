@@ -27,6 +27,7 @@ export const SERVICE = Object.freeze({
     settings: createToken("service", "settings"),
     movie: createToken("service", "movie"),
     actressInfo: createToken("service", "actress-info"),
+    imageSearch: createToken("service", "image-search"),
     review: createToken("service", "review"),
     related: createToken("service", "related"),
     magnet: createToken("service", "magnet"),

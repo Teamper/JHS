@@ -19,4 +19,12 @@ describe("ScreenshotService", () => {
         ]);
         expect(getImages).toHaveBeenCalledWith({ carNum: "ABC-123" }, { scope: "scope" });
     });
+
+    it("gets provider confirmation URLs through the Integration boundary", () => {
+        const providers = { getAvailable: vi.fn(), updateHealth: vi.fn() };
+        const getSearchUrl = vi.fn(() => "https://javstore.net/search?q=ABC-123");
+        const integrations = { list: vi.fn(() => [{ id: "javstore" }]), getAdapter: vi.fn(() => ({ getSearchUrl })) };
+        expect(new ScreenshotService(providers, integrations).getSearchUrl({ carNum: "ABC-123" })).toBe("https://javstore.net/search?q=ABC-123");
+        expect(getSearchUrl).toHaveBeenCalledWith({ carNum: "ABC-123" });
+    });
 });
