@@ -38,6 +38,16 @@ describe("HTTP, URL and settings contracts", () => {
         await expect(service.request({ providerId: "example", url: "https://api.example.test/data", urlPolicy: { trustClass: "builtin-public", hosts: ["api.example.test"] }, cacheScope: "none" })).rejects.toMatchObject({ code: "INVALID_URL" });
     });
 
+    it("cancels non-cached requests with their LifecycleScope", async () => {
+        const request = vi.fn(options => new Promise((resolve, reject) => options.signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true })));
+        const service = new HttpService({ request }, new ExternalUrlPolicy()), scope = new LifecycleScope("settings:test-source");
+        const pending = service.request({ providerId: "example", url: "https://api.example.test/data", urlPolicy: { trustClass: "builtin-public", hosts: ["api.example.test"] }, cacheScope: "none" }, scope);
+        await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+        scope.dispose();
+        await expect(pending).rejects.toMatchObject({ code: "ABORTED" });
+        expect(request.mock.calls[0][0].signal.aborted).toBe(true);
+    });
+
     it("normalizes authentication and rate-limit HTTP statuses", async () => {
         const policy = new ExternalUrlPolicy(), options = { providerId: "example", url: "https://api.example.test/data", urlPolicy: { trustClass: "builtin-public", hosts: ["api.example.test"] }, cacheScope: "none" };
         const unauthorized = new HttpService({ request: async () => ({ status: 401, finalUrl: options.url }) }, policy);

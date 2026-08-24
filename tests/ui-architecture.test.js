@@ -43,6 +43,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     const translate = readTestFile(join(process.cwd(), "src/plugins/translate/translate.js"), "utf8");
     const translationUi = readTestFile(join(process.cwd(), "src/ui/translation/title-translation.js"), "utf8");
     const settings = readTestFile(join(process.cwd(), "src/plugins/backup/setting-templates.js"), "utf8");
+    const settingPlugin = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8");
     const settingStyles = readTestFile(join(process.cwd(), "src/plugins/backup/setting-styles.js"), "utf8");
     const pluginPanels = readTestFile(join(process.cwd(), "src/plugins/backup/setting-panels.js"), "utf8");
     const reviews = readTestFile(join(process.cwd(), "src/plugins/external-search/review.js"), "utf8");
@@ -240,6 +241,15 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(previewVideo).toContain('this.getRuntimeService("storage")');
         expect(previewVideo).toContain('this.getRuntimeService("settings")');
         expect(previewVideo).toContain('settings.set("videoMuted"');
+    });
+
+    it("tests resource sources through scoped HttpService trust classes", () => {
+        const start = settingPlugin.indexOf("async testSource"), testSource = settingPlugin.slice(start, settingPlugin.indexOf("previewCarNumbers", start));
+        expect(testSource).toContain('getRuntimeService("http").request');
+        expect(testSource).toContain('getRuntimeService("scope")');
+        expect(testSource).toContain('trustClass: "custom-public"');
+        expect(testSource).toContain('trustClass: "builtin-public"');
+        expect(testSource).not.toContain("gmHttp");
     });
 
     it("resets host cover animation without touching hover preview lifecycle", () => {

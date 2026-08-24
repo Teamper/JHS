@@ -7659,7 +7659,7 @@
           source.enabled = event.currentTarget.checked;
           "screenshot" === kind ? await this.resourceSettings.saveScreenshotSettings(this.resourceState.screenshot) : custom ? await this.resourceSettings.saveMagnetSources(this.resourceState.custom) : await this.resourceSettings.saveBuiltInSources(this.resourceState.builtIn);
         });
-        node.on("click", ".jhs-source-test", (event) => this.testSource(event.currentTarget, source.baseUrl || source.searchUrlTemplate?.replace("{keyword}", "test")));
+        node.on("click", ".jhs-source-test", (event) => this.testSource(event.currentTarget, source.baseUrl || source.searchUrlTemplate?.replace("{keyword}", "test"), { custom, source }));
         custom && node.on("click", ".jhs-source-edit", (() => this.openSourceDialog(source))).on("click", ".jhs-source-delete", ((event) => utils.q(event, `确认删除来源「${source.name}」？`, (async () => {
           this.resourceState.custom = this.resourceState.custom.filter(((item) => item.id !== source.id));
           await this.resourceSettings.saveMagnetSources(this.resourceState.custom);
@@ -7748,15 +7748,15 @@
         badge.text("检测失败");
       }
     }
-    async testSource(button, url) {
+    async testSource(button, url, options = {}) {
       if (!url) return show.info("本站来源无需跨站测试");
       const node = $(button).prop("disabled", true), badge = node.siblings(".jhs-source-test-state").length ? node.siblings(".jhs-source-test-state") : $('<span class="jhs-badge jhs-source-test-state"></span>').insertAfter(node);
       badge.text("检测中");
       try {
-        const response = await gmHttp.get(url);
-        badge.text(response ? "200 · 可解析" : "空响应");
+        const parsed = new URL(url), scope = await this.getRuntimeService("scope")(), response = await this.getRuntimeService("http").request({ providerId: `settings-source-${options.source?.id || "unknown"}`, method: "GET", url: parsed.href, responseType: "text", cacheScope: "none", urlPolicy: options.custom ? { trustClass: "custom-public" } : { trustClass: "builtin-public", hosts: [options.source?.domain || parsed.hostname] } }, scope);
+        badge.text(response.data ? "200 · 可解析" : "空响应");
       } catch (error) {
-        badge.text(error?._cfBlocked ? "Cloudflare 拦截" : error?.status === 404 ? "404" : error?._circuitBreaker ? "熔断" : "请求失败");
+        badge.text("NOT_FOUND" === error?.code ? "404" : "RATE_LIMITED" === error?.code ? "限流" : "AUTH_REQUIRED" === error?.code ? "需要授权" : "请求失败");
       } finally {
         node.prop("disabled", false).text("测试");
       }
@@ -15473,7 +15473,7 @@ ${error.stack}` : "");
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog]),
-    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage]),
+    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.http]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [SERVICE.dialog]),
@@ -16030,7 +16030,7 @@ ${error.stack}` : "");
         const cached = this.cache.get(serializedKey, cachePolicy);
         if (cached.hit) return cached.value;
       }
-      if (method !== "GET" || cacheScope === "none") return this.executeUnderlying({ ...options, method, url: initialUrl.href }, urlPolicy);
+      if (method !== "GET" || cacheScope === "none") return this.executeUnderlying({ ...options, method, url: initialUrl.href, signal: scope?.signal }, urlPolicy);
       let entry = this.inflight.get(serializedKey);
       if (!entry) {
         const controller = new AbortController();

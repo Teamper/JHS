@@ -68,7 +68,7 @@ export class HttpService {
             const cached = this.cache.get(serializedKey, cachePolicy);
             if (cached.hit) return cached.value;
         }
-        if (method !== "GET" || cacheScope === "none") return this.executeUnderlying({ ...options, method, url: initialUrl.href }, urlPolicy);
+        if (method !== "GET" || cacheScope === "none") return this.executeUnderlying({ ...options, method, url: initialUrl.href, signal: scope?.signal }, urlPolicy);
 
         let entry = this.inflight.get(serializedKey);
         if (!entry) {
