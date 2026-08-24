@@ -10,6 +10,11 @@
       "JavDB": 0,
       "JavBus": 3
     },
+    "startupMedianMilliseconds": {
+      "JavDB": 220,
+      "JavBus": 230
+    },
+    "startupBaselineReason": "Five-sample median from the deterministic desktop-wide Edge fixture harness; CI warnings require RC review rather than automatic failure",
     "startupRegressionRatio": 0.1
   }
 }
