@@ -4653,13 +4653,9 @@
   __name(parseCustomMagnetResponse, "parseCustomMagnetResponse");
 
   // src/plugins/backup/resource-settings.js
-  var BUILT_IN_MAGNET_SOURCES = Object.freeze([
+  var BUILT_IN_NATIVE_MAGNET_SOURCES = Object.freeze([
     { id: "native-javdb", name: "JavDB 本站", type: "本站资源", domain: "javdb.com", priority: 10, enabled: true },
-    { id: "native-javbus", name: "JavBus 本站", type: "本站资源", domain: "javbus.com", priority: 11, enabled: true },
-    { id: "u9a9", name: "U9A9", type: "网页来源", domain: "u9a9.com", baseUrl: "https://u9a9.com", priority: 20, enabled: true },
-    { id: "u3c3", name: "U3C3", type: "网页来源", domain: "u3c3.com", baseUrl: "https://u3c3.com", priority: 30, enabled: true },
-    { id: "sukebei", name: "Sukebei", type: "网页来源", domain: "sukebei.nyaa.si", baseUrl: "https://sukebei.nyaa.si", priority: 40, enabled: true },
-    { id: "btsow", name: "BTSOW", type: "API 来源", domain: "btsow.lol", baseUrl: "https://btsow.lol", priority: 50, enabled: true }
+    { id: "native-javbus", name: "JavBus 本站", type: "本站资源", domain: "javbus.com", priority: 11, enabled: true }
   ]);
   var BUILT_IN_SCREENSHOT_SOURCES = Object.freeze([
     { id: "javstore", name: "JavStore", domain: "javstore.net", priority: 10, enabled: true },
@@ -7644,7 +7640,8 @@
     }
     async loadResourceSettings() {
       const [custom, tags, filters, builtInOverrides, screenshot, cloud] = await Promise.all([this.resourceSettings.getMagnetSources(), this.resourceSettings.getMagnetTagRules(), this.resourceSettings.getMagnetFilterRules(), this.resourceSettings.getBuiltInSources(), this.resourceSettings.getScreenshotSettings(), this.resourceSettings.getCloudSettings()]);
-      this.resourceState = { custom, tags, filters, builtIn: BUILT_IN_MAGNET_SOURCES.map(((source) => ({ ...source, ...builtInOverrides.find(((item) => item.id === source.id)) || {} }))), screenshot: { mode: screenshot.mode, providers: BUILT_IN_SCREENSHOT_SOURCES.map(((source) => {
+      const builtInCatalog = [...BUILT_IN_NATIVE_MAGNET_SOURCES, ...this.getRuntimeService("magnet").getBuiltInSources()];
+      this.resourceState = { custom, tags, filters, builtIn: builtInCatalog.map(((source) => ({ ...source, ...builtInOverrides.find(((item) => item.id === source.id)) || {} }))), screenshot: { mode: screenshot.mode, providers: BUILT_IN_SCREENSHOT_SOURCES.map(((source) => {
         const merged = { ...source, ...screenshot.providers.find(((item) => item.id === source.id)) || {} };
         return false === source.implemented ? { ...merged, enabled: false } : merged;
       })) } };
@@ -9721,9 +9718,18 @@ ${error.stack}` : "");
       super(...arguments), i(this, "sourceRegistry", new MagnetSourceRegistry()), i(this, "searchEngines", []);
     }
     async initializeSources() {
-      const settings = new ResourceSettingsService(), overrides = await settings.getBuiltInSources(), custom = await settings.getMagnetSources();
-      const configured = /* @__PURE__ */ __name((id) => ({ ...BUILT_IN_MAGNET_SOURCES.find(((source) => source.id === id)) || {}, ...overrides.find(((source) => source.id === id)) || {} }), "configured");
-      const baseUrl = /* @__PURE__ */ __name((id, fallback) => String(configured(id).baseUrl || fallback).replace(/\/$/, ""), "baseUrl");
+      const settings = new ResourceSettingsService(), magnet = this.getRuntimeService("magnet"), overrides = await settings.getBuiltInSources(), custom = await settings.getMagnetSources();
+      const integrationSources = magnet.getBuiltInSources(), catalog = [...BUILT_IN_NATIVE_MAGNET_SOURCES, ...integrationSources];
+      const configured = /* @__PURE__ */ __name((id) => ({ ...catalog.find(((source) => source.id === id)) || {}, ...overrides.find(((source) => source.id === id)) || {} }), "configured");
+      const externalSources = integrationSources.map(((source) => {
+        const config = configured(source.id), baseUrl = String(config.baseUrl || source.baseUrl).replace(/\/$/, "");
+        return {
+          ...source,
+          ...config,
+          search: /* @__PURE__ */ __name(async (keyword) => magnet.searchSource(source.id, keyword, { baseUrl, scope: await this.getRuntimeService("scope")() }), "search"),
+          targetUrl: /* @__PURE__ */ __name((keyword) => magnet.getSourceTargetUrl(source.id, keyword, { baseUrl }), "targetUrl")
+        };
+      }));
       this.sourceRegistry = new MagnetSourceRegistry([
         {
           name: "JavDB 本站",
@@ -9743,34 +9749,7 @@ ${error.stack}` : "");
           search: /* @__PURE__ */ __name(async (keyword, root = document) => parseNativeMagnets(root?.jquery ? root[0] : root, "javbus"), "search"),
           targetUrl: /* @__PURE__ */ __name(() => window.location.href, "targetUrl")
         },
-        {
-          name: "U9A9",
-          id: "u9a9",
-          url: "https://u9a9.com/?type=2&search={keyword}",
-          targetPage: "https://u9a9.com/?type=2&search={keyword}",
-          priority: 10,
-          search: /* @__PURE__ */ __name((keyword) => this.searchTorrentSource("u9a9", `${baseUrl("u9a9", "https://u9a9.com")}/?type=2&search={keyword}`, keyword), "search"),
-          targetUrl: /* @__PURE__ */ __name((keyword) => `${baseUrl("u9a9", "https://u9a9.com")}/?type=2&search=${encodeURIComponent(keyword)}`, "targetUrl")
-        },
-        {
-          name: "U3C3",
-          id: "u3c3",
-          url: "https://u3c3.com/?search2=a8lr16lo&search={keyword}",
-          targetPage: "https://u3c3.com/?search2=a8lr16lo&search={keyword}",
-          priority: 20,
-          search: /* @__PURE__ */ __name((keyword) => this.searchTorrentSource("u3c3", `${baseUrl("u3c3", "https://u3c3.com")}/?search2=a8lr16lo&search={keyword}`, keyword), "search"),
-          targetUrl: /* @__PURE__ */ __name((keyword) => `${baseUrl("u3c3", "https://u3c3.com")}/?search2=a8lr16lo&search=${encodeURIComponent(keyword)}`, "targetUrl")
-        },
-        {
-          name: "Sukebei",
-          id: "sukebei",
-          url: "https://sukebei.nyaa.si/?f=0&c=0_0&q={keyword}",
-          targetPage: "https://sukebei.nyaa.si/?f=0&c=0_0&q={keyword}",
-          priority: 30,
-          search: /* @__PURE__ */ __name((keyword) => this.searchTorrentSource("sukebei", `${baseUrl("sukebei", "https://sukebei.nyaa.si")}/?f=0&c=0_0&q={keyword}`, keyword), "search"),
-          targetUrl: /* @__PURE__ */ __name((keyword) => `${baseUrl("sukebei", "https://sukebei.nyaa.si")}/?f=0&c=0_0&q=${encodeURIComponent(keyword)}`, "targetUrl")
-        },
-        { name: "BTSOW", id: "btsow", priority: 40, search: /* @__PURE__ */ __name((keyword) => this.searchBtsow(keyword, baseUrl("btsow", "https://btsow.lol")), "search"), targetUrl: /* @__PURE__ */ __name((keyword) => `${baseUrl("btsow", "https://btsow.lol")}/search/${encodeURIComponent(keyword)}`, "targetUrl") }
+        ...externalSources
       ].map(((source) => {
         const config = configured(source.id), applicable = source.applicable ?? true;
         return { ...source, ...config, enabled: applicable && (config.enabled ?? source.enabled ?? true), search: source.search, targetUrl: source.targetUrl };
@@ -9836,12 +9815,6 @@ ${error.stack}` : "");
       }
       t2.parseJson && await t2.parseJson.call(this, e2, t2, n2, a2);
     }
-    async searchTorrentSource(source, template, keyword) {
-      const url = template.replace("{keyword}", encodeURIComponent(keyword));
-      const config = BUILT_IN_MAGNET_SOURCES.find(((item) => item.id === source)), targetHost = new URL(url).hostname;
-      const html = await this.requestSource(source, url, { ttlMs: CACHE_TTL.magnet, hosts: config?.domain ? [config.domain] : void 0, custom: Boolean(config?.domain && targetHost !== config.domain) });
-      return this.parseTorrentList(html, keyword).map(((item) => ({ ...item, source, files: [] })));
-    }
     async searchCustomSources(keyword) {
       const configs = JSON.parse(await storageManager.getSetting("customMagnetSources", "[]"));
       const enabled = configs.filter(((config) => config.enabled)).map(validateCustomMagnetSource);
@@ -9873,19 +9846,6 @@ ${error.stack}` : "");
         }
       }));
       return deduplicateMagnetResults(groups.flat());
-    }
-    async searchBtsow(keyword, baseUrl = "https://btsow.lol") {
-      const defaultHost = BUILT_IN_MAGNET_SOURCES.find(((item) => item.id === "btsow"))?.domain, targetHost = new URL(baseUrl).hostname;
-      const payload = await this.requestSource("btsow", `${baseUrl}/search`, {
-        method: "POST",
-        body: JSON.stringify([{ search: keyword }, 50, 1]),
-        responseType: "json",
-        headers: { "Content-Type": "application/json" },
-        custom: targetHost !== defaultHost,
-        hosts: defaultHost ? [defaultHost] : void 0
-      });
-      const value = "string" === typeof payload ? JSON.parse(payload) : payload;
-      return (value?.data || []).map(((item) => normalizeMagnetResult({ title: item.name, magnet: `magnet:?xt=urn:btih:${item.hash}`, size: `${(Number(item.size) / 1073741824).toFixed(2)} GB`, date: utils.formatDate(new Date(1e3 * item.lastUpdateTime)) }, "btsow"))).filter(Boolean);
     }
     async requestSource(sourceId, url, options = {}) {
       const scope = await this.getRuntimeService("scope")(), response = await this.getRuntimeService("http").request({
@@ -9944,24 +9904,6 @@ ${error.stack}` : "");
         const e3 = $(this), t3 = e3.data("magnet");
         await utils.copyToClipboard("磁力链接", t3) && a2(e3);
       }))) : e2.append('<div class="magnet-error">没有找到相关结果</div>');
-    }
-    parseTorrentList(e2, t2) {
-      const n2 = utils.htmlTo$dom(e2), a2 = [];
-      return n2.find(".torrent-list tbody tr").each(((e3, n3) => {
-        const i2 = $(n3);
-        if (i2.text().includes("置顶")) return;
-        const s2 = i2.find("td:nth-child(2) a").attr("title") || i2.find("td:nth-child(2) a").text().trim();
-        if (!s2.toLowerCase().includes(t2.toLowerCase())) return;
-        const o2 = i2.find("td:nth-child(3) a[href^='magnet:']").attr("href"), r2 = i2.find("td:nth-child(4)").text().trim(), l2 = i2.find("td:nth-child(5)").text().trim(), c2 = parseInt(i2.find("td:nth-child(6)").text().trim()) || 0, d2 = parseInt(i2.find("td:nth-child(7)").text().trim()) || 0;
-        o2 && a2.push({
-          title: s2,
-          magnet: o2,
-          size: r2,
-          date: l2,
-          seeders: c2,
-          leechers: d2
-        });
-      })), a2;
     }
     calcMagnetScore(e2) {
       return calcMagnetScore(e2);
@@ -15449,7 +15391,7 @@ ${error.stack}` : "");
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog]),
-    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.offline]),
+    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.offline, SERVICE.magnet]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account]),
@@ -15468,7 +15410,7 @@ ${error.stack}` : "");
     manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie, SERVICE.storage, SERVICE.http]),
     manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings]),
     manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }, [SERVICE.http]),
-    manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage, SERVICE.http]),
+    manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage, SERVICE.http, SERVICE.magnet]),
     manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot]),
     manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [SERVICE.dialog, SERVICE.storage, SERVICE.http]),
     manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }),
@@ -16274,6 +16216,26 @@ ${error.stack}` : "");
       if (!manifest2) return [];
       const adapter = this.integrations?.getAdapter(manifest2.id);
       return typeof adapter?.listMagnets === "function" ? adapter.listMagnets(movieRef, context) : [];
+    }
+    getBuiltInSources() {
+      return (this.integrations?.list("magnet.search") ?? []).flatMap((manifest2) => {
+        const adapter = this.integrations?.getAdapter(manifest2.id);
+        return typeof adapter?.getSources === "function" ? adapter.getSources() : [];
+      });
+    }
+    async searchSource(sourceId, keyword, context = {}) {
+      for (const manifest2 of this.integrations?.list("magnet.search") ?? []) {
+        const adapter = this.integrations?.getAdapter(manifest2.id);
+        if (adapter?.getSources?.().some((source) => source.id === sourceId)) return adapter.search(sourceId, keyword, context);
+      }
+      return [];
+    }
+    getSourceTargetUrl(sourceId, keyword, context = {}) {
+      for (const manifest2 of this.integrations?.list("magnet.search") ?? []) {
+        const adapter = this.integrations?.getAdapter(manifest2.id);
+        if (adapter?.getSources?.().some((source) => source.id === sourceId)) return adapter.targetUrl(sourceId, keyword, context);
+      }
+      return null;
     }
     assess(magnet) {
       return assessMagnetQuality(magnet);
@@ -18222,6 +18184,97 @@ ${error.stack}` : "");
   __name(createSubtitleCatAdapter, "createSubtitleCatAdapter");
   var manifest_default15 = defineIntegration({ id: "subtitlecat", trustClass: "builtin-public", hosts: ["subtitlecat.com"], capabilities: ["subtitle.search"], requires: [], createClient: /* @__PURE__ */ __name(() => Object.freeze({ id: "subtitlecat" }), "createClient"), createAdapter: /* @__PURE__ */ __name(() => createSubtitleCatAdapter(), "createAdapter"), createHostAdapter: null, cachePolicy: "none", quality: "bronze" });
 
+  // src/integrations/torrent-sources/manifest.js
+  var SOURCES = Object.freeze([
+    Object.freeze({ id: "u9a9", name: "U9A9", type: "网页来源", domain: "u9a9.com", baseUrl: "https://u9a9.com", priority: 20, enabled: true, searchPath: /* @__PURE__ */ __name((keyword) => `/?type=2&search=${encodeURIComponent(keyword)}`, "searchPath") }),
+    Object.freeze({ id: "u3c3", name: "U3C3", type: "网页来源", domain: "u3c3.com", baseUrl: "https://u3c3.com", priority: 30, enabled: true, searchPath: /* @__PURE__ */ __name((keyword) => `/?search2=a8lr16lo&search=${encodeURIComponent(keyword)}`, "searchPath") }),
+    Object.freeze({ id: "sukebei", name: "Sukebei", type: "网页来源", domain: "sukebei.nyaa.si", baseUrl: "https://sukebei.nyaa.si", priority: 40, enabled: true, searchPath: /* @__PURE__ */ __name((keyword) => `/?f=0&c=0_0&q=${encodeURIComponent(keyword)}`, "searchPath") }),
+    Object.freeze({ id: "btsow", name: "BTSOW", type: "API 来源", domain: "btsow.lol", baseUrl: "https://btsow.lol", priority: 50, enabled: true, searchPath: /* @__PURE__ */ __name((keyword) => `/search/${encodeURIComponent(keyword)}`, "searchPath") })
+  ]);
+  function normalizeMagnet(value, source) {
+    const item = value, magnet = String(item?.magnet || "");
+    if (!magnet.startsWith("magnet:")) return null;
+    return Object.freeze({ title: String(item.title || ""), magnet, size: String(item.size || ""), date: String(item.date || ""), seeders: Number(item.seeders) || 0, leechers: Number(item.leechers) || 0, source, files: Object.freeze([]) });
+  }
+  __name(normalizeMagnet, "normalizeMagnet");
+  function parseTorrentSource(html, keyword, source) {
+    if (typeof html !== "string") throw new JhsError("INVALID_RESPONSE", "磁力来源响应不是 HTML", { source });
+    const document2 = new DOMParser().parseFromString(html, "text/html"), challenge = `${document2.title} ${document2.body?.textContent || ""}`;
+    if (/Just a moment|cf-chl-|Cloudflare/i.test(challenge)) throw new JhsError("CF_BLOCKED", "磁力来源被 Cloudflare 拦截", { source });
+    return Object.freeze([...document2.querySelectorAll(".torrent-list tbody tr")].flatMap((row) => {
+      if (row.textContent?.includes("置顶")) return [];
+      const titleNode = row.querySelector("td:nth-child(2) a"), title = titleNode?.getAttribute("title") || titleNode?.textContent?.trim() || "";
+      if (!title.toLowerCase().includes(keyword.toLowerCase())) return [];
+      const result = normalizeMagnet({
+        title,
+        magnet: row.querySelector('td:nth-child(3) a[href^="magnet:"]')?.getAttribute("href"),
+        size: row.querySelector("td:nth-child(4)")?.textContent?.trim(),
+        date: row.querySelector("td:nth-child(5)")?.textContent?.trim(),
+        seeders: row.querySelector("td:nth-child(6)")?.textContent?.trim(),
+        leechers: row.querySelector("td:nth-child(7)")?.textContent?.trim()
+      }, source);
+      return result ? [result] : [];
+    }));
+  }
+  __name(parseTorrentSource, "parseTorrentSource");
+  function parseBtsowSource(payload) {
+    let value = payload;
+    if (typeof value === "string") {
+      try {
+        value = JSON.parse(value);
+      } catch (cause) {
+        throw new JhsError("INVALID_RESPONSE", "BTSOW 返回了无效 JSON", { source: "btsow", cause });
+      }
+    }
+    const items = value?.data;
+    if (!Array.isArray(items)) throw new JhsError("INVALID_RESPONSE", "BTSOW 响应缺少结果数组", { source: "btsow" });
+    return Object.freeze(items.flatMap((item) => {
+      const timestamp = Number(item.lastUpdateTime), date = Number.isFinite(timestamp) ? new Date(1e3 * timestamp).toISOString().slice(0, 10) : "";
+      const result = normalizeMagnet({ title: item.name, magnet: `magnet:?xt=urn:btih:${item.hash}`, size: `${(Number(item.size) / 1073741824).toFixed(2)} GB`, date }, "btsow");
+      return result ? [result] : [];
+    }));
+  }
+  __name(parseBtsowSource, "parseBtsowSource");
+  function createTorrentSourcesAdapter(http) {
+    const find = /* @__PURE__ */ __name((id) => SOURCES.find((source) => source.id === id), "find");
+    return Object.freeze({
+      contracts: ["Magnet", "MagnetSource"],
+      getSources: /* @__PURE__ */ __name(() => Object.freeze(SOURCES.map((source) => Object.freeze({ id: source.id, name: source.name, type: source.type, domain: source.domain, baseUrl: source.baseUrl, priority: source.priority, enabled: source.enabled }))), "getSources"),
+      targetUrl(sourceId, keyword, options = {}) {
+        const source = find(sourceId);
+        if (!source) throw new JhsError("UNSUPPORTED", `未知磁力来源：${sourceId}`, { source: "torrent-sources" });
+        const origin = new URL(options.baseUrl || source.baseUrl).origin;
+        return `${origin}${source.searchPath(keyword)}`;
+      },
+      async search(sourceId, keyword, options = {}) {
+        const source = find(sourceId);
+        if (!source) throw new JhsError("UNSUPPORTED", `未知磁力来源：${sourceId}`, { source: "torrent-sources" });
+        const origin = new URL(options.baseUrl || source.baseUrl).origin, overridden = new URL(origin).hostname !== source.domain;
+        const urlPolicy = overridden ? { trustClass: "custom-public", expectedOrigin: origin } : { trustClass: "builtin-public", hosts: [source.domain], expectedOrigin: origin };
+        if (source.id === "btsow") {
+          const response2 = await http.request({ providerId: "magnet:btsow", method: "POST", url: `${origin}/search`, body: JSON.stringify([{ search: keyword }, 50, 1]), headers: { "Content-Type": "application/json" }, responseType: "json", cacheScope: "none", urlPolicy }, options.scope);
+          return parseBtsowSource(response2.data);
+        }
+        const url = `${origin}${source.searchPath(keyword)}`;
+        const response = await http.request({ providerId: `magnet:${source.id}`, method: "GET", url, responseType: "text", cacheScope: "public", ttlMs: 216e5, urlPolicy }, options.scope);
+        return parseTorrentSource(response.data, keyword, source.id);
+      }
+    });
+  }
+  __name(createTorrentSourcesAdapter, "createTorrentSourcesAdapter");
+  var manifest_default16 = defineIntegration({
+    id: "torrent-sources",
+    trustClass: "builtin-public",
+    hosts: ["u9a9.com", "u3c3.com", "sukebei.nyaa.si", "btsow.lol"],
+    capabilities: ["magnet.search"],
+    requires: [SERVICE.http],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => createTorrentSourcesAdapter(client.http), "createAdapter"),
+    createHostAdapter: null,
+    cachePolicy: { "magnet.search": "source-configured" },
+    quality: "silver"
+  });
+
   // src/integrations/wikipedia/parser.js
   function compact(value) {
     return value.replace(/\s+/g, " ").trim();
@@ -18275,7 +18328,7 @@ ${error.stack}` : "");
     });
   }
   __name(createWikipediaAdapter, "createWikipediaAdapter");
-  var manifest_default16 = defineIntegration({
+  var manifest_default17 = defineIntegration({
     id: "wikipedia",
     trustClass: "builtin-public",
     hosts: ["ja.wikipedia.org"],
@@ -18343,7 +18396,7 @@ ${error.stack}` : "");
     });
   }
   __name(createXunleiAdapter, "createXunleiAdapter");
-  var manifest_default17 = defineIntegration({
+  var manifest_default18 = defineIntegration({
     id: "xunlei",
     trustClass: "builtin-public",
     hosts: XUNLEI_HOSTS,
@@ -18357,7 +18410,7 @@ ${error.stack}` : "");
   });
 
   // src/app/integration-catalog.js
-  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default7, manifest_default8, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13, manifest_default14, manifest_default15, manifest_default16, manifest_default17]);
+  var integrationManifests = Object.freeze([manifest_default2, manifest_default3, manifest_default4, manifest_default5, manifest_default6, manifest_default7, manifest_default8, manifest_default9, manifest_default10, manifest_default11, manifest_default12, manifest_default13, manifest_default14, manifest_default15, manifest_default16, manifest_default17, manifest_default18]);
 
   // src/app/bootstrap.js
   function patchLayerRuntime(layerRuntime) {

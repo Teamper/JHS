@@ -1,13 +1,10 @@
 import { MAGNET_SOURCE_IDS, validateCustomMagnetSource, validateHttpsBaseUrl } from "../external-search/magnet-source-registry.js";
 
-export const BUILT_IN_MAGNET_SOURCES = Object.freeze([
+export const BUILT_IN_NATIVE_MAGNET_SOURCES = Object.freeze([
     { id: "native-javdb", name: "JavDB 本站", type: "本站资源", domain: "javdb.com", priority: 10, enabled: true },
-    { id: "native-javbus", name: "JavBus 本站", type: "本站资源", domain: "javbus.com", priority: 11, enabled: true },
-    { id: "u9a9", name: "U9A9", type: "网页来源", domain: "u9a9.com", baseUrl: "https://u9a9.com", priority: 20, enabled: true },
-    { id: "u3c3", name: "U3C3", type: "网页来源", domain: "u3c3.com", baseUrl: "https://u3c3.com", priority: 30, enabled: true },
-    { id: "sukebei", name: "Sukebei", type: "网页来源", domain: "sukebei.nyaa.si", baseUrl: "https://sukebei.nyaa.si", priority: 40, enabled: true },
-    { id: "btsow", name: "BTSOW", type: "API 来源", domain: "btsow.lol", baseUrl: "https://btsow.lol", priority: 50, enabled: true }
+    { id: "native-javbus", name: "JavBus 本站", type: "本站资源", domain: "javbus.com", priority: 11, enabled: true }
 ]);
+export const BUILT_IN_MAGNET_SOURCES = BUILT_IN_NATIVE_MAGNET_SOURCES;
 export const BUILT_IN_SCREENSHOT_SOURCES = Object.freeze([
     { id: "javstore", name: "JavStore", domain: "javstore.net", priority: 10, enabled: true },
     { id: "projectjav", name: "ProjectJav", domain: "projectjav.com", priority: 20, enabled: false, implemented: false },

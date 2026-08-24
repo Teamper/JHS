@@ -6,7 +6,7 @@ import { legacyActionToFlag } from "../../core/state-model.js";
 import { stateService } from "../../core/state-service.js";
 import { applyTheme } from "../../core/theme.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
-import { BUILT_IN_MAGNET_SOURCES, BUILT_IN_SCREENSHOT_SOURCES, ResourceSettingsService, buildCustomMagnetSource, validateRule } from "./resource-settings.js";
+import { BUILT_IN_NATIVE_MAGNET_SOURCES, BUILT_IN_SCREENSHOT_SOURCES, ResourceSettingsService, buildCustomMagnetSource, validateRule } from "./resource-settings.js";
 import { backupDataByWebDav, backupListBtnByWebDav, exportSettingData, importSettingData, openFileListDialog } from "./setting-backup.js";
 import { initQuickSettingForm, loadSettingForm, saveSettingForm } from "./setting-forms.js";
 import { renderDataHealthPanel, renderNetworkPanel, renderPluginMgmtPanel, renderSnapshotPanel, repairDataHealthWithBackup, showDiffPreview } from "./setting-panels.js";
@@ -296,7 +296,8 @@ export class SettingPlugin extends BasePlugin {
     }
     async loadResourceSettings() {
         const [custom, tags, filters, builtInOverrides, screenshot, cloud] = await Promise.all([this.resourceSettings.getMagnetSources(), this.resourceSettings.getMagnetTagRules(), this.resourceSettings.getMagnetFilterRules(), this.resourceSettings.getBuiltInSources(), this.resourceSettings.getScreenshotSettings(), this.resourceSettings.getCloudSettings()]);
-        this.resourceState = { custom, tags, filters, builtIn: BUILT_IN_MAGNET_SOURCES.map((source => ({ ...source, ...(builtInOverrides.find((item => item.id === source.id)) || {}) }))), screenshot: { mode: screenshot.mode, providers: BUILT_IN_SCREENSHOT_SOURCES.map((source => { const merged = { ...source, ...(screenshot.providers.find((item => item.id === source.id)) || {}) }; return false === source.implemented ? { ...merged, enabled: false } : merged; })) } };
+        const builtInCatalog = [...BUILT_IN_NATIVE_MAGNET_SOURCES, ...this.getRuntimeService("magnet").getBuiltInSources()];
+        this.resourceState = { custom, tags, filters, builtIn: builtInCatalog.map((source => ({ ...source, ...(builtInOverrides.find((item => item.id === source.id)) || {}) }))), screenshot: { mode: screenshot.mode, providers: BUILT_IN_SCREENSHOT_SOURCES.map((source => { const merged = { ...source, ...(screenshot.providers.find((item => item.id === source.id)) || {}) }; return false === source.implemented ? { ...merged, enabled: false } : merged; })) } };
         this.renderResourceSettings(); $("#enable123Offline").prop("checked", cloud.enable123Offline); $("#enable115Offline").prop("checked", cloud.enable115Offline); $("#offlineProviderMode").val(cloud.providerMode); $("#enable115Match").prop("checked", cloud.enable115Match); $("#enable115LoginRedirect").prop("checked", cloud.enable115LoginRedirect); $("#oneOneFiveConcurrency").val(cloud.concurrency); $("#oneOneFiveCacheMinutes").val(cloud.cacheMinutes);
         $("#cloud-services-panel").off("change.jhsResource", "input, select").on("change.jhsResource", "input, select", (() => void this.saveCloudSettings())); $("#resource-sources-panel").off("change.jhsResource", 'input[name="screenshotMode"]').on("change.jhsResource", 'input[name="screenshotMode"]', (event => { this.resourceState.screenshot.mode = event.currentTarget.value; this.resourceSettings.saveScreenshotSettings(this.resourceState.screenshot); }));
         $("#add-custom-magnet-source").off("click.jhsResource").on("click.jhsResource", (() => this.openSourceDialog())); $("#add-magnet-tag-rule").off("click.jhsResource").on("click.jhsResource", (() => this.openRuleDialog("tag"))); $("#add-magnet-filter-rule").off("click.jhsResource").on("click.jhsResource", (() => this.openRuleDialog("filter")));

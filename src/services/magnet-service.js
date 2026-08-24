@@ -25,6 +25,28 @@ export class MagnetService {
         const adapter = this.integrations?.getAdapter(manifest.id);
         return typeof adapter?.listMagnets === "function" ? adapter.listMagnets(movieRef, context) : [];
     }
+    getBuiltInSources() {
+        return (this.integrations?.list("magnet.search") ?? []).flatMap((manifest) => {
+            const adapter = this.integrations?.getAdapter(manifest.id);
+            return typeof adapter?.getSources === "function" ? adapter.getSources() : [];
+        });
+    }
+    /** @param {string} sourceId @param {string} keyword @param {Record<string, any>} [context] */
+    async searchSource(sourceId, keyword, context = {}) {
+        for (const manifest of this.integrations?.list("magnet.search") ?? []) {
+            const adapter = this.integrations?.getAdapter(manifest.id);
+            if (adapter?.getSources?.().some((/** @type {{id: string}} */ source) => source.id === sourceId)) return adapter.search(sourceId, keyword, context);
+        }
+        return [];
+    }
+    /** @param {string} sourceId @param {string} keyword @param {Record<string, any>} [context] */
+    getSourceTargetUrl(sourceId, keyword, context = {}) {
+        for (const manifest of this.integrations?.list("magnet.search") ?? []) {
+            const adapter = this.integrations?.getAdapter(manifest.id);
+            if (adapter?.getSources?.().some((/** @type {{id: string}} */ source) => source.id === sourceId)) return adapter.targetUrl(sourceId, keyword, context);
+        }
+        return null;
+    }
     /** @param {Parameters<typeof assessMagnetQuality>[0]} magnet */
     assess(magnet) { return assessMagnetQuality(magnet); }
 }
