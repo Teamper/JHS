@@ -9,7 +9,7 @@ export class JavTrailersPlugin extends BasePlugin {
     constructor() {
         super(), this.hasBand = !1;
     }
-    handle() {
+    async handle() {
         let e = window.location.href;
         if (!e.includes("handle=1")) return;
         if ($("h1:contains('Page not found')").length) {
@@ -22,21 +22,27 @@ export class JavTrailersPlugin extends BasePlugin {
             const n = e.split("?")[0].split("search/")[1].toLowerCase(), a = t.find((e => $(e).find(".vid-title").text().toLowerCase().includes(n)));
             if (a) return void (window.location.href = $(a).attr("href") + window.location.search);
         }
-        this.handlePlayJavTrailers(), $("#videoPlayerContainer").on("click", (() => {
-            this.handlePlayJavTrailers();
-        })), window.addEventListener("message", (e => {
+        const scope = await this.getRuntimeService("scope")();
+        this.handlePlayJavTrailers(scope), this.bindPlaybackControls(scope);
+    }
+    bindPlaybackControls(scope) {
+        const container = $("#videoPlayerContainer"), replay = () => this.handlePlayJavTrailers(scope);
+        container.off("click.jhsJavTrailers").on("click.jhsJavTrailers", replay), scope.addCleanup((() => container.off("click.jhsJavTrailers", replay))), scope.listen(window, "message", (() => {
             let t = document.getElementById("vjs_video_3_html5_api");
             t && (t.currentTime += 5);
         }));
     }
-    handlePlayJavTrailers() {
-        this.hasBand || (utils.loopDetector((() => 0 !== $("#vjs_video_3_html5_api").length), (() => {
-            setTimeout((() => {
+    handlePlayJavTrailers(scope) {
+        if (this.hasBand || scope.signal.aborted) return;
+        const playerWait = utils.loopDetector((() => 0 !== $("#vjs_video_3_html5_api").length), (() => {
+            if (scope.signal.aborted) return;
+            scope.ownTimeout(setTimeout((() => {
+                if (scope.signal.aborted) return;
                 this.hasBand = !0;
                 let e = document.getElementById("vjs_video_3_html5_api");
                 clog.debug(e), safePlay(e, {
                     context: "JavTrailers 预览"
-                }), e.currentTime = 5, e.addEventListener("timeupdate", (function() {
+                }), e.currentTime = 5, scope.listen(e, "timeupdate", (function() {
                     e.currentTime >= 14 && e.currentTime < 16 && (e.currentTime += 2);
                 })), $("#vjs_video_3_html5_api").css({
                     position: "fixed",
@@ -49,8 +55,9 @@ export class JavTrailersPlugin extends BasePlugin {
                     bottom: "20px",
                     zIndex: String(JHS_Z_INDEX.debug)
                 });
-            }), 100);
-        })), utils.loopDetector((() => $("#vjs_video_3 canvas").length > 0), (() => {
+            }), 100));
+        })), canvasWait = utils.loopDetector((() => $("#vjs_video_3 canvas").length > 0), (() => {
+            if (scope.signal.aborted) return;
             0 !== $("#vjs_video_3 canvas").length && $("#vjs_video_3 canvas").css({
                 position: "fixed",
                 width: "100vw",
@@ -60,6 +67,7 @@ export class JavTrailersPlugin extends BasePlugin {
                 right: "0",
                 zIndex: String(JHS_Z_INDEX.debug - 1)
             });
-        })));
+        }));
+        scope.addCleanup(playerWait), scope.addCleanup(canvasWait);
     }
 }

@@ -1066,8 +1066,11 @@
       }, "g"), p2 = /* @__PURE__ */ __name(() => {
         c2 || (clearTimeout(r2), r2 = setTimeout(g2, Math.max(0, n2)));
       }, "p");
+      const cancel = /* @__PURE__ */ __name(() => {
+        c2 = true, d2();
+      }, "cancel");
       this.intervalContainer[s2] = {};
-      if (e2()) return void h2(true);
+      if (e2()) return h2(true), cancel;
       if ("function" == typeof MutationObserver && document.documentElement) o2 = new MutationObserver(p2), o2.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
       else this.intervalContainer[s2].fallback = setInterval(g2, Math.max(100, n2));
       l2 = setTimeout((() => {
@@ -1080,6 +1083,7 @@
         }
         h2(t3 || i2);
       }), Math.max(0, a2));
+      return cancel;
     }
     rightClick(e2, t2, n2) {
       let a2;
@@ -9565,7 +9569,7 @@ ${error.stack}` : "");
     constructor() {
       super(), this.hasBand = false;
     }
-    handle() {
+    async handle() {
       let e2 = window.location.href;
       if (!e2.includes("handle=1")) return;
       if ($("h1:contains('Page not found')").length) {
@@ -9578,21 +9582,27 @@ ${error.stack}` : "");
         const n2 = e2.split("?")[0].split("search/")[1].toLowerCase(), a2 = t2.find(((e3) => $(e3).find(".vid-title").text().toLowerCase().includes(n2)));
         if (a2) return void (window.location.href = $(a2).attr("href") + window.location.search);
       }
-      this.handlePlayJavTrailers(), $("#videoPlayerContainer").on("click", (() => {
-        this.handlePlayJavTrailers();
-      })), window.addEventListener("message", ((e3) => {
-        let t3 = document.getElementById("vjs_video_3_html5_api");
-        t3 && (t3.currentTime += 5);
+      const scope = await this.getRuntimeService("scope")();
+      this.handlePlayJavTrailers(scope), this.bindPlaybackControls(scope);
+    }
+    bindPlaybackControls(scope) {
+      const container = $("#videoPlayerContainer"), replay = /* @__PURE__ */ __name(() => this.handlePlayJavTrailers(scope), "replay");
+      container.off("click.jhsJavTrailers").on("click.jhsJavTrailers", replay), scope.addCleanup((() => container.off("click.jhsJavTrailers", replay))), scope.listen(window, "message", (() => {
+        let t2 = document.getElementById("vjs_video_3_html5_api");
+        t2 && (t2.currentTime += 5);
       }));
     }
-    handlePlayJavTrailers() {
-      this.hasBand || (utils.loopDetector((() => 0 !== $("#vjs_video_3_html5_api").length), (() => {
-        setTimeout((() => {
+    handlePlayJavTrailers(scope) {
+      if (this.hasBand || scope.signal.aborted) return;
+      const playerWait = utils.loopDetector((() => 0 !== $("#vjs_video_3_html5_api").length), (() => {
+        if (scope.signal.aborted) return;
+        scope.ownTimeout(setTimeout((() => {
+          if (scope.signal.aborted) return;
           this.hasBand = true;
           let e2 = document.getElementById("vjs_video_3_html5_api");
           clog.debug(e2), safePlay(e2, {
             context: "JavTrailers 预览"
-          }), e2.currentTime = 5, e2.addEventListener("timeupdate", (function() {
+          }), e2.currentTime = 5, scope.listen(e2, "timeupdate", (function() {
             e2.currentTime >= 14 && e2.currentTime < 16 && (e2.currentTime += 2);
           })), $("#vjs_video_3_html5_api").css({
             position: "fixed",
@@ -9605,8 +9615,9 @@ ${error.stack}` : "");
             bottom: "20px",
             zIndex: String(JHS_Z_INDEX.debug)
           });
-        }), 100);
-      })), utils.loopDetector((() => $("#vjs_video_3 canvas").length > 0), (() => {
+        }), 100));
+      })), canvasWait = utils.loopDetector((() => $("#vjs_video_3 canvas").length > 0), (() => {
+        if (scope.signal.aborted) return;
         0 !== $("#vjs_video_3 canvas").length && $("#vjs_video_3 canvas").css({
           position: "fixed",
           width: "100vw",
@@ -9616,7 +9627,8 @@ ${error.stack}` : "");
           right: "0",
           zIndex: String(JHS_Z_INDEX.debug - 1)
         });
-      })));
+      }));
+      scope.addCleanup(playerWait), scope.addCleanup(canvasWait);
     }
   };
   __name(_JavTrailersPlugin, "JavTrailersPlugin");

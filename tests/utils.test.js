@@ -309,6 +309,16 @@ describe("loopDetector", () => {
         expect(getObserver().disconnected).toBe(true);
         expect(Object.keys(utils.intervalContainer)).toHaveLength(0);
     });
+
+    it("supports lifecycle cancellation before the condition becomes ready", () => {
+        vi.useFakeTimers();
+        let ready = false;
+        const callback = vi.fn(), { utils, getObserver } = loadUtilsWithObserver(), cancel = utils.loopDetector(() => ready, callback, 20, 1e4, false);
+        cancel(), ready = true, getObserver().emit(), vi.advanceTimersByTime(20);
+        expect(callback).not.toHaveBeenCalled();
+        expect(getObserver().disconnected).toBe(true);
+        expect(Object.keys(utils.intervalContainer)).toHaveLength(0);
+    });
 });
 
 describe("debounce", () => {

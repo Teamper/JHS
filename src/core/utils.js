@@ -130,8 +130,9 @@ export class Utils {
         }, p = () => {
             c || (clearTimeout(r), r = setTimeout(g, Math.max(0, n)));
         };
+        const cancel = () => { c = !0, d(); };
         this.intervalContainer[s] = {};
-        if (e()) return void h(!0);
+        if (e()) return h(!0), cancel;
         if ("function" == typeof MutationObserver && document.documentElement) o = new MutationObserver(p),
         o.observe(document.documentElement, { childList: !0, subtree: !0, characterData: !0 }); else this.intervalContainer[s].fallback = setInterval(g, Math.max(100, n));
         l = setTimeout((() => {
@@ -140,6 +141,7 @@ export class Utils {
             try { t = e(); } catch (e) { clog.error("DOM 等待条件执行失败", e); }
             h(t || i);
         }), Math.max(0, a));
+        return cancel;
     }
     rightClick(e, t, n) {
         let a;
