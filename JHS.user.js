@@ -7079,7 +7079,7 @@
             `;
       $("<style>").attr("id", "verticalImgStyle").text(e2).appendTo("head");
     }
-    l && busImgPlugin?.logImageHeightsByRow();
+    l && busImgPlugin?.logImageHeightsByRow?.();
   }
   __name(applyImageMode, "applyImageMode");
 
@@ -9863,7 +9863,13 @@
   // src/plugins/external-search/fc2-by-123av.js
   var _Fc2By123AvPlugin = class _Fc2By123AvPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "$contentBox", null), i(this, "$listRoot", null), i(this, "urlParams", new URLSearchParams(window.location.search)), i(this, "currentPage", this.urlParams.get("page") ? parseInt(this.urlParams.get("page")) : 1), i(this, "maxPage", null), i(this, "keyword", this.urlParams.get("keyword") || null);
+      super(...arguments);
+      this.$contentBox = null;
+      this.$listRoot = null;
+      this.urlParams = new URLSearchParams(window.location.search);
+      this.currentPage = parseInt(this.urlParams.get("page") || "1", 10);
+      this.maxPage = null;
+      this.keyword = this.urlParams.get("keyword") || null;
     }
     getName() {
       return "Fc2By123AvPlugin";
@@ -9881,7 +9887,7 @@
       this.$contentBox = $(contentBox), this.$listRoot = $(host.createOwnedListRoot(["jhs-123av-list", "jhs-layout-d2c171b1"]));
       let e2 = $("h2.section-title");
       e2.contents().first().replaceWith("123Av"), e2.css("marginBottom", "0"), e2.append('\n            <div class="jhs-layout-f5f47b30">\n                <input id="search-123av-keyword" type="text" placeholder="搜索123Av Fc2ppv内容" class="jhs-field">\n                <button type="button" id="search-123av-btn" class="jhs-btn jhs-btn--primary jhs-layout-21a4fe43">搜索</button>\n                <button type="button" id="clear-123av-btn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n            </div>\n        '), $("#search-123av-keyword").val(this.keyword), $("#search-123av-btn").on("click", (async () => {
-        let e3 = $("#search-123av-keyword").val().trim();
+        let e3 = String($("#search-123av-keyword").val() || "").trim();
         e3 && (this.keyword = e3, utils.setHrefParam("keyword", e3), await this.handleQuery());
       })), $("#clear-123av-btn").on("click", (async () => {
         $("#search-123av-keyword").val(""), this.keyword = "", utils.setHrefParam("keyword", ""), $(".page-box").show(), await this.handleQuery();
@@ -9892,19 +9898,20 @@
       })), $(".pagination-previous").on("click", ((e3) => {
         e3.preventDefault(), this.currentPage > 1 && (this.currentPage--, utils.setHrefParam("page", this.currentPage), this.renderPagination(), this.handleQuery());
       })), $(".pagination-next").on("click", ((e3) => {
-        e3.preventDefault(), this.currentPage < this.maxPage && (this.currentPage++, utils.setHrefParam("page", this.currentPage), this.renderPagination(), this.handleQuery());
+        e3.preventDefault(), this.currentPage < (this.maxPage ?? 0) && (this.currentPage++, utils.setHrefParam("page", this.currentPage), this.renderPagination(), this.handleQuery());
       }));
     }
     renderPagination() {
       const e2 = $(".pagination-list");
       e2.empty();
-      let t2 = Math.max(1, this.currentPage - 2), n2 = Math.min(this.maxPage, this.currentPage + 2);
-      this.currentPage <= 3 ? n2 = Math.min(6, this.maxPage) : this.currentPage >= this.maxPage - 2 && (t2 = Math.max(this.maxPage - 5, 1)), t2 > 1 && (e2.append('<li><button type="button" class="jhs-btn pagination-link" data-page="1">1</button></li>'), t2 > 2 && e2.append('<li><span class="pagination-ellipsis">…</span></li>'));
+      const maxPage = this.maxPage ?? 1;
+      let t2 = Math.max(1, this.currentPage - 2), n2 = Math.min(maxPage, this.currentPage + 2);
+      this.currentPage <= 3 ? n2 = Math.min(6, maxPage) : this.currentPage >= maxPage - 2 && (t2 = Math.max(maxPage - 5, 1)), t2 > 1 && (e2.append('<li><button type="button" class="jhs-btn pagination-link" data-page="1">1</button></li>'), t2 > 2 && e2.append('<li><span class="pagination-ellipsis">…</span></li>'));
       for (let a2 = t2; a2 <= n2; a2++) {
         const t3 = a2 === this.currentPage ? " is-current" : "";
         e2.append(`<li><button type="button" class="jhs-btn pagination-link${t3}" data-page="${a2}">${a2}</button></li>`);
       }
-      n2 < this.maxPage && (n2 < this.maxPage - 1 && e2.append('<li><span class="pagination-ellipsis">…</span></li>'), e2.append(`<li><button type="button" class="jhs-btn pagination-link" data-page="${this.maxPage}">${this.maxPage}</button></li>`));
+      n2 < maxPage && (n2 < maxPage - 1 && e2.append('<li><span class="pagination-ellipsis">…</span></li>'), e2.append(`<li><button type="button" class="jhs-btn pagination-link" data-page="${maxPage}">${maxPage}</button></li>`));
     }
     async handleQuery() {
       let e2 = loading();
@@ -9919,7 +9926,7 @@
           clog.error("123AV 获取数据失败");
         }
         let s2 = this.markDataListHtml(i2);
-        this.$listRoot.html(s2), await utils.smoothScrollToTop();
+        this.$listRoot?.html(s2), await utils.smoothScrollToTop();
       } catch (t2) {
         clog.error(t2);
       } finally {
@@ -14543,7 +14550,15 @@ ${failure.stack}` : "");
   // src/plugins/status/auto-page.js
   var _AutoPagePlugin = class _AutoPagePlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "preloadDistance", 500), i(this, "currentPage", this.getInitialPageNumber()), i(this, "pageItems", []);
+      super(...arguments);
+      this.preloadDistance = 500;
+      this.currentPage = this.getInitialPageNumber();
+      this.pageItems = [];
+      this.container = void 0;
+      this.loader = void 0;
+      this.nextUrl = null;
+      this.hasMore = false;
+      this.isLoading = false;
     }
     getName() {
       return "AutoPagePlugin";
@@ -14569,13 +14584,16 @@ ${failure.stack}` : "");
       if (await this.shouldDisablePaging()) return;
       const scope = await this.getRuntimeService("scope")();
       const e2 = this.getSelector();
-      if (this.container = document.querySelector(e2.boxSelector), !this.container) return void clog.error("没有找到容器节点,停止瀑布流!");
-      this.loader = document.createElement("div"), this.loader.className = "jhs-scroll", this.container.parentNode.insertBefore(this.loader, this.container.nextSibling), this.pageItems.push({
+      const container = document.querySelector(e2.boxSelector);
+      if (!container || !container.parentNode) return void clog.error("没有找到容器节点,停止瀑布流!");
+      this.container = container;
+      const loader = document.createElement("div");
+      this.loader = loader, loader.className = "jhs-scroll", container.parentNode.insertBefore(loader, container.nextSibling), this.pageItems.push({
         page: this.currentPage,
         top: 0,
         url: window.location.href
-      }), this.loader.addEventListener("click", (() => {
-        this.loader.classList.contains("waterfall-error") && void this.loadNextPage().catch(((error) => clog.error("瀑布流重试失败", error)));
+      }), loader.addEventListener("click", (() => {
+        loader.classList.contains("waterfall-error") && void this.loadNextPage().catch(((error) => clog.error("瀑布流重试失败", error)));
       })), (() => {
         let t3 = false;
         scope.listen(window, "scroll", (() => {
@@ -14585,14 +14603,14 @@ ${failure.stack}` : "");
         }));
       })();
       const t2 = document.querySelector(e2.nextPageSelector);
-      this.nextUrl = null == t2 ? void 0 : t2.href, this.hasMore = !!this.nextUrl, scope.ownTimeout(setTimeout((() => {
+      this.nextUrl = t2?.href ?? null, this.hasMore = !!this.nextUrl, scope.ownTimeout(setTimeout((() => {
         this.checkLoad();
       }), 1e3)), this.hasMore || this.setState("waterfall-no-more", "已经到底了");
     }
     async loadNextPage() {
       var e2;
       if (await storageManager.getSetting("autoPage", _) === C) return void this.setState("waterfall-loading", "");
-      if (this.isLoading || !this.nextUrl) return;
+      if (this.isLoading || !this.nextUrl || !this.container) return;
       this.isLoading = true, this.setState("waterfall-loading", "加载中...");
       const t2 = this.getSelector();
       try {
@@ -14644,6 +14662,7 @@ ${failure.stack}` : "");
       window.history.replaceState({}, "", e2), l && (document.title = document.title.replace(/第\d+頁/, `第${this.currentPage}頁`));
     }
     setState(e2, t2) {
+      if (!this.loader) return;
       this.loader.className = `jhs-scroll ${e2}`, this.loader.textContent = t2;
     }
   };

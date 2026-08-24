@@ -1,3 +1,5 @@
+// @ts-check
+
 import { L, r } from "../../core/constants.js";
 
 /**
@@ -5,6 +7,7 @@ import { L, r } from "../../core/constants.js";
  * Returns { categories, corePlugins }.
  */
 export function getPluginCategories() {
+    /** @type {Record<string, [string, string]>} */
     const pluginMeta = {
         SettingPlugin:["设置中心","core"], StatsPlugin:["统计中心","core"], MobileBottomBarPlugin:["工具栏与移动操作","core"],
         ListPagePlugin:["列表状态处理","list"], NavBarPlugin:["JavDB 导航","list"], BusNavBarPlugin:["JavBus 导航","list"], ListPageButtonPlugin:["列表操作","list"], HighlightMagnetPlugin:["磁力标记","list"], FoldCategoryPlugin:["分类折叠","list"], AutoPagePlugin:["自动翻页","list"], HitShowPlugin:["热播榜单","list"], TOP250Plugin:["TOP 250","list"],
@@ -13,7 +16,7 @@ export function getPluginCategories() {
         HistoryPlugin:["鉴定记录","data"], BlacklistPlugin:["黑名单","data"], FilterTitleKeywordPlugin:["关键词筛选","data"], FavoriteActressesPlugin:["演员收藏","data"], NewVideoPlugin:["新作品检测","data"], TaskPlugin:["定时任务","data"],
         OtherSitePlugin:["外部站点","network"], Fc2Plugin:["FC2 详情","network"], Fc2By123AvPlugin:["FC2 123AV","network"], MagnetHubPlugin:["磁力聚合","network"], JavTrailersPlugin:["预告片","network"], SubTitleCatPlugin:["字幕搜索","network"], OneTwoThreeOfflinePlugin:["123 云盘离线","network"]
     };
-    const group = (key, label) => ({ label, plugins:Object.entries(pluginMeta).filter((e => e[1][1] === key)).map((e => e[0])) });
+    const group = (/** @type {string} */ key, /** @type {string} */ label) => ({ label, plugins:Object.entries(pluginMeta).filter((e => e[1][1] === key)).map((e => e[0])) });
     return {
         categories: {
             core:group("core", "基础核心"), list:group("list", "列表页"), detail:group("detail", "详情页"),
@@ -24,6 +27,7 @@ export function getPluginCategories() {
 }
 
 /** Build the HTML for the cache items grid in the settings dialog. */
+/** @param {Array<{ text: string, key: string, title: string }>} cacheItems */
 function buildCacheItemsHtml(cacheItems) {
     return cacheItems.map(e => `
             <div class="cache-item">
@@ -50,6 +54,7 @@ function buildVideoQualityOptions() {
 }
 
 /** Build the main settings dialog HTML template. */
+/** @param {string} activePanel @param {Array<{ text: string, key: string, title: string }>} cacheItems @param {{ screenSvg: string, videoSvg: string, handleSvg: string, siteSvg: string, copySvg: string }} coverButtonPlugin */
 export function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
     const n = buildCacheItemsHtml(cacheItems);
     const a = buildVideoQualityOptions();

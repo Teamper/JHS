@@ -1,6 +1,9 @@
+// @ts-check
+
 import { C, _, l } from "../../core/constants.js";
 
 /** Generate the settings page CSS based on container config and site type. */
+/** @param {number | string} containerWidth @param {number} containerColumns @param {boolean} isJavBus @param {boolean} isJavDB */
 export function buildSettingCss(containerWidth, containerColumns, isJavBus, isJavDB) {
     let base;
     if (isJavBus) {
@@ -399,6 +402,7 @@ export function buildSettingCss(containerWidth, containerColumns, isJavBus, isJa
 }
 
 /** Toggle between vertical (cover-fit) and normal (contain) image display modes. */
+/** @param {{ logImageHeightsByRow?: () => void } | null} [busImgPlugin] */
 export async function applyImageMode(busImgPlugin = null) {
     $("#verticalImgStyle").remove();
     if (await storageManager.getSetting("enableVerticalModel", C) === _) {
@@ -444,5 +448,5 @@ export async function applyImageMode(busImgPlugin = null) {
             `;
         $("<style>").attr("id", "verticalImgStyle").text(e).appendTo("head");
     }
-    l && busImgPlugin?.logImageHeightsByRow();
+    l && busImgPlugin?.logImageHeightsByRow?.();
 }

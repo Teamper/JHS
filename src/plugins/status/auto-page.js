@@ -1,11 +1,24 @@
-import { C, _, i, l, o, r } from "../../core/constants.js";
+// @ts-check
+
+import { C, _, l, o, r } from "../../core/constants.js";
 import { requestHostPage } from "../../core/host-page-request.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class AutoPagePlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "preloadDistance", 500), i(this, "currentPage", this.getInitialPageNumber()),
-        i(this, "pageItems", []);
+        super(...arguments);
+        this.preloadDistance = 500;
+        this.currentPage = this.getInitialPageNumber();
+        /** @type {Array<{ page: number, top: number, url: string }>} */
+        this.pageItems = [];
+        /** @type {HTMLElement | undefined} */
+        this.container = void 0;
+        /** @type {HTMLDivElement | undefined} */
+        this.loader = void 0;
+        /** @type {string | null} */
+        this.nextUrl = null;
+        this.hasMore = false;
+        this.isLoading = false;
     }
     getName() {
         return "AutoPagePlugin";
@@ -31,15 +44,18 @@ export class AutoPagePlugin extends BasePlugin {
         if (await this.shouldDisablePaging()) return;
         const scope = await this.getRuntimeService("scope")();
         const e = this.getSelector();
-        if (this.container = document.querySelector(e.boxSelector), !this.container) return void clog.error("没有找到容器节点,停止瀑布流!");
-        this.loader = document.createElement("div"), this.loader.className = "jhs-scroll",
-        this.container.parentNode.insertBefore(this.loader, this.container.nextSibling),
+        const container = /** @type {HTMLElement | null} */ (document.querySelector(e.boxSelector));
+        if (!container || !container.parentNode) return void clog.error("没有找到容器节点,停止瀑布流!");
+        this.container = container;
+        const loader = document.createElement("div");
+        this.loader = loader, loader.className = "jhs-scroll",
+        container.parentNode.insertBefore(loader, container.nextSibling),
         this.pageItems.push({
             page: this.currentPage,
             top: 0,
             url: window.location.href
-        }), this.loader.addEventListener("click", (() => {
-            this.loader.classList.contains("waterfall-error") && void this.loadNextPage().catch((error => clog.error("瀑布流重试失败", error)));
+        }), loader.addEventListener("click", (() => {
+            loader.classList.contains("waterfall-error") && void this.loadNextPage().catch((error => clog.error("瀑布流重试失败", error)));
         })), (() => {
             let t = !1;
             scope.listen(window, "scroll", (() => {
@@ -48,15 +64,15 @@ export class AutoPagePlugin extends BasePlugin {
                 })));
             }));
         })();
-        const t = document.querySelector(e.nextPageSelector);
-        this.nextUrl = null == t ? void 0 : t.href, this.hasMore = !!this.nextUrl, scope.ownTimeout(setTimeout((() => {
+        const t = /** @type {HTMLAnchorElement | null} */ (document.querySelector(e.nextPageSelector));
+        this.nextUrl = t?.href ?? null, this.hasMore = !!this.nextUrl, scope.ownTimeout(setTimeout((() => {
             this.checkLoad();
         }), 1e3)), this.hasMore || this.setState("waterfall-no-more", "已经到底了");
     }
     async loadNextPage() {
         var e;
         if (await storageManager.getSetting("autoPage", _) === C) return void this.setState("waterfall-loading", "");
-        if (this.isLoading || !this.nextUrl) return;
+        if (this.isLoading || !this.nextUrl || !this.container) return;
         this.isLoading = !0, this.setState("waterfall-loading", "加载中...");
         const t = this.getSelector();
         try {
@@ -106,10 +122,11 @@ export class AutoPagePlugin extends BasePlugin {
         const enabled = await storageManager.getSetting("autoPage", _);
         return enabled !== _ || [ "search?q", "handlePlayback=1", "handleTop=1", "/want_watch_videos", "/watched_videos", "/advanced_search?type=100" ].some((e => o.includes(e)));
     }
-    updatePageUrl(e) {
+    updatePageUrl(/** @type {string} */ e) {
         window.history.replaceState({}, "", e), l && (document.title = document.title.replace(/第\d+頁/, `第${this.currentPage}頁`));
     }
-    setState(e, t) {
+    setState(/** @type {string} */ e, /** @type {string} */ t) {
+        if (!this.loader) return;
         this.loader.className = `jhs-scroll ${e}`, this.loader.textContent = t;
     }
 }
