@@ -1,3 +1,5 @@
+// @ts-check
+
 import { l, r } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
@@ -5,14 +7,26 @@ import { readListItem } from "../../core/list-item-reader.js";
 import { stateService } from "../../core/state-service.js";
 import { getDetailResourceAdapter } from "../status/detail-workspace.js";
 
+/** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
+/** @typedef {{ available: boolean, authState: string, reason: string }} ProviderAvailability */
+/** @typedef {{ id: string, name: string, capabilities: string[], isEnabled: () => boolean | Promise<boolean>, getAvailability: (options: { force: boolean }) => Promise<ProviderAvailability>, submit: (resource: string, info?: any) => Promise<unknown>, openUrl?: () => string, retryPolicy?: { automaticAttempts: number } }} OfflineProvider */
+/** @typedef {{ provider: OfflineProvider, availability: ProviderAvailability }} OfflineCandidate */
+/** @typedef {{ preventDefault: () => void, stopPropagation: () => void, currentTarget: EventTarget }} JQueryClickEvent */
+
 class OfflineProviderRegistry {
-    constructor() { this.providers = new Map, this.availabilityCache = new Map, this.positiveTtl = 3e5, this.negativeTtl = 2e4; }
+    constructor() {
+        /** @type {Map<string, OfflineProvider>} */ this.providers = new Map;
+        /** @type {Map<string, { time: number, value: ProviderAvailability }>} */ this.availabilityCache = new Map;
+        this.positiveTtl = 3e5, this.negativeTtl = 2e4;
+    }
+    /** @param {OfflineProvider} provider */
     register(provider) {
         if (!provider?.id || !Array.isArray(provider.capabilities) || "function" != typeof provider.submit || "function" != typeof provider.getAvailability) throw new TypeError("Invalid offline provider");
         return this.providers.set(provider.id, provider), provider;
     }
+    /** @param {string} resource @param {{ force?: boolean }} [options] */
     async getCandidates(resource, { force = !1 } = {}) {
-        const type = /^ed2k:/i.test(resource) ? "ed2k" : /^magnet:/i.test(resource) ? "magnet" : "unknown", candidates = [];
+        const type = /^ed2k:/i.test(resource) ? "ed2k" : /^magnet:/i.test(resource) ? "magnet" : "unknown", candidates = /** @type {OfflineCandidate[]} */ ([]);
         for (const provider of this.providers.values()) {
             if (!provider.capabilities.includes(type) || !await provider.isEnabled()) continue;
             const availability = await this.getAvailability(provider, force);
@@ -20,13 +34,15 @@ class OfflineProviderRegistry {
         }
         return candidates;
     }
+    /** @param {OfflineProvider} provider @param {boolean} [force] */
     async getAvailability(provider, force = !1) {
         const cached = this.availabilityCache.get(provider.id);
-        const ttl = [ "ready", "unknown" ].includes(cached?.value?.authState) ? this.positiveTtl : this.negativeTtl;
+        const ttl = cached && [ "ready", "unknown" ].includes(cached.value.authState) ? this.positiveTtl : this.negativeTtl;
         if (!force && cached && Date.now() - cached.time < ttl) return cached.value;
         const value = await provider.getAvailability({ force });
         return this.availabilityCache.set(provider.id, { time: Date.now(), value }), value;
     }
+    /** @param {string} id @param {ProviderAvailability} value */
     updateAvailability(id, value) { this.availabilityCache.set(id, { time: Date.now(), value }); }
 }
 
@@ -38,16 +54,17 @@ export class UnifiedOfflinePlugin extends BasePlugin {
         if (!(r || l)) return;
         const scope = await this.getRuntimeService("scope")();
         this.registerProviders(scope), this.bindSubmit(), scope.addCleanup((() => $(document).off(".jhsUnifiedOffline")));
-        if (window.isDetailPage) this.injectNativeButtons(), scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
+        if (window.isDetailPage) this.injectNativeButtons(), jhsEventBus && scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
     }
+    /** @param {any} scope */
     registerProviders(scope) {
         const one23 = this.getDependency("OneTwoThreeOfflinePlugin"), offline = this.getRuntimeService("offline");
-        one23 && this.registry.register({ id: "123", name: "123 云盘", capabilities: [ "magnet" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: () => storageManager.getSetting("enable123Offline", !0), getAvailability: async () => one23.getStoredToken() ? { available: !0, authState: "ready", reason: "授权已同步" } : { available: !1, authState: "token-missing", reason: "尚未同步 123 授权" }, submit: async resource => { const token = one23.getStoredToken(); if (!token) throw Object.assign(new Error("尚未同步 123 授权"), { code: "TOKEN_MISSING" }); return offline.submitWithIntegration("pan123", resource, { token, scope }); }, openUrl: () => offline.getIntegrationHomeUrl("pan123") });
-        this.registry.register({ id: "115", name: "115", capabilities: [ "magnet", "ed2k" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: () => storageManager.getSetting("enable115Offline", !1), getAvailability: async () => ({ available: !0, authState: "unknown", reason: "提交时确认登录状态" }), submit: resource => offline.submitWithIntegration("one115", resource, { scope }), openUrl: () => offline.getIntegrationHomeUrl("one115") });
-        window.offlineProviderRegistry = this.registry;
+        one23 && this.registry.register({ id: "123", name: "123 云盘", capabilities: [ "magnet" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: () => storageManager.getSetting("enable123Offline", !0), getAvailability: async () => one23.getStoredToken() ? { available: !0, authState: "ready", reason: "授权已同步" } : { available: !1, authState: "token-missing", reason: "尚未同步 123 授权" }, submit: async (/** @type {string} */ resource) => { const token = one23.getStoredToken(); if (!token) throw Object.assign(new Error("尚未同步 123 授权"), { code: "TOKEN_MISSING" }); return offline.submitWithIntegration("pan123", resource, { token, scope }); }, openUrl: () => offline.getIntegrationHomeUrl("pan123") });
+        this.registry.register({ id: "115", name: "115", capabilities: [ "magnet", "ed2k" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: () => storageManager.getSetting("enable115Offline", !1), getAvailability: async () => ({ available: !0, authState: "unknown", reason: "提交时确认登录状态" }), submit: (/** @type {string} */ resource) => offline.submitWithIntegration("one115", resource, { scope }), openUrl: () => offline.getIntegrationHomeUrl("one115") });
+        (/** @type {any} */ (window)).offlineProviderRegistry = this.registry;
     }
     bindSubmit() {
-        $(document).off("click.jhsUnifiedOffline", ".jhs-offline-btn").on("click.jhsUnifiedOffline", ".jhs-offline-btn", (async event => {
+        $(document).off("click.jhsUnifiedOffline", ".jhs-offline-btn").on("click.jhsUnifiedOffline", ".jhs-offline-btn", (async (/** @type {JQueryClickEvent} */ event) => {
             event.preventDefault(), event.stopPropagation();
             const button = $(event.currentTarget), resource = button.attr("data-resource") || button.attr("data-magnet") || button.closest(".magnet-result,.item,td").find('a[href^="magnet:"],a[href^="ed2k:"]').first().attr("href");
             resource ? await this.submitResource(event, resource, button) : show.error("未找到可提交资源");
@@ -56,7 +73,7 @@ export class UnifiedOfflinePlugin extends BasePlugin {
     injectNativeButtons() {
         const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
         if (!adapter) return;
-        adapter.rows().forEach((row => {
+        adapter.rows().forEach(((/** @type {Element} */ row) => {
             const resource = adapter.getResource(row), target = adapter.getActionTarget(row);
             if (!resource || !target?.length || $(row).closest(".magnet-container,.jhs-review-panel,.movie-detail-container").length) return;
             const owner = `native-${adapter.site}`;
@@ -66,6 +83,7 @@ export class UnifiedOfflinePlugin extends BasePlugin {
             button.attr("data-resource", resource), target.append(button);
         }));
     }
+    /** @param {unknown} event @param {OfflineCandidate[]} candidates @returns {Promise<OfflineCandidate | null>} */
     async chooseCandidate(event, candidates) {
         if (1 === candidates.length) return candidates[0];
         const mode = await storageManager.getSetting("offlineProviderMode", "ask"), preferred = candidates.find((candidate => candidate.provider.id === mode));
@@ -77,11 +95,13 @@ export class UnifiedOfflinePlugin extends BasePlugin {
             const index = dialog.open({ type: 1, title: "选择离线服务", content, area: utils.getDialogArea("sm"), cancel: () => resolve(null) });
         }));
     }
+    /** @param {JQueryHandle} button */
     getVideoInfo(button) {
         if (window.isDetailPage) return this.getPageInfo();
         const item = button?.closest?.(".item");
         return item?.length ? readListItem(item) : this.getPageInfo();
     }
+    /** @param {unknown} event @param {string} resource @param {JQueryHandle} [button] @param {any} [context] @param {string | null} [retryOf] @param {{ forceAvailabilityRefresh?: boolean, preferredProviderId?: string }} [options] */
     async submitResource(event, resource, button = $(), context = null, retryOf = null, options = {}) {
         if (button.hasClass("loading")) return;
         const candidates = await this.registry.getCandidates(resource, { force: !!options.forceAvailabilityRefresh });
@@ -98,10 +118,10 @@ export class UnifiedOfflinePlugin extends BasePlugin {
             await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "submitted", retryOf }), submitted = !0,
             button.text("已提交"), show.ok(`${selected.provider.name} 离线任务已创建`), utils.q(event, "是否将该作品标记为已下载？", (async () => { info?.carNum && await stateService.patch(info.carNum, { downloaded: !0 }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } }); }));
         } catch (error) {
-            const code = error?.code || ("TOKEN_EXPIRED" === error ? "TOKEN_EXPIRED" : "SUBMIT_FAILED");
-            [ "AUTH_REQUIRED", "LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING" ].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: !1, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: error.message || String(error) });
+            const errorRecord = /** @type {{ code?: string, message?: string }} */ (error), code = errorRecord?.code || ("TOKEN_EXPIRED" === error ? "TOKEN_EXPIRED" : "SUBMIT_FAILED"), message = errorRecord?.message || String(error);
+            [ "AUTH_REQUIRED", "LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING" ].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: !1, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: message });
             restoreButton();
-            submitted || await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "failed", errorCode: code, errorMessage: error?.message || String(error), retryOf }), show.error(`${selected.provider.name} 离线失败：${error?.message || error}`);
+            submitted || await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "failed", errorCode: code, errorMessage: message, retryOf }), show.error(`${selected.provider.name} 离线失败：${message}`);
         } finally { submitted ? setTimeout(restoreButton, this.BUTTON_COOLDOWN_MS) : restoreButton(); }
     }
 }

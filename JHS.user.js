@@ -10472,7 +10472,12 @@ ${value}\r
   __name(getDetailResourceAdapter, "getDetailResourceAdapter");
   var _DetailWorkspacePlugin = class _DetailWorkspacePlugin extends BasePlugin {
     constructor() {
-      super(), this.hostRoot = null, this.resourceObserver = null, this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null, this.lifecycleScope = null;
+      super();
+      this.hostRoot = null;
+      this.resourceObserver = null;
+      this.scheduledResourceFrame = null;
+      this.cancelScheduledResourceFrame = null;
+      this.lifecycleScope = null;
     }
     getName() {
       return "DetailWorkspacePlugin";
@@ -10565,14 +10570,15 @@ ${value}\r
     }
     normalizeHostActions(info) {
       const labels = /* @__PURE__ */ new Set(["想看", "看过", "看過", "存入清单", "存入清單", "下载", "下載", "订正", "訂正"]);
-      info.find("a, button").filter((function() {
-        return !$(this).is(".jhs-btn, [id^='jhs-']") && labels.has($(this).text().replace(/\s+/g, " ").trim());
-      })).addClass("jhs-detail-host-action");
+      info.find("a, button").filter(((_2, element) => !$(element).is(".jhs-btn, [id^='jhs-']") && labels.has($(element).text().replace(/\s+/g, " ").trim()))).addClass("jhs-detail-host-action");
     }
     isJhsOnlyMutation(record) {
       if ($(record.target).closest(".jhs-offline-actions,.jhs-select-control,.jhs-magnet-score").length) return true;
       const nodes = [...record.addedNodes, ...record.removedNodes].filter(((node) => node.nodeType === Node.ELEMENT_NODE));
-      return nodes.length > 0 && nodes.every(((node) => node.matches?.(".jhs-offline-btn,.jhs-offline-actions,.jhs-magnet-score,.jhs-select-control") || node.closest?.(".jhs-offline-actions,.jhs-select-control")));
+      return nodes.length > 0 && nodes.every(((node) => {
+        const element = node;
+        return element.matches?.(".jhs-offline-btn,.jhs-offline-actions,.jhs-magnet-score,.jhs-select-control") || element.closest?.(".jhs-offline-actions,.jhs-select-control");
+      }));
     }
     bindResourceLifecycle() {
       const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
@@ -10588,13 +10594,14 @@ ${value}\r
     scheduleResourceUpdate() {
       if (null !== this.scheduledResourceFrame) return;
       const usesAnimationFrame = "function" == typeof window.requestAnimationFrame;
-      const schedule = usesAnimationFrame ? window.requestAnimationFrame.bind(window) : (callback) => setTimeout(callback);
+      const schedule = usesAnimationFrame ? window.requestAnimationFrame.bind(window) : ((callback) => Number(setTimeout(callback)));
       this.scheduledResourceFrame = schedule((() => {
         this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null;
         const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
         if (!adapter) return;
         this.placeOwnedSlots();
         adapter.sortSelect.length && (adapter.sortSelect.addClass("jhs-select-source"), JhsSelect.enhance(adapter.controller), JhsSelect.refresh(adapter.sortSelect));
+        if (!jhsEventBus) return;
         void jhsEventBus.emit("magnet-items-updated", { site: adapter.site, resourceRoot: adapter.resourceRoot[0], rows: adapter.rows() }, { broadcast: false });
       }));
       this.cancelScheduledResourceFrame = () => {
@@ -12710,11 +12717,11 @@ ${failure.stack}` : "");
       return this.getScreenshotFromInitializedProviders(e2);
     }
     async getScreenshotFromInitializedProviders(e2) {
-      e2 = normalizeCarNum(e2);
-      if (!e2) throw new Error("缩略图番号不可用");
+      const carNum = normalizeCarNum(e2);
+      if (!carNum) throw new Error("缩略图番号不可用");
       let n2;
       try {
-        n2 = await this.providerRegistry.first(e2);
+        n2 = await this.providerRegistry.first(carNum);
       } catch (i2) {
         throw clog.error("获取缩略图资源失败:", n2, i2), i2;
       }
@@ -12734,25 +12741,26 @@ ${failure.stack}` : "");
       r && container.append(image.addClass("jhs-layout-cad980f4"));
       l && container.append($('<div class="photo-frame"></div>').append(image.attr("title", e2).addClass("jhs-layout-d4a575e8")));
       container.on("click", ((e3) => {
-        e3.stopPropagation(), e3.preventDefault(), showImageViewer(e3.currentTarget);
+        e3.stopPropagation(), e3.preventDefault(), globalThis.showImageViewer(e3.currentTarget);
       }));
     }
     showErrorFallback(e2, t2) {
-      var n2;
-      clog.error("获取缩略图失败:", null == (n2 = null == t2 ? void 0 : t2.message) ? void 0 : n2.substring(0, 100));
+      const errorMessage = t2 instanceof Error ? t2.message : "";
+      clog.error("获取缩略图失败:", errorMessage.substring(0, 100));
       const a2 = `jhs-screenshot-message${l ? " jhs-screenshot-message--bus" : ""}`;
-      if (!(e2 = normalizeCarNum(e2))) return void $(".screen-container").empty().append($("<div></div>").addClass(a2).text("无法获取番号，缩略图未加载"));
-      const searchUrl = this.getRuntimeService("screenshot").getSearchUrl({ carNum: e2 }), container = $(".screen-container").empty();
+      const carNum = normalizeCarNum(e2);
+      if (!carNum) return void $(".screen-container").empty().append($("<div></div>").addClass(a2).text("无法获取番号，缩略图未加载"));
+      const searchUrl = this.getRuntimeService("screenshot").getSearchUrl({ carNum }), container = $(".screen-container").empty();
       const message = $("<div></div>").addClass(a2).text("获取缩略图失败"), retry = $('<a href="#" class="retry-link">点击重试</a>');
       container.append(message, $("<br>"), retry);
       searchUrl && container.append(document.createTextNode(" 或 "), $('<a class="check-link" target="_blank" rel="noopener noreferrer">前往确认</a>').attr("href", searchUrl));
       container.off("click", ".retry-link").off("click", ".check-link").on("click", ".retry-link", (async (t3) => {
         t3.stopPropagation(), t3.preventDefault(), container.empty().append($("<div></div>").addClass(a2).text("正在重新加载..."));
         try {
-          const t4 = await this.getScreenshot(e2);
+          const t4 = await this.getScreenshot(carNum);
           this.addImg("缩略图", t4);
-        } catch (n3) {
-          this.showErrorFallback(e2, n3);
+        } catch (n2) {
+          this.showErrorFallback(carNum, n2);
         }
       })).on("click", ".check-link", ((t3) => {
         t3.stopPropagation(), t3.preventDefault(), window.open(searchUrl, "_blank");
@@ -12796,7 +12804,7 @@ ${failure.stack}` : "");
     renderInto(target, url, alt) {
       const host = $(target), image = $("<img>").attr({ src: normalizeJavStoreAssetUrl(url), alt, loading: "lazy" }).addClass("jhs-fc2-gallery__image"), button = $('<button type="button" class="jhs-btn jhs-fc2-gallery-item jhs-fc2-screenshot-thumbnail"></button>').attr("aria-label", `查看${alt}大图`).append(image);
       host.empty().append(button).off("click.jhsScreenshot").on("click.jhsScreenshot", ".jhs-fc2-screenshot-thumbnail", ((event) => {
-        event.preventDefault(), event.stopPropagation(), showImageViewer(image[0]);
+        event.preventDefault(), event.stopPropagation(), globalThis.showImageViewer(image[0]);
       }));
     }
   };
@@ -14109,7 +14117,9 @@ ${failure.stack}` : "");
   // src/plugins/offline/unified-offline.js
   var _OfflineProviderRegistry = class _OfflineProviderRegistry {
     constructor() {
-      this.providers = /* @__PURE__ */ new Map(), this.availabilityCache = /* @__PURE__ */ new Map(), this.positiveTtl = 3e5, this.negativeTtl = 2e4;
+      this.providers = /* @__PURE__ */ new Map();
+      this.availabilityCache = /* @__PURE__ */ new Map();
+      this.positiveTtl = 3e5, this.negativeTtl = 2e4;
     }
     register(provider) {
       if (!provider?.id || !Array.isArray(provider.capabilities) || "function" != typeof provider.submit || "function" != typeof provider.getAvailability) throw new TypeError("Invalid offline provider");
@@ -14126,7 +14136,7 @@ ${failure.stack}` : "");
     }
     async getAvailability(provider, force = false) {
       const cached = this.availabilityCache.get(provider.id);
-      const ttl = ["ready", "unknown"].includes(cached?.value?.authState) ? this.positiveTtl : this.negativeTtl;
+      const ttl = cached && ["ready", "unknown"].includes(cached.value.authState) ? this.positiveTtl : this.negativeTtl;
       if (!force && cached && Date.now() - cached.time < ttl) return cached.value;
       const value = await provider.getAvailability({ force });
       return this.availabilityCache.set(provider.id, { time: Date.now(), value }), value;
@@ -14151,7 +14161,7 @@ ${failure.stack}` : "");
       if (!(r || l)) return;
       const scope = await this.getRuntimeService("scope")();
       this.registerProviders(scope), this.bindSubmit(), scope.addCleanup((() => $(document).off(".jhsUnifiedOffline")));
-      if (window.isDetailPage) this.injectNativeButtons(), scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
+      if (window.isDetailPage) this.injectNativeButtons(), jhsEventBus && scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
     }
     registerProviders(scope) {
       const one23 = this.getDependency("OneTwoThreeOfflinePlugin"), offline = this.getRuntimeService("offline");
@@ -14217,10 +14227,10 @@ ${failure.stack}` : "");
           info?.carNum && await stateService.patch(info.carNum, { downloaded: true }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } });
         }));
       } catch (error) {
-        const code = error?.code || ("TOKEN_EXPIRED" === error ? "TOKEN_EXPIRED" : "SUBMIT_FAILED");
-        ["AUTH_REQUIRED", "LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING"].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: false, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: error.message || String(error) });
+        const errorRecord = error, code = errorRecord?.code || ("TOKEN_EXPIRED" === error ? "TOKEN_EXPIRED" : "SUBMIT_FAILED"), message = errorRecord?.message || String(error);
+        ["AUTH_REQUIRED", "LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING"].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: false, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: message });
         restoreButton();
-        submitted || await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "failed", errorCode: code, errorMessage: error?.message || String(error), retryOf }), show.error(`${selected.provider.name} 离线失败：${error?.message || error}`);
+        submitted || await stateService.appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "failed", errorCode: code, errorMessage: message, retryOf }), show.error(`${selected.provider.name} 离线失败：${message}`);
       } finally {
         submitted ? setTimeout(restoreButton, this.BUTTON_COOLDOWN_MS) : restoreButton();
       }
@@ -14803,12 +14813,15 @@ ${failure.stack}` : "");
       $(document).off("click.jhsCommentImage", ".jhs-comment-image-link").on("click.jhsCommentImage", ".jhs-comment-image-link", ((event) => {
         event.preventDefault();
         const image = images.eq(Number($(event.currentTarget).data("image-index")));
-        image.length && showImageViewer(image[0]);
+        image.length && globalThis.showImageViewer(image[0]);
       }));
     }
     linkCommentImageTextNodes(element, imageCount) {
       const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT), nodes = [];
-      while (walker.nextNode()) if (!$(walker.currentNode.parentElement).closest("a,button,code,pre,textarea,.jhs-comment-image-link").length && /(?:图|圖片|图片)\s*[一二三四五六七八九十\d]+/i.test(walker.currentNode.nodeValue || "")) nodes.push(walker.currentNode);
+      while (walker.nextNode()) {
+        const textNode = walker.currentNode;
+        if (!$(textNode.parentElement).closest("a,button,code,pre,textarea,.jhs-comment-image-link").length && /(?:图|圖片|图片)\s*[一二三四五六七八九十\d]+/i.test(textNode.nodeValue || "")) nodes.push(textNode);
+      }
       nodes.forEach(((textNode) => {
         const text = textNode.nodeValue || "", pattern = /(?:图|圖片|图片)\s*([一二三四五六七八九十\d]+)/gi, fragment = document.createDocumentFragment();
         let cursor = 0, match;

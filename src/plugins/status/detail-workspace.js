@@ -1,16 +1,21 @@
+// @ts-check
+
 import { normalizeCarNum } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
 
+/** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
+
 /** 返回当前详情页的宿主资源边界；调用者不得重挂载这些节点。 */
+/** @param {any} hostAdapter */
 export function getDetailResourceAdapter(hostAdapter) {
     if (!window.isDetailPage || typeof hostAdapter?.getDetailResourceBoundary !== "function") return null;
     const boundary = hostAdapter.getDetailResourceBoundary();
     if (!boundary) return null;
     return {
         ...boundary, hostRoot: $(boundary.hostRoot), controller: $(boundary.controller), observeRoot: $(boundary.observeRoot), resourceRoot: $(boundary.resourceRoot), resourceRegion: $(boundary.resourceRegion),
-        sortSelect: $(boundary.sortSelect), getActionTarget(row) {
+        sortSelect: $(boundary.sortSelect), getActionTarget(/** @type {Element} */ row) {
             const target = $(boundary.getActionTarget(row));
             if (!target.length || !boundary.actionTargetRequiresWrapper?.(row)) return target;
             let actions = target.children(".jhs-offline-actions").first();
@@ -22,7 +27,12 @@ export function getDetailResourceAdapter(hostAdapter) {
 /** 非破坏性详情工作区：仅标记宿主稳定块，并为 JHS 自有内容提供固定插槽。 */
 export class DetailWorkspacePlugin extends BasePlugin {
     constructor() {
-        super(), this.hostRoot = null, this.resourceObserver = null, this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null, this.lifecycleScope = null;
+        super();
+        /** @type {JQueryHandle | null} */ this.hostRoot = null;
+        /** @type {any} */ this.resourceObserver = null;
+        /** @type {number | null} */ this.scheduledResourceFrame = null;
+        /** @type {(() => void) | null} */ this.cancelScheduledResourceFrame = null;
+        /** @type {any} */ this.lifecycleScope = null;
     }
     getName() { return "DetailWorkspacePlugin"; }
     async initCss() {
@@ -70,14 +80,14 @@ export class DetailWorkspacePlugin extends BasePlugin {
             root.attr({ "data-jhs-workspace-ready": "true", "data-jhs-workspace-site": adapter.site }).addClass("jhs-detail-host-workspace jhs-ui");
             if ("javdb" === adapter.site) {
                 root.children("h2,.video-meta-panel").attr("data-jhs-host-region", "summary");
-                root.children(".columns").filter(((_, element) => $(element).find(".tile-images,.preview-images").length > 0)).attr("data-jhs-host-region", "gallery");
-                root.children(".columns").filter(((_, element) => $(element).find("#magnets-content").length > 0)).attr("data-jhs-host-region", "resources");
+                root.children(".columns").filter(((/** @type {number} */ _, /** @type {Element} */ element) => $(element).find(".tile-images,.preview-images").length > 0)).attr("data-jhs-host-region", "gallery");
+                root.children(".columns").filter(((/** @type {number} */ _, /** @type {Element} */ element) => $(element).find("#magnets-content").length > 0)).attr("data-jhs-host-region", "resources");
                 this.normalizeHostActions(root.find(".video-meta-panel").first());
             } else {
                 root.children("h3,.row.movie").attr("data-jhs-host-region", "summary");
                 const resource = getDetailResourceAdapter(this.getRuntimeService("host"));
                 resource?.resourceRegion?.attr("data-jhs-host-region", "resources");
-                root.children().filter(((_, element) => $(element).is("#sample-waterfall") || $(element).find("#sample-waterfall").length > 0)).attr("data-jhs-host-region", "gallery");
+                root.children().filter(((/** @type {number} */ _, /** @type {Element} */ element) => $(element).is("#sample-waterfall") || $(element).find("#sample-waterfall").length > 0)).attr("data-jhs-host-region", "gallery");
                 this.normalizeHostActions(root.find(".info").first());
             }
             this.ensureOwnedSlots(root), this.adoptExistingOwnedPanels(root);
@@ -85,6 +95,7 @@ export class DetailWorkspacePlugin extends BasePlugin {
         this.hostRoot = root, this.ensureOwnedSlots(root), this.placeOwnedSlots(), this.bindResourceLifecycle();
         return root;
     }
+    /** @param {string} name */
     getSlot(name) {
         return this.ensureWorkspace().find(`[data-jhs-slot="${name}"]`).first();
     }
@@ -106,20 +117,26 @@ export class DetailWorkspacePlugin extends BasePlugin {
         summaryRegion.length && summaryActions.insertAfter(summaryRegion);
         resource?.resourceRegion?.length && postResource.insertAfter(resource.resourceRegion);
     }
+    /** @param {JQueryHandle} root */
     adoptExistingOwnedPanels(root) {
         [ [ ".jhs-detail-btn-row", "summary-actions" ], [ ".jhs-related-panel", "related" ], [ ".jhs-review-panel", "reviews" ] ].forEach((([ selector, slot ]) => {
             const target = root.find(`[data-jhs-slot="${slot}"]`).first();
-            root.find(selector).filter(((_, element) => !$(element).closest("[data-jhs-slot]").length)).each(((_, element) => target.append(element)));
+            root.find(selector).filter(((/** @type {number} */ _, /** @type {Element} */ element) => !$(element).closest("[data-jhs-slot]").length)).each(((/** @type {number} */ _, /** @type {Element} */ element) => target.append(element)));
         }));
     }
+    /** @param {JQueryHandle} info */
     normalizeHostActions(info) {
         const labels = new Set([ "想看", "看过", "看過", "存入清单", "存入清單", "下载", "下載", "订正", "訂正" ]);
-        info.find("a, button").filter((function() { return !$(this).is(".jhs-btn, [id^='jhs-']") && labels.has($(this).text().replace(/\s+/g, " ").trim()); })).addClass("jhs-detail-host-action");
+        info.find("a, button").filter(((/** @type {number} */ _, /** @type {Element} */ element) => !$(element).is(".jhs-btn, [id^='jhs-']") && labels.has($(element).text().replace(/\s+/g, " ").trim()))).addClass("jhs-detail-host-action");
     }
+    /** @param {MutationRecord} record */
     isJhsOnlyMutation(record) {
         if ($(record.target).closest(".jhs-offline-actions,.jhs-select-control,.jhs-magnet-score").length) return !0;
         const nodes = [ ...record.addedNodes, ...record.removedNodes ].filter((node => node.nodeType === Node.ELEMENT_NODE));
-        return nodes.length > 0 && nodes.every((node => node.matches?.(".jhs-offline-btn,.jhs-offline-actions,.jhs-magnet-score,.jhs-select-control") || node.closest?.(".jhs-offline-actions,.jhs-select-control")));
+        return nodes.length > 0 && nodes.every((node => {
+            const element = /** @type {Element} */ (node);
+            return element.matches?.(".jhs-offline-btn,.jhs-offline-actions,.jhs-magnet-score,.jhs-select-control") || element.closest?.(".jhs-offline-actions,.jhs-select-control");
+        }));
     }
     bindResourceLifecycle() {
         const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
@@ -127,20 +144,21 @@ export class DetailWorkspacePlugin extends BasePlugin {
         if (this.resourceObserver && this.resourceObserver.root === adapter.observeRoot[0]) return void this.scheduleResourceUpdate();
         this.resourceObserver && this.lifecycleScope?.releaseObserver(this.resourceObserver);
         if (!this.lifecycleScope) return;
-        const observer = this.lifecycleScope.observe(adapter.observeRoot[0], (records => { records.every((record => this.isJhsOnlyMutation(record))) || this.scheduleResourceUpdate(); }), { childList: !0, subtree: !0 });
+        const observer = this.lifecycleScope.observe(adapter.observeRoot[0], ((/** @type {MutationRecord[]} */ records) => { records.every((record => this.isJhsOnlyMutation(record))) || this.scheduleResourceUpdate(); }), { childList: !0, subtree: !0 });
         observer.root = adapter.observeRoot[0], this.resourceObserver = observer,
         adapter.sortSelect.length && adapter.sortSelect.addClass("jhs-select-source") && JhsSelect.enhance(adapter.controller), this.scheduleResourceUpdate();
     }
     scheduleResourceUpdate() {
         if (null !== this.scheduledResourceFrame) return;
         const usesAnimationFrame = "function" == typeof window.requestAnimationFrame;
-        const schedule = usesAnimationFrame ? window.requestAnimationFrame.bind(window) : callback => setTimeout(callback);
+        const schedule = /** @type {(callback: FrameRequestCallback) => number} */ (usesAnimationFrame ? window.requestAnimationFrame.bind(window) : (callback => Number(setTimeout(callback))));
         this.scheduledResourceFrame = schedule((() => {
             this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null;
             const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
             if (!adapter) return;
             this.placeOwnedSlots();
             adapter.sortSelect.length && (adapter.sortSelect.addClass("jhs-select-source"), JhsSelect.enhance(adapter.controller), JhsSelect.refresh(adapter.sortSelect));
+            if (!jhsEventBus) return;
             void jhsEventBus.emit("magnet-items-updated", { site: adapter.site, resourceRoot: adapter.resourceRoot[0], rows: adapter.rows() }, { broadcast: !1 });
         }));
         this.cancelScheduledResourceFrame = () => {
@@ -150,6 +168,7 @@ export class DetailWorkspacePlugin extends BasePlugin {
 }
 
 /** 创建 FC2 自有详情壳，所有异步模块只写入固定插槽。 */
+/** @param {{ carNum?: string, source?: string, mode?: string }} [options] */
 export function createFc2DetailShell({ carNum = "", source = "fc2", mode = "dialog" } = {}) {
     const workspace = $('<div class="jhs-fc2-workspace jhs-ui"></div>').attr({
         "data-jhs-fc2-source": source,
@@ -166,6 +185,7 @@ export function createFc2DetailShell({ carNum = "", source = "fc2", mode = "dial
 }
 
 /** 创建只属于单个 FC2 详情实例的生命周期和插槽上下文。 */
+/** @param {JQueryHandle | Element} root @param {Record<string, unknown>} [options] */
 export function createFc2DetailContext(root, options = {}) {
     const workspace = $(root).is(".jhs-fc2-workspace") ? $(root) : $(root).find(".jhs-fc2-workspace").first();
     let destroyed = !1;
@@ -176,10 +196,10 @@ export function createFc2DetailContext(root, options = {}) {
         workspace,
         namespace,
         observers,
-        getSlot: name => workspace.find(`[data-jhs-slot="${name}"]`).first(),
-        getSection: name => workspace.find(`[data-jhs-section="${name}"]`).first(),
+        getSlot: (/** @type {string} */ name) => workspace.find(`[data-jhs-slot="${name}"]`).first(),
+        getSection: (/** @type {string} */ name) => workspace.find(`[data-jhs-section="${name}"]`).first(),
         isAlive: () => !destroyed && workspace[0]?.isConnected !== !1,
-        addObserver(observer) { observer && observers.add(observer); return observer; },
+        addObserver(/** @type {{ disconnect?: () => void }} */ observer) { observer && observers.add(observer); return observer; },
         destroy() {
             if (destroyed) return;
             destroyed = !0, workspace.off(namespace).find("*").off(namespace), observers.forEach((observer => observer.disconnect?.())), observers.clear(), workspace.removeData("jhsFc2Context");

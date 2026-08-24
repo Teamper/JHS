@@ -14,6 +14,7 @@ export class JhsSelect {
     [key: string]: any;
     constructor(element: Element | any, options?: Record<string, unknown>);
     static enhance(root?: ParentNode | Element | string): JhsSelect[];
+    static refresh(select: HTMLSelectElement | Element | string | any): void;
     static setValue(select: HTMLSelectElement | Element | string | any, value: unknown, emit?: boolean): void;
     static setVisible(select: HTMLSelectElement | Element | string | any, visible: boolean): void;
     destroy(): void;
