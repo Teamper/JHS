@@ -1,6 +1,7 @@
 import { l, r } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
+import { readListItem } from "../../core/list-item-reader.js";
 import { stateService } from "../../core/state-service.js";
 import { OneOneFiveClient } from "../one-one-five/client.js";
 import { getDetailResourceAdapter } from "../status/detail-workspace.js";
@@ -79,7 +80,7 @@ export class UnifiedOfflinePlugin extends BasePlugin {
     getVideoInfo(button) {
         if (window.isDetailPage) return this.getPageInfo();
         const item = button?.closest?.(".item");
-        return item?.length ? this.getDependency("ListPagePlugin").findCarNumAndHref(item) : this.getPageInfo();
+        return item?.length ? readListItem(item) : this.getPageInfo();
     }
     async submitResource(event, resource, button = $(), context = null, retryOf = null, options = {}) {
         if (button.hasClass("loading")) return;

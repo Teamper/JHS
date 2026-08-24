@@ -9,9 +9,16 @@ export class OneOneFiveMatchPlugin extends BasePlugin {
     getName() { return "OneOneFiveMatchPlugin"; }
     async handle() {
         if (!await storageManager.getSetting("enable115Match", !1)) return;
-        if (!isDetailPage) return this.setupListMatching();
+        const hostAdapter = this.getRuntimeService("host");
+        if (!isDetailPage) {
+            const scope = await this.getRuntimeService("scope")();
+            await this.setupListMatching(hostAdapter), scope.ownObserver(this.observer), scope.addCleanup((() => {
+                this.unsubscribeItems?.(), this.unsubscribeItems = null, this.flushTimer && clearTimeout(this.flushTimer), this.flushTimer = null, this.pendingCards.clear();
+            }));
+            return;
+        }
         const carNum = this.getPageInfo().carNum, keyword = normalize115Keyword(carNum); if (!keyword) return;
-        const host = $(".movie-panel-info,.container .info").first(); host.append('<div class="panel-block jhs-115-match"><strong>115匹配：</strong><span>匹配中</span></div>');
+        const host = $(hostAdapter.locateDetailSlots().summary); host.append('<div class="panel-block jhs-115-match"><strong>115匹配：</strong><span>匹配中</span></div>');
         try {
             const cacheMinutes = Math.max(1, Number(await storageManager.getSetting("oneOneFiveCacheMinutes", 60)) || 60), matches = await storageManager.cachedRequest(`115match:${carNum}`, cacheMinutes * 6e4, (() => new OneOneFiveClient().search(keyword)));
             const box = $(".jhs-115-match").empty().append("<strong>115匹配：</strong>");
@@ -20,13 +27,13 @@ export class OneOneFiveMatchPlugin extends BasePlugin {
             box.on("click", ".jhs-115-rename", (event => this.renameWithPreview(event, $(event.currentTarget).data("match"), carNum)));
         } catch (error) { const box = $(".jhs-115-match").empty().append("<strong>115匹配：</strong>", document.createTextNode("未登录或请求失败 ")); box.append('<a class="jhs-btn jhs-btn--ghost" href="https://115.com" target="_blank">去登录</a>', $('<button type="button" class="jhs-btn jhs-btn--ghost">重试</button>').on("click", (() => location.reload()))); clog.error("115 匹配失败", error); }
     }
-    async setupListMatching() {
+    async setupListMatching(hostAdapter) {
         this.concurrency = Math.max(1, Math.min(10, Number(await storageManager.getSetting("oneOneFiveConcurrency", 4)) || 4)), this.cacheMinutes = Math.max(1, Number(await storageManager.getSetting("oneOneFiveCacheMinutes", 60)) || 60);
         this.observer = new IntersectionObserver((entries => {
             entries.forEach((entry => entry.isIntersecting && (this.observer.unobserve(entry.target), this.pendingCards.add(entry.target))));
             this.pendingCards.size && this.scheduleFlush();
         }), { rootMargin: "200px" });
-        this.registerCards($(".movie-list .item,.masonry .item").get()), this.unsubscribeItems = jhsEventBus.on("list-items-added", (payload => this.registerCards(payload.items || [])));
+        this.registerCards($(hostAdapter.locateListRoot()).find(".item").get()), this.unsubscribeItems = jhsEventBus.on("list-items-added", (payload => this.registerCards(payload.items || [])));
     }
     registerCards(cards) {
         cards.forEach((card => { "true" !== card.dataset.jhs115Observed && "matched" !== card.dataset.jhs115State && (card.dataset.jhs115Observed = "true", this.observer.observe(card)); }));

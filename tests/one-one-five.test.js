@@ -26,7 +26,10 @@ describe("115 domain", () => {
     it("keeps disabled plugins request-free", () => {
         const source = readTestFile(join(import.meta.dirname, "../src/plugins/one-one-five/plugins.js"), "utf8");
         expect(source).toContain('getSetting("enable115Match", !1)');
-        expect(source).toContain("return this.setupListMatching()");
+        expect(source).toContain("await this.setupListMatching(hostAdapter)");
+        expect(source).toContain("scope.ownObserver(this.observer)");
+        expect(source).toContain("hostAdapter.locateListRoot()");
+        expect(source).not.toContain('$(".movie-list .item,.masonry .item")');
         expect(source).toContain('jhsEventBus.on("list-items-added"');
         expect(source).not.toContain("new MutationObserver");
         expect(source).not.toContain("gmHttp");

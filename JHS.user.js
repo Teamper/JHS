@@ -3907,7 +3907,7 @@
   // src/plugins/dependency-map.js
   var LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     AutoPagePlugin: ["ListPagePlugin"],
-    BlacklistPlugin: ["TaskPlugin", "SettingPlugin", "ListPagePlugin"],
+    BlacklistPlugin: ["TaskPlugin", "SettingPlugin"],
     BusNavBarPlugin: ["SearchByImagePlugin"],
     CompatibilityEnhancementsPlugin: ["ListPagePlugin"],
     CoverButtonPlugin: ["ListPagePlugin", "ScreenShotPlugin", "OtherSitePlugin"],
@@ -3955,9 +3955,9 @@
       "BusImgPlugin"
     ],
     StatsPlugin: ["OtherSitePlugin", "NewVideoPlugin", "ListPagePlugin"],
-    TaskPlugin: ["OtherSitePlugin", "BlacklistPlugin", "ListPagePlugin"],
+    TaskPlugin: ["OtherSitePlugin", "BlacklistPlugin"],
     TOP250Plugin: ["HitShowPlugin"],
-    UnifiedOfflinePlugin: ["OneTwoThreeOfflinePlugin", "ListPagePlugin"]
+    UnifiedOfflinePlugin: ["OneTwoThreeOfflinePlugin"]
   });
 
   // src/plugins/avatar/actress-info.js
@@ -5440,6 +5440,49 @@
   }
   __name(applyImageMode, "applyImageMode");
 
+  // src/core/movie-identity.js
+  var SIMPLE_CAR_PREFIXES2 = /* @__PURE__ */ new Set(["ABC", "ABP", "ADN", "ATID", "BF", "CAWD", "DLDSS", "DVAJ", "FSDSS", "HEYZO", "HMN", "IPX", "IPZZ", "JUQ", "JUL", "JUX", "MEYD", "MIAA", "MIDE", "MIDV", "MIMK", "MIRD", "NIMA", "PRED", "RBD", "SDDE", "SONE", "SSIS", "SSNI", "STARS", "URE", "VEC", "WAAA", "WANZ", "XVSR"]);
+  function normalizeMovieCarNum(value) {
+    if (typeof value !== "string") return null;
+    let carNum = value.trim();
+    if (!carNum || ["undefined", "null"].includes(carNum.toLowerCase())) return null;
+    carNum = carNum.normalize("NFKC").replace(/[‐‑‒–—―﹘﹣－]/g, "-").replace(/[\s_]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").toUpperCase();
+    const match = carNum.match(/^([A-Z]{2,8})(\d{2,7})$/);
+    return match && SIMPLE_CAR_PREFIXES2.has(match[1]) ? `${match[1]}-${match[2]}` : carNum || null;
+  }
+  __name(normalizeMovieCarNum, "normalizeMovieCarNum");
+
+  // src/core/list-item-reader.js
+  function readListItem(item) {
+    const jq = globalThis.$, element = item?.jquery ? item : jq(item);
+    const anchor = element.find("a"), url = anchor.attr("href"), titleNode = element.find(".video-title");
+    let carNum, title, publishTime;
+    if (titleNode.length) {
+      const strong = titleNode.find("strong");
+      if (strong.length) carNum = strong.text().trim();
+      title = anchor.attr("title") ? anchor.attr("title").trim() : carNum ? titleNode.text().replace(carNum, "").trim() : titleNode.text().trim();
+      publishTime = element.find(".meta").text().trim();
+    }
+    if (!carNum) {
+      const image = element.find("img");
+      if (image.length) title = image.attr("title")?.trim() || image.attr("data-title")?.trim() || title;
+      const dates = element.find("date").map((_index, node) => jq(node).text().trim()).get();
+      publishTime = dates.find((value) => /^\d{4}-\d{1,2}-\d{1,2}$/.test(value));
+      carNum = dates.find((value) => !/^\d{4}-\d{1,2}-\d{1,2}$/.test(value));
+    }
+    const normalized = normalizeMovieCarNum(carNum);
+    if (!normalized) throw new TypeError("提取番号信息失败");
+    return Object.freeze({
+      carNum: normalized,
+      aHref: url,
+      url,
+      title,
+      publishTime,
+      fc2Source: ["fc2", "123av"].includes(element.attr("data-jhs-fc2-source")) ? element.attr("data-jhs-fc2-source") : "fc2"
+    });
+  }
+  __name(readListItem, "readListItem");
+
   // src/plugins/status/list-page.js
   var Te = {
     IS_FILTERED: {
@@ -5562,18 +5605,24 @@
     }
     async handle() {
       if (!window.isListPage || isHitShowPage()) return;
+      const scope = await this.getRuntimeService("scope")();
       const refreshAll = /* @__PURE__ */ __name(async () => {
         this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
         const e2 = this.getDependency("HistoryPlugin");
         e2.tableObj && e2.tableObj.setData();
       }, "refreshAll");
-      jhsEventBus.on("legacy-refresh", refreshAll), jhsEventBus.on("blacklist-rules-changed", refreshAll), jhsEventBus.on("filter-rules-changed", refreshAll), jhsEventBus.on("settings-changed", refreshAll), jhsEventBus.on("car-state-changed", (async (payload) => {
+      ["legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed"].forEach(((type) => scope.addCleanup(jhsEventBus.on(type, refreshAll)))), scope.addCleanup(jhsEventBus.on("car-state-changed", (async (payload) => {
         this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key);
         const items = this.getIndexedItems(payload.carNums || []);
         items.length && (await this.doFilterItems(items), this.applyVisibility(items));
         const history = this.getDependency("HistoryPlugin");
         history.tableObj && history.tableObj.setData();
-      })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(), this.rememberTagExpand(), $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await jhsEventBus.emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: false }), this.checkDom();
+      }))), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(), await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(), this.rememberTagExpand(), $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await jhsEventBus.emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: false }), this.checkDom(scope), scope.addCleanup((() => {
+        this.processTimer && clearTimeout(this.processTimer), this.processTimer = null, this.pendingItems.clear();
+        this.hdImageObserver?.disconnect(), this.hdImageObserver = null;
+        this.recountFrame && (globalThis.cancelAnimationFrame?.(this.recountFrame) ?? clearTimeout(this.recountFrame)), this.recountFrame = null;
+        $(this.getSelector().boxSelector).off(".jhsMovieDetail"), $("#jhs-quick-filter").off(), this.itemIndex.clear();
+      }));
     }
     async createQuickFilter() {
       if ($("#jhs-quick-filter").length) return;
@@ -5640,7 +5689,7 @@
         clog.debug("触发"), localStorage.setItem(t2, e3.toString());
       }));
     }
-    checkDom() {
+    checkDom(scope = null) {
       if (!window.isListPage || isHitShowPage()) return;
       const e2 = this.getSelector(), t2 = document.querySelector(e2.boxSelector);
       if (!t2) return void clog.error("没有找到容器节点!");
@@ -5663,6 +5712,7 @@
         childList: true,
         subtree: false
       });
+      scope?.ownObserver(a2);
     }
     async processAddedItems(items) {
       const selector = this.getSelector(), covers = items.flatMap(((item) => [...item.querySelectorAll(selector.coverImgSelector)]));
@@ -5946,30 +5996,12 @@
       return t2;
     }
     findCarNumAndHref(e2) {
-      var t2, n2;
-      let a2, i2, s2, o2 = e2.find("a"), r2 = o2.attr("href"), l2 = e2.find(".video-title");
-      if (l2.length > 0) {
-        let t3 = l2.find("strong");
-        t3.length > 0 && (a2 = t3.text().trim()), i2 = o2.attr("title") ? o2.attr("title").trim() : a2 ? l2.text().replace(a2, "").trim() : l2.text().trim(), s2 = e2.find(".meta").text().trim();
+      try {
+        return readListItem(e2);
+      } catch (error) {
+        show.error("提取番号信息失败");
+        throw error;
       }
-      if (!a2) {
-        let o3 = e2.find("img");
-        r2 && o3.length > 0 && (i2 = (null == (t2 = o3.attr("title")) ? void 0 : t2.trim()) || (null == (n2 = o3.attr("data-title")) ? void 0 : n2.trim()));
-        const l3 = /* @__PURE__ */ __name((e3) => /^\d{4}-\d{1,2}-\d{1,2}$/.test(e3), "l");
-        s2 = e2.find("date").map(((e3, t3) => $(t3).text().trim())).get().find(l3), a2 = e2.find("date").map(((e3, t3) => $(t3).text().trim())).get().find(((e3) => !l3(e3)));
-      }
-      if (!a2) {
-        const e3 = "提取番号信息失败";
-        throw show.error(e3), new Error(e3);
-      }
-      return {
-        carNum: normalizeCarNum(a2),
-        aHref: r2,
-        url: r2,
-        title: i2,
-        publishTime: s2,
-        fc2Source: ["fc2", "123av"].includes(e2.attr("data-jhs-fc2-source")) ? e2.attr("data-jhs-fc2-source") : "fc2"
-      };
     }
     showCarNumBox(e2) {
       const t2 = $(".movie-list .item").toArray().find(((t3) => $(t3).find(".video-title strong").text() === e2));
@@ -8114,7 +8146,7 @@
       let n2, a2;
       if (t2 ? (l && t2.find(".avatar-box").length > 0 && t2.find(".avatar-box").parent().remove(), n2 = t2.find(this.getSelector().requestDomItemSelector), a2 = t2.find(this.getSelector().nextPageSelector).attr("href")) : (n2 = $(this.getSelector().itemSelector), a2 = $(this.getSelector().nextPageSelector).attr("href")), a2 && 0 === n2.length) throw show.error("解析列表失败"), new Error("解析列表失败");
       for (const s2 of n2) {
-        const t3 = $(s2), { carNum: n3, url: a3, publishTime: o2 } = this.getDependency("ListPagePlugin").findCarNumAndHref(t3);
+        const t3 = $(s2), { carNum: n3, url: a3, publishTime: o2 } = readListItem(t3);
         if (a3 && n3) try {
           await stateService.patch(n3, { blocked: true }, { type: "actor-page-block", record: { carNum: n3, url: a3, names: e2, publishTime: o2 } }), clog.log("屏蔽演员番号", e2, n3);
         } catch (i2) {
@@ -8133,7 +8165,7 @@
       pageDom ? (n2 = pageDom.find(this.getSelector().requestDomItemSelector), a2 = pageDom.find(this.getSelector().nextPageSelector).attr("href")) : (n2 = $(this.getSelector().itemSelector), a2 = $(this.getSelector().nextPageSelector).attr("href"));
       if (a2 && 0 === n2.length) throw show.error("解析列表失败"), new Error("解析列表失败");
       for (const i2 of n2) {
-        const n3 = $(i2), { carNum: a3, url: o2, publishTime: r2 } = this.getDependency("ListPagePlugin").findCarNumAndHref(n3);
+        const n3 = $(i2), { carNum: a3, url: o2, publishTime: r2 } = readListItem(n3);
         if (o2 && a3) try {
           const flag = legacyActionToFlag(t2);
           flag && await stateService.patch(a3, { [flag]: true }, { type: "actor-page-batch-state", record: { carNum: a3, url: o2, names: e2, publishTime: r2 } }), clog.log("批量操作", e2, a3, t2);
@@ -8172,7 +8204,7 @@
       if (pageState.isEmpty && nextPageLink) throw new Error("黑名单作品空页面包含下一页");
       const records = [], publishTimes = [];
       for (const item of pageState.items) {
-        const element = $(item), { carNum, url, publishTime } = this.getDependency("ListPagePlugin").findCarNumAndHref(element);
+        const element = $(item), { carNum, url, publishTime } = readListItem(element);
         publishTime && publishTimes.push(publishTime), url && carNum && records.push({
           carNum,
           url,
@@ -9951,7 +9983,7 @@ ${error.stack}` : "");
     }
     async loadOtherSite(e2, t2, n2 = {}) {
       if ("yes" !== await storageManager.getSetting("enableLoadOtherSite", "yes")) return;
-      const root = n2.root ? $(n2.root) : $(document), target = n2.target ? $(n2.target) : root.find(".movie-panel-info,.container .info").first();
+      const root = n2.root ? $(n2.root) : $(document), target = n2.target ? $(n2.target) : $(this.getRuntimeService("host").locateDetailSlots().summary);
       if (!target.length || n2.isActive && !n2.isActive()) return;
       root.find("#otherSiteBox,#settingsArea,[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
       e2 = normalizeCarNum(e2) || this.getPageInfo().carNum;
@@ -11161,18 +11193,6 @@ ${error.stack}` : "");
   };
   __name(_CoverButtonPlugin, "CoverButtonPlugin");
   var CoverButtonPlugin = _CoverButtonPlugin;
-
-  // src/core/movie-identity.js
-  var SIMPLE_CAR_PREFIXES2 = /* @__PURE__ */ new Set(["ABC", "ABP", "ADN", "ATID", "BF", "CAWD", "DLDSS", "DVAJ", "FSDSS", "HEYZO", "HMN", "IPX", "IPZZ", "JUQ", "JUL", "JUX", "MEYD", "MIAA", "MIDE", "MIDV", "MIMK", "MIRD", "NIMA", "PRED", "RBD", "SDDE", "SONE", "SSIS", "SSNI", "STARS", "URE", "VEC", "WAAA", "WANZ", "XVSR"]);
-  function normalizeMovieCarNum(value) {
-    if (typeof value !== "string") return null;
-    let carNum = value.trim();
-    if (!carNum || ["undefined", "null"].includes(carNum.toLowerCase())) return null;
-    carNum = carNum.normalize("NFKC").replace(/[‐‑‒–—―﹘﹣－]/g, "-").replace(/[\s_]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").toUpperCase();
-    const match = carNum.match(/^([A-Z]{2,8})(\d{2,7})$/);
-    return match && SIMPLE_CAR_PREFIXES2.has(match[1]) ? `${match[1]}-${match[2]}` : carNum || null;
-  }
-  __name(normalizeMovieCarNum, "normalizeMovieCarNum");
 
   // src/integrations/javstore/parser.js
   function resolveDocument(page) {
@@ -12753,7 +12773,7 @@ ${error.stack}` : "");
       let c2 = [];
       const publishTimes = [];
       for (const m2 of s2) {
-        const e3 = $(m2), { carNum: s3, url: o3, title: r2, publishTime: l2 } = this.getDependency("ListPagePlugin").findCarNumAndHref(e3);
+        const e3 = $(m2), { carNum: s3, url: o3, title: r2, publishTime: l2 } = readListItem(e3);
         l2 && publishTimes.push(l2);
         if (!s3) continue;
         a2.find(((e4) => r2.includes(e4) || s3.includes(e4))) || (i2.has(s3) || (() => {
@@ -12897,7 +12917,7 @@ ${error.stack}` : "");
     getVideoInfo(button) {
       if (window.isDetailPage) return this.getPageInfo();
       const item = button?.closest?.(".item");
-      return item?.length ? this.getDependency("ListPagePlugin").findCarNumAndHref(item) : this.getPageInfo();
+      return item?.length ? readListItem(item) : this.getPageInfo();
     }
     async submitResource(event, resource, button = $(), context = null, retryOf = null, options = {}) {
       if (button.hasClass("loading")) return;
@@ -12938,10 +12958,17 @@ ${error.stack}` : "");
     }
     async handle() {
       if (!await storageManager.getSetting("enable115Match", false)) return;
-      if (!isDetailPage) return this.setupListMatching();
+      const hostAdapter = this.getRuntimeService("host");
+      if (!isDetailPage) {
+        const scope = await this.getRuntimeService("scope")();
+        await this.setupListMatching(hostAdapter), scope.ownObserver(this.observer), scope.addCleanup((() => {
+          this.unsubscribeItems?.(), this.unsubscribeItems = null, this.flushTimer && clearTimeout(this.flushTimer), this.flushTimer = null, this.pendingCards.clear();
+        }));
+        return;
+      }
       const carNum = this.getPageInfo().carNum, keyword = normalize115Keyword(carNum);
       if (!keyword) return;
-      const host = $(".movie-panel-info,.container .info").first();
+      const host = $(hostAdapter.locateDetailSlots().summary);
       host.append('<div class="panel-block jhs-115-match"><strong>115匹配：</strong><span>匹配中</span></div>');
       try {
         const cacheMinutes = Math.max(1, Number(await storageManager.getSetting("oneOneFiveCacheMinutes", 60)) || 60), matches = await storageManager.cachedRequest(`115match:${carNum}`, cacheMinutes * 6e4, (() => new OneOneFiveClient().search(keyword)));
@@ -12960,13 +12987,13 @@ ${error.stack}` : "");
         clog.error("115 匹配失败", error);
       }
     }
-    async setupListMatching() {
+    async setupListMatching(hostAdapter) {
       this.concurrency = Math.max(1, Math.min(10, Number(await storageManager.getSetting("oneOneFiveConcurrency", 4)) || 4)), this.cacheMinutes = Math.max(1, Number(await storageManager.getSetting("oneOneFiveCacheMinutes", 60)) || 60);
       this.observer = new IntersectionObserver(((entries) => {
         entries.forEach(((entry) => entry.isIntersecting && (this.observer.unobserve(entry.target), this.pendingCards.add(entry.target))));
         this.pendingCards.size && this.scheduleFlush();
       }), { rootMargin: "200px" });
-      this.registerCards($(".movie-list .item,.masonry .item").get()), this.unsubscribeItems = jhsEventBus.on("list-items-added", ((payload) => this.registerCards(payload.items || [])));
+      this.registerCards($(hostAdapter.locateListRoot()).find(".item").get()), this.unsubscribeItems = jhsEventBus.on("list-items-added", ((payload) => this.registerCards(payload.items || [])));
     }
     registerCards(cards) {
       cards.forEach(((card) => {
@@ -15415,7 +15442,7 @@ ${error.stack}` : "");
     manifest("detail.gallery", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
     manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo]),
-    manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [SERVICE.movie]),
+    manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie]),
     manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings]),
     manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }),
     manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }),
@@ -15426,7 +15453,7 @@ ${error.stack}` : "");
     manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }),
     manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics]),
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings]),
-    manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }),
+    manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }, [PORT.host]),
     manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }),
     manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }),
     manifest("identity.javbus-navigation", "identity", BusNavBarPlugin, ["javbus"], { javbus: 7 }),

@@ -1,6 +1,7 @@
 import { I, T, _, i, l, normalizeCarNum } from "../../core/constants.js";
 import { parseNumberSetting, parseTaskTimestamp, selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
+import { readListItem } from "../../core/list-item-reader.js";
 import { detectSite } from "../../core/site-context.js";
 import { parseJavDbActorList } from "../../integrations/javdb/parser.js";
 import { parseDetailPage } from "../../integrations/host-list/parser.js";
@@ -447,7 +448,7 @@ export class TaskPlugin extends BasePlugin {
         let c = [];
         const publishTimes = [];
         for (const m of s) {
-            const e = $(m), {carNum: s, url: o, title: r, publishTime: l} = this.getDependency("ListPagePlugin").findCarNumAndHref(e);
+            const e = $(m), {carNum: s, url: o, title: r, publishTime: l} = readListItem(e);
             l && publishTimes.push(l);
             if (!s) continue;
             a.find((e => r.includes(e) || s.includes(e))) || (i.has(s) || (() => {

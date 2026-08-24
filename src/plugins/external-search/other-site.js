@@ -108,7 +108,7 @@ export class OtherSitePlugin extends BasePlugin {
     }
     async loadOtherSite(e, t, n = {}) {
         if ("yes" !== await storageManager.getSetting("enableLoadOtherSite", "yes")) return;
-        const root = n.root ? $(n.root) : $(document), target = n.target ? $(n.target) : root.find(".movie-panel-info,.container .info").first();
+        const root = n.root ? $(n.root) : $(document), target = n.target ? $(n.target) : $(this.getRuntimeService("host").locateDetailSlots().summary);
         if (!target.length || n.isActive && !n.isActive()) return;
         root.find("#otherSiteBox,#settingsArea,[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
         e = normalizeCarNum(e) || this.getPageInfo().carNum;

@@ -42,8 +42,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
     const gmHttp = { get: vi.fn() }, beans = {
         OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com"), getJavBusUrl: vi.fn(async () => "https://www.javbus.com") },
         NewVideoPlugin: { loadData: vi.fn(async () => {}), resetBtnTip: vi.fn(async () => {}) },
-        BlacklistPlugin: { resetBtnTip: vi.fn(async () => {}) },
-        ListPagePlugin: { findCarNumAndHref: element => ({ carNum: element.attr("data-car"), url: element.attr("data-url"), title: element.attr("data-title") || "", publishTime: element.attr("data-date") || "" }) }
+        BlacklistPlugin: { resetBtnTip: vi.fn(async () => {}) }
     };
     class BasePlugin {
         getBean(name) { return beans[name]; }
@@ -61,6 +60,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         utils: { sleep: vi.fn(async () => {}), getNowStr: (a = "-", b = ":", timestamp = null) => format(null == timestamp ? clock.now : timestamp), getHourDifference: (left, right) => Math.floor(Math.abs(right.getTime() - left.getTime()) / 36e5), genericSort: items => [ ...items ], htmlTo$dom: html => $(new JSDOM(html, { url: "https://javdb.com/" }).window.document) },
         clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() }, show: { info: vi.fn(), error: vi.fn() }, i: (target, key, value) => target[key] = value,
         jhsEventBus, normalizeCarNum: value => String(value || "").toUpperCase(),
+        readListItem: element => ({ carNum: element.attr("data-car"), url: element.attr("data-url"), title: element.attr("data-title") || "", publishTime: element.attr("data-date") || "" }),
         setTimeout, clearTimeout
     });
     context.globalThis = context;

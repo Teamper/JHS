@@ -2,6 +2,7 @@ import { B, C, _, b, escapeHtml, i, k, l, normalizeCarNum, o, r, u, y } from "..
 import { jhsEventBus } from "../../core/event-bus.js";
 import { mapLimit, safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
+import { readListItem } from "../../core/list-item-reader.js";
 import { isHitShowPage } from "../../core/site-context.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
 import { stateService } from "../../core/state-service.js";
@@ -129,23 +130,29 @@ export class ListPagePlugin extends BasePlugin {
     }
     async handle() {
         if (!window.isListPage || isHitShowPage()) return;
+        const scope = await this.getRuntimeService("scope")();
         const refreshAll = async () => {
                 this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
                 const e = this.getDependency("HistoryPlugin");
                 e.tableObj && e.tableObj.setData();
         };
-        jhsEventBus.on("legacy-refresh", refreshAll), jhsEventBus.on("blacklist-rules-changed", refreshAll), jhsEventBus.on("filter-rules-changed", refreshAll), jhsEventBus.on("settings-changed", refreshAll),
-        jhsEventBus.on("car-state-changed", (async payload => {
+        [ "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed" ].forEach((type => scope.addCleanup(jhsEventBus.on(type, refreshAll)))),
+        scope.addCleanup(jhsEventBus.on("car-state-changed", (async payload => {
             this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key);
             const items = this.getIndexedItems(payload.carNums || []);
             items.length && (await this.doFilterItems(items), this.applyVisibility(items));
             const history = this.getDependency("HistoryPlugin");
             history.tableObj && history.tableObj.setData();
-        })), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
+        }))), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
         await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(),
         this.rememberTagExpand(),
         $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await jhsEventBus.emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: !1 }),
-        this.checkDom();
+        this.checkDom(scope), scope.addCleanup((() => {
+            this.processTimer && clearTimeout(this.processTimer), this.processTimer = null, this.pendingItems.clear();
+            this.hdImageObserver?.disconnect(), this.hdImageObserver = null;
+            this.recountFrame && (globalThis.cancelAnimationFrame?.(this.recountFrame) ?? clearTimeout(this.recountFrame)), this.recountFrame = null;
+            $(this.getSelector().boxSelector).off(".jhsMovieDetail"), $("#jhs-quick-filter").off(), this.itemIndex.clear();
+        }));
     }
     async createQuickFilter() {
         if ($("#jhs-quick-filter").length) return;
@@ -215,7 +222,7 @@ export class ListPagePlugin extends BasePlugin {
             clog.debug("触发"), localStorage.setItem(t, e.toString());
         }));
     }
-    checkDom() {
+    checkDom(scope = null) {
         if (!window.isListPage || isHitShowPage()) return;
         const e = this.getSelector(), t = document.querySelector(e.boxSelector);
         if (!t) return void clog.error("没有找到容器节点!");
@@ -239,6 +246,7 @@ export class ListPagePlugin extends BasePlugin {
             childList: !0,
             subtree: !1
         });
+        scope?.ownObserver(a);
     }
     async processAddedItems(items) {
         const selector = this.getSelector(), covers = items.flatMap((item => [ ...item.querySelectorAll(selector.coverImgSelector) ]));
@@ -465,31 +473,7 @@ export class ListPagePlugin extends BasePlugin {
         return t;
     }
     findCarNumAndHref(e) {
-        var t, n;
-        let a, i, s, o = e.find("a"), r = o.attr("href"), l = e.find(".video-title");
-        if (l.length > 0) {
-            let t = l.find("strong");
-            t.length > 0 && (a = t.text().trim()), i = o.attr("title") ? o.attr("title").trim() : a ? l.text().replace(a, "").trim() : l.text().trim(),
-            s = e.find(".meta").text().trim();
-        }
-        if (!a) {
-            let o = e.find("img");
-            r && o.length > 0 && (i = (null == (t = o.attr("title")) ? void 0 : t.trim()) || (null == (n = o.attr("data-title")) ? void 0 : n.trim()));
-            const l = e => /^\d{4}-\d{1,2}-\d{1,2}$/.test(e);
-            s = e.find("date").map(((e, t) => $(t).text().trim())).get().find(l), a = e.find("date").map(((e, t) => $(t).text().trim())).get().find((e => !l(e)));
-        }
-        if (!a) {
-            const e = "提取番号信息失败";
-            throw show.error(e), new Error(e);
-        }
-        return {
-            carNum: normalizeCarNum(a),
-            aHref: r,
-            url: r,
-            title: i,
-            publishTime: s,
-            fc2Source: [ "fc2", "123av" ].includes(e.attr("data-jhs-fc2-source")) ? e.attr("data-jhs-fc2-source") : "fc2"
-        };
+        try { return readListItem(e); } catch (error) { show.error("提取番号信息失败"); throw error; }
     }
     showCarNumBox(e) {
         const t = $(".movie-list .item").toArray().find((t => $(t).find(".video-title strong").text() === e));

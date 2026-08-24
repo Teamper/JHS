@@ -2,6 +2,7 @@ import { A, B, D, I, P, T, d, i, l, o, r } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { normalizeHttpUrl, parseNumberSetting, selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
+import { readListItem } from "../../core/list-item-reader.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
 import { stateService } from "../../core/state-service.js";
 import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
@@ -348,7 +349,7 @@ export class BlacklistPlugin extends BasePlugin {
         a = $(this.getSelector().nextPageSelector).attr("href")), a && 0 === n.length) throw show.error("解析列表失败"),
         new Error("解析列表失败");
         for (const s of n) {
-            const t = $(s), {carNum: n, url: a, publishTime: o} = this.getDependency("ListPagePlugin").findCarNumAndHref(t);
+            const t = $(s), {carNum: n, url: a, publishTime: o} = readListItem(t);
             if (a && n) try {
                 await stateService.patch(n, { blocked: !0 }, { type: "actor-page-block", record: { carNum: n, url: a, names: e, publishTime: o } }), clog.log("屏蔽演员番号", e, n);
             } catch (i) {
@@ -367,7 +368,7 @@ export class BlacklistPlugin extends BasePlugin {
         pageDom ? (n = pageDom.find(this.getSelector().requestDomItemSelector), a = pageDom.find(this.getSelector().nextPageSelector).attr("href")) : (n = $(this.getSelector().itemSelector), a = $(this.getSelector().nextPageSelector).attr("href"));
         if (a && 0 === n.length) throw show.error("解析列表失败"), new Error("解析列表失败");
         for (const i of n) {
-            const n = $(i), {carNum: a, url: o, publishTime: r} = this.getDependency("ListPagePlugin").findCarNumAndHref(n);
+            const n = $(i), {carNum: a, url: o, publishTime: r} = readListItem(n);
             if (o && a) try {
                 const flag = legacyActionToFlag(t);
                 flag && await stateService.patch(a, { [flag]: !0 }, { type: "actor-page-batch-state", record: { carNum: a, url: o, names: e, publishTime: r } }), clog.log("批量操作", e, a, t);
@@ -403,7 +404,7 @@ export class BlacklistPlugin extends BasePlugin {
         if (pageState.isEmpty && nextPageLink) throw new Error("黑名单作品空页面包含下一页");
         const records = [], publishTimes = [];
         for (const item of pageState.items) {
-            const element = $(item), {carNum, url, publishTime} = this.getDependency("ListPagePlugin").findCarNumAndHref(element);
+            const element = $(item), {carNum, url, publishTime} = readListItem(element);
             publishTime && publishTimes.push(publishTime), url && carNum && records.push({
                 carNum,
                 url,

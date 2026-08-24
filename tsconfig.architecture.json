@@ -19,6 +19,8 @@
     "src/core/event-bus.js",
     "src/core/legacy-plugin-contributions.js",
     "src/core/lifecycle-scope.js",
+    "src/core/list-item-reader.js",
+    "src/core/magnet-quality.js",
     "src/core/movie-identity.js",
     "src/core/selection-model.js",
     "src/core/site-context.js",
