@@ -1829,7 +1829,7 @@
 <style>
     .top-bar { z-index:var(--jhs-z-host-topbar)!important; }
     ${getJavBusHiddenNavCss()}
-    .masonry { display:grid; width:100%!important; height:100%!important; padding:0 15px!important; column-gap:10px; row-gap:10px; grid-template-columns:repeat(4,minmax(0,1fr)); align-items:start; }
+    .masonry { display:grid; box-sizing:border-box; width:100%!important; height:100%!important; padding:0 15px!important; column-gap:10px; row-gap:10px; grid-template-columns:repeat(4,minmax(0,1fr)); align-items:start; }
     .masonry .item { top:initial!important; left:initial!important; float:none!important; position:relative!important; background-color:var(--jhs-surface-2); }
     .masonry .movie-box { width:100%!important; height:100%!important; margin:0!important; overflow:inherit!important; }
     .masonry .movie-box .photo-frame { height:auto!important; margin:0!important; position:relative; }
@@ -16548,7 +16548,7 @@ ${failure.stack}` : "");
         `;
     }
     async handle() {
-      if (!utils.isMobileMode()) return;
+      if (this.getRuntimeService("profile").current() !== "compact") return;
       const backdrop = $('<div class="jhs-fab-backdrop"></div>').appendTo("body");
       const menu = this.createMenu();
       $("body").append(menu);
@@ -16997,7 +16997,7 @@ ${failure.stack}` : "");
     manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog, SERVICE.storage, SERVICE.actressInfo, SERVICE.state]),
     manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }, [SERVICE.storage, SERVICE.http, SERVICE.actressInfo]),
     manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics, SERVICE.dialog, SERVICE.state]),
-    manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings]),
+    manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings, SERVICE.profile]),
     manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }, [PORT.host, SERVICE.dialog, SERVICE.offline]),
     manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [PORT.host, SERVICE.dialog, SERVICE.offline, SERVICE.state]),
     manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }, [SERVICE.state]),
@@ -17033,6 +17033,7 @@ ${failure.stack}` : "");
         [SERVICE.settings, "settings"],
         [SERVICE.cache, "cache"],
         [SERVICE.http, "http"],
+        [SERVICE.profile, "profile"],
         [SERVICE.actressInfo, "actressInfo"],
         [SERVICE.imageSearch, "imageSearch"],
         [SERVICE.screenshot, "screenshot"],

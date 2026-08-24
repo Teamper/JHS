@@ -10,7 +10,7 @@ function buildJavBusCss() { return `
 <style>
     .top-bar { z-index:var(--jhs-z-host-topbar)!important; }
     ${getJavBusHiddenNavCss()}
-    .masonry { display:grid; width:100%!important; height:100%!important; padding:0 15px!important; column-gap:10px; row-gap:10px; grid-template-columns:repeat(4,minmax(0,1fr)); align-items:start; }
+    .masonry { display:grid; box-sizing:border-box; width:100%!important; height:100%!important; padding:0 15px!important; column-gap:10px; row-gap:10px; grid-template-columns:repeat(4,minmax(0,1fr)); align-items:start; }
     .masonry .item { top:initial!important; left:initial!important; float:none!important; position:relative!important; background-color:var(--jhs-surface-2); }
     .masonry .movie-box { width:100%!important; height:100%!important; margin:0!important; overflow:inherit!important; }
     .masonry .movie-box .photo-frame { height:auto!important; margin:0!important; position:relative; }

@@ -190,7 +190,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
         `;
     }
     async handle() {
-        if (!utils.isMobileMode()) return;
+        if (this.getRuntimeService("profile").current() !== "compact") return;
         // 添加遮罩
         const backdrop = $('<div class="jhs-fab-backdrop"></div>').appendTo("body");
         // 添加菜单

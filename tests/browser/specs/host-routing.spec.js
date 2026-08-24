@@ -20,6 +20,25 @@ for (const [label, url, expectedPlugin] of [
   });
 }
 
+for (const [label, url] of [
+  ["JavDB", "https://javdb.com/"],
+  ["JavBus", "https://www.javbus.com/"]
+]) {
+  test(`${label} list route uses its HostAdapter and list runtime`, async ({ context, page }, testInfo) => {
+    await fulfillHostFixtures(context);
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    await injectUserscriptRuntime(page);
+    await expect.poll(() => page.evaluate(() => window.isListPage)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("ListPagePlugin"))).toBe(true);
+    await expect(page.locator(label === "JavDB" ? ".movie-list .item" : ".masonry .movie-box")).toHaveCount(1);
+    if (testInfo.project.name.startsWith("mobile")) {
+      await expect(page.locator("#jhs-fab")).toBeVisible();
+      await expect(page.locator("#jhs-fab-menu .jhs-mobile-filter-menu")).toHaveCount(1);
+    } else await expect(page.locator("#jhs-quick-filter")).toBeVisible();
+    await assertNoHorizontalOverflow(page);
+  });
+}
+
 test("legacy disabled plugin migrates to one contribution only", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers storage migration");
   await fulfillHostFixtures(context);

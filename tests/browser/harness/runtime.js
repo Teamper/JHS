@@ -8,12 +8,14 @@ const repoRoot = resolve(browserRoot, "..", "..");
 export async function fulfillHostFixtures(context) {
   const javdb = await readFile(join(browserRoot, "fixtures", "javdb-detail.html"), "utf8");
   const javbus = await readFile(join(browserRoot, "fixtures", "javbus-detail.html"), "utf8");
+  const javdbList = await readFile(join(browserRoot, "fixtures", "javdb-list.html"), "utf8");
+  const javbusList = await readFile(join(browserRoot, "fixtures", "javbus-list.html"), "utf8");
   await context.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     if (request.isNavigationRequest() && request.frame() === request.frame().page().mainFrame()) {
-      if (url.hostname === "javdb.com") return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: javdb });
-      if (url.hostname === "www.javbus.com") return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: javbus });
+      if (url.hostname === "javdb.com") return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: url.pathname.startsWith("/v/") ? javdb : javdbList });
+      if (url.hostname === "www.javbus.com") return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: url.pathname === "/" ? javbusList : javbus });
     }
     return route.abort("blockedbyclient");
   });
