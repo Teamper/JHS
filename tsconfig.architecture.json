@@ -54,6 +54,7 @@
     "src/plugins/backup/setting-styles.js",
     "src/plugins/backup/setting-templates.js",
     "src/plugins/blacklist/filter-title-keyword.js",
+    "src/plugins/blacklist/blacklist.js",
     "src/plugins/dependency-map.js",
     "src/plugins/external-search/hit-show.js",
     "src/plugins/external-search/fc2-by-123av.js",

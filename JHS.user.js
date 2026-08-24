@@ -8815,9 +8815,16 @@
   __name(parseDetailPage, "parseDetailPage");
 
   // src/plugins/blacklist/blacklist.js
+  function getBlacklistEventBus() {
+    if (!jhsEventBus) throw new Error("Blacklist EventBus 未初始化");
+    return jhsEventBus;
+  }
+  __name(getBlacklistEventBus, "getBlacklistEventBus");
   var _BlacklistPlugin = class _BlacklistPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "blacklistSearchDebounced", null), i(this, "taskStatusUnsubscribe", null);
+      super(...arguments);
+      this.blacklistSearchDebounced = null;
+      this.taskStatusUnsubscribe = null;
     }
     getName() {
       return "BlacklistPlugin";
@@ -8950,7 +8957,7 @@
           const dialog = $(t3).find(".layui-layer-content > div").first().addClass("jhs-blacklist-layout").removeAttr("style"), toolbar = dialog.children("div").first().addClass("jhs-blacklist-toolbar").removeAttr("style");
           toolbar.children("div").addClass("jhs-blacklist-toolbar__group").removeAttr("style"), toolbar.find("select,input,a").removeAttr("style"), dialog.find("#table-container").removeAttr("style");
           dialog.find("#table-container").before('<div id="blacklist-task-status" class="jhs-task-status jhs-blacklist-task-status" aria-live="polite"></div>'), JhsSelect.enhance(t3);
-          this.renderTaskStatus(), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.renderTaskStatus()));
+          this.renderTaskStatus(), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = getBlacklistEventBus().on("task-status-changed", (() => this.renderTaskStatus()));
           await this.loadTableData();
           const content = $(t3).find(".layui-layer-content"), search = content.find("#searchValue");
           this.blacklistSearchDebounced = utils.debounce((() => void this.reloadTable()), 200), content.on("click", "#cleanQueryBtn", (async () => {
@@ -8980,15 +8987,15 @@
           }));
         }, "success"),
         end: /* @__PURE__ */ __name(async () => {
-          this.blacklistSearchDebounced?.cancel?.(), this.blacklistSearchDebounced = null, this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null), await jhsEventBus.emit("blacklist-rules-changed");
+          this.blacklistSearchDebounced?.cancel?.(), this.blacklistSearchDebounced = null, this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null), await getBlacklistEventBus().emit("blacklist-rules-changed");
         }, "end")
       });
     }
     renderTaskStatus() {
       const container = $("#blacklist-task-status");
       if (!container.length) return;
-      const snapshot = this.getDependency("TaskPlugin").getTaskStatusSnapshot("blacklist"), labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = /* @__PURE__ */ __name((value) => value ? new Date(value).toLocaleString() : "无", "format");
-      container.empty().append($('<span class="jhs-task-status__name"></span>').text(`黑名单：${labels[snapshot.state]}`), $('<span class="jhs-task-status__meta"></span>').text(`上次完成 ${format(snapshot.completedAt)}；下次检查 ${snapshot.nextAt ? format(snapshot.nextAt) : "立即"}`));
+      const snapshot = this.getDependency("TaskPlugin").getTaskStatusSnapshot("blacklist"), labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = /* @__PURE__ */ __name((value) => value ? new Date(value).toLocaleString() : "无", "format"), state = snapshot.state;
+      container.empty().append($('<span class="jhs-task-status__name"></span>').text(`黑名单：${labels[state] || labels.idle}`), $('<span class="jhs-task-status__meta"></span>').text(`上次完成 ${format(snapshot.completedAt)}；下次检查 ${snapshot.nextAt ? format(snapshot.nextAt) : "立即"}`));
     }
     async reloadTable() {
       if (!this.tableObj) return;
@@ -8998,17 +9005,17 @@
     async getTableData() {
       const e2 = this.getDependency("TaskPlugin"), t2 = await storageManager.getBlacklist(), n2 = await storageManager.getBlacklistCarList(), a2 = String($("#searchValue").val() || "").trim().toLocaleLowerCase(), i2 = $("#statusType").val(), s2 = $("#dataType"), o2 = s2.val(), r2 = $("#urlType").val(), l2 = t2.length;
       let c2 = 0, d2 = 0;
-      const h2 = t2.map(((t3) => {
+      const h2 = t2.map((t3) => {
         t3.role === B ? c2++ : t3.role === P && d2++;
         let n3 = false;
         return n3 = shouldSkipStopped(t3.lastPublishTime, this.checkBlacklist_ruleTime), {
           ...t3,
           isUnCheck: n3
         };
-      })).filter(((item) => {
+      }).filter((item) => {
         const aliases = Array.isArray(item.allName) ? item.allName.join(" ") : item.allName || "", searchable = `${item.name || ""} ${aliases} ${item.starId || ""}`.toLocaleLowerCase(), searchMatch = !a2 || searchable.includes(a2), statusMatch = !i2 || "normal" === i2 && !item.isUnCheck || "stop" === i2 && item.isUnCheck, roleMatch = !o2 || item.role === o2, hasCategory = item.url.includes("t="), urlMatch = !r2 || "hasT" === r2 && hasCategory || "noT" === r2 && !hasCategory;
         return searchMatch && statusMatch && roleMatch && urlMatch;
-      }));
+      });
       s2.html(`
             <option value="">所有 (${l2})</option>
             <option value="actor">男演员 (${c2})</option>
@@ -9019,21 +9026,21 @@
         const e3 = m2.starId;
         g2.has(e3) || g2.set(e3, []), g2.get(e3).push(m2);
       }
-      const p2 = h2.map(((e3) => {
+      const p2 = h2.map((e3) => {
         const t3 = e3.starId, n3 = g2.get(t3) || [];
         return {
           ...e3,
           carList: n3,
           count: n3.length
         };
-      }));
+      });
       return this.currentCarCount = p2.reduce(((e3, t3) => e3 + (t3.count || 0)), 0), p2;
     }
     async loadTableData() {
       this.checkBlacklist_ruleTime = parseNumberSetting(await storageManager.getSetting("checkBlacklist_ruleTime"), 8760, { min: 0 });
       const e2 = await this.getTableData(), placeholder = document.createElement("div");
       renderStateView(placeholder, { type: "empty", title: "没有符合当前筛选条件的黑名单记录" });
-      this.tableObj = createJhsTable(Tabulator, "#table-container", {
+      this.tableObj = createJhsTable(globalThis.Tabulator, "#table-container", {
         layout: "fitColumns",
         placeholder,
         virtualDom: true,
@@ -9188,7 +9195,7 @@
       }
       processed += n2.length, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
       if (a2) {
-        clog.log("正在请求下一页内容:", a2), await new Promise(((e3) => setTimeout(e3, 500)));
+        clog.log("正在请求下一页内容:", a2), await new Promise((e3) => setTimeout(e3, 500));
         const scope = await this.getRuntimeService("scope")(), t3 = await requestHostPage(this.getRuntimeService("http"), a2, scope), n3 = new DOMParser(), i2 = $(n3.parseFromString(t3, "text/html"));
         await this.filterAllVideo(e2, i2, page + 1, processed);
       } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
@@ -9208,7 +9215,7 @@
       }
       processed += n2.length, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
       if (a2) {
-        clog.log("正在请求下一页内容:", a2), await new Promise(((e3) => setTimeout(e3, 500)));
+        clog.log("正在请求下一页内容:", a2), await new Promise((e3) => setTimeout(e3, 500));
         const scope = await this.getRuntimeService("scope")(), i2 = await requestHostPage(this.getRuntimeService("http"), a2, scope), s2 = new DOMParser(), o2 = $(s2.parseFromString(i2, "text/html"));
         await this.batchSaveAllVideos(e2, t2, o2, page + 1, processed);
       } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
