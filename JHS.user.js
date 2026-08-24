@@ -116,11 +116,11 @@
   var s = /* @__PURE__ */ __name((e2, t2, n2) => (((e3, t3, n3) => {
     t3.has(e3) || a("Cannot " + n3);
   })(e2, t2, "access private method"), n2), "s");
-  var o = window.location.href;
-  var siteContext = detectSite(window.location);
-  var r = siteContext.isJavDB;
-  var l = siteContext.isJavBus;
-  var c = o.includes("/search?q") || o.includes("/search/") || o.includes("/users/");
+  var o = "";
+  var siteContext = { site: "unknown", hostname: "", isJavDB: false, isJavBus: false, is123Pan: false, isJavTrailers: false, isSubtitleCat: false };
+  var r = false;
+  var l = false;
+  var c = false;
   var d = "filter";
   var h = "favorite";
   var g = "hasDown";
@@ -200,6 +200,16 @@
     text: "4K (2160p60fps)",
     canSelect: true
   }];
+  function initializeRuntimeConstants(locationLike = window.location) {
+    const detected = detectSite(locationLike);
+    o = locationLike.href;
+    siteContext = detected;
+    r = detected.isJavDB;
+    l = detected.isJavBus;
+    c = o.includes("/search?q") || o.includes("/search/") || o.includes("/users/");
+    return detected;
+  }
+  __name(initializeRuntimeConstants, "initializeRuntimeConstants");
   function escapeHtml(e2) {
     const t2 = document.createElement("span");
     return t2.textContent = e2, t2.innerHTML;
@@ -234,10 +244,14 @@
     return pageInfo;
   }
   __name(assertPageInfoContract, "assertPageInfoContract");
-  var M = "";
-  window.location.href.includes("hideNav=1") && (M = "\n         .navbar-default {\n            display: none !important;\n        }\n        body {\n            padding-top:0px!important;\n        }\n    ");
-  var j = "";
-  window.location.href.includes("hideNav=1") && (j = "\n        .main-nav,#search-bar-container {\n            display: none !important;\n        }\n        \n        html {\n            padding-top:0px!important;\n        }\n    ");
+  function getJavBusHiddenNavCss() {
+    return window.location.href.includes("hideNav=1") ? "\n         .navbar-default {\n            display: none !important;\n        }\n        body {\n            padding-top:0px!important;\n        }\n    " : "";
+  }
+  __name(getJavBusHiddenNavCss, "getJavBusHiddenNavCss");
+  function getJavDbHiddenNavCss() {
+    return window.location.href.includes("hideNav=1") ? "\n        .main-nav,#search-bar-container {\n            display: none !important;\n        }\n        \n        html {\n            padding-top:0px!important;\n        }\n    " : "";
+  }
+  __name(getJavDbHiddenNavCss, "getJavDbHiddenNavCss");
   function H(e2) {
     if (e2) if (e2.includes("<style>")) document.head.insertAdjacentHTML("beforeend", e2);
     else {
@@ -1808,10 +1822,11 @@
   var JhsSelect = _JhsSelect;
 
   // src/core/css-injection.js
-  var N = `
+  function buildJavBusCss() {
+    return `
 <style>
     .top-bar { z-index:var(--jhs-z-host-topbar)!important; }
-    ${M}
+    ${getJavBusHiddenNavCss()}
     .masonry { display:grid; width:100%!important; height:100%!important; padding:0 15px!important; column-gap:10px; row-gap:10px; grid-template-columns:repeat(4,minmax(0,1fr)); align-items:start; }
     .masonry .item { top:initial!important; left:initial!important; float:none!important; position:relative!important; background-color:var(--jhs-surface-2); }
     .masonry .movie-box { width:100%!important; height:100%!important; margin:0!important; overflow:inherit!important; }
@@ -1824,9 +1839,12 @@
     footer { display:none!important; }
     .video-title { display:-webkit-box!important; height:75px; white-space:normal!important; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
 </style>`;
-  var E = `
+  }
+  __name(buildJavBusCss, "buildJavBusCss");
+  function buildJavDbCss() {
+    return `
 <style>
-    ${j}
+    ${getJavDbHiddenNavCss()}
     .navbar { z-index:var(--jhs-z-host-nav)!important; padding:0; }
     .navbar-link:not(.is-arrowless) { padding-right:33px; }
     .sub-header, #footer, .app-desktop-banner,
@@ -1843,6 +1861,8 @@
     .main-tabs ul, .tabs ul { flex-wrap:wrap; flex-grow:0; }
     .toolbar { display:flex; }
 </style>`;
+  }
+  __name(buildJavDbCss, "buildJavDbCss");
   var F = `
 <style>
     .fr-btn { float:right; margin-left:4px!important; }
@@ -1866,7 +1886,7 @@
   function injectCoreCss() {
     if (coreCssInjected) return;
     H(buildThemeCss());
-    l && H(N), r && H(E);
+    l && H(buildJavBusCss()), r && H(buildJavDbCss());
     H(F);
     H(buildUiPrimitivesCss());
     coreCssInjected = true;
@@ -4164,7 +4184,10 @@
   __name(_StateService, "StateService");
   var StateService = _StateService;
   var stateService = new StateService(storageManager2, jhsEventBus);
-  storageManager2.stateService = stateService;
+  function attachStateServiceCompatibility() {
+    storageManager2.stateService = stateService;
+  }
+  __name(attachStateServiceCompatibility, "attachStateServiceCompatibility");
 
   // src/core/lifecycle-scope.js
   var _LifecycleScope = class _LifecycleScope {
@@ -19942,6 +19965,8 @@ ${failure.stack}` : "");
   __name(prepareLocalOrigins, "prepareLocalOrigins");
   async function bootstrapJhs() {
     try {
+      const siteContext2 = initializeRuntimeConstants(window.location);
+      attachStateServiceCompatibility();
       const vendors = getVendorRuntime();
       const jhsEventBus2 = initializeEventBus();
       Object.assign(globalThis, { utils: utils2, gmHttp: gmHttp2, storageManager: storageManager2, stateService, jhsEventBus: jhsEventBus2 });
@@ -19950,7 +19975,6 @@ ${failure.stack}` : "");
       injectCoreCss();
       const disabled = await migrateDisabledPluginSettings();
       const localOriginSettings = await prepareLocalOrigins();
-      const siteContext2 = detectSite(window.location);
       const javdbHostAdapter = new JavDbHostAdapter(), javbusHostAdapter = new JavBusHostAdapter();
       const hostAdapter = r ? javdbHostAdapter : l ? javbusHostAdapter : null;
       const route = hostAdapter?.detectRoute() ?? "other";

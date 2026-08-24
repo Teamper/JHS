@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { scanImportTimeEffects } from "./import-time-purity.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const baselinePath = path.join(rootDir, "architecture-baseline.json");
@@ -135,6 +136,24 @@ async function checkImportGraph() {
     console.log(`Import graph passed (${files.length} modules, 0 cycles)`);
 }
 
+async function checkImportTimePurity() {
+    const files = await listJavaScriptFiles(path.join(rootDir, "src"));
+    const violations = [];
+    for (const file of files) {
+        const relativeFile = path.relative(rootDir, file).replaceAll("\\", "/");
+        if (relativeFile === "src/main.js") continue;
+        const source = await readFile(file, "utf8");
+        for (const violation of scanImportTimeEffects(source, file)) {
+            violations.push(`${relativeFile}:${violation.line}:${violation.column}: ${violation.effect.slice(0, 160)}`);
+        }
+    }
+    if (violations.length) {
+        violations.forEach((violation) => console.error(`import-time side effect: ${violation}`));
+        throw new Error(`Bootstrap purity failed (${violations.length} import-time side effect(s))`);
+    }
+    console.log(`Bootstrap purity passed (${files.length - 1} non-root modules)`);
+}
+
 const findings = await scan();
 if (process.argv.includes("--write-baseline")) {
     await writeFile(baselinePath, `${JSON.stringify({ version: 1, exceptions: findings }, null, 2)}\n`);
@@ -156,3 +175,4 @@ const remaining = findings.length;
 const removed = baseline.exceptions.length - remaining;
 console.log(`Architecture debt ratchet passed (${remaining} remaining, ${removed} removed)`);
 await checkImportGraph();
+await checkImportTimePurity();

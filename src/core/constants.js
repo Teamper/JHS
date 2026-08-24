@@ -17,7 +17,8 @@ export var n = Object.defineProperty, a = (/** @type {any} */ e) => {
     t.has(e) || a("Cannot " + n);
 })(e, t, "access private method"), n);
 
-export const o = window.location.href, siteContext = detectSite(window.location), r = siteContext.isJavDB, l = siteContext.isJavBus, c = o.includes("/search?q") || o.includes("/search/") || o.includes("/users/"), d = "filter", h = "favorite", g = "hasDown", p = "hasWatch", m = "屏蔽", u = "已屏蔽", f = "var(--jhs-status-filter-text)", v = "收藏", b = "已收藏", w = "var(--jhs-status-fav-text)", y = "已下载", x = "var(--jhs-status-down-text)", k = "已观看", S = "var(--jhs-status-watch-text)", C = "no", _ = "yes", T = "javdb", I = "javbus", B = "actor", P = "actress", D = "censored", A = "uncensored", L = [ {
+export let o = "", siteContext = { site: "unknown", hostname: "", isJavDB: false, isJavBus: false, is123Pan: false, isJavTrailers: false, isSubtitleCat: false }, r = false, l = false, c = false;
+export const d = "filter", h = "favorite", g = "hasDown", p = "hasWatch", m = "屏蔽", u = "已屏蔽", f = "var(--jhs-status-filter-text)", v = "收藏", b = "已收藏", w = "var(--jhs-status-fav-text)", y = "已下载", x = "var(--jhs-status-down-text)", k = "已观看", S = "var(--jhs-status-watch-text)", C = "no", _ = "yes", T = "javdb", I = "javbus", B = "actor", P = "actress", D = "censored", A = "uncensored", L = [ {
     id: "video-mhb",
     quality: "dmb_w",
     text: "旧视频源-中画质宽版 (404p)",
@@ -79,6 +80,17 @@ export const o = window.location.href, siteContext = detectSite(window.location)
     canSelect: !0
 } ];
 
+/** 在 Composition Root 中一次性建立旧模块仍使用的站点兼容快照。 */
+export function initializeRuntimeConstants(locationLike = window.location) {
+    const detected = detectSite(locationLike);
+    o = locationLike.href;
+    siteContext = detected;
+    r = detected.isJavDB;
+    l = detected.isJavBus;
+    c = o.includes("/search?q") || o.includes("/search/") || o.includes("/users/");
+    return detected;
+}
+
 /** @param {string} e */
 export function escapeHtml(e) { const t = document.createElement("span"); return t.textContent = e, t.innerHTML; }
 
@@ -117,15 +129,17 @@ export function assertPageInfoContract(/** @type {unknown} */ pageInfo) {
     return pageInfo;
 }
 
-export let M = "";
-
-window.location.href.includes("hideNav=1") && (M = "\n         .navbar-default {\n            display: none !important;\n        }\n        body {\n            padding-top:0px!important;\n        }\n    ");
+/** 仅在样式注入阶段读取当前地址，避免模块导入产生浏览器环境副作用。 */
+export function getJavBusHiddenNavCss() {
+    return window.location.href.includes("hideNav=1") ? "\n         .navbar-default {\n            display: none !important;\n        }\n        body {\n            padding-top:0px!important;\n        }\n    " : "";
+}
 
 /* N (JavBus CSS) moved to css-injection.js */
 
-export let j = "";
-
-window.location.href.includes("hideNav=1") && (j = "\n        .main-nav,#search-bar-container {\n            display: none !important;\n        }\n        \n        html {\n            padding-top:0px!important;\n        }\n    ");
+/** 仅在样式注入阶段读取当前地址，避免模块导入产生浏览器环境副作用。 */
+export function getJavDbHiddenNavCss() {
+    return window.location.href.includes("hideNav=1") ? "\n        .main-nav,#search-bar-container {\n            display: none !important;\n        }\n        \n        html {\n            padding-top:0px!important;\n        }\n    " : "";
+}
 
 /* E (JavDB CSS) moved to css-injection.js */
 

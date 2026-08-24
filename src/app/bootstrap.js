@@ -1,12 +1,11 @@
 // @ts-check
 
-import { l, r } from "../core/constants.js";
+import { initializeRuntimeConstants, l, r } from "../core/constants.js";
 import { injectCoreCss } from "../core/css-injection.js";
-import { detectSite } from "../core/site-context.js";
 import { JhsError } from "../core/jhs-error.js";
 import { runDataMigrations } from "../core/migration.js";
 import { PluginManager } from "../core/plugin-manager.js";
-import { stateService } from "../core/state-service.js";
+import { attachStateServiceCompatibility, stateService } from "../core/state-service.js";
 import { gmHttp, storageManager, utils } from "../core/http.js";
 import { initializeEventBus } from "../core/event-bus.js";
 import { migrateDisabledPlugins, parseDisabledPlugins } from "../core/legacy-plugin-contributions.js";
@@ -86,6 +85,8 @@ async function prepareLocalOrigins() {
 
 export async function bootstrapJhs() {
     try {
+        const siteContext = initializeRuntimeConstants(window.location);
+        attachStateServiceCompatibility();
         const vendors = getVendorRuntime();
         const jhsEventBus = initializeEventBus();
         Object.assign(globalThis, { utils, gmHttp, storageManager, stateService, jhsEventBus });
@@ -94,7 +95,6 @@ export async function bootstrapJhs() {
         injectCoreCss();
         const disabled = await migrateDisabledPluginSettings();
         const localOriginSettings = await prepareLocalOrigins();
-        const siteContext = detectSite(window.location);
         const javdbHostAdapter = new JavDbHostAdapter(), javbusHostAdapter = new JavBusHostAdapter();
         const hostAdapter = r ? javdbHostAdapter : l ? javbusHostAdapter : null;
         const route = hostAdapter?.detectRoute() ?? "other";

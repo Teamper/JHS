@@ -271,4 +271,8 @@ class StateService {
 }
 
 export const stateService = new StateService(storageManager, jhsEventBus);
-storageManager.stateService = stateService;
+
+/** 在 Composition Root 中挂载仍由旧 StorageManager 调用的兼容引用。 */
+export function attachStateServiceCompatibility() {
+    storageManager.stateService = stateService;
+}

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+### Changed
+
+- 新增可单测的 Bootstrap Purity 架构门禁，禁止除 Composition Root 外的生产模块在导入阶段启动 DOM、网络、Storage、监听器、Observer 或定时器；原隐藏导航样式改为 Bootstrap 注入时才读取地址。
+
 ### Fixed
 
 - 修复 ESM 单入口迁移后核心主题、宿主布局与 UI primitive 样式未进入启动链的问题；样式模块现在保持导入无副作用，并由 Bootstrap 显式一次性注入。

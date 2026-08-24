@@ -1,15 +1,15 @@
 // @ts-check
 
-import { H, M, j, l, r } from "./constants.js";
+import { H, getJavBusHiddenNavCss, getJavDbHiddenNavCss, l, r } from "./constants.js";
 import { buildThemeCss } from "./theme.js";
 import { buildUiPrimitivesCss } from "./ui-primitives.js";
 
 /** CSS injection for site-specific layouts, global UI, and responsive behavior. */
 
-const N = `
+function buildJavBusCss() { return `
 <style>
     .top-bar { z-index:var(--jhs-z-host-topbar)!important; }
-    ${M}
+    ${getJavBusHiddenNavCss()}
     .masonry { display:grid; width:100%!important; height:100%!important; padding:0 15px!important; column-gap:10px; row-gap:10px; grid-template-columns:repeat(4,minmax(0,1fr)); align-items:start; }
     .masonry .item { top:initial!important; left:initial!important; float:none!important; position:relative!important; background-color:var(--jhs-surface-2); }
     .masonry .movie-box { width:100%!important; height:100%!important; margin:0!important; overflow:inherit!important; }
@@ -21,11 +21,11 @@ const N = `
     .avatar-box .photo-info { display:flex; align-items:center; justify-content:center; gap:30px; flex-direction:row; background-color:var(--jhs-surface)!important; }
     footer { display:none!important; }
     .video-title { display:-webkit-box!important; height:75px; white-space:normal!important; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
-</style>`;
+</style>`; }
 
-const E = `
+function buildJavDbCss() { return `
 <style>
-    ${j}
+    ${getJavDbHiddenNavCss()}
     .navbar { z-index:var(--jhs-z-host-nav)!important; padding:0; }
     .navbar-link:not(.is-arrowless) { padding-right:33px; }
     .sub-header, #footer, .app-desktop-banner,
@@ -41,7 +41,7 @@ const E = `
     .main-tabs, .tabs { overflow-x:hidden; flex-wrap:wrap; justify-content:flex-start; }
     .main-tabs ul, .tabs ul { flex-wrap:wrap; flex-grow:0; }
     .toolbar { display:flex; }
-</style>`;
+</style>`; }
 
 const F = `
 <style>
@@ -69,7 +69,7 @@ let coreCssInjected = false;
 export function injectCoreCss() {
     if (coreCssInjected) return;
     H(buildThemeCss());
-    l && H(N), r && H(E);
+    l && H(buildJavBusCss()), r && H(buildJavDbCss());
     H(F);
     H(buildUiPrimitivesCss());
     coreCssInjected = true;
