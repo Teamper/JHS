@@ -2729,11 +2729,17 @@
   __name(getStatePath, "getStatePath");
   function setStatePath(value, path, next) {
     const keys = path.split("."), last = keys.pop(), target = keys.reduce(((current, key) => current[key] || (current[key] = {})), value);
+    if (!last) return;
     void 0 === next ? delete target[last] : target[last] = cloneStateValue(next);
   }
   __name(setStatePath, "setStatePath");
+  function uniqueStateKeys(values) {
+    return [...new Set(values.filter(((value) => "string" === typeof value && !!value)))];
+  }
+  __name(uniqueStateKeys, "uniqueStateKeys");
   function captureNewVideoEffect(actresses, decisions, carNum) {
-    const key = normalizeCarNum(carNum), actressItems = [];
+    const key = normalizeCarNum(carNum);
+    const actressItems = [];
     actresses.forEach(((actress, actressIndex) => (actress.newVideoList || []).forEach(((item, itemIndex) => {
       normalizeCarNum("string" == typeof item ? item : item.carNum) === key && actressItems.push({ actressIndex, itemIndex, item: cloneStateValue(item) });
     }))));
@@ -2743,7 +2749,7 @@
   function canRestoreNewVideoEffect(actresses, decisions, carNum, effect) {
     const key = normalizeCarNum(carNum);
     if (stableStateValue(decisions[key] || null) !== stableStateValue(null)) return false;
-    return effect.actressItems.every(((entry) => !(actresses[entry.actressIndex]?.newVideoList || []).some(((item) => normalizeCarNum("string" == typeof item ? item : item.carNum) === key))));
+    return effect.actressItems.every(((entry) => !(actresses[entry.actressIndex]?.newVideoList || []).some((item) => normalizeCarNum("string" == typeof item ? item : item.carNum) === key)));
   }
   __name(canRestoreNewVideoEffect, "canRestoreNewVideoEffect");
   function restoreNewVideoEffect(actresses, decisions, carNum, effect) {
@@ -2753,12 +2759,15 @@
       const list = [...actress.newVideoList || []], index = Math.min(entry.itemIndex, list.length);
       list.splice(index, 0, cloneStateValue(entry.item)), actress.newVideoList = list;
     }));
-    effect.decision ? decisions[normalizeCarNum(carNum)] = cloneStateValue(effect.decision) : delete decisions[normalizeCarNum(carNum)];
+    const key = normalizeCarNum(carNum);
+    effect.decision ? decisions[key] = cloneStateValue(effect.decision) : delete decisions[key];
   }
   __name(restoreNewVideoEffect, "restoreNewVideoEffect");
   function pruneActivityLog(log, now = Date.now()) {
     const result = { entries: Array.isArray(log?.entries) ? log.entries : [], trackingStartedAt: log?.trackingStartedAt || new Date(now).toISOString(), coverageStart: log?.coverageStart || null, truncatedAt: log?.truncatedAt || null };
-    const cutoff = now - ACTIVITY_RETENTION_MS, recent = [], older = [];
+    const cutoff = now - ACTIVITY_RETENTION_MS;
+    const recent = [];
+    const older = [];
     result.entries.forEach(((entry) => (Date.parse(entry.createdAt) >= cutoff || "pending" === entry.commitState ? recent : older).push(entry)));
     older.sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)))), recent.sort(((left, right) => String(left.createdAt).localeCompare(String(right.createdAt))));
     const olderAllowance = Math.max(0, ACTIVITY_SOFT_LIMIT - recent.length);
@@ -2777,7 +2786,8 @@
       this.storage = storage, this.eventBus = eventBus, this._queue = Promise.resolve(), this._recovering = false;
     }
     _withLock(callback) {
-      if (globalThis.navigator?.locks?.request) return navigator.locks.request("jhs_state_mutation", callback);
+      const lockManager = globalThis.navigator?.locks;
+      if (lockManager) return lockManager.request("jhs_state_mutation", callback);
       const run = this._queue.then(callback, callback);
       return this._queue = run.catch((() => {
       })), run;
@@ -2806,7 +2816,7 @@
       return { carList: carList || [], actresses: actresses || [], decisions: decisions || {}, activity: pruneActivityLog(activity) };
     }
     _removeHandledNewVideos(actresses, decisions, carNums) {
-      const keys = new Set(carNums.map(normalizeCarNum).filter(Boolean)), nextDecisions = { ...decisions };
+      const keys = new Set(uniqueStateKeys(carNums.map(normalizeCarNum))), nextDecisions = { ...decisions };
       keys.forEach(((key) => delete nextDecisions[key]));
       const nextActresses = actresses.map(((actress) => {
         if (!Array.isArray(actress.newVideoList)) return actress;
@@ -2856,7 +2866,7 @@
       return this._withLock((() => this._recoverWithoutLock()));
     }
     async patch(carNums, patch, options = {}) {
-      const keys = [...new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean))];
+      const keys = uniqueStateKeys((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum));
       if (!keys.length) throw new Error("番号为空");
       const invalidFlag = Object.keys(patch).find(((key) => !STATE_FLAG_NAMES.includes(key) || "boolean" != typeof patch[key]));
       if (invalidFlag) throw new TypeError(`无效状态字段: ${invalidFlag}`);
@@ -2864,7 +2874,9 @@
     }
     async _patchWithoutLock(keys, patch, options) {
       await this._recoverWithoutLock();
-      const domains = await this._readDomains(), map = new Map(domains.carList.map(((record) => [normalizeCarNum(record.carNum), record]))), changes = [], handled = [];
+      const domains = await this._readDomains(), map = new Map(domains.carList.map(((record) => [normalizeCarNum(record.carNum), record])));
+      const changes = [];
+      const handled = [];
       const records = Array.isArray(options.records) ? new Map(options.records.map(((record) => [normalizeCarNum(record.carNum), record]))) : /* @__PURE__ */ new Map();
       keys.forEach(((carNum) => {
         const existing = map.get(carNum), metadata = records.get(carNum) || options.record || {}, now = utils.getNowStr(), before = existing ? cloneStateValue(existing) : null;
@@ -2896,22 +2908,23 @@
       });
     }
     async remove(carNums) {
-      const keys = new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean));
+      const keys = new Set(uniqueStateKeys((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum)));
       return this._withLock(async () => {
         await this._recoverWithoutLock();
-        const domains = await this._readDomains(), changes = domains.carList.filter(((record) => keys.has(normalizeCarNum(record.carNum)))).map(((record) => ({ carNum: normalizeCarNum(record.carNum), operation: "delete", fields: ["record"], before: cloneStateValue(record), after: null, undoState: "pending" })));
+        const domains = await this._readDomains(), changes = domains.carList.filter((record) => keys.has(normalizeCarNum(record.carNum))).map((record) => ({ carNum: normalizeCarNum(record.carNum), operation: "delete", fields: ["record"], before: cloneStateValue(record), after: null, undoState: "pending" }));
         if (!changes.length) return { changed: [], transactionId: null };
         const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "record-delete", commitState: "pending", changes, createdAt: (/* @__PURE__ */ new Date()).toISOString(), undoAttemptedAt: null };
-        await this._commit(domains, { carList: domains.carList.filter(((record) => !keys.has(normalizeCarNum(record.carNum)))), actresses: domains.actresses, decisions: domains.decisions }, activity), await this.eventBus.emit("car-records-removed", { carNums: changes.map(((change) => change.carNum)), transactionId: activity.id }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
-        return { changed: changes.map(((change) => change.carNum)), transactionId: activity.id };
+        await this._commit(domains, { carList: domains.carList.filter((record) => !keys.has(normalizeCarNum(record.carNum))), actresses: domains.actresses, decisions: domains.decisions }, activity), await this.eventBus.emit("car-records-removed", { carNums: changes.map((change) => change.carNum), transactionId: activity.id }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+        return { changed: changes.map((change) => change.carNum), transactionId: activity.id };
       });
     }
     async setNewVideoDecision(carNums, action, until = null) {
       if (!["ignored", "snoozed", null].includes(action)) throw new TypeError("无效新作决策");
-      const keys = [...new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean))];
+      const keys = uniqueStateKeys((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum));
       return this._withLock(async () => {
         await this._recoverWithoutLock();
-        const domains = await this._readDomains(), decisions = { ...domains.decisions }, now = (/* @__PURE__ */ new Date()).toISOString(), changes = [];
+        const domains = await this._readDomains(), decisions = { ...domains.decisions }, now = (/* @__PURE__ */ new Date()).toISOString();
+        const changes = [];
         keys.forEach(((carNum) => {
           const before = cloneStateValue(decisions[carNum] || null), after = action ? { action, until: "snoozed" === action ? until : null, createdAt: before?.createdAt || now, updatedAt: now } : null;
           stableStateValue(before) === stableStateValue(after) || (after ? decisions[carNum] = after : delete decisions[carNum], changes.push({ carNum, operation: "new-video-decision", fields: ["decision"], before, after, undoState: "pending" }));
@@ -2924,7 +2937,7 @@
       });
     }
     async removeFromNewVideoList(carNums, reason = "manual") {
-      const keys = [...new Set((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum).filter(Boolean))];
+      const keys = uniqueStateKeys((Array.isArray(carNums) ? carNums : [carNums]).map(normalizeCarNum));
       return this._withLock(async () => {
         await this._recoverWithoutLock();
         const domains = await this._readDomains(), changed = keys.filter(((carNum) => {
@@ -2942,7 +2955,9 @@
         await this._recoverWithoutLock();
         const domains = await this._readDomains(), transaction = domains.activity.entries.find(((entry) => entry.id === transactionId && "committed" === entry.commitState));
         if (!transaction) throw new Error("操作记录不存在或尚未提交");
-        const carMap = new Map(domains.carList.map(((record) => [normalizeCarNum(record.carNum), cloneStateValue(record)]))), decisions = { ...domains.decisions }, actresses = cloneStateValue(domains.actresses), reverted = [], conflicts = [];
+        const carMap = new Map(domains.carList.map(((record) => [normalizeCarNum(record.carNum), cloneStateValue(record)]))), decisions = { ...domains.decisions }, actresses = cloneStateValue(domains.actresses);
+        const reverted = [];
+        const conflicts = [];
         for (const change of transaction.changes) {
           if ("reverted" === change.undoState) continue;
           const current = carMap.get(change.carNum);

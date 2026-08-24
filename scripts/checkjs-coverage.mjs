@@ -27,7 +27,7 @@ for (const file of files) {
     if (compiledFiles.has(path.resolve(file)) && /^\s*\/\/\s*@ts-check\b/m.test(source)) checked.push(file);
 }
 const coverage = files.length === 0 ? 100 : (checked.length / files.length) * 100;
-const required = Number(process.env.JHS_CHECKJS_MIN ?? 90.9);
+const required = Number(process.env.JHS_CHECKJS_MIN ?? 91.5);
 if (coverage + Number.EPSILON < required) {
     throw new Error(`checkJs coverage ${coverage.toFixed(1)}% is below ${required}%`);
 }

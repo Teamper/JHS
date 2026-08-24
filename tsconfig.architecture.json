@@ -36,7 +36,7 @@
     "src/core/selection-model.js",
     "src/core/site-context.js",
     "src/core/state-model.js",
-    "src/core/state-service.d.ts",
+    "src/core/state-service.js",
     "src/core/storage-index.js",
     "src/core/theme.js",
     "src/core/ui-primitives.js",
