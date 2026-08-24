@@ -3,10 +3,13 @@ class FilterTitleKeywordPlugin extends BasePlugin {
         return "FilterTitleKeywordPlugin";
     }
     async handle() {
-        if (!isDetailPage && !isFc2Page) return;
+        if (!isDetailPage) return;
+        await this.bindDetailRoot(document);
+    }
+    async bindDetailRoot(root, { layerIndex = null } = {}) {
         if (await storageManager.getSetting("enableTitleSelectFilter", _) !== _) return;
-        let e;
-        r ? e = ".title strong, .current-title" : l && (e = "h3"), utils.rightClick(document.body, e, (e => {
+        const host = $(root), selector = r ? ".title strong, .current-title" : l ? "h3" : ".current-title, .origin-title, .jhs-detail-title";
+        host.off("contextmenu.jhsTitleFilter", selector).on("contextmenu.jhsTitleFilter", selector, (e => {
             const t = window.getSelection().toString();
             if (t) {
                 e.preventDefault();
@@ -15,7 +18,7 @@ class FilterTitleKeywordPlugin extends BasePlugin {
                     clientY: e.clientY + 80
                 };
                 utils.q(n, `是否屏蔽标题关键词 ${t}?`, (async () => {
-                    await storageManager.saveTitleFilterKeyword(t), await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" }), utils.closePage();
+                    await storageManager.saveTitleFilterKeyword(t), await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" }), utils.closePage({ root: host, layerIndex });
                 }));
             }
         }));

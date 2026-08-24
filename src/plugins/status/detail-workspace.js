@@ -162,22 +162,42 @@ class DetailWorkspacePlugin extends BasePlugin {
     }
 }
 
-/** 将完全由 JHS 创建的详情弹层原位组织为固定插槽。 */
-function organizeJhsOwnedDetailWorkspace(container) {
-    if (!container?.length || container.attr("data-jhs-organized")) return;
-    const children = container.children().detach();
-    container.attr("data-jhs-organized", "true").addClass("jhs-detail-workspace jhs-ui").attr("data-site", "fc2").empty();
-    const section = (name, title, hasContent = !1) => $(`<section class="jhs-detail-workspace__section ${hasContent ? "has-content" : ""}" data-jhs-section="${name}"><header class="jhs-detail-workspace__header"><h2>${title}</h2></header><div class="jhs-detail-workspace__content" data-jhs-slot="${name}"></div></section>`);
-    const summary = section("summary", "影片概览", !0), gallery = section("gallery", "预览与剧照"), resources = section("resources", "资源", !0), reviews = section("reviews", "评论", !0), related = section("related", "相关清单", !0);
-    container.append(summary, gallery, resources, reviews, related);
-    const summaryContent = summary.find('[data-jhs-slot="summary"]'), resourceContent = resources.find('[data-jhs-slot="resources"]'), info = children.filter(".movie-info-container"), actionSelector = "#filterBtn, #favoriteBtn, #hasDownBtn, #hasWatchBtn, #enable-magnets-filter, #search-subtitle-btn, #xunLeiSubtitleBtn, #magnetSearchBtn", actionButtons = children.find(actionSelector).addBack(actionSelector);
-    summaryContent.append(info), info.find(".origin-title, .current-title, .movie-title, h3").first().addClass("jhs-detail-title");
-    if (actionButtons.length) {
-        const toolbar = $('<div class="jhs-detail-btn-row" role="toolbar" aria-label="影片状态操作"></div>');
-        actionButtons.each((function() { toolbar.append($(this).removeAttr("style").addClass("jhs-btn")); })), summaryContent.append(toolbar);
-    }
-    resourceContent.append(children.filter(".movie-panel-info, .video-panel")), resourceContent.find("#magnets-content").length || resourceContent.append(children.filter("#magnets-content"));
-    related.find('[data-jhs-slot="related"]').append(children.filter("#related-content")), reviews.find('[data-jhs-slot="reviews"]').append(children.filter("#reviews-content")), container.append(children.filter("#data-actress").removeAttr("style").addClass("jhs-is-hidden"));
-    const movieGallery = info.find(".movie-gallery").first();
-    movieGallery.length && (gallery.find('[data-jhs-slot="gallery"]').append(movieGallery), gallery.addClass("has-content"));
+/** 创建 FC2 自有详情壳，所有异步模块只写入固定插槽。 */
+function createFc2DetailShell({ carNum = "", source = "fc2", mode = "dialog" } = {}) {
+    const workspace = $('<div class="jhs-fc2-workspace jhs-ui"></div>').attr({
+        "data-jhs-fc2-source": source,
+        "data-jhs-fc2-mode": mode,
+        "data-jhs-car-num": normalizeCarNum(carNum) || ""
+    });
+    const definitions = [ [ "summary", "影片概览" ], [ "gallery", "预览与剧照" ], [ "resources", "资源" ], [ "reviews", "评论" ], [ "related", "相关清单" ] ];
+    definitions.forEach((([ name, title ]) => {
+        const section = $('<section class="jhs-fc2-section"></section>').attr("data-jhs-section", name);
+        const header = $('<header class="jhs-fc2-section__header"></header>'), heading = $("<h2></h2>").text(title), actions = $('<div class="jhs-fc2-section__actions"></div>').attr("data-jhs-section-actions", name);
+        section.append(header.append(heading, actions), $('<div class="jhs-fc2-section__content"></div>').attr("data-jhs-slot", name)), workspace.append(section);
+    }));
+    return workspace;
+}
+
+/** 创建只属于单个 FC2 详情实例的生命周期和插槽上下文。 */
+function createFc2DetailContext(root, options = {}) {
+    const workspace = $(root).is(".jhs-fc2-workspace") ? $(root) : $(root).find(".jhs-fc2-workspace").first();
+    let destroyed = !1;
+    const namespace = `.jhsFc2Detail${Date.now()}${Math.random().toString(36).slice(2)}`, observers = new Set();
+    const context = {
+        ...options,
+        root: workspace,
+        workspace,
+        namespace,
+        observers,
+        getSlot: name => workspace.find(`[data-jhs-slot="${name}"]`).first(),
+        getSection: name => workspace.find(`[data-jhs-section="${name}"]`).first(),
+        isAlive: () => !destroyed && workspace[0]?.isConnected !== !1,
+        addObserver(observer) { observer && observers.add(observer); return observer; },
+        destroy() {
+            if (destroyed) return;
+            destroyed = !0, workspace.off(namespace).find("*").off(namespace), observers.forEach((observer => observer.disconnect?.())), observers.clear(), workspace.removeData("jhsFc2Context");
+        }
+    };
+    workspace.data("jhsFc2Context", context);
+    return context;
 }

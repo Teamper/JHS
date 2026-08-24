@@ -93,16 +93,16 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(translate).not.toMatch(/\.html\(/);
     });
 
-    it("keeps exactly the selected eight quick settings", () => {
+    it("keeps exactly the selected seven quick settings", () => {
         const quick = settings.slice(settings.indexOf("function buildQuickSettingHtml"));
-        for (const id of [ "showAllItem", "needClosePage", "autoPage", "translateTitle", "hoverBigImg", "enableLoadOtherSite", "enableLoadScreenShot", "enableLoadPreviewVideo" ])
+        for (const id of [ "needClosePage", "autoPage", "translateTitle", "hoverBigImg", "enableLoadOtherSite", "enableLoadScreenShot", "enableLoadPreviewVideo" ])
             expect(quick).toContain(`"${id}"`);
-        for (const id of [ "showFilterItem", "enableLoadActressInfo", "enableVerticalModel", "containerColumns", "containerWidth" ])
+        for (const id of [ "showAllItem", "showFavoriteItem", "showHasDownItem", "showHasWatchItem", "showFilterItem", "enableLoadActressInfo", "enableVerticalModel", "containerColumns", "containerWidth" ])
             expect(quick).not.toContain(`id="${id}"`);
     });
 
     it("removes retired hard-hidden visibility settings from every UI and form path", () => {
-        for (const id of [ "showFilterItem", "showFilterActorItem", "showFilterKeywordItem" ]) {
+        for (const id of [ "showAllItem", "showFavoriteItem", "showHasDownItem", "showHasWatchItem", "showFilterItem", "showFilterActorItem", "showFilterKeywordItem" ]) {
             expect(settings).not.toContain(id);
             expect(settingForms).not.toContain(id);
         }

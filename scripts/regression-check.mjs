@@ -178,7 +178,7 @@ assertIncludes(detailWorkspace, "{ broadcast: !1 }", "DOM lifecycle events must 
 assert(!/\.jhs-detail-host-workspace\s*\{[^}]*display\s*:\s*flex/.test(detailWorkspace), "host workspace must not force flex layout");
 assert(!/data-jhs-host-region[^}]*order\s*:/.test(detailWorkspace), "semantic host markers must not control layout order");
 for (const token of ['$("#magnets-content").detach()', '$("#magnet-table").detach()']) assert(!detailWorkspace.includes(token), "host resource DOM must not be detached");
-assertIncludes(detailWorkspace, "container.append(summary, gallery, resources, reviews, related)", "FC2 reviews-before-related order");
+assertIncludes(detailWorkspace, '[ "summary", "影片概览" ], [ "gallery", "预览与剧照" ], [ "resources", "资源" ], [ "reviews", "评论" ], [ "related", "相关清单" ]', "FC2 fixed section order");
 assert(!unifiedOffline.includes("$('a[href^=\"magnet:\"],a[href^=\"ed2k:\"]')"), "unified offline must not scan the whole page");
 assert(!unifiedOffline.includes("link.after("), "unified offline must inject through adapter action targets");
 assert(!hitShow.includes('target="_blank"'), "hit-show cards must use shared detail navigation");
@@ -186,8 +186,9 @@ assert(!listPageButton.includes("window.open("), "pending detail navigation must
 for (const [label, source] of [["FC2", fc2], ["FC2/123AV", fc2By123Av]]) {
   assert(!source.includes("layer.closeAll("), `${label} state actions must not close unrelated layers`);
   assert(!source.includes("stateService.patch("), `${label} state actions must use toggle semantics`);
-  assertIncludes(source, "detailStateController.bind", `${label} detail state controller`);
 }
+assertIncludes(fc2, "detailStateController.bind", "shared FC2 detail state controller");
+assertIncludes(fc2By123Av, 'this.getBean("Fc2Plugin").openFc2Dialog', "123AV must reuse FC2 state and shell ownership");
 assert(!uiPrimitives.includes('.trigger("change")'), "JhsSelect must dispatch one native change without jQuery double fire");
 for (const [label, source] of [["123", one23Offline], ["115", one115Offline]]) {
   assert(!source.includes("injectJavDbButtons"), `${label} provider must not inject JavDB UI`);
@@ -197,7 +198,10 @@ assert(!history.slice(history.indexOf("async editRecord")).includes("projectLega
 assert(!history.slice(history.indexOf("async editRecord")).includes("legacyActionToFlag"), "history editor must patch four flags directly");
 assertIncludes(storage.slice(storage.indexOf("async getSetting("), storage.indexOf("async saveSetting(")), "Object.prototype.hasOwnProperty.call(", "settings must preserve explicit falsey values");
 assertIncludes(await read("src/plugins/backup/setting.js"), '.off("change.jhsResource", "input, select")', "cloud settings must persist selects through delegated binding");
-assertIncludes(listPageSource, "shouldHideInDefaultView", "multi-state default visibility contract");
+for (const retiredVisibilityToken of [ "shouldHideInDefaultView", "settingHidden", "data-jhs-setting-hide" ])
+  assert(!listPageSource.includes(retiredVisibilityToken), `retired all-view visibility rule returned: ${retiredVisibilityToken}`);
+for (const retiredSetting of [ "showAllItem", "showFavoriteItem", "showHasDownItem", "showHasWatchItem" ])
+  assert(!listPageSource.includes(retiredSetting) && !settingFormsSource.includes(retiredSetting) && !settingTemplatesSource.includes(retiredSetting), `retired list visibility setting returned: ${retiredSetting}`);
 assertIncludes(listPageSource, "getIndexedItems(payload.carNums || [])", "precise list DOM index lookup");
 assertIncludes(listPageSource, "scheduleRecount()", "frame-coalesced status recount");
 assertIncludes(listPageSource, "normalizeQuickFilterKey", "quick filter compatibility boundary");
@@ -410,6 +414,19 @@ for (const [scope, checks] of regressionMatrix) {
     assertIncludes(source, token, scope);
   }
 }
+
+const fc2Source = sourceByFile.get("external-search/fc2.js");
+const fc2By123AvSource = sourceByFile.get("external-search/fc2-by-123av.js");
+const workspaceSource = sourceByFile.get("status/detail-workspace.js");
+const reviewSource = sourceByFile.get("external-search/review.js");
+assertIncludes(fc2Source, "mountFc2Detail", "FC2 owned workspace");
+assertIncludes(fc2Source, "magnetHubPromise ||=", "FC2 lazy magnet single-flight");
+assertIncludes(workspaceSource, "createFc2DetailContext", "FC2 owned workspace");
+assertIncludes(fc2By123AvSource, "loadDetail(context, url)", "123AV FC2 adapter");
+assert(!fc2Source.includes("organizeJhsOwnedDetailWorkspace"), "FC2 must render directly into owned slots");
+assert(!fc2By123AvSource.includes("organizeJhsOwnedDetailWorkspace"), "123AV FC2 must reuse the owned shell");
+assert(!reviewSource.includes("R(movieId, 2, pageSize).catch"), "review page 2 must only load on demand");
+assert(!sourceMain.includes("isFc2Page"), "FC2 title filtering must bind to the mounted detail root");
 
 console.log(
   `Regression checks passed for ${version}: ${expectedPlugins.length} plugins, ${regressionMatrix.length} scopes, ${stableReleaseChecks.length} stable release checks`

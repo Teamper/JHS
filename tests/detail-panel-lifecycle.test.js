@@ -11,7 +11,7 @@ function loadPanels() {
     const relatedFetch = vi.fn(async movieId => [{ relatedId: movieId, name: movieId, movieCount: 1, collectionCount: 0, viewCount: 0, createTime: "today" }]);
     const context = vm.createContext({
         document: dom.window.document, window: dom.window, $, BasePlugin: class { getBean() { return null; } }, _: "yes", C: "no", r: false, l: false,
-        storageManager: { getSetting: vi.fn(async () => "yes"), getReviewFilterKeywordList: vi.fn(async () => []), saveReviewFilterKeyword: vi.fn(), saveSettingItem: vi.fn() },
+        storageManager: { getSetting: vi.fn(async key => "reviewCount" === key ? 20 : "yes"), getReviewFilterKeywordList: vi.fn(async () => []), saveReviewFilterKeyword: vi.fn(), saveSettingItem: vi.fn() },
         R: reviewFetch, K: relatedFetch, utils: { formatDate: value => value, q: (event, message, callback) => callback() }, show: { error: vi.fn(), ok: vi.fn() }, clog: { error: vi.fn(), warn: vi.fn() }, escapeHtml: String,
         i: (target, key, value) => (target[key] = value)
     });
@@ -48,5 +48,14 @@ describe("detail panel instance lifecycle", () => {
         window.getSelection = () => ({ toString: () => "keyword" });
         $("#review-a .review-content").trigger("contextmenu");
         await vi.waitFor((() => expect(storageManager.saveReviewFilterKeyword).toHaveBeenCalledOnce()));
+    });
+
+    it("adopts owned workspace headers and does not prefetch the second review page", async () => {
+        const { $, Review, reviewFetch } = loadPanels(), plugin = new Review;
+        const section = $('<section><header><div data-jhs-section-actions="reviews"></div></header><div id="owned-reviews"></div></section>').appendTo("body");
+        reviewFetch.mockResolvedValueOnce(Array.from({ length: 20 }, ((_, index) => ({ username: String(index), score: 1, created_at: "2026", likes_count: 0, content: "ok" }))));
+        const panel = await plugin.showReview("owned", section.find("#owned-reviews"), { ownedSection: section, isActive: () => true });
+        expect(panel.children(".jhs-panel-header")).toHaveLength(0), expect(section.find('> header [data-jhs-section-actions="reviews"] .jhs-review-toggle')).toHaveLength(1);
+        expect(reviewFetch).toHaveBeenCalledTimes(1), expect(panel.find(".jhs-review-load-more")).toHaveLength(1);
     });
 });

@@ -111,16 +111,8 @@ function matchesQuickFilter(filter, flags, { visibilityReasons = {}, recent = !1
     return "recent7d" === normalizedFilter && recent;
 }
 
-function shouldHideInDefaultView(flags, settings) {
-    if (settings.showAllItem === _) return !1;
-    const activeVisibility = [ [ flags.favorite, settings.showFavoriteItem ?? _ ], [ flags.downloaded, settings.showHasDownItem ?? _ ], [ flags.watched, settings.showHasWatchItem ?? _ ] ].filter((entry => entry[0]));
-    return activeVisibility.length > 0 && activeVisibility.every((entry => entry[1] !== _));
-}
-
-function shouldShowItem({ filter, flags, visibilityReasons, settingHidden, recent }) {
-    const normalizedFilter = normalizeQuickFilterKey(filter);
-    if (!matchesQuickFilter(normalizedFilter, flags, { visibilityReasons, recent })) return !1;
-    return "all" !== normalizedFilter || !settingHidden;
+function shouldShowItem({ filter, flags, visibilityReasons, recent }) {
+    return matchesQuickFilter(filter, flags, { visibilityReasons, recent });
 }
 
 class ListPagePlugin extends BasePlugin {
@@ -202,8 +194,8 @@ class ListPagePlugin extends BasePlugin {
     applyVisibility(items = null) {
         const e = this.activeQuickFilter || "waitCheck", t = this.getSelector().itemSelector;
         (items ? $(items) : $(t)).each((function() {
-            const t = $(this), flags = normalizeStateFlags(JSON.parse(t.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(t.attr("data-jhs-visibility") || "{}"), settingHidden = "yes" === t.attr("data-jhs-setting-hide"), recent = "yes" === t.attr("data-jhs-recent");
-            shouldShowItem({ filter: e, flags, visibilityReasons, settingHidden, recent }) ? t.show() : t.hide();
+            const t = $(this), flags = normalizeStateFlags(JSON.parse(t.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(t.attr("data-jhs-visibility") || "{}"), recent = "yes" === t.attr("data-jhs-recent");
+            shouldShowItem({ filter: e, flags, visibilityReasons, recent }) ? t.show() : t.hide();
         }));
     }
     setQuickFilter(filter, { syncUi = !0 } = {}) {
@@ -387,7 +379,7 @@ class ListPagePlugin extends BasePlugin {
         utils.time("累计耗费时间"), utils.time("读取数据耗时");
         const {titleKeywords: n, settings: s, carMap: m, recentCarNums: recent, actorCarNumToNameMap: f, actressCarNumToNameMap: v} = await this.getFilterContext(), o = utils.time("读取数据耗时");
         utils.time("组装数据耗时");
-        const b = utils.time("组装数据耗时"), k = (null == s ? void 0 : s.showFavoriteItem) ?? _, S = (null == s ? void 0 : s.showHasDownItem) ?? _, T = (null == s ? void 0 : s.showHasWatchItem) ?? _, I = (null == s ? void 0 : s.showAllItem) ?? C, P = (null == s ? void 0 : s.tagPosition) || "rightTop";
+        const b = utils.time("组装数据耗时"), P = (null == s ? void 0 : s.tagPosition) || "rightTop";
         const O = n.filter((e => e));
         this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0,
         this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0,
@@ -398,8 +390,8 @@ class ListPagePlugin extends BasePlugin {
             let t = $(e[n]);
             if (l && t.find(".avatar-box").length > 0) continue;
             const {carNum: a, title: i} = this.findCarNumAndHref(t), record = m.get(a), flags = normalizeStateFlags(record?.stateFlags), actorFiltered = f.has(a), actressFiltered = v.has(a), keyword = this.findMatchedTitleKeyword(O, i, a), visibilityReasons = { keyword: !!keyword, actorBlacklist: actorFiltered, actressBlacklist: actressFiltered };
-            const hardHidden = isHardHidden(flags, visibilityReasons), settingHidden = shouldHideInDefaultView(flags, { showAllItem: I, showFavoriteItem: k, showHasDownItem: S, showHasWatchItem: T });
-            t.attr("data-jhs-flags", JSON.stringify(flags)).attr("data-jhs-visibility", JSON.stringify(visibilityReasons)).attr("data-jhs-setting-hide", settingHidden ? _ : C).attr("data-jhs-recent", recent.has(a) ? _ : C).attr("data-jhs-tag-position", P);
+            const hardHidden = isHardHidden(flags, visibilityReasons);
+            t.attr("data-jhs-flags", JSON.stringify(flags)).attr("data-jhs-visibility", JSON.stringify(visibilityReasons)).attr("data-jhs-recent", recent.has(a) ? _ : C).attr("data-jhs-tag-position", P);
             const signature = JSON.stringify({ flags, visibilityReasons, P });
             if (t.attr("data-jhs-state-signature") !== signature) {
                 t.attr("data-jhs-state-signature", signature), t.find(".jhs-status-tags").remove();
@@ -434,11 +426,11 @@ class ListPagePlugin extends BasePlugin {
         })), $(e.boxSelector).on("contextmenu", ".item img, .item video", (async e => {
             try {
                 e.preventDefault();
-                const t = $(e.target).closest(".item"), {carNum: n, url: a, publishTime: i} = this.findCarNumAndHref(t);
+                const t = $(e.target).closest(".item"), {carNum: n, url: a, publishTime: i, fc2Source} = this.findCarNumAndHref(t);
                 let s = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10"), o = "";
                 s.length && (o = s.text().trim().split(",")[0].replace("(無碼)", "")), utils.q(e, `是否屏蔽番号 ${n}?`, (async () => {
                     try {
-                        o || (o = await this.parseActressName(a)), await stateService.patch(n, { blocked: !0 }, { record: { carNum: n, url: a, names: o, publishTime: i } }), show.ok("操作成功");
+                        o || (o = await this.parseActressName(a)), await stateService.patch(n, { blocked: !0 }, { record: { carNum: n, url: a, names: o, publishTime: i, fc2Source } }), show.ok("操作成功");
                     } catch (s) { clog.error("屏蔽操作失败:", s), show.error("操作失败"); }
                 }));
             } catch (t) { clog.error("右键菜单处理失败:", t); }
@@ -446,12 +438,12 @@ class ListPagePlugin extends BasePlugin {
     }
     /** 从任意列表卡片进入统一详情导航。 */
     async openMovieDetail(item, { event = null, autoplay = !1, newTab = !1 } = {}) {
-        const card = item?.jquery ? item : $(item), {carNum, aHref} = this.findCarNumAndHref(card);
+        const card = item?.jquery ? item : $(item), {carNum, aHref, fc2Source} = this.findCarNumAndHref(card);
         if (!carNum || !aHref) return;
         const shouldOpenTab = newTab || !!event && (event.ctrlKey || event.metaKey || 1 === event.button);
         if (carNum.includes("FC2-")) {
             const movieId = this.parseMovieId(aHref);
-            return shouldOpenTab ? this.getBean("Fc2Plugin").openFc2Page(movieId, carNum, aHref, { event, newTab: !0 }) : this.getBean("Fc2Plugin").openFc2Dialog(movieId, carNum, aHref);
+            return shouldOpenTab ? this.getBean("Fc2Plugin").openFc2Page(movieId, carNum, aHref, { event, newTab: !0 }, { source: fc2Source }) : this.getBean("Fc2Plugin").openFc2Dialog(movieId, carNum, aHref, { source: fc2Source });
         }
         const destination = new URL(aHref, window.location.origin);
         autoplay && destination.searchParams.set("autoPlay", "1"), utils.openPage(destination.href, carNum, !0, { event, newTab: shouldOpenTab }), this.$currentImage = null;
@@ -499,7 +491,8 @@ class ListPagePlugin extends BasePlugin {
             aHref: r,
             url: r,
             title: i,
-            publishTime: s
+            publishTime: s,
+            fc2Source: [ "fc2", "123av" ].includes(e.attr("data-jhs-fc2-source")) ? e.attr("data-jhs-fc2-source") : "fc2"
         };
     }
     showCarNumBox(e) {

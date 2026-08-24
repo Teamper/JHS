@@ -8,11 +8,12 @@ class TranslatePlugin extends BasePlugin {
     handle() {
         isDetailPage && this.translate();
     }
-    async translate(e, t = !0) {
+    async translate(e, t = !0, options = {}) {
         if (await storageManager.getSetting("translateTitle", _) !== _) return;
         l && (t = !1);
-        let n = $(".origin-title");
-        if (n.length || (n = $(".current-title")), n.length || (n = $("h3")), !n.length) return;
+        const root = options.root ? $(options.root) : $(document);
+        let n = root.find(".origin-title").first();
+        if (n.length || (n = root.find(".current-title").first()), n.length || (n = root.find("h3").first()), !n.length) return;
         const a = n.text().trim();
         if (!a) return void show.error("获取标题失败, 无法进行翻译");
         let i = n.nextAll(".translated-title").first();
@@ -29,6 +30,7 @@ class TranslatePlugin extends BasePlugin {
         if (r[o]) return void i.text(r[o]);
         try {
             const e = await _e(a, "ja", "zh-CN");
+            if (!n[0]?.isConnected) return;
             i.text(e), r[o] = e, localStorage.setItem("jhs_translate", JSON.stringify(r));
         } catch (l) {
             clog.error("翻译失败:", l), i.addClass("is-error").text(`翻译失败: ${l.message || String(l)}`);

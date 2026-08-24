@@ -158,7 +158,8 @@ class StateService {
             const existing = map.get(carNum), metadata = records.get(carNum) || options.record || {}, now = utils.getNowStr(), before = existing ? cloneStateValue(existing) : null;
             const record = existing ? { ...existing, stateFlags: normalizeStateFlags(existing.stateFlags) } : { carNum, url: metadata.url || window.location.href, names: metadata.names || "", createDate: now, stateFlags: createEmptyStateFlags() };
             const fields = [];
-            [ "url", "names", "publishTime", "starId", "remark" ].forEach((field => {
+            [ "url", "names", "publishTime", "starId", "remark", "fc2Source" ].forEach((field => {
+                if ("fc2Source" === field && ![ "fc2", "123av" ].includes(metadata[field])) return;
                 if (!Object.prototype.hasOwnProperty.call(metadata, field) || null == metadata[field] || !options.replaceMetadata && "" === metadata[field] || record[field] === metadata[field]) return;
                 record[field] = metadata[field], fields.push(field);
             }));

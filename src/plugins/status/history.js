@@ -1,6 +1,8 @@
 class HistoryPlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null);
+        super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectAll", !1),
+        i(this, "historyExcludedCarNums", new Set), i(this, "historySorters", []), i(this, "historyFilteredCount", 0),
+        i(this, "historySelectionSyncing", !1);
     }
     getName() {
         return "HistoryPlugin";
@@ -10,6 +12,8 @@ class HistoryPlugin extends BasePlugin {
             <style>
                 .jhs-history-layout { display:flex; flex-direction:column; height:100%; min-height:0; padding:var(--jhs-space-3) var(--jhs-space-4); overflow:hidden; }
                 #filterBox, #allSelectBox { display:flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-2); margin-bottom:var(--jhs-space-2); }
+                .jhs-history-selection-summary { color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
+                .jhs-history-select-all { width:18px; height:18px; accent-color:var(--jhs-accent); cursor:pointer; }
                 #table-container { flex:1; min-height:0; overflow-x:hidden; }
                 .sub-btns { position:relative; display:inline-block; }
                 .sub-btns-menu { position:absolute; top:calc(100% + var(--jhs-space-1)); right:0; z-index:var(--jhs-z-popover); display:none; min-width:156px; padding:var(--jhs-space-1); overflow:hidden; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
@@ -57,7 +61,8 @@ class HistoryPlugin extends BasePlugin {
             anim: -1,
             success: async e => {
                 const root = $(e);
-                this.historyRoot = root, JhsSelect.enhance(root);
+                this.historyRoot = root, root.find("#allSelectBox").prepend('<span id="historySelectionSummary" class="jhs-history-selection-summary" role="status" aria-live="polite"></span>'),
+                this.resetHistorySelection(!1), JhsSelect.enhance(root);
                 await this.loadTableData(), root.on("click.jhsHistory", "#clearSearchbtn", (async e => {
                     root.find("#searchCarNum").val(""), JhsSelect.setValue(root.find("#dataType"), "all"), await this.reloadTable(),
                     root.find("#allSelectBox").hide();
@@ -90,13 +95,13 @@ class HistoryPlugin extends BasePlugin {
                 })), this.bindHistoryActions(root);
             },
             end: () => {
-                this.historyRoot?.off(".jhsHistory"), this.historyRoot = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null);
+                this.resetHistorySelection(), this.historyRoot?.off(".jhsHistory"), this.historyRoot = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null);
             }
         });
     }
     async showHistoryView(view) {
         const stateView = "state" === view;
-        this.historyRoot?.find("#filterBox,#allSelectBox").toggle(stateView), this.tableObj?.destroy(), this.tableObj = null;
+        this.resetHistorySelection(), this.historyRoot?.find("#filterBox,#allSelectBox").toggle(stateView), this.tableObj?.destroy(), this.tableObj = null;
         return stateView ? this.loadTableData() : "activity" === view ? this.renderActivityHistory() : this.renderOfflineHistory();
     }
     async renderActivityHistory() {
@@ -115,8 +120,76 @@ class HistoryPlugin extends BasePlugin {
             host.append($("<article class=\"jhs-card\"></article>").append($("<strong></strong>").text(`${item.providerName || item.providerId} · ${item.status}`), $("<p></p>").text(`${item.carNum || "未关联番号"} · ${new Date(item.createdAt).toLocaleString()}${item.retryOf ? ` · 重试自 ${item.retryOf}` : ""}`), $("<p></p>").text(item.errorMessage || item.resource), actions));
         }));
     }
-    async reloadTable() {
-        this.tableObj.deselectRow(), this.tableObj.setPage(1);
+    async reloadTable(resetSelection = !0) {
+        resetSelection && this.resetHistorySelection(), await this.tableObj?.setPage(1);
+    }
+    normalizeHistoryCarNum(carNum) {
+        return normalizeCarNum(carNum) || String(carNum || "").trim().toUpperCase();
+    }
+    /** 清空 History 的全选、排除项和当前页选择。 */
+    resetHistorySelection(deselectRows = !0) {
+        this.historySelectAll = !1, this.historyExcludedCarNums.clear();
+        if (deselectRows && this.tableObj) {
+            this.historySelectionSyncing = !0;
+            try {
+                this.tableObj.deselectRow();
+            } finally {
+                this.historySelectionSyncing = !1;
+            }
+        }
+        this.updateHistorySelectionUi();
+    }
+    createHistorySelectAllCheckbox() {
+        const checkbox = document.createElement("input");
+        return checkbox.type = "checkbox", checkbox.className = "jhs-history-select-all", checkbox.setAttribute("aria-label", "选择当前筛选条件下的全部记录"),
+        checkbox.addEventListener("change", (() => {
+            checkbox.checked ? (this.historySelectAll = !0, this.historyExcludedCarNums.clear(), this.syncHistoryPageSelection()) : this.resetHistorySelection();
+        })), checkbox;
+    }
+    syncHistoryPageSelection() {
+        if (!this.tableObj || !this.historySelectAll) return void this.updateHistorySelectionUi();
+        const currentRows = this.tableObj.getData?.() || [], selectedIds = currentRows.map((item => item.carNum)).filter((carNum => !this.historyExcludedCarNums.has(this.normalizeHistoryCarNum(carNum))));
+        this.historySelectionSyncing = !0;
+        try {
+            this.tableObj.deselectRow(), selectedIds.length && this.tableObj.selectRow(selectedIds);
+        } finally {
+            this.historySelectionSyncing = !1;
+        }
+        this.updateHistorySelectionUi();
+    }
+    updateHistoryRowSelection(row, selected) {
+        if (!this.historySelectAll || this.historySelectionSyncing) return void this.updateHistorySelectionUi();
+        const carNum = this.normalizeHistoryCarNum(row?.getData?.().carNum);
+        carNum && (selected ? this.historyExcludedCarNums.delete(carNum) : this.historyExcludedCarNums.add(carNum)), this.updateHistorySelectionUi();
+    }
+    getHistorySelectionSummary() {
+        if (this.historySelectAll) {
+            const excluded = this.historyExcludedCarNums.size, selected = Math.max(0, this.historyFilteredCount - excluded);
+            return {
+                count: selected,
+                text: excluded ? `已选择当前筛选结果 ${selected} 条，已排除 ${excluded} 条` : `已选择当前筛选结果 ${selected} 条`
+            };
+        }
+        const count = this.tableObj?.getSelectedData?.().length || 0;
+        return {
+            count,
+            text: `已选择当前页 ${count} 条`
+        };
+    }
+    updateHistorySelectionUi() {
+        if (!this.historyRoot) return;
+        const summary = this.getHistorySelectionSummary(), batchBox = this.historyRoot.find("#allSelectBox"), filterBox = this.historyRoot.find("#filterBox");
+        this.historyRoot.find("#historySelectionSummary").text(summary.text), summary.count > 0 ? (filterBox.hide(), batchBox.show()) : (filterBox.show(), batchBox.hide());
+        this.historyRoot.find(".jhs-history-select-all").each(((index, element) => {
+            element.checked = this.historySelectAll, element.indeterminate = this.historySelectAll ? this.historyExcludedCarNums.size > 0 : summary.count > 0;
+        }));
+    }
+    /** 解析批量操作实际要处理的当前页或完整筛选结果。 */
+    async getHistoryBatchSelection() {
+        if (!this.historySelectAll) return this.tableObj?.getSelectedData?.() || [];
+        const rows = await this.getFilteredHistoryData(this.historySorters), available = new Set(rows.map((item => this.normalizeHistoryCarNum(item.carNum))));
+        for (const carNum of this.historyExcludedCarNums) available.has(carNum) || this.historyExcludedCarNums.delete(carNum);
+        return this.historyFilteredCount = rows.length, rows.filter((item => !this.historyExcludedCarNums.has(this.normalizeHistoryCarNum(item.carNum))));
     }
     bindHistoryActions(root) {
         root.on("click.jhsHistory", (function(e) {
@@ -150,32 +223,37 @@ class HistoryPlugin extends BasePlugin {
                 carNum: a,
                 url: i
             }).catch((error => clog.error("历史详情打开失败", error)));
-        })), root.on("click.jhsHistory", ".multiple-history-deleteBtn, .multiple-history-filterBtn, .multiple-history-favoriteBtn, .multiple-history-hasDownBtn, .multiple-history-hasWatchBtn", (e => {
+        })), root.on("click.jhsHistory", ".multiple-history-deleteBtn, .multiple-history-filterBtn, .multiple-history-favoriteBtn, .multiple-history-hasDownBtn, .multiple-history-hasWatchBtn", (async e => {
             e.preventDefault(), e.stopPropagation();
             const t = $(e.currentTarget);
-            let n = this.tableObj.getSelectedData(), a = "", i = "";
+            let n = await this.getHistoryBatchSelection(), a = "", i = "";
             t.hasClass("multiple-history-filterBtn") ? (a = "屏蔽", i = d) : t.hasClass("multiple-history-favoriteBtn") ? (a = "收藏",
             i = h) : t.hasClass("multiple-history-hasDownBtn") ? (a = "已下载", i = g) : t.hasClass("multiple-history-hasWatchBtn") ? (a = "已观看",
-            i = p) : t.hasClass("multiple-history-deleteBtn") && (a = "移除", i = "delete"), utils.q(e, `当前已勾选${n.length}条数据, 是否全标记为 ${a}?`, (async () => {
+            i = p) : t.hasClass("multiple-history-deleteBtn") && (a = "移除", i = "delete");
+            if (!n.length) return void show.info("请先选择要处理的记录");
+            const selectionText = this.historySelectAll ? this.historyExcludedCarNums.size ? `当前筛选结果中已选择 ${n.length} 条，排除 ${this.historyExcludedCarNums.size} 条` : `当前筛选结果中已选择全部 ${n.length} 条` : `当前页已选择 ${n.length} 条`;
+            utils.q(e, `${selectionText}，是否标记为${a}？`, (async () => {
                 let e = loading();
                 try {
                     if ("delete" === i) {
                         const e = n.map((e => e.carNum)), t = await stateService.remove(e);
-                        t.changed.length > 0 ? show.ok(`已成功删除 ${t.changed.length} 个番号`) : show.error("提供的番号中没有一个存在于列表中。");
+                        if (!t.changed.length) return void show.error("提供的番号中没有一个存在于列表中。");
+                        show.ok(`已成功删除 ${t.changed.length} 个番号`);
                     } else {
                         const flag = legacyActionToFlag(i);
                         await stateService.patch(n.map((item => item.carNum)), { [flag]: !0 }, { type: "history-batch-state", records: n }), show.ok("操作成功");
                     }
-                    this.tableObj.deselectRow(), await this.reloadTable();
+                    this.resetHistorySelection(), await this.reloadTable(!1);
                 } catch (t) {
-                    clog.error(t);
+                    clog.error(t), show.error("操作失败，请稍后重试");
                 } finally {
                     e.close();
                 }
             }));
         }));
     }
-    async getDataList(e, t, n) {
+    /** 返回应用当前搜索、状态筛选和排序后的完整 History 数据。 */
+    async getFilteredHistoryData(sorters = this.historySorters) {
         let a = await storageManager.getCarList();
         this.allCount = a.length, this.filterCount = 0, this.favoriteCount = 0, this.hasDownCount = 0,
         this.hasWatchCount = 0, this.waitCheckCount = 0, a.forEach((e => {
@@ -197,17 +275,23 @@ class HistoryPlugin extends BasePlugin {
                 return n || a;
             }));
         }
-        if (n && n.length > 0) {
-            const e = n[0], t = e.field, a = e.dir;
+        if (sorters && sorters.length > 0) {
+            const e = sorters[0], t = e.field, a = e.dir;
             s.sort(((e, n) => {
                 const i = e[t], s = n[t], o = null == i || "" === i, r = null == s || "" === s;
                 return o && !r ? 1 : !o && r ? -1 : o && r ? 0 : i < s ? "asc" === a ? -1 : 1 : i > s ? "asc" === a ? 1 : -1 : 0;
             }));
         }
-        const r = s.length, l = Math.ceil(r / t), c = (e - 1) * t, m = c + t;
-        return s = s.slice(c, m), {
+        return s;
+    }
+    async getDataList(e, t, n) {
+        this.historySorters = Array.isArray(n) ? n.map((sorter => ({
+            ...sorter
+        }))) : [];
+        const rows = await this.getFilteredHistoryData(this.historySorters), r = rows.length, l = Math.ceil(r / t), c = (e - 1) * t, m = c + t;
+        return this.historyFilteredCount = r, {
             maxPage: l,
-            dataList: s,
+            dataList: rows.slice(c, m),
             totalCount: r
         };
     }
@@ -231,7 +315,7 @@ class HistoryPlugin extends BasePlugin {
                 data: "dataList"
             },
             paginationSize: 50,
-            paginationSizeSelector: [ 50, 100, 1e3, 99999 ],
+            paginationSizeSelector: [ 50, 100, 1e3 ],
             paginationCounter: (e, t, n, a, i) => `共 ${a} 条记录`,
             responsiveLayout: "collapse",
             responsiveLayoutCollapse: !0,
@@ -243,14 +327,11 @@ class HistoryPlugin extends BasePlugin {
             index: "carNum",
             columns: [ {
                 formatter: "rowSelection",
-                titleFormatter: "rowSelection",
+                titleFormatter: () => this.createHistorySelectAllCheckbox(),
                 hozAlign: "center",
                 headerSort: !1,
                 responsive: 0,
                 width: 40,
-                titleFormatterParams: {
-                    rowRange: "active"
-                },
                 cellClick: (e, t) => {
                     t.getRow().toggleSelect();
                 }
@@ -371,9 +452,14 @@ class HistoryPlugin extends BasePlugin {
                     }
                 }
             }
-        }), this.tableObj.on("rowSelectionChanged", ((e, t, n, a) => {
-            const i = this.historyRoot.find("#allSelectBox"), s = this.historyRoot.find("#filterBox");
-            e && e.length > 0 ? (s.hide(), i.show()) : (s.show(), i.hide());
+        }), this.tableObj.on("dataProcessed", (() => {
+            this.historySelectAll ? this.syncHistoryPageSelection() : this.updateHistorySelectionUi();
+        })), this.tableObj.on("rowSelected", (row => {
+            this.updateHistoryRowSelection(row, !0);
+        })), this.tableObj.on("rowDeselected", (row => {
+            this.updateHistoryRowSelection(row, !1);
+        })), this.tableObj.on("rowSelectionChanged", (() => {
+            this.updateHistorySelectionUi();
         })), this.tableObj.on("rowDblClick", (function(e, t) {
             t.toggleSelect();
         }));
@@ -381,13 +467,14 @@ class HistoryPlugin extends BasePlugin {
     handleDelete(e, t) {
         utils.q(e, `是否移除${t}?`, (async () => {
             await stateService.remove(t), this.getBean("ListPagePlugin").showCarNumBox(t),
-            await this.reloadTable(null);
+            await this.reloadTable();
         }));
     }
     async handleClickDetail(e, t) {
         if (r) if (t.carNum.includes("FC2-")) {
             const e = this.parseMovieId(t.url);
-            this.getBean("Fc2Plugin").openFc2Dialog(e, t.carNum, t.url);
+            const plugin = this.getBean("Fc2Plugin"), source = await plugin.resolveFc2Source(t);
+            plugin.openFc2Dialog(e, t.carNum, t.url, { source });
         } else {
             if (!t.url) return void window.open("/search?q=" + t.carNum, "_blank");
             utils.openPage(t.url, t.carNum, !1, e);
@@ -396,7 +483,8 @@ class HistoryPlugin extends BasePlugin {
             let n = t.url;
             if (n.includes("javdb")) if (t.carNum.includes("FC2-")) {
                 const e = this.parseMovieId(n);
-                await this.getBean("Fc2Plugin").openFc2Page(e, t.carNum, n);
+                const plugin = this.getBean("Fc2Plugin"), source = await plugin.resolveFc2Source(t);
+                await plugin.openFc2Page(e, t.carNum, n, { newTab: !0 }, { source });
             } else window.open(n, "_blank"); else utils.openPage(t.url, t.carNum, !1, e);
         }
     }

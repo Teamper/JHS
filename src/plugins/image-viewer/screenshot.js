@@ -29,8 +29,8 @@ class ScreenShotPlugin extends BasePlugin {
         const mode = await this.initializeProviders();
         if ("manual" === mode) return $(".screen-container").text("请选择截图来源"), void this.renderProviderTabs(e);
         try {
-            const t = await this.getScreenshot(e);
-            this.addImg("缩略图", t), clog.log("加载缩略图:", t);
+            const t = await this.getScreenshotFromInitializedProviders(e);
+            t ? (this.addImg("缩略图", t), clog.log("加载缩略图:", t)) : this.showErrorFallback(e, null);
         } catch (t) {
             this.showErrorFallback(e, t);
         }
@@ -49,6 +49,11 @@ class ScreenShotPlugin extends BasePlugin {
         e = normalizeCarNum(e);
         if (!e) throw clog.warn("跳过缩略图解析：番号不可用"), new Error("缩略图番号不可用");
         await this.initializeProviders();
+        return this.getScreenshotFromInitializedProviders(e);
+    }
+    async getScreenshotFromInitializedProviders(e) {
+        e = normalizeCarNum(e);
+        if (!e) throw new Error("缩略图番号不可用");
         localStorage.removeItem("jhs_screenShot");
         let n;
         try {
@@ -56,7 +61,7 @@ class ScreenShotPlugin extends BasePlugin {
         } catch (i) {
             throw clog.error("获取缩略图资源失败:", n, i), i;
         }
-        if (!n) return this.showErrorFallback(e, null), null;
+        if (!n) return null;
         let url = n.url, a = url.indexOf("https://");
         return -1 !== a && (url = url.substring(a)), clog.log(`缩略图获取成功 (${n.source}):`, url), url;
     }
@@ -118,6 +123,48 @@ class ScreenShotPlugin extends BasePlugin {
             }
         })).on("click", ".check-link", (async t => {
             t.stopPropagation(), t.preventDefault(), window.open(searchUrl, "_blank");
+        }));
+    }
+    /** 将截图状态与结果限制在指定容器内，供自有详情工作区使用。 */
+    async loadInto(target, carNum, { isActive = () => !0 } = {}) {
+        const host = $(target);
+        if (!host.length || "yes" !== await storageManager.getSetting("enableLoadScreenShot", "yes")) return host.empty(), null;
+        const mode = await this.initializeProviders(), renderMessage = message => isActive() && host.empty().append($("<div></div>").addClass("jhs-panel-state").text(message));
+        if ("manual" === mode) {
+            host.empty();
+            const tabs = $('<div class="jhs-screenshot-providers" role="tablist" aria-label="截图来源"></div>'), result = $('<div class="jhs-screenshot-result"></div>').text("请选择截图来源");
+            this.providerRegistry.providers.forEach((provider => tabs.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').prop("disabled", !provider.enabled).attr("data-provider", provider.id).text(provider.name))));
+            host.append(tabs, result), tabs.on("click", "button:not(:disabled)", (async event => {
+                const provider = this.providerRegistry.get($(event.currentTarget).data("provider"));
+                result.text(`${provider.name} 加载中…`);
+                try {
+                    const loaded = await provider.getScreenshot(normalizeCarNum(carNum));
+                    if (!isActive()) return;
+                    loaded?.url ? this.renderInto(result, loaded.url, `${provider.name} 缩略图`) : result.text(`${provider.name} 无结果`);
+                } catch (error) {
+                    isActive() && result.text(`${provider.name} 请求失败`), clog.error("截图源请求失败", error);
+                }
+            }));
+            return host;
+        }
+        renderMessage("正在加载缩略图…");
+        try {
+            const url = await this.getScreenshotFromInitializedProviders(carNum);
+            if (!isActive()) return null;
+            if (!url) return host.empty(), null;
+            return this.renderInto(host, url, "缩略图"), url;
+        } catch (error) {
+            if (!isActive()) return null;
+            host.empty();
+            const state = $('<div class="jhs-panel-state"></div>').text("缩略图加载失败 "), retry = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>');
+            retry.on("click", (() => void this.loadInto(host, carNum, { isActive }))), host.append(state.append(retry));
+            return clog.error("缩略图加载失败", error), null;
+        }
+    }
+    renderInto(target, url, alt) {
+        const host = $(target), image = $("<img>").attr({ src: normalizeJavStoreAssetUrl(url), alt, loading: "lazy" }).addClass("jhs-fc2-gallery__image"), button = $('<button type="button" class="jhs-btn jhs-fc2-gallery-item jhs-fc2-screenshot-thumbnail"></button>').attr("aria-label", `查看${alt}大图`).append(image);
+        host.empty().append(button).off("click.jhsScreenshot").on("click.jhsScreenshot", ".jhs-fc2-screenshot-thumbnail", (event => {
+            event.preventDefault(), event.stopPropagation(), showImageViewer(image[0]);
         }));
     }
 }

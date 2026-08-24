@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 function loadVisibility() {
     const source = readFileSync(join(process.cwd(), "src/plugins/status/list-page.js"), "utf8"), start = source.indexOf("const QUICK_FILTER_LABELS"), end = source.indexOf("class ListPagePlugin", start), context = vm.createContext({ _: "yes", C: "no", hasAnyState: flags => Object.values(flags).some(Boolean) });
-    vm.runInContext(`${source.slice(start, end)};globalThis.api={normalizeQuickFilterKey,isHardHidden,matchesQuickFilter,shouldHideInDefaultView,shouldShowItem,PRIMARY_QUICK_FILTERS,SECONDARY_QUICK_FILTERS}`, context);
+    vm.runInContext(`${source.slice(start, end)};globalThis.api={normalizeQuickFilterKey,isHardHidden,matchesQuickFilter,shouldShowItem,PRIMARY_QUICK_FILTERS,SECONDARY_QUICK_FILTERS}`, context);
     return context.api;
 }
 
@@ -52,19 +52,35 @@ describe("multi-state list visibility", () => {
         expect(api.matchesQuickFilter(filter, stateFlags, { visibilityReasons, recent })).toBe(expected);
     });
 
-    it.each([
-        [["favorite"], { showFavoriteItem: "no" }, true],
-        [["downloaded"], { showHasDownItem: "yes" }, false],
-        [["watched"], { showHasWatchItem: "no" }, true],
-        [["favorite", "downloaded"], { showFavoriteItem: "no", showHasDownItem: "yes" }, false],
-        [["favorite", "watched"], { showFavoriteItem: "no", showHasWatchItem: "no" }, true],
-        [[], { showFavoriteItem: "no", showHasDownItem: "no", showHasWatchItem: "no" }, false]
-    ])("computes all-view state preference for %j", (active, settings, hidden) => expect(api.shouldHideInDefaultView(flags(...active), settings)).toBe(hidden));
+    it("matches the complete primary-filter matrix without a second visibility rule", () => {
+        const records = {
+            A: flags(),
+            B: flags("favorite"),
+            C: flags("downloaded"),
+            D: flags("watched"),
+            E: flags("favorite", "downloaded"),
+            F: flags("favorite", "watched"),
+            G: flags("downloaded", "watched"),
+            H: flags("favorite", "downloaded", "watched"),
+            I: flags("blocked")
+        }, visible = filter => Object.entries(records).filter(([, stateFlags]) => api.shouldShowItem({
+            filter,
+            flags: stateFlags,
+            visibilityReasons: reasons(),
+            recent: false
+        })).map(([key]) => key);
+        expect(visible("all")).toEqual([ "A", "B", "C", "D", "E", "F", "G", "H" ]);
+        expect(visible("waitCheck")).toEqual([ "A" ]);
+        expect(visible("favorite")).toEqual([ "B", "E", "F", "H" ]);
+        expect(visible("hasDown")).toEqual([ "C", "E", "G", "H" ]);
+        expect(visible("hasWatch")).toEqual([ "D", "F", "G", "H" ]);
+        expect(visible("blockedItems")).toEqual([ "I" ]);
+    });
 
-    it("applies state display preferences only to all", () => {
-        const stateFlags = flags("favorite"), visibilityReasons = reasons();
-        expect(api.shouldShowItem({ filter: "all", flags: stateFlags, visibilityReasons, settingHidden: true, recent: false })).toBe(false);
-        expect(api.shouldShowItem({ filter: "favorite", flags: stateFlags, visibilityReasons, settingHidden: true, recent: false })).toBe(true);
-        expect(api.shouldShowItem({ filter: "favorite", flags: stateFlags, visibilityReasons: reasons("keyword"), settingHidden: false, recent: false })).toBe(false);
+    it("keeps every hard-hidden reason out of all and exposes it through blocked items", () => {
+        for (const visibilityReasons of [ reasons("keyword"), reasons("actorBlacklist"), reasons("actressBlacklist") ]) {
+            expect(api.shouldShowItem({ filter: "all", flags: flags("favorite"), visibilityReasons, recent: false })).toBe(false);
+            expect(api.shouldShowItem({ filter: "blockedItems", flags: flags("favorite"), visibilityReasons, recent: false })).toBe(true);
+        }
     });
 });

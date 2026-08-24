@@ -4,10 +4,10 @@ function calcMagnetScore(e) {
     const n = (e.seeders || 0);
     const seedersScore = n >= 50 ? 35 : n >= 10 ? 25 : n >= 1 ? 15 : 3;
     t += seedersScore;
-    const a = (e.title || "").toLowerCase();
-    const resolutionScore = /4k|2160p/.test(a) ? 25 : /1080p/.test(a) ? 20 : /720p/.test(a) ? 15 : 5;
+    const a = (e.title || "").toLowerCase(), resolution = String(e.resolution || "").toLowerCase();
+    const resolutionScore = /4k|2160p/.test(resolution) || /4k|2160p/.test(a) ? 25 : /1080p/.test(resolution) || /1080p/.test(a) ? 20 : /720p/.test(resolution) || /720p/.test(a) ? 15 : 5;
     t += resolutionScore;
-    const subtitleScore = /-c\b|-uc\b|chinese|中字|字幕/.test(a) ? 20 : 0;
+    const subtitleScore = e.hasSubtitle || /-c\b|-uc\b|chinese|中字|字幕/.test(a) ? 20 : 0;
     t += subtitleScore;
     const i = e.date ? _daysSince(e.date) : 999;
     const freshnessScore = i <= 7 ? 15 : i <= 30 ? 12 : i <= 90 ? 8 : 3;
@@ -26,15 +26,15 @@ function _daysSince(e) {
 
 class MagnetHubPlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "currentEngine", null), i(this, "sourceRegistry", new MagnetSourceRegistry()), i(this, "searchEngines", []);
+        super(...arguments), i(this, "sourceRegistry", new MagnetSourceRegistry()), i(this, "searchEngines", []);
     }
     async initializeSources() {
         const settings = new ResourceSettingsService(), overrides = await settings.getBuiltInSources(), custom = await settings.getMagnetSources();
         const configured = id => ({ ...(BUILT_IN_MAGNET_SOURCES.find((source => source.id === id)) || {}), ...(overrides.find((source => source.id === id)) || {}) });
         const baseUrl = (id, fallback) => String(configured(id).baseUrl || fallback).replace(/\/$/, "");
         this.sourceRegistry = new MagnetSourceRegistry([ {
-            name: "JavDB 本站", id: "native-javdb", applicable: r, enabled: r, priority: 1, search: async () => parseNativeMagnets(document, "javdb"), targetUrl: () => window.location.href
-        }, { name: "JavBus 本站", id: "native-javbus", applicable: l, enabled: l, priority: 2, search: async () => parseNativeMagnets(document, "javbus"), targetUrl: () => window.location.href
+            name: "JavDB 本站", id: "native-javdb", applicable: r, enabled: r, priority: 1, search: async (keyword, root = document) => parseNativeMagnets(root?.jquery ? root[0] : root, "javdb"), targetUrl: () => window.location.href
+        }, { name: "JavBus 本站", id: "native-javbus", applicable: l, enabled: l, priority: 2, search: async (keyword, root = document) => parseNativeMagnets(root?.jquery ? root[0] : root, "javbus"), targetUrl: () => window.location.href
         }, {
             name: "U9A9",
             id: "u9a9",
@@ -76,37 +76,38 @@ class MagnetHubPlugin extends BasePlugin {
             .magnet-copy { position:absolute; top:var(--jhs-space-2); right:var(--jhs-space-3); }
         </style>`;
     }
-    async createMagnetHub(e) {
+    async createMagnetHub(e, options = {}) {
         await this.initializeSources();
         e = e.replace("FC2-", "");
+        const root = options.root ? $(options.root) : $(document), engines = [ ...this.searchEngines ];
         const t = $('<div class="magnet-container jhs-ui"></div>'), n = $('<div class="magnet-tabs"></div>'), a = "jhs_magnetHub_selectedEngine", i = localStorage.getItem(a);
         const o = $('<div class="magnet-tabs__options" role="tablist" aria-label="磁力来源"></div>');
-        this.currentEngine = this.searchEngines.find((engine => engine.id === i)) || this.searchEngines[0] || null;
-        if (!this.currentEngine) return t.append($('<div class="magnet-error"></div>').text("暂无可用磁力来源，请前往设置启用来源"));
-        this.searchEngines.forEach((engine => o.append($('<button type="button" class="jhs-btn magnet-tab" role="tab" aria-selected="false" tabindex="-1"></button>').attr("data-engine", engine.id).text(engine.name).toggleClass("active", engine.id === this.currentEngine.id))));
-        const target = $('<a class="jhs-btn jhs-btn--ghost" id="targetBox" target="_blank" rel="noopener noreferrer">原网页</a>').attr("href", this.currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e))).toggle("all" !== this.currentEngine.id);
+        let currentEngine = engines.find((engine => engine.id === i)) || engines[0] || null;
+        if (!currentEngine) return t.append($('<div class="magnet-error"></div>').text("暂无可用磁力来源，请前往设置启用来源"));
+        engines.forEach((engine => o.append($('<button type="button" class="jhs-btn magnet-tab" role="tab" aria-selected="false" tabindex="-1"></button>').attr("data-engine", engine.id).text(engine.name).toggleClass("active", engine.id === currentEngine.id))));
+        const target = $('<a class="jhs-btn jhs-btn--ghost" data-jhs-role="magnet-target" target="_blank" rel="noopener noreferrer">原网页</a>').attr("href", currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e))).toggle("all" !== currentEngine.id);
         n.append(o), n.append(target),
         o.find(".magnet-tab.active").attr({ "aria-selected": "true", tabindex: "0" }),
         t.append(n);
         const r = $('<div class="magnet-results"></div>');
         return t.append(r), t.on("click", ".magnet-tab", (n => {
             const i = $(n.target).data("engine");
-            this.currentEngine = this.searchEngines.find((e => e.id === i)), $("#targetBox").attr("href", this.currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e))).toggle("all" !== this.currentEngine.id),
+            currentEngine = engines.find((e => e.id === i)), t.find('[data-jhs-role="magnet-target"]').attr("href", currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e))).toggle("all" !== currentEngine.id),
             localStorage.setItem(a, i), t.find(".magnet-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), $(n.target).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }),
-            this.searchEngine(r, this.currentEngine, e);
+            this.searchEngine(r, currentEngine, e, root);
         })), t.on("keydown", ".magnet-tab", (e => {
             if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(e.key)) return;
             e.preventDefault();
             const n = t.find(".magnet-tab"), a = n.index(e.currentTarget);
             let i = "Home" === e.key ? 0 : "End" === e.key ? n.length - 1 : "ArrowRight" === e.key ? (a + 1) % n.length : (a - 1 + n.length) % n.length;
             n.eq(i).trigger("click").trigger("focus");
-        })), this.searchEngine(r, this.currentEngine, e), t;
+        })), this.searchEngine(r, currentEngine, e, root), t;
     }
-    async searchEngine(e, t, n) {
+    async searchEngine(e, t, n, root = $(document)) {
         e.html(`<div class="magnet-loading">正在从 ${escapeHtml(t.name)} 搜索 "${escapeHtml(n)}"...</div>`);
         const a = `${t.name}_${n}`;
         if (t.search) try {
-            return void this.displayResults(e, await this.applyRuntimeRules(deduplicateMagnetResults(await t.search(n))), t.name);
+            return void this.displayResults(e, await this.applyRuntimeRules(deduplicateMagnetResults(await t.search(n, root))), t.name);
         } catch (error) {
             clog.error(`磁力源 ${t.name} 请求失败`, error);
             return void e.html(`<div class="magnet-error">${escapeHtml(t.name)} 请求失败</div>`);

@@ -55,6 +55,14 @@ describe("StateService durable transactions", () => {
         expect(data.get("activity_log").entries[0].changes[0].fields).toEqual([ "names", "remark" ]);
     });
 
+    it("persists only a valid explicit FC2 source without migrating old records", async () => {
+        const { service, data } = createHarness({ car_list: [], favorite_actresses: [], new_video_decisions: {} });
+        await service.patch("FC2-123", { favorite: true }, { record: { url: "https://mirror.example/video/123", fc2Source: "123av" } });
+        expect(data.get("car_list")[0]).toMatchObject({ carNum: "FC2-123", fc2Source: "123av" });
+        await service.patch("FC2-456", { favorite: true }, { record: { fc2Source: "unknown" } });
+        expect(data.get("car_list")[1]).not.toHaveProperty("fc2Source");
+    });
+
     it.each([
         [ "prepared", false, false, false, false ],
         [ "car-list written", true, false, false, false ],

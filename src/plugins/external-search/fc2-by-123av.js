@@ -87,51 +87,37 @@ class Fc2By123AvPlugin extends BasePlugin {
             e.close();
         }
     }
-    async open123AvFc2Dialog(e, t) {
-        let n = "";
-        await storageManager.getSetting("enableLoadOtherSite", _) === _ && (n = '<div class="movie-panel-info fc2-movie-panel-info jhs-layout-a26bda7d"><strong>第三方站点: </strong></div>');
-        let a = `\n            <div class="movie-detail-container">\n               \x3c!-- <div class="movie-poster-container">\n                    <iframe class="movie-trailer" frameborder="0" allowfullscreen scrolling="no"></iframe>\n                </div>\n                <div class="right-box">--\x3e\n                    <div class="movie-info-container">\n                        <div class="search-loading">加载中...</div>\n                    </div>\n                    \n                    ${n}\n                    \n                    <div class="jhs-layout-f4e719ae">\n                        <button type="button" id="filterBtn" class="jhs-btn jhs-btn--filter"><span>${m}</span></button>\n                        <button type="button" id="favoriteBtn" class="jhs-btn jhs-btn--fav"><span>${v}</span></button>\n                        <button type="button" id="hasDownBtn" class="jhs-btn jhs-btn--down"><span>${y}</span></button>\n                        <button type="button" id="hasWatchBtn" class="jhs-btn jhs-btn--watch"><span>${k}</span></button>\n                        \n                        <button type="button" id="search-subtitle-btn" class="jhs-btn jhs-btn--accent">\n                            <span>字幕 (SubTitleCat)</span>\n                        </button>\n                        <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--accent">\n                            <span>字幕 (迅雷)</span>\n                        </button>\n                    </div>\n                    <div class="message video-panel jhs-layout-a26bda7d">\n                        <div id="magnets-content" class="magnet-links">\n                        </div>\n                    </div>\n                    <div id="reviews-content">\n                    </div>\n                    <div id="related-content">\n                    </div>\n                    <span id="data-actress" class="jhs-layout-6b99de8b"></span>\n               \x3c!-- </div>--\x3e\n            </div>\n        `;
-        layer.open({
-            type: 1,
-            title: e,
-            content: a,
-            area: utils.getDialogArea("workspace"),
-            skin: "movie-detail-layer",
-            scrollbar: !1,
-            success: async (n, a) => {
-                const root = $(n), detailRoot = root.find(".movie-detail-container");
-                organizeJhsOwnedDetailWorkspace(detailRoot), detailStateController.bind({ root: n, layerIndex: a, carNum: e, activityType: "fc2-state", getRecord: () => ({ carNum: e, url: t, names: root.find("#data-actress").text(), publishTime: root.find("#data-publishTime").text() }) }), utils.setupEscClose(a), this.loadData(e, t);
-                let i = e.replace("FC2-", "");
-                $("#magnets-content").append(await this.getBean("MagnetHubPlugin").createMagnetHub(i)),
-                root.find("#search-subtitle-btn").on("click", (t => utils.openPage(`https://subtitlecat.com/index.php?search=${e}`, e, !1, t))),
-                $("#xunLeiSubtitleBtn").on("click", (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(e)));
-                let s = e.replace("FC2-", "");
-                void this.getBean("OtherSitePlugin").loadOtherSite(s, e).catch((error => clog.error("FC2 外部站点加载失败", error)));
-            }
-        });
+    async open123AvFc2Dialog(carNum, url) { return this.getBean("Fc2Plugin").openFc2Dialog(null, carNum, url, { source: "123av" }); }
+    /** 将 123AV 数据填入 Fc2Plugin 创建的固定工作区。 */
+    async loadDetail(context, url) {
+        const infoPromise = this.loadSummary(context, url), imagesPromise = this.getImgList(context.carNum), actressPromise = this.getActressInfo(context.carNum), movieIdPromise = resolveJavDbMovieId(context.carNum), fc2Plugin = this.getBean("Fc2Plugin");
+        void fc2Plugin.configureJavDbWantButton(context, movieIdPromise), void fc2Plugin.mountPanels(context, movieIdPromise), void movieIdPromise.then((movieId => context.isAlive() && fc2Plugin.fetchAndRenderNativeMagnets(context, movieId))).catch((error => {
+            context.isAlive() && fc2Plugin.setState(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.retryResolvedMagnets(context))), clog.error("123AV 磁力关联失败", error);
+        }));
+        imagesPromise.then((images => context.isAlive() && this.getBean("Fc2Plugin").renderGallery(context, images))).catch((error => context.isAlive() && this.getBean("Fc2Plugin").setState(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)))));
+        actressPromise.then((async data => {
+            await infoPromise.catch((() => null));
+            context.isAlive() && this.render123AvActress(context, data);
+        })).catch((error => clog.error("FC2 演员信息加载失败", error)));
+        await Promise.allSettled([ infoPromise, imagesPromise, actressPromise, movieIdPromise ]);
     }
-    async loadData(e, t) {
-        let n = loading();
+    async loadSummary(context, url) {
         try {
-            const {publishDate: a, title: i} = await this.get123AvVideoInfo(t);
-            const articleId = encodeURIComponent(String(e || "").replace("FC2-", ""));
-            $(".movie-info-container").html(`\n                    <h3 class="movie-title jhs-layout-761d3add"><strong class="current-title">${escapeHtml(i || "无标题")}</strong></h3>\n                    <div class="movie-meta jhs-layout-761d3add">\n                        <span><strong>番号: </strong>${escapeHtml(e || "未知")}</span>\n                        <span><strong>年份: </strong>${escapeHtml(a || "未知")}</span>\n                        <span><strong>站点: </strong><a href="https://fc2ppvdb.com/articles/${articleId}" target="_blank">fc2ppvdb</a><a href="https://adult.contents.fc2.com/article/${articleId}/" target="_blank" class="jhs-layout-3fed2a7e">fc2电子市场</a></span>\n                    </div>\n                    <div class="movie-actors jhs-layout-761d3add"><div class="actor-list"><strong>主演: </strong></div></div>\n                    <div class="movie-seller jhs-layout-761d3add"><span><strong>卖家: </strong></span></div>\n                    <div class="movie-gallery jhs-layout-761d3add"><strong>剧照: </strong><div class="image-list"></div></div>\n                    <div id="data-publishTime" class="jhs-layout-6b99de8b">${escapeHtml(a || "")}</div>\n                `),
-            await Promise.all([ this.getImgList(e), this.getActressInfo(e), this.getBean("TranslatePlugin").translate(e, !1) ]);
-        } catch (a) {
-            clog.error(a);
-        } finally {
-            n.close();
+            const info = await this.get123AvVideoInfo(url);
+            if (!context.isAlive()) return null;
+            this.render123AvSummary(context, info), await this.getBean("TranslatePlugin").translate(context.carNum, !1, { root: context.root });
+            return info;
+        } catch (error) {
+            context.isAlive() && this.getBean("Fc2Plugin").setState(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.loadSummary(context, url))), clog.error("123AV 详情加载失败", error);
+            throw error;
         }
     }
-    handleLongImg(e) {
-        utils.loopDetector((() => $(".movie-gallery .image-list").length > 0), (async () => {
-            $(".movie-gallery .image-list").prepend(' <a class="tile-item screen-container jhs-layout-e5d57abb"><div class="jhs-layout-9db87399">正在加载缩略图</div></a> ');
-            const t = normalizeHttpUrl(await this.getBean("ScreenShotPlugin").getScreenshot(e));
-            t && ($(".screen-container").html(`<img src="${escapeHtml(t)}" alt="" loading="lazy" class="jhs-layout-cad980f4">`),
-            $(".screen-container").on("click", (e => {
-                e.stopPropagation(), e.preventDefault(), showImageViewer(e.currentTarget);
-            })));
-        }));
+    async retryResolvedMagnets(context) {
+        try { return await this.getBean("Fc2Plugin").fetchAndRenderNativeMagnets(context, await resolveJavDbMovieId(context.carNum)); } catch (error) { context.isAlive() && this.getBean("Fc2Plugin").setState(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.retryResolvedMagnets(context))); }
+    }
+    render123AvSummary(context, info) {
+        const body = context.root.find('[data-jhs-role="summary-content"]').empty(), title = $('<h1 class="jhs-fc2-title"><strong class="current-title"></strong></h1>');
+        title.find("strong").text(info.title || "无标题"), body.append(title, $('<div class="jhs-fc2-meta"></div>').append($("<span></span>").text(`番号：${context.carNum}`), $("<span></span>").text(`发行：${info.publishDate || "未知"}`)), '<div class="jhs-fc2-actors" data-jhs-role="actors"><strong>主演：</strong><span>正在加载演员…</span></div>', '<div class="jhs-fc2-meta" data-jhs-role="seller"></div>', this.getBean("Fc2Plugin").createSourceLinks(context), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(info.publishDate || ""));
     }
     async get123AvVideoInfo(e) {
         const t = await this.request123Av(e);
@@ -142,48 +128,54 @@ class Fc2By123AvPlugin extends BasePlugin {
         const n = await gmHttp.get(t), a = $(n), i = a.find("div").filter((function() {
             return 0 === $(this).text().trim().indexOf("女優：");
         }));
-        if (0 === i.length || i.length > 1) return void show.error("解析女优信息失败");
+        if (0 === i.length || i.length > 1) return { actors: [], seller: null };
         const s = $(i[0]).find("a");
-        let o = "<strong>主演: </strong>";
+        const actors = [];
         if (s.length > 0) {
-            let e = "";
             s.each(((t, n) => {
-                let a = $(n), i = a.text(), s = a.attr("href");
-                o += `<span class="actor-tag"><a href="https://fc2ppvdb.com${escapeHtml(s)}" target="_blank">${escapeHtml(i)}</a></span>`,
-                e += i + " ";
-            })), $("#data-actress").text(e);
-        } else o += "<span>暂无演员信息</span>";
-        $(".actor-list").html(o);
+                const link = $(n), name = link.text().trim(), url = normalizeHttpUrl(link.attr("href"), "https://fc2ppvdb.com");
+                name && actors.push({ name, url });
+            }));
+        }
         const r = a.find("div").filter((function() {
             return 0 === $(this).text().trim().indexOf("販売者：");
         }));
+        let seller = null;
         if (r.length > 0) {
-            const e = $(r[0]).find("a");
-            if (e.length > 0) {
-                const t = $(e[0]);
-                let n = t.text(), a = t.attr("href");
-                const sellerUrl = normalizeHttpUrl(a, "https://fc2ppvdb.com");
-                $(".movie-seller").empty().append($("<span></span>").append("卖家: ", sellerUrl ? $("<a></a>").attr({ href: sellerUrl, target: "_blank" }).text(n) : document.createTextNode(n)));
-            }
+            const link = $(r[0]).find("a").first();
+            link.length && (seller = { name: link.text().trim(), url: normalizeHttpUrl(link.attr("href"), "https://fc2ppvdb.com") });
         }
+        return { actors, seller };
     }
     async getImgList(e) {
         let t = e.replace("FC2-", ""), n = `https://adult.contents.fc2.com/article/${e.replace("FC2-", "")}/`;
         const a = await gmHttp.get(n, null, {
             referer: n
         });
-        let i = $(a).find(".items_article_SampleImagesArea img").map((function() {
+        return $(a).find(".items_article_SampleImagesArea img").map((function() {
             return normalizeHttpUrl($(this).attr("src"), n);
-        })).get().filter(Boolean), s = "";
-        Array.isArray(i) && i.length > 0 ? s = i.map(((e, t) => `\n                <a href="${escapeHtml(e)}" data-fancybox="movie-gallery" data-caption="剧照 ${t + 1}">\n                    <img src="${escapeHtml(e)}" class="movie-image-thumb" loading="lazy" alt=""/>\n                </a>\n            `)).join("") : $(".movie-gallery").html("<h4>剧照: 暂无剧照</h4>"),
-        $(".image-list").html(s), this.handleLongImg(t);
+        })).get().filter(Boolean);
+    }
+    async reloadImages(context) {
+        try {
+            const images = await this.getImgList(context.carNum);
+            context.isAlive() && this.getBean("Fc2Plugin").renderGallery(context, images);
+        } catch (error) {
+            context.isAlive() && this.getBean("Fc2Plugin").setState(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)));
+        }
+    }
+    render123AvActress(context, data) {
+        const host = context.root.find('[data-jhs-role="actors"]').empty().append("<strong>主演：</strong>");
+        data.actors.length ? data.actors.forEach((actor => host.append($("<a></a>").addClass("jhs-fc2-actor").attr({ href: actor.url, target: "_blank", rel: "noopener noreferrer" }).text(actor.name)))) : host.append($("<span></span>").text("暂无演员信息"));
+        context.root.find('[data-jhs-role="actress-data"]').remove(), context.root.find(".jhs-fc2-summary__body").append($('<span class="jhs-is-hidden" data-jhs-role="actress-data"></span>').text(data.actors.map((actor => actor.name)).join(" ")));
+        if (data.seller) context.root.find('[data-jhs-role="seller"]').empty().append("卖家：", data.seller.url ? $("<a></a>").attr({ href: data.seller.url, target: "_blank", rel: "noopener noreferrer" }).text(data.seller.name) : document.createTextNode(data.seller.name));
     }
     markDataListHtml(e) {
         let t = "";
         return e.forEach((e => {
             const href = normalizeHttpUrl(e.href, "https://123av.com"), imageUrl = normalizeHttpUrl(e.imgSrc, "https://123av.com");
             if (!href) return;
-            t += `\n                <div class="item">\n                    <a href="${escapeHtml(href)}" class="box" title="${escapeHtml(e.title)}">\n                        <div class="cover ">${imageUrl ? `<img loading="lazy" src="${escapeHtml(imageUrl)}" alt="">` : ""}</div>\n                        <div class="video-title"><strong>${escapeHtml(e.carNum)}</strong> ${escapeHtml(e.title)}</div>\n                        <div class="score"></div><div class="meta"></div><div class="jhs-toolbar"></div>\n                    </a>\n                </div>\n            `;
+            t += `\n                <div class="item" data-jhs-fc2-source="123av">\n                    <a href="${escapeHtml(href)}" class="box" title="${escapeHtml(e.title)}">\n                        <div class="cover ">${imageUrl ? `<img loading="lazy" src="${escapeHtml(imageUrl)}" alt="">` : ""}</div>\n                        <div class="video-title"><strong>${escapeHtml(e.carNum)}</strong> ${escapeHtml(e.title)}</div>\n                        <div class="score"></div><div class="meta"></div><div class="jhs-toolbar"></div>\n                    </a>\n                </div>\n            `;
         })), t;
     }
 }

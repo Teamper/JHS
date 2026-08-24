@@ -105,11 +105,7 @@ const pluginManager = function() {
     window.isDetailPage = function() {
         let e = window.location.href;
         return r ? e.split("?")[0].includes("/v/") : !!l && $("#magnet-table").length > 0;
-    }(), window.isListPage = r ? isListPage(window.location, $(".movie-list").length > 0) : !!l && $(".masonry > div .item").length > 0,
-    window.isFc2Page = function() {
-        let e = window.location.href;
-        return e.includes("advanced_search?type=3") || e.includes("advanced_search?type=100");
-    }();
+    }(), window.isListPage = r ? isListPage(window.location, $(".movie-list").length > 0) : !!l && $(".masonry > div .item").length > 0;
     const e = (async () => {
         await runDataMigrations(storageManager), await stateService.recoverPendingTransaction();
     })();

@@ -1560,7 +1560,10 @@
             flex-direction: column;
         }
         .magnet-tabs > div {
+            width: 100%;
+            min-width: 0;
             max-width: 100%;
+            box-sizing: border-box;
             overflow-x: auto;
         }
         .magnet-result {
@@ -2914,6 +2917,7 @@
   }
   __name(runDataMigrations, "runDataMigrations");
   var U = "https://jdforrepam.com/api";
+  var javDbMovieIdRequests = /* @__PURE__ */ new Map();
   function O() {
     const e2 = "jhs_review_ts", t2 = "jhs_review_sign", n2 = Math.floor(Date.now() / 1e3);
     if (n2 - (localStorage.getItem(e2) || 0) <= 20) return localStorage.getItem(t2);
@@ -2921,6 +2925,72 @@
     return localStorage.setItem(e2, n2), localStorage.setItem(t2, a2), a2;
   }
   __name(O, "O");
+  async function resolveJavDbMovieId(carNum) {
+    const normalized = normalizeCarNum(carNum);
+    if (!normalized) return null;
+    if (javDbMovieIdRequests.has(normalized)) return javDbMovieIdRequests.get(normalized);
+    const request = storageManager.cachedRequest(`javdb-movie-id:${normalized}`, 7 * 864e5, (async () => {
+      const response = await gmHttp.get(`${U}/v2/search`, {
+        q: normalized,
+        page: 1,
+        type: "movie",
+        limit: 20,
+        movie_type: "all",
+        from_recent: "false",
+        movie_filter_by: "all",
+        movie_sort_by: "relevance"
+      }, {
+        "user-agent": "Dart/3.5 (dart:io)",
+        "accept-language": "zh-TW",
+        host: "jdforrepam.com",
+        jdsignature: await O()
+      });
+      if (!Array.isArray(response?.data?.movies)) throw new Error(response?.message || "JavDB 番号解析失败");
+      const match = response.data.movies.find(((movie) => normalizeCarNum(movie.number) === normalized));
+      return match?.id ? { __jhsCacheTtl: 7 * 864e5, data: { movieId: String(match.id) } } : { __jhsCacheTtl: 6 * 36e5, data: { miss: true } };
+    })).then(((value) => value?.miss ? null : value?.movieId || null));
+    javDbMovieIdRequests.set(normalized, request);
+    try {
+      return await request;
+    } finally {
+      javDbMovieIdRequests.get(normalized) === request && javDbMovieIdRequests.delete(normalized);
+    }
+  }
+  __name(resolveJavDbMovieId, "resolveJavDbMovieId");
+  async function markJavDbWantWatch(movieId) {
+    const id = String(movieId || "").trim(), encryptedToken = localStorage.getItem("jhs_appAuthorization"), token = encryptedToken ? await decryptData(encryptedToken) : "";
+    if (!token) {
+      const error = new Error("请先登录 JavDB 账号");
+      throw error.code = "LOGIN_REQUIRED", error;
+    }
+    if (!id) throw new Error("JavDB 影片 ID 无效");
+    const boundary = "----jhs-javdb-want-watch", body = [["status", "want_watch"], ["score", "0"], ["content", ""]].map((([name, value]) => `--${boundary}\r
+Content-Disposition: form-data; name="${name}"\r
+\r
+${value}\r
+`)).join("") + `--${boundary}--\r
+`;
+    try {
+      const response = await gmHttp.gmRequest("POST", `${U}/v1/movies/${encodeURIComponent(id)}/reviews`, body, {}, {
+        "user-agent": "Dart/3.5 (dart:io)",
+        "accept-language": "zh-TW",
+        authorization: `Bearer ${token}`,
+        jdsignature: await O(),
+        "content-type": `multipart/form-data; boundary=${boundary}`
+      });
+      if (0 === response?.success) throw response;
+      await storageManager.deleteCachedRequest(`movie-detail:${id}`);
+      return response;
+    } catch (error) {
+      if (401 === error?.status || "JWTVerificationError" === error?.action || /未登录|登录|unauthorized|jwt/i.test(error?.message || "")) {
+        localStorage.removeItem("jhs_appAuthorization");
+        const loginError = new Error("JavDB 登录已失效，请重新登录");
+        throw loginError.code = "LOGIN_REQUIRED", loginError;
+      }
+      throw error instanceof Error ? error : new Error(error?.message || "加入 JavDB 想看失败");
+    }
+  }
+  __name(markJavDbWantWatch, "markJavDbWantWatch");
   var R = /* @__PURE__ */ __name(async (e2, t2 = 1, n2 = 20) => {
     let a2 = `${U}/v1/movies/${e2}/reviews`, i2 = {
       jdSignature: await O()
@@ -3729,7 +3799,8 @@
         const existing = map.get(carNum), metadata = records.get(carNum) || options.record || {}, now = utils.getNowStr(), before = existing ? cloneStateValue(existing) : null;
         const record = existing ? { ...existing, stateFlags: normalizeStateFlags(existing.stateFlags) } : { carNum, url: metadata.url || window.location.href, names: metadata.names || "", createDate: now, stateFlags: createEmptyStateFlags() };
         const fields = [];
-        ["url", "names", "publishTime", "starId", "remark"].forEach(((field) => {
+        ["url", "names", "publishTime", "starId", "remark", "fc2Source"].forEach(((field) => {
+          if ("fc2Source" === field && !["fc2", "123av"].includes(metadata[field])) return;
           if (!Object.prototype.hasOwnProperty.call(metadata, field) || null == metadata[field] || !options.replaceMetadata && "" === metadata[field] || record[field] === metadata[field]) return;
           record[field] = metadata[field], fields.push(field);
         }));
@@ -3958,19 +4029,23 @@
       }), e3);
     }
     __name(e2, "e");
-    document.head.insertAdjacentHTML("beforeend", "\n        <style>\n            .viewer-canvas {\n                overflow: auto !important;\n            }\n            \n            .viewer-close {\n                background: rgba(222, 51, 51, 0.6) !important; /* 状态红 --jhs-status-filter 半透明弱化 */\n            }\n            .viewer-close:hover {\n                background: rgba(222, 51, 51, 0.8) !important;\n            }\n        </style>\n    "), window.showImageViewer = function(t2, n2 = "") {
+    document.head.insertAdjacentHTML("beforeend", "\n        <style>\n            .viewer-canvas {\n                overflow: auto !important;\n            }\n            \n            .viewer-close {\n                background: rgba(222, 51, 51, 0.6) !important; /* 状态红 --jhs-status-filter 半透明弱化 */\n            }\n            .viewer-close:hover {\n                background: rgba(222, 51, 51, 0.8) !important;\n            }\n        </style>\n    "), window.showImageViewer = function(t2, n2 = "", options = {}) {
       let a2 = null, i2 = false;
       "string" == typeof t2 || t2 instanceof String ? (a2 = $('<div class="temporary-container jhs-layout-c8be1ccb">').append(`<img src="${t2}" alt="${n2}">`).appendTo("body"), i2 = true) : a2 = $(t2);
+      const galleryRoot = options.galleryRoot ? $(options.galleryRoot) : null, viewerHost = galleryRoot?.length ? galleryRoot : a2, selectedImage = "string" == typeof t2 || t2 instanceof String ? a2.find("img")[0] : a2[0], galleryImages = viewerHost.find("img").addBack("img").toArray(), initialViewIndex = Math.max(0, galleryImages.indexOf(selectedImage)), hasGallery = galleryImages.length > 1;
       const s2 = {
         zIndex: JHS_Z_INDEX.viewer,
         navbar: false,
+        initialViewIndex,
         zoomOnWheel: false,
         zoomRatio: 0.1,
         toggleOnDblclick: false,
         toolbar: {
+          prev: hasGallery ? 1 : 0,
           zoomIn: 1,
           zoomOut: 1,
           reset: 1,
+          next: hasGallery ? 1 : 0,
           rotateLeft: 0,
           rotateRight: 0,
           flipHorizontal: 0,
@@ -3980,18 +4055,20 @@
         keyboard: false,
         viewed() {
           o2.zoomTo(1.4);
-          let e3 = (o2.viewerData.width - o2.imageData.width) / 2;
-          o2.moveTo(e3, 0);
+          const x = (o2.viewerData.width - o2.imageData.width) / 2, y2 = (o2.viewerData.height - o2.imageData.height) / 2;
+          o2.moveTo(x, y2);
         },
         shown() {
           i2 && a2.remove(), document.documentElement.style.overflow = "hidden", document.body.style.overflow = "hidden", o2.handleKeydown = function(t3) {
+            if (hasGallery && "ArrowLeft" === t3.key) return t3.preventDefault(), t3.stopPropagation(), void o2.prev();
+            if (hasGallery && "ArrowRight" === t3.key) return t3.preventDefault(), t3.stopPropagation(), void o2.next();
             "Escape" !== t3.key && " " !== t3.key || (t3.preventDefault(), t3.stopPropagation(), o2.destroy(), document.removeEventListener("keydown", o2.handleKeydown), document.documentElement.style.overflow = "", document.body.style.overflow = "", e2());
           }, document.addEventListener("keydown", o2.handleKeydown);
         },
         hidden() {
           o2 && o2.handleKeydown && document.removeEventListener("keydown", o2.handleKeydown), o2.destroy(), document.documentElement.style.overflow = "", document.body.style.overflow = "", e2();
         }
-      }, o2 = new Viewer(a2[0], s2);
+      }, o2 = new Viewer(viewerHost[0], s2);
       o2.show();
     };
   })(), window.ImageHoverPreview = class {
@@ -5629,158 +5706,263 @@
       return "Fc2Plugin";
     }
     async initCss() {
-      return "\n            <style>\n                /* 弹层样式 */\n                .movie-detail-layer .layui-layer-title {\n                    font-size: 18px;\n                    color: var(--jhs-text);\n                    background: var(--jhs-surface-2);\n                }\n                \n                \n                /* 容器样式 */\n                .movie-detail-container {\n                    margin: 40px;\n                    height: 100%;\n                    background: var(--jhs-surface);\n                }\n                \n                .movie-poster-container {\n                    flex: 0 0 60%;\n                    padding: 15px;\n                }\n                \n                .right-box {\n                    flex: 1;\n                    padding: 20px;\n                    overflow-y: auto;\n                }\n                \n                /* 预告片iframe */\n                .movie-trailer {\n                    width: 100%;\n                    height: 100%;\n                    min-height: 400px;\n                    background: #000;\n                    border-radius: 4px;\n                }\n                \n                /* 电影信息样式 */\n                .movie-title {\n                    font-size: 24px;\n                    margin-bottom: 15px;\n                    color: var(--jhs-text);\n                }\n                \n                .movie-meta {\n                    margin-bottom: 20px;\n                    color: var(--jhs-text-muted);\n                }\n                \n                .movie-meta span {\n                    margin-right: 15px;\n                }\n                \n                /* 演员列表 */\n                .actor-list {\n                    display: flex;\n                    flex-wrap: wrap;\n                    gap: 8px;\n                    margin-top: 10px;\n                }\n                \n                .actor-tag {\n                    padding: 4px 12px;\n                    background: var(--jhs-surface-2);\n                    border-radius: 15px;\n                    font-size: 12px;\n                    color: var(--jhs-text-muted);\n                }\n                \n                /* 图片列表 */\n                .image-list {\n                    display: flex;\n                    flex-wrap: wrap;\n                    gap: 10px;\n                    margin-top: 10px;\n                }\n                \n                .movie-image-thumb {\n                    width: 120px;\n                    height: 80px;\n                    object-fit: cover;\n                    border-radius: 4px;\n                    cursor: pointer;\n                    transition: transform 0.3s;\n                }\n                \n                .movie-image-thumb:hover {\n                    transform: scale(1.05);\n                }\n                \n                /* 加载中和错误状态 */\n                .search-loading, .movie-error {\n                    padding: 40px;\n                    text-align: center;\n                    color: var(--jhs-text-faint);\n                }\n                \n                .movie-error {\n                    color: var(--jhs-status-filter);\n                }\n                \n                .fancybox-container{\n                    z-index:var(--jhs-z-loading)\n                 }\n                 \n                 \n                 /* 错误提示样式 */\n                .movie-not-found, .movie-error {\n                    text-align: center;\n                    padding: 30px;\n                    color: var(--jhs-text-muted);\n                }\n                \n                .movie-not-found h3, .movie-error h3 {\n                    color: var(--jhs-status-filter);\n                    margin: 15px 0;\n                }\n                \n                .icon-warning, .icon-error {\n                    font-size: 50px;\n                    color: var(--jhs-status-watch);\n                }\n                \n                .icon-error {\n                    color: var(--jhs-status-filter);\n                }\n                \n                .fc2-movie-panel-info .panel-block {\n                    padding: 0 !important;\n                }\n            </style>\n        ";
+      return `<style>
+            .movie-detail-layer .layui-layer-content { min-height:0; overflow:hidden; background:var(--jhs-bg); }
+            .movie-detail-layer .jhs-fc2-dialog-host { height:100%; min-height:0; }
+            .jhs-fc2-workspace { display:grid; grid-auto-rows:max-content; align-content:start; width:min(100%,1440px); min-width:0; margin:0 auto; padding:var(--jhs-space-5); gap:var(--jhs-space-4); box-sizing:border-box; background:var(--jhs-bg); color:var(--jhs-text); }
+            .jhs-fc2-workspace[data-jhs-fc2-mode="dialog"] { height:100%; min-height:0; overflow-x:hidden; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+            .jhs-fc2-section { min-width:0; overflow:hidden; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); }
+            .jhs-fc2-section__header { display:flex; min-height:var(--jhs-control-height); align-items:center; justify-content:space-between; gap:var(--jhs-space-3); padding:var(--jhs-space-3) var(--jhs-space-5); border-bottom:1px solid var(--jhs-border); background:var(--jhs-surface-2); }
+            .jhs-fc2-section__header h2 { margin:0; color:var(--jhs-text); font-size:var(--jhs-font-size-lg); }
+            .jhs-fc2-section__actions { display:flex; align-items:center; gap:var(--jhs-space-2); }
+            .jhs-fc2-section__content { min-width:0; padding:var(--jhs-space-5); }
+            .jhs-fc2-summary { display:grid; grid-template-columns:minmax(220px,34%) minmax(0,1fr); gap:var(--jhs-space-5); }
+            .jhs-fc2-preview { display:grid; min-height:240px; place-items:center; overflow:hidden; border-radius:var(--jhs-radius-sm); background:var(--jhs-surface-2); }
+            .jhs-fc2-preview:empty::after { color:var(--jhs-text-faint); content:"暂无预览"; }
+            .jhs-fc2-preview img { display:block; width:100%; height:100%; max-height:520px; object-fit:contain; }
+            .jhs-fc2-title { margin:0 0 var(--jhs-space-3); color:var(--jhs-text); font-size:clamp(20px,2.4vw,28px); line-height:1.35; }
+            .jhs-fc2-meta { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2) var(--jhs-space-4); margin-bottom:var(--jhs-space-3); color:var(--jhs-text-muted); }
+            .jhs-fc2-actors { display:flex; flex-wrap:wrap; align-items:center; gap:var(--jhs-space-2); }
+            .jhs-fc2-actor { display:inline-flex; padding:var(--jhs-space-1) var(--jhs-space-2); border-radius:var(--jhs-radius-pill); background:var(--jhs-surface-2); color:var(--jhs-text); font-size:var(--jhs-font-size-sm); }
+            .jhs-fc2-toolbar { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); margin-top:var(--jhs-space-4); }
+            .jhs-fc2-gallery-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(112px,144px)); justify-content:start; gap:var(--jhs-space-3); }
+            .jhs-fc2-gallery-item { display:block; width:100%; min-width:0; padding:0; overflow:hidden; border:1px solid transparent; border-radius:var(--jhs-radius-sm); background:var(--jhs-surface-2); aspect-ratio:3/2; cursor:zoom-in; }
+            .jhs-fc2-gallery-item:focus-visible { border-color:var(--jhs-accent); outline:2px solid var(--jhs-accent); outline-offset:2px; }
+            .jhs-fc2-gallery__image { display:block; width:100%; height:100%; object-fit:cover; }
+            .jhs-fc2-screenshot { margin-top:var(--jhs-space-4); overflow:hidden; border-radius:var(--jhs-radius-sm); }
+            .jhs-fc2-screenshot:empty { display:none; margin:0; }
+            .jhs-fc2-screenshot-thumbnail { width:112px; max-width:100%; }
+            .jhs-fc2-resource-stack { display:grid; gap:var(--jhs-space-4); }
+            .jhs-fc2-resource-group { min-width:0; }
+            .jhs-fc2-resource-group + .jhs-fc2-resource-group { padding-top:var(--jhs-space-4); border-top:1px solid var(--jhs-border); }
+            .jhs-fc2-resource-title { margin:0 0 var(--jhs-space-3); color:var(--jhs-text); font-size:var(--jhs-font-size-md); }
+            .jhs-fc2-magnet-item { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:var(--jhs-space-3); padding:var(--jhs-space-3) 0; border-bottom:1px solid var(--jhs-border); }
+            .jhs-fc2-magnet-item:last-child { border-bottom:0; }
+            .jhs-fc2-magnet-name { min-width:0; overflow-wrap:anywhere; }
+            .jhs-fc2-magnet-tags { display:flex; flex-wrap:wrap; gap:var(--jhs-space-1); margin-top:var(--jhs-space-2); }
+            .jhs-fc2-source-links { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); margin-top:var(--jhs-space-3); }
+            .jhs-fc2-resource-group.is-collapsed > [data-jhs-role="magnet-hub"] > [data-jhs-role="magnet-hub-content"] { display:none; }
+            .jhs-fc2-state { padding:var(--jhs-space-5); color:var(--jhs-text-muted); text-align:center; }
+            .jhs-fc2-state.is-error { color:var(--jhs-danger); }
+            @media (max-width:767px) {
+                .jhs-fc2-workspace { padding:var(--jhs-space-3); gap:var(--jhs-space-3); }
+                .jhs-fc2-section__header,.jhs-fc2-section__content { padding:var(--jhs-space-3); }
+                .jhs-fc2-summary { grid-template-columns:1fr; }
+                .jhs-fc2-preview { min-height:200px; }
+                .jhs-fc2-gallery-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--jhs-space-2); }
+                .jhs-fc2-toolbar .jhs-btn,.jhs-fc2-section__actions .jhs-btn { min-height:44px; }
+                .jhs-fc2-magnet-item { grid-template-columns:1fr; }
+            }
+            @media (max-width:420px) { .jhs-fc2-toolbar { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); } .jhs-fc2-toolbar .jhs-btn { width:100%; } }
+            @media (max-width:339px) { .jhs-fc2-toolbar { grid-template-columns:1fr; } }
+            @media (prefers-reduced-motion:reduce) { .jhs-fc2-workspace * { scroll-behavior:auto!important; transition-duration:0.01ms!important; } }
+        </style>`;
     }
-    handle() {
-      let e2 = "/advanced_search?type=3&score_min=0&d=1";
-      if ($('.navbar-item:contains("FC2")').attr("href", e2), $('.tabs a:contains("FC2")').attr("href", e2), o.includes("advanced_search?type=3")) {
-        $("h2.section-title").contents().first().replaceWith("Fc2PPV"), $(".section .container > .box").remove();
-      }
-      if (o.includes("collection_codes?movieId")) {
-        $("section").html("");
-        const e3 = new URLSearchParams(window.location.search);
-        let t2 = e3.get("movieId"), n2 = e3.get("carNum"), a2 = e3.get("url");
-        t2 && n2 && a2 && this.openFc2Dialog(t2, n2, a2);
-      }
+    async handle() {
+      const fc2Href = "/advanced_search?type=3&score_min=0&d=1";
+      $('.navbar-item:contains("FC2")').attr("href", fc2Href), $('.tabs a:contains("FC2")').attr("href", fc2Href);
+      if (o.includes("advanced_search?type=3")) $("h2.section-title").contents().first().replaceWith("Fc2PPV"), $(".section .container > .box").remove();
+      if (!o.includes("collection_codes?movieId")) return;
+      const params = new URLSearchParams(window.location.search), movieId = params.get("movieId"), carNum = params.get("carNum"), url = params.get("url"), explicitSource = params.get("source"), source = ["fc2", "123av"].includes(explicitSource) ? explicitSource : await this.resolveFc2Source({ url }), host = $("section").first().empty();
+      if (!carNum || !url) return void host.append($('<div class="jhs-fc2-state is-error"></div>').text("FC2 详情参数不完整"));
+      const context = this.mountFc2Detail(host, { movieId, carNum, url, source, mode: "page" });
+      $(window).off("pagehide.jhsFc2Detail").one("pagehide.jhsFc2Detail", (() => context.destroy()));
     }
-    openFc2Dialog(e2, t2, n2) {
-      let a2 = t2.replace("FC2-", "");
-      if (n2.includes("123av")) return void this.getBean("Fc2By123AvPlugin").open123AvFc2Dialog(t2, n2);
-      let i2 = `
-            <div class="movie-detail-container">
-                <!--<div class="movie-poster-container">
-                    <iframe class="movie-trailer" frameborder="0" allowfullscreen scrolling="no"></iframe>
-                </div>-->
-               <!-- <div class="right-box">-->
-                    <div class="movie-info-container">
-                        <div class="search-loading">加载中...</div>
-                    </div>
-
-                    <div class="movie-panel-info fc2-movie-panel-info jhs-layout-a26bda7d"><strong>第三方资源: </strong></div>
-
-                    <div class="jhs-layout-ba4750c8">
-                        <button type="button" id="filterBtn" class="jhs-btn jhs-btn--filter"><span>${m}</span></button>
-                        <button type="button" id="favoriteBtn" class="jhs-btn jhs-btn--fav"><span>${v}</span></button>
-                        <button type="button" id="hasDownBtn" class="jhs-btn jhs-btn--down"><span>${y}</span></button>
-                        <button type="button" id="hasWatchBtn" class="jhs-btn jhs-btn--watch"><span>${k}</span></button>
-
-                        <button type="button" id="search-subtitle-btn" class="jhs-btn jhs-btn--accent">
-                            <span>字幕 (SubTitleCat)</span>
-                        </button>
-                        <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--accent">
-                            <span>字幕 (迅雷)</span>
-                        </button>
-                        <button type="button" id="magnetSearchBtn" class="jhs-btn jhs-btn--accent jhs-layout-9fe45cd8">
-                            <span>磁力搜索</span>
-                        </button>
-                    </div>
-                    <div class="message video-panel jhs-layout-a26bda7d">
-                        <div id="magnets-content" class="magnet-links jhs-layout-6d489fc7">
-                            <div class="search-loading">加载中...</div>
-                        </div>
-                    </div>
-                    <div id="reviews-content">
-                    </div>
-                    <div id="related-content">
-                    </div>
-                    <span id="data-actress" class="jhs-layout-6b99de8b"></span>
-                <!--</div>-->
-            </div>
-        `;
-      layer.open({
+    openFc2Dialog(movieId, carNum, url, { source = "fc2" } = {}) {
+      let context = null;
+      return layer.open({
         type: 1,
-        title: t2,
-        content: i2,
+        title: carNum,
+        content: '<div class="jhs-fc2-dialog-host"></div>',
         area: utils.getDialogArea("workspace"),
         skin: "movie-detail-layer",
         scrollbar: false,
-        success: /* @__PURE__ */ __name((i3, s2) => {
-          const root = $(i3), detailRoot = root.find(".movie-detail-container");
-          organizeJhsOwnedDetailWorkspace(detailRoot), detailStateController.bind({ root: i3, layerIndex: s2, carNum: t2, activityType: "fc2-state", getRecord: /* @__PURE__ */ __name(() => ({ carNum: t2, url: n2, names: root.find("#data-actress").text(), publishTime: root.find("#data-releaseDate").text() }), "getRecord") }), void this.loadData(e2, t2).catch(((error) => clog.error("FC2 详情加载失败", error))), root.find("#search-subtitle-btn").on("click", ((e3) => utils.openPage(`https://subtitlecat.com/index.php?search=${t2}`, t2, false, e3))), $("#xunLeiSubtitleBtn").on("click", (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(t2))), $("#magnetSearchBtn").on("click", (async () => {
-            let e3 = await this.getBean("MagnetHubPlugin").createMagnetHub(t2);
-            layer.open({
-              type: 1,
-              title: "磁力搜索",
-              content: '<div id="magnetHubBox"></div>',
-              area: utils.getResponsiveArea(["60%", "80%"]),
-              scrollbar: false,
-              success: /* @__PURE__ */ __name(() => {
-                $("#magnetHubBox").append(e3);
-              }, "success")
-            });
-          })), void this.getBean("OtherSitePlugin").loadOtherSite(a2, t2).catch(((error) => clog.error("FC2 外部站点加载失败", error))), utils.setupEscClose(s2);
+        shadeClose: true,
+        success: /* @__PURE__ */ __name((layerRoot, layerIndex) => {
+          context = this.mountFc2Detail($(layerRoot).find(".jhs-fc2-dialog-host"), { movieId, carNum, url, source, layerIndex, mode: "dialog" }), utils.setupEscClose(layerIndex);
         }, "success"),
-        end() {
-          window.location.href.includes("collection_codes?movieId") && utils.closePage();
-        }
+        end: /* @__PURE__ */ __name(() => context?.destroy(), "end")
       });
     }
-    async loadData(e2, t2) {
-      const n2 = t2.replace("FC2-", "");
-      this.handleLongImg(n2), await Promise.all([this.handleMovieDetail(e2), this.handleMagnets(e2), this.getBean("ReviewPlugin").showReview(e2, $("#reviews-content")), this.getBean("RelatedPlugin").showRelated($("#related-content"), e2)]);
+    /** 统一挂载 FC2 与 123AV-FC2 详情。 */
+    mountFc2Detail(host, options) {
+      const target = $(host), previous = target.data("jhsFc2Context");
+      previous?.destroy?.(), target.empty();
+      const shell = createFc2DetailShell(options).appendTo(target), context = createFc2DetailContext(shell, options);
+      target.data("jhsFc2Context", context), this.initializeWorkspace(context);
+      return context;
     }
-    async handleMovieDetail(e2) {
+    initializeWorkspace(context) {
+      const summary = $('<div class="jhs-fc2-summary"><div class="jhs-fc2-preview" data-jhs-role="main-preview"></div><div class="jhs-fc2-summary__body"><div data-jhs-role="summary-content"><div class="jhs-fc2-state">正在加载影片信息…</div></div></div></div>'), toolbar = $('<div class="jhs-fc2-toolbar" role="toolbar" aria-label="影片操作"></div>');
+      [["filterBtn", "jhs-btn--filter", m], ["favoriteBtn", "jhs-btn--fav", v], ["hasDownBtn", "jhs-btn--down", y], ["hasWatchBtn", "jhs-btn--watch", k]].forEach((([id, className, label]) => toolbar.append($('<button type="button" class="jhs-btn"><span></span></button>').attr("id", id).addClass(className).find("span").text(label).end())));
+      toolbar.append('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="javdb-want" aria-pressed="false" disabled>JavDB 想看（关联中）</button>', '<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="subtitlecat">字幕 (SubtitleCat)</button>', '<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="xunlei">字幕 (迅雷)</button>'), summary.find(".jhs-fc2-summary__body").append(toolbar), context.getSlot("summary").append(summary);
+      const gallery = $('<div class="jhs-fc2-gallery-grid" data-jhs-role="gallery-grid"></div>'), screenshot = $('<div class="jhs-fc2-screenshot" data-jhs-role="screenshot"></div>');
+      gallery.on(`click${context.namespace}`, ".jhs-fc2-gallery-item", ((event) => {
+        const image = $(event.currentTarget).find("img")[0];
+        image && showImageViewer(image, "", { galleryRoot: gallery[0] });
+      }));
+      context.getSlot("gallery").append(gallery, screenshot);
+      const resources = $('<div class="jhs-fc2-resource-stack"></div>'), nativeGroup = this.createResourceGroup("站内磁力", "native-magnets"), sitesGroup = this.createResourceGroup("第三方站点", "other-sites"), hubGroup = this.createResourceGroup("更多磁力来源", "magnet-hub"), hubButton = $('<button type="button" class="jhs-btn jhs-btn--secondary" data-jhs-action="magnet-hub" aria-expanded="false">展开磁力搜索</button>');
+      let magnetHubPromise = null;
+      hubGroup.find('[data-jhs-role="magnet-hub"]').append(hubButton, '<div data-jhs-role="magnet-hub-content"></div>'), resources.append(nativeGroup, sitesGroup, hubGroup), context.getSlot("resources").append(resources);
+      toolbar.on(`click${context.namespace}`, '[data-jhs-action="subtitlecat"]', ((event) => utils.openPage(`https://subtitlecat.com/index.php?search=${encodeURIComponent(context.carNum)}`, context.carNum, false, event))), toolbar.on(`click${context.namespace}`, '[data-jhs-action="xunlei"]', (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(context.carNum)));
+      hubButton.on(`click${context.namespace}`, (async () => {
+        if (!context.isAlive()) return;
+        const box = hubGroup.find('[data-jhs-role="magnet-hub-content"]'), expanded = "true" === hubButton.attr("aria-expanded");
+        if (expanded) return hubGroup.addClass("is-collapsed"), void hubButton.attr("aria-expanded", "false").text("展开磁力搜索");
+        magnetHubPromise || (magnetHubPromise = this.getBean("MagnetHubPlugin").createMagnetHub(context.carNum, { root: context.root }));
+        const hub = await magnetHubPromise;
+        if (context.isAlive() && !box.children().length) box.append(hub);
+        if (context.isAlive()) hubGroup.removeClass("is-collapsed"), hubButton.attr("aria-expanded", "true").text("收起磁力搜索"), box[0]?.scrollIntoView?.({ block: "nearest" });
+      }));
+      detailStateController.bind({ root: context.root, layerIndex: context.layerIndex ?? null, carNum: context.carNum, activityType: "fc2-state", getRecord: /* @__PURE__ */ __name(() => ({ carNum: context.carNum, url: context.url, fc2Source: context.source, names: context.root.find('[data-jhs-role="actress-data"]').text(), publishTime: context.root.find('[data-jhs-role="publish-time"]').text() }), "getRecord") });
+      void this.getBean("FilterTitleKeywordPlugin").bindDetailRoot(context.root, { layerIndex: context.layerIndex ?? null });
+      void this.getBean("OtherSitePlugin").loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: false, isActive: context.isAlive }).then(((box) => {
+        if (context.isAlive() && !box) sitesGroup.remove();
+      })).catch(((error) => {
+        context.isAlive() && sitesGroup.remove(), clog.error("FC2 外部站点加载失败", error);
+      }));
+      void this.getBean("ScreenShotPlugin").loadInto(screenshot, context.carNum.replace("FC2-", ""), { isActive: context.isAlive }).then(((result) => {
+        if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove();
+      }));
+      "123av" === context.source ? void this.getBean("Fc2By123AvPlugin").loadDetail(context, context.url) : void this.loadNativeDetail(context);
+    }
+    createResourceGroup(title, role) {
+      return $('<section class="jhs-fc2-resource-group"><h3 class="jhs-fc2-resource-title"></h3><div></div></section>').find("h3").text(title).end().find("div").attr("data-jhs-role", role).end();
+    }
+    setState(target, message, retry = null) {
+      const host = $(target).empty(), state = $('<div class="jhs-fc2-state"></div>').text(message);
+      retry && state.addClass("is-error").append(" ", $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry)), host.append(state);
+    }
+    async loadNativeDetail(context) {
+      const movieIdPromise = Promise.resolve(context.movieId);
+      this.configureJavDbWantButton(context, movieIdPromise), await Promise.allSettled([this.fetchAndRenderNativeDetail(context), this.fetchAndRenderNativeMagnets(context), this.mountPanels(context, movieIdPromise)]);
+    }
+    /** 绑定当前工作区自己的 JavDB“想看”操作。 */
+    async configureJavDbWantButton(context, movieIdPromise) {
+      const button = context.root.find('[data-jhs-action="javdb-want"]');
       try {
-        const movie = await V(e2), t2 = movie.actors || [], n2 = movie.imgList || [];
-        let a2 = "";
-        if (t2.length > 0) {
-          let actressNames = "";
-          for (let n3 = 0; n3 < t2.length; n3++) {
-            let i3 = t2[n3];
-            a2 += `<span class="actor-tag"><a href="/actors/${escapeHtml(i3.id)}" target="_blank">${escapeHtml(i3.name)}</a></span>`, 0 === i3.gender && (actressNames += String(i3.name || "") + " ");
-          }
-          $("#data-actress").text(actressNames);
-        } else a2 = '<span class="no-data">暂无演员信息</span>';
-        const images = Array.isArray(n2) ? n2.map(((value) => normalizeHttpUrl(value))).filter(Boolean) : [], i2 = images.length > 0 ? images.map(((value, index) => `
-                <a href="${escapeHtml(value)}" data-fancybox="movie-gallery" data-caption="剧照 ${index + 1}">
-                    <img src="${escapeHtml(value)}" class="movie-image-thumb" loading="lazy" alt=""/>
-                </a>
-            `)).join("") : '<div class="no-data">暂无剧照</div>', carNum = String(movie.carNum || ""), safeCarNum = escapeHtml(carNum || "未知"), releaseDate = escapeHtml(movie.releaseDate || "未知"), score = Number.isFinite(Number(movie.score)) ? escapeHtml(String(movie.score)) : "无", duration = Number.isFinite(Number(movie.duration)) ? `${escapeHtml(String(movie.duration))} m` : "无", articleId = encodeURIComponent(carNum.replace("FC2-", ""));
-        $(".movie-info-container").html(`
-                <h3 class="movie-title"><strong class="current-title">${escapeHtml(movie.title || "无标题")}</strong></h3>
-                <div class="movie-meta"><span><strong>番号: </strong>${safeCarNum}</span><span><strong>年份: </strong>${releaseDate}</span><span><strong>评分: </strong>${score}</span><span><strong>时长: </strong>${duration}</span></div>
-                <div class="movie-meta"><span><strong>站点: </strong><a href="https://fc2ppvdb.com/articles/${articleId}" target="_blank">fc2ppvdb</a><a href="https://adult.contents.fc2.com/article/${articleId}/" target="_blank" class="jhs-layout-3fed2a7e">fc2电子市场</a></span></div>
-                <div class="movie-actors"><div class="actor-list"><strong>主演: </strong>${a2}</div></div>
-                <div class="movie-gallery jhs-layout-d2c171b1"><strong>剧照: </strong><div class="image-list">${i2}</div></div>
-                <div id="data-releaseDate" class="jhs-layout-6b99de8b">${escapeHtml(movie.releaseDate || "")}</div>
-            `), await this.getBean("TranslatePlugin").translate(carNum, false);
+        const movieId = await movieIdPromise;
+        if (!context.isAlive()) return;
+        if (!movieId) return void button.prop("disabled", true).text("JavDB 暂无对应作品");
+        button.prop("disabled", false).text("JavDB 想看").off(`click${context.namespace}`).on(`click${context.namespace}`, (() => void this.submitJavDbWant(context, movieId, button)));
       } catch (error) {
-        throw clog.error(error), $(".movie-info-container").html(`<div class="movie-error">加载失败: ${escapeHtml(error.message)}</div>`), error;
+        context.isAlive() && button.prop("disabled", false).text("JavDB 关联失败，重试").off(`click${context.namespace}`).on(`click${context.namespace}`, (() => void this.configureJavDbWantButton(context, resolveJavDbMovieId(context.carNum)))), clog.error("FC2 JavDB 想看关联失败", error);
       }
     }
-    handleLongImg(e2) {
-      utils.loopDetector((() => $(".movie-gallery .image-list").length > 0), (async () => {
-        $(".movie-gallery .image-list").prepend(' <a class="tile-item screen-container jhs-layout-e5d57abb"><div class="jhs-layout-9db87399">正在加载缩略图</div></a> ');
-        const t2 = this.getBean("ScreenShotPlugin"), n2 = await t2.getScreenshot(e2);
-        n2 && await t2.addImg("缩略图", n2);
+    async submitJavDbWant(context, movieId, button) {
+      if (!context.isAlive() || button.data("jhsBusy") || "true" === button.attr("aria-pressed")) return;
+      button.data("jhsBusy", true).attr({ "aria-busy": "true", "aria-disabled": "true" }).text("正在加入想看…");
+      try {
+        await markJavDbWantWatch(movieId);
+        if (!context.isAlive()) return;
+        button.attr({ "aria-pressed": "true", "aria-disabled": "false" }).text("已加入 JavDB 想看"), show.ok("已加入 JavDB 想看");
+      } catch (error) {
+        if (!context.isAlive()) return;
+        if ("LOGIN_REQUIRED" === error?.code) {
+          button.attr("aria-disabled", "false").text("JavDB 想看");
+          const loginPlugin = this.getBean("TOP250Plugin");
+          return loginPlugin?.openLoginDialog({ onSuccess: /* @__PURE__ */ __name(() => this.submitJavDbWant(context, movieId, button), "onSuccess") });
+        }
+        button.attr("aria-disabled", "false").text("JavDB 想看"), show.error(error?.message || "加入 JavDB 想看失败"), clog.error("加入 JavDB 想看失败", error);
+      } finally {
+        context.isAlive() && button.removeData("jhsBusy").removeAttr("aria-busy");
+      }
+    }
+    async fetchAndRenderNativeDetail(context) {
+      try {
+        const movie = await V(context.movieId);
+        if (!context.isAlive()) return;
+        this.renderSummary(context, movie), this.renderGallery(context, movie.imgList || []), await this.getBean("TranslatePlugin").translate(movie.carNum || context.carNum, false, { root: context.root });
+      } catch (error) {
+        context.isAlive() && this.setState(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.fetchAndRenderNativeDetail(context))), clog.error("FC2 详情加载失败", error);
+      }
+    }
+    renderSummary(context, movie) {
+      const body = context.root.find('[data-jhs-role="summary-content"]').empty(), title = $('<h1 class="jhs-fc2-title"><strong class="current-title"></strong></h1>');
+      title.find("strong").text(movie.title || "无标题"), body.append(title);
+      const meta = $('<div class="jhs-fc2-meta"></div>');
+      [`番号：${movie.carNum || context.carNum}`, `发行：${movie.releaseDate || "未知"}`, `评分：${Number.isFinite(Number(movie.score)) ? movie.score : "无"}`, `时长：${Number.isFinite(Number(movie.duration)) ? movie.duration + " 分钟" : "无"}`].forEach(((value) => meta.append($("<span></span>").text(value)))), body.append(meta);
+      const actors = $('<div class="jhs-fc2-actors"><strong>主演：</strong></div>'), actressNames = [];
+      (movie.actors || []).forEach(((actor) => {
+        actors.append($("<a></a>").addClass("jhs-fc2-actor").attr({ href: `/actors/${encodeURIComponent(actor.id)}`, target: "_blank", rel: "noopener noreferrer" }).text(actor.name || "未知演员")), 0 === actor.gender && actressNames.push(actor.name);
+      }));
+      movie.actors?.length || actors.append($("<span></span>").text("暂无演员信息")), body.append(actors, this.createSourceLinks(context), $('<span class="jhs-is-hidden" data-jhs-role="actress-data"></span>').text(actressNames.join(" ")), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(movie.releaseDate || ""));
+    }
+    createSourceLinks(context) {
+      const id = String(context.carNum || "").replace(/^FC2-(?:PPV-)?/i, ""), links = $('<div class="jhs-fc2-source-links" aria-label="影片来源"></div>'), values = [["123av" === context.source ? "123AV 原页面" : "JavDB 原页面", normalizeHttpUrl(context.url)], ["FC2PPVDB", `https://fc2ppvdb.com/articles/${encodeURIComponent(id)}`], ["FC2 市场", `https://adult.contents.fc2.com/article/${encodeURIComponent(id)}/`]];
+      values.forEach((([label, href]) => href && links.append($("<a></a>").addClass("jhs-btn jhs-btn--ghost jhs-btn--sm").attr({ href, target: "_blank", rel: "noopener noreferrer" }).text(label))));
+      return links;
+    }
+    renderGallery(context, images) {
+      const urls = [...new Set((images || []).map(((url) => normalizeHttpUrl(url))).filter(Boolean))], grid = context.root.find('[data-jhs-role="gallery-grid"]').empty(), preview = context.root.find('[data-jhs-role="main-preview"]').empty();
+      if (!urls.length) return this.setState(grid, "暂无剧照");
+      preview.append($("<img>").attr({ src: urls[0], alt: `${context.carNum} 预览`, loading: "eager" }));
+      urls.forEach(((url, index) => grid.append($('<button type="button" class="jhs-btn jhs-fc2-gallery-item"></button>').attr("aria-label", `查看剧照 ${index + 1}`).append($("<img>").addClass("jhs-fc2-gallery__image").attr({ src: url, alt: `剧照 ${index + 1}`, loading: "lazy" })))));
+    }
+    async fetchAndRenderNativeMagnets(context, movieId = context.movieId) {
+      const host = context.root.find('[data-jhs-role="native-magnets"]');
+      this.setState(host, "正在加载站内磁力…");
+      try {
+        if (!movieId) return this.setState(host, "JavDB 暂无对应作品");
+        const response = await gmHttp.get(`${U}/v1/movies/${movieId}/magnets`, null, { jdSignature: await O() }), magnets = response?.data?.magnets || [];
+        if (!context.isAlive()) return;
+        host.empty();
+        if (!magnets.length) return this.setState(host, "暂无站内磁力");
+        const highlighter = this.getBean("HighlightMagnetPlugin"), assessments = [];
+        magnets.forEach(((item) => {
+          const hash = normalizeBtihHash(item.hash);
+          if (!hash) return;
+          const magnet = `magnet:?xt=urn:btih:${hash}`, assessment = highlighter.assessMagnet({ title: item.name, hasHdTag: !!item.hd, hasSubtitleTag: !!item.cnsub, date: item.created_at, seeders: Number(item.seeders) || 0 }), row = $('<div class="jhs-fc2-magnet-item"></div>').attr("data-jhs-high-quality", String(assessment.highQuality)), info = $('<div class="jhs-fc2-magnet-name"></div>'), actions = $('<div class="jhs-toolbar"></div>'), tags = $('<div class="jhs-fc2-magnet-tags"></div>');
+          assessments.push(assessment), tags.append($("<span></span>").addClass("jhs-badge").attr("title", `磁力质量评分 ${assessment.score.total}`).text(`${assessment.grade} ${assessment.score.total}`)), item.hd && tags.append('<span class="jhs-badge">高清</span>'), item.cnsub && tags.append('<span class="jhs-badge">字幕</span>');
+          info.append($("<a></a>").attr("href", magnet).text(item.name || magnet), $("<div></div>").addClass("jhs-fc2-meta").text(`${(Number(item.size || 0) / 1024).toFixed(2)} GB · ${Number(item.files_count) || 0} 个文件${item.created_at ? ` · ${item.created_at}` : ""}`), tags), actions.append($('<button type="button" class="jhs-btn jhs-btn--secondary copy-to-clipboard">复制</button>').attr("data-clipboard-text", magnet), $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-offline-btn">离线</button>').attr({ "data-resource": magnet, "data-jhs-offline-owner": "fc2" })), host.append(row.append(info, actions));
+        }));
+        await this.bindNativeMagnetFilter(context, host, assessments.some(((item) => item.highQuality)));
+      } catch (error) {
+        context.isAlive() && this.setState(host, "站内磁力加载失败", (() => void this.fetchAndRenderNativeMagnets(context, movieId))), clog.error("FC2 磁力加载失败", error);
+      }
+    }
+    async bindNativeMagnetFilter(context, host, hasMatch) {
+      const section = context.getSection("resources"), actions = section.find(".jhs-fc2-section__actions"), old = actions.find('[data-jhs-action="filter-native-magnets"]');
+      old.remove();
+      const button = $('<button type="button" class="jhs-btn jhs-btn--ghost jhs-btn--sm" data-jhs-action="filter-native-magnets"></button>'), apply = /* @__PURE__ */ __name((enabled) => {
+        host.find(".jhs-fc2-magnet-item").show();
+        enabled && hasMatch && host.find('.jhs-fc2-magnet-item[data-jhs-high-quality="false"]').hide();
+        button.attr("aria-pressed", String(enabled && hasMatch)).text(hasMatch ? enabled ? "显示全部磁力" : "过滤低质量" : "暂无可过滤项").prop("disabled", !hasMatch);
+      }, "apply");
+      actions.append(button), apply(await storageManager.getSetting("enableMagnetsFilter", _) === _), button.on(`click${context.namespace}`, (async () => {
+        const enabled = "true" !== button.attr("aria-pressed");
+        apply(enabled), await storageManager.saveSettingItem("enableMagnetsFilter", enabled ? _ : C);
       }));
     }
-    async handleMagnets(e2) {
+    async mountPanels(context, movieIdPromise) {
       try {
-        const requestUrl = `${U}/v1/movies/${e2}/magnets`, n2 = {
-          jdSignature: await O()
-        };
-        const magnets = (await gmHttp.get(requestUrl, null, n2)).data.magnets || [];
-        let html = "";
-        for (const [index, item] of magnets.entries()) {
-          const hash = normalizeBtihHash(item.hash);
-          if (!hash) {
-            clog.warn("忽略无效 FC2 磁力哈希", item.hash);
-            continue;
-          }
-          const magnet = `magnet:?xt=urn:btih:${hash}`, size = Number(item.size), filesCount = Number(item.files_count);
-          html += `
-                    <div class="item columns is-desktop ${index % 2 === 0 ? "odd" : ""}"><div class="magnet-name column is-four-fifths"><a href="${magnet}" title="右键点击并选择“复制链接地址”"><span class="name">${escapeHtml(item.name || "")}</span><br><span class="meta">${Number.isFinite(size) ? (size / 1024).toFixed(2) : "0.00"}GB, ${Number.isFinite(filesCount) ? filesCount : 0}个文件</span><br><div class="jhs-toolbar">${item.hd ? '<span class="jhs-badge jhs-badge--accent">高清</span>' : ""}${item.cnsub ? '<span class="jhs-badge jhs-badge--watch">字幕</span>' : ""}</div></a></div><div class="jhs-toolbar column"><button class="jhs-btn jhs-btn--secondary copy-to-clipboard" data-clipboard-text="${magnet}" type="button">复制</button><button class="jhs-btn jhs-btn--secondary jhs-offline-btn" data-resource="${magnet}" data-jhs-offline-owner="fc2" type="button">离线</button></div><div class="date column"><span class="time">${escapeHtml(item.created_at || "")}</span></div></div>`;
-        }
-        $("#magnets-content").html(html || '<span class="no-data">暂无磁力信息</span>');
+        const movieId = await movieIdPromise;
+        if (!context.isAlive()) return;
+        if (!movieId) return this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related"), this.setState(context.getSlot("reviews"), "JavDB 暂无对应作品"), this.setState(context.getSlot("related"), "JavDB 暂无对应作品");
+        this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related");
+        await Promise.allSettled([this.getBean("ReviewPlugin").showReview(movieId, context.getSlot("reviews"), { ownedSection: context.getSection("reviews"), isActive: context.isAlive }), this.getBean("RelatedPlugin").showRelated(context.getSlot("related"), movieId, { ownedSection: context.getSection("related"), isActive: context.isAlive })]);
       } catch (error) {
-        throw clog.error(error), $("#magnets-content").html(`<div class="movie-error">加载失败: ${escapeHtml(error.message)}</div>`), error;
+        if (!context.isAlive()) return;
+        this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related");
+        const retry = /* @__PURE__ */ __name(() => void this.mountPanels(context, resolveJavDbMovieId(context.carNum)), "retry");
+        this.setState(context.getSlot("reviews"), "评论关联失败", retry), this.setState(context.getSlot("related"), "相关清单关联失败", retry), clog.error("FC2 JavDB 关联失败", error);
       }
     }
-    async openFc2Page(e2, t2, n2, navigation = { newTab: true }) {
-      const a2 = this.getBean("OtherSitePlugin");
-      let i2 = await a2.getJavDbUrl();
-      utils.openPage(`${i2}/users/collection_codes?movieId=${e2}&carNum=${encodeURIComponent(t2)}&url=${encodeURIComponent(n2)}`, t2, true, navigation);
+    clearOwnedPanel(context, name) {
+      context.getSlot(name).empty(), context.getSection(name).find(".jhs-fc2-section__actions").empty();
+    }
+    async resolveFc2Source(record = {}) {
+      if (["fc2", "123av"].includes(record.fc2Source)) return record.fc2Source;
+      try {
+        return new URL(record.url, window.location.origin).hostname === new URL(await this.getBean("OtherSitePlugin").getAv123Url()).hostname ? "123av" : "fc2";
+      } catch (error) {
+        return "fc2";
+      }
+    }
+    async openFc2Page(movieId, carNum, url, navigation = { newTab: true }, { source = "fc2" } = {}) {
+      const baseUrl = await this.getBean("OtherSitePlugin").getJavDbUrl();
+      utils.openPage(`${baseUrl}/users/collection_codes?movieId=${movieId || ""}&carNum=${encodeURIComponent(carNum)}&url=${encodeURIComponent(url)}&source=${encodeURIComponent(source)}`, carNum, true, navigation);
     }
   };
   __name(_Fc2Plugin, "Fc2Plugin");
@@ -5819,6 +6001,12 @@
     getQualitySignals(title, hasSubtitleTag = false) {
       const value = String(title || "").toLowerCase(), resolution = /(?:4k|2160p|1080p|720p)/.exec(value)?.[0] || "", subtitle = hasSubtitleTag || /(?:-c\b|-u(?:c)?\b|chinese|中字|字幕)/.test(value);
       return { resolution, subtitle, recognized: !!resolution || subtitle, highQuality: "4k" === resolution || "2160p" === resolution || subtitle };
+    }
+    /** 返回与 DOM 无关的磁力质量结果，供自有详情工作区复用。 */
+    assessMagnet({ title = "", hasHdTag = false, hasSubtitleTag = false, date = null, seeders = 0 } = {}) {
+      const signals = this.getQualitySignals(title, hasSubtitleTag), highQuality = hasHdTag || signals.highQuality;
+      const score = calcMagnetScore({ title, date, seeders, resolution: hasHdTag && !signals.resolution ? "1080p" : signals.resolution, hasSubtitle: signals.subtitle });
+      return { ...signals, highQuality, score, grade: score.total >= 70 ? "高" : score.total >= 40 ? "中" : "低" };
     }
     updateFilterHint(hasMatch) {
       $("#enable-magnets-filter").removeClass("do-hide").attr("data-tip", hasMatch ? "仅显示识别到的高质量或字幕磁力" : "未识别到可过滤项，当前未隐藏磁力");
@@ -6311,7 +6499,7 @@ ${error.stack}` : "");
         insert: 0
       }) : window.location.href = s2;
     }
-    openLoginDialog() {
+    openLoginDialog({ onSuccess = null } = {}) {
       layer.open({
         type: 1,
         title: "JavDB",
@@ -6364,7 +6552,7 @@ ${error.stack}` : "");
                 if (1 !== n3) throw clog.error("登录失败", e4), new Error(e4.message);
                 {
                   let n4 = e4.data.token;
-                  await localStorage.setItem(me, await encryptData(n4)), show.ok("登录成功"), layer.close(t2), window.location.href = "/advanced_search?handleTop=1&period=daily";
+                  await localStorage.setItem(me, await encryptData(n4)), show.ok("登录成功"), layer.close(t2), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
                 }
               }
             })).catch(((e4) => {
@@ -6536,14 +6724,14 @@ ${error.stack}` : "");
     async initCss() {
       return `
             <style>
-                #otherSiteBox, #settingsArea { margin-top:var(--jhs-space-2); user-select:none; }
-                .jhs-site-list, #siteCheckboxes { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); }
+                [data-jhs-other-site-box], [data-jhs-other-site-settings], #otherSiteBox, #settingsArea { margin-top:var(--jhs-space-2); user-select:none; }
+                .jhs-site-list, [data-jhs-role="site-checkboxes"], #siteCheckboxes { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); }
                 .site-btn { position:relative; }
                 .site-btn::before { width:7px; height:7px; border-radius:50%; background:var(--jhs-brand-color,var(--jhs-text-faint)); content:""; }
-                #javTrailersBtn { --jhs-brand-color:#d4a72c; } #123AvBtn { --jhs-brand-color:#e05d44; }
-                #jableBtn { --jhs-brand-color:#c94556; } #avgleBtn { --jhs-brand-color:#4677c8; }
-                #missAvBtn { --jhs-brand-color:#8b5cf6; } #supJavBtn { --jhs-brand-color:#ef6c35; }
-                #javDbBtn { --jhs-brand-color:#2684ff; } #javBusBtn { --jhs-brand-color:#cc3d3d; } #fanzaBtn { --jhs-brand-color:#ea4c89; }
+                [data-jhs-site-id="javTrailersBtn"],#javTrailersBtn { --jhs-brand-color:#d4a72c; } [data-jhs-site-id="123AvBtn"],#123AvBtn { --jhs-brand-color:#e05d44; }
+                [data-jhs-site-id="jableBtn"],#jableBtn { --jhs-brand-color:#c94556; } [data-jhs-site-id="avgleBtn"],#avgleBtn { --jhs-brand-color:#4677c8; }
+                [data-jhs-site-id="missAvBtn"],#missAvBtn { --jhs-brand-color:#8b5cf6; } [data-jhs-site-id="supJavBtn"],#supJavBtn { --jhs-brand-color:#ef6c35; }
+                [data-jhs-site-id="javDbBtn"],#javDbBtn { --jhs-brand-color:#2684ff; } [data-jhs-site-id="javBusBtn"],#javBusBtn { --jhs-brand-color:#cc3d3d; } [data-jhs-site-id="fanzaBtn"],#fanzaBtn { --jhs-brand-color:#ea4c89; }
                 .site-btn.is-checking { opacity:.65; pointer-events:none; }
                 .site-btn.is-available { border-color:var(--jhs-status-down-text); background:var(--jhs-status-down-tint); }
                 .site-btn.is-unavailable { border-color:var(--jhs-status-filter-text); background:var(--jhs-status-filter-tint); }
@@ -6559,56 +6747,53 @@ ${error.stack}` : "");
     }
     async loadOtherSite(e2, t2, n2 = {}) {
       if ("yes" !== await storageManager.getSetting("enableLoadOtherSite", "yes")) return;
-      $("#otherSiteBox,#settingsArea").remove();
+      const root = n2.root ? $(n2.root) : $(document), target = n2.target ? $(n2.target) : root.find(".movie-panel-info,.container .info").first();
+      if (!target.length || n2.isActive && !n2.isActive()) return;
+      root.find("#otherSiteBox,#settingsArea,[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
       e2 = normalizeCarNum(e2) || this.getPageInfo().carNum;
-      const a2 = this.getEnabledSites(), i2 = `
-            <div id="otherSiteBox" class="panel-block">
-                <div class="jhs-site-list">
-                    ${this.siteConfigs.map(((e3) => {
-        if (e3.sourceCarNum = t2, e3.condition && false === e3.condition(e3.sourceCarNum)) return "";
-        return `<a target="_blank" class="site-btn jhs-btn jhs-btn--secondary ${a2.includes(e3.id) ? "" : "jhs-is-hidden"}" id="${e3.id}"><span>${e3.id.replace("Btn", "")}</span></a>`;
-      })).join("")}
-                    <button type="button" id="detectOtherSiteBtn" class="site-btn jhs-btn jhs-btn--primary"><span>检测外部站点</span></button>
-                    <button type="button" id="settingSiteBtn" class="site-btn jhs-btn jhs-btn--secondary"><span>设置</span></button>
-                </div>
-            </div>
-            <div id="settingsArea" class="panel-block jhs-is-hidden"><div id="siteCheckboxes"></div></div>
-        `;
-      $(".movie-panel-info").append(i2), $(".container .info").append(i2);
-      if (!e2) return $("#otherSiteBox .site-btn").removeAttr("href").attr({ "aria-disabled": "true", title: "番号不可用" }), $("#detectOtherSiteBtn").prop("disabled", true), this.renderSettingsArea(), this.setupEventListeners(), void clog.warn("跳过第三方站点解析：番号不可用");
-      $("#javTrailersBtn").on("click", (async (t3) => {
-        t3.preventDefault();
-        let o2 = $("#javTrailersBtn").attr("href"), r2 = o2 + "?handle=1";
-        t3 && (t3.ctrlKey || t3.metaKey) && (r2 = o2), utils.openPage(r2, e2, false, t3);
-      })), await Promise.all(this.siteConfigs.map((async (t3) => {
-        t3.condition && false === t3.condition(t3.sourceCarNum) || await this.prepareSiteLink(e2, t3);
-      }))), this.renderSettingsArea(), this.setupEventListeners(), $("#detectOtherSiteBtn").off("click").on("click", ((t3) => {
-        t3.preventDefault(), this.detectOtherSites(e2);
-      })), n2.autoDetect && await this.detectOtherSites(e2);
+      const enabled = this.getEnabledSites(), configs = this.siteConfigs.map(((config) => ({ ...config, sourceCarNum: t2 }))), view = { root, target, configs, carNum: e2, isActive: "function" === typeof n2.isActive ? n2.isActive : () => true };
+      const box = $('<div class="panel-block" data-jhs-other-site-box><div class="jhs-site-list"></div></div>'), list = box.find(".jhs-site-list"), settings = $('<div class="panel-block jhs-is-hidden" data-jhs-other-site-settings><div data-jhs-role="site-checkboxes"></div></div>');
+      configs.forEach(((config) => {
+        if (config.condition && false === config.condition(config.sourceCarNum)) return;
+        const button = $('<a target="_blank" class="site-btn jhs-btn jhs-btn--secondary"><span></span></a>').attr("data-jhs-site-id", config.id).toggleClass("jhs-is-hidden", !enabled.includes(config.id));
+        button.find("span").text(config.id.replace("Btn", "")), list.append(button);
+      }));
+      list.append('<button type="button" class="site-btn jhs-btn jhs-btn--primary" data-jhs-role="detect-sites"><span>检测外部站点</span></button>', '<button type="button" class="site-btn jhs-btn jhs-btn--secondary" data-jhs-role="site-settings"><span>设置</span></button>'), target.append(box, settings), view.box = box, view.settings = settings;
+      if (!e2) return box.find(".site-btn").removeAttr("href").attr({ "aria-disabled": "true", title: "番号不可用" }), box.find('[data-jhs-role="detect-sites"]').prop("disabled", true), this.renderSettingsArea(view), this.setupEventListeners(view), void clog.warn("跳过第三方站点解析：番号不可用");
+      box.find('[data-jhs-site-id="javTrailersBtn"]').on("click", ((event) => {
+        event.preventDefault();
+        const original = $(event.currentTarget).attr("href"), destination = event.ctrlKey || event.metaKey ? original : original + "?handle=1";
+        utils.openPage(destination, e2, false, event);
+      })), await Promise.all(configs.map((async (config) => {
+        config.condition && false === config.condition(config.sourceCarNum) || await this.prepareSiteLink(e2, config, view);
+      }))), this.renderSettingsArea(view), this.setupEventListeners(view), box.find('[data-jhs-role="detect-sites"]').off("click").on("click", ((event) => {
+        event.preventDefault(), this.detectOtherSites(e2, view);
+      })), n2.autoDetect && await this.detectOtherSites(e2, view);
+      return box;
     }
-    async prepareSiteLink(e2, t2) {
-      const n2 = $(`#${t2.id}`);
+    async prepareSiteLink(e2, t2, view = { root: $(document), isActive: /* @__PURE__ */ __name(() => true, "isActive") }) {
+      const n2 = view.root.find(`[data-jhs-site-id="${t2.id}"],#${t2.id}`).first();
       if (!(e2 = normalizeCarNum(e2))) return n2.removeAttr("href").attr({ "aria-disabled": "true", title: "番号不可用" }), void this.setSiteState(n2, "idle");
       if (t2.initUrl) return void (n2.attr("href", t2.initUrl(e2)), this.setSiteState(n2, "idle"), n2.attr("title", "点击前往外部搜索页"));
       try {
         const a2 = await t2.getBaseUrl(), i2 = t2.searchPath(a2, e2);
-        n2.attr("href", i2), n2.attr("title", "点击前往外部搜索页；点击检测按钮后才自动检测"), this.setSiteState(n2, "idle");
+        view.isActive() && (n2.attr("href", i2), n2.attr("title", "点击前往外部搜索页；点击检测按钮后才自动检测"), this.setSiteState(n2, "idle"));
       } catch (a2) {
-        n2.attr("title", "外部站点地址未配置或不可用"), this.setSiteState(n2, "domain-error");
+        view.isActive() && (n2.attr("title", "外部站点地址未配置或不可用"), this.setSiteState(n2, "domain-error"));
       }
     }
-    async detectOtherSites(e2) {
-      const t2 = $("#detectOtherSiteBtn"), n2 = t2.text();
+    async detectOtherSites(e2, view = { root: $(document), configs: this.siteConfigs, isActive: /* @__PURE__ */ __name(() => true, "isActive") }) {
+      const t2 = view.root.find('[data-jhs-role="detect-sites"],#detectOtherSiteBtn').first(), n2 = t2.text();
       if (!(e2 = normalizeCarNum(e2))) return t2.prop("disabled", true), void clog.warn("跳过第三方站点检测：番号不可用");
-      return t2.text("检测中").prop("disabled", true).addClass("is-checking"), await Promise.all(this.siteConfigs.map((async (t3) => {
-        t3.condition && false === t3.condition(t3.sourceCarNum) || await this.handleSite(e2, t3);
-      }))), t2.text(n2).prop("disabled", false).removeClass("is-checking");
+      return t2.text("检测中").prop("disabled", true).addClass("is-checking"), await Promise.all(view.configs.map((async (t3) => {
+        t3.condition && false === t3.condition(t3.sourceCarNum) || await this.handleSite(e2, t3, view);
+      }))), view.isActive() && t2.text(n2).prop("disabled", false).removeClass("is-checking");
     }
     setSiteState(e2, t2) {
       e2.removeClass("is-checking is-available is-unavailable is-domain-error"), "idle" !== t2 && e2.addClass(`is-${t2}`);
     }
-    async handleSite(e2, t2) {
-      const n2 = $(`#${t2.id}`);
+    async handleSite(e2, t2, view = { root: $(document), isActive: /* @__PURE__ */ __name(() => true, "isActive") }) {
+      const n2 = view.root.find(`[data-jhs-site-id="${t2.id}"],#${t2.id}`).first();
       n2.removeAttr("href").find(".site-tag").remove(), this.setSiteState(n2, "checking");
       if (t2.initUrl && n2.attr("href", t2.initUrl(e2)), t2.noHandle && true === t2.noHandle) {
         const t3 = "jhs_other_site_dmm", a2 = (localStorage.getItem(t3) ? JSON.parse(localStorage.getItem(t3)) : {})[e2];
@@ -6625,7 +6810,9 @@ ${error.stack}` : "");
           n2.attr("title", `站点已熔断，${_breaker.remaining}秒后重试`), this.setSiteState(n2, "domain-error");
           return;
         }
-        const c2 = await storageManager.cachedRequest(`other-site:${t2.id}:${e2}`, 864e5, (() => gmHttp.get(l2, null, t2.headers, true, t2.requestOptions || {}))), d2 = utils.htmlTo$dom(c2), h2 = [];
+        const c2 = await storageManager.cachedRequest(`other-site:${t2.id}:${e2}`, 864e5, (() => gmHttp.get(l2, null, t2.headers, true, t2.requestOptions || {})));
+        if (!view.isActive()) return;
+        const d2 = utils.htmlTo$dom(c2), h2 = [];
         d2.find(t2.itemSelector).each(((n3, a3) => {
           const i3 = $(a3);
           const itemText = t2.findCarNumOrTitle(i3);
@@ -6699,30 +6886,25 @@ ${error.stack}` : "");
     saveEnabledSites(e2) {
       localStorage.setItem("jhs_enabled_sites", JSON.stringify(e2));
     }
-    renderSettingsArea() {
-      const e2 = this.getEnabledSites(), t2 = document.getElementById("siteCheckboxes");
-      t2 && (t2.innerHTML = this.siteConfigs.map(((t3) => {
-        const n2 = e2.includes(t3.id);
-        return `
-                <label class="jhs-site-option" for="checkbox-${t3.id}">
-                    <input type="checkbox" id="checkbox-${t3.id}" data-site-id="${t3.id}" ${n2 ? "checked" : ""}>
-                    <span>${t3.id.replace("Btn", "")}</span>
-                </label>
-            `;
-      })).join(""));
+    renderSettingsArea(view = { root: $(document), configs: this.siteConfigs }) {
+      const enabled = this.getEnabledSites(), target = view.root.find('[data-jhs-role="site-checkboxes"],#siteCheckboxes').first().empty();
+      view.configs.forEach(((config) => {
+        const input = $('<input type="checkbox">').attr("data-site-id", config.id).prop("checked", enabled.includes(config.id));
+        target.append($('<label class="jhs-site-option"></label>').append(input, $("<span></span>").text(config.id.replace("Btn", ""))));
+      }));
     }
-    setupEventListeners() {
-      const $settingsArea = $("#settingsArea");
-      $("#settingSiteBtn").off("click.jhsOtherSite").on("click.jhsOtherSite", (() => {
+    setupEventListeners(view = { root: $(document), configs: this.siteConfigs, carNum: null }) {
+      const $settingsArea = view.root.find("[data-jhs-other-site-settings],#settingsArea").first();
+      view.root.find('[data-jhs-role="site-settings"],#settingSiteBtn').off("click.jhsOtherSite").on("click.jhsOtherSite", (() => {
         $settingsArea.toggleClass("jhs-is-hidden");
       })), $settingsArea.off("change.jhsOtherSite").on("change.jhsOtherSite", 'input[type="checkbox"]', (async (event) => {
         const siteId = $(event.currentTarget).attr("data-site-id");
         try {
           if (event.currentTarget.checked) {
-            $(`#${siteId}`).removeClass("jhs-is-hidden");
-            const carNum = this.getPageInfo().carNum, site = this.siteConfigs.find(((item) => item.id === siteId));
-            site && await this.prepareSiteLink(carNum, site);
-          } else $(`#${siteId}`).addClass("jhs-is-hidden");
+            view.root.find(`[data-jhs-site-id="${siteId}"],#${siteId}`).removeClass("jhs-is-hidden");
+            const carNum = view.carNum || this.getPageInfo().carNum, site = view.configs.find(((item) => item.id === siteId));
+            site && await this.prepareSiteLink(carNum, site, view);
+          } else view.root.find(`[data-jhs-site-id="${siteId}"],#${siteId}`).addClass("jhs-is-hidden");
           this.saveEnabledSites($settingsArea.find('input[type="checkbox"]:checked').map(((index, input) => $(input).attr("data-site-id"))).get());
         } catch (error) {
           clog.warn(`外部站点 ${siteId || "unknown"} 状态更新失败`, error);
@@ -7001,7 +7183,7 @@ ${error.stack}` : "");
   var DetailPageButtonPlugin = _DetailPageButtonPlugin;
   var _HistoryPlugin = class _HistoryPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null);
+      super(...arguments), i(this, "tableObj", null), i(this, "historyRoot", null), i(this, "historySelectAll", false), i(this, "historyExcludedCarNums", /* @__PURE__ */ new Set()), i(this, "historySorters", []), i(this, "historyFilteredCount", 0), i(this, "historySelectionSyncing", false);
     }
     getName() {
       return "HistoryPlugin";
@@ -7011,6 +7193,8 @@ ${error.stack}` : "");
             <style>
                 .jhs-history-layout { display:flex; flex-direction:column; height:100%; min-height:0; padding:var(--jhs-space-3) var(--jhs-space-4); overflow:hidden; }
                 #filterBox, #allSelectBox { display:flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-2); margin-bottom:var(--jhs-space-2); }
+                .jhs-history-selection-summary { color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
+                .jhs-history-select-all { width:18px; height:18px; accent-color:var(--jhs-accent); cursor:pointer; }
                 #table-container { flex:1; min-height:0; overflow-x:hidden; }
                 .sub-btns { position:relative; display:inline-block; }
                 .sub-btns-menu { position:absolute; top:calc(100% + var(--jhs-space-1)); right:0; z-index:var(--jhs-z-popover); display:none; min-width:156px; padding:var(--jhs-space-1); overflow:hidden; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
@@ -7076,7 +7260,7 @@ ${error.stack}` : "");
         anim: -1,
         success: /* @__PURE__ */ __name(async (e3) => {
           const root = $(e3);
-          this.historyRoot = root, JhsSelect.enhance(root);
+          this.historyRoot = root, root.find("#allSelectBox").prepend('<span id="historySelectionSummary" class="jhs-history-selection-summary" role="status" aria-live="polite"></span>'), this.resetHistorySelection(false), JhsSelect.enhance(root);
           await this.loadTableData(), root.on("click.jhsHistory", "#clearSearchbtn", (async (e4) => {
             root.find("#searchCarNum").val(""), JhsSelect.setValue(root.find("#dataType"), "all"), await this.reloadTable(), root.find("#allSelectBox").hide();
           })).on("focusout keydown", "#searchCarNum", (async (e4) => {
@@ -7108,13 +7292,13 @@ ${error.stack}` : "");
           })), this.bindHistoryActions(root);
         }, "success"),
         end: /* @__PURE__ */ __name(() => {
-          this.historyRoot?.off(".jhsHistory"), this.historyRoot = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null);
+          this.resetHistorySelection(), this.historyRoot?.off(".jhsHistory"), this.historyRoot = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null);
         }, "end")
       });
     }
     async showHistoryView(view) {
       const stateView = "state" === view;
-      this.historyRoot?.find("#filterBox,#allSelectBox").toggle(stateView), this.tableObj?.destroy(), this.tableObj = null;
+      this.resetHistorySelection(), this.historyRoot?.find("#filterBox,#allSelectBox").toggle(stateView), this.tableObj?.destroy(), this.tableObj = null;
       return stateView ? this.loadTableData() : "activity" === view ? this.renderActivityHistory() : this.renderOfflineHistory();
     }
     async renderActivityHistory() {
@@ -7133,8 +7317,75 @@ ${error.stack}` : "");
         host.append($('<article class="jhs-card"></article>').append($("<strong></strong>").text(`${item.providerName || item.providerId} · ${item.status}`), $("<p></p>").text(`${item.carNum || "未关联番号"} · ${new Date(item.createdAt).toLocaleString()}${item.retryOf ? ` · 重试自 ${item.retryOf}` : ""}`), $("<p></p>").text(item.errorMessage || item.resource), actions));
       }));
     }
-    async reloadTable() {
-      this.tableObj.deselectRow(), this.tableObj.setPage(1);
+    async reloadTable(resetSelection = true) {
+      resetSelection && this.resetHistorySelection(), await this.tableObj?.setPage(1);
+    }
+    normalizeHistoryCarNum(carNum) {
+      return normalizeCarNum(carNum) || String(carNum || "").trim().toUpperCase();
+    }
+    /** 清空 History 的全选、排除项和当前页选择。 */
+    resetHistorySelection(deselectRows = true) {
+      this.historySelectAll = false, this.historyExcludedCarNums.clear();
+      if (deselectRows && this.tableObj) {
+        this.historySelectionSyncing = true;
+        try {
+          this.tableObj.deselectRow();
+        } finally {
+          this.historySelectionSyncing = false;
+        }
+      }
+      this.updateHistorySelectionUi();
+    }
+    createHistorySelectAllCheckbox() {
+      const checkbox = document.createElement("input");
+      return checkbox.type = "checkbox", checkbox.className = "jhs-history-select-all", checkbox.setAttribute("aria-label", "选择当前筛选条件下的全部记录"), checkbox.addEventListener("change", (() => {
+        checkbox.checked ? (this.historySelectAll = true, this.historyExcludedCarNums.clear(), this.syncHistoryPageSelection()) : this.resetHistorySelection();
+      })), checkbox;
+    }
+    syncHistoryPageSelection() {
+      if (!this.tableObj || !this.historySelectAll) return void this.updateHistorySelectionUi();
+      const currentRows = this.tableObj.getData?.() || [], selectedIds = currentRows.map(((item) => item.carNum)).filter(((carNum) => !this.historyExcludedCarNums.has(this.normalizeHistoryCarNum(carNum))));
+      this.historySelectionSyncing = true;
+      try {
+        this.tableObj.deselectRow(), selectedIds.length && this.tableObj.selectRow(selectedIds);
+      } finally {
+        this.historySelectionSyncing = false;
+      }
+      this.updateHistorySelectionUi();
+    }
+    updateHistoryRowSelection(row, selected) {
+      if (!this.historySelectAll || this.historySelectionSyncing) return void this.updateHistorySelectionUi();
+      const carNum = this.normalizeHistoryCarNum(row?.getData?.().carNum);
+      carNum && (selected ? this.historyExcludedCarNums.delete(carNum) : this.historyExcludedCarNums.add(carNum)), this.updateHistorySelectionUi();
+    }
+    getHistorySelectionSummary() {
+      if (this.historySelectAll) {
+        const excluded = this.historyExcludedCarNums.size, selected = Math.max(0, this.historyFilteredCount - excluded);
+        return {
+          count: selected,
+          text: excluded ? `已选择当前筛选结果 ${selected} 条，已排除 ${excluded} 条` : `已选择当前筛选结果 ${selected} 条`
+        };
+      }
+      const count = this.tableObj?.getSelectedData?.().length || 0;
+      return {
+        count,
+        text: `已选择当前页 ${count} 条`
+      };
+    }
+    updateHistorySelectionUi() {
+      if (!this.historyRoot) return;
+      const summary = this.getHistorySelectionSummary(), batchBox = this.historyRoot.find("#allSelectBox"), filterBox = this.historyRoot.find("#filterBox");
+      this.historyRoot.find("#historySelectionSummary").text(summary.text), summary.count > 0 ? (filterBox.hide(), batchBox.show()) : (filterBox.show(), batchBox.hide());
+      this.historyRoot.find(".jhs-history-select-all").each(((index, element) => {
+        element.checked = this.historySelectAll, element.indeterminate = this.historySelectAll ? this.historyExcludedCarNums.size > 0 : summary.count > 0;
+      }));
+    }
+    /** 解析批量操作实际要处理的当前页或完整筛选结果。 */
+    async getHistoryBatchSelection() {
+      if (!this.historySelectAll) return this.tableObj?.getSelectedData?.() || [];
+      const rows = await this.getFilteredHistoryData(this.historySorters), available = new Set(rows.map(((item) => this.normalizeHistoryCarNum(item.carNum))));
+      for (const carNum of this.historyExcludedCarNums) available.has(carNum) || this.historyExcludedCarNums.delete(carNum);
+      return this.historyFilteredCount = rows.length, rows.filter(((item) => !this.historyExcludedCarNums.has(this.normalizeHistoryCarNum(item.carNum))));
     }
     bindHistoryActions(root) {
       root.on("click.jhsHistory", (function(e2) {
@@ -7170,58 +7421,69 @@ ${error.stack}` : "");
           carNum: a2,
           url: i2
         }).catch(((error) => clog.error("历史详情打开失败", error)));
-      })), root.on("click.jhsHistory", ".multiple-history-deleteBtn, .multiple-history-filterBtn, .multiple-history-favoriteBtn, .multiple-history-hasDownBtn, .multiple-history-hasWatchBtn", ((e2) => {
+      })), root.on("click.jhsHistory", ".multiple-history-deleteBtn, .multiple-history-filterBtn, .multiple-history-favoriteBtn, .multiple-history-hasDownBtn, .multiple-history-hasWatchBtn", (async (e2) => {
         e2.preventDefault(), e2.stopPropagation();
         const t2 = $(e2.currentTarget);
-        let n2 = this.tableObj.getSelectedData(), a2 = "", i2 = "";
-        t2.hasClass("multiple-history-filterBtn") ? (a2 = "屏蔽", i2 = d) : t2.hasClass("multiple-history-favoriteBtn") ? (a2 = "收藏", i2 = h) : t2.hasClass("multiple-history-hasDownBtn") ? (a2 = "已下载", i2 = g) : t2.hasClass("multiple-history-hasWatchBtn") ? (a2 = "已观看", i2 = p) : t2.hasClass("multiple-history-deleteBtn") && (a2 = "移除", i2 = "delete"), utils.q(e2, `当前已勾选${n2.length}条数据, 是否全标记为 ${a2}?`, (async () => {
+        let n2 = await this.getHistoryBatchSelection(), a2 = "", i2 = "";
+        t2.hasClass("multiple-history-filterBtn") ? (a2 = "屏蔽", i2 = d) : t2.hasClass("multiple-history-favoriteBtn") ? (a2 = "收藏", i2 = h) : t2.hasClass("multiple-history-hasDownBtn") ? (a2 = "已下载", i2 = g) : t2.hasClass("multiple-history-hasWatchBtn") ? (a2 = "已观看", i2 = p) : t2.hasClass("multiple-history-deleteBtn") && (a2 = "移除", i2 = "delete");
+        if (!n2.length) return void show.info("请先选择要处理的记录");
+        const selectionText = this.historySelectAll ? this.historyExcludedCarNums.size ? `当前筛选结果中已选择 ${n2.length} 条，排除 ${this.historyExcludedCarNums.size} 条` : `当前筛选结果中已选择全部 ${n2.length} 条` : `当前页已选择 ${n2.length} 条`;
+        utils.q(e2, `${selectionText}，是否标记为${a2}？`, (async () => {
           let e3 = loading();
           try {
             if ("delete" === i2) {
               const e4 = n2.map(((e5) => e5.carNum)), t3 = await stateService.remove(e4);
-              t3.changed.length > 0 ? show.ok(`已成功删除 ${t3.changed.length} 个番号`) : show.error("提供的番号中没有一个存在于列表中。");
+              if (!t3.changed.length) return void show.error("提供的番号中没有一个存在于列表中。");
+              show.ok(`已成功删除 ${t3.changed.length} 个番号`);
             } else {
               const flag = legacyActionToFlag(i2);
               await stateService.patch(n2.map(((item) => item.carNum)), { [flag]: true }, { type: "history-batch-state", records: n2 }), show.ok("操作成功");
             }
-            this.tableObj.deselectRow(), await this.reloadTable();
+            this.resetHistorySelection(), await this.reloadTable(false);
           } catch (t3) {
-            clog.error(t3);
+            clog.error(t3), show.error("操作失败，请稍后重试");
           } finally {
             e3.close();
           }
         }));
       }));
     }
-    async getDataList(e2, t2, n2) {
+    /** 返回应用当前搜索、状态筛选和排序后的完整 History 数据。 */
+    async getFilteredHistoryData(sorters = this.historySorters) {
       let a2 = await storageManager.getCarList();
-      this.allCount = a2.length, this.filterCount = 0, this.favoriteCount = 0, this.hasDownCount = 0, this.hasWatchCount = 0, this.waitCheckCount = 0, a2.forEach(((e3) => {
-        const flags = normalizeStateFlags(e3.stateFlags);
+      this.allCount = a2.length, this.filterCount = 0, this.favoriteCount = 0, this.hasDownCount = 0, this.hasWatchCount = 0, this.waitCheckCount = 0, a2.forEach(((e2) => {
+        const flags = normalizeStateFlags(e2.stateFlags);
         flags.blocked && this.filterCount++, flags.favorite && this.favoriteCount++, flags.downloaded && this.hasDownCount++, flags.watched && this.hasWatchCount++, hasAnyState(flags) || this.waitCheckCount++;
       })), this.historyRoot.find('#dataType option[value="all"]').text(`所有 (${this.allCount})`), this.historyRoot.find('#dataType option[value="waitCheck"]').text(`待鉴定 (${this.waitCheckCount})`), this.historyRoot.find('#dataType option[value="filter"]').text(`${u} (${this.filterCount})`), this.historyRoot.find('#dataType option[value="favorite"]').text(`${b} (${this.favoriteCount})`), this.historyRoot.find('#dataType option[value="hasDown"]').text(`${y} (${this.hasDownCount})`), this.historyRoot.find('#dataType option[value="hasWatch"]').text(`${k} (${this.hasWatchCount})`);
       const i2 = this.historyRoot.find("#dataType").val();
       const flagByFilter = { filter: "blocked", favorite: "favorite", hasDown: "downloaded", hasWatch: "watched" };
-      let s2 = "all" === i2 ? a2 : "waitCheck" === i2 ? a2.filter(((e3) => !hasAnyState(e3.stateFlags))) : a2.filter(((e3) => normalizeStateFlags(e3.stateFlags)[flagByFilter[i2]]));
+      let s2 = "all" === i2 ? a2 : "waitCheck" === i2 ? a2.filter(((e2) => !hasAnyState(e2.stateFlags))) : a2.filter(((e2) => normalizeStateFlags(e2.stateFlags)[flagByFilter[i2]]));
       const o2 = this.historyRoot.find("#searchCarNum").val().trim();
       if (o2) {
-        let e3 = o2.toLowerCase().replace("-c", "").replace("-uc", "").replace("-4k", "");
-        s2 = s2.filter(((t3) => {
-          const n3 = t3.carNum.toLowerCase().includes(e3);
-          const a3 = (t3.names ? t3.names : "").toLowerCase().includes(e3);
-          return n3 || a3;
+        let e2 = o2.toLowerCase().replace("-c", "").replace("-uc", "").replace("-4k", "");
+        s2 = s2.filter(((t2) => {
+          const n2 = t2.carNum.toLowerCase().includes(e2);
+          const a3 = (t2.names ? t2.names : "").toLowerCase().includes(e2);
+          return n2 || a3;
         }));
       }
-      if (n2 && n2.length > 0) {
-        const e3 = n2[0], t3 = e3.field, a3 = e3.dir;
-        s2.sort(((e4, n3) => {
-          const i3 = e4[t3], s3 = n3[t3], o3 = null == i3 || "" === i3, r3 = null == s3 || "" === s3;
-          return o3 && !r3 ? 1 : !o3 && r3 ? -1 : o3 && r3 ? 0 : i3 < s3 ? "asc" === a3 ? -1 : 1 : i3 > s3 ? "asc" === a3 ? 1 : -1 : 0;
+      if (sorters && sorters.length > 0) {
+        const e2 = sorters[0], t2 = e2.field, a3 = e2.dir;
+        s2.sort(((e3, n2) => {
+          const i3 = e3[t2], s3 = n2[t2], o3 = null == i3 || "" === i3, r2 = null == s3 || "" === s3;
+          return o3 && !r2 ? 1 : !o3 && r2 ? -1 : o3 && r2 ? 0 : i3 < s3 ? "asc" === a3 ? -1 : 1 : i3 > s3 ? "asc" === a3 ? 1 : -1 : 0;
         }));
       }
-      const r2 = s2.length, l2 = Math.ceil(r2 / t2), c2 = (e2 - 1) * t2, m2 = c2 + t2;
-      return s2 = s2.slice(c2, m2), {
+      return s2;
+    }
+    async getDataList(e2, t2, n2) {
+      this.historySorters = Array.isArray(n2) ? n2.map(((sorter) => ({
+        ...sorter
+      }))) : [];
+      const rows = await this.getFilteredHistoryData(this.historySorters), r2 = rows.length, l2 = Math.ceil(r2 / t2), c2 = (e2 - 1) * t2, m2 = c2 + t2;
+      return this.historyFilteredCount = r2, {
         maxPage: l2,
-        dataList: s2,
+        dataList: rows.slice(c2, m2),
         totalCount: r2
       };
     }
@@ -7245,7 +7507,7 @@ ${error.stack}` : "");
           data: "dataList"
         },
         paginationSize: 50,
-        paginationSizeSelector: [50, 100, 1e3, 99999],
+        paginationSizeSelector: [50, 100, 1e3],
         paginationCounter: /* @__PURE__ */ __name((e2, t2, n2, a2, i2) => `共 ${a2} 条记录`, "paginationCounter"),
         responsiveLayout: "collapse",
         responsiveLayoutCollapse: true,
@@ -7257,14 +7519,11 @@ ${error.stack}` : "");
         index: "carNum",
         columns: [{
           formatter: "rowSelection",
-          titleFormatter: "rowSelection",
+          titleFormatter: /* @__PURE__ */ __name(() => this.createHistorySelectAllCheckbox(), "titleFormatter"),
           hozAlign: "center",
           headerSort: false,
           responsive: 0,
           width: 40,
-          titleFormatterParams: {
-            rowRange: "active"
-          },
           cellClick: /* @__PURE__ */ __name((e2, t2) => {
             t2.getRow().toggleSelect();
           }, "cellClick")
@@ -7385,22 +7644,28 @@ ${error.stack}` : "");
             }
           }
         }
-      }), this.tableObj.on("rowSelectionChanged", ((e2, t2, n2, a2) => {
-        const i2 = this.historyRoot.find("#allSelectBox"), s2 = this.historyRoot.find("#filterBox");
-        e2 && e2.length > 0 ? (s2.hide(), i2.show()) : (s2.show(), i2.hide());
+      }), this.tableObj.on("dataProcessed", (() => {
+        this.historySelectAll ? this.syncHistoryPageSelection() : this.updateHistorySelectionUi();
+      })), this.tableObj.on("rowSelected", ((row) => {
+        this.updateHistoryRowSelection(row, true);
+      })), this.tableObj.on("rowDeselected", ((row) => {
+        this.updateHistoryRowSelection(row, false);
+      })), this.tableObj.on("rowSelectionChanged", (() => {
+        this.updateHistorySelectionUi();
       })), this.tableObj.on("rowDblClick", (function(e2, t2) {
         t2.toggleSelect();
       }));
     }
     handleDelete(e2, t2) {
       utils.q(e2, `是否移除${t2}?`, (async () => {
-        await stateService.remove(t2), this.getBean("ListPagePlugin").showCarNumBox(t2), await this.reloadTable(null);
+        await stateService.remove(t2), this.getBean("ListPagePlugin").showCarNumBox(t2), await this.reloadTable();
       }));
     }
     async handleClickDetail(e2, t2) {
       if (r) if (t2.carNum.includes("FC2-")) {
         const e3 = this.parseMovieId(t2.url);
-        this.getBean("Fc2Plugin").openFc2Dialog(e3, t2.carNum, t2.url);
+        const plugin = this.getBean("Fc2Plugin"), source = await plugin.resolveFc2Source(t2);
+        plugin.openFc2Dialog(e3, t2.carNum, t2.url, { source });
       } else {
         if (!t2.url) return void window.open("/search?q=" + t2.carNum, "_blank");
         utils.openPage(t2.url, t2.carNum, false, e2);
@@ -7409,7 +7674,8 @@ ${error.stack}` : "");
         let n2 = t2.url;
         if (n2.includes("javdb")) if (t2.carNum.includes("FC2-")) {
           const e3 = this.parseMovieId(n2);
-          await this.getBean("Fc2Plugin").openFc2Page(e3, t2.carNum, n2);
+          const plugin = this.getBean("Fc2Plugin"), source = await plugin.resolveFc2Source(t2);
+          await plugin.openFc2Page(e3, t2.carNum, n2, { newTab: true }, { source });
         } else window.open(n2, "_blank");
         else utils.openPage(t2.url, t2.carNum, false, e2);
       }
@@ -7521,37 +7787,22 @@ ${error.stack}` : "");
       if (l) {
         const carNumber = this.getPageInfo().carNum;
         if (!carNumber) return void clog.warn("跳过 JavBus 评论解析：番号不可用");
-        const movies = await (async (value) => {
-          const url = `${U}/v2/search`, headers = {
-            "user-agent": "Dart/3.5 (dart:io)",
-            "accept-language": "zh-TW",
-            host: "jdforrepam.com",
-            jdsignature: await O()
-          }, params = {
-            q: value,
-            page: 1,
-            type: "movie",
-            limit: 1,
-            movie_type: "all",
-            from_recent: "false",
-            movie_filter_by: "all",
-            movie_sort_by: "relevance"
-          };
-          return (await gmHttp.get(url, params, headers)).data.movies;
-        })(carNumber);
-        const match = movies.find(((movie) => movie.number.toLowerCase() === carNumber.toLowerCase()));
-        match && await this.showReview(match.id, this.getBean("DetailWorkspacePlugin")?.getSlot("reviews"));
+        const movieId = await resolveJavDbMovieId(carNumber);
+        movieId && await this.showReview(movieId, this.getBean("DetailWorkspacePlugin")?.getSlot("reviews"));
       }
     }
-    async showReview(movieId, target) {
+    async showReview(movieId, target, options = {}) {
+      const isActive = "function" === typeof options.isActive ? options.isActive : () => true;
       const enabled = await storageManager.getSetting("enableLoadReview", _), host = target?.length ? target : this.getBean("DetailWorkspacePlugin")?.getSlot("reviews") || $("#magnets-content");
+      if (!isActive() || !host?.length) return $();
       const existing = host.children('[data-jhs-panel="reviews"]').filter(((_2, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
       if (existing.length) return existing;
       const panel = $('<section class="jhs-review-panel" data-jhs-panel="reviews"></section>').attr("data-jhs-movie-id", String(movieId));
       const header = $('<header class="jhs-panel-header"><h3>评论</h3></header>');
       const toggle = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-panel-toggle jhs-review-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>');
       const state = { movieId, panel, floorIndex: 1, loaded: false, loading: false, page: 1 };
-      header.append(toggle), panel.append(header, '<div class="jhs-review-list jhs-review-container"></div>', '<div class="jhs-panel-footer jhs-review-footer"></div>'), host.append(panel), this.bindRightClickFilter();
+      header.append(toggle), options.ownedSection ? options.ownedSection.find('[data-jhs-section-actions="reviews"]').first().append(toggle) : panel.append(header), panel.append('<div class="jhs-review-list jhs-review-container"></div>', '<div class="jhs-panel-footer jhs-review-footer"></div>'), host.append(panel), this.bindRightClickFilter();
+      state.isActive = isActive;
       this.updateToggle(toggle, enabled === _);
       toggle.on("click", ((event) => {
         event.preventDefault(), event.stopPropagation();
@@ -7565,7 +7816,7 @@ ${error.stack}` : "");
       toggle.attr("aria-expanded", String(expanded)), toggle.find(".toggle-text").text(expanded ? "折叠" : "展开"), toggle.find(".toggle-icon").text(expanded ? "▲" : "▼");
     }
     async fetchAndDisplayReviews(state) {
-      if (state.loading) return;
+      if (state.loading || !state.isActive?.()) return;
       state.loading = true;
       const { movieId, panel } = state, container = panel.find(".jhs-review-container"), footer = panel.find(".jhs-review-footer");
       container.empty().append($('<div class="jhs-panel-state"></div>').text("获取评论中...")), footer.empty();
@@ -7578,12 +7829,12 @@ ${error.stack}` : "");
         state.loading = false;
         return void this.renderRetry(container, "获取评论失败", (() => this.fetchAndDisplayReviews(state)));
       }
+      if (!state.isActive?.()) return void (state.loading = false);
       state.loading = false, state.loaded = true;
       container.empty();
       if (!reviews.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无评论"));
       const keywords = await storageManager.getReviewFilterKeywordList();
-      await this.displayReviews(state, reviews, container, keywords), reviews.length === pageSize && R(movieId, 2, pageSize).catch((() => {
-      }));
+      await this.displayReviews(state, reviews, container, keywords);
       reviews.length === pageSize ? this.bindLoadMore(state, pageSize, keywords, container, footer) : footer.append($('<div class="jhs-panel-end"></div>').text("已加载全部评论"));
     }
     renderRetry(container, message, retry) {
@@ -7596,9 +7847,12 @@ ${error.stack}` : "");
       const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-review-load-more">加载更多评论</button>'), end = $('<div class="jhs-panel-end jhs-review-end">已加载全部评论</div>').hide();
       footer.empty().append(button, end);
       button.on("click", (async () => {
-        button.text("加载中...").prop("disabled", true), state.page++;
+        const nextPage = state.page + 1;
+        button.text("加载中...").prop("disabled", true);
         try {
-          const reviews = await R(state.movieId, state.page, pageSize);
+          const reviews = await R(state.movieId, nextPage, pageSize);
+          if (!state.isActive?.()) return;
+          state.page = nextPage;
           await this.displayReviews(state, reviews, container, keywords), reviews.length < pageSize ? (button.remove(), end.show()) : button.text("加载更多评论").prop("disabled", false);
         } catch (error) {
           clog.error("加载更多评论失败:", error), button.text("加载失败，请重试").prop("disabled", false);
@@ -7668,19 +7922,22 @@ ${error.stack}` : "");
       return "FilterTitleKeywordPlugin";
     }
     async handle() {
-      if (!isDetailPage && !isFc2Page) return;
+      if (!isDetailPage) return;
+      await this.bindDetailRoot(document);
+    }
+    async bindDetailRoot(root, { layerIndex = null } = {}) {
       if (await storageManager.getSetting("enableTitleSelectFilter", _) !== _) return;
-      let e2;
-      r ? e2 = ".title strong, .current-title" : l && (e2 = "h3"), utils.rightClick(document.body, e2, ((e3) => {
+      const host = $(root), selector = r ? ".title strong, .current-title" : l ? "h3" : ".current-title, .origin-title, .jhs-detail-title";
+      host.off("contextmenu.jhsTitleFilter", selector).on("contextmenu.jhsTitleFilter", selector, ((e2) => {
         const t2 = window.getSelection().toString();
         if (t2) {
-          e3.preventDefault();
+          e2.preventDefault();
           let n2 = {
-            clientX: e3.clientX,
-            clientY: e3.clientY + 80
+            clientX: e2.clientX,
+            clientY: e2.clientY + 80
           };
           utils.q(n2, `是否屏蔽标题关键词 ${t2}?`, (async () => {
-            await storageManager.saveTitleFilterKeyword(t2), await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" }), utils.closePage();
+            await storageManager.saveTitleFilterKeyword(t2), await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" }), utils.closePage({ root: host, layerIndex });
           }));
         }
       }));
@@ -8137,7 +8394,7 @@ ${error.stack}` : "");
     async handle() {
       if (!window.isListPage) return;
       await this.createMenuBtn(), this.bindEvent();
-      const e2 = await storageManager.getSetting("autoPage"), t2 = this.isHitShowPage();
+      const e2 = await storageManager.getSetting("autoPage"), t2 = this.supportsLiveSorting();
       $("#sort-toggle-btn").prop("disabled", e2 === _ && !t2).attr("title", e2 === _ && !t2 ? "瀑布流模式仅支持默认排序" : "选择列表排序方式"), (e2 !== _ || t2) && await this.sortItems();
     }
     async createMenuBtn() {
@@ -8293,7 +8550,7 @@ ${error.stack}` : "");
       }));
     }
     async sortItems() {
-      const e2 = this.isHitShowPage();
+      const e2 = this.supportsLiveSorting();
       if (!e2 && (o.includes("handle") || o.includes("advanced_search"))) return;
       const s2 = await storageManager.getSetting("autoPage");
       if (c || s2 === _ && !e2) return;
@@ -8307,7 +8564,7 @@ ${error.stack}` : "");
         const card = $(element), originalIndex = Number(card.attr("data-original-index")) || 0;
         if ("default" === t2) return { element, key: originalIndex, originalIndex, index };
         if ("rateCount" === t2) {
-          const explicit = Number(card.attr("data-jhs-rate-count")), match = card.find(".score .value").text().match(/由(\d+)人/);
+          const explicit = Number(card.attr("data-jhs-rate-count")), match = card.find(".score").text().replaceAll(",", "").match(/(?:由\s*)?(\d+)\s*人(?:评价)?/);
           return { element, key: Number.isFinite(explicit) ? explicit : match ? Number(match[1]) : 0, originalIndex, index };
         }
         const value = card.attr("data-jhs-publish-time") || card.find(".meta").text().trim() || card.find("date").filter((function() {
@@ -8321,6 +8578,12 @@ ${error.stack}` : "");
     }
     isHitShowPage() {
       return isHitShowPage(window.location);
+    }
+    isFc2ListPage() {
+      return r && "/advanced_search" === window.location.pathname && "3" === new URLSearchParams(window.location.search).get("type");
+    }
+    supportsLiveSorting() {
+      return this.isHitShowPage() || this.isFc2ListPage();
     }
     async openWaitCheck() {
       let e2 = this.getSelector();
@@ -8456,16 +8719,8 @@ ${error.stack}` : "");
     return "recent7d" === normalizedFilter && recent;
   }
   __name(matchesQuickFilter, "matchesQuickFilter");
-  function shouldHideInDefaultView(flags, settings) {
-    if (settings.showAllItem === _) return false;
-    const activeVisibility = [[flags.favorite, settings.showFavoriteItem ?? _], [flags.downloaded, settings.showHasDownItem ?? _], [flags.watched, settings.showHasWatchItem ?? _]].filter(((entry) => entry[0]));
-    return activeVisibility.length > 0 && activeVisibility.every(((entry) => entry[1] !== _));
-  }
-  __name(shouldHideInDefaultView, "shouldHideInDefaultView");
-  function shouldShowItem({ filter, flags, visibilityReasons, settingHidden, recent }) {
-    const normalizedFilter = normalizeQuickFilterKey(filter);
-    if (!matchesQuickFilter(normalizedFilter, flags, { visibilityReasons, recent })) return false;
-    return "all" !== normalizedFilter || !settingHidden;
+  function shouldShowItem({ filter, flags, visibilityReasons, recent }) {
+    return matchesQuickFilter(filter, flags, { visibilityReasons, recent });
   }
   __name(shouldShowItem, "shouldShowItem");
   var _ListPagePlugin = class _ListPagePlugin extends BasePlugin {
@@ -8533,8 +8788,8 @@ ${error.stack}` : "");
     applyVisibility(items = null) {
       const e2 = this.activeQuickFilter || "waitCheck", t2 = this.getSelector().itemSelector;
       (items ? $(items) : $(t2)).each((function() {
-        const t3 = $(this), flags = normalizeStateFlags(JSON.parse(t3.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(t3.attr("data-jhs-visibility") || "{}"), settingHidden = "yes" === t3.attr("data-jhs-setting-hide"), recent = "yes" === t3.attr("data-jhs-recent");
-        shouldShowItem({ filter: e2, flags, visibilityReasons, settingHidden, recent }) ? t3.show() : t3.hide();
+        const t3 = $(this), flags = normalizeStateFlags(JSON.parse(t3.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(t3.attr("data-jhs-visibility") || "{}"), recent = "yes" === t3.attr("data-jhs-recent");
+        shouldShowItem({ filter: e2, flags, visibilityReasons, recent }) ? t3.show() : t3.hide();
       }));
     }
     setQuickFilter(filter, { syncUi = true } = {}) {
@@ -8716,7 +8971,7 @@ ${error.stack}` : "");
       utils.time("累计耗费时间"), utils.time("读取数据耗时");
       const { titleKeywords: n2, settings: s2, carMap: m2, recentCarNums: recent, actorCarNumToNameMap: f, actressCarNumToNameMap: v2 } = await this.getFilterContext(), o2 = utils.time("读取数据耗时");
       utils.time("组装数据耗时");
-      const b2 = utils.time("组装数据耗时"), k2 = (null == s2 ? void 0 : s2.showFavoriteItem) ?? _, S = (null == s2 ? void 0 : s2.showHasDownItem) ?? _, T2 = (null == s2 ? void 0 : s2.showHasWatchItem) ?? _, I2 = (null == s2 ? void 0 : s2.showAllItem) ?? C, P2 = (null == s2 ? void 0 : s2.tagPosition) || "rightTop";
+      const b2 = utils.time("组装数据耗时"), P2 = (null == s2 ? void 0 : s2.tagPosition) || "rightTop";
       const O2 = n2.filter(((e3) => e3));
       this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0, this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0, this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时");
       const R2 = [];
@@ -8725,8 +8980,8 @@ ${error.stack}` : "");
         let t2 = $(e2[n3]);
         if (l && t2.find(".avatar-box").length > 0) continue;
         const { carNum: a2, title: i2 } = this.findCarNumAndHref(t2), record = m2.get(a2), flags = normalizeStateFlags(record?.stateFlags), actorFiltered = f.has(a2), actressFiltered = v2.has(a2), keyword = this.findMatchedTitleKeyword(O2, i2, a2), visibilityReasons = { keyword: !!keyword, actorBlacklist: actorFiltered, actressBlacklist: actressFiltered };
-        const hardHidden = isHardHidden(flags, visibilityReasons), settingHidden = shouldHideInDefaultView(flags, { showAllItem: I2, showFavoriteItem: k2, showHasDownItem: S, showHasWatchItem: T2 });
-        t2.attr("data-jhs-flags", JSON.stringify(flags)).attr("data-jhs-visibility", JSON.stringify(visibilityReasons)).attr("data-jhs-setting-hide", settingHidden ? _ : C).attr("data-jhs-recent", recent.has(a2) ? _ : C).attr("data-jhs-tag-position", P2);
+        const hardHidden = isHardHidden(flags, visibilityReasons);
+        t2.attr("data-jhs-flags", JSON.stringify(flags)).attr("data-jhs-visibility", JSON.stringify(visibilityReasons)).attr("data-jhs-recent", recent.has(a2) ? _ : C).attr("data-jhs-tag-position", P2);
         const signature = JSON.stringify({ flags, visibilityReasons, P: P2 });
         if (t2.attr("data-jhs-state-signature") !== signature) {
           t2.attr("data-jhs-state-signature", signature), t2.find(".jhs-status-tags").remove();
@@ -8820,11 +9075,11 @@ ${error.stack}` : "");
       })), $(e2.boxSelector).on("contextmenu", ".item img, .item video", (async (e3) => {
         try {
           e3.preventDefault();
-          const t2 = $(e3.target).closest(".item"), { carNum: n2, url: a2, publishTime: i2 } = this.findCarNumAndHref(t2);
+          const t2 = $(e3.target).closest(".item"), { carNum: n2, url: a2, publishTime: i2, fc2Source } = this.findCarNumAndHref(t2);
           let s2 = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10"), o2 = "";
           s2.length && (o2 = s2.text().trim().split(",")[0].replace("(無碼)", "")), utils.q(e3, `是否屏蔽番号 ${n2}?`, (async () => {
             try {
-              o2 || (o2 = await this.parseActressName(a2)), await stateService.patch(n2, { blocked: true }, { record: { carNum: n2, url: a2, names: o2, publishTime: i2 } }), show.ok("操作成功");
+              o2 || (o2 = await this.parseActressName(a2)), await stateService.patch(n2, { blocked: true }, { record: { carNum: n2, url: a2, names: o2, publishTime: i2, fc2Source } }), show.ok("操作成功");
             } catch (s3) {
               clog.error("屏蔽操作失败:", s3), show.error("操作失败");
             }
@@ -8836,12 +9091,12 @@ ${error.stack}` : "");
     }
     /** 从任意列表卡片进入统一详情导航。 */
     async openMovieDetail(item, { event = null, autoplay = false, newTab = false } = {}) {
-      const card = item?.jquery ? item : $(item), { carNum, aHref } = this.findCarNumAndHref(card);
+      const card = item?.jquery ? item : $(item), { carNum, aHref, fc2Source } = this.findCarNumAndHref(card);
       if (!carNum || !aHref) return;
       const shouldOpenTab = newTab || !!event && (event.ctrlKey || event.metaKey || 1 === event.button);
       if (carNum.includes("FC2-")) {
         const movieId = this.parseMovieId(aHref);
-        return shouldOpenTab ? this.getBean("Fc2Plugin").openFc2Page(movieId, carNum, aHref, { event, newTab: true }) : this.getBean("Fc2Plugin").openFc2Dialog(movieId, carNum, aHref);
+        return shouldOpenTab ? this.getBean("Fc2Plugin").openFc2Page(movieId, carNum, aHref, { event, newTab: true }, { source: fc2Source }) : this.getBean("Fc2Plugin").openFc2Dialog(movieId, carNum, aHref, { source: fc2Source });
       }
       const destination = new URL(aHref, window.location.origin);
       autoplay && destination.searchParams.set("autoPlay", "1"), utils.openPage(destination.href, carNum, true, { event, newTab: shouldOpenTab }), this.$currentImage = null;
@@ -8887,7 +9142,8 @@ ${error.stack}` : "");
         aHref: r2,
         url: r2,
         title: i2,
-        publishTime: s2
+        publishTime: s2,
+        fc2Source: ["fc2", "123av"].includes(e2.attr("data-jhs-fc2-source")) ? e2.attr("data-jhs-fc2-source") : "fc2"
       };
     }
     showCarNumBox(e2) {
@@ -10128,14 +10384,6 @@ ${error.stack}` : "");
                                     </select>
                                 </div>
                             </div>
-                            <div class="jhs-setting-row" data-description="控制普通状态内容是否继续显示在全部视图中。">
-                                <span class="setting-label">列表状态显示</span>
-                                <div class="form-content jhs-setting-toggle-grid">
-                                    <label><input type="checkbox" id="showFavoriteItem" class="mini-switch"><span>收藏</span></label>
-                                    <label><input type="checkbox" id="showHasDownItem" class="mini-switch"><span>已下载</span></label>
-                                    <label><input type="checkbox" id="showHasWatchItem" class="mini-switch"><span>已观看</span></label>
-                                </div>
-                            </div>
                             <div class="jhs-setting-row ${r ? "" : "do-hide"}"><span class="setting-label">加载女优信息</span><div class="form-content"><input type="checkbox" id="enableLoadActressInfo" class="mini-switch"></div></div>
                             <div class="jhs-setting-row"><span class="setting-label">竖图模式</span><div class="form-content"><input type="checkbox" id="enableVerticalModel" class="mini-switch"></div></div>
                             <div class="jhs-setting-row"><span class="setting-label">页面列数：<span id="showContainerColumns"></span></span><div class="form-content"><input type="range" class="jhs-range" id="containerColumns" min="2" max="10" step="1"></div></div>
@@ -10462,7 +10710,6 @@ ${error.stack}` : "");
   __name(injectResourceSourcesPanel, "injectResourceSourcesPanel");
   function buildQuickSettingHtml() {
     const rows = [
-      ["显示全部已鉴定内容", "showAllItem", "快速显示全部已鉴定状态。"],
       ["鉴定后立即关闭", "needClosePage", "完成鉴定后关闭当前详情窗口。"],
       ["瀑布流", "autoPage", "连续加载列表；启用后普通列表只支持默认排序。"],
       ["标题翻译", "translateTitle", "翻译列表和详情页标题。"],
@@ -10738,7 +10985,7 @@ ${error.stack}` : "");
     let e2 = await storageManager.getSetting();
     $("#videoQuality").val(e2.videoQuality), $("#reviewCount").val(e2.reviewCount || 20), $("#tagPosition").val(e2.tagPosition || "rightTop"), $("#defaultQuickFilterTab").val(normalizeQuickFilterKey(e2.defaultQuickFilterTab)), $("#needClosePageBasic").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e2.autoRemoveNewVideoMarkAfterBrowse && e2.autoRemoveNewVideoMarkAfterBrowse === _), $("#waitCheckCount").val(e2.waitCheckCount || 5), $("#checkConcurrencyCount").val(parseNumberSetting(e2.checkConcurrencyCount, 2, { min: 2, max: 5 })), $("#checkRequestSleep").val(parseNumberSetting(e2.checkRequestSleep, 100, { min: 0, max: 3e3 })), $("#enableCheckBlacklist").val(e2.enableCheckBlacklist || _), $("#checkBlacklist_intervalTime").val(e2.checkBlacklist_intervalTime || 12), $("#checkBlacklist_ruleTime").val(parseNumberSetting(e2.checkBlacklist_ruleTime, 8760, { min: 0 })), $("#enableCheckFavoriteActress").val(e2.enableCheckFavoriteActress || _), $("#checkFavoriteActress_IntervalTime").val(e2.checkFavoriteActress_IntervalTime || 24), $("#enableCheckNewVideo").val(e2.enableCheckNewVideo || _), $("#checkNewVideo_intervalTime").val(e2.checkNewVideo_intervalTime || 12), $("#checkNewVideo_ruleTime").val(parseNumberSetting(e2.checkNewVideo_ruleTime, 8760, { min: 0 }));
     const t2 = e2.highlightedTagNumber || 1, n2 = e2.highlightedTagColor || "#ce2222";
-    $("#highlightedTagNumber").val(e2.highlightedTagNumber || 1), $("#highlightedTagColor").val(e2.highlightedTagColor || "#ce2222"), $("#highlightedTagLabel").css("border", `${t2}px solid ${n2}`), $("#enableClog").val(e2.enableClog || _), $("#clogMsgCount").val(e2.clogMsgCount || 2e3), $("#mobileMode").val(e2.mobileMode || "auto"), $("#themeMode").val(e2.themeMode || "light"), $("#httpTimeout").val(e2.httpTimeout || 5e3), $("#httpRetryCount").val(e2.httpRetryCount || 3), $("#webDavUrl").val(e2.webDavUrl || ""), $("#webDavUsername").val(e2.webDavUsername || ""), $("#webDavPassword").val(await decryptCredential(e2.webDavPassword) || ""), $("#enableTitleSelectFilter").prop("checked", !e2.enableTitleSelectFilter || e2.enableTitleSelectFilter === _), $("#enableFavoriteActresses").prop("checked", !e2.enableFavoriteActresses || e2.enableFavoriteActresses === _), $("#enableSaveActressCarInfo").prop("checked", !!e2.enableSaveActressCarInfo && e2.enableSaveActressCarInfo === _), $("#enableScreenSvg").prop("checked", !e2.enableScreenSvg || e2.enableScreenSvg === _), $("#enableVideoSvg").prop("checked", !e2.enableVideoSvg || e2.enableVideoSvg === _), $("#enableHandleSvg").prop("checked", !e2.enableHandleSvg || e2.enableHandleSvg === _), $("#enableSiteSvg").prop("checked", !e2.enableSiteSvg || e2.enableSiteSvg === _), $("#enableCopySvg").prop("checked", !e2.enableCopySvg || e2.enableCopySvg === _), $("#showFavoriteItem").prop("checked", !e2.showFavoriteItem || e2.showFavoriteItem === _), $("#showHasDownItem").prop("checked", !e2.showHasDownItem || e2.showHasDownItem === _), $("#showHasWatchItem").prop("checked", !e2.showHasWatchItem || e2.showHasWatchItem === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableVerticalModel").prop("checked", !!e2.enableVerticalModel && e2.enableVerticalModel === _), $("#containerColumns").val(e2.containerColumns || 5), $("#showContainerColumns").text(e2.containerColumns || 5), $("#containerWidth").val((e2.containerWidth || 100) - 70), $("#showContainerWidth").text((e2.containerWidth || 100) + "%");
+    $("#highlightedTagNumber").val(e2.highlightedTagNumber || 1), $("#highlightedTagColor").val(e2.highlightedTagColor || "#ce2222"), $("#highlightedTagLabel").css("border", `${t2}px solid ${n2}`), $("#enableClog").val(e2.enableClog || _), $("#clogMsgCount").val(e2.clogMsgCount || 2e3), $("#mobileMode").val(e2.mobileMode || "auto"), $("#themeMode").val(e2.themeMode || "light"), $("#httpTimeout").val(e2.httpTimeout || 5e3), $("#httpRetryCount").val(e2.httpRetryCount || 3), $("#webDavUrl").val(e2.webDavUrl || ""), $("#webDavUsername").val(e2.webDavUsername || ""), $("#webDavPassword").val(await decryptCredential(e2.webDavPassword) || ""), $("#enableTitleSelectFilter").prop("checked", !e2.enableTitleSelectFilter || e2.enableTitleSelectFilter === _), $("#enableFavoriteActresses").prop("checked", !e2.enableFavoriteActresses || e2.enableFavoriteActresses === _), $("#enableSaveActressCarInfo").prop("checked", !!e2.enableSaveActressCarInfo && e2.enableSaveActressCarInfo === _), $("#enableScreenSvg").prop("checked", !e2.enableScreenSvg || e2.enableScreenSvg === _), $("#enableVideoSvg").prop("checked", !e2.enableVideoSvg || e2.enableVideoSvg === _), $("#enableHandleSvg").prop("checked", !e2.enableHandleSvg || e2.enableHandleSvg === _), $("#enableSiteSvg").prop("checked", !e2.enableSiteSvg || e2.enableSiteSvg === _), $("#enableCopySvg").prop("checked", !e2.enableCopySvg || e2.enableCopySvg === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableVerticalModel").prop("checked", !!e2.enableVerticalModel && e2.enableVerticalModel === _), $("#containerColumns").val(e2.containerColumns || 5), $("#showContainerColumns").text(e2.containerColumns || 5), $("#containerWidth").val((e2.containerWidth || 100) - 70), $("#showContainerWidth").text((e2.containerWidth || 100) + "%");
     const a2 = getBean("OtherSitePlugin"), i2 = await a2.getMissAvUrl(), s2 = await a2.getjableUrl(), o2 = await a2.getAvgleUrl(), r2 = await a2.getJavTrailersUrl(), l2 = await a2.getAv123Url(), c2 = await a2.getJavDbUrl(), d2 = await a2.getJavBusUrl(), h2 = await a2.getSupJavUrl();
     $("#missAvUrl").val(i2), $("#jableUrl").val(s2), $("#avgleUrl").val(o2), $("#javTrailersUrl").val(r2), $("#av123Url").val(l2), $("#javDbUrl").val(c2), $("#javBusUrl").val(d2), $("#supJavUrl").val(h2);
     let g2 = await storageManager.getReviewFilterKeywordList(), p2 = await storageManager.getTitleFilterKeyword();
@@ -10775,51 +11022,34 @@ ${error.stack}` : "");
   __name(bindLayoutRangeEvents, "bindLayoutRangeEvents");
   async function initQuickSettingForm(getBean, getSelector, openSettingDialogFn) {
     let e2 = await storageManager.getSetting();
-    $("#needClosePage").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoPage").prop("checked", !e2.autoPage || e2.autoPage === _), $("#translateTitle").prop("checked", !e2.translateTitle || e2.translateTitle === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableLoadOtherSite").prop("checked", !e2.enableLoadOtherSite || e2.enableLoadOtherSite === _), $("#showFavoriteItem").prop("checked", !e2.showFavoriteItem || e2.showFavoriteItem === _), $("#showHasDownItem").prop("checked", !e2.showHasDownItem || e2.showHasDownItem === _), $("#showHasWatchItem").prop("checked", !e2.showHasWatchItem || e2.showHasWatchItem === _), $("#showFavoriteItem").on("change", (async (t3) => {
-      let n3 = $("#showFavoriteItem").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("showFavoriteItem", n3), await jhsEventBus.emit("filter-rules-changed", { setting: "showFavoriteItem" });
-    })), $("#showHasDownItem").on("change", (async (t3) => {
-      let n3 = $("#showHasDownItem").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("showHasDownItem", n3), await jhsEventBus.emit("filter-rules-changed", { setting: "showHasDownItem" });
-    })), $("#showHasWatchItem").on("change", (async (t3) => {
-      let n3 = $("#showHasWatchItem").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("showHasWatchItem", n3), await jhsEventBus.emit("filter-rules-changed", { setting: "showHasWatchItem" });
-    }));
-    const t2 = $("#showFavoriteItem, #showHasDownItem, #showHasWatchItem"), n2 = /* @__PURE__ */ __name(() => {
-      const e3 = $("#showAllItem").is(":checked");
-      t2.prop("disabled", e3), e3 ? t2.attr("data-tip", "请先关闭显示所有才可点击") : t2.removeAttr("data-tip");
-    }, "n");
-    $("#showAllItem").prop("checked", !!e2.showAllItem && e2.showAllItem === _), $("#showAllItem").on("change", (async (t3) => {
-      let a2 = $("#showAllItem").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("showAllItem", a2), n2(), await jhsEventBus.emit("filter-rules-changed", { setting: "showAllItem" });
-    })), n2(), $("#needClosePage").on("change", (async (t3) => {
+    $("#needClosePage").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoPage").prop("checked", !e2.autoPage || e2.autoPage === _), $("#translateTitle").prop("checked", !e2.translateTitle || e2.translateTitle === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableLoadOtherSite").prop("checked", !e2.enableLoadOtherSite || e2.enableLoadOtherSite === _), $("#needClosePage").on("change", (async (t2) => {
       await storageManager.saveSettingItem("needClosePage", $("#needClosePage").is(":checked") ? _ : C), await jhsEventBus.emit("filter-rules-changed");
-    })), $("#autoPage").on("change", (async (t3) => {
-      const n3 = $("#autoPage").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("autoPage", n3), $("#sort-toggle-btn").prop("disabled", n3 === _).attr("title", n3 === _ ? "瀑布流模式仅支持默认排序" : "选择列表排序方式");
-    })), $("#translateTitle").on("change", (async (t3) => {
-      const n3 = $("#translateTitle").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("translateTitle", n3), n3 === _ ? (await getBean("ListPagePlugin").doFilter(), isDetailPage && await getBean("TranslatePlugin").translate()) : (await getBean("ListPagePlugin").revertTranslation(), $(".translated-title").remove());
-    })), $("#hoverBigImg").prop("checked", !!e2.hoverBigImg && e2.hoverBigImg === _), $("#hoverBigImg").on("change", (async (t3) => {
-      const n3 = $("#hoverBigImg").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("hoverBigImg", n3), window.imageHoverPreviewObj && (window.imageHoverPreviewObj.destroy(), window.imageHoverPreviewObj = null), n3 === _ && (window.imageHoverPreviewObj = new ImageHoverPreview({
+    })), $("#autoPage").on("change", (async (t2) => {
+      const n2 = $("#autoPage").is(":checked") ? _ : C;
+      await storageManager.saveSettingItem("autoPage", n2), $("#sort-toggle-btn").prop("disabled", n2 === _).attr("title", n2 === _ ? "瀑布流模式仅支持默认排序" : "选择列表排序方式");
+    })), $("#translateTitle").on("change", (async (t2) => {
+      const n2 = $("#translateTitle").is(":checked") ? _ : C;
+      await storageManager.saveSettingItem("translateTitle", n2), n2 === _ ? (await getBean("ListPagePlugin").doFilter(), isDetailPage && await getBean("TranslatePlugin").translate()) : (await getBean("ListPagePlugin").revertTranslation(), $(".translated-title").remove());
+    })), $("#hoverBigImg").prop("checked", !!e2.hoverBigImg && e2.hoverBigImg === _), $("#hoverBigImg").on("change", (async (t2) => {
+      const n2 = $("#hoverBigImg").is(":checked") ? _ : C;
+      await storageManager.saveSettingItem("hoverBigImg", n2), window.imageHoverPreviewObj && (window.imageHoverPreviewObj.destroy(), window.imageHoverPreviewObj = null), n2 === _ && (window.imageHoverPreviewObj = new ImageHoverPreview({
         selector: getSelector().coverImgSelector
       }));
-    })), $("#enableLoadActressInfo").on("change", (async (t3) => {
-      const n3 = $("#enableLoadActressInfo").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("enableLoadActressInfo", n3), n3 === _ ? getBean("ActressInfoPlugin").loadActressInfo() : $(".actress-info").remove();
-    })), $("#enableLoadOtherSite").on("change", (async (t3) => {
-      const n3 = $("#enableLoadOtherSite").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("enableLoadOtherSite", n3), n3 === _ ? await getBean("OtherSitePlugin").loadOtherSite() : $("#otherSiteBox").remove();
-    })), $("#enableLoadScreenShot").prop("checked", !e2.enableLoadScreenShot || e2.enableLoadScreenShot === _), $("#enableLoadScreenShot").on("change", (async (t3) => {
-      const n3 = $("#enableLoadScreenShot").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("enableLoadScreenShot", n3), n3 === _ ? await getBean("ScreenShotPlugin").loadScreenShot() : $(".screen-container").remove();
-    })), $("#enableLoadPreviewVideo").prop("checked", !e2.enableLoadPreviewVideo || e2.enableLoadPreviewVideo === _), $("#enableLoadPreviewVideo").on("change", (async (t3) => {
-      const n3 = $("#enableLoadPreviewVideo").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("enableLoadPreviewVideo", n3);
-    })), $("#enableVerticalModel").prop("checked", !!e2.enableVerticalModel && e2.enableVerticalModel === _), $("#enableVerticalModel").on("change", (async (t3) => {
-      const n3 = $("#enableVerticalModel").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("enableVerticalModel", n3), applyImageMode();
+    })), $("#enableLoadActressInfo").on("change", (async (t2) => {
+      const n2 = $("#enableLoadActressInfo").is(":checked") ? _ : C;
+      await storageManager.saveSettingItem("enableLoadActressInfo", n2), n2 === _ ? getBean("ActressInfoPlugin").loadActressInfo() : $(".actress-info").remove();
+    })), $("#enableLoadOtherSite").on("change", (async (t2) => {
+      const n2 = $("#enableLoadOtherSite").is(":checked") ? _ : C;
+      await storageManager.saveSettingItem("enableLoadOtherSite", n2), n2 === _ ? await getBean("OtherSitePlugin").loadOtherSite() : $("#otherSiteBox").remove();
+    })), $("#enableLoadScreenShot").prop("checked", !e2.enableLoadScreenShot || e2.enableLoadScreenShot === _), $("#enableLoadScreenShot").on("change", (async (t2) => {
+      const n2 = $("#enableLoadScreenShot").is(":checked") ? _ : C;
+      await storageManager.saveSettingItem("enableLoadScreenShot", n2), n2 === _ ? await getBean("ScreenShotPlugin").loadScreenShot() : $(".screen-container").remove();
+    })), $("#enableLoadPreviewVideo").prop("checked", !e2.enableLoadPreviewVideo || e2.enableLoadPreviewVideo === _), $("#enableLoadPreviewVideo").on("change", (async (t2) => {
+      const n2 = $("#enableLoadPreviewVideo").is(":checked") ? _ : C;
+      await storageManager.saveSettingItem("enableLoadPreviewVideo", n2);
+    })), $("#enableVerticalModel").prop("checked", !!e2.enableVerticalModel && e2.enableVerticalModel === _), $("#enableVerticalModel").on("change", (async (t2) => {
+      const n2 = $("#enableVerticalModel").is(":checked") ? _ : C;
+      await storageManager.saveSettingItem("enableVerticalModel", n2), applyImageMode();
     })), $("#moreBtn").on("click", (() => {
       $(".simple-setting, .mini-simple-setting").html("").hide(), openSettingDialogFn("base-panel");
     }));
@@ -10827,7 +11057,7 @@ ${error.stack}` : "");
   __name(initQuickSettingForm, "initQuickSettingForm");
   async function saveSettingForm(getBean) {
     let e2 = await storageManager.getSetting();
-    e2.videoQuality = $("#videoQuality").val(), e2.reviewCount = $("#reviewCount").val(), e2.tagPosition = $("#tagPosition").val(), e2.defaultQuickFilterTab = normalizeQuickFilterKey($("#defaultQuickFilterTab").val()), e2.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e2.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e2.waitCheckCount = $("#waitCheckCount").val(), e2.highlightedTagNumber = $("#highlightedTagNumber").val(), e2.highlightedTagColor = $("#highlightedTagColor").val(), e2.checkConcurrencyCount = $("#checkConcurrencyCount").val(), e2.checkRequestSleep = $("#checkRequestSleep").val(), e2.enableCheckBlacklist = $("#enableCheckBlacklist").val(), e2.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e2.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(), e2.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e2.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(), e2.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e2.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(), e2.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e2.httpTimeout = Number($("#httpTimeout").val()) || 5e3, e2.httpRetryCount = Number($("#httpRetryCount").val()) || 3, e2.circuitBreakerThreshold = Number($("#circuitBreakerThreshold").val()) || 3, e2.circuitBreakerCooldown = Number($("#circuitBreakerCooldownSec").val()) * 1e3, e2.enableClog = $("#enableClog").val(), e2.enableClog === _ ? clog.show() : clog.hide(), e2.clogMsgCount = $("#clogMsgCount").val(), e2.mobileMode = $("#mobileMode").val(), e2.themeMode = $("#themeMode").val(), e2.webDavUrl = $("#webDavUrl").val(), e2.webDavUsername = $("#webDavUsername").val(), e2.webDavPassword = await encryptCredential($("#webDavPassword").val()), e2.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""), e2.jableUrl = $("#jableUrl").val().replace(/\/$/, ""), e2.avgleUrl = $("#avgleUrl").val().replace(/\/$/, ""), e2.javTrailersUrl = $("#javTrailersUrl").val().replace(/\/$/, ""), e2.av123Url = $("#av123Url").val().replace(/\/$/, ""), e2.javDbUrl = $("#javDbUrl").val().replace(/\/$/, ""), e2.javBusUrl = $("#javBusUrl").val().replace(/\/$/, ""), e2.supJavUrl = $("#supJavUrl").val().replace(/\/$/, ""), e2.enableTitleSelectFilter = $("#enableTitleSelectFilter").is(":checked") ? _ : C, e2.enableFavoriteActresses = $("#enableFavoriteActresses").is(":checked") ? _ : C, e2.enableSaveActressCarInfo = $("#enableSaveActressCarInfo").is(":checked") ? _ : C, e2.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e2.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C, e2.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e2.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C, e2.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C, e2.showFavoriteItem = $("#showFavoriteItem").is(":checked") ? _ : C, e2.showHasDownItem = $("#showHasDownItem").is(":checked") ? _ : C, e2.showHasWatchItem = $("#showHasWatchItem").is(":checked") ? _ : C, e2.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e2.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C, e2.containerColumns = Number($("#containerColumns").val()) || 5, e2.containerWidth = Number($("#containerWidth").val()) + 70 || 100, await storageManager.saveSetting(e2);
+    e2.videoQuality = $("#videoQuality").val(), e2.reviewCount = $("#reviewCount").val(), e2.tagPosition = $("#tagPosition").val(), e2.defaultQuickFilterTab = normalizeQuickFilterKey($("#defaultQuickFilterTab").val()), e2.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e2.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e2.waitCheckCount = $("#waitCheckCount").val(), e2.highlightedTagNumber = $("#highlightedTagNumber").val(), e2.highlightedTagColor = $("#highlightedTagColor").val(), e2.checkConcurrencyCount = $("#checkConcurrencyCount").val(), e2.checkRequestSleep = $("#checkRequestSleep").val(), e2.enableCheckBlacklist = $("#enableCheckBlacklist").val(), e2.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e2.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(), e2.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e2.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(), e2.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e2.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(), e2.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e2.httpTimeout = Number($("#httpTimeout").val()) || 5e3, e2.httpRetryCount = Number($("#httpRetryCount").val()) || 3, e2.circuitBreakerThreshold = Number($("#circuitBreakerThreshold").val()) || 3, e2.circuitBreakerCooldown = Number($("#circuitBreakerCooldownSec").val()) * 1e3, e2.enableClog = $("#enableClog").val(), e2.enableClog === _ ? clog.show() : clog.hide(), e2.clogMsgCount = $("#clogMsgCount").val(), e2.mobileMode = $("#mobileMode").val(), e2.themeMode = $("#themeMode").val(), e2.webDavUrl = $("#webDavUrl").val(), e2.webDavUsername = $("#webDavUsername").val(), e2.webDavPassword = await encryptCredential($("#webDavPassword").val()), e2.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""), e2.jableUrl = $("#jableUrl").val().replace(/\/$/, ""), e2.avgleUrl = $("#avgleUrl").val().replace(/\/$/, ""), e2.javTrailersUrl = $("#javTrailersUrl").val().replace(/\/$/, ""), e2.av123Url = $("#av123Url").val().replace(/\/$/, ""), e2.javDbUrl = $("#javDbUrl").val().replace(/\/$/, ""), e2.javBusUrl = $("#javBusUrl").val().replace(/\/$/, ""), e2.supJavUrl = $("#supJavUrl").val().replace(/\/$/, ""), e2.enableTitleSelectFilter = $("#enableTitleSelectFilter").is(":checked") ? _ : C, e2.enableFavoriteActresses = $("#enableFavoriteActresses").is(":checked") ? _ : C, e2.enableSaveActressCarInfo = $("#enableSaveActressCarInfo").is(":checked") ? _ : C, e2.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e2.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C, e2.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e2.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C, e2.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C, e2.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e2.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C, e2.containerColumns = Number($("#containerColumns").val()) || 5, e2.containerWidth = Number($("#containerWidth").val()) + 70 || 100, await storageManager.saveSetting(e2);
     let t2 = [];
     $("#reviewKeywordContainer .keyword-label").toArray().forEach(((e3) => {
       let n3 = $(e3).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
@@ -11974,13 +12204,15 @@ ${error.stack}` : "");
                 .jhs-related-time { color:var(--jhs-text-faint); font-size:14px; white-space:nowrap; }
             </style>`;
     }
-    async showRelated(target, movieId) {
+    async showRelated(target, movieId, options = {}) {
+      const isActive = "function" === typeof options.isActive ? options.isActive : () => true;
       const enabled = await storageManager.getSetting("enableLoadRelated", C), host = target?.length ? target : this.getBean("DetailWorkspacePlugin")?.getSlot("related");
       if (!movieId) return void show.error("未传入movieId");
+      if (!isActive() || !host?.length) return $();
       const existing = host.children('[data-jhs-panel="related"]').filter(((_2, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
       if (existing.length) return existing;
       const panel = $('<section class="jhs-related-panel" data-jhs-panel="related"></section>').attr("data-jhs-movie-id", String(movieId)), header = $('<header class="jhs-panel-header"><h3>相关清单</h3></header>'), toggle = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-panel-toggle jhs-related-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>'), state = { movieId, panel, floorIndex: 1, loaded: false, loading: false, page: 1 };
-      header.append(toggle), panel.append(header, '<div class="jhs-related-list jhs-related-container"></div>', '<div class="jhs-panel-footer jhs-related-footer"></div>'), host.append(panel);
+      header.append(toggle), options.ownedSection ? options.ownedSection.find('[data-jhs-section-actions="related"]').first().append(toggle) : panel.append(header), panel.append('<div class="jhs-related-list jhs-related-container"></div>', '<div class="jhs-panel-footer jhs-related-footer"></div>'), host.append(panel), state.isActive = isActive;
       this.updateToggle(toggle, enabled === _);
       toggle.on("click", ((event) => {
         event.preventDefault(), event.stopPropagation();
@@ -11994,7 +12226,7 @@ ${error.stack}` : "");
       toggle.attr("aria-expanded", String(expanded)), toggle.find(".toggle-text").text(expanded ? "折叠" : "展开"), toggle.find(".toggle-icon").text(expanded ? "▲" : "▼");
     }
     async fetchAndDisplayRelateds(state) {
-      if (state.loading) return;
+      if (state.loading || !state.isActive?.()) return;
       state.loading = true;
       const { movieId, panel } = state, container = panel.find(".jhs-related-container"), footer = panel.find(".jhs-related-footer");
       container.empty().append($('<div class="jhs-panel-state"></div>').text("获取清单中...")), footer.empty();
@@ -12006,6 +12238,7 @@ ${error.stack}` : "");
         state.loading = false;
         return void this.renderRetry(container, (() => this.fetchAndDisplayRelateds(state)));
       }
+      if (!state.isActive?.()) return void (state.loading = false);
       state.loading = false, state.loaded = true;
       container.empty();
       if (!related.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无清单"));
@@ -12020,9 +12253,12 @@ ${error.stack}` : "");
       const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-related-load-more">加载更多清单</button>'), end = $('<div class="jhs-panel-end jhs-related-end">已加载全部清单</div>').hide();
       footer.empty().append(button, end);
       button.on("click", (async () => {
-        button.text("加载中...").prop("disabled", true), state.page++;
+        const nextPage = state.page + 1;
+        button.text("加载中...").prop("disabled", true);
         try {
-          const related = await K(state.movieId, state.page, 20);
+          const related = await K(state.movieId, nextPage, 20);
+          if (!state.isActive?.()) return;
+          state.page = nextPage;
           this.displayRelateds(state, related, container), related.length < 20 ? (button.remove(), end.show()) : button.text("加载更多清单").prop("disabled", false);
         } catch (error) {
           clog.error("加载更多清单失败:", error), button.text("加载失败，请重试").prop("disabled", false);
@@ -12223,12 +12459,12 @@ ${error.stack}` : "");
       })), $(document).on("click", ".filterBtn, .favoriteBtn, .hasDownBtn, .hasWatchBtn", ((t3) => {
         t3.preventDefault(), t3.stopPropagation();
         try {
-          const n3 = $(t3.currentTarget), a3 = n3.closest(".item"), { carNum: i3, url: s3, publishTime: o2 } = e2.findCarNumAndHref(a3), r2 = /* @__PURE__ */ __name(async (t4) => {
+          const n3 = $(t3.currentTarget), a3 = n3.closest(".item"), { carNum: i3, url: s3, publishTime: o2, fc2Source } = e2.findCarNumAndHref(a3), r2 = /* @__PURE__ */ __name(async (t4) => {
             try {
               let n4 = await e2.parseActressName(s3);
               const flag = legacyActionToFlag(t4);
               if (!flag) throw new Error("不支持的状态操作");
-              await stateService.patch(i3, { [flag]: true }, { type: "list-card-state", record: { carNum: i3, url: s3, names: n4, publishTime: o2 } }), show.ok("操作成功");
+              await stateService.patch(i3, { [flag]: true }, { type: "list-card-state", record: { carNum: i3, url: s3, names: n4, publishTime: o2, fc2Source } }), show.ok("操作成功");
             } catch (r3) {
               clog.error("保存操作失败:", r3), show.error("操作失败");
             }
@@ -12361,94 +12597,43 @@ ${error.stack}` : "");
         e2.close();
       }
     }
-    async open123AvFc2Dialog(e2, t2) {
-      let n2 = "";
-      await storageManager.getSetting("enableLoadOtherSite", _) === _ && (n2 = '<div class="movie-panel-info fc2-movie-panel-info jhs-layout-a26bda7d"><strong>第三方站点: </strong></div>');
-      let a2 = `
-            <div class="movie-detail-container">
-               <!-- <div class="movie-poster-container">
-                    <iframe class="movie-trailer" frameborder="0" allowfullscreen scrolling="no"></iframe>
-                </div>
-                <div class="right-box">-->
-                    <div class="movie-info-container">
-                        <div class="search-loading">加载中...</div>
-                    </div>
-
-                    ${n2}
-
-                    <div class="jhs-layout-f4e719ae">
-                        <button type="button" id="filterBtn" class="jhs-btn jhs-btn--filter"><span>${m}</span></button>
-                        <button type="button" id="favoriteBtn" class="jhs-btn jhs-btn--fav"><span>${v}</span></button>
-                        <button type="button" id="hasDownBtn" class="jhs-btn jhs-btn--down"><span>${y}</span></button>
-                        <button type="button" id="hasWatchBtn" class="jhs-btn jhs-btn--watch"><span>${k}</span></button>
-
-                        <button type="button" id="search-subtitle-btn" class="jhs-btn jhs-btn--accent">
-                            <span>字幕 (SubTitleCat)</span>
-                        </button>
-                        <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--accent">
-                            <span>字幕 (迅雷)</span>
-                        </button>
-                    </div>
-                    <div class="message video-panel jhs-layout-a26bda7d">
-                        <div id="magnets-content" class="magnet-links">
-                        </div>
-                    </div>
-                    <div id="reviews-content">
-                    </div>
-                    <div id="related-content">
-                    </div>
-                    <span id="data-actress" class="jhs-layout-6b99de8b"></span>
-               <!-- </div>-->
-            </div>
-        `;
-      layer.open({
-        type: 1,
-        title: e2,
-        content: a2,
-        area: utils.getDialogArea("workspace"),
-        skin: "movie-detail-layer",
-        scrollbar: false,
-        success: /* @__PURE__ */ __name(async (n3, a3) => {
-          const root = $(n3), detailRoot = root.find(".movie-detail-container");
-          organizeJhsOwnedDetailWorkspace(detailRoot), detailStateController.bind({ root: n3, layerIndex: a3, carNum: e2, activityType: "fc2-state", getRecord: /* @__PURE__ */ __name(() => ({ carNum: e2, url: t2, names: root.find("#data-actress").text(), publishTime: root.find("#data-publishTime").text() }), "getRecord") }), utils.setupEscClose(a3), this.loadData(e2, t2);
-          let i2 = e2.replace("FC2-", "");
-          $("#magnets-content").append(await this.getBean("MagnetHubPlugin").createMagnetHub(i2)), root.find("#search-subtitle-btn").on("click", ((t3) => utils.openPage(`https://subtitlecat.com/index.php?search=${e2}`, e2, false, t3))), $("#xunLeiSubtitleBtn").on("click", (() => this.getBean("DetailPageButtonPlugin").searchXunLeiSubtitle(e2)));
-          let s2 = e2.replace("FC2-", "");
-          void this.getBean("OtherSitePlugin").loadOtherSite(s2, e2).catch(((error) => clog.error("FC2 外部站点加载失败", error)));
-        }, "success")
-      });
+    async open123AvFc2Dialog(carNum, url) {
+      return this.getBean("Fc2Plugin").openFc2Dialog(null, carNum, url, { source: "123av" });
     }
-    async loadData(e2, t2) {
-      let n2 = loading();
+    /** 将 123AV 数据填入 Fc2Plugin 创建的固定工作区。 */
+    async loadDetail(context, url) {
+      const infoPromise = this.loadSummary(context, url), imagesPromise = this.getImgList(context.carNum), actressPromise = this.getActressInfo(context.carNum), movieIdPromise = resolveJavDbMovieId(context.carNum), fc2Plugin = this.getBean("Fc2Plugin");
+      void fc2Plugin.configureJavDbWantButton(context, movieIdPromise), void fc2Plugin.mountPanels(context, movieIdPromise), void movieIdPromise.then(((movieId) => context.isAlive() && fc2Plugin.fetchAndRenderNativeMagnets(context, movieId))).catch(((error) => {
+        context.isAlive() && fc2Plugin.setState(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.retryResolvedMagnets(context))), clog.error("123AV 磁力关联失败", error);
+      }));
+      imagesPromise.then(((images) => context.isAlive() && this.getBean("Fc2Plugin").renderGallery(context, images))).catch(((error) => context.isAlive() && this.getBean("Fc2Plugin").setState(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)))));
+      actressPromise.then((async (data) => {
+        await infoPromise.catch((() => null));
+        context.isAlive() && this.render123AvActress(context, data);
+      })).catch(((error) => clog.error("FC2 演员信息加载失败", error)));
+      await Promise.allSettled([infoPromise, imagesPromise, actressPromise, movieIdPromise]);
+    }
+    async loadSummary(context, url) {
       try {
-        const { publishDate: a2, title: i2 } = await this.get123AvVideoInfo(t2);
-        const articleId = encodeURIComponent(String(e2 || "").replace("FC2-", ""));
-        $(".movie-info-container").html(`
-                    <h3 class="movie-title jhs-layout-761d3add"><strong class="current-title">${escapeHtml(i2 || "无标题")}</strong></h3>
-                    <div class="movie-meta jhs-layout-761d3add">
-                        <span><strong>番号: </strong>${escapeHtml(e2 || "未知")}</span>
-                        <span><strong>年份: </strong>${escapeHtml(a2 || "未知")}</span>
-                        <span><strong>站点: </strong><a href="https://fc2ppvdb.com/articles/${articleId}" target="_blank">fc2ppvdb</a><a href="https://adult.contents.fc2.com/article/${articleId}/" target="_blank" class="jhs-layout-3fed2a7e">fc2电子市场</a></span>
-                    </div>
-                    <div class="movie-actors jhs-layout-761d3add"><div class="actor-list"><strong>主演: </strong></div></div>
-                    <div class="movie-seller jhs-layout-761d3add"><span><strong>卖家: </strong></span></div>
-                    <div class="movie-gallery jhs-layout-761d3add"><strong>剧照: </strong><div class="image-list"></div></div>
-                    <div id="data-publishTime" class="jhs-layout-6b99de8b">${escapeHtml(a2 || "")}</div>
-                `), await Promise.all([this.getImgList(e2), this.getActressInfo(e2), this.getBean("TranslatePlugin").translate(e2, false)]);
-      } catch (a2) {
-        clog.error(a2);
-      } finally {
-        n2.close();
+        const info = await this.get123AvVideoInfo(url);
+        if (!context.isAlive()) return null;
+        this.render123AvSummary(context, info), await this.getBean("TranslatePlugin").translate(context.carNum, false, { root: context.root });
+        return info;
+      } catch (error) {
+        context.isAlive() && this.getBean("Fc2Plugin").setState(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.loadSummary(context, url))), clog.error("123AV 详情加载失败", error);
+        throw error;
       }
     }
-    handleLongImg(e2) {
-      utils.loopDetector((() => $(".movie-gallery .image-list").length > 0), (async () => {
-        $(".movie-gallery .image-list").prepend(' <a class="tile-item screen-container jhs-layout-e5d57abb"><div class="jhs-layout-9db87399">正在加载缩略图</div></a> ');
-        const t2 = normalizeHttpUrl(await this.getBean("ScreenShotPlugin").getScreenshot(e2));
-        t2 && ($(".screen-container").html(`<img src="${escapeHtml(t2)}" alt="" loading="lazy" class="jhs-layout-cad980f4">`), $(".screen-container").on("click", ((e3) => {
-          e3.stopPropagation(), e3.preventDefault(), showImageViewer(e3.currentTarget);
-        })));
-      }));
+    async retryResolvedMagnets(context) {
+      try {
+        return await this.getBean("Fc2Plugin").fetchAndRenderNativeMagnets(context, await resolveJavDbMovieId(context.carNum));
+      } catch (error) {
+        context.isAlive() && this.getBean("Fc2Plugin").setState(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.retryResolvedMagnets(context)));
+      }
+    }
+    render123AvSummary(context, info) {
+      const body = context.root.find('[data-jhs-role="summary-content"]').empty(), title = $('<h1 class="jhs-fc2-title"><strong class="current-title"></strong></h1>');
+      title.find("strong").text(info.title || "无标题"), body.append(title, $('<div class="jhs-fc2-meta"></div>').append($("<span></span>").text(`番号：${context.carNum}`), $("<span></span>").text(`发行：${info.publishDate || "未知"}`)), '<div class="jhs-fc2-actors" data-jhs-role="actors"><strong>主演：</strong><span>正在加载演员…</span></div>', '<div class="jhs-fc2-meta" data-jhs-role="seller"></div>', this.getBean("Fc2Plugin").createSourceLinks(context), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(info.publishDate || ""));
     }
     async get123AvVideoInfo(e2) {
       const t2 = await this.request123Av(e2);
@@ -12459,43 +12644,47 @@ ${error.stack}` : "");
       const n2 = await gmHttp.get(t2), a2 = $(n2), i2 = a2.find("div").filter((function() {
         return 0 === $(this).text().trim().indexOf("女優：");
       }));
-      if (0 === i2.length || i2.length > 1) return void show.error("解析女优信息失败");
+      if (0 === i2.length || i2.length > 1) return { actors: [], seller: null };
       const s2 = $(i2[0]).find("a");
-      let o2 = "<strong>主演: </strong>";
+      const actors = [];
       if (s2.length > 0) {
-        let e3 = "";
         s2.each(((t3, n3) => {
-          let a3 = $(n3), i3 = a3.text(), s3 = a3.attr("href");
-          o2 += `<span class="actor-tag"><a href="https://fc2ppvdb.com${escapeHtml(s3)}" target="_blank">${escapeHtml(i3)}</a></span>`, e3 += i3 + " ";
-        })), $("#data-actress").text(e3);
-      } else o2 += "<span>暂无演员信息</span>";
-      $(".actor-list").html(o2);
+          const link = $(n3), name = link.text().trim(), url = normalizeHttpUrl(link.attr("href"), "https://fc2ppvdb.com");
+          name && actors.push({ name, url });
+        }));
+      }
       const r2 = a2.find("div").filter((function() {
         return 0 === $(this).text().trim().indexOf("販売者：");
       }));
+      let seller = null;
       if (r2.length > 0) {
-        const e3 = $(r2[0]).find("a");
-        if (e3.length > 0) {
-          const t3 = $(e3[0]);
-          let n3 = t3.text(), a3 = t3.attr("href");
-          const sellerUrl = normalizeHttpUrl(a3, "https://fc2ppvdb.com");
-          $(".movie-seller").empty().append($("<span></span>").append("卖家: ", sellerUrl ? $("<a></a>").attr({ href: sellerUrl, target: "_blank" }).text(n3) : document.createTextNode(n3)));
-        }
+        const link = $(r2[0]).find("a").first();
+        link.length && (seller = { name: link.text().trim(), url: normalizeHttpUrl(link.attr("href"), "https://fc2ppvdb.com") });
       }
+      return { actors, seller };
     }
     async getImgList(e2) {
       let t2 = e2.replace("FC2-", ""), n2 = `https://adult.contents.fc2.com/article/${e2.replace("FC2-", "")}/`;
       const a2 = await gmHttp.get(n2, null, {
         referer: n2
       });
-      let i2 = $(a2).find(".items_article_SampleImagesArea img").map((function() {
+      return $(a2).find(".items_article_SampleImagesArea img").map((function() {
         return normalizeHttpUrl($(this).attr("src"), n2);
-      })).get().filter(Boolean), s2 = "";
-      Array.isArray(i2) && i2.length > 0 ? s2 = i2.map(((e3, t3) => `
-                <a href="${escapeHtml(e3)}" data-fancybox="movie-gallery" data-caption="剧照 ${t3 + 1}">
-                    <img src="${escapeHtml(e3)}" class="movie-image-thumb" loading="lazy" alt=""/>
-                </a>
-            `)).join("") : $(".movie-gallery").html("<h4>剧照: 暂无剧照</h4>"), $(".image-list").html(s2), this.handleLongImg(t2);
+      })).get().filter(Boolean);
+    }
+    async reloadImages(context) {
+      try {
+        const images = await this.getImgList(context.carNum);
+        context.isAlive() && this.getBean("Fc2Plugin").renderGallery(context, images);
+      } catch (error) {
+        context.isAlive() && this.getBean("Fc2Plugin").setState(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)));
+      }
+    }
+    render123AvActress(context, data) {
+      const host = context.root.find('[data-jhs-role="actors"]').empty().append("<strong>主演：</strong>");
+      data.actors.length ? data.actors.forEach(((actor) => host.append($("<a></a>").addClass("jhs-fc2-actor").attr({ href: actor.url, target: "_blank", rel: "noopener noreferrer" }).text(actor.name)))) : host.append($("<span></span>").text("暂无演员信息"));
+      context.root.find('[data-jhs-role="actress-data"]').remove(), context.root.find(".jhs-fc2-summary__body").append($('<span class="jhs-is-hidden" data-jhs-role="actress-data"></span>').text(data.actors.map(((actor) => actor.name)).join(" ")));
+      if (data.seller) context.root.find('[data-jhs-role="seller"]').empty().append("卖家：", data.seller.url ? $("<a></a>").attr({ href: data.seller.url, target: "_blank", rel: "noopener noreferrer" }).text(data.seller.name) : document.createTextNode(data.seller.name));
     }
     markDataListHtml(e2) {
       let t2 = "";
@@ -12503,7 +12692,7 @@ ${error.stack}` : "");
         const href = normalizeHttpUrl(e3.href, "https://123av.com"), imageUrl = normalizeHttpUrl(e3.imgSrc, "https://123av.com");
         if (!href) return;
         t2 += `
-                <div class="item">
+                <div class="item" data-jhs-fc2-source="123av">
                     <a href="${escapeHtml(href)}" class="box" title="${escapeHtml(e3.title)}">
                         <div class="cover ">${imageUrl ? `<img loading="lazy" src="${escapeHtml(imageUrl)}" alt="">` : ""}</div>
                         <div class="video-title"><strong>${escapeHtml(e3.carNum)}</strong> ${escapeHtml(e3.title)}</div>
@@ -12619,10 +12808,10 @@ ${error.stack}` : "");
     const n2 = e2.seeders || 0;
     const seedersScore = n2 >= 50 ? 35 : n2 >= 10 ? 25 : n2 >= 1 ? 15 : 3;
     t2 += seedersScore;
-    const a2 = (e2.title || "").toLowerCase();
-    const resolutionScore = /4k|2160p/.test(a2) ? 25 : /1080p/.test(a2) ? 20 : /720p/.test(a2) ? 15 : 5;
+    const a2 = (e2.title || "").toLowerCase(), resolution = String(e2.resolution || "").toLowerCase();
+    const resolutionScore = /4k|2160p/.test(resolution) || /4k|2160p/.test(a2) ? 25 : /1080p/.test(resolution) || /1080p/.test(a2) ? 20 : /720p/.test(resolution) || /720p/.test(a2) ? 15 : 5;
     t2 += resolutionScore;
-    const subtitleScore = /-c\b|-uc\b|chinese|中字|字幕/.test(a2) ? 20 : 0;
+    const subtitleScore = e2.hasSubtitle || /-c\b|-uc\b|chinese|中字|字幕/.test(a2) ? 20 : 0;
     t2 += subtitleScore;
     const i2 = e2.date ? _daysSince(e2.date) : 999;
     const freshnessScore = i2 <= 7 ? 15 : i2 <= 30 ? 12 : i2 <= 90 ? 8 : 3;
@@ -12644,7 +12833,7 @@ ${error.stack}` : "");
   __name(_daysSince, "_daysSince");
   var _MagnetHubPlugin = class _MagnetHubPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "currentEngine", null), i(this, "sourceRegistry", new MagnetSourceRegistry()), i(this, "searchEngines", []);
+      super(...arguments), i(this, "sourceRegistry", new MagnetSourceRegistry()), i(this, "searchEngines", []);
     }
     async initializeSources() {
       const settings = new ResourceSettingsService(), overrides = await settings.getBuiltInSources(), custom = await settings.getMagnetSources();
@@ -12657,7 +12846,7 @@ ${error.stack}` : "");
           applicable: r,
           enabled: r,
           priority: 1,
-          search: /* @__PURE__ */ __name(async () => parseNativeMagnets(document, "javdb"), "search"),
+          search: /* @__PURE__ */ __name(async (keyword, root = document) => parseNativeMagnets(root?.jquery ? root[0] : root, "javdb"), "search"),
           targetUrl: /* @__PURE__ */ __name(() => window.location.href, "targetUrl")
         },
         {
@@ -12666,7 +12855,7 @@ ${error.stack}` : "");
           applicable: l,
           enabled: l,
           priority: 2,
-          search: /* @__PURE__ */ __name(async () => parseNativeMagnets(document, "javbus"), "search"),
+          search: /* @__PURE__ */ __name(async (keyword, root = document) => parseNativeMagnets(root?.jquery ? root[0] : root, "javbus"), "search"),
           targetUrl: /* @__PURE__ */ __name(() => window.location.href, "targetUrl")
         },
         {
@@ -12722,33 +12911,34 @@ ${error.stack}` : "");
             .magnet-copy { position:absolute; top:var(--jhs-space-2); right:var(--jhs-space-3); }
         </style>`;
     }
-    async createMagnetHub(e2) {
+    async createMagnetHub(e2, options = {}) {
       await this.initializeSources();
       e2 = e2.replace("FC2-", "");
+      const root = options.root ? $(options.root) : $(document), engines = [...this.searchEngines];
       const t2 = $('<div class="magnet-container jhs-ui"></div>'), n2 = $('<div class="magnet-tabs"></div>'), a2 = "jhs_magnetHub_selectedEngine", i2 = localStorage.getItem(a2);
       const o2 = $('<div class="magnet-tabs__options" role="tablist" aria-label="磁力来源"></div>');
-      this.currentEngine = this.searchEngines.find(((engine) => engine.id === i2)) || this.searchEngines[0] || null;
-      if (!this.currentEngine) return t2.append($('<div class="magnet-error"></div>').text("暂无可用磁力来源，请前往设置启用来源"));
-      this.searchEngines.forEach(((engine) => o2.append($('<button type="button" class="jhs-btn magnet-tab" role="tab" aria-selected="false" tabindex="-1"></button>').attr("data-engine", engine.id).text(engine.name).toggleClass("active", engine.id === this.currentEngine.id))));
-      const target = $('<a class="jhs-btn jhs-btn--ghost" id="targetBox" target="_blank" rel="noopener noreferrer">原网页</a>').attr("href", this.currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e2))).toggle("all" !== this.currentEngine.id);
+      let currentEngine = engines.find(((engine) => engine.id === i2)) || engines[0] || null;
+      if (!currentEngine) return t2.append($('<div class="magnet-error"></div>').text("暂无可用磁力来源，请前往设置启用来源"));
+      engines.forEach(((engine) => o2.append($('<button type="button" class="jhs-btn magnet-tab" role="tab" aria-selected="false" tabindex="-1"></button>').attr("data-engine", engine.id).text(engine.name).toggleClass("active", engine.id === currentEngine.id))));
+      const target = $('<a class="jhs-btn jhs-btn--ghost" data-jhs-role="magnet-target" target="_blank" rel="noopener noreferrer">原网页</a>').attr("href", currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e2))).toggle("all" !== currentEngine.id);
       n2.append(o2), n2.append(target), o2.find(".magnet-tab.active").attr({ "aria-selected": "true", tabindex: "0" }), t2.append(n2);
       const r2 = $('<div class="magnet-results"></div>');
       return t2.append(r2), t2.on("click", ".magnet-tab", ((n3) => {
         const i3 = $(n3.target).data("engine");
-        this.currentEngine = this.searchEngines.find(((e3) => e3.id === i3)), $("#targetBox").attr("href", this.currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e2))).toggle("all" !== this.currentEngine.id), localStorage.setItem(a2, i3), t2.find(".magnet-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), $(n3.target).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }), this.searchEngine(r2, this.currentEngine, e2);
+        currentEngine = engines.find(((e3) => e3.id === i3)), t2.find('[data-jhs-role="magnet-target"]').attr("href", currentEngine.targetPage.replace("{keyword}", encodeURIComponent(e2))).toggle("all" !== currentEngine.id), localStorage.setItem(a2, i3), t2.find(".magnet-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), $(n3.target).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }), this.searchEngine(r2, currentEngine, e2, root);
       })), t2.on("keydown", ".magnet-tab", ((e3) => {
         if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e3.key)) return;
         e3.preventDefault();
         const n3 = t2.find(".magnet-tab"), a3 = n3.index(e3.currentTarget);
         let i3 = "Home" === e3.key ? 0 : "End" === e3.key ? n3.length - 1 : "ArrowRight" === e3.key ? (a3 + 1) % n3.length : (a3 - 1 + n3.length) % n3.length;
         n3.eq(i3).trigger("click").trigger("focus");
-      })), this.searchEngine(r2, this.currentEngine, e2), t2;
+      })), this.searchEngine(r2, currentEngine, e2, root), t2;
     }
-    async searchEngine(e2, t2, n2) {
+    async searchEngine(e2, t2, n2, root = $(document)) {
       e2.html(`<div class="magnet-loading">正在从 ${escapeHtml(t2.name)} 搜索 "${escapeHtml(n2)}"...</div>`);
       const a2 = `${t2.name}_${n2}`;
       if (t2.search) try {
-        return void this.displayResults(e2, await this.applyRuntimeRules(deduplicateMagnetResults(await t2.search(n2))), t2.name);
+        return void this.displayResults(e2, await this.applyRuntimeRules(deduplicateMagnetResults(await t2.search(n2, root))), t2.name);
       } catch (error) {
         clog.error(`磁力源 ${t2.name} 请求失败`, error);
         return void e2.html(`<div class="magnet-error">${escapeHtml(t2.name)} 请求失败</div>`);
@@ -12933,8 +13123,8 @@ ${error.stack}` : "");
       const mode = await this.initializeProviders();
       if ("manual" === mode) return $(".screen-container").text("请选择截图来源"), void this.renderProviderTabs(e2);
       try {
-        const t2 = await this.getScreenshot(e2);
-        this.addImg("缩略图", t2), clog.log("加载缩略图:", t2);
+        const t2 = await this.getScreenshotFromInitializedProviders(e2);
+        t2 ? (this.addImg("缩略图", t2), clog.log("加载缩略图:", t2)) : this.showErrorFallback(e2, null);
       } catch (t2) {
         this.showErrorFallback(e2, t2);
       }
@@ -12959,6 +13149,11 @@ ${error.stack}` : "");
       e2 = normalizeCarNum(e2);
       if (!e2) throw clog.warn("跳过缩略图解析：番号不可用"), new Error("缩略图番号不可用");
       await this.initializeProviders();
+      return this.getScreenshotFromInitializedProviders(e2);
+    }
+    async getScreenshotFromInitializedProviders(e2) {
+      e2 = normalizeCarNum(e2);
+      if (!e2) throw new Error("缩略图番号不可用");
       localStorage.removeItem("jhs_screenShot");
       let n2;
       try {
@@ -12966,7 +13161,7 @@ ${error.stack}` : "");
       } catch (i2) {
         throw clog.error("获取缩略图资源失败:", n2, i2), i2;
       }
-      if (!n2) return this.showErrorFallback(e2, null), null;
+      if (!n2) return null;
       let url = n2.url, a2 = url.indexOf("https://");
       return -1 !== a2 && (url = url.substring(a2)), clog.log(`缩略图获取成功 (${n2.source}):`, url), url;
     }
@@ -13026,6 +13221,48 @@ ${error.stack}` : "");
         }
       })).on("click", ".check-link", (async (t3) => {
         t3.stopPropagation(), t3.preventDefault(), window.open(searchUrl, "_blank");
+      }));
+    }
+    /** 将截图状态与结果限制在指定容器内，供自有详情工作区使用。 */
+    async loadInto(target, carNum, { isActive = /* @__PURE__ */ __name(() => true, "isActive") } = {}) {
+      const host = $(target);
+      if (!host.length || "yes" !== await storageManager.getSetting("enableLoadScreenShot", "yes")) return host.empty(), null;
+      const mode = await this.initializeProviders(), renderMessage = /* @__PURE__ */ __name((message) => isActive() && host.empty().append($("<div></div>").addClass("jhs-panel-state").text(message)), "renderMessage");
+      if ("manual" === mode) {
+        host.empty();
+        const tabs = $('<div class="jhs-screenshot-providers" role="tablist" aria-label="截图来源"></div>'), result = $('<div class="jhs-screenshot-result"></div>').text("请选择截图来源");
+        this.providerRegistry.providers.forEach(((provider) => tabs.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').prop("disabled", !provider.enabled).attr("data-provider", provider.id).text(provider.name))));
+        host.append(tabs, result), tabs.on("click", "button:not(:disabled)", (async (event) => {
+          const provider = this.providerRegistry.get($(event.currentTarget).data("provider"));
+          result.text(`${provider.name} 加载中…`);
+          try {
+            const loaded = await provider.getScreenshot(normalizeCarNum(carNum));
+            if (!isActive()) return;
+            loaded?.url ? this.renderInto(result, loaded.url, `${provider.name} 缩略图`) : result.text(`${provider.name} 无结果`);
+          } catch (error) {
+            isActive() && result.text(`${provider.name} 请求失败`), clog.error("截图源请求失败", error);
+          }
+        }));
+        return host;
+      }
+      renderMessage("正在加载缩略图…");
+      try {
+        const url = await this.getScreenshotFromInitializedProviders(carNum);
+        if (!isActive()) return null;
+        if (!url) return host.empty(), null;
+        return this.renderInto(host, url, "缩略图"), url;
+      } catch (error) {
+        if (!isActive()) return null;
+        host.empty();
+        const state = $('<div class="jhs-panel-state"></div>').text("缩略图加载失败 "), retry = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>');
+        retry.on("click", (() => void this.loadInto(host, carNum, { isActive }))), host.append(state.append(retry));
+        return clog.error("缩略图加载失败", error), null;
+      }
+    }
+    renderInto(target, url, alt) {
+      const host = $(target), image = $("<img>").attr({ src: normalizeJavStoreAssetUrl(url), alt, loading: "lazy" }).addClass("jhs-fc2-gallery__image"), button = $('<button type="button" class="jhs-btn jhs-fc2-gallery-item jhs-fc2-screenshot-thumbnail"></button>').attr("aria-label", `查看${alt}大图`).append(image);
+      host.empty().append(button).off("click.jhsScreenshot").on("click.jhsScreenshot", ".jhs-fc2-screenshot-thumbnail", ((event) => {
+        event.preventDefault(), event.stopPropagation(), showImageViewer(image[0]);
       }));
     }
   };
@@ -13168,11 +13405,12 @@ ${error.stack}` : "");
     handle() {
       isDetailPage && this.translate();
     }
-    async translate(e2, t2 = true) {
+    async translate(e2, t2 = true, options = {}) {
       if (await storageManager.getSetting("translateTitle", _) !== _) return;
       l && (t2 = false);
-      let n2 = $(".origin-title");
-      if (n2.length || (n2 = $(".current-title")), n2.length || (n2 = $("h3")), !n2.length) return;
+      const root = options.root ? $(options.root) : $(document);
+      let n2 = root.find(".origin-title").first();
+      if (n2.length || (n2 = root.find(".current-title").first()), n2.length || (n2 = root.find("h3").first()), !n2.length) return;
       const a2 = n2.text().trim();
       if (!a2) return void show.error("获取标题失败, 无法进行翻译");
       let i2 = n2.nextAll(".translated-title").first();
@@ -13189,6 +13427,7 @@ ${error.stack}` : "");
       if (r2[o2]) return void i2.text(r2[o2]);
       try {
         const e3 = await _e(a2, "ja", "zh-CN");
+        if (!n2[0]?.isConnected) return;
         i2.text(e3), r2[o2] = e3, localStorage.setItem("jhs_translate", JSON.stringify(r2));
       } catch (l2) {
         clog.error("翻译失败:", l2), i2.addClass("is-error").text(`翻译失败: ${l2.message || String(l2)}`);
@@ -15706,27 +15945,47 @@ ${error.stack}` : "");
   };
   __name(_DetailWorkspacePlugin, "DetailWorkspacePlugin");
   var DetailWorkspacePlugin = _DetailWorkspacePlugin;
-  function organizeJhsOwnedDetailWorkspace(container) {
-    if (!container?.length || container.attr("data-jhs-organized")) return;
-    const children = container.children().detach();
-    container.attr("data-jhs-organized", "true").addClass("jhs-detail-workspace jhs-ui").attr("data-site", "fc2").empty();
-    const section = /* @__PURE__ */ __name((name, title, hasContent = false) => $(`<section class="jhs-detail-workspace__section ${hasContent ? "has-content" : ""}" data-jhs-section="${name}"><header class="jhs-detail-workspace__header"><h2>${title}</h2></header><div class="jhs-detail-workspace__content" data-jhs-slot="${name}"></div></section>`), "section");
-    const summary = section("summary", "影片概览", true), gallery = section("gallery", "预览与剧照"), resources = section("resources", "资源", true), reviews = section("reviews", "评论", true), related = section("related", "相关清单", true);
-    container.append(summary, gallery, resources, reviews, related);
-    const summaryContent = summary.find('[data-jhs-slot="summary"]'), resourceContent = resources.find('[data-jhs-slot="resources"]'), info = children.filter(".movie-info-container"), actionSelector = "#filterBtn, #favoriteBtn, #hasDownBtn, #hasWatchBtn, #enable-magnets-filter, #search-subtitle-btn, #xunLeiSubtitleBtn, #magnetSearchBtn", actionButtons = children.find(actionSelector).addBack(actionSelector);
-    summaryContent.append(info), info.find(".origin-title, .current-title, .movie-title, h3").first().addClass("jhs-detail-title");
-    if (actionButtons.length) {
-      const toolbar = $('<div class="jhs-detail-btn-row" role="toolbar" aria-label="影片状态操作"></div>');
-      actionButtons.each((function() {
-        toolbar.append($(this).removeAttr("style").addClass("jhs-btn"));
-      })), summaryContent.append(toolbar);
-    }
-    resourceContent.append(children.filter(".movie-panel-info, .video-panel")), resourceContent.find("#magnets-content").length || resourceContent.append(children.filter("#magnets-content"));
-    related.find('[data-jhs-slot="related"]').append(children.filter("#related-content")), reviews.find('[data-jhs-slot="reviews"]').append(children.filter("#reviews-content")), container.append(children.filter("#data-actress").removeAttr("style").addClass("jhs-is-hidden"));
-    const movieGallery = info.find(".movie-gallery").first();
-    movieGallery.length && (gallery.find('[data-jhs-slot="gallery"]').append(movieGallery), gallery.addClass("has-content"));
+  function createFc2DetailShell({ carNum = "", source = "fc2", mode = "dialog" } = {}) {
+    const workspace = $('<div class="jhs-fc2-workspace jhs-ui"></div>').attr({
+      "data-jhs-fc2-source": source,
+      "data-jhs-fc2-mode": mode,
+      "data-jhs-car-num": normalizeCarNum(carNum) || ""
+    });
+    const definitions = [["summary", "影片概览"], ["gallery", "预览与剧照"], ["resources", "资源"], ["reviews", "评论"], ["related", "相关清单"]];
+    definitions.forEach((([name, title]) => {
+      const section = $('<section class="jhs-fc2-section"></section>').attr("data-jhs-section", name);
+      const header = $('<header class="jhs-fc2-section__header"></header>'), heading = $("<h2></h2>").text(title), actions = $('<div class="jhs-fc2-section__actions"></div>').attr("data-jhs-section-actions", name);
+      section.append(header.append(heading, actions), $('<div class="jhs-fc2-section__content"></div>').attr("data-jhs-slot", name)), workspace.append(section);
+    }));
+    return workspace;
   }
-  __name(organizeJhsOwnedDetailWorkspace, "organizeJhsOwnedDetailWorkspace");
+  __name(createFc2DetailShell, "createFc2DetailShell");
+  function createFc2DetailContext(root, options = {}) {
+    const workspace = $(root).is(".jhs-fc2-workspace") ? $(root) : $(root).find(".jhs-fc2-workspace").first();
+    let destroyed = false;
+    const namespace = `.jhsFc2Detail${Date.now()}${Math.random().toString(36).slice(2)}`, observers = /* @__PURE__ */ new Set();
+    const context = {
+      ...options,
+      root: workspace,
+      workspace,
+      namespace,
+      observers,
+      getSlot: /* @__PURE__ */ __name((name) => workspace.find(`[data-jhs-slot="${name}"]`).first(), "getSlot"),
+      getSection: /* @__PURE__ */ __name((name) => workspace.find(`[data-jhs-section="${name}"]`).first(), "getSection"),
+      isAlive: /* @__PURE__ */ __name(() => !destroyed && workspace[0]?.isConnected !== false, "isAlive"),
+      addObserver(observer) {
+        observer && observers.add(observer);
+        return observer;
+      },
+      destroy() {
+        if (destroyed) return;
+        destroyed = true, workspace.off(namespace).find("*").off(namespace), observers.forEach(((observer) => observer.disconnect?.())), observers.clear(), workspace.removeData("jhsFc2Context");
+      }
+    };
+    workspace.data("jhsFc2Context", context);
+    return context;
+  }
+  __name(createFc2DetailContext, "createFc2DetailContext");
   var _CompatibilityEnhancementsPlugin = class _CompatibilityEnhancementsPlugin extends BasePlugin {
     getName() {
       return "CompatibilityEnhancementsPlugin";
@@ -15953,10 +16212,7 @@ ${error.stack}` : "");
     window.isDetailPage = (function() {
       let e3 = window.location.href;
       return r ? e3.split("?")[0].includes("/v/") : !!l && $("#magnet-table").length > 0;
-    })(), window.isListPage = r ? isListPage(window.location, $(".movie-list").length > 0) : !!l && $(".masonry > div .item").length > 0, window.isFc2Page = (function() {
-      let e3 = window.location.href;
-      return e3.includes("advanced_search?type=3") || e3.includes("advanced_search?type=100");
-    })();
+    })(), window.isListPage = r ? isListPage(window.location, $(".movie-list").length > 0) : !!l && $(".masonry > div .item").length > 0;
     const e2 = (async () => {
       await runDataMigrations(storageManager), await stateService.recoverPendingTransaction();
     })();

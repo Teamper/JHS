@@ -320,14 +320,6 @@ function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
                                     </select>
                                 </div>
                             </div>
-                            <div class="jhs-setting-row" data-description="控制普通状态内容是否继续显示在全部视图中。">
-                                <span class="setting-label">列表状态显示</span>
-                                <div class="form-content jhs-setting-toggle-grid">
-                                    <label><input type="checkbox" id="showFavoriteItem" class="mini-switch"><span>收藏</span></label>
-                                    <label><input type="checkbox" id="showHasDownItem" class="mini-switch"><span>已下载</span></label>
-                                    <label><input type="checkbox" id="showHasWatchItem" class="mini-switch"><span>已观看</span></label>
-                                </div>
-                            </div>
                             <div class="jhs-setting-row ${r ? "" : "do-hide"}"><span class="setting-label">加载女优信息</span><div class="form-content"><input type="checkbox" id="enableLoadActressInfo" class="mini-switch"></div></div>
                             <div class="jhs-setting-row"><span class="setting-label">竖图模式</span><div class="form-content"><input type="checkbox" id="enableVerticalModel" class="mini-switch"></div></div>
                             <div class="jhs-setting-row"><span class="setting-label">页面列数：<span id="showContainerColumns"></span></span><div class="form-content"><input type="range" class="jhs-range" id="containerColumns" min="2" max="10" step="1"></div></div>
@@ -659,7 +651,6 @@ function injectResourceSourcesPanel() {
 /** Build the shared quick-settings content for desktop and mobile. */
 function buildQuickSettingHtml() {
     const rows = [
-        [ "显示全部已鉴定内容", "showAllItem", "快速显示全部已鉴定状态。" ],
         [ "鉴定后立即关闭", "needClosePage", "完成鉴定后关闭当前详情窗口。" ],
         [ "瀑布流", "autoPage", "连续加载列表；启用后普通列表只支持默认排序。" ],
         [ "标题翻译", "translateTitle", "翻译列表和详情页标题。" ],

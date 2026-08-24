@@ -39,37 +39,22 @@ class ReviewPlugin extends BasePlugin {
         if (l) {
             const carNumber = this.getPageInfo().carNum;
             if (!carNumber) return void clog.warn("跳过 JavBus 评论解析：番号不可用");
-            const movies = await (async value => {
-                const url = `${U}/v2/search`, headers = {
-                    "user-agent": "Dart/3.5 (dart:io)",
-                    "accept-language": "zh-TW",
-                    host: "jdforrepam.com",
-                    jdsignature: await O()
-                }, params = {
-                    q: value,
-                    page: 1,
-                    type: "movie",
-                    limit: 1,
-                    movie_type: "all",
-                    from_recent: "false",
-                    movie_filter_by: "all",
-                    movie_sort_by: "relevance"
-                };
-                return (await gmHttp.get(url, params, headers)).data.movies;
-            })(carNumber);
-            const match = movies.find((movie => movie.number.toLowerCase() === carNumber.toLowerCase()));
-            match && await this.showReview(match.id, this.getBean("DetailWorkspacePlugin")?.getSlot("reviews"));
+            const movieId = await resolveJavDbMovieId(carNumber);
+            movieId && await this.showReview(movieId, this.getBean("DetailWorkspacePlugin")?.getSlot("reviews"));
         }
     }
-    async showReview(movieId, target) {
+    async showReview(movieId, target, options = {}) {
+        const isActive = "function" === typeof options.isActive ? options.isActive : () => !0;
         const enabled = await storageManager.getSetting("enableLoadReview", _), host = target?.length ? target : this.getBean("DetailWorkspacePlugin")?.getSlot("reviews") || $("#magnets-content");
+        if (!isActive() || !host?.length) return $();
         const existing = host.children('[data-jhs-panel="reviews"]').filter(((_, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
         if (existing.length) return existing;
         const panel = $('<section class="jhs-review-panel" data-jhs-panel="reviews"></section>').attr("data-jhs-movie-id", String(movieId));
         const header = $('<header class="jhs-panel-header"><h3>评论</h3></header>');
         const toggle = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-panel-toggle jhs-review-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>');
         const state = { movieId, panel, floorIndex: 1, loaded: !1, loading: !1, page: 1 };
-        header.append(toggle), panel.append(header, '<div class="jhs-review-list jhs-review-container"></div>', '<div class="jhs-panel-footer jhs-review-footer"></div>'), host.append(panel), this.bindRightClickFilter();
+        header.append(toggle), options.ownedSection ? options.ownedSection.find('[data-jhs-section-actions="reviews"]').first().append(toggle) : panel.append(header), panel.append('<div class="jhs-review-list jhs-review-container"></div>', '<div class="jhs-panel-footer jhs-review-footer"></div>'), host.append(panel), this.bindRightClickFilter();
+        state.isActive = isActive;
         this.updateToggle(toggle, enabled === _);
         toggle.on("click", (event => {
             event.preventDefault(), event.stopPropagation();
@@ -84,7 +69,7 @@ class ReviewPlugin extends BasePlugin {
         toggle.find(".toggle-icon").text(expanded ? "▲" : "▼");
     }
     async fetchAndDisplayReviews(state) {
-        if (state.loading) return;
+        if (state.loading || !state.isActive?.()) return;
         state.loading = !0;
         const { movieId, panel } = state, container = panel.find(".jhs-review-container"), footer = panel.find(".jhs-review-footer");
         container.empty().append($('<div class="jhs-panel-state"></div>').text("获取评论中...")), footer.empty();
@@ -98,11 +83,12 @@ class ReviewPlugin extends BasePlugin {
             state.loading = !1;
             return void this.renderRetry(container, "获取评论失败", (() => this.fetchAndDisplayReviews(state)));
         }
+        if (!state.isActive?.()) return void (state.loading = !1);
         state.loading = !1, state.loaded = !0;
         container.empty();
         if (!reviews.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无评论"));
         const keywords = await storageManager.getReviewFilterKeywordList();
-        await this.displayReviews(state, reviews, container, keywords), reviews.length === pageSize && R(movieId, 2, pageSize).catch((() => {}));
+        await this.displayReviews(state, reviews, container, keywords);
         reviews.length === pageSize ? this.bindLoadMore(state, pageSize, keywords, container, footer) : footer.append($('<div class="jhs-panel-end"></div>').text("已加载全部评论"));
     }
     renderRetry(container, message, retry) {
@@ -115,9 +101,12 @@ class ReviewPlugin extends BasePlugin {
         const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-review-load-more">加载更多评论</button>'), end = $('<div class="jhs-panel-end jhs-review-end">已加载全部评论</div>').hide();
         footer.empty().append(button, end);
         button.on("click", (async () => {
-            button.text("加载中...").prop("disabled", !0), state.page++;
+            const nextPage = state.page + 1;
+            button.text("加载中...").prop("disabled", !0);
             try {
-                const reviews = await R(state.movieId, state.page, pageSize);
+                const reviews = await R(state.movieId, nextPage, pageSize);
+                if (!state.isActive?.()) return;
+                state.page = nextPage;
                 await this.displayReviews(state, reviews, container, keywords), reviews.length < pageSize ? (button.remove(), end.show()) : button.text("加载更多评论").prop("disabled", !1);
             } catch (error) {
                 clog.error("加载更多评论失败:", error), button.text("加载失败，请重试").prop("disabled", !1);

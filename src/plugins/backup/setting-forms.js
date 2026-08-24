@@ -24,9 +24,6 @@ async function loadSettingForm(getBean) {
     $("#enableHandleSvg").prop("checked", !e.enableHandleSvg || e.enableHandleSvg === _),
     $("#enableSiteSvg").prop("checked", !e.enableSiteSvg || e.enableSiteSvg === _),
     $("#enableCopySvg").prop("checked", !e.enableCopySvg || e.enableCopySvg === _),
-    $("#showFavoriteItem").prop("checked", !e.showFavoriteItem || e.showFavoriteItem === _),
-    $("#showHasDownItem").prop("checked", !e.showHasDownItem || e.showHasDownItem === _),
-    $("#showHasWatchItem").prop("checked", !e.showHasWatchItem || e.showHasWatchItem === _),
     $("#enableLoadActressInfo").prop("checked", !e.enableLoadActressInfo || e.enableLoadActressInfo === _),
     $("#enableVerticalModel").prop("checked", !!e.enableVerticalModel && e.enableVerticalModel === _),
     $("#containerColumns").val(e.containerColumns || 5), $("#showContainerColumns").text(e.containerColumns || 5),
@@ -74,27 +71,7 @@ async function initQuickSettingForm(getBean, getSelector, openSettingDialogFn) {
     $("#autoPage").prop("checked", !e.autoPage || e.autoPage === _), $("#translateTitle").prop("checked", !e.translateTitle || e.translateTitle === _),
     $("#enableLoadActressInfo").prop("checked", !e.enableLoadActressInfo || e.enableLoadActressInfo === _),
     $("#enableLoadOtherSite").prop("checked", !e.enableLoadOtherSite || e.enableLoadOtherSite === _),
-    $("#showFavoriteItem").prop("checked", !e.showFavoriteItem || e.showFavoriteItem === _),
-    $("#showHasDownItem").prop("checked", !e.showHasDownItem || e.showHasDownItem === _),
-    $("#showHasWatchItem").prop("checked", !e.showHasWatchItem || e.showHasWatchItem === _),
-    $("#showFavoriteItem").on("change", (async t => {
-        let n = $("#showFavoriteItem").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("showFavoriteItem", n), await jhsEventBus.emit("filter-rules-changed", { setting: "showFavoriteItem" });
-    })), $("#showHasDownItem").on("change", (async t => {
-        let n = $("#showHasDownItem").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("showHasDownItem", n), await jhsEventBus.emit("filter-rules-changed", { setting: "showHasDownItem" });
-    })), $("#showHasWatchItem").on("change", (async t => {
-        let n = $("#showHasWatchItem").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("showHasWatchItem", n), await jhsEventBus.emit("filter-rules-changed", { setting: "showHasWatchItem" });
-    }));
-    const t = $("#showFavoriteItem, #showHasDownItem, #showHasWatchItem"), n = () => {
-        const e = $("#showAllItem").is(":checked");
-        t.prop("disabled", e), e ? t.attr("data-tip", "请先关闭显示所有才可点击") : t.removeAttr("data-tip");
-    };
-    $("#showAllItem").prop("checked", !!e.showAllItem && e.showAllItem === _), $("#showAllItem").on("change", (async t => {
-        let a = $("#showAllItem").is(":checked") ? _ : C;
-        await storageManager.saveSettingItem("showAllItem", a), n(), await jhsEventBus.emit("filter-rules-changed", { setting: "showAllItem" });
-    })), n(), $("#needClosePage").on("change", (async t => {
+    $("#needClosePage").on("change", (async t => {
         await storageManager.saveSettingItem("needClosePage", $("#needClosePage").is(":checked") ? _ : C),
         await jhsEventBus.emit("filter-rules-changed");
     })), $("#autoPage").on("change", (async t => {
@@ -161,8 +138,6 @@ async function saveSettingForm(getBean) {
     e.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C,
     e.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C,
     e.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C,
-    e.showFavoriteItem = $("#showFavoriteItem").is(":checked") ? _ : C,
-    e.showHasDownItem = $("#showHasDownItem").is(":checked") ? _ : C, e.showHasWatchItem = $("#showHasWatchItem").is(":checked") ? _ : C,
     e.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C,
     e.containerColumns = Number($("#containerColumns").val()) || 5, e.containerWidth = Number($("#containerWidth").val()) + 70 || 100,
     await storageManager.saveSetting(e);

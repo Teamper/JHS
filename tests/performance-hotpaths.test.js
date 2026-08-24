@@ -146,9 +146,14 @@ describe("list mutation hot path", () => {
 
     it("projects setQuickFilter to desktop and mobile controls", async () => {
         const { plugin, dom, $ } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
-        container.innerHTML = `<div class="item" data-jhs-flags='{"favorite":true}' data-jhs-visibility='{}' data-jhs-setting-hide="yes"></div><div class="item" data-jhs-flags='{}' data-jhs-visibility='{"keyword":true}'></div>`;
+        container.innerHTML = `<div class="item" data-jhs-flags='{"favorite":true}' data-jhs-visibility='{}'></div><div class="item" data-jhs-flags='{}' data-jhs-visibility='{"keyword":true}'></div>`;
         await plugin.createQuickFilter();
         $("body").append('<span class="jhs-mobile-filter-label"></span><button class="jhs-mobile-filter-option" data-jhs-filter="blockedItems" aria-checked="false"></button>');
+        plugin.setQuickFilter("all");
+        expect($(".item").filter(((_, item) => "none" !== $(item).css("display"))).length).toBe(1);
+        const appended = $('<div class="item" data-jhs-flags=\'{"downloaded":true}\' data-jhs-visibility="{}"></div>').appendTo(container);
+        plugin.applyVisibility(appended);
+        expect(appended.css("display")).not.toBe("none");
         plugin.setQuickFilter("blockedItems");
         expect(plugin.activeQuickFilter).toBe("blockedItems");
         expect($(".item").filter(((_, item) => "none" !== $(item).css("display"))).length).toBe(1);

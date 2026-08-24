@@ -70,20 +70,24 @@ unsafeWindow.loading = window.loading = function() {
         }), e);
     }
     document.head.insertAdjacentHTML("beforeend", "\n        <style>\n            .viewer-canvas {\n                overflow: auto !important;\n            }\n            \n            .viewer-close {\n                background: rgba(222, 51, 51, 0.6) !important; /* 状态红 --jhs-status-filter 半透明弱化 */\n            }\n            .viewer-close:hover {\n                background: rgba(222, 51, 51, 0.8) !important;\n            }\n        </style>\n    "),
-    window.showImageViewer = function(t, n = "") {
+    window.showImageViewer = function(t, n = "", options = {}) {
         let a = null, i = !1;
         "string" == typeof t || t instanceof String ? (a = $('<div class="temporary-container jhs-layout-c8be1ccb">').append(`<img src="${t}" alt="${n}">`).appendTo("body"),
         i = !0) : a = $(t);
+        const galleryRoot = options.galleryRoot ? $(options.galleryRoot) : null, viewerHost = galleryRoot?.length ? galleryRoot : a, selectedImage = "string" == typeof t || t instanceof String ? a.find("img")[0] : a[0], galleryImages = viewerHost.find("img").addBack("img").toArray(), initialViewIndex = Math.max(0, galleryImages.indexOf(selectedImage)), hasGallery = galleryImages.length > 1;
         const s = {
             zIndex: JHS_Z_INDEX.viewer,
             navbar: !1,
+            initialViewIndex,
             zoomOnWheel: !1,
             zoomRatio: .1,
             toggleOnDblclick: !1,
             toolbar: {
+                prev: hasGallery ? 1 : 0,
                 zoomIn: 1,
                 zoomOut: 1,
                 reset: 1,
+                next: hasGallery ? 1 : 0,
                 rotateLeft: 0,
                 rotateRight: 0,
                 flipHorizontal: 0,
@@ -93,12 +97,14 @@ unsafeWindow.loading = window.loading = function() {
             keyboard: !1,
             viewed() {
                 o.zoomTo(1.4);
-                let e = (o.viewerData.width - o.imageData.width) / 2;
-                o.moveTo(e, 0);
+                const x = (o.viewerData.width - o.imageData.width) / 2, y = (o.viewerData.height - o.imageData.height) / 2;
+                o.moveTo(x, y);
             },
             shown() {
                 i && a.remove(), document.documentElement.style.overflow = "hidden", document.body.style.overflow = "hidden",
                 o.handleKeydown = function(t) {
+                    if (hasGallery && "ArrowLeft" === t.key) return t.preventDefault(), t.stopPropagation(), void o.prev();
+                    if (hasGallery && "ArrowRight" === t.key) return t.preventDefault(), t.stopPropagation(), void o.next();
                     "Escape" !== t.key && " " !== t.key || (t.preventDefault(), t.stopPropagation(),
                     o.destroy(), document.removeEventListener("keydown", o.handleKeydown), document.documentElement.style.overflow = "",
                     document.body.style.overflow = "", e());
@@ -109,7 +115,7 @@ unsafeWindow.loading = window.loading = function() {
                 o.destroy(), document.documentElement.style.overflow = "", document.body.style.overflow = "",
                 e();
             }
-        }, o = new Viewer(a[0], s);
+        }, o = new Viewer(viewerHost[0], s);
         o.show();
     };
 }(), window.ImageHoverPreview = class {

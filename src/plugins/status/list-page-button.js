@@ -5,7 +5,7 @@ class ListPageButtonPlugin extends BasePlugin {
     async handle() {
         if (!window.isListPage) return;
         await this.createMenuBtn(), this.bindEvent();
-        const e = await storageManager.getSetting("autoPage"), t = this.isHitShowPage();
+        const e = await storageManager.getSetting("autoPage"), t = this.supportsLiveSorting();
         $("#sort-toggle-btn").prop("disabled", e === _ && !t).attr("title", e === _ && !t ? "瀑布流模式仅支持默认排序" : "选择列表排序方式"),
         (e !== _ || t) && await this.sortItems();
     }
@@ -120,7 +120,7 @@ class ListPageButtonPlugin extends BasePlugin {
         }));
     }
     async sortItems() {
-        const e = this.isHitShowPage();
+        const e = this.supportsLiveSorting();
         if (!e && (o.includes("handle") || o.includes("advanced_search"))) return;
         const s = await storageManager.getSetting("autoPage");
         if (c || s === _ && !e) return;
@@ -134,7 +134,7 @@ class ListPageButtonPlugin extends BasePlugin {
             const card = $(element), originalIndex = Number(card.attr("data-original-index")) || 0;
             if ("default" === t) return { element, key: originalIndex, originalIndex, index };
             if ("rateCount" === t) {
-                const explicit = Number(card.attr("data-jhs-rate-count")), match = card.find(".score .value").text().match(/由(\d+)人/);
+                const explicit = Number(card.attr("data-jhs-rate-count")), match = card.find(".score").text().replaceAll(",", "").match(/(?:由\s*)?(\d+)\s*人(?:评价)?/);
                 return { element, key: Number.isFinite(explicit) ? explicit : match ? Number(match[1]) : 0, originalIndex, index };
             }
             const value = card.attr("data-jhs-publish-time") || card.find(".meta").text().trim() || card.find("date").filter((function() { return /^\d{4}-\d{1,2}-\d{1,2}$/.test($(this).text().trim()); })).first().text().trim(), timestamp = Date.parse(value);
@@ -146,6 +146,12 @@ class ListPageButtonPlugin extends BasePlugin {
     }
     isHitShowPage() {
         return isHitShowPage(window.location);
+    }
+    isFc2ListPage() {
+        return r && "/advanced_search" === window.location.pathname && "3" === new URLSearchParams(window.location.search).get("type");
+    }
+    supportsLiveSorting() {
+        return this.isHitShowPage() || this.isFc2ListPage();
     }
     async openWaitCheck() {
         let e = this.getSelector();

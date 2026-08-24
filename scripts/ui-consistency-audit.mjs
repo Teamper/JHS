@@ -243,8 +243,8 @@ requireMatch(storageQueue, /return this\.queue = task\.catch[\s\S]{0,160}, task/
 forbidMatch(highlightMagnet, /#enable-magnets-filter[^\n]{0,100}(?:hide\(|addClass\(["']do-hide)/, "magnet filtering must never hide its toolbar entry");
 requireMatch(highlightMagnet, /removeClass\("do-hide"\)[\s\S]{0,160}未识别到可过滤项/, "magnet filtering must retain a no-match hint");
 requireMatch(highlightMagnet, /showAll\(\)[\s\S]{0,260}removeClass\("do-hide"\)[\s\S]{0,260}\.show\(\)/, "disabling magnet filtering must restore every row");
-requireMatch(detail, /#enable-magnets-filter/, "FC2 detail workspace must collect the magnet filter action");
-requireMatch(detail, /container\.append\(summary, gallery, resources, reviews, related\)/, "FC2 workspace must place reviews before related lists");
+requireMatch(detail, /createFc2DetailContext/, "FC2 detail workspace must own a scoped lifecycle context");
+requireMatch(detail, /\[ "summary", "影片概览" \], \[ "gallery", "预览与剧照" \], \[ "resources", "资源" \], \[ "reviews", "评论" \], \[ "related", "相关清单" \]/, "FC2 workspace must place reviews before related lists");
 requireMatch(commandbar, /<button type="button" id="jhs-fab" class="jhs-btn"/, "mobile FAB must be a native JHS button");
 requireMatch(commandbar, /role="menuitem" class="jhs-btn jhs-fab-menu-item"/, "mobile FAB items must use native menu buttons");
 requireMatch(commandbar, /ArrowDown[\s\S]*ArrowUp[\s\S]*Home[\s\S]*End/, "mobile FAB menu must support keyboard navigation");

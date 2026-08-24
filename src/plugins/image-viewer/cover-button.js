@@ -125,12 +125,12 @@ class CoverButtonPlugin extends BasePlugin {
         })), $(document).on("click", ".filterBtn, .favoriteBtn, .hasDownBtn, .hasWatchBtn", (t => {
             t.preventDefault(), t.stopPropagation();
             try {
-                const n = $(t.currentTarget), a = n.closest(".item"), {carNum: i, url: s, publishTime: o} = e.findCarNumAndHref(a), r = async t => {
+                const n = $(t.currentTarget), a = n.closest(".item"), {carNum: i, url: s, publishTime: o, fc2Source} = e.findCarNumAndHref(a), r = async t => {
                     try {
                         let n = await e.parseActressName(s);
                         const flag = legacyActionToFlag(t);
                         if (!flag) throw new Error("不支持的状态操作");
-                        await stateService.patch(i, { [flag]: !0 }, { type: "list-card-state", record: { carNum: i, url: s, names: n, publishTime: o } }), show.ok("操作成功");
+                        await stateService.patch(i, { [flag]: !0 }, { type: "list-card-state", record: { carNum: i, url: s, names: n, publishTime: o, fc2Source } }), show.ok("操作成功");
                     } catch (r) { clog.error("保存操作失败:", r), show.error("操作失败"); }
                 };
                 n.hasClass("filterBtn") ? utils.q(t, `是否屏蔽${i}?`, (() => r(d))) : n.hasClass("favoriteBtn") ? void r(h) : n.hasClass("hasDownBtn") ? void r(g) : n.hasClass("hasWatchBtn") && void r(p), this.closeCardMenus();

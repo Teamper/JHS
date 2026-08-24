@@ -780,7 +780,10 @@ function buildUiPrimitivesCss() {
             flex-direction: column;
         }
         .magnet-tabs > div {
+            width: 100%;
+            min-width: 0;
             max-width: 100%;
+            box-sizing: border-box;
             overflow-x: auto;
         }
         .magnet-result {

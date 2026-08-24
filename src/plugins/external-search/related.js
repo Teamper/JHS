@@ -16,13 +16,15 @@ class RelatedPlugin extends BasePlugin {
                 .jhs-related-time { color:var(--jhs-text-faint); font-size:14px; white-space:nowrap; }
             </style>`;
     }
-    async showRelated(target, movieId) {
+    async showRelated(target, movieId, options = {}) {
+        const isActive = "function" === typeof options.isActive ? options.isActive : () => !0;
         const enabled = await storageManager.getSetting("enableLoadRelated", C), host = target?.length ? target : this.getBean("DetailWorkspacePlugin")?.getSlot("related");
         if (!movieId) return void show.error("未传入movieId");
+        if (!isActive() || !host?.length) return $();
         const existing = host.children('[data-jhs-panel="related"]').filter(((_, element) => $(element).attr("data-jhs-movie-id") === String(movieId))).first();
         if (existing.length) return existing;
         const panel = $('<section class="jhs-related-panel" data-jhs-panel="related"></section>').attr("data-jhs-movie-id", String(movieId)), header = $('<header class="jhs-panel-header"><h3>相关清单</h3></header>'), toggle = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-panel-toggle jhs-related-toggle"><span class="toggle-text"></span><span class="toggle-icon" aria-hidden="true"></span></button>'), state = { movieId, panel, floorIndex: 1, loaded: !1, loading: !1, page: 1 };
-        header.append(toggle), panel.append(header, '<div class="jhs-related-list jhs-related-container"></div>', '<div class="jhs-panel-footer jhs-related-footer"></div>'), host.append(panel);
+        header.append(toggle), options.ownedSection ? options.ownedSection.find('[data-jhs-section-actions="related"]').first().append(toggle) : panel.append(header), panel.append('<div class="jhs-related-list jhs-related-container"></div>', '<div class="jhs-panel-footer jhs-related-footer"></div>'), host.append(panel), state.isActive = isActive;
         this.updateToggle(toggle, enabled === _);
         toggle.on("click", (event => {
             event.preventDefault(), event.stopPropagation();
@@ -37,7 +39,7 @@ class RelatedPlugin extends BasePlugin {
         toggle.find(".toggle-icon").text(expanded ? "▲" : "▼");
     }
     async fetchAndDisplayRelateds(state) {
-        if (state.loading) return;
+        if (state.loading || !state.isActive?.()) return;
         state.loading = !0;
         const { movieId, panel } = state, container = panel.find(".jhs-related-container"), footer = panel.find(".jhs-related-footer");
         container.empty().append($('<div class="jhs-panel-state"></div>').text("获取清单中...")), footer.empty();
@@ -49,6 +51,7 @@ class RelatedPlugin extends BasePlugin {
             state.loading = !1;
             return void this.renderRetry(container, (() => this.fetchAndDisplayRelateds(state)));
         }
+        if (!state.isActive?.()) return void (state.loading = !1);
         state.loading = !1, state.loaded = !0;
         container.empty();
         if (!related.length) return void container.append($('<div class="jhs-panel-state"></div>').text("无清单"));
@@ -63,9 +66,12 @@ class RelatedPlugin extends BasePlugin {
         const button = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-related-load-more">加载更多清单</button>'), end = $('<div class="jhs-panel-end jhs-related-end">已加载全部清单</div>').hide();
         footer.empty().append(button, end);
         button.on("click", (async () => {
-            button.text("加载中...").prop("disabled", !0), state.page++;
+            const nextPage = state.page + 1;
+            button.text("加载中...").prop("disabled", !0);
             try {
-                const related = await K(state.movieId, state.page, 20);
+                const related = await K(state.movieId, nextPage, 20);
+                if (!state.isActive?.()) return;
+                state.page = nextPage;
                 this.displayRelateds(state, related, container), related.length < 20 ? (button.remove(), end.show()) : button.text("加载更多清单").prop("disabled", !1);
             } catch (error) {
                 clog.error("加载更多清单失败:", error), button.text("加载失败，请重试").prop("disabled", !1);

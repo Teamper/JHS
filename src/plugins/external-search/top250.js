@@ -100,7 +100,7 @@ class Top250Plugin extends BasePlugin {
             insert: 0
         }) : window.location.href = s;
     }
-    openLoginDialog() {
+    openLoginDialog({ onSuccess = null } = {}) {
         layer.open({
             type: 1,
             title: "JavDB",
@@ -127,7 +127,7 @@ class Top250Plugin extends BasePlugin {
                             if (1 !== n) throw clog.error("登录失败", e), new Error(e.message);
                             {
                                 let n = e.data.token;
-                                await localStorage.setItem(me, await encryptData(n)), show.ok("登录成功"), layer.close(t), window.location.href = "/advanced_search?handleTop=1&period=daily";
+                                await localStorage.setItem(me, await encryptData(n)), show.ok("登录成功"), layer.close(t), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
                             }
                         }
                     })).catch((e => {
