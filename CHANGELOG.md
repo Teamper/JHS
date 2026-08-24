@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - TaskPlugin 与 ListPagePlugin 真实运行时进入 strict checkJs，明确调度状态/结果、配置刷新、网络分页、列表增量索引、筛选视图和媒体导航边界；生产源码类型覆盖率提升至 95.5%，RC 最低覆盖门禁上调至 95%。
 - Detail 的 legacy Contribution 改为一插件一 ID；封面状态按钮、详情状态按钮、JavDB 预览以及 JavBus 原生详情/图片/预览现在保持各自独立的旧版禁用语义。
 - Transitional PluginManager 的不可禁用属性改由 system Feature manifest 下发，删除 Settings、Stats 与移动工具栏的名称硬编码保护名单。
+- Feature/Contribution/Integration manifest schema 现在拒绝空值、重复 ID/token 和非法 host；Integration cache policy 必须精确覆盖全部 capability，Adapter 必须声明 normalized contract，JavDB 补齐四项显式 no-cache 声明。
 - 新增可单测的 Bootstrap Purity 架构门禁，禁止除 Composition Root 外的生产模块在导入阶段启动 DOM、网络、Storage、监听器、Observer 或定时器；原隐藏导航样式改为 Bootstrap 注入时才读取地址。
 - strict checkJs 继续覆盖自动翻页、设置样式/模板和 123AV-FC2 入口，并补齐分页空值、DOM 容器与 Integration 返回数据的显式契约。
 - 截图、宿主详情工作区、兼容增强与统一离线模块进入 strict checkJs；Provider availability、宿主资源边界、Observer 和 jQuery 兼容句柄均补充显式类型，覆盖率门禁同步上调至 84%。

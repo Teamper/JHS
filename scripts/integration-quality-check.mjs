@@ -39,6 +39,19 @@ for (const entry of entries) {
     if (!allowedQualities.has(manifest?.quality)) errors.push(`${entry.name}: invalid quality`);
     if (!Array.isArray(manifest?.capabilities) || manifest.capabilities.length === 0) errors.push(`${entry.name}: no capabilities`);
     if (manifest?.cachePolicy === undefined) errors.push(`${entry.name}: cachePolicy must be explicit, including none`);
+    if (manifest?.cachePolicy && manifest.cachePolicy !== "none" && typeof manifest.cachePolicy === "object") {
+        const missing = manifest.capabilities.filter((capability) => !Object.hasOwn(manifest.cachePolicy, capability));
+        const extra = Object.keys(manifest.cachePolicy).filter((capability) => !manifest.capabilities.includes(capability));
+        if (missing.length || extra.length) errors.push(`${entry.name}: cachePolicy must explicitly cover exactly its capabilities`);
+    }
+    try {
+        const adapter = manifest.createAdapter(manifest.createClient({}), {});
+        if (!Array.isArray(adapter?.contracts) || adapter.contracts.length === 0 || adapter.contracts.some((contract) => typeof contract !== "string" || !contract.trim())) {
+            errors.push(`${entry.name}: adapter must declare at least one normalized contract`);
+        }
+    } catch (error) {
+        errors.push(`${entry.name}: adapter cannot be constructed for contract inspection (${error?.message || error})`);
+    }
     const parserTest = path.join(rootDir, "tests", "integrations", `${entry.name}.contract.test.js`);
     const fixture = path.join(rootDir, "tests", "fixtures", "integrations", entry.name);
     if (!(await exists(parserTest))) errors.push(`${entry.name}: missing contract test`);

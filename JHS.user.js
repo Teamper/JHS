@@ -5492,12 +5492,28 @@
     if (!Array.isArray(value)) throw new TypeError(`${field} must be an array`);
   }
   __name(requireArray, "requireArray");
+  function requireUniqueStrings(value, field) {
+    requireArray(value, field);
+    const items = value;
+    for (const item of items) requireNonEmptyString(item, `${field} item`);
+    if (new Set(items).size !== items.length) throw new TypeError(`${field} cannot contain duplicates`);
+  }
+  __name(requireUniqueStrings, "requireUniqueStrings");
+  function requireUniqueTokens(value, field) {
+    requireArray(value, field);
+    const items = value;
+    if (items.some((item) => typeof item !== "symbol")) throw new TypeError(`${field} must contain dependency tokens`);
+    if (new Set(items).size !== items.length) throw new TypeError(`${field} cannot contain duplicate tokens`);
+  }
+  __name(requireUniqueTokens, "requireUniqueTokens");
   function defineFeature(manifest2) {
     requireNonEmptyString(manifest2.id, "Feature id");
     if (!FEATURE_KINDS.has(String(manifest2.kind))) throw new TypeError("Feature kind must be system or feature");
     if (!STARTUP_MODES.has(String(manifest2.startup))) throw new TypeError("Feature startup mode is invalid");
-    for (const field of ["sites", "routes", "requires", "contributes", "providesCommands"]) requireArray(manifest2[field], field);
+    for (const field of ["sites", "routes", "contributes", "providesCommands"]) requireUniqueStrings(manifest2[field], field);
+    requireUniqueTokens(manifest2.requires, "requires");
     if (typeof manifest2.activate !== "function") throw new TypeError("Feature activate must be a function");
+    if (typeof manifest2.disableable !== "boolean") throw new TypeError("Feature disableable must be explicit");
     if (manifest2.kind === "system" && manifest2.disableable !== false) throw new TypeError("System features cannot be disableable");
     return Object.freeze({ ...manifest2 });
   }
@@ -5506,8 +5522,8 @@
     requireNonEmptyString(manifest2.id, "Contribution id");
     requireNonEmptyString(manifest2.featureId, "Contribution featureId");
     requireNonEmptyString(manifest2.legacyPluginId, "Contribution legacyPluginId");
-    requireArray(manifest2.sites, "sites");
-    requireArray(manifest2.requires, "requires");
+    requireUniqueStrings(manifest2.sites, "sites");
+    requireUniqueTokens(manifest2.requires, "requires");
     if (typeof manifest2.plugin !== "function") throw new TypeError("Contribution plugin must be a class");
     if (!manifest2.order || typeof manifest2.order !== "object") throw new TypeError("Contribution order must be explicit");
     return Object.freeze({ ...manifest2, sites: Object.freeze([...manifest2.sites]), order: Object.freeze({ ...manifest2.order }) });
@@ -5517,11 +5533,25 @@
     requireNonEmptyString(manifest2.id, "Integration id");
     if (!TRUST_CLASSES.has(String(manifest2.trustClass))) throw new TypeError("Integration trustClass is invalid");
     if (!QUALITY_LEVELS.has(String(manifest2.quality))) throw new TypeError("Integration quality is invalid");
-    for (const field of ["hosts", "capabilities", "requires"]) requireArray(manifest2[field], field);
+    requireUniqueStrings(manifest2.hosts, "hosts");
+    requireUniqueStrings(manifest2.capabilities, "capabilities");
+    requireUniqueTokens(manifest2.requires, "requires");
     const hosts = manifest2.hosts;
     const capabilities = manifest2.capabilities;
     if (hosts.length === 0 || capabilities.length === 0) throw new TypeError("Integration hosts and capabilities cannot be empty");
+    for (const host of hosts) {
+      const value = String(host);
+      if (value !== value.toLowerCase() || new URL(`https://${value}`).hostname !== value) throw new TypeError(`Integration host is invalid: ${value}`);
+    }
     if (manifest2.cachePolicy === void 0) throw new TypeError("Integration cachePolicy must be explicit");
+    if (manifest2.cachePolicy !== "none") {
+      if (!manifest2.cachePolicy || typeof manifest2.cachePolicy !== "object" || Array.isArray(manifest2.cachePolicy)) throw new TypeError("Integration cachePolicy must be none or a capability map");
+      const policy = manifest2.cachePolicy;
+      const missing = capabilities.filter((capability) => !Object.hasOwn(policy, String(capability)));
+      const extra = Object.keys(policy).filter((capability) => !capabilities.includes(capability));
+      if (missing.length || extra.length) throw new TypeError(`Integration cachePolicy mismatch (missing: ${missing.join(", ") || "none"}; extra: ${extra.join(", ") || "none"})`);
+      for (const [capability, value] of Object.entries(policy)) requireNonEmptyString(value, `cachePolicy.${capability}`);
+    }
     if (typeof manifest2.createClient !== "function" || typeof manifest2.createAdapter !== "function") {
       throw new TypeError("Integration client and adapter factories are required");
     }
@@ -18359,7 +18389,14 @@ ${failure.stack}` : "");
     }
     resolveDeclared(requiredTokens) {
       const dependencies = /* @__PURE__ */ Object.create(null);
+      const seen = /* @__PURE__ */ new Set();
       for (const token of requiredTokens) {
+        if (seen.has(token)) {
+          const error = new JhsError("DUPLICATE_TOKEN", `Duplicate declared dependency: ${String(token)}`, { source: "DependencyContainer" });
+          this.diagnostics?.recordError?.(error);
+          throw error;
+        }
+        seen.add(token);
         if (!this.values.has(token)) {
           const error = new JhsError("MISSING_DEPENDENCY", `Missing declared dependency: ${String(token)}`, { source: "DependencyContainer" });
           this.diagnostics?.recordError?.(error);
@@ -19568,7 +19605,7 @@ ${failure.stack}` : "");
     createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http], hostAdapter: dependencies[PORT.javdbHost] }), "createClient"),
     createAdapter: /* @__PURE__ */ __name((client) => createJavDbAdapter(client.http, createJavDbSignature, client.hostAdapter), "createAdapter"),
     createHostAdapter: null,
-    cachePolicy: { "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.reviews": "public-1d", "movie.related": "public-1d", "actor.movies": "public-5m", "actor.collection": "none", "actor.uncollect": "none", "account.login": "none" },
+    cachePolicy: { "movie.search": "none", "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.state": "none", "movie.reviews": "public-1d", "movie.related": "public-1d", "actor.lookup": "none", "actor.movies": "public-5m", "actor.collection": "none", "actor.uncollect": "none", "actor.avatar-placeholder": "none", "account.login": "none" },
     quality: "silver"
   });
 

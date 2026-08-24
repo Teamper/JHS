@@ -22,6 +22,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(container.resolveDeclared([SERVICE.movie])[SERVICE.review]).toBeUndefined();
         expect(() => container.register(SERVICE.movie, {})).toThrow(/Duplicate/);
         expect(() => container.resolveDeclared([SERVICE.review])).toThrow(/Missing/);
+        expect(() => container.resolveDeclared([SERVICE.movie, SERVICE.movie])).toThrow(/Duplicate declared dependency/);
     });
 
     it("limits transitional legacy plugins to explicitly declared dependencies", () => {
@@ -156,6 +157,9 @@ describe("v6.5 architecture runtime contracts", () => {
 
     it("validates integration manifests and keeps ProviderRegistry focused", async () => {
         expect(() => defineIntegration({ id: "bad", trustClass: "builtin-public", hosts: [], capabilities: [], requires: [], cachePolicy: "none", quality: "bronze", createClient() {}, createAdapter() {} })).toThrow();
+        expect(() => defineIntegration({ id: "bad-host", trustClass: "builtin-public", hosts: ["HTTPS://EXAMPLE.COM"], capabilities: ["movie.detail"], requires: [], cachePolicy: "none", quality: "bronze", createClient() {}, createAdapter() {} })).toThrow(/host is invalid/);
+        expect(() => defineIntegration({ id: "bad-cache", trustClass: "builtin-public", hosts: ["example.com"], capabilities: ["movie.detail", "movie.images"], requires: [], cachePolicy: { "movie.detail": "none" }, quality: "bronze", createClient() {}, createAdapter() {} })).toThrow(/cachePolicy mismatch/);
+        expect(() => defineIntegration({ id: "bad-deps", trustClass: "builtin-public", hosts: ["example.com"], capabilities: ["movie.detail"], requires: [SERVICE.http, SERVICE.http], cachePolicy: "none", quality: "bronze", createClient() {}, createAdapter() {} })).toThrow(/duplicate tokens/);
         const registry = new ProviderRegistry();
         registry.register({ id: "slow", capabilities: ["magnet"], priority: 1 });
         registry.register({ id: "fast", capabilities: ["magnet"], priority: 2, isAvailable: async () => true });

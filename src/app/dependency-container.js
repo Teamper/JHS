@@ -25,7 +25,14 @@ export class DependencyContainer {
     /** @param {readonly symbol[]} requiredTokens */
     resolveDeclared(requiredTokens) {
         const dependencies = Object.create(null);
+        const seen = new Set();
         for (const token of requiredTokens) {
+            if (seen.has(token)) {
+                const error = new JhsError("DUPLICATE_TOKEN", `Duplicate declared dependency: ${String(token)}`, { source: "DependencyContainer" });
+                this.diagnostics?.recordError?.(error);
+                throw error;
+            }
+            seen.add(token);
             if (!this.values.has(token)) {
                 const error = new JhsError("MISSING_DEPENDENCY", `Missing declared dependency: ${String(token)}`, { source: "DependencyContainer" });
                 this.diagnostics?.recordError?.(error);
