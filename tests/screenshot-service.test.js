@@ -102,3 +102,52 @@ describe("ScreenshotService explicit provider resolution", () => {
         expect(integrations.getAdapter).not.toHaveBeenCalled();
     });
 });
+
+describe("ScreenshotService provider whitelist", () => {
+    it("returns null immediately when all providers are disabled", async () => {
+        const getImages = vi.fn(async () => [{ url: "https://javstore.net/a.jpg" }]);
+        const integrations = { list: vi.fn(() => [{ id: "javstore" }]), getAdapter: vi.fn(() => ({ getImages })) };
+        const providers = { getAvailable: vi.fn(async () => []), get: vi.fn(() => null), updateHealth: vi.fn() };
+        const service = new ScreenshotService(providers, integrations);
+        const settings = { enableLoadScreenShot: "yes", screenshotProviders: JSON.stringify([{ id: "javstore", enabled: false }]) };
+        await expect(service.resolve({ carNum: "ABC-123" }, { settings })).resolves.toBeNull();
+        expect(integrations.getAdapter).not.toHaveBeenCalled();
+        expect(providers.getAvailable).not.toHaveBeenCalled();
+    });
+
+    it("does not call a disabled javstore through the default fallback", async () => {
+        const getImages = vi.fn(async () => [{ url: "https://javstore.net/a.jpg" }]);
+        const integrations = { list: vi.fn(() => [{ id: "javstore" }]), getAdapter: vi.fn(() => ({ getImages })) };
+        const providers = { getAvailable: vi.fn(async () => []), get: vi.fn(() => null), updateHealth: vi.fn() };
+        const service = new ScreenshotService(providers, integrations);
+        const settings = { enableLoadScreenShot: "yes", screenshotProviders: JSON.stringify([{ id: "javstore", enabled: false }]) };
+        await expect(service.resolve({ carNum: "ABC-123" }, { settings })).resolves.toBeNull();
+        expect(integrations.getAdapter).not.toHaveBeenCalled();
+    });
+
+    it("rejects an explicit providerId that is not in the whitelist", async () => {
+        const provider = { id: "projectjav", capabilities: ["screenshot"], resolve: vi.fn(async () => ["x"]) };
+        const providers = { get: vi.fn(() => provider), getAvailable: vi.fn(async () => []), updateHealth: vi.fn() };
+        const integrations = { list: vi.fn(() => []), getAdapter: vi.fn() };
+        const service = new ScreenshotService(providers, integrations);
+        const settings = { enableLoadScreenShot: "yes", screenshotProviders: JSON.stringify([{ id: "javstore", enabled: true }]) };
+        await expect(service.resolve({ carNum: "ABC-123" }, { providerId: "projectjav", settings })).resolves.toBeNull();
+        expect(provider.resolve).not.toHaveBeenCalled();
+    });
+
+    it("keeps the whitelisted javstore working in default and explicit modes", async () => {
+        const getImages = vi.fn(async () => [{ url: "https://javstore.net/long.jpg", providerId: "javstore" }]);
+        const integrations = { list: vi.fn(() => [{ id: "javstore" }]), getAdapter: vi.fn(() => ({ getImages })) };
+        const providers = { getAvailable: vi.fn(async () => []), get: vi.fn(() => null), updateHealth: vi.fn() };
+        const service = new ScreenshotService(providers, integrations);
+        const settings = { enableLoadScreenShot: "yes", screenshotProviders: JSON.stringify([{ id: "javstore", enabled: true, priority: 5 }]) };
+        await expect(service.resolve({ carNum: "ABC-123" }, { settings })).resolves.toEqual([{ url: "https://javstore.net/long.jpg", providerId: "javstore" }]);
+        await expect(service.resolve({ carNum: "ABC-123" }, { providerId: "javstore", settings })).resolves.toEqual([{ url: "https://javstore.net/long.jpg", providerId: "javstore" }]);
+    });
+
+    it("getSearchUrl returns null when javstore is disabled", () => {
+        const integrations = { list: vi.fn(() => [{ id: "javstore" }]), getAdapter: vi.fn(() => ({ getSearchUrl: () => "https://javstore.net/search?q=ABC-123" })) };
+        const service = new ScreenshotService({ getAvailable: vi.fn(), updateHealth: vi.fn() }, integrations);
+        expect(service.getSearchUrl({ carNum: "ABC-123" }, { screenshotProviders: JSON.stringify([{ id: "javstore", enabled: false }]) })).toBeNull();
+    });
+});

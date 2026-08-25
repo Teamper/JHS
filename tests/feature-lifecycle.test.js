@@ -4,6 +4,7 @@ import { readTestFile } from "./helpers/read-test-file.js";
 import { join } from "node:path";
 import vm from "node:vm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 const $ = jquery;
@@ -54,6 +55,7 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
         const { Plugin, settings } = loadPlugin("src/plugins/status/auto-page.js", {
             className: "AutoPagePlugin",
             settingsSnapshot: { autoPage: "no" },
+            globals: { LifecycleScope },
         });
         const plugin = new Plugin();
         plugin.getRuntimeService = (name) => name === "settings" ? settings : { scope: async () => ({ addCleanup: () => {}, listen: () => {}, ownTimeout: () => {}, disposed: false }), http: {} }[name];
@@ -125,5 +127,56 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
         expect(settingsEvents.filter((item) => item.name === "settings.changed")).toHaveLength(1);
         expect(unmounted).toHaveBeenCalledTimes(3);
         expect(mounted).toHaveBeenCalledTimes(4); // 初始 handle 一次 + 3 次重新挂载
+    });
+
+    it("AutoPage: stop 释放 liveScope，请求中切 OFF 不再 append", async () => {
+        let resolveRequest;
+        const pending = new Promise((resolve) => { resolveRequest = resolve; });
+        const { Plugin, settings } = loadPlugin("src/plugins/status/auto-page.js", {
+            className: "AutoPagePlugin",
+            settingsSnapshot: { autoPage: "yes" },
+            globals: { LifecycleScope, requestHostPage: () => pending },
+        });
+        const plugin = new Plugin();
+        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "http" ? {} : async () => ({ addCleanup: () => {}, listen: () => {}, ownTimeout: () => {}, disposed: false });
+        plugin.getSelector = () => ({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item", coverImgSelector: ".cover img", nextPageSelector: ".pagination-next" });
+        plugin.shouldDisablePaging = async () => false;
+        plugin.getBoxCarInfoList = () => [];
+        plugin.getOptionalDependency = () => ({ replaceHdImg: () => {} });
+        await plugin.reconfigure();
+        expect(plugin.started).toBe(true);
+        const firstScope = plugin.liveScope;
+        expect(firstScope).not.toBeNull();
+        plugin.nextUrl = "/page/2";
+        const loadPromise = plugin.loadNextPage();
+        plugin.stop();
+        expect(plugin.started).toBe(false);
+        expect(plugin.liveScope).toBeNull();
+        expect(firstScope.disposed).toBe(true);
+        resolveRequest('<div class="movie-list"><div class="item"></div></div>');
+        await loadPromise;
+        expect(plugin.pageItems).toEqual([]);
+        expect($(".movie-list").children().length).toBe(0);
+    });
+
+    it("ActressInfo: 查询中切 OFF 后异步返回不再 append", async () => {
+        let resolveInfo;
+        const pending = new Promise((resolve) => { resolveInfo = resolve; });
+        const { Plugin, settings } = loadPlugin("src/plugins/avatar/actress-info.js", {
+            className: "ActressInfoPlugin",
+            settingsSnapshot: { enableLoadActressInfo: "yes" },
+        });
+        win.history.replaceState({}, "", "/v/test-id");
+        const plugin = new Plugin();
+        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "actressInfo" ? { lookup: () => pending, profileUrl: () => "" } : name === "scope" ? async () => ({}) : null;
+        $("body").append('<div>女優A</div><a class="female"></a><div><strong>演員</strong></div>');
+        const mountPromise = plugin.mount();
+        await Promise.resolve();
+        plugin.unmount();
+        expect($(".actress-info").length).toBe(0);
+        resolveInfo({ url: "https://example.test", birthday: "1990-01-01", age: "30", height: "160", weight: "45", threeSizeText: "B", braSize: "B70" });
+        await mountPromise;
+        expect($(".actress-info").length).toBe(0);
+        expect($(".female").next(".actress-info").length).toBe(0);
     });
 });

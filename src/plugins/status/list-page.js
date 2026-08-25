@@ -20,6 +20,9 @@ function getListEventBus() {
     return jhsEventBus;
 }
 
+/** settings-changed 中需要触发列表全量重判定的 key；其余（主题/Preview/截图/布局等）由各自 Feature 精确处理。 */
+const LIST_EFFECT_KEYS = new Set([ "tagPosition", "defaultQuickFilterTab" ]);
+
 const Te = {
     IS_FILTERED: {
         text: u,
@@ -124,7 +127,11 @@ export class ListPagePlugin extends BasePlugin {
         };
         settingsService.addEventListener("settings.changed", onSettingsChanged);
         scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
-        const refreshAll = async () => {
+        const refreshAll = async (/** @type {any} */ payload = {}) => {
+                // 6.5 收敛：settings-changed 只对列表判定相关 key 全量刷新；主题/Preview/截图/布局
+                // 等由各自 Feature 精确处理，不再触发 doFilter/applyVisibility/History setData。
+                const changedNames = /** @type {string[] | undefined} */ (payload?.changedNames);
+                if (changedNames && !changedNames.some((name) => LIST_EFFECT_KEYS.has(name))) return;
                 this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
                 const e = this.getOptionalDependency("HistoryPlugin");
                 e?.tableObj && e.tableObj.setData();

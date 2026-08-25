@@ -18,17 +18,34 @@ export class PreviewVideoPlugin extends BasePlugin {
     async handle() {
         if (!isDetailPage) return;
         const settingsService = this.getRuntimeService("settings");
-        if (!isPreviewEnabled(settingsService.snapshot())) return;
-        this.lifecycleScope = await this.getRuntimeService("scope")();
-        // 实时总开关：OFF → 卸载 JHS 播放器并隐藏入口；ON → 重新挂载。
-        const onSettingsChanged = (/** @type {any} */ event) => {
-            const names = /** @type {string[] | undefined} */ (event.detail?.names);
-            if (!names?.includes("enablePreviewVideo")) return;
-            if (isPreviewEnabled(settingsService.snapshot())) void this.handle().catch((error => clog.error("预览视频重新挂载失败", error)));
-            else this.unmountJhsPreview();
-        };
-        settingsService.addEventListener("settings.changed", onSettingsChanged);
-        this.lifecycleScope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
+        if (!this.lifecycleScope) this.lifecycleScope = await this.getRuntimeService("scope")();
+        if (!this._settingsListenerBound) {
+            this._settingsListenerBound = true;
+            const onSettingsChanged = (/** @type {any} */ event) => {
+                const names = /** @type {string[] | undefined} */ (event.detail?.names);
+                if (!names?.some((name) => name === "enablePreviewVideo" || name === "enableLoadPreviewVideo")) return;
+                this.reconfigure();
+            };
+            settingsService.addEventListener("settings.changed", onSettingsChanged);
+            this.lifecycleScope.addCleanup((() => {
+                settingsService.removeEventListener("settings.changed", onSettingsChanged);
+                this._settingsListenerBound = false;
+            }));
+        }
+        this.reconfigure();
+    }
+    /** 统一 reconfigure：总开关与 DMM 子开关都从这里走，禁止递归 handle()。 */
+    reconfigure() {
+        const settings = this.getRuntimeService("settings").snapshot();
+        if (!isPreviewEnabled(settings)) return void this.unmountPreview();
+        this.mountPreview();
+        if (isDmmEnabled(settings)) void this.initDmm(this.lifecycleScope).catch((error => clog.error("预加载 DMM 失败", error)));
+        else this.unmountDmmPlayer();
+    }
+    /** 幂等挂载：入口可见、click 绑定；gallery/autoPlay 只处理一次。 */
+    mountPreview() {
+        if (this._previewMounted) return;
+        this._previewMounted = true;
         $(".preview-video-container").removeClass("jhs-native-preview-hidden");
         const trigger = $(".preview-video-container"), openVideo = () => {
             utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => {
@@ -37,9 +54,22 @@ export class PreviewVideoPlugin extends BasePlugin {
         };
         trigger.off("click.jhsVideo").on("click.jhsVideo", openVideo);
         this.lifecycleScope.addCleanup((() => trigger.off("click.jhsVideo", openVideo)));
-        if (isDmmEnabled(settingsService.snapshot()) && !o.includes("autoPlay=1")) await this.initDmm(this.lifecycleScope);
         const url = window.location.href;
         (url.includes("gallery-1") || url.includes("gallery-2")) && openVideo(), url.includes("autoPlay=1") && trigger.length > 0 && trigger[0].click();
+    }
+    /** 只销毁 JHS DMM 播放器并把控制权交回宿主原生预览（总开关仍开启时保留入口）。 */
+    unmountDmmPlayer() {
+        const $dmm = $("#jhs-preview-video"), dmm = $dmm[0];
+        dmm && (dmm.pause(), $dmm.removeAttr("src"), dmm.load(), $dmm.remove());
+        $("#video-bottom-toolbar").remove();
+        $("#preview-video").removeClass("jhs-native-preview-hidden");
+        this.dmmPreviewPromise = null;
+    }
+    /** 总开关 OFF：卸载播放器、隐藏入口。 */
+    unmountPreview() {
+        this._previewMounted = false;
+        this.unmountDmmPlayer();
+        $(".preview-video-container").addClass("jhs-native-preview-hidden");
     }
     /** 卸载 JHS 播放器并把控制权交回宿主（宿主原生 UI 只做可逆隐藏，不销毁）。 */
     unmountJhsPreview() {
@@ -144,7 +174,8 @@ export class PreviewVideoPlugin extends BasePlugin {
         }
         $toolbar.append($qualityList);
         const $actions = $("<div></div>").addClass("jhs-toolbar");
-        $actions.append('<button type="button" class="jhs-btn jhs-btn--filter jhs-layout-3f0d74e1" id="video-filterBtn">屏蔽</button>', '<button type="button" class="jhs-btn jhs-btn--fav jhs-layout-2afc43dc" id="video-favoriteBtn">收藏</button>', '<button type="button" class="jhs-btn jhs-btn--down jhs-layout-5c319329" id="speed-btn">快进</button>'),
+        const hasDetailActions = !!this.getOptionalDependency("DetailPageButtonPlugin");
+        $actions.append(hasDetailActions ? '<button type="button" class="jhs-btn jhs-btn--filter jhs-layout-3f0d74e1" id="video-filterBtn">屏蔽</button>' : "", hasDetailActions ? '<button type="button" class="jhs-btn jhs-btn--fav jhs-layout-2afc43dc" id="video-favoriteBtn">收藏</button>' : "", '<button type="button" class="jhs-btn jhs-btn--down jhs-layout-5c319329" id="speed-btn">快进</button>'),
         $toolbar.append($actions), $host.append($toolbar), sources || await safePlay(nativeVideo, {
             context: "JavDB 预览视频",
             notify: !0,

@@ -2,6 +2,7 @@
 
 import { C, _, l, o, r } from "../../core/constants.js";
 import { requestHostPage } from "../../core/host-page-request.js";
+import { LifecycleScope } from "../../core/lifecycle-scope.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class AutoPagePlugin extends BasePlugin {
@@ -12,6 +13,8 @@ export class AutoPagePlugin extends BasePlugin {
         /** @type {Array<{ page: number, top: number, url: string }>} */
         this.pageItems = [];
         /** @type {boolean} */ this.started = false;
+        /** @type {import("../../core/lifecycle-scope.js").LifecycleScope | null} */ this.liveScope = null;
+        /** @type {number} */ this.generation = 0;
         /** @type {HTMLElement | undefined} */
         this.container = void 0;
         /** @type {HTMLDivElement | undefined} */
@@ -47,10 +50,17 @@ export class AutoPagePlugin extends BasePlugin {
     start() {
         if (this.started) return this.waterfallPromise || (this.waterfallPromise = this.waterfall().finally((() => { this.waterfallPromise = null; })));
         this.started = true;
+        this.liveScope?.dispose();
+        this.liveScope = new LifecycleScope("autopage:live");
+        this.generation++;
         return this.waterfall();
     }
+    /** 真正 stop：释放 live scope（scroll listener/定时器/请求全部随之 dispose），并使在途请求作废。 */
     stop() {
         this.started = false;
+        this.generation++;
+        this.liveScope?.dispose();
+        this.liveScope = null;
         this.nextUrl = null;
         this.hasMore = false;
         this.isLoading = false;
@@ -71,9 +81,10 @@ export class AutoPagePlugin extends BasePlugin {
         return 1;
     }
     async waterfall() {
-        if (!this.started) return;
+        if (!this.started || !this.liveScope) return;
         if (await this.shouldDisablePaging()) return;
-        const scope = await this.getRuntimeService("scope")();
+        if (!this.started || !this.liveScope || this.liveScope.disposed) return;
+        const scope = this.liveScope;
         const e = this.getSelector();
         const container = /** @type {HTMLElement | null} */ (document.querySelector(e.boxSelector));
         if (!container || !container.parentNode) return void clog.error("没有找到容器节点,停止瀑布流!");
@@ -106,10 +117,11 @@ export class AutoPagePlugin extends BasePlugin {
         if (this.getRuntimeService("settings").snapshot().autoPage === "no") return void this.setState("waterfall-loading", "");
         if (this.isLoading || !this.nextUrl || !this.container) return;
         this.isLoading = !0, this.setState("waterfall-loading", "加载中...");
-        const t = this.getSelector();
+        const t = this.getSelector(), generation = this.generation, scope = this.liveScope;
         try {
-            const scope = await this.getRuntimeService("scope")();
+            if (!scope || scope.disposed || generation !== this.generation) return;
             const i = await requestHostPage(this.getRuntimeService("http"), this.nextUrl, scope);
+            if (!this.started || !this.liveScope || this.liveScope.disposed || generation !== this.generation) return;
             clog.log("请求下一页内容:", this.nextUrl);
             const s = utils.htmlTo$dom(i);
             l && s.find(".avatar-box").length > 0 && s.find(".avatar-box").parent().remove();
@@ -117,6 +129,7 @@ export class AutoPagePlugin extends BasePlugin {
             const d = this.getBoxCarInfoList(), h = this.getBoxCarInfoList(c);
             if (this.checkDuplicateCarNumbers(d, h)) return this.nextUrl = null, this.hasMore = !1,
             void this.setState("waterfall-error", "翻页内容出现重复数据, 页码受JavDB限制, 已停止瀑布流");
+            if (!this.started || !this.liveScope || this.liveScope.disposed || generation !== this.generation) return;
             const g = this.container.scrollHeight;
             this.pageItems.push({
                 page: this.currentPage + 1,
@@ -131,7 +144,7 @@ export class AutoPagePlugin extends BasePlugin {
             let u = s.find(".pagination");
             $(".pagination").replaceWith(u), this.setState("waterfall-loading", ""), this.hasMore || this.setState("waterfall-no-more", "已经到底了");
         } catch (n) {
-            clog.error("加载失败:", n), this.setState("waterfall-error", "加载失败，点击重试");
+            this.started && this.loader && this.setState("waterfall-error", "加载失败，点击重试"), clog.error("加载失败:", n);
         } finally {
             this.isLoading = !1;
         }

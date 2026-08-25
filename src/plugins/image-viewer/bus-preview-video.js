@@ -35,6 +35,7 @@ export class BusPreviewVideoPlugin extends BasePlugin {
     }
     /** 总开关 OFF：卸载 JHS 预览入口（宿主无原生预览可保留，直接删除自有 UI）。 */
     unmountPreview() {
+        this._busPreviewMounted = false;
         this.closeVideoModal();
         $("#bus-preview-modal").remove();
         $(".preview-video-container").off("click.jhsBusPreview").remove();
@@ -42,18 +43,44 @@ export class BusPreviewVideoPlugin extends BasePlugin {
     async handle() {
         if (!isDetailPage) return;
         const settingsService = this.getRuntimeService("settings");
-        if (!isPreviewEnabled(settingsService.snapshot())) return;
-        const scope = await this.getRuntimeService("scope")();
-        const onSettingsChanged = (/** @type {any} */ event) => {
-            const names = /** @type {string[] | undefined} */ (event.detail?.names);
-            if (!names?.includes("enablePreviewVideo")) return;
-            if (isPreviewEnabled(settingsService.snapshot())) void this.handle().catch((error => clog.error("预览视频重新挂载失败", error)));
-            else this.unmountPreview();
-        };
-        settingsService.addEventListener("settings.changed", onSettingsChanged);
-        scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
+        if (!this._busScope) this._busScope = await this.getRuntimeService("scope")();
+        if (!this._settingsListenerBound) {
+            this._settingsListenerBound = true;
+            const onSettingsChanged = (/** @type {any} */ event) => {
+                const names = /** @type {string[] | undefined} */ (event.detail?.names);
+                if (!names?.some((name) => name === "enablePreviewVideo" || name === "enableLoadPreviewVideo")) return;
+                this.reconfigure();
+            };
+            settingsService.addEventListener("settings.changed", onSettingsChanged);
+            this._busScope.addCleanup((() => {
+                settingsService.removeEventListener("settings.changed", onSettingsChanged);
+                this._settingsListenerBound = false;
+            }));
+        }
+        this.reconfigure();
+    }
+    /** 统一 reconfigure：总开关 OFF→卸载；DMM 子开关 OFF→停止当前 JHS 播放。 */
+    reconfigure() {
+        const settings = this.getRuntimeService("settings").snapshot();
+        if (!isPreviewEnabled(settings)) return void this.unmountPreview();
+        this.mountPreview();
+        if (!isDmmEnabled(settings)) this.closeVideoModal();
+    }
+    /** 幂等挂载：modal、入口按钮、DMM 预载。 */
+    mountPreview() {
+        if (this._busPreviewMounted) return;
+        this._busPreviewMounted = true;
+        const scope = this._busScope, settingsService = this.getRuntimeService("settings");
         this.initModal(scope);
-        const e = $("#sample-waterfall .sample-box .photo-frame img:first").attr("src"), t = $(`\n            <button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65">\n                <div class="photo-frame jhs-layout-87db2275">\n                    <img src="${e}" class="video-cover" alt="">\n                    <div class="play-icon jhs-play-overlay">\n                        ▶\n                    </div>\n                </div>\n            </button>`);
+        const e = $("#sample-waterfall .sample-box .photo-frame img:first").attr("src"), t = $(`
+            <button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65">
+                <div class="photo-frame jhs-layout-87db2275">
+                    <img src="${e}" class="video-cover" alt="">
+                    <div class="play-icon jhs-play-overlay">
+                        ▶
+                    </div>
+                </div>
+            </button>`);
         $("#sample-waterfall").prepend(t);
         if (isDmmEnabled(settingsService.snapshot())) {
             void fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope).catch((error => clog.warn("预加载 DMM 失败", error)));

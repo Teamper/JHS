@@ -28,7 +28,8 @@ export class NavBarPlugin extends BasePlugin {
         }));
     }
     hookSearch() {
-        $("#navbar-menu-hero").after('\n            <div class="navbar-menu jhs-ui" id="search-box">\n                <div class="navbar-start jhs-layout-d9caa2c0">\n                    <select id="search-type" class="jhs-select-source">\n                        <option value="all">影片</option>\n                        <option value="actor">演员</option>\n                        <option value="series">系列</option>\n                        <option value="maker">片商</option>\n                        <option value="director">导演</option>\n                        <option value="code">番号</option>\n                        <option value="list">清单</option>\n                    </select>\n                    <input id="search-keyword" type="text" placeholder="输入影片番号、演员名等关键词进行检索" class="jhs-field">\n                    <a href="/advanced_search?noFold=1" title="高级检索" class="jhs-btn jhs-btn--secondary"><span>...</span></a>\n                    <button type="button" id="search-img-btn" class="jhs-btn jhs-btn--secondary">识图</button>\n                    <button type="button" id="search-btn" class="jhs-btn jhs-btn--primary">检索</button>\n                </div>\n            </div>\n        '),
+        const hasSearchByImage = !!this.getOptionalDependency("SearchByImagePlugin");
+        $("#navbar-menu-hero").after('\n            <div class="navbar-menu jhs-ui" id="search-box">\n                <div class="navbar-start jhs-layout-d9caa2c0">\n                    <select id="search-type" class="jhs-select-source">\n                        <option value="all">影片</option>\n                        <option value="actor">演员</option>\n                        <option value="series">系列</option>\n                        <option value="maker">片商</option>\n                        <option value="director">导演</option>\n                        <option value="code">番号</option>\n                        <option value="list">清单</option>\n                    </select>\n                    <input id="search-keyword" type="text" placeholder="输入影片番号、演员名等关键词进行检索" class="jhs-field">\n                    <a href="/advanced_search?noFold=1" title="高级检索" class="jhs-btn jhs-btn--secondary"><span>...</span></a>\n                    ' + (hasSearchByImage ? '<button type="button" id="search-img-btn" class="jhs-btn jhs-btn--secondary">识图</button>' : "") + '\n                    <button type="button" id="search-btn" class="jhs-btn jhs-btn--primary">检索</button>\n                </div>\n            </div>\n        '),
         $("#search-keyword").on("paste", ((/** @type {any} */ e) => {
             const t = e.originalEvent?.clipboardData?.items || [];
             for (let n = 0; n < t.length; n++) if (-1 !== t[n].type.indexOf("image")) {
@@ -47,16 +48,17 @@ export class NavBarPlugin extends BasePlugin {
         })), $("#search-btn").on("click", ((/** @type {MouseEvent} */ e) => {
             let t = $("#search-keyword").val(), n = $("#search-type").val();
             "" !== t && (window.location.href.includes("/search") ? window.location.href = "/search?q=" + t + "&f=" + n : window.open("/search?q=" + t + "&f=" + n));
-        })), $("#search-img-btn").on("click", (() => {
+        })), hasSearchByImage && $("#search-img-btn").on("click", (() => {
             this.getOptionalDependency("SearchByImagePlugin")?.open?.();
         }));
     }
     hookOldSearch() {
         const e = document.querySelector(".search-image");
         if (!e) return;
+        const hasSearchByImage = !!this.getOptionalDependency("SearchByImagePlugin");
         const t = e.cloneNode(!0);
         e.parentNode?.replaceChild(t, e), $("#button-search-image").attr("data-tooltip", "以图识图"),
-        $(".search-image").on("click", ((/** @type {MouseEvent} */ e) => {
+        hasSearchByImage && $(".search-image").on("click", ((/** @type {MouseEvent} */ e) => {
             this.getOptionalDependency("SearchByImagePlugin")?.open?.();
         }));
     }

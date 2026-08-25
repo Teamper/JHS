@@ -17,7 +17,7 @@ export async function renderTranslatedTitle(options) {
     translatedNode.removeClass("is-error").text("翻译中...");
     try {
         const translated = await options.translation.translate(sourceText, { scope: options.scope });
-        if (!title[0]?.isConnected) return;
+        if (!title[0]?.isConnected || !translatedNode[0]?.isConnected) return;
         translatedNode.text(translated);
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);

@@ -363,6 +363,18 @@ export class SettingPlugin extends BasePlugin {
         $("#themeMode").on("change", (async function() {
             await settingPlugin.getRuntimeService("settings").set("themeMode", $(this).val()), applyTheme();
         }));
+        // 6.5 live：UI/显示型设置即时生效，不等底部“保存”。
+        $("#mobileMode").on("change", (async function() {
+            await settingPlugin.getRuntimeService("settings").set("mobileMode", $(this).val());
+        }));
+        $("#enableClog").on("change", (async function() {
+            const value = $(this).val();
+            await settingPlugin.getRuntimeService("settings").set("enableClog", value);
+            "yes" === value ? clog.show() : clog.hide();
+        }));
+        $("#needClosePageBasic").on("change", (async function() {
+            await settingPlugin.getRuntimeService("settings").set("needClosePage", $(this).is(":checked") ? "yes" : "no");
+        }));
     }
     async loadResourceSettings() {
         const [custom, tags, filters, builtInOverrides, screenshot, cloud] = await Promise.all([this.resourceSettings.getMagnetSources(), this.resourceSettings.getMagnetTagRules(), this.resourceSettings.getMagnetFilterRules(), this.resourceSettings.getBuiltInSources(), this.resourceSettings.getScreenshotSettings(), this.resourceSettings.getCloudSettings()]);

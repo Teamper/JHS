@@ -88,7 +88,7 @@ export function registerDefaultSettings(registry) {
         surfaces: ["full", "quick"],
         defaultValue: no,
     });
-    registry.register({ key: "mobileMode", owner: "LayoutFeature", label: "移动模式", type: "select", defaultValue: "auto", effect: "live", surfaces: ["full"], options: Object.freeze([{ value: "auto", label: "自动" }, { value: "desktop", label: "桌面" }, { value: "mobile", label: "移动" }]) });
+    registry.register({ key: "mobileMode", owner: "LayoutFeature", label: "移动模式", type: "select", defaultValue: "auto", effect: "live", surfaces: ["full"], options: Object.freeze([{ value: "auto", label: "自动检测" }, { value: "on", label: "强制开启" }, { value: "off", label: "强制关闭" }]) });
     registry.register({ key: "themeMode", owner: "ThemeFeature", label: "主题", type: "select", defaultValue: "light", effect: "live", surfaces: ["full"], options: Object.freeze([{ value: "light", label: "浅色" }, { value: "dark", label: "深色" }]) });
     registry.register({ key: "containerColumns", owner: "LayoutFeature", label: "列表列数", type: "number", defaultValue: 5, effect: "live", surfaces: ["full"] });
     registry.register({ key: "containerWidth", owner: "LayoutFeature", label: "列表宽度", type: "number", defaultValue: 100, effect: "live", surfaces: ["full"] });

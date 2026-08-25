@@ -3,6 +3,10 @@
 import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class ActressInfoPlugin extends BasePlugin {
+    constructor() {
+        super(...arguments);
+        /** @type {number} */ this._generation = 0;
+    }
     getName() { return "ActressInfoPlugin"; }
     async handle() {
         const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
@@ -19,13 +23,19 @@ export class ActressInfoPlugin extends BasePlugin {
     /** ON：立即加载当前详情/演员页。 */
     async mount() {
         if (this.getRuntimeService("settings").snapshot().enableLoadActressInfo === "no") return;
+        this._generation++;
         const path = window.location.pathname;
         if (path.startsWith("/v/") || path.startsWith("/movies/")) await this.handleDetailPage();
         else if (path.startsWith("/actors/")) await this.handleStarPage();
     }
-    /** OFF：删除 JHS 演员信息 DOM 并释放请求。 */
+    /** OFF：删除 JHS 演员信息 DOM 并使在途查询作废（generation 防回流）。 */
     unmount() {
+        this._generation++;
         $(".actress-info").remove();
+    }
+    /** 在途查询是否仍然有效：generation 未变且设置仍开启。 */
+    isStillActive(/** @type {number} */ generation) {
+        return generation === this._generation && this.getRuntimeService("settings").snapshot().enableLoadActressInfo !== "no";
     }
     async initCss() {
         return `<style>
@@ -34,12 +44,14 @@ export class ActressInfoPlugin extends BasePlugin {
     }
     async handleDetailPage() {
         if ($(".actress-info").length > 0) return;
+        const generation = this._generation;
         const names = $(".female").prev().map(((/** @type {number} */ index, /** @type {Element} */ item) => $(item).text().trim())).get();
         if (!names.length) return;
         /** @type {any[]} */ const blocks = [];
         for (const name of names) {
             let info = null;
             try { info = await this.searchInfo(name); } catch (error) { clog.error("演员资料查询失败", name, error); }
+            if (!this.isStillActive(generation)) return;
             const block = $('<div class="panel-block actress-info"></div>');
             if (info) {
                 block.append($("<strong></strong>").text(`${name}:`));
@@ -56,10 +68,12 @@ export class ActressInfoPlugin extends BasePlugin {
             }
             blocks.push(block);
         }
+        if (!this.isStillActive(generation)) return;
         $('strong:contains("演員")').parent().after(...blocks);
     }
     async handleStarPage() {
         if ($(".actress-info").length > 0) return;
+        const generation = this._generation;
         /** @type {string[]} */ const names = [];
         const title = $(".actor-section-name");
         if (title.length) title.text().trim().split(",").forEach(((/** @type {string} */ name) => names.push(name.trim())));
@@ -69,6 +83,7 @@ export class ActressInfoPlugin extends BasePlugin {
         let info = null;
         for (const name of names) {
             try { info = await this.searchInfo(name); } catch (error) { clog.error("演员资料查询失败", name, error); }
+            if (!this.isStillActive(generation)) return;
             if (info) break;
         }
         const body = $('<div class="jhs-layout-c0d4a511"></div>');
@@ -79,6 +94,7 @@ export class ActressInfoPlugin extends BasePlugin {
             row2.append($("<span></span>").addClass("jhs-layout-dd5a75f6").text(`体重: ${info.weight}`), $("<span></span>").addClass("jhs-layout-d4a09a0d").text(`三围: ${info.threeSizeText}`), $("<span></span>").addClass("jhs-layout-d4a09a0d").text(`罩杯: ${info.braSize}`));
             body.append(row1, row2);
         }
+        if (!this.isStillActive(generation)) return;
         const result = info ? $("<a></a>").addClass("actress-info").attr({ href: info.url, target: "_blank", rel: "noopener noreferrer" }).append(body) : body.addClass("actress-info");
         title.parent().append(result);
     }

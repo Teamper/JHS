@@ -9,9 +9,28 @@ export class HighlightMagnetPlugin extends BasePlugin {
     async handle() {
         if (!window.isDetailPage) return;
         const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
-        scope.addCleanup(jhsEventBus?.on("magnet-items-updated", (() => {
-            (settings.snapshot().enableMagnetsFilter ?? _) === _ ? this.doFilterMagnet() : this.showAll();
-        })) || (() => {}));
+        if (!this._settingsListenerBound) {
+            this._settingsListenerBound = true;
+            const onSettingsChanged = (/** @type {any} */ event) => {
+                const names = /** @type {string[] | undefined} */ (event.detail?.names);
+                if (!names?.includes("enableMagnetsFilter")) return;
+                this.reconfigure();
+            };
+            settings.addEventListener("settings.changed", onSettingsChanged);
+            scope.addCleanup((() => {
+                settings.removeEventListener("settings.changed", onSettingsChanged);
+                this._settingsListenerBound = false;
+            }));
+        }
+        scope.addCleanup(jhsEventBus?.on("magnet-items-updated", (() => this.reconfigure())) || (() => {}));
+        this.reconfigure();
+    }
+    /** 唯一 reconfigure：settings.changed 与 magnet-items-updated 共用；同时同步本地按钮文案/aria。 */
+    reconfigure() {
+        const enabled = (this.getRuntimeService("settings").snapshot().enableMagnetsFilter ?? _) === _;
+        enabled ? this.doFilterMagnet() : this.showAll();
+        $("#magnets-span").text(enabled ? "关闭磁力过滤" : "开启磁力过滤");
+        $("#enable-magnets-filter").attr("aria-pressed", String(enabled));
     }
     async initCss() {
         return `<style>.jhs-magnet-score{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:600;vertical-align:middle;cursor:help}</style>`;

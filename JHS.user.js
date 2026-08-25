@@ -4142,7 +4142,8 @@
       return ["iphone", "ipod", "ipad", "android", "blackberry", "windows phone", "nokia", "webos", "opera mini", "mobile", "mobi", "tablet"].some(((t2) => e2.includes(t2)));
     }
     isMobileMode() {
-      const e2 = storageManager.getSettingSync("mobileMode", "auto");
+      const snapshot = globalThis.settingsService?.snapshot?.();
+      const e2 = snapshot?.mobileMode ?? storageManager.getSettingSync("mobileMode", "auto");
       return "on" === e2 || "off" !== e2 && (this.isMobile() || window.innerWidth < 768);
     }
     async copyToClipboard(e2, t2) {
@@ -5952,12 +5953,17 @@
     ],
     StatsPlugin: ["NewVideoPlugin", "ListPagePlugin"],
     TaskPlugin: ["BlacklistPlugin"],
+    TranslatePlugin: ["ListPagePlugin"],
     TOP250Plugin: ["HitShowPlugin"],
     UnifiedOfflinePlugin: ["OneTwoThreeOfflinePlugin"]
   });
 
   // src/plugins/avatar/actress-info.js
   var _ActressInfoPlugin = class _ActressInfoPlugin extends BasePlugin {
+    constructor() {
+      super(...arguments);
+      this._generation = 0;
+    }
     getName() {
       return "ActressInfoPlugin";
     }
@@ -5975,12 +5981,17 @@
     }
     async mount() {
       if (this.getRuntimeService("settings").snapshot().enableLoadActressInfo === "no") return;
+      this._generation++;
       const path = window.location.pathname;
       if (path.startsWith("/v/") || path.startsWith("/movies/")) await this.handleDetailPage();
       else if (path.startsWith("/actors/")) await this.handleStarPage();
     }
     unmount() {
+      this._generation++;
       $(".actress-info").remove();
+    }
+    isStillActive(generation) {
+      return generation === this._generation && this.getRuntimeService("settings").snapshot().enableLoadActressInfo !== "no";
     }
     async initCss() {
       return `<style>
@@ -5989,6 +6000,7 @@
     }
     async handleDetailPage() {
       if ($(".actress-info").length > 0) return;
+      const generation = this._generation;
       const names = $(".female").prev().map(((index, item) => $(item).text().trim())).get();
       if (!names.length) return;
       const blocks = [];
@@ -5999,6 +6011,7 @@
         } catch (error) {
           clog.error("演员资料查询失败", name, error);
         }
+        if (!this.isStillActive(generation)) return;
         const block = $('<div class="panel-block actress-info"></div>');
         if (info) {
           block.append($("<strong></strong>").text(`${name}:`));
@@ -6015,10 +6028,12 @@
         }
         blocks.push(block);
       }
+      if (!this.isStillActive(generation)) return;
       $('strong:contains("演員")').parent().after(...blocks);
     }
     async handleStarPage() {
       if ($(".actress-info").length > 0) return;
+      const generation = this._generation;
       const names = [];
       const title = $(".actor-section-name");
       if (title.length) title.text().trim().split(",").forEach(((name) => names.push(name.trim())));
@@ -6032,6 +6047,7 @@
         } catch (error) {
           clog.error("演员资料查询失败", name, error);
         }
+        if (!this.isStillActive(generation)) return;
         if (info) break;
       }
       const body = $('<div class="jhs-layout-c0d4a511"></div>');
@@ -6042,6 +6058,7 @@
         row2.append($("<span></span>").addClass("jhs-layout-dd5a75f6").text(`体重: ${info.weight}`), $("<span></span>").addClass("jhs-layout-d4a09a0d").text(`三围: ${info.threeSizeText}`), $("<span></span>").addClass("jhs-layout-d4a09a0d").text(`罩杯: ${info.braSize}`));
         body.append(row1, row2);
       }
+      if (!this.isStillActive(generation)) return;
       const result = info ? $("<a></a>").addClass("actress-info").attr({ href: info.url, target: "_blank", rel: "noopener noreferrer" }).append(body) : body.addClass("actress-info");
       title.parent().append(result);
     }
@@ -8818,6 +8835,17 @@
       $("#themeMode").on("change", (async function() {
         await settingPlugin.getRuntimeService("settings").set("themeMode", $(this).val()), applyTheme();
       }));
+      $("#mobileMode").on("change", (async function() {
+        await settingPlugin.getRuntimeService("settings").set("mobileMode", $(this).val());
+      }));
+      $("#enableClog").on("change", (async function() {
+        const value = $(this).val();
+        await settingPlugin.getRuntimeService("settings").set("enableClog", value);
+        "yes" === value ? clog.show() : clog.hide();
+      }));
+      $("#needClosePageBasic").on("change", (async function() {
+        await settingPlugin.getRuntimeService("settings").set("needClosePage", $(this).is(":checked") ? "yes" : "no");
+      }));
     }
     async loadResourceSettings() {
       const [custom, tags, filters, builtInOverrides, screenshot, cloud] = await Promise.all([this.resourceSettings.getMagnetSources(), this.resourceSettings.getMagnetTagRules(), this.resourceSettings.getMagnetFilterRules(), this.resourceSettings.getBuiltInSources(), this.resourceSettings.getScreenshotSettings(), this.resourceSettings.getCloudSettings()]);
@@ -9650,7 +9678,7 @@
     translatedNode.removeClass("is-error").text("翻译中...");
     try {
       const translated = await options.translation.translate(sourceText, { scope: options.scope });
-      if (!title[0]?.isConnected) return;
+      if (!title[0]?.isConnected || !translatedNode[0]?.isConnected) return;
       translatedNode.text(translated);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -10499,6 +10527,7 @@ ${value}\r
       previous?.destroy?.(), target.empty();
       const shell = createFc2DetailShell(options).appendTo(target), context = createFc2DetailContext(shell, options);
       target.data("jhsFc2Context", context), this.initializeWorkspace(context);
+      this.bindFc2FeatureLifecycle(context);
       return context;
     }
     initializeWorkspace(context) {
@@ -10536,28 +10565,70 @@ ${value}\r
       "123av" === context.source ? void this.load123AvDetail(context) : void this.loadNativeDetail(context);
       const keywordFilter = this.getOptionalDependency("FilterTitleKeywordPlugin");
       keywordFilter && void Promise.resolve().then((() => keywordFilter.bindDetailRoot(context.root, { layerIndex: context.layerIndex ?? null }))).catch(((error) => clog.error("FC2 关键词过滤初始化失败", error)));
-      const otherSite = this.getOptionalDependency("OtherSitePlugin");
-      otherSite ? void Promise.resolve().then((() => otherSite.loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: false, isActive: context.isAlive }))).then((box) => {
+      this.mountFc2OtherSites(context, sitesGroup, this.getOptionalDependency("OtherSitePlugin"));
+      this.loadFc2Screenshot(context);
+    }
+    bindFc2FeatureLifecycle(context) {
+      const settings = this.getRuntimeService("settings"), handler = /* @__PURE__ */ __name((event) => {
+        const names = event.detail?.names;
+        if (!names?.length) return;
+        if (names.includes("enableLoadScreenShot")) {
+          settings.snapshot().enableLoadScreenShot === "no" ? this.unmountFc2Screenshot(context) : void this.loadFc2Screenshot(context);
+        }
+        if (names.includes("translateTitle")) {
+          (settings.snapshot().translateTitle ?? _) === _ ? void this.applyFc2Translation(context) : this.revertFc2Translation(context);
+        }
+        if (names.includes("enableMagnetsFilter")) {
+          context.magnetFilterApply?.((settings.snapshot().enableMagnetsFilter ?? _) === _);
+        }
+        if (names.includes("enableLoadOtherSite")) {
+          const sitesGroup = context.getSection("resources").find('[data-jhs-role="other-sites"]').closest(".jhs-fc2-resource-group");
+          settings.snapshot().enableLoadOtherSite === "no" ? this.unmountFc2OtherSites(context, sitesGroup) : void this.mountFc2OtherSites(context, sitesGroup, this.getOptionalDependency("OtherSitePlugin"));
+        }
+      }, "handler");
+      settings.addEventListener("settings.changed", handler);
+      context.addObserver({ disconnect: /* @__PURE__ */ __name(() => settings.removeEventListener("settings.changed", handler), "disconnect") });
+    }
+    loadFc2Screenshot(context) {
+      const screenshotService = this.getRuntimeService("screenshot"), settings = this.getRuntimeService("settings"), screenshot = context.root.find('[data-jhs-role="screenshot"]');
+      if (!screenshotService.isEnabled(settings.snapshot())) return void screenshot.empty();
+      void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((scope) => renderScreenshotPanel({
+        target: screenshot,
+        carNum: context.carNum.replace("FC2-", ""),
+        screenshot: screenshotService,
+        settings: settings.snapshot(),
+        scope,
+        isActive: /* @__PURE__ */ __name(() => context.isAlive() && settings.snapshot().enableLoadScreenShot !== "no", "isActive"),
+        isDuplicate: /* @__PURE__ */ __name((url) => Boolean(context.galleryUrls?.has(url)), "isDuplicate")
+      })).then((result) => {
+        if (!context.isAlive()) return;
+        if (settings.snapshot().enableLoadScreenShot === "no") return void screenshot.empty();
+        if (!result && !screenshot.children().length) screenshot.remove();
+      }).catch((error) => {
+        context.isAlive() && settings.snapshot().enableLoadScreenShot !== "no" && screenshot.remove(), clog.error("FC2 剧照初始化失败", error);
+      });
+    }
+    unmountFc2Screenshot(context) {
+      context.root.find('[data-jhs-role="screenshot"]').empty();
+    }
+    applyFc2Translation(context) {
+      void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((scope) => renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope })).catch(((error) => clog.error("FC2 标题翻译失败", error)));
+    }
+    revertFc2Translation(context) {
+      context.root.find(".translated-title").remove();
+    }
+    mountFc2OtherSites(context, sitesGroup, otherSite) {
+      if (!otherSite) return void sitesGroup.remove();
+      sitesGroup.length && sitesGroup.show();
+      void Promise.resolve().then((() => otherSite.loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: false, isActive: context.isAlive }))).then((box) => {
         if (context.isAlive() && !box) sitesGroup.remove();
       }).catch((error) => {
         context.isAlive() && sitesGroup.remove(), clog.error("FC2 外部站点加载失败", error);
-      }) : sitesGroup.remove();
-      const screenshotService = this.getRuntimeService("screenshot");
-      if (screenshotService.isEnabled(this.getRuntimeService("settings").snapshot())) {
-        void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((scope) => renderScreenshotPanel({
-          target: screenshot,
-          carNum: context.carNum.replace("FC2-", ""),
-          screenshot: screenshotService,
-          settings: this.getRuntimeService("settings").snapshot(),
-          scope,
-          isActive: context.isAlive,
-          isDuplicate: /* @__PURE__ */ __name((url) => Boolean(context.galleryUrls?.has(url)), "isDuplicate")
-        })).then((result) => {
-          if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove();
-        }).catch(((error) => {
-          context.isAlive() && screenshot.remove(), clog.error("FC2 剧照初始化失败", error);
-        }));
-      } else screenshot.remove();
+      });
+    }
+    unmountFc2OtherSites(context, sitesGroup) {
+      context.root.find("[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
+      sitesGroup.length && sitesGroup.hide();
     }
     createResourceGroup(title, role) {
       return $('<section class="jhs-fc2-resource-group"><h3 class="jhs-fc2-resource-title"></h3><div></div></section>').find("h3").text(title).end().find("div").attr("data-jhs-role", role).end();
@@ -10679,7 +10750,7 @@ ${value}\r
         button.attr("aria-pressed", String(enabled && hasMatch)).text(hasMatch ? enabled ? "显示全部磁力" : "过滤低质量" : "暂无可过滤项").prop("disabled", !hasMatch);
       }, "apply");
       const settings = this.getRuntimeService("settings");
-      actions.append(button), apply((settings.snapshot().enableMagnetsFilter ?? _) === _), button.on(`click${context.namespace}`, (async () => {
+      context.magnetFilterApply = apply, actions.append(button), apply((settings.snapshot().enableMagnetsFilter ?? _) === _), button.on(`click${context.namespace}`, (async () => {
         const enabled = "true" !== button.attr("aria-pressed");
         apply(enabled), await settings.set("enableMagnetsFilter", enabled ? _ : "no");
       }));
@@ -11956,6 +12027,7 @@ ${failure.stack}` : "");
       e2.length > 0 && e2[0].pause(), $("#bus-preview-modal").removeClass("is-open");
     }
     unmountPreview() {
+      this._busPreviewMounted = false;
       this.closeVideoModal();
       $("#bus-preview-modal").remove();
       $(".preview-video-container").off("click.jhsBusPreview").remove();
@@ -11963,16 +12035,32 @@ ${failure.stack}` : "");
     async handle() {
       if (!isDetailPage) return;
       const settingsService = this.getRuntimeService("settings");
-      if (!isPreviewEnabled(settingsService.snapshot())) return;
-      const scope = await this.getRuntimeService("scope")();
-      const onSettingsChanged = /* @__PURE__ */ __name((event) => {
-        const names = event.detail?.names;
-        if (!names?.includes("enablePreviewVideo")) return;
-        if (isPreviewEnabled(settingsService.snapshot())) void this.handle().catch(((error) => clog.error("预览视频重新挂载失败", error)));
-        else this.unmountPreview();
-      }, "onSettingsChanged");
-      settingsService.addEventListener("settings.changed", onSettingsChanged);
-      scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
+      if (!this._busScope) this._busScope = await this.getRuntimeService("scope")();
+      if (!this._settingsListenerBound) {
+        this._settingsListenerBound = true;
+        const onSettingsChanged = /* @__PURE__ */ __name((event) => {
+          const names = event.detail?.names;
+          if (!names?.some((name) => name === "enablePreviewVideo" || name === "enableLoadPreviewVideo")) return;
+          this.reconfigure();
+        }, "onSettingsChanged");
+        settingsService.addEventListener("settings.changed", onSettingsChanged);
+        this._busScope.addCleanup((() => {
+          settingsService.removeEventListener("settings.changed", onSettingsChanged);
+          this._settingsListenerBound = false;
+        }));
+      }
+      this.reconfigure();
+    }
+    reconfigure() {
+      const settings = this.getRuntimeService("settings").snapshot();
+      if (!isPreviewEnabled(settings)) return void this.unmountPreview();
+      this.mountPreview();
+      if (!isDmmEnabled(settings)) this.closeVideoModal();
+    }
+    mountPreview() {
+      if (this._busPreviewMounted) return;
+      this._busPreviewMounted = true;
+      const scope = this._busScope, settingsService = this.getRuntimeService("settings");
       this.initModal(scope);
       const e2 = $("#sample-waterfall .sample-box .photo-frame img:first").attr("src"), t2 = $(`
             <button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65">
@@ -12104,7 +12192,7 @@ ${failure.stack}` : "");
       const onSettingsChanged = /* @__PURE__ */ __name((event) => {
         const names = event.detail?.names || [];
         if (names.includes("enablePreviewVideo")) {
-          if (isPreviewEnabled(settingsService.snapshot())) void this.handle().catch(((error) => clog.error("卡片预览重新挂载失败", error)));
+          if (isPreviewEnabled(settingsService.snapshot())) void this.addSvgBtn().catch(((error) => clog.error("卡片预览重新挂载失败", error)));
           else {
             $('[id$="_preview_video"]').each((_2, element) => {
               element.pause?.(), $(element).parent().remove();
@@ -12114,8 +12202,14 @@ ${failure.stack}` : "");
         }
         if (names.some((name) => ["enableLoadScreenShot", "enableVideoSvg", "enableHandleSvg", "enableSiteSvg", "enableCopySvg"].includes(name))) void this.enableSvgBtn();
       }, "onSettingsChanged");
-      settingsService.addEventListener("settings.changed", onSettingsChanged);
-      scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
+      if (!this._settingsListenerBound) {
+        this._settingsListenerBound = true;
+        settingsService.addEventListener("settings.changed", onSettingsChanged);
+        scope.addCleanup((() => {
+          settingsService.removeEventListener("settings.changed", onSettingsChanged);
+          this._settingsListenerBound = false;
+        }));
+      }
       this.addSvgBtn();
       await this.bindClick(scope);
     }
@@ -12308,16 +12402,32 @@ ${failure.stack}` : "");
     async handle() {
       if (!isDetailPage) return;
       const settingsService = this.getRuntimeService("settings");
-      if (!isPreviewEnabled(settingsService.snapshot())) return;
-      this.lifecycleScope = await this.getRuntimeService("scope")();
-      const onSettingsChanged = /* @__PURE__ */ __name((event) => {
-        const names = event.detail?.names;
-        if (!names?.includes("enablePreviewVideo")) return;
-        if (isPreviewEnabled(settingsService.snapshot())) void this.handle().catch(((error) => clog.error("预览视频重新挂载失败", error)));
-        else this.unmountJhsPreview();
-      }, "onSettingsChanged");
-      settingsService.addEventListener("settings.changed", onSettingsChanged);
-      this.lifecycleScope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
+      if (!this.lifecycleScope) this.lifecycleScope = await this.getRuntimeService("scope")();
+      if (!this._settingsListenerBound) {
+        this._settingsListenerBound = true;
+        const onSettingsChanged = /* @__PURE__ */ __name((event) => {
+          const names = event.detail?.names;
+          if (!names?.some((name) => name === "enablePreviewVideo" || name === "enableLoadPreviewVideo")) return;
+          this.reconfigure();
+        }, "onSettingsChanged");
+        settingsService.addEventListener("settings.changed", onSettingsChanged);
+        this.lifecycleScope.addCleanup((() => {
+          settingsService.removeEventListener("settings.changed", onSettingsChanged);
+          this._settingsListenerBound = false;
+        }));
+      }
+      this.reconfigure();
+    }
+    reconfigure() {
+      const settings = this.getRuntimeService("settings").snapshot();
+      if (!isPreviewEnabled(settings)) return void this.unmountPreview();
+      this.mountPreview();
+      if (isDmmEnabled(settings)) void this.initDmm(this.lifecycleScope).catch(((error) => clog.error("预加载 DMM 失败", error)));
+      else this.unmountDmmPlayer();
+    }
+    mountPreview() {
+      if (this._previewMounted) return;
+      this._previewMounted = true;
       $(".preview-video-container").removeClass("jhs-native-preview-hidden");
       const trigger = $(".preview-video-container"), openVideo = /* @__PURE__ */ __name(() => {
         utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => {
@@ -12326,9 +12436,20 @@ ${failure.stack}` : "");
       }, "openVideo");
       trigger.off("click.jhsVideo").on("click.jhsVideo", openVideo);
       this.lifecycleScope.addCleanup((() => trigger.off("click.jhsVideo", openVideo)));
-      if (isDmmEnabled(settingsService.snapshot()) && !o.includes("autoPlay=1")) await this.initDmm(this.lifecycleScope);
       const url = window.location.href;
       (url.includes("gallery-1") || url.includes("gallery-2")) && openVideo(), url.includes("autoPlay=1") && trigger.length > 0 && trigger[0].click();
+    }
+    unmountDmmPlayer() {
+      const $dmm = $("#jhs-preview-video"), dmm = $dmm[0];
+      dmm && (dmm.pause(), $dmm.removeAttr("src"), dmm.load(), $dmm.remove());
+      $("#video-bottom-toolbar").remove();
+      $("#preview-video").removeClass("jhs-native-preview-hidden");
+      this.dmmPreviewPromise = null;
+    }
+    unmountPreview() {
+      this._previewMounted = false;
+      this.unmountDmmPlayer();
+      $(".preview-video-container").addClass("jhs-native-preview-hidden");
     }
     unmountJhsPreview() {
       const $dmm = $("#jhs-preview-video"), dmm = $dmm[0];
@@ -12426,7 +12547,8 @@ ${failure.stack}` : "");
       }
       $toolbar.append($qualityList);
       const $actions = $("<div></div>").addClass("jhs-toolbar");
-      $actions.append('<button type="button" class="jhs-btn jhs-btn--filter jhs-layout-3f0d74e1" id="video-filterBtn">屏蔽</button>', '<button type="button" class="jhs-btn jhs-btn--fav jhs-layout-2afc43dc" id="video-favoriteBtn">收藏</button>', '<button type="button" class="jhs-btn jhs-btn--down jhs-layout-5c319329" id="speed-btn">快进</button>'), $toolbar.append($actions), $host.append($toolbar), sources || await safePlay(nativeVideo, {
+      const hasDetailActions = !!this.getOptionalDependency("DetailPageButtonPlugin");
+      $actions.append(hasDetailActions ? '<button type="button" class="jhs-btn jhs-btn--filter jhs-layout-3f0d74e1" id="video-filterBtn">屏蔽</button>' : "", hasDetailActions ? '<button type="button" class="jhs-btn jhs-btn--fav jhs-layout-2afc43dc" id="video-favoriteBtn">收藏</button>' : "", '<button type="button" class="jhs-btn jhs-btn--down jhs-layout-5c319329" id="speed-btn">快进</button>'), $toolbar.append($actions), $host.append($toolbar), sources || await safePlay(nativeVideo, {
         context: "JavDB 预览视频",
         notify: true,
         message: "REGION_BLOCKED" === error?.code ? error.message : "当前视频源无法播放"
@@ -14320,6 +14442,43 @@ ${failure.stack}` : "");
   var OneTwoThreeOfflinePlugin = _OneTwoThreeOfflinePlugin;
 
   // src/features/stats/stats-repository.js
+  function computeLibraryStats(cars) {
+    let total = 0, blocked = 0, favoriteRaw = 0, favoriteEffective = 0, downloadedRaw = 0, downloadedEffective = 0, watchedRaw = 0, watchedEffective = 0, pending = 0;
+    for (const car of cars ?? []) {
+      const flags = normalizeStateFlags(car?.stateFlags);
+      total++;
+      const isBlocked = flags.blocked === true;
+      isBlocked && blocked++;
+      const unblocked2 = !isBlocked;
+      if (flags.favorite) {
+        favoriteRaw++;
+        unblocked2 && favoriteEffective++;
+      }
+      if (flags.downloaded) {
+        downloadedRaw++;
+        unblocked2 && downloadedEffective++;
+      }
+      if (flags.watched) {
+        watchedRaw++;
+        unblocked2 && watchedEffective++;
+      }
+      !hasAnyState(flags) && pending++;
+    }
+    const unblocked = total - blocked;
+    return Object.freeze({
+      total,
+      blocked,
+      unblocked,
+      favoriteRaw,
+      favoriteEffective,
+      downloadedRaw,
+      downloadedEffective,
+      watchedRaw,
+      watchedEffective,
+      pending
+    });
+  }
+  __name(computeLibraryStats, "computeLibraryStats");
   var _StatsRepository = class _StatsRepository {
     constructor(dependencies) {
       this.storage = dependencies.storage;
@@ -14379,12 +14538,8 @@ ${failure.stack}` : "");
     }
     async openDialog() {
       const diagnostics = this.getRuntimeService("diagnostics").exportSnapshot();
-      const { cars, actresses, blacklist, activity } = await this.getStatsRepository().loadLibrarySnapshot(), total = cars.length;
-      const counts = { manualBlocked: 0, favorite: 0, hasDown: 0, hasWatch: 0, pending: 0 };
-      cars.forEach(((car) => {
-        const flags = normalizeStateFlags(car.stateFlags);
-        flags.blocked && counts.manualBlocked++, flags.favorite && counts.favorite++, flags.downloaded && counts.hasDown++, flags.watched && counts.hasWatch++, hasAnyState(flags) || counts.pending++;
-      }));
+      const { cars, actresses, blacklist, activity } = await this.getStatsRepository().loadLibrarySnapshot();
+      const stats = computeLibraryStats(cars), total = stats.total;
       const actressCounts = /* @__PURE__ */ new Map();
       cars.forEach(((car) => {
         const names = String(car.names || "").split(/[\s,，、]+/).filter(Boolean);
@@ -14397,13 +14552,13 @@ ${failure.stack}` : "");
         }));
       }));
       const topActresses = [...actressCounts.values()].sort(((left, right) => right.count - left.count || left.name.localeCompare(right.name))).slice(0, 10), topValue = topActresses[0]?.count || 1, javDbUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", await storageManager.getSetting());
-      const pending = counts.pending, counter = this.getOptionalDependency("NewVideoPlugin"), listPage = this.getOptionalDependency("ListPagePlugin"), newVideos = counter ? await counter.getPendingNewVideoTotal() : 0, pageSummary = listPage?.getCurrentPageSummary?.() || { blockedItems: 0 };
+      const pending = stats.pending, counter = this.getOptionalDependency("NewVideoPlugin"), listPage = this.getOptionalDependency("ListPagePlugin"), newVideos = counter ? await counter.getPendingNewVideoTotal() : 0, pageSummary = listPage?.getCurrentPageSummary?.() || { blockedItems: 0 };
       const metrics = [
         { label: "总记录", value: total, action: null },
-        { label: "收藏", value: counts.favorite, action: null },
-        { label: "下载", value: counts.hasDown, action: null },
-        { label: "已看", value: counts.hasWatch, action: null },
-        { label: "手动屏蔽", value: counts.manualBlocked, action: null },
+        { label: "收藏", value: stats.favoriteRaw, action: null },
+        { label: "下载", value: stats.downloadedRaw, action: null },
+        { label: "已看", value: stats.watchedRaw, action: null },
+        { label: "手动屏蔽", value: stats.blocked, action: null },
         { label: "未鉴定", value: pending, action: null },
         { label: "收藏演员", value: actresses.length, action: null },
         { label: "黑名单演员", value: blacklist.length, action: null },
@@ -14411,8 +14566,14 @@ ${failure.stack}` : "");
         { label: "活跃功能", value: diagnostics.activeFeatures.length, action: null },
         { label: "运行错误", value: diagnostics.errors.length, action: null }
       ];
-      const statusRows = [["收藏", counts.favorite, "var(--jhs-status-fav)"], ["下载", counts.hasDown, "var(--jhs-status-down)"], ["已看", counts.hasWatch, "var(--jhs-status-watch)"], ["手动屏蔽", counts.manualBlocked, "var(--jhs-status-filter)"], ["未鉴定", pending, "var(--jhs-border-strong)"]];
-      const row = /* @__PURE__ */ __name((label, value, max, color, href = "") => `<div class="jhs-stats__row">${href ? `<a class="jhs-stats__label" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(label)}">${escapeHtml(label)}</a>` : `<span class="jhs-stats__label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`}<span class="jhs-stats__track"><span class="jhs-stats__bar" data-width="${max ? Math.round(value / max * 100) : 0}" data-color="${color}"></span></span><span class="jhs-stats__value">${value}${max === total && total ? ` (${Math.round(value / total * 100)}%)` : ""}</span></div>`, "row");
+      const statusRows = [
+        ["收藏", stats.favoriteEffective, stats.unblocked, "var(--jhs-status-fav)"],
+        ["下载", stats.downloadedEffective, stats.unblocked, "var(--jhs-status-down)"],
+        ["已看", stats.watchedEffective, stats.unblocked, "var(--jhs-status-watch)"],
+        ["手动屏蔽", stats.blocked, stats.total, "var(--jhs-status-filter)"],
+        ["未鉴定", stats.pending, stats.unblocked, "var(--jhs-border-strong)"]
+      ];
+      const row = /* @__PURE__ */ __name((label, value, max, color, href = "", showPercent = false) => `<div class="jhs-stats__row">${href ? `<a class="jhs-stats__label" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(label)}">${escapeHtml(label)}</a>` : `<span class="jhs-stats__label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`}<span class="jhs-stats__track"><span class="jhs-stats__bar" data-width="${max ? Math.round(value / max * 100) : 0}" data-color="${color}"></span></span><span class="jhs-stats__value">${value}${showPercent && max ? ` (${Math.round(value / max * 100)}%)` : ""}</span></div>`, "row");
       const trend = /* @__PURE__ */ __name((days) => {
         const cutoff = Date.now() - days * 864e5, result = { identified: 0, downloaded: 0, watched: 0 };
         activity.entries.filter(((entry) => "committed" === entry.commitState && Date.parse(entry.createdAt) >= cutoff)).forEach(((entry) => entry.changes.filter(((change) => "reverted" !== change.undoState)).forEach(((change) => {
@@ -14426,7 +14587,7 @@ ${failure.stack}` : "");
       const dialogHtml = `<div class="jhs-stats jhs-scrollbar jhs-ui">
             <section class="jhs-stats__group"><h3>全库概览</h3><div class="jhs-stats__metrics">${metrics.map(renderMetric).join("")}</div></section>
             <section class="jhs-stats__group"><h3>当前页面</h3><div class="jhs-stats__metrics">${renderMetric({ label: "屏蔽项", value: pageSummary.blockedItems, action: "filter", filter: "blockedItems" })}</div></section>
-            <section class="jhs-stats__group"><h3>状态分布</h3><div class="jhs-stats__rows">${statusRows.map(((item) => row(item[0], item[1], total, item[2]))).join("")}</div></section>
+            <section class="jhs-stats__group"><h3>状态分布</h3><div class="jhs-stats__rows">${statusRows.map(((item) => row(item[0], item[1], item[2], item[3], "", true))).join("")}</div></section>
             <section class="jhs-stats__group"><h3>活动趋势</h3><p class="jhs-helper-text">${coverageNote}</p><div class="jhs-stats__metrics"><div class="jhs-stats__metric"><strong>${trend7.identified}</strong><span>近 7 天新增鉴定</span></div><div class="jhs-stats__metric"><strong>${trend7.downloaded}</strong><span>近 7 天标记下载</span></div><div class="jhs-stats__metric"><strong>${trend7.watched}</strong><span>近 7 天标记观看</span></div><div class="jhs-stats__metric"><strong>${trend30.identified}</strong><span>近 30 天新增鉴定</span></div><div class="jhs-stats__metric"><strong>${trend30.downloaded}</strong><span>近 30 天标记下载</span></div><div class="jhs-stats__metric"><strong>${trend30.watched}</strong><span>近 30 天标记观看</span></div></div></section>
             ${topActresses.length ? `<section class="jhs-stats__group"><h3>Top 10 演员</h3><div class="jhs-stats__rows">${topActresses.map(((item) => row(item.name, item.count, topValue, "var(--jhs-accent)", new URL(item.starId ? `/actors/${encodeURIComponent(item.starId)}` : `/search?q=${encodeURIComponent(item.name)}`, javDbUrl).href))).join("")}</div></section>` : ""}
         </div>`;
@@ -14456,6 +14617,8 @@ ${failure.stack}` : "");
       this.currentPage = this.getInitialPageNumber();
       this.pageItems = [];
       this.started = false;
+      this.liveScope = null;
+      this.generation = 0;
       this.container = void 0;
       this.loader = void 0;
       this.nextUrl = null;
@@ -14489,10 +14652,16 @@ ${failure.stack}` : "");
         this.waterfallPromise = null;
       })));
       this.started = true;
+      this.liveScope?.dispose();
+      this.liveScope = new LifecycleScope("autopage:live");
+      this.generation++;
       return this.waterfall();
     }
     stop() {
       this.started = false;
+      this.generation++;
+      this.liveScope?.dispose();
+      this.liveScope = null;
       this.nextUrl = null;
       this.hasMore = false;
       this.isLoading = false;
@@ -14513,9 +14682,10 @@ ${failure.stack}` : "");
       return 1;
     }
     async waterfall() {
-      if (!this.started) return;
+      if (!this.started || !this.liveScope) return;
       if (await this.shouldDisablePaging()) return;
-      const scope = await this.getRuntimeService("scope")();
+      if (!this.started || !this.liveScope || this.liveScope.disposed) return;
+      const scope = this.liveScope;
       const e2 = this.getSelector();
       const container = document.querySelector(e2.boxSelector);
       if (!container || !container.parentNode) return void clog.error("没有找到容器节点,停止瀑布流!");
@@ -14546,16 +14716,18 @@ ${failure.stack}` : "");
       if (this.getRuntimeService("settings").snapshot().autoPage === "no") return void this.setState("waterfall-loading", "");
       if (this.isLoading || !this.nextUrl || !this.container) return;
       this.isLoading = true, this.setState("waterfall-loading", "加载中...");
-      const t2 = this.getSelector();
+      const t2 = this.getSelector(), generation = this.generation, scope = this.liveScope;
       try {
-        const scope = await this.getRuntimeService("scope")();
+        if (!scope || scope.disposed || generation !== this.generation) return;
         const i2 = await requestHostPage(this.getRuntimeService("http"), this.nextUrl, scope);
+        if (!this.started || !this.liveScope || this.liveScope.disposed || generation !== this.generation) return;
         clog.log("请求下一页内容:", this.nextUrl);
         const s2 = utils.htmlTo$dom(i2);
         l && s2.find(".avatar-box").length > 0 && s2.find(".avatar-box").parent().remove();
         let c2 = s2.find(this.getSelector().requestDomItemSelector);
         const d2 = this.getBoxCarInfoList(), h2 = this.getBoxCarInfoList(c2);
         if (this.checkDuplicateCarNumbers(d2, h2)) return this.nextUrl = null, this.hasMore = false, void this.setState("waterfall-error", "翻页内容出现重复数据, 页码受JavDB限制, 已停止瀑布流");
+        if (!this.started || !this.liveScope || this.liveScope.disposed || generation !== this.generation) return;
         const g2 = this.container.scrollHeight;
         this.pageItems.push({
           page: this.currentPage + 1,
@@ -14569,7 +14741,7 @@ ${failure.stack}` : "");
         let u2 = s2.find(".pagination");
         $(".pagination").replaceWith(u2), this.setState("waterfall-loading", ""), this.hasMore || this.setState("waterfall-no-more", "已经到底了");
       } catch (n2) {
-        clog.error("加载失败:", n2), this.setState("waterfall-error", "加载失败，点击重试");
+        this.started && this.loader && this.setState("waterfall-error", "加载失败，点击重试"), clog.error("加载失败:", n2);
       } finally {
         this.isLoading = false;
       }
@@ -14662,6 +14834,7 @@ ${failure.stack}` : "");
       return "BusNavBarPlugin";
     }
     handle() {
+      if (!this.getOptionalDependency("SearchByImagePlugin")) return;
       $("#navbar > div > div > span").append('\n            <button class="jhs-btn btn btn-default jhs-layout-638cb2c9" id="search-img-btn">识图</button>\n       '), $("#search-img-btn").on("click", (() => {
         this.getOptionalDependency("SearchByImagePlugin")?.open?.();
       }));
@@ -15363,10 +15536,28 @@ ${failure.stack}` : "");
     async handle() {
       if (!window.isDetailPage) return;
       const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
-      scope.addCleanup(jhsEventBus?.on("magnet-items-updated", (() => {
-        (settings.snapshot().enableMagnetsFilter ?? _) === _ ? this.doFilterMagnet() : this.showAll();
-      })) || (() => {
+      if (!this._settingsListenerBound) {
+        this._settingsListenerBound = true;
+        const onSettingsChanged = /* @__PURE__ */ __name((event) => {
+          const names = event.detail?.names;
+          if (!names?.includes("enableMagnetsFilter")) return;
+          this.reconfigure();
+        }, "onSettingsChanged");
+        settings.addEventListener("settings.changed", onSettingsChanged);
+        scope.addCleanup((() => {
+          settings.removeEventListener("settings.changed", onSettingsChanged);
+          this._settingsListenerBound = false;
+        }));
+      }
+      scope.addCleanup(jhsEventBus?.on("magnet-items-updated", (() => this.reconfigure())) || (() => {
       }));
+      this.reconfigure();
+    }
+    reconfigure() {
+      const enabled = (this.getRuntimeService("settings").snapshot().enableMagnetsFilter ?? _) === _;
+      enabled ? this.doFilterMagnet() : this.showAll();
+      $("#magnets-span").text(enabled ? "关闭磁力过滤" : "开启磁力过滤");
+      $("#enable-magnets-filter").attr("aria-pressed", String(enabled));
     }
     async initCss() {
       return `<style>.jhs-magnet-score{display:inline-flex;align-items:center;gap:3px;margin-left:6px;padding:1px 6px;border-radius:10px;font-size:11px;font-weight:600;vertical-align:middle;cursor:help}</style>`;
@@ -16354,6 +16545,7 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
     return jhsEventBus;
   }
   __name(getListEventBus, "getListEventBus");
+  var LIST_EFFECT_KEYS = /* @__PURE__ */ new Set(["tagPosition", "defaultQuickFilterTab"]);
   var Te = {
     IS_FILTERED: {
       text: u,
@@ -16457,7 +16649,9 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
       }, "onSettingsChanged");
       settingsService.addEventListener("settings.changed", onSettingsChanged);
       scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
-      const refreshAll = /* @__PURE__ */ __name(async () => {
+      const refreshAll = /* @__PURE__ */ __name(async (payload = {}) => {
+        const changedNames = payload?.changedNames;
+        if (changedNames && !changedNames.some((name) => LIST_EFFECT_KEYS.has(name))) return;
         this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
         const e2 = this.getOptionalDependency("HistoryPlugin");
         e2?.tableObj && e2.tableObj.setData();
@@ -17497,7 +17691,8 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
       }));
     }
     hookSearch() {
-      $("#navbar-menu-hero").after('\n            <div class="navbar-menu jhs-ui" id="search-box">\n                <div class="navbar-start jhs-layout-d9caa2c0">\n                    <select id="search-type" class="jhs-select-source">\n                        <option value="all">影片</option>\n                        <option value="actor">演员</option>\n                        <option value="series">系列</option>\n                        <option value="maker">片商</option>\n                        <option value="director">导演</option>\n                        <option value="code">番号</option>\n                        <option value="list">清单</option>\n                    </select>\n                    <input id="search-keyword" type="text" placeholder="输入影片番号、演员名等关键词进行检索" class="jhs-field">\n                    <a href="/advanced_search?noFold=1" title="高级检索" class="jhs-btn jhs-btn--secondary"><span>...</span></a>\n                    <button type="button" id="search-img-btn" class="jhs-btn jhs-btn--secondary">识图</button>\n                    <button type="button" id="search-btn" class="jhs-btn jhs-btn--primary">检索</button>\n                </div>\n            </div>\n        '), $("#search-keyword").on("paste", ((e2) => {
+      const hasSearchByImage = !!this.getOptionalDependency("SearchByImagePlugin");
+      $("#navbar-menu-hero").after('\n            <div class="navbar-menu jhs-ui" id="search-box">\n                <div class="navbar-start jhs-layout-d9caa2c0">\n                    <select id="search-type" class="jhs-select-source">\n                        <option value="all">影片</option>\n                        <option value="actor">演员</option>\n                        <option value="series">系列</option>\n                        <option value="maker">片商</option>\n                        <option value="director">导演</option>\n                        <option value="code">番号</option>\n                        <option value="list">清单</option>\n                    </select>\n                    <input id="search-keyword" type="text" placeholder="输入影片番号、演员名等关键词进行检索" class="jhs-field">\n                    <a href="/advanced_search?noFold=1" title="高级检索" class="jhs-btn jhs-btn--secondary"><span>...</span></a>\n                    ' + (hasSearchByImage ? '<button type="button" id="search-img-btn" class="jhs-btn jhs-btn--secondary">识图</button>' : "") + '\n                    <button type="button" id="search-btn" class="jhs-btn jhs-btn--primary">检索</button>\n                </div>\n            </div>\n        '), $("#search-keyword").on("paste", ((e2) => {
         const t2 = e2.originalEvent?.clipboardData?.items || [];
         for (let n2 = 0; n2 < t2.length; n2++) if (-1 !== t2[n2].type.indexOf("image")) {
           const e3 = t2[n2].getAsFile();
@@ -17515,15 +17710,16 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
       })), $("#search-btn").on("click", ((e2) => {
         let t2 = $("#search-keyword").val(), n2 = $("#search-type").val();
         "" !== t2 && (window.location.href.includes("/search") ? window.location.href = "/search?q=" + t2 + "&f=" + n2 : window.open("/search?q=" + t2 + "&f=" + n2));
-      })), $("#search-img-btn").on("click", (() => {
+      })), hasSearchByImage && $("#search-img-btn").on("click", (() => {
         this.getOptionalDependency("SearchByImagePlugin")?.open?.();
       }));
     }
     hookOldSearch() {
       const e2 = document.querySelector(".search-image");
       if (!e2) return;
+      const hasSearchByImage = !!this.getOptionalDependency("SearchByImagePlugin");
       const t2 = e2.cloneNode(true);
-      e2.parentNode?.replaceChild(t2, e2), $("#button-search-image").attr("data-tooltip", "以图识图"), $(".search-image").on("click", ((e3) => {
+      e2.parentNode?.replaceChild(t2, e2), $("#button-search-image").attr("data-tooltip", "以图识图"), hasSearchByImage && $(".search-image").on("click", ((e3) => {
         this.getOptionalDependency("SearchByImagePlugin")?.open?.();
       }));
     }
@@ -17619,8 +17815,40 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
     async initCss() {
       return "\n            <style>\n                .translated-title { margin-top:var(--jhs-space-2); color:var(--jhs-text); font-size:clamp(16px,1.5vw,18px); font-weight:500; line-height:1.5; }\n                .translated-title.is-error { color:var(--jhs-danger); }\n            </style>";
     }
-    handle() {
-      isDetailPage && this.translate();
+    async handle() {
+      const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
+      if (!this._settingsListenerBound) {
+        this._settingsListenerBound = true;
+        const onSettingsChanged = /* @__PURE__ */ __name((event) => {
+          const names = event.detail?.names;
+          if (!names?.includes("translateTitle")) return;
+          this.reconfigure();
+        }, "onSettingsChanged");
+        settings.addEventListener("settings.changed", onSettingsChanged);
+        scope.addCleanup((() => {
+          settings.removeEventListener("settings.changed", onSettingsChanged);
+          this._settingsListenerBound = false;
+        }));
+      }
+      this.reconfigure();
+    }
+    reconfigure() {
+      const enabled = (this.getRuntimeService("settings").snapshot().translateTitle ?? _) === _;
+      if (enabled) void this.applyTranslation();
+      else this.revertTranslation();
+    }
+    async applyTranslation() {
+      if (isDetailPage) return this.translate();
+      if (!window.isListPage) return;
+      const listPage = this.getOptionalDependency("ListPagePlugin");
+      if (!listPage?.translateListItems || typeof listPage.getSelector !== "function") return;
+      const items = $(listPage.getSelector().itemSelector).toArray();
+      await listPage.translateListItems(items);
+    }
+    revertTranslation() {
+      $(".translated-title").remove();
+      const listPage = this.getOptionalDependency("ListPagePlugin");
+      listPage?.revertTranslation?.();
     }
     async translate(e2, t2 = true, options = {}) {
       if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) !== _) return;
@@ -18824,7 +19052,11 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
     }
     async resolve(movieRef, context = {}) {
       if (context.settings && !this.isEnabled(context.settings)) return null;
+      const enabledProviders = context.settings ? this.getEnabledProviders(context.settings) : null;
+      const enabledIds = enabledProviders ? new Set(enabledProviders.map((provider) => provider.id)) : null;
+      if (enabledProviders && !enabledProviders.length) return null;
       if (context.providerId) {
+        if (enabledIds && !enabledIds.has(context.providerId)) return null;
         const provider = this.providers.get?.(context.providerId);
         if (provider) {
           if (provider.enabled === false || !provider.capabilities?.includes("screenshot")) return null;
@@ -18833,9 +19065,11 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
         return this.resolveIntegration(context.providerId, movieRef, context);
       }
       for (const provider of await this.providers.getAvailable("screenshot", context)) {
+        if (enabledIds && !enabledIds.has(provider.id)) continue;
         const result = await this.resolveFromProvider(provider, movieRef, context);
         if (result) return result;
       }
+      if (enabledIds && !enabledIds.has(DEFAULT_SCREENSHOT_PROVIDER)) return null;
       return this.resolveIntegration(DEFAULT_SCREENSHOT_PROVIDER, movieRef, context);
     }
     async resolveFromProvider(provider, movieRef, context) {
@@ -18858,8 +19092,10 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
       const result = await adapter.getImages(movieRef, context);
       return Array.isArray(result) && result.length ? result : null;
     }
-    getSearchUrl(movieRef) {
+    getSearchUrl(movieRef, settings = null) {
       if (!SCREENSHOT_PROVIDER_IDS.has(DEFAULT_SCREENSHOT_PROVIDER)) return null;
+      if (settings && !this.isEnabled(settings)) return null;
+      if (settings && !this.getEnabledProviders(settings).some((provider) => provider.id === DEFAULT_SCREENSHOT_PROVIDER)) return null;
       for (const manifest2 of this.integrations?.list("movie.images") ?? []) {
         if (manifest2.id !== DEFAULT_SCREENSHOT_PROVIDER) continue;
         const adapter = this.integrations?.getAdapter(manifest2.id);
@@ -19559,7 +19795,7 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
       surfaces: ["full", "quick"],
       defaultValue: no
     });
-    registry.register({ key: "mobileMode", owner: "LayoutFeature", label: "移动模式", type: "select", defaultValue: "auto", effect: "live", surfaces: ["full"], options: Object.freeze([{ value: "auto", label: "自动" }, { value: "desktop", label: "桌面" }, { value: "mobile", label: "移动" }]) });
+    registry.register({ key: "mobileMode", owner: "LayoutFeature", label: "移动模式", type: "select", defaultValue: "auto", effect: "live", surfaces: ["full"], options: Object.freeze([{ value: "auto", label: "自动检测" }, { value: "on", label: "强制开启" }, { value: "off", label: "强制关闭" }]) });
     registry.register({ key: "themeMode", owner: "ThemeFeature", label: "主题", type: "select", defaultValue: "light", effect: "live", surfaces: ["full"], options: Object.freeze([{ value: "light", label: "浅色" }, { value: "dark", label: "深色" }]) });
     registry.register({ key: "containerColumns", owner: "LayoutFeature", label: "列表列数", type: "number", defaultValue: 5, effect: "live", surfaces: ["full"] });
     registry.register({ key: "containerWidth", owner: "LayoutFeature", label: "列表宽度", type: "number", defaultValue: 100, effect: "live", surfaces: ["full"] });

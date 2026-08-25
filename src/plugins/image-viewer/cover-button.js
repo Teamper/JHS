@@ -42,7 +42,7 @@ export class CoverButtonPlugin extends BasePlugin {
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
             if (names.includes("enablePreviewVideo")) {
-                if (isPreviewEnabled(settingsService.snapshot())) void this.handle().catch((error => clog.error("卡片预览重新挂载失败", error)));
+                if (isPreviewEnabled(settingsService.snapshot())) void this.addSvgBtn().catch((error => clog.error("卡片预览重新挂载失败", error)));
                 else {
                     $('[id$="_preview_video"]').each((/** @type {number} */ _, /** @type {HTMLVideoElement} */ element) => {
                         element.pause?.(), $(element).parent().remove();
@@ -53,8 +53,15 @@ export class CoverButtonPlugin extends BasePlugin {
             // 长缩略图与卡片按钮开关即时重建工具箱，不保留死按钮。
             if (names.some((name) => [ "enableLoadScreenShot", "enableVideoSvg", "enableHandleSvg", "enableSiteSvg", "enableCopySvg" ].includes(name))) void this.enableSvgBtn();
         };
-        settingsService.addEventListener("settings.changed", onSettingsChanged);
-        scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
+        // 6.5：listener 只注册一次，避免 ON→OFF→ON 循环累积；重新开启只重建按钮，不再递归 handle()。
+        if (!this._settingsListenerBound) {
+            this._settingsListenerBound = true;
+            settingsService.addEventListener("settings.changed", onSettingsChanged);
+            scope.addCleanup((() => {
+                settingsService.removeEventListener("settings.changed", onSettingsChanged);
+                this._settingsListenerBound = false;
+            }));
+        }
         this.addSvgBtn();
         await this.bindClick(scope);
     }

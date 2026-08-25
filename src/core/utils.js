@@ -271,7 +271,8 @@ export class Utils {
         return [ "iphone", "ipod", "ipad", "android", "blackberry", "windows phone", "nokia", "webos", "opera mini", "mobile", "mobi", "tablet" ].some((t => e.includes(t)));
     }
     isMobileMode() {
-        const e = storageManager.getSettingSync("mobileMode", "auto");
+        const snapshot = /** @type {any} */ (globalThis).settingsService?.snapshot?.();
+        const e = snapshot?.mobileMode ?? storageManager.getSettingSync("mobileMode", "auto");
         return "on" === e || ("off" !== e && (this.isMobile() || window.innerWidth < 768));
     }
     async copyToClipboard(e, t) {

@@ -30,7 +30,7 @@ test("preview master switch OFF removes card preview buttons", async ({ context,
   await injectUserscriptRuntime(page);
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enablePreviewVideo", "no"));
   await page.waitForTimeout(300);
-  await expect(page.locator(".videoSvg")).toHaveCount(0);
+  await expect(page.locator(".videoSvg")).toBeHidden(); // 实现为 toggle(false) 隐藏，语义：列表工具按钮隐藏而非 unmount
 });
 
 test("all quick filter is the true full set including blocked items", async ({ context, page }, testInfo) => {
@@ -51,4 +51,31 @@ test("all quick filter is the true full set including blocked items", async ({ c
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector(".movie-list .item")).display)).toBe("none");
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("ListPagePlugin").setQuickFilter("blockedItems"));
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector(".movie-list .item")).display)).not.toBe("none");
+});
+
+
+test("mobileMode live toggles the mobile FAB on a desktop viewport", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers mobileMode live layout");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page);
+  await expect(page.locator("#jhs-fab")).toHaveCount(0);
+  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("mobileMode", "on"));
+  await expect(page.locator("#jhs-fab")).toBeVisible();
+  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("mobileMode", "off"));
+  await expect(page.locator("#jhs-fab")).toHaveCount(0);
+});
+
+test("FC2 detail screenshot slot follows the master switch live", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers FC2 screenshot lifecycle");
+  await fulfillHostFixtures(context);
+  const url = "https://javdb.com/users/collection_codes?movieId=fixture-id&carNum=FC2-123&url=https%3A%2F%2Ffc2ppvdb.com%2Farticles%2F123&source=fc2";
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page);
+  await expect(page.locator(".jhs-fc2-workspace")).toBeVisible();
+  await expect(page.locator('[data-jhs-role="screenshot"]')).toHaveCount(1);
+  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableLoadScreenShot", "no"));
+  await expect(page.locator('[data-jhs-role="screenshot"]')).toBeEmpty();
+  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableLoadScreenShot", "yes"));
+  await expect(page.locator('[data-jhs-role="screenshot"]')).not.toBeEmpty();
 });

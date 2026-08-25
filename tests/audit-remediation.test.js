@@ -27,24 +27,25 @@ describe("6.2.0 audit remediation", () => {
         expect(plugin.loader).toBeUndefined();
     });
 
-    it("owns AutoPage global listeners and startup timer in its Feature scope", async () => {
+    it("owns AutoPage global listeners and startup timer in its live scope", async () => {
         const dom = new JSDOM('<div id="list"></div><a class="next" href="/page/2"></a>', { url: "https://javdb.com/" });
-        const add = vi.spyOn(dom.window, "addEventListener"), remove = vi.spyOn(dom.window, "removeEventListener"), scope = new LifecycleScope("feature:list");
+        const add = vi.spyOn(dom.window, "addEventListener"), remove = vi.spyOn(dom.window, "removeEventListener");
         const { Class } = loadClass("src/plugins/status/auto-page.js", "AutoPagePlugin", {
             window: dom.window, document: dom.window.document, requestAnimationFrame: callback => callback(), setTimeout: vi.fn(() => 1),
             storageManager: { getSetting: vi.fn().mockResolvedValue("yes") }, _: "yes", C: "no", clog: { error: vi.fn() },
+            LifecycleScope,
         });
         const plugin = new Class();
         plugin.shouldDisablePaging = vi.fn().mockResolvedValue(false);
         plugin.getSelector = () => ({ boxSelector: "#list", nextPageSelector: ".next" });
-        plugin.getRuntimeService = name => "scope" === name ? () => scope : {};
+        plugin.getRuntimeService = name => "settings" === name ? { snapshot: () => ({ autoPage: "yes" }) } : "scope" === name ? async () => ({ addCleanup: () => {} }) : {};
         plugin.checkLoad = vi.fn();
-        plugin.started = true; // 6.5: waterfall 由 start()/reconfigure() 生命周期驱动
-        await plugin.waterfall();
-        expect(scope.snapshot().listeners).toBe(1);
+        await plugin.start();
+        const live = plugin.liveScope;
+        expect(live.snapshot().listeners).toBe(1);
         expect(add).toHaveBeenCalledWith("scroll", expect.any(Function), undefined);
-        scope.dispose();
-        expect(scope.snapshot()).toMatchObject({ listeners: 0, disposed: true });
+        plugin.stop();
+        expect(live.snapshot()).toMatchObject({ listeners: 0, disposed: true });
         expect(remove).toHaveBeenCalledWith("scroll", expect.any(Function), undefined);
     });
 

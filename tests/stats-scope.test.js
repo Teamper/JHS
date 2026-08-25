@@ -5,7 +5,7 @@ import vm from "node:vm";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
-import { StatsRepository } from "../src/features/stats/stats-repository.js";
+import { StatsRepository, computeLibraryStats } from "../src/features/stats/stats-repository.js";
 
 function loadStatsPlugin() {
     const dom = new JSDOM("<body></body>", { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
@@ -33,7 +33,7 @@ function loadStatsPlugin() {
         })
     };
     const context = vm.createContext({
-        window: dom.window, document: dom.window.document, $, BasePlugin, StatsRepository, layer, URL,
+        window: dom.window, document: dom.window.document, $, BasePlugin, StatsRepository, computeLibraryStats, layer, URL,
         storageManager: {
             getCarList: vi.fn(async () => [ { stateFlags: { blocked: true } }, { stateFlags: { favorite: true, downloaded: true, watched: true } }, { stateFlags: {} } ]),
             getFavoriteActressList: vi.fn(async () => [ {} ]), getBlacklist: vi.fn(async () => [ {}, {} ]), getSetting: vi.fn(async () => ({}))

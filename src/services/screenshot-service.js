@@ -44,13 +44,19 @@ export class ScreenshotService {
      * 解析影片长缩略图。
      * 指定 providerId 时只使用该来源，无结果返回 null，不 fallback 到其他 movie.images；
      * 未指定时先按 Provider 优先级，再回退到默认长缩略图来源（当前仅 javstore）。
+     * 传入 settings 时所有来源（ProviderRegistry / Integration fallback / manual provider）
+     * 都必须位于 getEnabledProviders(settings) 白名单内；全部禁用时直接返回 null。
      * @param {Record<string, unknown>} movieRef
      * @param {{ providerId?: string, scope?: unknown, settings?: Record<string, any> }} [context]
      */
     async resolve(movieRef, context = {}) {
         // 总开关门禁：任何调用路径在设置关闭时都不得发请求。
         if (context.settings && !this.isEnabled(context.settings)) return null;
+        const enabledProviders = context.settings ? this.getEnabledProviders(context.settings) : null;
+        const enabledIds = enabledProviders ? new Set(enabledProviders.map((provider) => provider.id)) : null;
+        if (enabledProviders && !enabledProviders.length) return null;
         if (context.providerId) {
+            if (enabledIds && !enabledIds.has(context.providerId)) return null;
             const provider = this.providers.get?.(context.providerId);
             if (provider) {
                 if (provider.enabled === false || !provider.capabilities?.includes("screenshot")) return null;
@@ -59,9 +65,11 @@ export class ScreenshotService {
             return this.resolveIntegration(context.providerId, movieRef, context);
         }
         for (const provider of await this.providers.getAvailable("screenshot", context)) {
+            if (enabledIds && !enabledIds.has(provider.id)) continue;
             const result = await this.resolveFromProvider(provider, movieRef, context);
             if (result) return result;
         }
+        if (enabledIds && !enabledIds.has(DEFAULT_SCREENSHOT_PROVIDER)) return null;
         return this.resolveIntegration(DEFAULT_SCREENSHOT_PROVIDER, movieRef, context);
     }
     /** @param {Record<string, any>} provider @param {Record<string, unknown>} movieRef @param {Record<string, unknown>} context */
@@ -84,9 +92,11 @@ export class ScreenshotService {
         const result = await adapter.getImages(movieRef, context);
         return Array.isArray(result) && result.length ? result : null;
     }
-    /** @param {Record<string, unknown>} movieRef */
-    getSearchUrl(movieRef) {
+    /** @param {Record<string, unknown>} movieRef @param {Record<string, any> | null} [settings] */
+    getSearchUrl(movieRef, settings = null) {
         if (!SCREENSHOT_PROVIDER_IDS.has(DEFAULT_SCREENSHOT_PROVIDER)) return null;
+        if (settings && !this.isEnabled(settings)) return null;
+        if (settings && !this.getEnabledProviders(settings).some((provider) => provider.id === DEFAULT_SCREENSHOT_PROVIDER)) return null;
         for (const manifest of this.integrations?.list("movie.images") ?? []) {
             if (manifest.id !== DEFAULT_SCREENSHOT_PROVIDER) continue;
             const adapter = this.integrations?.getAdapter(manifest.id);
