@@ -273,24 +273,7 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialo
                             }));
                         })), '\n                                    <button type="button" class="jhs-btn jhs-btn--danger backup-delete">删除</button>\n                                    <button type="button" class="jhs-btn jhs-btn--secondary backup-download">下载</button>\n                                    <button type="button" class="jhs-btn jhs-btn--primary backup-import">导入</button>\n                                ';
                     }
-                } ],
-                locale: "zh-cn",
-                langs: {
-                    "zh-cn": {
-                        pagination: {
-                            first: "首页",
-                            first_title: "首页",
-                            last: "尾页",
-                            last_title: "尾页",
-                            prev: "上一页",
-                            prev_title: "上一页",
-                            next: "下一页",
-                            next_title: "下一页",
-                            all: "所有",
-                            page_size: "每页行数"
-                        }
-                    }
-                }
+                } ]
             });
         }
     });

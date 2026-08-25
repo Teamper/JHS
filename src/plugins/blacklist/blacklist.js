@@ -338,24 +338,7 @@ export class BlacklistPlugin extends BasePlugin {
             initialSort: [ {
                 column: "createTime",
                 dir: "desc"
-            } ],
-            locale: "zh-cn",
-            langs: {
-                "zh-cn": {
-                    pagination: {
-                        first: "首页",
-                        first_title: "首页",
-                        last: "尾页",
-                        last_title: "尾页",
-                        prev: "上一页",
-                        prev_title: "上一页",
-                        next: "下一页",
-                        next_title: "下一页",
-                        all: "全部",
-                        page_size: "每页行数"
-                    }
-                }
-            }
+            } ]
         });
     }
     /** @param {string} e @param {any} [t] @param {number} [page] @param {number} [processed] */

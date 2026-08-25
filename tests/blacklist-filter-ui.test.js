@@ -7,6 +7,7 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 
 const source = readTestFile(join(process.cwd(), "src/plugins/blacklist/blacklist.js"), "utf8");
+const tableSource = readTestFile(join(process.cwd(), "src/ui/table/create-jhs-table.js"), "utf8");
 
 function createPlugin() {
     const dom = new JSDOM(`<body><input id="searchValue"><select id="dataType"><option value=""></option><option value="actor">actor</option><option value="actress">actress</option></select><select id="statusType"><option value=""></option><option value="normal">normal</option><option value="stop">stop</option></select><select id="urlType"><option value=""></option><option value="hasT">hasT</option><option value="noT">noT</option></select></body>`, { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
@@ -68,7 +69,7 @@ describe("blacklist reset and pagination contracts", () => {
     it("does not expose Tabulator's blank all-page option", () => {
         expect(source).toContain("paginationSizeSelector: [ 20, 50, 100, 1e3 ]");
         expect(source).not.toContain("paginationSizeSelector: [ 20, 50, 100, 1e3, !0 ]");
-        expect(source).toContain('all: "全部"');
+        expect(tableSource).toContain('all: "全部"');
         expect(source).not.toContain("99999");
     });
 

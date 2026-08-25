@@ -16,7 +16,12 @@ export function createWikipediaAdapter(http) {
                 providerId: "wikipedia", method: "GET", url, responseType: "text", cacheScope: "public", ttlMs: 604_800_000,
                 urlPolicy: { trustClass: "builtin-public", hosts: ["ja.wikipedia.org"] },
             }, options.scope);
-            return parseWikipediaActressInfo(response.data, response.finalUrl || url);
+            try {
+                return parseWikipediaActressInfo(response.data, response.finalUrl || url);
+            } catch (error) {
+                if (error instanceof TypeError && /actress information is missing/.test(error.message)) return null;
+                throw error;
+            }
         },
     });
 }

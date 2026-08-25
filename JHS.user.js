@@ -5407,6 +5407,7 @@
     }
     detectRoute() {
       if (this.location.pathname.startsWith("/v/") || this.location.pathname.startsWith("/movies/")) return "detail";
+      if (this.location.pathname === "/users/collection_codes") return "owned-detail";
       return this.locateListRoot() ? "list" : "other";
     }
     readMovieRef() {
@@ -5746,12 +5747,14 @@
     kind: "feature",
     disableable: true,
     sites: ["javdb", "javbus"],
-    routes: ["detail"],
+    routes: ["detail", "owned-detail"],
     startup: "eager",
     requires: [PORT.host, SERVICE.movie, SERVICE.review, SERVICE.related, SERVICE.magnet, SERVICE.screenshot],
-    contributes: ["detail.javdb-native", "detail.javbus-native", "detail.workspace", "detail.fc2-owned", "detail.fc2-lookup", "detail.cover-state-actions", "detail.page-state-actions", "detail.javdb-preview", "detail.javbus-images", "detail.javbus-preview", "detail.reviews", "detail.related", "detail.native-magnets", "detail.external-magnets", "detail.screenshot", "detail.external-sites"],
+    contributes: ["detail.javdb-native", "detail.javbus-native", "detail.workspace", "detail.fc2-owned", "detail.fc2-navigation", "detail.fc2-lookup", "detail.cover-state-actions", "detail.page-state-actions", "detail.javdb-preview", "detail.javbus-images", "detail.javbus-preview", "detail.reviews", "detail.related", "detail.native-magnets", "detail.external-magnets", "detail.screenshot", "detail.external-sites"],
     providesCommands: [],
     activate: /* @__PURE__ */ __name((deps, runtime) => {
+      if (runtime.route === "owned-detail") return { dispose: /* @__PURE__ */ __name(() => {
+      }, "dispose") };
       const controller = new DetailController({ hostAdapter: deps[PORT.host], scope: runtime.scope, enabledContributions: runtime.enabledContributions });
       controller.start();
       return { dispose: /* @__PURE__ */ __name(() => controller.dispose(), "dispose") };
@@ -5860,6 +5863,7 @@
     CompatibilityEnhancementsPlugin: ["ListPagePlugin"],
     CoverButtonPlugin: ["ListPagePlugin", "ScreenShotPlugin"],
     DetailPageButtonPlugin: ["DetailWorkspacePlugin", "MagnetHubPlugin", "HighlightMagnetPlugin"],
+    Fc2NavigationPlugin: ["Fc2Plugin"],
     Fc2Plugin: [
       "DetailPageButtonPlugin",
       "MagnetHubPlugin",
@@ -5917,10 +5921,10 @@
       return "ActressInfoPlugin";
     }
     async handle() {
-      if ("yes" === await storageManager.getSetting("enableLoadActressInfo", "yes")) await this.loadActressInfo();
-    }
-    async loadActressInfo() {
-      await Promise.all([this.handleDetailPage(), this.handleStarPage()]);
+      if ("yes" !== await storageManager.getSetting("enableLoadActressInfo", "yes")) return;
+      const path = window.location.pathname;
+      if (path.startsWith("/v/") || path.startsWith("/movies/")) await this.handleDetailPage();
+      else if (path.startsWith("/actors/")) await this.handleStarPage();
     }
     async initCss() {
       return `<style>
@@ -5936,8 +5940,8 @@
         let info = null;
         try {
           info = await this.searchInfo(name);
-        } catch {
-          clog.error("该名称查询失败,尝试其它名称");
+        } catch (error) {
+          clog.error("演员资料查询失败", name, error);
         }
         const block = $('<div class="panel-block actress-info"></div>');
         if (info) {
@@ -5969,8 +5973,8 @@
       for (const name of names) {
         try {
           info = await this.searchInfo(name);
-        } catch {
-          clog.error("该名称查询失败,尝试其它名称");
+        } catch (error) {
+          clog.error("演员资料查询失败", name, error);
         }
         if (info) break;
       }
@@ -6492,6 +6496,23 @@
   __name(removeStoredEncryptedCredential, "removeStoredEncryptedCredential");
 
   // src/ui/table/create-jhs-table.js
+  var JHS_TABLE_LOCALE = "zh-cn";
+  var JHS_TABLE_LANGS = Object.freeze({
+    "zh-cn": Object.freeze({
+      pagination: Object.freeze({
+        first: "首页",
+        first_title: "首页",
+        last: "尾页",
+        last_title: "尾页",
+        prev: "上一页",
+        prev_title: "上一页",
+        next: "下一页",
+        next_title: "下一页",
+        all: "全部",
+        page_size: "每页行数"
+      })
+    })
+  });
   function createJhsTable(TabulatorRuntime, target, options) {
     if (typeof TabulatorRuntime !== "function") throw new TypeError("Tabulator runtime is required");
     const pageSizes = (options.paginationSizeSelector ?? [20, 50, 100, 1e3]).filter((value) => Number.isInteger(value) && value > 0);
@@ -6502,7 +6523,9 @@
       paginationMode: "local",
       paginationSize: pageSizes[0] ?? 20,
       ...options,
-      paginationSizeSelector: pageSizes
+      paginationSizeSelector: pageSizes,
+      locale: options.locale ?? JHS_TABLE_LOCALE,
+      langs: options.langs ?? JHS_TABLE_LANGS
     });
   }
   __name(createJhsTable, "createJhsTable");
@@ -6767,24 +6790,7 @@
                 }));
               })), '\n                                    <button type="button" class="jhs-btn jhs-btn--danger backup-delete">删除</button>\n                                    <button type="button" class="jhs-btn jhs-btn--secondary backup-download">下载</button>\n                                    <button type="button" class="jhs-btn jhs-btn--primary backup-import">导入</button>\n                                ';
             }, "formatter")
-          }],
-          locale: "zh-cn",
-          langs: {
-            "zh-cn": {
-              pagination: {
-                first: "首页",
-                first_title: "首页",
-                last: "尾页",
-                last_title: "尾页",
-                prev: "上一页",
-                prev_title: "上一页",
-                next: "下一页",
-                next_title: "下一页",
-                all: "所有",
-                page_size: "每页行数"
-              }
-            }
-          }
+          }]
         });
       }, "success")
     });
@@ -8227,8 +8233,7 @@
             })), '<button type="button" class="jhs-btn jhs-btn--primary snap-restore">恢复</button> <button type="button" class="jhs-btn jhs-btn--secondary snap-download">下载</button> <button type="button" class="jhs-btn jhs-btn--danger snap-delete">删除</button>';
           }, "formatter")
         }
-      ],
-      locale: "zh-cn"
+      ]
     });
   }
   __name(renderSnapshotPanel, "renderSnapshotPanel");
@@ -9329,24 +9334,7 @@
         initialSort: [{
           column: "createTime",
           dir: "desc"
-        }],
-        locale: "zh-cn",
-        langs: {
-          "zh-cn": {
-            pagination: {
-              first: "首页",
-              first_title: "首页",
-              last: "尾页",
-              last_title: "尾页",
-              prev: "上一页",
-              prev_title: "上一页",
-              next: "下一页",
-              next_title: "下一页",
-              all: "全部",
-              page_size: "每页行数"
-            }
-          }
-        }
+        }]
       });
     }
     async filterAllVideo(e2, t2, page = 1, processed = 0) {
@@ -9503,13 +9491,14 @@
     host.append(state);
   }
   __name(renderFc2State, "renderFc2State");
-  function renderFc2Gallery(context, images) {
+  function renderFc2Gallery(context, images, coverUrl = null) {
     const jq = globalThis.$;
     const urls = [...new Set((images || []).map(normalizeUrl).filter(Boolean))];
     const grid = context.root.find('[data-jhs-role="gallery-grid"]').empty(), preview = context.root.find('[data-jhs-role="main-preview"]').empty();
     context.galleryUrls = new Set(urls);
+    const normalizedCover = normalizeUrl(coverUrl);
+    if (normalizedCover) preview.append(jq("<img>").attr({ src: normalizedCover, alt: `${context.carNum} 概览`, loading: "eager" }));
     if (!urls.length) return renderFc2State(grid, "暂无剧照");
-    preview.append(jq("<img>").attr({ src: urls[0], alt: `${context.carNum} 预览`, loading: "eager" }));
     urls.forEach((url, index) => grid.append(jq('<button type="button" class="jhs-btn jhs-fc2-gallery-item"></button>').attr("aria-label", `查看剧照 ${index + 1}`).append(jq("<img>").addClass("jhs-fc2-gallery__image").attr({ src: url, alt: `剧照 ${index + 1}`, loading: "lazy" }))));
     const screenshot = context.root.find('[data-jhs-role="screenshot"]');
     screenshot.find("img").each((_2, img) => {
@@ -9607,7 +9596,7 @@
     }
     async loadDetail(context, url) {
       const infoPromise = this.loadSummary(context, url), imagesPromise = this.getImgList(context.carNum), actressPromise = this.getActressInfo(context.carNum);
-      imagesPromise.then(((images) => context.isAlive() && renderFc2Gallery(context, images))).catch(((error) => context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)))));
+      imagesPromise.then(((images) => context.isAlive() && renderFc2Gallery(context, images, null))).catch(((error) => context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)))));
       actressPromise.then((async (data) => {
         await infoPromise.catch((() => null));
         context.isAlive() && this.render123AvActress(context, data);
@@ -9647,7 +9636,7 @@
     async reloadImages(context) {
       try {
         const images = await this.getImgList(context.carNum);
-        context.isAlive() && renderFc2Gallery(context, images);
+        context.isAlive() && renderFc2Gallery(context, images, null);
       } catch (error) {
         context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)));
       }
@@ -9823,6 +9812,15 @@ ${value}\r
   }, "q");
 
   // src/ui/detail/screenshot-panel.js
+  var DEFAULT_SCREENSHOT_PROVIDERS = Object.freeze([
+    Object.freeze({ id: "javstore", name: "JavStore", priority: 10, enabled: true })
+  ]);
+  function getEnabledScreenshotProviders(settings) {
+    const configured = Array.isArray(settings.screenshotProviders) ? settings.screenshotProviders : [];
+    const providers = configured.length ? DEFAULT_SCREENSHOT_PROVIDERS.map((provider) => ({ ...provider, ...configured.find((item) => item?.id === provider.id) || {} })) : [...DEFAULT_SCREENSHOT_PROVIDERS];
+    return providers.filter((provider) => provider.enabled !== false && !provider.implemented).sort((left, right) => Number(left.priority ?? 100) - Number(right.priority ?? 100));
+  }
+  __name(getEnabledScreenshotProviders, "getEnabledScreenshotProviders");
   function normalizeImageUrl(value) {
     try {
       const url = new URL(String(value || ""));
@@ -9850,10 +9848,13 @@ ${value}\r
     const jq = globalThis.$;
     const host = jq(options.target), isActive = options.isActive ?? (() => true), providerId = options.providerId ?? "javstore";
     if (!host.length || options.settings.enableLoadScreenShot === "no") return host.empty(), null;
-    const load = /* @__PURE__ */ __name(async (resultHost = host) => {
+    const enabledProviders = getEnabledScreenshotProviders(options.settings);
+    if (options.settings.screenshotMode !== "manual" && !enabledProviders.some((provider) => provider.id === providerId)) return host.empty(), null;
+    if (!enabledProviders.length) return host.empty().append(jq('<div class="jhs-panel-state">没有可用截图来源</div>')), host;
+    const load = /* @__PURE__ */ __name(async (resultHost = host, selectedProviderId = providerId) => {
       resultHost.empty().append(jq("<div></div>").addClass("jhs-panel-state").text("正在加载缩略图…"));
       try {
-        const images = await options.screenshot.resolve({ carNum: options.carNum }, { providerId, scope: options.scope });
+        const images = await options.screenshot.resolve({ carNum: options.carNum }, { providerId: selectedProviderId, scope: options.scope });
         if (!isActive()) return null;
         const image = Array.isArray(images) ? images[0] : images;
         if (!image?.url) return resultHost.empty(), null;
@@ -9862,7 +9863,7 @@ ${value}\r
       } catch (error) {
         if (!isActive()) return null;
         const state = jq("<div></div>").addClass("jhs-panel-state").text("缩略图加载失败 ");
-        const retry = jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", () => void load(resultHost));
+        const retry = jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", () => void load(resultHost, selectedProviderId));
         resultHost.empty().append(state.append(retry));
         globalThis.clog?.error("缩略图加载失败", error);
         return null;
@@ -9871,12 +9872,16 @@ ${value}\r
     if (options.settings.screenshotMode !== "manual") return load();
     const tabs = jq('<div class="jhs-screenshot-providers" role="tablist" aria-label="截图来源"></div>');
     const result = jq('<div class="jhs-screenshot-result"></div>').text("请选择截图来源");
-    const button = jq('<button type="button" class="jhs-btn jhs-btn--secondary" role="tab" aria-selected="false">JavStore</button>');
-    button.on("click", async () => {
-      button.attr("aria-selected", "true");
-      await load(result);
+    enabledProviders.forEach((provider) => {
+      const button = jq('<button type="button" class="jhs-btn jhs-btn--secondary" role="tab" aria-selected="false"></button>').text(provider.name);
+      button.on("click", async () => {
+        tabs.find("[role='tab']").attr("aria-selected", "false");
+        button.attr("aria-selected", "true");
+        await load(result, provider.id);
+      });
+      tabs.append(button);
     });
-    host.empty().append(tabs.append(button), result);
+    host.empty().append(tabs, result);
     return host;
   }
   __name(renderScreenshotPanel, "renderScreenshotPanel");
@@ -10440,7 +10445,8 @@ ${value}\r
       const context = this.mountFc2Detail(host, { movieId, carNum, url, source, mode: "page" });
       $(window).off("pagehide.jhsFc2Detail").one("pagehide.jhsFc2Detail", (() => context.destroy()));
     }
-    openFc2Dialog(movieId, carNum, url, { source = "fc2" } = {}) {
+    openFc2Dialog(movieId, carNum, url, { source = "" } = {}) {
+      source = ["fc2", "123av"].includes(source) ? source : "";
       let context = null;
       return this.getRuntimeService("dialog").open({
         type: 1,
@@ -10512,7 +10518,6 @@ ${value}\r
           settings: this.getRuntimeService("settings").snapshot(),
           scope,
           isActive: context.isAlive,
-          providerId: "javstore",
           isDuplicate: /* @__PURE__ */ __name((url) => Boolean(context.galleryUrls?.has(url)), "isDuplicate")
         })).then((result) => {
           if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove();
@@ -10589,7 +10594,7 @@ ${value}\r
         const movie = await this.getRuntimeService("movie").detail({ movieId: context.movieId, carNum: context.carNum, providerId: "javdb" }, { scope });
         if (!movie) throw new Error("JavDB 影片详情不存在");
         if (!context.isAlive()) return;
-        this.renderSummary(context, movie), renderFc2Gallery(context, movie.imageUrls || []);
+        this.renderSummary(context, movie), renderFc2Gallery(context, movie.imageUrls || [], movie.coverUrl || null);
         if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) === _) await renderTranslatedTitle({ root: context.root, carNum: movie.carNum || context.carNum, translation: this.getRuntimeService("translation"), scope });
       } catch (error) {
         context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.fetchAndRenderNativeDetail(context))), clog.error("FC2 详情加载失败", error);
@@ -10598,6 +10603,7 @@ ${value}\r
     renderSummary(context, movie) {
       const body = context.root.find('[data-jhs-role="summary-content"]').empty(), title = $('<h1 class="jhs-fc2-title"><strong class="current-title"></strong></h1>');
       title.find("strong").text(movie.title || "无标题"), body.append(title);
+      if (movie.originalTitle && movie.originalTitle !== movie.title) body.append($('<div class="jhs-fc2-original-title"></div>').text(movie.originalTitle));
       const meta = $('<div class="jhs-fc2-meta"></div>');
       [`番号：${movie.carNum || context.carNum}`, `发行：${movie.releaseDate || "未知"}`, `评分：${Number.isFinite(Number(movie.score)) ? movie.score : "无"}`, `时长：${Number.isFinite(Number(movie.duration)) ? movie.duration + " 分钟" : "无"}`].forEach(((value) => meta.append($("<span></span>").text(value)))), body.append(meta);
       const actressNames = [];
@@ -10666,17 +10672,20 @@ ${value}\r
     async resolveFc2Source(record = {}) {
       if (record.fc2Source && ["fc2", "123av"].includes(record.fc2Source)) return record.fc2Source;
       try {
-        return this.getRuntimeService("movie").matchesProviderUrl("av123", new URL(record.url, window.location.origin).href) ? "123av" : "fc2";
+        const url = new URL(record.url || "", window.location.origin);
+        if (this.getRuntimeService("movie").matchesProviderUrl("av123", url.href)) return "123av";
+        return url.origin === window.location.origin ? "fc2" : "";
       } catch {
-        return "fc2";
+        return "";
       }
     }
-    createFc2PageUrl(movieId, carNum, url, { source = "fc2" } = {}) {
+    createFc2PageUrl(movieId, carNum, url, { source = "" } = {}) {
       const target = new URL("/users/collection_codes", window.location.origin);
       target.searchParams.set("movieId", movieId || ""), target.searchParams.set("carNum", carNum), target.searchParams.set("url", url), target.searchParams.set("source", source);
       return target.href;
     }
-    async openFc2Page(movieId, carNum, url, navigation = { newTab: true }, { source = "fc2" } = {}) {
+    async openFc2Page(movieId, carNum, url, navigation = { newTab: true }, { source = "" } = {}) {
+      source = ["fc2", "123av"].includes(source) ? source : "";
       utils.openPage(this.createFc2PageUrl(movieId, carNum, url, { source }), carNum, true, navigation);
     }
   };
@@ -12476,7 +12485,8 @@ ${failure.stack}` : "");
     }
     renderProviderTabs(carNum) {
       const tabs = $('<div class="jhs-screenshot-providers" role="tablist"></div>');
-      this.providerRegistry.providers.forEach(((provider) => tabs.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').prop("disabled", !provider.enabled).attr("data-provider", provider.id).text(provider.name))));
+      this.providerRegistry.getEnabledProviders().forEach(((provider) => tabs.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').attr("data-provider", provider.id).text(provider.name))));
+      if (!tabs.children().length) return void $(".screen-container").text("没有可用截图来源");
       $(".screen-container").before(tabs);
       tabs.on("click", "button:not(:disabled)", (async (event) => {
         const provider = this.providerRegistry.get($(event.currentTarget).data("provider"));
@@ -12526,19 +12536,19 @@ ${failure.stack}` : "");
     }
     showErrorFallback(e2, t2) {
       const errorMessage2 = t2 instanceof Error ? t2.message : "";
-      clog.error("获取缩略图失败:", errorMessage2.substring(0, 100));
+      t2 && clog.error("获取缩略图失败:", errorMessage2.substring(0, 100));
       const a2 = `jhs-screenshot-message${l ? " jhs-screenshot-message--bus" : ""}`;
       const carNum = normalizeCarNum(e2);
       if (!carNum) return void $(".screen-container").empty().append($("<div></div>").addClass(a2).text("无法获取番号，缩略图未加载"));
       const searchUrl = this.getRuntimeService("screenshot").getSearchUrl({ carNum }), container = $(".screen-container").empty();
-      const message = $("<div></div>").addClass(a2).text("获取缩略图失败"), retry = $('<a href="#" class="retry-link">点击重试</a>');
+      const message = $("<div></div>").addClass(a2).text(t2 instanceof Error ? "获取缩略图失败" : "暂无缩略图结果"), retry = $('<a href="#" class="retry-link">点击重试</a>');
       container.append(message, $("<br>"), retry);
       searchUrl && container.append(document.createTextNode(" 或 "), $('<a class="check-link" target="_blank" rel="noopener noreferrer">前往确认</a>').attr("href", searchUrl));
       container.off("click", ".retry-link").off("click", ".check-link").on("click", ".retry-link", (async (t3) => {
         t3.stopPropagation(), t3.preventDefault(), container.empty().append($("<div></div>").addClass(a2).text("正在重新加载..."));
         try {
-          const t4 = await this.getScreenshot(carNum);
-          this.addImg("缩略图", t4);
+          const result = await this.getScreenshot(carNum);
+          result ? this.addImg("缩略图", result) : this.showErrorFallback(carNum, null);
         } catch (n2) {
           this.showErrorFallback(carNum, n2);
         }
@@ -12553,7 +12563,9 @@ ${failure.stack}` : "");
       if ("manual" === mode) {
         host.empty();
         const tabs = $('<div class="jhs-screenshot-providers" role="tablist" aria-label="截图来源"></div>'), result = $('<div class="jhs-screenshot-result"></div>').text("请选择截图来源");
-        this.providerRegistry.providers.forEach(((provider) => tabs.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').prop("disabled", !provider.enabled).attr("data-provider", provider.id).text(provider.name))));
+        const enabled = this.providerRegistry.getEnabledProviders();
+        enabled.forEach(((provider) => tabs.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').attr("data-provider", provider.id).text(provider.name))));
+        if (!enabled.length) return host.append($('<div class="jhs-panel-state"></div>').text("没有可用截图来源"));
         host.append(tabs, result), tabs.on("click", "button:not(:disabled)", (async (event) => {
           const provider = this.providerRegistry.get($(event.currentTarget).data("provider"));
           result.text(`${provider.name} 加载中…`);
@@ -14843,24 +14855,7 @@ ${failure.stack}` : "");
                     }));
                   })), '\n                                        <button type="button" class="jhs-btn jhs-btn--secondary subtitle-preview-btn">预览</button>\n                                        <button type="button" class="jhs-btn jhs-btn--primary subtitle-download-btn">下载</button>\n                                    ';
                 }, "formatter")
-              }],
-              locale: "zh-cn",
-              langs: {
-                "zh-cn": {
-                  pagination: {
-                    first: "首页",
-                    first_title: "首页",
-                    last: "尾页",
-                    last_title: "尾页",
-                    prev: "上一页",
-                    prev_title: "上一页",
-                    next: "下一页",
-                    next_title: "下一页",
-                    all: "所有",
-                    page_size: "每页行数"
-                  }
-                }
-              }
+              }]
             }), utils.setupEscClose(a2);
           }, "success")
         }) : show.error("迅雷中找不到相关字幕!");
@@ -14939,6 +14934,72 @@ ${failure.stack}` : "");
   };
   __name(_DetailPagePlugin, "DetailPagePlugin");
   var DetailPagePlugin = _DetailPagePlugin;
+
+  // src/plugins/status/fc2-navigation.js
+  var _Fc2NavigationPlugin = class _Fc2NavigationPlugin extends BasePlugin {
+    getName() {
+      return "Fc2NavigationPlugin";
+    }
+    async handle() {
+      if (!window.isListPage) return;
+      const fc2 = this.getOptionalDependency("Fc2Plugin");
+      if (!fc2) return;
+      const host = this.getRuntimeService("host");
+      const listRoot = host?.locateListRoot?.();
+      if (!listRoot) return;
+      const root = $(listRoot).first();
+      if (!root.length) return;
+      await this.protectFc2Navigation(root, fc2);
+      this.bindFc2Navigation(root, fc2);
+      const scope = await this.getRuntimeService("scope")();
+      scope.addCleanup(() => root.off(".jhsFc2Navigation"));
+    }
+    async protectFc2Navigation(root, fc2) {
+      for (const element of root.find(".item").toArray()) {
+        const item = $(element);
+        if (item.attr("data-jhs-fc2-protected") === "true") continue;
+        try {
+          const { carNum, aHref, fc2Source } = readListItem(item);
+          if (!carNum?.includes("FC2-") || !aHref) continue;
+          const source = fc2Source || await fc2.resolveFc2Source({ url: aHref }) || "";
+          item.attr({
+            "data-jhs-original-url": aHref,
+            "data-jhs-fc2-source": source,
+            "data-jhs-fc2-protected": "true"
+          });
+          item.find("a[href]").attr("href", fc2.createFc2PageUrl(null, carNum, aHref, { source }));
+        } catch (error) {
+          clog.warn("FC2 导航保护初始化失败", error);
+        }
+      }
+    }
+    bindFc2Navigation(root, fc2) {
+      const selector = ".item img, .item .video-title";
+      root.off("click.jhsFc2Navigation auxclick.jhsFc2Navigation", selector).on("click.jhsFc2Navigation auxclick.jhsFc2Navigation", selector, (async (event) => {
+        if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
+        if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
+        const item = $(event.currentTarget).closest(".item");
+        const { carNum, aHref, fc2Source } = readListItem(item);
+        if (!carNum?.includes("FC2-") || !aHref) return;
+        event.preventDefault();
+        event.stopPropagation();
+        try {
+          const shouldOpenTab = Boolean(event.ctrlKey || event.metaKey || 1 === event.button);
+          const movieId = await fc2.resolveMovieIdForRecord(carNum, aHref);
+          const source = fc2Source || await fc2.resolveFc2Source({ url: aHref }) || "";
+          if (shouldOpenTab) {
+            fc2.openFc2Page(movieId, carNum, aHref, { event, newTab: true }, { source });
+          } else {
+            fc2.openFc2Dialog(movieId, carNum, aHref, { source });
+          }
+        } catch (error) {
+          clog.error("打开 FC2 详情失败", error);
+        }
+      }));
+    }
+  };
+  __name(_Fc2NavigationPlugin, "Fc2NavigationPlugin");
+  var Fc2NavigationPlugin = _Fc2NavigationPlugin;
 
   // src/plugins/status/fold-category.js
   var _FoldCategoryPlugin = class _FoldCategoryPlugin extends BasePlugin {
@@ -15264,6 +15325,7 @@ ${failure.stack}` : "");
                  <div id="filterBox" class="jhs-layout-53809f1e">
                     <select id="dataType" class="jhs-select-source">
                         <option value="all" selected>所有</option>
+                        <option value="waitCheck">待鉴定</option>
                         <option value="filter">${u}</option>
                         <option value="favorite">${b}</option>
                         <option value="hasDown">${y}</option>
@@ -15347,7 +15409,11 @@ ${failure.stack}` : "");
       const history = await this.historyRepository.offline(), host = this.historyRoot.find("#table-container").empty();
       if (!history.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无离线任务</div>');
       history.slice().reverse().forEach((item) => {
-        const actions = $('<div class="jhs-toolbar"></div>').append($('<button type="button" class="jhs-btn jhs-copy-offline">复制资源</button>').attr("data-resource", item.resource), $('<button type="button" class="jhs-btn jhs-retry-offline">重试</button>').attr("data-id", item.id), $('<button type="button" class="jhs-btn jhs-open-offline">打开服务</button>').attr("data-id", item.id), $('<button type="button" class="jhs-btn jhs-btn--danger jhs-delete-offline">移除记录</button>').attr("data-id", item.id));
+        const offline = this.getOptionalDependency("UnifiedOfflinePlugin"), provider = offline?.registry?.providers?.get?.(item.providerId);
+        const actions = $('<div class="jhs-toolbar"></div>').append($('<button type="button" class="jhs-btn jhs-copy-offline">复制资源</button>').attr("data-resource", item.resource));
+        if (offline && provider) actions.append($('<button type="button" class="jhs-btn jhs-retry-offline">重试</button>').attr("data-id", item.id));
+        if (provider && typeof provider.openUrl === "function") actions.append($('<button type="button" class="jhs-btn jhs-open-offline">打开服务</button>').attr("data-id", item.id));
+        actions.append($('<button type="button" class="jhs-btn jhs-btn--danger jhs-delete-offline">移除记录</button>').attr("data-id", item.id));
         host.append($('<article class="jhs-card"></article>').append($("<strong></strong>").text(`${item.providerName || item.providerId} · ${item.status}`), $("<p></p>").text(`${item.carNum || "未关联番号"} · ${new Date(item.createdAt).toLocaleString()}${item.retryOf ? ` · 重试自 ${item.retryOf}` : ""}`), $("<p></p>").text(item.errorMessage || item.resource), actions));
       });
     }
@@ -15666,24 +15732,7 @@ ${failure.stack}` : "");
         initialSort: [{
           column: "updateDate",
           dir: "desc"
-        }],
-        locale: "zh-cn",
-        langs: {
-          "zh-cn": {
-            pagination: {
-              first: "首页",
-              first_title: "首页",
-              last: "尾页",
-              last_title: "尾页",
-              prev: "上一页",
-              prev_title: "上一页",
-              next: "下一页",
-              next_title: "下一页",
-              all: "所有",
-              page_size: "每页行数"
-            }
-          }
-        }
+        }]
       }), this.tableObj.on("dataProcessed", (() => {
         this.isHistoryAllFiltered() ? this.syncHistoryPageSelection() : this.updateHistorySelectionUi();
       })), this.tableObj.on("rowSelected", ((row) => {
@@ -16465,43 +16514,20 @@ ${failure.stack}` : "");
       }));
     }
     async openMovieDetail(item, { event = null, autoplay = false, newTab = false } = {}) {
-      const card = item?.jquery ? item : $(item), { carNum, aHref, fc2Source } = this.findCarNumAndHref(card);
+      const card = item?.jquery ? item : $(item), { carNum, aHref } = this.findCarNumAndHref(card);
       if (!carNum || !aHref) return;
       const shouldOpenTab = newTab || !!event && (event.ctrlKey || event.metaKey || 1 === event.button);
-      if (carNum.includes("FC2-")) {
-        const plugin = this.getOptionalDependency("Fc2Plugin");
-        if (!plugin) return utils.openPage(aHref, carNum, true, { event, newTab: shouldOpenTab });
-        const movieId = await plugin.resolveMovieIdForRecord(carNum, aHref), source = fc2Source || await plugin.resolveFc2Source({ url: aHref });
-        return shouldOpenTab ? plugin.openFc2Page(movieId, carNum, aHref, { event, newTab: true }, { source }) : plugin.openFc2Dialog(movieId, carNum, aHref, { source });
-      }
+      if (carNum.includes("FC2-")) return;
       const destination = new URL(aHref, window.location.origin);
       autoplay && destination.searchParams.set("autoPlay", "1"), utils.openPage(destination.href, carNum, true, { event, newTab: shouldOpenTab }), this.$currentImage = null;
     }
     bindMovieDetailNavigation(container) {
       const root = $(container), selector = ".item img, .item .video-title";
-      this.protectFc2Navigation(root);
       root.off("click.jhsMovieDetail auxclick.jhsMovieDetail", selector).on("click.jhsMovieDetail auxclick.jhsMovieDetail", selector, ((event) => {
         if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
         if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
         event.preventDefault(), event.stopPropagation();
         void this.openMovieDetail($(event.currentTarget).closest(".item"), { event }).catch(((error) => clog.error("打开影片详情失败", error)));
-      }));
-    }
-    protectFc2Navigation(root) {
-      const plugin = this.getOptionalDependency("Fc2Plugin");
-      if (!plugin) return;
-      root.find(".item").each(((_index, element) => {
-        const item = $(element);
-        if (item.attr("data-jhs-fc2-protected") === "true") return;
-        try {
-          const { carNum, aHref, fc2Source } = this.findCarNumAndHref(item);
-          if (!carNum.includes("FC2-") || !aHref) return;
-          const source = fc2Source || "fc2", target = plugin.createFc2PageUrl(null, carNum, aHref, { source });
-          item.attr({ "data-jhs-original-url": aHref, "data-jhs-fc2-source": source, "data-jhs-fc2-protected": "true" });
-          item.find("a[href]").attr("href", target);
-        } catch (error) {
-          clog.warn("FC2 导航保护初始化失败", error);
-        }
       }));
     }
     async parseActressName(e2) {
@@ -17244,7 +17270,8 @@ ${failure.stack}` : "");
     manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [PORT.host, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.state]),
     manifest("list.auto-page", "list", AutoPagePlugin, ["javdb", "javbus"], { javdb: 2, javbus: 5 }, [SERVICE.http]),
     manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related, SERVICE.state]),
-    manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
+    manifest("detail.fc2-navigation", "detail", Fc2NavigationPlugin, ["javdb"], { javdb: 4 }, [PORT.host]),
+    manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 5 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog, SERVICE.movie, SERVICE.settings, SERVICE.state]),
     manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state]),
@@ -18390,6 +18417,7 @@ ${failure.stack}` : "");
 
   // src/services/screenshot-service.js
   var DEFAULT_SCREENSHOT_PROVIDER = "javstore";
+  var SCREENSHOT_PROVIDER_IDS = /* @__PURE__ */ new Set([DEFAULT_SCREENSHOT_PROVIDER]);
   var _ScreenshotService = class _ScreenshotService {
     constructor(providers, integrations = null) {
       this.providers = providers;
@@ -18398,9 +18426,9 @@ ${failure.stack}` : "");
     async resolve(movieRef, context = {}) {
       if (context.providerId) {
         const provider = this.providers.get?.(context.providerId);
-        if (provider && provider.enabled !== false && provider.capabilities?.includes("screenshot")) {
-          const result = await this.resolveFromProvider(provider, movieRef, context);
-          if (result) return result;
+        if (provider) {
+          if (provider.enabled === false || !provider.capabilities?.includes("screenshot")) return null;
+          return this.resolveFromProvider(provider, movieRef, context);
         }
         return this.resolveIntegration(context.providerId, movieRef, context);
       }
@@ -18421,6 +18449,7 @@ ${failure.stack}` : "");
       return null;
     }
     async resolveIntegration(providerId, movieRef, context) {
+      if (!SCREENSHOT_PROVIDER_IDS.has(providerId)) return null;
       const manifest2 = this.integrations?.list("movie.images")?.find((item) => item.id === providerId);
       if (!manifest2) return null;
       const adapter = this.integrations?.getAdapter(manifest2.id);
@@ -18429,7 +18458,9 @@ ${failure.stack}` : "");
       return Array.isArray(result) && result.length ? result : null;
     }
     getSearchUrl(movieRef) {
+      if (!SCREENSHOT_PROVIDER_IDS.has(DEFAULT_SCREENSHOT_PROVIDER)) return null;
       for (const manifest2 of this.integrations?.list("movie.images") ?? []) {
+        if (manifest2.id !== DEFAULT_SCREENSHOT_PROVIDER) continue;
         const adapter = this.integrations?.getAdapter(manifest2.id);
         if (typeof adapter?.getSearchUrl === "function") return adapter.getSearchUrl(movieRef);
       }
@@ -18834,7 +18865,7 @@ ${failure.stack}` : "");
       try {
         const dependencies = this.container.resolveDeclared(manifest2.requires);
         const enabledContributions = Object.freeze(manifest2.contributes.filter((id) => !this.disabled.has(id)));
-        const result = await manifest2.activate(dependencies, Object.freeze({ scope, enabledContributions }));
+        const result = await manifest2.activate(dependencies, Object.freeze({ scope, enabledContributions, route: this.route }));
         for (const command of manifest2.providesCommands) {
           const handler = result?.commands?.[command];
           if (typeof handler !== "function") throw new Error(`Feature ${manifest2.id} did not provide command ${command}`);
@@ -19902,10 +19933,13 @@ ${failure.stack}` : "");
         const movie = payload?.data?.movie;
         if (!movie?.number) throw new Error(payload?.message || "JavDB detail response is invalid");
         const imageUrls = Array.isArray(movie.preview_images) ? movie.preview_images.map((image) => String(image.large_url || "").replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com")).filter(Boolean) : [];
+        const coverUrl = movie.cover_url ? String(movie.cover_url).replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com") : "";
         return Object.freeze({
           movieId: String(movie.id || movieId),
           carNum: normalizeMovieCarNum(movie.number),
-          title: String(movie.origin_title || movie.title || ""),
+          title: String(movie.title || movie.origin_title || ""),
+          originalTitle: String(movie.origin_title || movie.title || ""),
+          coverUrl: coverUrl || null,
           actors: Array.isArray(movie.actors) ? movie.actors.map((actor) => Object.freeze({ id: String(actor.id), name: String(actor.name || ""), gender: Number(actor.gender) })) : [],
           duration: Number(movie.duration) || null,
           score: Number(movie.score) || 0,
@@ -20465,7 +20499,12 @@ ${failure.stack}` : "");
           ttlMs: 6048e5,
           urlPolicy: { trustClass: "builtin-public", hosts: ["ja.wikipedia.org"] }
         }, options.scope);
-        return parseWikipediaActressInfo(response.data, response.finalUrl || url);
+        try {
+          return parseWikipediaActressInfo(response.data, response.finalUrl || url);
+        } catch (error) {
+          if (error instanceof TypeError && /actress information is missing/.test(error.message)) return null;
+          throw error;
+        }
       }
     });
   }

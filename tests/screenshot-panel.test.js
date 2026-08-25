@@ -19,6 +19,13 @@ it("keeps manual mode request-free until selected", async () => {
     await vi.waitFor(() => expect(resolve).toHaveBeenCalledOnce());
 });
 
+it("hides disabled providers and does not create request entries", async () => {
+    const resolve = vi.fn(async () => []);
+    await renderScreenshotPanel({ target: jquery("#target"), carNum: "ABC-123", screenshot: { resolve }, settings: { screenshotMode: "manual", screenshotProviders: [ { id: "javstore", enabled: false } ] } });
+    expect(jquery("#target button").length).toBe(0);
+    expect(resolve).not.toHaveBeenCalled();
+});
+
 it("resolves the long-thumbnail only through javstore", async () => {
     const resolve = vi.fn(async () => [ { url: "https://img.javstore.net/test.jpg", providerId: "javstore" } ]);
     await renderScreenshotPanel({ target: jquery("#target"), carNum: "ABC-123", screenshot: { resolve }, settings: {} });

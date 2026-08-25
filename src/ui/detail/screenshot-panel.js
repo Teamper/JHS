@@ -1,5 +1,20 @@
 // @ts-check
 
+const DEFAULT_SCREENSHOT_PROVIDERS = Object.freeze([
+    Object.freeze({ id: "javstore", name: "JavStore", priority: 10, enabled: true }),
+]);
+
+/** @param {Record<string, any>} settings */
+function getEnabledScreenshotProviders(settings) {
+    const configured = Array.isArray(settings.screenshotProviders) ? settings.screenshotProviders : [];
+    const providers = configured.length
+        ? DEFAULT_SCREENSHOT_PROVIDERS.map((provider) => ({ ...provider, ...(configured.find((item) => item?.id === provider.id) || {}) }))
+        : [...DEFAULT_SCREENSHOT_PROVIDERS];
+    return providers
+        .filter((provider) => provider.enabled !== false && !provider.implemented)
+        .sort((left, right) => Number(left.priority ?? 100) - Number(right.priority ?? 100));
+}
+
 /** @param {unknown} value */
 function normalizeImageUrl(value) {
     try {
@@ -29,10 +44,13 @@ export async function renderScreenshotPanel(options) {
     const jq = /** @type {any} */ (globalThis).$;
     const host = jq(options.target), isActive = options.isActive ?? (() => true), providerId = options.providerId ?? "javstore";
     if (!host.length || options.settings.enableLoadScreenShot === "no") return host.empty(), null;
-    const load = async (resultHost = host) => {
+    const enabledProviders = getEnabledScreenshotProviders(options.settings);
+    if (options.settings.screenshotMode !== "manual" && !enabledProviders.some((provider) => provider.id === providerId)) return host.empty(), null;
+    if (!enabledProviders.length) return host.empty().append(jq('<div class="jhs-panel-state">没有可用截图来源</div>')), host;
+    const load = async (resultHost = host, selectedProviderId = providerId) => {
         resultHost.empty().append(jq("<div></div>").addClass("jhs-panel-state").text("正在加载缩略图…"));
         try {
-            const images = await options.screenshot.resolve({ carNum: options.carNum }, { providerId, scope: options.scope });
+            const images = await options.screenshot.resolve({ carNum: options.carNum }, { providerId: selectedProviderId, scope: options.scope });
             if (!isActive()) return null;
             const image = Array.isArray(images) ? images[0] : images;
             if (!image?.url) return resultHost.empty(), null;
@@ -41,7 +59,7 @@ export async function renderScreenshotPanel(options) {
         } catch (error) {
             if (!isActive()) return null;
             const state = jq("<div></div>").addClass("jhs-panel-state").text("缩略图加载失败 ");
-            const retry = jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", () => void load(resultHost));
+            const retry = jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", () => void load(resultHost, selectedProviderId));
             resultHost.empty().append(state.append(retry));
             /** @type {any} */ (globalThis).clog?.error("缩略图加载失败", error);
             return null;
@@ -50,8 +68,15 @@ export async function renderScreenshotPanel(options) {
     if (options.settings.screenshotMode !== "manual") return load();
     const tabs = jq('<div class="jhs-screenshot-providers" role="tablist" aria-label="截图来源"></div>');
     const result = jq('<div class="jhs-screenshot-result"></div>').text("请选择截图来源");
-    const button = jq('<button type="button" class="jhs-btn jhs-btn--secondary" role="tab" aria-selected="false">JavStore</button>');
-    button.on("click", async () => { button.attr("aria-selected", "true"); await load(result); });
-    host.empty().append(tabs.append(button), result);
+    enabledProviders.forEach((provider) => {
+        const button = jq('<button type="button" class="jhs-btn jhs-btn--secondary" role="tab" aria-selected="false"></button>').text(provider.name);
+        button.on("click", async () => {
+            tabs.find("[role='tab']").attr("aria-selected", "false");
+            button.attr("aria-selected", "true");
+            await load(result, provider.id);
+        });
+        tabs.append(button);
+    });
+    host.empty().append(tabs, result);
     return host;
 }

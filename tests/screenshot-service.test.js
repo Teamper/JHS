@@ -55,6 +55,26 @@ describe("ScreenshotService explicit provider resolution", () => {
         expect(integrations.getAdapter).toHaveBeenCalledWith("javstore");
     });
 
+    it("does not call an explicit disabled provider or fall back to another source", async () => {
+        const integrations = threeIntegrations();
+        const getImages = vi.fn(async () => [ { url: "https://javstore.net/a.jpg" } ]);
+        integrations.getAdapter.mockReturnValue({ getImages });
+        const providers = { get: vi.fn(() => ({ id: "javstore", enabled: false, capabilities: [ "screenshot" ] })), updateHealth: vi.fn() };
+        await expect(new ScreenshotService(providers, integrations).resolve({ carNum: "ABC-123" }, { providerId: "javstore" })).resolves.toBeNull();
+        expect(integrations.getAdapter).not.toHaveBeenCalled();
+    });
+
+    it("never lets JavBus cover or FC2 gallery enter the long-thumbnail path", async () => {
+        const integrations = threeIntegrations();
+        const getImages = vi.fn(async () => [ { url: "https://example.com/cover.jpg" } ]);
+        integrations.getAdapter.mockReturnValue({ getImages });
+        const providers = { get: vi.fn(() => null), updateHealth: vi.fn() };
+        await expect(new ScreenshotService(providers, integrations).resolve({ carNum: "FC2-123" }, { providerId: "fc2content" })).resolves.toBeNull();
+        await expect(new ScreenshotService(providers, integrations).resolve({ carNum: "ABC-123" }, { providerId: "javbus" })).resolves.toBeNull();
+        expect(integrations.getAdapter).not.toHaveBeenCalled();
+        expect(new ScreenshotService(providers, integrations).getSearchUrl({ carNum: "ABC-123" })).toBeNull();
+    });
+
     it("returns null for an unknown explicit providerId without calling any adapter", async () => {
         const integrations = threeIntegrations();
         const providers = { getAvailable: vi.fn(async () => []), get: vi.fn(() => null), updateHealth: vi.fn() };

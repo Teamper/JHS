@@ -106,7 +106,7 @@ export class Fc2By123AvPlugin extends BasePlugin {
     /** @param {Fc2DetailContext} context @param {string} url */
     async loadDetail(context, url) {
         const infoPromise = this.loadSummary(context, url), imagesPromise = this.getImgList(context.carNum), actressPromise = this.getActressInfo(context.carNum);
-        imagesPromise.then((images => context.isAlive() && renderFc2Gallery(context, images))).catch((error => context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)))));
+        imagesPromise.then((images => context.isAlive() && renderFc2Gallery(context, images, null))).catch((error => context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)))));
         actressPromise.then((async data => {
             await infoPromise.catch((() => null));
             context.isAlive() && this.render123AvActress(context, data);
@@ -152,7 +152,7 @@ export class Fc2By123AvPlugin extends BasePlugin {
     async reloadImages(context) {
         try {
             const images = await this.getImgList(context.carNum);
-            context.isAlive() && renderFc2Gallery(context, images);
+            context.isAlive() && renderFc2Gallery(context, images, null);
         } catch (error) {
             context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)));
         }

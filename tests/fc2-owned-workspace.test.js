@@ -14,6 +14,7 @@ import { assessMagnetQuality } from "../src/core/magnet-quality.js";
 const repoRoot = join(import.meta.dirname, "..");
 const fc2Source = readTestFile(join(repoRoot, "src/plugins/external-search/fc2.js"), "utf8");
 const fc2ViewSource = readTestFile(join(repoRoot, "src/ui/detail/fc2-workspace-view.js"), "utf8");
+const fc2NavigationSource = readTestFile(join(repoRoot, "src/plugins/status/fc2-navigation.js"), "utf8");
 const fc2By123AvSource = readTestFile(join(repoRoot, "src/plugins/external-search/fc2-by-123av.js"), "utf8");
 const screenshotSource = readTestFile(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
 const listPageSource = readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8");
@@ -121,8 +122,8 @@ describe("FC2 owned detail workspace", () => {
     it("propagates an explicit FC2 source without guessing from URL text", () => {
         expect(fc2Source).not.toContain('url.includes("123av")');
         expect(fc2By123AvSource).toContain('data-jhs-fc2-source="123av"');
-        expect(listPageSource).toContain("source = fc2Source || await plugin.resolveFc2Source");
-        expect(listPageSource).toContain("resolveMovieIdForRecord(carNum, aHref)");
+        expect(fc2NavigationSource).toContain("fc2Source || (await fc2.resolveFc2Source");
+        expect(fc2NavigationSource).toContain("resolveMovieIdForRecord(carNum, aHref)");
         expect(historySource).toContain("resolveFc2Source(t)");
         expect(stateServiceSource).toContain('"fc2Source"');
         expect(fc2Source).toContain('target.searchParams.set("source", source)');
@@ -132,8 +133,10 @@ describe("FC2 owned detail workspace", () => {
         expect(fc2Source).not.toContain('getBean("ListPagePlugin")');
         expect(fc2Source).toContain('o.includes("collection_codes?movieId")');
         expect(fc2Source).toContain("openFc2Dialog(");
-        expect(listPageSource).toContain("protectFc2Navigation(root)");
-        expect(listPageSource).toContain('this.getBean("Fc2Plugin")');
+        expect(fc2NavigationSource).toContain("protectFc2Navigation(root, fc2)");
+        expect(fc2NavigationSource).toContain('this.getBean("Fc2Plugin")');
+        expect(listPageSource).not.toContain("protectFc2Navigation(root)");
+        expect(listPageSource).not.toContain('getBean("Fc2Plugin")');
     });
 
     it("restores source links, magnet metadata and scoped quality filtering", () => {

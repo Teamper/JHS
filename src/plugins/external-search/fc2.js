@@ -30,7 +30,7 @@ import { createFc2DetailContext, createFc2DetailShell } from "../status/detail-w
  * @property {Set<string> | undefined} galleryUrls
  */
 /** @typedef {{ id: string, name: string, gender?: number }} MovieActor */
-/** @typedef {{ title?: string, carNum?: string, releaseDate?: string, score?: number | string, duration?: number | string, actors?: MovieActor[], imageUrls?: string[] }} Fc2Movie */
+/** @typedef {{ title?: string, originalTitle?: string, coverUrl?: string | null, carNum?: string, releaseDate?: string, score?: number | string, duration?: number | string, actors?: MovieActor[], imageUrls?: string[] }} Fc2Movie */
 /** @typedef {{ hash?: string, title?: string, hasHdTag?: boolean, hasSubtitleTag?: boolean, createdAt?: string, seeders?: number, sizeMb?: number, fileCount?: number }} NativeMagnet */
 /** @typedef {{ highQuality: boolean, grade: string, score: { total: number } }} MagnetAssessment */
 /** @typedef {{ movieId?: string | null, carNum: string, url: string, source: string, mode: string, layerIndex?: number }} Fc2MountOptions */
@@ -124,7 +124,8 @@ export class Fc2Plugin extends BasePlugin {
         $(window).off("pagehide.jhsFc2Detail").one("pagehide.jhsFc2Detail", (() => context.destroy()));
     }
     /** @param {string | null} movieId @param {string} carNum @param {string} url @param {{ source?: string }} [options] */
-    openFc2Dialog(movieId, carNum, url, { source = "fc2" } = {}) {
+    openFc2Dialog(movieId, carNum, url, { source = "" } = {}) {
+        source = [ "fc2", "123av" ].includes(source) ? source : "";
         /** @type {Fc2DetailContext | null} */
         let context = null;
         return this.getRuntimeService("dialog").open({ type: 1, title: carNum, content: '<div class="jhs-fc2-dialog-host"></div>', area: utils.getDialogArea("workspace"), skin: "movie-detail-layer", scrollbar: !1, shadeClose: !0,
@@ -185,7 +186,7 @@ export class Fc2Plugin extends BasePlugin {
             void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderScreenshotPanel({
                 target: screenshot, carNum: context.carNum.replace("FC2-", ""), screenshot: this.getRuntimeService("screenshot"),
                 settings: this.getRuntimeService("settings").snapshot(), scope, isActive: context.isAlive,
-                providerId: "javstore", isDuplicate: url => Boolean(context.galleryUrls?.has(url)),
+                isDuplicate: url => Boolean(context.galleryUrls?.has(url)),
             })).then((/** @type {unknown} */ result) => { if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove(); }).catch((error => {
                 context.isAlive() && screenshot.remove(), clog.error("FC2 剧照初始化失败", error);
             }));
@@ -263,7 +264,7 @@ export class Fc2Plugin extends BasePlugin {
             const movie = await this.getRuntimeService("movie").detail({ movieId: context.movieId, carNum: context.carNum, providerId: "javdb" }, { scope });
             if (!movie) throw new Error("JavDB 影片详情不存在");
             if (!context.isAlive()) return;
-            this.renderSummary(context, movie), renderFc2Gallery(context, movie.imageUrls || []);
+            this.renderSummary(context, movie), renderFc2Gallery(context, movie.imageUrls || [], movie.coverUrl || null);
             if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) === _) await renderTranslatedTitle({ root: context.root, carNum: movie.carNum || context.carNum, translation: this.getRuntimeService("translation"), scope });
         } catch (error) {
             context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.fetchAndRenderNativeDetail(context))), clog.error("FC2 详情加载失败", error);
@@ -273,6 +274,7 @@ export class Fc2Plugin extends BasePlugin {
     renderSummary(context, movie) {
         const body = context.root.find('[data-jhs-role="summary-content"]').empty(), title = $('<h1 class="jhs-fc2-title"><strong class="current-title"></strong></h1>');
         title.find("strong").text(movie.title || "无标题"), body.append(title);
+        if (movie.originalTitle && movie.originalTitle !== movie.title) body.append($('<div class="jhs-fc2-original-title"></div>').text(movie.originalTitle));
         const meta = $('<div class="jhs-fc2-meta"></div>');
         [ `番号：${movie.carNum || context.carNum}`, `发行：${movie.releaseDate || "未知"}`, `评分：${Number.isFinite(Number(movie.score)) ? movie.score : "无"}`, `时长：${Number.isFinite(Number(movie.duration)) ? movie.duration + " 分钟" : "无"}` ].forEach((value => meta.append($("<span></span>").text(value)))), body.append(meta);
         /** @type {string[]} */
@@ -334,16 +336,21 @@ export class Fc2Plugin extends BasePlugin {
     /** @param {Fc2SourceRecord} [record] */
     async resolveFc2Source(record = {}) {
         if (record.fc2Source && [ "fc2", "123av" ].includes(record.fc2Source)) return record.fc2Source;
-        try { return this.getRuntimeService("movie").matchesProviderUrl("av123", new URL(/** @type {string} */ (record.url), window.location.origin).href) ? "123av" : "fc2"; } catch { return "fc2"; }
+        try {
+            const url = new URL(/** @type {string} */ (record.url || ""), window.location.origin);
+            if (this.getRuntimeService("movie").matchesProviderUrl("av123", url.href)) return "123av";
+            return url.origin === window.location.origin ? "fc2" : "";
+        } catch { return ""; }
     }
     /** Build the same-origin owned FC2 detail URL used by both interception and native anchor fallback. @param {string | null} movieId @param {string} carNum @param {string} url @param {{source?: string}} [options] */
-    createFc2PageUrl(movieId, carNum, url, { source = "fc2" } = {}) {
+    createFc2PageUrl(movieId, carNum, url, { source = "" } = {}) {
         const target = new URL("/users/collection_codes", window.location.origin);
         target.searchParams.set("movieId", movieId || ""), target.searchParams.set("carNum", carNum), target.searchParams.set("url", url), target.searchParams.set("source", source);
         return target.href;
     }
     /** @param {string | null} movieId @param {string} carNum @param {string} url @param {{ newTab?: boolean }} [navigation] @param {{ source?: string }} [options] */
-    async openFc2Page(movieId, carNum, url, navigation = { newTab: !0 }, { source = "fc2" } = {}) {
+    async openFc2Page(movieId, carNum, url, navigation = { newTab: !0 }, { source = "" } = {}) {
+        source = [ "fc2", "123av" ].includes(source) ? source : "";
         utils.openPage(this.createFc2PageUrl(movieId, carNum, url, { source }), carNum, !0, navigation);
     }
 }

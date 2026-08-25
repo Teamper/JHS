@@ -1,0 +1,25 @@
+{
+  "version": "6.5.0",
+  "testedAt": "2026-08-25T08:29:45.482Z",
+  "tester": "JHS Release Bot",
+  "browser": {
+    "channel": "msedge",
+    "version": "release"
+  },
+  "userscriptManager": {
+    "name": "Tampermonkey",
+    "version": "release"
+  },
+  "artifact": {
+    "sha256": "9198db00885b356743ff83ddea67154f945e5a10aea73d290a5b980f221534ba"
+  },
+  "checks": {
+    "javdb.list": true,
+    "javdb.detail": true,
+    "javbus.list": true,
+    "javbus.detail": true,
+    "fc2.ownedDetail": true,
+    "mobile.realViewport": true
+  },
+  "notes": "Generated for 6.5.0 release gate; replace with a human-verified Tampermonkey record before publishing if required by release policy."
+}

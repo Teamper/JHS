@@ -4,8 +4,12 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class ActressInfoPlugin extends BasePlugin {
     getName() { return "ActressInfoPlugin"; }
-    async handle() { if ("yes" === await storageManager.getSetting("enableLoadActressInfo", "yes")) await this.loadActressInfo(); }
-    async loadActressInfo() { await Promise.all([this.handleDetailPage(), this.handleStarPage()]); }
+    async handle() {
+        if ("yes" !== await storageManager.getSetting("enableLoadActressInfo", "yes")) return;
+        const path = window.location.pathname;
+        if (path.startsWith("/v/") || path.startsWith("/movies/")) await this.handleDetailPage();
+        else if (path.startsWith("/actors/")) await this.handleStarPage();
+    }
     async initCss() {
         return `<style>
             .info-tag { background-color:var(--jhs-status-fav-tint); display:inline-block; height:32px; padding:0 10px; line-height:30px; font-size:12px; color:var(--jhs-status-fav); border:1px solid var(--jhs-status-fav-tint); border-radius:4px; box-sizing:border-box; white-space:nowrap; }
@@ -18,7 +22,7 @@ export class ActressInfoPlugin extends BasePlugin {
         /** @type {any[]} */ const blocks = [];
         for (const name of names) {
             let info = null;
-            try { info = await this.searchInfo(name); } catch { clog.error("该名称查询失败,尝试其它名称"); }
+            try { info = await this.searchInfo(name); } catch (error) { clog.error("演员资料查询失败", name, error); }
             const block = $('<div class="panel-block actress-info"></div>');
             if (info) {
                 block.append($("<strong></strong>").text(`${name}:`));
@@ -47,7 +51,7 @@ export class ActressInfoPlugin extends BasePlugin {
         if (!names.length) return;
         let info = null;
         for (const name of names) {
-            try { info = await this.searchInfo(name); } catch { clog.error("该名称查询失败,尝试其它名称"); }
+            try { info = await this.searchInfo(name); } catch (error) { clog.error("演员资料查询失败", name, error); }
             if (info) break;
         }
         const body = $('<div class="jhs-layout-c0d4a511"></div>');

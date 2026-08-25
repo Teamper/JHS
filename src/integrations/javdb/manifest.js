@@ -92,8 +92,12 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
             const movie = payload?.data?.movie;
             if (!movie?.number) throw new Error(payload?.message || "JavDB detail response is invalid");
             const imageUrls = Array.isArray(movie.preview_images) ? movie.preview_images.map((/** @type {any} */ image) => String(image.large_url || "").replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com")).filter(Boolean) : [];
+            const coverUrl = movie.cover_url ? String(movie.cover_url).replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com") : "";
             return Object.freeze({
-                movieId: String(movie.id || movieId), carNum: normalizeMovieCarNum(movie.number), title: String(movie.origin_title || movie.title || ""),
+                movieId: String(movie.id || movieId), carNum: normalizeMovieCarNum(movie.number),
+                title: String(movie.title || movie.origin_title || ""),
+                originalTitle: String(movie.origin_title || movie.title || ""),
+                coverUrl: coverUrl || null,
                 actors: Array.isArray(movie.actors) ? movie.actors.map((/** @type {any} */ actor) => Object.freeze({ id: String(actor.id), name: String(actor.name || ""), gender: Number(actor.gender) })) : [],
                 duration: Number(movie.duration) || null, score: Number(movie.score) || 0, releaseDate: movie.release_date || null,
                 watchedCount: Number(movie.watched_count) || 0, imageUrls: Object.freeze(imageUrls), providerId: "javdb",

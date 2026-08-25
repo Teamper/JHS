@@ -109,7 +109,7 @@ describe("HTTP, URL and settings contracts", () => {
         await settings.load();
         await settings.set("theme", "dark");
         expect(settings.snapshot()).toEqual({ theme: "dark" });
-        expect(() => settings.set("theme", "invalid")).rejects.toThrow(/Invalid/);
+        await expect(settings.set("theme", "invalid")).rejects.toThrow(/Invalid/);
     });
 
     it("serializes concurrent settings writes without dropping fields", async () => {

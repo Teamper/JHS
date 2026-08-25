@@ -36,6 +36,11 @@ it("keeps explicit detail routes ahead of incidental list markup", () => {
     expect(new JavDbHostAdapter(dom.window.document, dom.window.location).detectRoute()).toBe("detail");
 });
 
+it("recognizes /users/collection_codes as owned-detail even when a movie-list exists", () => {
+    const dom = new JSDOM('<div class="movie-list"></div>', { url: "https://javdb.com/users/collection_codes?movieId=1&carNum=FC2-123" });
+    expect(new JavDbHostAdapter(dom.window.document, dom.window.location).detectRoute()).toBe("owned-detail");
+});
+
 it("normalizes JavDB host actor movies and uncollect mutations", async () => {
     const html = readFileSync(join(import.meta.dirname, "../fixtures/integrations/javdb/actor-movies.html"), "utf8");
     const hostAdapter = new JavDbHostAdapter();
@@ -91,10 +96,10 @@ it("resolves an exact normalized movie reference through the JavDB search contra
 
 it("normalizes JavDB detail and magnet contracts", async () => {
     const request = vi.fn()
-        .mockResolvedValueOnce({ data: { data: { movie: { id: 9, number: "ABC-123", origin_title: "Title", actors: [{ id: 2, name: "Actor", gender: 0 }], preview_images: [{ large_url: "https://old/rhe951l4q/a.jpg" }], watched_count: 8 } } } })
+        .mockResolvedValueOnce({ data: { data: { movie: { id: 9, number: "ABC-123", title: "Display Title", origin_title: "Original Title", cover_url: "https://old/rhe951l4q/cover.jpg", actors: [{ id: 2, name: "Actor", gender: 0 }], preview_images: [{ large_url: "https://old/rhe951l4q/a.jpg" }], watched_count: 8 } } } })
         .mockResolvedValueOnce({ data: { data: { magnets: [{ hash: "abc", name: "Magnet", hd: true, cnsub: false, size: 2048, files_count: 2 }] } } });
     const adapter = createJavDbAdapter({ request }, () => "signature");
-    await expect(adapter.getDetail({ movieId: "9" })).resolves.toMatchObject({ movieId: "9", carNum: "ABC-123", title: "Title", imageUrls: ["https://c0.jdbstatic.com/a.jpg"] });
+    await expect(adapter.getDetail({ movieId: "9" })).resolves.toMatchObject({ movieId: "9", carNum: "ABC-123", title: "Display Title", originalTitle: "Original Title", coverUrl: "https://c0.jdbstatic.com/cover.jpg", imageUrls: ["https://c0.jdbstatic.com/a.jpg"] });
     await expect(adapter.listMagnets({ movieId: "9" })).resolves.toEqual([{ hash: "abc", title: "Magnet", hasHdTag: true, hasSubtitleTag: false, createdAt: null, seeders: 0, sizeMb: 2048, fileCount: 2, providerId: "javdb" }]);
 });
 

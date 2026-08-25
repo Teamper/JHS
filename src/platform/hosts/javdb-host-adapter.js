@@ -7,6 +7,7 @@ export class JavDbHostAdapter {
     constructor(documentRuntime = document, locationRuntime = window.location) { this.site = "javdb"; this.document = documentRuntime; this.location = locationRuntime; }
     detectRoute() {
         if (this.location.pathname.startsWith("/v/") || this.location.pathname.startsWith("/movies/")) return "detail";
+        if (this.location.pathname === "/users/collection_codes") return "owned-detail";
         return this.locateListRoot() ? "list" : "other";
     }
     readMovieRef() {

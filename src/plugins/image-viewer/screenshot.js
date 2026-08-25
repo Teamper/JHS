@@ -49,7 +49,8 @@ export class ScreenShotPlugin extends BasePlugin {
     /** @param {string} carNum */
     renderProviderTabs(carNum) {
         const tabs = $('<div class="jhs-screenshot-providers" role="tablist"></div>');
-        this.providerRegistry.providers.forEach((provider => tabs.append($("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary\"></button>").prop("disabled", !provider.enabled).attr("data-provider", provider.id).text(provider.name))));
+        this.providerRegistry.getEnabledProviders().forEach((provider => tabs.append($("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary\"></button>").attr("data-provider", provider.id).text(provider.name))));
+        if (!tabs.children().length) return void $(".screen-container").text("没有可用截图来源");
         $(".screen-container").before(tabs);
         tabs.on("click", "button:not(:disabled)", (async (/** @type {JQueryClickEvent} */ event) => {
             const provider = this.providerRegistry.get($(event.currentTarget).data("provider"));
@@ -98,19 +99,19 @@ export class ScreenShotPlugin extends BasePlugin {
     /** @param {string} e @param {unknown} t */
     showErrorFallback(e, t) {
         const errorMessage = t instanceof Error ? t.message : "";
-        clog.error("获取缩略图失败:", errorMessage.substring(0, 100));
+        t && clog.error("获取缩略图失败:", errorMessage.substring(0, 100));
         const a = `jhs-screenshot-message${l ? " jhs-screenshot-message--bus" : ""}`;
         const carNum = normalizeCarNum(e);
         if (!carNum) return void $(".screen-container").empty().append($("<div></div>").addClass(a).text("无法获取番号，缩略图未加载"));
         const searchUrl = this.getRuntimeService("screenshot").getSearchUrl({ carNum }), container = $(".screen-container").empty();
-        const message = $("<div></div>").addClass(a).text("获取缩略图失败"), retry = $('<a href="#" class="retry-link">点击重试</a>');
+        const message = $("<div></div>").addClass(a).text(t instanceof Error ? "获取缩略图失败" : "暂无缩略图结果"), retry = $('<a href="#" class="retry-link">点击重试</a>');
         container.append(message, $("<br>"), retry);
         searchUrl && container.append(document.createTextNode(" 或 "), $('<a class="check-link" target="_blank" rel="noopener noreferrer">前往确认</a>').attr("href", searchUrl));
         container.off("click", ".retry-link").off("click", ".check-link").on("click", ".retry-link", (async (/** @type {JQueryClickEvent} */ t) => {
             t.stopPropagation(), t.preventDefault(), container.empty().append($("<div></div>").addClass(a).text("正在重新加载..."));
             try {
-                const t = await this.getScreenshot(carNum);
-                this.addImg("缩略图", t);
+                const result = await this.getScreenshot(carNum);
+                result ? this.addImg("缩略图", result) : this.showErrorFallback(carNum, null);
             } catch (n) {
                 this.showErrorFallback(carNum, n);
             }
@@ -127,7 +128,9 @@ export class ScreenShotPlugin extends BasePlugin {
         if ("manual" === mode) {
             host.empty();
             const tabs = $('<div class="jhs-screenshot-providers" role="tablist" aria-label="截图来源"></div>'), result = $('<div class="jhs-screenshot-result"></div>').text("请选择截图来源");
-            this.providerRegistry.providers.forEach((provider => tabs.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').prop("disabled", !provider.enabled).attr("data-provider", provider.id).text(provider.name))));
+            const enabled = this.providerRegistry.getEnabledProviders();
+            enabled.forEach((provider => tabs.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').attr("data-provider", provider.id).text(provider.name))));
+            if (!enabled.length) return host.append($('<div class="jhs-panel-state"></div>').text("没有可用截图来源"));
             host.append(tabs, result), tabs.on("click", "button:not(:disabled)", (async (/** @type {JQueryClickEvent} */ event) => {
                 const provider = this.providerRegistry.get($(event.currentTarget).data("provider"));
                 result.text(`${provider.name} 加载中…`);

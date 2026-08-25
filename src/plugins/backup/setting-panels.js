@@ -96,8 +96,7 @@ export async function renderSnapshotPanel() {
                     })), '<button type="button" class="jhs-btn jhs-btn--primary snap-restore">恢复</button> <button type="button" class="jhs-btn jhs-btn--secondary snap-download">下载</button> <button type="button" class="jhs-btn jhs-btn--danger snap-delete">删除</button>';
                 }
             }
-        ],
-        locale: "zh-cn"
+        ]
     });
 }
 

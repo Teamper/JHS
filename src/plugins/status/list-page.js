@@ -447,15 +447,10 @@ export class ListPagePlugin extends BasePlugin {
     /** 从任意列表卡片进入统一详情导航。 */
     /** @param {any} item @param {{ event?: MouseEvent | null, autoplay?: boolean, newTab?: boolean }} [options] */
     async openMovieDetail(item, { event = null, autoplay = !1, newTab = !1 } = {}) {
-        const card = item?.jquery ? item : $(item), {carNum, aHref, fc2Source} = this.findCarNumAndHref(card);
+        const card = item?.jquery ? item : $(item), {carNum, aHref} = this.findCarNumAndHref(card);
         if (!carNum || !aHref) return;
         const shouldOpenTab = newTab || !!event && (event.ctrlKey || event.metaKey || 1 === event.button);
-        if (carNum.includes("FC2-")) {
-            const plugin = this.getOptionalDependency("Fc2Plugin");
-            if (!plugin) return utils.openPage(aHref, carNum, !0, { event, newTab: shouldOpenTab });
-            const movieId = await plugin.resolveMovieIdForRecord(carNum, aHref), source = fc2Source || await plugin.resolveFc2Source({ url: aHref });
-            return shouldOpenTab ? plugin.openFc2Page(movieId, carNum, aHref, { event, newTab: !0 }, { source }) : plugin.openFc2Dialog(movieId, carNum, aHref, { source });
-        }
+        if (carNum.includes("FC2-")) return;
         const destination = new URL(aHref, window.location.origin);
         autoplay && destination.searchParams.set("autoPlay", "1"), utils.openPage(destination.href, carNum, !0, { event, newTab: shouldOpenTab }), this.$currentImage = null;
     }
@@ -463,28 +458,11 @@ export class ListPagePlugin extends BasePlugin {
     /** @param {any} container */
     bindMovieDetailNavigation(container) {
         const root = $(container), selector = ".item img, .item .video-title";
-        this.protectFc2Navigation(root);
         root.off("click.jhsMovieDetail auxclick.jhsMovieDetail", selector).on("click.jhsMovieDetail auxclick.jhsMovieDetail", selector, ((/** @type {any} */ event) => {
             if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
             if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
             event.preventDefault(), event.stopPropagation();
             void this.openMovieDetail($(event.currentTarget).closest(".item"), { event }).catch((error => clog.error("打开影片详情失败", error)));
-        }));
-    }
-    /** Rewrite FC2 card anchors to the same-origin owned detail page as a native-navigation fallback. @param {any} root */
-    protectFc2Navigation(root) {
-        const plugin = this.getOptionalDependency("Fc2Plugin");
-        if (!plugin) return;
-        root.find(".item").each(((/** @type {number} */ _index, /** @type {Element} */ element) => {
-            const item = $(element);
-            if (item.attr("data-jhs-fc2-protected") === "true") return;
-            try {
-                const { carNum, aHref, fc2Source } = this.findCarNumAndHref(item);
-                if (!carNum.includes("FC2-") || !aHref) return;
-                const source = fc2Source || "fc2", target = plugin.createFc2PageUrl(null, carNum, aHref, { source });
-                item.attr({ "data-jhs-original-url": aHref, "data-jhs-fc2-source": source, "data-jhs-fc2-protected": "true" });
-                item.find("a[href]").attr("href", target);
-            } catch (error) { clog.warn("FC2 导航保护初始化失败", error); }
         }));
     }
     /** @param {string} e */

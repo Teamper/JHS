@@ -108,7 +108,7 @@ export class FeatureRuntime {
         try {
             const dependencies = this.container.resolveDeclared(manifest.requires);
             const enabledContributions = Object.freeze(manifest.contributes.filter((/** @type {string} */ id) => !this.disabled.has(id)));
-            const result = await manifest.activate(dependencies, Object.freeze({ scope, enabledContributions }));
+            const result = await manifest.activate(dependencies, Object.freeze({ scope, enabledContributions, route: this.route }));
             for (const command of manifest.providesCommands) {
                 const handler = result?.commands?.[command];
                 if (typeof handler !== "function") throw new Error(`Feature ${manifest.id} did not provide command ${command}`);

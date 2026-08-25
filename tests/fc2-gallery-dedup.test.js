@@ -18,9 +18,16 @@ function makeContext() {
 describe("FC2 gallery dedup insurance", () => {
     it("records gallery urls on the context", () => {
         const context = makeContext();
-        renderFc2Gallery(context, [ "https://fc2content.net/a/1.jpg", "https://fc2content.net/a/2.jpg" ]);
+        renderFc2Gallery(context, [ "https://fc2content.net/a/1.jpg", "https://fc2content.net/a/2.jpg" ], "https://covers.example/cover.jpg");
         expect([ ...context.galleryUrls ]).toEqual([ "https://fc2content.net/a/1.jpg", "https://fc2content.net/a/2.jpg" ]);
-        expect(context.root.find('[data-jhs-role="main-preview"] img').attr("src")).toBe("https://fc2content.net/a/1.jpg");
+        expect(context.root.find('[data-jhs-role="main-preview"] img').attr("src")).toBe("https://covers.example/cover.jpg");
+    });
+
+    it("keeps the overview cover separate from the first gallery image", () => {
+        const context = makeContext();
+        renderFc2Gallery(context, [ "https://fc2content.net/a/1.jpg", "https://fc2content.net/a/2.jpg" ]);
+        expect(context.root.find('[data-jhs-role="main-preview"] img').length).toBe(0);
+        expect(context.root.find('[data-jhs-role="gallery-grid"] img').first().attr("src")).toBe("https://fc2content.net/a/1.jpg");
     });
 
     it("records an empty gallery so a later duplicate check cannot match", () => {
