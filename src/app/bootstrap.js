@@ -99,10 +99,11 @@ export async function bootstrapJhs() {
         const route = hostAdapter?.detectRoute() ?? "other";
         const context = createAppContext({
             gmRequest: globalThis.GM_xmlhttpRequest, gmGetValue: globalThis.GM_getValue, gmSetValue: globalThis.GM_setValue,
-            legacyHttp: gmHttp, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
+            legacyHttp: gmHttp, legacyStorage: storageManager, eventBus: jhsEventBus, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
             layer: vendors.layer, stateService, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
         });
         const settingsSnapshot = await context.services.settings.load();
+        context.services.profile.start();
         const legacySortMethod = localStorage.getItem("jhs_sortMethod");
         if (settingsSnapshot.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) {
             await context.services.settings.set("sortMethod", legacySortMethod);

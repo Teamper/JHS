@@ -12,7 +12,9 @@ const httpSource = readSource("src/core/http.js");
 describe("123AV Chinese adapter contract", () => {
     it("uses the confirmed Chinese list and encoded search routes", () => {
         expect(integrationSource).toContain("/cn/makers/fc2?page=${sourcePage}");
-        expect(integrationSource).toContain("/cn/search?keyword=${encodeURIComponent(keyword)}");
+        expect(integrationSource).toContain("/cn/search?keyword=${encodeURIComponent(keyword)}&page=${sourcePage}");
+        expect(integrationSource).toContain("keyword ? [page]");
+        expect(fc2Source).not.toContain('this.keyword && $(".page-box").hide()');
         expect(fc2Source).not.toContain("123av.com");
         expect(otherSiteSource).toContain('providerId: "av123"');
         expect(otherSiteSource).toContain('getRuntimeService("movie").searchUrl');
@@ -34,7 +36,8 @@ describe("123AV Chinese adapter contract", () => {
         expect(httpSource).toContain("n.requestUrl = t");
         expect(httpSource).toContain("n.finalUrl = e.finalUrl");
         expect(httpSource).toContain("n.cfDiagnostics =");
-        expect(integrationSource).toContain('cookiePartition: { topLevelSite: "https://123av.com" }');
+        expect(integrationSource).toContain("cookiePartition: { topLevelSite: origin }");
+        expect(integrationSource).toContain('trustClass: "custom-public"');
         expect(otherSiteSource).not.toContain("cookiePartitionTopLevelSite");
     });
 

@@ -451,8 +451,8 @@ export class ListPagePlugin extends BasePlugin {
         if (!carNum || !aHref) return;
         const shouldOpenTab = newTab || !!event && (event.ctrlKey || event.metaKey || 1 === event.button);
         if (carNum.includes("FC2-")) {
-            const movieId = this.parseMovieId(aHref);
-            return shouldOpenTab ? this.getDependency("Fc2Plugin").openFc2Page(movieId, carNum, aHref, { event, newTab: !0 }, { source: fc2Source }) : this.getDependency("Fc2Plugin").openFc2Dialog(movieId, carNum, aHref, { source: fc2Source });
+            const plugin = this.getDependency("Fc2Plugin"), movieId = await plugin.resolveMovieIdForRecord(carNum, aHref), source = fc2Source || await plugin.resolveFc2Source({ url: aHref });
+            return shouldOpenTab ? plugin.openFc2Page(movieId, carNum, aHref, { event, newTab: !0 }, { source }) : plugin.openFc2Dialog(movieId, carNum, aHref, { source });
         }
         const destination = new URL(aHref, window.location.origin);
         autoplay && destination.searchParams.set("autoPlay", "1"), utils.openPage(destination.href, carNum, !0, { event, newTab: shouldOpenTab }), this.$currentImage = null;

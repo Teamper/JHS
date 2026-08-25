@@ -41,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### Fixed
 
+- 修复新旧设置写入形成双状态源的问题；设置表单、快捷开关、主题、插件管理与资源设置统一写入 SettingsService，并同步刷新 legacy 缓存与当前 Runtime snapshot。
+- 恢复 123AV 自定义 HTTPS origin，搜索、详情、Cookie Partition 与 URL Policy 统一使用同一配置；搜索分页现使用已验证的 `page` 参数，旧镜像详情路径也可识别为 123AV 来源。
+- 修复 FC2 搜索 URL 被误解析为 `movieId=search` 以及 JavBus History 绕过统一 FC2 工作区的问题；只有明确 `/v/<id>` 路由直接取 ID，其余均按番号解析。
+- 修复 `mobileMode=on/off` 未进入 ProfileService、运行时切换不更新移动工具栏，以及移动详情状态误把 JavDB movieId 当番号的问题。
+- JavDB“想看”操作在已登录时先读取账户想看列表，已存在的作品不再重复提交。
 - 修复 JavBus masonry 在宿主未提供全局 border-box 时因 `width:100%` 叠加水平 padding 产生横向溢出的问题。
 - 修复 ESM 单入口迁移后核心主题、宿主布局与 UI primitive 样式未进入启动链的问题；样式模块现在保持导入无副作用，并由 Bootstrap 显式一次性注入。
 - 重新整理 FC2 与 123AV-FC2 详情页：影片信息、剧照、资源、评论和相关清单现在各有固定位置，关闭页面后旧请求不会再改动界面；同时补回来源链接、高清/字幕/日期标记与磁力筛选，123AV 详情也能加载对应的 JavDB 磁力。

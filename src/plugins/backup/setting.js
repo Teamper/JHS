@@ -60,7 +60,7 @@ export class SettingPlugin extends BasePlugin {
             otherSite: this.getDependency("OtherSitePlugin"), listPage: this.getDependency("ListPagePlugin"),
             translate: this.getDependency("TranslatePlugin"), actressInfo: this.getDependency("ActressInfoPlugin"),
             screenshot: this.getDependency("ScreenShotPlugin"), newVideo: this.getDependency("NewVideoPlugin"),
-            blacklist: this.getDependency("BlacklistPlugin"), busImg: this.getDependency("BusImgPlugin"), host: this.getRuntimeService("host"),
+            blacklist: this.getDependency("BlacklistPlugin"), busImg: this.getDependency("BusImgPlugin"), host: this.getRuntimeService("host"), settings: this.getRuntimeService("settings"),
         });
     }
     async initCss() {
@@ -72,6 +72,11 @@ export class SettingPlugin extends BasePlugin {
         return buildSettingCss(t, n, l, r);
     }
     async handle() {
+        const settings = this.getRuntimeService("settings");
+        this.resourceSettings = new ResourceSettingsService({
+            getSetting: async (key = null, fallback) => key === null ? settings.snapshot() : Object.prototype.hasOwnProperty.call(settings.snapshot(), key) ? settings.snapshot()[key] : fallback,
+            saveSettingItem: (key, value) => settings.set(key, value),
+        });
         await storageManager.getSetting("enableClog", _) === _ && clog.show();
         if (utils.isMobileMode()) return;
         const scope = await this.getRuntimeService("scope")();
@@ -175,7 +180,7 @@ export class SettingPlugin extends BasePlugin {
     collapseAdvancedTabs() {
         const advancedPanels = [
             { id: "health-panel", label: "数据体检", render: renderDataHealthPanel },
-            { id: "plugin-mgmt-panel", label: "插件管理", render: () => renderPluginMgmtPanel(this.pluginManager) },
+            { id: "plugin-mgmt-panel", label: "插件管理", render: () => renderPluginMgmtPanel(this.getRuntimeService("diagnostics"), this.getRuntimeService("settings")) },
             { id: "snapshot-panel", label: "恢复点", render: renderSnapshotPanel },
             { id: "network-panel", label: "外部请求", render: renderNetworkPanel }
         ];
@@ -242,7 +247,7 @@ export class SettingPlugin extends BasePlugin {
             const e = $(this).data("panel");
             $("#" + e).show(), "cache-panel" === e ? ($("#saveBtn").hide(), $("#clean-all").removeClass("jhs-is-hidden")) : ($("#saveBtn").show(),
             $("#clean-all").addClass("jhs-is-hidden")), "health-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderDataHealthPanel()),
-            "plugin-mgmt-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderPluginMgmtPanel(settingPlugin.getRuntimeService("diagnostics"))),
+            "plugin-mgmt-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderPluginMgmtPanel(settingPlugin.getRuntimeService("diagnostics"), settingPlugin.getRuntimeService("settings"))),
             "snapshot-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderSnapshotPanel()),
             "network-panel" === e && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderNetworkPanel(diagnostics));
         })), $("#importBtn").on("click", (e => importSettingData(previewDiff))), $("#exportBtn").on("click", (e => exportSettingData())),
@@ -290,7 +295,7 @@ export class SettingPlugin extends BasePlugin {
         }
         e.on("input", a), t.on("input", a);
         $("#themeMode").on("change", (async function() {
-            await storageManager.saveSettingItem("themeMode", $(this).val()), applyTheme();
+            await settingPlugin.getRuntimeService("settings").set("themeMode", $(this).val()), applyTheme();
         }));
     }
     async loadResourceSettings() {

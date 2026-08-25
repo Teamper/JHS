@@ -18,9 +18,10 @@ describe("settings invalidation ownership", () => {
         expect(saveSettingItem).not.toContain("clean_cacheSettingObj");
     });
 
-    it("lets settings-changed be the only TaskPlugin refresh path after form save", () => {
+    it("routes the full settings form through SettingsService", () => {
         const saveForm = methodBody(settingForms, "async function saveSettingForm", "function addLabelTag");
-        expect(saveForm).toContain("storageManager.saveSetting");
+        expect(saveForm).toContain("dependencies.settings.replace");
+        expect(saveForm).not.toContain("storageManager.saveSetting(");
         expect(saveForm).not.toContain("invalidateConfig");
     });
 });

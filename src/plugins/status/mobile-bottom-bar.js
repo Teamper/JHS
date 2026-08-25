@@ -190,7 +190,13 @@ export class MobileBottomBarPlugin extends BasePlugin {
         `;
     }
     async handle() {
-        if (this.getRuntimeService("profile").current() !== "compact") return;
+        const profile = this.getRuntimeService("profile"), scope = await this.getRuntimeService("scope")();
+        const sync = () => profile.current() === "compact" ? this.mountBottomBar() : this.unmountBottomBar();
+        scope.listen(profile, "profile.changed", sync);
+        sync();
+    }
+    mountBottomBar() {
+        if ($("#jhs-fab").length) return;
         // 添加遮罩
         const backdrop = $('<div class="jhs-fab-backdrop"></div>').appendTo("body");
         // 添加菜单
@@ -199,6 +205,10 @@ export class MobileBottomBarPlugin extends BasePlugin {
         // 添加 FAB 按钮
         const fab = $('<button type="button" id="jhs-fab" class="jhs-btn" aria-label="打开 JHS 工具" aria-controls="jhs-fab-menu" aria-haspopup="menu" aria-expanded="false">＋</button>').appendTo("body");
         this.bindEvents(fab, backdrop);
+    }
+    unmountBottomBar() {
+        this._fabGeneration++;
+        $("#jhs-fab, #jhs-fab-menu, .jhs-fab-backdrop").remove();
     }
     async afterPluginsReady() {
         this.buildCommandBar();
@@ -270,10 +280,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
     /** 获取详情页番号 */
     getCarNum() {
         try {
-            const basePlugin = this.getDependency("DetailPageButtonPlugin");
-            if (basePlugin?.parseMovieId) return basePlugin.parseMovieId(location.href);
-            const el = document.querySelector(".header, #video_id, .video-id");
-            if (el) return el.textContent.trim();
+            return this.getRuntimeService("host").readMovieRef?.()?.carNum || null;
         } catch (e) { clog.debug("移动端详情番号解析失败，已回退", e); }
         return null;
     }

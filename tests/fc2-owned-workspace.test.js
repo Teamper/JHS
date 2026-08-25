@@ -50,8 +50,8 @@ function loadWantApi({ encryptedToken = "encrypted", response = { success: 1 } }
         normalizeCarNum: String, utils: { formatDate: String }, show: { error: vi.fn() }
     });
     const source = readTestFile(join(repoRoot, "src/core/javdb-api.js"), "utf8");
-    vm.runInContext(`${source};globalThis.markWant=markJavDbWantWatch`, context);
-    return { markWant: context.markWant, gmRequest, deleteCachedRequest };
+    vm.runInContext(`${source};globalThis.markWant=markJavDbWantWatch;globalThis.getWantState=getJavDbWantWatchState`, context);
+    return { markWant: context.markWant, getWantState: context.getWantState, gmRequest, deleteCachedRequest };
 }
 
 function loadImageViewer() {
@@ -121,7 +121,8 @@ describe("FC2 owned detail workspace", () => {
     it("propagates an explicit FC2 source without guessing from URL text", () => {
         expect(fc2Source).not.toContain('url.includes("123av")');
         expect(fc2By123AvSource).toContain('data-jhs-fc2-source="123av"');
-        expect(listPageSource).toContain("{ source: fc2Source }");
+        expect(listPageSource).toContain("source = fc2Source || await plugin.resolveFc2Source");
+        expect(listPageSource).toContain("resolveMovieIdForRecord(carNum, aHref)");
         expect(historySource).toContain("resolveFc2Source(t)");
         expect(stateServiceSource).toContain('"fc2Source"');
         expect(fc2Source).toContain('target.searchParams.set("source", source)');
@@ -217,6 +218,12 @@ describe("JavDB exact movie resolver", () => {
 });
 
 describe("JavDB native want action", () => {
+    it("reads an existing authenticated want-watch state before enabling the action", async () => {
+        const api = loadWantApi({ response: { data: { movies: [ { id: "movie-123" } ] } } });
+        await expect(api.getWantState("movie-123")).resolves.toBe(true);
+        expect(api.gmRequest).toHaveBeenCalledWith("GET", expect.stringContaining("/v2/users/review_movies?status=want_watch"), null, {}, expect.objectContaining({ authorization: "Bearer token:encrypted" }));
+    });
+
     it("submits want_watch to the JavDB account and invalidates cached details", async () => {
         const api = loadWantApi();
         await expect(api.markWant("movie-123")).resolves.toEqual({ success: 1 });

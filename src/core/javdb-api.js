@@ -4,6 +4,7 @@ import { decryptData } from "./credential-crypto.js";
 
 export const U = "https://jdforrepam.com/api";
 let signatureSecond = 0, signatureValue = "";
+const wantWatchStateCache = new Map();
 
 /** @param {unknown} value @returns {Record<string, any>} */
 function asResponseRecord(value) {
@@ -37,6 +38,7 @@ export async function markJavDbWantWatch(/** @type {unknown} */ movieId) {
         });
         if (0 === response?.success) throw response;
         await storageManager.deleteCachedRequest(`movie-detail:${id}`);
+        wantWatchStateCache.set(id, true);
         return response;
     } catch (error) {
         const failure = asResponseRecord(error);
@@ -46,6 +48,26 @@ export async function markJavDbWantWatch(/** @type {unknown} */ movieId) {
         }
         throw error instanceof Error ? error : new Error(failure.message || "加入 JavDB 想看失败");
     }
+}
+
+/** Reads the authenticated account's current want-watch state; null means not logged in. */
+export async function getJavDbWantWatchState(/** @type {unknown} */ movieId) {
+    const id = String(movieId || "").trim(), encryptedToken = localStorage.getItem("jhs_appAuthorization"), token = encryptedToken ? await decryptData(encryptedToken) : "";
+    if (!token) return null;
+    if (!id) throw new Error("JavDB 影片 ID 无效");
+    if (wantWatchStateCache.has(id)) return wantWatchStateCache.get(id);
+    const limit = 48;
+    for (let page = 1; page <= 100; page++) {
+        const url = `${U}/v2/users/review_movies?status=want_watch&type=0&sort_by=create&order_by=desc&page=${page}&limit=${limit}`;
+        const response = await gmHttp.gmRequest("GET", url, null, {}, {
+            "user-agent": "Dart/3.5 (dart:io)", "accept-language": "zh-TW", authorization: `Bearer ${token}`, jdsignature: await O()
+        });
+        const movies = response?.data?.movies ?? response?.movies;
+        if (!Array.isArray(movies)) throw new Error("JavDB 想看状态响应无效");
+        if (movies.some((/** @type {any} */ movie) => String(movie.id) === id)) return wantWatchStateCache.set(id, true), true;
+        if (movies.length < limit) return wantWatchStateCache.set(id, false), false;
+    }
+    return false;
 }
 
 export const V = async (/** @type {string} */ e) => {

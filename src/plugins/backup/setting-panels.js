@@ -149,7 +149,7 @@ export function showDiffPreview(e, t, n = null, dialog) {
 
 /** Render the plugin management panel: categorized plugin list, timing, errors, cache stats. */
 /** @param {DiagnosticsHandle} diagnostics */
-export async function renderPluginMgmtPanel(diagnostics) {
+export async function renderPluginMgmtPanel(diagnostics, /** @type {any} */ settings = null) {
     const diagnosticSnapshot = diagnostics.exportSnapshot();
     const disabled = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
     const allNames = diagnosticSnapshot.legacyPlugins;
@@ -191,7 +191,8 @@ export async function renderPluginMgmtPanel(diagnostics) {
         } else {
             if (!list.includes(disabledId)) list.push(disabledId);
         }
-        await storageManager.saveSettingItem("disabledPlugins", JSON.stringify(list));
+        if (!settings) throw new Error("SettingsService is unavailable");
+        await settings.set("disabledPlugins", JSON.stringify(list));
         const all = diagnosticSnapshot.legacyPlugins;
         $("#pm-total").text(all.length);
         $("#pm-enabled").text(all.length - list.length);

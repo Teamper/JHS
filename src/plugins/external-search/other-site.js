@@ -194,8 +194,7 @@ export class OtherSitePlugin extends BasePlugin {
         return (await this.getSiteConfigs()).find((site) => site.id === "javTrailersBtn")?.baseUrl || "";
     }
     async getAv123Url() {
-        const url = this.getRuntimeService("movie").searchUrl("av123", { carNum: "" });
-        try { return url ? new URL(url).origin : ""; } catch { return ""; }
+        return this.getRuntimeService("movie").providerOrigin("av123") || "";
     }
     async getJavDbUrl() {
         return (await this.getSiteConfigs()).find((site) => site.id === "javDbBtn")?.baseUrl || "";

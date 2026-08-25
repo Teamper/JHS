@@ -398,6 +398,7 @@ export class StorageManager {
     async saveSetting(e) {
         e ? (await this._setItemAndInvalidate(this.setting_key, e), await window.clean_cacheSettingObj()) : show.error("设置对象为空");
     }
+    invalidateSettingCache() { this._invalidateCache(this.setting_key); }
     async saveSettingItem(e, t) {
         if (!e) return void show.error("key 不能为空");
         await navigator.locks.request("jhs_setting_lock", async () => {

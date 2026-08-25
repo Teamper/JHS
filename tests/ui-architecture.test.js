@@ -172,12 +172,12 @@ describe("list toolbar and UI cleanup contracts", () => {
     });
 
     it("binds full-settings layout ranges idempotently after loading the form", () => {
-        expect(settingForms).toContain("bindLayoutRangeEvents(dependencies.busImg, dependencies.host);");
+        expect(settingForms).toContain("bindLayoutRangeEvents(dependencies.busImg, dependencies.host, dependencies.settings);");
         expect(settingForms).toContain('.off(".jhsSetting")');
         expect(settingForms).toContain('.on("input.jhsSetting"');
         expect(settingForms).toContain('.on("change.jhsSetting"');
-        expect(settingForms).toContain('saveSettingItem("containerColumns"');
-        expect(settingForms).toContain('saveSettingItem("containerWidth"');
+        expect(settingForms).toContain('settings.set("containerColumns"');
+        expect(settingForms).toContain('settings.set("containerWidth"');
         expect(settingForms).toContain("await applyImageMode(busImgPlugin)");
         const rangeBinding = settingForms.slice(settingForms.indexOf("function bindLayoutRangeEvents"), settingForms.indexOf("async function initQuickSettingForm"));
         const columnsInput = rangeBinding.slice(rangeBinding.indexOf('on("input.jhsSetting"'), rangeBinding.indexOf('on("change.jhsSetting"'));

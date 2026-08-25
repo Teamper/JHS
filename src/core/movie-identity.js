@@ -12,4 +12,9 @@ export function normalizeMovieCarNum(value) {
     return match && SIMPLE_CAR_PREFIXES.has(match[1]) ? `${match[1]}-${match[2]}` : carNum || null;
 }
 
+/** Extracts an id only from an explicit JavDB-style detail path. */
+export function extractJavDbMovieId(/** @type {unknown} */ value, /** @type {string} */ baseUrl = "https://javdb.com") {
+    try { return new URL(String(value || ""), baseUrl).pathname.match(/^\/v\/([^/]+)\/?$/)?.[1] || null; } catch { return null; }
+}
+
 export { normalizeMovieCarNum as normalizeCarNum };

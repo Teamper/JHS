@@ -1,9 +1,9 @@
 {
   "version": 1,
   "bundle": {
-    "baselineBytes": 1113377,
+    "baselineBytes": 1229614,
     "maximumGrowthRatio": 0.1,
-    "reason": "Reviewed v6.5 architecture baseline after scoped HTTP, DMM, Pan123, JavTrailers and Xunlei Integration migrations"
+    "reason": "Reviewed v6.5 RC regression baseline after settings synchronization, configurable AV123 routing, FC2 identity guards and authenticated want-watch state checks"
   },
   "browserFixture": {
     "maximumInitialRequests": {

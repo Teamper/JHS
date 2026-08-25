@@ -3455,6 +3455,9 @@
     async saveSetting(e2) {
       e2 ? (await this._setItemAndInvalidate(this.setting_key, e2), await window.clean_cacheSettingObj()) : show.error("设置对象为空");
     }
+    invalidateSettingCache() {
+      this._invalidateCache(this.setting_key);
+    }
     async saveSettingItem(e2, t2) {
       if (!e2) return void show.error("key 不能为空");
       await navigator.locks.request("jhs_setting_lock", async () => {
@@ -5355,6 +5358,14 @@
     return match && SIMPLE_CAR_PREFIXES2.has(match[1]) ? `${match[1]}-${match[2]}` : carNum || null;
   }
   __name(normalizeMovieCarNum, "normalizeMovieCarNum");
+  function extractJavDbMovieId(value, baseUrl = "https://javdb.com") {
+    try {
+      return new URL(String(value || ""), baseUrl).pathname.match(/^\/v\/([^/]+)\/?$/)?.[1] || null;
+    } catch {
+      return null;
+    }
+  }
+  __name(extractJavDbMovieId, "extractJavDbMovieId");
 
   // src/platform/hosts/javdb-host-adapter.js
   var _JavDbHostAdapter = class _JavDbHostAdapter {
@@ -7234,7 +7245,7 @@
   // src/plugins/backup/setting-forms.js
   var settingsEventBus = jhsEventBus;
   async function loadSettingForm(dependencies) {
-    let e2 = await storageManager.getSetting();
+    let e2 = dependencies.settings.snapshot();
     $("#videoQuality").val(e2.videoQuality), $("#reviewCount").val(e2.reviewCount || 20), $("#tagPosition").val(e2.tagPosition || "rightTop"), $("#defaultQuickFilterTab").val(normalizeQuickFilterKey(e2.defaultQuickFilterTab)), $("#needClosePageBasic").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e2.autoRemoveNewVideoMarkAfterBrowse && e2.autoRemoveNewVideoMarkAfterBrowse === _), $("#waitCheckCount").val(e2.waitCheckCount || 5), $("#checkConcurrencyCount").val(parseNumberSetting(e2.checkConcurrencyCount, 2, { min: 2, max: 5 })), $("#checkRequestSleep").val(parseNumberSetting(e2.checkRequestSleep, 100, { min: 0, max: 3e3 })), $("#enableCheckBlacklist").val(e2.enableCheckBlacklist || _), $("#checkBlacklist_intervalTime").val(e2.checkBlacklist_intervalTime || 12), $("#checkBlacklist_ruleTime").val(parseNumberSetting(e2.checkBlacklist_ruleTime, 8760, { min: 0 })), $("#enableCheckFavoriteActress").val(e2.enableCheckFavoriteActress || _), $("#checkFavoriteActress_IntervalTime").val(e2.checkFavoriteActress_IntervalTime || 24), $("#enableCheckNewVideo").val(e2.enableCheckNewVideo || _), $("#checkNewVideo_intervalTime").val(e2.checkNewVideo_intervalTime || 12), $("#checkNewVideo_ruleTime").val(parseNumberSetting(e2.checkNewVideo_ruleTime, 8760, { min: 0 }));
     const t2 = e2.highlightedTagNumber || 1, n2 = e2.highlightedTagColor || "#ce2222";
     $("#highlightedTagNumber").val(e2.highlightedTagNumber || 1), $("#highlightedTagColor").val(e2.highlightedTagColor || "#ce2222"), $("#highlightedTagLabel").css("border", `${t2}px solid ${n2}`), $("#enableClog").val(e2.enableClog || _), $("#clogMsgCount").val(e2.clogMsgCount || 2e3), $("#mobileMode").val(e2.mobileMode || "auto"), $("#themeMode").val(e2.themeMode || "light"), $("#httpTimeout").val(e2.httpTimeout || 5e3), $("#httpRetryCount").val(e2.httpRetryCount || 3), $("#webDavUrl").val(e2.webDavUrl || ""), $("#webDavUsername").val(e2.webDavUsername || ""), $("#webDavPassword").val(await decryptCredential(e2.webDavPassword) || ""), $("#enableTitleSelectFilter").prop("checked", !e2.enableTitleSelectFilter || e2.enableTitleSelectFilter === _), $("#enableFavoriteActresses").prop("checked", !e2.enableFavoriteActresses || e2.enableFavoriteActresses === _), $("#enableSaveActressCarInfo").prop("checked", !!e2.enableSaveActressCarInfo && e2.enableSaveActressCarInfo === _), $("#enableScreenSvg").prop("checked", !e2.enableScreenSvg || e2.enableScreenSvg === _), $("#enableVideoSvg").prop("checked", !e2.enableVideoSvg || e2.enableVideoSvg === _), $("#enableHandleSvg").prop("checked", !e2.enableHandleSvg || e2.enableHandleSvg === _), $("#enableSiteSvg").prop("checked", !e2.enableSiteSvg || e2.enableSiteSvg === _), $("#enableCopySvg").prop("checked", !e2.enableCopySvg || e2.enableCopySvg === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableVerticalModel").prop("checked", !!e2.enableVerticalModel && e2.enableVerticalModel === _), $("#containerColumns").val(e2.containerColumns || 5), $("#showContainerColumns").text(e2.containerColumns || 5), $("#containerWidth").val((e2.containerWidth || 100) - 70), $("#showContainerWidth").text((e2.containerWidth || 100) + "%");
@@ -7250,64 +7261,64 @@
         "Enter" === t3.key && addKeyword(t3, e3);
       }));
     });
-    bindLayoutRangeEvents(dependencies.busImg, dependencies.host);
+    bindLayoutRangeEvents(dependencies.busImg, dependencies.host, dependencies.settings);
   }
   __name(loadSettingForm, "loadSettingForm");
-  function bindLayoutRangeEvents(busImgPlugin, hostAdapter) {
+  function bindLayoutRangeEvents(busImgPlugin, hostAdapter, settings) {
     $("#containerColumns").off(".jhsSetting").on("input.jhsSetting", (() => {
       const columns = $("#containerColumns").val();
       $("#showContainerColumns").text(columns);
       const listRoot = hostAdapter?.locateListRoot?.();
       listRoot && (listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
     })).on("change.jhsSetting", (async (event) => {
-      await storageManager.saveSettingItem("containerColumns", $(event.currentTarget).val()), await applyImageMode(busImgPlugin);
+      await settings.set("containerColumns", $(event.currentTarget).val()), await applyImageMode(busImgPlugin);
     }));
     $("#containerWidth").off(".jhsSetting").on("input.jhsSetting", ((event) => {
       const width = parseInt($(event.target).val()) + 70, widthText = `${width}%`;
       $("#showContainerWidth").text(widthText);
       const layoutContainer = hostAdapter?.getListLayoutContainer?.();
       layoutContainer && (layoutContainer.style.minWidth = widthText);
-    })).on("change.jhsSetting", ((event) => storageManager.saveSettingItem("containerWidth", parseInt($(event.currentTarget).val()) + 70)));
+    })).on("change.jhsSetting", ((event) => settings.set("containerWidth", parseInt($(event.currentTarget).val()) + 70)));
   }
   __name(bindLayoutRangeEvents, "bindLayoutRangeEvents");
   async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn) {
-    let e2 = await storageManager.getSetting();
+    let e2 = dependencies.settings.snapshot();
     $("#needClosePage").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoPage").prop("checked", !e2.autoPage || e2.autoPage === _), $("#translateTitle").prop("checked", !e2.translateTitle || e2.translateTitle === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableLoadOtherSite").prop("checked", !e2.enableLoadOtherSite || e2.enableLoadOtherSite === _), $("#needClosePage").on("change", (async (t2) => {
-      await storageManager.saveSettingItem("needClosePage", $("#needClosePage").is(":checked") ? _ : C), await settingsEventBus.emit("filter-rules-changed");
+      await dependencies.settings.set("needClosePage", $("#needClosePage").is(":checked") ? _ : C), await settingsEventBus.emit("filter-rules-changed");
     })), $("#autoPage").on("change", (async (t2) => {
       const n2 = $("#autoPage").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("autoPage", n2), $("#sort-toggle-btn").prop("disabled", n2 === _).attr("title", n2 === _ ? "瀑布流模式仅支持默认排序" : "选择列表排序方式");
+      await dependencies.settings.set("autoPage", n2), $("#sort-toggle-btn").prop("disabled", n2 === _).attr("title", n2 === _ ? "瀑布流模式仅支持默认排序" : "选择列表排序方式");
     })), $("#translateTitle").on("change", (async (t2) => {
       const n2 = $("#translateTitle").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("translateTitle", n2), n2 === _ ? (await dependencies.listPage.doFilter(), isDetailPage && await dependencies.translate?.translate()) : (await dependencies.listPage.revertTranslation(), $(".translated-title").remove());
+      await dependencies.settings.set("translateTitle", n2), n2 === _ ? (await dependencies.listPage.doFilter(), isDetailPage && await dependencies.translate?.translate()) : (await dependencies.listPage.revertTranslation(), $(".translated-title").remove());
     })), $("#hoverBigImg").prop("checked", !!e2.hoverBigImg && e2.hoverBigImg === _), $("#hoverBigImg").on("change", (async (t2) => {
       const n2 = $("#hoverBigImg").is(":checked") ? _ : C;
       const runtimeWindow = window;
-      await storageManager.saveSettingItem("hoverBigImg", n2), runtimeWindow.imageHoverPreviewObj && (runtimeWindow.imageHoverPreviewObj.destroy(), runtimeWindow.imageHoverPreviewObj = null), n2 === _ && (runtimeWindow.imageHoverPreviewObj = new ImageHoverPreview({
+      await dependencies.settings.set("hoverBigImg", n2), runtimeWindow.imageHoverPreviewObj && (runtimeWindow.imageHoverPreviewObj.destroy(), runtimeWindow.imageHoverPreviewObj = null), n2 === _ && (runtimeWindow.imageHoverPreviewObj = new ImageHoverPreview({
         selector: getSelector().coverImgSelector
       }));
     })), $("#enableLoadActressInfo").on("change", (async (t2) => {
       const n2 = $("#enableLoadActressInfo").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("enableLoadActressInfo", n2), n2 === _ ? dependencies.actressInfo?.loadActressInfo() : $(".actress-info").remove();
+      await dependencies.settings.set("enableLoadActressInfo", n2), n2 === _ ? dependencies.actressInfo?.loadActressInfo() : $(".actress-info").remove();
     })), $("#enableLoadOtherSite").on("change", (async (t2) => {
       const n2 = $("#enableLoadOtherSite").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("enableLoadOtherSite", n2), n2 === _ ? await dependencies.otherSite.loadOtherSite() : $("#otherSiteBox").remove();
+      await dependencies.settings.set("enableLoadOtherSite", n2), n2 === _ ? await dependencies.otherSite.loadOtherSite() : $("#otherSiteBox").remove();
     })), $("#enableLoadScreenShot").prop("checked", !e2.enableLoadScreenShot || e2.enableLoadScreenShot === _), $("#enableLoadScreenShot").on("change", (async (t2) => {
       const n2 = $("#enableLoadScreenShot").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("enableLoadScreenShot", n2), n2 === _ ? await dependencies.screenshot.loadScreenShot() : $(".screen-container").remove();
+      await dependencies.settings.set("enableLoadScreenShot", n2), n2 === _ ? await dependencies.screenshot.loadScreenShot() : $(".screen-container").remove();
     })), $("#enableLoadPreviewVideo").prop("checked", !e2.enableLoadPreviewVideo || e2.enableLoadPreviewVideo === _), $("#enableLoadPreviewVideo").on("change", (async (t2) => {
       const n2 = $("#enableLoadPreviewVideo").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("enableLoadPreviewVideo", n2);
+      await dependencies.settings.set("enableLoadPreviewVideo", n2);
     })), $("#enableVerticalModel").prop("checked", !!e2.enableVerticalModel && e2.enableVerticalModel === _), $("#enableVerticalModel").on("change", (async (t2) => {
       const n2 = $("#enableVerticalModel").is(":checked") ? _ : C;
-      await storageManager.saveSettingItem("enableVerticalModel", n2), applyImageMode(dependencies.busImg);
+      await dependencies.settings.set("enableVerticalModel", n2), applyImageMode(dependencies.busImg);
     })), $("#moreBtn").on("click", (() => {
       $(".simple-setting, .mini-simple-setting").html("").hide(), openSettingDialogFn("base-panel");
     }));
   }
   __name(initQuickSettingForm, "initQuickSettingForm");
   async function saveSettingForm(dependencies) {
-    let e2 = await storageManager.getSetting();
+    let e2 = { ...dependencies.settings.snapshot() };
     const nextWebDavUrl = String($("#webDavUrl").val() || "").trim();
     let nextWebDavOrigin = null;
     if (nextWebDavUrl) {
@@ -7325,7 +7336,7 @@
       if (!authorized) return void show.info("已取消 WebDAV 来源授权");
       trustedOrigins.add(nextWebDavOrigin);
     }
-    e2.videoQuality = $("#videoQuality").val(), e2.reviewCount = $("#reviewCount").val(), e2.tagPosition = $("#tagPosition").val(), e2.defaultQuickFilterTab = normalizeQuickFilterKey($("#defaultQuickFilterTab").val()), e2.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e2.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e2.waitCheckCount = $("#waitCheckCount").val(), e2.highlightedTagNumber = $("#highlightedTagNumber").val(), e2.highlightedTagColor = $("#highlightedTagColor").val(), e2.checkConcurrencyCount = $("#checkConcurrencyCount").val(), e2.checkRequestSleep = $("#checkRequestSleep").val(), e2.enableCheckBlacklist = $("#enableCheckBlacklist").val(), e2.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e2.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(), e2.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e2.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(), e2.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e2.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(), e2.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e2.httpTimeout = Number($("#httpTimeout").val()) || 5e3, e2.httpRetryCount = Number($("#httpRetryCount").val()) || 3, e2.circuitBreakerThreshold = Number($("#circuitBreakerThreshold").val()) || 3, e2.circuitBreakerCooldown = Number($("#circuitBreakerCooldownSec").val()) * 1e3, e2.enableClog = $("#enableClog").val(), e2.enableClog === _ ? clog.show() : clog.hide(), e2.clogMsgCount = $("#clogMsgCount").val(), e2.mobileMode = $("#mobileMode").val(), e2.themeMode = $("#themeMode").val(), e2.webDavUrl = nextWebDavUrl, e2.trustedLocalOrigins = [...trustedOrigins], e2.webDavUsername = $("#webDavUsername").val(), e2.webDavPassword = await encryptCredential($("#webDavPassword").val()), e2.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""), e2.jableUrl = $("#jableUrl").val().replace(/\/$/, ""), e2.avgleUrl = $("#avgleUrl").val().replace(/\/$/, ""), e2.javTrailersUrl = $("#javTrailersUrl").val().replace(/\/$/, ""), e2.av123Url = $("#av123Url").val().replace(/\/$/, ""), e2.javDbUrl = $("#javDbUrl").val().replace(/\/$/, ""), e2.javBusUrl = $("#javBusUrl").val().replace(/\/$/, ""), e2.supJavUrl = $("#supJavUrl").val().replace(/\/$/, ""), e2.enableTitleSelectFilter = $("#enableTitleSelectFilter").is(":checked") ? _ : C, e2.enableFavoriteActresses = $("#enableFavoriteActresses").is(":checked") ? _ : C, e2.enableSaveActressCarInfo = $("#enableSaveActressCarInfo").is(":checked") ? _ : C, e2.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e2.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C, e2.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e2.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C, e2.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C, e2.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e2.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C, e2.containerColumns = Number($("#containerColumns").val()) || 5, e2.containerWidth = Number($("#containerWidth").val()) + 70 || 100, await storageManager.saveSetting(e2);
+    e2.videoQuality = $("#videoQuality").val(), e2.reviewCount = $("#reviewCount").val(), e2.tagPosition = $("#tagPosition").val(), e2.defaultQuickFilterTab = normalizeQuickFilterKey($("#defaultQuickFilterTab").val()), e2.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e2.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e2.waitCheckCount = $("#waitCheckCount").val(), e2.highlightedTagNumber = $("#highlightedTagNumber").val(), e2.highlightedTagColor = $("#highlightedTagColor").val(), e2.checkConcurrencyCount = $("#checkConcurrencyCount").val(), e2.checkRequestSleep = $("#checkRequestSleep").val(), e2.enableCheckBlacklist = $("#enableCheckBlacklist").val(), e2.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e2.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(), e2.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e2.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(), e2.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e2.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(), e2.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e2.httpTimeout = Number($("#httpTimeout").val()) || 5e3, e2.httpRetryCount = Number($("#httpRetryCount").val()) || 3, e2.circuitBreakerThreshold = Number($("#circuitBreakerThreshold").val()) || 3, e2.circuitBreakerCooldown = Number($("#circuitBreakerCooldownSec").val()) * 1e3, e2.enableClog = $("#enableClog").val(), e2.enableClog === _ ? clog.show() : clog.hide(), e2.clogMsgCount = $("#clogMsgCount").val(), e2.mobileMode = $("#mobileMode").val(), e2.themeMode = $("#themeMode").val(), e2.webDavUrl = nextWebDavUrl, e2.trustedLocalOrigins = [...trustedOrigins], e2.webDavUsername = $("#webDavUsername").val(), e2.webDavPassword = await encryptCredential($("#webDavPassword").val()), e2.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""), e2.jableUrl = $("#jableUrl").val().replace(/\/$/, ""), e2.avgleUrl = $("#avgleUrl").val().replace(/\/$/, ""), e2.javTrailersUrl = $("#javTrailersUrl").val().replace(/\/$/, ""), e2.av123Url = $("#av123Url").val().replace(/\/$/, ""), e2.javDbUrl = $("#javDbUrl").val().replace(/\/$/, ""), e2.javBusUrl = $("#javBusUrl").val().replace(/\/$/, ""), e2.supJavUrl = $("#supJavUrl").val().replace(/\/$/, ""), e2.enableTitleSelectFilter = $("#enableTitleSelectFilter").is(":checked") ? _ : C, e2.enableFavoriteActresses = $("#enableFavoriteActresses").is(":checked") ? _ : C, e2.enableSaveActressCarInfo = $("#enableSaveActressCarInfo").is(":checked") ? _ : C, e2.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e2.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C, e2.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e2.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C, e2.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C, e2.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e2.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C, e2.containerColumns = Number($("#containerColumns").val()) || 5, e2.containerWidth = Number($("#containerWidth").val()) + 70 || 100, await dependencies.settings.replace(e2);
     let t2 = [];
     $("#reviewKeywordContainer .keyword-label").toArray().forEach((e3) => {
       let n3 = $(e3).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
@@ -8215,7 +8226,7 @@
     });
   }
   __name(showDiffPreview, "showDiffPreview");
-  async function renderPluginMgmtPanel(diagnostics) {
+  async function renderPluginMgmtPanel(diagnostics, settings = null) {
     const diagnosticSnapshot = diagnostics.exportSnapshot();
     const disabled = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
     const allNames = diagnosticSnapshot.legacyPlugins;
@@ -8257,7 +8268,8 @@
       } else {
         if (!list.includes(disabledId)) list.push(disabledId);
       }
-      await storageManager.saveSettingItem("disabledPlugins", JSON.stringify(list));
+      if (!settings) throw new Error("SettingsService is unavailable");
+      await settings.set("disabledPlugins", JSON.stringify(list));
       const all = diagnosticSnapshot.legacyPlugins;
       $("#pm-total").text(all.length);
       $("#pm-enabled").text(all.length - list.length);
@@ -8381,7 +8393,8 @@
         newVideo: this.getDependency("NewVideoPlugin"),
         blacklist: this.getDependency("BlacklistPlugin"),
         busImg: this.getDependency("BusImgPlugin"),
-        host: this.getRuntimeService("host")
+        host: this.getRuntimeService("host"),
+        settings: this.getRuntimeService("settings")
       });
     }
     async initCss() {
@@ -8393,6 +8406,11 @@
       return buildSettingCss(t2, n2, l, r);
     }
     async handle() {
+      const settings = this.getRuntimeService("settings");
+      this.resourceSettings = new ResourceSettingsService({
+        getSetting: /* @__PURE__ */ __name(async (key = null, fallback) => key === null ? settings.snapshot() : Object.prototype.hasOwnProperty.call(settings.snapshot(), key) ? settings.snapshot()[key] : fallback, "getSetting"),
+        saveSettingItem: /* @__PURE__ */ __name((key, value) => settings.set(key, value), "saveSettingItem")
+      });
       await storageManager.getSetting("enableClog", _) === _ && clog.show();
       if (utils.isMobileMode()) return;
       const scope = await this.getRuntimeService("scope")();
@@ -8497,7 +8515,7 @@
     collapseAdvancedTabs() {
       const advancedPanels = [
         { id: "health-panel", label: "数据体检", render: renderDataHealthPanel },
-        { id: "plugin-mgmt-panel", label: "插件管理", render: /* @__PURE__ */ __name(() => renderPluginMgmtPanel(this.pluginManager), "render") },
+        { id: "plugin-mgmt-panel", label: "插件管理", render: /* @__PURE__ */ __name(() => renderPluginMgmtPanel(this.getRuntimeService("diagnostics"), this.getRuntimeService("settings")), "render") },
         { id: "snapshot-panel", label: "恢复点", render: renderSnapshotPanel },
         { id: "network-panel", label: "外部请求", render: renderNetworkPanel }
       ];
@@ -8562,7 +8580,7 @@
       $(".side-menu-item").on("click", (function() {
         $(".side-menu-item").removeClass("active").attr("aria-current", "false"), $(this).addClass("active").attr("aria-current", "page"), $(".content-panel").hide();
         const e3 = $(this).data("panel");
-        $("#" + e3).show(), "cache-panel" === e3 ? ($("#saveBtn").hide(), $("#clean-all").removeClass("jhs-is-hidden")) : ($("#saveBtn").show(), $("#clean-all").addClass("jhs-is-hidden")), "health-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderDataHealthPanel()), "plugin-mgmt-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderPluginMgmtPanel(settingPlugin.getRuntimeService("diagnostics"))), "snapshot-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderSnapshotPanel()), "network-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderNetworkPanel(diagnostics));
+        $("#" + e3).show(), "cache-panel" === e3 ? ($("#saveBtn").hide(), $("#clean-all").removeClass("jhs-is-hidden")) : ($("#saveBtn").show(), $("#clean-all").addClass("jhs-is-hidden")), "health-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderDataHealthPanel()), "plugin-mgmt-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderPluginMgmtPanel(settingPlugin.getRuntimeService("diagnostics"), settingPlugin.getRuntimeService("settings"))), "snapshot-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderSnapshotPanel()), "network-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderNetworkPanel(diagnostics));
       })), $("#importBtn").on("click", ((e3) => importSettingData(previewDiff))), $("#exportBtn").on("click", ((e3) => exportSettingData())), $("#preview-car-number-import").on("click", (() => this.previewCarNumbers())), $("#confirm-car-number-import").on("click", (async (e3) => this.confirmCarNumbers(e3))), $("#webdavBackupBtn").on("click", ((e3) => backupDataByWebDav(this.folderName, webdav))), $("#webdavBackupListBtn").on("click", ((e3) => backupListBtnByWebDav(this.folderName, (files, client, label) => openFileListDialog(files, client, label, this.folderName, previewDiff, dialog), webdav))), $("#saveBtn").on("click", (() => saveSettingForm(this.getFormDependencies()))), $("#runHealthCheckBtn").on("click", (() => renderDataHealthPanel())), $("#repairHealthBtn").on("click", ((e3) => {
         utils.q(e3, "修复前会自动下载备份，是否继续?", (() => repairDataHealthWithBackup()));
       })), $("#pm-clear-log").on("click", (() => {
@@ -8605,7 +8623,7 @@
       __name(a2, "a");
       e2.on("input", a2), t2.on("input", a2);
       $("#themeMode").on("change", (async function() {
-        await storageManager.saveSettingItem("themeMode", $(this).val()), applyTheme();
+        await settingPlugin.getRuntimeService("settings").set("themeMode", $(this).val()), applyTheme();
       }));
     }
     async loadResourceSettings() {
@@ -9456,11 +9474,11 @@
     async handleQuery() {
       let e2 = loading();
       try {
-        this.keyword && $(".page-box").hide();
+        $(".page-box").show();
         const scope = await this.getRuntimeService("scope")();
         const result = await this.getRuntimeService("movie").catalog("av123", { page: this.currentPage, keyword: this.keyword || "" }, { scope });
         const i2 = result.items;
-        if (!this.keyword && !this.maxPage && result.maxPage) this.maxPage = result.maxPage, this.renderPagination();
+        if (result.maxPage) this.maxPage = result.maxPage, this.renderPagination();
         if (0 === i2.length) {
           clog.log(i2), show.error("无结果");
           clog.error("123AV 获取数据失败");
@@ -9608,6 +9626,7 @@
   var U = "https://jdforrepam.com/api";
   var signatureSecond = 0;
   var signatureValue = "";
+  var wantWatchStateCache = /* @__PURE__ */ new Map();
   function asResponseRecord(value) {
     return value && "object" == typeof value ? value : {};
   }
@@ -9642,6 +9661,7 @@ ${value}\r
       });
       if (0 === response?.success) throw response;
       await storageManager.deleteCachedRequest(`movie-detail:${id}`);
+      wantWatchStateCache.set(id, true);
       return response;
     } catch (error) {
       const failure = asResponseRecord(error);
@@ -9653,6 +9673,28 @@ ${value}\r
     }
   }
   __name(markJavDbWantWatch, "markJavDbWantWatch");
+  async function getJavDbWantWatchState(movieId) {
+    const id = String(movieId || "").trim(), encryptedToken = localStorage.getItem("jhs_appAuthorization"), token = encryptedToken ? await decryptData(encryptedToken) : "";
+    if (!token) return null;
+    if (!id) throw new Error("JavDB 影片 ID 无效");
+    if (wantWatchStateCache.has(id)) return wantWatchStateCache.get(id);
+    const limit = 48;
+    for (let page = 1; page <= 100; page++) {
+      const url = `${U}/v2/users/review_movies?status=want_watch&type=0&sort_by=create&order_by=desc&page=${page}&limit=${limit}`;
+      const response = await gmHttp.gmRequest("GET", url, null, {}, {
+        "user-agent": "Dart/3.5 (dart:io)",
+        "accept-language": "zh-TW",
+        authorization: `Bearer ${token}`,
+        jdsignature: await O()
+      });
+      const movies = response?.data?.movies ?? response?.movies;
+      if (!Array.isArray(movies)) throw new Error("JavDB 想看状态响应无效");
+      if (movies.some((movie) => String(movie.id) === id)) return wantWatchStateCache.set(id, true), true;
+      if (movies.length < limit) return wantWatchStateCache.set(id, false), false;
+    }
+    return false;
+  }
+  __name(getJavDbWantWatchState, "getJavDbWantWatchState");
   var q = /* @__PURE__ */ __name(async (e2 = "all", t2 = "", n2 = 1, a2 = 40) => {
     let i2 = `${U}/v1/movies/top?start_rank=1&type=${e2}&type_value=${t2}&ignore_watched=false&page=${n2}&limit=${a2}`;
     const l2 = localStorage.getItem("jhs_appAuthorization"), c2 = l2 ? await decryptData(l2) : "";
@@ -10196,6 +10238,10 @@ ${value}\r
   __name(createFc2DetailContext, "createFc2DetailContext");
 
   // src/plugins/external-search/fc2.js
+  function parseExplicitJavDbMovieId(value) {
+    return extractJavDbMovieId(value, window.location.origin);
+  }
+  __name(parseExplicitJavDbMovieId, "parseExplicitJavDbMovieId");
   var _Fc2Plugin = class _Fc2Plugin extends BasePlugin {
     constructor() {
       super(...arguments);
@@ -10210,6 +10256,9 @@ ${value}\r
     async resolveMovieId(carNum) {
       const scope = await this.getRuntimeService("scope")();
       return (await this.getRuntimeService("movie").resolve({ carNum }, { scope }))?.movieId || null;
+    }
+    async resolveMovieIdForRecord(carNum, url = "") {
+      return parseExplicitJavDbMovieId(url) || this.resolveMovieId(carNum);
     }
     async initCss() {
       return `<style>
@@ -10269,8 +10318,9 @@ ${value}\r
       $('.navbar-item:contains("FC2")').attr("href", fc2Href), $('.tabs a:contains("FC2")').attr("href", fc2Href);
       if (o.includes("advanced_search?type=3")) $("h2.section-title").contents().first().replaceWith("Fc2PPV"), $(".section .container > .box").remove();
       if (!o.includes("collection_codes?movieId")) return;
-      const params = new URLSearchParams(window.location.search), movieId = params.get("movieId"), carNum = params.get("carNum"), url = params.get("url"), explicitSource = params.get("source"), host = $("section").first().empty();
+      const params = new URLSearchParams(window.location.search), requestedMovieId = params.get("movieId"), carNum = params.get("carNum"), url = params.get("url"), explicitSource = params.get("source"), host = $("section").first().empty();
       if (!carNum || !url) return void host.append($('<div class="jhs-fc2-state is-error"></div>').text("FC2 详情参数不完整"));
+      const movieId = requestedMovieId && "search" !== requestedMovieId ? requestedMovieId : await this.resolveMovieIdForRecord(carNum, url);
       const source = ["fc2", "123av"].includes(explicitSource || "") ? explicitSource : await this.resolveFc2Source({ url });
       const context = this.mountFc2Detail(host, { movieId, carNum, url, source, mode: "page" });
       $(window).off("pagehide.jhsFc2Detail").one("pagehide.jhsFc2Detail", (() => context.destroy()));
@@ -10370,6 +10420,13 @@ ${value}\r
         const movieId = await movieIdPromise;
         if (!context.isAlive()) return;
         if (!movieId) return void button.prop("disabled", true).text("JavDB 暂无对应作品");
+        try {
+          const alreadyWanted = await getJavDbWantWatchState(movieId);
+          if (!context.isAlive()) return;
+          if (alreadyWanted) return void button.prop("disabled", true).attr("aria-pressed", "true").text("已在 JavDB 想看");
+        } catch (error) {
+          clog.warn("读取 JavDB 想看状态失败，保留手动操作", error);
+        }
         button.prop("disabled", false).text("JavDB 想看").off(`click${context.namespace}`).on(`click${context.namespace}`, (() => void this.submitJavDbWant(context, movieId, button)));
       } catch (error) {
         context.isAlive() && button.prop("disabled", false).text("JavDB 关联失败，重试").off(`click${context.namespace}`).on(`click${context.namespace}`, (() => void this.configureJavDbWantButton(context, this.resolveMovieId(context.carNum)))), clog.error("FC2 JavDB 想看关联失败", error);
@@ -11166,12 +11223,7 @@ ${failure.stack}` : "");
       return (await this.getSiteConfigs()).find((site) => site.id === "javTrailersBtn")?.baseUrl || "";
     }
     async getAv123Url() {
-      const url = this.getRuntimeService("movie").searchUrl("av123", { carNum: "" });
-      try {
-        return url ? new URL(url).origin : "";
-      } catch {
-        return "";
-      }
+      return this.getRuntimeService("movie").providerOrigin("av123") || "";
     }
     async getJavDbUrl() {
       return (await this.getSiteConfigs()).find((site) => site.id === "javDbBtn")?.baseUrl || "";
@@ -15470,22 +15522,19 @@ ${failure.stack}` : "");
       }));
     }
     async handleClickDetail(e2, t2) {
-      if (r) if (t2.carNum.includes("FC2-")) {
-        const e3 = this.parseMovieId(t2.url);
-        const plugin = this.getDependency("Fc2Plugin"), source = await plugin.resolveFc2Source(t2);
-        plugin.openFc2Dialog(e3, t2.carNum, t2.url, { source });
-      } else {
+      if (t2.carNum.includes("FC2-")) {
+        const plugin = this.getDependency("Fc2Plugin"), source = await plugin.resolveFc2Source(t2), movieId = await plugin.resolveMovieIdForRecord(t2.carNum, t2.url);
+        if (r) plugin.openFc2Dialog(movieId, t2.carNum, t2.url, { source });
+        else if (l) await plugin.openFc2Page(movieId, t2.carNum, t2.url, { newTab: true }, { source });
+        return;
+      }
+      if (r) {
         if (!t2.url) return void window.open("/search?q=" + t2.carNum, "_blank");
         utils.openPage(t2.url, t2.carNum, false, e2);
       }
       if (l) {
-        let n2 = t2.url;
-        if (n2.includes("javdb")) if (t2.carNum.includes("FC2-")) {
-          const e3 = this.parseMovieId(n2);
-          const plugin = this.getDependency("Fc2Plugin"), source = await plugin.resolveFc2Source(t2);
-          await plugin.openFc2Page(e3, t2.carNum, n2, { newTab: true }, { source });
-        } else window.open(n2, "_blank");
-        else utils.openPage(t2.url, t2.carNum, false, e2);
+        const url = t2.url || "";
+        url.includes("javdb") ? window.open(url, "_blank") : utils.openPage(url, t2.carNum, false, e2);
       }
     }
     async editRecord(e2) {
@@ -16236,8 +16285,8 @@ ${failure.stack}` : "");
       if (!carNum || !aHref) return;
       const shouldOpenTab = newTab || !!event && (event.ctrlKey || event.metaKey || 1 === event.button);
       if (carNum.includes("FC2-")) {
-        const movieId = this.parseMovieId(aHref);
-        return shouldOpenTab ? this.getDependency("Fc2Plugin").openFc2Page(movieId, carNum, aHref, { event, newTab: true }, { source: fc2Source }) : this.getDependency("Fc2Plugin").openFc2Dialog(movieId, carNum, aHref, { source: fc2Source });
+        const plugin = this.getDependency("Fc2Plugin"), movieId = await plugin.resolveMovieIdForRecord(carNum, aHref), source = fc2Source || await plugin.resolveFc2Source({ url: aHref });
+        return shouldOpenTab ? plugin.openFc2Page(movieId, carNum, aHref, { event, newTab: true }, { source }) : plugin.openFc2Dialog(movieId, carNum, aHref, { source });
       }
       const destination = new URL(aHref, window.location.origin);
       autoplay && destination.searchParams.set("autoPlay", "1"), utils.openPage(destination.href, carNum, true, { event, newTab: shouldOpenTab }), this.$currentImage = null;
@@ -16554,12 +16603,22 @@ ${failure.stack}` : "");
         `;
     }
     async handle() {
-      if (this.getRuntimeService("profile").current() !== "compact") return;
+      const profile = this.getRuntimeService("profile"), scope = await this.getRuntimeService("scope")();
+      const sync = /* @__PURE__ */ __name(() => profile.current() === "compact" ? this.mountBottomBar() : this.unmountBottomBar(), "sync");
+      scope.listen(profile, "profile.changed", sync);
+      sync();
+    }
+    mountBottomBar() {
+      if ($("#jhs-fab").length) return;
       const backdrop = $('<div class="jhs-fab-backdrop"></div>').appendTo("body");
       const menu = this.createMenu();
       $("body").append(menu);
       const fab = $('<button type="button" id="jhs-fab" class="jhs-btn" aria-label="打开 JHS 工具" aria-controls="jhs-fab-menu" aria-haspopup="menu" aria-expanded="false">＋</button>').appendTo("body");
       this.bindEvents(fab, backdrop);
+    }
+    unmountBottomBar() {
+      this._fabGeneration++;
+      $("#jhs-fab, #jhs-fab-menu, .jhs-fab-backdrop").remove();
     }
     async afterPluginsReady() {
       this.buildCommandBar();
@@ -16628,10 +16687,7 @@ ${failure.stack}` : "");
     }
     getCarNum() {
       try {
-        const basePlugin = this.getDependency("DetailPageButtonPlugin");
-        if (basePlugin?.parseMovieId) return basePlugin.parseMovieId(location.href);
-        const el = document.querySelector(".header, #video_id, .video-id");
-        if (el) return el.textContent.trim();
+        return this.getRuntimeService("host").readMovieRef?.()?.carNum || null;
       } catch (e2) {
         clog.debug("移动端详情番号解析失败，已回退", e2);
       }
@@ -16985,7 +17041,7 @@ ${failure.stack}` : "");
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 4 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog, SERVICE.state]),
-    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.state]),
+    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.state]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }, [SERVICE.movie]),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account]),
@@ -17011,7 +17067,7 @@ ${failure.stack}` : "");
     manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog, SERVICE.storage, SERVICE.actressInfo, SERVICE.state]),
     manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }, [SERVICE.storage, SERVICE.http, SERVICE.actressInfo]),
     manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics, SERVICE.dialog, SERVICE.state]),
-    manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [SERVICE.settings, SERVICE.profile]),
+    manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [PORT.host, SERVICE.settings, SERVICE.profile]),
     manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }, [PORT.host, SERVICE.dialog, SERVICE.offline]),
     manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [PORT.host, SERVICE.dialog, SERVICE.offline, SERVICE.state]),
     manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }, [SERVICE.state]),
@@ -17959,6 +18015,14 @@ ${failure.stack}` : "");
         return null;
       }
     }
+    providerOrigin(providerId) {
+      try {
+        const adapter = this.integrations?.getAdapter(providerId);
+        return typeof adapter?.origin === "function" ? adapter.origin() : null;
+      } catch {
+        return null;
+      }
+    }
     matchesProviderUrl(providerId, url) {
       try {
         const adapter = this.integrations?.getAdapter(providerId);
@@ -18044,12 +18108,16 @@ ${failure.stack}` : "");
       super();
       this.window = options.windowRuntime ?? window;
       this.scope = options.scope;
+      this.settings = options.settings ?? null;
       this.coarseQuery = this.window.matchMedia("(any-pointer: coarse)");
       this.profile = this.calculate();
       this.started = false;
     }
     calculate() {
       const width = this.window.innerWidth;
+      const mobileMode = (this.settings?.snapshot() ?? {}).mobileMode;
+      if (mobileMode === "on") return "compact";
+      if (mobileMode === "off") return width >= 1200 ? "wide" : "regular";
       const shortSide = Math.min(this.window.innerWidth, this.window.innerHeight);
       if (width <= 767 || this.coarseQuery.matches && shortSide <= 480) return "compact";
       if (width >= 1200) return "wide";
@@ -18068,6 +18136,8 @@ ${failure.stack}` : "");
       this.scope.listen(this.window, "resize", update, { passive: true });
       this.scope.listen(this.window, "orientationchange", update, { passive: true });
       this.scope.listen(this.coarseQuery, "change", update);
+      if (this.settings) this.scope.listen(this.settings, "settings.changed", update);
+      update();
     }
     current() {
       return this.profile;
@@ -18203,6 +18273,7 @@ ${failure.stack}` : "");
       super();
       this.storage = storage;
       this.validators = options.validators ?? {};
+      this.afterPersist = options.afterPersist ?? null;
       this.snapshotValue = Object.freeze({});
       this.writeChain = Promise.resolve();
     }
@@ -18211,17 +18282,35 @@ ${failure.stack}` : "");
       this.snapshotValue = Object.freeze(stored && typeof stored === "object" && !Array.isArray(stored) ? { ...stored } : {});
       return this.snapshotValue;
     }
+    async refresh(key = "setting") {
+      return this.load(key);
+    }
     snapshot() {
       return this.snapshotValue;
     }
     async set(name, value, storageKey = "setting") {
-      const validator = this.validators[name];
-      if (validator && !validator(value)) throw new TypeError(`Invalid setting: ${name}`);
+      return this.patch({ [name]: value }, storageKey);
+    }
+    async patch(values, storageKey = "setting") {
+      if (!values || typeof values !== "object" || Array.isArray(values)) throw new TypeError("Settings patch must be an object");
+      return this._enqueue({ ...values }, Object.keys(values), storageKey, true);
+    }
+    async replace(values, storageKey = "setting") {
+      if (!values || typeof values !== "object" || Array.isArray(values)) throw new TypeError("Settings replacement must be an object");
+      return this._enqueue({ ...values }, Object.keys(values), storageKey, false);
+    }
+    _enqueue(values, changedNames, storageKey, merge) {
+      for (const name of changedNames) {
+        const validator = this.validators[name];
+        if (validator && !validator(values[name])) throw new TypeError(`Invalid setting: ${name}`);
+      }
       const operation = this.writeChain.then(async () => {
-        const next = Object.freeze({ ...this.snapshotValue, [name]: value });
+        const next = Object.freeze(merge ? { ...this.snapshotValue, ...values } : { ...values });
         await this.storage.set(storageKey, next);
         this.snapshotValue = next;
-        this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name, value, snapshot: next }) }));
+        await this.afterPersist?.(next, Object.freeze([...changedNames]));
+        const name = changedNames.length === 1 ? changedNames[0] : null;
+        this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name, value: name ? next[name] : void 0, names: Object.freeze([...changedNames]), snapshot: next }) }));
         return next;
       });
       this.writeChain = operation.then(() => void 0, () => void 0);
@@ -18666,9 +18755,14 @@ ${failure.stack}` : "");
     const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache });
     diagnostics.setNetworkController(http);
     const webdav = new WebDavService(http);
-    const settings = new SettingsService(storage);
-    const profile = new ProfileService({ scope: rootScope });
-    profile.start();
+    const settings = new SettingsService(storage, { afterPersist: /* @__PURE__ */ __name(async () => {
+      runtime.legacyStorage?.invalidateSettingCache?.();
+      await runtime.eventBus?.emit?.("settings-changed");
+    }, "afterPersist") });
+    if (runtime.eventBus) rootScope.addCleanup(runtime.eventBus.on("settings-changed", async (_payload, event) => {
+      if (event.originId === runtime.eventBus.originId) await settings.refresh();
+    }));
+    const profile = new ProfileService({ scope: rootScope, settings });
     const commands = new CommandRegistry();
     const providers = new ProviderRegistry(diagnostics);
     const settingsRegistry = new SettingsRegistry();
@@ -18799,51 +18893,67 @@ ${failure.stack}` : "");
   __name(parse123AvVideoInfo, "parse123AvVideoInfo");
 
   // src/integrations/av123/manifest.js
-  var REQUEST_OPTIONS = Object.freeze({ cookiePartition: { topLevelSite: "https://123av.com" } });
-  function create123AvAdapter(http) {
-    const request = /* @__PURE__ */ __name((url, scope) => http.request({
-      providerId: "av123",
-      method: "GET",
-      url,
-      responseType: "text",
-      cacheScope: "public",
-      ttlMs: 6048e5,
-      requestOptions: REQUEST_OPTIONS,
-      urlPolicy: { trustClass: "builtin-public", hosts: ["123av.com"] }
-    }, scope), "request");
+  var DEFAULT_ORIGIN = "https://123av.com";
+  function normalizeBaseOrigin(configured) {
+    try {
+      const url = new URL(String(configured || DEFAULT_ORIGIN));
+      if (url.protocol !== "https:") return DEFAULT_ORIGIN;
+      return url.origin;
+    } catch {
+      return DEFAULT_ORIGIN;
+    }
+  }
+  __name(normalizeBaseOrigin, "normalizeBaseOrigin");
+  function create123AvAdapter(http, settings = null) {
+    const baseOrigin = /* @__PURE__ */ __name(() => normalizeBaseOrigin(settings?.snapshot().av123Url), "baseOrigin");
+    const request = /* @__PURE__ */ __name((url, scope) => {
+      const origin = new URL(url).origin, isBuiltin = origin === DEFAULT_ORIGIN;
+      return http.request({
+        providerId: "av123",
+        method: "GET",
+        url,
+        responseType: "text",
+        cacheScope: "public",
+        ttlMs: 6048e5,
+        requestOptions: { cookiePartition: { topLevelSite: origin } },
+        urlPolicy: isBuiltin ? { trustClass: "builtin-public", hosts: ["123av.com"], expectedOrigin: origin } : { trustClass: "custom-public", expectedOrigin: origin }
+      }, scope);
+    }, "request");
     return Object.freeze({
       contracts: ["MovieRef", "MovieDetail"],
+      origin: baseOrigin,
       searchUrl(movieRef) {
         const carNum = normalizeMovieCarNum(movieRef?.carNum);
-        return carNum ? `https://123av.com/cn/search?keyword=${encodeURIComponent(carNum)}` : null;
+        return carNum ? `${baseOrigin()}/cn/search?keyword=${encodeURIComponent(carNum)}` : null;
       },
       detailUrl(movieRef) {
         const id = normalizeMovieCarNum(movieRef.carNum)?.match(/^FC2-(\d+)$/)?.[1];
-        return movieRef.url ? new URL(movieRef.url).href : id ? `https://123av.com/cn/v/fc2-ppv-${id}` : null;
+        return movieRef.url ? new URL(movieRef.url).href : id ? `${baseOrigin()}/cn/v/fc2-ppv-${id}` : null;
       },
       matchesUrl(value) {
         try {
-          return new URL(value).hostname === "123av.com";
+          const url = new URL(value);
+          return url.origin === baseOrigin() || /^\/cn\/v\/fc2-ppv-\d+\/?$/i.test(url.pathname);
         } catch {
           return false;
         }
       },
       async listCatalog(query = {}, options = {}) {
         const page = Math.max(1, Number(query.page) || 1), keyword = String(query.keyword || "").trim();
-        const sourcePages = keyword ? [1] : [page * 2 - 1, page * 2];
-        const urls = sourcePages.map((sourcePage) => keyword ? `https://123av.com/cn/search?keyword=${encodeURIComponent(keyword)}` : `https://123av.com/cn/makers/fc2?page=${sourcePage}`);
+        const sourcePages = keyword ? [page] : [page * 2 - 1, page * 2];
+        const urls = sourcePages.map((sourcePage) => keyword ? `${baseOrigin()}/cn/search?keyword=${encodeURIComponent(keyword)}&page=${sourcePage}` : `${baseOrigin()}/cn/makers/fc2?page=${sourcePage}`);
         const responses = await Promise.all(urls.map((url) => request(url, options.scope)));
         const lists = responses.map((response, index) => parse123AvCards(response.data, response.finalUrl || urls[index]));
         const items = merge123AvCards(lists).map((item) => Object.freeze({
           carNum: item.carNum,
           title: item.title,
           url: item.href,
-          imageUrl: item.imgSrc ? new URL(item.imgSrc, "https://123av.com").href : null,
-          previewUrl: item.preview ? new URL(item.preview, "https://123av.com").href : null,
+          imageUrl: item.imgSrc ? new URL(item.imgSrc, baseOrigin()).href : null,
+          previewUrl: item.preview ? new URL(item.preview, baseOrigin()).href : null,
           providerId: "av123"
         }));
-        const sourceMaxPage = keyword || !responses.length ? null : parse123AvSourceMaxPage(responses[0].data, responses[0].finalUrl || urls[0]);
-        return Object.freeze({ items, maxPage: sourceMaxPage ? Math.ceil(sourceMaxPage / 2) : null });
+        const sourceMaxPage = !responses.length ? null : parse123AvSourceMaxPage(responses[0].data, responses[0].finalUrl || urls[0]);
+        return Object.freeze({ items, maxPage: sourceMaxPage ? keyword ? sourceMaxPage : Math.ceil(sourceMaxPage / 2) : null });
       },
       async resolveMovie(movieRef, options = {}) {
         const carNum = normalizeMovieCarNum(movieRef.carNum);
@@ -18857,7 +18967,7 @@ ${failure.stack}` : "");
       async getDetail(movieRef, options = {}) {
         const carNum = normalizeMovieCarNum(movieRef.carNum), id = carNum?.match(/^FC2-(\d+)$/)?.[1];
         if (!carNum || !movieRef.url && !id) throw new TypeError("123AV movie reference is invalid");
-        const url = new URL(movieRef.url || `https://123av.com/cn/v/fc2-ppv-${id}`).href;
+        const url = new URL(movieRef.url || `${baseOrigin()}/cn/v/fc2-ppv-${id}`).href;
         const response = await request(url, options.scope), info = parse123AvVideoInfo(response.data, response.finalUrl || url);
         if (!info.title) throw new TypeError("123AV detail is malformed");
         return defineMovieDetail({ carNum, title: info.title, releaseDate: info.publishDate || null, url: response.finalUrl || url, providerId: "av123" });
@@ -18870,9 +18980,9 @@ ${failure.stack}` : "");
     trustClass: "builtin-public",
     hosts: ["123av.com"],
     capabilities: ["movie.search", "movie.detail", "movie.catalog"],
-    requires: [SERVICE.http],
-    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }), "createClient"),
-    createAdapter: /* @__PURE__ */ __name((client) => create123AvAdapter(client.http), "createAdapter"),
+    requires: [SERVICE.http, SERVICE.settings],
+    createClient: /* @__PURE__ */ __name((dependencies) => Object.freeze({ http: dependencies[SERVICE.http], settings: dependencies[SERVICE.settings] }), "createClient"),
+    createAdapter: /* @__PURE__ */ __name((client) => create123AvAdapter(client.http, client.settings), "createAdapter"),
     createHostAdapter: null,
     cachePolicy: { "movie.search": "public-7d", "movie.detail": CACHE.externalDetail, "movie.catalog": "public-7d" },
     quality: "silver"
@@ -20291,6 +20401,8 @@ ${failure.stack}` : "");
         gmGetValue: globalThis.GM_getValue,
         gmSetValue: globalThis.GM_setValue,
         legacyHttp: gmHttp2,
+        legacyStorage: storageManager2,
+        eventBus: jhsEventBus2,
         storageForage: storageManager2.forage,
         localStorage: globalThis.localStorage,
         layer: vendors.layer,
@@ -20303,6 +20415,7 @@ ${failure.stack}` : "");
         localOrigins: localOriginSettings.origins
       });
       const settingsSnapshot = await context.services.settings.load();
+      context.services.profile.start();
       const legacySortMethod = localStorage.getItem("jhs_sortMethod");
       if (settingsSnapshot.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) {
         await context.services.settings.set("sortMethod", legacySortMethod);

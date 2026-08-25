@@ -520,21 +520,19 @@ export class HistoryPlugin extends BasePlugin {
     }
     /** @param {any} e @param {HistoryRecord} t */
     async handleClickDetail(e, t) {
-        if (r) if (t.carNum.includes("FC2-")) {
-            const e = this.parseMovieId(t.url);
-            const plugin = this.getDependency("Fc2Plugin"), source = await plugin.resolveFc2Source(t);
-            plugin.openFc2Dialog(e, t.carNum, t.url, { source });
-        } else {
+        if (t.carNum.includes("FC2-")) {
+            const plugin = this.getDependency("Fc2Plugin"), source = await plugin.resolveFc2Source(t), movieId = await plugin.resolveMovieIdForRecord(t.carNum, t.url);
+            if (r) plugin.openFc2Dialog(movieId, t.carNum, t.url, { source });
+            else if (l) await plugin.openFc2Page(movieId, t.carNum, t.url, { newTab: !0 }, { source });
+            return;
+        }
+        if (r) {
             if (!t.url) return void window.open("/search?q=" + t.carNum, "_blank");
             utils.openPage(t.url, t.carNum, !1, e);
         }
         if (l) {
-            let n = t.url;
-            if (n.includes("javdb")) if (t.carNum.includes("FC2-")) {
-                const e = this.parseMovieId(n);
-                const plugin = this.getDependency("Fc2Plugin"), source = await plugin.resolveFc2Source(t);
-                await plugin.openFc2Page(e, t.carNum, n, { newTab: !0 }, { source });
-            } else window.open(n, "_blank"); else utils.openPage(t.url, t.carNum, !1, e);
+            const url = t.url || "";
+            url.includes("javdb") ? window.open(url, "_blank") : utils.openPage(url, t.carNum, !1, e);
         }
     }
     /** @param {HistoryRecord} e */

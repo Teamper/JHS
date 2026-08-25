@@ -124,6 +124,23 @@ describe("HTTP, URL and settings contracts", () => {
         expect(values.get("setting")).toEqual(settings.snapshot());
     });
 
+    it("replaces, patches and refreshes the single runtime settings snapshot", async () => {
+        const values = new Map([["setting", { mobileMode: "auto", reviewCount: 20 }]]), afterPersist = vi.fn(), storage = {
+            get: vi.fn(async key => values.get(key)),
+            set: vi.fn(async (key, value) => values.set(key, value)),
+        };
+        const settings = new SettingsService(storage, { afterPersist });
+        await settings.load();
+        await settings.patch({ reviewCount: 50, themeMode: "dark" });
+        expect(settings.snapshot()).toEqual({ mobileMode: "auto", reviewCount: 50, themeMode: "dark" });
+        await settings.replace({ mobileMode: "off" });
+        expect(settings.snapshot()).toEqual({ mobileMode: "off" });
+        values.set("setting", { mobileMode: "on", legacyWrite: true });
+        await settings.refresh();
+        expect(settings.snapshot()).toEqual({ mobileMode: "on", legacyWrite: true });
+        expect(afterPersist).toHaveBeenCalledTimes(2);
+    });
+
     it("proxies legacy network controls through DiagnosticsService", () => {
         const legacyHttp = {
             getCircuitBreakerStatus: vi.fn(() => ({ "api.example": { state: "open" } })),

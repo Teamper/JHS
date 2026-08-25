@@ -33,6 +33,27 @@ describe("selection, profile and table primitives", () => {
         expect(scope.snapshot().listeners).toBe(0);
     });
 
+    it("honors mobileMode on/off/auto and reacts to runtime setting changes", () => {
+        const media = new EventTarget();
+        Object.defineProperty(media, "matches", { value: true, writable: true });
+        const windowRuntime = new EventTarget();
+        Object.assign(windowRuntime, { innerWidth: 460, innerHeight: 800, matchMedia: () => media });
+        const settings = new EventTarget();
+        let snapshot = { mobileMode: "off" };
+        settings.snapshot = () => snapshot;
+        const scope = new LifecycleScope("profile-settings");
+        const service = new ProfileService({ windowRuntime, scope, settings });
+        service.start();
+        expect(service.current()).toBe("regular");
+        snapshot = { mobileMode: "on" };
+        settings.dispatchEvent(new CustomEvent("settings.changed"));
+        expect(service.current()).toBe("compact");
+        snapshot = { mobileMode: "auto" };
+        settings.dispatchEvent(new CustomEvent("settings.changed"));
+        expect(service.current()).toBe("compact");
+        scope.dispose();
+    });
+
     it("normalizes JhsTable page sizes without Tabulator's blank all option", () => {
         const Tabulator = vi.fn(function(target, options) { this.target = target; this.options = options; });
         const table = createJhsTable(Tabulator, "#table", { paginationSizeSelector: [20, 50, true, 1000] });

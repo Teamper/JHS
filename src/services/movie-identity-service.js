@@ -98,6 +98,13 @@ export class MovieIdentityService {
             return typeof adapter?.searchUrl === "function" ? adapter.searchUrl(movieRef) : null;
         } catch { return null; }
     }
+    /** @param {string} providerId */
+    providerOrigin(providerId) {
+        try {
+            const adapter = this.integrations?.getAdapter(providerId);
+            return typeof adapter?.origin === "function" ? adapter.origin() : null;
+        } catch { return null; }
+    }
     /** @param {string} providerId @param {string} url */
     matchesProviderUrl(providerId, url) {
         try {

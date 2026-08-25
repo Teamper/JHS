@@ -11,8 +11,8 @@ function loadMobilePlugin() {
     dom.window.isListPage = true, dom.window.isDetailPage = false;
     const listPage = { activeQuickFilter: "waitCheck", setQuickFilter: vi.fn(), syncQuickFilterUi: vi.fn() }, listButtons = { openWaitCheck: vi.fn(async () => {}), sortItems: vi.fn(async () => {}) };
     const beans = { ListPagePlugin: listPage, ListPageButtonPlugin: listButtons };
-    const settings = { snapshot: () => ({ sortMethod: "default" }), set: vi.fn(async () => {}) };
-    class BasePlugin { getBean(name) { return beans[name]; } getRuntimeService() { return settings; } }
+    const settings = { snapshot: () => ({ sortMethod: "default" }), set: vi.fn(async () => {}) }, host = { readMovieRef: vi.fn(() => ({ carNum: "ABC-123" })) };
+    class BasePlugin { getBean(name) { return beans[name]; } getRuntimeService(name) { return "host" === name ? host : settings; } }
     const labels = { all: "全部", waitCheck: "待鉴定", favorite: "收藏", hasDown: "下载", hasWatch: "已看", blockedItems: "屏蔽项", favoriteUndownloaded: "收藏未下载", favoriteUnwatched: "收藏未观看", downloadedUnwatched: "下载未观看", recent7d: "最近 7 天" };
     const context = vm.createContext({
         window: dom.window, document: dom.window.document, $, BasePlugin, localStorage: dom.window.localStorage,
@@ -24,7 +24,7 @@ function loadMobilePlugin() {
     });
     const source = readTestFile(join(import.meta.dirname, "../src/plugins/status/mobile-bottom-bar.js"), "utf8");
     vm.runInContext(`${source};globalThis.TestMobilePlugin=MobileBottomBarPlugin`, context);
-    return { $, listButtons, listPage, plugin: new context.TestMobilePlugin() };
+    return { $, host, listButtons, listPage, plugin: new context.TestMobilePlugin() };
 }
 
 describe("mobile list FAB", () => {
@@ -41,5 +41,11 @@ describe("mobile list FAB", () => {
         const { listButtons, plugin } = loadMobilePlugin();
         await plugin.handleAction("check");
         expect(listButtons.openWaitCheck).toHaveBeenCalledOnce();
+    });
+
+    it("reads the normalized car number from the HostAdapter", () => {
+        const { host, plugin } = loadMobilePlugin();
+        expect(plugin.getCarNum()).toBe("ABC-123");
+        expect(host.readMovieRef).toHaveBeenCalledOnce();
     });
 });

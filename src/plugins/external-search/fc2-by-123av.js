@@ -81,11 +81,11 @@ export class Fc2By123AvPlugin extends BasePlugin {
     async handleQuery() {
         let e = loading();
         try {
-            this.keyword && $(".page-box").hide();
+            $(".page-box").show();
             const scope = await this.getRuntimeService("scope")();
             const result = await this.getRuntimeService("movie").catalog("av123", { page: this.currentPage, keyword: this.keyword || "" }, { scope });
             const i = result.items;
-            if (!this.keyword && !this.maxPage && result.maxPage) this.maxPage = result.maxPage, this.renderPagination();
+            if (result.maxPage) this.maxPage = result.maxPage, this.renderPagination();
             if (0 === i.length) {
                 clog.log(i), show.error("无结果");
                 clog.error("123AV 获取数据失败");

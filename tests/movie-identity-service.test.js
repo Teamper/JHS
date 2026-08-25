@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { MovieIdentityService } from "../src/services/movie-identity-service.js";
+import { extractJavDbMovieId } from "../src/core/movie-identity.js";
 
 describe("MovieIdentityService", () => {
+    it("extracts movie ids only from explicit detail routes", () => {
+        expect(extractJavDbMovieId("https://javdb.com/v/movie-123?ref=test")).toBe("movie-123");
+        expect(extractJavDbMovieId("https://javdb.com/search?q=FC2-1234567")).toBeNull();
+        expect(extractJavDbMovieId("https://123av.com/cn/v/fc2-ppv-1234567")).toBeNull();
+    });
     it("uses JavDB as the default canonical resolver without probing AV123 first", async () => {
         const av123 = { resolveMovie: vi.fn(async () => ({ movieId: "av123" })) };
         const javdb = { resolveMovie: vi.fn(async () => ({ movieId: "javdb" })) };

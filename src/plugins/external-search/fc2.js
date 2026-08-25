@@ -3,7 +3,8 @@
 import { _, k, m, o, v, y } from "../../core/constants.js";
 import { DetailStateController } from "../../core/detail-state-controller.js";
 import { normalizeBtihHash } from "../../core/feature-helpers.js";
-import { markJavDbWantWatch } from "../../core/javdb-api.js";
+import { extractJavDbMovieId } from "../../core/movie-identity.js";
+import { getJavDbWantWatchState, markJavDbWantWatch } from "../../core/javdb-api.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { renderTranslatedTitle } from "../../ui/translation/title-translation.js";
 import { renderScreenshotPanel } from "../../ui/detail/screenshot-panel.js";
@@ -34,6 +35,11 @@ import { createFc2DetailContext, createFc2DetailShell } from "../status/detail-w
 /** @typedef {{ movieId?: string | null, carNum: string, url: string, source: string, mode: string, layerIndex?: number }} Fc2MountOptions */
 /** @typedef {{ fc2Source?: string, url?: string }} Fc2SourceRecord */
 
+/** Returns an id only for an explicit JavDB detail route. */
+export function parseExplicitJavDbMovieId(/** @type {string} */ value) {
+    return extractJavDbMovieId(value, window.location.origin);
+}
+
 export class Fc2Plugin extends BasePlugin {
     constructor() {
         super(...arguments);
@@ -49,6 +55,8 @@ export class Fc2Plugin extends BasePlugin {
         const scope = await this.getRuntimeService("scope")();
         return (await this.getRuntimeService("movie").resolve({ carNum }, { scope }))?.movieId || null;
     }
+    /** @param {string} carNum @param {string} [url] */
+    async resolveMovieIdForRecord(carNum, url = "") { return parseExplicitJavDbMovieId(url) || this.resolveMovieId(carNum); }
     async initCss() {
         return `<style>
             .movie-detail-layer .layui-layer-content { min-height:0; overflow:hidden; background:var(--jhs-bg); }
@@ -107,8 +115,9 @@ export class Fc2Plugin extends BasePlugin {
         $('.navbar-item:contains("FC2")').attr("href", fc2Href), $('.tabs a:contains("FC2")').attr("href", fc2Href);
         if (o.includes("advanced_search?type=3")) $("h2.section-title").contents().first().replaceWith("Fc2PPV"), $(".section .container > .box").remove();
         if (!o.includes("collection_codes?movieId")) return;
-        const params = new URLSearchParams(window.location.search), movieId = params.get("movieId"), carNum = params.get("carNum"), url = params.get("url"), explicitSource = params.get("source"), host = $("section").first().empty();
+        const params = new URLSearchParams(window.location.search), requestedMovieId = params.get("movieId"), carNum = params.get("carNum"), url = params.get("url"), explicitSource = params.get("source"), host = $("section").first().empty();
         if (!carNum || !url) return void host.append($('<div class="jhs-fc2-state is-error"></div>').text("FC2 详情参数不完整"));
+        const movieId = requestedMovieId && "search" !== requestedMovieId ? requestedMovieId : await this.resolveMovieIdForRecord(carNum, url);
         const source = [ "fc2", "123av" ].includes(explicitSource || "") ? /** @type {string} */ (explicitSource) : await this.resolveFc2Source({ url });
         const context = this.mountFc2Detail(host, { movieId, carNum, url, source, mode: "page" });
         $(window).off("pagehide.jhsFc2Detail").one("pagehide.jhsFc2Detail", (() => context.destroy()));
@@ -200,6 +209,11 @@ export class Fc2Plugin extends BasePlugin {
             const movieId = await movieIdPromise;
             if (!context.isAlive()) return;
             if (!movieId) return void button.prop("disabled", !0).text("JavDB 暂无对应作品");
+            try {
+                const alreadyWanted = await getJavDbWantWatchState(movieId);
+                if (!context.isAlive()) return;
+                if (alreadyWanted) return void button.prop("disabled", !0).attr("aria-pressed", "true").text("已在 JavDB 想看");
+            } catch (error) { clog.warn("读取 JavDB 想看状态失败，保留手动操作", error); }
             button.prop("disabled", !1).text("JavDB 想看").off(`click${context.namespace}`).on(`click${context.namespace}`, (() => void this.submitJavDbWant(context, movieId, button)));
         } catch (error) {
             context.isAlive() && button.prop("disabled", !1).text("JavDB 关联失败，重试").off(`click${context.namespace}`).on(`click${context.namespace}`, (() => void this.configureJavDbWantButton(context, this.resolveMovieId(context.carNum)))), clog.error("FC2 JavDB 想看关联失败", error);
