@@ -3,7 +3,7 @@
 import { L } from "../../core/constants.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { Z, fetchDmmPreview } from "./preview-video.js";
+import { Z, fetchDmmPreview, fetchDmmPreviewIfEnabled, isDmmEnabled, isPreviewEnabled } from "../../services/preview-service.js";
 
 export class BusPreviewVideoPlugin extends BasePlugin {
     getName() {
@@ -33,13 +33,29 @@ export class BusPreviewVideoPlugin extends BasePlugin {
         const e = $("#preview-video");
         e.length > 0 && /** @type {HTMLVideoElement} */ (e[0]).pause(), $("#bus-preview-modal").removeClass("is-open");
     }
+    /** 总开关 OFF：卸载 JHS 预览入口（宿主无原生预览可保留，直接删除自有 UI）。 */
+    unmountPreview() {
+        this.closeVideoModal();
+        $("#bus-preview-modal").remove();
+        $(".preview-video-container").off("click.jhsBusPreview").remove();
+    }
     async handle() {
         if (!isDetailPage) return;
+        const settingsService = this.getRuntimeService("settings");
+        if (!isPreviewEnabled(settingsService.snapshot())) return;
         const scope = await this.getRuntimeService("scope")();
+        const onSettingsChanged = (/** @type {any} */ event) => {
+            const names = /** @type {string[] | undefined} */ (event.detail?.names);
+            if (!names?.includes("enablePreviewVideo")) return;
+            if (isPreviewEnabled(settingsService.snapshot())) void this.handle().catch((error => clog.error("预览视频重新挂载失败", error)));
+            else this.unmountPreview();
+        };
+        settingsService.addEventListener("settings.changed", onSettingsChanged);
+        scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
         this.initModal(scope);
         const e = $("#sample-waterfall .sample-box .photo-frame img:first").attr("src"), t = $(`\n            <button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65">\n                <div class="photo-frame jhs-layout-87db2275">\n                    <img src="${e}" class="video-cover" alt="">\n                    <div class="play-icon jhs-play-overlay">\n                        ▶\n                    </div>\n                </div>\n            </button>`);
         $("#sample-waterfall").prepend(t);
-        if ("yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes")) {
+        if (isDmmEnabled(settingsService.snapshot())) {
             void fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope).catch((error => clog.warn("预加载 DMM 失败", error)));
         }
         let n = !1, a = $(".preview-video-container");
@@ -62,7 +78,7 @@ export class BusPreviewVideoPlugin extends BasePlugin {
             notify: !0
         });
         let a = this.getPageInfo().carNum;
-        const scope = await this.getRuntimeService("scope")(), {sources: i, error: previewError} = await fetchDmmPreview(a, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope);
+        const scope = await this.getRuntimeService("scope")(), {sources: i, error: previewError} = await fetchDmmPreviewIfEnabled(a, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope, this.getRuntimeService("settings").snapshot());
         i && 0 !== Object.keys(i).length ? (await this.createVideoPlayerAndControls(i, t),
         n = $("#preview-video"), n.length > 0 ? (e.addClass("is-open"), await safePlay(n[0], {
             context: "JavBus 预览视频",
@@ -71,7 +87,7 @@ export class BusPreviewVideoPlugin extends BasePlugin {
         })) : show.error("视频播放器创建失败。")) : show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未找到可用的视频源。");
     }
     async createVideoPlayerAndControls(/** @type {Record<string, string>} */ e, /** @type {any} */ t) {
-        let n = await storageManager.getSetting("videoQuality");
+        let n = this.getRuntimeService("settings").snapshot().videoQuality;
         n = Z(Object.keys(e), n);
         let a = e[n];
         t.html(`\n            <div class="video-player-wrapper">\n                <video id="preview-video" class="jhs-video-player" controls playsinline>\n                    <source src="${a}" />\n                </video>\n            </div>\n            <div class="jhs-video-toolbar jhs-video-quality-list" role="group" aria-label="视频画质">\n                </div>\n        `);

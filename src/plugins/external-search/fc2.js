@@ -182,9 +182,10 @@ export class Fc2Plugin extends BasePlugin {
         otherSite ? void Promise.resolve().then((() => otherSite.loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: !1, isActive: context.isAlive }))).then((/** @type {JQueryHandle | null} */ box) => { if (context.isAlive() && !box) sitesGroup.remove(); }).catch((/** @type {unknown} */ error) => {
             context.isAlive() && sitesGroup.remove(), clog.error("FC2 外部站点加载失败", error);
         }) : sitesGroup.remove();
-        if (this.getOptionalDependency("ScreenShotPlugin")) {
+        const screenshotService = this.getRuntimeService("screenshot");
+        if (screenshotService.isEnabled(this.getRuntimeService("settings").snapshot())) {
             void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderScreenshotPanel({
-                target: screenshot, carNum: context.carNum.replace("FC2-", ""), screenshot: this.getRuntimeService("screenshot"),
+                target: screenshot, carNum: context.carNum.replace("FC2-", ""), screenshot: screenshotService,
                 settings: this.getRuntimeService("settings").snapshot(), scope, isActive: context.isAlive,
                 isDuplicate: url => Boolean(context.galleryUrls?.has(url)),
             })).then((/** @type {unknown} */ result) => { if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove(); }).catch((error => {

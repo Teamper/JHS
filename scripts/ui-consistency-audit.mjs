@@ -23,7 +23,7 @@ async function listJavaScriptFiles(dir) {
   return files;
 }
 
-const [theme, primitives, build, injection, magnet, settings, utils, detail, commandbar, newVideo, manager, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, reviewUi, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, screenshot, parsers, javstoreIntegration, otherSite, javDbHostAdapter, settingRenderer, builtSource] = await Promise.all([
+const [theme, primitives, build, injection, magnet, settings, utils, detail, commandbar, newVideo, manager, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, reviewUi, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, previewService, screenshot, parsers, javstoreIntegration, otherSite, javDbHostAdapter, settingRenderer, builtSource] = await Promise.all([
   readFile(join(srcRoot, "core", "theme.js"), "utf8"),
   readFile(join(srcRoot, "core", "ui-primitives.js"), "utf8"),
   readFile(join(repoRoot, "scripts", "build.mjs"), "utf8"),
@@ -54,6 +54,7 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(srcRoot, "plugins", "external-search", "other-site.js"), "utf8"),
   readFile(join(srcRoot, "core", "constants.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "image-viewer", "preview-video.js"), "utf8"),
+  readFile(join(srcRoot, "services", "preview-service.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "image-viewer", "screenshot.js"), "utf8"),
   readFile(join(srcRoot, "integrations", "javstore", "parser.js"), "utf8"),
   readFile(join(srcRoot, "integrations", "javstore", "manifest.js"), "utf8"),
@@ -223,8 +224,8 @@ requireMatch(constants, /function assertPageInfoContract[\s\S]*expected object/,
 requireMatch(manager, /return assertPageInfoContract\(\{\s*carNum,\s*url: t,\s*actress: n,\s*actors: a,\s*publishTime: i\s*\}\)/,
   "getPageInfo must return its complete public object contract");
 requireMatch(utils, /new URL\(e, window\.location\.origin\)[\s\S]*searchParams\.set\("jhsCarNum", carNum\)/, "detail URLs must carry the known car number");
-requireMatch(previewVideo, /async fetchVideo\(\)\s*\{\s*const carNum = normalizeCarNum\(this\.carNum\)/, "DMM must validate carNum before cache and parsing");
-requireMatch(previewVideo, /跳过 DMM 解析：番号不可用/, "DMM invalid-number warning is missing");
+requireMatch(previewService, /async fetchVideo\(\)\s*\{\s*const carNum = normalizeCarNum\(this\.carNum\)/, "DMM must validate carNum before cache and parsing");
+requireMatch(previewService, /跳过 DMM 解析：番号不可用/, "DMM invalid-number warning is missing");
 requireMatch(previewVideo, /<video id="jhs-preview-video"[^>]+controls playsinline/, "JavDB DMM playback must use an isolated JHS video element");
 requireMatch(previewVideo, /nativeVideo\.pause\(\)[\s\S]{0,100}jhs-native-preview-hidden/, "successful DMM playback must pause and hide the JavDB player");
 requireMatch(previewVideo, /dmmVideo\.muted = muted == null \|\| muted === !0/, "JavDB DMM playback must default to muted autoplay");
@@ -241,7 +242,7 @@ requireMatch(javstoreIntegration, /for \(const candidate of candidates\)[\s\S]*a
 requireMatch(parsers, /normalizeJavStoreAssetUrl\(previewHref, detailUrl\)/, "JavStore preview URLs must be resolved and normalized against the detail page");
 requireMatch(parsers, /"javstore\.net" === hostname \|\| hostname\.endsWith\("\.javstore\.net"\)[\s\S]{0,100}url\.protocol = "https:"/, "JavStore HTTP preview URLs must be upgraded selectively");
 requireMatch(parsers, /previewUrl\.replace\("\.th", ""\)/, "JavStore preview URLs must retain .th compatibility");
-requireMatch(screenshot, /getRuntimeService\("screenshot"\)\.resolve/, "screenshots must resolve through ScreenshotService");
+requireMatch(screenshot, /service\.resolve\(s*\{ carNum|getScreenshotService\(\)\.resolve/, "screenshots must resolve through ScreenshotService");
 requireMatch(screenshot, /addImg\(e, t\)[\s\S]{0,100}normalizeJavStoreAssetUrl\(t\)/, "screenshot rendering must normalize JavStore asset URLs at the final boundary");
 requireMatch(parsers, /"CLICK HERE!" === wrap\(element\)\.text\(\)\.trim\(\)/, "JavStore detail parsing must retain the CLICK HERE! link contract");
 requireMatch(javstoreIntegration, /if \(imageUrl\) return[\s\S]*return \[\]/, "JavStore must continue after a candidate without CLICK HERE!");

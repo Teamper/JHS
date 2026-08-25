@@ -4,7 +4,7 @@ import { _, d, g, h, k, l, m, p, r, v, y } from "../../core/constants.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
-import { Z, fetchDmmPreview } from "./preview-video.js";
+import { Z, fetchDmmPreviewIfEnabled, isPreviewEnabled } from "../../services/preview-service.js";
 
 /** @typedef {any} JQueryHandle */
 /** @typedef {MouseEvent & { ctrlKey?: boolean, metaKey?: boolean }} CardActionEvent */
@@ -38,6 +38,20 @@ export class CoverButtonPlugin extends BasePlugin {
     async handle() {
         if (!window.isListPage) return;
         const scope = await this.getRuntimeService("scope")();
+        const settingsService = this.getRuntimeService("settings");
+        const onSettingsChanged = (/** @type {any} */ event) => {
+            const names = /** @type {string[] | undefined} */ (event.detail?.names);
+            if (!names?.includes("enablePreviewVideo")) return;
+            if (isPreviewEnabled(settingsService.snapshot())) void this.handle().catch((error => clog.error("卡片预览重新挂载失败", error)));
+            else {
+                $('[id$="_preview_video"]').each((/** @type {number} */ _, /** @type {HTMLVideoElement} */ element) => {
+                    element.pause?.(), $(element).parent().remove();
+                });
+                void this.enableSvgBtn();
+            }
+        };
+        settingsService.addEventListener("settings.changed", onSettingsChanged);
+        scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
         this.addSvgBtn();
         await this.bindClick(scope);
     }
@@ -87,9 +101,9 @@ export class CoverButtonPlugin extends BasePlugin {
     }
     /** @param {JQueryHandle | Element | null} [items] */
     async enableSvgBtn(items = null) {
-        const e = await storageManager.getSetting(), {enableLoadScreenShot: t = _, enableVideoSvg: n = _, enableHandleSvg: a = _, enableSiteSvg: i = _, enableCopySvg: s = _} = e;
+        const e = this.getRuntimeService("settings").snapshot(), {enableLoadScreenShot: t = _, enableVideoSvg: n = _, enablePreviewVideo: q = _, enableHandleSvg: a = _, enableSiteSvg: i = _, enableCopySvg: s = _} = e;
         const scope = items ? $(items) : $(document);
-        [ { selector: ".screenSvg", enabled: this.getOptionalDependency("ScreenShotPlugin") ? t : "no" }, { selector: ".videoSvg", enabled: n }, { selector: ".handleSvg", enabled: a }, { selector: ".siteSvg", enabled: i }, { selector: ".copySvg", enabled: s } ].forEach((({selector: e, enabled: t}) => {
+        [ { selector: ".screenSvg", enabled: t }, { selector: ".videoSvg", enabled: n === _ && q === _ ? _ : "no" }, { selector: ".handleSvg", enabled: a }, { selector: ".siteSvg", enabled: i }, { selector: ".copySvg", enabled: s } ].forEach((({selector: e, enabled: t}) => {
             scope.find(e).toggle(t === _);
         }));
     }
@@ -191,6 +205,8 @@ export class CoverButtonPlugin extends BasePlugin {
     }
     /** @param {JQueryHandle} e @param {JQueryHandle} t @param {string} n */
     async showVideo(e, t, n) {
+        const settings = this.getRuntimeService("settings").snapshot();
+        if (!isPreviewEnabled(settings)) return show.error("预览视频已关闭");
         const a = `${n}_preview_video`;
         let i = $(`#${a}`);
         if (i.length > 0) return i.parent().show(), await safePlay(i[0], {
@@ -198,9 +214,9 @@ export class CoverButtonPlugin extends BasePlugin {
             notify: !0
         }), void t.hide();
         t.addClass("loading"), t.after('<div class="loading-spinner"></div>');
-        const s = t.attr("src"), scope = await this.getRuntimeService("scope")(), {sources: o, error: previewError} = await fetchDmmPreview(n, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope);
+        const s = t.attr("src"), scope = await this.getRuntimeService("scope")(), {sources: o, error: previewError} = await fetchDmmPreviewIfEnabled(n, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope, settings);
         if (!o) return show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未解析到视频"), void this.showImg(e, t, n);
-        let r = await storageManager.getSetting("videoQuality");
+        let r = this.getRuntimeService("settings").snapshot().videoQuality;
         r = Z(Object.keys(o), r);
         let c = o[r], d = `
             <div class="jhs-layout-d543acf8">

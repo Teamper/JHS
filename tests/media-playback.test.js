@@ -20,7 +20,7 @@ describe("preview playback contracts", () => {
     });
     it("treats high-quality preview as an enhancement instead of disabling native playback", () => {
         const handle = preview.slice(preview.indexOf("async handleVideo()"));
-        expect(handle.indexOf("void safePlay(nativeVideo")).toBeLessThan(handle.indexOf('getSetting("enableLoadPreviewVideo"'));
+        expect(handle.indexOf("void safePlay(nativeVideo")).toBeLessThan(handle.indexOf("const dmmEnabled = isDmmEnabled"));
         expect(handle).toContain("dmmEnabled ? await this.getDmmPreview()");
         expect(preview.slice(preview.indexOf("async initDmm()"), preview.indexOf("async handleVideo()"))).not.toMatch(/attr\("src", source\)/);
     });
@@ -54,7 +54,7 @@ describe("preview playback contracts", () => {
         for (const source of [bus, cover]) {
             expect(source).toContain('getRuntimeService("movie")');
             expect(source).toContain('getRuntimeService("scope")()');
-            expect(source).toMatch(/fetchDmmPreview\([^\n]+getRuntimeService\("storage"\)[^\n]+getRuntimeService\("movie"\)[^\n]+scope\)/);
+            expect(source).toMatch(/fetchDmmPreviewIfEnabled\([^\n]+getRuntimeService\("storage"\)[^\n]+getRuntimeService\("movie"\)[^\n]+scope[^\n]+(?:settings|snapshot\(\))\)/);
         }
     });
     it("keeps native play calls inside safePlay only", () => {

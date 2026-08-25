@@ -87,7 +87,7 @@ function loadDmmParser() {
         $: () => ({ attr: vi.fn().mockReturnThis(), css: vi.fn().mockReturnThis(), append: vi.fn().mockReturnThis() }),
         show: { error: vi.fn() }
     });
-    const source = readTestFile(join(repoRoot, "src/plugins/image-viewer/preview-video.js"), "utf8"), start = source.indexOf("const Z ="), end = source.indexOf("async function fetchDmmPreview", start);
+    const source = readTestFile(join(repoRoot, "src/services/preview-service.js"), "utf8"), start = source.indexOf("const Z ="), end = source.indexOf("async function fetchDmmPreview", start);
     vm.runInContext(`${source.slice(start, end)}; globalThis.TestDmmParser = DmmPreviewParser;`, context);
     return { Parser: context.TestDmmParser, warn, error, request };
 }
@@ -195,11 +195,10 @@ describe("detail car number propagation", () => {
 
     it("resolves screenshots through the declared ScreenshotService", async () => {
         const resolve = vi.fn(async () => [{ url: "https://img.javstore.net/preview.jpg", providerId: "javstore" }]);
-        const { Plugin } = loadScreenshotPlugin({ screenshot: { resolve }, scope: { id: "detail" } });
-        await expect(new Plugin().getServiceScreenshot("IPZZ-479")).resolves.toEqual({
-            url: "https://img.javstore.net/preview.jpg", source: "javstore", detailUrl: null,
-        });
-        expect(resolve).toHaveBeenCalledWith({ carNum: "IPZZ-479" }, { providerId: "javstore", scope: { id: "detail" } });
+        const settings = { snapshot: () => ({ enableLoadScreenShot: "yes" }) };
+        const { Plugin } = loadScreenshotPlugin({ screenshot: { resolve, isEnabled: () => true }, settings, scope: { id: "detail" } });
+        await expect(new Plugin().getScreenshot("IPZZ-479")).resolves.toBe("https://img.javstore.net/preview.jpg");
+        expect(resolve).toHaveBeenCalledWith({ carNum: "IPZZ-479" }, { scope: { id: "detail" }, settings: { enableLoadScreenShot: "yes" } });
     });
 
     it("normalizes a legacy JavStore URL again at the image rendering boundary", () => {

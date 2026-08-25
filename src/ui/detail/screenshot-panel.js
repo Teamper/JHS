@@ -1,20 +1,5 @@
 // @ts-check
 
-const DEFAULT_SCREENSHOT_PROVIDERS = Object.freeze([
-    Object.freeze({ id: "javstore", name: "JavStore", priority: 10, enabled: true }),
-]);
-
-/** @param {Record<string, any>} settings */
-function getEnabledScreenshotProviders(settings) {
-    const configured = Array.isArray(settings.screenshotProviders) ? settings.screenshotProviders : [];
-    const providers = configured.length
-        ? DEFAULT_SCREENSHOT_PROVIDERS.map((provider) => ({ ...provider, ...(configured.find((item) => item?.id === provider.id) || {}) }))
-        : [...DEFAULT_SCREENSHOT_PROVIDERS];
-    return providers
-        .filter((provider) => provider.enabled !== false && !provider.implemented)
-        .sort((left, right) => Number(left.priority ?? 100) - Number(right.priority ?? 100));
-}
-
 /** @param {unknown} value */
 function normalizeImageUrl(value) {
     try {
@@ -38,19 +23,21 @@ function renderImage(host, url, alt) {
 }
 
 /**
+ * 唯一截图视图：设置解析、provider 过滤、manual/auto 策略全部来自 ScreenshotService。
  * @param {{target: any, carNum: string, screenshot: import("../../services/screenshot-service.js").ScreenshotService, settings: Record<string, any>, scope?: import("../../core/lifecycle-scope.js").LifecycleScope, isActive?: () => boolean, providerId?: string, isDuplicate?: (url: string) => boolean}} options
  */
 export async function renderScreenshotPanel(options) {
     const jq = /** @type {any} */ (globalThis).$;
     const host = jq(options.target), isActive = options.isActive ?? (() => true), providerId = options.providerId ?? "javstore";
-    if (!host.length || options.settings.enableLoadScreenShot === "no") return host.empty(), null;
-    const enabledProviders = getEnabledScreenshotProviders(options.settings);
-    if (options.settings.screenshotMode !== "manual" && !enabledProviders.some((provider) => provider.id === providerId)) return host.empty(), null;
+    if (!host.length || !options.screenshot.isEnabled(options.settings)) return host.empty(), null;
+    const { mode } = options.screenshot.getScreenshotSettings(options.settings);
+    const enabledProviders = options.screenshot.getEnabledProviders(options.settings);
+    if (mode !== "manual" && !enabledProviders.some((provider) => provider.id === providerId)) return host.empty(), null;
     if (!enabledProviders.length) return host.empty().append(jq('<div class="jhs-panel-state">没有可用截图来源</div>')), host;
     const load = async (resultHost = host, selectedProviderId = providerId) => {
         resultHost.empty().append(jq("<div></div>").addClass("jhs-panel-state").text("正在加载缩略图…"));
         try {
-            const images = await options.screenshot.resolve({ carNum: options.carNum }, { providerId: selectedProviderId, scope: options.scope });
+            const images = await options.screenshot.resolve({ carNum: options.carNum }, { providerId: selectedProviderId, scope: options.scope, settings: options.settings });
             if (!isActive()) return null;
             const image = Array.isArray(images) ? images[0] : images;
             if (!image?.url) return resultHost.empty(), null;
@@ -65,7 +52,7 @@ export async function renderScreenshotPanel(options) {
             return null;
         }
     };
-    if (options.settings.screenshotMode !== "manual") return load();
+    if (mode !== "manual") return load();
     const tabs = jq('<div class="jhs-screenshot-providers" role="tablist" aria-label="截图来源"></div>');
     const result = jq('<div class="jhs-screenshot-result"></div>').text("请选择截图来源");
     enabledProviders.forEach((provider) => {

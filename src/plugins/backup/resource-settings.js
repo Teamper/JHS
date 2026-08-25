@@ -7,11 +7,6 @@ export const BUILT_IN_NATIVE_MAGNET_SOURCES = Object.freeze([
     { id: "native-javbus", name: "JavBus 本站", type: "本站资源", domain: "javbus.com", priority: 11, enabled: true }
 ]);
 export const BUILT_IN_MAGNET_SOURCES = BUILT_IN_NATIVE_MAGNET_SOURCES;
-export const BUILT_IN_SCREENSHOT_SOURCES = Object.freeze([
-    { id: "javstore", name: "JavStore", domain: "javstore.net", priority: 10, enabled: true },
-    { id: "projectjav", name: "ProjectJav", domain: "projectjav.com", priority: 20, enabled: false, implemented: false },
-    { id: "18av", name: "18AV", domain: "18av.mm-cg.com", priority: 30, enabled: false, implemented: false }
-]);
 
 /** @typedef {Record<string, any>} ResourceRecord */
 

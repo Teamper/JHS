@@ -72,7 +72,6 @@
     "src/plugins/image-viewer/bus-preview-video.js",
     "src/plugins/image-viewer/cover-button.js",
     "src/plugins/image-viewer/preview-video.js",
-    "src/plugins/image-viewer/screenshot-provider-registry.js",
     "src/plugins/image-viewer/screenshot.js",
     "src/plugins/new-video/task.js",
     "src/plugins/external-search/javtrailers.js",

@@ -6348,11 +6348,6 @@
     { id: "native-javdb", name: "JavDB 本站", type: "本站资源", domain: "javdb.com", priority: 10, enabled: true },
     { id: "native-javbus", name: "JavBus 本站", type: "本站资源", domain: "javbus.com", priority: 11, enabled: true }
   ]);
-  var BUILT_IN_SCREENSHOT_SOURCES = Object.freeze([
-    { id: "javstore", name: "JavStore", domain: "javstore.net", priority: 10, enabled: true },
-    { id: "projectjav", name: "ProjectJav", domain: "projectjav.com", priority: 20, enabled: false, implemented: false },
-    { id: "18av", name: "18AV", domain: "18av.mm-cg.com", priority: 30, enabled: false, implemented: false }
-  ]);
   function validateRule(rule) {
     if (!rule.name?.trim() || !rule.pattern?.trim()) throw new TypeError("规则名称和匹配内容不能为空");
     if ("regex" === rule.type) try {
@@ -6477,6 +6472,13 @@
   };
   __name(_ResourceSettingsService, "ResourceSettingsService");
   var ResourceSettingsService = _ResourceSettingsService;
+
+  // src/services/screenshot-sources.js
+  var BUILT_IN_SCREENSHOT_SOURCES = Object.freeze([
+    Object.freeze({ id: "javstore", name: "JavStore", domain: "javstore.net", priority: 10, enabled: true }),
+    Object.freeze({ id: "projectjav", name: "ProjectJav", domain: "projectjav.com", priority: 20, enabled: false, implemented: false }),
+    Object.freeze({ id: "18av", name: "18AV", domain: "18av.mm-cg.com", priority: 30, enabled: false, implemented: false })
+  ]);
 
   // src/core/credential-crypto.js
   var ENCRYPTION_SALT = "x7k9p3";
@@ -9854,15 +9856,6 @@ ${value}\r
   }, "q");
 
   // src/ui/detail/screenshot-panel.js
-  var DEFAULT_SCREENSHOT_PROVIDERS = Object.freeze([
-    Object.freeze({ id: "javstore", name: "JavStore", priority: 10, enabled: true })
-  ]);
-  function getEnabledScreenshotProviders(settings) {
-    const configured = Array.isArray(settings.screenshotProviders) ? settings.screenshotProviders : [];
-    const providers = configured.length ? DEFAULT_SCREENSHOT_PROVIDERS.map((provider) => ({ ...provider, ...configured.find((item) => item?.id === provider.id) || {} })) : [...DEFAULT_SCREENSHOT_PROVIDERS];
-    return providers.filter((provider) => provider.enabled !== false && !provider.implemented).sort((left, right) => Number(left.priority ?? 100) - Number(right.priority ?? 100));
-  }
-  __name(getEnabledScreenshotProviders, "getEnabledScreenshotProviders");
   function normalizeImageUrl(value) {
     try {
       const url = new URL(String(value || ""));
@@ -9889,14 +9882,15 @@ ${value}\r
   async function renderScreenshotPanel(options) {
     const jq = globalThis.$;
     const host = jq(options.target), isActive = options.isActive ?? (() => true), providerId = options.providerId ?? "javstore";
-    if (!host.length || options.settings.enableLoadScreenShot === "no") return host.empty(), null;
-    const enabledProviders = getEnabledScreenshotProviders(options.settings);
-    if (options.settings.screenshotMode !== "manual" && !enabledProviders.some((provider) => provider.id === providerId)) return host.empty(), null;
+    if (!host.length || !options.screenshot.isEnabled(options.settings)) return host.empty(), null;
+    const { mode } = options.screenshot.getScreenshotSettings(options.settings);
+    const enabledProviders = options.screenshot.getEnabledProviders(options.settings);
+    if (mode !== "manual" && !enabledProviders.some((provider) => provider.id === providerId)) return host.empty(), null;
     if (!enabledProviders.length) return host.empty().append(jq('<div class="jhs-panel-state">没有可用截图来源</div>')), host;
     const load = /* @__PURE__ */ __name(async (resultHost = host, selectedProviderId = providerId) => {
       resultHost.empty().append(jq("<div></div>").addClass("jhs-panel-state").text("正在加载缩略图…"));
       try {
-        const images = await options.screenshot.resolve({ carNum: options.carNum }, { providerId: selectedProviderId, scope: options.scope });
+        const images = await options.screenshot.resolve({ carNum: options.carNum }, { providerId: selectedProviderId, scope: options.scope, settings: options.settings });
         if (!isActive()) return null;
         const image = Array.isArray(images) ? images[0] : images;
         if (!image?.url) return resultHost.empty(), null;
@@ -9911,7 +9905,7 @@ ${value}\r
         return null;
       }
     }, "load");
-    if (options.settings.screenshotMode !== "manual") return load();
+    if (mode !== "manual") return load();
     const tabs = jq('<div class="jhs-screenshot-providers" role="tablist" aria-label="截图来源"></div>');
     const result = jq('<div class="jhs-screenshot-result"></div>').text("请选择截图来源");
     enabledProviders.forEach((provider) => {
@@ -10552,11 +10546,12 @@ ${value}\r
       }).catch((error) => {
         context.isAlive() && sitesGroup.remove(), clog.error("FC2 外部站点加载失败", error);
       }) : sitesGroup.remove();
-      if (this.getOptionalDependency("ScreenShotPlugin")) {
+      const screenshotService = this.getRuntimeService("screenshot");
+      if (screenshotService.isEnabled(this.getRuntimeService("settings").snapshot())) {
         void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((scope) => renderScreenshotPanel({
           target: screenshot,
           carNum: context.carNum.replace("FC2-", ""),
-          screenshot: this.getRuntimeService("screenshot"),
+          screenshot: screenshotService,
           settings: this.getRuntimeService("settings").snapshot(),
           scope,
           isActive: context.isAlive,
@@ -11855,7 +11850,7 @@ ${failure.stack}` : "");
   __name(_BusImgPlugin, "BusImgPlugin");
   var BusImgPlugin = _BusImgPlugin;
 
-  // src/plugins/image-viewer/preview-video.js
+  // src/services/preview-service.js
   var Z = /* @__PURE__ */ __name((e2, t2) => {
     if (!e2 || 0 === e2.length) return null;
     const n2 = new Set(e2);
@@ -11865,6 +11860,14 @@ ${failure.stack}` : "");
     return e2[0] || null;
   }, "Z");
   var ee = "jhs_dmm_video";
+  function isPreviewEnabled(settings) {
+    return settings?.enablePreviewVideo !== "no";
+  }
+  __name(isPreviewEnabled, "isPreviewEnabled");
+  function isDmmEnabled(settings) {
+    return settings?.enableLoadPreviewVideo !== "no";
+  }
+  __name(isDmmEnabled, "isDmmEnabled");
   var _DmmPreviewParser = class _DmmPreviewParser {
     constructor(e2, storage, movie, scope) {
       this.carNum = e2 || "", this.storage = storage, this.movie = movie, this.scope = scope, this.lastError = null;
@@ -11926,151 +11929,11 @@ ${failure.stack}` : "");
     };
   }
   __name(fetchDmmPreview, "fetchDmmPreview");
-  var _PreviewVideoPlugin = class _PreviewVideoPlugin extends BasePlugin {
-    getName() {
-      return "PreviewVideoPlugin";
-    }
-    async initCss() {
-      return ".jhs-dmm-preview-player{display:none;width:100%;height:auto}.jhs-dmm-preview-player.is-active{display:block}.jhs-native-preview-hidden{display:none!important}";
-    }
-    async handle() {
-      if (!isDetailPage) return;
-      this.lifecycleScope = await this.getRuntimeService("scope")();
-      const trigger = $(".preview-video-container"), openVideo = /* @__PURE__ */ __name(() => {
-        utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => {
-          this.handleVideo().catch(((error) => clog.error("预览视频处理失败", error)));
-        }), 20, 1e4, true, this.lifecycleScope);
-      }, "openVideo");
-      trigger.off("click.jhsVideo").on("click.jhsVideo", openVideo);
-      this.lifecycleScope.addCleanup((() => trigger.off("click.jhsVideo", openVideo)));
-      await storageManager.getSetting("enableLoadPreviewVideo", _) !== _ || o.includes("autoPlay=1") || this.initDmm(this.lifecycleScope);
-      const url = window.location.href;
-      (url.includes("gallery-1") || url.includes("gallery-2")) && openVideo(), url.includes("autoPlay=1") && trigger.length > 0 && trigger[0].click();
-    }
-    async initDmm(scope) {
-      try {
-        const { sources } = await this.getDmmPreview(scope);
-        if (!sources) return;
-        const $video = $("#preview-video"), video = $video[0];
-        if (video) return;
-        clog.debug("JavDB没有视频播放元素, 开始创建...");
-        const cover = $(".column-video-cover img").attr("src");
-        $(".preview-images").prepend(`
-                <a class="preview-video-container" data-fancybox="gallery" href="#preview-video">
-                    <span>预告片</span>
-                    <img src="${cover}" class="video-cover jhs-layout-8cf76fd7" alt="">
-                </a>
-            `), $(".preview-video-container").off("click.jhsVideo").on("click.jhsVideo", (() => {
-          utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => this.handleVideo().catch(((error) => clog.error("预览视频处理失败", error)))), 20, 1e4, true, scope);
-        }));
-      } catch (error) {
-        clog.error("预加载 DMM 失败:", error);
-      }
-    }
-    getDmmPreview(scope = this.lifecycleScope) {
-      if (this.dmmPreviewPromise) return this.dmmPreviewPromise;
-      this.dmmPreviewPromise = Promise.resolve(scope || this.getRuntimeService("scope")()).then(((requestScope) => fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), requestScope))).then(((result) => {
-        (result.error?.retryable || "HTTP_ERROR" === result.error?.code) && (this.dmmPreviewPromise = null);
-        return result;
-      }), ((error) => {
-        this.dmmPreviewPromise = null;
-        throw error;
-      }));
-      return this.dmmPreviewPromise;
-    }
-    createDmmPlayer($nativeVideo) {
-      const $host = $nativeVideo.parent(), existing = $host.find("#jhs-preview-video");
-      if (existing.length) return existing;
-      const $player = $('<video id="jhs-preview-video" class="jhs-video-player jhs-dmm-preview-player" controls playsinline></video>');
-      return $nativeVideo.after($player), $player;
-    }
-    async restoreNativePlayer($nativeVideo, nativeVideo, notify = false) {
-      const $dmmVideo = $nativeVideo.parent().find("#jhs-preview-video"), dmmVideo = $dmmVideo[0];
-      dmmVideo && (dmmVideo.pause(), $dmmVideo.removeAttr("src"), dmmVideo.load(), $dmmVideo.remove());
-      $nativeVideo.removeClass("jhs-native-preview-hidden");
-      return safePlay(nativeVideo, {
-        context: "JavDB 原生预览回退",
-        notify
-      });
-    }
-    async handleVideo() {
-      const $nativeVideo = $("#preview-video");
-      if (!$nativeVideo.length) return;
-      const settings = this.getRuntimeService("settings"), $host = $nativeVideo.parent().css("position", "relative"), nativeVideo = $nativeVideo[0], muted = settings.snapshot().videoMuted;
-      void safePlay(nativeVideo, {
-        context: "JavDB 原生预览",
-        notify: false
-      });
-      const dmmEnabled = await storageManager.getSetting("enableLoadPreviewVideo", _) !== C, dmmResult = dmmEnabled ? await this.getDmmPreview() : {
-        sources: null,
-        error: null
-      }, { sources, error } = dmmResult, $toolbar = $("<div></div>").attr("id", "video-bottom-toolbar").addClass("jhs-video-toolbar"), $qualityList = $("<div></div>").addClass("jhs-video-quality-list").attr({
-        role: "group",
-        "aria-label": "视频画质"
-      });
-      $host.find("#video-bottom-toolbar").remove();
-      let dmmPlayed = false;
-      let $dmmVideo = null;
-      let dmmVideo = null;
-      if (sources) {
-        const preferredQuality = await storageManager.getSetting("videoQuality"), selectedQuality = Z(Object.keys(sources), preferredQuality), source = sources[selectedQuality];
-        const currentTime = nativeVideo.currentTime;
-        $dmmVideo = this.createDmmPlayer($nativeVideo), dmmVideo = $dmmVideo[0], dmmVideo.muted = muted == null || muted === true, $dmmVideo.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {
-          void settings.set("videoMuted", dmmVideo.muted).catch((error2) => clog.error("保存视频静音设置失败", error2));
-        })), $dmmVideo.attr("src", source), dmmVideo.load(), dmmVideo.currentTime = currentTime, $dmmVideo.addClass("is-active");
-        dmmPlayed = await safePlay(dmmVideo, {
-          context: "JavDB 高画质预览",
-          notify: false
-        });
-        if (!dmmPlayed && !dmmVideo.muted) dmmVideo.muted = true, dmmPlayed = await safePlay(dmmVideo, {
-          context: "JavDB 高画质预览静音重试",
-          notify: false
-        });
-        dmmPlayed ? (nativeVideo.pause(), $nativeVideo.addClass("jhs-native-preview-hidden")) : ($dmmVideo.removeClass("is-active"), await this.restoreNativePlayer($nativeVideo, nativeVideo, true));
-        dmmPlayed && L.forEach(((quality) => {
-          const qualitySource = sources[quality.quality];
-          if (!qualitySource) return;
-          const active = dmmPlayed && selectedQuality === quality.quality;
-          $qualityList.append($(`<button type="button" class="jhs-btn jhs-video-quality-btn${active ? " active" : ""}" data-quality="${quality.quality}" data-video-src="${qualitySource}" aria-pressed="${active ? "true" : "false"}">${quality.text}</button>`));
-        }));
-      }
-      $toolbar.append($qualityList);
-      const $actions = $("<div></div>").addClass("jhs-toolbar");
-      $actions.append('<button type="button" class="jhs-btn jhs-btn--filter jhs-layout-3f0d74e1" id="video-filterBtn">屏蔽</button>', '<button type="button" class="jhs-btn jhs-btn--fav jhs-layout-2afc43dc" id="video-favoriteBtn">收藏</button>', '<button type="button" class="jhs-btn jhs-btn--down jhs-layout-5c319329" id="speed-btn">快进</button>'), $toolbar.append($actions), $host.append($toolbar), sources || await safePlay(nativeVideo, {
-        context: "JavDB 预览视频",
-        notify: true,
-        message: "REGION_BLOCKED" === error?.code ? error.message : "当前视频源无法播放"
-      });
-      $toolbar.off("click.jhsVideo").on("click.jhsVideo", ".jhs-video-quality-btn", (async (event) => {
-        const $button = $(event.currentTarget);
-        if ($button.hasClass("active")) return;
-        try {
-          if (!dmmVideo) return;
-          const currentTime = dmmVideo.currentTime, previousSource = $dmmVideo.attr("src");
-          $dmmVideo.attr("src", $button.data("video-src")), dmmVideo.load(), dmmVideo.currentTime = currentTime;
-          const played = await safePlay(dmmVideo, {
-            context: "JavDB 画质切换",
-            notify: false
-          });
-          if (played) $toolbar.find(".jhs-video-quality-btn").removeClass("active").attr("aria-pressed", "false"), $button.addClass("active").attr("aria-pressed", "true");
-          else {
-            previousSource && ($dmmVideo.attr("src", previousSource), dmmVideo.load(), dmmVideo.currentTime = currentTime);
-            const restored = previousSource && await safePlay(dmmVideo, {
-              context: "JavDB 画质切换回退",
-              notify: false
-            });
-            restored || await this.restoreNativePlayer($nativeVideo, nativeVideo, true);
-          }
-        } catch (playbackError) {
-          clog.error("切换画质失败:", playbackError);
-        }
-      })), $("#speed-btn").off("click.jhsVideo").on("click.jhsVideo", (() => {
-        dmmVideo && (dmmVideo.currentTime += 10);
-      })), $toolbar.off("contextmenu.jhsVideo").on("contextmenu.jhsVideo", "#speed-btn", ((event) => (event.preventDefault(), this.getOptionalDependency("DetailPageButtonPlugin")?.filterOne?.(event)))), $("#video-filterBtn").off("click.jhsVideo").on("click.jhsVideo", ((event) => this.getOptionalDependency("DetailPageButtonPlugin")?.filterOne?.(event))), $("#video-favoriteBtn").off("click.jhsVideo").on("click.jhsVideo", ((event) => this.getOptionalDependency("DetailPageButtonPlugin")?.favoriteOne?.(event)));
-    }
-  };
-  __name(_PreviewVideoPlugin, "PreviewVideoPlugin");
-  var PreviewVideoPlugin = _PreviewVideoPlugin;
+  async function fetchDmmPreviewIfEnabled(carNum, storage, movie, scope, settings) {
+    if (!isDmmEnabled(settings)) return { sources: null, error: null };
+    return fetchDmmPreview(carNum, storage, movie, scope);
+  }
+  __name(fetchDmmPreviewIfEnabled, "fetchDmmPreviewIfEnabled");
 
   // src/plugins/image-viewer/bus-preview-video.js
   var _BusPreviewVideoPlugin = class _BusPreviewVideoPlugin extends BasePlugin {
@@ -12100,9 +11963,24 @@ ${failure.stack}` : "");
       const e2 = $("#preview-video");
       e2.length > 0 && e2[0].pause(), $("#bus-preview-modal").removeClass("is-open");
     }
+    unmountPreview() {
+      this.closeVideoModal();
+      $("#bus-preview-modal").remove();
+      $(".preview-video-container").off("click.jhsBusPreview").remove();
+    }
     async handle() {
       if (!isDetailPage) return;
+      const settingsService = this.getRuntimeService("settings");
+      if (!isPreviewEnabled(settingsService.snapshot())) return;
       const scope = await this.getRuntimeService("scope")();
+      const onSettingsChanged = /* @__PURE__ */ __name((event) => {
+        const names = event.detail?.names;
+        if (!names?.includes("enablePreviewVideo")) return;
+        if (isPreviewEnabled(settingsService.snapshot())) void this.handle().catch(((error) => clog.error("预览视频重新挂载失败", error)));
+        else this.unmountPreview();
+      }, "onSettingsChanged");
+      settingsService.addEventListener("settings.changed", onSettingsChanged);
+      scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
       this.initModal(scope);
       const e2 = $("#sample-waterfall .sample-box .photo-frame img:first").attr("src"), t2 = $(`
             <button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65">
@@ -12114,7 +11992,7 @@ ${failure.stack}` : "");
                 </div>
             </button>`);
       $("#sample-waterfall").prepend(t2);
-      if ("yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes")) {
+      if (isDmmEnabled(settingsService.snapshot())) {
         void fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope).catch(((error) => clog.warn("预加载 DMM 失败", error)));
       }
       let n2 = false, a2 = $(".preview-video-container");
@@ -12138,7 +12016,7 @@ ${failure.stack}` : "");
         notify: true
       });
       let a2 = this.getPageInfo().carNum;
-      const scope = await this.getRuntimeService("scope")(), { sources: i2, error: previewError } = await fetchDmmPreview(a2, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope);
+      const scope = await this.getRuntimeService("scope")(), { sources: i2, error: previewError } = await fetchDmmPreviewIfEnabled(a2, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope, this.getRuntimeService("settings").snapshot());
       i2 && 0 !== Object.keys(i2).length ? (await this.createVideoPlayerAndControls(i2, t2), n2 = $("#preview-video"), n2.length > 0 ? (e2.addClass("is-open"), await safePlay(n2[0], {
         context: "JavBus 预览视频",
         notify: true,
@@ -12146,7 +12024,7 @@ ${failure.stack}` : "");
       })) : show.error("视频播放器创建失败。")) : show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未找到可用的视频源。");
     }
     async createVideoPlayerAndControls(e2, t2) {
-      let n2 = await storageManager.getSetting("videoQuality");
+      let n2 = this.getRuntimeService("settings").snapshot().videoQuality;
       n2 = Z(Object.keys(e2), n2);
       let a2 = e2[n2];
       t2.html(`
@@ -12230,6 +12108,20 @@ ${failure.stack}` : "");
     async handle() {
       if (!window.isListPage) return;
       const scope = await this.getRuntimeService("scope")();
+      const settingsService = this.getRuntimeService("settings");
+      const onSettingsChanged = /* @__PURE__ */ __name((event) => {
+        const names = event.detail?.names;
+        if (!names?.includes("enablePreviewVideo")) return;
+        if (isPreviewEnabled(settingsService.snapshot())) void this.handle().catch(((error) => clog.error("卡片预览重新挂载失败", error)));
+        else {
+          $('[id$="_preview_video"]').each((_2, element) => {
+            element.pause?.(), $(element).parent().remove();
+          });
+          void this.enableSvgBtn();
+        }
+      }, "onSettingsChanged");
+      settingsService.addEventListener("settings.changed", onSettingsChanged);
+      scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
       this.addSvgBtn();
       await this.bindClick(scope);
     }
@@ -12276,9 +12168,9 @@ ${failure.stack}` : "");
       })), this.enableSvgBtn(items);
     }
     async enableSvgBtn(items = null) {
-      const e2 = await storageManager.getSetting(), { enableLoadScreenShot: t2 = _, enableVideoSvg: n2 = _, enableHandleSvg: a2 = _, enableSiteSvg: i2 = _, enableCopySvg: s2 = _ } = e2;
+      const e2 = this.getRuntimeService("settings").snapshot(), { enableLoadScreenShot: t2 = _, enableVideoSvg: n2 = _, enablePreviewVideo: q2 = _, enableHandleSvg: a2 = _, enableSiteSvg: i2 = _, enableCopySvg: s2 = _ } = e2;
       const scope = items ? $(items) : $(document);
-      [{ selector: ".screenSvg", enabled: this.getOptionalDependency("ScreenShotPlugin") ? t2 : "no" }, { selector: ".videoSvg", enabled: n2 }, { selector: ".handleSvg", enabled: a2 }, { selector: ".siteSvg", enabled: i2 }, { selector: ".copySvg", enabled: s2 }].forEach((({ selector: e3, enabled: t3 }) => {
+      [{ selector: ".screenSvg", enabled: t2 }, { selector: ".videoSvg", enabled: n2 === _ && q2 === _ ? _ : "no" }, { selector: ".handleSvg", enabled: a2 }, { selector: ".siteSvg", enabled: i2 }, { selector: ".copySvg", enabled: s2 }].forEach((({ selector: e3, enabled: t3 }) => {
         scope.find(e3).toggle(t3 === _);
       }));
     }
@@ -12382,6 +12274,8 @@ ${failure.stack}` : "");
       a2.length > 0 && (a2[0].pause(), a2.parent().hide()), t2.show(), t2.removeClass("loading"), t2.next(".loading-spinner").remove();
     }
     async showVideo(e2, t2, n2) {
+      const settings = this.getRuntimeService("settings").snapshot();
+      if (!isPreviewEnabled(settings)) return show.error("预览视频已关闭");
       const a2 = `${n2}_preview_video`;
       let i2 = $(`#${a2}`);
       if (i2.length > 0) return i2.parent().show(), await safePlay(i2[0], {
@@ -12389,9 +12283,9 @@ ${failure.stack}` : "");
         notify: true
       }), void t2.hide();
       t2.addClass("loading"), t2.after('<div class="loading-spinner"></div>');
-      const s2 = t2.attr("src"), scope = await this.getRuntimeService("scope")(), { sources: o2, error: previewError } = await fetchDmmPreview(n2, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope);
+      const s2 = t2.attr("src"), scope = await this.getRuntimeService("scope")(), { sources: o2, error: previewError } = await fetchDmmPreviewIfEnabled(n2, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope, settings);
       if (!o2) return show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未解析到视频"), void this.showImg(e2, t2, n2);
-      let r2 = await storageManager.getSetting("videoQuality");
+      let r2 = this.getRuntimeService("settings").snapshot().videoQuality;
       r2 = Z(Object.keys(o2), r2);
       let c2 = o2[r2], d2 = `
             <div class="jhs-layout-d543acf8">
@@ -12408,6 +12302,171 @@ ${failure.stack}` : "");
   };
   __name(_CoverButtonPlugin, "CoverButtonPlugin");
   var CoverButtonPlugin = _CoverButtonPlugin;
+
+  // src/plugins/image-viewer/preview-video.js
+  var _PreviewVideoPlugin = class _PreviewVideoPlugin extends BasePlugin {
+    getName() {
+      return "PreviewVideoPlugin";
+    }
+    async initCss() {
+      return ".jhs-dmm-preview-player{display:none;width:100%;height:auto}.jhs-dmm-preview-player.is-active{display:block}.jhs-native-preview-hidden{display:none!important}";
+    }
+    async handle() {
+      if (!isDetailPage) return;
+      const settingsService = this.getRuntimeService("settings");
+      if (!isPreviewEnabled(settingsService.snapshot())) return;
+      this.lifecycleScope = await this.getRuntimeService("scope")();
+      const onSettingsChanged = /* @__PURE__ */ __name((event) => {
+        const names = event.detail?.names;
+        if (!names?.includes("enablePreviewVideo")) return;
+        if (isPreviewEnabled(settingsService.snapshot())) void this.handle().catch(((error) => clog.error("预览视频重新挂载失败", error)));
+        else this.unmountJhsPreview();
+      }, "onSettingsChanged");
+      settingsService.addEventListener("settings.changed", onSettingsChanged);
+      this.lifecycleScope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
+      $(".preview-video-container").removeClass("jhs-native-preview-hidden");
+      const trigger = $(".preview-video-container"), openVideo = /* @__PURE__ */ __name(() => {
+        utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => {
+          this.handleVideo().catch(((error) => clog.error("预览视频处理失败", error)));
+        }), 20, 1e4, true, this.lifecycleScope);
+      }, "openVideo");
+      trigger.off("click.jhsVideo").on("click.jhsVideo", openVideo);
+      this.lifecycleScope.addCleanup((() => trigger.off("click.jhsVideo", openVideo)));
+      if (isDmmEnabled(settingsService.snapshot()) && !o.includes("autoPlay=1")) await this.initDmm(this.lifecycleScope);
+      const url = window.location.href;
+      (url.includes("gallery-1") || url.includes("gallery-2")) && openVideo(), url.includes("autoPlay=1") && trigger.length > 0 && trigger[0].click();
+    }
+    unmountJhsPreview() {
+      const $dmm = $("#jhs-preview-video"), dmm = $dmm[0];
+      dmm && (dmm.pause(), $dmm.removeAttr("src"), dmm.load(), $dmm.remove());
+      $("#video-bottom-toolbar").remove();
+      $("#preview-video").removeClass("jhs-native-preview-hidden");
+      $(".preview-video-container").addClass("jhs-native-preview-hidden");
+    }
+    async initDmm(scope) {
+      try {
+        const { sources } = await this.getDmmPreview(scope);
+        if (!sources) return;
+        const $video = $("#preview-video"), video = $video[0];
+        if (video) return;
+        clog.debug("JavDB没有视频播放元素, 开始创建...");
+        const cover = $(".column-video-cover img").attr("src");
+        $(".preview-images").prepend(`
+                <a class="preview-video-container" data-fancybox="gallery" href="#preview-video">
+                    <span>预告片</span>
+                    <img src="${cover}" class="video-cover jhs-layout-8cf76fd7" alt="">
+                </a>
+            `), $(".preview-video-container").off("click.jhsVideo").on("click.jhsVideo", (() => {
+          utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => this.handleVideo().catch(((error) => clog.error("预览视频处理失败", error)))), 20, 1e4, true, scope);
+        }));
+      } catch (error) {
+        clog.error("预加载 DMM 失败:", error);
+      }
+    }
+    getDmmPreview(scope = this.lifecycleScope) {
+      if (this.dmmPreviewPromise) return this.dmmPreviewPromise;
+      this.dmmPreviewPromise = Promise.resolve(scope || this.getRuntimeService("scope")()).then(((requestScope) => fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), requestScope))).then(((result) => {
+        (result.error?.retryable || "HTTP_ERROR" === result.error?.code) && (this.dmmPreviewPromise = null);
+        return result;
+      }), ((error) => {
+        this.dmmPreviewPromise = null;
+        throw error;
+      }));
+      return this.dmmPreviewPromise;
+    }
+    createDmmPlayer($nativeVideo) {
+      const $host = $nativeVideo.parent(), existing = $host.find("#jhs-preview-video");
+      if (existing.length) return existing;
+      const $player = $('<video id="jhs-preview-video" class="jhs-video-player jhs-dmm-preview-player" controls playsinline></video>');
+      return $nativeVideo.after($player), $player;
+    }
+    async restoreNativePlayer($nativeVideo, nativeVideo, notify = false) {
+      const $dmmVideo = $nativeVideo.parent().find("#jhs-preview-video"), dmmVideo = $dmmVideo[0];
+      dmmVideo && (dmmVideo.pause(), $dmmVideo.removeAttr("src"), dmmVideo.load(), $dmmVideo.remove());
+      $nativeVideo.removeClass("jhs-native-preview-hidden");
+      return safePlay(nativeVideo, {
+        context: "JavDB 原生预览回退",
+        notify
+      });
+    }
+    async handleVideo() {
+      const $nativeVideo = $("#preview-video");
+      if (!$nativeVideo.length) return;
+      const settings = this.getRuntimeService("settings"), $host = $nativeVideo.parent().css("position", "relative"), nativeVideo = $nativeVideo[0], muted = settings.snapshot().videoMuted;
+      void safePlay(nativeVideo, {
+        context: "JavDB 原生预览",
+        notify: false
+      });
+      const dmmEnabled = isDmmEnabled(this.getRuntimeService("settings").snapshot()), dmmResult = dmmEnabled ? await this.getDmmPreview() : {
+        sources: null,
+        error: null
+      }, { sources, error } = dmmResult, $toolbar = $("<div></div>").attr("id", "video-bottom-toolbar").addClass("jhs-video-toolbar"), $qualityList = $("<div></div>").addClass("jhs-video-quality-list").attr({
+        role: "group",
+        "aria-label": "视频画质"
+      });
+      $host.find("#video-bottom-toolbar").remove();
+      let dmmPlayed = false;
+      let $dmmVideo = null;
+      let dmmVideo = null;
+      if (sources) {
+        const preferredQuality = this.getRuntimeService("settings").snapshot().videoQuality, selectedQuality = Z(Object.keys(sources), preferredQuality), source = sources[selectedQuality];
+        const currentTime = nativeVideo.currentTime;
+        $dmmVideo = this.createDmmPlayer($nativeVideo), dmmVideo = $dmmVideo[0], dmmVideo.muted = muted == null || muted === true, $dmmVideo.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {
+          void settings.set("videoMuted", dmmVideo.muted).catch((error2) => clog.error("保存视频静音设置失败", error2));
+        })), $dmmVideo.attr("src", source), dmmVideo.load(), dmmVideo.currentTime = currentTime, $dmmVideo.addClass("is-active");
+        dmmPlayed = await safePlay(dmmVideo, {
+          context: "JavDB 高画质预览",
+          notify: false
+        });
+        if (!dmmPlayed && !dmmVideo.muted) dmmVideo.muted = true, dmmPlayed = await safePlay(dmmVideo, {
+          context: "JavDB 高画质预览静音重试",
+          notify: false
+        });
+        dmmPlayed ? (nativeVideo.pause(), $nativeVideo.addClass("jhs-native-preview-hidden")) : ($dmmVideo.removeClass("is-active"), await this.restoreNativePlayer($nativeVideo, nativeVideo, true));
+        dmmPlayed && L.forEach(((quality) => {
+          const qualitySource = sources[quality.quality];
+          if (!qualitySource) return;
+          const active = dmmPlayed && selectedQuality === quality.quality;
+          $qualityList.append($(`<button type="button" class="jhs-btn jhs-video-quality-btn${active ? " active" : ""}" data-quality="${quality.quality}" data-video-src="${qualitySource}" aria-pressed="${active ? "true" : "false"}">${quality.text}</button>`));
+        }));
+      }
+      $toolbar.append($qualityList);
+      const $actions = $("<div></div>").addClass("jhs-toolbar");
+      $actions.append('<button type="button" class="jhs-btn jhs-btn--filter jhs-layout-3f0d74e1" id="video-filterBtn">屏蔽</button>', '<button type="button" class="jhs-btn jhs-btn--fav jhs-layout-2afc43dc" id="video-favoriteBtn">收藏</button>', '<button type="button" class="jhs-btn jhs-btn--down jhs-layout-5c319329" id="speed-btn">快进</button>'), $toolbar.append($actions), $host.append($toolbar), sources || await safePlay(nativeVideo, {
+        context: "JavDB 预览视频",
+        notify: true,
+        message: "REGION_BLOCKED" === error?.code ? error.message : "当前视频源无法播放"
+      });
+      $toolbar.off("click.jhsVideo").on("click.jhsVideo", ".jhs-video-quality-btn", (async (event) => {
+        const $button = $(event.currentTarget);
+        if ($button.hasClass("active")) return;
+        try {
+          if (!dmmVideo) return;
+          const currentTime = dmmVideo.currentTime, previousSource = $dmmVideo.attr("src");
+          $dmmVideo.attr("src", $button.data("video-src")), dmmVideo.load(), dmmVideo.currentTime = currentTime;
+          const played = await safePlay(dmmVideo, {
+            context: "JavDB 画质切换",
+            notify: false
+          });
+          if (played) $toolbar.find(".jhs-video-quality-btn").removeClass("active").attr("aria-pressed", "false"), $button.addClass("active").attr("aria-pressed", "true");
+          else {
+            previousSource && ($dmmVideo.attr("src", previousSource), dmmVideo.load(), dmmVideo.currentTime = currentTime);
+            const restored = previousSource && await safePlay(dmmVideo, {
+              context: "JavDB 画质切换回退",
+              notify: false
+            });
+            restored || await this.restoreNativePlayer($nativeVideo, nativeVideo, true);
+          }
+        } catch (playbackError) {
+          clog.error("切换画质失败:", playbackError);
+        }
+      })), $("#speed-btn").off("click.jhsVideo").on("click.jhsVideo", (() => {
+        dmmVideo && (dmmVideo.currentTime += 10);
+      })), $toolbar.off("contextmenu.jhsVideo").on("contextmenu.jhsVideo", "#speed-btn", ((event) => (event.preventDefault(), this.getOptionalDependency("DetailPageButtonPlugin")?.filterOne?.(event)))), $("#video-filterBtn").off("click.jhsVideo").on("click.jhsVideo", ((event) => this.getOptionalDependency("DetailPageButtonPlugin")?.filterOne?.(event))), $("#video-favoriteBtn").off("click.jhsVideo").on("click.jhsVideo", ((event) => this.getOptionalDependency("DetailPageButtonPlugin")?.favoriteOne?.(event)));
+    }
+  };
+  __name(_PreviewVideoPlugin, "PreviewVideoPlugin");
+  var PreviewVideoPlugin = _PreviewVideoPlugin;
 
   // src/integrations/javstore/parser.js
   function resolveDocument(page) {
@@ -12456,115 +12515,58 @@ ${failure.stack}` : "");
   }
   __name(parseJavStorePreview, "parseJavStorePreview");
 
-  // src/plugins/image-viewer/screenshot-provider-registry.js
-  var _ScreenshotProviderRegistry = class _ScreenshotProviderRegistry {
-    constructor(providers = []) {
-      this.providers = /* @__PURE__ */ new Map();
-      providers.forEach(((provider) => this.register(provider)));
-    }
-    register(provider) {
-      if (!provider?.id || !provider.name || "function" !== typeof provider.getScreenshot) throw new TypeError("Invalid screenshot provider");
-      this.providers.set(provider.id, { enabled: true, priority: 100, ...provider });
-      return this;
-    }
-    get(id) {
-      return this.providers.get(id) || null;
-    }
-    getEnabledProviders() {
-      return [...this.providers.values()].filter(((provider) => provider.enabled)).sort(((a2, b2) => a2.priority - b2.priority));
-    }
-    async first(carNum) {
-      for (const provider of this.getEnabledProviders()) {
-        try {
-          const result = await provider.getScreenshot(carNum);
-          if (result?.url) return result;
-        } catch (error) {
-          globalThis.clog?.warn(`截图源 ${provider.name} 请求失败`, error);
-        }
-      }
-      return null;
-    }
-  };
-  __name(_ScreenshotProviderRegistry, "ScreenshotProviderRegistry");
-  var ScreenshotProviderRegistry = _ScreenshotProviderRegistry;
-
   // src/plugins/image-viewer/screenshot.js
   var _ScreenShotPlugin = class _ScreenShotPlugin extends BasePlugin {
-    constructor() {
-      super(...arguments), this.providerRegistry = new ScreenshotProviderRegistry();
-    }
-    async initializeProviders() {
-      const settings = await new ResourceSettingsService().getScreenshotSettings(), configured = /* @__PURE__ */ __name((id) => settings.providers.find(((provider) => provider.id === id)) || {}, "configured");
-      this.providerRegistry = new ScreenshotProviderRegistry([
-        { id: "javstore", name: "JavStore", priority: 10, getScreenshot: /* @__PURE__ */ __name((carNum) => this.getServiceScreenshot(carNum), "getScreenshot") },
-        { id: "projectjav", name: "ProjectJav", enabled: false, priority: 20, getScreenshot: /* @__PURE__ */ __name(async () => null, "getScreenshot") },
-        { id: "18av", name: "18AV", enabled: false, priority: 30, getScreenshot: /* @__PURE__ */ __name(async () => null, "getScreenshot") }
-      ].map(((provider) => ({ ...provider, ...configured(provider.id), enabled: !["projectjav", "18av"].includes(provider.id) && (configured(provider.id).enabled ?? provider.enabled ?? true), getScreenshot: provider.getScreenshot }))));
-      return settings.mode;
-    }
     getName() {
       return "ScreenShotPlugin";
+    }
+    getScreenshotService() {
+      return this.getRuntimeService("screenshot");
+    }
+    getSettingsSnapshot() {
+      return this.getRuntimeService("settings")?.snapshot?.() ?? {};
     }
     async initCss() {
       return `<style>.jhs-screenshot-message{margin-top:50px;color:var(--jhs-text-muted);cursor:auto}.jhs-screenshot-message--bus{margin-top:30px}</style>`;
     }
     async handle() {
+      if (!isDetailPage) return;
+      const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
+      const onSettingsChanged = /* @__PURE__ */ __name((event) => {
+        const names = event.detail?.names;
+        if (!names?.includes("enableLoadScreenShot")) return;
+        if (settings.snapshot().enableLoadScreenShot === "no") this.unmountHosted();
+        else void this.loadScreenShot().catch((error) => clog.error("长缩略图重新加载失败", error));
+      }, "onSettingsChanged");
+      settings.addEventListener("settings.changed", onSettingsChanged);
+      scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
       await this.loadScreenShot();
+    }
+    unmountHosted() {
+      $(".screen-container, .jhs-screenshot-providers").remove();
     }
     async loadScreenShot() {
       if (!isDetailPage) return;
-      if ("yes" !== await storageManager.getSetting("enableLoadScreenShot", "yes")) return;
-      let e2 = this.getPageInfo().carNum;
+      const service = this.getScreenshotService();
+      if (!service.isEnabled(this.getSettingsSnapshot())) return;
+      const carNum = this.getPageInfo().carNum;
       r && $(".preview-images .tile-item").first().before(' <a class="tile-item screen-container jhs-layout-cd9d5db1"><div class="jhs-layout-9db87399">正在加载缩略图</div></a> '), l && $("#sample-waterfall .sample-box:first").after(' <a class="sample-box screen-container jhs-layout-b5c4e4f7"><div class="jhs-layout-3536a853">正在加载缩略图</div></a> ');
-      const mode = await this.initializeProviders();
-      if ("manual" === mode) return $(".screen-container").text("请选择截图来源"), void this.renderProviderTabs(e2);
       try {
-        const t2 = await this.getScreenshotFromInitializedProviders(e2);
-        t2 ? (this.addImg("缩略图", t2), clog.log("加载缩略图:", t2)) : this.showErrorFallback(e2, null);
-      } catch (t2) {
-        this.showErrorFallback(e2, t2);
+        const url = await this.getScreenshot(carNum);
+        url ? (this.addImg("缩略图", url), clog.log("加载缩略图:", url)) : this.showErrorFallback(carNum, null);
+      } catch (error) {
+        this.showErrorFallback(carNum, error);
       }
-    }
-    renderProviderTabs(carNum) {
-      const tabs = $('<div class="jhs-screenshot-providers" role="tablist"></div>');
-      this.providerRegistry.getEnabledProviders().forEach(((provider) => tabs.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').attr("data-provider", provider.id).text(provider.name))));
-      if (!tabs.children().length) return void $(".screen-container").text("没有可用截图来源");
-      $(".screen-container").before(tabs);
-      tabs.on("click", "button:not(:disabled)", (async (event) => {
-        const provider = this.providerRegistry.get($(event.currentTarget).data("provider"));
-        $(".screen-container").text(`${provider.name} 加载中…`);
-        try {
-          const result = await provider.getScreenshot(carNum);
-          result?.url ? this.addImg(`${provider.name} 缩略图`, result.url) : $(".screen-container").text(`${provider.name} 无结果`);
-        } catch (error) {
-          $(".screen-container").text(`${provider.name} 请求失败`);
-          clog.error("截图源请求失败", error);
-        }
-      }));
     }
     async getScreenshot(e2) {
       e2 = normalizeCarNum(e2);
       if (!e2) throw clog.warn("跳过缩略图解析：番号不可用"), new Error("缩略图番号不可用");
-      await this.initializeProviders();
-      return this.getScreenshotFromInitializedProviders(e2);
-    }
-    async getScreenshotFromInitializedProviders(e2) {
-      const carNum = normalizeCarNum(e2);
-      if (!carNum) throw new Error("缩略图番号不可用");
-      let n2;
-      try {
-        n2 = await this.providerRegistry.first(carNum);
-      } catch (i2) {
-        throw clog.error("获取缩略图资源失败:", n2, i2), i2;
-      }
-      if (!n2) return null;
-      return clog.log(`缩略图获取成功 (${n2.source}):`, n2.url), n2.url;
-    }
-    async getServiceScreenshot(carNum) {
+      const service = this.getScreenshotService(), settings = this.getSettingsSnapshot();
+      if (!service.isEnabled(settings)) return clog.warn("长缩略图功能已关闭，跳过请求"), null;
       const scope = await this.getRuntimeService("scope")();
-      const images = await this.getRuntimeService("screenshot").resolve({ carNum }, { providerId: "javstore", scope });
+      const images = await service.resolve({ carNum: e2 }, { scope, settings });
       const image = Array.isArray(images) ? images[0] : images;
-      return image?.url ? { url: image.url, source: image.providerId || "javstore", detailUrl: null } : null;
+      return image?.url || null;
     }
     addImg(e2, t2) {
       const url = normalizeJavStoreAssetUrl(t2);
@@ -12582,7 +12584,7 @@ ${failure.stack}` : "");
       const a2 = `jhs-screenshot-message${l ? " jhs-screenshot-message--bus" : ""}`;
       const carNum = normalizeCarNum(e2);
       if (!carNum) return void $(".screen-container").empty().append($("<div></div>").addClass(a2).text("无法获取番号，缩略图未加载"));
-      const searchUrl = this.getRuntimeService("screenshot").getSearchUrl({ carNum }), container = $(".screen-container").empty();
+      const searchUrl = this.getScreenshotService().getSearchUrl({ carNum }), container = $(".screen-container").empty();
       const message = $("<div></div>").addClass(a2).text(t2 instanceof Error ? "获取缩略图失败" : "暂无缩略图结果"), retry = $('<a href="#" class="retry-link">点击重试</a>');
       container.append(message, $("<br>"), retry);
       searchUrl && container.append(document.createTextNode(" 或 "), $('<a class="check-link" target="_blank" rel="noopener noreferrer">前往确认</a>').attr("href", searchUrl));
@@ -12600,40 +12602,16 @@ ${failure.stack}` : "");
     }
     async loadInto(target, carNum, { isActive = /* @__PURE__ */ __name(() => true, "isActive") } = {}) {
       const host = $(target);
-      if (!host.length || "yes" !== await storageManager.getSetting("enableLoadScreenShot", "yes")) return host.empty(), null;
-      const mode = await this.initializeProviders(), renderMessage = /* @__PURE__ */ __name((message) => isActive() && host.empty().append($("<div></div>").addClass("jhs-panel-state").text(message)), "renderMessage");
-      if ("manual" === mode) {
-        host.empty();
-        const tabs = $('<div class="jhs-screenshot-providers" role="tablist" aria-label="截图来源"></div>'), result = $('<div class="jhs-screenshot-result"></div>').text("请选择截图来源");
-        const enabled = this.providerRegistry.getEnabledProviders();
-        enabled.forEach(((provider) => tabs.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').attr("data-provider", provider.id).text(provider.name))));
-        if (!enabled.length) return host.append($('<div class="jhs-panel-state"></div>').text("没有可用截图来源"));
-        host.append(tabs, result), tabs.on("click", "button:not(:disabled)", (async (event) => {
-          const provider = this.providerRegistry.get($(event.currentTarget).data("provider"));
-          result.text(`${provider.name} 加载中…`);
-          try {
-            const loaded = await provider.getScreenshot(normalizeCarNum(carNum));
-            if (!isActive()) return;
-            loaded?.url ? this.renderInto(result, loaded.url, `${provider.name} 缩略图`) : result.text(`${provider.name} 无结果`);
-          } catch (error) {
-            isActive() && result.text(`${provider.name} 请求失败`), clog.error("截图源请求失败", error);
-          }
-        }));
-        return host;
-      }
-      renderMessage("正在加载缩略图…");
-      try {
-        const url = await this.getScreenshotFromInitializedProviders(carNum);
-        if (!isActive()) return null;
-        if (!url) return host.empty(), null;
-        return this.renderInto(host, url, "缩略图"), url;
-      } catch (error) {
-        if (!isActive()) return null;
-        host.empty();
-        const state = $('<div class="jhs-panel-state"></div>').text("缩略图加载失败 "), retry = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>');
-        retry.on("click", (() => void this.loadInto(host, carNum, { isActive }))), host.append(state.append(retry));
-        return clog.error("缩略图加载失败", error), null;
-      }
+      if (!host.length || !this.getScreenshotService().isEnabled(this.getSettingsSnapshot())) return host.empty(), null;
+      const scope = await this.getRuntimeService("scope")();
+      return renderScreenshotPanel({
+        target: host,
+        carNum,
+        screenshot: this.getScreenshotService(),
+        settings: this.getSettingsSnapshot(),
+        scope,
+        isActive
+      });
     }
     renderInto(target, url, alt) {
       const host = $(target), image = $("<img>").attr({ src: normalizeJavStoreAssetUrl(url), alt, loading: "lazy" }).addClass("jhs-fc2-gallery__image"), button = $('<button type="button" class="jhs-btn jhs-fc2-gallery-item jhs-fc2-screenshot-thumbnail"></button>').attr("aria-label", `查看${alt}大图`).append(image);
@@ -17427,7 +17405,7 @@ ${failure.stack}` : "");
     manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings]),
     manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }, [SERVICE.http, SERVICE.state]),
     manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage, SERVICE.http, SERVICE.magnet]),
-    manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot]),
+    manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot, SERVICE.settings]),
     manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.state]),
     manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }),
     manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog, SERVICE.storage, SERVICE.actressInfo, SERVICE.movie, SERVICE.state]),
@@ -18557,7 +18535,30 @@ ${failure.stack}` : "");
       this.providers = providers;
       this.integrations = integrations;
     }
+    isEnabled(settings) {
+      return settings?.enableLoadScreenShot !== "no";
+    }
+    parseScreenshotProviders(value) {
+      if (Array.isArray(value)) return value;
+      if (typeof value === "string") {
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+      return [];
+    }
+    getScreenshotSettings(settings) {
+      return { mode: settings?.screenshotMode === "manual" ? "manual" : "auto", providers: this.parseScreenshotProviders(settings?.screenshotProviders) };
+    }
+    getEnabledProviders(settings) {
+      const configured = this.parseScreenshotProviders(settings?.screenshotProviders);
+      return BUILT_IN_SCREENSHOT_SOURCES.map((source) => ({ ...source, ...configured.find((item) => item?.id === source.id) || {} })).filter((provider) => provider.enabled !== false).sort((left, right) => Number(left.priority ?? 100) - Number(right.priority ?? 100));
+    }
     async resolve(movieRef, context = {}) {
+      if (context.settings && !this.isEnabled(context.settings)) return null;
       if (context.providerId) {
         const provider = this.providers.get?.(context.providerId);
         if (provider) {
@@ -18584,6 +18585,7 @@ ${failure.stack}` : "");
     }
     async resolveIntegration(providerId, movieRef, context) {
       if (!SCREENSHOT_PROVIDER_IDS.has(providerId)) return null;
+      if (context.settings && !this.isEnabled(context.settings)) return null;
       const manifest2 = this.integrations?.list("movie.images")?.find((item) => item.id === providerId);
       if (!manifest2) return null;
       const adapter = this.integrations?.getAdapter(manifest2.id);

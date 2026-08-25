@@ -1,89 +1,12 @@
 // @ts-check
 
-import { ProviderError } from "../../core/cache-policy.js";
-import { C, L, _, normalizeCarNum, o } from "../../core/constants.js";
+import { L, o } from "../../core/constants.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
+import { Z, fetchDmmPreview, isDmmEnabled, isPreviewEnabled } from "../../services/preview-service.js";
 
 /** @typedef {any} JQueryHandle */
 /** @typedef {{ code?: string, message?: string, retryable?: boolean }} PreviewFailure */
-/** @typedef {{ sources: Record<string, string> | null, error: PreviewFailure | null }} PreviewResult */
-
-/** @param {string[]} e @param {string | undefined} t @returns {string | null} */
-export const Z = (e, t) => {
-    if (!e || 0 === e.length) return null;
-    const n = new Set(e);
-    if (t && n.has(t)) return t;
-    const a = L.map((e => e.quality)).reverse();
-    for (const i of a) if (n.has(i)) return i;
-    return e[0] || null;
-}, ee = "jhs_dmm_video";
-
-class DmmPreviewParser {
-    /** @param {string | null} e @param {any} storage @param {any} movie @param {any} scope */
-    constructor(e, storage, movie, scope) {
-        /** @type {string} */
-        this.carNum = e || "", this.storage = storage, this.movie = movie, this.scope = scope, this.lastError = null;
-    }
-    _checkCache() {
-        const cached = this.storage.getLocal(ee), e = cached ? JSON.parse(cached) : {};
-        return e[this.carNum] ? (clog.debug("缓存中存在预览视频信息", e[this.carNum]), e[this.carNum]) : null;
-    }
-    /** @param {Record<string, string>} e */
-    _updateCache(e) {
-        const cached = this.storage.getLocal(ee), t = cached ? JSON.parse(cached) : {};
-        t[this.carNum] = e, clog.debug("成功解析出预览视频并已缓存:", e), this.storage.setLocal(ee, JSON.stringify(t));
-    }
-    async _fetchRemote() {
-        const result = await this.movie.preview("dmm", { carNum: this.carNum }, { scope: this.scope });
-        const button = $("#fanzaBtn");
-        if (!result.sources) {
-            clog.warn("所有关键词尝试均未找到匹配的Content ID, 解析Dmm视频失败");
-            button.attr("href", result.searchUrl).attr("title", "未查询到, 点击前往搜索页").css("backgroundColor", "var(--jhs-status-filter)");
-            return null;
-        }
-        button.attr("href", result.pageUrl).css("backgroundColor", "var(--jhs-status-down)");
-        if (result.matchType === "multiple") button.append('<span class="site-tag jhs-layout-294497f1">多结果</span>');
-        const cacheKey = "jhs_other_site_dmm", cached = this.storage.getLocal(cacheKey), cache = cached ? JSON.parse(cached) : {};
-        cache[this.carNum] = { type: result.matchType, url: result.pageUrl };
-        this.storage.setLocal(cacheKey, JSON.stringify(cache));
-        return result.sources;
-    }
-    async fetchVideo() {
-        const carNum = normalizeCarNum(this.carNum);
-        if (!carNum) return clog.warn("跳过 DMM 解析：番号不可用"), null;
-        this.carNum = carNum;
-        const e = this._checkCache();
-        if (e) return e;
-        try {
-            const e = this.carNum.toLowerCase();
-            if (e.startsWith("heyzo") || /^(n\d+|\d+(-\d+)*)$/.test(e) || /^n\d+$/.test(e)) return clog.debug("无码番号类型，取消 DMM 解析"), null;
-            if (this.carNum.includes("VR-")) return clog.debug("VR 类型，取消 DMM 解析"), null;
-            const sources = await this._fetchRemote();
-            if (!sources) return null;
-            return this._updateCache(sources), sources;
-        } catch (n) {
-            const error = /** @type {PreviewFailure} */ (n);
-            this.lastError = n instanceof ProviderError ? n : new ProviderError("dmm", error?.code || "PARSE_ERROR", error?.message || String(n), {
-                cause: n,
-                retryable: error?.retryable === true
-            }), clog.error("DMM API 搜索失败:", this.lastError);
-            const e = $("#fanzaBtn");
-            return e.attr("href", this.movie.searchUrl("dmm", { carNum: this.carNum })),
-            e.attr("title", "未查询到, 点击前往搜索页"), e.css("backgroundColor", "var(--jhs-status-filter)"), null;
-        }
-    }
-}
-
-/** 获取 DMM 预览源及可供界面判断的失败原因。 */
-/** @param {string | null} carNum @param {any} storage @param {any} movie @param {any} scope @returns {Promise<PreviewResult>} */
-export async function fetchDmmPreview(carNum, storage, movie, scope) {
-    const parser = new DmmPreviewParser(carNum, storage, movie, scope), sources = await parser.fetchVideo();
-    return {
-        sources,
-        error: parser.lastError
-    };
-}
 
 export class PreviewVideoPlugin extends BasePlugin {
     getName() {
@@ -94,7 +17,19 @@ export class PreviewVideoPlugin extends BasePlugin {
     }
     async handle() {
         if (!isDetailPage) return;
+        const settingsService = this.getRuntimeService("settings");
+        if (!isPreviewEnabled(settingsService.snapshot())) return;
         this.lifecycleScope = await this.getRuntimeService("scope")();
+        // 实时总开关：OFF → 卸载 JHS 播放器并隐藏入口；ON → 重新挂载。
+        const onSettingsChanged = (/** @type {any} */ event) => {
+            const names = /** @type {string[] | undefined} */ (event.detail?.names);
+            if (!names?.includes("enablePreviewVideo")) return;
+            if (isPreviewEnabled(settingsService.snapshot())) void this.handle().catch((error => clog.error("预览视频重新挂载失败", error)));
+            else this.unmountJhsPreview();
+        };
+        settingsService.addEventListener("settings.changed", onSettingsChanged);
+        this.lifecycleScope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
+        $(".preview-video-container").removeClass("jhs-native-preview-hidden");
         const trigger = $(".preview-video-container"), openVideo = () => {
             utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => {
                 this.handleVideo().catch((error => clog.error("预览视频处理失败", error)));
@@ -102,9 +37,17 @@ export class PreviewVideoPlugin extends BasePlugin {
         };
         trigger.off("click.jhsVideo").on("click.jhsVideo", openVideo);
         this.lifecycleScope.addCleanup((() => trigger.off("click.jhsVideo", openVideo)));
-        await storageManager.getSetting("enableLoadPreviewVideo", _) !== _ || o.includes("autoPlay=1") || this.initDmm(this.lifecycleScope);
+        if (isDmmEnabled(settingsService.snapshot()) && !o.includes("autoPlay=1")) await this.initDmm(this.lifecycleScope);
         const url = window.location.href;
         (url.includes("gallery-1") || url.includes("gallery-2")) && openVideo(), url.includes("autoPlay=1") && trigger.length > 0 && trigger[0].click();
+    }
+    /** 卸载 JHS 播放器并把控制权交回宿主（宿主原生 UI 只做可逆隐藏，不销毁）。 */
+    unmountJhsPreview() {
+        const $dmm = $("#jhs-preview-video"), dmm = $dmm[0];
+        dmm && (dmm.pause(), $dmm.removeAttr("src"), dmm.load(), $dmm.remove());
+        $("#video-bottom-toolbar").remove();
+        $("#preview-video").removeClass("jhs-native-preview-hidden");
+        $(".preview-video-container").addClass("jhs-native-preview-hidden");
     }
     /** @param {any} scope */
     async initDmm(scope) {
@@ -123,7 +66,7 @@ export class PreviewVideoPlugin extends BasePlugin {
         }
     }
     /** 复用单次 DMM 请求，避免预加载和点击处理重复抓取。 */
-    /** @param {any} [scope] @returns {Promise<PreviewResult>} */
+    /** @param {any} [scope] @returns {Promise<import("../../services/preview-service.js").PreviewResult>} */
     getDmmPreview(scope = this.lifecycleScope) {
         if (this.dmmPreviewPromise) return this.dmmPreviewPromise;
         this.dmmPreviewPromise = Promise.resolve(scope || this.getRuntimeService("scope")()).then((requestScope => fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), requestScope))).then((result => {
@@ -162,7 +105,7 @@ export class PreviewVideoPlugin extends BasePlugin {
             context: "JavDB 原生预览",
             notify: !1
         });
-        const dmmEnabled = await storageManager.getSetting("enableLoadPreviewVideo", _) !== C, dmmResult = dmmEnabled ? await this.getDmmPreview() : {
+        const dmmEnabled = isDmmEnabled(this.getRuntimeService("settings").snapshot()), dmmResult = dmmEnabled ? await this.getDmmPreview() : {
             sources: null,
             error: null
         }, {sources, error} = dmmResult, $toolbar = $("<div></div>").attr("id", "video-bottom-toolbar").addClass("jhs-video-toolbar"), $qualityList = $("<div></div>").addClass("jhs-video-quality-list").attr({
@@ -176,7 +119,7 @@ export class PreviewVideoPlugin extends BasePlugin {
         /** @type {any} Legacy jQuery media handle promoted to an HTMLVideoElement at runtime. */
         let dmmVideo = null;
         if (sources) {
-            const preferredQuality = await storageManager.getSetting("videoQuality"), selectedQuality = /** @type {string} */ (Z(Object.keys(sources), preferredQuality)), source = /** @type {string} */ (sources[selectedQuality]);
+            const preferredQuality = this.getRuntimeService("settings").snapshot().videoQuality, selectedQuality = /** @type {string} */ (Z(Object.keys(sources), preferredQuality)), source = /** @type {string} */ (sources[selectedQuality]);
             const currentTime = nativeVideo.currentTime;
             $dmmVideo = this.createDmmPlayer($nativeVideo), dmmVideo = $dmmVideo[0], dmmVideo.muted = muted == null || muted === !0,
             $dmmVideo.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {

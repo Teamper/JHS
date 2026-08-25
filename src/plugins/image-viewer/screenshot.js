@@ -3,87 +3,63 @@
 import { l, normalizeCarNum, r } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { normalizeJavStoreAssetUrl } from "../../integrations/javstore/parser.js";
-import { ResourceSettingsService } from "../backup/resource-settings.js";
-import { ScreenshotProviderRegistry } from "./screenshot-provider-registry.js";
+import { renderScreenshotPanel } from "../../ui/detail/screenshot-panel.js";
 
 /** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
 /** @typedef {{ preventDefault: () => void, stopPropagation: () => void, currentTarget: EventTarget }} JQueryClickEvent */
 
 export class ScreenShotPlugin extends BasePlugin {
-    constructor() {
-        super(...arguments), this.providerRegistry = new ScreenshotProviderRegistry();
-    }
-    async initializeProviders() {
-        const settings = await new ResourceSettingsService().getScreenshotSettings(), configured = (/** @type {string} */ id) => settings.providers.find(((/** @type {{ id: string }} */ provider) => provider.id === id)) || {};
-        this.providerRegistry = new ScreenshotProviderRegistry([
-            { id: "javstore", name: "JavStore", priority: 10, getScreenshot: (/** @type {string} */ carNum) => this.getServiceScreenshot(carNum) },
-            { id: "projectjav", name: "ProjectJav", enabled: !1, priority: 20, getScreenshot: async () => null },
-            { id: "18av", name: "18AV", enabled: !1, priority: 30, getScreenshot: async () => null }
-        ].map((provider => ({ ...provider, ...configured(provider.id), enabled: !["projectjav", "18av"].includes(provider.id) && (configured(provider.id).enabled ?? provider.enabled ?? true), getScreenshot: provider.getScreenshot }))));
-        return settings.mode;
-    }
     getName() {
         return "ScreenShotPlugin";
     }
+    /** @returns {import("../../services/screenshot-service.js").ScreenshotService} */
+    getScreenshotService() { return this.getRuntimeService("screenshot"); }
+    /** @returns {Record<string, any>} */
+    getSettingsSnapshot() { return /** @type {any} */ (this.getRuntimeService("settings"))?.snapshot?.() ?? {}; }
     async initCss() {
         return `<style>.jhs-screenshot-message{margin-top:50px;color:var(--jhs-text-muted);cursor:auto}.jhs-screenshot-message--bus{margin-top:30px}</style>`;
     }
     async handle() {
+        if (!isDetailPage) return;
+        const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
+        const onSettingsChanged = (/** @type {any} */ event) => {
+            const names = /** @type {string[] | undefined} */ (event.detail?.names);
+            if (!names?.includes("enableLoadScreenShot")) return;
+            if (settings.snapshot().enableLoadScreenShot === "no") this.unmountHosted();
+            else void this.loadScreenShot().catch((/** @type {unknown} */ error) => clog.error("长缩略图重新加载失败", error));
+        };
+        settings.addEventListener("settings.changed", onSettingsChanged);
+        scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
         await this.loadScreenShot();
+    }
+    /** 关闭总开关时删除 JHS 自有截图 UI（宿主原生区域不做永久销毁）。 */
+    unmountHosted() {
+        $(".screen-container, .jhs-screenshot-providers").remove();
     }
     async loadScreenShot() {
         if (!isDetailPage) return;
-        if ("yes" !== await storageManager.getSetting("enableLoadScreenShot", "yes")) return;
-        let e = this.getPageInfo().carNum;
+        const service = this.getScreenshotService();
+        if (!service.isEnabled(this.getSettingsSnapshot())) return;
+        const carNum = this.getPageInfo().carNum;
         r && $(".preview-images .tile-item").first().before(' <a class="tile-item screen-container jhs-layout-cd9d5db1"><div class="jhs-layout-9db87399">正在加载缩略图</div></a> '),
         l && $("#sample-waterfall .sample-box:first").after(' <a class="sample-box screen-container jhs-layout-b5c4e4f7"><div class="jhs-layout-3536a853">正在加载缩略图</div></a> ');
-        const mode = await this.initializeProviders();
-        if ("manual" === mode) return $(".screen-container").text("请选择截图来源"), void this.renderProviderTabs(e);
         try {
-            const t = await this.getScreenshotFromInitializedProviders(e);
-            t ? (this.addImg("缩略图", t), clog.log("加载缩略图:", t)) : this.showErrorFallback(e, null);
-        } catch (t) {
-            this.showErrorFallback(e, t);
+            const url = await this.getScreenshot(carNum);
+            url ? (this.addImg("缩略图", url), clog.log("加载缩略图:", url)) : this.showErrorFallback(carNum, null);
+        } catch (error) {
+            this.showErrorFallback(carNum, error);
         }
-    }
-    /** @param {string} carNum */
-    renderProviderTabs(carNum) {
-        const tabs = $('<div class="jhs-screenshot-providers" role="tablist"></div>');
-        this.providerRegistry.getEnabledProviders().forEach((provider => tabs.append($("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary\"></button>").attr("data-provider", provider.id).text(provider.name))));
-        if (!tabs.children().length) return void $(".screen-container").text("没有可用截图来源");
-        $(".screen-container").before(tabs);
-        tabs.on("click", "button:not(:disabled)", (async (/** @type {JQueryClickEvent} */ event) => {
-            const provider = this.providerRegistry.get($(event.currentTarget).data("provider"));
-            $(".screen-container").text(`${provider.name} 加载中…`);
-            try { const result = await provider.getScreenshot(carNum); result?.url ? this.addImg(`${provider.name} 缩略图`, result.url) : $(".screen-container").text(`${provider.name} 无结果`); } catch (error) { $(".screen-container").text(`${provider.name} 请求失败`); clog.error("截图源请求失败", error); }
-        }));
     }
     /** @param {string | null} e */
     async getScreenshot(e) {
         e = normalizeCarNum(e);
         if (!e) throw clog.warn("跳过缩略图解析：番号不可用"), new Error("缩略图番号不可用");
-        await this.initializeProviders();
-        return this.getScreenshotFromInitializedProviders(e);
-    }
-    /** @param {string} e */
-    async getScreenshotFromInitializedProviders(e) {
-        const carNum = normalizeCarNum(e);
-        if (!carNum) throw new Error("缩略图番号不可用");
-        let n;
-        try {
-            n = await this.providerRegistry.first(carNum);
-        } catch (i) {
-            throw clog.error("获取缩略图资源失败:", n, i), i;
-        }
-        if (!n) return null;
-        return clog.log(`缩略图获取成功 (${n.source}):`, n.url), n.url;
-    }
-    /** @param {string} carNum */
-    async getServiceScreenshot(carNum) {
+        const service = this.getScreenshotService(), settings = this.getSettingsSnapshot();
+        if (!service.isEnabled(settings)) return clog.warn("长缩略图功能已关闭，跳过请求"), null;
         const scope = await this.getRuntimeService("scope")();
-        const images = await this.getRuntimeService("screenshot").resolve({ carNum }, { providerId: "javstore", scope });
+        const images = await service.resolve({ carNum: e }, { scope, settings });
         const image = Array.isArray(images) ? images[0] : images;
-        return image?.url ? { url: image.url, source: image.providerId || "javstore", detailUrl: null } : null;
+        return image?.url || null;
     }
     /** @param {string} e @param {string} t */
     addImg(e, t) {
@@ -103,7 +79,7 @@ export class ScreenShotPlugin extends BasePlugin {
         const a = `jhs-screenshot-message${l ? " jhs-screenshot-message--bus" : ""}`;
         const carNum = normalizeCarNum(e);
         if (!carNum) return void $(".screen-container").empty().append($("<div></div>").addClass(a).text("无法获取番号，缩略图未加载"));
-        const searchUrl = this.getRuntimeService("screenshot").getSearchUrl({ carNum }), container = $(".screen-container").empty();
+        const searchUrl = this.getScreenshotService().getSearchUrl({ carNum }), container = $(".screen-container").empty();
         const message = $("<div></div>").addClass(a).text(t instanceof Error ? "获取缩略图失败" : "暂无缩略图结果"), retry = $('<a href="#" class="retry-link">点击重试</a>');
         container.append(message, $("<br>"), retry);
         searchUrl && container.append(document.createTextNode(" 或 "), $('<a class="check-link" target="_blank" rel="noopener noreferrer">前往确认</a>').attr("href", searchUrl));
@@ -119,44 +95,16 @@ export class ScreenShotPlugin extends BasePlugin {
             t.stopPropagation(), t.preventDefault(), window.open(searchUrl, "_blank");
         }));
     }
-    /** 将截图状态与结果限制在指定容器内，供自有详情工作区使用。 */
+    /** 将截图视图挂载到任意自有工作区容器（FC2 / owned detail 共用同一 ScreenshotView）。 */
     /** @param {JQueryHandle | Element} target @param {string} carNum @param {{ isActive?: () => boolean }} [options] */
     async loadInto(target, carNum, { isActive = () => !0 } = {}) {
         const host = $(target);
-        if (!host.length || "yes" !== await storageManager.getSetting("enableLoadScreenShot", "yes")) return host.empty(), null;
-        const mode = await this.initializeProviders(), renderMessage = (/** @type {string} */ message) => isActive() && host.empty().append($("<div></div>").addClass("jhs-panel-state").text(message));
-        if ("manual" === mode) {
-            host.empty();
-            const tabs = $('<div class="jhs-screenshot-providers" role="tablist" aria-label="截图来源"></div>'), result = $('<div class="jhs-screenshot-result"></div>').text("请选择截图来源");
-            const enabled = this.providerRegistry.getEnabledProviders();
-            enabled.forEach((provider => tabs.append($('<button type="button" class="jhs-btn jhs-btn--secondary"></button>').attr("data-provider", provider.id).text(provider.name))));
-            if (!enabled.length) return host.append($('<div class="jhs-panel-state"></div>').text("没有可用截图来源"));
-            host.append(tabs, result), tabs.on("click", "button:not(:disabled)", (async (/** @type {JQueryClickEvent} */ event) => {
-                const provider = this.providerRegistry.get($(event.currentTarget).data("provider"));
-                result.text(`${provider.name} 加载中…`);
-                try {
-                    const loaded = await provider.getScreenshot(normalizeCarNum(carNum));
-                    if (!isActive()) return;
-                    loaded?.url ? this.renderInto(result, loaded.url, `${provider.name} 缩略图`) : result.text(`${provider.name} 无结果`);
-                } catch (error) {
-                    isActive() && result.text(`${provider.name} 请求失败`), clog.error("截图源请求失败", error);
-                }
-            }));
-            return host;
-        }
-        renderMessage("正在加载缩略图…");
-        try {
-            const url = await this.getScreenshotFromInitializedProviders(carNum);
-            if (!isActive()) return null;
-            if (!url) return host.empty(), null;
-            return this.renderInto(host, url, "缩略图"), url;
-        } catch (error) {
-            if (!isActive()) return null;
-            host.empty();
-            const state = $('<div class="jhs-panel-state"></div>').text("缩略图加载失败 "), retry = $('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>');
-            retry.on("click", (() => void this.loadInto(host, carNum, { isActive }))), host.append(state.append(retry));
-            return clog.error("缩略图加载失败", error), null;
-        }
+        if (!host.length || !this.getScreenshotService().isEnabled(this.getSettingsSnapshot())) return host.empty(), null;
+        const scope = await this.getRuntimeService("scope")();
+        return renderScreenshotPanel({
+            target: host, carNum, screenshot: this.getScreenshotService(), settings: this.getSettingsSnapshot(),
+            scope, isActive,
+        });
     }
     /** @param {JQueryHandle | Element} target @param {string} url @param {string} alt */
     renderInto(target, url, alt) {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchDmmPreview } from "../src/plugins/image-viewer/preview-video.js";
+import { fetchDmmPreview } from "../src/services/preview-service.js";
 
 afterEach(() => vi.unstubAllGlobals());
 

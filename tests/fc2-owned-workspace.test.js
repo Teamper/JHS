@@ -188,8 +188,10 @@ describe("FC2 owned detail workspace", () => {
         expect(fc2Source).toContain('catch((error => {\n            context.isAlive() && renderFc2State');
     });
 
-    it("initializes screenshot providers once per owned render and removes empty spacing", () => {
-        expect(screenshotSource).toContain("getScreenshotFromInitializedProviders(carNum)");
+    it("initializes screenshot through the single ScreenshotService-owned view and removes empty spacing", () => {
+        expect(screenshotSource).toContain("renderScreenshotPanel");
+        expect(screenshotSource).toContain('service.isEnabled(this.getSettingsSnapshot())');
+        expect(fc2Source).toContain('screenshotService.isEnabled(this.getRuntimeService("settings").snapshot())');
         expect(fc2Source).toContain(".jhs-fc2-screenshot:empty");
         expect(fc2Source).toContain("if (context.isAlive() && !box) sitesGroup.remove()");
     });

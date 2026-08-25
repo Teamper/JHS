@@ -281,10 +281,12 @@ describe("list toolbar and UI cleanup contracts", () => {
     });
 
     it("keeps DMM preview persistence behind StorageService and SettingsService", () => {
+        const previewService = readTestFile(join(process.cwd(), "src/services/preview-service.js"), "utf8");
         expect(previewVideo).not.toContain("localStorage.");
         expect(previewVideo).not.toContain("gmHttp");
         expect(previewVideo).not.toContain("api.dmm.com");
-        expect(previewVideo).toContain('this.movie.preview("dmm"');
+        expect(previewService).toContain('this.movie.preview("dmm"');
+        expect(previewService).not.toContain("localStorage.");
         expect(previewVideo).toContain('this.getRuntimeService("storage")');
         expect(previewVideo).toContain('this.getRuntimeService("settings")');
         expect(previewVideo).toContain('settings.set("videoMuted"');
