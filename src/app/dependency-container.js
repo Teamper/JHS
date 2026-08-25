@@ -43,6 +43,17 @@ export class DependencyContainer {
                 enumerable: true,
             });
         }
-        return Object.freeze(dependencies);
+        Object.freeze(dependencies);
+        return new Proxy(dependencies, {
+            get: (target, property, receiver) => {
+                const tokenName = typeof property === "symbol" ? Symbol.keyFor(property) : null;
+                if (tokenName?.startsWith("jhs.") && !seen.has(property)) {
+                    const error = new JhsError("UNDECLARED_DEPENDENCY", `Undeclared dependency access: ${String(property)}`, { source: "DependencyContainer" });
+                    this.diagnostics?.recordError?.(error);
+                    throw error;
+                }
+                return Reflect.get(target, property, receiver);
+            },
+        });
     }
 }

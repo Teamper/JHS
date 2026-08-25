@@ -83,5 +83,8 @@ export function defineIntegration(manifest) {
     if (typeof manifest.createClient !== "function" || typeof manifest.createAdapter !== "function") {
         throw new TypeError("Integration client and adapter factories are required");
     }
+    if (manifest.createHostAdapter !== null && typeof manifest.createHostAdapter !== "function") {
+        throw new TypeError("Integration createHostAdapter must be a function or explicit null");
+    }
     return Object.freeze({ ...manifest });
 }

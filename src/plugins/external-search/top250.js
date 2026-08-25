@@ -9,6 +9,7 @@ const me = "jhs_appAuthorization";
 /** @typedef {Record<string, any>} TopMovie */
 
 export class Top250Plugin extends BasePlugin {
+    static legacyPluginId = "TOP250Plugin";
     constructor() {
         super(), i(this, "has_cnsub", ""), i(this, "$contentBox", null), i(this, "$listRoot", null), i(this, "movies", []);
     }

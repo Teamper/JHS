@@ -1912,6 +1912,7 @@
     "TASK_EXISTS",
     "OPERATION_FAILED",
     "MISSING_DEPENDENCY",
+    "UNDECLARED_DEPENDENCY",
     "DUPLICATE_TOKEN",
     "BOOTSTRAP_FAILED"
   ]);
@@ -5555,6 +5556,9 @@
     }
     if (typeof manifest2.createClient !== "function" || typeof manifest2.createAdapter !== "function") {
       throw new TypeError("Integration client and adapter factories are required");
+    }
+    if (manifest2.createHostAdapter !== null && typeof manifest2.createHostAdapter !== "function") {
+      throw new TypeError("Integration createHostAdapter must be a function or explicit null");
     }
     return Object.freeze({ ...manifest2 });
   }
@@ -11477,6 +11481,7 @@ ${failure.stack}` : "");
     }
   };
   __name(_Top250Plugin, "Top250Plugin");
+  __publicField(_Top250Plugin, "legacyPluginId", "TOP250Plugin");
   var Top250Plugin = _Top250Plugin;
 
   // src/plugins/favorite/favorite-actresses.js
@@ -16964,7 +16969,15 @@ ${failure.stack}` : "");
   var TranslatePlugin = _TranslatePlugin;
 
   // src/plugins/registry.js
-  var manifest = /* @__PURE__ */ __name((id, featureId, plugin, sites, order, requires = []) => defineContribution({ id, featureId, legacyPluginId: plugin.name, plugin, sites, order, requires }), "manifest");
+  var manifest = /* @__PURE__ */ __name((id, featureId, plugin, sites, order, requires = []) => defineContribution({
+    id,
+    featureId,
+    legacyPluginId: plugin.legacyPluginId ?? plugin.name,
+    plugin,
+    sites,
+    order,
+    requires
+  }), "manifest");
   var legacyContributionManifests = Object.freeze([
     manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [PORT.host, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.state]),
     manifest("list.auto-page", "list", AutoPagePlugin, ["javdb", "javbus"], { javdb: 2, javbus: 5 }, [SERVICE.http]),
@@ -18409,7 +18422,18 @@ ${failure.stack}` : "");
           enumerable: true
         });
       }
-      return Object.freeze(dependencies);
+      Object.freeze(dependencies);
+      return new Proxy(dependencies, {
+        get: /* @__PURE__ */ __name((target, property, receiver) => {
+          const tokenName = typeof property === "symbol" ? Symbol.keyFor(property) : null;
+          if (tokenName?.startsWith("jhs.") && !seen.has(property)) {
+            const error = new JhsError("UNDECLARED_DEPENDENCY", `Undeclared dependency access: ${String(property)}`, { source: "DependencyContainer" });
+            this.diagnostics?.recordError?.(error);
+            throw error;
+          }
+          return Reflect.get(target, property, receiver);
+        }, "get")
+      });
     }
   };
   __name(_DependencyContainer, "DependencyContainer");

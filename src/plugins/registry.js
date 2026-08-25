@@ -47,7 +47,9 @@ import { WantAndWatchedVideosPlugin } from "./status/want-and-watched-videos.js"
 import { SubTitleCatPlugin } from "./subtitle/subtitle-cat.js";
 import { TranslatePlugin } from "./translate/translate.js";
 
-const manifest = (id, featureId, plugin, sites, order, requires = []) => defineContribution({ id, featureId, legacyPluginId: plugin.name, plugin, sites, order, requires });
+const manifest = (id, featureId, plugin, sites, order, requires = []) => defineContribution({
+    id, featureId, legacyPluginId: plugin.legacyPluginId ?? plugin.name, plugin, sites, order, requires,
+});
 
 export const legacyContributionManifests = Object.freeze([
     manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [PORT.host, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.state]),

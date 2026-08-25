@@ -15,11 +15,13 @@ import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 
 describe("v6.5 architecture runtime contracts", () => {
     it("injects only declared tokens and rejects duplicate or missing dependencies", () => {
-        const container = new DependencyContainer();
+        const diagnostics = new DiagnosticsService();
+        const container = new DependencyContainer(diagnostics);
         const movie = { id: "movie" };
         container.register(SERVICE.movie, movie);
         expect(container.resolveDeclared([SERVICE.movie])[SERVICE.movie]).toBe(movie);
-        expect(container.resolveDeclared([SERVICE.movie])[SERVICE.review]).toBeUndefined();
+        expect(() => container.resolveDeclared([SERVICE.movie])[SERVICE.review]).toThrow(/Undeclared dependency access/);
+        expect(diagnostics.exportSnapshot().errors.at(-1)).toMatchObject({ code: "UNDECLARED_DEPENDENCY", source: "DependencyContainer" });
         expect(() => container.register(SERVICE.movie, {})).toThrow(/Duplicate/);
         expect(() => container.resolveDeclared([SERVICE.review])).toThrow(/Missing/);
         expect(() => container.resolveDeclared([SERVICE.movie, SERVICE.movie])).toThrow(/Duplicate declared dependency/);
@@ -51,6 +53,7 @@ describe("v6.5 architecture runtime contracts", () => {
         const { legacyContributionManifests, registerSitePlugins } = await import("../src/plugins/registry.js");
         expect(new Set(legacyContributionManifests.map((item) => item.id)).size).toBe(legacyContributionManifests.length);
         expect(new Set(legacyContributionManifests.map((item) => item.legacyPluginId)).size).toBe(legacyContributionManifests.length);
+        expect(legacyContributionManifests.find((item) => item.id === "discovery.top250")?.legacyPluginId).toBe("TOP250Plugin");
         const createRuntime = (site, disabled = []) => {
             const diagnostics = new DiagnosticsService();
             const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.profile, { current: () => "regular" }).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {}).register(SERVICE.state, {});
@@ -166,6 +169,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(() => defineIntegration({ id: "bad-host", trustClass: "builtin-public", hosts: ["HTTPS://EXAMPLE.COM"], capabilities: ["movie.detail"], requires: [], cachePolicy: "none", quality: "bronze", createClient() {}, createAdapter() {} })).toThrow(/host is invalid/);
         expect(() => defineIntegration({ id: "bad-cache", trustClass: "builtin-public", hosts: ["example.com"], capabilities: ["movie.detail", "movie.images"], requires: [], cachePolicy: { "movie.detail": "none" }, quality: "bronze", createClient() {}, createAdapter() {} })).toThrow(/cachePolicy mismatch/);
         expect(() => defineIntegration({ id: "bad-deps", trustClass: "builtin-public", hosts: ["example.com"], capabilities: ["movie.detail"], requires: [SERVICE.http, SERVICE.http], cachePolicy: "none", quality: "bronze", createClient() {}, createAdapter() {} })).toThrow(/duplicate tokens/);
+        expect(() => defineIntegration({ id: "bad-host-adapter", trustClass: "builtin-public", hosts: ["example.com"], capabilities: ["movie.detail"], requires: [], cachePolicy: "none", quality: "bronze", createClient() {}, createAdapter() {}, createHostAdapter: undefined })).toThrow(/createHostAdapter/);
         const registry = new ProviderRegistry();
         registry.register({ id: "slow", capabilities: ["magnet"], priority: 1 });
         registry.register({ id: "fast", capabilities: ["magnet"], priority: 2, isAvailable: async () => true });
