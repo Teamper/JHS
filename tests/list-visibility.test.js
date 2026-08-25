@@ -25,6 +25,11 @@ describe("multi-state list visibility", () => {
     });
 
     it.each([
+        ["all", flags(), reasons(), false, true],
+        ["all", flags("blocked"), reasons(), false, true],
+        ["all", flags(), reasons("keyword"), false, true],
+        ["all", flags(), reasons("actorBlacklist"), false, true],
+        ["all", flags(), reasons("actressBlacklist"), false, true],
         ["waitCheck", flags(), reasons(), false, true],
         ["waitCheck", flags(), reasons("keyword"), false, false],
         ["favorite", flags("favorite"), reasons(), false, true],
@@ -38,7 +43,7 @@ describe("multi-state list visibility", () => {
         ["recent7d", flags(), reasons(), true, true],
         ["blockedItems", flags(), reasons("keyword"), false, true],
         ["blockedItems", flags("blocked"), reasons(), false, true]
-    ])("matches %s with hard-hidden precedence", (filter, stateFlags, visibilityReasons, recent, expected) => {
+    ])("matches %s with the frozen all/blocked/hard-hidden precedence", (filter, stateFlags, visibilityReasons, recent, expected) => {
         expect(api.matchesQuickFilter(filter, stateFlags, { visibilityReasons, recent })).toBe(expected);
     });
 
@@ -59,7 +64,7 @@ describe("multi-state list visibility", () => {
             visibilityReasons: reasons(),
             recent: false
         })).map(([key]) => key);
-        expect(visible("all")).toEqual([ "A", "B", "C", "D", "E", "F", "G", "H" ]);
+        expect(visible("all")).toEqual([ "A", "B", "C", "D", "E", "F", "G", "H", "I" ]);
         expect(visible("waitCheck")).toEqual([ "A" ]);
         expect(visible("favorite")).toEqual([ "B", "E", "F", "H" ]);
         expect(visible("hasDown")).toEqual([ "C", "E", "G", "H" ]);
@@ -67,10 +72,12 @@ describe("multi-state list visibility", () => {
         expect(visible("blockedItems")).toEqual([ "I" ]);
     });
 
-    it("keeps every hard-hidden reason out of all and exposes it through blocked items", () => {
-        for (const visibilityReasons of [ reasons("keyword"), reasons("actorBlacklist"), reasons("actressBlacklist") ]) {
-            expect(api.shouldShowItem({ filter: "all", flags: flags("favorite"), visibilityReasons, recent: false })).toBe(false);
+    it("keeps all hard-hidden reasons inside all and exposes them through blocked items", () => {
+        for (const visibilityReasons of [ reasons("keyword"), reasons("actorBlacklist"), reasons("actressBlacklist"), reasons("keyword", "actorBlacklist", "actressBlacklist") ]) {
+            expect(api.shouldShowItem({ filter: "all", flags: flags("favorite"), visibilityReasons, recent: false })).toBe(true);
             expect(api.shouldShowItem({ filter: "blockedItems", flags: flags("favorite"), visibilityReasons, recent: false })).toBe(true);
+            expect(api.shouldShowItem({ filter: "favorite", flags: flags("favorite"), visibilityReasons, recent: false })).toBe(false);
+            expect(api.shouldShowItem({ filter: "waitCheck", flags: flags(), visibilityReasons, recent: false })).toBe(false);
         }
     });
 });

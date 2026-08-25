@@ -8,7 +8,8 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { isHitShowPage } from "../../core/site-context.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
-import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isHardHidden, matchesQuickFilter, normalizeQuickFilterKey, shouldShowItem } from "../../features/list/list-filters.js";
+import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isHardHidden, normalizeQuickFilterKey, shouldShowItem } from "../../features/list/list-filters.js";
+import { createListEvaluationContext, evaluateListItem, findMatchedTitleKeyword } from "../../features/list/list-evaluator.js";
 
 /** @typedef {Record<string, any>} ListRecord */
 /** @typedef {any} JQueryHandle */
@@ -319,11 +320,6 @@ export class ListPagePlugin extends BasePlugin {
             window.requestAnimationFrame ? window.requestAnimationFrame((() => setTimeout(e))) : setTimeout(e);
         });
     }
-    /** @param {string[]} e @param {string} t @param {string} n */
-    findMatchedTitleKeyword(e, t, n) {
-        for (const a of e) if (t.includes(a) || n.startsWith(a)) return a;
-        return null;
-    }
     async getFilterContext() {
         if (this.filterContext) return this.filterContext;
         const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([ storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), this.getRuntimeService("state").getActivityLog() ]), actorCarNumToNameMap = new Map, actressCarNumToNameMap = new Map, recentCarNums = new Set;
@@ -386,9 +382,9 @@ export class ListPagePlugin extends BasePlugin {
     async filterMovieList(e) {
         utils.time("累计耗费时间"), utils.time("读取数据耗时");
         const {titleKeywords: n, settings: s, carMap: m, recentCarNums: recent, actorCarNumToNameMap: f, actressCarNumToNameMap: v} = await this.getFilterContext(), o = utils.time("读取数据耗时");
+        const evaluationContext = createListEvaluationContext({ titleKeywords: n, settings: s, carMap: m, recentCarNums: recent, actorCarNumToNameMap: f, actressCarNumToNameMap: v });
         utils.time("组装数据耗时");
         const b = utils.time("组装数据耗时"), P = (null == s ? void 0 : s.tagPosition) || "rightTop";
-        const O = n.filter((/** @type {string} */ e) => e);
         this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0,
         this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0,
         this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时");
@@ -397,8 +393,7 @@ export class ListPagePlugin extends BasePlugin {
             n > 0 && n % 12 == 0 && await this.yieldListFrame();
             let t = $(e[n]);
             if (l && t.find(".avatar-box").length > 0) continue;
-            const {carNum: a, title: i} = this.findCarNumAndHref(t), record = m.get(a), flags = normalizeStateFlags(record?.stateFlags), actorFiltered = f.has(a), actressFiltered = v.has(a), keyword = this.findMatchedTitleKeyword(O, i, a), visibilityReasons = { keyword: !!keyword, actorBlacklist: actorFiltered, actressBlacklist: actressFiltered };
-            const hardHidden = isHardHidden(flags, visibilityReasons);
+            const {carNum: a, title: i} = this.findCarNumAndHref(t), {flags, visibilityReasons, hardHidden} = evaluateListItem({ carNum: a, title: i }, evaluationContext, { filter: this.activeQuickFilter || "waitCheck" }), keyword = visibilityReasons.keyword ? findMatchedTitleKeyword(evaluationContext.titleKeywords, i, a) : null;
             t.attr("data-jhs-flags", JSON.stringify(flags)).attr("data-jhs-visibility", JSON.stringify(visibilityReasons)).attr("data-jhs-recent", recent.has(a) ? _ : C).attr("data-jhs-tag-position", P);
             const signature = JSON.stringify({ flags, visibilityReasons, P });
             if (t.attr("data-jhs-state-signature") !== signature) {

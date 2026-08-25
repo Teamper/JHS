@@ -7324,9 +7324,9 @@
   __name(isHardHidden, "isHardHidden");
   function matchesQuickFilter(filter, flags, { visibilityReasons = {}, recent = false } = {}) {
     const normalizedFilter = normalizeQuickFilterKey(filter), hardHidden = isHardHidden(flags, visibilityReasons);
+    if ("all" === normalizedFilter) return true;
     if ("blockedItems" === normalizedFilter) return hardHidden;
     if (hardHidden) return false;
-    if ("all" === normalizedFilter) return true;
     if ("waitCheck" === normalizedFilter) return !hasAnyState(flags);
     if ("favorite" === normalizedFilter) return !!flags.favorite;
     if ("hasDown" === normalizedFilter) return !!flags.downloaded;
@@ -16138,6 +16138,45 @@ ${failure.stack}` : "");
   __name(_ListPageButtonPlugin, "ListPageButtonPlugin");
   var ListPageButtonPlugin = _ListPageButtonPlugin;
 
+  // src/features/list/list-evaluator.js
+  function findMatchedTitleKeyword(keywords, title, carNum) {
+    for (const keyword of keywords) if (title.includes(keyword) || carNum.startsWith(keyword)) return keyword;
+    return null;
+  }
+  __name(findMatchedTitleKeyword, "findMatchedTitleKeyword");
+  function createListEvaluationContext(options = {}) {
+    return {
+      titleKeywords: Array.isArray(options.titleKeywords) ? options.titleKeywords : [],
+      carMap: options.carMap instanceof Map ? options.carMap : /* @__PURE__ */ new Map(),
+      actorCarNumToNameMap: options.actorCarNumToNameMap instanceof Map ? options.actorCarNumToNameMap : /* @__PURE__ */ new Map(),
+      actressCarNumToNameMap: options.actressCarNumToNameMap instanceof Map ? options.actressCarNumToNameMap : /* @__PURE__ */ new Map(),
+      recentCarNums: options.recentCarNums instanceof Set ? options.recentCarNums : /* @__PURE__ */ new Set(),
+      settings: options.settings ?? {}
+    };
+  }
+  __name(createListEvaluationContext, "createListEvaluationContext");
+  function evaluateListItem(record, context, { filter = "waitCheck" } = {}) {
+    const carNum = record?.carNum;
+    const state = carNum ? context.carMap.get(carNum) : null;
+    const flags = normalizeStateFlags(state?.stateFlags);
+    const keyword = context.titleKeywords.length && carNum ? findMatchedTitleKeyword(context.titleKeywords, record.title || "", carNum) : null;
+    const visibilityReasons = {
+      keyword: !!keyword,
+      actorBlacklist: carNum ? context.actorCarNumToNameMap.has(carNum) : false,
+      actressBlacklist: carNum ? context.actressCarNumToNameMap.has(carNum) : false
+    };
+    const recent = carNum ? context.recentCarNums.has(carNum) : false;
+    const hardHidden = isHardHidden(flags, visibilityReasons);
+    return {
+      flags,
+      visibilityReasons,
+      recent,
+      hardHidden,
+      matchesCurrentFilter: matchesQuickFilter(filter, flags, { visibilityReasons, recent })
+    };
+  }
+  __name(evaluateListItem, "evaluateListItem");
+
   // src/plugins/status/list-page.js
   function getListEventBus() {
     if (!jhsEventBus) throw new Error("List EventBus 未初始化");
@@ -16425,10 +16464,6 @@ ${failure.stack}` : "");
         window.requestAnimationFrame ? window.requestAnimationFrame((() => setTimeout(e2))) : setTimeout(e2);
       });
     }
-    findMatchedTitleKeyword(e2, t2, n2) {
-      for (const a2 of e2) if (t2.includes(a2) || n2.startsWith(a2)) return a2;
-      return null;
-    }
     async getFilterContext() {
       if (this.filterContext) return this.filterContext;
       const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), this.getRuntimeService("state").getActivityLog()]), actorCarNumToNameMap = /* @__PURE__ */ new Map(), actressCarNumToNameMap = /* @__PURE__ */ new Map(), recentCarNums = /* @__PURE__ */ new Set();
@@ -16485,17 +16520,16 @@ ${failure.stack}` : "");
     async filterMovieList(e2) {
       utils.time("累计耗费时间"), utils.time("读取数据耗时");
       const { titleKeywords: n2, settings: s2, carMap: m2, recentCarNums: recent, actorCarNumToNameMap: f, actressCarNumToNameMap: v2 } = await this.getFilterContext(), o2 = utils.time("读取数据耗时");
+      const evaluationContext = createListEvaluationContext({ titleKeywords: n2, settings: s2, carMap: m2, recentCarNums: recent, actorCarNumToNameMap: f, actressCarNumToNameMap: v2 });
       utils.time("组装数据耗时");
       const b2 = utils.time("组装数据耗时"), P2 = (null == s2 ? void 0 : s2.tagPosition) || "rightTop";
-      const O2 = n2.filter((e3) => e3);
       this.currentPageFilterCount = 0, this.currentPageFavoriteCount = 0, this.currentPageHasDownCount = 0, this.currentPageHasWatchCount = 0, this.currentPageKeywordFilterCount = 0, this.currentPageActorFilterCount = 0, this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时");
       const R = [];
       for (let n3 = 0; n3 < e2.length; n3++) {
         n3 > 0 && n3 % 12 == 0 && await this.yieldListFrame();
         let t2 = $(e2[n3]);
         if (l && t2.find(".avatar-box").length > 0) continue;
-        const { carNum: a2, title: i2 } = this.findCarNumAndHref(t2), record = m2.get(a2), flags = normalizeStateFlags(record?.stateFlags), actorFiltered = f.has(a2), actressFiltered = v2.has(a2), keyword = this.findMatchedTitleKeyword(O2, i2, a2), visibilityReasons = { keyword: !!keyword, actorBlacklist: actorFiltered, actressBlacklist: actressFiltered };
-        const hardHidden = isHardHidden(flags, visibilityReasons);
+        const { carNum: a2, title: i2 } = this.findCarNumAndHref(t2), { flags, visibilityReasons, hardHidden } = evaluateListItem({ carNum: a2, title: i2 }, evaluationContext, { filter: this.activeQuickFilter || "waitCheck" }), keyword = visibilityReasons.keyword ? findMatchedTitleKeyword(evaluationContext.titleKeywords, i2, a2) : null;
         t2.attr("data-jhs-flags", JSON.stringify(flags)).attr("data-jhs-visibility", JSON.stringify(visibilityReasons)).attr("data-jhs-recent", recent.has(a2) ? _ : C).attr("data-jhs-tag-position", P2);
         const signature = JSON.stringify({ flags, visibilityReasons, P: P2 });
         if (t2.attr("data-jhs-state-signature") !== signature) {

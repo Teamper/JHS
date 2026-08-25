@@ -109,9 +109,8 @@ function loadScreenshotPlugin(overrides = {}) {
     });
     context.CACHE_TTL = { screenshot: 6048e5 };
     const parserSource = readTestFile(join(repoRoot, "src/integrations/javstore/parser.js"), "utf8");
-    const registrySource = readTestFile(join(repoRoot, "src/plugins/image-viewer/screenshot-provider-registry.js"), "utf8");
     const source = readTestFile(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
-    vm.runInContext(`${parserSource}\n${registrySource}\n${source}; globalThis.TestScreenshotPlugin = ScreenShotPlugin;`, context);
+    vm.runInContext(`${parserSource}\n${source}; globalThis.TestScreenshotPlugin = ScreenShotPlugin;`, context);
     return { Plugin: context.TestScreenshotPlugin, warn, debug, error, cachedRequest };
 }
 

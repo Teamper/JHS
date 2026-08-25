@@ -161,7 +161,8 @@ describe("list mutation hot path", () => {
         await plugin.createQuickFilter();
         $("body").append('<span class="jhs-mobile-filter-label"></span><button class="jhs-mobile-filter-option" data-jhs-filter="blockedItems" aria-checked="false"></button>');
         plugin.setQuickFilter("all");
-        expect($(".item").filter(((_, item) => "none" !== $(item).css("display"))).length).toBe(1);
+        // "全部"是包含 hard-hidden 的真全集
+        expect($(".item").filter(((_, item) => "none" !== $(item).css("display"))).length).toBe(2);
         const appended = $('<div class="item" data-jhs-flags=\'{"downloaded":true}\' data-jhs-visibility="{}"></div>').appendTo(container);
         plugin.applyVisibility(appended);
         expect(appended.css("display")).not.toBe("none");

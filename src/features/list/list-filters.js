@@ -32,9 +32,10 @@ export function isHardHidden(flags, visibilityReasons = {}) {
 /** @param {unknown} filter @param {StateFlags} flags @param {{ visibilityReasons?: VisibilityReasons, recent?: boolean }} [options] */
 export function matchesQuickFilter(filter, flags, { visibilityReasons = {}, recent = !1 } = {}) {
     const normalizedFilter = normalizeQuickFilterKey(filter), hardHidden = isHardHidden(flags, visibilityReasons);
+    // 语义冻结："全部"是包含所有 hard-hidden 的真全集；"屏蔽项"单独展示；其余状态筛选排除 hard-hidden。
+    if ("all" === normalizedFilter) return !0;
     if ("blockedItems" === normalizedFilter) return hardHidden;
     if (hardHidden) return !1;
-    if ("all" === normalizedFilter) return !0;
     if ("waitCheck" === normalizedFilter) return !hasAnyState(flags);
     if ("favorite" === normalizedFilter) return !!flags.favorite;
     if ("hasDown" === normalizedFilter) return !!flags.downloaded;

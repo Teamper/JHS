@@ -44,14 +44,15 @@ describe("MagnetSourceRegistry", () => {
     });
 });
 
-describe("ScreenshotProviderRegistry", () => {
-    const { ScreenshotProviderRegistry } = load("src/plugins/image-viewer/screenshot-provider-registry.js", ["ScreenshotProviderRegistry"]);
-    it("falls through misses and errors in priority order", async () => {
-        const registry = new ScreenshotProviderRegistry([
-            { id: "miss", name: "Miss", priority: 1, async getScreenshot() { return null; } },
-            { id: "error", name: "Error", priority: 2, async getScreenshot() { throw new Error("404"); } },
-            { id: "ok", name: "OK", priority: 3, async getScreenshot() { return { url: "https://img.test/a.jpg", source: "ok" }; } }
-        ]);
-        await expect(registry.first("ABC-1")).resolves.toMatchObject({ source: "ok" });
+describe("ScreenshotService provider policy", () => {
+    it("merges built-in sources with user config and keeps disabled providers out", async () => {
+        const { ScreenshotService } = await import("../src/services/screenshot-service.js");
+        const service = new ScreenshotService({ getAvailable: async () => [] }, null);
+        const providers = service.getEnabledProviders({
+            screenshotProviders: JSON.stringify([{ id: "javstore", enabled: true, priority: 7 }]),
+        });
+        expect(providers.map((item) => item.id)).toEqual([ "javstore" ]);
+        expect(providers[0].priority).toBe(7);
+        expect(service.getEnabledProviders({ screenshotProviders: [{ id: "javstore", enabled: false }] })).toEqual([]);
     });
 });
