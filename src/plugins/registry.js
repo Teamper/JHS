@@ -69,7 +69,7 @@ export const legacyContributionManifests = Object.freeze([
     manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }, [PORT.host]),
     manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage]),
     manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related, SERVICE.settings]),
-    manifest("detail.page-state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle, SERVICE.state]),
+    manifest("detail.page-state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle, SERVICE.state, SERVICE.settings]),
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [PORT.host, SERVICE.settings]),
     manifest("detail.javdb-preview", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie]),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),

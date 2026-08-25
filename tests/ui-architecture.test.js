@@ -78,9 +78,10 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(commandbar).toContain('quickFilter.detach()');
         expect(commandbar).toContain("jhs-mobile-filter-menu");
         expect(commandbar).toContain('item("quickFilter"');
-        expect(commandbar).toContain('item("check", "开始鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort"');
-        expect(commandbar).toContain('+ item("quickFilter"');
-        expect(commandbar).toContain('+ divider + group(item("logger", "运行日志") + item("setting", "设置"))');
+        expect(commandbar).toContain('hasListPageButton ? item("check", "开始鉴定") : "") + (hasNewVideo ? item("newVideo", "新作品") : "") + (hasBlacklist ? item("blacklist", "黑名单") : "") + (hasListPageButton ? item("sort"');
+        expect(commandbar).toContain(': "") + (hasListPage ? item("quickFilter"');
+        expect(commandbar).toContain('+ divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : ""))');
+        expect(commandbar).toContain('const hasListPageButton = !!this.getBean("ListPageButtonPlugin")');
         expect(commandbar).toContain('await this.getBean("ListPageButtonPlugin")?.openWaitCheck?.()');
         expect(commandbar).not.toContain('$("#waitCheckBtn").click()');
         expect(commandbar).not.toMatch(/\.jhs-commandbar__filters\s*\{[^}]*overflow-x\s*:\s*auto/);

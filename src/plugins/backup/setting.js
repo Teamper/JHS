@@ -168,6 +168,7 @@ export class SettingPlugin extends BasePlugin {
                     this.collapseAdvancedTabs();
                 }
                 const sections = await Promise.allSettled([ this.hydrateSettingForm(e), this.loadResourceSettings() ]), resourceResult = sections[1];
+                JhsSelect.refreshAll(e);
                 if (resourceResult.status === "rejected") {
                     clog.error("resource-settings 加载失败", resourceResult.reason), this.getRuntimeService("diagnostics").recordError({ source: "resource-settings", message: resourceResult.reason?.message || String(resourceResult.reason) }), show.error("资源设置加载失败，基本设置仍可保存");
                 }
@@ -185,7 +186,7 @@ export class SettingPlugin extends BasePlugin {
         try {
             await loadSettingForm(this.getFormDependencies());
             if (!button[0]?.isConnected) return !1;
-            JhsSelect.enhance(layerRoot), button.attr("data-jhs-settings-ready", "true").prop("disabled", !1).removeAttr("title"), status.empty().text("设置已加载");
+            JhsSelect.refreshAll(layerRoot), button.attr("data-jhs-settings-ready", "true").prop("disabled", !1).removeAttr("title"), status.empty().text("设置已加载");
             return !0;
         } catch (error) {
             clog.error("settings-form 加载失败", error), this.getRuntimeService("diagnostics").recordError({ source: "settings-form", message: error?.message || String(error) });
@@ -341,7 +342,7 @@ export class SettingPlugin extends BasePlugin {
         this.renderResourceSettings(); $("#enable123Offline").prop("checked", cloud.enable123Offline); $("#enable115Offline").prop("checked", cloud.enable115Offline); $("#offlineProviderMode").val(cloud.providerMode); $("#enable115Match").prop("checked", cloud.enable115Match); $("#enable115LoginRedirect").prop("checked", cloud.enable115LoginRedirect); $("#oneOneFiveConcurrency").val(cloud.concurrency); $("#oneOneFiveCacheMinutes").val(cloud.cacheMinutes);
         $("#cloud-services-panel").off("change.jhsResource", "input, select").on("change.jhsResource", "input, select", (() => void this.saveCloudSettings())); $("#resource-sources-panel").off("change.jhsResource", 'input[name="screenshotMode"]').on("change.jhsResource", 'input[name="screenshotMode"]', (event => { this.resourceState.screenshot.mode = event.currentTarget.value; this.resourceSettings.saveScreenshotSettings(this.resourceState.screenshot); }));
         $("#add-custom-magnet-source").off("click.jhsResource").on("click.jhsResource", (() => this.openSourceDialog())); $("#add-magnet-tag-rule").off("click.jhsResource").on("click.jhsResource", (() => this.openRuleDialog("tag"))); $("#add-magnet-filter-rule").off("click.jhsResource").on("click.jhsResource", (() => this.openRuleDialog("filter")));
-        $("#export-resource-config").off("click.jhsResource").on("click.jhsResource", (async () => $("#advanced-resource-json").val(JSON.stringify(await this.resourceSettings.exportConfig(), null, 2)).prop("readonly", true))); $("#edit-resource-config").off("click.jhsResource").on("click.jhsResource", (() => $("#advanced-resource-json").prop("readonly", false).trigger("focus"))); $("#import-resource-config").off("click.jhsResource").on("click.jhsResource", (async () => { try { await this.resourceSettings.importConfig($("#advanced-resource-json").val()); show.ok("资源配置导入成功"); await this.loadResourceSettings(); } catch (error) { show.error(error.message); } }));
+        $("#export-resource-config").off("click.jhsResource").on("click.jhsResource", (async () => $("#advanced-resource-json").val(JSON.stringify(await this.resourceSettings.exportConfig(), null, 2)).prop("readonly", true))); $("#edit-resource-config").off("click.jhsResource").on("click.jhsResource", (() => $("#advanced-resource-json").prop("readonly", false).trigger("focus"))); $("#import-resource-config").off("click.jhsResource").on("click.jhsResource", (async () => { try { await this.resourceSettings.importConfig($("#advanced-resource-json").val()); show.ok("资源配置导入成功"); await this.loadResourceSettings(); JhsSelect.refreshAll(); } catch (error) { show.error(error.message); } }));
         $("#car-number-import,#car-number-import-status").off("input.jhsResource change.jhsResource").on("input.jhsResource change.jhsResource", (() => { this.pendingCarImport = null; $("#confirm-car-number-import").prop("disabled", true).text("确认导入"); }));
         $("#check-one-one-five-login").off("click.jhsResource").on("click.jhsResource", (() => this.checkOneOneFiveLogin()));
     }

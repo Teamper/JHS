@@ -1717,6 +1717,12 @@
   }
   __name(initializeUiAccessibility, "initializeUiAccessibility");
   var _JhsSelect = class _JhsSelect {
+    static _ensureGlobalClickHandler() {
+      if (_JhsSelect._globalClickBound) return;
+      _JhsSelect._globalClickBound = true, $(document).on("click.jhsSelect", ((event) => {
+        $(event.target).closest(".jhs-select-control").length || _JhsSelect.closeAll();
+      }));
+    }
     constructor(select) {
       this.source = $(select);
       if (!this.source.length) return;
@@ -1790,9 +1796,7 @@
         const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
         items.eq(next).trigger("focus");
       }));
-      this.source.on("change.jhsSelect", (() => this.refresh())), $(document).on("click.jhsSelect", ((event) => {
-        $(event.target).closest(this.control).length || this.close();
-      }));
+      this.source.on("change.jhsSelect", (() => this.refresh())), _JhsSelect._ensureGlobalClickHandler();
     }
     options() {
       return this.menu.find(".jhs-select-option:not(:disabled)");
@@ -1821,6 +1825,7 @@
   };
   __name(_JhsSelect, "JhsSelect");
   __publicField(_JhsSelect, "instances", /* @__PURE__ */ new WeakMap());
+  __publicField(_JhsSelect, "_globalClickBound", false);
   var JhsSelect = _JhsSelect;
 
   // src/core/css-injection.js
@@ -5881,7 +5886,9 @@
       "ListPageButtonPlugin",
       "NewVideoPlugin",
       "BlacklistPlugin",
-      "SettingPlugin"
+      "SettingPlugin",
+      "HighlightMagnetPlugin",
+      "MagnetHubPlugin"
     ],
     NavBarPlugin: ["SearchByImagePlugin"],
     NewVideoPlugin: ["TaskPlugin", "SettingPlugin"],
@@ -8096,7 +8103,7 @@
       <section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>截图来源</h3><p>自动选择会按优先级依次尝试可用来源。</p></header><div class="jhs-setting-group"><label class="jhs-setting-row"><span>自动选择</span><input type="radio" name="screenshotMode" value="auto"></label><label class="jhs-setting-row"><span>手动选择</span><input type="radio" name="screenshotMode" value="manual"></label></div><div id="screenshot-source-list" class="jhs-resource-card-list"></div></section>
       <details class="jhs-setting-section jhs-resource-advanced"><summary>高级 · 导入 / 导出配置</summary><p class="jhs-setting-help">高级功能：错误修改可能导致自定义来源不可用，保存前会校验配置。</p><div class="jhs-toolbar"><button type="button" id="export-resource-config" class="jhs-btn">导出资源配置</button><button type="button" id="edit-resource-config" class="jhs-btn">编辑原始 JSON</button><button type="button" id="import-resource-config" class="jhs-btn jhs-btn--primary">校验并导入</button></div><textarea id="advanced-resource-json" class="jhs-textarea" rows="10" aria-label="高级资源配置 JSON"></textarea></details>
     </div>
-    <div id="cloud-services-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>统一离线服务</h3><p>115 状态：<span id="one-one-five-state" class="jhs-badge">未知</span> <button type="button" id="check-one-one-five-login" class="jhs-btn jhs-btn--ghost">检测登录状态</button></p><small>服务不可用时会在提交前显示原因。</small></header><label class="jhs-setting-row"><span><strong>123 云盘离线</strong><small>支持 Magnet，需要先在 123 云盘页面同步授权。</small></span><input type="checkbox" id="enable123Offline" class="mini-switch"></label><label class="jhs-setting-row"><span><strong>115 离线下载</strong><small>支持 Magnet 与 ED2K。</small></span><input type="checkbox" id="enable115Offline" class="mini-switch"></label><label class="jhs-setting-row"><span>默认服务</span><select id="offlineProviderMode" class="jhs-select-source"><option value="ask">每次询问</option><option value="123">优先 123</option><option value="115">优先 115</option></select></label><label class="jhs-setting-row"><span><strong>115 文件匹配</strong><small>根据当前番号查找网盘中已存在的视频。</small></span><input type="checkbox" id="enable115Match" class="mini-switch"></label><label class="jhs-setting-row"><span><strong>未登录时提供登录入口</strong><small>提交失败时显示 115 登录地址。</small></span><input type="checkbox" id="enable115LoginRedirect" class="mini-switch"></label><label class="jhs-setting-row"><span>匹配并发数</span><input type="number" id="oneOneFiveConcurrency" class="jhs-field" min="1" max="10"></label><label class="jhs-setting-row"><span>匹配缓存（分钟）</span><input type="number" id="oneOneFiveCacheMinutes" class="jhs-field" min="1" max="1440"></label></section></div>
+    <div id="cloud-services-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>统一离线服务</h3><p>115 状态：<span id="one-one-five-state" class="jhs-badge">未知</span> <button type="button" id="check-one-one-five-login" class="jhs-btn jhs-btn--ghost">检测登录状态</button></p><small>服务不可用时会在提交前显示原因。</small></header><label class="jhs-setting-row"><span><strong>123 云盘离线</strong><small>支持 Magnet，需要先在 123 云盘页面同步授权。</small></span><input type="checkbox" id="enable123Offline" class="mini-switch"></label><label class="jhs-setting-row"><span><strong>115 离线下载</strong><small>支持 Magnet 与 ED2K。</small></span><input type="checkbox" id="enable115Offline" class="mini-switch"></label><label class="jhs-setting-row"><span>默认服务</span><select id="offlineProviderMode" class="jhs-select-source"><option value="ask">每次询问</option><option value="123">优先 123</option><option value="115">优先 115</option></select></label><label class="jhs-setting-row"><span><strong>115 文件匹配</strong><small>根据当前番号查找网盘中已存在的视频，修改后刷新页面生效。</small></span><input type="checkbox" id="enable115Match" class="mini-switch"></label><label class="jhs-setting-row"><span><strong>未登录时提供登录入口</strong><small>提交失败时显示 115 登录地址。</small></span><input type="checkbox" id="enable115LoginRedirect" class="mini-switch"></label><label class="jhs-setting-row"><span>匹配并发数<small>刷新页面后生效。</small></span><input type="number" id="oneOneFiveConcurrency" class="jhs-field" min="1" max="10"></label><label class="jhs-setting-row"><span>匹配缓存（分钟）<small>刷新页面后生效。</small></span><input type="number" id="oneOneFiveCacheMinutes" class="jhs-field" min="1" max="1440"></label></section></div>
     <div id="data-tools-panel" class="content-panel"><section class="jhs-setting-section"><header class="jhs-setting-section__header"><h3>番号列表导入</h3><p>支持换行、空格、逗号分隔番号。必须先解析预览，再确认导入。</p></header><label class="jhs-setting-group"><span>番号</span><textarea id="car-number-import" class="jhs-textarea" rows="8" placeholder="ABC-001&#10;ABC-002&#10;FC2-1234567"></textarea></label><label class="jhs-setting-row"><span>导入为</span><select id="car-number-import-status" class="jhs-select-source"><option value="">请选择</option><option value="favorite">收藏</option><option value="hasDown">已下载</option><option value="hasWatch">已观看</option><option value="filter">屏蔽</option></select></label><div class="jhs-toolbar"><button type="button" id="preview-car-number-import" class="jhs-btn">解析预览</button><button type="button" id="confirm-car-number-import" class="jhs-btn jhs-btn--primary" disabled>确认导入</button></div><div id="car-number-import-preview" class="jhs-card" aria-live="polite"></div></section></div>`);
     const sidebar = $(".jhs-mobile-sidebar,.setting-sidebar").first();
     sidebar.append('<button type="button" class="jhs-btn side-menu-item" data-panel="resource-sources-panel" aria-controls="resource-sources-panel">资源来源</button><button type="button" class="jhs-btn side-menu-item" data-panel="cloud-services-panel" aria-controls="cloud-services-panel">云盘服务</button><button type="button" class="jhs-btn side-menu-item" data-panel="data-tools-panel" aria-controls="data-tools-panel">数据工具</button>');
@@ -8555,6 +8562,7 @@
             this.collapseAdvancedTabs();
           }
           const sections = await Promise.allSettled([this.hydrateSettingForm(e3), this.loadResourceSettings()]), resourceResult = sections[1];
+          JhsSelect.refreshAll(e3);
           if (resourceResult.status === "rejected") {
             clog.error("resource-settings 加载失败", resourceResult.reason), this.getRuntimeService("diagnostics").recordError({ source: "resource-settings", message: resourceResult.reason?.message || String(resourceResult.reason) }), show.error("资源设置加载失败，基本设置仍可保存");
           }
@@ -8571,7 +8579,7 @@
       try {
         await loadSettingForm(this.getFormDependencies());
         if (!button[0]?.isConnected) return false;
-        JhsSelect.enhance(layerRoot), button.attr("data-jhs-settings-ready", "true").prop("disabled", false).removeAttr("title"), status.empty().text("设置已加载");
+        JhsSelect.refreshAll(layerRoot), button.attr("data-jhs-settings-ready", "true").prop("disabled", false).removeAttr("title"), status.empty().text("设置已加载");
         return true;
       } catch (error) {
         clog.error("settings-form 加载失败", error), this.getRuntimeService("diagnostics").recordError({ source: "settings-form", message: error?.message || String(error) });
@@ -8747,6 +8755,7 @@
           await this.resourceSettings.importConfig($("#advanced-resource-json").val());
           show.ok("资源配置导入成功");
           await this.loadResourceSettings();
+          JhsSelect.refreshAll();
         } catch (error) {
           show.error(error.message);
         }
@@ -9498,9 +9507,15 @@
     const jq = globalThis.$;
     const urls = [...new Set((images || []).map(normalizeUrl).filter(Boolean))];
     const grid = context.root.find('[data-jhs-role="gallery-grid"]').empty(), preview = context.root.find('[data-jhs-role="main-preview"]').empty();
+    context.galleryUrls = new Set(urls);
     if (!urls.length) return renderFc2State(grid, "暂无剧照");
     preview.append(jq("<img>").attr({ src: urls[0], alt: `${context.carNum} 预览`, loading: "eager" }));
     urls.forEach((url, index) => grid.append(jq('<button type="button" class="jhs-btn jhs-fc2-gallery-item"></button>').attr("aria-label", `查看剧照 ${index + 1}`).append(jq("<img>").addClass("jhs-fc2-gallery__image").attr({ src: url, alt: `剧照 ${index + 1}`, loading: "lazy" }))));
+    const screenshot = context.root.find('[data-jhs-role="screenshot"]');
+    screenshot.find("img").each((_2, img) => {
+      const src = img.getAttribute("src");
+      if (src && context.galleryUrls.has(src)) screenshot.empty();
+    });
   }
   __name(renderFc2Gallery, "renderFc2Gallery");
   function createFc2SourceLinks(context, movieService) {
@@ -9520,8 +9535,9 @@
       this.$contentBox = null;
       this.$listRoot = null;
       this.urlParams = new URLSearchParams(window.location.search);
-      this.currentPage = parseInt(this.urlParams.get("page") || "1", 10);
+      this.currentPage = Math.max(1, parseInt(this.urlParams.get("page") || "1", 10) || 1);
       this.maxPage = null;
+      this._queryGeneration = 0;
       this.keyword = this.urlParams.get("keyword") || null;
     }
     getName() {
@@ -9541,9 +9557,9 @@
       let e2 = $("h2.section-title");
       e2.contents().first().replaceWith("123Av"), e2.css("marginBottom", "0"), e2.append('\n            <div class="jhs-layout-f5f47b30">\n                <input id="search-123av-keyword" type="text" placeholder="搜索123Av Fc2ppv内容" class="jhs-field">\n                <button type="button" id="search-123av-btn" class="jhs-btn jhs-btn--primary jhs-layout-21a4fe43">搜索</button>\n                <button type="button" id="clear-123av-btn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n            </div>\n        '), $("#search-123av-keyword").val(this.keyword), $("#search-123av-btn").on("click", (async () => {
         let e3 = String($("#search-123av-keyword").val() || "").trim();
-        e3 && (this.keyword = e3, utils.setHrefParam("keyword", e3), await this.handleQuery());
+        e3 && (this.keyword = e3, utils.setHrefParam("keyword", e3), this.currentPage = 1, this.maxPage = null, utils.setHrefParam("page", 1), await this.handleQuery());
       })), $("#clear-123av-btn").on("click", (async () => {
-        $("#search-123av-keyword").val(""), this.keyword = "", utils.setHrefParam("keyword", ""), $(".page-box").show(), await this.handleQuery();
+        $("#search-123av-keyword").val(""), this.keyword = "", utils.setHrefParam("keyword", ""), this.currentPage = 1, this.maxPage = null, utils.setHrefParam("page", 1), $(".page-box").show(), await this.handleQuery();
       })), $(".empty-message").remove(), $("#foldCategoryBtn").remove(), this.$contentBox.children(".box").remove(), $("#sort-toggle-btn").remove(), this.$contentBox.append(this.$listRoot), this.$contentBox.append('<div class="page-box"></div>');
       utils.setHrefParam("page", this.currentPage);
       $(".page-box").append('\n            <nav class="pagination">\n                <button type="button" class="jhs-btn pagination-previous">上一页</button>\n                <ul class="pagination-list"></ul>\n                <button type="button" class="jhs-btn pagination-next">下一页</button>\n            </nav>\n        '), $(document).on("click", ".pagination-link", ((e3) => {
@@ -9568,12 +9584,15 @@
     }
     async handleQuery() {
       let e2 = loading();
+      const generation = ++this._queryGeneration;
       try {
         $(".page-box").show();
         const scope = await this.getRuntimeService("scope")();
+        if (generation !== this._queryGeneration) return;
         const result = await this.getRuntimeService("movie").catalog("av123", { page: this.currentPage, keyword: this.keyword || "" }, { scope });
+        if (generation !== this._queryGeneration) return;
         const i2 = result.items;
-        if (result.maxPage) this.maxPage = result.maxPage, this.renderPagination();
+        this.maxPage = Math.max(1, Number(result.maxPage) || 1), this.currentPage = Math.min(Math.max(1, this.currentPage), this.maxPage), this.renderPagination();
         if (0 === i2.length) {
           clog.log(i2), show.error("无结果");
           clog.error("123AV 获取数据失败");
@@ -9829,15 +9848,16 @@ ${value}\r
   __name(renderImage, "renderImage");
   async function renderScreenshotPanel(options) {
     const jq = globalThis.$;
-    const host = jq(options.target), isActive = options.isActive ?? (() => true);
+    const host = jq(options.target), isActive = options.isActive ?? (() => true), providerId = options.providerId ?? "javstore";
     if (!host.length || options.settings.enableLoadScreenShot === "no") return host.empty(), null;
     const load = /* @__PURE__ */ __name(async (resultHost = host) => {
       resultHost.empty().append(jq("<div></div>").addClass("jhs-panel-state").text("正在加载缩略图…"));
       try {
-        const images = await options.screenshot.resolve({ carNum: options.carNum }, { scope: options.scope });
+        const images = await options.screenshot.resolve({ carNum: options.carNum }, { providerId, scope: options.scope });
         if (!isActive()) return null;
         const image = Array.isArray(images) ? images[0] : images;
         if (!image?.url) return resultHost.empty(), null;
+        if (options.isDuplicate?.(image.url)) return resultHost.empty(), null;
         return renderImage(resultHost, image.url, "缩略图");
       } catch (error) {
         if (!isActive()) return null;
@@ -10491,7 +10511,9 @@ ${value}\r
           screenshot: this.getRuntimeService("screenshot"),
           settings: this.getRuntimeService("settings").snapshot(),
           scope,
-          isActive: context.isAlive
+          isActive: context.isAlive,
+          providerId: "javstore",
+          isDuplicate: /* @__PURE__ */ __name((url) => Boolean(context.galleryUrls?.has(url)), "isDuplicate")
         })).then((result) => {
           if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove();
         }).catch(((error) => {
@@ -11537,11 +11559,13 @@ ${failure.stack}` : "");
     }
     async handleTop() {
       if (!window.location.href.includes("handleTop=1")) return;
+      const hitShow = this.getOptionalDependency("HitShowPlugin");
+      if (!hitShow) return void show.info("热播列表功能已禁用");
       const e2 = new URLSearchParams(window.location.search);
       let t2 = e2.get("handleType") || "all", n2 = e2.get("type_value") || "";
       this.has_cnsub = e2.get("has_cnsub") || "";
       let a2 = Number(e2.get("page")) || 1;
-      this.toolBar(t2, n2, a2), this.hookPage();
+      this.hookPage(), this.toolBar(t2, n2, a2);
       let i2 = this.$listRoot;
       i2.html("");
       let s2 = loading();
@@ -11553,10 +11577,8 @@ ${failure.stack}` : "");
           let t3 = e3.data.movies;
           if (0 === t3.length) return show.error("无数据"), void s2.close();
           this.movies = t3;
-          const n3 = t3.filter(((e4) => "1" === this.has_cnsub ? e4.has_cnsub : "0" !== this.has_cnsub || !e4.has_cnsub)), a3 = this.getOptionalDependency("HitShowPlugin");
-          if (!a3) return void show.info("热播列表功能已禁用");
-          let r3 = a3.markDataListHtml(n3);
-          i2.html(r3), await a3.initializeRenderedList(), await a3.loadScore(n3), o2 = true;
+          const n3 = t3.filter(((e4) => "1" === this.has_cnsub ? e4.has_cnsub : "0" !== this.has_cnsub || !e4.has_cnsub)), r3 = hitShow.markDataListHtml(n3);
+          i2.html(r3), await hitShow.initializeRenderedList(), await hitShow.loadScore(n3), o2 = true;
         } else clog.error(e3), i2.html(`<h3>${escapeHtml(l3)}</h3>`), show.error(l3), "JWTVerificationError" === c2 && (removeStoredEncryptedCredential(me), await this.checkLogin(null, new URLSearchParams(window.location.search))), o2 = true;
       } catch (r2) {
         l2 < 3 ? (clog.error(`获取Top数据失败 (第 ${l2} 次重试):`, r2), await new Promise(((e3) => setTimeout(e3, 1e3)))) : (clog.error("所有重试尝试均失败，无法获取Top数据。", r2), i2.html("<h3>无法加载数据，请稍后再试。</h3>"));
@@ -12194,6 +12216,7 @@ ${failure.stack}` : "");
             </div>`;
     }
     async addSvgBtn(items = null) {
+      if (!this.getOptionalDependency("ListPagePlugin")) return;
       (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach(((element) => {
         const item = $(element);
         if (item.find(".tool-box").length || l && item.find(".avatar-box").length) return;
@@ -12487,7 +12510,7 @@ ${failure.stack}` : "");
     }
     async getServiceScreenshot(carNum) {
       const scope = await this.getRuntimeService("scope")();
-      const images = await this.getRuntimeService("screenshot").resolve({ carNum }, { scope });
+      const images = await this.getRuntimeService("screenshot").resolve({ carNum }, { providerId: "javstore", scope });
       const image = Array.isArray(images) ? images[0] : images;
       return image?.url ? { url: image.url, source: image.providerId || "javstore", detailUrl: null } : null;
     }
@@ -14732,11 +14755,11 @@ ${failure.stack}` : "");
           }, "success")
         });
       }));
-      const a2 = this.getOptionalDependency("HighlightMagnetPlugin"), i2 = await storageManager.getSetting("enableMagnetsFilter", _);
-      a2 || $("#enable-magnets-filter").remove(), $("#magnets-span").text(i2 === _ ? "关闭磁力过滤" : "开启磁力过滤"), i2 === _ && a2?.doFilterMagnet?.(), $("#enable-magnets-filter").on("click", ((e3) => {
+      const a2 = this.getOptionalDependency("HighlightMagnetPlugin"), settings = this.getRuntimeService("settings"), i2 = settings.snapshot().enableMagnetsFilter ?? _;
+      a2 || $("#enable-magnets-filter").remove(), $("#magnets-span").text(i2 === _ ? "关闭磁力过滤" : "开启磁力过滤"), i2 === _ && a2?.doFilterMagnet?.(), $("#enable-magnets-filter").on("click", (async (e3) => {
         let t3 = $("#magnets-span");
         if (!a2) return;
-        "关闭磁力过滤" === t3.text() ? (a2.showAll(), t3.text("开启磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", C)) : (a2.doFilterMagnet(), t3.text("关闭磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", _));
+        "关闭磁力过滤" === t3.text() ? (a2.showAll(), t3.text("开启磁力过滤"), await settings.set("enableMagnetsFilter", C)) : (a2.doFilterMagnet(), t3.text("关闭磁力过滤"), await settings.set("enableMagnetsFilter", _));
       })), $("#search-subtitle-btn").on("click", ((e3) => {
         const target = this.getRuntimeService("movie").sourceUrls({ carNum: t2 }, ["subtitlecat"])[0]?.url;
         if (target) utils.openPage(target, t2, false, e3);
@@ -16876,14 +16899,15 @@ ${failure.stack}` : "");
     }
     createMenu() {
       const item = /* @__PURE__ */ __name((action, label, attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, "item"), group = /* @__PURE__ */ __name((content) => `<div class="jhs-fab-group">${content}</div>`, "group"), divider = '<div class="jhs-fab-divider" role="separator"></div>';
+      const hasListPageButton = !!this.getOptionalDependency("ListPageButtonPlugin"), hasListPage = !!this.getOptionalDependency("ListPagePlugin"), hasNewVideo = !!this.getOptionalDependency("NewVideoPlugin"), hasBlacklist = !!this.getOptionalDependency("BlacklistPlugin"), hasSetting = !!this.getOptionalDependency("SettingPlugin"), hasDetailPageButton = !!this.getOptionalDependency("DetailPageButtonPlugin"), hasHighlightMagnet = !!this.getOptionalDependency("HighlightMagnetPlugin"), hasMagnetHub = !!this.getOptionalDependency("MagnetHubPlugin");
       let items;
       if (window.isListPage) {
         const requestedSortMethod = this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? requestedSortMethod : "default", sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getOptionalDependency("ListPagePlugin")?.activeQuickFilter), filterOptions = [...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""), sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
-        items = group(item("check", "开始鉴定") + item("newVideo", "新作品") + item("blacklist", "黑名单") + item("sort", `排序: ${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') + item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"')) + divider + group(item("logger", "运行日志") + item("setting", "设置")) + `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div><div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>`;
+        items = group((hasListPageButton ? item("check", "开始鉴定") : "") + (hasNewVideo ? item("newVideo", "新作品") : "") + (hasBlacklist ? item("blacklist", "黑名单") : "") + (hasListPageButton ? item("sort", `排序: ${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') : "") + (hasListPage ? item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"') : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : "")) + (hasListPage ? `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div>` : "") + (hasListPageButton ? `<div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>` : "");
       } else if (window.isDetailPage) {
         const statusDefs = [{ action: "filter", icon: m, label: "屏蔽", key: "filter" }, { action: "fav", icon: v, label: "收藏", key: "fav" }, { action: "down", icon: y, label: "已下载", key: "down" }, { action: "watch", icon: k, label: "已观看", key: "watch" }];
-        items = group(statusDefs.map(((definition) => item(definition.action, `<span class="jhs-fab-status-dot" data-status-key="${definition.key}"></span>${definition.icon}`, `aria-label="${definition.label}" aria-pressed="false" data-label="${definition.label}"`))).join("")) + divider + group(item("magnetFilter", "磁力过滤") + item("magnet", "磁力搜索") + item("subtitle", "字幕")) + divider + group(item("logger", "运行日志") + item("setting", "设置"));
-      } else items = group(item("logger", "运行日志") + item("setting", "设置"));
+        items = group(hasDetailPageButton ? statusDefs.map(((definition) => item(definition.action, `<span class="jhs-fab-status-dot" data-status-key="${definition.key}"></span>${definition.icon}`, `aria-label="${definition.label}" aria-pressed="false" data-label="${definition.label}"`))).join("") : "") + divider + group((hasHighlightMagnet ? item("magnetFilter", "磁力过滤") : "") + (hasMagnetHub ? item("magnet", "磁力搜索") : "") + (hasDetailPageButton ? item("subtitle", "字幕") : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : ""));
+      } else items = group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : ""));
       return $(`<div id="jhs-fab-menu" class="jhs-fab-menu" role="menu" aria-hidden="true">${items}</div>`);
     }
     async refreshDetailStatus() {
@@ -17234,7 +17258,7 @@ ${failure.stack}` : "");
     manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }, [PORT.host]),
     manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage]),
     manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related, SERVICE.settings]),
-    manifest("detail.page-state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle, SERVICE.state]),
+    manifest("detail.page-state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle, SERVICE.state, SERVICE.settings]),
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [PORT.host, SERVICE.settings]),
     manifest("detail.javdb-preview", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie]),
     manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }),
@@ -18365,28 +18389,44 @@ ${failure.stack}` : "");
   var ReviewService = _ReviewService;
 
   // src/services/screenshot-service.js
+  var DEFAULT_SCREENSHOT_PROVIDER = "javstore";
   var _ScreenshotService = class _ScreenshotService {
     constructor(providers, integrations = null) {
       this.providers = providers;
       this.integrations = integrations;
     }
     async resolve(movieRef, context = {}) {
-      for (const provider of await this.providers.getAvailable("screenshot", context)) {
-        try {
-          const result = await provider.resolve(movieRef, context);
-          this.providers.updateHealth(provider.id, { ok: true });
+      if (context.providerId) {
+        const provider = this.providers.get?.(context.providerId);
+        if (provider && provider.enabled !== false && provider.capabilities?.includes("screenshot")) {
+          const result = await this.resolveFromProvider(provider, movieRef, context);
           if (result) return result;
-        } catch (error) {
-          this.providers.updateHealth(provider.id, { ok: false, error: error instanceof Error ? error.message : String(error) });
         }
+        return this.resolveIntegration(context.providerId, movieRef, context);
       }
-      for (const manifest2 of this.integrations?.list("movie.images") ?? []) {
-        const adapter = this.integrations?.getAdapter(manifest2.id);
-        if (typeof adapter?.getImages !== "function") continue;
-        const result = await adapter.getImages(movieRef, context);
-        if (Array.isArray(result) && result.length) return result;
+      for (const provider of await this.providers.getAvailable("screenshot", context)) {
+        const result = await this.resolveFromProvider(provider, movieRef, context);
+        if (result) return result;
+      }
+      return this.resolveIntegration(DEFAULT_SCREENSHOT_PROVIDER, movieRef, context);
+    }
+    async resolveFromProvider(provider, movieRef, context) {
+      try {
+        const result = await provider.resolve(movieRef, context);
+        this.providers.updateHealth(provider.id, { ok: true });
+        if (result) return result;
+      } catch (error) {
+        this.providers.updateHealth(provider.id, { ok: false, error: error instanceof Error ? error.message : String(error) });
       }
       return null;
+    }
+    async resolveIntegration(providerId, movieRef, context) {
+      const manifest2 = this.integrations?.list("movie.images")?.find((item) => item.id === providerId);
+      if (!manifest2) return null;
+      const adapter = this.integrations?.getAdapter(manifest2.id);
+      if (typeof adapter?.getImages !== "function") return null;
+      const result = await adapter.getImages(movieRef, context);
+      return Array.isArray(result) && result.length ? result : null;
     }
     getSearchUrl(movieRef) {
       for (const manifest2 of this.integrations?.list("movie.images") ?? []) {

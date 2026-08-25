@@ -20,9 +20,16 @@ export function renderFc2Gallery(context, images) {
     const jq = /** @type {any} */ (globalThis).$;
     const urls = [...new Set((images || []).map(normalizeUrl).filter(Boolean))];
     const grid = context.root.find('[data-jhs-role="gallery-grid"]').empty(), preview = context.root.find('[data-jhs-role="main-preview"]').empty();
+    context.galleryUrls = new Set(urls);
     if (!urls.length) return renderFc2State(grid, "暂无剧照");
     preview.append(jq("<img>").attr({ src: urls[0], alt: `${context.carNum} 预览`, loading: "eager" }));
     urls.forEach((url, index) => grid.append(jq('<button type="button" class="jhs-btn jhs-fc2-gallery-item"></button>').attr("aria-label", `查看剧照 ${index + 1}`).append(jq("<img>").addClass("jhs-fc2-gallery__image").attr({ src: url, alt: `剧照 ${index + 1}`, loading: "lazy" }))));
+    // 去重保险：若额外长缩略图复用了 Gallery 图片，隐藏 screenshot 区域。
+    const screenshot = context.root.find('[data-jhs-role="screenshot"]');
+    screenshot.find("img").each((/** @type {number} */ _, /** @type {HTMLImageElement} */ img) => {
+        const src = img.getAttribute("src");
+        if (src && context.galleryUrls.has(src)) screenshot.empty();
+    });
 }
 
 /** @param {any} context @param {any} movieService */

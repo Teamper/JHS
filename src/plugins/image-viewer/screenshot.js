@@ -80,7 +80,7 @@ export class ScreenShotPlugin extends BasePlugin {
     /** @param {string} carNum */
     async getServiceScreenshot(carNum) {
         const scope = await this.getRuntimeService("scope")();
-        const images = await this.getRuntimeService("screenshot").resolve({ carNum }, { scope });
+        const images = await this.getRuntimeService("screenshot").resolve({ carNum }, { providerId: "javstore", scope });
         const image = Array.isArray(images) ? images[0] : images;
         return image?.url ? { url: image.url, source: image.providerId || "javstore", detailUrl: null } : null;
     }

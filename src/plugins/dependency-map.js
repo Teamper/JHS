@@ -30,7 +30,7 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     ],
     MobileBottomBarPlugin: [
         "ListPagePlugin", "DetailPageButtonPlugin", "ListPageButtonPlugin",
-        "NewVideoPlugin", "BlacklistPlugin", "SettingPlugin"
+        "NewVideoPlugin", "BlacklistPlugin", "SettingPlugin", "HighlightMagnetPlugin", "MagnetHubPlugin"
     ],
     NavBarPlugin: ["SearchByImagePlugin"],
     NewVideoPlugin: ["TaskPlugin", "SettingPlugin"],

@@ -77,6 +77,7 @@ export class CoverButtonPlugin extends BasePlugin {
     }
     /** @param {JQueryHandle | Element | null} [items] */
     async addSvgBtn(items = null) {
+        if (!this.getOptionalDependency("ListPagePlugin")) return;
         (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach(((/** @type {Element} */ element) => {
             const item = $(element);
             if (item.find(".tool-box").length || l && item.find(".avatar-box").length) return;

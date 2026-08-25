@@ -199,7 +199,7 @@ describe("detail car number propagation", () => {
         await expect(new Plugin().getServiceScreenshot("IPZZ-479")).resolves.toEqual({
             url: "https://img.javstore.net/preview.jpg", source: "javstore", detailUrl: null,
         });
-        expect(resolve).toHaveBeenCalledWith({ carNum: "IPZZ-479" }, { scope: { id: "detail" } });
+        expect(resolve).toHaveBeenCalledWith({ carNum: "IPZZ-479" }, { providerId: "javstore", scope: { id: "detail" } });
     });
 
     it("normalizes a legacy JavStore URL again at the image rendering boundary", () => {

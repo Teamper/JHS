@@ -128,6 +128,14 @@ describe("FC2 owned detail workspace", () => {
         expect(fc2Source).toContain('target.searchParams.set("source", source)');
     });
 
+    it("keeps the native FC2 entry free of a hard list.core dependency so disabling ListPagePlugin stays safe", () => {
+        expect(fc2Source).not.toContain('getBean("ListPagePlugin")');
+        expect(fc2Source).toContain('o.includes("collection_codes?movieId")');
+        expect(fc2Source).toContain("openFc2Dialog(");
+        expect(listPageSource).toContain("protectFc2Navigation(root)");
+        expect(listPageSource).toContain('this.getBean("Fc2Plugin")');
+    });
+
     it("restores source links, magnet metadata and scoped quality filtering", () => {
         expect(fc2ViewSource).toContain("FC2PPVDB");
         expect(fc2ViewSource).toContain("FC2 市场");

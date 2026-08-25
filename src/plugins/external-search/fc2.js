@@ -27,6 +27,7 @@ import { createFc2DetailContext, createFc2DetailShell } from "../status/detail-w
  * @property {(name: string) => JQueryHandle} getSlot
  * @property {(name: string) => JQueryHandle} getSection
  * @property {() => void} destroy
+ * @property {Set<string> | undefined} galleryUrls
  */
 /** @typedef {{ id: string, name: string, gender?: number }} MovieActor */
 /** @typedef {{ title?: string, carNum?: string, releaseDate?: string, score?: number | string, duration?: number | string, actors?: MovieActor[], imageUrls?: string[] }} Fc2Movie */
@@ -184,6 +185,7 @@ export class Fc2Plugin extends BasePlugin {
             void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderScreenshotPanel({
                 target: screenshot, carNum: context.carNum.replace("FC2-", ""), screenshot: this.getRuntimeService("screenshot"),
                 settings: this.getRuntimeService("settings").snapshot(), scope, isActive: context.isAlive,
+                providerId: "javstore", isDuplicate: url => Boolean(context.galleryUrls?.has(url)),
             })).then((/** @type {unknown} */ result) => { if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove(); }).catch((error => {
                 context.isAlive() && screenshot.remove(), clog.error("FC2 剧照初始化失败", error);
             }));

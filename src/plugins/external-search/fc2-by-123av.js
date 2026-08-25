@@ -18,8 +18,9 @@ export class Fc2By123AvPlugin extends BasePlugin {
         /** @type {JQueryHandle | null} */ this.$contentBox = null;
         /** @type {JQueryHandle | null} */ this.$listRoot = null;
         this.urlParams = new URLSearchParams(window.location.search);
-        this.currentPage = parseInt(this.urlParams.get("page") || "1", 10);
+        this.currentPage = Math.max(1, parseInt(this.urlParams.get("page") || "1", 10) || 1);
         /** @type {number | null} */ this.maxPage = null;
+        /** @type {number} */ this._queryGeneration = 0;
         /** @type {string | null} */ this.keyword = this.urlParams.get("keyword") || null;
     }
     getName() {
@@ -43,10 +44,10 @@ export class Fc2By123AvPlugin extends BasePlugin {
         e.contents().first().replaceWith("123Av"), e.css("marginBottom", "0"), e.append('\n            <div class="jhs-layout-f5f47b30">\n                <input id="search-123av-keyword" type="text" placeholder="搜索123Av Fc2ppv内容" class="jhs-field">\n                <button type="button" id="search-123av-btn" class="jhs-btn jhs-btn--primary jhs-layout-21a4fe43">搜索</button>\n                <button type="button" id="clear-123av-btn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n            </div>\n        '),
         $("#search-123av-keyword").val(this.keyword), $("#search-123av-btn").on("click", (async () => {
             let e = String($("#search-123av-keyword").val() || "").trim();
-            e && (this.keyword = e, utils.setHrefParam("keyword", e), await this.handleQuery());
+            e && (this.keyword = e, utils.setHrefParam("keyword", e), this.currentPage = 1, this.maxPage = null, utils.setHrefParam("page", 1), await this.handleQuery());
         })), $("#clear-123av-btn").on("click", (async () => {
             $("#search-123av-keyword").val(""), this.keyword = "", utils.setHrefParam("keyword", ""),
-            $(".page-box").show(), await this.handleQuery();
+            this.currentPage = 1, this.maxPage = null, utils.setHrefParam("page", 1), $(".page-box").show(), await this.handleQuery();
         })), $(".empty-message").remove(), $("#foldCategoryBtn").remove(), this.$contentBox.children(".box").remove(),
         $("#sort-toggle-btn").remove(),
         this.$contentBox.append(this.$listRoot),
@@ -80,12 +81,15 @@ export class Fc2By123AvPlugin extends BasePlugin {
     }
     async handleQuery() {
         let e = loading();
+        const generation = ++this._queryGeneration;
         try {
             $(".page-box").show();
             const scope = await this.getRuntimeService("scope")();
+            if (generation !== this._queryGeneration) return;
             const result = await this.getRuntimeService("movie").catalog("av123", { page: this.currentPage, keyword: this.keyword || "" }, { scope });
+            if (generation !== this._queryGeneration) return;
             const i = result.items;
-            if (result.maxPage) this.maxPage = result.maxPage, this.renderPagination();
+            this.maxPage = Math.max(1, Number(result.maxPage) || 1), this.currentPage = Math.min(Math.max(1, this.currentPage), this.maxPage), this.renderPagination();
             if (0 === i.length) {
                 clog.log(i), show.error("无结果");
                 clog.error("123AV 获取数据失败");

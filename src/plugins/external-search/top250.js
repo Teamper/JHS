@@ -56,11 +56,13 @@ export class Top250Plugin extends BasePlugin {
     }
     async handleTop() {
         if (!window.location.href.includes("handleTop=1")) return;
+        const hitShow = this.getOptionalDependency("HitShowPlugin");
+        if (!hitShow) return void show.info("热播列表功能已禁用");
         const e = new URLSearchParams(window.location.search);
         let t = e.get("handleType") || "all", n = e.get("type_value") || "";
         this.has_cnsub = e.get("has_cnsub") || "";
         let a = Number(e.get("page")) || 1;
-        this.toolBar(t, n, a), this.hookPage();
+        this.hookPage(), this.toolBar(t, n, a);
         let i = this.$listRoot;
         i.html("");
         let s = loading();
@@ -72,10 +74,8 @@ export class Top250Plugin extends BasePlugin {
                 let t = e.data.movies;
                 if (0 === t.length) return show.error("无数据"), void s.close();
                 this.movies = t;
-                const n = t.filter(((/** @type {TopMovie} */ e) => "1" === this.has_cnsub ? e.has_cnsub : "0" !== this.has_cnsub || !e.has_cnsub)), a = this.getOptionalDependency("HitShowPlugin");
-                if (!a) return void show.info("热播列表功能已禁用");
-                let r = a.markDataListHtml(n);
-                i.html(r), await a.initializeRenderedList(), await a.loadScore(n), o = !0;
+                const n = t.filter(((/** @type {TopMovie} */ e) => "1" === this.has_cnsub ? e.has_cnsub : "0" !== this.has_cnsub || !e.has_cnsub)), r = hitShow.markDataListHtml(n);
+                i.html(r), await hitShow.initializeRenderedList(), await hitShow.loadScore(n), o = !0;
             } else clog.error(e), i.html(`<h3>${escapeHtml(l)}</h3>`), show.error(l), "JWTVerificationError" === c && (removeStoredEncryptedCredential(me),
             await this.checkLogin(null, new URLSearchParams(window.location.search))), o = !0;
         } catch (r) {

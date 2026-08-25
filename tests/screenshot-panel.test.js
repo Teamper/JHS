@@ -18,3 +18,16 @@ it("keeps manual mode request-free until selected", async () => {
     jquery("#target button").trigger("click");
     await vi.waitFor(() => expect(resolve).toHaveBeenCalledOnce());
 });
+
+it("resolves the long-thumbnail only through javstore", async () => {
+    const resolve = vi.fn(async () => [ { url: "https://img.javstore.net/test.jpg", providerId: "javstore" } ]);
+    await renderScreenshotPanel({ target: jquery("#target"), carNum: "ABC-123", screenshot: { resolve }, settings: {} });
+    expect(resolve).toHaveBeenCalledWith({ carNum: "ABC-123" }, { providerId: "javstore", scope: undefined });
+});
+
+it("skips a screenshot that duplicates a gallery image", async () => {
+    const resolve = vi.fn(async () => [ { url: "https://fc2content.net/gallery/1.jpg", providerId: "fc2content" } ]);
+    const isDuplicate = vi.fn((url) => url === "https://fc2content.net/gallery/1.jpg");
+    await expect(renderScreenshotPanel({ target: jquery("#target"), carNum: "FC2-123", screenshot: { resolve }, settings: {}, isDuplicate })).resolves.toBeNull();
+    expect(jquery("#target").children().length).toBe(0);
+});

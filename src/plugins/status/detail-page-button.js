@@ -51,13 +51,13 @@ export class DetailPageButtonPlugin extends BasePlugin {
                 }
             });
         }));
-        const a = this.getOptionalDependency("HighlightMagnetPlugin"), i = await storageManager.getSetting("enableMagnetsFilter", _);
+        const a = this.getOptionalDependency("HighlightMagnetPlugin"), settings = this.getRuntimeService("settings"), i = settings.snapshot().enableMagnetsFilter ?? _;
         a || $("#enable-magnets-filter").remove(), $("#magnets-span").text(i === _ ? "关闭磁力过滤" : "开启磁力过滤"), i === _ && a?.doFilterMagnet?.(),
-        $("#enable-magnets-filter").on("click", ((/** @type {ActionEvent} */ e) => {
+        $("#enable-magnets-filter").on("click", (async (/** @type {ActionEvent} */ e) => {
             let t = $("#magnets-span");
             if (!a) return;
-            "关闭磁力过滤" === t.text() ? (a.showAll(), t.text("开启磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", C)) : (a.doFilterMagnet(),
-            t.text("关闭磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", _));
+            "关闭磁力过滤" === t.text() ? (a.showAll(), t.text("开启磁力过滤"), await settings.set("enableMagnetsFilter", C)) : (a.doFilterMagnet(),
+            t.text("关闭磁力过滤"), await settings.set("enableMagnetsFilter", _));
         })), $("#search-subtitle-btn").on("click", ((/** @type {ActionEvent} */ e) => {
             const target = this.getRuntimeService("movie").sourceUrls({ carNum: t }, ["subtitlecat"])[0]?.url;
             if (target) utils.openPage(target, t, !1, e);

@@ -1046,6 +1046,14 @@ export function initializeUiAccessibility(lifecycleScope) {
 export class JhsSelect {
     /** @type {WeakMap<object, JhsSelect>} */
     static instances = new WeakMap;
+    /** @type {boolean} */
+    static _globalClickBound = !1;
+    static _ensureGlobalClickHandler() {
+        if (JhsSelect._globalClickBound) return;
+        JhsSelect._globalClickBound = !0, $(document).on("click.jhsSelect", ((/** @type {any} */ event) => {
+            $(event.target).closest(".jhs-select-control").length || JhsSelect.closeAll();
+        }));
+    }
     /** @param {any} select */
     constructor(select) {
         this.source = $(select);
@@ -1129,9 +1137,7 @@ export class JhsSelect {
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
         }));
-        this.source.on("change.jhsSelect", (() => this.refresh())), $(document).on("click.jhsSelect", ((/** @type {any} */ event) => {
-            $(event.target).closest(this.control).length || this.close();
-        }));
+        this.source.on("change.jhsSelect", (() => this.refresh())), JhsSelect._ensureGlobalClickHandler();
     }
     options() {
         return this.menu.find(".jhs-select-option:not(:disabled)");

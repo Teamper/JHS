@@ -23,19 +23,20 @@ function renderImage(host, url, alt) {
 }
 
 /**
- * @param {{target: any, carNum: string, screenshot: import("../../services/screenshot-service.js").ScreenshotService, settings: Record<string, any>, scope?: import("../../core/lifecycle-scope.js").LifecycleScope, isActive?: () => boolean}} options
+ * @param {{target: any, carNum: string, screenshot: import("../../services/screenshot-service.js").ScreenshotService, settings: Record<string, any>, scope?: import("../../core/lifecycle-scope.js").LifecycleScope, isActive?: () => boolean, providerId?: string, isDuplicate?: (url: string) => boolean}} options
  */
 export async function renderScreenshotPanel(options) {
     const jq = /** @type {any} */ (globalThis).$;
-    const host = jq(options.target), isActive = options.isActive ?? (() => true);
+    const host = jq(options.target), isActive = options.isActive ?? (() => true), providerId = options.providerId ?? "javstore";
     if (!host.length || options.settings.enableLoadScreenShot === "no") return host.empty(), null;
     const load = async (resultHost = host) => {
         resultHost.empty().append(jq("<div></div>").addClass("jhs-panel-state").text("正在加载缩略图…"));
         try {
-            const images = await options.screenshot.resolve({ carNum: options.carNum }, { scope: options.scope });
+            const images = await options.screenshot.resolve({ carNum: options.carNum }, { providerId, scope: options.scope });
             if (!isActive()) return null;
             const image = Array.isArray(images) ? images[0] : images;
             if (!image?.url) return resultHost.empty(), null;
+            if (options.isDuplicate?.(image.url)) return resultHost.empty(), null;
             return renderImage(resultHost, image.url, "缩略图");
         } catch (error) {
             if (!isActive()) return null;
