@@ -1,5 +1,6 @@
 // @ts-check
 
+import { jhsEventBus } from "../../core/event-bus.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
 
@@ -26,10 +27,32 @@ export class Fc2NavigationPlugin extends BasePlugin {
         if (!listRoot) return;
         const root = $(listRoot).first();
         if (!root.length) return;
+        const scope = await this.getRuntimeService("scope")();
         await this.protectFc2Navigation(root, fc2);
         this.bindFc2Navigation(root, fc2);
-        const scope = await this.getRuntimeService("scope")();
         scope.addCleanup(() => root.off(".jhsFc2Navigation"));
+
+        // 6.5: protect FC2 cards added after initial render (AutoPage waterfall pages, filter re-render).
+        // Prefer the list-items-added event; keep a MutationObserver fallback so FC2 navigation keeps
+        // working when list.core is disabled.
+        let reprotectTimer = null;
+        const reprotect = () => {
+            if (reprotectTimer != null) return;
+            reprotectTimer = setTimeout(() => {
+                reprotectTimer = null;
+                void this.protectFc2Navigation(root, fc2).catch((error) => clog.warn("FC2 动态导航保护失败", error));
+            }, 80);
+        };
+        scope.addCleanup(() => {
+            if (reprotectTimer != null) { clearTimeout(reprotectTimer); reprotectTimer = null; }
+        });
+        const unsubscribeItems = jhsEventBus.on("list-items-added", (payload) => { if (payload?.items?.length) reprotect(); });
+        scope.addCleanup(unsubscribeItems);
+        if (typeof MutationObserver !== "undefined") {
+            scope.observe(listRoot, (records) => {
+                if (records.some((record) => record.addedNodes.length)) reprotect();
+            }, { childList: true, subtree: false });
+        }
     }
 
     /** @param {JQueryHandle} root @param {any} fc2 */

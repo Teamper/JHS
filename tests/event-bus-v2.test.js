@@ -45,4 +45,30 @@ describe("precise event bus", () => {
         await bus._receive(event), await bus._receive(event), await bus._receive({ ...event, eventId: "self", originId: bus.originId });
         expect(handler).toHaveBeenCalledTimes(1);
     });
+
+    it("isolates a throwing local listener and still broadcasts to other tabs", async () => {
+        FakeBroadcastChannel.channels = [];
+        const Bus = loadBus(), first = new Bus("iso-local"), second = new Bus("iso-local");
+        const bad = vi.fn(async () => { throw new Error("boom"); }), good = vi.fn(), remote = vi.fn(), errors = [];
+        first.errorReporter = (error) => errors.push(error);
+        first.on("settings-changed", bad), first.on("settings-changed", good), second.on("settings-changed", remote);
+        await first.emit("settings-changed", { source: "legacy" });
+        await Promise.resolve();
+        expect(bad).toHaveBeenCalledTimes(1);
+        expect(good).toHaveBeenCalledTimes(1);
+        expect(remote).toHaveBeenCalledTimes(1);
+        expect(errors).toHaveLength(1);
+    });
+
+    it("isolates throwing remote listeners from each other", async () => {
+        FakeBroadcastChannel.channels = [];
+        const Bus = loadBus(), first = new Bus("iso-remote"), second = new Bus("iso-remote");
+        const bad = vi.fn(async () => { throw new Error("boom"); }), good = vi.fn();
+        second.errorReporter = () => {};
+        second.on("car-state-changed", bad), second.on("car-state-changed", good);
+        await first.emit("car-state-changed", { carNums: [] });
+        await Promise.resolve();
+        expect(bad).toHaveBeenCalledTimes(1);
+        expect(good).toHaveBeenCalledTimes(1);
+    });
 });

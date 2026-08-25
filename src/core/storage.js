@@ -396,15 +396,20 @@ export class StorageManager {
         return "true" === n || "false" === n ? "true" === n.toLowerCase() : "string" != typeof n || "" === n.trim() || isNaN(Number(n)) ? n : Number(n);
     }
     async saveSetting(e) {
+        if (globalThis.settingsService?.replace) return globalThis.settingsService.replace(e);
         e ? (await this._setItemAndInvalidate(this.setting_key, e), await window.clean_cacheSettingObj()) : show.error("设置对象为空");
     }
     invalidateSettingCache() { this._invalidateCache(this.setting_key); }
     async saveSettingItem(e, t) {
         if (!e) return void show.error("key 不能为空");
-        await navigator.locks.request("jhs_setting_lock", async () => {
+        // 6.5: route through the single SettingsService write entry when it is available.
+        if (globalThis.settingsService?.set) return globalThis.settingsService.set(e, t);
+        const locks = globalThis.navigator?.locks;
+        const write = async () => {
             let n = await this.getSetting();
             n[e] = t, await this.saveSetting(n);
-        });
+        };
+        return locks?.request ? locks.request("jhs_setting_lock", write) : write();
     }
     async importData(e) {
         validatePortableData(e);

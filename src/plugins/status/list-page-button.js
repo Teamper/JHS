@@ -71,10 +71,13 @@ export class ListPageButtonPlugin extends BasePlugin {
         })), $("#blacklistBtn").on("click", ((/** @type {any} */ e) => {
             this.getOptionalDependency("BlacklistPlugin")?.openBlacklistDialog?.();
         })), this.bindSortMenu();
-        const e = this.getOptionalDependency("BlacklistPlugin");
-        e || $("#blacklistBtn,#addBlacklistBtn,#filterAllVideo,#favoriteAllVideo,#hasDownAllVideo").prop("disabled", !0).attr("title", "黑名单功能已禁用");
+        // 6.5: capability ownership — BlacklistPlugin owns only blacklist actions; one-click favorite /
+        // downloaded are list-state capabilities and must not be disabled when the blacklist is off.
+        const blacklist = this.getOptionalDependency("BlacklistPlugin"), listPage = this.getOptionalDependency("ListPagePlugin");
+        blacklist || $("#blacklistBtn,#addBlacklistBtn,#filterAllVideo").prop("disabled", !0).attr("title", "黑名单功能已禁用");
+        listPage || $("#favoriteAllVideo,#hasDownAllVideo").prop("disabled", !0).attr("title", "列表功能已禁用");
         $("#addBlacklistBtn").on("click", (async (/** @type {any} */ t) => {
-            await e?.addBlacklist?.(t);
+            await blacklist?.addBlacklist?.(t);
         })), $("#filterAllVideo").on("click", (async (/** @type {any} */ t) => {
             let n = {
                 clientX: t.clientX,
@@ -85,7 +88,7 @@ export class ListPageButtonPlugin extends BasePlugin {
             utils.q(n, "一键屏蔽视频列表?", (async () => {
                 this.loadObj = loading();
                 try {
-                    await e?.filterAllVideo?.(i);
+                    await blacklist?.filterAllVideo?.(i);
                 } catch (t) {
                     clog.error(t);
                 } finally { this.loadObj.close(); }
@@ -96,7 +99,7 @@ export class ListPageButtonPlugin extends BasePlugin {
             let i = a.text().trim().split(",")[0];
             utils.q(n, "一键收藏所有可见作品?", (async () => {
                 this.loadObj = loading();
-                try { await e?.batchSaveAllVideos?.(i, h); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
+                try { await listPage?.batchSaveAllVideos?.(i, h); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
             }));
         })), $("#hasDownAllVideo").on("click", (async (/** @type {any} */ t) => {
             let n = {clientX: t.clientX, clientY: t.clientY + 80}, a = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
@@ -104,7 +107,7 @@ export class ListPageButtonPlugin extends BasePlugin {
             let i = a.text().trim().split(",")[0];
             utils.q(n, "一键已下载所有可见作品?", (async () => {
                 this.loadObj = loading();
-                try { await e?.batchSaveAllVideos?.(i, g); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
+                try { await listPage?.batchSaveAllVideos?.(i, g); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
             }));
         }));
     }

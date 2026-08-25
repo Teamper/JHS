@@ -12,7 +12,17 @@ export const REQUIRED_MANUAL_SMOKE_CHECKS = Object.freeze([
     "javbus.detail",
     "fc2.ownedDetail",
     "mobile.realViewport",
+    "settings.crossTabSync",
+    "fc2.autopagePage2",
+    "dialog.layeredBlacklistSettingsWebdav",
+    "plugin.disabledNewVideo",
+    "plugin.disabledBlacklist",
+    "cloud.115",
+    "cloud.123",
 ]);
+
+/** Placeholder version strings that can never count as a real human-verified environment. */
+export const PLACEHOLDER_VERSIONS = Object.freeze([ "release", "latest", "unknown" ]);
 
 function assert(condition, message) {
     if (!condition) throw new Error(`Manual smoke gate failed: ${message}`);
@@ -42,11 +52,15 @@ export function validateManualSmokeRecord(value, expected) {
     const record = value && "object" === typeof value ? /** @type {Record<string, any>} */ (value) : {};
     assert(record.version === expected.version, `record version must equal ${expected.version}`);
     assert(Number.isFinite(Date.parse(record.testedAt)), "testedAt must be an ISO date-time");
+    assert(record.humanVerified === true, "humanVerified must be true: only a real human-verified Tampermonkey record counts");
     assert("string" === typeof record.tester && record.tester.trim().length > 0, "tester is required");
+    assert(!/bot/i.test(String(record.tester)), "tester must be a human, not a bot or placeholder");
     assert(["msedge", "chrome"].includes(record.browser?.channel), "browser.channel must be msedge or chrome");
     assert("string" === typeof record.browser?.version && record.browser.version.trim().length > 0, "browser.version is required");
+    assert(!PLACEHOLDER_VERSIONS.includes(String(record.browser.version).trim().toLowerCase()), "browser.version must be a real version, not release/latest/unknown");
     assert("tampermonkey" === String(record.userscriptManager?.name || "").toLowerCase(), "userscriptManager.name must be Tampermonkey");
     assert("string" === typeof record.userscriptManager?.version && record.userscriptManager.version.trim().length > 0, "userscriptManager.version is required");
+    assert(!PLACEHOLDER_VERSIONS.includes(String(record.userscriptManager.version).trim().toLowerCase()), "userscriptManager.version must be a real version, not release/latest/unknown");
     assert(record.artifact?.sha256 === expected.artifactSha256, "artifact.sha256 must match JHS.user.js");
     for (const check of REQUIRED_MANUAL_SMOKE_CHECKS) assert(record.checks?.[check] === true, `checks.${check} must be true`);
     return record;

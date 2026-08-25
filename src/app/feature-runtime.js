@@ -119,6 +119,16 @@ export class FeatureRuntime {
             this.diagnostics.recordStartup(manifest.id, performance.now() - started);
             return Object.freeze({ manifest, scope, enabledContributions, dispose: () => {
                 result?.dispose?.();
+                // 6.5: contribution scopes belong to the feature that owns their contribution ids;
+                // disposing the feature must tear down those scopes too so listeners/observers/timers
+                // do not leak across activate -> dispose -> activate cycles.
+                for (const contributionId of manifest.contributes) {
+                    const contributionScope = this.contributionScopes.get(contributionId);
+                    if (contributionScope) {
+                        contributionScope.dispose();
+                        this.contributionScopes.delete(contributionId);
+                    }
+                }
                 scope.dispose();
                 this.diagnostics.setFeature(manifest.id, false);
                 enabledContributions.forEach((/** @type {string} */ id) => this.diagnostics.setContribution(id, false));

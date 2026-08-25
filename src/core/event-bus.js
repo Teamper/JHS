@@ -1,11 +1,17 @@
 // @ts-check
 
 export class JhsEventBus {
-    /** @param {string} [channelName] */
-    constructor(channelName = "channel-refresh") {
+    /** @param {string} [channelName] @param {{errorReporter?: (error: unknown) => void}} [options] */
+    constructor(channelName = "channel-refresh", options = {}) {
         this.originId = globalThis.crypto?.randomUUID?.() || `tab_${Date.now()}_${Math.random().toString(36).slice(2)}`;
         this.listeners = new Map, this.seen = new Set, this.channel = new BroadcastChannel(channelName);
+        this.errorReporter = options.errorReporter ?? null;
         this.channel.addEventListener("message", (event => this._receive(event.data)));
+    }
+    /** @param {unknown} error */
+    _reportHandlerError(error) {
+        if (this.errorReporter) { try { this.errorReporter(error); } catch { /* never let reporting break dispatch */ } }
+        else { try { /** @type {any} */ (globalThis).clog?.error?.("[JHS] event listener failed:", error); } catch { /* ignore */ } }
     }
     /** @param {string} type @param {(payload: any, event: any) => unknown} handler */
     on(type, handler) {
@@ -14,7 +20,10 @@ export class JhsEventBus {
     }
     /** @param {any} event */
     async _dispatch(event) {
-        for (const handler of [ ...(this.listeners.get(event.type) || []) ]) await handler(event.payload, event);
+        for (const handler of [ ...(this.listeners.get(event.type) || []) ]) {
+            try { await handler(event.payload, event); }
+            catch (error) { this._reportHandlerError(error); }
+        }
     }
     /** @param {string} eventId */
     _remember(eventId) {
@@ -23,7 +32,9 @@ export class JhsEventBus {
     /** @param {string} type @param {any} [payload] @param {{broadcast?: boolean}} [options] */
     async emit(type, payload = {}, options = {}) {
         const event = { eventId: globalThis.crypto?.randomUUID?.() || `event_${Date.now()}_${Math.random().toString(36).slice(2)}`, originId: this.originId, type, payload, timestamp: Date.now() };
-        this._remember(event.eventId), await this._dispatch(event), !1 !== options.broadcast && this.channel.postMessage(event);
+        this._remember(event.eventId);
+        try { await this._dispatch(event); }
+        finally { !1 !== options.broadcast && this.channel.postMessage(event); }
         return event;
     }
     /** @param {any} event */
@@ -46,7 +57,7 @@ export function initializeEventBus() {
     const runtimeWindow = /** @type {any} */ (window);
     runtimeWindow.refresh = () => jhsEventBus?.emit("legacy-refresh");
     runtimeWindow.cleanCache_filter_actor_actress_car_list = () => jhsEventBus?.emit("blacklist-rules-changed");
-    runtimeWindow.clean_cacheSettingObj = () => jhsEventBus?.emit("settings-changed");
+    runtimeWindow.clean_cacheSettingObj = () => jhsEventBus?.emit("settings-changed", { source: "legacy" });
     return jhsEventBus;
 }
 // @ts-check

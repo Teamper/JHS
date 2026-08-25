@@ -102,6 +102,9 @@ export async function bootstrapJhs() {
             legacyHttp: gmHttp, legacyStorage: storageManager, eventBus: jhsEventBus, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
             layer: vendors.layer, stateService, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
         });
+        // 6.5: expose the single settings write entry so legacy writers (storageManager.saveSetting/saveSettingItem)
+        // route through SettingsService with lock + re-read + merge.
+        Object.assign(globalThis, { settingsService: context.services.settings });
         const settingsSnapshot = await context.services.settings.load();
         context.services.profile.start();
         const legacySortMethod = localStorage.getItem("jhs_sortMethod");

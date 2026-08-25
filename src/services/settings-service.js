@@ -7,7 +7,7 @@ export class SettingsService extends EventTarget {
         this.storage = storage;
         this.validators = options.validators ?? {};
         this.afterPersist = options.afterPersist ?? null;
-        this.snapshotValue = Object.freeze({});
+        /** @type {Readonly<Record<string, unknown>>} */ this.snapshotValue = Object.freeze({});
         this.writeChain = Promise.resolve();
     }
 
@@ -18,8 +18,16 @@ export class SettingsService extends EventTarget {
         return this.snapshotValue;
     }
 
-    /** Refreshes the in-memory snapshot after a transitional legacy write. */
-    async refresh(key = "setting") { return this.load(key); }
+    /** Refreshes the in-memory snapshot after a transitional legacy or remote write; emits settings.changed only when values actually changed. */
+    async refresh(key = "setting") {
+        const previous = this.snapshotValue;
+        await this.load(key);
+        const changedNames = Object.keys(this.snapshotValue).filter((name) => previous[name] !== this.snapshotValue[name]);
+        if (changedNames.length) {
+            this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name: changedNames.length === 1 ? changedNames[0] : null, value: undefined, names: Object.freeze([ ...changedNames ]), snapshot: this.snapshotValue }) }));
+        }
+        return this.snapshotValue;
+    }
 
     snapshot() { return this.snapshotValue; }
 
@@ -40,21 +48,30 @@ export class SettingsService extends EventTarget {
         return this._enqueue({ ...values }, Object.keys(values), storageKey, false);
     }
 
+    /** Runs the read-modify-write inside the shared jhs_setting_lock so it serializes with legacy writers and other tabs. @param {() => Promise<Record<string, unknown>>} fn */
+    async _withSettingLock(fn) {
+        const locks = globalThis.navigator?.locks;
+        if (!locks?.request) return fn();
+        return locks.request("jhs_setting_lock", () => fn());
+    }
+
     /** @param {Record<string, unknown>} values @param {string[]} changedNames @param {string} storageKey @param {boolean} merge */
     _enqueue(values, changedNames, storageKey, merge) {
         for (const name of changedNames) {
             const validator = this.validators[name];
             if (validator && !validator(values[name])) throw new TypeError(`Invalid setting: ${name}`);
         }
-        const operation = this.writeChain.then(async () => {
-            const next = Object.freeze(merge ? { ...this.snapshotValue, ...values } : { ...values });
+        const operation = this.writeChain.then(() => this._withSettingLock(async () => {
+            const stored = await this.storage.get(storageKey);
+            const base = stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
+            const next = Object.freeze(merge ? { ...base, ...values } : { ...values });
             await this.storage.set(storageKey, next);
             this.snapshotValue = next;
             await this.afterPersist?.(next, Object.freeze([ ...changedNames ]));
             const name = changedNames.length === 1 ? changedNames[0] : null;
             this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name, value: name ? next[name] : undefined, names: Object.freeze([ ...changedNames ]), snapshot: next }) }));
             return next;
-        });
+        }));
         this.writeChain = operation.then(() => undefined, () => undefined);
         return operation;
     }

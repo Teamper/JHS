@@ -213,6 +213,25 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(runtime.getActiveFeatureIds()).not.toContain("detail");
     });
 
+    it("disposes contribution scopes when the owning feature is disposed", async () => {
+        const diagnostics = new DiagnosticsService(), runtime = new FeatureRuntime({
+            container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics,
+            site: "javdb", route: "detail",
+        });
+        runtime.register(defineFeature({
+            id: "detail", kind: "feature", disableable: true, sites: ["javdb"], routes: ["detail"],
+            startup: "eager", requires: [], contributes: ["detail.fc2", "detail.related"], providesCommands: [], activate: () => ({}),
+        }));
+        const scope = await runtime.getContributionScope("detail", "detail.fc2", "Fc2Plugin");
+        const activation = await runtime.activate("detail");
+        activation.dispose();
+        expect(scope.disposed).toBe(true);
+        // contribution scopes are recreated lazily after disposal (activate -> dispose -> activate cycle)
+        const scope2 = await runtime.getContributionScope("detail", "detail.fc2", "Fc2Plugin");
+        expect(scope2.disposed).toBe(false);
+        expect(scope2).not.toBe(scope);
+    });
+
     it("opens Settings through its registered owner without a DOM trigger", async () => {
         const owner = vi.fn(async () => "opened"), cleanup = registerSettingsUiOwner(owner);
         await expect(openSettingsUi("filter-panel")).resolves.toBe("opened");

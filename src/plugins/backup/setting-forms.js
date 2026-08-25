@@ -171,8 +171,12 @@ export async function saveSettingForm(dependencies) {
     e.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C,
     e.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C,
     e.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C,
-    e.containerColumns = Number($("#containerColumns").val()) || 5, e.containerWidth = Number($("#containerWidth").val()) + 70 || 100,
-    await dependencies.settings.replace(e);
+    e.containerColumns = Number($("#containerColumns").val()) || 5, e.containerWidth = Number($("#containerWidth").val()) + 70 || 100;
+    // 6.5: only the dirty fields are written, and they are merged by SettingsService onto the freshly
+    // re-read stored value (single write entry), so concurrent tabs or legacy writes are never clobbered.
+    const previous = /** @type {Readonly<Record<string, unknown>>} */ (dependencies.settings.snapshot()), changedValues = /** @type {Record<string, unknown>} */ ({});
+    for (const key of Object.keys(e)) if (e[key] !== previous[key]) changedValues[key] = e[key];
+    if (Object.keys(changedValues).length) await dependencies.settings.patch(changedValues);
     /** @type {string[]} */
     let t = [];
     $("#reviewKeywordContainer .keyword-label").toArray().forEach((/** @type {Element} */ e) => {

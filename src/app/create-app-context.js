@@ -55,12 +55,18 @@ export function createAppContext(runtime) {
     const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache });
     diagnostics.setNetworkController(http);
     const webdav = new WebDavService(http);
-    const settings = new SettingsService(storage, { afterPersist: async () => {
+    const settings = new SettingsService(storage, { afterPersist: async (_snapshot, changedNames) => {
         runtime.legacyStorage?.invalidateSettingCache?.();
-        await runtime.eventBus?.emit?.("settings-changed");
+        await runtime.eventBus?.emit?.("settings-changed", { changedNames, source: "service" });
     } });
     if (runtime.eventBus) rootScope.addCleanup(runtime.eventBus.on("settings-changed", async (/** @type {any} */ _payload, /** @type {any} */ event) => {
-        if (event.originId === runtime.eventBus.originId) await settings.refresh();
+        // Remote tabs must refresh; local legacy writes (source === "legacy") also refresh because they bypassed
+        // this SettingsService. Local service writes already updated the snapshot, so they are skipped.
+        const remote = event.originId !== runtime.eventBus.originId;
+        const localLegacy = event.originId === runtime.eventBus.originId && event.payload?.source === "legacy";
+        if (!remote && !localLegacy) return;
+        runtime.legacyStorage?.invalidateSettingCache?.();
+        await settings.refresh();
     }));
     const profile = new ProfileService({ scope: rootScope, settings });
     const commands = new CommandRegistry();

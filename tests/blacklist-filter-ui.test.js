@@ -39,12 +39,14 @@ function createPlugin() {
 describe("blacklist combined filters", () => {
     it("combines search, role, status and URL category without clearing sibling filters", async () => {
         const { plugin, $ } = createPlugin();
-        $("#searchValue").val("别名"), $("#dataType").val("actor"), $("#statusType").val("stop"), $("#urlType").val("hasT");
+        // the dialog owns a scoped root (set by openBlacklistDialog); filters live under it
+        plugin.blacklistRoot = $("body");
+        plugin.blacklistRoot.find("#searchValue").val("别名"), plugin.blacklistRoot.find("#dataType").val("actor"), plugin.blacklistRoot.find("#statusType").val("stop"), plugin.blacklistRoot.find("#urlType").val("hasT");
         const result = await plugin.getTableData();
         expect(result).toHaveLength(1);
         expect(result[0]).toMatchObject({ starId: "a-1", count: 1, isUnCheck: true });
-        expect($("#statusType").val()).toBe("stop");
-        expect($("#urlType").val()).toBe("hasT");
+        expect(plugin.blacklistRoot.find("#statusType").val()).toBe("stop");
+        expect(plugin.blacklistRoot.find("#urlType").val()).toBe("hasT");
     });
 
     it("keeps one table instance across empty and non-empty reloads", async () => {

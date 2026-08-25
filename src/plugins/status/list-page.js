@@ -7,7 +7,7 @@ import { requestHostPage } from "../../core/host-page-request.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { isHitShowPage } from "../../core/site-context.js";
-import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
+import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
 import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isHardHidden, matchesQuickFilter, normalizeQuickFilterKey, shouldShowItem } from "../../features/list/list-filters.js";
 
 /** @typedef {Record<string, any>} ListRecord */
@@ -421,6 +421,30 @@ export class ListPagePlugin extends BasePlugin {
         this.scheduleRecount(), void this.translateListItems(R).catch((/** @type {unknown} */ e) => clog.error("列表页翻译任务失败", e));
         const D = utils.time("处理页面耗时"), A = utils.time("累计耗费时间");
         clog.log(`\n            <table class="countTable jhs-layout-b12542a5">\n                <tr>\n                    <td colspan="2" class="jhs-count-table__cell">${o}</td>\n                    <td colspan="2" class="jhs-count-table__cell">${b}</td>\n                </tr>\n                \n                <tr>\n                    <td colspan="2" class="jhs-count-table__cell">${D}</td>\n                    <td colspan="2" class="jhs-count-table__cell">${A}</td>\n                </tr>\n                <tr>\n                    <td class="jhs-count-table__head">项目</td>\n                    <td class="jhs-count-table__head">数量</td>\n                    <td class="jhs-count-table__head">项目</td>\n                    <td class="jhs-count-table__head">数量</td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽单番号</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageFilterCount}</strong></td>\n                     <td class="jhs-count-table__cell">收藏</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageFavoriteCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽演员</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageActorFilterCount}</strong></td>\n                    <td class="jhs-count-table__cell">已下载</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasDownCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽关键词</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageKeywordFilterCount}</strong></td>\n                    <td class="jhs-count-table__cell">已观看</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasWatchCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">待鉴定</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageWaitCheckCount}</strong></td>\n                    <td class="jhs-count-table__cell"></td>\n                    <td class="jhs-count-table__cell"></td>\n                </tr>\n        \n                <tr>\n                    <td class="jhs-count-table__cell"><strong>总数</strong></td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageTotalCount}</strong></td>\n                </tr>\n            </table>\n        `);
+    }
+    /**
+     * Batch-mark all visible videos (e.g. one-click favorite / one-click downloaded) on the current
+     * actor/list page and every subsequent page. Lives on the list capability (not BlacklistPlugin),
+     * because marking state is a list-level action even though the button is rendered near blacklist
+     * controls.
+     * @param {string} actressName @param {string} flag @param {any} [pageDom] @param {number} [page] @param {number} [processed]
+     */
+    async batchSaveAllVideos(actressName, flag, pageDom = null, page = 1, processed = 0) {
+        let items, nextUrl;
+        pageDom ? (items = pageDom.find(this.getSelector().requestDomItemSelector), nextUrl = pageDom.find(this.getSelector().nextPageSelector).attr("href")) : (items = $(this.getSelector().itemSelector), nextUrl = $(this.getSelector().nextPageSelector).attr("href"));
+        if (nextUrl && 0 === items.length) throw show.error("解析列表失败"), new Error("解析列表失败");
+        for (const element of items) {
+            const item = $(element), {carNum, url, publishTime} = readListItem(item);
+            if (url && carNum) try {
+                const stateFlag = legacyActionToFlag(flag);
+                stateFlag && await this.getRuntimeService("state").patch(carNum, { [stateFlag]: !0 }, { type: "actor-page-batch-state", record: { carNum, url, names: actressName, publishTime } }), clog.log("批量操作", actressName, carNum, flag);
+            } catch (error) { clog.error(`保存失败 [${carNum}]:`, error); }
+        }
+        processed += items.length, clog.debug(`批量操作第 ${page} 页 · 已处理 ${processed} 个番号`);
+        if (nextUrl) { clog.log("正在请求下一页内容:", nextUrl), await new Promise((/** @type {(value: void) => void} */ resolve) => setTimeout(resolve, 500));
+            const scope = await this.getRuntimeService("scope")(), html = await requestHostPage(this.getRuntimeService("http"), nextUrl, scope), parsed = new DOMParser, nextDom = $(parsed.parseFromString(html, "text/html"));
+            await this.batchSaveAllVideos(actressName, flag, nextDom, page + 1, processed); }
+        else clog.debug(`批量操作完成 · ${page} 页 · 共处理 ${processed} 个番号`);
     }
     async bindClick() {
         let e = this.getSelector();

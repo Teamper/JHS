@@ -3484,6 +3484,7 @@
       return "true" === n2 || "false" === n2 ? "true" === n2.toLowerCase() : "string" != typeof n2 || "" === n2.trim() || isNaN(Number(n2)) ? n2 : Number(n2);
     }
     async saveSetting(e2) {
+      if (globalThis.settingsService?.replace) return globalThis.settingsService.replace(e2);
       e2 ? (await this._setItemAndInvalidate(this.setting_key, e2), await window.clean_cacheSettingObj()) : show.error("设置对象为空");
     }
     invalidateSettingCache() {
@@ -3491,10 +3492,13 @@
     }
     async saveSettingItem(e2, t2) {
       if (!e2) return void show.error("key 不能为空");
-      await navigator.locks.request("jhs_setting_lock", async () => {
+      if (globalThis.settingsService?.set) return globalThis.settingsService.set(e2, t2);
+      const locks = globalThis.navigator?.locks;
+      const write = /* @__PURE__ */ __name(async () => {
         let n2 = await this.getSetting();
         n2[e2] = t2, await this.saveSetting(n2);
-      });
+      }, "write");
+      return locks?.request ? locks.request("jhs_setting_lock", write) : write();
     }
     async importData(e2) {
       validatePortableData(e2);
@@ -4249,24 +4253,49 @@
 
   // src/core/event-bus.js
   var _JhsEventBus = class _JhsEventBus {
-    constructor(channelName = "channel-refresh") {
+    constructor(channelName = "channel-refresh", options = {}) {
       this.originId = globalThis.crypto?.randomUUID?.() || `tab_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       this.listeners = /* @__PURE__ */ new Map(), this.seen = /* @__PURE__ */ new Set(), this.channel = new BroadcastChannel(channelName);
+      this.errorReporter = options.errorReporter ?? null;
       this.channel.addEventListener("message", ((event) => this._receive(event.data)));
+    }
+    _reportHandlerError(error) {
+      if (this.errorReporter) {
+        try {
+          this.errorReporter(error);
+        } catch {
+        }
+      } else {
+        try {
+          globalThis.clog?.error?.("[JHS] event listener failed:", error);
+        } catch {
+        }
+      }
     }
     on(type, handler) {
       const handlers = this.listeners.get(type) || /* @__PURE__ */ new Set();
       return handlers.add(handler), this.listeners.set(type, handlers), () => handlers.delete(handler);
     }
     async _dispatch(event) {
-      for (const handler of [...this.listeners.get(event.type) || []]) await handler(event.payload, event);
+      for (const handler of [...this.listeners.get(event.type) || []]) {
+        try {
+          await handler(event.payload, event);
+        } catch (error) {
+          this._reportHandlerError(error);
+        }
+      }
     }
     _remember(eventId) {
       this.seen.add(eventId), this.seen.size > 256 && this.seen.delete(this.seen.values().next().value);
     }
     async emit(type, payload = {}, options = {}) {
       const event = { eventId: globalThis.crypto?.randomUUID?.() || `event_${Date.now()}_${Math.random().toString(36).slice(2)}`, originId: this.originId, type, payload, timestamp: Date.now() };
-      this._remember(event.eventId), await this._dispatch(event), false !== options.broadcast && this.channel.postMessage(event);
+      this._remember(event.eventId);
+      try {
+        await this._dispatch(event);
+      } finally {
+        false !== options.broadcast && this.channel.postMessage(event);
+      }
       return event;
     }
     async _receive(event) {
@@ -4287,7 +4316,7 @@
     const runtimeWindow = window;
     runtimeWindow.refresh = () => jhsEventBus?.emit("legacy-refresh");
     runtimeWindow.cleanCache_filter_actor_actress_car_list = () => jhsEventBus?.emit("blacklist-rules-changed");
-    runtimeWindow.clean_cacheSettingObj = () => jhsEventBus?.emit("settings-changed");
+    runtimeWindow.clean_cacheSettingObj = () => jhsEventBus?.emit("settings-changed", { source: "legacy" });
     return jhsEventBus;
   }
   __name(initializeEventBus, "initializeEventBus");
@@ -6702,7 +6731,8 @@
       area: utils.getResponsiveArea(["800px", "70%"]),
       anim: -1,
       success: /* @__PURE__ */ __name((a2) => {
-        const i2 = createJhsTable(globalThis.Tabulator, "#table-container", {
+        const tableRoot = $(a2).find(".jhs-table-dialog__content").get(0) || $(a2).find("#table-container").get(0);
+        const i2 = createJhsTable(globalThis.Tabulator, tableRoot, {
           pagination: false,
           layout: "fitColumns",
           placeholder: "暂无数据",
@@ -7392,7 +7422,10 @@
       if (!authorized) return void show.info("已取消 WebDAV 来源授权");
       trustedOrigins.add(nextWebDavOrigin);
     }
-    e2.videoQuality = $("#videoQuality").val(), e2.reviewCount = $("#reviewCount").val(), e2.tagPosition = $("#tagPosition").val(), e2.defaultQuickFilterTab = normalizeQuickFilterKey($("#defaultQuickFilterTab").val()), e2.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e2.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e2.waitCheckCount = $("#waitCheckCount").val(), e2.highlightedTagNumber = $("#highlightedTagNumber").val(), e2.highlightedTagColor = $("#highlightedTagColor").val(), e2.checkConcurrencyCount = $("#checkConcurrencyCount").val(), e2.checkRequestSleep = $("#checkRequestSleep").val(), e2.enableCheckBlacklist = $("#enableCheckBlacklist").val(), e2.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e2.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(), e2.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e2.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(), e2.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e2.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(), e2.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e2.httpTimeout = Number($("#httpTimeout").val()) || 5e3, e2.httpRetryCount = Number($("#httpRetryCount").val()) || 3, e2.circuitBreakerThreshold = Number($("#circuitBreakerThreshold").val()) || 3, e2.circuitBreakerCooldown = Number($("#circuitBreakerCooldownSec").val()) * 1e3, e2.enableClog = $("#enableClog").val(), e2.enableClog === _ ? clog.show() : clog.hide(), e2.clogMsgCount = $("#clogMsgCount").val(), e2.mobileMode = $("#mobileMode").val(), e2.themeMode = $("#themeMode").val(), e2.webDavUrl = nextWebDavUrl, e2.trustedLocalOrigins = [...trustedOrigins], e2.webDavUsername = $("#webDavUsername").val(), e2.webDavPassword = await encryptCredential($("#webDavPassword").val()), e2.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""), e2.jableUrl = $("#jableUrl").val().replace(/\/$/, ""), e2.avgleUrl = $("#avgleUrl").val().replace(/\/$/, ""), e2.javTrailersUrl = $("#javTrailersUrl").val().replace(/\/$/, ""), e2.av123Url = $("#av123Url").val().replace(/\/$/, ""), e2.javDbUrl = $("#javDbUrl").val().replace(/\/$/, ""), e2.javBusUrl = $("#javBusUrl").val().replace(/\/$/, ""), e2.supJavUrl = $("#supJavUrl").val().replace(/\/$/, ""), e2.enableTitleSelectFilter = $("#enableTitleSelectFilter").is(":checked") ? _ : C, e2.enableFavoriteActresses = $("#enableFavoriteActresses").is(":checked") ? _ : C, e2.enableSaveActressCarInfo = $("#enableSaveActressCarInfo").is(":checked") ? _ : C, e2.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e2.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C, e2.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e2.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C, e2.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C, e2.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e2.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C, e2.containerColumns = Number($("#containerColumns").val()) || 5, e2.containerWidth = Number($("#containerWidth").val()) + 70 || 100, await dependencies.settings.replace(e2);
+    e2.videoQuality = $("#videoQuality").val(), e2.reviewCount = $("#reviewCount").val(), e2.tagPosition = $("#tagPosition").val(), e2.defaultQuickFilterTab = normalizeQuickFilterKey($("#defaultQuickFilterTab").val()), e2.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e2.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e2.waitCheckCount = $("#waitCheckCount").val(), e2.highlightedTagNumber = $("#highlightedTagNumber").val(), e2.highlightedTagColor = $("#highlightedTagColor").val(), e2.checkConcurrencyCount = $("#checkConcurrencyCount").val(), e2.checkRequestSleep = $("#checkRequestSleep").val(), e2.enableCheckBlacklist = $("#enableCheckBlacklist").val(), e2.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e2.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(), e2.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e2.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(), e2.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e2.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(), e2.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e2.httpTimeout = Number($("#httpTimeout").val()) || 5e3, e2.httpRetryCount = Number($("#httpRetryCount").val()) || 3, e2.circuitBreakerThreshold = Number($("#circuitBreakerThreshold").val()) || 3, e2.circuitBreakerCooldown = Number($("#circuitBreakerCooldownSec").val()) * 1e3, e2.enableClog = $("#enableClog").val(), e2.enableClog === _ ? clog.show() : clog.hide(), e2.clogMsgCount = $("#clogMsgCount").val(), e2.mobileMode = $("#mobileMode").val(), e2.themeMode = $("#themeMode").val(), e2.webDavUrl = nextWebDavUrl, e2.trustedLocalOrigins = [...trustedOrigins], e2.webDavUsername = $("#webDavUsername").val(), e2.webDavPassword = await encryptCredential($("#webDavPassword").val()), e2.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""), e2.jableUrl = $("#jableUrl").val().replace(/\/$/, ""), e2.avgleUrl = $("#avgleUrl").val().replace(/\/$/, ""), e2.javTrailersUrl = $("#javTrailersUrl").val().replace(/\/$/, ""), e2.av123Url = $("#av123Url").val().replace(/\/$/, ""), e2.javDbUrl = $("#javDbUrl").val().replace(/\/$/, ""), e2.javBusUrl = $("#javBusUrl").val().replace(/\/$/, ""), e2.supJavUrl = $("#supJavUrl").val().replace(/\/$/, ""), e2.enableTitleSelectFilter = $("#enableTitleSelectFilter").is(":checked") ? _ : C, e2.enableFavoriteActresses = $("#enableFavoriteActresses").is(":checked") ? _ : C, e2.enableSaveActressCarInfo = $("#enableSaveActressCarInfo").is(":checked") ? _ : C, e2.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e2.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C, e2.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e2.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C, e2.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C, e2.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e2.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C, e2.containerColumns = Number($("#containerColumns").val()) || 5, e2.containerWidth = Number($("#containerWidth").val()) + 70 || 100;
+    const previous = dependencies.settings.snapshot(), changedValues = {};
+    for (const key of Object.keys(e2)) if (e2[key] !== previous[key]) changedValues[key] = e2[key];
+    if (Object.keys(changedValues).length) await dependencies.settings.patch(changedValues);
     let t2 = [];
     $("#reviewKeywordContainer .keyword-label").toArray().forEach((e3) => {
       let n3 = $(e3).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
@@ -9080,7 +9113,7 @@
     }
     async resetBtnTip() {
       const e2 = this.getOptionalDependency("TaskPlugin"), t2 = e2 ? this.getRuntimeService("storage").getLocal(e2.lastCheckBlacklistTimeKey) || "无" : "任务已禁用", n2 = await storageManager.getSetting("checkBlacklist_intervalTime", 12);
-      this.checkBlacklist_ruleTime = await storageManager.getSetting("checkBlacklist_ruleTime", 8760), $("#checkBlacklistBtn").attr("data-tip", `上次整批检测: ${t2}; 检测间隔时间: ${n2}小时`);
+      this.checkBlacklist_ruleTime = await storageManager.getSetting("checkBlacklist_ruleTime", 8760), (this.blacklistRoot || $()).find("#checkBlacklistBtn").attr("data-tip", `上次整批检测: ${t2}; 检测间隔时间: ${n2}小时`);
     }
     async openBlacklistDialog() {
       const e2 = this.getOptionalDependency("TaskPlugin"), t2 = await storageManager.getSetting(), lastCheck = e2 ? this.getRuntimeService("storage").getLocal(e2.lastCheckBlacklistTimeKey) || "无" : "任务已禁用";
@@ -9123,7 +9156,9 @@
         area: utils.getDialogArea("xl"),
         anim: -1,
         success: /* @__PURE__ */ __name(async (t3) => {
-          const dialog = $(t3).find(".layui-layer-content > div").first().addClass("jhs-blacklist-layout").removeAttr("style"), toolbar = dialog.children("div").first().addClass("jhs-blacklist-toolbar").removeAttr("style");
+          const dialog = $(t3).find(".layui-layer-content > div").first().addClass("jhs-blacklist-layout").removeAttr("style");
+          this.blacklistRoot = dialog;
+          const toolbar = dialog.children("div").first().addClass("jhs-blacklist-toolbar").removeAttr("style");
           toolbar.children("div").addClass("jhs-blacklist-toolbar__group").removeAttr("style"), toolbar.find("select,input,a").removeAttr("style"), dialog.find("#table-container").removeAttr("style");
           dialog.find("#table-container").before('<div id="blacklist-task-status" class="jhs-task-status jhs-blacklist-task-status" aria-live="polite"></div>'), JhsSelect.enhance(t3);
           e2 || dialog.find("#checkBlacklistBtn").prop("disabled", true).attr("title", "后台任务功能已禁用");
@@ -9131,7 +9166,7 @@
           await this.loadTableData();
           const content = $(t3).find(".layui-layer-content"), search = content.find("#searchValue");
           this.blacklistSearchDebounced = utils.debounce((() => void this.reloadTable()), 200), content.on("click", "#cleanQueryBtn", (async () => {
-            search.val(""), JhsSelect.setValue("#dataType", "", false), JhsSelect.setValue("#statusType", "", false), JhsSelect.setValue("#urlType", "", false), await this.reloadTable();
+            search.val(""), JhsSelect.setValue(this.blacklistRoot.find("#dataType"), "", false), JhsSelect.setValue(this.blacklistRoot.find("#statusType"), "", false), JhsSelect.setValue(this.blacklistRoot.find("#urlType"), "", false), await this.reloadTable();
           })).on("input", "#searchValue", this.blacklistSearchDebounced).on("change", "#dataType,#statusType,#urlType", (async () => {
             await this.reloadTable();
           })).on("click", "#toSetting", (() => {
@@ -9157,12 +9192,12 @@
           }));
         }, "success"),
         end: /* @__PURE__ */ __name(async () => {
-          this.blacklistSearchDebounced?.cancel?.(), this.blacklistSearchDebounced = null, this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null), await getBlacklistEventBus().emit("blacklist-rules-changed");
+          this.blacklistRoot = null, this.blacklistSearchDebounced?.cancel?.(), this.blacklistSearchDebounced = null, this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null), await getBlacklistEventBus().emit("blacklist-rules-changed");
         }, "end")
       });
     }
     renderTaskStatus() {
-      const container = $("#blacklist-task-status");
+      const container = (this.blacklistRoot || $()).find("#blacklist-task-status");
       if (!container.length) return;
       const task = this.getOptionalDependency("TaskPlugin");
       if (!task) return void container.empty().text("后台任务功能已禁用");
@@ -9175,7 +9210,7 @@
       this.tableObj.setData(e2);
     }
     async getTableData() {
-      const t2 = await storageManager.getBlacklist(), n2 = await storageManager.getBlacklistCarList(), a2 = String($("#searchValue").val() || "").trim().toLocaleLowerCase(), i2 = $("#statusType").val(), s2 = $("#dataType"), o2 = s2.val(), r2 = $("#urlType").val(), l2 = t2.length;
+      const root = this.blacklistRoot || $(), t2 = await storageManager.getBlacklist(), n2 = await storageManager.getBlacklistCarList(), a2 = String(root.find("#searchValue").val() || "").trim().toLocaleLowerCase(), i2 = root.find("#statusType").val(), s2 = root.find("#dataType"), o2 = s2.val(), r2 = root.find("#urlType").val(), l2 = t2.length;
       let c2 = 0, d2 = 0;
       const h2 = t2.map((t3) => {
         t3.role === B ? c2++ : t3.role === P && d2++;
@@ -9212,7 +9247,8 @@
       this.checkBlacklist_ruleTime = parseNumberSetting(await storageManager.getSetting("checkBlacklist_ruleTime"), 8760, { min: 0 });
       const e2 = await this.getTableData(), placeholder = document.createElement("div");
       renderStateView(placeholder, { type: "empty", title: "没有符合当前筛选条件的黑名单记录" });
-      this.tableObj = createJhsTable(globalThis.Tabulator, "#table-container", {
+      const tableRoot = (this.blacklistRoot || $()).find("#table-container").get(0);
+      this.tableObj = createJhsTable(globalThis.Tabulator, tableRoot, {
         layout: "fitColumns",
         placeholder,
         virtualDom: true,
@@ -9348,36 +9384,16 @@
           clog.error(`保存失败 [${n3}]:`, i2);
         }
       }
-      processed += n2.length, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
+      processed += n2.length, (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
       if (a2) {
         clog.log("正在请求下一页内容:", a2), await new Promise((e3) => setTimeout(e3, 500));
         const scope = await this.getRuntimeService("scope")(), t3 = await requestHostPage(this.getRuntimeService("http"), a2, scope), n3 = new DOMParser(), i2 = $(n3.parseFromString(t3, "text/html"));
         await this.filterAllVideo(e2, i2, page + 1, processed);
-      } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
-    }
-    async batchSaveAllVideos(e2, t2, pageDom = null, page = 1, processed = 0) {
-      let n2, a2;
-      pageDom ? (n2 = pageDom.find(this.getSelector().requestDomItemSelector), a2 = pageDom.find(this.getSelector().nextPageSelector).attr("href")) : (n2 = $(this.getSelector().itemSelector), a2 = $(this.getSelector().nextPageSelector).attr("href"));
-      if (a2 && 0 === n2.length) throw show.error("解析列表失败"), new Error("解析列表失败");
-      for (const i2 of n2) {
-        const n3 = $(i2), { carNum: a3, url: o2, publishTime: r2 } = readListItem(n3);
-        if (o2 && a3) try {
-          const flag = legacyActionToFlag(t2);
-          flag && await this.getRuntimeService("state").patch(a3, { [flag]: true }, { type: "actor-page-batch-state", record: { carNum: a3, url: o2, names: e2, publishTime: r2 } }), clog.log("批量操作", e2, a3, t2);
-        } catch (s2) {
-          clog.error(`保存失败 [${a3}]:`, s2);
-        }
-      }
-      processed += n2.length, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
-      if (a2) {
-        clog.log("正在请求下一页内容:", a2), await new Promise((e3) => setTimeout(e3, 500));
-        const scope = await this.getRuntimeService("scope")(), i2 = await requestHostPage(this.getRuntimeService("http"), a2, scope), s2 = new DOMParser(), o2 = $(s2.parseFromString(i2, "text/html"));
-        await this.batchSaveAllVideos(e2, t2, o2, page + 1, processed);
-      } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
+      } else (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
     }
     async filterActorVideo(e2, t2, n2, site = l ? I : T, page = 1, processed = 0) {
       let { nextPageLink: a2, recordCount } = await this.parseAndSaveFilterInfo(n2, e2, t2, site);
-      processed += recordCount, $("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已屏蔽 ${processed} 个番号`);
+      processed += recordCount, (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已屏蔽 ${processed} 个番号`);
       if (this.nextPageLink = a2, a2) {
         let n3;
         this.lastPageLink = a2;
@@ -9385,7 +9401,7 @@
         const scope = await this.getRuntimeService("scope")(), i2 = await requestHostPage(this.getRuntimeService("http"), a2, scope);
         n3 = utils.htmlTo$dom(i2);
         await this.filterActorVideo(e2, t2, n3, site, page + 1, processed);
-      } else $("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 新增 ${processed} 个番号`);
+      } else (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 新增 ${processed} 个番号`);
     }
     async parseAndSaveFilterInfo(e2, t2, n2, site) {
       if (![T, I].includes(site)) throw new Error(`未知黑名单来源站点: ${site}`);
@@ -14949,10 +14965,33 @@ ${failure.stack}` : "");
       if (!listRoot) return;
       const root = $(listRoot).first();
       if (!root.length) return;
+      const scope = await this.getRuntimeService("scope")();
       await this.protectFc2Navigation(root, fc2);
       this.bindFc2Navigation(root, fc2);
-      const scope = await this.getRuntimeService("scope")();
       scope.addCleanup(() => root.off(".jhsFc2Navigation"));
+      let reprotectTimer = null;
+      const reprotect = /* @__PURE__ */ __name(() => {
+        if (reprotectTimer != null) return;
+        reprotectTimer = setTimeout(() => {
+          reprotectTimer = null;
+          void this.protectFc2Navigation(root, fc2).catch((error) => clog.warn("FC2 动态导航保护失败", error));
+        }, 80);
+      }, "reprotect");
+      scope.addCleanup(() => {
+        if (reprotectTimer != null) {
+          clearTimeout(reprotectTimer);
+          reprotectTimer = null;
+        }
+      });
+      const unsubscribeItems = jhsEventBus.on("list-items-added", (payload) => {
+        if (payload?.items?.length) reprotect();
+      });
+      scope.addCleanup(unsubscribeItems);
+      if (typeof MutationObserver !== "undefined") {
+        scope.observe(listRoot, (records) => {
+          if (records.some((record) => record.addedNodes.length)) reprotect();
+        }, { childList: true, subtree: false });
+      }
     }
     async protectFc2Navigation(root, fc2) {
       for (const element of root.find(".item").toArray()) {
@@ -15247,6 +15286,92 @@ ${failure.stack}` : "");
   var HistoryRepository = _HistoryRepository;
 
   // src/plugins/status/history.js
+  function buildCarNumCell(carNum) {
+    const value = String(carNum || ""), i2 = value.indexOf("-");
+    if (-1 === i2) return document.createTextNode(value);
+    const wrapper = document.createElement("span"), button = document.createElement("button");
+    button.type = "button";
+    button.className = "jhs-btn jhs-btn--ghost jhs-btn--sm table-link-param";
+    button.textContent = value.substring(0, i2 + 1);
+    wrapper.appendChild(button), wrapper.appendChild(document.createTextNode(value.substring(i2 + 1)));
+    return wrapper;
+  }
+  __name(buildCarNumCell, "buildCarNumCell");
+  function buildNamesCell(names) {
+    const wrapper = document.createElement("span");
+    String(names || "").split(" ").filter((name) => "" !== name.trim()).forEach((name) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "jhs-btn jhs-btn--ghost jhs-btn--sm table-link-param";
+      button.textContent = name;
+      wrapper.appendChild(button);
+    });
+    return wrapper;
+  }
+  __name(buildNamesCell, "buildNamesCell");
+  function buildActionButtons(record) {
+    const container = document.createElement("div");
+    container.className = "action-btns";
+    container.dataset.carNum = String(record.carNum || "");
+    container.dataset.href = record.url ? String(record.url) : "";
+    const detail = document.createElement("button");
+    detail.type = "button", detail.className = "jhs-btn jhs-btn--secondary history-detailBtn";
+    const detailSpan = document.createElement("span");
+    detailSpan.textContent = "查看";
+    detail.appendChild(detailSpan);
+    container.appendChild(detail);
+    const subBtns = document.createElement("div");
+    subBtns.className = "sub-btns";
+    const toggle = document.createElement("button");
+    toggle.type = "button", toggle.className = "jhs-btn jhs-btn--ghost sub-btns-toggle";
+    toggle.setAttribute("aria-haspopup", "menu"), toggle.setAttribute("aria-expanded", "false");
+    const toggleSpan = document.createElement("span");
+    toggleSpan.textContent = "更多操作";
+    toggle.appendChild(toggleSpan);
+    subBtns.appendChild(toggle);
+    const menu = document.createElement("div");
+    menu.className = "sub-btns-menu", menu.setAttribute("role", "menu");
+    const menuItems = [["history-editBtn", "编辑", ""], ["history-deleteBtn", "移除", "jhs-btn--danger"], ["history-hasWatchBtn", k, ""], ["history-hasDownBtn", y, ""], ["history-favoriteBtn", v, ""], ["history-filterBtn", m, ""]];
+    for (const [cls, label, extra] of menuItems) {
+      const item = document.createElement("button");
+      item.type = "button", item.className = `jhs-btn jhs-btn--ghost ${cls}`, item.setAttribute("role", "menuitem");
+      extra && item.classList.add(extra);
+      item.textContent = label;
+      menu.appendChild(item);
+    }
+    subBtns.appendChild(menu), container.appendChild(subBtns);
+    return container;
+  }
+  __name(buildActionButtons, "buildActionButtons");
+  function buildEditRecordForm(flags) {
+    return `
+            <div class="jhs-layout-8cddc29a">
+                <div class="jhs-layout-da303dcf">
+                    <label class="jhs-layout-27f87d75">番号:</label>
+                    <input type="text" id="edit-carNum" class="jhs-field jhs-history-edit-field" readonly>
+                </div>
+                <div class="jhs-layout-da303dcf">
+                    <label class="jhs-layout-27f87d75">演员 (用空格隔开):</label>
+                    <textarea id="edit-names" class="jhs-textarea jhs-history-edit-field"></textarea>
+                </div>
+                <fieldset class="jhs-layout-da303dcf"><legend class="jhs-layout-27f87d75">状态:</legend>
+                    <label class="jhs-option-row">收藏 <input type="checkbox" id="edit-favorite" class="mini-switch" ${flags.favorite ? "checked" : ""}></label>
+                    <label class="jhs-option-row">已下载 <input type="checkbox" id="edit-downloaded" class="mini-switch" ${flags.downloaded ? "checked" : ""}></label>
+                    <label class="jhs-option-row">已观看 <input type="checkbox" id="edit-watched" class="mini-switch" ${flags.watched ? "checked" : ""}></label>
+                    <label class="jhs-option-row">屏蔽 <input type="checkbox" id="edit-blocked" class="mini-switch" ${flags.blocked ? "checked" : ""}></label>
+                </fieldset>
+                <div class="jhs-layout-da303dcf">
+                    <label class="jhs-layout-27f87d75">链接:</label>
+                    <input type="text" id="edit-url" class="jhs-field jhs-history-edit-field">
+                </div>
+                <div class="jhs-layout-da303dcf">
+                    <label class="jhs-layout-27f87d75">备注:</label>
+                    <textarea id="edit-remark" class="jhs-textarea jhs-history-edit-field"></textarea>
+                </div>
+            </div>
+        `;
+  }
+  __name(buildEditRecordForm, "buildEditRecordForm");
   var _HistoryPlugin = class _HistoryPlugin extends BasePlugin {
     constructor() {
       super(...arguments);
@@ -15286,10 +15411,10 @@ ${failure.stack}` : "");
       return `
             <style>
                 .jhs-history-layout { display:flex; flex-direction:column; height:100%; min-height:0; padding:var(--jhs-space-3) var(--jhs-space-4); overflow:hidden; }
-                #filterBox, #allSelectBox { display:flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-2); margin-bottom:var(--jhs-space-2); }
+                .jhs-history-dialog #filterBox, .jhs-history-dialog #allSelectBox { display:flex; align-items:center; flex-wrap:wrap; gap:var(--jhs-space-2); margin-bottom:var(--jhs-space-2); }
                 .jhs-history-selection-summary { color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
                 .jhs-history-select-all { width:18px; height:18px; accent-color:var(--jhs-accent); cursor:pointer; }
-                #table-container { flex:1; min-height:0; overflow-x:hidden; }
+                .jhs-history-dialog #table-container { flex:1; min-height:0; overflow-x:hidden; }
                 .sub-btns { position:relative; display:inline-block; }
                 .sub-btns-menu { position:absolute; top:calc(100% + var(--jhs-space-1)); right:0; z-index:var(--jhs-z-popover); display:none; min-width:156px; padding:var(--jhs-space-1); overflow:hidden; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
                 .sub-btns-menu.show { display:grid !important; gap:var(--jhs-space-1); }
@@ -15321,7 +15446,7 @@ ${failure.stack}` : "");
     }
     openHistory() {
       let e2 = `
-            <div class="jhs-layout-7cb3f981">
+            <div class="jhs-layout-7cb3f981 jhs-history-dialog">
                  <div id="filterBox" class="jhs-layout-53809f1e">
                     <select id="dataType" class="jhs-select-source">
                         <option value="all" selected>所有</option>
@@ -15637,11 +15762,7 @@ ${failure.stack}` : "");
           width: 120,
           sorter: "string",
           responsive: 0,
-          formatter: /* @__PURE__ */ __name((e2, t2, n2) => {
-            const a2 = e2.getData().carNum, i2 = a2.indexOf("-");
-            if (-1 === i2) return a2;
-            return `<button type="button" class="jhs-btn jhs-btn--ghost jhs-btn--sm table-link-param">${a2.substring(0, i2 + 1)}</button>${a2.substring(i2 + 1)}`;
-          }, "formatter")
+          formatter: /* @__PURE__ */ __name((e2) => buildCarNumCell(e2.getData().carNum), "formatter")
         }, {
           title: "演员",
           field: "names",
@@ -15649,7 +15770,7 @@ ${failure.stack}` : "");
           sorter: "string",
           responsive: 5,
           headerSort: true,
-          formatter: /* @__PURE__ */ __name((e2, t2, n2) => (e2.getData().names || "").split(" ").filter((e3) => "" !== e3.trim()).map((e3) => `<button type="button" class="jhs-btn jhs-btn--ghost jhs-btn--sm table-link-param">${e3}</button>`).join(" "), "formatter")
+          formatter: /* @__PURE__ */ __name((e2) => buildNamesCell(e2.getData().names), "formatter")
         }, {
           title: "创建时间",
           field: "createDate",
@@ -15706,27 +15827,13 @@ ${failure.stack}` : "");
           responsive: 0,
           headerSort: false,
           formatter: /* @__PURE__ */ __name((e2, t2, n2) => {
-            const a2 = e2.getData();
-            return n2((() => {
-              var t3;
-              null == (t3 = e2.getElement().querySelector(".history-editBtn")) || t3.addEventListener("click", ((e3) => {
+            const a2 = e2.getData(), element = buildActionButtons(a2);
+            n2((() => {
+              element.querySelector(".history-editBtn")?.addEventListener("click", ((ev) => {
                 this.editRecord(a2);
               }));
-            })), `
-                        <div class="action-btns" data-car-num="${a2.carNum}" data-href="${a2.url ? a2.url : ""}">
-                            <button type="button" class="jhs-btn jhs-btn--secondary history-detailBtn"><span>查看</span></button>
-                            <div class="sub-btns">
-                                <button type="button" class="jhs-btn jhs-btn--ghost sub-btns-toggle" aria-haspopup="menu" aria-expanded="false"><span>更多操作</span></button>
-                                <div class="sub-btns-menu" role="menu">
-                                    <button type="button" class="jhs-btn jhs-btn--ghost history-editBtn" role="menuitem"><span>编辑</span></button>
-                                    <button type="button" class="jhs-btn jhs-btn--danger history-deleteBtn" role="menuitem"><span>移除</span></button>
-                                    <button type="button" class="jhs-btn jhs-btn--ghost history-hasWatchBtn" role="menuitem">${k}</button>
-                                    <button type="button" class="jhs-btn jhs-btn--ghost history-hasDownBtn" role="menuitem">${y}</button>
-                                    <button type="button" class="jhs-btn jhs-btn--ghost history-favoriteBtn" role="menuitem">${v}</button>
-                                    <button type="button" class="jhs-btn jhs-btn--ghost history-filterBtn" role="menuitem">${m}</button>
-                                </div>
-                            </div>
-                        </div>`;
+            }));
+            return element;
           }, "formatter")
         }],
         initialSort: [{
@@ -15769,59 +15876,38 @@ ${failure.stack}` : "");
       }
     }
     async editRecord(e2) {
-      const t2 = e2.carNum, n2 = e2.names || "", a2 = e2.url || "", flags = normalizeStateFlags(e2.stateFlags), s2 = e2.remark || "";
+      const carNum = e2.carNum, names = e2.names || "", url = e2.url || "", remark = e2.remark || "", flags = normalizeStateFlags(e2.stateFlags);
       let editRoot = $();
-      const c2 = `
-            <div class="jhs-layout-8cddc29a">
-                <div class="jhs-layout-da303dcf">
-                    <label class="jhs-layout-27f87d75">番号:</label>
-                    <input type="text" id="edit-carNum" value="${t2}" class="jhs-field jhs-history-edit-field" readonly>
-                </div>
-                <div class="jhs-layout-da303dcf">
-                    <label class="jhs-layout-27f87d75">演员 (用空格隔开):</label>
-                    <textarea id="edit-names" class="jhs-textarea jhs-history-edit-field">${n2}</textarea>
-                </div>
-                <fieldset class="jhs-layout-da303dcf"><legend class="jhs-layout-27f87d75">状态:</legend>
-                    <label class="jhs-option-row">收藏 <input type="checkbox" id="edit-favorite" class="mini-switch" ${flags.favorite ? "checked" : ""}></label>
-                    <label class="jhs-option-row">已下载 <input type="checkbox" id="edit-downloaded" class="mini-switch" ${flags.downloaded ? "checked" : ""}></label>
-                    <label class="jhs-option-row">已观看 <input type="checkbox" id="edit-watched" class="mini-switch" ${flags.watched ? "checked" : ""}></label>
-                    <label class="jhs-option-row">屏蔽 <input type="checkbox" id="edit-blocked" class="mini-switch" ${flags.blocked ? "checked" : ""}></label>
-                </fieldset>
-                <div class="jhs-layout-da303dcf">
-                    <label class="jhs-layout-27f87d75">链接:</label>
-                    <input type="text" id="edit-url" value="${a2}" class="jhs-field jhs-history-edit-field">
-                </div>
-                <div class="jhs-layout-da303dcf">
-                    <label class="jhs-layout-27f87d75">备注:</label>
-                    <textarea id="edit-remark" class="jhs-textarea jhs-history-edit-field">${s2}</textarea>
-                </div>
-            </div>
-        `;
+      const c2 = buildEditRecordForm(flags);
       const dialog = this.getRuntimeService("dialog");
       dialog.open({
         type: 1,
-        title: `编辑记录: ${t2}`,
+        title: `编辑记录: ${carNum}`,
         area: utils.getDialogArea("sm"),
         content: c2,
         btn: ["保存", "取消"],
-        success: /* @__PURE__ */ __name((e3, t3) => {
-          editRoot = $(e3);
-          const n3 = /* @__PURE__ */ __name((e4) => {
-            e4.css("height", "auto"), e4.css("height", e4[0].scrollHeight + 15 + "px");
-          }, "n"), a3 = editRoot.find("#edit-names");
-          a3.on("input", ((event) => n3($(event.currentTarget)))), n3(a3);
-          const i2 = editRoot.find("#edit-remark");
-          i2.on("input", ((event) => n3($(event.currentTarget)))), n3(i2);
+        success: /* @__PURE__ */ __name((layerEl, _index) => {
+          editRoot = $(layerEl);
+          editRoot.find("#edit-carNum").val(carNum);
+          editRoot.find("#edit-names").val(names);
+          editRoot.find("#edit-url").val(url);
+          editRoot.find("#edit-remark").val(remark);
+          const resize = /* @__PURE__ */ __name((el) => {
+            el.css("height", "auto"), el.css("height", el[0].scrollHeight + 15 + "px");
+          }, "resize"), namesField = editRoot.find("#edit-names");
+          namesField.on("input", ((event) => resize($(event.currentTarget)))), resize(namesField);
+          const remarkField = editRoot.find("#edit-remark");
+          remarkField.on("input", ((event) => resize($(event.currentTarget)))), resize(remarkField);
         }, "success"),
-        yes: /* @__PURE__ */ __name(async (t3) => {
-          const n3 = String(editRoot.find("#edit-names").val() || "").trim(), i2 = String(editRoot.find("#edit-url").val() || "").trim(), s3 = String(editRoot.find("#edit-remark").val() || "").trim(), nextFlags = {
+        yes: /* @__PURE__ */ __name(async (index) => {
+          const nextNames = String(editRoot.find("#edit-names").val() || "").trim(), nextUrl = String(editRoot.find("#edit-url").val() || "").trim(), nextRemark = String(editRoot.find("#edit-remark").val() || "").trim(), nextFlags = {
             favorite: editRoot.find("#edit-favorite").prop("checked"),
             downloaded: editRoot.find("#edit-downloaded").prop("checked"),
             watched: editRoot.find("#edit-watched").prop("checked"),
             blocked: editRoot.find("#edit-blocked").prop("checked")
           };
           const save = /* @__PURE__ */ __name(async () => {
-            await this.historyRepository.patch(e2.carNum, nextFlags, { type: "history-edit", replaceMetadata: true, record: { ...e2, names: n3, url: i2, remark: s3 } }), this.tableObj.setData(), dialog.close(t3);
+            await this.historyRepository.patch(e2.carNum, nextFlags, { type: "history-edit", replaceMetadata: true, record: { ...e2, names: nextNames, url: nextUrl, remark: nextRemark } }), this.tableObj.setData(), dialog.close(index);
           }, "save");
           if (!flags.blocked && nextFlags.blocked) return utils.q(null, `是否屏蔽${e2.carNum}?`, (() => void save())), false;
           await save();
@@ -15913,17 +15999,18 @@ ${failure.stack}` : "");
       return `<div class="jhs-sort-control"><button type="button" id="sort-toggle-btn" class="jhs-btn jhs-btn--secondary" aria-haspopup="menu" aria-expanded="false" title="${title}"><span id="jhs-sort-current">${current}</span></button><div class="jhs-popover jhs-sort-menu" role="menu" aria-label="排序方式">${Object.entries(labels).map((([value, label]) => `<button type="button" class="jhs-btn jhs-btn--ghost jhs-sort-option" role="menuitemradio" aria-checked="${value === method ? "true" : "false"}" data-sort-method="${value}" tabindex="-1">${label}</button>`)).join("")}</div></div>`;
     }
     bindEvent() {
-      $("#waitCheckBtn").on("click", ((e3) => {
+      $("#waitCheckBtn").on("click", ((e2) => {
         void this.openWaitCheck().catch(((error) => clog.error("待鉴定列表打开失败", error)));
-      })), $("#newVideoBtn").on("click", ((e3) => {
+      })), $("#newVideoBtn").on("click", ((e2) => {
         this.getOptionalDependency("NewVideoPlugin")?.openDialog?.();
-      })), $("#blacklistBtn").on("click", ((e3) => {
+      })), $("#blacklistBtn").on("click", ((e2) => {
         this.getOptionalDependency("BlacklistPlugin")?.openBlacklistDialog?.();
       })), this.bindSortMenu();
-      const e2 = this.getOptionalDependency("BlacklistPlugin");
-      e2 || $("#blacklistBtn,#addBlacklistBtn,#filterAllVideo,#favoriteAllVideo,#hasDownAllVideo").prop("disabled", true).attr("title", "黑名单功能已禁用");
+      const blacklist = this.getOptionalDependency("BlacklistPlugin"), listPage = this.getOptionalDependency("ListPagePlugin");
+      blacklist || $("#blacklistBtn,#addBlacklistBtn,#filterAllVideo").prop("disabled", true).attr("title", "黑名单功能已禁用");
+      listPage || $("#favoriteAllVideo,#hasDownAllVideo").prop("disabled", true).attr("title", "列表功能已禁用");
       $("#addBlacklistBtn").on("click", (async (t2) => {
-        await e2?.addBlacklist?.(t2);
+        await blacklist?.addBlacklist?.(t2);
       })), $("#filterAllVideo").on("click", (async (t2) => {
         let n2 = {
           clientX: t2.clientX,
@@ -15934,7 +16021,7 @@ ${failure.stack}` : "");
         utils.q(n2, "一键屏蔽视频列表?", (async () => {
           this.loadObj = loading();
           try {
-            await e2?.filterAllVideo?.(i2);
+            await blacklist?.filterAllVideo?.(i2);
           } catch (t3) {
             clog.error(t3);
           } finally {
@@ -15948,7 +16035,7 @@ ${failure.stack}` : "");
         utils.q(n2, "一键收藏所有可见作品?", (async () => {
           this.loadObj = loading();
           try {
-            await e2?.batchSaveAllVideos?.(i2, h);
+            await listPage?.batchSaveAllVideos?.(i2, h);
           } catch (t3) {
             clog.error(t3);
           } finally {
@@ -15962,7 +16049,7 @@ ${failure.stack}` : "");
         utils.q(n2, "一键已下载所有可见作品?", (async () => {
           this.loadObj = loading();
           try {
-            await e2?.batchSaveAllVideos?.(i2, g);
+            await listPage?.batchSaveAllVideos?.(i2, g);
           } catch (t3) {
             clog.error(t3);
           } finally {
@@ -16487,6 +16574,26 @@ ${failure.stack}` : "");
                 </tr>
             </table>
         `);
+    }
+    async batchSaveAllVideos(actressName, flag, pageDom = null, page = 1, processed = 0) {
+      let items, nextUrl;
+      pageDom ? (items = pageDom.find(this.getSelector().requestDomItemSelector), nextUrl = pageDom.find(this.getSelector().nextPageSelector).attr("href")) : (items = $(this.getSelector().itemSelector), nextUrl = $(this.getSelector().nextPageSelector).attr("href"));
+      if (nextUrl && 0 === items.length) throw show.error("解析列表失败"), new Error("解析列表失败");
+      for (const element of items) {
+        const item = $(element), { carNum, url, publishTime } = readListItem(item);
+        if (url && carNum) try {
+          const stateFlag = legacyActionToFlag(flag);
+          stateFlag && await this.getRuntimeService("state").patch(carNum, { [stateFlag]: true }, { type: "actor-page-batch-state", record: { carNum, url, names: actressName, publishTime } }), clog.log("批量操作", actressName, carNum, flag);
+        } catch (error) {
+          clog.error(`保存失败 [${carNum}]:`, error);
+        }
+      }
+      processed += items.length, clog.debug(`批量操作第 ${page} 页 · 已处理 ${processed} 个番号`);
+      if (nextUrl) {
+        clog.log("正在请求下一页内容:", nextUrl), await new Promise((resolve) => setTimeout(resolve, 500));
+        const scope = await this.getRuntimeService("scope")(), html = await requestHostPage(this.getRuntimeService("http"), nextUrl, scope), parsed = new DOMParser(), nextDom = $(parsed.parseFromString(html, "text/html"));
+        await this.batchSaveAllVideos(actressName, flag, nextDom, page + 1, processed);
+      } else clog.debug(`批量操作完成 · ${page} 页 · 共处理 ${processed} 个番号`);
     }
     async bindClick() {
       let e2 = this.getSelector();
@@ -18540,7 +18647,13 @@ ${failure.stack}` : "");
       return this.snapshotValue;
     }
     async refresh(key = "setting") {
-      return this.load(key);
+      const previous = this.snapshotValue;
+      await this.load(key);
+      const changedNames = Object.keys(this.snapshotValue).filter((name) => previous[name] !== this.snapshotValue[name]);
+      if (changedNames.length) {
+        this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name: changedNames.length === 1 ? changedNames[0] : null, value: void 0, names: Object.freeze([...changedNames]), snapshot: this.snapshotValue }) }));
+      }
+      return this.snapshotValue;
     }
     snapshot() {
       return this.snapshotValue;
@@ -18556,20 +18669,27 @@ ${failure.stack}` : "");
       if (!values || typeof values !== "object" || Array.isArray(values)) throw new TypeError("Settings replacement must be an object");
       return this._enqueue({ ...values }, Object.keys(values), storageKey, false);
     }
+    async _withSettingLock(fn) {
+      const locks = globalThis.navigator?.locks;
+      if (!locks?.request) return fn();
+      return locks.request("jhs_setting_lock", () => fn());
+    }
     _enqueue(values, changedNames, storageKey, merge) {
       for (const name of changedNames) {
         const validator = this.validators[name];
         if (validator && !validator(values[name])) throw new TypeError(`Invalid setting: ${name}`);
       }
-      const operation = this.writeChain.then(async () => {
-        const next = Object.freeze(merge ? { ...this.snapshotValue, ...values } : { ...values });
+      const operation = this.writeChain.then(() => this._withSettingLock(async () => {
+        const stored = await this.storage.get(storageKey);
+        const base = stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
+        const next = Object.freeze(merge ? { ...base, ...values } : { ...values });
         await this.storage.set(storageKey, next);
         this.snapshotValue = next;
         await this.afterPersist?.(next, Object.freeze([...changedNames]));
         const name = changedNames.length === 1 ? changedNames[0] : null;
         this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name, value: name ? next[name] : void 0, names: Object.freeze([...changedNames]), snapshot: next }) }));
         return next;
-      });
+      }));
       this.writeChain = operation.then(() => void 0, () => void 0);
       return operation;
     }
@@ -18876,6 +18996,13 @@ ${failure.stack}` : "");
         this.diagnostics.recordStartup(manifest2.id, performance.now() - started);
         return Object.freeze({ manifest: manifest2, scope, enabledContributions, dispose: /* @__PURE__ */ __name(() => {
           result?.dispose?.();
+          for (const contributionId of manifest2.contributes) {
+            const contributionScope = this.contributionScopes.get(contributionId);
+            if (contributionScope) {
+              contributionScope.dispose();
+              this.contributionScopes.delete(contributionId);
+            }
+          }
           scope.dispose();
           this.diagnostics.setFeature(manifest2.id, false);
           enabledContributions.forEach((id) => this.diagnostics.setContribution(id, false));
@@ -19024,12 +19151,16 @@ ${failure.stack}` : "");
     const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache });
     diagnostics.setNetworkController(http);
     const webdav = new WebDavService(http);
-    const settings = new SettingsService(storage, { afterPersist: /* @__PURE__ */ __name(async () => {
+    const settings = new SettingsService(storage, { afterPersist: /* @__PURE__ */ __name(async (_snapshot, changedNames) => {
       runtime.legacyStorage?.invalidateSettingCache?.();
-      await runtime.eventBus?.emit?.("settings-changed");
+      await runtime.eventBus?.emit?.("settings-changed", { changedNames, source: "service" });
     }, "afterPersist") });
     if (runtime.eventBus) rootScope.addCleanup(runtime.eventBus.on("settings-changed", async (_payload, event) => {
-      if (event.originId === runtime.eventBus.originId) await settings.refresh();
+      const remote = event.originId !== runtime.eventBus.originId;
+      const localLegacy = event.originId === runtime.eventBus.originId && event.payload?.source === "legacy";
+      if (!remote && !localLegacy) return;
+      runtime.legacyStorage?.invalidateSettingCache?.();
+      await settings.refresh();
     }));
     const profile = new ProfileService({ scope: rootScope, settings });
     const commands = new CommandRegistry();
@@ -20692,6 +20823,7 @@ ${failure.stack}` : "");
         disabled,
         localOrigins: localOriginSettings.origins
       });
+      Object.assign(globalThis, { settingsService: context.services.settings });
       const settingsSnapshot = await context.services.settings.load();
       context.services.profile.start();
       const legacySortMethod = localStorage.getItem("jhs_sortMethod");

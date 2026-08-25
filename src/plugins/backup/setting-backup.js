@@ -185,7 +185,8 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialo
         area: utils.getResponsiveArea([ "800px", "70%" ]),
         anim: -1,
         success: (/** @type {HTMLElement} */ a) => {
-            const i = createJhsTable((/** @type {any} */ (globalThis)).Tabulator, "#table-container", {
+            const tableRoot = $(a).find(".jhs-table-dialog__content").get(0) || $(a).find("#table-container").get(0);
+            const i = createJhsTable((/** @type {any} */ (globalThis)).Tabulator, tableRoot, {
                 pagination: !1,
                 layout: "fitColumns",
                 placeholder: "暂无数据",
