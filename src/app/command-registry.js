@@ -8,6 +8,19 @@ export class CommandRegistry {
         this.handlers = new Map();
         /** @type {((featureId: string) => Promise<void>) | null} */
         this.activateOwner = null;
+        /** @type {Map<string, boolean>} */
+        this.ownerEnabled = new Map();
+    }
+
+    /** @param {string} command @param {boolean} enabled */
+    setOwnerEnabled(command, enabled) {
+        if (!this.owners.has(command)) throw new Error(`Unknown command owner: ${command}`);
+        this.ownerEnabled.set(command, enabled);
+    }
+
+    /** 命令可用性：owner 已注册且未被功能禁用。 @param {string} command */
+    isAvailable(command) {
+        return this.owners.has(command) && this.ownerEnabled.get(command) !== false;
     }
 
     /** @param {(featureId: string) => Promise<void>} activator */

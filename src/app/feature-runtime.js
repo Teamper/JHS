@@ -36,7 +36,10 @@ export class FeatureRuntime {
         }
         this.manifests.set(validated.id, validated);
         for (const contributionId of validated.contributes) this.contributionOwners.set(contributionId, validated.id);
-        for (const command of validated.providesCommands) this.commands.registerOwner(command, validated.id);
+        for (const command of validated.providesCommands) {
+            this.commands.registerOwner(command, validated.id);
+            this.commands.setOwnerEnabled(command, this.isEligible(validated));
+        }
     }
 
     /** @param {Record<string, any>} manifest */

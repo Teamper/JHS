@@ -106,7 +106,7 @@ export class CoverButtonPlugin extends BasePlugin {
     async enableSvgBtn(items = null) {
         const e = this.getRuntimeService("settings").snapshot(), {enableLoadScreenShot: t = _, enableVideoSvg: n = _, enablePreviewVideo: q = _, enableHandleSvg: a = _, enableSiteSvg: i = _, enableCopySvg: s = _} = e;
         const scope = items ? $(items) : $(document);
-        [ { selector: ".screenSvg", enabled: t }, { selector: ".videoSvg", enabled: n === _ && q === _ ? _ : "no" }, { selector: ".handleSvg", enabled: a }, { selector: ".siteSvg", enabled: i }, { selector: ".copySvg", enabled: s } ].forEach((({selector: e, enabled: t}) => {
+        [ { selector: ".screenSvg", enabled: t === _ && Boolean(this.getOptionalDependency("ScreenShotPlugin")) ? _ : "no" }, { selector: ".videoSvg", enabled: n === _ && q === _ ? _ : "no" }, { selector: ".handleSvg", enabled: a }, { selector: ".siteSvg", enabled: i }, { selector: ".copySvg", enabled: s } ].forEach((({selector: e, enabled: t}) => {
             scope.find(e).toggle(t === _);
         }));
     }

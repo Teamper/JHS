@@ -139,7 +139,8 @@ export function buildSettingCss(containerWidth, containerColumns, isJavBus, isJa
                 .simple-setting .jhs-setting-row, .mini-simple-setting .jhs-setting-row, .jhs-quick-setting .jhs-setting-row { grid-template-columns:minmax(0,1fr) auto; gap:var(--jhs-space-3); min-height:48px; padding:var(--jhs-space-2) 0; border-bottom:1px solid var(--jhs-border); }
                 .simple-setting .jhs-setting-row:last-child, .mini-simple-setting .jhs-setting-row:last-child, .jhs-quick-setting .jhs-setting-row:last-child { border-bottom:0; }
                 .simple-setting .jhs-setting-row__control, .mini-simple-setting .jhs-setting-row__control, .jhs-quick-setting .jhs-setting-row__control { width:auto; justify-self:end; }
-                .simple-setting .jhs-setting-row__description, .mini-simple-setting .jhs-setting-row__description, .jhs-quick-setting .jhs-setting-row__description { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+                .simple-setting .jhs-setting-row__description, .mini-simple-setting .jhs-setting-row__description, .jhs-quick-setting .jhs-setting-row__description { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-height:1.35; }
+                @media (max-width:767px) { .simple-setting .jhs-setting-row__description, .mini-simple-setting .jhs-setting-row__description, .jhs-quick-setting .jhs-setting-row__description { -webkit-line-clamp:unset; white-space:normal; } }
                 .jhs-setting-nav-item { position:relative; }
                 .jhs-nav-button { padding-right:15px !important; }
                 .jhs-mini-setting-box { position:relative; margin-left:auto; }
@@ -410,19 +411,20 @@ export async function applyImageMode(busImgPlugin = null) {
         window.location.href.includes("/advanced_search?type=100") && (e = "50% 50% !important");
         const t = `
                 .cover {
-                    min-height: 350px !important;
+                    aspect-ratio: 3 / 4.26;
                     overflow: hidden !important;
-                    padding-top: 142% !important;
                 }
 
                 .cover img {
+                    width: 100%;
+                    height: 100%;
                     object-fit: cover !important;
                     object-position: ${e};
                 }
 
                 /* bus的 */
                 .masonry .movie-box img {
-                    min-height: 500px !important;
+                    aspect-ratio: 3 / 4.26;
                     object-fit: cover !important;
                     object-position: top right;
                 }

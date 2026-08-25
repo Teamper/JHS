@@ -579,6 +579,7 @@ export class NewVideoPlugin extends BasePlugin {
     }
     async editActress(e) {
         const dialog = this.getRuntimeService("dialog");
+        /** @type {any} */ let editRoot = null;
         const t = String(e.name || ""), n = normalizeHttpUrl(e.avatar, this.nvJavDbUrl) || "", a = String(e.remark || ""), i = Array.isArray(e.allName) ? e.allName.join("，") : "", s = Array.isArray(e.newVideoList) ? e.newVideoList.map((e => "string" == typeof e ? e : e.carNum)).join("，") : "", o = String(e.starId || ""), l = e.actressType || "", safe = value => escapeHtml(String(value || "")), c = `\n            <div class="jhs-form-dialog">\n                <div class="jhs-avatar-editor">\n                    <img id="edit-avatar-preview" src="${safe(n)}" alt="Avatar Preview" \n                         class="jhs-avatar-editor__preview">\n                    <div class="jhs-form-dialog__body">\n                        <label class="jhs-form-label">头像链接:</label>\n                        <input type="text" id="edit-actress-avatar" value="${safe(n)}" \n                               class="jhs-field">\n                       <div class="jhs-toolbar jhs-avatar-editor__actions">\n                            <button type="button" id="search-avatar-btn" \n                                class="jhs-btn jhs-btn--secondary">\n                                搜索头像\n                            </button>\n                            <button type="button" id="select-cdn-btn" \n                                class="jhs-btn jhs-btn--secondary">\n                                选择 CDN 源\n                            </button>\n                        </div>\n                    </div>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">主名称:</label>\n                    <input type="text" id="edit-actress-name" value="${safe(t)}" \n                           class="jhs-field">\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">所有别名(用逗号隔开):</label>\n                    <textarea id="edit-actress-allname" class="jhs-textarea">${safe(i)}</textarea>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">演员类别:</label>\n                    <select id="actressType" class="jhs-select-source">\n                        <option value="" ${"" === l ? "selected" : ""}>未知</option>\n                        <option value="censored" ${"censored" === l ? "selected" : ""}>有码</option>\n                        <option value="uncensored" ${"uncensored" === l ? "selected" : ""}>无码</option>\n                    </select>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">最新作品(用逗号隔开):</label>\n                    <textarea id="edit-actress-newvideolist" class="jhs-textarea">${safe(s)}</textarea>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">备注:</label>\n                   <textarea id="edit-remark" class="jhs-textarea">${safe(a)}</textarea>\n                </div>\n            </div>\n        `;
         dialog.open({
             type: 1,
@@ -587,24 +588,26 @@ export class NewVideoPlugin extends BasePlugin {
             content: c,
             btn: [ "保存", "取消" ],
             success: (e, t) => {
+                editRoot = $(e);
+                this._editActressRoot = editRoot;
                 JhsSelect.enhance(e);
                 const n = e => {
                     e.css("height", "auto"), e.css("height", e[0].scrollHeight + 15 + "px");
                 };
-                $("#edit-actress-avatar").on("input", (function() {
+                editRoot.find("#edit-actress-avatar").on("input", (function() {
                     const e = $(this).val();
-                    $("#edit-avatar-preview").attr("src", e);
+                    editRoot.find("#edit-avatar-preview").attr("src", e);
                 }));
-                const a = $("#edit-actress-allname");
+                const a = editRoot.find("#edit-actress-allname");
                 a.on("input", (function() {
                     n($(this));
                 })), n(a);
-                const i = $("#edit-actress-newvideolist");
+                const i = editRoot.find("#edit-actress-newvideolist");
                 i.on("input", (function() {
                     n($(this));
-                })), n(i), $("#search-avatar-btn").on("click", (async () => {
+                })), n(i), editRoot.find("#search-avatar-btn").on("click", (async () => {
                     await this.searchAvatar();
-                })), $("#select-cdn-btn").on("click", (async () => {
+                })), editRoot.find("#select-cdn-btn").on("click", (async () => {
                     await (async () => {
                         const e = this.avatarSourceIndex, t = this.avatarSources.map(((t, n) => `\n        <label class="jhs-option-row" for="cdn-${n}">\n            <input type="radio" id="cdn-${n}" name="cdn-source" value="${n}" ${n === e ? "checked" : ""}>\n            <span>${t.name} ${t.recommended ? "(推荐)" : ""}</span>\n        </label>\n    `)).join(""), n = `\n        <div class="jhs-form-dialog">\n            <p class="jhs-form-dialog__title">请选择头像数据源 (当前: ${this.avatarSources[e]?.name || "无可用来源"}):</p>\n            ${t}\n            <p class="jhs-helper-text">切换后将在下次搜索时使用所选来源。</p>\n        </div>\n    `;
                         dialog.open({
@@ -628,7 +631,7 @@ export class NewVideoPlugin extends BasePlugin {
                 })), utils.setupEscClose(t);
             },
             yes: async t => {
-                const n = $("#edit-actress-avatar").val().trim(), a = $("#edit-actress-name").val().trim(), i = $("#edit-actress-allname").val().trim(), s = $("#edit-actress-newvideolist").val().trim(), o = $("#edit-remark").val().trim(), r = $("#actressType").val();
+                const root = editRoot || $(document), n = root.find("#edit-actress-avatar").val().trim(), a = root.find("#edit-actress-name").val().trim(), i = root.find("#edit-actress-allname").val().trim(), s = root.find("#edit-actress-newvideolist").val().trim(), o = root.find("#edit-remark").val().trim(), r = root.find("#actressType").val();
                 if (!a) return show.error("主名称不能为空"), !1;
                 const l = i.split(/[\uff0c,]/).map((e => e.trim())).filter((e => e.length > 0)), c = s.split(/[\uff0c,]/).map((e => e.trim())).filter((e => e.length > 0));
                 e.avatar = n, e.name = a, e.allName = l, e.newVideoList = c, e.actressType = r,
@@ -667,7 +670,7 @@ export class NewVideoPlugin extends BasePlugin {
     }
     async searchAvatar() {
         const dialog = this.getRuntimeService("dialog");
-        const e = $("#edit-actress-name"), t = $("#edit-actress-allname"), n = e.val().trim(), a = t.val().trim().split(/[\uff0c,]/).map((e => e.trim())).filter((e => e.length > 0));
+        const root = this._editActressRoot || $(document), e = root.find("#edit-actress-name"), t = root.find("#edit-actress-allname"), n = e.val().trim(), a = t.val().trim().split(/[\uff0c,]/).map((e => e.trim())).filter((e => e.length > 0));
         if (n && a.unshift(n), 0 === a.length) return void show.error("请先填写女优主名称或别名进行搜索。");
         const i = loading("正在搜索头像...");
         let s = [];
@@ -708,7 +711,7 @@ export class NewVideoPlugin extends BasePlugin {
                     })), this.complete && (this.naturalWidth > 0 ? image.trigger("load") : image.trigger("error"));
                 })), candidates.on("click", (function() {
                     const candidate = $(this), url = candidate.attr("data-url");
-                    $("#edit-actress-avatar").val(url), $("#edit-avatar-preview").attr("src", url), candidates.attr("aria-pressed", "false"),
+                    root.find("#edit-actress-avatar").val(url), root.find("#edit-avatar-preview").attr("src", url), candidates.attr("aria-pressed", "false"),
                     candidate.attr("aria-pressed", "true"), setTimeout((() => {
                         dialog.close(t);
                     }), 150);

@@ -8,10 +8,12 @@ function normalizeUrl(value) {
     } catch { return null; }
 }
 
+import { createPanelState } from "./primitives.js";
+
 /** @param {any} target @param {string} message @param {null|(() => void)} [retry] */
 export function renderFc2State(target, message, retry = null) {
-    const jq = /** @type {any} */ (globalThis).$, host = jq(target).empty(), state = jq('<div class="jhs-fc2-state"></div>').text(message);
-    if (retry) state.addClass("is-error").append(" ", jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry));
+    const jq = /** @type {any} */ (globalThis).$, host = jq(target).empty();
+    const state = createPanelState(message, { retry, tone: retry ? "error" : "neutral", extraClass: "jhs-fc2-state" });
     host.append(state);
 }
 

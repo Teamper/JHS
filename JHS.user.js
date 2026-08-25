@@ -7001,7 +7001,8 @@
                 .simple-setting .jhs-setting-row, .mini-simple-setting .jhs-setting-row, .jhs-quick-setting .jhs-setting-row { grid-template-columns:minmax(0,1fr) auto; gap:var(--jhs-space-3); min-height:48px; padding:var(--jhs-space-2) 0; border-bottom:1px solid var(--jhs-border); }
                 .simple-setting .jhs-setting-row:last-child, .mini-simple-setting .jhs-setting-row:last-child, .jhs-quick-setting .jhs-setting-row:last-child { border-bottom:0; }
                 .simple-setting .jhs-setting-row__control, .mini-simple-setting .jhs-setting-row__control, .jhs-quick-setting .jhs-setting-row__control { width:auto; justify-self:end; }
-                .simple-setting .jhs-setting-row__description, .mini-simple-setting .jhs-setting-row__description, .jhs-quick-setting .jhs-setting-row__description { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+                .simple-setting .jhs-setting-row__description, .mini-simple-setting .jhs-setting-row__description, .jhs-quick-setting .jhs-setting-row__description { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:2; line-height:1.35; }
+                @media (max-width:767px) { .simple-setting .jhs-setting-row__description, .mini-simple-setting .jhs-setting-row__description, .jhs-quick-setting .jhs-setting-row__description { -webkit-line-clamp:unset; white-space:normal; } }
                 .jhs-setting-nav-item { position:relative; }
                 .jhs-nav-button { padding-right:15px !important; }
                 .jhs-mini-setting-box { position:relative; margin-left:auto; }
@@ -7270,19 +7271,20 @@
       window.location.href.includes("/advanced_search?type=100") && (e2 = "50% 50% !important");
       const t2 = `
                 .cover {
-                    min-height: 350px !important;
+                    aspect-ratio: 3 / 4.26;
                     overflow: hidden !important;
-                    padding-top: 142% !important;
                 }
 
                 .cover img {
+                    width: 100%;
+                    height: 100%;
                     object-fit: cover !important;
                     object-position: ${e2};
                 }
 
                 /* bus的 */
                 .masonry .movie-box img {
-                    min-height: 500px !important;
+                    aspect-ratio: 3 / 4.26;
                     object-fit: cover !important;
                     object-position: top right;
                 }
@@ -9658,6 +9660,25 @@
   }
   __name(renderTranslatedTitle, "renderTranslatedTitle");
 
+  // src/ui/detail/primitives.js
+  function createPanelState(message, { retry = null, tone = "neutral", extraClass = "" } = {}) {
+    const jq = globalThis.$;
+    const state = jq('<div class="jhs-panel-state"></div>').text(message);
+    if (extraClass) state.addClass(extraClass);
+    if ("error" === tone) state.addClass("is-error");
+    if (retry) state.append(" ", jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry));
+    return state;
+  }
+  __name(createPanelState, "createPanelState");
+  function createPanelLoading(message = "正在加载…") {
+    return createPanelState(message);
+  }
+  __name(createPanelLoading, "createPanelLoading");
+  function createPanelError(message, retry = null) {
+    return createPanelState(message, { retry, tone: "error" });
+  }
+  __name(createPanelError, "createPanelError");
+
   // src/ui/detail/fc2-workspace-view.js
   function normalizeUrl(value) {
     try {
@@ -9669,8 +9690,8 @@
   }
   __name(normalizeUrl, "normalizeUrl");
   function renderFc2State(target, message, retry = null) {
-    const jq = globalThis.$, host = jq(target).empty(), state = jq('<div class="jhs-fc2-state"></div>').text(message);
-    if (retry) state.addClass("is-error").append(" ", jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", retry));
+    const jq = globalThis.$, host = jq(target).empty();
+    const state = createPanelState(message, { retry, tone: retry ? "error" : "neutral", extraClass: "jhs-fc2-state" });
     host.append(state);
   }
   __name(renderFc2State, "renderFc2State");
@@ -10027,7 +10048,7 @@ ${value}\r
     if (mode !== "manual" && !enabledProviders.some((provider) => provider.id === providerId)) return host.empty(), null;
     if (!enabledProviders.length) return host.empty().append(jq('<div class="jhs-panel-state">没有可用截图来源</div>')), host;
     const load = /* @__PURE__ */ __name(async (resultHost = host, selectedProviderId = providerId) => {
-      resultHost.empty().append(jq("<div></div>").addClass("jhs-panel-state").text("正在加载缩略图…"));
+      resultHost.empty().append(createPanelLoading("正在加载缩略图…"));
       try {
         const images = await options.screenshot.resolve({ carNum: options.carNum }, { providerId: selectedProviderId, scope: options.scope, settings: options.settings });
         if (!isActive()) return null;
@@ -10037,9 +10058,7 @@ ${value}\r
         return renderImage(resultHost, image.url, "缩略图");
       } catch (error) {
         if (!isActive()) return null;
-        const state = jq("<div></div>").addClass("jhs-panel-state").text("缩略图加载失败 ");
-        const retry = jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", () => void load(resultHost, selectedProviderId));
-        resultHost.empty().append(state.append(retry));
+        resultHost.empty().append(createPanelError("缩略图加载失败 ", () => void load(resultHost, selectedProviderId)));
         globalThis.clog?.error("缩略图加载失败", error);
         return null;
       }
@@ -12323,7 +12342,7 @@ ${failure.stack}` : "");
     async enableSvgBtn(items = null) {
       const e2 = this.getRuntimeService("settings").snapshot(), { enableLoadScreenShot: t2 = _, enableVideoSvg: n2 = _, enablePreviewVideo: q2 = _, enableHandleSvg: a2 = _, enableSiteSvg: i2 = _, enableCopySvg: s2 = _ } = e2;
       const scope = items ? $(items) : $(document);
-      [{ selector: ".screenSvg", enabled: t2 }, { selector: ".videoSvg", enabled: n2 === _ && q2 === _ ? _ : "no" }, { selector: ".handleSvg", enabled: a2 }, { selector: ".siteSvg", enabled: i2 }, { selector: ".copySvg", enabled: s2 }].forEach((({ selector: e3, enabled: t3 }) => {
+      [{ selector: ".screenSvg", enabled: t2 === _ && Boolean(this.getOptionalDependency("ScreenShotPlugin")) ? _ : "no" }, { selector: ".videoSvg", enabled: n2 === _ && q2 === _ ? _ : "no" }, { selector: ".handleSvg", enabled: a2 }, { selector: ".siteSvg", enabled: i2 }, { selector: ".copySvg", enabled: s2 }].forEach((({ selector: e3, enabled: t3 }) => {
         scope.find(e3).toggle(t3 === _);
       }));
     }
@@ -13356,6 +13375,7 @@ ${failure.stack}` : "");
     }
     async editActress(e2) {
       const dialog = this.getRuntimeService("dialog");
+      let editRoot = null;
       const t2 = String(e2.name || ""), n2 = normalizeHttpUrl(e2.avatar, this.nvJavDbUrl) || "", a2 = String(e2.remark || ""), i2 = Array.isArray(e2.allName) ? e2.allName.join("，") : "", s2 = Array.isArray(e2.newVideoList) ? e2.newVideoList.map(((e3) => "string" == typeof e3 ? e3 : e3.carNum)).join("，") : "", o2 = String(e2.starId || ""), l2 = e2.actressType || "", safe = /* @__PURE__ */ __name((value) => escapeHtml(String(value || "")), "safe"), c2 = `
             <div class="jhs-form-dialog">
                 <div class="jhs-avatar-editor">
@@ -13411,24 +13431,26 @@ ${failure.stack}` : "");
         content: c2,
         btn: ["保存", "取消"],
         success: /* @__PURE__ */ __name((e3, t3) => {
+          editRoot = $(e3);
+          this._editActressRoot = editRoot;
           JhsSelect.enhance(e3);
           const n3 = /* @__PURE__ */ __name((e4) => {
             e4.css("height", "auto"), e4.css("height", e4[0].scrollHeight + 15 + "px");
           }, "n");
-          $("#edit-actress-avatar").on("input", (function() {
+          editRoot.find("#edit-actress-avatar").on("input", (function() {
             const e4 = $(this).val();
-            $("#edit-avatar-preview").attr("src", e4);
+            editRoot.find("#edit-avatar-preview").attr("src", e4);
           }));
-          const a3 = $("#edit-actress-allname");
+          const a3 = editRoot.find("#edit-actress-allname");
           a3.on("input", (function() {
             n3($(this));
           })), n3(a3);
-          const i3 = $("#edit-actress-newvideolist");
+          const i3 = editRoot.find("#edit-actress-newvideolist");
           i3.on("input", (function() {
             n3($(this));
-          })), n3(i3), $("#search-avatar-btn").on("click", (async () => {
+          })), n3(i3), editRoot.find("#search-avatar-btn").on("click", (async () => {
             await this.searchAvatar();
-          })), $("#select-cdn-btn").on("click", (async () => {
+          })), editRoot.find("#select-cdn-btn").on("click", (async () => {
             await (async () => {
               const e4 = this.avatarSourceIndex, t4 = this.avatarSources.map(((t5, n5) => `
         <label class="jhs-option-row" for="cdn-${n5}">
@@ -13462,7 +13484,7 @@ ${failure.stack}` : "");
           })), utils.setupEscClose(t3);
         }, "success"),
         yes: /* @__PURE__ */ __name(async (t3) => {
-          const n3 = $("#edit-actress-avatar").val().trim(), a3 = $("#edit-actress-name").val().trim(), i3 = $("#edit-actress-allname").val().trim(), s3 = $("#edit-actress-newvideolist").val().trim(), o3 = $("#edit-remark").val().trim(), r2 = $("#actressType").val();
+          const root = editRoot || $(document), n3 = root.find("#edit-actress-avatar").val().trim(), a3 = root.find("#edit-actress-name").val().trim(), i3 = root.find("#edit-actress-allname").val().trim(), s3 = root.find("#edit-actress-newvideolist").val().trim(), o3 = root.find("#edit-remark").val().trim(), r2 = root.find("#actressType").val();
           if (!a3) return show.error("主名称不能为空"), false;
           const l3 = i3.split(/[\uff0c,]/).map(((e3) => e3.trim())).filter(((e3) => e3.length > 0)), c3 = s3.split(/[\uff0c,]/).map(((e3) => e3.trim())).filter(((e3) => e3.length > 0));
           e2.avatar = n3, e2.name = a3, e2.allName = l3, e2.newVideoList = c3, e2.actressType = r2, e2.remark = o3;
@@ -13496,7 +13518,7 @@ ${failure.stack}` : "");
     }
     async searchAvatar() {
       const dialog = this.getRuntimeService("dialog");
-      const e2 = $("#edit-actress-name"), t2 = $("#edit-actress-allname"), n2 = e2.val().trim(), a2 = t2.val().trim().split(/[\uff0c,]/).map(((e3) => e3.trim())).filter(((e3) => e3.length > 0));
+      const root = this._editActressRoot || $(document), e2 = root.find("#edit-actress-name"), t2 = root.find("#edit-actress-allname"), n2 = e2.val().trim(), a2 = t2.val().trim().split(/[\uff0c,]/).map(((e3) => e3.trim())).filter(((e3) => e3.length > 0));
       if (n2 && a2.unshift(n2), 0 === a2.length) return void show.error("请先填写女优主名称或别名进行搜索。");
       const i2 = loading("正在搜索头像...");
       let s2 = [];
@@ -13536,7 +13558,7 @@ ${failure.stack}` : "");
             })), this.complete && (this.naturalWidth > 0 ? image.trigger("load") : image.trigger("error"));
           })), candidates.on("click", (function() {
             const candidate = $(this), url = candidate.attr("data-url");
-            $("#edit-actress-avatar").val(url), $("#edit-avatar-preview").attr("src", url), candidates.attr("aria-pressed", "false"), candidate.attr("aria-pressed", "true"), setTimeout((() => {
+            root.find("#edit-actress-avatar").val(url), root.find("#edit-avatar-preview").attr("src", url), candidates.attr("aria-pressed", "false"), candidate.attr("aria-pressed", "true"), setTimeout((() => {
               dialog.close(t3);
             }), 150);
           })), utils.setupEscClose(t3);
@@ -16121,6 +16143,7 @@ ${failure.stack}` : "");
       $("#sort-toggle-btn").prop("disabled", e2 === _ && !t2).attr("title", e2 === _ && !t2 ? "瀑布流模式仅支持默认排序" : "选择列表排序方式"), (e2 !== _ || t2) && await this.sortItems();
     }
     async createMenuBtn(scope) {
+      const hasNewVideo = Boolean(this.getOptionalDependency("NewVideoPlugin")), hasBlacklist = Boolean(this.getOptionalDependency("BlacklistPlugin")), hasListPage = Boolean(this.getOptionalDependency("ListPagePlugin"));
       if (r) {
         const e2 = o.includes("/actors/");
         let t2 = $(".main-tabs, .tabs"), n2 = "加入黑名单", a2 = "jhs-btn--filter", s2 = null;
@@ -16143,18 +16166,18 @@ ${failure.stack}` : "");
                 <div class="jhs-list-btn-row">
                     <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>
                     ${e2 ? `
-                     <button type="button" id="addBlacklistBtn" class="jhs-btn ${a2}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n2}</span></button>
-                     <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></button>
-                     <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>一键收藏所有作品</span></button>
-                     <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>一键已下载所有作品</span></button>
+${hasBlacklist ? `<button type="button" id="addBlacklistBtn" class="jhs-btn ${a2}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n2}</span></button>` : ""}
+${hasBlacklist ? `<button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></button>` : ""}
+${hasListPage ? `<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>一键收藏所有作品</span></button>` : ""}
+${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>一键已下载所有作品</span></button>` : ""}
                     ` : ""}
                     ${o.includes("/tags") ? `
-                      <button type="button" id="addBlacklistBtn" class="jhs-btn ${a2}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n2}</span></button>
+ ${hasBlacklist ? `<button type="button" id="addBlacklistBtn" class="jhs-btn ${a2}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n2}</span></button>` : ""}
                     ` : ""}
                 </div>
                 <div class="jhs-list-btn-row">
-                    <button type="button" id="newVideoBtn" class="jhs-btn jhs-btn--secondary"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></button>
-                    <button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>
+                    ${hasNewVideo ? `<button type="button" id="newVideoBtn" class="jhs-btn jhs-btn--secondary"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></button>` : ""}
+                    ${hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}
                     ${c ? "" : this.sortMenuHtml(l2 || "default", d2)}
                 </div>
             `);
@@ -16170,12 +16193,13 @@ ${failure.stack}` : "");
         $(".masonry").parent().prepend(`
                 <div class="jhs-list-btn-row">
                     <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>
-                    ${e2 ? `
+                    ${e2 && hasBlacklist ? `
                         <button type="button" id="addBlacklistBtn" class="jhs-btn ${n2}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${t2}</span></button>
                         <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></button>
+                    ` : ""}${e2 && hasListPage ? `
                         <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>一键收藏所有作品</span></button>
                         <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>一键已下载所有作品</span></button>
-                    ` : '<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>'}
+                    ` : ""}${!e2 && hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}
                     ${this.sortMenuHtml(a2)}
                 </div>
             `);
@@ -16197,8 +16221,6 @@ ${failure.stack}` : "");
         this.getOptionalDependency("BlacklistPlugin")?.openBlacklistDialog?.();
       })), this.bindSortMenu();
       const blacklist = this.getOptionalDependency("BlacklistPlugin"), listPage = this.getOptionalDependency("ListPagePlugin");
-      blacklist || $("#blacklistBtn,#addBlacklistBtn,#filterAllVideo").prop("disabled", true).attr("title", "黑名单功能已禁用");
-      listPage || $("#favoriteAllVideo,#hasDownAllVideo").prop("disabled", true).attr("title", "列表功能已禁用");
       $("#addBlacklistBtn").on("click", (async (t2) => {
         await blacklist?.addBlacklist?.(t2);
       })), $("#filterAllVideo").on("click", (async (t2) => {
@@ -19094,6 +19116,14 @@ ${failure.stack}` : "");
       this.owners = /* @__PURE__ */ new Map();
       this.handlers = /* @__PURE__ */ new Map();
       this.activateOwner = null;
+      this.ownerEnabled = /* @__PURE__ */ new Map();
+    }
+    setOwnerEnabled(command, enabled) {
+      if (!this.owners.has(command)) throw new Error(`Unknown command owner: ${command}`);
+      this.ownerEnabled.set(command, enabled);
+    }
+    isAvailable(command) {
+      return this.owners.has(command) && this.ownerEnabled.get(command) !== false;
     }
     setActivator(activator) {
       this.activateOwner = activator;
@@ -19200,7 +19230,10 @@ ${failure.stack}` : "");
       }
       this.manifests.set(validated.id, validated);
       for (const contributionId of validated.contributes) this.contributionOwners.set(contributionId, validated.id);
-      for (const command of validated.providesCommands) this.commands.registerOwner(command, validated.id);
+      for (const command of validated.providesCommands) {
+        this.commands.registerOwner(command, validated.id);
+        this.commands.setOwnerEnabled(command, this.isEligible(validated));
+      }
     }
     isEligible(manifest2) {
       if (manifest2.kind !== "system" && this.disabled.has(manifest2.id)) return false;

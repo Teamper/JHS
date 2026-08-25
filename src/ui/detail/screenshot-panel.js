@@ -1,5 +1,7 @@
 // @ts-check
 
+import { createPanelError, createPanelLoading } from "./primitives.js";
+
 /** @param {unknown} value */
 function normalizeImageUrl(value) {
     try {
@@ -35,7 +37,7 @@ export async function renderScreenshotPanel(options) {
     if (mode !== "manual" && !enabledProviders.some((provider) => provider.id === providerId)) return host.empty(), null;
     if (!enabledProviders.length) return host.empty().append(jq('<div class="jhs-panel-state">没有可用截图来源</div>')), host;
     const load = async (resultHost = host, selectedProviderId = providerId) => {
-        resultHost.empty().append(jq("<div></div>").addClass("jhs-panel-state").text("正在加载缩略图…"));
+        resultHost.empty().append(createPanelLoading("正在加载缩略图…"));
         try {
             const images = await options.screenshot.resolve({ carNum: options.carNum }, { providerId: selectedProviderId, scope: options.scope, settings: options.settings });
             if (!isActive()) return null;
@@ -45,9 +47,7 @@ export async function renderScreenshotPanel(options) {
             return renderImage(resultHost, image.url, "缩略图");
         } catch (error) {
             if (!isActive()) return null;
-            const state = jq("<div></div>").addClass("jhs-panel-state").text("缩略图加载失败 ");
-            const retry = jq('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm">重试</button>').on("click", () => void load(resultHost, selectedProviderId));
-            resultHost.empty().append(state.append(retry));
+            resultHost.empty().append(createPanelError("缩略图加载失败 ", () => void load(resultHost, selectedProviderId)));
             /** @type {any} */ (globalThis).clog?.error("缩略图加载失败", error);
             return null;
         }
