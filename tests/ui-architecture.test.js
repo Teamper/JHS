@@ -111,12 +111,15 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(translate).not.toMatch(/\.html\(/);
     });
 
-    it("keeps exactly the selected seven quick settings", () => {
-        const quick = settings.slice(settings.indexOf("function buildQuickSettingHtml"));
-        for (const id of [ "needClosePage", "autoPage", "translateTitle", "hoverBigImg", "enableLoadOtherSite", "enableLoadScreenShot", "enableLoadPreviewVideo" ])
-            expect(quick).toContain(`"${id}"`);
-        for (const id of [ "showAllItem", "showFavoriteItem", "showHasDownItem", "showHasWatchItem", "showFilterItem", "enableLoadActressInfo", "enableVerticalModel", "containerColumns", "containerWidth" ])
-            expect(quick).not.toContain(`id="${id}"`);
+    it("keeps exactly the canonical quick settings from the settings registry", () => {
+        const catalog = readFileSync(join(process.cwd(), "src/app/settings-catalog.js"), "utf8");
+        for (const id of [ "needClosePage", "autoPage", "translateTitle", "hoverBigImg", "enableLoadOtherSite", "enableLoadActressInfo", "enableLoadScreenShot", "enablePreviewVideo", "enableLoadPreviewVideo", "enableVerticalModel" ])
+            expect(catalog).toContain(`"${id}"`);
+        // 快捷设置由唯一 renderer 从 registry 生成，模板不再手写任何开关行
+        expect(settings).toContain("buildQuickSettingsHtml(registry, options)");
+        expect(settings).not.toContain('id="enableScreenSvg"');
+        for (const id of [ "showAllItem", "showFavoriteItem", "showHasDownItem", "showHasWatchItem", "showFilterItem", "enableLoadActressInfo", "enableVerticalModel" ])
+            expect(settings).not.toContain(`id="${id}"`);
     });
 
     it("removes retired hard-hidden visibility settings from every UI and form path", () => {
@@ -154,7 +157,7 @@ describe("list toolbar and UI cleanup contracts", () => {
         const settingPlugin = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8");
         expect(settingPlugin).toContain("if (utils.isMobileMode()) return;");
         expect(settingPlugin).toContain("openQuickSetting()");
-        expect(settingPlugin).toContain("buildQuickSettingHtml()");
+        expect(settingPlugin).toContain('buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))');
         expect(settingPlugin).toContain('id="jhs-quick-setting-sheet"');
         expect(settingPlugin).toContain('id="jhs-quick-setting-backdrop"');
         const mobileQuickSetting = settingPlugin.slice(settingPlugin.indexOf("openQuickSetting()"), settingPlugin.indexOf("async openSettingDialog"));

@@ -4,6 +4,7 @@ import { initializeRuntimeConstants, l, r } from "../core/constants.js";
 import { injectCoreCss } from "../core/css-injection.js";
 import { JhsError } from "../core/jhs-error.js";
 import { runDataMigrations } from "../core/migration.js";
+import { normalizeScreenshotSetting } from "../core/settings-migration.js";
 import { PluginManager } from "../core/plugin-manager.js";
 import { createLegacyRuntime } from "../core/legacy-runtime.js";
 import { initializeEventBus } from "../core/event-bus.js";
@@ -106,6 +107,7 @@ export async function bootstrapJhs() {
         // route through SettingsService with lock + re-read + merge.
         Object.assign(globalThis, { settingsService: context.services.settings });
         const settingsSnapshot = await context.services.settings.load();
+        await normalizeScreenshotSetting(context.services.settings);
         context.services.profile.start();
         const legacySortMethod = localStorage.getItem("jhs_sortMethod");
         if (settingsSnapshot.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) {

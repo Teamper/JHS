@@ -2092,6 +2092,18 @@
   }
   __name(runDataMigrations, "runDataMigrations");
 
+  // src/core/settings-migration.js
+  async function normalizeScreenshotSetting(settings) {
+    const snapshot = settings.snapshot();
+    const legacy = snapshot.enableScreenSvg;
+    const current = snapshot.enableLoadScreenShot;
+    if ((legacy === "no" || current === "no") && current !== "no") {
+      await settings.set("enableLoadScreenShot", "no");
+    }
+    return settings.snapshot();
+  }
+  __name(normalizeScreenshotSetting, "normalizeScreenshotSetting");
+
   // src/core/legacy-plugin-contributions.js
   var LEGACY_PLUGIN_CONTRIBUTION_MAP = Object.freeze({
     ListPagePlugin: "list.core",
@@ -7328,13 +7340,92 @@
   }
   __name(shouldShowItem, "shouldShowItem");
 
+  // src/ui/settings/setting-control-renderer.js
+  function normalizeBooleanValue(key, value) {
+    return value === "yes" || value === true;
+  }
+  __name(normalizeBooleanValue, "normalizeBooleanValue");
+  function renderSettingControl(descriptor, options = {}) {
+    const jq = globalThis.$;
+    const value = options.value ?? descriptor.defaultValue;
+    const onChange = options.onChange ?? null;
+    let control;
+    if (descriptor.type === "boolean") {
+      control = jq('<input type="checkbox" class="mini-switch">').prop("checked", normalizeBooleanValue(descriptor.key, value));
+      control.on("change", () => {
+        onChange?.(control.is(":checked") ? "yes" : "no");
+      });
+      return { root: control, getValue: /* @__PURE__ */ __name(() => control.is(":checked") ? "yes" : "no", "getValue"), setValue: /* @__PURE__ */ __name((next) => control.prop("checked", normalizeBooleanValue(descriptor.key, next)), "setValue") };
+    }
+    if (descriptor.type === "select") {
+      const optionsList = Array.isArray(descriptor.options) ? descriptor.options : [];
+      control = jq('<select class="jhs-select-source"></select>');
+      optionsList.forEach((option) => {
+        const item = option && typeof option === "object" ? option : { value: option, label: String(option) };
+        control.append(jq("<option></option>").attr("value", item.value).text(item.label ?? String(item.value)));
+      });
+      control.val(String(value ?? ""));
+      control.on("change", () => onChange?.(control.val()));
+      return { root: control, getValue: /* @__PURE__ */ __name(() => control.val(), "getValue"), setValue: /* @__PURE__ */ __name((next) => control.val(String(next ?? "")), "setValue") };
+    }
+    if (descriptor.type === "number") {
+      control = jq('<input type="number" class="jhs-field">').val(value == null ? "" : String(value));
+      control.on("change", () => onChange?.(Number(control.val()) || 0));
+      return { root: control, getValue: /* @__PURE__ */ __name(() => Number(control.val()) || 0, "getValue"), setValue: /* @__PURE__ */ __name((next) => control.val(next == null ? "" : String(next)), "setValue") };
+    }
+    control = jq('<input type="text" class="jhs-field">').val(value == null ? "" : String(value));
+    control.on("change", () => onChange?.(control.val()));
+    return { root: control, getValue: /* @__PURE__ */ __name(() => control.val(), "getValue"), setValue: /* @__PURE__ */ __name((next) => control.val(next == null ? "" : String(next)), "setValue") };
+  }
+  __name(renderSettingControl, "renderSettingControl");
+  function renderSettingRow(descriptor, options = {}) {
+    const jq = globalThis.$;
+    const rendered = renderSettingControl(descriptor, { value: options.value, onChange: options.onChange });
+    const copy = jq('<span class="jhs-setting-row__copy"></span>').append(jq('<span class="jhs-setting-row__label"></span>').text(descriptor.label)).append(jq('<span class="jhs-setting-row__description"></span>').text(descriptor.description || ""));
+    const control = jq('<span class="jhs-setting-row__control"></span>').append(rendered.root);
+    const row = jq('<label class="jhs-setting-row"></label>').attr("data-jhs-setting", descriptor.key).attr("data-jhs-setting-effect", descriptor.effect || "live").toggleClass("jhs-setting-row--indent", descriptor.indent === true).append(copy, control);
+    return { row, root: rendered.root, getValue: rendered.getValue, setValue: rendered.setValue };
+  }
+  __name(renderSettingRow, "renderSettingRow");
+  function buildQuickSettingsHtml(registry, options = {}) {
+    const jq = globalThis.$;
+    const list = jq('<div class="simple-setting__list"></div>');
+    for (const descriptor of registry.list({ surfaces: ["quick"], disabledContributions: options.disabledContributions })) {
+      const { row } = renderSettingRow(descriptor);
+      list.append(row);
+    }
+    return list;
+  }
+  __name(buildQuickSettingsHtml, "buildQuickSettingsHtml");
+  function bindSettingRows(root, descriptors, { settings, onChanged = null }) {
+    const setters = {};
+    descriptors.forEach((descriptor) => {
+      const row = root.find(`[data-jhs-setting="${descriptor.key}"]`).first();
+      if (!row.length) return;
+      const rendered = renderSettingControl(descriptor, { value: settings.snapshot()[descriptor.key] ?? descriptor.defaultValue });
+      row.find(".jhs-setting-row__control").empty().append(rendered.root);
+      rendered.root.on("change", () => {
+        const value = rendered.getValue();
+        onChanged?.(descriptor.key, value);
+        if ((descriptor.effect || "live") === "live") {
+          void settings.set(descriptor.key, value).catch((error) => {
+            globalThis.clog?.error(`保存设置失败: ${descriptor.key}`, error);
+          });
+        }
+      });
+      setters[descriptor.key] = rendered.setValue;
+    });
+    return setters;
+  }
+  __name(bindSettingRows, "bindSettingRows");
+
   // src/plugins/backup/setting-forms.js
   var settingsEventBus = jhsEventBus;
   async function loadSettingForm(dependencies) {
     let e2 = dependencies.settings.snapshot();
     $("#videoQuality").val(e2.videoQuality), $("#reviewCount").val(e2.reviewCount || 20), $("#tagPosition").val(e2.tagPosition || "rightTop"), $("#defaultQuickFilterTab").val(normalizeQuickFilterKey(e2.defaultQuickFilterTab)), $("#needClosePageBasic").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e2.autoRemoveNewVideoMarkAfterBrowse && e2.autoRemoveNewVideoMarkAfterBrowse === _), $("#waitCheckCount").val(e2.waitCheckCount || 5), $("#checkConcurrencyCount").val(parseNumberSetting(e2.checkConcurrencyCount, 2, { min: 2, max: 5 })), $("#checkRequestSleep").val(parseNumberSetting(e2.checkRequestSleep, 100, { min: 0, max: 3e3 })), $("#enableCheckBlacklist").val(e2.enableCheckBlacklist || _), $("#checkBlacklist_intervalTime").val(e2.checkBlacklist_intervalTime || 12), $("#checkBlacklist_ruleTime").val(parseNumberSetting(e2.checkBlacklist_ruleTime, 8760, { min: 0 })), $("#enableCheckFavoriteActress").val(e2.enableCheckFavoriteActress || _), $("#checkFavoriteActress_IntervalTime").val(e2.checkFavoriteActress_IntervalTime || 24), $("#enableCheckNewVideo").val(e2.enableCheckNewVideo || _), $("#checkNewVideo_intervalTime").val(e2.checkNewVideo_intervalTime || 12), $("#checkNewVideo_ruleTime").val(parseNumberSetting(e2.checkNewVideo_ruleTime, 8760, { min: 0 }));
     const t2 = e2.highlightedTagNumber || 1, n2 = e2.highlightedTagColor || "#ce2222";
-    $("#highlightedTagNumber").val(e2.highlightedTagNumber || 1), $("#highlightedTagColor").val(e2.highlightedTagColor || "#ce2222"), $("#highlightedTagLabel").css("border", `${t2}px solid ${n2}`), $("#enableClog").val(e2.enableClog || _), $("#clogMsgCount").val(e2.clogMsgCount || 2e3), $("#mobileMode").val(e2.mobileMode || "auto"), $("#themeMode").val(e2.themeMode || "light"), $("#httpTimeout").val(e2.httpTimeout || 5e3), $("#httpRetryCount").val(e2.httpRetryCount || 3), $("#webDavUrl").val(e2.webDavUrl || ""), $("#webDavUsername").val(e2.webDavUsername || ""), $("#webDavPassword").val(await decryptCredential(e2.webDavPassword) || ""), $("#enableTitleSelectFilter").prop("checked", !e2.enableTitleSelectFilter || e2.enableTitleSelectFilter === _), $("#enableFavoriteActresses").prop("checked", !e2.enableFavoriteActresses || e2.enableFavoriteActresses === _), $("#enableSaveActressCarInfo").prop("checked", !!e2.enableSaveActressCarInfo && e2.enableSaveActressCarInfo === _), $("#enableScreenSvg").prop("checked", !e2.enableScreenSvg || e2.enableScreenSvg === _), $("#enableVideoSvg").prop("checked", !e2.enableVideoSvg || e2.enableVideoSvg === _), $("#enableHandleSvg").prop("checked", !e2.enableHandleSvg || e2.enableHandleSvg === _), $("#enableSiteSvg").prop("checked", !e2.enableSiteSvg || e2.enableSiteSvg === _), $("#enableCopySvg").prop("checked", !e2.enableCopySvg || e2.enableCopySvg === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableVerticalModel").prop("checked", !!e2.enableVerticalModel && e2.enableVerticalModel === _), $("#containerColumns").val(e2.containerColumns || 5), $("#showContainerColumns").text(e2.containerColumns || 5), $("#containerWidth").val((e2.containerWidth || 100) - 70), $("#showContainerWidth").text((e2.containerWidth || 100) + "%");
+    $("#highlightedTagNumber").val(e2.highlightedTagNumber || 1), $("#highlightedTagColor").val(e2.highlightedTagColor || "#ce2222"), $("#highlightedTagLabel").css("border", `${t2}px solid ${n2}`), $("#enableClog").val(e2.enableClog || _), $("#clogMsgCount").val(e2.clogMsgCount || 2e3), $("#mobileMode").val(e2.mobileMode || "auto"), $("#themeMode").val(e2.themeMode || "light"), $("#httpTimeout").val(e2.httpTimeout || 5e3), $("#httpRetryCount").val(e2.httpRetryCount || 3), $("#webDavUrl").val(e2.webDavUrl || ""), $("#webDavUsername").val(e2.webDavUsername || ""), $("#webDavPassword").val(await decryptCredential(e2.webDavPassword) || ""), $("#enableTitleSelectFilter").prop("checked", !e2.enableTitleSelectFilter || e2.enableTitleSelectFilter === _), $("#enableFavoriteActresses").prop("checked", !e2.enableFavoriteActresses || e2.enableFavoriteActresses === _), $("#enableSaveActressCarInfo").prop("checked", !!e2.enableSaveActressCarInfo && e2.enableSaveActressCarInfo === _), $("#containerColumns").val(e2.containerColumns || 5), $("#showContainerColumns").text(e2.containerColumns || 5), $("#containerWidth").val((e2.containerWidth || 100) - 70), $("#showContainerWidth").text((e2.containerWidth || 100) + "%");
     const movie = dependencies.movie, i2 = movie.externalSiteOrigin("missAvBtn", e2), s2 = movie.externalSiteOrigin("jableBtn", e2), o2 = movie.externalSiteOrigin("avgleBtn", e2), r2 = movie.externalSiteOrigin("javTrailersBtn", e2), l2 = movie.providerOrigin("av123") || "", c2 = movie.externalSiteOrigin("javDbBtn", e2), d2 = movie.externalSiteOrigin("javBusBtn", e2), h2 = movie.externalSiteOrigin("supJavBtn", e2);
     $("#missAvUrl").val(i2), $("#jableUrl").val(s2), $("#avgleUrl").val(o2), $("#javTrailersUrl").val(r2), $("#av123Url").val(l2), $("#javDbUrl").val(c2), $("#javBusUrl").val(d2), $("#supJavUrl").val(h2);
     let g2 = await storageManager.getReviewFilterKeywordList(), p2 = await storageManager.getTitleFilterKeyword();
@@ -7367,38 +7458,14 @@
     })).on("change.jhsSetting", ((event) => settings.set("containerWidth", parseInt($(event.currentTarget).val()) + 70)));
   }
   __name(bindLayoutRangeEvents, "bindLayoutRangeEvents");
-  async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn) {
-    let e2 = dependencies.settings.snapshot();
-    $("#needClosePage").prop("checked", !e2.needClosePage || e2.needClosePage === _), $("#autoPage").prop("checked", !e2.autoPage || e2.autoPage === _), $("#translateTitle").prop("checked", !e2.translateTitle || e2.translateTitle === _), $("#enableLoadActressInfo").prop("checked", !e2.enableLoadActressInfo || e2.enableLoadActressInfo === _), $("#enableLoadOtherSite").prop("checked", !e2.enableLoadOtherSite || e2.enableLoadOtherSite === _), $("#needClosePage").on("change", (async (t2) => {
-      await dependencies.settings.set("needClosePage", $("#needClosePage").is(":checked") ? _ : C), await settingsEventBus.emit("filter-rules-changed");
-    })), $("#autoPage").on("change", (async (t2) => {
-      const n2 = $("#autoPage").is(":checked") ? _ : C;
-      await dependencies.settings.set("autoPage", n2), $("#sort-toggle-btn").prop("disabled", n2 === _).attr("title", n2 === _ ? "瀑布流模式仅支持默认排序" : "选择列表排序方式");
-    })), $("#translateTitle").on("change", (async (t2) => {
-      const n2 = $("#translateTitle").is(":checked") ? _ : C;
-      await dependencies.settings.set("translateTitle", n2), n2 === _ ? (await dependencies.listPage?.doFilter?.(), isDetailPage && await dependencies.translate?.translate?.()) : (await dependencies.listPage?.revertTranslation?.(), $(".translated-title").remove());
-    })), $("#hoverBigImg").prop("checked", !!e2.hoverBigImg && e2.hoverBigImg === _), $("#hoverBigImg").on("change", (async (t2) => {
-      const n2 = $("#hoverBigImg").is(":checked") ? _ : C;
-      const runtimeWindow = window;
-      await dependencies.settings.set("hoverBigImg", n2), runtimeWindow.imageHoverPreviewObj && (runtimeWindow.imageHoverPreviewObj.destroy(), runtimeWindow.imageHoverPreviewObj = null), n2 === _ && (runtimeWindow.imageHoverPreviewObj = new ImageHoverPreview({
-        selector: getSelector().coverImgSelector
-      }));
-    })), $("#enableLoadActressInfo").on("change", (async (t2) => {
-      const n2 = $("#enableLoadActressInfo").is(":checked") ? _ : C;
-      await dependencies.settings.set("enableLoadActressInfo", n2), n2 === _ ? dependencies.actressInfo?.loadActressInfo() : $(".actress-info").remove();
-    })), $("#enableLoadOtherSite").on("change", (async (t2) => {
-      const n2 = $("#enableLoadOtherSite").is(":checked") ? _ : C;
-      await dependencies.settings.set("enableLoadOtherSite", n2), n2 === _ ? await dependencies.otherSite?.loadOtherSite?.() : $("#otherSiteBox").remove();
-    })), $("#enableLoadScreenShot").prop("checked", !e2.enableLoadScreenShot || e2.enableLoadScreenShot === _), $("#enableLoadScreenShot").on("change", (async (t2) => {
-      const n2 = $("#enableLoadScreenShot").is(":checked") ? _ : C;
-      await dependencies.settings.set("enableLoadScreenShot", n2), n2 === _ ? await dependencies.screenshot?.loadScreenShot?.() : $(".screen-container").remove();
-    })), $("#enableLoadPreviewVideo").prop("checked", !e2.enableLoadPreviewVideo || e2.enableLoadPreviewVideo === _), $("#enableLoadPreviewVideo").on("change", (async (t2) => {
-      const n2 = $("#enableLoadPreviewVideo").is(":checked") ? _ : C;
-      await dependencies.settings.set("enableLoadPreviewVideo", n2);
-    })), $("#enableVerticalModel").prop("checked", !!e2.enableVerticalModel && e2.enableVerticalModel === _), $("#enableVerticalModel").on("change", (async (t2) => {
-      const n2 = $("#enableVerticalModel").is(":checked") ? _ : C;
-      await dependencies.settings.set("enableVerticalModel", n2), applyImageMode(dependencies.busImg);
-    })), $("#moreBtn").on("click", (() => {
+  async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn, root = null) {
+    const registry = dependencies.settingsRegistry;
+    if (!registry) return;
+    const host = root ? $(root) : $(".simple-setting, .mini-simple-setting, .jhs-quick-setting").first();
+    if (!host.length) return;
+    const descriptors = registry.list({ surfaces: ["quick"] });
+    bindSettingRows(host, descriptors, { settings: dependencies.settings });
+    host.find("#moreBtn").off("click").on("click", (() => {
       $(".simple-setting, .mini-simple-setting").html("").hide(), openSettingDialogFn("base-panel");
     }));
   }
@@ -7422,7 +7489,9 @@
       if (!authorized) return void show.info("已取消 WebDAV 来源授权");
       trustedOrigins.add(nextWebDavOrigin);
     }
-    e2.videoQuality = $("#videoQuality").val(), e2.reviewCount = $("#reviewCount").val(), e2.tagPosition = $("#tagPosition").val(), e2.defaultQuickFilterTab = normalizeQuickFilterKey($("#defaultQuickFilterTab").val()), e2.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e2.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e2.waitCheckCount = $("#waitCheckCount").val(), e2.highlightedTagNumber = $("#highlightedTagNumber").val(), e2.highlightedTagColor = $("#highlightedTagColor").val(), e2.checkConcurrencyCount = $("#checkConcurrencyCount").val(), e2.checkRequestSleep = $("#checkRequestSleep").val(), e2.enableCheckBlacklist = $("#enableCheckBlacklist").val(), e2.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e2.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(), e2.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e2.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(), e2.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e2.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(), e2.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e2.httpTimeout = Number($("#httpTimeout").val()) || 5e3, e2.httpRetryCount = Number($("#httpRetryCount").val()) || 3, e2.circuitBreakerThreshold = Number($("#circuitBreakerThreshold").val()) || 3, e2.circuitBreakerCooldown = Number($("#circuitBreakerCooldownSec").val()) * 1e3, e2.enableClog = $("#enableClog").val(), e2.enableClog === _ ? clog.show() : clog.hide(), e2.clogMsgCount = $("#clogMsgCount").val(), e2.mobileMode = $("#mobileMode").val(), e2.themeMode = $("#themeMode").val(), e2.webDavUrl = nextWebDavUrl, e2.trustedLocalOrigins = [...trustedOrigins], e2.webDavUsername = $("#webDavUsername").val(), e2.webDavPassword = await encryptCredential($("#webDavPassword").val()), e2.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""), e2.jableUrl = $("#jableUrl").val().replace(/\/$/, ""), e2.avgleUrl = $("#avgleUrl").val().replace(/\/$/, ""), e2.javTrailersUrl = $("#javTrailersUrl").val().replace(/\/$/, ""), e2.av123Url = $("#av123Url").val().replace(/\/$/, ""), e2.javDbUrl = $("#javDbUrl").val().replace(/\/$/, ""), e2.javBusUrl = $("#javBusUrl").val().replace(/\/$/, ""), e2.supJavUrl = $("#supJavUrl").val().replace(/\/$/, ""), e2.enableTitleSelectFilter = $("#enableTitleSelectFilter").is(":checked") ? _ : C, e2.enableFavoriteActresses = $("#enableFavoriteActresses").is(":checked") ? _ : C, e2.enableSaveActressCarInfo = $("#enableSaveActressCarInfo").is(":checked") ? _ : C, e2.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e2.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C, e2.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e2.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C, e2.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C, e2.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e2.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C, e2.containerColumns = Number($("#containerColumns").val()) || 5, e2.containerWidth = Number($("#containerWidth").val()) + 70 || 100;
+    e2.videoQuality = $("#videoQuality").val(), e2.reviewCount = $("#reviewCount").val(), e2.tagPosition = $("#tagPosition").val(), e2.defaultQuickFilterTab = normalizeQuickFilterKey($("#defaultQuickFilterTab").val()), e2.needClosePage = $("#needClosePageBasic").is(":checked") ? _ : C, e2.autoRemoveNewVideoMarkAfterBrowse = $("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, e2.waitCheckCount = $("#waitCheckCount").val(), e2.highlightedTagNumber = $("#highlightedTagNumber").val(), e2.highlightedTagColor = $("#highlightedTagColor").val(), e2.checkConcurrencyCount = $("#checkConcurrencyCount").val(), e2.checkRequestSleep = $("#checkRequestSleep").val(), e2.enableCheckBlacklist = $("#enableCheckBlacklist").val(), e2.checkBlacklist_intervalTime = $("#checkBlacklist_intervalTime").val(), e2.checkBlacklist_ruleTime = $("#checkBlacklist_ruleTime").val(), e2.enableCheckFavoriteActress = $("#enableCheckFavoriteActress").val(), e2.checkFavoriteActress_IntervalTime = $("#checkFavoriteActress_IntervalTime").val(), e2.enableCheckNewVideo = $("#enableCheckNewVideo").val(), e2.checkNewVideo_intervalTime = $("#checkNewVideo_intervalTime").val(), e2.checkNewVideo_ruleTime = $("#checkNewVideo_ruleTime").val(), e2.httpTimeout = Number($("#httpTimeout").val()) || 5e3, e2.httpRetryCount = Number($("#httpRetryCount").val()) || 3, e2.circuitBreakerThreshold = Number($("#circuitBreakerThreshold").val()) || 3, e2.circuitBreakerCooldown = Number($("#circuitBreakerCooldownSec").val()) * 1e3, e2.enableClog = $("#enableClog").val(), e2.enableClog === _ ? clog.show() : clog.hide(), e2.clogMsgCount = $("#clogMsgCount").val(), e2.mobileMode = $("#mobileMode").val(), e2.themeMode = $("#themeMode").val(), e2.webDavUrl = nextWebDavUrl, e2.trustedLocalOrigins = [...trustedOrigins], e2.webDavUsername = $("#webDavUsername").val(), e2.webDavPassword = await encryptCredential($("#webDavPassword").val()), e2.missAvUrl = $("#missAvUrl").val().replace(/\/$/, ""), e2.jableUrl = $("#jableUrl").val().replace(/\/$/, ""), e2.avgleUrl = $("#avgleUrl").val().replace(/\/$/, ""), e2.javTrailersUrl = $("#javTrailersUrl").val().replace(/\/$/, ""), e2.av123Url = $("#av123Url").val().replace(/\/$/, ""), e2.javDbUrl = $("#javDbUrl").val().replace(/\/$/, ""), e2.javBusUrl = $("#javBusUrl").val().replace(/\/$/, ""), e2.supJavUrl = $("#supJavUrl").val().replace(/\/$/, ""), e2.enableTitleSelectFilter = $("#enableTitleSelectFilter").is(":checked") ? _ : C, e2.enableFavoriteActresses = $("#enableFavoriteActresses").is(":checked") ? _ : C, e2.enableSaveActressCarInfo = $("#enableSaveActressCarInfo").is(":checked") ? _ : C, // 6.5: live 开关（长缩略图/预览/卡片按钮/演员信息/竖图等）由 renderer 即时写入 SettingsService，
+    // 不再出现在底部"保存"提交中。
+    e2.containerColumns = Number($("#containerColumns").val()) || 5, e2.containerWidth = Number($("#containerWidth").val()) + 70 || 100;
     const previous = dependencies.settings.snapshot(), changedValues = {};
     for (const key of Object.keys(e2)) if (e2[key] !== previous[key]) changedValues[key] = e2[key];
     if (Object.keys(changedValues).length) await dependencies.settings.patch(changedValues);
@@ -7666,54 +7735,10 @@
 
                             <div class="jhs-setting-row">
                                 <span class="setting-label">
-                                    封面快捷按钮
+                                    功能开关
                                 </span>
                             </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    长缩略图:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableScreenSvg" class="mini-switch">
-                                </div>
-                            </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    预览视频:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableVideoSvg" class="mini-switch">
-                                </div>
-                            </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    鉴定按钮:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableHandleSvg" class="mini-switch">
-                                </div>
-                            </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    第三方跳转:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableSiteSvg" class="mini-switch">
-                                </div>
-                            </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    复制按钮:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableCopySvg" class="mini-switch">
-                                </div>
-                            </div>
+                            <div id="jhs-live-settings" class="jhs-live-settings"></div>
 
 
 
@@ -7823,8 +7848,6 @@
                                     </select>
                                 </div>
                             </div>
-                            <div class="jhs-setting-row ${r ? "" : "do-hide"}"><span class="setting-label">加载女优信息</span><div class="form-content"><input type="checkbox" id="enableLoadActressInfo" class="mini-switch"></div></div>
-                            <div class="jhs-setting-row"><span class="setting-label">竖图模式</span><div class="form-content"><input type="checkbox" id="enableVerticalModel" class="mini-switch"></div></div>
                             <div class="jhs-setting-row"><span class="setting-label">页面列数：<span id="showContainerColumns"></span></span><div class="form-content"><input type="range" class="jhs-range" id="containerColumns" min="2" max="10" step="1"></div></div>
                             <div class="jhs-setting-row"><span class="setting-label">页面宽度：<span id="showContainerWidth"></span></span><div class="form-content"><input type="range" class="jhs-range" id="containerWidth" min="0" max="30" step="1"></div></div>
                         </div></section>
@@ -8148,22 +8171,12 @@
     sidebar.append('<button type="button" class="jhs-btn side-menu-item" data-panel="resource-sources-panel" aria-controls="resource-sources-panel">资源来源</button><button type="button" class="jhs-btn side-menu-item" data-panel="cloud-services-panel" aria-controls="cloud-services-panel">云盘服务</button><button type="button" class="jhs-btn side-menu-item" data-panel="data-tools-panel" aria-controls="data-tools-panel">数据工具</button>');
   }
   __name(injectResourceSourcesPanel, "injectResourceSourcesPanel");
-  function buildQuickSettingHtml() {
-    const rows = [
-      ["鉴定后立即关闭", "needClosePage", "完成鉴定后关闭当前详情窗口。"],
-      ["瀑布流", "autoPage", "连续加载列表；启用后普通列表只支持默认排序。"],
-      ["标题翻译", "translateTitle", "翻译列表和详情页标题。"],
-      ["悬浮大图", "hoverBigImg", "鼠标悬停封面时显示大图。"],
-      ["外部站点", "enableLoadOtherSite", "在详情页提供第三方站点入口。"],
-      ["长缩略图", "enableLoadScreenShot", "在详情页图片区加载长缩略图。"],
-      ["高画质预览", "enableLoadPreviewVideo", "解析更高画质的预览视频。"]
-    ];
+  function buildQuickSettingHtml(registry = void 0, options = {}) {
+    const list = registry ? buildQuickSettingsHtml(registry, options) : null;
     return `
         <div class="simple-setting__panel jhs-ui">
             <div class="simple-setting__scroll jhs-scrollbar">
-                <div class="simple-setting__list">
-                    ${rows.map(((e2) => `<label class="jhs-setting-row" for="${e2[1]}"><span class="jhs-setting-row__copy"><span class="jhs-setting-row__label">${e2[0]}</span><span class="jhs-setting-row__description">${e2[2]}</span></span><span class="jhs-setting-row__control"><input type="checkbox" id="${e2[1]}" class="mini-switch"></span></label>`)).join("")}
-                </div>
+                ${list ? list.prop("outerHTML") : '<div class="simple-setting__list"></div>'}
             </div>
             <footer class="simple-setting__footer">
                 <button type="button" id="moreBtn" class="jhs-btn jhs-btn--ghost">完整设置 <span aria-hidden="true">›</span></button>
@@ -8488,7 +8501,8 @@
         busImg: this.getOptionalDependency("BusImgPlugin"),
         host: this.getRuntimeService("host"),
         movie: this.getRuntimeService("movie"),
-        settings: this.getRuntimeService("settings")
+        settings: this.getRuntimeService("settings"),
+        settingsRegistry: this.getRuntimeService("settingsRegistry")
       });
     }
     async initCss() {
@@ -8533,7 +8547,7 @@
       l && (isDetailPage ? $("h3").before('\n                    <div class="container-fluid jhs-setting-detail-anchor">\n                        <div id="top-right-box" class="jhs-setting-anchor">\n                            <div class="setting-box">\n                                <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                    <span>设置</span>\n                                </button>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ') : window.isListPage && utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
         $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" class="jhs-setting-anchor">\n                        <div class="setting-box">\n                            <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                <span>设置</span>\n                            </button>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
       }), 1, 1e4, false, scope)), $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (async () => {
-        $(".simple-setting").html(buildQuickSettingHtml()).show();
+        $(".simple-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
         try {
           await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this));
         } catch (error) {
@@ -8543,7 +8557,7 @@
       })).on("mouseleave", ".setting-box", (() => {
         $(".simple-setting").html("").hide();
       })), $(".main-nav, .container-fluid").on("mouseenter", ".mini-setting-box", (async () => {
-        $(".mini-simple-setting").html(buildQuickSettingHtml()).show();
+        $(".mini-simple-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
         try {
           await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this));
         } catch (error) {
@@ -8568,7 +8582,7 @@
             <header class="jhs-quick-setting__header"><h2 id="jhs-quick-setting-title">快捷设置</h2><button type="button" class="jhs-btn jhs-btn--ghost jhs-quick-setting__close" aria-label="关闭快捷设置">×</button></header>
             <div class="jhs-quick-setting"></div>
         </section>`);
-      sheet.find(".jhs-quick-setting").html(buildQuickSettingHtml()), $("body").append(backdrop, sheet), clog.lowZIndex();
+      sheet.find(".jhs-quick-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))), $("body").append(backdrop, sheet), clog.lowZIndex();
       backdrop.on("click.jhsQuickSetting", (() => closeQuickSetting())), sheet.on("click.jhsQuickSetting", ".jhs-quick-setting__close", (() => closeQuickSetting())), $(document).off("keydown.jhsQuickSetting").on("keydown.jhsQuickSetting", ((event) => {
         if ("Escape" === event.key) return event.preventDefault(), closeQuickSetting();
         if ("Tab" !== event.key) return;
@@ -8594,7 +8608,7 @@
         area: utils.getDialogArea("lg"),
         scrollbar: false,
         success: /* @__PURE__ */ __name(async (e3, n2) => {
-          $(e3).find(".layui-layer-content").css("position", "relative"), this.renderTaskStatuses(), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), injectResourceSourcesPanel(), this.bindClick(), $(".side-menu-item.active").attr("aria-current", "page"), utils.setupEscClose(n2), t2 && t2();
+          $(e3).find(".layui-layer-content").css("position", "relative"), this.renderTaskStatuses(), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), injectResourceSourcesPanel(), this.hydrateLiveSettings($(e3)), this.bindClick(), $(".side-menu-item.active").attr("aria-current", "page"), utils.setupEscClose(n2), t2 && t2();
           this.renderTaskStatuses(), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.renderTaskStatuses()));
           if (utils.isMobileMode()) {
             this.collapseAdvancedTabs();
@@ -8610,6 +8624,18 @@
           this.getOptionalDependency("CoverButtonPlugin")?.enableSvgBtn?.();
         }, "end")
       });
+    }
+    hydrateLiveSettings(layerRoot) {
+      const host = $(layerRoot).find("#jhs-live-settings");
+      if (!host.length) return;
+      const registry = this.getRuntimeService("settingsRegistry"), settings = this.getRuntimeService("settings");
+      const staticKeys = /* @__PURE__ */ new Set(["needClosePage", "themeMode", "mobileMode", "enableClog", "containerColumns", "containerWidth"]);
+      const descriptors = registry.list({ surfaces: ["full"] }).filter((descriptor) => (descriptor.effect || "live") === "live" && !staticKeys.has(descriptor.key));
+      descriptors.forEach((descriptor) => {
+        const { row } = renderSettingRow(descriptor, { value: settings.snapshot()[descriptor.key] ?? descriptor.defaultValue });
+        host.append(row);
+      });
+      bindSettingRows(host, descriptors, { settings });
     }
     async hydrateSettingForm(layerRoot) {
       const button = $(layerRoot).find("#saveBtn"), status = $(layerRoot).find("#settings-hydration-status");
@@ -12250,7 +12276,7 @@ ${failure.stack}` : "");
       })), this.enableSvgBtn(items);
     }
     async enableSvgBtn(items = null) {
-      const e2 = await storageManager.getSetting(), { enableScreenSvg: t2 = _, enableVideoSvg: n2 = _, enableHandleSvg: a2 = _, enableSiteSvg: i2 = _, enableCopySvg: s2 = _ } = e2;
+      const e2 = await storageManager.getSetting(), { enableLoadScreenShot: t2 = _, enableVideoSvg: n2 = _, enableHandleSvg: a2 = _, enableSiteSvg: i2 = _, enableCopySvg: s2 = _ } = e2;
       const scope = items ? $(items) : $(document);
       [{ selector: ".screenSvg", enabled: this.getOptionalDependency("ScreenShotPlugin") ? t2 : "no" }, { selector: ".videoSvg", enabled: n2 }, { selector: ".handleSvg", enabled: a2 }, { selector: ".siteSvg", enabled: i2 }, { selector: ".copySvg", enabled: s2 }].forEach((({ selector: e3, enabled: t3 }) => {
         scope.find(e3).toggle(t3 === _);
@@ -17381,7 +17407,7 @@ ${failure.stack}` : "");
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 5 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog, SERVICE.movie, SERVICE.settings, SERVICE.state]),
-    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state]),
+    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, REGISTRY.settings]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }, [SERVICE.movie]),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account]),
@@ -17455,7 +17481,8 @@ ${failure.stack}` : "");
         [SERVICE.storage, "storage"],
         [SERVICE.state, "state"],
         [SERVICE.offline, "offline"],
-        [SERVICE.dialog, "dialog"]
+        [SERVICE.dialog, "dialog"],
+        [REGISTRY.settings, "settingsRegistry"]
       ]);
       for (const token of item.requires) {
         const name = runtimeNames.get(token);
@@ -18649,7 +18676,8 @@ ${failure.stack}` : "");
     async refresh(key = "setting") {
       const previous = this.snapshotValue;
       await this.load(key);
-      const changedNames = Object.keys(this.snapshotValue).filter((name) => previous[name] !== this.snapshotValue[name]);
+      const keys = /* @__PURE__ */ new Set([...Object.keys(previous), ...Object.keys(this.snapshotValue)]);
+      const changedNames = [...keys].filter((name) => previous[name] !== this.snapshotValue[name]);
       if (changedNames.length) {
         this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name: changedNames.length === 1 ? changedNames[0] : null, value: void 0, names: Object.freeze([...changedNames]), snapshot: this.snapshotValue }) }));
       }
@@ -18683,11 +18711,15 @@ ${failure.stack}` : "");
         const stored = await this.storage.get(storageKey);
         const base = stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
         const next = Object.freeze(merge ? { ...base, ...values } : { ...values });
+        const actualChanged = merge ? Object.keys(values).filter((name) => base[name] !== values[name]) : [.../* @__PURE__ */ new Set([...Object.keys(base), ...Object.keys(next)])].filter((name) => base[name] !== next[name]);
         await this.storage.set(storageKey, next);
         this.snapshotValue = next;
-        await this.afterPersist?.(next, Object.freeze([...changedNames]));
-        const name = changedNames.length === 1 ? changedNames[0] : null;
-        this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name, value: name ? next[name] : void 0, names: Object.freeze([...changedNames]), snapshot: next }) }));
+        const changed = Object.freeze([...actualChanged]);
+        await this.afterPersist?.(next, changed);
+        if (changed.length) {
+          const name = changed.length === 1 ? changed[0] : null;
+          this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name, value: name ? next[name] : void 0, names: changed, snapshot: next }) }));
+        }
         return next;
       }));
       this.writeChain = operation.then(() => void 0, () => void 0);
@@ -19113,24 +19145,152 @@ ${failure.stack}` : "");
   var IntegrationRegistry = _IntegrationRegistry;
 
   // src/app/settings-registry.js
+  var VALID_EFFECTS = /* @__PURE__ */ new Set(["live", "nextNavigation", "manual"]);
+  var VALID_TYPES = /* @__PURE__ */ new Set(["boolean", "select", "number", "text", "password", "json"]);
+  var VALID_SURFACES = /* @__PURE__ */ new Set(["full", "quick"]);
+  function normalizeSettingDescriptor(descriptor) {
+    if (!descriptor || typeof descriptor !== "object" || Array.isArray(descriptor)) throw new TypeError("Setting descriptor must be an object");
+    const key = String(descriptor.key ?? descriptor.id ?? "");
+    if (!key) throw new TypeError("Setting descriptor requires key (or id)");
+    if (!descriptor.owner) throw new TypeError(`Setting descriptor requires owner: ${key}`);
+    const type = String(descriptor.type ?? (descriptor.defaultValue != null ? typeof descriptor.defaultValue === "boolean" ? "boolean" : "text" : "text"));
+    if (!VALID_TYPES.has(type)) throw new TypeError(`Setting descriptor has invalid type: ${key} (${type})`);
+    const effect = descriptor.effect ?? "live";
+    if (!VALID_EFFECTS.has(effect)) throw new TypeError(`Setting descriptor has invalid effect: ${key} (${effect})`);
+    const surfaces = Array.isArray(descriptor.surfaces) ? [...new Set(descriptor.surfaces)].filter((name) => VALID_SURFACES.has(name)) : [];
+    if (descriptor.surfaces != null && !Array.isArray(descriptor.surfaces)) throw new TypeError(`Setting descriptor surfaces must be an array: ${key}`);
+    return Object.freeze({
+      ...descriptor,
+      key,
+      owner: String(descriptor.owner),
+      label: String(descriptor.label ?? descriptor.key ?? key),
+      description: descriptor.description == null ? "" : String(descriptor.description),
+      type,
+      effect,
+      surfaces: Object.freeze(surfaces),
+      validate: typeof descriptor.validate === "function" ? descriptor.validate : null,
+      contribution: descriptor.contribution == null ? void 0 : String(descriptor.contribution)
+    });
+  }
+  __name(normalizeSettingDescriptor, "normalizeSettingDescriptor");
   var _SettingsRegistry = class _SettingsRegistry {
     constructor() {
       this.descriptors = /* @__PURE__ */ new Map();
     }
     register(descriptor) {
-      if (!descriptor?.id || !descriptor.owner) throw new TypeError("Setting descriptor requires id and owner");
-      if (this.descriptors.has(descriptor.id)) throw new Error(`Duplicate setting descriptor: ${descriptor.id}`);
-      this.descriptors.set(descriptor.id, Object.freeze({ ...descriptor }));
+      const normalized = normalizeSettingDescriptor(descriptor);
+      if (this.descriptors.has(normalized.key)) throw new Error(`Duplicate setting descriptor: ${normalized.key}`);
+      this.descriptors.set(normalized.key, normalized);
+      return this;
     }
     list(options = {}) {
-      return [...this.descriptors.values()].filter((descriptor) => !descriptor.contribution || !options.disabledContributions?.has(descriptor.contribution));
+      const surfaces = options.surfaces;
+      return [...this.descriptors.values()].filter((descriptor) => {
+        if (descriptor.contribution && options.disabledContributions?.has(descriptor.contribution)) return false;
+        if (surfaces && surfaces.length) {
+          if (!descriptor.surfaces.includes(surfaces[0]) && !surfaces.some((name) => descriptor.surfaces.includes(name))) return false;
+        }
+        return true;
+      });
     }
-    get(id) {
-      return this.descriptors.get(id) ?? null;
+    get(key) {
+      return this.descriptors.get(key) ?? null;
+    }
+    isValid(key, value) {
+      const descriptor = this.descriptors.get(key);
+      if (!descriptor) return true;
+      if (typeof descriptor.validate === "function") return descriptor.validate(value) === true;
+      return true;
     }
   };
   __name(_SettingsRegistry, "SettingsRegistry");
   var SettingsRegistry = _SettingsRegistry;
+
+  // src/app/settings-catalog.js
+  function registerDefaultSettings(registry) {
+    const boolean = { type: "boolean", effect: "live" };
+    const yes = "yes", no = "no";
+    const toggle = /* @__PURE__ */ __name((key, owner, label, extra = {}) => registry.register({ key, owner, label, ...boolean, defaultValue: extra.defaultValue ?? yes, ...extra }), "toggle");
+    toggle("enableLoadScreenShot", "ScreenshotFeature", "长缩略图", {
+      description: "在详情页图片区加载长缩略图。关闭后列表长缩略图按钮、详情截图与截图来源请求全部停止。",
+      surfaces: ["full", "quick"]
+    });
+    toggle("enableScreenSvg", "ScreenshotFeature", "长缩略图（旧）", { surfaces: [], defaultValue: yes });
+    toggle("enablePreviewVideo", "PreviewVideoFeature", "预览视频", {
+      description: "预览视频总开关。关闭后 JavDB/JavBus 详情与列表卡片的预览入口、播放器与 DMM 请求全部消失。",
+      surfaces: ["full", "quick"]
+    });
+    toggle("enableLoadPreviewVideo", "PreviewVideoFeature", "DMM 高画质增强", {
+      description: "解析更高画质的 DMM 预览视频；关闭后仍可使用宿主原生预览，但不发起 DMM 请求。",
+      surfaces: ["full", "quick"],
+      indent: true
+    });
+    toggle("enableVideoSvg", "CoverButtonFeature", "卡片播放视频", { description: "在列表卡片上显示播放视频按钮。", surfaces: ["full"] });
+    toggle("enableHandleSvg", "CoverButtonFeature", "卡片鉴定处理", { description: "在列表卡片上显示鉴定处理菜单。", surfaces: ["full"] });
+    toggle("enableSiteSvg", "CoverButtonFeature", "卡片第三方网站", { description: "在列表卡片上显示第三方网站菜单。", surfaces: ["full"] });
+    toggle("enableCopySvg", "CoverButtonFeature", "卡片复制", { description: "在列表卡片上显示复制菜单。", surfaces: ["full"] });
+    toggle("autoPage", "AutoPageFeature", "瀑布流", {
+      description: "连续加载列表；启用后普通列表只支持默认排序。",
+      surfaces: ["full", "quick"]
+    });
+    toggle("translateTitle", "TranslateFeature", "标题翻译", {
+      description: "翻译列表和详情页标题。",
+      surfaces: ["full", "quick"]
+    });
+    toggle("hoverBigImg", "ListImageFeature", "悬浮大图", {
+      description: "鼠标悬停封面时显示大图。",
+      surfaces: ["full", "quick"],
+      defaultValue: no
+    });
+    registry.register({
+      key: "defaultQuickFilterTab",
+      owner: "ListPageFeature",
+      label: "列表默认筛选",
+      description: "进入列表页时默认选中的筛选标签，修改后下次进入列表生效。",
+      type: "select",
+      defaultValue: "waitCheck",
+      effect: "nextNavigation",
+      surfaces: ["full"],
+      options: Object.freeze([
+        { value: "all", label: "全部" },
+        { value: "waitCheck", label: "待鉴定" },
+        { value: "favorite", label: "收藏" },
+        { value: "hasDown", label: "下载" },
+        { value: "hasWatch", label: "已看" },
+        { value: "blockedItems", label: "屏蔽项" }
+      ])
+    });
+    toggle("enableLoadOtherSite", "OtherSiteFeature", "外部站点", {
+      description: "在详情页提供第三方站点入口。",
+      surfaces: ["full", "quick"]
+    });
+    toggle("enableLoadActressInfo", "ActressInfoFeature", "演员信息", {
+      description: "在详情页与演员页展示演员资料。",
+      surfaces: ["full", "quick"]
+    });
+    toggle("enableMagnetsFilter", "MagnetFeature", "磁力质量过滤", {
+      description: "在资源列表中过滤低质量磁力。",
+      surfaces: ["full"]
+    });
+    toggle("needClosePage", "WorkflowFeature", "鉴定后立即关闭", {
+      description: "完成鉴定后关闭当前详情窗口。",
+      surfaces: ["full", "quick"]
+    });
+    toggle("enableVerticalModel", "LayoutFeature", "竖图模式", {
+      description: "使用竖图比例的列表卡片布局。",
+      surfaces: ["full", "quick"],
+      defaultValue: no
+    });
+    registry.register({ key: "mobileMode", owner: "LayoutFeature", label: "移动模式", type: "select", defaultValue: "auto", effect: "live", surfaces: ["full"], options: Object.freeze([{ value: "auto", label: "自动" }, { value: "desktop", label: "桌面" }, { value: "mobile", label: "移动" }]) });
+    registry.register({ key: "themeMode", owner: "ThemeFeature", label: "主题", type: "select", defaultValue: "light", effect: "live", surfaces: ["full"], options: Object.freeze([{ value: "light", label: "浅色" }, { value: "dark", label: "深色" }]) });
+    registry.register({ key: "containerColumns", owner: "LayoutFeature", label: "列表列数", type: "number", defaultValue: 5, effect: "live", surfaces: ["full"] });
+    registry.register({ key: "containerWidth", owner: "LayoutFeature", label: "列表宽度", type: "number", defaultValue: 100, effect: "live", surfaces: ["full"] });
+    registry.register({ key: "screenshotMode", owner: "ScreenshotFeature", label: "截图来源模式", type: "select", defaultValue: "auto", effect: "manual", surfaces: ["full"], options: Object.freeze([{ value: "auto", label: "自动选择" }, { value: "manual", label: "手动选择" }]) });
+    registry.register({ key: "screenshotProviders", owner: "ScreenshotFeature", label: "截图来源", type: "json", defaultValue: [], effect: "manual", surfaces: ["full"] });
+    registry.register({ key: "enableClog", owner: "CoreFeature", label: "日志", type: "select", defaultValue: yes, effect: "live", surfaces: ["full"], options: Object.freeze([{ value: yes, label: "开启" }, { value: no, label: "关闭" }]) });
+    registry.register({ key: "videoMuted", owner: "PreviewVideoFeature", label: "视频默认静音", type: "boolean", defaultValue: true, effect: "live", surfaces: [] });
+  }
+  __name(registerDefaultSettings, "registerDefaultSettings");
 
   // src/app/create-app-context.js
   function createAppContext(runtime) {
@@ -19166,6 +19326,7 @@ ${failure.stack}` : "");
     const commands = new CommandRegistry();
     const providers = new ProviderRegistry(diagnostics);
     const settingsRegistry = new SettingsRegistry();
+    registerDefaultSettings(settingsRegistry);
     const integrations = new IntegrationRegistry(container, diagnostics);
     const movie = new MovieIdentityService(integrations);
     const actressInfo = new ActressInfoService(integrations, cache);
@@ -20825,6 +20986,7 @@ ${failure.stack}` : "");
       });
       Object.assign(globalThis, { settingsService: context.services.settings });
       const settingsSnapshot = await context.services.settings.load();
+      await normalizeScreenshotSetting(context.services.settings);
       context.services.profile.start();
       const legacySortMethod = localStorage.getItem("jhs_sortMethod");
       if (settingsSnapshot.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) {

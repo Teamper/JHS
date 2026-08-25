@@ -1,7 +1,7 @@
 // @ts-check
 
 import { defineContribution } from "../contracts/manifests.js";
-import { PORT, SERVICE } from "../contracts/tokens.js";
+import { PORT, REGISTRY, SERVICE } from "../contracts/tokens.js";
 import { LEGACY_PLUGIN_DEPENDENCY_MAP } from "./dependency-map.js";
 import { ActressInfoPlugin } from "./avatar/actress-info.js";
 import { SearchByImagePlugin } from "./avatar/search-by-image.js";
@@ -60,7 +60,7 @@ export const legacyContributionManifests = Object.freeze([
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 5 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog, SERVICE.movie, SERVICE.settings, SERVICE.state]),
-    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state]),
+    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, REGISTRY.settings]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }, [SERVICE.movie]),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account]),
@@ -137,6 +137,7 @@ export function registerSitePlugins(pluginManager, featureRuntime, site) {
                 [SERVICE.state, "state"],
                 [SERVICE.offline, "offline"],
                 [SERVICE.dialog, "dialog"],
+                [REGISTRY.settings, "settingsRegistry"],
             ]);
             for (const token of item.requires) {
                 const name = runtimeNames.get(token);

@@ -6,6 +6,7 @@ import { parseNumberSetting } from "../../core/feature-helpers.js";
 import { applyImageMode } from "./setting-styles.js";
 import { decryptCredential, encryptCredential } from "../../core/credential-crypto.js";
 import { normalizeQuickFilterKey } from "../../features/list/list-filters.js";
+import { bindSettingRows } from "../../ui/settings/setting-control-renderer.js";
 
 /** @typedef {Record<string, any>} SettingDependencies */
 const settingsEventBus = /** @type {NonNullable<typeof jhsEventBus>} */ (jhsEventBus);
@@ -32,13 +33,6 @@ export async function loadSettingForm(dependencies) {
     $("#webDavPassword").val(await decryptCredential(e.webDavPassword) || ""), $("#enableTitleSelectFilter").prop("checked", !e.enableTitleSelectFilter || e.enableTitleSelectFilter === _),
     $("#enableFavoriteActresses").prop("checked", !e.enableFavoriteActresses || e.enableFavoriteActresses === _),
     $("#enableSaveActressCarInfo").prop("checked", !!e.enableSaveActressCarInfo && e.enableSaveActressCarInfo === _),
-    $("#enableScreenSvg").prop("checked", !e.enableScreenSvg || e.enableScreenSvg === _),
-    $("#enableVideoSvg").prop("checked", !e.enableVideoSvg || e.enableVideoSvg === _),
-    $("#enableHandleSvg").prop("checked", !e.enableHandleSvg || e.enableHandleSvg === _),
-    $("#enableSiteSvg").prop("checked", !e.enableSiteSvg || e.enableSiteSvg === _),
-    $("#enableCopySvg").prop("checked", !e.enableCopySvg || e.enableCopySvg === _),
-    $("#enableLoadActressInfo").prop("checked", !e.enableLoadActressInfo || e.enableLoadActressInfo === _),
-    $("#enableVerticalModel").prop("checked", !!e.enableVerticalModel && e.enableVerticalModel === _),
     $("#containerColumns").val(e.containerColumns || 5), $("#showContainerColumns").text(e.containerColumns || 5),
     $("#containerWidth").val((e.containerWidth || 100) - 70), $("#showContainerWidth").text((e.containerWidth || 100) + "%");
     const movie = dependencies.movie, i = movie.externalSiteOrigin("missAvBtn", e), s = movie.externalSiteOrigin("jableBtn", e), o = movie.externalSiteOrigin("avgleBtn", e), r = movie.externalSiteOrigin("javTrailersBtn", e), l = movie.providerOrigin("av123") || "", c = movie.externalSiteOrigin("javDbBtn", e), d = movie.externalSiteOrigin("javBusBtn", e), h = movie.externalSiteOrigin("supJavBtn", e);
@@ -77,51 +71,16 @@ function bindLayoutRangeEvents(busImgPlugin, hostAdapter, settings) {
 }
 
 /** Initialize quick settings in either the desktop popover or mobile layer. */
-/** @param {SettingDependencies} dependencies @param {() => any} getSelector @param {(panel: string) => void} openSettingDialogFn */
-export async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn) {
-    let e = dependencies.settings.snapshot();
-    $("#needClosePage").prop("checked", !e.needClosePage || e.needClosePage === _),
-    $("#autoPage").prop("checked", !e.autoPage || e.autoPage === _), $("#translateTitle").prop("checked", !e.translateTitle || e.translateTitle === _),
-    $("#enableLoadActressInfo").prop("checked", !e.enableLoadActressInfo || e.enableLoadActressInfo === _),
-    $("#enableLoadOtherSite").prop("checked", !e.enableLoadOtherSite || e.enableLoadOtherSite === _),
-    $("#needClosePage").on("change", (async (/** @type {any} */ t) => {
-        await dependencies.settings.set("needClosePage", $("#needClosePage").is(":checked") ? _ : C),
-        await settingsEventBus.emit("filter-rules-changed");
-    })), $("#autoPage").on("change", (async (/** @type {any} */ t) => {
-        const n = $("#autoPage").is(":checked") ? _ : C;
-        await dependencies.settings.set("autoPage", n), $("#sort-toggle-btn").prop("disabled", n === _).attr("title", n === _ ? "瀑布流模式仅支持默认排序" : "选择列表排序方式");
-    })), $("#translateTitle").on("change", (async (/** @type {any} */ t) => {
-        const n = $("#translateTitle").is(":checked") ? _ : C;
-        await dependencies.settings.set("translateTitle", n), n === _ ? (await dependencies.listPage?.doFilter?.(),
-        isDetailPage && await dependencies.translate?.translate?.()) : (await dependencies.listPage?.revertTranslation?.(),
-        $(".translated-title").remove());
-    })), $("#hoverBigImg").prop("checked", !!e.hoverBigImg && e.hoverBigImg === _),
-    $("#hoverBigImg").on("change", (async (/** @type {any} */ t) => {
-        const n = $("#hoverBigImg").is(":checked") ? _ : C;
-        const runtimeWindow = /** @type {any} */ (window);
-        await dependencies.settings.set("hoverBigImg", n), runtimeWindow.imageHoverPreviewObj && (runtimeWindow.imageHoverPreviewObj.destroy(),
-        runtimeWindow.imageHoverPreviewObj = null), n === _ && (runtimeWindow.imageHoverPreviewObj = new ImageHoverPreview({
-            selector: getSelector().coverImgSelector
-        }));
-    })), $("#enableLoadActressInfo").on("change", (async (/** @type {any} */ t) => {
-        const n = $("#enableLoadActressInfo").is(":checked") ? _ : C;
-        await dependencies.settings.set("enableLoadActressInfo", n), n === _ ? dependencies.actressInfo?.loadActressInfo() : $(".actress-info").remove();
-    })), $("#enableLoadOtherSite").on("change", (async (/** @type {any} */ t) => {
-        const n = $("#enableLoadOtherSite").is(":checked") ? _ : C;
-        await dependencies.settings.set("enableLoadOtherSite", n), n === _ ? await dependencies.otherSite?.loadOtherSite?.() : $("#otherSiteBox").remove();
-    })), $("#enableLoadScreenShot").prop("checked", !e.enableLoadScreenShot || e.enableLoadScreenShot === _),
-    $("#enableLoadScreenShot").on("change", (async (/** @type {any} */ t) => {
-        const n = $("#enableLoadScreenShot").is(":checked") ? _ : C;
-        await dependencies.settings.set("enableLoadScreenShot", n), n === _ ? await dependencies.screenshot?.loadScreenShot?.() : $(".screen-container").remove();
-    })), $("#enableLoadPreviewVideo").prop("checked", !e.enableLoadPreviewVideo || e.enableLoadPreviewVideo === _),
-    $("#enableLoadPreviewVideo").on("change", (async (/** @type {any} */ t) => {
-        const n = $("#enableLoadPreviewVideo").is(":checked") ? _ : C;
-        await dependencies.settings.set("enableLoadPreviewVideo", n);
-    })), $("#enableVerticalModel").prop("checked", !!e.enableVerticalModel && e.enableVerticalModel === _),
-    $("#enableVerticalModel").on("change", (async (/** @type {any} */ t) => {
-        const n = $("#enableVerticalModel").is(":checked") ? _ : C;
-        await dependencies.settings.set("enableVerticalModel", n), applyImageMode(dependencies.busImg);
-    })), $("#moreBtn").on("click", (() => {
+/** @param {SettingDependencies} dependencies @param {() => any} getSelector @param {(panel: string) => void} openSettingDialogFn @param {any} [root] */
+export async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn, root = null) {
+    const registry = dependencies.settingsRegistry;
+    if (!registry) return;
+    const host = root ? $(root) : $(".simple-setting, .mini-simple-setting, .jhs-quick-setting").first();
+    if (!host.length) return;
+    const descriptors = registry.list({ surfaces: [ "quick" ] });
+    // 同一 SettingsService key：renderer 绑定 live 写入，副作用（mount/unmount）由 PR5 生命周期接管。
+    bindSettingRows(host, descriptors, { settings: dependencies.settings });
+    host.find("#moreBtn").off("click").on("click", (() => {
         $(".simple-setting, .mini-simple-setting").html("").hide(), openSettingDialogFn("base-panel");
     }));
 }
@@ -167,10 +126,8 @@ export async function saveSettingForm(dependencies) {
     e.supJavUrl = $("#supJavUrl").val().replace(/\/$/, ""), e.enableTitleSelectFilter = $("#enableTitleSelectFilter").is(":checked") ? _ : C,
     e.enableFavoriteActresses = $("#enableFavoriteActresses").is(":checked") ? _ : C,
     e.enableSaveActressCarInfo = $("#enableSaveActressCarInfo").is(":checked") ? _ : C,
-    e.enableScreenSvg = $("#enableScreenSvg").is(":checked") ? _ : C, e.enableVideoSvg = $("#enableVideoSvg").is(":checked") ? _ : C,
-    e.enableHandleSvg = $("#enableHandleSvg").is(":checked") ? _ : C, e.enableSiteSvg = $("#enableSiteSvg").is(":checked") ? _ : C,
-    e.enableCopySvg = $("#enableCopySvg").is(":checked") ? _ : C,
-    e.enableLoadActressInfo = $("#enableLoadActressInfo").is(":checked") ? _ : C, e.enableVerticalModel = $("#enableVerticalModel").is(":checked") ? _ : C,
+    // 6.5: live 开关（长缩略图/预览/卡片按钮/演员信息/竖图等）由 renderer 即时写入 SettingsService，
+    // 不再出现在底部"保存"提交中。
     e.containerColumns = Number($("#containerColumns").val()) || 5, e.containerWidth = Number($("#containerWidth").val()) + 70 || 100;
     // 6.5: only the dirty fields are written, and they are merged by SettingsService onto the freshly
     // re-read stored value (single write entry), so concurrent tabs or legacy writes are never clobbered.

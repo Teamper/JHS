@@ -7,7 +7,8 @@ import { DependencyContainer } from "../src/app/dependency-container.js";
 import { FeatureRuntime, migrateDisabledPlugins } from "../src/app/feature-runtime.js";
 import { ProviderRegistry } from "../src/app/provider-registry.js";
 import { defineFeature, defineIntegration } from "../src/contracts/manifests.js";
-import { PORT, SERVICE } from "../src/contracts/tokens.js";
+import { PORT, REGISTRY, SERVICE } from "../src/contracts/tokens.js";
+import { SettingsRegistry } from "../src/app/settings-registry.js";
 import { featureManifests } from "../src/features/catalog.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { openSettingsUi, registerSettingsUiOwner } from "../src/core/settings-ui-owner.js";
@@ -62,7 +63,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.find((item) => item.id === "discovery.top250")?.legacyPluginId).toBe("TOP250Plugin");
         const createRuntime = (site, disabled = []) => {
             const diagnostics = new DiagnosticsService();
-            const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.profile, { current: () => "regular" }).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {}).register(SERVICE.state, {});
+            const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.profile, { current: () => "regular" }).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {}).register(SERVICE.state, {}).register(REGISTRY.settings, new SettingsRegistry());
             const runtime = new FeatureRuntime({ container, commands: new CommandRegistry(), diagnostics, disabled, site, route: "list" });
             featureManifests.forEach((manifest) => runtime.register(manifest));
             return runtime;
@@ -134,6 +135,7 @@ describe("v6.5 architecture runtime contracts", () => {
             ["screenshot", SERVICE.screenshot], ["translation", SERVICE.translation], ["subtitle", SERVICE.subtitle],
             ["account", SERVICE.account], ["webdav", SERVICE.webdav], ["storage", SERVICE.storage],
             ["state", SERVICE.state], ["offline", SERVICE.offline], ["dialog", SERVICE.dialog],
+            ["settingsRegistry", REGISTRY.settings],
         ]);
         for (const contribution of legacyContributionManifests) {
             const source = contribution.plugin.toString();

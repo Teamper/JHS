@@ -22,7 +22,8 @@ export class SettingsService extends EventTarget {
     async refresh(key = "setting") {
         const previous = this.snapshotValue;
         await this.load(key);
-        const changedNames = Object.keys(this.snapshotValue).filter((name) => previous[name] !== this.snapshotValue[name]);
+        const keys = new Set([ ...Object.keys(previous), ...Object.keys(this.snapshotValue) ]);
+        const changedNames = [ ...keys ].filter((name) => previous[name] !== this.snapshotValue[name]);
         if (changedNames.length) {
             this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name: changedNames.length === 1 ? changedNames[0] : null, value: undefined, names: Object.freeze([ ...changedNames ]), snapshot: this.snapshotValue }) }));
         }
@@ -63,13 +64,21 @@ export class SettingsService extends EventTarget {
         }
         const operation = this.writeChain.then(() => this._withSettingLock(async () => {
             const stored = await this.storage.get(storageKey);
-            const base = stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
+            const base = /** @type {Record<string, unknown>} */ (stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {});
             const next = Object.freeze(merge ? { ...base, ...values } : { ...values });
+            // 真实 diff：以锁内重读的 base 为准，同值重写不发事件；replace 覆盖整个对象，
+            // 因此被删除的 key 也计入 changed。
+            const actualChanged = merge
+                ? Object.keys(values).filter((name) => base[name] !== values[name])
+                : [ ...new Set([ ...Object.keys(base), ...Object.keys(next) ]) ].filter((name) => base[name] !== next[name]);
             await this.storage.set(storageKey, next);
             this.snapshotValue = next;
-            await this.afterPersist?.(next, Object.freeze([ ...changedNames ]));
-            const name = changedNames.length === 1 ? changedNames[0] : null;
-            this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name, value: name ? next[name] : undefined, names: Object.freeze([ ...changedNames ]), snapshot: next }) }));
+            const changed = Object.freeze([ ...actualChanged ]);
+            await this.afterPersist?.(next, changed);
+            if (changed.length) {
+                const name = changed.length === 1 ? changed[0] : null;
+                this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name, value: name ? next[name] : undefined, names: changed, snapshot: next }) }));
+            }
             return next;
         }));
         this.writeChain = operation.then(() => undefined, () => undefined);

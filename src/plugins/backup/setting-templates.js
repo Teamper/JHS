@@ -1,6 +1,7 @@
 // @ts-check
 
 import { L, r } from "../../core/constants.js";
+import { buildQuickSettingsHtml } from "../../ui/settings/setting-control-renderer.js";
 
 /**
  * Build the plugin categories configuration shared between inject and render.
@@ -170,54 +171,10 @@ export function buildSettingDialogHtml(activePanel, cacheItems) {
 
                             <div class="jhs-setting-row">
                                 <span class="setting-label">
-                                    封面快捷按钮
+                                    功能开关
                                 </span>
                             </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    长缩略图:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableScreenSvg" class="mini-switch">
-                                </div>
-                            </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    预览视频:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableVideoSvg" class="mini-switch">
-                                </div>
-                            </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    鉴定按钮:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableHandleSvg" class="mini-switch">
-                                </div>
-                            </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    第三方跳转:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableSiteSvg" class="mini-switch">
-                                </div>
-                            </div>
-
-                            <div class="jhs-setting-row">
-                                <span class="setting-label jhs-setting-label-inline">
-                                    复制按钮:
-                                </span>
-                                <div class="form-content">
-                                    <input type="checkbox" id="enableCopySvg" class="mini-switch">
-                                </div>
-                            </div>
+                            <div id="jhs-live-settings" class="jhs-live-settings"></div>
 
 
 
@@ -327,8 +284,6 @@ export function buildSettingDialogHtml(activePanel, cacheItems) {
                                     </select>
                                 </div>
                             </div>
-                            <div class="jhs-setting-row ${r ? "" : "do-hide"}"><span class="setting-label">加载女优信息</span><div class="form-content"><input type="checkbox" id="enableLoadActressInfo" class="mini-switch"></div></div>
-                            <div class="jhs-setting-row"><span class="setting-label">竖图模式</span><div class="form-content"><input type="checkbox" id="enableVerticalModel" class="mini-switch"></div></div>
                             <div class="jhs-setting-row"><span class="setting-label">页面列数：<span id="showContainerColumns"></span></span><div class="form-content"><input type="range" class="jhs-range" id="containerColumns" min="2" max="10" step="1"></div></div>
                             <div class="jhs-setting-row"><span class="setting-label">页面宽度：<span id="showContainerWidth"></span></span><div class="form-content"><input type="range" class="jhs-range" id="containerWidth" min="0" max="30" step="1"></div></div>
                         </div></section>
@@ -657,22 +612,13 @@ export function injectResourceSourcesPanel() {
 }
 
 /** Build the shared quick-settings content for desktop and mobile. */
-export function buildQuickSettingHtml() {
-    const rows = [
-        [ "鉴定后立即关闭", "needClosePage", "完成鉴定后关闭当前详情窗口。" ],
-        [ "瀑布流", "autoPage", "连续加载列表；启用后普通列表只支持默认排序。" ],
-        [ "标题翻译", "translateTitle", "翻译列表和详情页标题。" ],
-        [ "悬浮大图", "hoverBigImg", "鼠标悬停封面时显示大图。" ],
-        [ "外部站点", "enableLoadOtherSite", "在详情页提供第三方站点入口。" ],
-        [ "长缩略图", "enableLoadScreenShot", "在详情页图片区加载长缩略图。" ],
-        [ "高画质预览", "enableLoadPreviewVideo", "解析更高画质的预览视频。" ]
-    ];
+/** @param {any} [registry] @param {{ disabledContributions?: Set<string> }} [options] */
+export function buildQuickSettingHtml(registry = undefined, options = {}) {
+    const list = registry ? buildQuickSettingsHtml(registry, options) : null;
     return `
         <div class="simple-setting__panel jhs-ui">
             <div class="simple-setting__scroll jhs-scrollbar">
-                <div class="simple-setting__list">
-                    ${rows.map((e => `<label class="jhs-setting-row" for="${e[1]}"><span class="jhs-setting-row__copy"><span class="jhs-setting-row__label">${e[0]}</span><span class="jhs-setting-row__description">${e[2]}</span></span><span class="jhs-setting-row__control"><input type="checkbox" id="${e[1]}" class="mini-switch"></span></label>`)).join("")}
-                </div>
+                ${list ? list.prop("outerHTML") : '<div class="simple-setting__list"></div>'}
             </div>
             <footer class="simple-setting__footer">
                 <button type="button" id="moreBtn" class="jhs-btn jhs-btn--ghost">完整设置 <span aria-hidden="true">›</span></button>

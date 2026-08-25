@@ -23,7 +23,7 @@ async function listJavaScriptFiles(dir) {
   return files;
 }
 
-const [theme, primitives, build, injection, magnet, settings, utils, detail, commandbar, newVideo, manager, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, reviewUi, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, screenshot, parsers, javstoreIntegration, otherSite, javDbHostAdapter, builtSource] = await Promise.all([
+const [theme, primitives, build, injection, magnet, settings, utils, detail, commandbar, newVideo, manager, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, reviewUi, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, screenshot, parsers, javstoreIntegration, otherSite, javDbHostAdapter, settingRenderer, builtSource] = await Promise.all([
   readFile(join(srcRoot, "core", "theme.js"), "utf8"),
   readFile(join(srcRoot, "core", "ui-primitives.js"), "utf8"),
   readFile(join(repoRoot, "scripts", "build.mjs"), "utf8"),
@@ -59,6 +59,7 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(srcRoot, "integrations", "javstore", "manifest.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "external-search", "other-site.js"), "utf8"),
   readFile(join(srcRoot, "platform", "hosts", "javdb-host-adapter.js"), "utf8"),
+  readFile(join(srcRoot, "ui", "settings", "setting-control-renderer.js"), "utf8"),
   readFile(join(repoRoot, "JHS.user.js"), "utf8")
 ]);
 
@@ -107,8 +108,9 @@ requireMatch(magnet, /ArrowLeft.*ArrowRight.*Home.*End/s, "magnet source switche
 requireMatch(settings, /<nav class="jhs-mobile-sidebar/, "settings navigation must use a nav landmark");
 requireMatch(settings, /<button type="button" class="[^"]*side-menu-item/, "settings navigation items must be keyboard-native buttons");
 forbidMatch(settings, /organizeSettingDialog/, "settings must emit final sections without runtime re-wrapping");
-for (const token of ["jhs-setting-section", "jhs-setting-group", "jhs-setting-row__description"])
+for (const token of ["jhs-setting-section", "jhs-setting-group"])
   requireMatch(settings, new RegExp(token), `settings information architecture missing ${token}`);
+requireMatch(settings + settingRenderer, /jhs-setting-row__description/, "settings information architecture missing jhs-setting-row__description");
 
 for (const preset of ["sm", "md", "lg", "xl", "workspace"])
   requireMatch(utils, new RegExp(`${preset}:\\s*\\[`), `dialog preset missing ${preset}`);

@@ -34,6 +34,7 @@ import { FeatureRuntime } from "./feature-runtime.js";
 import { ProviderRegistry } from "./provider-registry.js";
 import { IntegrationRegistry } from "./integration-registry.js";
 import { SettingsRegistry } from "./settings-registry.js";
+import { registerDefaultSettings } from "./settings-catalog.js";
 import { LifecycleScope } from "../core/lifecycle-scope.js";
 
 /** @param {{gmRequest: (options: Record<string, any>) => any, gmGetValue: (key: string, fallback?: unknown) => unknown, gmSetValue: (key: string, value: unknown) => void, legacyHttp?: any, legacyStorage?: any, eventBus?: any, storageForage: any, localStorage: Storage, layer: any, stateService: any, hostAdapter?: any, hostAdapters?: {javdb?: any, javbus?: any}, disabled?: string[], site?: string, route?: string, localOrigins?: string[]}} runtime */
@@ -72,6 +73,7 @@ export function createAppContext(runtime) {
     const commands = new CommandRegistry();
     const providers = new ProviderRegistry(diagnostics);
     const settingsRegistry = new SettingsRegistry();
+    registerDefaultSettings(settingsRegistry);
     const integrations = new IntegrationRegistry(container, diagnostics);
     const movie = new MovieIdentityService(integrations);
     const actressInfo = new ActressInfoService(integrations, cache);

@@ -12,6 +12,7 @@ import { initQuickSettingForm, loadSettingForm, saveSettingForm } from "./settin
 import { renderDataHealthPanel, renderNetworkPanel, renderPluginMgmtPanel, renderSnapshotPanel, repairDataHealthWithBackup, showDiffPreview } from "./setting-panels.js";
 import { applyImageMode, buildSettingCss } from "./setting-styles.js";
 import { buildQuickSettingHtml, buildSettingDialogHtml, injectHealthPanel, injectNetworkPanel, injectPluginMgmtPanel, injectResourceSourcesPanel, injectSnapshotPanel } from "./setting-templates.js";
+import { bindSettingRows, renderSettingRow } from "../../ui/settings/setting-control-renderer.js";
 
 export class SettingPlugin extends BasePlugin {
     constructor() {
@@ -62,6 +63,7 @@ export class SettingPlugin extends BasePlugin {
             actressInfo: this.getOptionalDependency("ActressInfoPlugin"), screenshot: this.getOptionalDependency("ScreenShotPlugin"),
             newVideo: this.getOptionalDependency("NewVideoPlugin"), blacklist: this.getOptionalDependency("BlacklistPlugin"),
             busImg: this.getOptionalDependency("BusImgPlugin"), host: this.getRuntimeService("host"), movie: this.getRuntimeService("movie"), settings: this.getRuntimeService("settings"),
+            settingsRegistry: this.getRuntimeService("settingsRegistry"),
         });
     }
     async initCss() {
@@ -106,13 +108,13 @@ export class SettingPlugin extends BasePlugin {
             $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" class="jhs-setting-anchor">\n                        <div class="setting-box">\n                            <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                <span>设置</span>\n                            </button>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
         }), 1, 1e4, !1, scope)),
         $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (async () => {
-            $(".simple-setting").html(buildQuickSettingHtml()).show();
+            $(".simple-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
             try { await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this)); } catch (error) { clog.warn("桌面快捷设置初始化失败", error); }
             clog.lowZIndex();
         })).on("mouseleave", ".setting-box", (() => {
             $(".simple-setting").html("").hide();
         })), $(".main-nav, .container-fluid").on("mouseenter", ".mini-setting-box", (async () => {
-            $(".mini-simple-setting").html(buildQuickSettingHtml()).show();
+            $(".mini-simple-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
             try { await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this)); } catch (error) { clog.warn("迷你快捷设置初始化失败", error); }
             clog.lowZIndex();
         })).on("mouseleave", ".mini-setting-box", (() => {
@@ -134,7 +136,7 @@ export class SettingPlugin extends BasePlugin {
             <header class="jhs-quick-setting__header"><h2 id="jhs-quick-setting-title">快捷设置</h2><button type="button" class="jhs-btn jhs-btn--ghost jhs-quick-setting__close" aria-label="关闭快捷设置">×</button></header>
             <div class="jhs-quick-setting"></div>
         </section>`);
-        sheet.find(".jhs-quick-setting").html(buildQuickSettingHtml()), $("body").append(backdrop, sheet), clog.lowZIndex();
+        sheet.find(".jhs-quick-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))), $("body").append(backdrop, sheet), clog.lowZIndex();
         backdrop.on("click.jhsQuickSetting", (() => closeQuickSetting())), sheet.on("click.jhsQuickSetting", ".jhs-quick-setting__close", (() => closeQuickSetting())),
         $(document).off("keydown.jhsQuickSetting").on("keydown.jhsQuickSetting", (event => {
             if ("Escape" === event.key) return event.preventDefault(), closeQuickSetting();
@@ -162,7 +164,7 @@ export class SettingPlugin extends BasePlugin {
             scrollbar: !1,
             success: async (e, n) => {
                 $(e).find(".layui-layer-content").css("position", "relative"), this.renderTaskStatuses(), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), injectResourceSourcesPanel(),
-                this.bindClick(), $(".side-menu-item.active").attr("aria-current", "page"), utils.setupEscClose(n), t && t();
+                this.hydrateLiveSettings($(e)), this.bindClick(), $(".side-menu-item.active").attr("aria-current", "page"), utils.setupEscClose(n), t && t();
                 this.renderTaskStatuses(), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.renderTaskStatuses()));
                 if (utils.isMobileMode()) {
                     this.collapseAdvancedTabs();
@@ -178,6 +180,20 @@ export class SettingPlugin extends BasePlugin {
                 this.getOptionalDependency("CoverButtonPlugin")?.enableSvgBtn?.();
             }
         });
+    }
+    /** 完整设置中由 descriptor 驱动的 live 开关：与快捷设置共用同一 key 与写入路径。 */
+    /** @param {JQueryHandle | HTMLElement} layerRoot */
+    hydrateLiveSettings(layerRoot) {
+        const host = $(layerRoot).find("#jhs-live-settings");
+        if (!host.length) return;
+        const registry = this.getRuntimeService("settingsRegistry"), settings = this.getRuntimeService("settings");
+        const staticKeys = new Set([ "needClosePage", "themeMode", "mobileMode", "enableClog", "containerColumns", "containerWidth" ]);
+        const descriptors = registry.list({ surfaces: [ "full" ] }).filter((descriptor) => (descriptor.effect || "live") === "live" && !staticKeys.has(descriptor.key));
+        descriptors.forEach((descriptor) => {
+            const { row } = renderSettingRow(descriptor, { value: settings.snapshot()[descriptor.key] ?? descriptor.defaultValue });
+            host.append(row);
+        });
+        bindSettingRows(host, descriptors, { settings });
     }
     /** @param {JQueryHandle | HTMLElement} layerRoot */
     async hydrateSettingForm(layerRoot) {
