@@ -7,6 +7,9 @@ import { requestHostPage } from "../../core/host-page-request.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
+import { QUICK_FILTER_LABELS, normalizeQuickFilterKey } from "../../features/list/list-filters.js";
+import { createListEvaluationContext, evaluateListItem } from "../../features/list/list-evaluator.js";
+import { scanAllPages } from "../../features/list/batch-scanner.js";
 import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
 import { parseDetailPage } from "../../integrations/host-list/parser.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
@@ -345,26 +348,49 @@ export class BlacklistPlugin extends BasePlugin {
         });
     }
     /** @param {string} e @param {any} [t] @param {number} [page] @param {number} [processed] */
-    async filterAllVideo(e, t, page = 1, processed = 0) {
-        let n, a;
-        if (t ? (l && t.find(".avatar-box").length > 0 && t.find(".avatar-box").parent().remove(),
-        n = t.find(this.getSelector().requestDomItemSelector), a = t.find(this.getSelector().nextPageSelector).attr("href")) : (n = $(this.getSelector().itemSelector),
-        a = $(this.getSelector().nextPageSelector).attr("href")), a && 0 === n.length) throw show.error("解析列表失败"),
-        new Error("解析列表失败");
-        for (const s of n) {
-            const t = $(s), {carNum: n, url: a, publishTime: o} = readListItem(t);
-            if (a && n) try {
-                await this.getRuntimeService("state").patch(n, { blocked: !0 }, { type: "actor-page-block", record: { carNum: n, url: a, names: e, publishTime: o } }), clog.log("屏蔽演员番号", e, n);
-            } catch (i) {
-                clog.error(`保存失败 [${n}]:`, i);
-            }
+    /**
+     * 一键屏蔽：跨全部分页扫描，仅处理符合当前筛选的记录（"全部"包含屏蔽项）。
+     * @param {string} actressName @param {{ filter?: unknown, confirm?: boolean, root?: any }} [options]
+     */
+    async filterAllVideo(actressName, { filter = this.getOptionalDependency("ListPagePlugin")?.activeQuickFilter || "waitCheck", confirm = true, root = null } = {}) {
+        const normalized = normalizeQuickFilterKey(filter), filterLabel = QUICK_FILTER_LABELS[normalized];
+        const confirmText = "all" === normalized
+            ? "将处理当前搜索全部分页的所有作品（包括屏蔽项）并加入黑名单。"
+            : `将处理当前搜索全部分页中符合「${filterLabel}」筛选的作品并加入黑名单。`;
+        if (confirm) {
+            const proceed = await new Promise((resolve) => utils.q(null, confirmText, () => resolve(true), () => resolve(false)));
+            if (!proceed) return { cancelled: true };
         }
-        processed += n.length, (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
-        if (a) {
-            clog.log("正在请求下一页内容:", a), await new Promise((/** @type {(value: void) => void} */ e) => setTimeout(e, 500));
-            const scope = await this.getRuntimeService("scope")(), t = await requestHostPage(this.getRuntimeService("http"), a, scope), n = new DOMParser, i = $(n.parseFromString(t, "text/html"));
-            await this.filterAllVideo(e, i, page + 1, processed);
-        } else (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
+        const scope = await this.getRuntimeService("scope")(), listPage = this.getOptionalDependency("ListPagePlugin");
+        const context = "function" === typeof listPage?.createEvaluationContext ? await listPage.createEvaluationContext() : createListEvaluationContext({});
+        const batchToken = Symbol("batch"); this.batchToken = batchToken;
+        const isCancelled = () => this.batchToken !== batchToken || Boolean(scope?.disposed);
+        const statusHost = () => (this.blacklistRoot || $()).find("#checkBlacklistMsg");
+        const records = await scanAllPages({
+            startDom: root ? $(root) : $(document),
+            itemSelector: this.getSelector().requestDomItemSelector,
+            nextPageSelector: this.getSelector().nextPageSelector,
+            fetchHtml: async (/** @type {string} */ url) => requestHostPage(this.getRuntimeService("http"), url, scope),
+            parseItem: (/** @type {any} */ item) => readListItem(item),
+            evaluate: (/** @type {any} */ item) => evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized }),
+            isCancelled,
+            onProgress: (/** @type {{ page: number, scanned: number, matched: number }} */ {page, scanned, matched}) => {
+                const host = statusHost(); host.length && host.text(`正在扫描第 ${page} 页 · 已扫描 ${scanned} · 匹配 ${matched} 个番号`);
+            },
+        });
+        if (isCancelled()) return { cancelled: true };
+        let updated = 0;
+        for (let index = 0; index < records.length; index += 75) {
+            const chunk = records.slice(index, index + 75);
+            await this.getRuntimeService("state").patch(chunk.map((item) => item.carNum), { blocked: !0 }, {
+                type: "actor-page-block",
+                records: chunk.map((item) => ({ carNum: item.carNum, url: item.url || "", names: actressName, publishTime: item.publishTime || "" })),
+            });
+            updated += chunk.length;
+            clog.log("一键屏蔽进度", `已屏蔽 ${updated}/${records.length} 个番号`);
+        }
+        const host = statusHost(); host.length && host.text(`处理完成 · 共屏蔽 ${updated} 个番号`);
+        return { matched: records.length, updated };
     }
     /** @param {string} e @param {string} t @param {any} n @param {string} [site] @param {number} [page] @param {number} [processed] */
     async filterActorVideo(e, t, n, site = l ? I : T, page = 1, processed = 0) {

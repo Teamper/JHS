@@ -10,6 +10,7 @@ import { isHitShowPage } from "../../core/site-context.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
 import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isHardHidden, normalizeQuickFilterKey, shouldShowItem } from "../../features/list/list-filters.js";
 import { createListEvaluationContext, evaluateListItem, findMatchedTitleKeyword } from "../../features/list/list-evaluator.js";
+import { scanAllPages } from "../../features/list/batch-scanner.js";
 
 /** @typedef {Record<string, any>} ListRecord */
 /** @typedef {any} JQueryHandle */
@@ -88,7 +89,7 @@ const Te = {
 
 export class ListPagePlugin extends BasePlugin {
     async initCss() {
-        return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}</style>`;
+        return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}.jhs-batch-progress{position:fixed;right:16px;bottom:16px;z-index:var(--jhs-z-modal);display:flex;align-items:center;gap:var(--jhs-space-2);padding:var(--jhs-space-2) var(--jhs-space-3);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-md);background:var(--jhs-surface);color:var(--jhs-text);box-shadow:0 4px 16px rgba(0,0,0,.18)}</style>`;
     }
     constructor() {
         super(...arguments);
@@ -320,6 +321,10 @@ export class ListPagePlugin extends BasePlugin {
             window.requestAnimationFrame ? window.requestAnimationFrame((() => setTimeout(e))) : setTimeout(e);
         });
     }
+    /** 供页面展示与跨页批量操作共用的唯一判定上下文。 */
+    async createEvaluationContext() {
+        return createListEvaluationContext(await this.getFilterContext());
+    }
     async getFilterContext() {
         if (this.filterContext) return this.filterContext;
         const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([ storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), this.getRuntimeService("state").getActivityLog() ]), actorCarNumToNameMap = new Map, actressCarNumToNameMap = new Map, recentCarNums = new Set;
@@ -418,28 +423,78 @@ export class ListPagePlugin extends BasePlugin {
         clog.log(`\n            <table class="countTable jhs-layout-b12542a5">\n                <tr>\n                    <td colspan="2" class="jhs-count-table__cell">${o}</td>\n                    <td colspan="2" class="jhs-count-table__cell">${b}</td>\n                </tr>\n                \n                <tr>\n                    <td colspan="2" class="jhs-count-table__cell">${D}</td>\n                    <td colspan="2" class="jhs-count-table__cell">${A}</td>\n                </tr>\n                <tr>\n                    <td class="jhs-count-table__head">项目</td>\n                    <td class="jhs-count-table__head">数量</td>\n                    <td class="jhs-count-table__head">项目</td>\n                    <td class="jhs-count-table__head">数量</td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽单番号</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageFilterCount}</strong></td>\n                     <td class="jhs-count-table__cell">收藏</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageFavoriteCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽演员</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageActorFilterCount}</strong></td>\n                    <td class="jhs-count-table__cell">已下载</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasDownCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽关键词</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageKeywordFilterCount}</strong></td>\n                    <td class="jhs-count-table__cell">已观看</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasWatchCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">待鉴定</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageWaitCheckCount}</strong></td>\n                    <td class="jhs-count-table__cell"></td>\n                    <td class="jhs-count-table__cell"></td>\n                </tr>\n        \n                <tr>\n                    <td class="jhs-count-table__cell"><strong>总数</strong></td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageTotalCount}</strong></td>\n                </tr>\n            </table>\n        `);
     }
     /**
-     * Batch-mark all visible videos (e.g. one-click favorite / one-click downloaded) on the current
-     * actor/list page and every subsequent page. Lives on the list capability (not BlacklistPlugin),
-     * because marking state is a list-level action even though the button is rendered near blacklist
-     * controls.
-     * @param {string} actressName @param {string} flag @param {any} [pageDom] @param {number} [page] @param {number} [processed]
+     * Batch-mark every item matching the current quick filter across all pages.
+     * 语义：全部 = 包含 hard-hidden 的真全集；其他筛选 = 全部分页中符合该筛选的项。
+     * @param {string} actressName @param {string} flag @param {{ filter?: unknown, confirm?: boolean, root?: any }} [options]
      */
-    async batchSaveAllVideos(actressName, flag, pageDom = null, page = 1, processed = 0) {
-        let items, nextUrl;
-        pageDom ? (items = pageDom.find(this.getSelector().requestDomItemSelector), nextUrl = pageDom.find(this.getSelector().nextPageSelector).attr("href")) : (items = $(this.getSelector().itemSelector), nextUrl = $(this.getSelector().nextPageSelector).attr("href"));
-        if (nextUrl && 0 === items.length) throw show.error("解析列表失败"), new Error("解析列表失败");
-        for (const element of items) {
-            const item = $(element), {carNum, url, publishTime} = readListItem(item);
-            if (url && carNum) try {
-                const stateFlag = legacyActionToFlag(flag);
-                stateFlag && await this.getRuntimeService("state").patch(carNum, { [stateFlag]: !0 }, { type: "actor-page-batch-state", record: { carNum, url, names: actressName, publishTime } }), clog.log("批量操作", actressName, carNum, flag);
-            } catch (error) { clog.error(`保存失败 [${carNum}]:`, error); }
+    async batchSaveAllVideos(actressName, flag, { filter = this.activeQuickFilter || "waitCheck", confirm = true, root = null } = {}) {
+        const stateFlag = legacyActionToFlag(flag);
+        if (!stateFlag) throw new TypeError(`不支持的状态操作: ${flag}`);
+        const normalized = normalizeQuickFilterKey(filter), filterLabel = QUICK_FILTER_LABELS[normalized];
+        const confirmText = "all" === normalized
+            ? "将处理当前搜索全部分页的所有作品，包括屏蔽项。"
+            : `将处理当前搜索全部分页中符合「${filterLabel}」筛选的作品。`;
+        if (confirm) {
+            const proceed = await new Promise((resolve) => utils.q(null, confirmText, () => resolve(true), () => resolve(false)));
+            if (!proceed) return { cancelled: true };
         }
-        processed += items.length, clog.debug(`批量操作第 ${page} 页 · 已处理 ${processed} 个番号`);
-        if (nextUrl) { clog.log("正在请求下一页内容:", nextUrl), await new Promise((/** @type {(value: void) => void} */ resolve) => setTimeout(resolve, 500));
-            const scope = await this.getRuntimeService("scope")(), html = await requestHostPage(this.getRuntimeService("http"), nextUrl, scope), parsed = new DOMParser, nextDom = $(parsed.parseFromString(html, "text/html"));
-            await this.batchSaveAllVideos(actressName, flag, nextDom, page + 1, processed); }
-        else clog.debug(`批量操作完成 · ${page} 页 · 共处理 ${processed} 个番号`);
+        const scope = await this.getRuntimeService("scope")(), context = await this.createEvaluationContext(), batchToken = Symbol("batch");
+        this.batchToken = batchToken;
+        const isCancelled = () => this.batchToken !== batchToken || Boolean(scope?.disposed);
+        const progressElement = this.showBatchProgress();
+        const setProgress = (/** @type {string} */ text) => {
+            const label = progressElement?.find(".jhs-batch-progress__label");
+            label && label.length ? label.text(text) : clog.debug(text);
+        };
+        const onProgress = (/** @type {{ page: number, scanned: number, matched: number }} */ {page, scanned, matched}) => {
+            setProgress(`已扫描 ${page} 页 · 匹配 ${matched} 项`);
+            clog.debug(`批量扫描第 ${page} 页 · 已扫描 ${scanned} · 匹配 ${matched}`);
+        };
+        try {
+            const records = await scanAllPages({
+                startDom: root ? $(root) : $(document),
+                itemSelector: this.getSelector().requestDomItemSelector,
+                nextPageSelector: this.getSelector().nextPageSelector,
+                fetchHtml: async (/** @type {string} */ url) => requestHostPage(this.getRuntimeService("http"), url, scope),
+                parseItem: (/** @type {any} */ item) => readListItem(item),
+                evaluate: (/** @type {any} */ item) => evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized }),
+                isCancelled,
+                onProgress,
+            });
+            if (isCancelled()) return { cancelled: true };
+            let updated = 0;
+            for (let index = 0; index < records.length; index += 75) {
+                const chunk = records.slice(index, index + 75);
+                await this.getRuntimeService("state").patch(chunk.map((item) => item.carNum), { [stateFlag]: !0 }, {
+                    type: "actor-page-batch-state",
+                    records: chunk.map((item) => ({ carNum: item.carNum, url: item.url || "", names: actressName, publishTime: item.publishTime || "" })),
+                });
+                updated += chunk.length;
+                setProgress(`已更新 ${updated}/${records.length} 项`);
+            }
+            setProgress(`批量完成：匹配 ${records.length} 项 · 已更新 ${updated} 项`);
+            setTimeout(() => progressElement?.remove(), 1800);
+            return { matched: records.length, updated };
+        } catch (error) {
+            clog.error("批量操作失败:", error);
+            setProgress("批量操作失败");
+            progressElement?.addClass("jhs-batch-progress--error");
+            setTimeout(() => progressElement?.remove(), 2500);
+            throw error;
+        } finally {
+            this.batchToken = null;
+        }
+    }
+    /** 批量进度浮层（带取消按钮）；返回可更新的状态元素。 */
+    showBatchProgress() {
+        let element = $("#jhs-batch-progress");
+        if (!element.length) {
+            element = $('<div id="jhs-batch-progress" class="jhs-ui jhs-batch-progress" role="status"></div>').appendTo("body");
+            element.append('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm" id="jhs-batch-cancel">取消</button>');
+            element.find("#jhs-batch-cancel").on("click", () => { this.batchToken = null; });
+        }
+        element.find(".jhs-batch-progress__label").remove().end().prepend($('<span class="jhs-batch-progress__label"></span>').text("正在扫描…"));
+        return element;
     }
     async bindClick() {
         let e = this.getSelector();

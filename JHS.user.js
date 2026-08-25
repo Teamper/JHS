@@ -5899,7 +5899,7 @@
   // src/plugins/dependency-map.js
   var LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     AutoPagePlugin: ["ListPagePlugin"],
-    BlacklistPlugin: ["TaskPlugin", "SettingPlugin"],
+    BlacklistPlugin: ["TaskPlugin", "SettingPlugin", "ListPagePlugin"],
     BusNavBarPlugin: ["SearchByImagePlugin"],
     CompatibilityEnhancementsPlugin: ["ListPagePlugin"],
     CoverButtonPlugin: ["ListPagePlugin", "ScreenShotPlugin"],
@@ -9030,6 +9030,96 @@
   }
   __name(readListItem, "readListItem");
 
+  // src/features/list/list-evaluator.js
+  function findMatchedTitleKeyword(keywords, title, carNum) {
+    for (const keyword of keywords) if (title.includes(keyword) || carNum.startsWith(keyword)) return keyword;
+    return null;
+  }
+  __name(findMatchedTitleKeyword, "findMatchedTitleKeyword");
+  function createListEvaluationContext(options = {}) {
+    return {
+      titleKeywords: Array.isArray(options.titleKeywords) ? options.titleKeywords : [],
+      carMap: options.carMap instanceof Map ? options.carMap : /* @__PURE__ */ new Map(),
+      actorCarNumToNameMap: options.actorCarNumToNameMap instanceof Map ? options.actorCarNumToNameMap : /* @__PURE__ */ new Map(),
+      actressCarNumToNameMap: options.actressCarNumToNameMap instanceof Map ? options.actressCarNumToNameMap : /* @__PURE__ */ new Map(),
+      recentCarNums: options.recentCarNums instanceof Set ? options.recentCarNums : /* @__PURE__ */ new Set(),
+      settings: options.settings ?? {}
+    };
+  }
+  __name(createListEvaluationContext, "createListEvaluationContext");
+  function evaluateListItem(record, context, { filter = "waitCheck" } = {}) {
+    const carNum = record?.carNum;
+    const state = carNum ? context.carMap.get(carNum) : null;
+    const flags = normalizeStateFlags(state?.stateFlags);
+    const keyword = context.titleKeywords.length && carNum ? findMatchedTitleKeyword(context.titleKeywords, record.title || "", carNum) : null;
+    const visibilityReasons = {
+      keyword: !!keyword,
+      actorBlacklist: carNum ? context.actorCarNumToNameMap.has(carNum) : false,
+      actressBlacklist: carNum ? context.actressCarNumToNameMap.has(carNum) : false
+    };
+    const recent = carNum ? context.recentCarNums.has(carNum) : false;
+    const hardHidden = isHardHidden(flags, visibilityReasons);
+    return {
+      flags,
+      visibilityReasons,
+      recent,
+      hardHidden,
+      matchesCurrentFilter: matchesQuickFilter(filter, flags, { visibilityReasons, recent })
+    };
+  }
+  __name(evaluateListItem, "evaluateListItem");
+
+  // src/features/list/batch-scanner.js
+  async function scanAllPages({
+    startDom,
+    itemSelector,
+    nextPageSelector,
+    fetchHtml,
+    parseItem,
+    evaluate,
+    isCancelled = /* @__PURE__ */ __name(() => false, "isCancelled"),
+    onProgress = /* @__PURE__ */ __name(() => {
+    }, "onProgress"),
+    pageDelayMs = 500,
+    maxPages = 200
+  }) {
+    const records = [];
+    const seen = /* @__PURE__ */ new Set();
+    let dom = startDom, page = 1, scanned = 0;
+    while (dom && dom.length) {
+      if (isCancelled()) break;
+      onProgress({ page, scanned, matched: records.length });
+      const items = dom.find(itemSelector).toArray();
+      for (const element of items) {
+        if (isCancelled()) break;
+        let item = null;
+        try {
+          item = parseItem($(element));
+        } catch {
+          continue;
+        }
+        if (!item?.carNum) continue;
+        scanned++;
+        const evaluated = evaluate(item);
+        if (evaluated?.matchesCurrentFilter && !seen.has(item.carNum)) {
+          seen.add(item.carNum);
+          records.push({ ...item, flags: evaluated.flags, visibilityReasons: evaluated.visibilityReasons, hardHidden: evaluated.hardHidden });
+        }
+      }
+      const nextUrl = dom.find(nextPageSelector).attr("href");
+      if (!nextUrl) break;
+      if (isCancelled() || page >= maxPages) break;
+      if (pageDelayMs) await new Promise((resolve) => setTimeout(resolve, pageDelayMs));
+      if (isCancelled()) break;
+      const html = await fetchHtml(nextUrl);
+      const parsed = new DOMParser().parseFromString(html, "text/html");
+      dom = $(parsed);
+      page++;
+    }
+    return records;
+  }
+  __name(scanAllPages, "scanAllPages");
+
   // src/integrations/host-list/parser.js
   function parseDetailPage($page, selectors) {
     const challengeText = $page.find("title, body").text();
@@ -9401,23 +9491,46 @@
         }]
       });
     }
-    async filterAllVideo(e2, t2, page = 1, processed = 0) {
-      let n2, a2;
-      if (t2 ? (l && t2.find(".avatar-box").length > 0 && t2.find(".avatar-box").parent().remove(), n2 = t2.find(this.getSelector().requestDomItemSelector), a2 = t2.find(this.getSelector().nextPageSelector).attr("href")) : (n2 = $(this.getSelector().itemSelector), a2 = $(this.getSelector().nextPageSelector).attr("href")), a2 && 0 === n2.length) throw show.error("解析列表失败"), new Error("解析列表失败");
-      for (const s2 of n2) {
-        const t3 = $(s2), { carNum: n3, url: a3, publishTime: o2 } = readListItem(t3);
-        if (a3 && n3) try {
-          await this.getRuntimeService("state").patch(n3, { blocked: true }, { type: "actor-page-block", record: { carNum: n3, url: a3, names: e2, publishTime: o2 } }), clog.log("屏蔽演员番号", e2, n3);
-        } catch (i2) {
-          clog.error(`保存失败 [${n3}]:`, i2);
-        }
+    async filterAllVideo(actressName, { filter = this.getOptionalDependency("ListPagePlugin")?.activeQuickFilter || "waitCheck", confirm = true, root = null } = {}) {
+      const normalized = normalizeQuickFilterKey(filter), filterLabel = QUICK_FILTER_LABELS[normalized];
+      const confirmText = "all" === normalized ? "将处理当前搜索全部分页的所有作品（包括屏蔽项）并加入黑名单。" : `将处理当前搜索全部分页中符合「${filterLabel}」筛选的作品并加入黑名单。`;
+      if (confirm) {
+        const proceed = await new Promise((resolve) => utils.q(null, confirmText, () => resolve(true), () => resolve(false)));
+        if (!proceed) return { cancelled: true };
       }
-      processed += n2.length, (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已扫描 ${processed} 个番号`);
-      if (a2) {
-        clog.log("正在请求下一页内容:", a2), await new Promise((e3) => setTimeout(e3, 500));
-        const scope = await this.getRuntimeService("scope")(), t3 = await requestHostPage(this.getRuntimeService("http"), a2, scope), n3 = new DOMParser(), i2 = $(n3.parseFromString(t3, "text/html"));
-        await this.filterAllVideo(e2, i2, page + 1, processed);
-      } else (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 共扫描 ${processed} 个番号`);
+      const scope = await this.getRuntimeService("scope")(), listPage = this.getOptionalDependency("ListPagePlugin");
+      const context = "function" === typeof listPage?.createEvaluationContext ? await listPage.createEvaluationContext() : createListEvaluationContext({});
+      const batchToken = /* @__PURE__ */ Symbol("batch");
+      this.batchToken = batchToken;
+      const isCancelled = /* @__PURE__ */ __name(() => this.batchToken !== batchToken || Boolean(scope?.disposed), "isCancelled");
+      const statusHost = /* @__PURE__ */ __name(() => (this.blacklistRoot || $()).find("#checkBlacklistMsg"), "statusHost");
+      const records = await scanAllPages({
+        startDom: root ? $(root) : $(document),
+        itemSelector: this.getSelector().requestDomItemSelector,
+        nextPageSelector: this.getSelector().nextPageSelector,
+        fetchHtml: /* @__PURE__ */ __name(async (url) => requestHostPage(this.getRuntimeService("http"), url, scope), "fetchHtml"),
+        parseItem: /* @__PURE__ */ __name((item) => readListItem(item), "parseItem"),
+        evaluate: /* @__PURE__ */ __name((item) => evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized }), "evaluate"),
+        isCancelled,
+        onProgress: /* @__PURE__ */ __name(({ page, scanned, matched }) => {
+          const host2 = statusHost();
+          host2.length && host2.text(`正在扫描第 ${page} 页 · 已扫描 ${scanned} · 匹配 ${matched} 个番号`);
+        }, "onProgress")
+      });
+      if (isCancelled()) return { cancelled: true };
+      let updated = 0;
+      for (let index = 0; index < records.length; index += 75) {
+        const chunk = records.slice(index, index + 75);
+        await this.getRuntimeService("state").patch(chunk.map((item) => item.carNum), { blocked: true }, {
+          type: "actor-page-block",
+          records: chunk.map((item) => ({ carNum: item.carNum, url: item.url || "", names: actressName, publishTime: item.publishTime || "" }))
+        });
+        updated += chunk.length;
+        clog.log("一键屏蔽进度", `已屏蔽 ${updated}/${records.length} 个番号`);
+      }
+      const host = statusHost();
+      host.length && host.text(`处理完成 · 共屏蔽 ${updated} 个番号`);
+      return { matched: records.length, updated };
     }
     async filterActorVideo(e2, t2, n2, site = l ? I : T, page = 1, processed = 0) {
       let { nextPageLink: a2, recordCount } = await this.parseAndSaveFilterInfo(n2, e2, t2, site);
@@ -15959,8 +16072,8 @@ ${failure.stack}` : "");
                     ${e2 ? `
                      <button type="button" id="addBlacklistBtn" class="jhs-btn ${a2}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n2}</span></button>
                      <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></button>
-                     <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="一键收藏当前页面所有作品"><span>一键收藏所有作品</span></button>
-                     <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="一键标记当前页面所有作品为已下载"><span>一键已下载所有作品</span></button>
+                     <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>一键收藏所有作品</span></button>
+                     <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>一键已下载所有作品</span></button>
                     ` : ""}
                     ${o.includes("/tags") ? `
                       <button type="button" id="addBlacklistBtn" class="jhs-btn ${a2}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n2}</span></button>
@@ -15987,8 +16100,8 @@ ${failure.stack}` : "");
                     ${e2 ? `
                         <button type="button" id="addBlacklistBtn" class="jhs-btn ${n2}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${t2}</span></button>
                         <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></button>
-                        <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="一键收藏当前页面所有作品"><span>一键收藏所有作品</span></button>
-                        <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="一键标记当前页面所有作品为已下载"><span>一键已下载所有作品</span></button>
+                        <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>一键收藏所有作品</span></button>
+                        <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>一键已下载所有作品</span></button>
                     ` : '<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>'}
                     ${this.sortMenuHtml(a2)}
                 </div>
@@ -16033,33 +16146,29 @@ ${failure.stack}` : "");
           }
         }));
       })), $("#favoriteAllVideo").on("click", (async (t2) => {
-        let n2 = { clientX: t2.clientX, clientY: t2.clientY + 80 }, a2 = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
+        let a2 = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
         if (0 === a2.length) return void show.error("获取演员名称失败");
         let i2 = a2.text().trim().split(",")[0];
-        utils.q(n2, "一键收藏所有可见作品?", (async () => {
-          this.loadObj = loading();
-          try {
-            await listPage?.batchSaveAllVideos?.(i2, h);
-          } catch (t3) {
-            clog.error(t3);
-          } finally {
-            this.loadObj.close();
-          }
-        }));
+        this.loadObj = loading();
+        try {
+          await listPage?.batchSaveAllVideos?.(i2, h);
+        } catch (t3) {
+          clog.error(t3);
+        } finally {
+          this.loadObj.close();
+        }
       })), $("#hasDownAllVideo").on("click", (async (t2) => {
-        let n2 = { clientX: t2.clientX, clientY: t2.clientY + 80 }, a2 = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
+        let a2 = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
         if (0 === a2.length) return void show.error("获取演员名称失败");
         let i2 = a2.text().trim().split(",")[0];
-        utils.q(n2, "一键已下载所有可见作品?", (async () => {
-          this.loadObj = loading();
-          try {
-            await listPage?.batchSaveAllVideos?.(i2, g);
-          } catch (t3) {
-            clog.error(t3);
-          } finally {
-            this.loadObj.close();
-          }
-        }));
+        this.loadObj = loading();
+        try {
+          await listPage?.batchSaveAllVideos?.(i2, g);
+        } catch (t3) {
+          clog.error(t3);
+        } finally {
+          this.loadObj.close();
+        }
       }));
     }
     bindSortMenu() {
@@ -16138,45 +16247,6 @@ ${failure.stack}` : "");
   __name(_ListPageButtonPlugin, "ListPageButtonPlugin");
   var ListPageButtonPlugin = _ListPageButtonPlugin;
 
-  // src/features/list/list-evaluator.js
-  function findMatchedTitleKeyword(keywords, title, carNum) {
-    for (const keyword of keywords) if (title.includes(keyword) || carNum.startsWith(keyword)) return keyword;
-    return null;
-  }
-  __name(findMatchedTitleKeyword, "findMatchedTitleKeyword");
-  function createListEvaluationContext(options = {}) {
-    return {
-      titleKeywords: Array.isArray(options.titleKeywords) ? options.titleKeywords : [],
-      carMap: options.carMap instanceof Map ? options.carMap : /* @__PURE__ */ new Map(),
-      actorCarNumToNameMap: options.actorCarNumToNameMap instanceof Map ? options.actorCarNumToNameMap : /* @__PURE__ */ new Map(),
-      actressCarNumToNameMap: options.actressCarNumToNameMap instanceof Map ? options.actressCarNumToNameMap : /* @__PURE__ */ new Map(),
-      recentCarNums: options.recentCarNums instanceof Set ? options.recentCarNums : /* @__PURE__ */ new Set(),
-      settings: options.settings ?? {}
-    };
-  }
-  __name(createListEvaluationContext, "createListEvaluationContext");
-  function evaluateListItem(record, context, { filter = "waitCheck" } = {}) {
-    const carNum = record?.carNum;
-    const state = carNum ? context.carMap.get(carNum) : null;
-    const flags = normalizeStateFlags(state?.stateFlags);
-    const keyword = context.titleKeywords.length && carNum ? findMatchedTitleKeyword(context.titleKeywords, record.title || "", carNum) : null;
-    const visibilityReasons = {
-      keyword: !!keyword,
-      actorBlacklist: carNum ? context.actorCarNumToNameMap.has(carNum) : false,
-      actressBlacklist: carNum ? context.actressCarNumToNameMap.has(carNum) : false
-    };
-    const recent = carNum ? context.recentCarNums.has(carNum) : false;
-    const hardHidden = isHardHidden(flags, visibilityReasons);
-    return {
-      flags,
-      visibilityReasons,
-      recent,
-      hardHidden,
-      matchesCurrentFilter: matchesQuickFilter(filter, flags, { visibilityReasons, recent })
-    };
-  }
-  __name(evaluateListItem, "evaluateListItem");
-
   // src/plugins/status/list-page.js
   function getListEventBus() {
     if (!jhsEventBus) throw new Error("List EventBus 未初始化");
@@ -16251,7 +16321,7 @@ ${failure.stack}` : "");
   };
   var _ListPagePlugin = class _ListPagePlugin extends BasePlugin {
     async initCss() {
-      return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}</style>`;
+      return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}.jhs-batch-progress{position:fixed;right:16px;bottom:16px;z-index:var(--jhs-z-modal);display:flex;align-items:center;gap:var(--jhs-space-2);padding:var(--jhs-space-2) var(--jhs-space-3);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-md);background:var(--jhs-surface);color:var(--jhs-text);box-shadow:0 4px 16px rgba(0,0,0,.18)}</style>`;
     }
     constructor() {
       super(...arguments);
@@ -16464,6 +16534,9 @@ ${failure.stack}` : "");
         window.requestAnimationFrame ? window.requestAnimationFrame((() => setTimeout(e2))) : setTimeout(e2);
       });
     }
+    async createEvaluationContext() {
+      return createListEvaluationContext(await this.getFilterContext());
+    }
     async getFilterContext() {
       if (this.filterContext) return this.filterContext;
       const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), this.getRuntimeService("state").getActivityLog()]), actorCarNumToNameMap = /* @__PURE__ */ new Map(), actressCarNumToNameMap = /* @__PURE__ */ new Map(), recentCarNums = /* @__PURE__ */ new Set();
@@ -16613,25 +16686,73 @@ ${failure.stack}` : "");
             </table>
         `);
     }
-    async batchSaveAllVideos(actressName, flag, pageDom = null, page = 1, processed = 0) {
-      let items, nextUrl;
-      pageDom ? (items = pageDom.find(this.getSelector().requestDomItemSelector), nextUrl = pageDom.find(this.getSelector().nextPageSelector).attr("href")) : (items = $(this.getSelector().itemSelector), nextUrl = $(this.getSelector().nextPageSelector).attr("href"));
-      if (nextUrl && 0 === items.length) throw show.error("解析列表失败"), new Error("解析列表失败");
-      for (const element of items) {
-        const item = $(element), { carNum, url, publishTime } = readListItem(item);
-        if (url && carNum) try {
-          const stateFlag = legacyActionToFlag(flag);
-          stateFlag && await this.getRuntimeService("state").patch(carNum, { [stateFlag]: true }, { type: "actor-page-batch-state", record: { carNum, url, names: actressName, publishTime } }), clog.log("批量操作", actressName, carNum, flag);
-        } catch (error) {
-          clog.error(`保存失败 [${carNum}]:`, error);
-        }
+    async batchSaveAllVideos(actressName, flag, { filter = this.activeQuickFilter || "waitCheck", confirm = true, root = null } = {}) {
+      const stateFlag = legacyActionToFlag(flag);
+      if (!stateFlag) throw new TypeError(`不支持的状态操作: ${flag}`);
+      const normalized = normalizeQuickFilterKey(filter), filterLabel = QUICK_FILTER_LABELS[normalized];
+      const confirmText = "all" === normalized ? "将处理当前搜索全部分页的所有作品，包括屏蔽项。" : `将处理当前搜索全部分页中符合「${filterLabel}」筛选的作品。`;
+      if (confirm) {
+        const proceed = await new Promise((resolve) => utils.q(null, confirmText, () => resolve(true), () => resolve(false)));
+        if (!proceed) return { cancelled: true };
       }
-      processed += items.length, clog.debug(`批量操作第 ${page} 页 · 已处理 ${processed} 个番号`);
-      if (nextUrl) {
-        clog.log("正在请求下一页内容:", nextUrl), await new Promise((resolve) => setTimeout(resolve, 500));
-        const scope = await this.getRuntimeService("scope")(), html = await requestHostPage(this.getRuntimeService("http"), nextUrl, scope), parsed = new DOMParser(), nextDom = $(parsed.parseFromString(html, "text/html"));
-        await this.batchSaveAllVideos(actressName, flag, nextDom, page + 1, processed);
-      } else clog.debug(`批量操作完成 · ${page} 页 · 共处理 ${processed} 个番号`);
+      const scope = await this.getRuntimeService("scope")(), context = await this.createEvaluationContext(), batchToken = /* @__PURE__ */ Symbol("batch");
+      this.batchToken = batchToken;
+      const isCancelled = /* @__PURE__ */ __name(() => this.batchToken !== batchToken || Boolean(scope?.disposed), "isCancelled");
+      const progressElement = this.showBatchProgress();
+      const setProgress = /* @__PURE__ */ __name((text) => {
+        const label = progressElement?.find(".jhs-batch-progress__label");
+        label && label.length ? label.text(text) : clog.debug(text);
+      }, "setProgress");
+      const onProgress = /* @__PURE__ */ __name(({ page, scanned, matched }) => {
+        setProgress(`已扫描 ${page} 页 · 匹配 ${matched} 项`);
+        clog.debug(`批量扫描第 ${page} 页 · 已扫描 ${scanned} · 匹配 ${matched}`);
+      }, "onProgress");
+      try {
+        const records = await scanAllPages({
+          startDom: root ? $(root) : $(document),
+          itemSelector: this.getSelector().requestDomItemSelector,
+          nextPageSelector: this.getSelector().nextPageSelector,
+          fetchHtml: /* @__PURE__ */ __name(async (url) => requestHostPage(this.getRuntimeService("http"), url, scope), "fetchHtml"),
+          parseItem: /* @__PURE__ */ __name((item) => readListItem(item), "parseItem"),
+          evaluate: /* @__PURE__ */ __name((item) => evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized }), "evaluate"),
+          isCancelled,
+          onProgress
+        });
+        if (isCancelled()) return { cancelled: true };
+        let updated = 0;
+        for (let index = 0; index < records.length; index += 75) {
+          const chunk = records.slice(index, index + 75);
+          await this.getRuntimeService("state").patch(chunk.map((item) => item.carNum), { [stateFlag]: true }, {
+            type: "actor-page-batch-state",
+            records: chunk.map((item) => ({ carNum: item.carNum, url: item.url || "", names: actressName, publishTime: item.publishTime || "" }))
+          });
+          updated += chunk.length;
+          setProgress(`已更新 ${updated}/${records.length} 项`);
+        }
+        setProgress(`批量完成：匹配 ${records.length} 项 · 已更新 ${updated} 项`);
+        setTimeout(() => progressElement?.remove(), 1800);
+        return { matched: records.length, updated };
+      } catch (error) {
+        clog.error("批量操作失败:", error);
+        setProgress("批量操作失败");
+        progressElement?.addClass("jhs-batch-progress--error");
+        setTimeout(() => progressElement?.remove(), 2500);
+        throw error;
+      } finally {
+        this.batchToken = null;
+      }
+    }
+    showBatchProgress() {
+      let element = $("#jhs-batch-progress");
+      if (!element.length) {
+        element = $('<div id="jhs-batch-progress" class="jhs-ui jhs-batch-progress" role="status"></div>').appendTo("body");
+        element.append('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm" id="jhs-batch-cancel">取消</button>');
+        element.find("#jhs-batch-cancel").on("click", () => {
+          this.batchToken = null;
+        });
+      }
+      element.find(".jhs-batch-progress__label").remove().end().prepend($('<span class="jhs-batch-progress__label"></span>').text("正在扫描…"));
+      return element;
     }
     async bindClick() {
       let e2 = this.getSelector();
