@@ -53,8 +53,8 @@ export class StatsPlugin extends BasePlugin {
                 current.count++, actressCounts.set(key, current);
             } else names.forEach((name => { const key = `name:${name}`, current = actressCounts.get(key) || { starId: "", name, count: 0 }; current.count++, actressCounts.set(key, current); }));
         }));
-        const topActresses = [ ...actressCounts.values() ].sort(((left, right) => right.count - left.count || left.name.localeCompare(right.name))).slice(0, 10), topValue = topActresses[0]?.count || 1, javDbUrl = await this.getDependency("OtherSitePlugin").getJavDbUrl();
-        const pending = counts.pending, counter = this.getDependency("NewVideoPlugin"), newVideos = counter ? await counter.getPendingNewVideoTotal() : 0, pageSummary = this.getDependency("ListPagePlugin").getCurrentPageSummary();
+        const topActresses = [ ...actressCounts.values() ].sort(((left, right) => right.count - left.count || left.name.localeCompare(right.name))).slice(0, 10), topValue = topActresses[0]?.count || 1, javDbUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", await storageManager.getSetting());
+        const pending = counts.pending, counter = this.getOptionalDependency("NewVideoPlugin"), listPage = this.getOptionalDependency("ListPagePlugin"), newVideos = counter ? await counter.getPendingNewVideoTotal() : 0, pageSummary = listPage?.getCurrentPageSummary?.() || { blockedItems: 0 };
         const metrics = [
             { label: "总记录", value: total, action: null },
             { label: "收藏", value: counts.favorite, action: null },
@@ -89,8 +89,8 @@ export class StatsPlugin extends BasePlugin {
             $(layerElement).find("button.jhs-stats__metric[data-action]").on("click", ((/** @type {MouseEvent} */ event) => {
                 const metric = $(event.currentTarget), action = metric.data("action");
                 dialog.close(layerIndex);
-                if ("new-video" === action) return this.getDependency("NewVideoPlugin").openDialog();
-                if ("filter" === action) this.getDependency("ListPagePlugin").setQuickFilter(metric.data("filter"));
+                if ("new-video" === action) return counter?.openDialog?.();
+                if ("filter" === action) listPage?.setQuickFilter?.(metric.data("filter"));
             }));
             utils.setupEscClose(layerIndex);
         } });

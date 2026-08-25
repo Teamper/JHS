@@ -58,10 +58,10 @@ export class SettingPlugin extends BasePlugin {
     }
     getFormDependencies() {
         return Object.freeze({
-            otherSite: this.getDependency("OtherSitePlugin"), listPage: this.getDependency("ListPagePlugin"),
-            translate: this.getDependency("TranslatePlugin"), actressInfo: this.getDependency("ActressInfoPlugin"),
-            screenshot: this.getDependency("ScreenShotPlugin"), newVideo: this.getDependency("NewVideoPlugin"),
-            blacklist: this.getDependency("BlacklistPlugin"), busImg: this.getDependency("BusImgPlugin"), host: this.getRuntimeService("host"), settings: this.getRuntimeService("settings"),
+            otherSite: this.getOptionalDependency("OtherSitePlugin"), listPage: this.getOptionalDependency("ListPagePlugin"), translate: this.getOptionalDependency("TranslatePlugin"),
+            actressInfo: this.getOptionalDependency("ActressInfoPlugin"), screenshot: this.getOptionalDependency("ScreenShotPlugin"),
+            newVideo: this.getOptionalDependency("NewVideoPlugin"), blacklist: this.getOptionalDependency("BlacklistPlugin"),
+            busImg: this.getOptionalDependency("BusImgPlugin"), host: this.getRuntimeService("host"), movie: this.getRuntimeService("movie"), settings: this.getRuntimeService("settings"),
         });
     }
     async initCss() {
@@ -69,7 +69,7 @@ export class SettingPlugin extends BasePlugin {
         let t = (null == e ? void 0 : e.containerWidth) ?? "100";
         utils.isMobileMode() && (t = "100");
         let n = utils.isMobileMode() ? 1 : (null == e ? void 0 : e.containerColumns) ?? 5;
-        applyImageMode(this.getDependency("BusImgPlugin")).catch((e => clog.error("[JHS] applyImageMode failed:", e)));
+        applyImageMode(this.getOptionalDependency("BusImgPlugin")).catch((e => clog.error("[JHS] applyImageMode failed:", e)));
         return buildSettingCss(t, n, l, r);
     }
     async handle() {
@@ -161,23 +161,31 @@ export class SettingPlugin extends BasePlugin {
             area: utils.getDialogArea("lg"),
             scrollbar: !1,
             success: async (e, n) => {
-                $(e).find(".layui-layer-content").css("position", "relative"), this.renderTaskStatuses(), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), injectResourceSourcesPanel(), await loadSettingForm(this.getFormDependencies()), await this.loadResourceSettings(),
-                JhsSelect.enhance(e), this.bindClick(), $(".side-menu-item.active").attr("aria-current", "page"), utils.setupEscClose(n), t && t();
+                $(e).find(".layui-layer-content").css("position", "relative"), this.renderTaskStatuses(), injectHealthPanel(), injectPluginMgmtPanel(), injectSnapshotPanel(), injectNetworkPanel(), injectResourceSourcesPanel(),
+                this.bindClick(), $(".side-menu-item.active").attr("aria-current", "page"), utils.setupEscClose(n), t && t();
                 this.renderTaskStatuses(), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.renderTaskStatuses()));
                 if (utils.isMobileMode()) {
                     this.collapseAdvancedTabs();
                 }
+                const sections = await Promise.allSettled([ loadSettingForm(this.getFormDependencies()), this.loadResourceSettings() ]);
+                JhsSelect.enhance(e);
+                sections.forEach(((result, index) => {
+                    if (result.status !== "rejected") return;
+                    const source = index === 0 ? "settings-form" : "resource-settings";
+                    clog.error(`${source} 加载失败`, result.reason), this.getRuntimeService("diagnostics").recordError({ source, message: result.reason?.message || String(result.reason) });
+                }));
+                sections.some((result => result.status === "rejected")) && show.error("部分设置内容加载失败，基础操作仍可使用");
             },
             end: () => {
                 this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null;
-                this.getDependency("CoverButtonPlugin")?.enableSvgBtn?.();
+                this.getOptionalDependency("CoverButtonPlugin")?.enableSvgBtn?.();
             }
         });
     }
     renderTaskStatuses() {
         const container = $("#setting-task-status-list");
         if (!container.length) return;
-        const taskPlugin = this.getDependency("TaskPlugin");
+        const taskPlugin = this.getOptionalDependency("TaskPlugin");
         if (!taskPlugin?.getTaskStatusSnapshot) return void container.empty();
         const names = { blacklist: "黑名单", favoriteActress: "演员同步", newVideo: "新作品" }, labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = value => value ? new Date(value).toLocaleString() : "无";
         container.empty(), [ "blacklist", "favoriteActress", "newVideo" ].forEach((name => {

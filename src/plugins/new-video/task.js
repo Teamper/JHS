@@ -249,7 +249,7 @@ export class TaskPlugin extends BasePlugin {
     }
     async doTask() {
         if (!window.isListPage) return;
-        await this.loadConfig(), this.javDbUrl = await this.getDependency("OtherSitePlugin").getJavDbUrl();
+        await this.loadConfig(), this.javDbUrl = await this.getConfiguredSiteOrigin("javDbBtn");
         return navigator.locks.request(this.singleTaskKey, {
             ifAvailable: !0
         }, (async e => {
@@ -296,13 +296,17 @@ export class TaskPlugin extends BasePlugin {
     }
     /** 确保所有任务入口均已具备配置和站点地址。 */
     async ensureReady() {
-        (!this.taskConfig || this.taskConfigDirty) && await this.loadConfig(), this.javDbUrl || (this.javDbUrl = await this.getDependency("OtherSitePlugin").getJavDbUrl());
+        (!this.taskConfig || this.taskConfigDirty) && await this.loadConfig(), this.javDbUrl || (this.javDbUrl = await this.getConfiguredSiteOrigin("javDbBtn"));
         if (!this.javDbUrl) throw new Error("JavDB 地址未配置");
+    }
+    /** @param {string} siteId */
+    async getConfiguredSiteOrigin(siteId) {
+        return this.getRuntimeService("movie").externalSiteOrigin(siteId, await storageManager.getSetting());
     }
     /** @param {string} url */
     async resolveBlacklistSite(url) {
         try {
-            const target = new URL(url), otherSite = this.getDependency("OtherSitePlugin"), [ javDbUrl, javBusUrl ] = await Promise.all([ otherSite?.getJavDbUrl?.(), otherSite?.getJavBusUrl?.() ]);
+            const target = new URL(url), [ javDbUrl, javBusUrl ] = await Promise.all([ this.getConfiguredSiteOrigin("javDbBtn"), this.getConfiguredSiteOrigin("javBusBtn") ]);
             for (const [ configuredUrl, site ] of [ [ javDbUrl, T ], [ javBusUrl, I ] ]) {
                 try {
                     if (configuredUrl && target.hostname === new URL(configuredUrl).hostname) return site;
@@ -317,8 +321,10 @@ export class TaskPlugin extends BasePlugin {
         }
     }
     async checkBlacklist(force = !1) {
-        await this.ensureReady();
         const result = this.createTaskResult({ skippedHost: 0 });
+        const blacklistPlugin = this.getOptionalDependency("BlacklistPlugin");
+        if (!blacklistPlugin) return clog.warn("黑名单功能已禁用，跳过自动检测"), result;
+        await this.ensureReady();
         if (!await this.shouldStartTask("blacklist", force)) return clog.debug("检测黑名单未到整批执行时间"), result;
         this.beginTaskAttempt("blacklist"), result.attempted = !0;
         return this.withActiveTask("blacklist", async () => {
@@ -348,7 +354,6 @@ export class TaskPlugin extends BasePlugin {
                 }
             }
             clog.log(`<span class="jhs-task-emphasis">检测屏蔽黑名单, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
-            const blacklistPlugin = this.getDependency("BlacklistPlugin");
             try {
                 await this.limitConcurrency(eligible, concurrency, sleep, (async (/** @type {TaskRecord} */ entry) => {
                     const {item, site} = entry;
@@ -377,7 +382,7 @@ export class TaskPlugin extends BasePlugin {
             }
             const completed = 0 === result.parseFailed + result.networkFailed + result.aborted;
             result.completed = completed, result.fatal = !!blockedError, await this.finalizeTask("blacklist", completed), finalized = !0, this.renderBlacklistResult(result, completed);
-            try { await this.getDependency("BlacklistPlugin").resetBtnTip(); } catch (error) { clog.error("刷新黑名单检测提示失败", error); }
+            try { await blacklistPlugin.resetBtnTip(); } catch (error) { clog.error("刷新黑名单检测提示失败", error); }
             if (blockedError) throw blockedError;
             return result;
             } catch (error) {

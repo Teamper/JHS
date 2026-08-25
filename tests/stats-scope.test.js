@@ -15,10 +15,12 @@ function loadStatsPlugin() {
     const stateService = { getActivityLog: vi.fn(async () => ({ entries: [], coverageStart: null })) };
     class BasePlugin {
         getBean(name) { return beans[name]; }
+        getOptionalDependency(name) { return beans[name]; }
         getRuntimeService(name) {
             if (name === "diagnostics") return { exportSnapshot: () => ({ activeFeatures: ["list"], errors: [] }) };
             if (name === "dialog") return { open: layer.open, close: layer.close };
             if (name === "state") return stateService;
+            if (name === "movie") return { externalSiteOrigin: () => "https://javdb.com" };
             return null;
         }
     }
@@ -34,7 +36,7 @@ function loadStatsPlugin() {
         window: dom.window, document: dom.window.document, $, BasePlugin, StatsRepository, layer, URL,
         storageManager: {
             getCarList: vi.fn(async () => [ { stateFlags: { blocked: true } }, { stateFlags: { favorite: true, downloaded: true, watched: true } }, { stateFlags: {} } ]),
-            getFavoriteActressList: vi.fn(async () => [ {} ]), getBlacklist: vi.fn(async () => [ {}, {} ])
+            getFavoriteActressList: vi.fn(async () => [ {} ]), getBlacklist: vi.fn(async () => [ {}, {} ]), getSetting: vi.fn(async () => ({}))
         },
         utils: { getDialogArea: vi.fn(() => [ "1040px", "760px" ]), setupEscClose: vi.fn() },
         normalizeStateFlags: flags => ({ blocked: !!flags?.blocked, favorite: !!flags?.favorite, downloaded: !!flags?.downloaded, watched: !!flags?.watched }),

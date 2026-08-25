@@ -106,3 +106,32 @@ test("Settings opens when optional CoverButton and Blacklist contributions are d
   await expect.poll(() => page.evaluate(() => window.__jhsSettingsSaved)).toBe(true);
   await expect(page.locator(".layui-layer #saveBtn")).not.toHaveAttribute("aria-busy", "true");
 });
+
+test("Settings remains interactive and catalogs a disabled external-sites contribution", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers disabled optional settings dependencies");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page, { disabledPlugins: ["OtherSitePlugin"] });
+  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
+  await page.locator('.layui-layer .side-menu-item[data-panel="base-panel"]').click();
+  await expect(page.locator(".layui-layer #base-panel")).toBeVisible();
+  await page.locator('.layui-layer .side-menu-item[data-panel="plugin-mgmt-panel"]').click();
+  const externalSitesToggle = page.locator('.layui-layer .pm-toggle[data-plugin="OtherSitePlugin"]');
+  await expect(externalSitesToggle).toBeVisible();
+  await expect(externalSitesToggle).not.toBeChecked();
+});
+
+test("FC2 core workspace survives disabled optional detail contributions", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers FC2 optional contribution isolation");
+  await fulfillHostFixtures(context);
+  const disabledPlugins = ["OtherSitePlugin", "ScreenShotPlugin", "FilterTitleKeywordPlugin", "MagnetHubPlugin"];
+  await page.goto("https://javdb.com/users/collection_codes?movieId=fixture-id&carNum=FC2-123&url=https%3A%2F%2Ffc2ppvdb.com%2Farticles%2F123&source=fc2", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page, { disabledPlugins });
+  await expect(page.locator(".jhs-fc2-workspace[data-jhs-fc2-mode='page']")).toBeVisible();
+  const pluginNames = await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames());
+  disabledPlugins.forEach((name) => expect(pluginNames).not.toContain(name));
+  await expect(page.locator('[data-jhs-role="other-sites"]')).toHaveCount(0);
+  await expect(page.locator('[data-jhs-role="magnet-hub"]')).toHaveCount(0);
+  await expect(page.locator('[data-jhs-role="screenshot"]')).toHaveCount(0);
+});

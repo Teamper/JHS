@@ -33,13 +33,18 @@ describe("v6.5 architecture runtime contracts", () => {
         class ConsumerPlugin extends BasePlugin {
             getName() { return "ConsumerPlugin"; }
             dependency(name) { return this.getDependency(name); }
+            optionalDependency(name) { return this.getOptionalDependency(name); }
         }
-        const manager = new PluginManager();
-        manager.setDependencyDeclarations({ ConsumerPlugin: ["DependencyPlugin"] });
+        const diagnostics = new DiagnosticsService();
+        const manager = new PluginManager({ diagnostics });
+        manager.setDependencyDeclarations({ ConsumerPlugin: ["DependencyPlugin", "MissingPlugin"] });
         manager.register(DependencyPlugin);
         manager.register(ConsumerPlugin);
         const consumer = manager.getBean("ConsumerPlugin");
         expect(consumer.dependency("DependencyPlugin")).toBe(manager.getBean("DependencyPlugin"));
+        expect(consumer.optionalDependency("MissingPlugin")).toBeUndefined();
+        expect(() => consumer.dependency("MissingPlugin")).toThrow("Missing dependency: ConsumerPlugin -> MissingPlugin");
+        expect(diagnostics.exportSnapshot().errors.at(-1)).toMatchObject({ plugin: "ConsumerPlugin", phase: "dependency" });
         expect(() => consumer.dependency("UndeclaredPlugin")).toThrow(/未声明依赖/);
     });
 
@@ -81,6 +86,12 @@ describe("v6.5 architecture runtime contracts", () => {
         registerSitePlugins(javdbWithCoverDisabled, createRuntime("javdb", ["CoverButtonPlugin"]), "javdb");
         expect(javdbWithCoverDisabled.getPluginNames()).not.toContain("CoverButtonPlugin");
         expect(javdbWithCoverDisabled.getPluginNames()).toContain("DetailPageButtonPlugin");
+        expect(javdbWithCoverDisabled.getPluginDescriptors()).toContainEqual({ name: "CoverButtonPlugin", disableable: true });
+
+        const javdbWithExternalSitesDisabled = new PluginManager();
+        registerSitePlugins(javdbWithExternalSitesDisabled, createRuntime("javdb", ["OtherSitePlugin"]), "javdb");
+        expect(javdbWithExternalSitesDisabled.getPluginNames()).not.toContain("OtherSitePlugin");
+        expect(javdbWithExternalSitesDisabled.getPluginDescriptors()).toContainEqual({ name: "OtherSitePlugin", disableable: true });
 
         const javbusWithImagesDisabled = new PluginManager();
         registerSitePlugins(javbusWithImagesDisabled, createRuntime("javbus", ["BusImgPlugin"]), "javbus");

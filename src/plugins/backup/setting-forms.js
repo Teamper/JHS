@@ -41,7 +41,7 @@ export async function loadSettingForm(dependencies) {
     $("#enableVerticalModel").prop("checked", !!e.enableVerticalModel && e.enableVerticalModel === _),
     $("#containerColumns").val(e.containerColumns || 5), $("#showContainerColumns").text(e.containerColumns || 5),
     $("#containerWidth").val((e.containerWidth || 100) - 70), $("#showContainerWidth").text((e.containerWidth || 100) + "%");
-    const a = dependencies.otherSite, i = await a.getMissAvUrl(), s = await a.getjableUrl(), o = await a.getAvgleUrl(), r = await a.getJavTrailersUrl(), l = await a.getAv123Url(), c = await a.getJavDbUrl(), d = await a.getJavBusUrl(), h = await a.getSupJavUrl();
+    const movie = dependencies.movie, i = movie.externalSiteOrigin("missAvBtn", e), s = movie.externalSiteOrigin("jableBtn", e), o = movie.externalSiteOrigin("avgleBtn", e), r = movie.externalSiteOrigin("javTrailersBtn", e), l = movie.providerOrigin("av123") || "", c = movie.externalSiteOrigin("javDbBtn", e), d = movie.externalSiteOrigin("javBusBtn", e), h = movie.externalSiteOrigin("supJavBtn", e);
     $("#missAvUrl").val(i), $("#jableUrl").val(s), $("#avgleUrl").val(o), $("#javTrailersUrl").val(r),
     $("#av123Url").val(l), $("#javDbUrl").val(c), $("#javBusUrl").val(d), $("#supJavUrl").val(h);
     let g = await storageManager.getReviewFilterKeywordList(), p = await storageManager.getTitleFilterKeyword();
@@ -92,8 +92,8 @@ export async function initQuickSettingForm(dependencies, getSelector, openSettin
         await dependencies.settings.set("autoPage", n), $("#sort-toggle-btn").prop("disabled", n === _).attr("title", n === _ ? "瀑布流模式仅支持默认排序" : "选择列表排序方式");
     })), $("#translateTitle").on("change", (async (/** @type {any} */ t) => {
         const n = $("#translateTitle").is(":checked") ? _ : C;
-        await dependencies.settings.set("translateTitle", n), n === _ ? (await dependencies.listPage.doFilter(),
-        isDetailPage && await dependencies.translate?.translate()) : (await dependencies.listPage.revertTranslation(),
+        await dependencies.settings.set("translateTitle", n), n === _ ? (await dependencies.listPage?.doFilter?.(),
+        isDetailPage && await dependencies.translate?.translate?.()) : (await dependencies.listPage?.revertTranslation?.(),
         $(".translated-title").remove());
     })), $("#hoverBigImg").prop("checked", !!e.hoverBigImg && e.hoverBigImg === _),
     $("#hoverBigImg").on("change", (async (/** @type {any} */ t) => {
@@ -108,11 +108,11 @@ export async function initQuickSettingForm(dependencies, getSelector, openSettin
         await dependencies.settings.set("enableLoadActressInfo", n), n === _ ? dependencies.actressInfo?.loadActressInfo() : $(".actress-info").remove();
     })), $("#enableLoadOtherSite").on("change", (async (/** @type {any} */ t) => {
         const n = $("#enableLoadOtherSite").is(":checked") ? _ : C;
-        await dependencies.settings.set("enableLoadOtherSite", n), n === _ ? await dependencies.otherSite.loadOtherSite() : $("#otherSiteBox").remove();
+        await dependencies.settings.set("enableLoadOtherSite", n), n === _ ? await dependencies.otherSite?.loadOtherSite?.() : $("#otherSiteBox").remove();
     })), $("#enableLoadScreenShot").prop("checked", !e.enableLoadScreenShot || e.enableLoadScreenShot === _),
     $("#enableLoadScreenShot").on("change", (async (/** @type {any} */ t) => {
         const n = $("#enableLoadScreenShot").is(":checked") ? _ : C;
-        await dependencies.settings.set("enableLoadScreenShot", n), n === _ ? await dependencies.screenshot.loadScreenShot() : $(".screen-container").remove();
+        await dependencies.settings.set("enableLoadScreenShot", n), n === _ ? await dependencies.screenshot?.loadScreenShot?.() : $(".screen-container").remove();
     })), $("#enableLoadPreviewVideo").prop("checked", !e.enableLoadPreviewVideo || e.enableLoadPreviewVideo === _),
     $("#enableLoadPreviewVideo").on("change", (async (/** @type {any} */ t) => {
         const n = $("#enableLoadPreviewVideo").is(":checked") ? _ : C;

@@ -56,7 +56,7 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
     clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
     show: { info: vi.fn(), error: vi.fn() },
     utils: { ...defaultUtils, ...overrides.utils },
-    storageManager: overrides.storageManager || {},
+    storageManager: overrides.storageManager || { getSetting: vi.fn(async () => ({})) },
     $: () => ({ text: vi.fn() })
   });
   const parsers = ["src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js"].map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
@@ -65,7 +65,7 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
   const task = new context.TestTaskPlugin();
   task.getRuntimeService = name => name === "actressInfo" ? {
     collection: async (_integrationId, input) => gmHttp.get(input.pageUrl)
-  } : name === "scope" ? async () => null : null;
+  } : name === "scope" ? async () => null : name === "movie" ? { externalSiteOrigin: () => "https://javdb.example" } : null;
   return task;
 }
 
@@ -260,7 +260,6 @@ describe("blocked network task termination", () => {
   it("initializes direct task entrypoints without relying on idle startup", async () => {
     const task = loadTaskPlugin({ get: vi.fn() });
     task.loadConfig = vi.fn(async () => { task.taskConfig = { checkConcurrencyCount: 2 }; });
-    task.getBean = vi.fn(() => ({ getJavDbUrl: vi.fn(async () => "https://javdb.example") }));
 
     await task.ensureReady();
 

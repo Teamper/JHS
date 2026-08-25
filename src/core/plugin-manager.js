@@ -22,12 +22,19 @@ export class PluginManager {
         this._idleCompleted = 0;
         this._disabledPluginsPromise = null;
         /** @type {Readonly<Record<string, string[]>>} */ this._dependencyDeclarations = Object.freeze({});
+        /** @type {Map<string, {name: string, disableable: boolean}>} */ this._catalogDescriptors = new Map();
         this.diagnostics = options.diagnostics ?? null;
     }
     /** @param {Readonly<Record<string, string[]>>} declarations */
     setDependencyDeclarations(declarations) {
         if (this.plugins.size) throw new Error("依赖声明必须在插件注册前配置");
         this._dependencyDeclarations = declarations || Object.freeze({});
+    }
+    /** @param {Array<{name: string, disableable: boolean}>} descriptors */
+    setCatalogDescriptors(descriptors) {
+        if (this.plugins.size) throw new Error("插件目录必须在插件注册前配置");
+        this._catalogDescriptors = new Map(descriptors.map((item) => [item.name, Object.freeze({ ...item })]));
+        this._syncDiagnostics();
     }
     /** @param {new (...args: any[]) => any} e @param {Record<string, any>} [runtimeServices] @param {{disableable?: boolean}} [options] */
     register(e, runtimeServices = {}, options = {}) {
@@ -53,6 +60,12 @@ export class PluginManager {
     resolveDeclaredPlugin(e) {
         return this.plugins.get(e);
     }
+    /** @param {string} plugin @param {string} dependency @param {Error} error */
+    recordDependencyError(plugin, dependency, error) {
+        (/** @type {any} */ (error)).jhsDiagnosticsRecorded = true;
+        this._addError(plugin, "dependency", error);
+        return error;
+    }
     /** @param {string} e @param {string} t @param {unknown} n */
     _addError(e, t, n) {
         const error = /** @type {{ message?: string, stack?: string }} */ (n);
@@ -70,7 +83,11 @@ export class PluginManager {
     clearErrorLog() { this._errorLog = []; this.diagnostics?.clearErrors(); }
     getTimings() { return [...this._lastTimings]; }
     getPluginNames() { return Array.from(this.plugins.keys()); }
-    getPluginDescriptors() { return [...this.plugins].map(([name, plugin]) => Object.freeze({ name, disableable: plugin.disableable !== false })); }
+    getPluginDescriptors() {
+        const descriptors = new Map(this._catalogDescriptors);
+        for (const [name, plugin] of this.plugins) descriptors.set(name, Object.freeze({ name, disableable: plugin.disableable !== false }));
+        return [...descriptors.values()];
+    }
     getStartupReport() {
         return {
             registeredPlugins: this.plugins.size,
@@ -134,7 +151,7 @@ export class PluginManager {
             e.timing.status = "error";
             e.timing.error = error?.message || String(n);
             clog.error(`插件 ${e.name} 执行失败`, n);
-            this._addError(e.name, "idle" === e.mode ? "handle-idle" : "handle", n);
+            (/** @type {any} */ (n))?.jhsDiagnosticsRecorded || this._addError(e.name, "idle" === e.mode ? "handle-idle" : "handle", n);
         }
     }
     /** @param {() => Promise<void>} e */
@@ -244,7 +261,21 @@ export class BasePlugin {
     /** @param {string} e @returns {any} */
     getDependency(e) {
         if (!this.declaredDependencies.has(e)) {
-            throw new Error(`${this.getName()} 未声明依赖 ${e}`);
+            const error = new Error(`${this.getName()} 未声明依赖 ${e}`);
+            throw this.pluginManager?.recordDependencyError(this.getName(), e, error) || error;
+        }
+        const dependency = this.pluginManager.resolveDeclaredPlugin(e);
+        if (!dependency) {
+            const error = new Error(`Missing dependency: ${this.getName()} -> ${e}`);
+            throw this.pluginManager?.recordDependencyError(this.getName(), e, error) || error;
+        }
+        return dependency;
+    }
+    /** @param {string} e @returns {any} */
+    getOptionalDependency(e) {
+        if (!this.declaredDependencies.has(e)) {
+            const error = new Error(`${this.getName()} 未声明依赖 ${e}`);
+            throw this.pluginManager?.recordDependencyError(this.getName(), e, error) || error;
         }
         return this.pluginManager.resolveDeclaredPlugin(e);
     }

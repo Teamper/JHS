@@ -157,27 +157,37 @@ export class Fc2Plugin extends BasePlugin {
         toolbar.on(`click${context.namespace}`, '[data-jhs-action="subtitlecat"]', ((/** @type {MouseEvent} */ event) => {
             const target = this.getRuntimeService("movie").sourceUrls({ carNum: context.carNum }, ["subtitlecat"])[0]?.url;
             if (target) utils.openPage(target, context.carNum, !1, event);
-        })), toolbar.on(`click${context.namespace}`, '[data-jhs-action="xunlei"]', (() => this.getDependency("DetailPageButtonPlugin").searchXunLeiSubtitle(context.carNum)));
+        }));
+        const detailActions = this.getOptionalDependency("DetailPageButtonPlugin");
+        detailActions ? toolbar.on(`click${context.namespace}`, '[data-jhs-action="xunlei"]', (() => detailActions.searchXunLeiSubtitle(context.carNum))) : toolbar.find('[data-jhs-action="xunlei"]').remove();
+        const magnetHub = this.getOptionalDependency("MagnetHubPlugin");
+        if (!magnetHub) hubGroup.remove();
         hubButton.on(`click${context.namespace}`, (async () => {
+            if (!magnetHub) return;
             if (!context.isAlive()) return;
             const box = hubGroup.find('[data-jhs-role="magnet-hub-content"]'), expanded = "true" === hubButton.attr("aria-expanded");
             if (expanded) return hubGroup.addClass("is-collapsed"), void hubButton.attr("aria-expanded", "false").text("展开磁力搜索");
-            magnetHubPromise ||= this.getDependency("MagnetHubPlugin").createMagnetHub(context.carNum, { root: context.root });
+            magnetHubPromise ||= magnetHub.createMagnetHub(context.carNum, { root: context.root });
             const hub = await magnetHubPromise;
             if (context.isAlive() && !box.children().length) box.append(hub);
             if (context.isAlive()) hubGroup.removeClass("is-collapsed"), hubButton.attr("aria-expanded", "true").text("收起磁力搜索"), box[0]?.scrollIntoView?.({ block: "nearest" });
         }));
         this.getDetailStateController().bind({ root: context.root, layerIndex: context.layerIndex ?? null, carNum: context.carNum, activityType: "fc2-state", getRecord: () => ({ carNum: context.carNum, url: context.url, fc2Source: context.source, names: context.root.find('[data-jhs-role="actress-data"]').text(), publishTime: context.root.find('[data-jhs-role="publish-time"]').text() }) });
-        void this.getDependency("FilterTitleKeywordPlugin").bindDetailRoot(context.root, { layerIndex: context.layerIndex ?? null });
-        void (/** @type {any} */ (this.getDependency("OtherSitePlugin"))).loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: !1, isActive: context.isAlive }).then((/** @type {JQueryHandle | null} */ box) => { if (context.isAlive() && !box) sitesGroup.remove(); }).catch((/** @type {unknown} */ error) => {
-            context.isAlive() && sitesGroup.remove(), clog.error("FC2 外部站点加载失败", error);
-        });
-        const scopePromise = this.getRuntimeService("scope")();
-        void scopePromise.then((/** @type {any} */ scope) => renderScreenshotPanel({
-            target: screenshot, carNum: context.carNum.replace("FC2-", ""), screenshot: this.getRuntimeService("screenshot"),
-            settings: this.getRuntimeService("settings").snapshot(), scope, isActive: context.isAlive,
-        })).then((/** @type {unknown} */ result) => { if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove(); });
         "123av" === context.source ? void this.load123AvDetail(context) : void this.loadNativeDetail(context);
+        const keywordFilter = this.getOptionalDependency("FilterTitleKeywordPlugin");
+        keywordFilter && void Promise.resolve().then((() => keywordFilter.bindDetailRoot(context.root, { layerIndex: context.layerIndex ?? null }))).catch((error => clog.error("FC2 关键词过滤初始化失败", error)));
+        const otherSite = this.getOptionalDependency("OtherSitePlugin");
+        otherSite ? void Promise.resolve().then((() => otherSite.loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: !1, isActive: context.isAlive }))).then((/** @type {JQueryHandle | null} */ box) => { if (context.isAlive() && !box) sitesGroup.remove(); }).catch((/** @type {unknown} */ error) => {
+            context.isAlive() && sitesGroup.remove(), clog.error("FC2 外部站点加载失败", error);
+        }) : sitesGroup.remove();
+        if (this.getOptionalDependency("ScreenShotPlugin")) {
+            void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderScreenshotPanel({
+                target: screenshot, carNum: context.carNum.replace("FC2-", ""), screenshot: this.getRuntimeService("screenshot"),
+                settings: this.getRuntimeService("settings").snapshot(), scope, isActive: context.isAlive,
+            })).then((/** @type {unknown} */ result) => { if (context.isAlive() && !result && !screenshot.children().length) screenshot.remove(); }).catch((error => {
+                context.isAlive() && screenshot.remove(), clog.error("FC2 剧照初始化失败", error);
+            }));
+        } else screenshot.remove();
     }
     /** @param {string} title @param {string} role */
     createResourceGroup(title, role) { return $('<section class="jhs-fc2-resource-group"><h3 class="jhs-fc2-resource-title"></h3><div></div></section>').find("h3").text(title).end().find("div").attr("data-jhs-role", role).end(); }
@@ -188,7 +198,9 @@ export class Fc2Plugin extends BasePlugin {
     }
     /** @param {Fc2DetailContext} context */
     async load123AvDetail(context) {
-        const source = /** @type {any} */ (this.getDependency("Fc2By123AvPlugin")), movieIdPromise = /** @type {Promise<string | null>} */ (source.resolveMovieId(context.carNum));
+        const source = /** @type {any} */ (this.getOptionalDependency("Fc2By123AvPlugin"));
+        if (!source) return void renderFc2State(context.getSlot("summary"), "123AV 详情功能已禁用");
+        const movieIdPromise = /** @type {Promise<string | null>} */ (source.resolveMovieId(context.carNum));
         void this.configureJavDbWantButton(context, movieIdPromise), void this.mountPanels(context, movieIdPromise), void movieIdPromise.then((movieId => {
             if (context.isAlive()) return this.fetchAndRenderNativeMagnets(context, movieId);
         })).catch((error => {
@@ -198,7 +210,9 @@ export class Fc2Plugin extends BasePlugin {
     }
     /** @param {Fc2DetailContext} context */
     async load123AvMagnets(context) {
-        const movieId = await (/** @type {any} */ (this.getDependency("Fc2By123AvPlugin"))).resolveMovieId(context.carNum);
+        const source = /** @type {any} */ (this.getOptionalDependency("Fc2By123AvPlugin"));
+        if (!source) throw new Error("123AV 详情功能已禁用");
+        const movieId = await source.resolveMovieId(context.carNum);
         return this.fetchAndRenderNativeMagnets(context, movieId);
     }
     /** 绑定当前工作区自己的 JavDB“想看”操作。 */
@@ -232,7 +246,7 @@ export class Fc2Plugin extends BasePlugin {
             const normalizedError = /** @type {{ code?: string, message?: string }} */ (error);
             if ("LOGIN_REQUIRED" === normalizedError?.code) {
                 button.attr("aria-disabled", "false").text("JavDB 想看");
-                const loginPlugin = this.getDependency("TOP250Plugin");
+                const loginPlugin = this.getOptionalDependency("TOP250Plugin");
                 return loginPlugin?.openLoginDialog({ onSuccess: () => this.submitJavDbWant(context, movieId, button) });
             }
             button.attr("aria-disabled", "false").text("JavDB 想看"), show.error(normalizedError?.message || "加入 JavDB 想看失败"), clog.error("加入 JavDB 想看失败", error);

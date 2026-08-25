@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### Fixed
 
+- 修复禁用外部站点后设置弹窗初始化提前中断、内部按钮失效，以及 FC2 核心详情被可选插件同步异常阻断的问题；设置行为现先绑定并按区块降级，站点 URL 统一由 MovieIdentityService 提供，FC2 可选 Contribution 独立 fail-open。
+- 插件管理目录现在保留已禁用 Contribution 的描述信息，可在设置中重新启用；legacy 依赖新增必需/可选两种读取契约，缺失必需依赖会给出明确链路并写入 Diagnostics。
 - 修复 JavDB 高级搜索、想看和看过列表因 URL 白名单遗漏而未启动列表运行时的问题；HostAdapter 现在按宿主列表 DOM 能力识别路由。
 - 修复 FC2 等跨路由 legacy Contribution 借用 Detail Feature scope 后在列表页被判定为不可用的问题；每个 Contribution 现拥有独立生命周期，并将 FC2 原生卡片链接保护为 JHS owned detail page。
 - 修复 Settings 导航按钮委托范围不覆盖实际挂载节点、`settings.open` 依赖模拟 DOM 点击，以及禁用 CoverButton/Blacklist 后打开或保存失败的问题；入口、保存忙碌态与失败反馈现由 Settings owner 统一处理。

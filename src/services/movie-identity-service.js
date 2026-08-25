@@ -117,6 +117,10 @@ export class MovieIdentityService {
         const manifest = (this.integrations?.list("movie.external-sites") ?? [])[0], adapter = manifest && this.integrations?.getAdapter(manifest.id);
         return typeof adapter?.getSites === "function" ? adapter.getSites(settings) : [];
     }
+    /** @param {string} siteId @param {Record<string, any>} [settings] */
+    externalSiteOrigin(siteId, settings = {}) {
+        return this.externalSites(settings).find((/** @type {{id?: string, baseUrl?: string}} */ site) => site.id === siteId)?.baseUrl || "";
+    }
     /** @param {string} siteId @param {string} carNum @param {{settings?: Record<string, any>, scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async searchExternalSite(siteId, carNum, options = {}) {
         const manifest = (this.integrations?.list("movie.external-sites") ?? [])[0], adapter = manifest && this.integrations?.getAdapter(manifest.id);

@@ -23,9 +23,9 @@ function loadTaskLifecycle({ isListPage = false, hidden = false } = {}) {
     const context = vm.createContext({
         console, URL, window, document, navigator: { locks }, setTimeout: setTimeoutSpy, clearTimeout: clearTimeoutSpy,
         localStorage: { getItem: vi.fn(), setItem: vi.fn() }, $: () => ({ length: 0 }), l: true, _: "yes",
-        T: "javdb", I: "javbus", D: "censored", A: "uncensored", BasePlugin: class { getRuntimeService(name) { return "storage" === name ? storage : "scope" === name ? () => scope : null; } },
+        T: "javdb", I: "javbus", D: "censored", A: "uncensored", BasePlugin: class { getRuntimeService(name) { return "storage" === name ? storage : "scope" === name ? () => scope : "movie" === name ? { externalSiteOrigin: () => "https://javdb.com" } : null; } },
         StorageQueue: class { constructor() { this.queue = Promise.resolve(); } },
-        storageManager: {}, utils: { sleep: vi.fn(), getNowStr: vi.fn(), getHourDifference: vi.fn() },
+        storageManager: { getSetting: vi.fn(async () => ({})) }, utils: { sleep: vi.fn(), getNowStr: vi.fn(), getHourDifference: vi.fn() },
         clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() }, show: { info: vi.fn(), error: vi.fn() },
         i: (target, key, value) => (target[key] = value)
     });
@@ -106,7 +106,6 @@ describe("background task lifecycle", () => {
 
         const visible = loadTaskLifecycle({ isListPage: true });
         visible.plugin.loadConfig = vi.fn(async () => visible.plugin.taskConfig = { enableCheckBlacklist: "no" });
-        visible.plugin.getBean = () => ({ getJavDbUrl: vi.fn(async () => "https://javdb.com") });
         await visible.plugin.doTask();
         expect(visible.locks.request).toHaveBeenCalledTimes(1);
     });

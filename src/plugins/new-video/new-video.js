@@ -310,7 +310,8 @@ export class NewVideoPlugin extends BasePlugin {
         const generation = ++this.nvRenderGeneration, container = "list" === this._viewMode ? $("#new-video-list-container") : $("#actress-card-container");
         renderStateView(container, { type: "loading", title: "加载中" });
         try {
-            const [ actresses, carMap, decisions, javDbUrl, ruleTime ] = await Promise.all([ storageManager.getFavoriteActressList(), storageManager.getCarMap(), this.getRuntimeService("state").getNewVideoDecisions(), this.getDependency("OtherSitePlugin").getJavDbUrl(), storageManager.getSetting("checkNewVideo_ruleTime", 8760) ]);
+            const settings = await storageManager.getSetting();
+            const [ actresses, carMap, decisions, ruleTime ] = await Promise.all([ storageManager.getFavoriteActressList(), storageManager.getCarMap(), this.getRuntimeService("state").getNewVideoDecisions(), storageManager.getSetting("checkNewVideo_ruleTime", 8760) ]), javDbUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", settings);
             if (!this.isWorkspaceMounted() || generation !== this.nvRenderGeneration) return;
             this.nvActressesCache = actresses, this.nvCarMapCache = carMap, this.nvDecisionsCache = decisions, this.nvJavDbUrl = javDbUrl, this.nvRuleTime = parseNumberSetting(ruleTime, 8760, { min: 0 });
             const items = aggregateNewVideoRecords(actresses, carMap, decisions), nextMap = new Map;
@@ -385,7 +386,7 @@ export class NewVideoPlugin extends BasePlugin {
             e.preventDefault();
             const t = $(e.currentTarget).attr("data-starId"), n = sortedActresses.find((e => e.starId === t));
             utils.q(e, `是否取消收藏 ${n.name}?`, (async () => {
-                const baseUrl = await this.getDependency("OtherSitePlugin").getJavDbUrl(), csrfToken = document.querySelector("meta[name=csrf-token]").content;
+                const baseUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", await storageManager.getSetting()), csrfToken = document.querySelector("meta[name=csrf-token]").content;
                 const result = await this.getRuntimeService("actressInfo").uncollect("javdb", { actorId: t, baseUrl, csrfToken }, { scope: await this.getRuntimeService("scope")() });
                 result.success ? (await storageManager.removeFavoriteActress(t), await jhsEventBus.emit("new-video-changed", { reason: "favorite-actress-removed" })) : (show.error("移除失败"),
                 clog.error("移除失败,返回值:", result));

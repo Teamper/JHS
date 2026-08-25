@@ -85,7 +85,7 @@ export class CoverButtonPlugin extends BasePlugin {
     async enableSvgBtn(items = null) {
         const e = await storageManager.getSetting(), {enableScreenSvg: t = _, enableVideoSvg: n = _, enableHandleSvg: a = _, enableSiteSvg: i = _, enableCopySvg: s = _} = e;
         const scope = items ? $(items) : $(document);
-        [ { selector: ".screenSvg", enabled: t }, { selector: ".videoSvg", enabled: n }, { selector: ".handleSvg", enabled: a }, { selector: ".siteSvg", enabled: i }, { selector: ".copySvg", enabled: s } ].forEach((({selector: e, enabled: t}) => {
+        [ { selector: ".screenSvg", enabled: this.getOptionalDependency("ScreenShotPlugin") ? t : "no" }, { selector: ".videoSvg", enabled: n }, { selector: ".handleSvg", enabled: a }, { selector: ".siteSvg", enabled: i }, { selector: ".copySvg", enabled: s } ].forEach((({selector: e, enabled: t}) => {
             scope.find(e).toggle(t === _);
         }));
     }
@@ -130,7 +130,9 @@ export class CoverButtonPlugin extends BasePlugin {
                 const a = $(t.currentTarget).closest(".item");
                 let {carNum: i} = e.findCarNumAndHref(a);
                 i = i.replace("FC2-", "");
-                const s = await this.getDependency("ScreenShotPlugin").getScreenshot(i);
+                const screenshot = this.getOptionalDependency("ScreenShotPlugin");
+                if (!screenshot) throw new Error("剧照功能已禁用");
+                const s = await screenshot.getScreenshot(i);
                 n.close(), (/** @type {any} */ (globalThis)).showImageViewer(s);
             } catch (a) {
                 clog.error("图片预览出错:", a), show.error("图片预览出错:" + a);
@@ -149,7 +151,7 @@ export class CoverButtonPlugin extends BasePlugin {
                 n.hasClass("filterBtn") ? utils.q(t, `是否屏蔽${i}?`, (() => r(d))) : n.hasClass("favoriteBtn") ? void r(h) : n.hasClass("hasDownBtn") ? void r(g) : n.hasClass("hasWatchBtn") && void r(p), this.closeCardMenus();
             } catch (t) { clog.error("按钮点击处理失败:", t); }
         }));
-        const t = this.getDependency("OtherSitePlugin"), n = await t.getMissAvUrl(), a = await t.getjableUrl(), i = await t.getAvgleUrl(), s = await t.getAv123Url();
+        const settings = this.getRuntimeService("settings").snapshot(), movie = this.getRuntimeService("movie"), n = movie.externalSiteOrigin("missAvBtn", settings), a = movie.externalSiteOrigin("jableBtn", settings), i = movie.externalSiteOrigin("avgleBtn", settings), s = movie.providerOrigin("av123") || "";
         $(this.getSelector().itemSelector).each(((/** @type {number} */ t, /** @type {HTMLElement} */ o) => {
             const r = $(o), {carNum: l} = e.findCarNumAndHref(r);
             r.find(".site-jable").attr({ href: `${a}/search/${l}/`, target: "_blank", rel: "noopener noreferrer" }),

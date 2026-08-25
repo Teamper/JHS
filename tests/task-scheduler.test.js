@@ -62,8 +62,18 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
     };
     class BasePlugin {
         getBean(name) { return beans[name]; }
+        getOptionalDependency(name) { return beans[name]; }
         getRuntimeService(name) {
-            return "storage" === name ? storage : "scope" === name ? () => scope : "http" === name ? http : "actressInfo" === name ? actressInfo : null;
+            if ("storage" === name) return storage;
+            if ("scope" === name) return () => scope;
+            if ("http" === name) return http;
+            if ("actressInfo" === name) return actressInfo;
+            if ("movie" === name) return {
+                externalSiteOrigin: siteId => "javBusBtn" === siteId
+                    ? beans.OtherSitePlugin.getJavBusUrl()
+                    : beans.OtherSitePlugin.getJavDbUrl(),
+            };
+            return null;
         }
         getSelector(site = "javdb") { return site === "javbus" ? { boxSelector: ".masonry", itemSelector: ".masonry .item", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" } : { boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }; }
     }
