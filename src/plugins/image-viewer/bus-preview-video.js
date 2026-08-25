@@ -6,6 +6,10 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 import { Z, fetchDmmPreview, fetchDmmPreviewIfEnabled, isDmmEnabled, isPreviewEnabled } from "../../services/preview-service.js";
 
 export class BusPreviewVideoPlugin extends BasePlugin {
+    constructor() {
+        super(...arguments);
+        /** @type {number} */ this._busPreviewGeneration = 0;
+    }
     getName() {
         return "BusPreviewVideoPlugin";
     }
@@ -61,6 +65,7 @@ export class BusPreviewVideoPlugin extends BasePlugin {
     }
     /** 统一 reconfigure：总开关 OFF→卸载；DMM 子开关 OFF→停止当前 JHS 播放。 */
     reconfigure() {
+        this._busPreviewGeneration++;
         const settings = this.getRuntimeService("settings").snapshot();
         if (!isPreviewEnabled(settings)) return void this.unmountPreview();
         this.mountPreview();
@@ -98,14 +103,17 @@ export class BusPreviewVideoPlugin extends BasePlugin {
         })), window.location.href.includes("autoPlay=1") && a.trigger("click");
     }
     async handleVideo() {
+        const generation = this._busPreviewGeneration;
         const e = $("#bus-preview-modal"), t = e.find(".bus-preview-modal-content");
         let n = $("#preview-video");
+        if (generation !== this._busPreviewGeneration || !isPreviewEnabled(this.getRuntimeService("settings").snapshot())) return;
         if (n.length > 0) return e.addClass("is-open"), void await safePlay(n[0], {
             context: "JavBus 预览视频",
             notify: !0
         });
         let a = this.getPageInfo().carNum;
         const scope = await this.getRuntimeService("scope")(), {sources: i, error: previewError} = await fetchDmmPreviewIfEnabled(a, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope, this.getRuntimeService("settings").snapshot());
+        if (generation !== this._busPreviewGeneration || !isPreviewEnabled(this.getRuntimeService("settings").snapshot())) return;
         i && 0 !== Object.keys(i).length ? (await this.createVideoPlayerAndControls(i, t),
         n = $("#preview-video"), n.length > 0 ? (e.addClass("is-open"), await safePlay(n[0], {
             context: "JavBus 预览视频",

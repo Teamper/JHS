@@ -10,6 +10,10 @@ import { Z, fetchDmmPreviewIfEnabled, isPreviewEnabled } from "../../services/pr
 /** @typedef {MouseEvent & { ctrlKey?: boolean, metaKey?: boolean }} CardActionEvent */
 
 export class CoverButtonPlugin extends BasePlugin {
+    constructor() {
+        super(...arguments);
+        /** @type {number} */ this.previewGeneration = 0;
+    }
     getName() {
         return "CoverButtonPlugin";
     }
@@ -42,6 +46,7 @@ export class CoverButtonPlugin extends BasePlugin {
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
             if (names.includes("enablePreviewVideo")) {
+                this.previewGeneration++;
                 if (isPreviewEnabled(settingsService.snapshot())) void this.addSvgBtn().catch((error => clog.error("卡片预览重新挂载失败", error)));
                 else {
                     $('[id$="_preview_video"]').each((/** @type {number} */ _, /** @type {HTMLVideoElement} */ element) => {
@@ -217,6 +222,7 @@ export class CoverButtonPlugin extends BasePlugin {
     async showVideo(e, t, n) {
         const settings = this.getRuntimeService("settings").snapshot();
         if (!isPreviewEnabled(settings)) return show.error("预览视频已关闭");
+        const generation = this.previewGeneration;
         const a = `${n}_preview_video`;
         let i = $(`#${a}`);
         if (i.length > 0) return i.parent().show(), await safePlay(i[0], {
@@ -225,6 +231,7 @@ export class CoverButtonPlugin extends BasePlugin {
         }), void t.hide();
         t.addClass("loading"), t.after('<div class="loading-spinner"></div>');
         const s = t.attr("src"), scope = await this.getRuntimeService("scope")(), {sources: o, error: previewError} = await fetchDmmPreviewIfEnabled(n, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope, settings);
+        if (generation !== this.previewGeneration || !isPreviewEnabled(this.getRuntimeService("settings").snapshot())) return void this.showImg(e, t, n);
         if (!o) return show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未解析到视频"), void this.showImg(e, t, n);
         let r = this.getRuntimeService("settings").snapshot().videoQuality;
         r = Z(Object.keys(o), r);

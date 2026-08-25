@@ -9,6 +9,7 @@ import { readListItem } from "../../core/list-item-reader.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
 import { QUICK_FILTER_LABELS, normalizeQuickFilterKey } from "../../features/list/list-filters.js";
 import { createListEvaluationContext, evaluateListItem } from "../../features/list/list-evaluator.js";
+import { resolveFirstPageUrl } from "../../features/list/batch-scope.js";
 import { scanAllPages } from "../../features/list/batch-scanner.js";
 import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
 import { parseDetailPage } from "../../integrations/host-list/parser.js";
@@ -366,8 +367,11 @@ export class BlacklistPlugin extends BasePlugin {
         const batchToken = Symbol("batch"); this.batchToken = batchToken;
         const isCancelled = () => this.batchToken !== batchToken || Boolean(scope?.disposed);
         const statusHost = () => (this.blacklistRoot || $()).find("#checkBlacklistMsg");
+        const site = this.getRuntimeService("host")?.site ?? (r ? "javdb" : l ? "javbus" : null);
         const records = await scanAllPages({
             startDom: root ? $(root) : $(document),
+            currentUrl: root ? null : window.location.href,
+            firstPageUrl: root ? null : resolveFirstPageUrl(window.location.href, site),
             itemSelector: this.getSelector().requestDomItemSelector,
             nextPageSelector: this.getSelector().nextPageSelector,
             fetchHtml: async (/** @type {string} */ url) => requestHostPage(this.getRuntimeService("http"), url, scope),

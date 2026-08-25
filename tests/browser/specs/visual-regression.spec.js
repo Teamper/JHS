@@ -8,6 +8,7 @@ import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime
  * 断言为真实 PNG diff（toHaveScreenshot），不再只验证“能截出一张图”。
  */
 const ENABLED = process.env.JHS_VISUAL_REGRESSION === "1";
+const VISUAL_PROJECTS = new Set(["desktop-wide", "mobile"]);
 
 const pages = [
   ["JavDB List", "https://javdb.com/", ".movie-list"],
@@ -20,7 +21,7 @@ const pages = [
 for (const [label, url, selector] of pages) {
   for (const theme of ["light", "dark"]) {
     test(`${label} ${theme} baseline`, async ({ context, page }, testInfo) => {
-      test.skip(!ENABLED, "visual regression is opt-in via JHS_VISUAL_REGRESSION=1");
+      test.skip(!ENABLED || !VISUAL_PROJECTS.has(testInfo.project.name), "visual regression is opt-in via JHS_VISUAL_REGRESSION=1 and pinned to desktop-wide/mobile");
       await fulfillHostFixtures(context);
       await page.goto(url, { waitUntil: "domcontentloaded" });
       await injectUserscriptRuntime(page);
@@ -37,11 +38,12 @@ for (const [label, url, selector] of pages) {
 }
 
 test("Settings dialog visual baseline", async ({ context, page }, testInfo) => {
-  test.skip(!ENABLED, "visual regression is opt-in via JHS_VISUAL_REGRESSION=1");
+  test.skip(!ENABLED || !VISUAL_PROJECTS.has(testInfo.project.name), "visual regression is opt-in via JHS_VISUAL_REGRESSION=1 and pinned to desktop-wide/mobile");
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await expect(page).toHaveScreenshot("settings-dialog.png", { fullPage: false, maxDiffPixelRatio: 0.02 });
+  // 只锁定设置弹窗本身，避免页面背景（FAB/日志浮层/列表状态）造成非确定性 diff。
+  await expect(page.locator(".layui-layer")).toHaveScreenshot("settings-dialog.png", { maxDiffPixelRatio: 0.02 });
 });

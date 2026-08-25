@@ -13,6 +13,7 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 export class OtherSitePlugin extends BasePlugin {
     constructor() {
         super(...arguments);
+        /** @type {number} */ this.mountGeneration = 0;
         /** @type {SiteConfig[]} */
         this.siteConfigs = [
             { id: "javTrailersBtn" }, { id: "123AvBtn", providerId: "av123" }, { id: "jableBtn" }, { id: "avgleBtn" }, { id: "missAvBtn" }, { id: "supJavBtn" },
@@ -64,18 +65,24 @@ export class OtherSitePlugin extends BasePlugin {
         if (this.getRuntimeService("settings").snapshot().enableLoadOtherSite === "no") return;
         await this.loadOtherSite(null, null, { autoDetect: !1 });
     }
-    /** OFF：删除 JHS 自有面板（宿主原生 UI 不做永久销毁）。 */
+    /** OFF：删除 JHS 自有面板（宿主原生 UI 不做永久销毁），并使在途挂载作废。 */
     unmount() {
+        this.mountGeneration++;
         $("[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
     }
     /** @param {string | null} e @param {string | null} t @param {OtherSiteLoadOptions} [n] */
     async loadOtherSite(e, t, n = {}) {
-        if (this.getRuntimeService("settings").snapshot().enableLoadOtherSite === "no") return;
+        const settingsService = this.getRuntimeService("settings");
+        if (settingsService.snapshot().enableLoadOtherSite === "no") return;
+        const generation = ++this.mountGeneration;
+        const isActive = () => generation === this.mountGeneration && ("function" === typeof n.isActive ? n.isActive() : !0) && settingsService.snapshot().enableLoadOtherSite !== "no";
         const root = n.root ? $(n.root) : $(document), target = n.target ? $(n.target) : $(this.getRuntimeService("host").locateDetailSlots().summary);
-        if (!target.length || n.isActive && !n.isActive()) return;
+        if (!target.length || !isActive()) return;
         root.find("#otherSiteBox,#settingsArea,[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
         e = normalizeCarNum(e) || this.getPageInfo().carNum;
-        const enabled = this.getEnabledSites(), configs = (await this.getSiteConfigs()).map((config => ({ ...config, sourceCarNum: t }))), view = /** @type {OtherSiteView} */ ({ root, target, configs, carNum: e, isActive: "function" === typeof n.isActive ? n.isActive : () => !0 });
+        const enabled = this.getEnabledSites(), configs = (await this.getSiteConfigs()).map((config => ({ ...config, sourceCarNum: t })));
+        if (!isActive()) return;
+        const view = /** @type {OtherSiteView} */ ({ root, target, configs, carNum: e, isActive });
         const box = $('<div class="panel-block" data-jhs-other-site-box><div class="jhs-site-list"></div></div>'), list = box.find(".jhs-site-list"), settings = $('<div class="panel-block jhs-is-hidden" data-jhs-other-site-settings><div data-jhs-role="site-checkboxes"></div></div>');
         configs.forEach((config => {
             if (config.condition && !1 === config.condition(config.sourceCarNum)) return;
@@ -90,7 +97,9 @@ export class OtherSitePlugin extends BasePlugin {
             utils.openPage(destination, e, !1, event);
         })), await mapLimit(configs, 4, (async (config) => {
             config.condition && !1 === config.condition(config.sourceCarNum) || await this.prepareSiteLink(e, config, view);
-        })), this.renderSettingsArea(view), this.setupEventListeners(view), box.find('[data-jhs-role="detect-sites"]').off("click").on("click", ((/** @type {JQuerySiteEvent} */ event) => {
+        }));
+        if (!isActive()) return;
+        this.renderSettingsArea(view), this.setupEventListeners(view), box.find('[data-jhs-role="detect-sites"]').off("click").on("click", ((/** @type {JQuerySiteEvent} */ event) => {
             event.preventDefault(), this.detectOtherSites(e, view);
         })), n.autoDetect && await this.detectOtherSites(e, view);
         return box;

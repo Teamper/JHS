@@ -9,6 +9,10 @@ import { Z, fetchDmmPreview, isDmmEnabled, isPreviewEnabled } from "../../servic
 /** @typedef {{ code?: string, message?: string, retryable?: boolean }} PreviewFailure */
 
 export class PreviewVideoPlugin extends BasePlugin {
+    constructor() {
+        super(...arguments);
+        /** @type {number} */ this.previewGeneration = 0;
+    }
     getName() {
         return "PreviewVideoPlugin";
     }
@@ -36,6 +40,7 @@ export class PreviewVideoPlugin extends BasePlugin {
     }
     /** 统一 reconfigure：总开关与 DMM 子开关都从这里走，禁止递归 handle()。 */
     reconfigure() {
+        this.previewGeneration++;
         const settings = this.getRuntimeService("settings").snapshot();
         if (!isPreviewEnabled(settings)) return void this.unmountPreview();
         this.mountPreview();
@@ -59,6 +64,7 @@ export class PreviewVideoPlugin extends BasePlugin {
     }
     /** 只销毁 JHS DMM 播放器并把控制权交回宿主原生预览（总开关仍开启时保留入口）。 */
     unmountDmmPlayer() {
+        $('[data-jhs-dmm-trigger]').remove();
         const $dmm = $("#jhs-preview-video"), dmm = $dmm[0];
         dmm && (dmm.pause(), $dmm.removeAttr("src"), dmm.load(), $dmm.remove());
         $("#video-bottom-toolbar").remove();
@@ -73,6 +79,7 @@ export class PreviewVideoPlugin extends BasePlugin {
     }
     /** 卸载 JHS 播放器并把控制权交回宿主（宿主原生 UI 只做可逆隐藏，不销毁）。 */
     unmountJhsPreview() {
+        $('[data-jhs-dmm-trigger]').remove();
         const $dmm = $("#jhs-preview-video"), dmm = $dmm[0];
         dmm && (dmm.pause(), $dmm.removeAttr("src"), dmm.load(), $dmm.remove());
         $("#video-bottom-toolbar").remove();
@@ -81,14 +88,16 @@ export class PreviewVideoPlugin extends BasePlugin {
     }
     /** @param {any} scope */
     async initDmm(scope) {
+        const generation = this.previewGeneration, settings = this.getRuntimeService("settings");
         try {
             const {sources} = await this.getDmmPreview(scope);
+            if (generation !== this.previewGeneration || scope?.disposed || !isPreviewEnabled(settings.snapshot()) || !isDmmEnabled(settings.snapshot())) return;
             if (!sources) return;
             const $video = $("#preview-video"), video = $video[0];
             if (video) return;
             clog.debug("JavDB没有视频播放元素, 开始创建...");
             const cover = $(".column-video-cover img").attr("src");
-            $(".preview-images").prepend(`\n                <a class="preview-video-container" data-fancybox="gallery" href="#preview-video">\n                    <span>预告片</span>\n                    <img src="${cover}" class="video-cover jhs-layout-8cf76fd7" alt="">\n                </a>\n            `), $(".preview-video-container").off("click.jhsVideo").on("click.jhsVideo", (() => {
+            $(".preview-images").prepend(`\n                <a class="preview-video-container" data-jhs-dmm-trigger="true" data-fancybox="gallery" href="#preview-video">\n                    <span>预告片</span>\n                    <img src="${cover}" class="video-cover jhs-layout-8cf76fd7" alt="">\n                </a>\n            `), $(".preview-video-container").off("click.jhsVideo").on("click.jhsVideo", (() => {
                 utils.loopDetector((() => $(".fancybox-content #preview-video").length > 0), (() => this.handleVideo().catch((error => clog.error("预览视频处理失败", error)))), 20, 1e4, !0, scope);
             }));
         } catch (error) {
@@ -135,10 +144,13 @@ export class PreviewVideoPlugin extends BasePlugin {
             context: "JavDB 原生预览",
             notify: !1
         });
+        const generation = this.previewGeneration;
         const dmmEnabled = isDmmEnabled(this.getRuntimeService("settings").snapshot()), dmmResult = dmmEnabled ? await this.getDmmPreview() : {
             sources: null,
             error: null
-        }, {sources, error} = dmmResult, $toolbar = $("<div></div>").attr("id", "video-bottom-toolbar").addClass("jhs-video-toolbar"), $qualityList = $("<div></div>").addClass("jhs-video-quality-list").attr({
+        };
+        if (generation !== this.previewGeneration || !isPreviewEnabled(settings.snapshot()) || !isDmmEnabled(settings.snapshot())) return;
+        const {sources, error} = dmmResult, $toolbar = $("<div></div>").attr("id", "video-bottom-toolbar").addClass("jhs-video-toolbar"), $qualityList = $("<div></div>").addClass("jhs-video-quality-list").attr({
             role: "group",
             "aria-label": "视频画质"
         });

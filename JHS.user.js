@@ -5851,7 +5851,7 @@
       sites: [],
       routes: [],
       startup: "on-command",
-      requires: [SERVICE.diagnostics],
+      requires: [SERVICE.diagnostics, SERVICE.profile],
       contributes: ["settings.core"],
       providesCommands: ["settings.open"],
       activate: /* @__PURE__ */ __name(() => ({ commands: { "settings.open": /* @__PURE__ */ __name(() => openSettingsUi(), "settings.open") } }), "activate")
@@ -8484,7 +8484,7 @@
   // src/plugins/backup/setting.js
   var _SettingPlugin = class _SettingPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService()), i(this, "pendingCarImport", null), i(this, "taskStatusUnsubscribe", null), i(this, "cacheItems", [{
+      super(...arguments), i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService()), i(this, "pendingCarImport", null), i(this, "taskStatusUnsubscribe", null), i(this, "_desktopSettingNavMounted", false), i(this, "_settingScope", null), i(this, "_settingNavResizeCleanup", null), i(this, "cacheItems", [{
         key: "jhs_dmm_video",
         text: "预览视频缓存",
         title: "预览视频缓存"
@@ -8557,6 +8557,7 @@
       });
       await storageManager.getSetting("enableClog", _) === _ && clog.show();
       const scope = await this.getRuntimeService("scope")();
+      this._settingScope = scope;
       const liveSettings = this.getRuntimeService("settings");
       const onSettingsChanged = /* @__PURE__ */ __name((event) => {
         const names = event.detail?.names || [];
@@ -8582,18 +8583,31 @@
         if (!target) return;
         event.preventDefault(), $(".simple-setting, .mini-simple-setting").html("").hide(), clog.lowZIndex(), void openSettings().catch((() => void 0));
       }));
-      if (utils.isMobileMode()) return;
+      scope.addCleanup((() => this.unmountDesktopSettingNav()));
+      this.syncDesktopSettingNav(this.getRuntimeService("profile").current() === "compact");
+    }
+    syncDesktopSettingNav(compact2) {
+      if (compact2) this.unmountDesktopSettingNav();
+      else this.mountDesktopSettingNav();
+    }
+    mountDesktopSettingNav() {
+      if (this._desktopSettingNavMounted) return;
+      const scope = this._settingScope;
+      if (!scope) return;
+      this._desktopSettingNavMounted = true;
       if (r) {
         let e2 = /* @__PURE__ */ __name(function() {
           $(".navbar-search").is(":hidden") ? ($(".mini-setting-box").hide(), $(".setting-box").show()) : ($(".mini-setting-box").show(), $(".setting-box").hide());
         }, "e");
         $("#navbar-menu-user .navbar-end").prepend('<div class="navbar-item has-dropdown is-hoverable setting-box jhs-setting-nav-item">\n                    <button type="button" id="setting-btn" class="jhs-btn navbar-link nav-btn jhs-nav-btn jhs-nav-button">\n                        设置\n                    </button>\n                    <div class="simple-setting"></div>\n                </div>'), utils.loopDetector((() => $("#miniHistoryBtn").length > 0), (() => {
           $(".miniHistoryBtnBox").before('\n                    <div class="navbar-item mini-setting-box jhs-mini-setting-box">\n                        <button type="button" id="mini-setting-btn" class="jhs-btn navbar-link nav-btn jhs-nav-btn jhs-mini-setting-trigger">\n                            设置\n                        </button>\n                        <div class="mini-simple-setting"></div>\n                    </div>\n                '), e2();
-        }), 20, 1e4, true, scope), scope.listen(window, "resize", e2);
+        }), 20, 1e4, true, scope);
+        this._settingNavResizeCleanup?.();
+        this._settingNavResizeCleanup = scope.listen(window, "resize", e2);
       }
       l && (isDetailPage ? $("h3").before('\n                    <div class="container-fluid jhs-setting-detail-anchor">\n                        <div id="top-right-box" class="jhs-setting-anchor">\n                            <div class="setting-box">\n                                <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                    <span>设置</span>\n                                </button>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ') : window.isListPage && utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
         $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" class="jhs-setting-anchor">\n                        <div class="setting-box">\n                            <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                <span>设置</span>\n                            </button>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
-      }), 1, 1e4, false, scope)), $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (async () => {
+      }), 1, 1e4, false, scope)), $(".main-nav, .container-fluid").off("mouseenter.jhsSettingQuick mouseleave.jhsSettingQuick").on("mouseenter.jhsSettingQuick", ".setting-box", (async () => {
         $(".simple-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
         try {
           await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this));
@@ -8601,9 +8615,9 @@
           clog.warn("桌面快捷设置初始化失败", error);
         }
         clog.lowZIndex();
-      })).on("mouseleave", ".setting-box", (() => {
+      })).on("mouseleave.jhsSettingQuick", ".setting-box", (() => {
         $(".simple-setting").html("").hide();
-      })), $(".main-nav, .container-fluid").on("mouseenter", ".mini-setting-box", (async () => {
+      })).on("mouseenter.jhsSettingQuick", ".mini-setting-box", (async () => {
         $(".mini-simple-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
         try {
           await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this));
@@ -8611,9 +8625,17 @@
           clog.warn("迷你快捷设置初始化失败", error);
         }
         clog.lowZIndex();
-      })).on("mouseleave", ".mini-setting-box", (() => {
+      })).on("mouseleave.jhsSettingQuick", ".mini-setting-box", (() => {
         $(".mini-simple-setting").html("").hide();
       }));
+    }
+    unmountDesktopSettingNav() {
+      this._desktopSettingNavMounted = false;
+      this._settingNavResizeCleanup?.();
+      this._settingNavResizeCleanup = null;
+      $(".jhs-setting-nav-item, .jhs-mini-setting-box, .jhs-setting-anchor, .jhs-setting-detail-anchor").remove();
+      $(".simple-setting, .mini-simple-setting").html("").hide();
+      $(".main-nav, .container-fluid").off("mouseenter.jhsSettingQuick mouseleave.jhsSettingQuick");
     }
     async openQuickSetting() {
       $("#jhs-quick-setting-backdrop, #jhs-quick-setting-sheet").remove();
@@ -9125,6 +9147,47 @@
   }
   __name(evaluateListItem, "evaluateListItem");
 
+  // src/features/list/batch-scope.js
+  var JAVBUS_LIST_PREFIXES = /* @__PURE__ */ new Set(["star", "genre", "maker", "actress", "series", "tag"]);
+  function stripTrailingSlashes(value) {
+    return value.replace(/\/+$/, "");
+  }
+  __name(stripTrailingSlashes, "stripTrailingSlashes");
+  function resolveFirstPageUrl(currentUrl, site) {
+    try {
+      const url = new URL(currentUrl);
+      if (site === "javdb") {
+        url.searchParams.delete("page");
+        return url.href;
+      }
+      if (site === "javbus") {
+        const segments = url.pathname.split("/").filter(Boolean);
+        const last = segments[segments.length - 1];
+        const secondLast = segments[segments.length - 2];
+        if (segments.length >= 2 && /^\d+$/.test(last)) {
+          const removable = secondLast === "page" || segments.length >= 3 && JAVBUS_LIST_PREFIXES.has(segments[segments.length - 3]) && !/^\d+$/.test(secondLast);
+          if (removable) {
+            const remaining = secondLast === "page" ? segments.slice(0, -2) : segments.slice(0, -1);
+            url.pathname = remaining.length ? "/" + remaining.join("/") : "/";
+          }
+        }
+        return url.href;
+      }
+    } catch {
+    }
+    return currentUrl;
+  }
+  __name(resolveFirstPageUrl, "resolveFirstPageUrl");
+  function isSamePageUrl(left, right) {
+    try {
+      const a2 = new URL(left), b2 = new URL(right);
+      return a2.origin === b2.origin && stripTrailingSlashes(a2.pathname) === stripTrailingSlashes(b2.pathname) && a2.search === b2.search;
+    } catch {
+      return left === right;
+    }
+  }
+  __name(isSamePageUrl, "isSamePageUrl");
+
   // src/features/list/batch-scanner.js
   async function scanAllPages({
     startDom,
@@ -9137,11 +9200,20 @@
     onProgress = /* @__PURE__ */ __name(() => {
     }, "onProgress"),
     pageDelayMs = 500,
-    maxPages = 200
+    maxPages = 200,
+    currentUrl = null,
+    firstPageUrl = null
   }) {
     const records = [];
     const seen = /* @__PURE__ */ new Set();
     let dom = startDom, page = 1, scanned = 0;
+    if (firstPageUrl && currentUrl && !isSamePageUrl(firstPageUrl, currentUrl)) {
+      if (isCancelled()) return records;
+      const html = await fetchHtml(firstPageUrl);
+      if (isCancelled()) return records;
+      const parsed = new DOMParser().parseFromString(html, "text/html");
+      dom = $(parsed);
+    }
     while (dom && dom.length) {
       if (isCancelled()) break;
       onProgress({ page, scanned, matched: records.length });
@@ -9560,8 +9632,11 @@
       this.batchToken = batchToken;
       const isCancelled = /* @__PURE__ */ __name(() => this.batchToken !== batchToken || Boolean(scope?.disposed), "isCancelled");
       const statusHost = /* @__PURE__ */ __name(() => (this.blacklistRoot || $()).find("#checkBlacklistMsg"), "statusHost");
+      const site = this.getRuntimeService("host")?.site ?? (r ? "javdb" : l ? "javbus" : null);
       const records = await scanAllPages({
         startDom: root ? $(root) : $(document),
+        currentUrl: root ? null : window.location.href,
+        firstPageUrl: root ? null : resolveFirstPageUrl(window.location.href, site),
         itemSelector: this.getSelector().requestDomItemSelector,
         nextPageSelector: this.getSelector().nextPageSelector,
         fetchHtml: /* @__PURE__ */ __name(async (url) => requestHostPage(this.getRuntimeService("http"), url, scope), "fetchHtml"),
@@ -9678,6 +9753,7 @@
     translatedNode.removeClass("is-error").text("翻译中...");
     try {
       const translated = await options.translation.translate(sourceText, { scope: options.scope });
+      if (options.isActive && !options.isActive()) return;
       if (!title[0]?.isConnected || !translatedNode[0]?.isConnected) return;
       translatedNode.text(translated);
     } catch (error) {
@@ -10426,6 +10502,7 @@ ${value}\r
     constructor() {
       super(...arguments);
       this.detailStateController = null;
+      this.translationGeneration = 0;
     }
     getName() {
       return "Fc2Plugin";
@@ -10576,7 +10653,11 @@ ${value}\r
           settings.snapshot().enableLoadScreenShot === "no" ? this.unmountFc2Screenshot(context) : void this.loadFc2Screenshot(context);
         }
         if (names.includes("translateTitle")) {
-          (settings.snapshot().translateTitle ?? _) === _ ? void this.applyFc2Translation(context) : this.revertFc2Translation(context);
+          if ((settings.snapshot().translateTitle ?? _) === _) void this.applyFc2Translation(context);
+          else {
+            this.translationGeneration++;
+            this.revertFc2Translation(context);
+          }
         }
         if (names.includes("enableMagnetsFilter")) {
           context.magnetFilterApply?.((settings.snapshot().enableMagnetsFilter ?? _) === _);
@@ -10612,15 +10693,17 @@ ${value}\r
       context.root.find('[data-jhs-role="screenshot"]').empty();
     }
     applyFc2Translation(context) {
-      void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((scope) => renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope })).catch(((error) => clog.error("FC2 标题翻译失败", error)));
+      const generation = this.translationGeneration, settings = this.getRuntimeService("settings");
+      void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((scope) => renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope, isActive: /* @__PURE__ */ __name(() => context.isAlive() && (settings.snapshot().translateTitle ?? _) === _ && generation === this.translationGeneration, "isActive") })).catch(((error) => clog.error("FC2 标题翻译失败", error)));
     }
     revertFc2Translation(context) {
       context.root.find(".translated-title").remove();
     }
     mountFc2OtherSites(context, sitesGroup, otherSite) {
       if (!otherSite) return void sitesGroup.remove();
+      const settings = this.getRuntimeService("settings");
       sitesGroup.length && sitesGroup.show();
-      void Promise.resolve().then((() => otherSite.loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: false, isActive: context.isAlive }))).then((box) => {
+      void Promise.resolve().then((() => otherSite.loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: false, isActive: /* @__PURE__ */ __name(() => context.isAlive() && settings.snapshot().enableLoadOtherSite !== "no", "isActive") }))).then((box) => {
         if (context.isAlive() && !box) sitesGroup.remove();
       }).catch((error) => {
         context.isAlive() && sitesGroup.remove(), clog.error("FC2 外部站点加载失败", error);
@@ -11292,6 +11375,7 @@ ${failure.stack}` : "");
   var _OtherSitePlugin = class _OtherSitePlugin extends BasePlugin {
     constructor() {
       super(...arguments);
+      this.mountGeneration = 0;
       this.siteConfigs = [
         { id: "javTrailersBtn" },
         { id: "123AvBtn", providerId: "av123" },
@@ -11348,15 +11432,21 @@ ${failure.stack}` : "");
       await this.loadOtherSite(null, null, { autoDetect: false });
     }
     unmount() {
+      this.mountGeneration++;
       $("[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
     }
     async loadOtherSite(e2, t2, n2 = {}) {
-      if (this.getRuntimeService("settings").snapshot().enableLoadOtherSite === "no") return;
+      const settingsService = this.getRuntimeService("settings");
+      if (settingsService.snapshot().enableLoadOtherSite === "no") return;
+      const generation = ++this.mountGeneration;
+      const isActive = /* @__PURE__ */ __name(() => generation === this.mountGeneration && ("function" === typeof n2.isActive ? n2.isActive() : true) && settingsService.snapshot().enableLoadOtherSite !== "no", "isActive");
       const root = n2.root ? $(n2.root) : $(document), target = n2.target ? $(n2.target) : $(this.getRuntimeService("host").locateDetailSlots().summary);
-      if (!target.length || n2.isActive && !n2.isActive()) return;
+      if (!target.length || !isActive()) return;
       root.find("#otherSiteBox,#settingsArea,[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
       e2 = normalizeCarNum(e2) || this.getPageInfo().carNum;
-      const enabled = this.getEnabledSites(), configs = (await this.getSiteConfigs()).map(((config) => ({ ...config, sourceCarNum: t2 }))), view = { root, target, configs, carNum: e2, isActive: "function" === typeof n2.isActive ? n2.isActive : () => true };
+      const enabled = this.getEnabledSites(), configs = (await this.getSiteConfigs()).map(((config) => ({ ...config, sourceCarNum: t2 })));
+      if (!isActive()) return;
+      const view = { root, target, configs, carNum: e2, isActive };
       const box = $('<div class="panel-block" data-jhs-other-site-box><div class="jhs-site-list"></div></div>'), list = box.find(".jhs-site-list"), settings = $('<div class="panel-block jhs-is-hidden" data-jhs-other-site-settings><div data-jhs-role="site-checkboxes"></div></div>');
       configs.forEach(((config) => {
         if (config.condition && false === config.condition(config.sourceCarNum)) return;
@@ -11371,7 +11461,9 @@ ${failure.stack}` : "");
         utils.openPage(destination, e2, false, event);
       })), await mapLimit(configs, 4, (async (config) => {
         config.condition && false === config.condition(config.sourceCarNum) || await this.prepareSiteLink(e2, config, view);
-      })), this.renderSettingsArea(view), this.setupEventListeners(view), box.find('[data-jhs-role="detect-sites"]').off("click").on("click", ((event) => {
+      }));
+      if (!isActive()) return;
+      this.renderSettingsArea(view), this.setupEventListeners(view), box.find('[data-jhs-role="detect-sites"]').off("click").on("click", ((event) => {
         event.preventDefault(), this.detectOtherSites(e2, view);
       })), n2.autoDetect && await this.detectOtherSites(e2, view);
       return box;
@@ -12000,6 +12092,10 @@ ${failure.stack}` : "");
 
   // src/plugins/image-viewer/bus-preview-video.js
   var _BusPreviewVideoPlugin = class _BusPreviewVideoPlugin extends BasePlugin {
+    constructor() {
+      super(...arguments);
+      this._busPreviewGeneration = 0;
+    }
     getName() {
       return "BusPreviewVideoPlugin";
     }
@@ -12052,6 +12148,7 @@ ${failure.stack}` : "");
       this.reconfigure();
     }
     reconfigure() {
+      this._busPreviewGeneration++;
       const settings = this.getRuntimeService("settings").snapshot();
       if (!isPreviewEnabled(settings)) return void this.unmountPreview();
       this.mountPreview();
@@ -12089,14 +12186,17 @@ ${failure.stack}` : "");
       })), window.location.href.includes("autoPlay=1") && a2.trigger("click");
     }
     async handleVideo() {
+      const generation = this._busPreviewGeneration;
       const e2 = $("#bus-preview-modal"), t2 = e2.find(".bus-preview-modal-content");
       let n2 = $("#preview-video");
+      if (generation !== this._busPreviewGeneration || !isPreviewEnabled(this.getRuntimeService("settings").snapshot())) return;
       if (n2.length > 0) return e2.addClass("is-open"), void await safePlay(n2[0], {
         context: "JavBus 预览视频",
         notify: true
       });
       let a2 = this.getPageInfo().carNum;
       const scope = await this.getRuntimeService("scope")(), { sources: i2, error: previewError } = await fetchDmmPreviewIfEnabled(a2, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope, this.getRuntimeService("settings").snapshot());
+      if (generation !== this._busPreviewGeneration || !isPreviewEnabled(this.getRuntimeService("settings").snapshot())) return;
       i2 && 0 !== Object.keys(i2).length ? (await this.createVideoPlayerAndControls(i2, t2), n2 = $("#preview-video"), n2.length > 0 ? (e2.addClass("is-open"), await safePlay(n2[0], {
         context: "JavBus 预览视频",
         notify: true,
@@ -12160,6 +12260,10 @@ ${failure.stack}` : "");
 
   // src/plugins/image-viewer/cover-button.js
   var _CoverButtonPlugin = class _CoverButtonPlugin extends BasePlugin {
+    constructor() {
+      super(...arguments);
+      this.previewGeneration = 0;
+    }
     getName() {
       return "CoverButtonPlugin";
     }
@@ -12192,6 +12296,7 @@ ${failure.stack}` : "");
       const onSettingsChanged = /* @__PURE__ */ __name((event) => {
         const names = event.detail?.names || [];
         if (names.includes("enablePreviewVideo")) {
+          this.previewGeneration++;
           if (isPreviewEnabled(settingsService.snapshot())) void this.addSvgBtn().catch(((error) => clog.error("卡片预览重新挂载失败", error)));
           else {
             $('[id$="_preview_video"]').each((_2, element) => {
@@ -12364,6 +12469,7 @@ ${failure.stack}` : "");
     async showVideo(e2, t2, n2) {
       const settings = this.getRuntimeService("settings").snapshot();
       if (!isPreviewEnabled(settings)) return show.error("预览视频已关闭");
+      const generation = this.previewGeneration;
       const a2 = `${n2}_preview_video`;
       let i2 = $(`#${a2}`);
       if (i2.length > 0) return i2.parent().show(), await safePlay(i2[0], {
@@ -12372,6 +12478,7 @@ ${failure.stack}` : "");
       }), void t2.hide();
       t2.addClass("loading"), t2.after('<div class="loading-spinner"></div>');
       const s2 = t2.attr("src"), scope = await this.getRuntimeService("scope")(), { sources: o2, error: previewError } = await fetchDmmPreviewIfEnabled(n2, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope, settings);
+      if (generation !== this.previewGeneration || !isPreviewEnabled(this.getRuntimeService("settings").snapshot())) return void this.showImg(e2, t2, n2);
       if (!o2) return show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未解析到视频"), void this.showImg(e2, t2, n2);
       let r2 = this.getRuntimeService("settings").snapshot().videoQuality;
       r2 = Z(Object.keys(o2), r2);
@@ -12393,6 +12500,10 @@ ${failure.stack}` : "");
 
   // src/plugins/image-viewer/preview-video.js
   var _PreviewVideoPlugin = class _PreviewVideoPlugin extends BasePlugin {
+    constructor() {
+      super(...arguments);
+      this.previewGeneration = 0;
+    }
     getName() {
       return "PreviewVideoPlugin";
     }
@@ -12419,6 +12530,7 @@ ${failure.stack}` : "");
       this.reconfigure();
     }
     reconfigure() {
+      this.previewGeneration++;
       const settings = this.getRuntimeService("settings").snapshot();
       if (!isPreviewEnabled(settings)) return void this.unmountPreview();
       this.mountPreview();
@@ -12440,6 +12552,7 @@ ${failure.stack}` : "");
       (url.includes("gallery-1") || url.includes("gallery-2")) && openVideo(), url.includes("autoPlay=1") && trigger.length > 0 && trigger[0].click();
     }
     unmountDmmPlayer() {
+      $("[data-jhs-dmm-trigger]").remove();
       const $dmm = $("#jhs-preview-video"), dmm = $dmm[0];
       dmm && (dmm.pause(), $dmm.removeAttr("src"), dmm.load(), $dmm.remove());
       $("#video-bottom-toolbar").remove();
@@ -12452,6 +12565,7 @@ ${failure.stack}` : "");
       $(".preview-video-container").addClass("jhs-native-preview-hidden");
     }
     unmountJhsPreview() {
+      $("[data-jhs-dmm-trigger]").remove();
       const $dmm = $("#jhs-preview-video"), dmm = $dmm[0];
       dmm && (dmm.pause(), $dmm.removeAttr("src"), dmm.load(), $dmm.remove());
       $("#video-bottom-toolbar").remove();
@@ -12459,15 +12573,17 @@ ${failure.stack}` : "");
       $(".preview-video-container").addClass("jhs-native-preview-hidden");
     }
     async initDmm(scope) {
+      const generation = this.previewGeneration, settings = this.getRuntimeService("settings");
       try {
         const { sources } = await this.getDmmPreview(scope);
+        if (generation !== this.previewGeneration || scope?.disposed || !isPreviewEnabled(settings.snapshot()) || !isDmmEnabled(settings.snapshot())) return;
         if (!sources) return;
         const $video = $("#preview-video"), video = $video[0];
         if (video) return;
         clog.debug("JavDB没有视频播放元素, 开始创建...");
         const cover = $(".column-video-cover img").attr("src");
         $(".preview-images").prepend(`
-                <a class="preview-video-container" data-fancybox="gallery" href="#preview-video">
+                <a class="preview-video-container" data-jhs-dmm-trigger="true" data-fancybox="gallery" href="#preview-video">
                     <span>预告片</span>
                     <img src="${cover}" class="video-cover jhs-layout-8cf76fd7" alt="">
                 </a>
@@ -12512,10 +12628,13 @@ ${failure.stack}` : "");
         context: "JavDB 原生预览",
         notify: false
       });
+      const generation = this.previewGeneration;
       const dmmEnabled = isDmmEnabled(this.getRuntimeService("settings").snapshot()), dmmResult = dmmEnabled ? await this.getDmmPreview() : {
         sources: null,
         error: null
-      }, { sources, error } = dmmResult, $toolbar = $("<div></div>").attr("id", "video-bottom-toolbar").addClass("jhs-video-toolbar"), $qualityList = $("<div></div>").addClass("jhs-video-quality-list").attr({
+      };
+      if (generation !== this.previewGeneration || !isPreviewEnabled(settings.snapshot()) || !isDmmEnabled(settings.snapshot())) return;
+      const { sources, error } = dmmResult, $toolbar = $("<div></div>").attr("id", "video-bottom-toolbar").addClass("jhs-video-toolbar"), $qualityList = $("<div></div>").addClass("jhs-video-quality-list").attr({
         role: "group",
         "aria-label": "视频画质"
       });
@@ -14640,6 +14759,7 @@ ${failure.stack}` : "");
       }, "onSettingsChanged");
       settings.addEventListener("settings.changed", onSettingsChanged);
       scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
+      scope.addCleanup((() => this.stop()));
       this.reconfigure();
     }
     reconfigure() {
@@ -14655,7 +14775,10 @@ ${failure.stack}` : "");
       this.liveScope?.dispose();
       this.liveScope = new LifecycleScope("autopage:live");
       this.generation++;
-      return this.waterfall();
+      this.waterfallPromise = this.waterfall().finally((() => {
+        this.waterfallPromise = null;
+      }));
+      return this.waterfallPromise;
     }
     stop() {
       this.started = false;
@@ -16364,9 +16487,9 @@ ${failure.stack}` : "");
                     <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>
                     ${e2 ? `
 ${hasBlacklist ? `<button type="button" id="addBlacklistBtn" class="jhs-btn ${a2}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n2}</span></button>` : ""}
-${hasBlacklist ? `<button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></button>` : ""}
-${hasListPage ? `<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>一键收藏所有作品</span></button>` : ""}
-${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>一键已下载所有作品</span></button>` : ""}
+${hasBlacklist ? `<button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>批量屏蔽</span></button>` : ""}
+${hasListPage ? `<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>批量收藏</span></button>` : ""}
+${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>批量标记已下载</span></button>` : ""}
                     ` : ""}
                     ${o.includes("/tags") ? `
  ${hasBlacklist ? `<button type="button" id="addBlacklistBtn" class="jhs-btn ${a2}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n2}</span></button>` : ""}
@@ -16392,10 +16515,10 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
                     <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>
                     ${e2 && hasBlacklist ? `
                         <button type="button" id="addBlacklistBtn" class="jhs-btn ${n2}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${t2}</span></button>
-                        <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></button>
+                        <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>批量屏蔽</span></button>
                     ` : ""}${e2 && hasListPage ? `
-                        <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>一键收藏所有作品</span></button>
-                        <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>一键已下载所有作品</span></button>
+                        <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>批量收藏</span></button>
+                        <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>批量标记已下载</span></button>
                     ` : ""}${!e2 && hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}
                     ${this.sortMenuHtml(a2)}
                 </div>
@@ -16421,22 +16544,17 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
       $("#addBlacklistBtn").on("click", (async (t2) => {
         await blacklist?.addBlacklist?.(t2);
       })), $("#filterAllVideo").on("click", (async (t2) => {
-        let n2 = {
-          clientX: t2.clientX,
-          clientY: t2.clientY + 80
-        }, a2 = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
+        const a2 = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
         if (0 === a2.length) return void show.error("获取演员名称失败");
-        let i2 = a2.text().trim().split(",")[0];
-        utils.q(n2, "一键屏蔽视频列表?", (async () => {
-          this.loadObj = loading();
-          try {
-            await blacklist?.filterAllVideo?.(i2);
-          } catch (t3) {
-            clog.error(t3);
-          } finally {
-            this.loadObj.close();
-          }
-        }));
+        const i2 = a2.text().trim().split(",")[0];
+        this.loadObj = loading();
+        try {
+          await blacklist?.filterAllVideo?.(i2);
+        } catch (t3) {
+          clog.error(t3);
+        } finally {
+          this.loadObj.close();
+        }
       })), $("#favoriteAllVideo").on("click", (async (t2) => {
         let a2 = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
         if (0 === a2.length) return void show.error("获取演员名称失败");
@@ -16635,6 +16753,7 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
       this.itemIndex = /* @__PURE__ */ new Map();
       this.recountFrame = null;
       this.$currentImage = null;
+      this.translationGeneration = 0;
     }
     getName() {
       return "ListPagePlugin";
@@ -17010,8 +17129,11 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
         clog.debug(`批量扫描第 ${page} 页 · 已扫描 ${scanned} · 匹配 ${matched}`);
       }, "onProgress");
       try {
+        const site = this.getRuntimeService("host")?.site ?? (r ? "javdb" : l ? "javbus" : null);
         const records = await scanAllPages({
           startDom: root ? $(root) : $(document),
+          currentUrl: root ? null : window.location.href,
+          firstPageUrl: root ? null : resolveFirstPageUrl(window.location.href, site),
           itemSelector: this.getSelector().requestDomItemSelector,
           nextPageSelector: this.getSelector().nextPageSelector,
           fetchHtml: /* @__PURE__ */ __name(async (url) => requestHostPage(this.getRuntimeService("http"), url, scope), "fetchHtml"),
@@ -17021,8 +17143,11 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
           onProgress
         });
         if (isCancelled()) return { cancelled: true };
+        progressElement?.find("#jhs-batch-cancel").prop("disabled", true).attr("title", "正在写入，无法取消");
+        setProgress("正在写入，无法取消…");
         let updated = 0;
         for (let index = 0; index < records.length; index += 75) {
+          if (isCancelled()) break;
           const chunk = records.slice(index, index + 75);
           await this.getRuntimeService("state").patch(chunk.map((item) => item.carNum), { [stateFlag]: true }, {
             type: "actor-page-batch-state",
@@ -17169,11 +17294,16 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
         3 !== node.nodeType || "" === (node.textContent || "").trim() || (node.textContent || "").includes(n2) || (node.textContent = " " + t2 + " ");
       })), a2.attr("title", t2)) : a2.text(t2), e2.attr("data-jhs-translation-key", n2);
     }
+    invalidateTranslations() {
+      this.translationGeneration++;
+    }
     async translate(e2) {
       let t2, n2, a2 = e2.find(".video-title");
       if (r ? (t2 = a2.contents().filter(((e3, t3) => 3 === t3.nodeType && "" !== (t3.textContent || "").trim())).text().trim(), n2 = e2.find(".video-title strong").text().trim()) : (t2 = (e2.find("img").attr("data-title") || "").trim(), n2 = (e2.find("a").attr("href") || "").split("/").filter(Boolean).pop()?.trim()), !t2 || !n2) return;
+      const generation = this.translationGeneration, settings = this.getRuntimeService("settings");
       const scope = await this.getRuntimeService("scope")();
       const translated = await this.getRuntimeService("translation").translate(t2, { scope });
+      if (generation !== this.translationGeneration || settings?.snapshot?.().translateTitle !== "yes") return;
       this.applyTranslatedTitle(e2, translated, n2);
     }
     async revertTranslation() {
@@ -17222,6 +17352,7 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
     constructor() {
       super(...arguments);
       this._fabGeneration = 0;
+      this._commandBarSources = [];
     }
     getName() {
       return "MobileBottomBarPlugin";
@@ -17404,9 +17535,8 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
     }
     async handle() {
       const profile = this.getRuntimeService("profile"), scope = await this.getRuntimeService("scope")();
-      const sync = /* @__PURE__ */ __name(() => profile.current() === "compact" ? this.mountBottomBar() : this.unmountBottomBar(), "sync");
-      scope.listen(profile, "profile.changed", sync);
-      sync();
+      scope.listen(profile, "profile.changed", () => this.syncSurfaces());
+      this.syncSurfaces();
     }
     mountBottomBar() {
       if ($("#jhs-fab").length) return;
@@ -17421,10 +17551,47 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
       $("#jhs-fab, #jhs-fab-menu, .jhs-fab-backdrop").remove();
     }
     async afterPluginsReady() {
+      this.syncSurfaces();
+    }
+    syncSurfaces() {
+      const compact2 = this.getRuntimeService("profile").current() === "compact";
+      const setting = this.getOptionalDependency("SettingPlugin");
+      if (compact2) {
+        this.unmountDesktopCommandBar();
+        setting?.unmountDesktopSettingNav?.();
+        this.mountBottomBar();
+      } else {
+        this.unmountBottomBar();
+        this.mountDesktopCommandBar();
+        setting?.mountDesktopSettingNav?.();
+      }
+    }
+    mountDesktopCommandBar() {
+      if (!window.isListPage || $("#jhs-page-commandbar").length) return;
       this.buildCommandBar();
+    }
+    unmountDesktopCommandBar() {
+      $("#jhs-page-commandbar").remove();
+      for (const source of this._commandBarSources || []) {
+        const element = source.element;
+        if (!element?.isConnected) continue;
+        if (source.parent?.isConnected) {
+          if (source.next?.isConnected) source.parent.insertBefore(element, source.next);
+          else source.parent.appendChild(element);
+        } else {
+          const host = $(this.getSelector().boxSelector).first();
+          host.length ? host.before(element) : document.body.appendChild(element);
+        }
+      }
+      this._commandBarSources = [];
+      $(document).off("click.jhsCommandbar");
     }
     buildCommandBar() {
       if (!window.isListPage || $("#jhs-page-commandbar").length) return;
+      this._commandBarSources = [];
+      const remember = /* @__PURE__ */ __name((element) => {
+        this._commandBarSources.push({ element, parent: element.parentNode, next: element.nextSibling });
+      }, "remember");
       const commandbar = $(`
             <div id="jhs-page-commandbar" class="jhs-page-commandbar jhs-ui" role="toolbar" aria-label="JHS 页面工具">
                 <div class="jhs-commandbar__left"></div>
@@ -17437,28 +17604,28 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
       const primary = $('<div class="jhs-commandbar__primary"></div>');
       ["#waitCheckBtn", "#newVideoBtn", "#historyBtn"].forEach(((selector) => {
         const item = $(selector).first();
-        item.length && item.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo(primary);
+        item.length && (remember(item[0]), item.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo(primary));
       }));
       primary.children().length && left.append(primary);
       const more = $('<div class="jhs-commandbar__more"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-more-menu" aria-expanded="false">更多</button><div id="jhs-commandbar-more-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
       ["#statsBtn", "#blacklistBtn"].forEach(((selector) => {
         const item = $(selector).first();
-        item.length && item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(more.find(".jhs-commandbar__menu"));
+        item.length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(more.find(".jhs-commandbar__menu")));
       }));
       more.find(".jhs-commandbar__menu").children().length && left.append(more);
       const quickFilter = $("#jhs-quick-filter").first();
-      quickFilter.length && left.append($('<div class="jhs-commandbar__filters"></div>').append(quickFilter.detach()));
+      quickFilter.length && (remember(quickFilter[0]), left.append($('<div class="jhs-commandbar__filters"></div>').append(quickFilter.detach())));
       const contextItem = $("#addBlacklistBtn").first();
-      contextItem.length && contextItem.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo($('<div class="jhs-commandbar__context"></div>').appendTo(right));
+      contextItem.length && (remember(contextItem[0]), contextItem.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo($('<div class="jhs-commandbar__context"></div>').appendTo(right)));
       const sort = $(".jhs-sort-control").first();
       if (sort.length) {
         const view = $('<label class="jhs-commandbar__view"><span class="jhs-commandbar__sort-label">排序</span></label>');
-        sort.detach().appendTo(view), right.append(view);
+        remember(sort[0]), sort.detach().appendTo(view), right.append(view);
       }
       const batch = $('<div class="jhs-commandbar__batch"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-batch-menu" aria-expanded="false">批量操作</button><div id="jhs-commandbar-batch-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
       ["#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo"].forEach(((selector) => {
         const item = $(selector).first();
-        item.length && item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batch.find(".jhs-commandbar__menu"));
+        item.length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batch.find(".jhs-commandbar__menu")));
       }));
       batch.find(".jhs-commandbar__menu").children().length && right.append(batch);
       $(".jhs-list-btn-row").filter(((index, element) => !$(element).children().length)).remove();
@@ -17715,9 +17882,10 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
       }));
     }
     hookOldSearch() {
+      const hasSearchByImage = !!this.getOptionalDependency("SearchByImagePlugin");
+      if (!hasSearchByImage) return;
       const e2 = document.querySelector(".search-image");
       if (!e2) return;
-      const hasSearchByImage = !!this.getOptionalDependency("SearchByImagePlugin");
       const t2 = e2.cloneNode(true);
       e2.parentNode?.replaceChild(t2, e2), $("#button-search-image").attr("data-tooltip", "以图识图"), hasSearchByImage && $(".search-image").on("click", ((e3) => {
         this.getOptionalDependency("SearchByImagePlugin")?.open?.();
@@ -17835,7 +18003,10 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
     reconfigure() {
       const enabled = (this.getRuntimeService("settings").snapshot().translateTitle ?? _) === _;
       if (enabled) void this.applyTranslation();
-      else this.revertTranslation();
+      else {
+        this.getOptionalDependency("ListPagePlugin")?.invalidateTranslations?.();
+        this.revertTranslation();
+      }
     }
     async applyTranslation() {
       if (isDetailPage) return this.translate();
@@ -17851,10 +18022,11 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
       listPage?.revertTranslation?.();
     }
     async translate(e2, t2 = true, options = {}) {
-      if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) !== _) return;
+      const settings = this.getRuntimeService("settings");
+      if ((settings.snapshot().translateTitle ?? _) !== _) return;
       l && (t2 = false);
       const scope = await this.getRuntimeService("scope")();
-      await renderTranslatedTitle({ root: options.root, carNum: e2 ?? void 0, translation: this.getRuntimeService("translation"), scope });
+      await renderTranslatedTitle({ root: options.root, carNum: e2 ?? void 0, translation: this.getRuntimeService("translation"), scope, isActive: /* @__PURE__ */ __name(() => (settings.snapshot().translateTitle ?? _) === _, "isActive") });
     }
   };
   __name(_TranslatePlugin, "TranslatePlugin");
@@ -17878,7 +18050,7 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 5 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog, SERVICE.movie, SERVICE.settings, SERVICE.state]),
-    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, REGISTRY.settings]),
+    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.profile, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, REGISTRY.settings]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }, [SERVICE.movie]),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account]),
@@ -17899,7 +18071,7 @@ ${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-b
     manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }, [SERVICE.http, SERVICE.state]),
     manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage, SERVICE.http, SERVICE.magnet]),
     manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot, SERVICE.settings]),
-    manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.state]),
+    manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [PORT.host, SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.state]),
     manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }),
     manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog, SERVICE.storage, SERVICE.actressInfo, SERVICE.movie, SERVICE.state]),
     manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }, [SERVICE.storage, SERVICE.http, SERVICE.actressInfo, SERVICE.movie]),

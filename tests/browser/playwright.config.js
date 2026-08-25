@@ -13,6 +13,8 @@ const viewports = [
 export default defineConfig({
   testDir: "./specs",
   outputDir: "../../output/playwright/test-results",
+  snapshotDir: "./screenshots/baseline",
+  snapshotPathTemplate: "{snapshotDir}/{arg}-{projectName}{ext}",
   workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: [["line"], ["html", { outputFolder: "../../output/playwright/report", open: "never" }]],

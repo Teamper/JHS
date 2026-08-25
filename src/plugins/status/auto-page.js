@@ -39,6 +39,7 @@ export class AutoPagePlugin extends BasePlugin {
         };
         settings.addEventListener("settings.changed", onSettingsChanged);
         scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
+        scope.addCleanup((() => this.stop()));
         this.reconfigure();
     }
     /** 总开关 live 生命周期：OFF→stop，ON→start（不刷新页面）。 */
@@ -53,7 +54,8 @@ export class AutoPagePlugin extends BasePlugin {
         this.liveScope?.dispose();
         this.liveScope = new LifecycleScope("autopage:live");
         this.generation++;
-        return this.waterfall();
+        this.waterfallPromise = this.waterfall().finally((() => { this.waterfallPromise = null; }));
+        return this.waterfallPromise;
     }
     /** 真正 stop：释放 live scope（scroll listener/定时器/请求全部随之 dispose），并使在途请求作废。 */
     stop() {

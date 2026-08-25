@@ -46,7 +46,11 @@ function loadListObserver() {
     const translate = vi.fn(async () => "译文"), mapLimit = vi.fn(async (items, concurrency, mapper) => Promise.all(items.map(mapper))), storageManager = { getSetting: vi.fn(async () => "yes") };
     class BasePlugin {
         getSelector() { return { boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }; }
-        getRuntimeService(name) { return name === "translation" ? { translate } : async () => undefined; }
+        getRuntimeService(name) {
+            if (name === "translation") return { translate };
+            if (name === "settings") return { snapshot: () => ({ translateTitle: "yes" }) };
+            return async () => undefined;
+        }
     }
     const context = vm.createContext({
         console, window: dom.window, document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver,

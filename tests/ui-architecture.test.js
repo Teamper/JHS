@@ -70,6 +70,9 @@ describe("list toolbar and UI cleanup contracts", () => {
 
     it("builds the command bar after plugin initialization and keeps semantic actions separate", () => {
         expect(commandbar).toContain("async afterPluginsReady()");
+        expect(commandbar).toContain("syncSurfaces()");
+        expect(commandbar).toContain("mountDesktopCommandBar()");
+        expect(commandbar).toContain("unmountDesktopCommandBar()");
         expect(commandbar).toContain('[ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" ]');
         expect(commandbar).toContain('[ "#statsBtn", "#blacklistBtn" ]');
         expect(commandbar).toMatch(/#addBlacklistBtn[\s\S]*jhs-commandbar__context/);
@@ -155,7 +158,9 @@ describe("list toolbar and UI cleanup contracts", () => {
 
     it("shares quick settings across desktop and mobile without a mobile navbar trigger", () => {
         const settingPlugin = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8");
-        expect(settingPlugin).toContain("if (utils.isMobileMode()) return;");
+        expect(settingPlugin).toContain("syncDesktopSettingNav(");
+        expect(settingPlugin).toContain("mountDesktopSettingNav()");
+        expect(settingPlugin).toContain("unmountDesktopSettingNav()");
         expect(settingPlugin).toContain("openQuickSetting()");
         expect(settingPlugin).toContain('buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))');
         expect(settingPlugin).toContain('id="jhs-quick-setting-sheet"');

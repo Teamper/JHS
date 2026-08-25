@@ -44,7 +44,7 @@ export class ListPageButtonPlugin extends BasePlugin {
             const r = o.includes("advanced_search");
             r && (t = $("h2.section-title"));
             const l = this.getRuntimeService("settings").snapshot().sortMethod || "default", d = "当前排序方式: " + ("rateCount" === l ? "评价人数" : "date" === l ? "时间" : "默认");
-            t.append(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e ? `\n${hasBlacklist ? `<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>` : ""}\n${hasBlacklist ? `<button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></button>` : ""}\n${hasListPage ? `<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>一键收藏所有作品</span></button>` : ""}\n${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>一键已下载所有作品</span></button>` : ""}\n                    ` : ""}\n                    ${o.includes("/tags") ? `\n ${hasBlacklist ? `<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>` : ""}\n                    ` : ""}\n                </div>\n                <div class="jhs-list-btn-row">\n                    ${hasNewVideo ? `<button type="button" id="newVideoBtn" class="jhs-btn jhs-btn--secondary"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></button>` : ""}\n                    ${hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}\n                    ${c ? "" : this.sortMenuHtml(l || "default", d)}\n                </div>\n            `);
+            t.append(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e ? `\n${hasBlacklist ? `<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>` : ""}\n${hasBlacklist ? `<button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>批量屏蔽</span></button>` : ""}\n${hasListPage ? `<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>批量收藏</span></button>` : ""}\n${hasListPage ? `<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>批量标记已下载</span></button>` : ""}\n                    ` : ""}\n                    ${o.includes("/tags") ? `\n ${hasBlacklist ? `<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>` : ""}\n                    ` : ""}\n                </div>\n                <div class="jhs-list-btn-row">\n                    ${hasNewVideo ? `<button type="button" id="newVideoBtn" class="jhs-btn jhs-btn--secondary"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></button>` : ""}\n                    ${hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}\n                    ${c ? "" : this.sortMenuHtml(l || "default", d)}\n                </div>\n            `);
         }
         if (l) {
             const e = o.includes("/star/");
@@ -54,7 +54,7 @@ export class ListPageButtonPlugin extends BasePlugin {
                 e.find((/** @type {BlacklistRecord} */ e) => e.starId === a.starId) && (t = "已加入黑名单", n = "jhs-btn--muted");
             }
             const a = this.getRuntimeService("settings").snapshot().sortMethod || "default";
-            $(".masonry").parent().prepend(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e && hasBlacklist ? `    \n                        <button type="button" id="addBlacklistBtn" class="jhs-btn ${n}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${t}</span></button>\n                        <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>一键屏蔽所有作品</span></button>\n                    ` : ""}${e && hasListPage ? `    \n                        <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>一键收藏所有作品</span></button>\n                        <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>一键已下载所有作品</span></button>\n                    ` : ""}${!e && hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}\n                    ${this.sortMenuHtml(a)}\n                </div>\n            `);
+            $(".masonry").parent().prepend(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e && hasBlacklist ? `    \n                        <button type="button" id="addBlacklistBtn" class="jhs-btn ${n}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${t}</span></button>\n                        <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>批量屏蔽</span></button>\n                    ` : ""}${e && hasListPage ? `    \n                        <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>批量收藏</span></button>\n                        <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>批量标记已下载</span></button>\n                    ` : ""}${!e && hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}\n                    ${this.sortMenuHtml(a)}\n                </div>\n            `);
         }
         $("#waitCheckBtn > span").text("开始鉴定");
         const newVideoCount = $("#newVideoCount").detach(), newVideoLabel = $("#newVideoBtn > span");
@@ -78,20 +78,15 @@ export class ListPageButtonPlugin extends BasePlugin {
         $("#addBlacklistBtn").on("click", (async (/** @type {any} */ t) => {
             await blacklist?.addBlacklist?.(t);
         })), $("#filterAllVideo").on("click", (async (/** @type {any} */ t) => {
-            let n = {
-                clientX: t.clientX,
-                clientY: t.clientY + 80
-            }, a = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
+            const a = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
             if (0 === a.length) return void show.error("获取演员名称失败");
-            let i = a.text().trim().split(",")[0];
-            utils.q(n, "一键屏蔽视频列表?", (async () => {
-                this.loadObj = loading();
-                try {
-                    await blacklist?.filterAllVideo?.(i);
-                } catch (t) {
-                    clog.error(t);
-                } finally { this.loadObj.close(); }
-            }));
+            const i = a.text().trim().split(",")[0];
+            this.loadObj = loading();
+            try {
+                await blacklist?.filterAllVideo?.(i);
+            } catch (t) {
+                clog.error(t);
+            } finally { this.loadObj.close(); }
         })), $("#favoriteAllVideo").on("click", (async (/** @type {any} */ t) => {
             let a = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
             if (0 === a.length) return void show.error("获取演员名称失败");

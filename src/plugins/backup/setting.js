@@ -17,7 +17,8 @@ import { bindSettingRows, renderSettingRow } from "../../ui/settings/setting-con
 
 export class SettingPlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService()), i(this, "pendingCarImport", null), i(this, "taskStatusUnsubscribe", null), i(this, "cacheItems", [ {
+        super(...arguments), i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService()), i(this, "pendingCarImport", null), i(this, "taskStatusUnsubscribe", null),
+i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this, "_settingNavResizeCleanup", null), i(this, "cacheItems", [ {
             key: "jhs_dmm_video",
             text: "预览视频缓存",
             title: "预览视频缓存"
@@ -83,6 +84,7 @@ export class SettingPlugin extends BasePlugin {
         });
         await storageManager.getSetting("enableClog", _) === _ && clog.show();
         const scope = await this.getRuntimeService("scope")();
+        this._settingScope = scope;
         // 6.5 live：UI 型设置立即应用（theme/layout），无需等待底部保存。
         const liveSettings = this.getRuntimeService("settings");
         const onSettingsChanged = (/** @type {any} */ event) => {
@@ -105,7 +107,20 @@ export class SettingPlugin extends BasePlugin {
             if (!target) return;
             event.preventDefault(), $(".simple-setting, .mini-simple-setting").html("").hide(), clog.lowZIndex(), void openSettings().catch((() => undefined));
         }));
-        if (utils.isMobileMode()) return;
+        scope.addCleanup((() => this.unmountDesktopSettingNav()));
+        this.syncDesktopSettingNav(this.getRuntimeService("profile").current() === "compact");
+    }
+    /** 桌面设置入口 Surface：compact 卸载，regular/wide 幂等挂载。 */
+    /** @param {boolean} compact */
+    syncDesktopSettingNav(compact) {
+        if (compact) this.unmountDesktopSettingNav();
+        else this.mountDesktopSettingNav();
+    }
+    mountDesktopSettingNav() {
+        if (this._desktopSettingNavMounted) return;
+        const scope = this._settingScope;
+        if (!scope) return;
+        this._desktopSettingNavMounted = true;
         if (r) {
             let e = function() {
                 $(".navbar-search").is(":hidden") ? ($(".mini-setting-box").hide(), $(".setting-box").show()) : ($(".mini-setting-box").show(),
@@ -115,24 +130,34 @@ export class SettingPlugin extends BasePlugin {
             utils.loopDetector((() => $("#miniHistoryBtn").length > 0), (() => {
                 $(".miniHistoryBtnBox").before('\n                    <div class="navbar-item mini-setting-box jhs-mini-setting-box">\n                        <button type="button" id="mini-setting-btn" class="jhs-btn navbar-link nav-btn jhs-nav-btn jhs-mini-setting-trigger">\n                            设置\n                        </button>\n                        <div class="mini-simple-setting"></div>\n                    </div>\n                '),
                 e();
-            }), 20, 1e4, !0, scope), scope.listen(window, "resize", e);
+            }), 20, 1e4, !0, scope);
+            this._settingNavResizeCleanup?.();
+            this._settingNavResizeCleanup = scope.listen(window, "resize", e);
         }
         l && (isDetailPage ? $("h3").before('\n                    <div class="container-fluid jhs-setting-detail-anchor">\n                        <div id="top-right-box" class="jhs-setting-anchor">\n                            <div class="setting-box">\n                                <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                    <span>设置</span>\n                                </button>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ') : window.isListPage && utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
             $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" class="jhs-setting-anchor">\n                        <div class="setting-box">\n                            <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                <span>设置</span>\n                            </button>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
         }), 1, 1e4, !1, scope)),
-        $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (async () => {
+        $(".main-nav, .container-fluid").off("mouseenter.jhsSettingQuick mouseleave.jhsSettingQuick").on("mouseenter.jhsSettingQuick", ".setting-box", (async () => {
             $(".simple-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
             try { await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this)); } catch (error) { clog.warn("桌面快捷设置初始化失败", error); }
             clog.lowZIndex();
-        })).on("mouseleave", ".setting-box", (() => {
+        })).on("mouseleave.jhsSettingQuick", ".setting-box", (() => {
             $(".simple-setting").html("").hide();
-        })), $(".main-nav, .container-fluid").on("mouseenter", ".mini-setting-box", (async () => {
+        })).on("mouseenter.jhsSettingQuick", ".mini-setting-box", (async () => {
             $(".mini-simple-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
             try { await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this)); } catch (error) { clog.warn("迷你快捷设置初始化失败", error); }
             clog.lowZIndex();
-        })).on("mouseleave", ".mini-setting-box", (() => {
+        })).on("mouseleave.jhsSettingQuick", ".mini-setting-box", (() => {
             $(".mini-simple-setting").html("").hide();
         }));
+    }
+    unmountDesktopSettingNav() {
+        this._desktopSettingNavMounted = false;
+        this._settingNavResizeCleanup?.();
+        this._settingNavResizeCleanup = null;
+        $(".jhs-setting-nav-item, .jhs-mini-setting-box, .jhs-setting-anchor, .jhs-setting-detail-anchor").remove();
+        $(".simple-setting, .mini-simple-setting").html("").hide();
+        $(".main-nav, .container-fluid").off("mouseenter.jhsSettingQuick mouseleave.jhsSettingQuick");
     }
     /** Open shared quick settings in the mobile bottom sheet. */
     async openQuickSetting() {

@@ -1,8 +1,11 @@
 // @ts-check
 
+import { isSamePageUrl } from "./batch-scope.js";
+
 /**
  * 跨分页批量扫描器（纯协调逻辑，可单测）：
- * 从当前列表 DOM 开始逐页解析，使用调用方注入的 ListEvaluator 判定，
+ * 总是从当前搜索条件的第一页开始逐页解析（firstPageUrl 与当前页不同时先请求第一页），
+ * 使用调用方注入的 ListEvaluator 判定，
  * 只收集 matchesCurrentFilter === true 的记录并按番号去重。
  */
 
@@ -18,11 +21,20 @@ export async function scanAllPages({
     onProgress = () => {},
     pageDelayMs = 500,
     maxPages = 200,
+    currentUrl = null,
+    firstPageUrl = null,
 }) {
     /** @type {Array<Record<string, any>>} */
     const records = [];
     const seen = new Set();
     let dom = startDom, page = 1, scanned = 0;
+    if (firstPageUrl && currentUrl && !isSamePageUrl(firstPageUrl, currentUrl)) {
+        if (isCancelled()) return records;
+        const html = await fetchHtml(firstPageUrl);
+        if (isCancelled()) return records;
+        const parsed = new DOMParser().parseFromString(html, "text/html");
+        dom = $(parsed);
+    }
     while (dom && dom.length) {
         if (isCancelled()) break;
         onProgress({ page, scanned, matched: records.length });

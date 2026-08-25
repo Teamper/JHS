@@ -8,9 +8,12 @@ const blacklist = readTestFile(join(process.cwd(), "src/plugins/blacklist/blackl
 const scanner = readTestFile(join(process.cwd(), "src/features/list/batch-scanner.js"), "utf8");
 
 describe("batch action contract (筛选后批量语义)", () => {
-    it("scans every page through the shared scanner with the frozen filter snapshot", () => {
+    it("scans every page from the first page through the shared scanner with the frozen filter snapshot", () => {
         expect(listPage).toContain("scanAllPages({");
         expect(listPage).toContain("startDom: root ? $(root) : $(document)");
+        expect(listPage).toContain("currentUrl: root ? null : window.location.href");
+        expect(listPage).toContain("firstPageUrl: root ? null : resolveFirstPageUrl(window.location.href, site)");
+        expect(blacklist).toContain("firstPageUrl: root ? null : resolveFirstPageUrl(window.location.href, site)");
         expect(listPage).toContain("itemSelector: this.getSelector().requestDomItemSelector");
         expect(listPage).toContain('evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized })');
     });
@@ -31,6 +34,13 @@ describe("batch action contract (筛选后批量语义)", () => {
         expect(listButtons).toContain("batchSaveAllVideos?.(i, h)");
         expect(listButtons).toContain("batchSaveAllVideos?.(i, g)");
         expect(listButtons).not.toContain("一键收藏所有可见作品?");
+        expect(listButtons).toContain("批量屏蔽");
+        expect(listButtons).toContain("批量收藏");
+        expect(listButtons).toContain("批量标记已下载");
+        expect(listButtons).not.toContain('utils.q(n, "一键屏蔽视频列表?"');
+        expect(listPage).toContain('正在写入，无法取消');
+        expect(listPage).toContain('#jhs-batch-cancel").prop("disabled", true');
         expect(scanner).toContain("matchesCurrentFilter === true");
+        expect(scanner).toContain("isSamePageUrl(firstPageUrl, currentUrl)");
     });
 });

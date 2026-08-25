@@ -32,7 +32,10 @@ export class TranslatePlugin extends BasePlugin {
     reconfigure() {
         const enabled = (this.getRuntimeService("settings").snapshot().translateTitle ?? _) === _;
         if (enabled) void this.applyTranslation();
-        else this.revertTranslation();
+        else {
+            this.getOptionalDependency("ListPagePlugin")?.invalidateTranslations?.();
+            this.revertTranslation();
+        }
     }
     /** ON：详情页插入/刷新翻译标题；列表页翻译当前所有卡片。 */
     async applyTranslation() {
@@ -51,9 +54,10 @@ export class TranslatePlugin extends BasePlugin {
     }
     /** @param {string | null} [e] @param {boolean} [t] @param {{root?: ParentNode}} [options] */
     async translate(e, t = !0, options = {}) {
-        if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) !== _) return;
+        const settings = this.getRuntimeService("settings");
+        if ((settings.snapshot().translateTitle ?? _) !== _) return;
         l && (t = !1);
         const scope = await this.getRuntimeService("scope")();
-        await renderTranslatedTitle({ root: options.root, carNum: e ?? undefined, translation: this.getRuntimeService("translation"), scope });
+        await renderTranslatedTitle({ root: options.root, carNum: e ?? undefined, translation: this.getRuntimeService("translation"), scope, isActive: () => (settings.snapshot().translateTitle ?? _) === _ });
     }
 }

@@ -10,6 +10,7 @@ import { isHitShowPage } from "../../core/site-context.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
 import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isHardHidden, normalizeQuickFilterKey, shouldShowItem } from "../../features/list/list-filters.js";
 import { createListEvaluationContext, evaluateListItem, findMatchedTitleKeyword } from "../../features/list/list-evaluator.js";
+import { resolveFirstPageUrl } from "../../features/list/batch-scope.js";
 import { scanAllPages } from "../../features/list/batch-scanner.js";
 
 /** @typedef {Record<string, any>} ListRecord */
@@ -113,6 +114,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {Map<string, Set<Element>>} */ this.itemIndex = new Map();
         /** @type {number | null} */ this.recountFrame = null;
         /** @type {any} */ this.$currentImage = null;
+        /** @type {number} */ this.translationGeneration = 0;
     }
     getName() {
         return "ListPagePlugin";
@@ -465,8 +467,11 @@ export class ListPagePlugin extends BasePlugin {
             clog.debug(`批量扫描第 ${page} 页 · 已扫描 ${scanned} · 匹配 ${matched}`);
         };
         try {
+            const site = this.getRuntimeService("host")?.site ?? (r ? "javdb" : l ? "javbus" : null);
             const records = await scanAllPages({
                 startDom: root ? $(root) : $(document),
+                currentUrl: root ? null : window.location.href,
+                firstPageUrl: root ? null : resolveFirstPageUrl(window.location.href, site),
                 itemSelector: this.getSelector().requestDomItemSelector,
                 nextPageSelector: this.getSelector().nextPageSelector,
                 fetchHtml: async (/** @type {string} */ url) => requestHostPage(this.getRuntimeService("http"), url, scope),
@@ -476,8 +481,12 @@ export class ListPagePlugin extends BasePlugin {
                 onProgress,
             });
             if (isCancelled()) return { cancelled: true };
+            // 写入阶段不可取消：禁用按钮并给出明确文案，避免出现半批数据状态。
+            progressElement?.find("#jhs-batch-cancel").prop("disabled", true).attr("title", "正在写入，无法取消");
+            setProgress("正在写入，无法取消…");
             let updated = 0;
             for (let index = 0; index < records.length; index += 75) {
+                if (isCancelled()) break;
                 const chunk = records.slice(index, index + 75);
                 await this.getRuntimeService("state").patch(chunk.map((item) => item.carNum), { [stateFlag]: !0 }, {
                     type: "actor-page-batch-state",
@@ -633,14 +642,20 @@ export class ListPagePlugin extends BasePlugin {
             3 !== node.nodeType || "" === (node.textContent || "").trim() || (node.textContent || "").includes(n) || (node.textContent = " " + t + " ");
         })), a.attr("title", t)) : a.text(t), e.attr("data-jhs-translation-key", n);
     }
+    /** 使在途列表翻译作废（Translate OFF 时调用）。 */
+    invalidateTranslations() {
+        this.translationGeneration++;
+    }
     /** @param {JQueryHandle} e */
     async translate(e) {
         let t, n, a = e.find(".video-title");
         if (r ? (t = a.contents().filter(((/** @type {number} */ e, /** @type {Node} */ t) => 3 === t.nodeType && "" !== (t.textContent || "").trim())).text().trim(),
         n = e.find(".video-title strong").text().trim()) : (t = (e.find("img").attr("data-title") || "").trim(),
         n = (e.find("a").attr("href") || "").split("/").filter(Boolean).pop()?.trim()), !t || !n) return;
+        const generation = this.translationGeneration, settings = this.getRuntimeService("settings");
         const scope = await this.getRuntimeService("scope")();
         const translated = await this.getRuntimeService("translation").translate(t, { scope });
+        if (generation !== this.translationGeneration || settings?.snapshot?.().translateTitle !== "yes") return;
         this.applyTranslatedTitle(e, translated, n);
     }
     async revertTranslation() {

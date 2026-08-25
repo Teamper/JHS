@@ -48,6 +48,7 @@ export class Fc2Plugin extends BasePlugin {
         super(...arguments);
         /** @type {DetailStateController | null} */
         this.detailStateController = null;
+        /** @type {number} */ this.translationGeneration = 0;
     }
     getName() { return "Fc2Plugin"; }
     getDetailStateController() {
@@ -194,7 +195,11 @@ export class Fc2Plugin extends BasePlugin {
                 settings.snapshot().enableLoadScreenShot === "no" ? this.unmountFc2Screenshot(context) : void this.loadFc2Screenshot(context);
             }
             if (names.includes("translateTitle")) {
-                (settings.snapshot().translateTitle ?? _) === _ ? void this.applyFc2Translation(context) : this.revertFc2Translation(context);
+                if ((settings.snapshot().translateTitle ?? _) === _) void this.applyFc2Translation(context);
+                else {
+                    this.translationGeneration++;
+                    this.revertFc2Translation(context);
+                }
             }
             if (names.includes("enableMagnetsFilter")) {
                 context.magnetFilterApply?.((settings.snapshot().enableMagnetsFilter ?? _) === _);
@@ -233,7 +238,8 @@ export class Fc2Plugin extends BasePlugin {
     /** ON：按当前 DOM 标题重新翻译（原生/123AV 共用 .current-title）。 */
     /** @param {Fc2DetailContext} context */
     applyFc2Translation(context) {
-        void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope })).catch((error => clog.error("FC2 标题翻译失败", error)));
+        const generation = this.translationGeneration, settings = this.getRuntimeService("settings");
+        void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope, isActive: () => context.isAlive() && (settings.snapshot().translateTitle ?? _) === _ && generation === this.translationGeneration })).catch((error => clog.error("FC2 标题翻译失败", error)));
     }
     /** OFF：移除 FC2 已渲染的翻译节点。 */
     /** @param {Fc2DetailContext} context */
@@ -244,8 +250,9 @@ export class Fc2Plugin extends BasePlugin {
     /** @param {Fc2DetailContext} context @param {any} sitesGroup @param {any} [otherSite] */
     mountFc2OtherSites(context, sitesGroup, otherSite) {
         if (!otherSite) return void sitesGroup.remove();
+        const settings = this.getRuntimeService("settings");
         sitesGroup.length && sitesGroup.show();
-        void Promise.resolve().then((() => otherSite.loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: !1, isActive: context.isAlive }))).then((/** @type {JQueryHandle | null} */ box) => { if (context.isAlive() && !box) sitesGroup.remove(); }).catch((/** @type {unknown} */ error) => {
+        void Promise.resolve().then((() => otherSite.loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: !1, isActive: () => context.isAlive() && settings.snapshot().enableLoadOtherSite !== "no" }))).then((/** @type {JQueryHandle | null} */ box) => { if (context.isAlive() && !box) sitesGroup.remove(); }).catch((/** @type {unknown} */ error) => {
             context.isAlive() && sitesGroup.remove(), clog.error("FC2 外部站点加载失败", error);
         });
     }

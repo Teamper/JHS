@@ -61,6 +61,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 修复列表页“全部”仍被旧状态显示设置二次过滤的问题；收藏、已下载和已看作品会正常出现在“全部”中，硬屏蔽内容仍统一收在“屏蔽项”。
 - 修复 DMM/FANZA 外部链接检测分支因缓存键变量遮蔽站点配置而触发 TDZ 异常的问题，并增加构建产物回归测试。
 - 修复 JavBus 与列表封面请求 DMM 预览时未注入 MovieService 和 LifecycleScope、导致无缓存请求无法访问远端 Provider 的问题。
+- 修复批量操作从第 2/3 页启动时漏掉前面页面的问题；批量扫描现在总是先解析当前搜索条件的第一页（JavDB 删除 `page` 参数，JavBus 剥离 `/page/N` 与 `/star|genre|maker|actress|series|tag/<id>/N`），当前页即第一页时复用 DOM，随后从第一页扫描到最后一页。
+- 修复 Preview 关闭后异步回流：DMM 请求、卡片预览与 JavBus 预览在所有 await 边界后重新校验总开关/DMM 子开关与 generation，OFF 后在途请求不再重建播放器、工具栏或预览入口；JavDB 人工创建的预告片入口单独标记 `data-jhs-dmm-trigger`，DMM OFF 只移除该入口、不动宿主原生预览。
+- 修复列表与 FC2 标题翻译在 OFF 后旧请求返回仍写回译文的问题；列表翻译新增 translationGeneration 作废机制，标题渲染统一在写 DOM 前检查 isActive。
+- 修复外部站点面板在 OFF 后异步重新挂载的问题；OtherSite 新增 mountGeneration，并在 getSiteConfigs/mapLimit 等异步边界后重新校验挂载代次与 `enableLoadOtherSite` 设置，FC2 挂载同时合并 workspace 存活检查。
+- mobileMode 现在统一控制桌面命令栏、桌面设置入口与移动 FAB 三套 Surface：compact 只保留 FAB，regular/wide 只保留桌面工具栏与设置入口；桌面命令栏卸载时把收拢的控件放回宿主原位，再次开启可完整重建。
+- 批量交互收口：一键屏蔽只保留业务函数内的单次确认；批量写入阶段禁用取消按钮并提示“正在写入，无法取消”；批量按钮文案统一为“批量屏蔽 / 批量收藏 / 批量标记已下载”。
+- 修复旧版 `.search-image` 识图入口在 SearchByImagePlugin 禁用时仍被 clone/replace、导致宿主原生按钮失效的问题；插件 OFF 时完全不碰宿主 DOM。
+- 真正启用 PNG Visual Regression Release Gate：新增 `check:visual`（内部显式设置 `JHS_VISUAL_REGRESSION=1`），`check:release` 与 CI 均执行；提交 JavDB/JavBus/FC2/Settings 桌面与移动两组真实 baseline PNG，snapshot 路径不含平台后缀。
+- AutoPage 在 Feature 根 scope dispose 时补 `stop()` 清理，首次启动与重复启动统一走同一 waterfallPromise 管理。
 
 ## [6.4.1](../../compare/v6.4.0...v6.4.1) - 2026-08-23
 

@@ -7,7 +7,7 @@ import { openSettingsUi } from "../../core/settings-ui-owner.js";
 export const systemFeatureManifests = Object.freeze([
     defineFeature({
         id: "settings", kind: "system", disableable: false, sites: [], routes: [], startup: "on-command",
-        requires: [SERVICE.diagnostics], contributes: ["settings.core"], providesCommands: ["settings.open"],
+        requires: [SERVICE.diagnostics, SERVICE.profile], contributes: ["settings.core"], providesCommands: ["settings.open"],
         activate: () => ({ commands: { "settings.open": () => openSettingsUi() } }),
     }),
     defineFeature({

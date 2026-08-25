@@ -9,6 +9,8 @@ export class MobileBottomBarPlugin extends BasePlugin {
     constructor() {
         super(...arguments);
         this._fabGeneration = 0;
+        /** @type {Array<{ element: Element, parent: Node | null, next: Node | null }>} */
+        this._commandBarSources = [];
     }
     getName() {
         return "MobileBottomBarPlugin";
@@ -191,9 +193,8 @@ export class MobileBottomBarPlugin extends BasePlugin {
     }
     async handle() {
         const profile = this.getRuntimeService("profile"), scope = await this.getRuntimeService("scope")();
-        const sync = () => profile.current() === "compact" ? this.mountBottomBar() : this.unmountBottomBar();
-        scope.listen(profile, "profile.changed", sync);
-        sync();
+        scope.listen(profile, "profile.changed", () => this.syncSurfaces());
+        this.syncSurfaces();
     }
     mountBottomBar() {
         if ($("#jhs-fab").length) return;
@@ -211,11 +212,50 @@ export class MobileBottomBarPlugin extends BasePlugin {
         $("#jhs-fab, #jhs-fab-menu, .jhs-fab-backdrop").remove();
     }
     async afterPluginsReady() {
+        this.syncSurfaces();
+    }
+    /** 统一桌面/移动两套 UI Surface：compact 只保留 FAB，regular/wide 只保留桌面工具栏与设置入口。 */
+    syncSurfaces() {
+        const compact = this.getRuntimeService("profile").current() === "compact";
+        const setting = this.getOptionalDependency("SettingPlugin");
+        if (compact) {
+            this.unmountDesktopCommandBar();
+            setting?.unmountDesktopSettingNav?.();
+            this.mountBottomBar();
+        } else {
+            this.unmountBottomBar();
+            this.mountDesktopCommandBar();
+            setting?.mountDesktopSettingNav?.();
+        }
+    }
+    mountDesktopCommandBar() {
+        if (!window.isListPage || $("#jhs-page-commandbar").length) return;
         this.buildCommandBar();
+    }
+    /** 卸载桌面命令栏并把被收拢的控件放回宿主原位（原容器已移除时回退到列表容器前）。 */
+    unmountDesktopCommandBar() {
+        $("#jhs-page-commandbar").remove();
+        for (const source of this._commandBarSources || []) {
+            const element = source.element;
+            if (!element?.isConnected) continue;
+            if (source.parent?.isConnected) {
+                if (source.next?.isConnected) source.parent.insertBefore(element, source.next);
+                else source.parent.appendChild(element);
+            } else {
+                const host = $(this.getSelector().boxSelector).first();
+                host.length ? host.before(element) : document.body.appendChild(element);
+            }
+        }
+        this._commandBarSources = [];
+        $(document).off("click.jhsCommandbar");
     }
     /** 将列表页分散的 JHS 控件收敛为单一命令栏。 */
     buildCommandBar() {
         if (!window.isListPage || $("#jhs-page-commandbar").length) return;
+        this._commandBarSources = [];
+        const remember = (/** @type {Element} */ element) => {
+            this._commandBarSources.push({ element, parent: element.parentNode, next: element.nextSibling });
+        };
         const commandbar = $(`
             <div id="jhs-page-commandbar" class="jhs-page-commandbar jhs-ui" role="toolbar" aria-label="JHS 页面工具">
                 <div class="jhs-commandbar__left"></div>
@@ -228,28 +268,28 @@ export class MobileBottomBarPlugin extends BasePlugin {
         const primary = $('<div class="jhs-commandbar__primary"></div>');
         [ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" ].forEach((selector => {
             const item = $(selector).first();
-            item.length && item.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo(primary);
+            item.length && (remember(item[0]), item.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo(primary));
         }));
         primary.children().length && left.append(primary);
         const more = $('<div class="jhs-commandbar__more"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-more-menu" aria-expanded="false">更多</button><div id="jhs-commandbar-more-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
         [ "#statsBtn", "#blacklistBtn" ].forEach((selector => {
             const item = $(selector).first();
-            item.length && item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(more.find(".jhs-commandbar__menu"));
+            item.length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(more.find(".jhs-commandbar__menu")));
         }));
         more.find(".jhs-commandbar__menu").children().length && left.append(more);
         const quickFilter = $("#jhs-quick-filter").first();
-        quickFilter.length && left.append($('<div class="jhs-commandbar__filters"></div>').append(quickFilter.detach()));
+        quickFilter.length && (remember(quickFilter[0]), left.append($('<div class="jhs-commandbar__filters"></div>').append(quickFilter.detach())));
         const contextItem = $("#addBlacklistBtn").first();
-        contextItem.length && contextItem.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo($('<div class="jhs-commandbar__context"></div>').appendTo(right));
+        contextItem.length && (remember(contextItem[0]), contextItem.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo($('<div class="jhs-commandbar__context"></div>').appendTo(right)));
         const sort = $(".jhs-sort-control").first();
         if (sort.length) {
             const view = $('<label class="jhs-commandbar__view"><span class="jhs-commandbar__sort-label">排序</span></label>');
-            sort.detach().appendTo(view), right.append(view);
+            remember(sort[0]), sort.detach().appendTo(view), right.append(view);
         }
         const batch = $('<div class="jhs-commandbar__batch"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-batch-menu" aria-expanded="false">批量操作</button><div id="jhs-commandbar-batch-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
         [ "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo" ].forEach((selector => {
             const item = $(selector).first();
-            item.length && item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batch.find(".jhs-commandbar__menu"));
+            item.length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batch.find(".jhs-commandbar__menu")));
         }));
         batch.find(".jhs-commandbar__menu").children().length && right.append(batch);
         $(".jhs-list-btn-row").filter(((/** @type {number} */ index, /** @type {Element} */ element) => !$(element).children().length)).remove();

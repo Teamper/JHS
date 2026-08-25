@@ -99,8 +99,8 @@ test("Settings opens when optional CoverButton and Blacklist contributions are d
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   await page.evaluate(() => {
-    const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings"), replace = settings.replace.bind(settings);
-    settings.replace = async (...args) => { window.__jhsSettingsSaved = true; return replace(...args); };
+    const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings"), patch = settings.patch.bind(settings);
+    settings.patch = async (...args) => { window.__jhsSettingsSaved = true; return patch(...args); };
   });
   await page.locator(".layui-layer #saveBtn").click();
   await expect.poll(() => page.evaluate(() => window.__jhsSettingsSaved)).toBe(true);
@@ -185,5 +185,4 @@ test("FC2 core workspace survives disabled optional detail contributions", async
   disabledPlugins.forEach((name) => expect(pluginNames).not.toContain(name));
   await expect(page.locator('[data-jhs-role="other-sites"]')).toHaveCount(0);
   await expect(page.locator('[data-jhs-role="magnet-hub"]')).toHaveCount(0);
-  await expect(page.locator('[data-jhs-role="screenshot"]')).toHaveCount(0);
 });

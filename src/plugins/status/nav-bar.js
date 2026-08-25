@@ -53,9 +53,10 @@ export class NavBarPlugin extends BasePlugin {
         }));
     }
     hookOldSearch() {
+        const hasSearchByImage = !!this.getOptionalDependency("SearchByImagePlugin");
+        if (!hasSearchByImage) return;
         const e = document.querySelector(".search-image");
         if (!e) return;
-        const hasSearchByImage = !!this.getOptionalDependency("SearchByImagePlugin");
         const t = e.cloneNode(!0);
         e.parentNode?.replaceChild(t, e), $("#button-search-image").attr("data-tooltip", "以图识图"),
         hasSearchByImage && $(".search-image").on("click", ((/** @type {MouseEvent} */ e) => {

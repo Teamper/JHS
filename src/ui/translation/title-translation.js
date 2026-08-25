@@ -1,7 +1,7 @@
 // @ts-check
 
 /**
- * @param {{root?: any, carNum?: string, translation: import("../../services/translation-service.js").TranslationService, scope?: import("../../core/lifecycle-scope.js").LifecycleScope}} options
+ * @param {{root?: any, carNum?: string, translation: import("../../services/translation-service.js").TranslationService, scope?: import("../../core/lifecycle-scope.js").LifecycleScope, isActive?: () => boolean}} options
  */
 export async function renderTranslatedTitle(options) {
     const jq = /** @type {any} */ (globalThis).$;
@@ -17,6 +17,7 @@ export async function renderTranslatedTitle(options) {
     translatedNode.removeClass("is-error").text("翻译中...");
     try {
         const translated = await options.translation.translate(sourceText, { scope: options.scope });
+        if (options.isActive && !options.isActive()) return;
         if (!title[0]?.isConnected || !translatedNode[0]?.isConnected) return;
         translatedNode.text(translated);
     } catch (error) {

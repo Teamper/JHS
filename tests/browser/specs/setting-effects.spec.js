@@ -54,16 +54,22 @@ test("all quick filter is the true full set including blocked items", async ({ c
 });
 
 
-test("mobileMode live toggles the mobile FAB on a desktop viewport", async ({ context, page }, testInfo) => {
+test("mobileMode force on/off swaps FAB and the desktop commandbar/setting surfaces", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers mobileMode live layout");
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   await expect(page.locator("#jhs-fab")).toHaveCount(0);
+  await expect(page.locator("#jhs-page-commandbar")).toHaveCount(1);
+  await expect(page.locator("#setting-btn")).toHaveCount(1);
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("mobileMode", "on"));
   await expect(page.locator("#jhs-fab")).toBeVisible();
+  await expect(page.locator("#jhs-page-commandbar")).toHaveCount(0);
+  await expect(page.locator("#setting-btn")).toHaveCount(0);
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("mobileMode", "off"));
   await expect(page.locator("#jhs-fab")).toHaveCount(0);
+  await expect(page.locator("#jhs-page-commandbar")).toHaveCount(1);
+  await expect(page.locator("#setting-btn")).toHaveCount(1);
 });
 
 test("FC2 detail screenshot slot follows the master switch live", async ({ context, page }, testInfo) => {

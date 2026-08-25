@@ -82,6 +82,44 @@ describe("PreviewVideoPlugin live lifecycle", () => {
         expect($("#video-bottom-toolbar").length).toBe(0);
         expect($("#preview-video").hasClass("jhs-native-preview-hidden")).toBe(false);
     });
+
+    it("stale initDmm never recreates the artificial trigger after Preview OFF", async () => {
+        win.isDetailPage = true;
+        const settings = makeSettings({ enablePreviewVideo: "yes", enableLoadPreviewVideo: "yes" });
+        const cleanups = [];
+        const scope = { addCleanup: (fn) => cleanups.push(fn), disposed: false };
+        const plugin = new PreviewVideoPlugin();
+        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "scope" ? async () => scope : name === "storage" ? {} : name === "movie" ? {} : null;
+        plugin.lifecycleScope = scope;
+        $("body").append('<div class="preview-images"></div>');
+        let resolveDmm = null;
+        plugin.getDmmPreview = () => new Promise((resolve) => { resolveDmm = resolve; });
+        const pending = plugin.initDmm(scope);
+        // 请求在途时用户关闭 Preview：generation 自增并卸载。
+        settings.snapshot().enablePreviewVideo = "no";
+        plugin.reconfigure();
+        resolveDmm?.({ sources: { mhb_w: "https://example.test/a.mp4" }, error: null });
+        await pending;
+        expect($(".preview-video-container[data-jhs-dmm-trigger]").length).toBe(0);
+        expect($(".preview-video-container").length).toBe(0);
+    });
+
+    it("initDmm marks the artificial trigger so DMM OFF can remove only it", async () => {
+        win.isDetailPage = true;
+        const settings = makeSettings({ enablePreviewVideo: "yes", enableLoadPreviewVideo: "yes" });
+        const cleanups = [];
+        const scope = { addCleanup: (fn) => cleanups.push(fn), disposed: false };
+        const plugin = new PreviewVideoPlugin();
+        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "scope" ? async () => scope : name === "storage" ? {} : name === "movie" ? {} : null;
+        plugin.lifecycleScope = scope;
+        $("body").append('<div class="preview-images"></div>');
+        plugin.getDmmPreview = async () => ({ sources: { mhb_w: "https://example.test/a.mp4" }, error: null });
+        await plugin.initDmm(scope);
+        expect($(".preview-video-container[data-jhs-dmm-trigger]").length).toBe(1);
+        settings.snapshot().enableLoadPreviewVideo = "no";
+        plugin.reconfigure();
+        expect($(".preview-video-container[data-jhs-dmm-trigger]").length).toBe(0);
+    });
 });
 
 describe("BusPreviewVideoPlugin live lifecycle", () => {

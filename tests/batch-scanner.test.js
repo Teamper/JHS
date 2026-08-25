@@ -85,4 +85,47 @@ describe("cross-page batch scanner", () => {
         expect(cancelledRecords).toHaveLength(0);
         expect(progress).toHaveBeenCalled();
     });
+
+    it("starts from the first page even when the user is on a later page", async () => {
+        const currentPage = pageDom('<div class="item" data-id="P3-01"></div><a class="next" href="/p4"></a>');
+        const firstPageHtml = '<div class="item" data-id="P1-01"></div><a class="next" href="/p2"></a>';
+        const page2Html = '<div class="item" data-id="P2-01"></div><a class="next" href="/p3"></a>';
+        const page3Html = '<div class="item" data-id="P3-01"></div><a class="next" href="/p4"></a>';
+        const page4Html = '<div class="item" data-id="P4-01"></div><a class="next" href="/p5"></a>';
+        const page5Html = '<div class="item" data-id="P5-01"></div>';
+        const fetchHtml = vi.fn(async (url) => ({ "/page/1": firstPageHtml, "/p2": page2Html, "/p3": page3Html, "/p4": page4Html, "/p5": page5Html }[url]));
+        const context = makeContext({});
+        const records = await scanAllPages({
+            startDom: currentPage,
+            currentUrl: "/page/3",
+            firstPageUrl: "/page/1",
+            itemSelector: ".item",
+            nextPageSelector: ".next",
+            fetchHtml,
+            parseItem: (item) => ({ carNum: item.attr("data-id"), title: "" }),
+            evaluate: (item) => evaluateListItem({ carNum: item.carNum, title: item.title }, context, { filter: "waitCheck" }),
+            pageDelayMs: 0,
+        });
+        expect(fetchHtml.mock.calls.map((call) => call[0])).toEqual([ "/page/1", "/p2", "/p3", "/p4", "/p5" ]);
+        expect(records.map((item) => item.carNum)).toEqual([ "P1-01", "P2-01", "P3-01", "P4-01", "P5-01" ]);
+    });
+
+    it("reuses the current DOM when already on the first page", async () => {
+        const page1 = pageDom('<div class="item" data-id="A-001"></div><a class="next" href="/p2"></a>');
+        const fetchHtml = vi.fn(async () => '<div class="item" data-id="A-002"></div>');
+        const context = makeContext({});
+        const records = await scanAllPages({
+            startDom: page1,
+            currentUrl: "/page/1",
+            firstPageUrl: "/page/1",
+            itemSelector: ".item",
+            nextPageSelector: ".next",
+            fetchHtml,
+            parseItem: (item) => ({ carNum: item.attr("data-id"), title: "" }),
+            evaluate: (item) => evaluateListItem({ carNum: item.carNum, title: item.title }, context, { filter: "waitCheck" }),
+            pageDelayMs: 0,
+        });
+        expect(fetchHtml).toHaveBeenCalledTimes(1);
+        expect(records.map((item) => item.carNum)).toEqual([ "A-001", "A-002" ]);
+    });
 });
