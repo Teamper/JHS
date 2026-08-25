@@ -32,7 +32,7 @@ describe("settings invalidation ownership", () => {
     it("opens and closes Settings without requiring CoverButtonPlugin", () => {
         const openDialog = methodBody(settingPlugin, "async openSettingDialog", "renderTaskStatuses()");
         expect(openDialog).not.toContain('getDependency("CoverButtonPlugin")');
-        expect(settingPlugin).toContain('getOptionalDependency("CoverButtonPlugin")?.enableSvgBtn?.()');
+        expect(settingPlugin).toContain('getBean("CoverButtonPlugin")?.enableSvgBtn?.()');
         expect(settingTemplates).not.toContain("coverButtonPlugin");
     });
 });

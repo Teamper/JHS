@@ -38,7 +38,13 @@ export function createDmmAdapter(http) {
                     candidates = parseDmmItemCandidates(response.data, carNum, keyword);
                     hadSuccessfulRequest = true;
                     if (candidates.length) break;
-                } catch (error) { lastError = error; }
+                } catch (error) {
+                    // HttpService already owns transport retries. Trying every
+                    // keyword after the provider itself failed only multiplies
+                    // identical startup traffic.
+                    lastError = error;
+                    break;
+                }
             }
             if (!candidates.length) {
                 if (!hadSuccessfulRequest && lastError) throw lastError;

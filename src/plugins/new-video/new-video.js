@@ -167,13 +167,13 @@ export class NewVideoPlugin extends BasePlugin {
         $("#newVideoCount").text(`${e}`);
     }
     async resetBtnTip() {
-        const storage = this.getRuntimeService("storage"), e = this.getDependency("TaskPlugin"), t = await storageManager.getSetting(), n = storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无", a = t.checkFavoriteActress_IntervalTime, i = storage.getLocal(e.lastCheckNewVideoTimeKey) || "无", s = t.checkNewVideo_intervalTime;
+        const storage = this.getRuntimeService("storage"), e = this.getOptionalDependency("TaskPlugin"), t = await storageManager.getSetting(), n = e ? storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无" : "任务已禁用", a = t.checkFavoriteActress_IntervalTime, i = e ? storage.getLocal(e.lastCheckNewVideoTimeKey) || "无" : "任务已禁用", s = t.checkNewVideo_intervalTime;
         $("#checkFavoriteActress").attr("data-tip", `上次完整同步: ${n}; 检测间隔时间: ${a}小时`), $("#checkNewVideo").attr("data-tip", `上次整批检测: ${i}; 检测间隔时间: ${s}小时`);
     }
     async openDialog() {
         const storage = this.getRuntimeService("storage");
         this.cleanupNewVideoWorkspace(), this._viewMode = "list" === storage.getLocal("jhs_newVideoViewMode") ? "list" : "actress", this.currentPage = 1, this.nvCurrentPage = 1, this.nvSelected = new Set, this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map, this.nvRenderGeneration++;
-        const e = this.getDependency("TaskPlugin"), t = await storageManager.getSetting(), n = storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无", a = t.checkFavoriteActress_IntervalTime, i = storage.getLocal(e.lastCheckNewVideoTimeKey) || "无", s = t.checkNewVideo_intervalTime;
+        const e = this.getOptionalDependency("TaskPlugin"), t = await storageManager.getSetting(), n = e ? storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无" : "任务已禁用", a = t.checkFavoriteActress_IntervalTime, i = e ? storage.getLocal(e.lastCheckNewVideoTimeKey) || "无" : "任务已禁用", s = t.checkNewVideo_intervalTime;
         let o = `
             <div class="newVideoToolBox jhs-ui">
                 <div class="jhs-new-video-toolbar" role="toolbar" aria-label="新作品工作区工具">
@@ -224,7 +224,8 @@ export class NewVideoPlugin extends BasePlugin {
         this.nvAllItemsMap.clear(), this.nvFlatListCache = [], this.nvActressesCache = [], this.nvCarMapCache = new Map, this.nvDecisionsCache = {}, this.nvCurrentPageItems = [];
     }
     bindClick() {
-        const taskPlugin = this.getDependency("TaskPlugin");
+        const taskPlugin = this.getOptionalDependency("TaskPlugin");
+        taskPlugin || $("#checkFavoriteActress,#checkNewVideo").prop("disabled", !0).attr("title", "后台任务功能已禁用");
         $("#reLoad").on("click", (() => {
             void this.reloadNewVideoWorkspaceData(), $("#checkNewVideoMsg").text("");
         })), $("#new-video-list-container").on("click", ".nv-card__link", (async e => {
@@ -238,7 +239,7 @@ export class NewVideoPlugin extends BasePlugin {
                 clog.error("移除新作品标记失败:", n);
             }
         })), $("#toSetting").on("click", (e => {
-            this.getDependency("SettingPlugin").openSettingDialog("task-panel", (() => {
+            this.getOptionalDependency("SettingPlugin")?.openSettingDialog?.("task-panel", (() => {
                 $("#setting-checkFavoriteActress").css({
                     border: "1px solid var(--jhs-status-filter)"
                 }), $("#setting-checkNewVideo").css({
@@ -249,10 +250,10 @@ export class NewVideoPlugin extends BasePlugin {
         $("#checkFavoriteActress").on("click", (event => {
             void this.runManualTask($(event.currentTarget), "同步中…", (async () => {
                 if (!$('a[href*="/users/profile"]').length) return void show.error("未登录 JavDB，同步失败");
-                await taskPlugin.checkFavoriteActress(!0);
+                await taskPlugin?.checkFavoriteActress?.(!0);
             }));
         })), $("#checkNewVideo").on("click", (event => {
-            void this.runManualTask($(event.currentTarget), "检测中…", (() => taskPlugin.checkNewVideo(!0)));
+            void this.runManualTask($(event.currentTarget), "检测中…", (() => taskPlugin?.checkNewVideo?.(!0)));
         })), $("#paramActressType").on("change", (e => {
             this.currentPage = 1, this.nvRenderGeneration++, "actress" === this._viewMode && this.renderActressCards();
         })), $("#paramSortBy").on("change", (e => {
@@ -274,15 +275,17 @@ export class NewVideoPlugin extends BasePlugin {
     }
     async runManualTask(button, busyLabel, runner) {
         if (button.attr("aria-busy") === "true") return;
+        const task = this.getOptionalDependency("TaskPlugin");
+        if (!task) return void show.info("后台任务功能已禁用");
         const label = button.find("span").last(), previous = label.text();
         button.attr("aria-busy", "true").prop("disabled", !0), label.text(busyLabel);
         try {
-            await navigator.locks.request(this.getDependency("TaskPlugin").singleTaskKey, { ifAvailable: !0 }, (async lock => {
+            await navigator.locks.request(task.singleTaskKey, { ifAvailable: !0 }, (async lock => {
                 if (!lock) return void show.error("后台任务正在运行，请稍后再试");
                 await runner();
             }));
         } catch (error) {
-            clog.error("手动任务执行失败", error), this.getDependency("TaskPlugin").isNetworkBlocked(error) && show.error(error.message || "任务执行失败");
+            clog.error("手动任务执行失败", error), task.isNetworkBlocked(error) && show.error(error.message || "任务执行失败");
         } finally {
             button.removeAttr("aria-busy").prop("disabled", !1), label.text(previous), this.renderTaskStatuses();
         }
@@ -326,7 +329,8 @@ export class NewVideoPlugin extends BasePlugin {
     renderTaskStatuses() {
         const container = $("#jhs-task-status-list");
         if (!container.length) return;
-        const taskPlugin = this.getDependency("TaskPlugin"), names = { favoriteActress: "演员同步", newVideo: "新作品", blacklist: "黑名单" }, labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = value => value ? new Date(value).toLocaleString() : "无";
+        const taskPlugin = this.getOptionalDependency("TaskPlugin"), names = { favoriteActress: "演员同步", newVideo: "新作品", blacklist: "黑名单" }, labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = value => value ? new Date(value).toLocaleString() : "无";
+        if (!taskPlugin) return void container.empty().text("后台任务功能已禁用");
         container.empty(), [ "favoriteActress", "newVideo", "blacklist" ].forEach((name => {
             const snapshot = taskPlugin.getTaskStatusSnapshot(name), item = $('<div class="jhs-task-status"></div>');
             item.append($('<span class="jhs-task-status__name"></span>').text(`${names[name]}：${labels[snapshot.state]}`)), item.append($('<span class="jhs-task-status__meta"></span>').text(`上次完成 ${format(snapshot.completedAt)}；下次检查 ${snapshot.nextAt ? format(snapshot.nextAt) : "立即"}`)), container.append(item);
@@ -359,7 +363,7 @@ export class NewVideoPlugin extends BasePlugin {
         const sortedActresses = utils.genericSort(t, sortMap[sortBy] || defaultSort);
         const totalCount = sortedActresses.length, totalPages = Math.ceil(totalCount / this.pageSize), pageStart = (this.currentPage - 1) * this.pageSize, pageEnd = pageStart + this.pageSize;
         totalPages > 0 && this.currentPage > totalPages && (this.currentPage = totalPages);
-        const safePageStart = (this.currentPage - 1) * this.pageSize, pageActresses = sortedActresses.slice(safePageStart, safePageStart + this.pageSize), javDbUrl = this.nvJavDbUrl, taskPlugin = this.getDependency("TaskPlugin"), ruleTime = this.nvRuleTime;
+        const safePageStart = (this.currentPage - 1) * this.pageSize, pageActresses = sortedActresses.slice(safePageStart, safePageStart + this.pageSize), javDbUrl = this.nvJavDbUrl, taskPlugin = this.getOptionalDependency("TaskPlugin"), ruleTime = this.nvRuleTime;
         if (0 === pageActresses.length) {
             renderStateView(e, { type: "empty", title: this.nvActressesCache.length ? "没有符合当前筛选条件的演员" : "暂无收藏演员" });
             return void this.renderPagination(totalCount, totalPages);
@@ -398,7 +402,7 @@ export class NewVideoPlugin extends BasePlugin {
         })), $(".btn-check-actress").off("click").on("click", (e => {
             e.preventDefault();
             const button = $(e.currentTarget), starId = button.attr("data-starId"), actress = sortedActresses.find((item => item.starId === starId));
-            void this.runManualTask(button, "检测中…", (() => taskPlugin.checkOneNewVideo(actress)));
+            void this.runManualTask(button, "检测中…", (() => taskPlugin?.checkOneNewVideo?.(actress)));
         })), $(".actress-card__menu").on("keydown", (event => {
             if ("Escape" !== event.key) return;
             event.preventDefault();

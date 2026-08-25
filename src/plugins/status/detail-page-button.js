@@ -21,7 +21,8 @@ export class DetailPageButtonPlugin extends BasePlugin {
         return this.detailStateController ||= new DetailStateController(this.getRuntimeService("state"));
     }
     async handle() {
-        this.hideVideoControls(), window.isDetailPage && (await this.createMenuBtn(), await this.autoRemoveNewVideoMark());
+        const scope = await this.getRuntimeService("scope")();
+        this.hideVideoControls(scope), window.isDetailPage && (await this.createMenuBtn(), await this.autoRemoveNewVideoMark());
     }
     async autoRemoveNewVideoMark() {
         try {
@@ -34,9 +35,11 @@ export class DetailPageButtonPlugin extends BasePlugin {
     }
     async createMenuBtn() {
         const e = this.getPageInfo(), t = e.carNum, n = `\n            <div class="jhs-detail-btn-row jhs-layout-e2965a97">\n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="filterBtn" class="jhs-btn jhs-btn--filter jhs-layout-44293084">\n                        <span>${m}</span>\n                    </button>\n                    <button type="button" id="favoriteBtn" class="jhs-btn jhs-btn--fav jhs-layout-44293084">\n                        <span>${v}</span>\n                    </button>\n                    <button type="button" id="hasDownBtn" class="jhs-btn jhs-btn--down jhs-layout-44293084">\n                        <span>${y}</span>\n                    </button>\n                    <button type="button" id="hasWatchBtn" class="jhs-btn jhs-btn--watch jhs-layout-44293084">\n                        <span>${k}</span>\n                    </button>\n                </div>\n        \n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="enable-magnets-filter" class="jhs-btn jhs-btn--watch jhs-layout-5f3e3549">\n                        <span id="magnets-span">关闭磁力过滤</span>\n                    </button>\n                    <button type="button" id="magnetSearchBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>磁力搜索</span>\n                    </button>\n                    <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>字幕 (迅雷)</span>\n                    </button>\n                    <button type="button" id="search-subtitle-btn" class="jhs-btn jhs-btn--accent jhs-layout-f43f0d6d">\n                        <span>字幕 (SubTitleCat)</span>\n                    </button>\n                </div>\n            </div>\n        `;
-        const workspaceSlot = this.getDependency("DetailWorkspacePlugin")?.getSlot("summary-actions");
+        const workspaceSlot = this.getOptionalDependency("DetailWorkspacePlugin")?.getSlot?.("summary-actions");
         workspaceSlot?.length ? workspaceSlot.append(n) : r ? $(".tabs").after(n) : l && $("#mag-submit-show").before(n), $("#magnetSearchBtn").on("click", (async () => {
-            let t = await this.getDependency("MagnetHubPlugin").createMagnetHub(e.carNum);
+            const magnetHub = this.getOptionalDependency("MagnetHubPlugin");
+            if (!magnetHub) return void show.info("磁力搜索功能已禁用");
+            let t = await magnetHub.createMagnetHub(e.carNum);
             this.getRuntimeService("dialog").open({
                 type: 1,
                 title: "磁力搜索 " + e.carNum,
@@ -48,10 +51,11 @@ export class DetailPageButtonPlugin extends BasePlugin {
                 }
             });
         }));
-        const a = this.getDependency("HighlightMagnetPlugin"), i = await storageManager.getSetting("enableMagnetsFilter", _);
-        $("#magnets-span").text(i === _ ? "关闭磁力过滤" : "开启磁力过滤"), i === _ && a.doFilterMagnet(),
+        const a = this.getOptionalDependency("HighlightMagnetPlugin"), i = await storageManager.getSetting("enableMagnetsFilter", _);
+        a || $("#enable-magnets-filter").remove(), $("#magnets-span").text(i === _ ? "关闭磁力过滤" : "开启磁力过滤"), i === _ && a?.doFilterMagnet?.(),
         $("#enable-magnets-filter").on("click", ((/** @type {ActionEvent} */ e) => {
             let t = $("#magnets-span");
+            if (!a) return;
             "关闭磁力过滤" === t.text() ? (a.showAll(), t.text("开启磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", C)) : (a.doFilterMagnet(),
             t.text("关闭磁力过滤"), storageManager.saveSettingItem("enableMagnetsFilter", _));
         })), $("#search-subtitle-btn").on("click", ((/** @type {ActionEvent} */ e) => {
@@ -175,10 +179,13 @@ export class DetailPageButtonPlugin extends BasePlugin {
         e && e.preventDefault();
         return this.getDetailStateController().requestToggle(this.getStateBinding(), "blocked", e);
     }
-    hideVideoControls() {
-        $(document).on("mouseenter", "#preview-video", ((/** @type {Event} */ event) => {
+    /** @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope */
+    hideVideoControls(scope) {
+        const documentRoot = $(document);
+        documentRoot.off("mouseenter.jhsDetailVideo").on("mouseenter.jhsDetailVideo", "#preview-video", ((/** @type {Event} */ event) => {
             $(event.currentTarget).prop("controls", !0);
         }));
+        scope.addCleanup((() => documentRoot.off("mouseenter.jhsDetailVideo")));
     }
     /** @param {SubtitleRecord} subtitle @param {string} t */
     async previewSubtitle(subtitle, t) {

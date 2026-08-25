@@ -72,7 +72,8 @@ export class Top250Plugin extends BasePlugin {
                 let t = e.data.movies;
                 if (0 === t.length) return show.error("无数据"), void s.close();
                 this.movies = t;
-                const n = t.filter(((/** @type {TopMovie} */ e) => "1" === this.has_cnsub ? e.has_cnsub : "0" !== this.has_cnsub || !e.has_cnsub)), a = this.getDependency("HitShowPlugin");
+                const n = t.filter(((/** @type {TopMovie} */ e) => "1" === this.has_cnsub ? e.has_cnsub : "0" !== this.has_cnsub || !e.has_cnsub)), a = this.getOptionalDependency("HitShowPlugin");
+                if (!a) return void show.info("热播列表功能已禁用");
                 let r = a.markDataListHtml(n);
                 i.html(r), await a.initializeRenderedList(), await a.loadScore(n), o = !0;
             } else clog.error(e), i.html(`<h3>${escapeHtml(l)}</h3>`), show.error(l), "JWTVerificationError" === c && (removeStoredEncryptedCredential(me),
@@ -98,7 +99,8 @@ export class Top250Plugin extends BasePlugin {
                 const link = $(element), url = new URL(link.attr("href"), window.location.origin);
                 url.searchParams.set("has_cnsub", value), link.attr("href", url.toString());
             }));
-            const movies = this.movies.filter(((/** @type {TopMovie} */ movie) => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), hitShow = this.getDependency("HitShowPlugin");
+            const movies = this.movies.filter(((/** @type {TopMovie} */ movie) => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), hitShow = this.getOptionalDependency("HitShowPlugin");
+            if (!hitShow) return void show.info("热播列表功能已禁用");
             this.$listRoot.html(hitShow.markDataListHtml(movies)), await hitShow.initializeRenderedList(), void hitShow.loadScore(movies).catch(((/** @type {unknown} */ error) => clog.error("Top250 评分加载失败", error)));
         }));
     }

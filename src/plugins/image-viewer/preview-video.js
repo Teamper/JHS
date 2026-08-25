@@ -234,8 +234,8 @@ export class PreviewVideoPlugin extends BasePlugin {
             dmmVideo && (dmmVideo.currentTime += 10);
         })),
         $toolbar.off("contextmenu.jhsVideo").on("contextmenu.jhsVideo", "#speed-btn", ((/** @type {MouseEvent} */ event) => (event.preventDefault(),
-        this.getDependency("DetailPageButtonPlugin").filterOne(event)))),
-        $("#video-filterBtn").off("click.jhsVideo").on("click.jhsVideo", ((/** @type {MouseEvent} */ event) => this.getDependency("DetailPageButtonPlugin").filterOne(event))),
-        $("#video-favoriteBtn").off("click.jhsVideo").on("click.jhsVideo", ((/** @type {MouseEvent} */ event) => this.getDependency("DetailPageButtonPlugin").favoriteOne(event)));
+        this.getOptionalDependency("DetailPageButtonPlugin")?.filterOne?.(event)))),
+        $("#video-filterBtn").off("click.jhsVideo").on("click.jhsVideo", ((/** @type {MouseEvent} */ event) => this.getOptionalDependency("DetailPageButtonPlugin")?.filterOne?.(event))),
+        $("#video-favoriteBtn").off("click.jhsVideo").on("click.jhsVideo", ((/** @type {MouseEvent} */ event) => this.getOptionalDependency("DetailPageButtonPlugin")?.favoriteOne?.(event)));
     }
 }

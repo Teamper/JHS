@@ -91,7 +91,8 @@ export class AutoPagePlugin extends BasePlugin {
                 top: g,
                 url: this.nextUrl
             });
-            const p = this.getDependency("ListPagePlugin");
+            const p = this.getOptionalDependency("ListPagePlugin");
+            if (!p) return void this.setState("waterfall-error", "列表功能已禁用，无法继续翻页");
             let m = s.find(this.getSelector().coverImgSelector);
             p.replaceHdImg(m), $(this.getSelector().boxSelector).append(c), this.nextUrl = null == (e = s.find(t.nextPageSelector)) ? void 0 : e.attr("href"),
             this.hasMore = !!this.nextUrl;

@@ -98,6 +98,20 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(javbusWithImagesDisabled.getPluginNames()).not.toContain("BusImgPlugin");
         expect(javbusWithImagesDisabled.getPluginNames()).toContain("BusPreviewVideoPlugin");
 
+        for (const [site, disabledPlugin, survivingPlugin] of [
+            ["javdb", "Fc2Plugin", "ListPagePlugin"],
+            ["javdb", "AutoPagePlugin", "ListPagePlugin"],
+            ["javdb", "CoverButtonPlugin", "ListPagePlugin"],
+            ["javdb", "ListPageButtonPlugin", "ListPagePlugin"],
+            ["javdb", "HighlightMagnetPlugin", "DetailPageButtonPlugin"],
+            ["javdb", "MagnetHubPlugin", "DetailPageButtonPlugin"],
+        ]) {
+            const manager = new PluginManager();
+            registerSitePlugins(manager, createRuntime(site, [disabledPlugin]), site);
+            expect(manager.getPluginNames(), `${survivingPlugin} must survive disabled ${disabledPlugin}`).not.toContain(disabledPlugin);
+            expect(manager.getPluginNames(), `${survivingPlugin} must survive disabled ${disabledPlugin}`).toContain(survivingPlugin);
+        }
+
         const legacyDiagnostics = new DiagnosticsService();
         const javdbWithStaleSystemDisables = new PluginManager({ diagnostics: legacyDiagnostics });
         registerSitePlugins(javdbWithStaleSystemDisables, createRuntime("javdb", ["settings.core", "stats.dashboard", "responsive-shell.bottom-bar"]), "javdb");
@@ -109,6 +123,34 @@ describe("v6.5 architecture runtime contracts", () => {
             "SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin",
         ]);
     }, 15_000);
+
+    it("declares every literal runtime service used by a legacy contribution", async () => {
+        const { legacyContributionManifests } = await import("../src/plugins/registry.js");
+        const runtimeTokens = new Map([
+            ["host", PORT.host], ["diagnostics", SERVICE.diagnostics], ["review", SERVICE.review],
+            ["related", SERVICE.related], ["movie", SERVICE.movie], ["magnet", SERVICE.magnet],
+            ["settings", SERVICE.settings], ["cache", SERVICE.cache], ["http", SERVICE.http],
+            ["profile", SERVICE.profile], ["actressInfo", SERVICE.actressInfo], ["imageSearch", SERVICE.imageSearch],
+            ["screenshot", SERVICE.screenshot], ["translation", SERVICE.translation], ["subtitle", SERVICE.subtitle],
+            ["account", SERVICE.account], ["webdav", SERVICE.webdav], ["storage", SERVICE.storage],
+            ["state", SERVICE.state], ["offline", SERVICE.offline], ["dialog", SERVICE.dialog],
+        ]);
+        for (const contribution of legacyContributionManifests) {
+            const source = contribution.plugin.toString();
+            const usedNames = [...source.matchAll(/getRuntimeService\(["']([^"']+)["']\)/g)].map((match) => match[1]).filter((name) => name !== "scope");
+            for (const name of new Set(usedNames)) {
+                expect(runtimeTokens.has(name), `${contribution.id} uses unknown runtime service ${name}`).toBe(true);
+                expect(contribution.requires, `${contribution.id} must declare runtime service ${name}`).toContain(runtimeTokens.get(name));
+            }
+        }
+    });
+
+    it("keeps independently disableable legacy contributions out of the hard dependency graph", async () => {
+        const { legacyContributionManifests } = await import("../src/plugins/registry.js");
+        for (const contribution of legacyContributionManifests) {
+            expect(contribution.plugin.toString(), `${contribution.id} must use optional plugin dependencies`).not.toContain("this.getDependency(");
+        }
+    });
 
     it("exports measured and redacted diagnostics", () => {
         const diagnostics = new DiagnosticsService();

@@ -224,7 +224,7 @@ assertIncludes(statsSource, 'action: "filter", filter: "blockedItems"', "Stats c
 assertIncludes(statsSource, 'title: "统计"', "Stats dialog title");
 assert(!mobileSource.includes("activeQuickFilter ="), "mobile filter actions must use ListPagePlugin.setQuickFilter");
 assert(!mobileSource.includes('$("#waitCheckBtn").click()'), "mobile identification must call ListPageButtonPlugin.openWaitCheck directly");
-assertIncludes(mobileSource, 'await this.getDependency("ListPageButtonPlugin")?.openWaitCheck?.()', "mobile identification API");
+assertIncludes(mobileSource, 'await this.getOptionalDependency("ListPageButtonPlugin")?.openWaitCheck?.()', "mobile identification API");
 assert(!/\.jhs-commandbar__filters\s*\{[^}]*overflow-x\s*:\s*auto/.test(mobileSource), "command-bar filters must not clip popovers with horizontal overflow");
 assert(!/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*overflow-x\s*:\s*auto/.test(mobileSource), "tablet command bar must wrap instead of scrolling horizontally");
 assert(/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*flex-wrap\s*:\s*wrap[^}]*overflow\s*:\s*visible/.test(mobileSource), "tablet command bar must wrap with visible overflow");

@@ -32,6 +32,18 @@ export class HistoryPlugin extends BasePlugin {
     getName() {
         return "HistoryPlugin";
     }
+    /** @param {string} value */
+    getSourceLabel(value) {
+        if (!value) return "";
+        const movie = this.getRuntimeService("movie"), settings = this.getRuntimeService("settings").snapshot();
+        if (movie.matchesProviderUrl("av123", value)) return "123AV";
+        try {
+            const origin = new URL(value).origin;
+            if (origin === movie.externalSiteOrigin("javDbBtn", settings)) return "JavDB";
+            if (origin === movie.externalSiteOrigin("javBusBtn", settings)) return "JavBus";
+        } catch {}
+        return value.includes("javdb") ? "JavDB" : value.includes("javbus") ? "JavBus" : value.includes("123av") ? "123AV" : "其他";
+    }
     get historyRepository() {
         return this._historyRepository ||= new HistoryRepository({ storage: storageManager, state: this.getRuntimeService("state") });
     }
@@ -114,9 +126,10 @@ export class HistoryPlugin extends BasePlugin {
                     await utils.copyToClipboard("离线资源", $(event.currentTarget).data("resource"));
                 })).on("click", ".jhs-retry-offline", (async (/** @type {any} */ event) => {
                     const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id);
-                    item && await this.getDependency("UnifiedOfflinePlugin").submitResource(event, item.resource, $(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: !0, preferredProviderId: item.providerId }), await this.renderOfflineHistory();
+                    const offline = this.getOptionalDependency("UnifiedOfflinePlugin");
+                    item && offline && await offline.submitResource(event, item.resource, $(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: !0, preferredProviderId: item.providerId }), await this.renderOfflineHistory();
                 })).on("click", ".jhs-open-offline", (async (/** @type {any} */ event) => {
-                    const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id), provider = this.getDependency("UnifiedOfflinePlugin").registry.providers.get(item?.providerId), url = provider?.openUrl?.();
+                    const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id), provider = this.getOptionalDependency("UnifiedOfflinePlugin")?.registry?.providers?.get(item?.providerId), url = provider?.openUrl?.();
                     url && window.open(url, "_blank", "noopener,noreferrer");
                 })).on("click", ".jhs-delete-offline", (async (/** @type {any} */ event) => {
                     await this.historyRepository.removeOffline($(event.currentTarget).data("id")), await this.renderOfflineHistory();
@@ -425,7 +438,7 @@ export class HistoryPlugin extends BasePlugin {
                 hozAlign: "left",
                 formatter: (/** @type {TableHandle} */ e, /** @type {any} */ t, /** @type {any} */ n) => {
                     let a = e.getData().url;
-                    return a ? `<span class="jhs-badge jhs-badge--neutral">${a.includes("javdb") ? "JavDB" : a.includes("javbus") ? "JavBus" : a.includes("123av") ? "123AV" : "其他"}</span>` : "";
+                    return a ? `<span class="jhs-badge jhs-badge--neutral">${this.getSourceLabel(a)}</span>` : "";
                 }
             }, {
                 title: "状态",
@@ -514,14 +527,16 @@ export class HistoryPlugin extends BasePlugin {
     /** @param {any} e @param {string} t */
     handleDelete(e, t) {
         utils.q(e, `是否移除${t}?`, (async () => {
-            await this.historyRepository.remove(t), this.getDependency("ListPagePlugin").showCarNumBox(t),
+            await this.historyRepository.remove(t), this.getOptionalDependency("ListPagePlugin")?.showCarNumBox?.(t),
             await this.reloadTable();
         }));
     }
     /** @param {any} e @param {HistoryRecord} t */
     async handleClickDetail(e, t) {
         if (t.carNum.includes("FC2-")) {
-            const plugin = this.getDependency("Fc2Plugin"), source = await plugin.resolveFc2Source(t), movieId = await plugin.resolveMovieIdForRecord(t.carNum, t.url);
+            const plugin = this.getOptionalDependency("Fc2Plugin");
+            if (!plugin) return t.url ? void utils.openPage(t.url, t.carNum, !1, e) : void show.info("FC2 详情功能已禁用");
+            const source = await plugin.resolveFc2Source(t), movieId = await plugin.resolveMovieIdForRecord(t.carNum, t.url);
             if (r) plugin.openFc2Dialog(movieId, t.carNum, t.url, { source });
             else if (l) await plugin.openFc2Page(movieId, t.carNum, t.url, { newTab: !0 }, { source });
             return;

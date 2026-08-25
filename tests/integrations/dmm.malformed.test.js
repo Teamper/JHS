@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { createDmmAdapter } from "../../src/integrations/dmm/manifest.js";
 import { parseDmmItemCandidates, parseDmmPlayerSources, parseDmmPreview } from "../../src/integrations/dmm/parser.js";
 
@@ -23,6 +23,9 @@ it("preserves region-blocked errors across candidate fallback", async () => {
 });
 
 it("does not silently normalize an unavailable provider", async () => {
-    const adapter = createDmmAdapter({ request: async () => { throw new Error("provider unavailable"); } });
+    const request = vi.fn(async () => { throw new Error("provider unavailable"); });
+    const adapter = createDmmAdapter({ request });
     await expect(adapter.getPreview({ url: "https://www.dmm.co.jp/player/1" })).rejects.toThrow("provider unavailable");
+    await expect(adapter.getPreviewForMovie({ carNum: "ABC-123" })).rejects.toThrow("provider unavailable");
+    expect(request).toHaveBeenCalledTimes(2);
 });

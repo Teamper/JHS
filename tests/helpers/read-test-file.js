@@ -14,5 +14,6 @@ export function readTestFile(file, encoding) {
         .replace(/^export\s+(?=(?:const|let|var|class|function|async\s+function)\b)/gm, "")
         // Legacy VM fixtures provide BasePlugin#getBean. Production code uses
         // declared dependency injection and never executes this compatibility projection.
-        .replaceAll("this.getDependency(", "this.getBean(");
+        .replaceAll("this.getDependency(", "this.getBean(")
+        .replaceAll("this.getOptionalDependency(", "this.getBean(");
 }

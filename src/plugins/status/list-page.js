@@ -117,16 +117,16 @@ export class ListPagePlugin extends BasePlugin {
         const scope = await this.getRuntimeService("scope")();
         const refreshAll = async () => {
                 this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
-                const e = this.getDependency("HistoryPlugin");
-                e.tableObj && e.tableObj.setData();
+                const e = this.getOptionalDependency("HistoryPlugin");
+                e?.tableObj && e.tableObj.setData();
         };
         [ "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed" ].forEach((type => scope.addCleanup(getListEventBus().on(type, refreshAll)))),
         scope.addCleanup(getListEventBus().on("car-state-changed", (async payload => {
             this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key);
             const items = this.getIndexedItems(payload.carNums || []);
             items.length && (await this.doFilterItems(items), this.applyVisibility(items));
-            const history = this.getDependency("HistoryPlugin");
-            history.tableObj && history.tableObj.setData();
+            const history = this.getOptionalDependency("HistoryPlugin");
+            history?.tableObj && history.tableObj.setData();
         }))), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
         await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(),
         this.rememberTagExpand(),
@@ -239,8 +239,8 @@ export class ListPagePlugin extends BasePlugin {
     async processAddedItems(items) {
         const selector = this.getSelector(), covers = items.flatMap((/** @type {Element} */ item) => [ ...item.querySelectorAll(selector.coverImgSelector) ]);
         this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items), await this.doFilterItems(items), this.applyVisibility(items),
-        await this.getDependency("ListPageButtonPlugin").sortItems(), await this.getDependency("CoverButtonPlugin").addSvgBtn(items),
-        items.forEach((/** @type {Element} */ item) => /** @type {HTMLElement} */ (item).dataset.jhsProcessed = "true"), this.indexItems(items), await getListEventBus().emit("list-items-added", { items }, { broadcast: !1 }), this.getDependency("AutoPagePlugin").checkLoad();
+        await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.(), await this.getOptionalDependency("CoverButtonPlugin")?.addSvgBtn?.(items),
+        items.forEach((/** @type {Element} */ item) => /** @type {HTMLElement} */ (item).dataset.jhsProcessed = "true"), this.indexItems(items), await getListEventBus().emit("list-items-added", { items }, { broadcast: !1 }), this.getOptionalDependency("AutoPagePlugin")?.checkLoad?.();
     }
     rebuildItemIndex() {
         this.itemIndex.clear(), this.indexItems($(this.getSelector().itemSelector).toArray());
@@ -311,7 +311,7 @@ export class ListPagePlugin extends BasePlugin {
         if (!window.isListPage) return;
         let e = items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray();
         e.length && (await this.filterMovieList(e), l && setTimeout((() => {
-            this.getDependency("BusImgPlugin").logImageHeightsByRow().catch((/** @type {unknown} */ e) => clog.error("JavBus图片高度修正失败", e));
+            this.getOptionalDependency("BusImgPlugin")?.logImageHeightsByRow?.().catch((/** @type {unknown} */ e) => clog.error("JavBus图片高度修正失败", e));
         })));
     }
     async yieldListFrame() {
@@ -451,7 +451,9 @@ export class ListPagePlugin extends BasePlugin {
         if (!carNum || !aHref) return;
         const shouldOpenTab = newTab || !!event && (event.ctrlKey || event.metaKey || 1 === event.button);
         if (carNum.includes("FC2-")) {
-            const plugin = this.getDependency("Fc2Plugin"), movieId = await plugin.resolveMovieIdForRecord(carNum, aHref), source = fc2Source || await plugin.resolveFc2Source({ url: aHref });
+            const plugin = this.getOptionalDependency("Fc2Plugin");
+            if (!plugin) return utils.openPage(aHref, carNum, !0, { event, newTab: shouldOpenTab });
+            const movieId = await plugin.resolveMovieIdForRecord(carNum, aHref), source = fc2Source || await plugin.resolveFc2Source({ url: aHref });
             return shouldOpenTab ? plugin.openFc2Page(movieId, carNum, aHref, { event, newTab: !0 }, { source }) : plugin.openFc2Dialog(movieId, carNum, aHref, { source });
         }
         const destination = new URL(aHref, window.location.origin);
@@ -471,7 +473,8 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** Rewrite FC2 card anchors to the same-origin owned detail page as a native-navigation fallback. @param {any} root */
     protectFc2Navigation(root) {
-        const plugin = this.getDependency("Fc2Plugin");
+        const plugin = this.getOptionalDependency("Fc2Plugin");
+        if (!plugin) return;
         root.find(".item").each(((/** @type {number} */ _index, /** @type {Element} */ element) => {
             const item = $(element);
             if (item.attr("data-jhs-fc2-protected") === "true") return;

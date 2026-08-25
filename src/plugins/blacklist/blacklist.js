@@ -70,7 +70,8 @@ export class BlacklistPlugin extends BasePlugin {
             }
         }
         utils.q(t, i, (async () => {
-            const e = this.getDependency("TaskPlugin");
+            const e = this.getOptionalDependency("TaskPlugin");
+            if (!e) return void show.error("后台任务功能已禁用，无法执行黑名单抓取");
             navigator.locks.request(e.singleTaskKey, {
                 ifAvailable: !0
             }, (async (/** @type {any} */ e) => {
@@ -111,12 +112,12 @@ export class BlacklistPlugin extends BasePlugin {
         }));
     }
     async resetBtnTip() {
-        const e = this.getDependency("TaskPlugin"), t = this.getRuntimeService("storage").getLocal(e.lastCheckBlacklistTimeKey) || "无", n = await storageManager.getSetting("checkBlacklist_intervalTime", 12);
+        const e = this.getOptionalDependency("TaskPlugin"), t = e ? this.getRuntimeService("storage").getLocal(e.lastCheckBlacklistTimeKey) || "无" : "任务已禁用", n = await storageManager.getSetting("checkBlacklist_intervalTime", 12);
         this.checkBlacklist_ruleTime = await storageManager.getSetting("checkBlacklist_ruleTime", 8760),
         $("#checkBlacklistBtn").attr("data-tip", `上次整批检测: ${t}; 检测间隔时间: ${n}小时`);
     }
     async openBlacklistDialog() {
-        const e = this.getDependency("TaskPlugin"), t = await storageManager.getSetting(), lastCheck = this.getRuntimeService("storage").getLocal(e.lastCheckBlacklistTimeKey) || "无";
+        const e = this.getOptionalDependency("TaskPlugin"), t = await storageManager.getSetting(), lastCheck = e ? this.getRuntimeService("storage").getLocal(e.lastCheckBlacklistTimeKey) || "无" : "任务已禁用";
         let n = `\n            <div class="jhs-layout-7cb3f981"> \n                 <div class="jhs-layout-da5a4919">\n                    <div class="jhs-layout-31a824a2">\n                        <button type="button" id="checkBlacklistBtn" class="jhs-btn jhs-btn--secondary" data-tip="上次整批检测: ${lastCheck}; 检测间隔时间: ${t.checkBlacklist_intervalTime}小时">${this.blacklistSvg}<span>手动检测黑名单</span></button>\n                        <button type="button" class="jhs-btn jhs-btn--ghost" id="toSetting">${this.settingSvg}<span>配置</span></button>\n                    </div>\n                    <div class="jhs-layout-31a824a2">\n                        <select id="dataType" class="jhs-select-source">\n                            <option value="" selected>所有</option>\n                            <option value="actor">男演员</option>\n                            <option value="actress">女演员</option>\n                        </select>\n                        <select id="statusType" class="jhs-select-source">\n                            <option value="" selected>全部状态</option>\n                            <option value="normal">继续检测</option>\n                            <option value="stop">停更跳过</option>\n                        </select>\n                        <select id="urlType" data-tip="在演员页屏蔽时,是否选择了分类" class="jhs-select-source${r ? "" : " jhs-is-hidden"}">\n                            <option value="" selected>--屏蔽类型--</option>\n                            <option value="hasT">按所选分类屏蔽</option>\n                            <option value="noT">未筛选分类</option>\n                        </select>\n                        <input id="searchValue" type="search" placeholder="搜索名称、别名或 ID" class="jhs-field">\n                        <button type="button" id="cleanQueryBtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                    </div>\n\n                </div>\n                <div id="table-container" class="jhs-layout-d44e70c7"></div>\n            </div>\n        `;
         this.getRuntimeService("dialog").open({
             type: 1,
@@ -129,6 +130,7 @@ export class BlacklistPlugin extends BasePlugin {
                 const dialog = $(t).find(".layui-layer-content > div").first().addClass("jhs-blacklist-layout").removeAttr("style"), toolbar = dialog.children("div").first().addClass("jhs-blacklist-toolbar").removeAttr("style");
                 toolbar.children("div").addClass("jhs-blacklist-toolbar__group").removeAttr("style"), toolbar.find("select,input,a").removeAttr("style"), dialog.find("#table-container").removeAttr("style");
                 dialog.find("#table-container").before('<div id="blacklist-task-status" class="jhs-task-status jhs-blacklist-task-status" aria-live="polite"></div>'), JhsSelect.enhance(t);
+                e || dialog.find("#checkBlacklistBtn").prop("disabled", !0).attr("title", "后台任务功能已禁用");
                 this.renderTaskStatus(), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = getBlacklistEventBus().on("task-status-changed", (() => this.renderTaskStatus()));
                 await this.loadTableData();
                 const content = $(t).find(".layui-layer-content"), search = content.find("#searchValue");
@@ -137,7 +139,7 @@ export class BlacklistPlugin extends BasePlugin {
                 })).on("input", "#searchValue", this.blacklistSearchDebounced).on("change", "#dataType,#statusType,#urlType", (async () => {
                     await this.reloadTable();
                 })).on("click", "#toSetting", (() => {
-                    this.getDependency("SettingPlugin").openSettingDialog("task-panel", (() => {
+                    this.getOptionalDependency("SettingPlugin")?.openSettingDialog?.("task-panel", (() => {
                         $("#setting-blacklist").css({
                             border: "1px solid var(--jhs-status-filter)"
                         });
@@ -148,7 +150,7 @@ export class BlacklistPlugin extends BasePlugin {
                     utils.openPage(n, a, !0, e);
                 })).on("click", "#checkBlacklistBtn", ((/** @type {any} */ event) => {
                     const button = $(event.currentTarget), label = button.find("span").last(), previous = label.text();
-                    if (button.attr("aria-busy") === "true") return;
+                    if (!e || button.attr("aria-busy") === "true") return;
                     button.attr("aria-busy", "true").prop("disabled", !0), label.text("检测中…"), navigator.locks.request(e.singleTaskKey, { ifAvailable: !0 }, (async lock => {
                         lock ? await e.checkBlacklist(!0) : show.error("后台任务正在运行，请稍后再试");
                     })).catch((error => {
@@ -166,7 +168,9 @@ export class BlacklistPlugin extends BasePlugin {
     renderTaskStatus() {
         const container = $("#blacklist-task-status");
         if (!container.length) return;
-        const snapshot = this.getDependency("TaskPlugin").getTaskStatusSnapshot("blacklist"), labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = (/** @type {unknown} */ value) => value ? new Date(/** @type {string | number | Date} */ (value)).toLocaleString() : "无", state = /** @type {keyof typeof labels} */ (snapshot.state);
+        const task = this.getOptionalDependency("TaskPlugin");
+        if (!task) return void container.empty().text("后台任务功能已禁用");
+        const snapshot = task.getTaskStatusSnapshot("blacklist"), labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = (/** @type {unknown} */ value) => value ? new Date(/** @type {string | number | Date} */ (value)).toLocaleString() : "无", state = /** @type {keyof typeof labels} */ (snapshot.state);
         container.empty().append($("<span class=\"jhs-task-status__name\"></span>").text(`黑名单：${labels[state] || labels.idle}`), $("<span class=\"jhs-task-status__meta\"></span>").text(`上次完成 ${format(snapshot.completedAt)}；下次检查 ${snapshot.nextAt ? format(snapshot.nextAt) : "立即"}`));
     }
     async reloadTable() {
@@ -175,7 +179,7 @@ export class BlacklistPlugin extends BasePlugin {
         this.tableObj.setData(e);
     }
     async getTableData() {
-        const e = this.getDependency("TaskPlugin"), t = await storageManager.getBlacklist(), n = await storageManager.getBlacklistCarList(), a = String($("#searchValue").val() || "").trim().toLocaleLowerCase(), i = $("#statusType").val(), s = $("#dataType"), o = s.val(), r = $("#urlType").val(), l = t.length;
+        const t = await storageManager.getBlacklist(), n = await storageManager.getBlacklistCarList(), a = String($("#searchValue").val() || "").trim().toLocaleLowerCase(), i = $("#statusType").val(), s = $("#dataType"), o = s.val(), r = $("#urlType").val(), l = t.length;
         let c = 0, d = 0;
         const h = t.map((/** @type {BlacklistRecord} */ t) => {
             t.role === B ? c++ : t.role === P && d++;

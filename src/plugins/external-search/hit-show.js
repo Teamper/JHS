@@ -44,10 +44,10 @@ export class HitShowPlugin extends BasePlugin {
             if (generation !== this.loadGeneration) return;
             this.$listRoot.html(this.markDataListHtml(movies));
             await this.initializeRenderedList();
-            await this.getDependency("ListPageButtonPlugin").sortItems();
+            await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.();
             loadingObj.close(), loadingClosed = !0;
             void this.loadScore(movies, generation).then((async () => {
-                if (generation === this.loadGeneration && "rateCount" === this.getRuntimeService("settings").snapshot().sortMethod) await this.getDependency("ListPageButtonPlugin").sortItems();
+                if (generation === this.loadGeneration && "rateCount" === this.getRuntimeService("settings").snapshot().sortMethod) await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.();
             })).catch((error => clog.error("热播评分补全失败", error)));
         } catch (error) {
             clog.error("所有重试尝试均失败，无法获取数据。", error);
@@ -67,9 +67,9 @@ export class HitShowPlugin extends BasePlugin {
         throw lastError;
     }
     async initializeRenderedList() {
-        const listPage = this.getDependency("ListPagePlugin");
-        listPage.replaceHdImg(), await listPage.doFilter(), listPage.applyVisibility(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector);
-        this.getDependency("CoverButtonPlugin").addSvgBtn();
+        const listPage = this.getOptionalDependency("ListPagePlugin");
+        listPage && (listPage.replaceHdImg(), await listPage.doFilter(), listPage.applyVisibility(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector));
+        await this.getOptionalDependency("CoverButtonPlugin")?.addSvgBtn?.();
     }
     toolBar(/** @type {string | null} */ e) {
         $("#jhs-hitshow-period").remove();

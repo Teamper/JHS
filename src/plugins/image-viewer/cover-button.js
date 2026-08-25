@@ -36,7 +36,10 @@ export class CoverButtonPlugin extends BasePlugin {
             </style>`;
     }
     async handle() {
-        window.isListPage && (this.addSvgBtn(), await this.bindClick());
+        if (!window.isListPage) return;
+        const scope = await this.getRuntimeService("scope")();
+        this.addSvgBtn();
+        await this.bindClick(scope);
     }
     /** 构建卡片工具和三个卡片内 popover。 */
     buildToolBox() {
@@ -93,23 +96,28 @@ export class CoverButtonPlugin extends BasePlugin {
         const openMenus = $(".jhs-card-menu.is-open"), triggers = openMenus.siblings(".jhs-card-menu-trigger");
         openMenus.removeClass("is-open"), triggers.attr("aria-expanded", "false"), focus && triggers.first().trigger("focus");
     }
-    async bindClick() {
+    /** @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope */
+    async bindClick(scope) {
         this.getSelector();
-        const e = this.getDependency("ListPagePlugin");
-        $(document).on("click", ".jhs-card-menu-trigger", ((/** @type {CardActionEvent} */ event) => {
+        const e = this.getOptionalDependency("ListPagePlugin");
+        if (!e) return;
+        const documentRoot = $(document);
+        documentRoot.off(".jhsCoverButton");
+        scope.addCleanup((() => documentRoot.off(".jhsCoverButton")));
+        documentRoot.on("click.jhsCoverButton", ".jhs-card-menu-trigger", ((/** @type {CardActionEvent} */ event) => {
             event.preventDefault(), event.stopPropagation();
             const trigger = $(event.currentTarget), menu = trigger.siblings(".jhs-card-menu"), open = !menu.hasClass("is-open");
             this.closeCardMenus(), menu.toggleClass("is-open", open), trigger.attr("aria-expanded", String(open)), open && menu.children().first().trigger("focus");
-        })).on("keydown", ".jhs-card-menu [role='menuitem']", ((/** @type {KeyboardEvent} */ event) => {
+        })).on("keydown.jhsCoverButton", ".jhs-card-menu [role='menuitem']", ((/** @type {KeyboardEvent} */ event) => {
             const menu = $(event.currentTarget).closest(".jhs-card-menu"), items = menu.find("[role='menuitem']"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), this.closeCardMenus(!0);
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
-        })).on("click", ((/** @type {CardActionEvent} */ event) => {
+        })).on("click.jhsCoverButton", ((/** @type {CardActionEvent} */ event) => {
             $(event.target).closest(".more-tools-container").length || this.closeCardMenus();
-        })), $(document).on("click", ".videoSvg", ((/** @type {CardActionEvent} */ t) => {
+        })), documentRoot.on("click.jhsCoverButton", ".videoSvg", ((/** @type {CardActionEvent} */ t) => {
             t.preventDefault(), $('.videoSvg[title!="播放视频"]').each(((/** @type {number} */ t, /** @type {HTMLElement} */ n) => {
                 const a = $(n);
                 let i = a.closest(".item"), s = i.find("img"), {carNum: o} = e.findCarNumAndHref(i);
@@ -123,7 +131,7 @@ export class CoverButtonPlugin extends BasePlugin {
                 if (!i.length) return void show.error("没有找到图片");
                 void this.showVideo(a, i, t).catch((error => clog.error("卡片预览视频打开失败", error)));
             }
-        })), $(document).on("click", ".screenSvg", (async (/** @type {CardActionEvent} */ t) => {
+        })), documentRoot.on("click.jhsCoverButton", ".screenSvg", (async (/** @type {CardActionEvent} */ t) => {
             t.preventDefault();
             let n = loading();
             try {
@@ -137,7 +145,7 @@ export class CoverButtonPlugin extends BasePlugin {
             } catch (a) {
                 clog.error("图片预览出错:", a), show.error("图片预览出错:" + a);
             } finally { n.close(); }
-        })), $(document).on("click", ".filterBtn, .favoriteBtn, .hasDownBtn, .hasWatchBtn", ((/** @type {CardActionEvent} */ t) => {
+        })), documentRoot.on("click.jhsCoverButton", ".filterBtn, .favoriteBtn, .hasDownBtn, .hasWatchBtn", ((/** @type {CardActionEvent} */ t) => {
             t.preventDefault(), t.stopPropagation();
             try {
                 const n = $(t.currentTarget), a = n.closest(".item"), {carNum: i, url: s, publishTime: o, fc2Source} = e.findCarNumAndHref(a), r = async (/** @type {string} */ t) => {
@@ -159,7 +167,7 @@ export class CoverButtonPlugin extends BasePlugin {
             r.find(".site-miss-av").attr({ href: `${n}/search/${l}`, target: "_blank", rel: "noopener noreferrer" }),
             r.find(".site-123-av").attr({ href: `${s}/cn/search?keyword=${encodeURIComponent(l)}`, target: "_blank", rel: "noopener noreferrer" });
         }));
-        $(document).on("click", ".site-jable, .site-avgle, .site-miss-av, .site-123-av", ((/** @type {CardActionEvent} */ t) => {
+        documentRoot.on("click.jhsCoverButton", ".site-jable, .site-avgle, .site-miss-av, .site-123-av", ((/** @type {CardActionEvent} */ t) => {
             try {
                 t.preventDefault(), t.stopPropagation();
                 const o = $(t.currentTarget), r = o.closest(".item"), {carNum: l} = e.findCarNumAndHref(r);
@@ -168,7 +176,7 @@ export class CoverButtonPlugin extends BasePlugin {
                 if (!c) return;
                 t.ctrlKey || t.metaKey ? GM_openInTab(c, { insert: 0 }) : window.open(c), this.closeCardMenus();
             } catch (t) { clog.error("站点按钮处理失败:", t); }
-        })), $(document).on("click", ".titleSvg, .carNumSvg, .downSvg", ((/** @type {CardActionEvent} */ t) => {
+        })), documentRoot.on("click.jhsCoverButton", ".titleSvg, .carNumSvg, .downSvg", ((/** @type {CardActionEvent} */ t) => {
             t.preventDefault(), t.stopPropagation();
             const n = $(t.currentTarget).closest(".item"), {carNum: a, title: i} = e.findCarNumAndHref(n), s = n.find(l ? ".photo-frame img" : ".cover img");
             $(t.currentTarget).hasClass("titleSvg") ? utils.copyToClipboard("标题", i) : $(t.currentTarget).hasClass("carNumSvg") ? utils.copyToClipboard("番号", a) : $(t.currentTarget).hasClass("downSvg") && fetch(s.attr("src")).then((e => e.blob())).then((e => utils.download(e, a + " " + i + ".jpg"))), this.closeCardMenus();

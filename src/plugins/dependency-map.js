@@ -1,11 +1,14 @@
 // @ts-check
 
 /**
- * Transitional dependency declarations for legacy plugins.
+ * Transitional optional-availability declarations for legacy plugins.
  *
  * New Features use manifest tokens. Legacy plugins receive only the plugin
  * instances declared here so that internal code cannot use PluginManager as
- * an unrestricted service locator during the 6.5 migration.
+ * an unrestricted service locator during the 6.5 migration. Every production
+ * call site uses getOptionalDependency(); these edges do not define startup
+ * ordering and may therefore be cyclic. The hard legacy dependency graph is
+ * intentionally empty and enforced by architecture-runtime.test.js.
  */
 export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     AutoPagePlugin: ["ListPagePlugin"],

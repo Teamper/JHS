@@ -167,20 +167,32 @@ export class SettingPlugin extends BasePlugin {
                 if (utils.isMobileMode()) {
                     this.collapseAdvancedTabs();
                 }
-                const sections = await Promise.allSettled([ loadSettingForm(this.getFormDependencies()), this.loadResourceSettings() ]);
-                JhsSelect.enhance(e);
-                sections.forEach(((result, index) => {
-                    if (result.status !== "rejected") return;
-                    const source = index === 0 ? "settings-form" : "resource-settings";
-                    clog.error(`${source} 加载失败`, result.reason), this.getRuntimeService("diagnostics").recordError({ source, message: result.reason?.message || String(result.reason) });
-                }));
-                sections.some((result => result.status === "rejected")) && show.error("部分设置内容加载失败，基础操作仍可使用");
+                const sections = await Promise.allSettled([ this.hydrateSettingForm(e), this.loadResourceSettings() ]), resourceResult = sections[1];
+                if (resourceResult.status === "rejected") {
+                    clog.error("resource-settings 加载失败", resourceResult.reason), this.getRuntimeService("diagnostics").recordError({ source: "resource-settings", message: resourceResult.reason?.message || String(resourceResult.reason) }), show.error("资源设置加载失败，基本设置仍可保存");
+                }
             },
             end: () => {
                 this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null;
                 this.getOptionalDependency("CoverButtonPlugin")?.enableSvgBtn?.();
             }
         });
+    }
+    /** @param {JQueryHandle | HTMLElement} layerRoot */
+    async hydrateSettingForm(layerRoot) {
+        const button = $(layerRoot).find("#saveBtn"), status = $(layerRoot).find("#settings-hydration-status");
+        button.attr("data-jhs-settings-ready", "false").prop("disabled", !0).attr("title", "正在加载设置…"), status.empty().text("正在加载设置…");
+        try {
+            await loadSettingForm(this.getFormDependencies());
+            if (!button[0]?.isConnected) return !1;
+            JhsSelect.enhance(layerRoot), button.attr("data-jhs-settings-ready", "true").prop("disabled", !1).removeAttr("title"), status.empty().text("设置已加载");
+            return !0;
+        } catch (error) {
+            clog.error("settings-form 加载失败", error), this.getRuntimeService("diagnostics").recordError({ source: "settings-form", message: error?.message || String(error) });
+            const retry = $('<button type="button" class="jhs-btn jhs-btn--secondary">重试加载</button>').on("click", (() => void this.hydrateSettingForm(layerRoot)));
+            status.empty().append(document.createTextNode("表单加载失败，已禁止保存。"), retry), show.error("设置表单加载失败，保存已禁用");
+            return !1;
+        }
     }
     renderTaskStatuses() {
         const container = $("#setting-task-status-list");
@@ -258,7 +270,7 @@ export class SettingPlugin extends BasePlugin {
     }
     bindClick() {
         const settingPlugin = this, webdav = this.getRuntimeService("webdav"), dialog = this.getRuntimeService("dialog"), diagnostics = this.getRuntimeService("diagnostics"), storage = this.getRuntimeService("storage"), previewDiff = (diff, imported, restored = null) => showDiffPreview(diff, imported, restored, dialog);
-        $("#saveBtn").attr("data-jhs-settings-ready", "true");
+        $("#saveBtn").attr("data-jhs-settings-ready", "false").prop("disabled", !0).attr("title", "正在加载设置…");
         $(".side-menu-item").on("click", (function() {
             $(".side-menu-item").removeClass("active").attr("aria-current", "false"), $(this).addClass("active").attr("aria-current", "page"), $(".content-panel").hide();
             const e = $(this).data("panel");
@@ -272,11 +284,11 @@ export class SettingPlugin extends BasePlugin {
         $("#webdavBackupBtn").on("click", (e => backupDataByWebDav(this.folderName, webdav))), $("#webdavBackupListBtn").on("click", (e => backupListBtnByWebDav(this.folderName, (files, client, label) => openFileListDialog(files, client, label, this.folderName, previewDiff, dialog), webdav))),
         $("#saveBtn").on("click", (async event => {
             const button = $(event.currentTarget);
-            if (button.data("jhsBusy")) return;
+            if (button.data("jhsBusy") || "true" !== button.attr("data-jhs-settings-ready")) return;
             button.data("jhsBusy", !0).prop("disabled", !0).attr("aria-busy", "true");
             try { await saveSettingForm(this.getFormDependencies()); }
             catch (error) { clog.error("设置保存失败", error), show.error("设置保存失败"); }
-            finally { button.removeData("jhsBusy").prop("disabled", !1).removeAttr("aria-busy"); }
+            finally { button.removeData("jhsBusy").prop("disabled", "true" !== button.attr("data-jhs-settings-ready")).removeAttr("aria-busy"); }
         })), $("#runHealthCheckBtn").on("click", (() => renderDataHealthPanel())),
         $("#repairHealthBtn").on("click", (e => {
             utils.q(e, "修复前会自动下载备份，是否继续?", (() => repairDataHealthWithBackup()));

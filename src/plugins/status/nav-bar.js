@@ -34,7 +34,8 @@ export class NavBarPlugin extends BasePlugin {
             for (let n = 0; n < t.length; n++) if (-1 !== t[n].type.indexOf("image")) {
                 const e = t[n].getAsFile();
                 $("#search-keyword").blur();
-                const a = this.getDependency("SearchByImagePlugin");
+                const a = this.getOptionalDependency("SearchByImagePlugin");
+                if (!a) return void show.info("以图识图功能已禁用");
                 return void a.open((() => {
                     a.handleImageFile(e), a.resetSearchUI();
                 }));
@@ -47,7 +48,7 @@ export class NavBarPlugin extends BasePlugin {
             let t = $("#search-keyword").val(), n = $("#search-type").val();
             "" !== t && (window.location.href.includes("/search") ? window.location.href = "/search?q=" + t + "&f=" + n : window.open("/search?q=" + t + "&f=" + n));
         })), $("#search-img-btn").on("click", (() => {
-            this.getDependency("SearchByImagePlugin").open();
+            this.getOptionalDependency("SearchByImagePlugin")?.open?.();
         }));
     }
     hookOldSearch() {
@@ -56,7 +57,7 @@ export class NavBarPlugin extends BasePlugin {
         const t = e.cloneNode(!0);
         e.parentNode?.replaceChild(t, e), $("#button-search-image").attr("data-tooltip", "以图识图"),
         $(".search-image").on("click", ((/** @type {MouseEvent} */ e) => {
-            this.getDependency("SearchByImagePlugin").open();
+            this.getOptionalDependency("SearchByImagePlugin")?.open?.();
         }));
     }
     margeNav() {

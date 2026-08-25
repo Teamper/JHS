@@ -111,7 +111,7 @@ test("Settings remains interactive and catalogs a disabled external-sites contri
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers disabled optional settings dependencies");
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
-  await injectUserscriptRuntime(page, { disabledPlugins: ["OtherSitePlugin"] });
+  await injectUserscriptRuntime(page, { disabledPlugins: ["OtherSitePlugin", "BusImgPlugin", "UnknownLegacyPlugin"] });
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   await page.locator('.layui-layer .side-menu-item[data-panel="base-panel"]').click();
@@ -120,6 +120,58 @@ test("Settings remains interactive and catalogs a disabled external-sites contri
   const externalSitesToggle = page.locator('.layui-layer .pm-toggle[data-plugin="OtherSitePlugin"]');
   await expect(externalSitesToggle).toBeVisible();
   await expect(externalSitesToggle).not.toBeChecked();
+  await expect(page.locator(".layui-layer #pm-disabled")).toHaveText("1");
+  const enabled = Number(await page.locator(".layui-layer #pm-enabled").textContent());
+  const total = Number(await page.locator(".layui-layer #pm-total").textContent());
+  expect(enabled).toBe(total - 1);
+});
+
+test("Settings blocks saving until failed hydration is retried successfully", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the hydration failure gate");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page);
+  await page.evaluate(() => {
+    const movie = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("movie");
+    window.__jhsOriginalExternalSiteOrigin = movie.externalSiteOrigin.bind(movie);
+    movie.externalSiteOrigin = () => { throw new Error("fixture hydration failure"); };
+  });
+  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  const save = page.locator(".layui-layer #saveBtn");
+  await expect(save).toBeDisabled();
+  await expect(save).toHaveAttribute("data-jhs-settings-ready", "false");
+  await expect(page.locator(".layui-layer #settings-hydration-status")).toContainText("表单加载失败");
+  await page.evaluate(() => {
+    const movie = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("movie");
+    movie.externalSiteOrigin = window.__jhsOriginalExternalSiteOrigin;
+  });
+  await page.getByRole("button", { name: "重试加载" }).click();
+  await expect(save).toHaveAttribute("data-jhs-settings-ready", "true");
+  await expect(save).toBeEnabled();
+});
+
+test("list runtime survives disabled optional list contributions", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers disabled list combinations");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
+  const disabledPlugins = ["Fc2Plugin", "AutoPagePlugin", "CoverButtonPlugin", "ListPageButtonPlugin"];
+  await injectUserscriptRuntime(page, { disabledPlugins });
+  const pluginNames = await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames());
+  expect(pluginNames).toContain("ListPagePlugin");
+  disabledPlugins.forEach((name) => expect(pluginNames).not.toContain(name));
+  await expect(page.locator(".movie-list .item")).toBeVisible();
+});
+
+test("detail state controls survive disabled optional magnet contributions", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers disabled detail combinations");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/v/test-id", { waitUntil: "domcontentloaded" });
+  const disabledPlugins = ["HighlightMagnetPlugin", "MagnetHubPlugin"];
+  await injectUserscriptRuntime(page, { disabledPlugins });
+  const pluginNames = await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames());
+  expect(pluginNames).toContain("DetailPageButtonPlugin");
+  disabledPlugins.forEach((name) => expect(pluginNames).not.toContain(name));
+  await expect(page.locator(".jhs-detail-btn-row")).toBeVisible();
 });
 
 test("FC2 core workspace survives disabled optional detail contributions", async ({ context, page }, testInfo) => {

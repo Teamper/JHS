@@ -153,6 +153,10 @@ export async function renderPluginMgmtPanel(diagnostics, /** @type {any} */ sett
     const diagnosticSnapshot = diagnostics.exportSnapshot();
     const disabled = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
     const allNames = diagnosticSnapshot.legacyPlugins;
+    const effectiveDisabledNames = (/** @type {string[]} */ values) => {
+        const disabledSet = new Set(values);
+        return allNames.filter(((/** @type {string} */ name) => disabledSet.has(name) || disabledSet.has(disabledIdForPlugin(name))));
+    };
     const { categories, pluginMeta } = getPluginCategories();
     const pluginDescriptors = new Map((diagnosticSnapshot.legacyPluginDescriptors || []).map((/** @type {{name: string, disableable: boolean}} */ item) => [item.name, item]));
     const registeredSet = new Set(allNames);
@@ -178,10 +182,10 @@ export async function renderPluginMgmtPanel(diagnostics, /** @type {any} */ sett
         html += `</section>`;
     }
     $("#plugin-mgmt-list").html(html);
-    const enabledCount = allNames.length - disabled.length;
+    const effectiveDisabled = effectiveDisabledNames(disabled), enabledCount = allNames.length - effectiveDisabled.length;
     $("#pm-total").text(allNames.length);
     $("#pm-enabled").text(enabledCount);
-    $("#pm-disabled").text(disabled.length);
+    $("#pm-disabled").text(effectiveDisabled.length);
     $(".pm-toggle").off("change").on("change", async (/** @type {Event} */ e) => {
         const name = $(e.target).data("plugin");
         let list = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
@@ -193,10 +197,10 @@ export async function renderPluginMgmtPanel(diagnostics, /** @type {any} */ sett
         }
         if (!settings) throw new Error("SettingsService is unavailable");
         await settings.set("disabledPlugins", JSON.stringify(list));
-        const all = diagnosticSnapshot.legacyPlugins;
+        const all = diagnosticSnapshot.legacyPlugins, currentDisabled = effectiveDisabledNames(list);
         $("#pm-total").text(all.length);
-        $("#pm-enabled").text(all.length - list.length);
-        $("#pm-disabled").text(list.length);
+        $("#pm-enabled").text(all.length - currentDisabled.length);
+        $("#pm-disabled").text(currentDisabled.length);
         show.ok(`插件 "${name}" 已${$(e.target).is(":checked") ? "启用" : "禁用"}，刷新后生效`);
     });
     const startup = diagnosticSnapshot.legacyStartup, timings = diagnosticSnapshot.legacyTimings;

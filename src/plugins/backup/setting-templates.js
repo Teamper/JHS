@@ -563,6 +563,7 @@ export function buildSettingDialogHtml(activePanel, cacheItems) {
                         </div>
 
                     <div class="jhs-setting-footer">
+                        <span id="settings-hydration-status" class="jhs-caption" aria-live="polite"></span>
                         <button type="button" id="saveBtn" class="jhs-btn jhs-btn--primary">保存设置</button>
                         <button id="clean-all" class="jhs-btn jhs-btn--danger jhs-is-hidden">清理全部缓存</button>
                     </div>

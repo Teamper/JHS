@@ -12,14 +12,20 @@ export class BusPreviewVideoPlugin extends BasePlugin {
     async initCss() {
         return "\n            .bus-preview-modal { position:fixed; inset:0; z-index:var(--jhs-z-modal); display:flex; align-items:center; justify-content:center; visibility:hidden; opacity:0; background:rgba(0,0,0,.95); transition:opacity var(--jhs-motion-base) var(--jhs-ease); }\n            .bus-preview-modal.is-open { visibility:visible; opacity:1; }\n            .bus-preview-modal-content { position:relative; display:flex; max-width:95%; max-height:95%; flex-direction:column; align-items:center; gap:var(--jhs-space-3); }\n            .video-player-wrapper { position:relative; width:80vw; max-width:100%; max-height:85vh; aspect-ratio:16/9; background:#000; }\n            .video-player-wrapper #preview-video { position:absolute; inset:0; }\n        ";
     }
-    initModal() {
+    /** @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope */
+    initModal(scope) {
         if (0 === $("#bus-preview-modal").length) {
             $("body").append('\n                <div id="bus-preview-modal" class="bus-preview-modal">\n                    <div class="bus-preview-modal-content">\n                        </div>\n                </div>\n            ');
             const e = $("#bus-preview-modal");
             e.on("click", ((/** @type {MouseEvent} */ e) => {
                 e.target instanceof Element && "bus-preview-modal" === e.target.id && this.closeVideoModal();
-            })), $(document).on("keydown", ((/** @type {KeyboardEvent} */ t) => {
-                "Escape" === t.key && e.hasClass("is-open") && this.closeVideoModal();
+            }));
+            scope.listen(document, "keydown", ((/** @type {Event} */ event) => {
+                event instanceof KeyboardEvent && "Escape" === event.key && e.hasClass("is-open") && this.closeVideoModal();
+            }));
+            scope.addCleanup((() => {
+                e.off();
+                e.remove();
             }));
         }
     }
@@ -29,11 +35,11 @@ export class BusPreviewVideoPlugin extends BasePlugin {
     }
     async handle() {
         if (!isDetailPage) return;
-        this.initModal();
+        const scope = await this.getRuntimeService("scope")();
+        this.initModal(scope);
         const e = $("#sample-waterfall .sample-box .photo-frame img:first").attr("src"), t = $(`\n            <button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65">\n                <div class="photo-frame jhs-layout-87db2275">\n                    <img src="${e}" class="video-cover" alt="">\n                    <div class="play-icon jhs-play-overlay">\n                        ▶\n                    </div>\n                </div>\n            </button>`);
         $("#sample-waterfall").prepend(t);
         if ("yes" === await storageManager.getSetting("enableLoadPreviewVideo", "yes")) {
-            const scope = await this.getRuntimeService("scope")();
             void fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope).catch((error => clog.warn("预加载 DMM 失败", error)));
         }
         let n = !1, a = $(".preview-video-container");

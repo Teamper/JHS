@@ -41,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### Fixed
 
+- 修复可选 List/Detail Contribution 被禁用时沿 legacy 硬依赖链级联移除核心运行时、Settings 表单 hydration 失败后仍可保存、插件禁用统计计入无效旧值，以及自定义 123AV 镜像在 History 中来源误标的问题；legacy 插件边现统一为显式可选依赖，并增加声明式 Runtime Service、禁用组合和加载重试门禁。
 - 修复禁用外部站点后设置弹窗初始化提前中断、内部按钮失效，以及 FC2 核心详情被可选插件同步异常阻断的问题；设置行为现先绑定并按区块降级，站点 URL 统一由 MovieIdentityService 提供，FC2 可选 Contribution 独立 fail-open。
 - 插件管理目录现在保留已禁用 Contribution 的描述信息，可在设置中重新启用；legacy 依赖新增必需/可选两种读取契约，缺失必需依赖会给出明确链路并写入 Diagnostics。
 - 修复 JavDB 高级搜索、想看和看过列表因 URL 白名单遗漏而未启动列表运行时的问题；HostAdapter 现在按宿主列表 DOM 能力识别路由。
