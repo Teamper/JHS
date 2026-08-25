@@ -34,6 +34,7 @@
     "src/core/movie-identity.js",
     "src/core/plugin-manager.js",
     "src/core/selection-model.js",
+    "src/core/settings-ui-owner.js",
     "src/core/site-context.js",
     "src/core/state-model.js",
     "src/core/state-service.js",

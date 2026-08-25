@@ -3,6 +3,7 @@ import { jhsEventBus } from "../../core/event-bus.js";
 import { buildFallbackCarUrl, parseCarNumberText } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
+import { registerSettingsUiOwner } from "../../core/settings-ui-owner.js";
 import { applyTheme } from "../../core/theme.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
 import { BUILT_IN_NATIVE_MAGNET_SOURCES, BUILT_IN_SCREENSHOT_SOURCES, ResourceSettingsService, buildCustomMagnetSource, validateRule } from "./resource-settings.js";
@@ -78,8 +79,18 @@ export class SettingPlugin extends BasePlugin {
             saveSettingItem: (key, value) => settings.set(key, value),
         });
         await storageManager.getSetting("enableClog", _) === _ && clog.show();
-        if (utils.isMobileMode()) return;
         const scope = await this.getRuntimeService("scope")();
+        const openSettings = async (panel = "backup-panel") => {
+            try { return await this.openSettingDialog(panel); }
+            catch (error) { clog.error("设置中心打开失败", error), show.error("设置中心打开失败"); throw error; }
+        };
+        scope.addCleanup(registerSettingsUiOwner(openSettings));
+        scope.listen(document, "click", (event => {
+            const target = event.target instanceof Element ? event.target.closest("#setting-btn, #mini-setting-btn") : null;
+            if (!target) return;
+            event.preventDefault(), $(".simple-setting, .mini-simple-setting").html("").hide(), clog.lowZIndex(), void openSettings().catch((() => undefined));
+        }));
+        if (utils.isMobileMode()) return;
         if (r) {
             let e = function() {
                 $(".navbar-search").is(":hidden") ? ($(".mini-setting-box").hide(), $(".setting-box").show()) : ($(".mini-setting-box").show(),
@@ -94,9 +105,7 @@ export class SettingPlugin extends BasePlugin {
         l && (isDetailPage ? $("h3").before('\n                    <div class="container-fluid jhs-setting-detail-anchor">\n                        <div id="top-right-box" class="jhs-setting-anchor">\n                            <div class="setting-box">\n                                <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                    <span>设置</span>\n                                </button>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ') : window.isListPage && utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
             $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" class="jhs-setting-anchor">\n                        <div class="setting-box">\n                            <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                <span>设置</span>\n                            </button>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
         }), 1, 1e4, !1, scope)),
-        $(".main-nav, .container-fluid").on("click", "#setting-btn, #mini-setting-btn", (() => {
-            $(".simple-setting, .mini-simple-setting").html("").hide(), clog.lowZIndex(), void this.openSettingDialog().catch((error => clog.error("设置中心打开失败", error)));
-        })), $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (async () => {
+        $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (async () => {
             $(".simple-setting").html(buildQuickSettingHtml()).show();
             try { await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this)); } catch (error) { clog.warn("桌面快捷设置初始化失败", error); }
             clog.lowZIndex();
@@ -144,8 +153,7 @@ export class SettingPlugin extends BasePlugin {
         }
     }
     async openSettingDialog(e = "backup-panel", t) {
-        const a = this.getDependency("CoverButtonPlugin");
-        const s = buildSettingDialogHtml(e, this.cacheItems, a);
+        const s = buildSettingDialogHtml(e, this.cacheItems);
         this.getRuntimeService("dialog").open({
             type: 1,
             title: "设置",
@@ -162,7 +170,7 @@ export class SettingPlugin extends BasePlugin {
             },
             end: () => {
                 this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null;
-                this.getDependency("CoverButtonPlugin").enableSvgBtn();
+                this.getDependency("CoverButtonPlugin")?.enableSvgBtn?.();
             }
         });
     }
@@ -242,6 +250,7 @@ export class SettingPlugin extends BasePlugin {
     }
     bindClick() {
         const settingPlugin = this, webdav = this.getRuntimeService("webdav"), dialog = this.getRuntimeService("dialog"), diagnostics = this.getRuntimeService("diagnostics"), storage = this.getRuntimeService("storage"), previewDiff = (diff, imported, restored = null) => showDiffPreview(diff, imported, restored, dialog);
+        $("#saveBtn").attr("data-jhs-settings-ready", "true");
         $(".side-menu-item").on("click", (function() {
             $(".side-menu-item").removeClass("active").attr("aria-current", "false"), $(this).addClass("active").attr("aria-current", "page"), $(".content-panel").hide();
             const e = $(this).data("panel");
@@ -253,7 +262,14 @@ export class SettingPlugin extends BasePlugin {
         })), $("#importBtn").on("click", (e => importSettingData(previewDiff))), $("#exportBtn").on("click", (e => exportSettingData())),
         $("#preview-car-number-import").on("click", (() => this.previewCarNumbers())), $("#confirm-car-number-import").on("click", (async e => this.confirmCarNumbers(e))),
         $("#webdavBackupBtn").on("click", (e => backupDataByWebDav(this.folderName, webdav))), $("#webdavBackupListBtn").on("click", (e => backupListBtnByWebDav(this.folderName, (files, client, label) => openFileListDialog(files, client, label, this.folderName, previewDiff, dialog), webdav))),
-        $("#saveBtn").on("click", (() => saveSettingForm(this.getFormDependencies()))), $("#runHealthCheckBtn").on("click", (() => renderDataHealthPanel())),
+        $("#saveBtn").on("click", (async event => {
+            const button = $(event.currentTarget);
+            if (button.data("jhsBusy")) return;
+            button.data("jhsBusy", !0).prop("disabled", !0).attr("aria-busy", "true");
+            try { await saveSettingForm(this.getFormDependencies()); }
+            catch (error) { clog.error("设置保存失败", error), show.error("设置保存失败"); }
+            finally { button.removeData("jhsBusy").prop("disabled", !1).removeAttr("aria-busy"); }
+        })), $("#runHealthCheckBtn").on("click", (() => renderDataHealthPanel())),
         $("#repairHealthBtn").on("click", (e => {
             utils.q(e, "修复前会自动下载备份，是否继续?", (() => repairDataHealthWithBackup()));
         })), $("#pm-clear-log").on("click", (() => {

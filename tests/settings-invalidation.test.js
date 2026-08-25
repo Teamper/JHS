@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 const storage = readTestFile(join(process.cwd(), "src/core/storage.js"), "utf8");
 const settingForms = readTestFile(join(process.cwd(), "src/plugins/backup/setting-forms.js"), "utf8");
+const settingPlugin = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8");
+const settingTemplates = readTestFile(join(process.cwd(), "src/plugins/backup/setting-templates.js"), "utf8");
 
 function methodBody(source, start, end) {
     return source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));
@@ -23,5 +25,14 @@ describe("settings invalidation ownership", () => {
         expect(saveForm).toContain("dependencies.settings.replace");
         expect(saveForm).not.toContain("storageManager.saveSetting(");
         expect(saveForm).not.toContain("invalidateConfig");
+        expect(saveForm).toContain("dependencies.blacklist?.resetBtnTip?.()");
+        expect(saveForm).toContain("dependencies.blacklist?.reloadTable?.()");
+    });
+
+    it("opens and closes Settings without requiring CoverButtonPlugin", () => {
+        const openDialog = methodBody(settingPlugin, "async openSettingDialog", "renderTaskStatuses()");
+        expect(openDialog).not.toContain('getDependency("CoverButtonPlugin")');
+        expect(settingPlugin).toContain('getBean("CoverButtonPlugin")?.enableSvgBtn?.()');
+        expect(settingTemplates).not.toContain("coverButtonPlugin");
     });
 });

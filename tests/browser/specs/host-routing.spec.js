@@ -49,3 +49,60 @@ test("legacy disabled plugin migrates to one contribution only", async ({ contex
   expect(pluginNames).toContain("RelatedPlugin");
   expect(pluginNames).toContain("DetailWorkspacePlugin");
 });
+
+for (const path of ["/advanced_search?type=3", "/advanced_search?type=100", "/want_watch_videos", "/watched_videos"]) {
+  test(`JavDB DOM list route remains active on ${path}`, async ({ context, page }) => {
+    await fulfillHostFixtures(context);
+    await page.goto(`https://javdb.com${path}`, { waitUntil: "domcontentloaded" });
+    await injectUserscriptRuntime(page);
+    await expect.poll(() => page.evaluate(() => window.isListPage)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("ListPagePlugin"))).toBe(true);
+  });
+}
+
+test("FC2 cards keep dialog navigation and use owned-page anchor fallback", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers navigation semantics");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/advanced_search?type=3", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page);
+  await expect.poll(() => page.locator(".movie-list .item").getAttribute("data-jhs-fc2-protected")).toBe("true");
+  const href = await page.locator(".movie-list .item a").getAttribute("href");
+  expect(new URL(href).pathname).toBe("/users/collection_codes");
+  expect(new URL(href).searchParams.get("url")).toBe("/v/vip-fc2-placeholder");
+  await page.evaluate(() => {
+    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
+    fc2.resolveMovieIdForRecord = async () => null;
+    fc2.resolveFc2Source = async () => "fc2";
+    fc2.openFc2Dialog = (...args) => { window.__jhsFc2Navigation = { mode: "dialog", args }; };
+    fc2.openFc2Page = (...args) => { window.__jhsFc2Navigation = { mode: "page", args }; };
+  });
+  await page.evaluate(() => document.querySelector(".movie-list .item img").dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })));
+  await expect.poll(() => page.evaluate(() => window.__jhsFc2Navigation?.mode)).toBe("dialog");
+  await page.evaluate(() => { window.__jhsFc2Navigation = null; });
+  await page.evaluate(() => document.querySelector(".movie-list .item img").dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ctrlKey: true })));
+  await expect.poll(() => page.evaluate(() => window.__jhsFc2Navigation?.mode)).toBe("page");
+  await page.evaluate(() => { window.__jhsFc2Navigation = null; document.querySelector(".movie-list .item img").dispatchEvent(new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 })); });
+  await expect.poll(() => page.evaluate(() => window.__jhsFc2Navigation?.mode)).toBe("page");
+  const ownedUrl = new URL(href);
+  ownedUrl.searchParams.set("movieId", "fixture-id");
+  await page.goto(ownedUrl.href, { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page);
+  expect(new URL(page.url()).pathname).toBe("/users/collection_codes");
+  await expect(page.locator(".jhs-fc2-workspace[data-jhs-fc2-mode='page']")).toBeVisible();
+});
+
+test("Settings opens when optional CoverButton and Blacklist contributions are disabled", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers optional settings dependencies");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page, { disabledPlugins: ["CoverButtonPlugin", "BlacklistPlugin"] });
+  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
+  await page.evaluate(() => {
+    const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings"), replace = settings.replace.bind(settings);
+    settings.replace = async (...args) => { window.__jhsSettingsSaved = true; return replace(...args); };
+  });
+  await page.locator(".layui-layer #saveBtn").click();
+  await expect.poll(() => page.evaluate(() => window.__jhsSettingsSaved)).toBe(true);
+  await expect(page.locator(".layui-layer #saveBtn")).not.toHaveAttribute("aria-busy", "true");
+});

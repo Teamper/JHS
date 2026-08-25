@@ -186,7 +186,7 @@ export async function saveSettingForm(dependencies) {
         n.push(t);
     }), await storageManager.saveTitleFilterKeyword(n), show.ok("保存成功"), await settingsEventBus.emit("filter-rules-changed", { scope: "title-keyword" });
     const a = dependencies.newVideo;
-    a && a.resetBtnTip(), dependencies.blacklist.resetBtnTip(), dependencies.blacklist.reloadTable();
+    a?.resetBtnTip?.(), dependencies.blacklist?.resetBtnTip?.(), dependencies.blacklist?.reloadTable?.();
 }
 
 /** Create a removable keyword label tag in the filter panel. */

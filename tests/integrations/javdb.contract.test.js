@@ -24,6 +24,18 @@ it("owns JavDB list roots and creates host-compatible JHS list surfaces", () => 
     expect(owned.classList.contains("jhs-owned-list")).toBe(true);
 });
 
+it.each([
+    "/advanced_search?type=3", "/advanced_search?type=100", "/want_watch_videos", "/watched_videos",
+])("detects DOM-backed JavDB list route %s", (path) => {
+    const dom = new JSDOM('<div class="movie-list"><article class="item"></article></div>', { url: `https://javdb.com${path}` });
+    expect(new JavDbHostAdapter(dom.window.document, dom.window.location).detectRoute()).toBe("list");
+});
+
+it("keeps explicit detail routes ahead of incidental list markup", () => {
+    const dom = new JSDOM('<div class="movie-list"></div>', { url: "https://javdb.com/v/test-id" });
+    expect(new JavDbHostAdapter(dom.window.document, dom.window.location).detectRoute()).toBe("detail");
+});
+
 it("normalizes JavDB host actor movies and uncollect mutations", async () => {
     const html = readFileSync(join(import.meta.dirname, "../fixtures/integrations/javdb/actor-movies.html"), "utf8");
     const hostAdapter = new JavDbHostAdapter();

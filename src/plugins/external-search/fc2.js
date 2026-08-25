@@ -320,10 +320,14 @@ export class Fc2Plugin extends BasePlugin {
         if (record.fc2Source && [ "fc2", "123av" ].includes(record.fc2Source)) return record.fc2Source;
         try { return this.getRuntimeService("movie").matchesProviderUrl("av123", new URL(/** @type {string} */ (record.url), window.location.origin).href) ? "123av" : "fc2"; } catch { return "fc2"; }
     }
-    /** @param {string | null} movieId @param {string} carNum @param {string} url @param {{ newTab?: boolean }} [navigation] @param {{ source?: string }} [options] */
-    async openFc2Page(movieId, carNum, url, navigation = { newTab: !0 }, { source = "fc2" } = {}) {
+    /** Build the same-origin owned FC2 detail URL used by both interception and native anchor fallback. @param {string | null} movieId @param {string} carNum @param {string} url @param {{source?: string}} [options] */
+    createFc2PageUrl(movieId, carNum, url, { source = "fc2" } = {}) {
         const target = new URL("/users/collection_codes", window.location.origin);
         target.searchParams.set("movieId", movieId || ""), target.searchParams.set("carNum", carNum), target.searchParams.set("url", url), target.searchParams.set("source", source);
-        utils.openPage(target.href, carNum, !0, navigation);
+        return target.href;
+    }
+    /** @param {string | null} movieId @param {string} carNum @param {string} url @param {{ newTab?: boolean }} [navigation] @param {{ source?: string }} [options] */
+    async openFc2Page(movieId, carNum, url, navigation = { newTab: !0 }, { source = "fc2" } = {}) {
+        utils.openPage(this.createFc2PageUrl(movieId, carNum, url, { source }), carNum, !0, navigation);
     }
 }

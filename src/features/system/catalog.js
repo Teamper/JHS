@@ -2,12 +2,13 @@
 
 import { defineFeature } from "../../contracts/manifests.js";
 import { SERVICE } from "../../contracts/tokens.js";
+import { openSettingsUi } from "../../core/settings-ui-owner.js";
 
 export const systemFeatureManifests = Object.freeze([
     defineFeature({
         id: "settings", kind: "system", disableable: false, sites: [], routes: [], startup: "on-command",
         requires: [SERVICE.diagnostics], contributes: ["settings.core"], providesCommands: ["settings.open"],
-        activate: () => ({ commands: { "settings.open": () => document.querySelector("#setting-btn, #mini-setting-btn")?.dispatchEvent(new MouseEvent("click", { bubbles: true })) } }),
+        activate: () => ({ commands: { "settings.open": () => openSettingsUi() } }),
     }),
     defineFeature({
         id: "diagnostics", kind: "system", disableable: false, sites: [], routes: [], startup: "eager",

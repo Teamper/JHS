@@ -41,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### Fixed
 
+- 修复 JavDB 高级搜索、想看和看过列表因 URL 白名单遗漏而未启动列表运行时的问题；HostAdapter 现在按宿主列表 DOM 能力识别路由。
+- 修复 FC2 等跨路由 legacy Contribution 借用 Detail Feature scope 后在列表页被判定为不可用的问题；每个 Contribution 现拥有独立生命周期，并将 FC2 原生卡片链接保护为 JHS owned detail page。
+- 修复 Settings 导航按钮委托范围不覆盖实际挂载节点、`settings.open` 依赖模拟 DOM 点击，以及禁用 CoverButton/Blacklist 后打开或保存失败的问题；入口、保存忙碌态与失败反馈现由 Settings owner 统一处理。
 - 修复新旧设置写入形成双状态源的问题；设置表单、快捷开关、主题、插件管理与资源设置统一写入 SettingsService，并同步刷新 legacy 缓存与当前 Runtime snapshot。
 - 恢复 123AV 自定义 HTTPS origin，搜索、详情、Cookie Partition 与 URL Policy 统一使用同一配置；搜索分页现使用已验证的 `page` 参数，旧镜像详情路径也可识别为 123AV 来源。
 - 修复 FC2 搜索 URL 被误解析为 `movieId=search` 以及 JavBus History 绕过统一 FC2 工作区的问题；只有明确 `/v/<id>` 路由直接取 ID，其余均按番号解析。

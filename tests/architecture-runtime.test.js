@@ -10,6 +10,7 @@ import { defineFeature, defineIntegration } from "../src/contracts/manifests.js"
 import { PORT, SERVICE } from "../src/contracts/tokens.js";
 import { featureManifests } from "../src/features/catalog.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { openSettingsUi, registerSettingsUiOwner } from "../src/core/settings-ui-owner.js";
 import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 
@@ -142,6 +143,29 @@ describe("v6.5 architecture runtime contracts", () => {
             id: "duplicate-owner", kind: "feature", disableable: true, sites: ["javdb"], routes: ["detail"],
             startup: "on-demand", requires: [], contributes: ["detail.related"], providesCommands: [], activate: () => ({}),
         }))).toThrow(/Duplicate contribution ownership/);
+    });
+
+    it("gives a legacy contribution a route-independent scope without activating its owner feature", async () => {
+        const diagnostics = new DiagnosticsService(), runtime = new FeatureRuntime({
+            container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics,
+            site: "javdb", route: "list",
+        });
+        runtime.register(defineFeature({
+            id: "detail", kind: "feature", disableable: true, sites: ["javdb"], routes: ["detail"],
+            startup: "on-demand", requires: [], contributes: ["detail.fc2"], providesCommands: [], activate: () => ({}),
+        }));
+        await expect(runtime.getScope("detail")).rejects.toThrow(/ineligible/);
+        const scope = await runtime.getContributionScope("detail", "detail.fc2", "Fc2Plugin");
+        expect(scope.id).toBe("contribution:detail.fc2");
+        expect(runtime.getActiveFeatureIds()).not.toContain("detail");
+    });
+
+    it("opens Settings through its registered owner without a DOM trigger", async () => {
+        const owner = vi.fn(async () => "opened"), cleanup = registerSettingsUiOwner(owner);
+        await expect(openSettingsUi("filter-panel")).resolves.toBe("opened");
+        expect(owner).toHaveBeenCalledWith("filter-panel");
+        cleanup();
+        expect(() => openSettingsUi()).toThrow(/not ready/);
     });
 
     it("disposes all scope-owned resources and blocks stale generations", () => {

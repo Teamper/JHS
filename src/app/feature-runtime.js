@@ -21,6 +21,8 @@ export class FeatureRuntime {
         this.contributionOwners = new Map();
         /** @type {Map<string, Promise<Record<string, any>>>} */
         this.activations = new Map();
+        /** @type {Map<string, LifecycleScope>} */
+        this.contributionScopes = new Map();
         this.commands.setActivator((featureId) => this.activate(featureId).then(() => undefined));
     }
 
@@ -71,6 +73,19 @@ export class FeatureRuntime {
     /** @param {string} featureId */
     async getScope(featureId) {
         return (await this.activate(featureId)).scope;
+    }
+
+    /** Return a page-lifetime scope owned by one enabled legacy contribution. @param {string} featureId @param {string} contributionId @param {string} legacyPluginId */
+    getContributionScope(featureId, contributionId, legacyPluginId) {
+        if (!this.isContributionEnabled(featureId, contributionId, legacyPluginId)) {
+            return Promise.reject(new Error(`Contribution is disabled or ineligible: ${contributionId}`));
+        }
+        let scope = this.contributionScopes.get(contributionId);
+        if (!scope || scope.disposed) {
+            scope = new LifecycleScope(`contribution:${contributionId}`, { onChange: (snapshot) => this.diagnostics.updateScope(snapshot) });
+            this.contributionScopes.set(contributionId, scope);
+        }
+        return Promise.resolve(scope);
     }
 
     /** @param {string} id */

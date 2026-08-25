@@ -5376,8 +5376,7 @@
     }
     detectRoute() {
       if (this.location.pathname.startsWith("/v/") || this.location.pathname.startsWith("/movies/")) return "detail";
-      const listPath = /^\/(?:$|search|tags|actors|users\/|lists|series)/.test(this.location.pathname);
-      return listPath && this.locateListRoot() ? "list" : "other";
+      return this.locateListRoot() ? "list" : "other";
     }
     readMovieRef() {
       const carNum = this.document.querySelector(".panel-block.first-block .value, [data-car-number]")?.textContent?.trim() ?? null;
@@ -5750,6 +5749,23 @@
     feature("compatibility", ["javdb", "javbus"], ["compatibility.enhancements"])
   ]);
 
+  // src/core/settings-ui-owner.js
+  var settingsOwner = null;
+  function registerSettingsUiOwner(owner) {
+    if (typeof owner !== "function") throw new TypeError("Settings UI owner must be a function");
+    if (settingsOwner && settingsOwner !== owner) throw new Error("Settings UI owner is already registered");
+    settingsOwner = owner;
+    return () => {
+      if (settingsOwner === owner) settingsOwner = null;
+    };
+  }
+  __name(registerSettingsUiOwner, "registerSettingsUiOwner");
+  function openSettingsUi(panel) {
+    if (!settingsOwner) throw new Error("Settings UI owner is not ready");
+    return settingsOwner(panel);
+  }
+  __name(openSettingsUi, "openSettingsUi");
+
   // src/features/system/catalog.js
   var systemFeatureManifests = Object.freeze([
     defineFeature({
@@ -5762,7 +5778,7 @@
       requires: [SERVICE.diagnostics],
       contributes: ["settings.core"],
       providesCommands: ["settings.open"],
-      activate: /* @__PURE__ */ __name(() => ({ commands: { "settings.open": /* @__PURE__ */ __name(() => document.querySelector("#setting-btn, #mini-setting-btn")?.dispatchEvent(new MouseEvent("click", { bubbles: true })), "settings.open") } }), "activate")
+      activate: /* @__PURE__ */ __name(() => ({ commands: { "settings.open": /* @__PURE__ */ __name(() => openSettingsUi(), "settings.open") } }), "activate")
     }),
     defineFeature({
       id: "diagnostics",
@@ -7348,7 +7364,7 @@
       n2.push(t3);
     }), await storageManager.saveTitleFilterKeyword(n2), show.ok("保存成功"), await settingsEventBus.emit("filter-rules-changed", { scope: "title-keyword" });
     const a2 = dependencies.newVideo;
-    a2 && a2.resetBtnTip(), dependencies.blacklist.resetBtnTip(), dependencies.blacklist.reloadTable();
+    a2?.resetBtnTip?.(), dependencies.blacklist?.resetBtnTip?.(), dependencies.blacklist?.reloadTable?.();
   }
   __name(saveSettingForm, "saveSettingForm");
   function addLabelTag(e2, t2) {
@@ -7462,7 +7478,7 @@
     return a2;
   }
   __name(buildVideoQualityOptions, "buildVideoQualityOptions");
-  function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
+  function buildSettingDialogHtml(activePanel, cacheItems) {
     const n2 = buildCacheItemsHtml(cacheItems);
     const a2 = buildVideoQualityOptions();
     return `
@@ -7583,7 +7599,7 @@
 
                             <div class="jhs-setting-row">
                                 <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.screenSvg}长缩略图:
+                                    长缩略图:
                                 </span>
                                 <div class="form-content">
                                     <input type="checkbox" id="enableScreenSvg" class="mini-switch">
@@ -7592,7 +7608,7 @@
 
                             <div class="jhs-setting-row">
                                 <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.videoSvg}预览视频:
+                                    预览视频:
                                 </span>
                                 <div class="form-content">
                                     <input type="checkbox" id="enableVideoSvg" class="mini-switch">
@@ -7601,7 +7617,7 @@
 
                             <div class="jhs-setting-row">
                                 <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.handleSvg}鉴定按钮:
+                                    鉴定按钮:
                                 </span>
                                 <div class="form-content">
                                     <input type="checkbox" id="enableHandleSvg" class="mini-switch">
@@ -7610,7 +7626,7 @@
 
                             <div class="jhs-setting-row">
                                 <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.siteSvg}第三方跳转:
+                                    第三方跳转:
                                 </span>
                                 <div class="form-content">
                                     <input type="checkbox" id="enableSiteSvg" class="mini-switch">
@@ -7619,7 +7635,7 @@
 
                             <div class="jhs-setting-row">
                                 <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.copySvg}复制按钮:
+                                    复制按钮:
                                 </span>
                                 <div class="form-content">
                                     <input type="checkbox" id="enableCopySvg" class="mini-switch">
@@ -8412,8 +8428,22 @@
         saveSettingItem: /* @__PURE__ */ __name((key, value) => settings.set(key, value), "saveSettingItem")
       });
       await storageManager.getSetting("enableClog", _) === _ && clog.show();
-      if (utils.isMobileMode()) return;
       const scope = await this.getRuntimeService("scope")();
+      const openSettings = /* @__PURE__ */ __name(async (panel = "backup-panel") => {
+        try {
+          return await this.openSettingDialog(panel);
+        } catch (error) {
+          clog.error("设置中心打开失败", error), show.error("设置中心打开失败");
+          throw error;
+        }
+      }, "openSettings");
+      scope.addCleanup(registerSettingsUiOwner(openSettings));
+      scope.listen(document, "click", ((event) => {
+        const target = event.target instanceof Element ? event.target.closest("#setting-btn, #mini-setting-btn") : null;
+        if (!target) return;
+        event.preventDefault(), $(".simple-setting, .mini-simple-setting").html("").hide(), clog.lowZIndex(), void openSettings().catch((() => void 0));
+      }));
+      if (utils.isMobileMode()) return;
       if (r) {
         let e2 = /* @__PURE__ */ __name(function() {
           $(".navbar-search").is(":hidden") ? ($(".mini-setting-box").hide(), $(".setting-box").show()) : ($(".mini-setting-box").show(), $(".setting-box").hide());
@@ -8424,9 +8454,7 @@
       }
       l && (isDetailPage ? $("h3").before('\n                    <div class="container-fluid jhs-setting-detail-anchor">\n                        <div id="top-right-box" class="jhs-setting-anchor">\n                            <div class="setting-box">\n                                <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                    <span>设置</span>\n                                </button>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ') : window.isListPage && utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
         $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" class="jhs-setting-anchor">\n                        <div class="setting-box">\n                            <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                <span>设置</span>\n                            </button>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
-      }), 1, 1e4, false, scope)), $(".main-nav, .container-fluid").on("click", "#setting-btn, #mini-setting-btn", (() => {
-        $(".simple-setting, .mini-simple-setting").html("").hide(), clog.lowZIndex(), void this.openSettingDialog().catch(((error) => clog.error("设置中心打开失败", error)));
-      })), $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (async () => {
+      }), 1, 1e4, false, scope)), $(".main-nav, .container-fluid").on("mouseenter", ".setting-box", (async () => {
         $(".simple-setting").html(buildQuickSettingHtml()).show();
         try {
           await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this));
@@ -8480,8 +8508,7 @@
       }
     }
     async openSettingDialog(e2 = "backup-panel", t2) {
-      const a2 = this.getDependency("CoverButtonPlugin");
-      const s2 = buildSettingDialogHtml(e2, this.cacheItems, a2);
+      const s2 = buildSettingDialogHtml(e2, this.cacheItems);
       this.getRuntimeService("dialog").open({
         type: 1,
         title: "设置",
@@ -8497,7 +8524,7 @@
         }, "success"),
         end: /* @__PURE__ */ __name(() => {
           this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null;
-          this.getDependency("CoverButtonPlugin").enableSvgBtn();
+          this.getDependency("CoverButtonPlugin")?.enableSvgBtn?.();
         }, "end")
       });
     }
@@ -8577,11 +8604,23 @@
     }
     bindClick() {
       const settingPlugin = this, webdav = this.getRuntimeService("webdav"), dialog = this.getRuntimeService("dialog"), diagnostics = this.getRuntimeService("diagnostics"), storage = this.getRuntimeService("storage"), previewDiff = /* @__PURE__ */ __name((diff, imported, restored = null) => showDiffPreview(diff, imported, restored, dialog), "previewDiff");
+      $("#saveBtn").attr("data-jhs-settings-ready", "true");
       $(".side-menu-item").on("click", (function() {
         $(".side-menu-item").removeClass("active").attr("aria-current", "false"), $(this).addClass("active").attr("aria-current", "page"), $(".content-panel").hide();
         const e3 = $(this).data("panel");
         $("#" + e3).show(), "cache-panel" === e3 ? ($("#saveBtn").hide(), $("#clean-all").removeClass("jhs-is-hidden")) : ($("#saveBtn").show(), $("#clean-all").addClass("jhs-is-hidden")), "health-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderDataHealthPanel()), "plugin-mgmt-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderPluginMgmtPanel(settingPlugin.getRuntimeService("diagnostics"), settingPlugin.getRuntimeService("settings"))), "snapshot-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderSnapshotPanel()), "network-panel" === e3 && ($("#saveBtn").hide(), $("#clean-all").addClass("jhs-is-hidden"), renderNetworkPanel(diagnostics));
-      })), $("#importBtn").on("click", ((e3) => importSettingData(previewDiff))), $("#exportBtn").on("click", ((e3) => exportSettingData())), $("#preview-car-number-import").on("click", (() => this.previewCarNumbers())), $("#confirm-car-number-import").on("click", (async (e3) => this.confirmCarNumbers(e3))), $("#webdavBackupBtn").on("click", ((e3) => backupDataByWebDav(this.folderName, webdav))), $("#webdavBackupListBtn").on("click", ((e3) => backupListBtnByWebDav(this.folderName, (files, client, label) => openFileListDialog(files, client, label, this.folderName, previewDiff, dialog), webdav))), $("#saveBtn").on("click", (() => saveSettingForm(this.getFormDependencies()))), $("#runHealthCheckBtn").on("click", (() => renderDataHealthPanel())), $("#repairHealthBtn").on("click", ((e3) => {
+      })), $("#importBtn").on("click", ((e3) => importSettingData(previewDiff))), $("#exportBtn").on("click", ((e3) => exportSettingData())), $("#preview-car-number-import").on("click", (() => this.previewCarNumbers())), $("#confirm-car-number-import").on("click", (async (e3) => this.confirmCarNumbers(e3))), $("#webdavBackupBtn").on("click", ((e3) => backupDataByWebDav(this.folderName, webdav))), $("#webdavBackupListBtn").on("click", ((e3) => backupListBtnByWebDav(this.folderName, (files, client, label) => openFileListDialog(files, client, label, this.folderName, previewDiff, dialog), webdav))), $("#saveBtn").on("click", (async (event) => {
+        const button = $(event.currentTarget);
+        if (button.data("jhsBusy")) return;
+        button.data("jhsBusy", true).prop("disabled", true).attr("aria-busy", "true");
+        try {
+          await saveSettingForm(this.getFormDependencies());
+        } catch (error) {
+          clog.error("设置保存失败", error), show.error("设置保存失败");
+        } finally {
+          button.removeData("jhsBusy").prop("disabled", false).removeAttr("aria-busy");
+        }
+      })), $("#runHealthCheckBtn").on("click", (() => renderDataHealthPanel())), $("#repairHealthBtn").on("click", ((e3) => {
         utils.q(e3, "修复前会自动下载备份，是否继续?", (() => repairDataHealthWithBackup()));
       })), $("#pm-clear-log").on("click", (() => {
         this.getRuntimeService("diagnostics").clearErrors(), $("#plugin-error-log").text("无错误记录"), show.ok("错误日志已清空");
@@ -8836,7 +8875,7 @@
   // src/core/list-item-reader.js
   function readListItem(item) {
     const jq = globalThis.$, element = item?.jquery ? item : jq(item);
-    const anchor = element.find("a"), url = anchor.attr("href"), titleNode = element.find(".video-title");
+    const anchor = element.find("a"), url = element.attr("data-jhs-original-url") || anchor.attr("href"), titleNode = element.find(".video-title");
     let carNum, title, publishTime;
     if (titleNode.length) {
       const strong = titleNode.find("strong");
@@ -10540,10 +10579,13 @@ ${value}\r
         return "fc2";
       }
     }
-    async openFc2Page(movieId, carNum, url, navigation = { newTab: true }, { source = "fc2" } = {}) {
+    createFc2PageUrl(movieId, carNum, url, { source = "fc2" } = {}) {
       const target = new URL("/users/collection_codes", window.location.origin);
       target.searchParams.set("movieId", movieId || ""), target.searchParams.set("carNum", carNum), target.searchParams.set("url", url), target.searchParams.set("source", source);
-      utils.openPage(target.href, carNum, true, navigation);
+      return target.href;
+    }
+    async openFc2Page(movieId, carNum, url, navigation = { newTab: true }, { source = "fc2" } = {}) {
+      utils.openPage(this.createFc2PageUrl(movieId, carNum, url, { source }), carNum, true, navigation);
     }
   };
   __name(_Fc2Plugin, "Fc2Plugin");
@@ -16293,11 +16335,28 @@ ${failure.stack}` : "");
     }
     bindMovieDetailNavigation(container) {
       const root = $(container), selector = ".item img, .item .video-title";
+      this.protectFc2Navigation(root);
       root.off("click.jhsMovieDetail auxclick.jhsMovieDetail", selector).on("click.jhsMovieDetail auxclick.jhsMovieDetail", selector, ((event) => {
         if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
         if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
         event.preventDefault(), event.stopPropagation();
         void this.openMovieDetail($(event.currentTarget).closest(".item"), { event }).catch(((error) => clog.error("打开影片详情失败", error)));
+      }));
+    }
+    protectFc2Navigation(root) {
+      const plugin = this.getDependency("Fc2Plugin");
+      root.find(".item").each(((_index, element) => {
+        const item = $(element);
+        if (item.attr("data-jhs-fc2-protected") === "true") return;
+        try {
+          const { carNum, aHref, fc2Source } = this.findCarNumAndHref(item);
+          if (!carNum.includes("FC2-") || !aHref) return;
+          const source = fc2Source || "fc2", target = plugin.createFc2PageUrl(null, carNum, aHref, { source });
+          item.attr({ "data-jhs-original-url": aHref, "data-jhs-fc2-source": source, "data-jhs-fc2-protected": "true" });
+          item.find("a[href]").attr("href", target);
+        } catch (error) {
+          clog.warn("FC2 导航保护初始化失败", error);
+        }
       }));
     }
     async parseActressName(e2) {
@@ -17092,7 +17151,7 @@ ${failure.stack}` : "");
     legacyContributionManifests.filter((item) => item.sites.includes(site) && featureRuntime.isContributionEnabled(item.featureId, item.id, item.legacyPluginId)).sort((left, right) => Number(left.order[site]) - Number(right.order[site])).forEach((item) => {
       const dependencies = featureRuntime.resolveDeclaredDependencies(item.requires);
       const runtimeServices = {};
-      runtimeServices.scope = () => featureRuntime.getScope(item.featureId);
+      runtimeServices.scope = () => featureRuntime.getContributionScope(item.featureId, item.id, item.legacyPluginId);
       const runtimeNames = /* @__PURE__ */ new Map([
         [PORT.host, "host"],
         [SERVICE.diagnostics, "diagnostics"],
@@ -18540,6 +18599,7 @@ ${failure.stack}` : "");
       this.manifests = /* @__PURE__ */ new Map();
       this.contributionOwners = /* @__PURE__ */ new Map();
       this.activations = /* @__PURE__ */ new Map();
+      this.contributionScopes = /* @__PURE__ */ new Map();
       this.commands.setActivator((featureId) => this.activate(featureId).then(() => void 0));
     }
     register(manifest2) {
@@ -18578,6 +18638,17 @@ ${failure.stack}` : "");
     }
     async getScope(featureId) {
       return (await this.activate(featureId)).scope;
+    }
+    getContributionScope(featureId, contributionId, legacyPluginId) {
+      if (!this.isContributionEnabled(featureId, contributionId, legacyPluginId)) {
+        return Promise.reject(new Error(`Contribution is disabled or ineligible: ${contributionId}`));
+      }
+      let scope = this.contributionScopes.get(contributionId);
+      if (!scope || scope.disposed) {
+        scope = new LifecycleScope(`contribution:${contributionId}`, { onChange: /* @__PURE__ */ __name((snapshot) => this.diagnostics.updateScope(snapshot), "onChange") });
+        this.contributionScopes.set(contributionId, scope);
+      }
+      return Promise.resolve(scope);
     }
     activate(id) {
       const existing = this.activations.get(id);

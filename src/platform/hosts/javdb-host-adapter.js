@@ -7,8 +7,7 @@ export class JavDbHostAdapter {
     constructor(documentRuntime = document, locationRuntime = window.location) { this.site = "javdb"; this.document = documentRuntime; this.location = locationRuntime; }
     detectRoute() {
         if (this.location.pathname.startsWith("/v/") || this.location.pathname.startsWith("/movies/")) return "detail";
-        const listPath = /^\/(?:$|search|tags|actors|users\/|lists|series)/.test(this.location.pathname);
-        return listPath && this.locateListRoot() ? "list" : "other";
+        return this.locateListRoot() ? "list" : "other";
     }
     readMovieRef() {
         const carNum = this.document.querySelector(".panel-block.first-block .value, [data-car-number]")?.textContent?.trim() ?? null;

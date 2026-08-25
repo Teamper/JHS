@@ -5,7 +5,7 @@ import { normalizeMovieCarNum } from "./movie-identity.js";
 /** Read one JavDB/JavBus list card without depending on ListPagePlugin. @param {any} item */
 export function readListItem(item) {
     const jq = /** @type {any} */ (globalThis).$, element = item?.jquery ? item : jq(item);
-    const anchor = element.find("a"), url = anchor.attr("href"), titleNode = element.find(".video-title");
+    const anchor = element.find("a"), url = element.attr("data-jhs-original-url") || anchor.attr("href"), titleNode = element.find(".video-title");
     let carNum, title, publishTime;
     if (titleNode.length) {
         const strong = titleNode.find("strong");

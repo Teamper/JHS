@@ -461,11 +461,27 @@ export class ListPagePlugin extends BasePlugin {
     /** @param {any} container */
     bindMovieDetailNavigation(container) {
         const root = $(container), selector = ".item img, .item .video-title";
+        this.protectFc2Navigation(root);
         root.off("click.jhsMovieDetail auxclick.jhsMovieDetail", selector).on("click.jhsMovieDetail auxclick.jhsMovieDetail", selector, ((/** @type {any} */ event) => {
             if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
             if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
             event.preventDefault(), event.stopPropagation();
             void this.openMovieDetail($(event.currentTarget).closest(".item"), { event }).catch((error => clog.error("打开影片详情失败", error)));
+        }));
+    }
+    /** Rewrite FC2 card anchors to the same-origin owned detail page as a native-navigation fallback. @param {any} root */
+    protectFc2Navigation(root) {
+        const plugin = this.getDependency("Fc2Plugin");
+        root.find(".item").each(((/** @type {number} */ _index, /** @type {Element} */ element) => {
+            const item = $(element);
+            if (item.attr("data-jhs-fc2-protected") === "true") return;
+            try {
+                const { carNum, aHref, fc2Source } = this.findCarNumAndHref(item);
+                if (!carNum.includes("FC2-") || !aHref) return;
+                const source = fc2Source || "fc2", target = plugin.createFc2PageUrl(null, carNum, aHref, { source });
+                item.attr({ "data-jhs-original-url": aHref, "data-jhs-fc2-source": source, "data-jhs-fc2-protected": "true" });
+                item.find("a[href]").attr("href", target);
+            } catch (error) { clog.warn("FC2 导航保护初始化失败", error); }
         }));
     }
     /** @param {string} e */

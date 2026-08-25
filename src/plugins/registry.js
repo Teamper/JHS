@@ -115,7 +115,7 @@ export function registerSitePlugins(pluginManager, featureRuntime, site) {
         .forEach((item) => {
             const dependencies = featureRuntime.resolveDeclaredDependencies(item.requires);
             const runtimeServices = {};
-            runtimeServices.scope = () => featureRuntime.getScope(item.featureId);
+            runtimeServices.scope = () => featureRuntime.getContributionScope(item.featureId, item.id, item.legacyPluginId);
             const runtimeNames = new Map([
                 [PORT.host, "host"], [SERVICE.diagnostics, "diagnostics"], [SERVICE.review, "review"],
                 [SERVICE.related, "related"], [SERVICE.movie, "movie"], [SERVICE.magnet, "magnet"],

@@ -158,7 +158,7 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(settingPlugin).toContain('id="jhs-quick-setting-backdrop"');
         const mobileQuickSetting = settingPlugin.slice(settingPlugin.indexOf("openQuickSetting()"), settingPlugin.indexOf("async openSettingDialog"));
         expect(mobileQuickSetting).not.toContain("layer.open(");
-        expect(settingPlugin).toMatch(/on\("click", "#setting-btn, #mini-setting-btn"[\s\S]*?\.html\(""\)\.hide\(\)[\s\S]*?openSettingDialog\(\)/);
+        expect(settingPlugin).toMatch(/scope\.listen\(document, "click"[\s\S]*?closest\("#setting-btn, #mini-setting-btn"\)[\s\S]*?\.html\(""\)\.hide\(\)[\s\S]*?openSettings\(\)/);
         expect(commandbar).toContain('this.getBean("SettingPlugin")?.openQuickSetting()');
         expect(commandbar).not.toContain('this.getBean("SettingPlugin")?.openSettingDialog()');
         expect(commandbar).toMatch(/const action = \$\(e\.currentTarget\)\.data\("action"\);[\s\S]*"quickFilter" === action[\s\S]*closeMenu\(!0\);\s*void this\.handleAction\(action\)\.catch/);

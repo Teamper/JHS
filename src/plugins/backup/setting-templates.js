@@ -54,8 +54,8 @@ function buildVideoQualityOptions() {
 }
 
 /** Build the main settings dialog HTML template. */
-/** @param {string} activePanel @param {Array<{ text: string, key: string, title: string }>} cacheItems @param {{ screenSvg: string, videoSvg: string, handleSvg: string, siteSvg: string, copySvg: string }} coverButtonPlugin */
-export function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugin) {
+/** @param {string} activePanel @param {Array<{ text: string, key: string, title: string }>} cacheItems */
+export function buildSettingDialogHtml(activePanel, cacheItems) {
     const n = buildCacheItemsHtml(cacheItems);
     const a = buildVideoQualityOptions();
     return `
@@ -176,7 +176,7 @@ export function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugi
 
                             <div class="jhs-setting-row">
                                 <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.screenSvg}长缩略图:
+                                    长缩略图:
                                 </span>
                                 <div class="form-content">
                                     <input type="checkbox" id="enableScreenSvg" class="mini-switch">
@@ -185,7 +185,7 @@ export function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugi
 
                             <div class="jhs-setting-row">
                                 <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.videoSvg}预览视频:
+                                    预览视频:
                                 </span>
                                 <div class="form-content">
                                     <input type="checkbox" id="enableVideoSvg" class="mini-switch">
@@ -194,7 +194,7 @@ export function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugi
 
                             <div class="jhs-setting-row">
                                 <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.handleSvg}鉴定按钮:
+                                    鉴定按钮:
                                 </span>
                                 <div class="form-content">
                                     <input type="checkbox" id="enableHandleSvg" class="mini-switch">
@@ -203,7 +203,7 @@ export function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugi
 
                             <div class="jhs-setting-row">
                                 <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.siteSvg}第三方跳转:
+                                    第三方跳转:
                                 </span>
                                 <div class="form-content">
                                     <input type="checkbox" id="enableSiteSvg" class="mini-switch">
@@ -212,7 +212,7 @@ export function buildSettingDialogHtml(activePanel, cacheItems, coverButtonPlugi
 
                             <div class="jhs-setting-row">
                                 <span class="setting-label jhs-setting-label-inline">
-                                    ${coverButtonPlugin.copySvg}复制按钮:
+                                    复制按钮:
                                 </span>
                                 <div class="form-content">
                                     <input type="checkbox" id="enableCopySvg" class="mini-switch">
