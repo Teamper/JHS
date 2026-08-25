@@ -5,8 +5,8 @@ import { escapeHtml, l, r } from "../../core/constants.js";
 import { mapLimit } from "../../core/feature-helpers.js";
 import { calcMagnetScore } from "../../core/magnet-quality.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { BUILT_IN_NATIVE_MAGNET_SOURCES, ResourceSettingsService } from "../backup/resource-settings.js";
-import { MagnetSourceRegistry, applyMagnetRules, deduplicateMagnetResults, parseCustomMagnetResponse, parseNativeMagnets, validateCustomMagnetSource } from "./magnet-source-registry.js";
+import { BUILT_IN_NATIVE_MAGNET_SOURCES, ResourceSettingsService } from "../../services/resource-settings-service.js";
+import { MagnetSourceRegistry, applyMagnetRules, deduplicateMagnetResults, parseCustomMagnetResponse, parseNativeMagnets, validateCustomMagnetSource } from "../../services/magnet-source-registry.js";
 
 /** @typedef {any} JQueryHandle */
 /** @typedef {{ id: string, name: string, enabled?: boolean, applicable?: boolean, priority?: number, baseUrl?: string, search: (keyword: string, root?: JQueryHandle | Document) => Promise<MagnetResult[]>, targetUrl: (keyword: string) => string, targetPage?: string, parseHtml?: Function, parseJson?: Function, url?: string }} MagnetSource */

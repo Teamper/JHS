@@ -9,6 +9,7 @@ import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js";
 
 const workspaceSource = readTestFile(join(process.cwd(), "src/plugins/status/detail-workspace.js"), "utf8");
+const adapterSource = readTestFile(join(process.cwd(), "src/ui/detail/detail-resource-adapter.js"), "utf8");
 const unifiedSource = readTestFile(join(process.cwd(), "src/plugins/offline/unified-offline.js"), "utf8");
 const selectSource = readTestFile(join(process.cwd(), "src/core/ui-primitives.js"), "utf8").slice(readTestFile(join(process.cwd(), "src/core/ui-primitives.js"), "utf8").indexOf("class JhsSelect"));
 
@@ -37,7 +38,8 @@ function createContext(html, { javdb = true } = {}) {
         normalizeStateFlags: value => value || {}, _: "yes"
     });
     vm.runInContext(`${selectSource};globalThis.JhsSelect=JhsSelect`, context);
-    vm.runInContext(`${workspaceSource};globalThis.DetailWorkspacePlugin=DetailWorkspacePlugin;globalThis.getDetailResourceAdapter=getDetailResourceAdapter`, context);
+    vm.runInContext(`${adapterSource};globalThis.getDetailResourceAdapter=getDetailResourceAdapter`, context);
+    vm.runInContext(`${workspaceSource};globalThis.DetailWorkspacePlugin=DetailWorkspacePlugin`, context);
     vm.runInContext(`${unifiedSource};globalThis.UnifiedOfflinePlugin=UnifiedOfflinePlugin`, context);
     const observers = new Set, scope = {
         observe(target, callback, options) { const observer = new dom.window.MutationObserver(callback); observer.observe(target, options), observers.add(observer); return observer; },

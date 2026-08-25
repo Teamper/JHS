@@ -6257,7 +6257,7 @@
   }
   __name(safePlay, "safePlay");
 
-  // src/plugins/external-search/magnet-source-registry.js
+  // src/services/magnet-source-registry.js
   var MAGNET_SOURCE_IDS = Object.freeze(["native-javdb", "native-javbus", "u9a9", "u3c3", "sukebei", "btsow"]);
   function normalizeMagnetResult(result, source) {
     if (!result || !String(result.magnet || "").startsWith("magnet:")) return null;
@@ -6358,7 +6358,7 @@
   }
   __name(parseCustomMagnetResponse, "parseCustomMagnetResponse");
 
-  // src/plugins/backup/resource-settings.js
+  // src/services/resource-settings-service.js
   var BUILT_IN_NATIVE_MAGNET_SOURCES = Object.freeze([
     { id: "native-javdb", name: "JavDB 本站", type: "本站资源", domain: "javdb.com", priority: 10, enabled: true },
     { id: "native-javbus", name: "JavBus 本站", type: "本站资源", domain: "javbus.com", priority: 11, enabled: true }
@@ -10346,169 +10346,7 @@ ${value}\r
   __name(_ReviewPanel, "ReviewPanel");
   var ReviewPanel = _ReviewPanel;
 
-  // src/plugins/status/detail-workspace.js
-  function getDetailResourceAdapter(hostAdapter) {
-    if (!window.isDetailPage || typeof hostAdapter?.getDetailResourceBoundary !== "function") return null;
-    const boundary = hostAdapter.getDetailResourceBoundary();
-    if (!boundary) return null;
-    return {
-      ...boundary,
-      hostRoot: $(boundary.hostRoot),
-      controller: $(boundary.controller),
-      observeRoot: $(boundary.observeRoot),
-      resourceRoot: $(boundary.resourceRoot),
-      resourceRegion: $(boundary.resourceRegion),
-      sortSelect: $(boundary.sortSelect),
-      getActionTarget(row) {
-        const target = $(boundary.getActionTarget(row));
-        if (!target.length || !boundary.actionTargetRequiresWrapper?.(row)) return target;
-        let actions = target.children(".jhs-offline-actions").first();
-        return actions.length || (actions = $('<span class="jhs-offline-actions"></span>').appendTo(target)), actions;
-      }
-    };
-  }
-  __name(getDetailResourceAdapter, "getDetailResourceAdapter");
-  var _DetailWorkspacePlugin = class _DetailWorkspacePlugin extends BasePlugin {
-    constructor() {
-      super();
-      this.hostRoot = null;
-      this.resourceObserver = null;
-      this.scheduledResourceFrame = null;
-      this.cancelScheduledResourceFrame = null;
-      this.lifecycleScope = null;
-    }
-    getName() {
-      return "DetailWorkspacePlugin";
-    }
-    async initCss() {
-      return `<style>
-            .jhs-detail-workspace { display:grid; width:min(100%,1440px); min-width:0; margin:0 auto; padding:var(--jhs-space-6); gap:var(--jhs-space-5); box-sizing:border-box; background:var(--jhs-bg); color:var(--jhs-text); }
-            .jhs-detail-workspace__section { display:none; min-width:0; overflow:hidden; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); }
-            .jhs-detail-workspace__section.has-content { display:block; }
-            .jhs-detail-workspace__header { padding:var(--jhs-space-4) var(--jhs-space-5); border-bottom:1px solid var(--jhs-border); background:var(--jhs-surface-2); }
-            .jhs-detail-workspace__header h2 { margin:0; color:var(--jhs-text); font-size:var(--jhs-font-size-lg); }
-            .jhs-detail-workspace__content { min-width:0; padding:var(--jhs-space-5); }
-            .jhs-detail-workspace__content:empty { display:none; }
-            .jhs-detail-workspace .jhs-detail-btn-row { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); margin-top:var(--jhs-space-4); }
-            .jhs-detail-workspace [data-jhs-section="gallery"] .jhs-detail-workspace__content { overflow-x:auto; }
-            .jhs-detail-host-workspace { color:var(--jhs-text); }
-            .jhs-detail-owned-slot { min-width:0; padding:var(--jhs-space-5) 0; border-top:1px solid var(--jhs-border); }
-            .jhs-detail-owned-slot:empty { display:none; }
-            .jhs-detail-owned-slot--summary-actions { padding:var(--jhs-space-3) 0 var(--jhs-space-5); border-top:0; }
-            .jhs-detail-post-resource { min-width:0; }
-            .jhs-detail-host-workspace .jhs-detail-btn-row { margin:0!important; }
-            .jhs-detail-host-action { display:inline-flex!important; min-height:var(--jhs-control-height)!important; align-items:center!important; justify-content:center!important; padding:0 var(--jhs-space-3)!important; border:1px solid var(--jhs-border)!important; border-radius:var(--jhs-radius-sm)!important; background:var(--jhs-surface)!important; color:var(--jhs-text)!important; box-shadow:none!important; font:inherit!important; font-size:var(--jhs-font-size-sm)!important; font-weight:600!important; line-height:1!important; text-decoration:none!important; }
-            .jhs-detail-host-action:hover { border-color:var(--jhs-accent)!important; background:var(--jhs-surface-2)!important; color:var(--jhs-accent)!important; }
-            .jhs-offline-actions { display:inline-flex; align-items:center; gap:var(--jhs-space-2); margin-left:var(--jhs-space-2); vertical-align:middle; }
-            @media (max-width:767px) { .jhs-detail-owned-slot { padding:var(--jhs-space-4) 0; } }
-        </style>`;
-    }
-    async handle() {
-      if (!window.isDetailPage) return;
-      this.lifecycleScope = await this.getRuntimeService("scope")();
-      const cancel = utils.loopDetector((() => !!this.getHostAdapter()), (() => this.ensureWorkspace()), 40, 2500, true, this.lifecycleScope);
-      this.lifecycleScope.addCleanup(cancel);
-      this.lifecycleScope.addCleanup((() => {
-        this.cancelScheduledResourceFrame?.(), this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null;
-      }));
-    }
-    getHostAdapter() {
-      const host = this.getRuntimeService("host"), root = host?.locateDetailRoot?.();
-      if (!root) return null;
-      return { site: host.site || "unknown", root: $(root) };
-    }
-    ensureWorkspace() {
-      const adapter = this.getHostAdapter();
-      if (!adapter) return $();
-      const root = adapter.root;
-      if (!root.attr("data-jhs-workspace-ready")) {
-        root.attr({ "data-jhs-workspace-ready": "true", "data-jhs-workspace-site": adapter.site }).addClass("jhs-detail-host-workspace jhs-ui");
-        if ("javdb" === adapter.site) {
-          root.children("h2,.video-meta-panel").attr("data-jhs-host-region", "summary");
-          root.children(".columns").filter(((_2, element) => $(element).find(".tile-images,.preview-images").length > 0)).attr("data-jhs-host-region", "gallery");
-          root.children(".columns").filter(((_2, element) => $(element).find("#magnets-content").length > 0)).attr("data-jhs-host-region", "resources");
-          this.normalizeHostActions(root.find(".video-meta-panel").first());
-        } else {
-          root.children("h3,.row.movie").attr("data-jhs-host-region", "summary");
-          const resource = getDetailResourceAdapter(this.getRuntimeService("host"));
-          resource?.resourceRegion?.attr("data-jhs-host-region", "resources");
-          root.children().filter(((_2, element) => $(element).is("#sample-waterfall") || $(element).find("#sample-waterfall").length > 0)).attr("data-jhs-host-region", "gallery");
-          this.normalizeHostActions(root.find(".info").first());
-        }
-        this.ensureOwnedSlots(root), this.adoptExistingOwnedPanels(root);
-      }
-      this.hostRoot = root, this.ensureOwnedSlots(root), this.placeOwnedSlots(), this.bindResourceLifecycle();
-      return root;
-    }
-    getSlot(name) {
-      return this.ensureWorkspace().find(`[data-jhs-slot="${name}"]`).first();
-    }
-    ensureOwnedSlots(root = this.hostRoot) {
-      if (!root?.length) return;
-      root.children('[data-jhs-slot="summary-actions"]').length || root.append('<div class="jhs-detail-owned-slot jhs-detail-owned-slot--summary-actions" data-jhs-slot="summary-actions"></div>');
-      let group = root.children('[data-jhs-slot-group="post-resource"]').first();
-      group.length || (group = $('<div class="jhs-detail-post-resource" data-jhs-slot-group="post-resource"></div>').appendTo(root));
-      group.children('[data-jhs-slot="reviews"]').length || group.append('<section class="jhs-detail-owned-slot jhs-detail-owned-slot--reviews" data-jhs-slot="reviews"></section>');
-      group.children('[data-jhs-slot="related"]').length || group.append('<section class="jhs-detail-owned-slot jhs-detail-owned-slot--related" data-jhs-slot="related"></section>');
-    }
-    placeOwnedSlots() {
-      const root = this.hostRoot, resource = getDetailResourceAdapter(this.getRuntimeService("host"));
-      if (!root?.length) return;
-      this.ensureOwnedSlots(root);
-      const summaryActions = root.children('[data-jhs-slot="summary-actions"]').first(), postResource = root.children('[data-jhs-slot-group="post-resource"]').first();
-      const summaryRegion = "javdb" === root.attr("data-jhs-workspace-site") ? root.children(".video-meta-panel").first() : root.children(".row.movie").first();
-      summaryRegion.length && summaryActions.insertAfter(summaryRegion);
-      resource?.resourceRegion?.length && postResource.insertAfter(resource.resourceRegion);
-    }
-    adoptExistingOwnedPanels(root) {
-      [[".jhs-detail-btn-row", "summary-actions"], [".jhs-related-panel", "related"], [".jhs-review-panel", "reviews"]].forEach((([selector, slot]) => {
-        const target = root.find(`[data-jhs-slot="${slot}"]`).first();
-        root.find(selector).filter(((_2, element) => !$(element).closest("[data-jhs-slot]").length)).each(((_2, element) => target.append(element)));
-      }));
-    }
-    normalizeHostActions(info) {
-      const labels = /* @__PURE__ */ new Set(["想看", "看过", "看過", "存入清单", "存入清單", "下载", "下載", "订正", "訂正"]);
-      info.find("a, button").filter(((_2, element) => !$(element).is(".jhs-btn, [id^='jhs-']") && labels.has($(element).text().replace(/\s+/g, " ").trim()))).addClass("jhs-detail-host-action");
-    }
-    isJhsOnlyMutation(record) {
-      if ($(record.target).closest(".jhs-offline-actions,.jhs-select-control,.jhs-magnet-score").length) return true;
-      const nodes = [...record.addedNodes, ...record.removedNodes].filter(((node) => node.nodeType === Node.ELEMENT_NODE));
-      return nodes.length > 0 && nodes.every(((node) => {
-        const element = node;
-        return element.matches?.(".jhs-offline-btn,.jhs-offline-actions,.jhs-magnet-score,.jhs-select-control") || element.closest?.(".jhs-offline-actions,.jhs-select-control");
-      }));
-    }
-    bindResourceLifecycle() {
-      const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
-      if (!adapter) return;
-      if (this.resourceObserver && this.resourceObserver.root === adapter.observeRoot[0]) return void this.scheduleResourceUpdate();
-      this.resourceObserver && this.lifecycleScope?.releaseObserver(this.resourceObserver);
-      if (!this.lifecycleScope) return;
-      const observer = this.lifecycleScope.observe(adapter.observeRoot[0], ((records) => {
-        records.every(((record) => this.isJhsOnlyMutation(record))) || this.scheduleResourceUpdate();
-      }), { childList: true, subtree: true });
-      observer.root = adapter.observeRoot[0], this.resourceObserver = observer, adapter.sortSelect.length && adapter.sortSelect.addClass("jhs-select-source") && JhsSelect.enhance(adapter.controller), this.scheduleResourceUpdate();
-    }
-    scheduleResourceUpdate() {
-      if (null !== this.scheduledResourceFrame) return;
-      const usesAnimationFrame = "function" == typeof window.requestAnimationFrame;
-      const schedule = usesAnimationFrame ? window.requestAnimationFrame.bind(window) : ((callback) => Number(setTimeout(callback)));
-      this.scheduledResourceFrame = schedule((() => {
-        this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null;
-        const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
-        if (!adapter) return;
-        this.placeOwnedSlots();
-        adapter.sortSelect.length && (adapter.sortSelect.addClass("jhs-select-source"), JhsSelect.enhance(adapter.controller), JhsSelect.refresh(adapter.sortSelect));
-        if (!jhsEventBus) return;
-        void jhsEventBus.emit("magnet-items-updated", { site: adapter.site, resourceRoot: adapter.resourceRoot[0], rows: adapter.rows() }, { broadcast: false });
-      }));
-      this.cancelScheduledResourceFrame = () => {
-        null !== this.scheduledResourceFrame && (usesAnimationFrame ? window.cancelAnimationFrame?.(this.scheduledResourceFrame) : clearTimeout(this.scheduledResourceFrame));
-      };
-    }
-  };
-  __name(_DetailWorkspacePlugin, "DetailWorkspacePlugin");
-  var DetailWorkspacePlugin = _DetailWorkspacePlugin;
+  // src/ui/detail/fc2-detail-workspace.js
   function createFc2DetailShell({ carNum = "", source = "fc2", mode = "dialog" } = {}) {
     const workspace = $('<div class="jhs-fc2-workspace jhs-ui"></div>').attr({
       "data-jhs-fc2-source": source,
@@ -11380,22 +11218,6 @@ ${failure.stack}` : "");
   var MagnetHubPlugin = _MagnetHubPlugin;
 
   // src/plugins/external-search/other-site.js
-  var _StorageQueue = class _StorageQueue {
-    constructor() {
-      this.queue = Promise.resolve();
-    }
-    addTask(e2) {
-      const task = this.queue.then((() => e2()));
-      return this.queue = task.catch(((e3) => {
-        clog.error("执行异步队列任务失败:", e3);
-      })), task;
-    }
-    async waitAllFinished() {
-      return this.queue;
-    }
-  };
-  __name(_StorageQueue, "StorageQueue");
-  var StorageQueue = _StorageQueue;
   var _OtherSitePlugin = class _OtherSitePlugin extends BasePlugin {
     constructor() {
       super(...arguments);
@@ -11476,9 +11298,9 @@ ${failure.stack}` : "");
         event.preventDefault();
         const original = $(event.currentTarget).attr("href"), destination = event.ctrlKey || event.metaKey ? original : original + "?handle=1";
         utils.openPage(destination, e2, false, event);
-      })), await Promise.all(configs.map((async (config) => {
+      })), await mapLimit(configs, 4, (async (config) => {
         config.condition && false === config.condition(config.sourceCarNum) || await this.prepareSiteLink(e2, config, view);
-      }))), this.renderSettingsArea(view), this.setupEventListeners(view), box.find('[data-jhs-role="detect-sites"]').off("click").on("click", ((event) => {
+      })), this.renderSettingsArea(view), this.setupEventListeners(view), box.find('[data-jhs-role="detect-sites"]').off("click").on("click", ((event) => {
         event.preventDefault(), this.detectOtherSites(e2, view);
       })), n2.autoDetect && await this.detectOtherSites(e2, view);
       return box;
@@ -11499,9 +11321,9 @@ ${failure.stack}` : "");
     async detectOtherSites(e2, view = { root: $(document), configs: this.siteConfigs, isActive: /* @__PURE__ */ __name(() => true, "isActive") }) {
       const t2 = view.root.find('[data-jhs-role="detect-sites"],#detectOtherSiteBtn').first(), n2 = t2.text();
       if (!(e2 = normalizeCarNum(e2))) return t2.prop("disabled", true), void clog.warn("跳过第三方站点检测：番号不可用");
-      return t2.text("检测中").prop("disabled", true).addClass("is-checking"), await Promise.all(view.configs.map((async (t3) => {
+      return t2.text("检测中").prop("disabled", true).addClass("is-checking"), await mapLimit(view.configs, 4, (async (t3) => {
         t3.condition && false === t3.condition(t3.sourceCarNum) || await this.handleSite(e2, t3, view);
-      }))), view.isActive?.() !== false && t2.text(n2).prop("disabled", false).removeClass("is-checking");
+      })), view.isActive?.() !== false && t2.text(n2).prop("disabled", false).removeClass("is-checking");
     }
     setSiteState(e2, t2) {
       e2.removeClass("is-checking is-available is-unavailable is-domain-error"), "idle" !== t2 && e2.addClass(`is-${t2}`);
@@ -13569,6 +13391,24 @@ ${failure.stack}` : "");
   __name(_NewVideoPlugin, "NewVideoPlugin");
   var NewVideoPlugin = _NewVideoPlugin;
 
+  // src/core/storage-queue.js
+  var _StorageQueue = class _StorageQueue {
+    constructor() {
+      this.queue = Promise.resolve();
+    }
+    addTask(e2) {
+      const task = this.queue.then((() => e2()));
+      return this.queue = task.catch(((e3) => {
+        clog.error("执行异步队列任务失败:", e3);
+      })), task;
+    }
+    async waitAllFinished() {
+      return this.queue;
+    }
+  };
+  __name(_StorageQueue, "StorageQueue");
+  var StorageQueue = _StorageQueue;
+
   // src/plugins/new-video/task.js
   var _TaskPlugin = class _TaskPlugin extends BasePlugin {
     constructor() {
@@ -14138,6 +13978,29 @@ ${failure.stack}` : "");
   };
   __name(_TaskPlugin, "TaskPlugin");
   var TaskPlugin = _TaskPlugin;
+
+  // src/ui/detail/detail-resource-adapter.js
+  function getDetailResourceAdapter(hostAdapter) {
+    if (!window.isDetailPage || typeof hostAdapter?.getDetailResourceBoundary !== "function") return null;
+    const boundary = hostAdapter.getDetailResourceBoundary();
+    if (!boundary) return null;
+    return {
+      ...boundary,
+      hostRoot: $(boundary.hostRoot),
+      controller: $(boundary.controller),
+      observeRoot: $(boundary.observeRoot),
+      resourceRoot: $(boundary.resourceRoot),
+      resourceRegion: $(boundary.resourceRegion),
+      sortSelect: $(boundary.sortSelect),
+      getActionTarget(row) {
+        const target = $(boundary.getActionTarget(row));
+        if (!target.length || !boundary.actionTargetRequiresWrapper?.(row)) return target;
+        let actions = target.children(".jhs-offline-actions").first();
+        return actions.length || (actions = $('<span class="jhs-offline-actions"></span>').appendTo(target)), actions;
+      }
+    };
+  }
+  __name(getDetailResourceAdapter, "getDetailResourceAdapter");
 
   // src/plugins/offline/unified-offline.js
   var _OfflineProviderRegistry = class _OfflineProviderRegistry {
@@ -15162,6 +15025,149 @@ ${failure.stack}` : "");
   };
   __name(_DetailPagePlugin, "DetailPagePlugin");
   var DetailPagePlugin = _DetailPagePlugin;
+
+  // src/plugins/status/detail-workspace.js
+  var _DetailWorkspacePlugin = class _DetailWorkspacePlugin extends BasePlugin {
+    constructor() {
+      super();
+      this.hostRoot = null;
+      this.resourceObserver = null;
+      this.scheduledResourceFrame = null;
+      this.cancelScheduledResourceFrame = null;
+      this.lifecycleScope = null;
+    }
+    getName() {
+      return "DetailWorkspacePlugin";
+    }
+    async initCss() {
+      return `<style>
+            .jhs-detail-workspace { display:grid; width:min(100%,1440px); min-width:0; margin:0 auto; padding:var(--jhs-space-6); gap:var(--jhs-space-5); box-sizing:border-box; background:var(--jhs-bg); color:var(--jhs-text); }
+            .jhs-detail-workspace__section { display:none; min-width:0; overflow:hidden; border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); }
+            .jhs-detail-workspace__section.has-content { display:block; }
+            .jhs-detail-workspace__header { padding:var(--jhs-space-4) var(--jhs-space-5); border-bottom:1px solid var(--jhs-border); background:var(--jhs-surface-2); }
+            .jhs-detail-workspace__header h2 { margin:0; color:var(--jhs-text); font-size:var(--jhs-font-size-lg); }
+            .jhs-detail-workspace__content { min-width:0; padding:var(--jhs-space-5); }
+            .jhs-detail-workspace__content:empty { display:none; }
+            .jhs-detail-workspace .jhs-detail-btn-row { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2); margin-top:var(--jhs-space-4); }
+            .jhs-detail-workspace [data-jhs-section="gallery"] .jhs-detail-workspace__content { overflow-x:auto; }
+            .jhs-detail-host-workspace { color:var(--jhs-text); }
+            .jhs-detail-owned-slot { min-width:0; padding:var(--jhs-space-5) 0; border-top:1px solid var(--jhs-border); }
+            .jhs-detail-owned-slot:empty { display:none; }
+            .jhs-detail-owned-slot--summary-actions { padding:var(--jhs-space-3) 0 var(--jhs-space-5); border-top:0; }
+            .jhs-detail-post-resource { min-width:0; }
+            .jhs-detail-host-workspace .jhs-detail-btn-row { margin:0!important; }
+            .jhs-detail-host-action { display:inline-flex!important; min-height:var(--jhs-control-height)!important; align-items:center!important; justify-content:center!important; padding:0 var(--jhs-space-3)!important; border:1px solid var(--jhs-border)!important; border-radius:var(--jhs-radius-sm)!important; background:var(--jhs-surface)!important; color:var(--jhs-text)!important; box-shadow:none!important; font:inherit!important; font-size:var(--jhs-font-size-sm)!important; font-weight:600!important; line-height:1!important; text-decoration:none!important; }
+            .jhs-detail-host-action:hover { border-color:var(--jhs-accent)!important; background:var(--jhs-surface-2)!important; color:var(--jhs-accent)!important; }
+            .jhs-offline-actions { display:inline-flex; align-items:center; gap:var(--jhs-space-2); margin-left:var(--jhs-space-2); vertical-align:middle; }
+            @media (max-width:767px) { .jhs-detail-owned-slot { padding:var(--jhs-space-4) 0; } }
+        </style>`;
+    }
+    async handle() {
+      if (!window.isDetailPage) return;
+      this.lifecycleScope = await this.getRuntimeService("scope")();
+      const cancel = utils.loopDetector((() => !!this.getHostAdapter()), (() => this.ensureWorkspace()), 40, 2500, true, this.lifecycleScope);
+      this.lifecycleScope.addCleanup(cancel);
+      this.lifecycleScope.addCleanup((() => {
+        this.cancelScheduledResourceFrame?.(), this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null;
+      }));
+    }
+    getHostAdapter() {
+      const host = this.getRuntimeService("host"), root = host?.locateDetailRoot?.();
+      if (!root) return null;
+      return { site: host.site || "unknown", root: $(root) };
+    }
+    ensureWorkspace() {
+      const adapter = this.getHostAdapter();
+      if (!adapter) return $();
+      const root = adapter.root;
+      if (!root.attr("data-jhs-workspace-ready")) {
+        root.attr({ "data-jhs-workspace-ready": "true", "data-jhs-workspace-site": adapter.site }).addClass("jhs-detail-host-workspace jhs-ui");
+        if ("javdb" === adapter.site) {
+          root.children("h2,.video-meta-panel").attr("data-jhs-host-region", "summary");
+          root.children(".columns").filter(((_2, element) => $(element).find(".tile-images,.preview-images").length > 0)).attr("data-jhs-host-region", "gallery");
+          root.children(".columns").filter(((_2, element) => $(element).find("#magnets-content").length > 0)).attr("data-jhs-host-region", "resources");
+          this.normalizeHostActions(root.find(".video-meta-panel").first());
+        } else {
+          root.children("h3,.row.movie").attr("data-jhs-host-region", "summary");
+          const resource = getDetailResourceAdapter(this.getRuntimeService("host"));
+          resource?.resourceRegion?.attr("data-jhs-host-region", "resources");
+          root.children().filter(((_2, element) => $(element).is("#sample-waterfall") || $(element).find("#sample-waterfall").length > 0)).attr("data-jhs-host-region", "gallery");
+          this.normalizeHostActions(root.find(".info").first());
+        }
+        this.ensureOwnedSlots(root), this.adoptExistingOwnedPanels(root);
+      }
+      this.hostRoot = root, this.ensureOwnedSlots(root), this.placeOwnedSlots(), this.bindResourceLifecycle();
+      return root;
+    }
+    getSlot(name) {
+      return this.ensureWorkspace().find(`[data-jhs-slot="${name}"]`).first();
+    }
+    ensureOwnedSlots(root = this.hostRoot) {
+      if (!root?.length) return;
+      root.children('[data-jhs-slot="summary-actions"]').length || root.append('<div class="jhs-detail-owned-slot jhs-detail-owned-slot--summary-actions" data-jhs-slot="summary-actions"></div>');
+      let group = root.children('[data-jhs-slot-group="post-resource"]').first();
+      group.length || (group = $('<div class="jhs-detail-post-resource" data-jhs-slot-group="post-resource"></div>').appendTo(root));
+      group.children('[data-jhs-slot="reviews"]').length || group.append('<section class="jhs-detail-owned-slot jhs-detail-owned-slot--reviews" data-jhs-slot="reviews"></section>');
+      group.children('[data-jhs-slot="related"]').length || group.append('<section class="jhs-detail-owned-slot jhs-detail-owned-slot--related" data-jhs-slot="related"></section>');
+    }
+    placeOwnedSlots() {
+      const root = this.hostRoot, resource = getDetailResourceAdapter(this.getRuntimeService("host"));
+      if (!root?.length) return;
+      this.ensureOwnedSlots(root);
+      const summaryActions = root.children('[data-jhs-slot="summary-actions"]').first(), postResource = root.children('[data-jhs-slot-group="post-resource"]').first();
+      const summaryRegion = "javdb" === root.attr("data-jhs-workspace-site") ? root.children(".video-meta-panel").first() : root.children(".row.movie").first();
+      summaryRegion.length && summaryActions.insertAfter(summaryRegion);
+      resource?.resourceRegion?.length && postResource.insertAfter(resource.resourceRegion);
+    }
+    adoptExistingOwnedPanels(root) {
+      [[".jhs-detail-btn-row", "summary-actions"], [".jhs-related-panel", "related"], [".jhs-review-panel", "reviews"]].forEach((([selector, slot]) => {
+        const target = root.find(`[data-jhs-slot="${slot}"]`).first();
+        root.find(selector).filter(((_2, element) => !$(element).closest("[data-jhs-slot]").length)).each(((_2, element) => target.append(element)));
+      }));
+    }
+    normalizeHostActions(info) {
+      const labels = /* @__PURE__ */ new Set(["想看", "看过", "看過", "存入清单", "存入清單", "下载", "下載", "订正", "訂正"]);
+      info.find("a, button").filter(((_2, element) => !$(element).is(".jhs-btn, [id^='jhs-']") && labels.has($(element).text().replace(/\s+/g, " ").trim()))).addClass("jhs-detail-host-action");
+    }
+    isJhsOnlyMutation(record) {
+      if ($(record.target).closest(".jhs-offline-actions,.jhs-select-control,.jhs-magnet-score").length) return true;
+      const nodes = [...record.addedNodes, ...record.removedNodes].filter(((node) => node.nodeType === Node.ELEMENT_NODE));
+      return nodes.length > 0 && nodes.every(((node) => {
+        const element = node;
+        return element.matches?.(".jhs-offline-btn,.jhs-offline-actions,.jhs-magnet-score,.jhs-select-control") || element.closest?.(".jhs-offline-actions,.jhs-select-control");
+      }));
+    }
+    bindResourceLifecycle() {
+      const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
+      if (!adapter) return;
+      if (this.resourceObserver && this.resourceObserver.root === adapter.observeRoot[0]) return void this.scheduleResourceUpdate();
+      this.resourceObserver && this.lifecycleScope?.releaseObserver(this.resourceObserver);
+      if (!this.lifecycleScope) return;
+      const observer = this.lifecycleScope.observe(adapter.observeRoot[0], ((records) => {
+        records.every(((record) => this.isJhsOnlyMutation(record))) || this.scheduleResourceUpdate();
+      }), { childList: true, subtree: true });
+      observer.root = adapter.observeRoot[0], this.resourceObserver = observer, adapter.sortSelect.length && adapter.sortSelect.addClass("jhs-select-source") && JhsSelect.enhance(adapter.controller), this.scheduleResourceUpdate();
+    }
+    scheduleResourceUpdate() {
+      if (null !== this.scheduledResourceFrame) return;
+      const usesAnimationFrame = "function" == typeof window.requestAnimationFrame;
+      const schedule = usesAnimationFrame ? window.requestAnimationFrame.bind(window) : ((callback) => Number(setTimeout(callback)));
+      this.scheduledResourceFrame = schedule((() => {
+        this.scheduledResourceFrame = null, this.cancelScheduledResourceFrame = null;
+        const adapter = getDetailResourceAdapter(this.getRuntimeService("host"));
+        if (!adapter) return;
+        this.placeOwnedSlots();
+        adapter.sortSelect.length && (adapter.sortSelect.addClass("jhs-select-source"), JhsSelect.enhance(adapter.controller), JhsSelect.refresh(adapter.sortSelect));
+        if (!jhsEventBus) return;
+        void jhsEventBus.emit("magnet-items-updated", { site: adapter.site, resourceRoot: adapter.resourceRoot[0], rows: adapter.rows() }, { broadcast: false });
+      }));
+      this.cancelScheduledResourceFrame = () => {
+        null !== this.scheduledResourceFrame && (usesAnimationFrame ? window.cancelAnimationFrame?.(this.scheduledResourceFrame) : clearTimeout(this.scheduledResourceFrame));
+      };
+    }
+  };
+  __name(_DetailWorkspacePlugin, "DetailWorkspacePlugin");
+  var DetailWorkspacePlugin = _DetailWorkspacePlugin;
 
   // src/plugins/status/fc2-navigation.js
   var _Fc2NavigationPlugin = class _Fc2NavigationPlugin extends BasePlugin {

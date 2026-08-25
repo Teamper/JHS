@@ -102,6 +102,8 @@ jobs:
           node-version: 22
       - name: Revalidate release identity and extract notes
         run: node scripts/release-contract.mjs --base-ref "${{ github.event.before }}" --notes-file /tmp/release-body.md
+      - name: Manual Tampermonkey smoke gate
+        run: npm run check:release-smoke
       - name: Validate immutable tag and release state
         id: release_state
         env:

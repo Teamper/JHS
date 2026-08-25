@@ -4,7 +4,7 @@ import { l, r } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
-import { getDetailResourceAdapter } from "../status/detail-workspace.js";
+import { getDetailResourceAdapter } from "../../ui/detail/detail-resource-adapter.js";
 
 /** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
 /** @typedef {{ available: boolean, authState: string, reason: string }} ProviderAvailability */

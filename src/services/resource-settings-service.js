@@ -1,6 +1,6 @@
 // @ts-check
 
-import { MAGNET_SOURCE_IDS, validateCustomMagnetSource, validateHttpsBaseUrl } from "../external-search/magnet-source-registry.js";
+import { MAGNET_SOURCE_IDS, validateCustomMagnetSource, validateHttpsBaseUrl } from "./magnet-source-registry.js";
 
 export const BUILT_IN_NATIVE_MAGNET_SOURCES = Object.freeze([
     { id: "native-javdb", name: "JavDB 本站", type: "本站资源", domain: "javdb.com", priority: 10, enabled: true },

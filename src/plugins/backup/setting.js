@@ -6,7 +6,7 @@ import { legacyActionToFlag } from "../../core/state-model.js";
 import { registerSettingsUiOwner } from "../../core/settings-ui-owner.js";
 import { applyTheme } from "../../core/theme.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
-import { BUILT_IN_NATIVE_MAGNET_SOURCES, ResourceSettingsService, buildCustomMagnetSource, validateRule } from "./resource-settings.js";
+import { BUILT_IN_NATIVE_MAGNET_SOURCES, ResourceSettingsService, buildCustomMagnetSource, validateRule } from "../../services/resource-settings-service.js";
 import { BUILT_IN_SCREENSHOT_SOURCES } from "../../services/screenshot-sources.js";
 import { backupDataByWebDav, backupListBtnByWebDav, exportSettingData, importSettingData, openFileListDialog } from "./setting-backup.js";
 import { initQuickSettingForm, loadSettingForm, saveSettingForm } from "./setting-forms.js";

@@ -71,7 +71,7 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
 
 function loadStorageQueue() {
   const context = vm.createContext({ clog: { error: vi.fn() } });
-  const queueSource = readTestFile(join(repoRoot, "src/plugins/external-search/other-site.js"), "utf8").split("class OtherSitePlugin")[0];
+  const queueSource = readTestFile(join(repoRoot, "src/core/storage-queue.js"), "utf8");
   vm.runInContext(`${queueSource}\nglobalThis.TestStorageQueue = StorageQueue;`, context);
   return { Queue: context.TestStorageQueue, error: context.clog.error };
 }

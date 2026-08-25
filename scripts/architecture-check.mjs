@@ -84,6 +84,7 @@ async function checkImportGraph() {
     const allowedLayers = {
         core: new Set(["core"]),
         features: new Set(["services", "ui", "contracts", "core"]),
+        plugins: new Set(["core", "contracts", "services", "ui", "features", "integrations", "platform"]),
         services: new Set(["contracts", "core"]),
         integrations: new Set(["contracts", "core"]),
         ui: new Set(["contracts", "core"]),
@@ -105,8 +106,10 @@ async function checkImportGraph() {
             const sameFeature = sourceLayer === "features" && targetLayer === "features" && sourceRelative[1] === targetRelative[1];
             const sameIntegration = sourceLayer === "integrations" && targetLayer === "integrations" && sourceRelative[1] === targetRelative[1];
             const sameSharedLayer = sourceLayer === targetLayer && [ "services", "ui" ].includes(sourceLayer);
+            const samePluginDir = sourceLayer === "plugins" && targetLayer === "plugins" && sourceRelative[1] === targetRelative[1];
             const featureCatalog = sourceRelative.join("/") === "features/catalog.js" && targetLayer === "features";
-            if (allowedLayers[sourceLayer] && !allowedLayers[sourceLayer].has(targetLayer) && !sameFeature && !sameIntegration && !sameSharedLayer && !featureCatalog) {
+            const pluginCatalog = sourceRelative.join("/") === "plugins/registry.js" && targetLayer === "plugins";
+            if (allowedLayers[sourceLayer] && !allowedLayers[sourceLayer].has(targetLayer) && !sameFeature && !sameIntegration && !sameSharedLayer && !samePluginDir && !featureCatalog && !pluginCatalog) {
                 boundaryErrors.push(`${sourceLayer} -> ${targetLayer}: ${path.relative(rootDir, file)} imports ${path.relative(rootDir, dependency)}`);
             }
         }

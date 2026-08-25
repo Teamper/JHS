@@ -23,7 +23,7 @@ async function listJavaScriptFiles(dir) {
   return files;
 }
 
-const [theme, primitives, build, injection, magnet, settings, utils, detail, commandbar, newVideo, manager, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, reviewUi, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, previewService, screenshot, parsers, javstoreIntegration, otherSite, javDbHostAdapter, settingRenderer, builtSource] = await Promise.all([
+const [theme, primitives, build, injection, magnet, settings, utils, detail, fc2Workspace, commandbar, newVideo, manager, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, reviewUi, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, previewService, screenshot, parsers, javstoreIntegration, otherSite, javDbHostAdapter, settingRenderer, builtSource] = await Promise.all([
   readFile(join(srcRoot, "core", "theme.js"), "utf8"),
   readFile(join(srcRoot, "core", "ui-primitives.js"), "utf8"),
   readFile(join(repoRoot, "scripts", "build.mjs"), "utf8"),
@@ -32,6 +32,7 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(srcRoot, "plugins", "backup", "setting-templates.js"), "utf8"),
   readFile(join(srcRoot, "core", "utils.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "status", "detail-workspace.js"), "utf8"),
+  readFile(join(srcRoot, "ui", "detail", "fc2-detail-workspace.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "status", "mobile-bottom-bar.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "new-video", "new-video.js"), "utf8"),
   readFile(join(srcRoot, "core", "plugin-manager.js"), "utf8"),
@@ -51,7 +52,7 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, com
   readFile(join(srcRoot, "plugins", "image-viewer", "cover-button.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "status", "highlight-magnet.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "new-video", "task.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "external-search", "other-site.js"), "utf8"),
+  readFile(join(srcRoot, "core", "storage-queue.js"), "utf8"),
   readFile(join(srcRoot, "core", "constants.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "image-viewer", "preview-video.js"), "utf8"),
   readFile(join(srcRoot, "services", "preview-service.js"), "utf8"),
@@ -119,7 +120,7 @@ requireMatch(utils, /window\.innerWidth\s*<=\s*768\s*\?\s*16/, "mobile dialog in
 requireMatch(utils, /getResponsiveArea\(e\)/, "legacy responsive dialog API must remain available");
 
 for (const section of ["summary", "gallery", "resources", "related", "reviews"])
-  requireMatch(detail, new RegExp(`data-jhs-section=\\"\\$\\{name\\}\\"|section\\(\\"${section}\\"`), `detail workspace missing ${section}`);
+  requireMatch(fc2Workspace, new RegExp(`data-jhs-section=\\"\\$\\{name\\}\\"|section\\(\\"${section}\\"`), `FC2 detail workspace missing ${section}`);
 requireMatch(detail, /if \(!window\.isDetailPage\) return/, "detail workspace must be limited to detail pages");
 requireMatch(commandbar, /id="jhs-page-commandbar"/, "page command bar is missing");
 if ((commandbar.match(/id="jhs-page-commandbar"/g) || []).length !== 1) failures.push("page command bar must have one source template");
@@ -260,8 +261,8 @@ requireMatch(storageQueue, /return this\.queue = task\.catch[\s\S]{0,160}, task/
 forbidMatch(highlightMagnet, /#enable-magnets-filter[^\n]{0,100}(?:hide\(|addClass\(["']do-hide)/, "magnet filtering must never hide its toolbar entry");
 requireMatch(highlightMagnet, /removeClass\("do-hide"\)[\s\S]{0,160}未识别到可过滤项/, "magnet filtering must retain a no-match hint");
 requireMatch(highlightMagnet, /showAll\(\)[\s\S]{0,260}removeClass\("do-hide"\)[\s\S]{0,260}\.show\(\)/, "disabling magnet filtering must restore every row");
-requireMatch(detail, /createFc2DetailContext/, "FC2 detail workspace must own a scoped lifecycle context");
-requireMatch(detail, /\[ "summary", "影片概览" \], \[ "gallery", "预览与剧照" \], \[ "resources", "资源" \], \[ "reviews", "评论" \], \[ "related", "相关清单" \]/, "FC2 workspace must place reviews before related lists");
+requireMatch(fc2Workspace, /createFc2DetailContext/, "FC2 detail workspace must own a scoped lifecycle context");
+requireMatch(fc2Workspace, /\[ "summary", "影片概览" \], \[ "gallery", "预览与剧照" \], \[ "resources", "资源" \], \[ "reviews", "评论" \], \[ "related", "相关清单" \]/, "FC2 workspace must place reviews before related lists");
 requireMatch(commandbar, /<button type="button" id="jhs-fab" class="jhs-btn"/, "mobile FAB must be a native JHS button");
 requireMatch(commandbar, /role="menuitem" class="jhs-btn jhs-fab-menu-item"/, "mobile FAB items must use native menu buttons");
 requireMatch(commandbar, /ArrowDown[\s\S]*ArrowUp[\s\S]*Home[\s\S]*End/, "mobile FAB menu must support keyboard navigation");

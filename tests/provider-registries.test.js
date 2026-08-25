@@ -11,7 +11,7 @@ function load(path, exports, extra = {}) {
 }
 
 describe("MagnetSourceRegistry", () => {
-    const api = load("src/plugins/external-search/magnet-source-registry.js", ["MagnetSourceRegistry", "extractInfoHash", "deduplicateMagnetResults", "validateCustomMagnetSource", "applyMagnetRules", "parseCustomMagnetResponse"], { utils: {}, $: () => ({}) });
+    const api = load("src/services/magnet-source-registry.js", ["MagnetSourceRegistry", "extractInfoHash", "deduplicateMagnetResults", "validateCustomMagnetSource", "applyMagnetRules", "parseCustomMagnetResponse"], { utils: {}, $: () => ({}) });
     it("sorts enabled providers and skips disabled providers", () => {
         const search = vi.fn(), registry = new api.MagnetSourceRegistry([
             { id: "late", name: "Late", enabled: true, priority: 20, search, targetUrl() {} },

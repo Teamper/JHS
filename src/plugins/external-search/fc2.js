@@ -11,7 +11,7 @@ import { renderScreenshotPanel } from "../../ui/detail/screenshot-panel.js";
 import { createFc2SourceLinks, renderFc2Gallery, renderFc2State } from "../../ui/detail/fc2-workspace-view.js";
 import { RelatedPanel } from "../../ui/detail/related-panel.js";
 import { ReviewPanel } from "../../ui/detail/review-panel.js";
-import { createFc2DetailContext, createFc2DetailShell } from "../status/detail-workspace.js";
+import { createFc2DetailContext, createFc2DetailShell } from "../../ui/detail/fc2-detail-workspace.js";
 
 /** @typedef {any} JQueryHandle */
 /**

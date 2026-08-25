@@ -1,6 +1,7 @@
 // @ts-check
 
 import { l, normalizeCarNum, r } from "../../core/constants.js";
+import { mapLimit } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 
 /** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
@@ -8,22 +9,6 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 /** @typedef {{ root: JQueryHandle, target?: JQueryHandle, configs: SiteConfig[], carNum?: string | null, isActive?: () => boolean, box?: JQueryHandle, settings?: JQueryHandle }} OtherSiteView */
 /** @typedef {{ root?: Element | JQueryHandle, target?: Element | JQueryHandle, isActive?: () => boolean, autoDetect?: boolean }} OtherSiteLoadOptions */
 /** @typedef {{ preventDefault: () => void, currentTarget: HTMLInputElement, ctrlKey?: boolean, metaKey?: boolean }} JQuerySiteEvent */
-
-export class StorageQueue {
-    constructor() {
-        /** @type {Promise<unknown>} */ this.queue = Promise.resolve();
-    }
-    /** @param {() => unknown | Promise<unknown>} e */
-    addTask(e) {
-        const task = this.queue.then((() => e()));
-        return this.queue = task.catch((e => {
-            clog.error("执行异步队列任务失败:", e);
-        })), task;
-    }
-    async waitAllFinished() {
-        return this.queue;
-    }
-}
 
 export class OtherSitePlugin extends BasePlugin {
     constructor() {
@@ -103,9 +88,9 @@ export class OtherSitePlugin extends BasePlugin {
             event.preventDefault();
             const original = $(event.currentTarget).attr("href"), destination = event.ctrlKey || event.metaKey ? original : original + "?handle=1";
             utils.openPage(destination, e, !1, event);
-        })), await Promise.all(configs.map((async config => {
+        })), await mapLimit(configs, 4, (async (config) => {
             config.condition && !1 === config.condition(config.sourceCarNum) || await this.prepareSiteLink(e, config, view);
-        }))), this.renderSettingsArea(view), this.setupEventListeners(view), box.find('[data-jhs-role="detect-sites"]').off("click").on("click", ((/** @type {JQuerySiteEvent} */ event) => {
+        })), this.renderSettingsArea(view), this.setupEventListeners(view), box.find('[data-jhs-role="detect-sites"]').off("click").on("click", ((/** @type {JQuerySiteEvent} */ event) => {
             event.preventDefault(), this.detectOtherSites(e, view);
         })), n.autoDetect && await this.detectOtherSites(e, view);
         return box;
@@ -128,9 +113,9 @@ export class OtherSitePlugin extends BasePlugin {
     async detectOtherSites(e, view = { root: $(document), configs: this.siteConfigs, isActive: () => !0 }) {
         const t = view.root.find('[data-jhs-role="detect-sites"],#detectOtherSiteBtn').first(), n = t.text();
         if (!(e = normalizeCarNum(e))) return t.prop("disabled", !0), void clog.warn("跳过第三方站点检测：番号不可用");
-        return t.text("检测中").prop("disabled", !0).addClass("is-checking"), await Promise.all(view.configs.map((async t => {
+        return t.text("检测中").prop("disabled", !0).addClass("is-checking"), await mapLimit(view.configs, 4, (async (t) => {
             t.condition && !1 === t.condition(t.sourceCarNum) || await this.handleSite(e, t, view);
-        }))), view.isActive?.() !== false && t.text(n).prop("disabled", !1).removeClass("is-checking");
+        })), view.isActive?.() !== false && t.text(n).prop("disabled", !1).removeClass("is-checking");
     }
     /** @param {JQueryHandle} e @param {string} t */
     setSiteState(e, t) {

@@ -6,7 +6,7 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { detectSite } from "../../core/site-context.js";
 import { parseDetailPage } from "../../integrations/host-list/parser.js";
-import { StorageQueue } from "../external-search/other-site.js";
+import { StorageQueue } from "../../core/storage-queue.js";
 
 /** @typedef {"blacklist" | "favoriteActress" | "newVideo"} TaskName */
 /** @typedef {Record<string, any>} TaskRecord */

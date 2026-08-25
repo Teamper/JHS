@@ -30,7 +30,7 @@ function loadWorkspace() {
     const dom = new JSDOM('<main id="host"></main>', { url: "https://javdb.com/users/collection_codes" }), $ = jqueryFactory(dom.window);
     const context = vm.createContext({ window: dom.window, document: dom.window.document, Node: dom.window.Node, MutationObserver: dom.window.MutationObserver, $, BasePlugin: class {}, r: true, l: false,
         normalizeCarNum: value => String(value || "").trim().toUpperCase() || null, jhsEventBus: { emit: vi.fn() }, utils: {}, JhsSelect: {} });
-    const source = readTestFile(join(repoRoot, "src/plugins/status/detail-workspace.js"), "utf8");
+    const source = readTestFile(join(repoRoot, "src/ui/detail/fc2-detail-workspace.js"), "utf8");
     vm.runInContext(`${source};globalThis.createShell=createFc2DetailShell;globalThis.createContext=createFc2DetailContext`, context);
     return { $, context };
 }

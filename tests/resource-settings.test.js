@@ -4,8 +4,8 @@ import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 
-const registry = readTestFile(join(import.meta.dirname, "../src/plugins/external-search/magnet-source-registry.js"), "utf8");
-const service = readTestFile(join(import.meta.dirname, "../src/plugins/backup/resource-settings.js"), "utf8");
+const registry = readTestFile(join(import.meta.dirname, "../src/services/magnet-source-registry.js"), "utf8");
+const service = readTestFile(join(import.meta.dirname, "../src/services/resource-settings-service.js"), "utf8");
 function load(initial = {}) {
     const values = new Map(Object.entries(initial)), storage = { getSetting: vi.fn(async (key, fallback) => values.has(key) ? values.get(key) : fallback), saveSettingItem: vi.fn(async (key, value) => values.set(key, value)) };
     const context = vm.createContext({ URL, storageManager: storage, Date });
