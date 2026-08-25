@@ -83,6 +83,18 @@ export class SettingPlugin extends BasePlugin {
         });
         await storageManager.getSetting("enableClog", _) === _ && clog.show();
         const scope = await this.getRuntimeService("scope")();
+        // 6.5 live：UI 型设置立即应用（theme/layout），无需等待底部保存。
+        const liveSettings = this.getRuntimeService("settings");
+        const onSettingsChanged = (/** @type {any} */ event) => {
+            const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
+            if (!names.length) return;
+            if (names.includes("themeMode")) void applyTheme();
+            if (names.some((name) => [ "mobileMode", "enableVerticalModel", "containerColumns", "containerWidth" ].includes(name))) {
+                void applyImageMode(this.getOptionalDependency("BusImgPlugin")).catch((/** @type {unknown} */ error) => clog.error("布局设置应用失败", error));
+            }
+        };
+        liveSettings.addEventListener("settings.changed", onSettingsChanged);
+        scope.addCleanup((() => liveSettings.removeEventListener("settings.changed", onSettingsChanged)));
         const openSettings = async (panel = "backup-panel") => {
             try { return await this.openSettingDialog(panel); }
             catch (error) { clog.error("设置中心打开失败", error), show.error("设置中心打开失败"); throw error; }

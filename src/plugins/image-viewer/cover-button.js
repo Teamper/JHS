@@ -40,15 +40,18 @@ export class CoverButtonPlugin extends BasePlugin {
         const scope = await this.getRuntimeService("scope")();
         const settingsService = this.getRuntimeService("settings");
         const onSettingsChanged = (/** @type {any} */ event) => {
-            const names = /** @type {string[] | undefined} */ (event.detail?.names);
-            if (!names?.includes("enablePreviewVideo")) return;
-            if (isPreviewEnabled(settingsService.snapshot())) void this.handle().catch((error => clog.error("卡片预览重新挂载失败", error)));
-            else {
-                $('[id$="_preview_video"]').each((/** @type {number} */ _, /** @type {HTMLVideoElement} */ element) => {
-                    element.pause?.(), $(element).parent().remove();
-                });
-                void this.enableSvgBtn();
+            const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
+            if (names.includes("enablePreviewVideo")) {
+                if (isPreviewEnabled(settingsService.snapshot())) void this.handle().catch((error => clog.error("卡片预览重新挂载失败", error)));
+                else {
+                    $('[id$="_preview_video"]').each((/** @type {number} */ _, /** @type {HTMLVideoElement} */ element) => {
+                        element.pause?.(), $(element).parent().remove();
+                    });
+                    void this.enableSvgBtn();
+                }
             }
+            // 长缩略图与卡片按钮开关即时重建工具箱，不保留死按钮。
+            if (names.some((name) => [ "enableLoadScreenShot", "enableVideoSvg", "enableHandleSvg", "enableSiteSvg", "enableCopySvg" ].includes(name))) void this.enableSvgBtn();
         };
         settingsService.addEventListener("settings.changed", onSettingsChanged);
         scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));

@@ -117,6 +117,13 @@ export class ListPagePlugin extends BasePlugin {
     async handle() {
         if (!window.isListPage || isHitShowPage()) return;
         const scope = await this.getRuntimeService("scope")();
+        const settingsService = this.getRuntimeService("settings");
+        const onSettingsChanged = (/** @type {any} */ event) => {
+            const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
+            if (names.includes("hoverBigImg")) this.configureHoverPreview(settingsService.snapshot().hoverBigImg === "yes" ? "yes" : "no");
+        };
+        settingsService.addEventListener("settings.changed", onSettingsChanged);
+        scope.addCleanup((() => settingsService.removeEventListener("settings.changed", onSettingsChanged)));
         const refreshAll = async () => {
                 this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
                 const e = this.getOptionalDependency("HistoryPlugin");
@@ -601,12 +608,16 @@ export class ListPagePlugin extends BasePlugin {
         }), { rootMargin: "200px" });
         for (const image of t) this.hdEagerRemaining > 0 ? (this.hdEagerRemaining--, this._replaceSingleHdImg(image)) : this.hdImageObserver ? (image.dataset.jhsHdObserved = "true",
         this.hdImageObserver.observe(image)) : this._replaceSingleHdImg(image);
-        storageManager.getSetting("hoverBigImg", C).then((/** @type {unknown} */ e) => {
-            const runtimeWindow = /** @type {any} */ (window);
-            e === _ && (runtimeWindow.imageHoverPreviewObj ? runtimeWindow.imageHoverPreviewObj.bindEvents() : runtimeWindow.imageHoverPreviewObj = new ImageHoverPreview({
-                selector: this.getSelector().coverImgSelector
-            }));
-        });
+        storageManager.getSetting("hoverBigImg", C).then((/** @type {unknown} */ e) => this.configureHoverPreview(e === _ ? "yes" : "no"));
+    }
+    /** hoverBigImg 唯一生命周期入口：ON→绑定，OFF→销毁。 */
+    /** @param {string} enabled */
+    configureHoverPreview(enabled) {
+        const runtimeWindow = /** @type {any} */ (window);
+        if (runtimeWindow.imageHoverPreviewObj) {
+            runtimeWindow.imageHoverPreviewObj.destroy?.(), runtimeWindow.imageHoverPreviewObj = null;
+        }
+        if ("yes" === enabled) runtimeWindow.imageHoverPreviewObj = new ImageHoverPreview({ selector: this.getSelector().coverImgSelector });
     }
     /** @param {JQueryHandle} e @param {string} t @param {string} n */
     applyTranslatedTitle(e, t, n) {

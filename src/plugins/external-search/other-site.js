@@ -34,8 +34,6 @@ export class OtherSitePlugin extends BasePlugin {
             { id: "javDbBtn", condition: () => l }, { id: "javBusBtn", condition: e => Boolean(r && e && !e.includes("FC2")) },
             { id: "fanzaBtn", providerId: "dmm", noHandle: !0, condition: e => Boolean(e && !e.includes("FC2")) },
         ];
-        /** @type {Record<string, any> | null} */ this.settingCache = null;
-        this.lastFetchTime = 0, this.CACHE_DURATION = 1e4;
     }
     getName() {
         return "OtherSitePlugin";
@@ -64,13 +62,30 @@ export class OtherSitePlugin extends BasePlugin {
             </style>`;
     }
     async handle() {
-        isDetailPage && await this.loadOtherSite(null, null, {
-            autoDetect: !1
-        });
+        const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
+        const onSettingsChanged = (/** @type {any} */ event) => {
+            const names = /** @type {string[] | undefined} */ (event.detail?.names);
+            if (!names?.includes("enableLoadOtherSite")) return;
+            if (settings.snapshot().enableLoadOtherSite === "no") this.unmount();
+            else void this.mount().catch((error => clog.error("外部站点重新挂载失败", error)));
+        };
+        settings.addEventListener("settings.changed", onSettingsChanged);
+        scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
+        await this.mount();
+    }
+    /** ON：在当前详情页挂载外部站点面板。 */
+    async mount() {
+        if (!isDetailPage) return;
+        if (this.getRuntimeService("settings").snapshot().enableLoadOtherSite === "no") return;
+        await this.loadOtherSite(null, null, { autoDetect: !1 });
+    }
+    /** OFF：删除 JHS 自有面板（宿主原生 UI 不做永久销毁）。 */
+    unmount() {
+        $("[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
     }
     /** @param {string | null} e @param {string | null} t @param {OtherSiteLoadOptions} [n] */
     async loadOtherSite(e, t, n = {}) {
-        if ("yes" !== await storageManager.getSetting("enableLoadOtherSite", "yes")) return;
+        if (this.getRuntimeService("settings").snapshot().enableLoadOtherSite === "no") return;
         const root = n.root ? $(n.root) : $(document), target = n.target ? $(n.target) : $(this.getRuntimeService("host").locateDetailSlots().summary);
         if (!target.length || n.isActive && !n.isActive()) return;
         root.find("#otherSiteBox,#settingsArea,[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
@@ -176,10 +191,9 @@ export class OtherSitePlugin extends BasePlugin {
             (clog.error(a), n.attr("title", "请求失败。"), this.setSiteState(n, "unavailable"), clog.warn(`检测第三方资源失败, ${i}`));
         }
     }
+    /** 设置唯一真相源：SettingsService 快照，不再维护插件私有缓存。 */
     async getSettingCache() {
-        const e = Date.now();
-        return (!this.settingCache || e - this.lastFetchTime > this.CACHE_DURATION) && (this.settingCache = await storageManager.getSetting(),
-        this.lastFetchTime = e), /** @type {Record<string, any>} */ (this.settingCache);
+        return /** @type {Record<string, any>} */ (this.getRuntimeService("settings").snapshot());
     }
     async getMissAvUrl() {
         return (await this.getSiteConfigs()).find((site) => site.id === "missAvBtn")?.baseUrl || "";

@@ -5,10 +5,27 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 export class ActressInfoPlugin extends BasePlugin {
     getName() { return "ActressInfoPlugin"; }
     async handle() {
-        if ("yes" !== await storageManager.getSetting("enableLoadActressInfo", "yes")) return;
+        const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
+        const onSettingsChanged = (/** @type {any} */ event) => {
+            const names = /** @type {string[] | undefined} */ (event.detail?.names);
+            if (!names?.includes("enableLoadActressInfo")) return;
+            if (settings.snapshot().enableLoadActressInfo === "no") this.unmount();
+            else void this.mount().catch((error => clog.error("演员信息重新挂载失败", error)));
+        };
+        settings.addEventListener("settings.changed", onSettingsChanged);
+        scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
+        await this.mount();
+    }
+    /** ON：立即加载当前详情/演员页。 */
+    async mount() {
+        if (this.getRuntimeService("settings").snapshot().enableLoadActressInfo === "no") return;
         const path = window.location.pathname;
         if (path.startsWith("/v/") || path.startsWith("/movies/")) await this.handleDetailPage();
         else if (path.startsWith("/actors/")) await this.handleStarPage();
+    }
+    /** OFF：删除 JHS 演员信息 DOM 并释放请求。 */
+    unmount() {
+        $(".actress-info").remove();
     }
     async initCss() {
         return `<style>

@@ -11,6 +11,7 @@ export class AutoPagePlugin extends BasePlugin {
         this.currentPage = this.getInitialPageNumber();
         /** @type {Array<{ page: number, top: number, url: string }>} */
         this.pageItems = [];
+        /** @type {boolean} */ this.started = false;
         /** @type {HTMLElement | undefined} */
         this.container = void 0;
         /** @type {HTMLDivElement | undefined} */
@@ -27,7 +28,36 @@ export class AutoPagePlugin extends BasePlugin {
         return "\n            <style>\n                .jhs-scroll {\n                    text-align: center;\n                    padding-top: 20px;\n                    font-size: 14px;\n                }\n                .jhs-scroll.waterfall-loading { color: var(--jhs-text); }\n                .jhs-scroll.waterfall-error { color: var(--jhs-status-filter); cursor: pointer; }\n                .jhs-scroll.waterfall-no-more { color: var(--jhs-status-down); }\n            </style>\n        ";
     }
     async handle() {
-        await this.waterfall();
+        const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
+        const onSettingsChanged = (/** @type {any} */ event) => {
+            const names = /** @type {string[] | undefined} */ (event.detail?.names);
+            if (!names?.includes("autoPage")) return;
+            this.reconfigure();
+        };
+        settings.addEventListener("settings.changed", onSettingsChanged);
+        scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
+        this.reconfigure();
+    }
+    /** 总开关 live 生命周期：OFF→stop，ON→start（不刷新页面）。 */
+    reconfigure() {
+        const enabled = this.getRuntimeService("settings").snapshot().autoPage !== "no";
+        if (enabled) return this.start();
+        return this.stop();
+    }
+    start() {
+        if (this.started) return this.waterfallPromise || (this.waterfallPromise = this.waterfall().finally((() => { this.waterfallPromise = null; })));
+        this.started = true;
+        return this.waterfall();
+    }
+    stop() {
+        this.started = false;
+        this.nextUrl = null;
+        this.hasMore = false;
+        this.isLoading = false;
+        this.loader?.remove();
+        this.loader = undefined;
+        this.container = undefined;
+        this.pageItems = [];
     }
     getInitialPageNumber() {
         if (l) {
@@ -41,6 +71,7 @@ export class AutoPagePlugin extends BasePlugin {
         return 1;
     }
     async waterfall() {
+        if (!this.started) return;
         if (await this.shouldDisablePaging()) return;
         const scope = await this.getRuntimeService("scope")();
         const e = this.getSelector();
@@ -71,7 +102,8 @@ export class AutoPagePlugin extends BasePlugin {
     }
     async loadNextPage() {
         var e;
-        if (await storageManager.getSetting("autoPage", _) === C) return void this.setState("waterfall-loading", "");
+        if (!this.started) return;
+        if (this.getRuntimeService("settings").snapshot().autoPage === "no") return void this.setState("waterfall-loading", "");
         if (this.isLoading || !this.nextUrl || !this.container) return;
         this.isLoading = !0, this.setState("waterfall-loading", "加载中...");
         const t = this.getSelector();
@@ -120,8 +152,8 @@ export class AutoPagePlugin extends BasePlugin {
     }
     async shouldDisablePaging() {
         if (!window.isListPage) return !0;
-        const enabled = await storageManager.getSetting("autoPage", _);
-        return enabled !== _ || [ "search?q", "handlePlayback=1", "handleTop=1", "/want_watch_videos", "/watched_videos", "/advanced_search?type=100" ].some((e => o.includes(e)));
+        const enabled = this.getRuntimeService("settings").snapshot().autoPage;
+        return enabled === "no" || [ "search?q", "handlePlayback=1", "handleTop=1", "/want_watch_videos", "/watched_videos", "/advanced_search?type=100" ].some((e => o.includes(e)));
     }
     updatePageUrl(/** @type {string} */ e) {
         window.history.replaceState({}, "", e), l && (document.title = document.title.replace(/第\d+頁/, `第${this.currentPage}頁`));

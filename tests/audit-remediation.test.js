@@ -39,6 +39,7 @@ describe("6.2.0 audit remediation", () => {
         plugin.getSelector = () => ({ boxSelector: "#list", nextPageSelector: ".next" });
         plugin.getRuntimeService = name => "scope" === name ? () => scope : {};
         plugin.checkLoad = vi.fn();
+        plugin.started = true; // 6.5: waterfall 由 start()/reconfigure() 生命周期驱动
         await plugin.waterfall();
         expect(scope.snapshot().listeners).toBe(1);
         expect(add).toHaveBeenCalledWith("scroll", expect.any(Function), undefined);
