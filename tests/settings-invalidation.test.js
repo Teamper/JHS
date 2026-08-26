@@ -21,23 +21,28 @@ describe("settings invalidation ownership", () => {
         expect(saveSettingItem).not.toContain("clean_cacheSettingObj");
     });
 
-    it("routes the settings form through SettingsService with a dirty-field patch", () => {
-        const saveForm = methodBody(settingForms, "async function saveSettingForm", "function addLabelTag");
-        expect(saveForm).toContain("dependencies.settings.patch");
+    it("routes the settings form through the SettingsService ownership patch", () => {
+        const saveForm = methodBody(settingForms, "async function saveSettingForm", "async function collectManualSettingPatch");
+        expect(saveForm).toContain("dependencies.settings.update");
         expect(saveForm).not.toContain("dependencies.settings.replace");
-        expect(saveForm).toContain("changedValues");
+        expect(saveForm).not.toContain("dependencies.settings.patch");
+        expect(saveForm).not.toContain("{ ...dependencies.settings.snapshot() }");
+        expect(saveForm).not.toContain("changedValues");
         expect(saveForm).not.toContain("storageManager.saveSetting(");
         expect(saveForm).not.toContain("invalidateConfig");
-        expect(saveForm).toContain("dependencies.blacklist?.resetBtnTip?.()");
-        expect(saveForm).toContain("dependencies.blacklist?.reloadTable?.()");
+        expect(settingForms).toContain("MANUAL_FORM_SETTING_KEYS");
+        expect(settingForms).toContain("dependencies.newVideo?.resetBtnTip?.()");
+        expect(settingForms).toContain("dependencies.blacklist?.resetBtnTip?.()");
+        expect(settingForms).toContain("dependencies.blacklist?.reloadTable?.()");
     });
 
     it("writes settings through a lock-scoped read-modify-write in SettingsService", () => {
-        const enqueue = settingsService.slice(settingsService.indexOf("_enqueue("));
-        expect(enqueue).toContain("jhs_setting_lock");
-        expect(enqueue).toContain("this.storage.get(storageKey)");
-        expect(enqueue).toContain("this.storage.set(storageKey, next)");
-        expect(enqueue).not.toContain("this.snapshotValue, ...values");
+        const update = settingsService.slice(settingsService.indexOf("async update("));
+        expect(update).toContain("jhs_setting_lock");
+        expect(update).toContain("this.storage.get(storageKey)");
+        expect(update).toContain("this.storage.set(storageKey, next)");
+        expect(update).toContain("this.writeChain");
+        expect(update).not.toContain("this.snapshotValue, ...values");
     });
 
     it("keeps legacy StorageManager as the fallback but routes through the single entry when available", () => {
@@ -53,5 +58,28 @@ describe("settings invalidation ownership", () => {
         expect(openDialog).not.toContain('getDependency("CoverButtonPlugin")');
         expect(settingPlugin).toContain('getBean("CoverButtonPlugin")?.enableSvgBtn?.()');
         expect(settingTemplates).not.toContain("coverButtonPlugin");
+    });
+});
+
+describe("migration write ownership", () => {
+    const bootstrap = readFileSync(join(process.cwd(), "src/app/bootstrap.js"), "utf8");
+    const migration = readFileSync(join(process.cwd(), "src/core/settings-migration.js"), "utf8");
+
+    it("bootstrap local-origin migration is deferred to an atomic settings update", () => {
+        expect(bootstrap).toContain("async function resolveLocalOrigins");
+        expect(bootstrap).toContain("async function persistLocalOriginMigration");
+        expect(bootstrap).not.toContain("saveSetting({ ...settings");
+    });
+
+    it("runtime screenshot migration deletes the legacy key atomically and never replace()s", () => {
+        expect(migration).toContain("settings.update");
+        expect(migration).toContain("delete draft.enableScreenSvg");
+        expect(migration).not.toContain("settings.replace");
+    });
+
+    it("async_merge_other uses updateSetting instead of whole-object saveSetting(e)", () => {
+        const merge = methodBody(storage, "async async_merge_other", "merge_blacklist");
+        expect(merge).toContain("this.updateSetting");
+        expect(merge).not.toContain("await this.saveSetting(e)");
     });
 });

@@ -411,6 +411,17 @@ export class StorageManager {
         };
         return locks?.request ? locks.request("jhs_setting_lock", write) : write();
     }
+    /** Atomic read-modify-write for settings. Delegates to SettingsService when available. */
+    async updateSetting(mutator) {
+        if (globalThis.settingsService?.update) return globalThis.settingsService.update(mutator);
+        const locks = globalThis.navigator?.locks;
+        const write = async () => {
+            const settings = await this.getSetting();
+            mutator(settings);
+            await this.saveSetting(settings);
+        };
+        return locks?.request ? locks.request("jhs_setting_lock", write) : write();
+    }
     async importData(e) {
         validatePortableData(e);
         await hasPortableUserData(this) && await this.createSnapshot("导入前自动备份", "auto-import");
@@ -590,7 +601,6 @@ export class StorageManager {
         clog.debug("清理 Blacklist 后", s.length), await this._setItemAndInvalidate(this.blacklist_key, s));
     }
     async async_merge_other() {
-        const e = await this.getSetting();
         let t = !1;
         const n = {
             enableCheckFilterActorActress: "enableCheckBlacklist",
@@ -599,12 +609,16 @@ export class StorageManager {
             checkIntervalTime_newVideo: "checkNewVideo_intervalTime",
             checkIntervalTime_favoriteActress: "checkFavoriteActress_IntervalTime"
         };
-        for (const a in n) {
-            const i = n[a];
-            Object.prototype.hasOwnProperty.call(e, a) && (e[i] = e[a], delete e[a], t = !0);
-        }
-        e.checkFilterTime && (delete e.checkFilterTime, t = !0), e.checkFilterConcurrencyCount && (delete e.checkFilterConcurrencyCount,
-        t = !0), e.checkFilterSleep && (delete e.checkFilterSleep, t = !0), t && (await this.saveSetting(e), clog.debug("配置数据已更正"));
+        await this.updateSetting((e) => {
+            for (const a in n) {
+                const i = n[a];
+                Object.prototype.hasOwnProperty.call(e, a) && (e[i] = e[a], delete e[a], t = !0);
+            }
+            e.checkFilterTime && (delete e.checkFilterTime, t = !0);
+            e.checkFilterConcurrencyCount && (delete e.checkFilterConcurrencyCount, t = !0);
+            e.checkFilterSleep && (delete e.checkFilterSleep, t = !0);
+        });
+        t && clog.debug("配置数据已更正");
     }
     /** 数据迁移: 补全黑名单条目缺失的 role/starId/allName/movieType 字段 */
     async merge_blacklist() {

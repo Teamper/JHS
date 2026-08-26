@@ -25,9 +25,16 @@ export class ReviewPanel {
         toggle.on("click", (/** @type {any} */ event) => {
             event.preventDefault(); event.stopPropagation();
             const expanded = toggle.find(".toggle-text").text() === "展开";
+            const previous = (this.settings.snapshot().enableLoadReview ?? "no") === "yes";
+            const desired = expanded ? "yes" : "no";
             this.updateToggle(toggle, expanded); panel.find(".jhs-review-container, .jhs-review-footer").toggle(expanded);
             if (expanded && !state.loaded && !state.loading) void this.fetch(state);
-            void this.settings.set("enableLoadReview", expanded ? "yes" : "no");
+            this.settings.set("enableLoadReview", desired).catch((/** @type {unknown} */ error) => {
+                this.updateToggle(toggle, previous);
+                panel.find(".jhs-review-container, .jhs-review-footer").toggle(previous);
+                /** @type {any} */ (globalThis).clog?.error("评论面板展开设置保存失败，已恢复", error);
+                /** @type {any} */ (globalThis).show?.error?.("评论面板展开设置保存失败，已恢复原设置");
+            });
         });
         if (enabled) await this.fetch(state); else panel.find(".jhs-review-container, .jhs-review-footer").hide();
         return panel;

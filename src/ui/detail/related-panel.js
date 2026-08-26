@@ -25,10 +25,17 @@ export class RelatedPanel {
         toggle.on("click", (/** @type {any} */ event) => {
             event.preventDefault(); event.stopPropagation();
             const expanded = toggle.find(".toggle-text").text() === "展开";
+            const previous = (this.settings.snapshot().enableLoadRelated ?? "no") === "yes";
+            const desired = expanded ? "yes" : "no";
             this.updateToggle(toggle, expanded);
             panel.find(".jhs-related-container, .jhs-related-footer").toggle(expanded);
             if (expanded && !state.loaded && !state.loading) void this.fetch(state);
-            void this.settings.set("enableLoadRelated", expanded ? "yes" : "no");
+            this.settings.set("enableLoadRelated", desired).catch((/** @type {unknown} */ error) => {
+                this.updateToggle(toggle, previous);
+                panel.find(".jhs-related-container, .jhs-related-footer").toggle(previous);
+                /** @type {any} */ (globalThis).clog?.error("相关清单展开设置保存失败，已恢复", error);
+                /** @type {any} */ (globalThis).show?.error?.("相关清单展开设置保存失败，已恢复原设置");
+            });
         });
         if (enabled) await this.fetch(state); else panel.find(".jhs-related-container, .jhs-related-footer").hide();
         return panel;

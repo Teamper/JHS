@@ -67,20 +67,34 @@ async function migrateDisabledPluginSettings(storageManager) {
     }
 }
 
-async function prepareLocalOrigins(storageManager) {
+async function resolveLocalOrigins(storageManager) {
+    // Read-only phase. Persisting is deferred until SettingsService exists so
+    // the migration can run as an atomic patch on the freshest stored draft.
     const settings = await storageManager.getSetting();
     const origins = new Set(Array.isArray(settings.trustedLocalOrigins) ? settings.trustedLocalOrigins : []);
     let legacyOrigin = null;
     try { if (settings.webDavUrl) legacyOrigin = new URL(settings.webDavUrl).origin; } catch { /* existing invalid values remain untouched */ }
     if (legacyOrigin && !origins.has(legacyOrigin)) {
         origins.add(legacyOrigin);
-        await storageManager.saveSetting({ ...settings, trustedLocalOrigins: [...origins], localOriginTrustNoticeV1: true });
-        return { origins: [...origins], notice: `已按现有 WebDAV 配置授权本地来源：${legacyOrigin}` };
-    } else if (legacyOrigin && !settings.localOriginTrustNoticeV1) {
-        await storageManager.saveSetting({ ...settings, localOriginTrustNoticeV1: true });
-        return { origins: [...origins], notice: `WebDAV 仅信任精确来源：${legacyOrigin}` };
+        return { origins: [...origins], notice: `已按现有 WebDAV 配置授权本地来源：${legacyOrigin}`, needsOrigin: true };
+    }
+    if (legacyOrigin && !settings.localOriginTrustNoticeV1) {
+        return { origins: [...origins], notice: `WebDAV 仅信任精确来源：${legacyOrigin}`, needsNotice: true };
     }
     return { origins: [...origins], notice: null };
+}
+
+async function persistLocalOriginMigration(settings, resolved) {
+    if (!resolved.needsOrigin && !resolved.needsNotice) return;
+    await settings.update((draft) => {
+        if (resolved.needsOrigin) {
+            const origins = new Set(Array.isArray(draft.trustedLocalOrigins) ? draft.trustedLocalOrigins : []);
+            const legacyOrigin = resolved.origins[resolved.origins.length - 1];
+            if (legacyOrigin) origins.add(legacyOrigin);
+            draft.trustedLocalOrigins = [ ...origins ];
+        }
+        draft.localOriginTrustNoticeV1 = true;
+    });
 }
 
 export async function bootstrapJhs() {
@@ -94,7 +108,7 @@ export async function bootstrapJhs() {
         importVendorStyles(utils);
         injectCoreCss();
         const disabled = await migrateDisabledPluginSettings(storageManager);
-        const localOriginSettings = await prepareLocalOrigins(storageManager);
+        const localOriginSettings = await resolveLocalOrigins(storageManager);
         const javdbHostAdapter = new JavDbHostAdapter(), javbusHostAdapter = new JavBusHostAdapter();
         const hostAdapter = r ? javdbHostAdapter : l ? javbusHostAdapter : null;
         const route = hostAdapter?.detectRoute() ?? "other";
@@ -107,6 +121,7 @@ export async function bootstrapJhs() {
         // route through SettingsService with lock + re-read + merge.
         Object.assign(globalThis, { settingsService: context.services.settings });
         const settingsSnapshot = await context.services.settings.load();
+        await persistLocalOriginMigration(context.services.settings, localOriginSettings);
         await normalizeScreenshotSetting(context.services.settings);
         context.services.profile.start();
         const legacySortMethod = localStorage.getItem("jhs_sortMethod");

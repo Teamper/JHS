@@ -1,3 +1,4 @@
+import { ResourceSettingsService } from "../src/services/resource-settings-service.js";
 import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -37,4 +38,54 @@ describe("resource settings UI contracts", () => {
     it("car import requires preview before confirm", () => { expect(template).toContain('id="confirm-car-number-import" class="jhs-btn jhs-btn--primary" disabled'); expect(setting).toContain('if (!this.pendingCarImport) return show.info("请先解析预览")'); });
     it("attaches resource dialog forms before passing them to layui", () => { expect(setting.match(/content\.appendTo\("body"\)\.hide\(\)/g)).toHaveLength(2); expect(setting.match(/end: \(\) => content\.remove\(\)/g)).toHaveLength(2); });
     it("keeps omitted advanced import fields", async () => { const { instance, values } = load(); values.set("customMagnetSources", JSON.stringify([{ id: "keep" }])); await instance.importConfig(JSON.stringify({ magnetTagRules: [] })); expect(values.get("customMagnetSources")).toBe(JSON.stringify([{ id: "keep" }])); });
+});
+
+describe("resource settings granular writes", () => {
+    it("screenshot mode and providers can be saved independently", async () => {
+        const { instance, values, storage } = load({ screenshotMode: "auto" });
+        await instance.saveScreenshotMode("manual");
+        expect(values.get("screenshotMode")).toBe("manual");
+        expect(storage.saveSettingItem).not.toHaveBeenCalledWith("screenshotProviders", expect.anything());
+        await instance.saveScreenshotProviders([{ id: "x", enabled: true }]);
+        expect(values.get("screenshotProviders")).toBe(JSON.stringify([{ id: "x", enabled: true }]));
+        expect(values.get("screenshotMode")).toBe("manual");
+    });
+
+    it("cloud single-key write only touches the requested key", async () => {
+        const { instance, storage } = load({ enable115Match: "false", oneOneFiveConcurrency: 4 });
+        await instance.saveCloudSetting("enable115Match", true);
+        expect(storage.saveSettingItem).toHaveBeenCalledTimes(1);
+        expect(storage.saveSettingItem.mock.calls[0][0]).toBe("enable115Match");
+        expect(storage.saveSettingItem.mock.calls[0][1]).toBe(true);
+    });
+
+    it("parses legacy boolean strings without Boolean('false')", async () => {
+        const { api } = load();
+        expect(api.parseBooleanSetting("false", true)).toBe(false);
+        expect(api.parseBooleanSetting("true", false)).toBe(true);
+        expect(api.parseBooleanSetting("no", true)).toBe(false);
+        expect(api.parseBooleanSetting(undefined, true)).toBe(true);
+    });
+
+    it("updateArray mutates from the freshest array when updateSetting is available", async () => {
+        const calls = [];
+        const values = new Map([["customMagnetSources", JSON.stringify([{ id: "a", enabled: true }])]]);
+        const storage = {
+            getSetting: vi.fn(async (key, fallback) => values.has(key) ? values.get(key) : fallback),
+            saveSettingItem: vi.fn(async (key, value) => values.set(key, value)),
+            updateSetting: vi.fn(async (mutator) => {
+                const draft = { customMagnetSources: values.get("customMagnetSources") };
+                mutator(draft);
+                values.set("customMagnetSources", draft.customMagnetSources);
+                calls.push(draft.customMagnetSources);
+            }),
+        };
+        const instance = new ResourceSettingsService(storage);
+        await instance.updateArray("customMagnetSources", (list) => {
+            list.find((item) => item.id === "a").enabled = false;
+            return list;
+        });
+        expect(JSON.parse(values.get("customMagnetSources"))[0].enabled).toBe(false);
+        expect(storage.saveSettingItem).not.toHaveBeenCalled();
+    });
 });

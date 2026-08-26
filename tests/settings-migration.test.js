@@ -37,3 +37,33 @@ describe("enableScreenSvg → enableLoadScreenShot migration", () => {
         expect(service.snapshot()).toEqual({});
     });
 });
+
+describe("one-shot screenshot migration", () => {
+    it("writes master and deletes legacy in the same update", async () => {
+        const service = createService({ enableLoadScreenShot: "yes", enableScreenSvg: "no", keep: 1 });
+        await service.load();
+        await normalizeScreenshotSetting(service);
+        expect(service.snapshot().enableLoadScreenShot).toBe("no");
+        expect(service.snapshot().enableScreenSvg).toBeUndefined();
+        expect(service.snapshot().keep).toBe(1);
+    });
+
+    it("does not touch enableLoadScreenShot after legacy key is gone", async () => {
+        const service = createService({ enableLoadScreenShot: "yes" });
+        await service.load();
+        await normalizeScreenshotSetting(service);
+        expect(service.snapshot()).toEqual({ enableLoadScreenShot: "yes" });
+    });
+
+    it("user can re-enable after migration and bootstrap never flips it back", async () => {
+        const stored = { setting: { enableLoadScreenShot: "yes", enableScreenSvg: "no" } };
+        const service = new SettingsService({ get: async (key) => stored[key], set: async (key, value) => { stored[key] = value; } });
+        await service.load();
+        await normalizeScreenshotSetting(service);
+        await service.set("enableLoadScreenShot", "yes");
+        expect(service.snapshot().enableLoadScreenShot).toBe("yes");
+        await normalizeScreenshotSetting(service);
+        expect(service.snapshot().enableLoadScreenShot).toBe("yes");
+        expect(service.snapshot().enableScreenSvg).toBeUndefined();
+    });
+});
