@@ -14,6 +14,7 @@ import { initQuickSettingForm, loadSettingForm, saveSettingForm } from "./settin
 import { renderDataHealthPanel, renderNetworkPanel, renderPluginMgmtPanel, renderSnapshotPanel, repairDataHealthWithBackup, showDiffPreview } from "./setting-panels.js";
 import { applyImageMode, buildSettingCss } from "./setting-styles.js";
 import { buildQuickSettingHtml, buildSettingDialogHtml, injectHealthPanel, injectNetworkPanel, injectPluginMgmtPanel, injectResourceSourcesPanel, injectSnapshotPanel } from "./setting-templates.js";
+import { bindSettingControl } from "../../ui/settings/setting-binding-controller.js";
 import { bindSettingRows, renderSettingRow } from "../../ui/settings/setting-control-renderer.js";
 
 export class SettingPlugin extends BasePlugin {
@@ -94,6 +95,11 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
             if (!names.length) return;
             if (names.includes("themeMode")) void applyTheme();
+            if (names.includes("enableClog")) {
+                const value = liveSettings.snapshot().enableClog;
+                if (value === "yes") clog.show();
+                else clog.hide();
+            }
             if (names.some((name) => [ "mobileMode", "enableVerticalModel", "containerColumns", "containerWidth" ].includes(name))) {
                 void applyImageMode(this.getOptionalDependency("BusImgPlugin")).catch((/** @type {unknown} */ error) => clog.error("布局设置应用失败", error));
             }
@@ -250,16 +256,102 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
     /** 完整设置中由 descriptor 驱动的 live 开关：与快捷设置共用同一 key 与写入路径。 */
     /** @param {JQueryHandle | HTMLElement} layerRoot */
     hydrateLiveSettings(layerRoot) {
-        const host = $(layerRoot).find("#jhs-live-settings");
-        if (!host.length) return null;
+        const root = $(layerRoot);
+        const host = root.find("#jhs-live-settings");
         const registry = this.getRuntimeService("settingsRegistry"), settings = this.getRuntimeService("settings");
         const staticKeys = new Set([ "needClosePage", "themeMode", "mobileMode", "enableClog", "containerColumns", "containerWidth" ]);
         const descriptors = registry.list({ surfaces: [ "full" ] }).filter((descriptor) => (descriptor.effect || "live") === "live" && !staticKeys.has(descriptor.key));
-        descriptors.forEach((descriptor) => {
-            const { row } = renderSettingRow(descriptor, { value: settings.snapshot()[descriptor.key] ?? descriptor.defaultValue });
-            host.append(row);
+        if (host.length) {
+            descriptors.forEach((descriptor) => {
+                const { row } = renderSettingRow(descriptor, { value: settings.snapshot()[descriptor.key] ?? descriptor.defaultValue });
+                host.append(row);
+            });
+        }
+        const dynamicBinding = host.length ? bindSettingRows(host, descriptors, { settings }) : null;
+        const staticBindings = [];
+        const registerStatic = (/** @type {any} */ config) => {
+            const binding = bindSettingControl({ settings, root, ...config });
+            if (binding) staticBindings.push(binding);
+        };
+        registerStatic({
+            selector: "#needClosePageBasic",
+            key: "needClosePage",
+            getValue: () => root.find("#needClosePageBasic").is(":checked") ? "yes" : "no",
+            setValue: (value) => root.find("#needClosePageBasic").prop("checked", value === "yes" || value === true),
+            fallback: "yes",
+            label: "鉴定后立即关闭",
         });
-        return bindSettingRows(host, descriptors, { settings });
+        registerStatic({
+            selector: "#themeMode",
+            key: "themeMode",
+            getValue: () => root.find("#themeMode").val(),
+            setValue: (value) => root.find("#themeMode").val(String(value ?? "")),
+            fallback: "light",
+            label: "主题",
+        });
+        registerStatic({
+            selector: "#mobileMode",
+            key: "mobileMode",
+            getValue: () => root.find("#mobileMode").val(),
+            setValue: (value) => root.find("#mobileMode").val(String(value ?? "")),
+            fallback: "auto",
+            label: "移动模式",
+        });
+        registerStatic({
+            selector: "#enableClog",
+            key: "enableClog",
+            getValue: () => root.find("#enableClog").val(),
+            setValue: (value) => root.find("#enableClog").val(String(value ?? "")),
+            fallback: "yes",
+            label: "日志",
+        });
+        registerStatic({
+            selector: "#containerColumns",
+            key: "containerColumns",
+            getValue: () => Number(root.find("#containerColumns").val()) || 5,
+            setValue: (value) => {
+                root.find("#containerColumns").val(value == null ? "" : String(value));
+                root.find("#showContainerColumns").text(value ?? "");
+            },
+            fallback: 5,
+            label: "列表列数",
+        });
+        registerStatic({
+            selector: "#containerWidth",
+            key: "containerWidth",
+            getValue: () => Number(root.find("#containerWidth").val()) + 70,
+            setValue: (value) => {
+                const width = Number(value) || 100;
+                root.find("#containerWidth").val(String(width - 70));
+                root.find("#showContainerWidth").text(`${width}%`);
+            },
+            fallback: 100,
+            label: "列表宽度",
+        });
+        registerStatic({
+            selector: "#defaultQuickFilterTab",
+            key: "defaultQuickFilterTab",
+            getValue: () => normalizeQuickFilterKey(root.find("#defaultQuickFilterTab").val()),
+            setValue: (value) => root.find("#defaultQuickFilterTab").val(String(value ?? "")),
+            fallback: "waitCheck",
+            label: "列表默认筛选",
+        });
+        if (!dynamicBinding && !staticBindings.length) return null;
+        return {
+            sync: (snapshot) => {
+                dynamicBinding?.sync?.(snapshot);
+                for (const binding of staticBindings) binding.sync?.(snapshot);
+            },
+            flush: async () => {
+                await dynamicBinding?.flush?.();
+                await Promise.all(staticBindings.map((binding) => binding.flush?.()));
+            },
+            dispose: () => {
+                dynamicBinding?.dispose?.();
+                for (const binding of staticBindings) binding.dispose();
+            },
+            setters: dynamicBinding?.setters ?? {},
+        };
     }
     /** @param {JQueryHandle | HTMLElement} layerRoot @param {number} generation */
     async hydrateSettingForm(layerRoot, generation) {
@@ -434,23 +526,8 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             labelPreview.css("border", `${count}px solid ${color}`);
         }
         numberInput.on("input", updatePreview), colorInput.on("input", updatePreview);
-        root.find("#themeMode").on("change", (async function() {
-            await settingPlugin.getRuntimeService("settings").set("themeMode", $(this).val()), applyTheme();
-        }));
-        root.find("#mobileMode").on("change", (async function() {
-            await settingPlugin.getRuntimeService("settings").set("mobileMode", $(this).val());
-        }));
-        root.find("#enableClog").on("change", (async function() {
-            const value = $(this).val();
-            await settingPlugin.getRuntimeService("settings").set("enableClog", value);
-            "yes" === value ? clog.show() : clog.hide();
-        }));
-        root.find("#needClosePageBasic").on("change", (async function() {
-            await settingPlugin.getRuntimeService("settings").set("needClosePage", $(this).is(":checked") ? "yes" : "no");
-        }));
-        root.find("#defaultQuickFilterTab").on("change", (async function() {
-            await settingPlugin.getRuntimeService("settings").set("defaultQuickFilterTab", normalizeQuickFilterKey($(this).val()));
-        }));
+        // Static live controls are bound through SettingBindingHub in
+        // hydrateLiveSettings(); no direct settings.set() handlers here.
     }
     async loadResourceSettings(layerRoot = null, generation = this._settingsDialogGeneration) {
         const root = layerRoot ? $(layerRoot) : $(document);

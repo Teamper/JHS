@@ -708,6 +708,14 @@ window.loading = function() {
         n.tooltipElement = null));
     }));
 }();
-loggerRuntime = Object.freeze({ loading: window.loading, show: window.show, clog: window.clog });
+const loggerLoading = window.loading;
+const loggerShow = window.show;
+const loggerClog = window.clog;
+loggerRuntime = Object.freeze({ loading: loggerLoading, show: loggerShow, clog: loggerClog });
+// The frozen runtime object is the source of truth for bootstrap/compatibility;
+// window/globalThis only keep compatibility mirrors for legacy code.
+window.loading = loggerRuntime.loading;
+window.show = loggerRuntime.show;
+window.clog = loggerRuntime.clog;
 return loggerRuntime;
 }

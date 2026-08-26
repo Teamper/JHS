@@ -5336,7 +5336,13 @@
         n2 && (n2.hoverTimeout && (clearTimeout(n2.hoverTimeout), n2.hoverTimeout = null), n2.contains(e3.relatedTarget) || n2.tooltipElement && ((a2 = n2.tooltipElement) && a2.parentNode && a2.remove(), n2.tooltipElement = null));
       }));
     })();
-    loggerRuntime = Object.freeze({ loading: window.loading, show: window.show, clog: window.clog });
+    const loggerLoading = window.loading;
+    const loggerShow = window.show;
+    const loggerClog = window.clog;
+    loggerRuntime = Object.freeze({ loading: loggerLoading, show: loggerShow, clog: loggerClog });
+    window.loading = loggerRuntime.loading;
+    window.show = loggerRuntime.show;
+    window.clog = loggerRuntime.clog;
     return loggerRuntime;
   }
   __name(initializeLoggerRuntime, "initializeLoggerRuntime");
@@ -7497,6 +7503,35 @@
     return hub;
   }
   __name(getSettingBindingHub, "getSettingBindingHub");
+  function bindSettingControl({ root, selector, key, getValue, setValue, fallback = void 0, label = key, settings, onChange = null }) {
+    const hub = getSettingBindingHub(settings);
+    const element = root.find(selector);
+    if (!element.length) return null;
+    const binding = {
+      setValue(name, value) {
+        if (name === key) setValue(value);
+      },
+      dispose() {
+        element.off(".jhsSettingBinding");
+        hub._dropBinding(binding);
+      }
+    };
+    hub.bindings.add(binding);
+    element.off(".jhsSettingBinding").on("change.jhsSettingBinding", () => {
+      const value = getValue();
+      onChange?.(key, value);
+      hub.userChanged(key, value, fallback, label);
+    });
+    binding.setValue(key, hub.desiredValue(key, settings.snapshot()[key] ?? fallback));
+    return {
+      sync(snapshot) {
+        if (Object.prototype.hasOwnProperty.call(snapshot, key)) setValue(snapshot[key]);
+      },
+      flush: /* @__PURE__ */ __name(() => hub.flush(), "flush"),
+      dispose: /* @__PURE__ */ __name(() => binding.dispose(), "dispose")
+    };
+  }
+  __name(bindSettingControl, "bindSettingControl");
   var _SettingBindingHub = class _SettingBindingHub {
     constructor(settings) {
       this.settings = settings;
@@ -7510,7 +7545,10 @@
       const detail = event.detail || {};
       const snapshot = detail.snapshot ?? this.settings.snapshot();
       const names = Array.isArray(detail.names) ? detail.names : Object.keys(snapshot);
-      for (const name of names) this.syncAll(name, snapshot[name]);
+      for (const name of names) {
+        const pending = this.pending.get(name);
+        this.syncAll(name, pending ? pending.value : snapshot[name]);
+      }
     }
     syncAll(key, value) {
       for (const binding of this.bindings) binding.setValue(key, value);
@@ -7524,13 +7562,17 @@
       const token = ++this.revision;
       const promise = this.settings.set(key, value).then(
         () => {
-          if (this.pending.get(key)?.token === token) this.pending.delete(key);
+          if (this.pending.get(key)?.token === token) {
+            this.pending.delete(key);
+            this._maybeDispose();
+          }
         },
         (error) => {
           if (this.pending.get(key)?.token === token) {
             this.pending.delete(key);
             const committed = this.settings.snapshot()[key] ?? fallback;
             this.syncAll(key, committed);
+            this._maybeDispose();
             if (typeof globalThis.show?.error === "function") {
               globalThis.show.error(`${label || key}保存失败，已恢复原设置`);
             } else if (typeof globalThis.clog?.error === "function") {
@@ -7548,7 +7590,10 @@
     }
     _dropBinding(binding) {
       this.bindings.delete(binding);
-      if (!this.bindings.size) {
+      this._maybeDispose();
+    }
+    _maybeDispose() {
+      if (this.bindings.size === 0 && this.pending.size === 0) {
         this.settings.removeEventListener("settings.changed", this._onSettingsChanged);
         hubs.delete(this.settings);
       }
@@ -7813,16 +7858,13 @@
       root.find("#showContainerColumns").text(columns);
       const listRoot = hostAdapter?.locateListRoot?.();
       listRoot && (listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
-    })).on("change.jhsSetting", (async (event) => {
-      await settings.set("containerColumns", Number($(event.currentTarget).val()) || 5);
-      await applyImageMode(busImgPlugin);
     }));
     root.find("#containerWidth").off(".jhsSetting").on("input.jhsSetting", ((event) => {
       const width = parseInt($(event.target).val()) + 70, widthText = `${width}%`;
       root.find("#showContainerWidth").text(widthText);
       const layoutContainer = hostAdapter?.getListLayoutContainer?.();
       layoutContainer && (layoutContainer.style.minWidth = widthText);
-    })).on("change.jhsSetting", ((event) => settings.set("containerWidth", parseInt($(event.currentTarget).val()) + 70)));
+    }));
   }
   __name(bindLayoutRangeEvents, "bindLayoutRangeEvents");
   async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn, root = null) {
@@ -8973,6 +9015,11 @@
         const names = event.detail?.names || [];
         if (!names.length) return;
         if (names.includes("themeMode")) void applyTheme();
+        if (names.includes("enableClog")) {
+          const value = liveSettings.snapshot().enableClog;
+          if (value === "yes") clog.show();
+          else clog.hide();
+        }
         if (names.some((name) => ["mobileMode", "enableVerticalModel", "containerColumns", "containerWidth"].includes(name))) {
           void applyImageMode(this.getOptionalDependency("BusImgPlugin")).catch((error) => clog.error("布局设置应用失败", error));
         }
@@ -9130,16 +9177,102 @@
       });
     }
     hydrateLiveSettings(layerRoot) {
-      const host = $(layerRoot).find("#jhs-live-settings");
-      if (!host.length) return null;
+      const root = $(layerRoot);
+      const host = root.find("#jhs-live-settings");
       const registry = this.getRuntimeService("settingsRegistry"), settings = this.getRuntimeService("settings");
       const staticKeys = /* @__PURE__ */ new Set(["needClosePage", "themeMode", "mobileMode", "enableClog", "containerColumns", "containerWidth"]);
       const descriptors = registry.list({ surfaces: ["full"] }).filter((descriptor) => (descriptor.effect || "live") === "live" && !staticKeys.has(descriptor.key));
-      descriptors.forEach((descriptor) => {
-        const { row } = renderSettingRow(descriptor, { value: settings.snapshot()[descriptor.key] ?? descriptor.defaultValue });
-        host.append(row);
+      if (host.length) {
+        descriptors.forEach((descriptor) => {
+          const { row } = renderSettingRow(descriptor, { value: settings.snapshot()[descriptor.key] ?? descriptor.defaultValue });
+          host.append(row);
+        });
+      }
+      const dynamicBinding = host.length ? bindSettingRows(host, descriptors, { settings }) : null;
+      const staticBindings = [];
+      const registerStatic = /* @__PURE__ */ __name((config) => {
+        const binding = bindSettingControl({ settings, root, ...config });
+        if (binding) staticBindings.push(binding);
+      }, "registerStatic");
+      registerStatic({
+        selector: "#needClosePageBasic",
+        key: "needClosePage",
+        getValue: /* @__PURE__ */ __name(() => root.find("#needClosePageBasic").is(":checked") ? "yes" : "no", "getValue"),
+        setValue: /* @__PURE__ */ __name((value) => root.find("#needClosePageBasic").prop("checked", value === "yes" || value === true), "setValue"),
+        fallback: "yes",
+        label: "鉴定后立即关闭"
       });
-      return bindSettingRows(host, descriptors, { settings });
+      registerStatic({
+        selector: "#themeMode",
+        key: "themeMode",
+        getValue: /* @__PURE__ */ __name(() => root.find("#themeMode").val(), "getValue"),
+        setValue: /* @__PURE__ */ __name((value) => root.find("#themeMode").val(String(value ?? "")), "setValue"),
+        fallback: "light",
+        label: "主题"
+      });
+      registerStatic({
+        selector: "#mobileMode",
+        key: "mobileMode",
+        getValue: /* @__PURE__ */ __name(() => root.find("#mobileMode").val(), "getValue"),
+        setValue: /* @__PURE__ */ __name((value) => root.find("#mobileMode").val(String(value ?? "")), "setValue"),
+        fallback: "auto",
+        label: "移动模式"
+      });
+      registerStatic({
+        selector: "#enableClog",
+        key: "enableClog",
+        getValue: /* @__PURE__ */ __name(() => root.find("#enableClog").val(), "getValue"),
+        setValue: /* @__PURE__ */ __name((value) => root.find("#enableClog").val(String(value ?? "")), "setValue"),
+        fallback: "yes",
+        label: "日志"
+      });
+      registerStatic({
+        selector: "#containerColumns",
+        key: "containerColumns",
+        getValue: /* @__PURE__ */ __name(() => Number(root.find("#containerColumns").val()) || 5, "getValue"),
+        setValue: /* @__PURE__ */ __name((value) => {
+          root.find("#containerColumns").val(value == null ? "" : String(value));
+          root.find("#showContainerColumns").text(value ?? "");
+        }, "setValue"),
+        fallback: 5,
+        label: "列表列数"
+      });
+      registerStatic({
+        selector: "#containerWidth",
+        key: "containerWidth",
+        getValue: /* @__PURE__ */ __name(() => Number(root.find("#containerWidth").val()) + 70, "getValue"),
+        setValue: /* @__PURE__ */ __name((value) => {
+          const width = Number(value) || 100;
+          root.find("#containerWidth").val(String(width - 70));
+          root.find("#showContainerWidth").text(`${width}%`);
+        }, "setValue"),
+        fallback: 100,
+        label: "列表宽度"
+      });
+      registerStatic({
+        selector: "#defaultQuickFilterTab",
+        key: "defaultQuickFilterTab",
+        getValue: /* @__PURE__ */ __name(() => normalizeQuickFilterKey(root.find("#defaultQuickFilterTab").val()), "getValue"),
+        setValue: /* @__PURE__ */ __name((value) => root.find("#defaultQuickFilterTab").val(String(value ?? "")), "setValue"),
+        fallback: "waitCheck",
+        label: "列表默认筛选"
+      });
+      if (!dynamicBinding && !staticBindings.length) return null;
+      return {
+        sync: /* @__PURE__ */ __name((snapshot) => {
+          dynamicBinding?.sync?.(snapshot);
+          for (const binding of staticBindings) binding.sync?.(snapshot);
+        }, "sync"),
+        flush: /* @__PURE__ */ __name(async () => {
+          await dynamicBinding?.flush?.();
+          await Promise.all(staticBindings.map((binding) => binding.flush?.()));
+        }, "flush"),
+        dispose: /* @__PURE__ */ __name(() => {
+          dynamicBinding?.dispose?.();
+          for (const binding of staticBindings) binding.dispose();
+        }, "dispose"),
+        setters: dynamicBinding?.setters ?? {}
+      };
     }
     async hydrateSettingForm(layerRoot, generation) {
       const button = $(layerRoot).find("#saveBtn"), status = $(layerRoot).find("#settings-hydration-status");
@@ -9313,23 +9446,6 @@
       }
       __name(updatePreview, "updatePreview");
       numberInput.on("input", updatePreview), colorInput.on("input", updatePreview);
-      root.find("#themeMode").on("change", (async function() {
-        await settingPlugin.getRuntimeService("settings").set("themeMode", $(this).val()), applyTheme();
-      }));
-      root.find("#mobileMode").on("change", (async function() {
-        await settingPlugin.getRuntimeService("settings").set("mobileMode", $(this).val());
-      }));
-      root.find("#enableClog").on("change", (async function() {
-        const value = $(this).val();
-        await settingPlugin.getRuntimeService("settings").set("enableClog", value);
-        "yes" === value ? clog.show() : clog.hide();
-      }));
-      root.find("#needClosePageBasic").on("change", (async function() {
-        await settingPlugin.getRuntimeService("settings").set("needClosePage", $(this).is(":checked") ? "yes" : "no");
-      }));
-      root.find("#defaultQuickFilterTab").on("change", (async function() {
-        await settingPlugin.getRuntimeService("settings").set("defaultQuickFilterTab", normalizeQuickFilterKey($(this).val()));
-      }));
     }
     async loadResourceSettings(layerRoot = null, generation = this._settingsDialogGeneration) {
       const root = layerRoot ? $(layerRoot) : $(document);
@@ -22330,12 +22446,11 @@ ${failure.stack}` : "");
         ...globalThis.__jhsBrowserTestMetadata ?? {}
       });
       Object.assign(globalThis, logger);
-      if (localOriginSettings.notice) globalThis.show.info(localOriginSettings.notice);
+      if (localOriginSettings.notice) logger.show.info(localOriginSettings.notice);
       const pluginManager = new PluginManager({ diagnostics: context.services.diagnostics });
       for (const manifest2 of integrationManifests) context.registries.integrations.register(manifest2);
       for (const manifest2 of featureManifests) context.registries.features.register(manifest2);
       registerSitePlugins(pluginManager, context.registries.features, siteContext2.site);
-      await context.registries.features.start();
       attachCompatibilityFacade({
         pluginManager,
         utils: utils2,
@@ -22343,16 +22458,17 @@ ${failure.stack}` : "");
         storageManager: storageManager2,
         stateService,
         jhsEventBus: jhsEventBus2,
-        clog: globalThis.clog,
-        show: globalThis.show,
-        loading: globalThis.loading
+        clog: logger.clog,
+        show: logger.show,
+        loading: logger.loading
       }, globalThis.unsafeWindow);
+      await context.registries.features.start();
       window.isDetailPage = route === "detail";
       window.isListPage = route === "list";
       await runDataMigrations(storageManager2);
       await stateService.recoverPendingTransaction();
       await Promise.all([pluginManager.processCss(), applyTheme()]);
-      if (r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie)) globalThis.show.error("请切换到中文语言下才可正常使用本脚本", { duration: -1 });
+      if (r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie)) logger.show.error("请切换到中文语言下才可正常使用本脚本", { duration: -1 });
       await pluginManager.processPlugins();
       return context;
     } catch (cause) {

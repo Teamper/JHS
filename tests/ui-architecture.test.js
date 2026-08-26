@@ -131,7 +131,7 @@ describe("list toolbar and UI cleanup contracts", () => {
             expect(settingForms).not.toContain(id);
         }
         expect(settingForms).toContain("normalizeQuickFilterKey(e.defaultQuickFilterTab)");
-        expect(settingPlugin).toContain('normalizeQuickFilterKey($(this).val())');
+        expect(settingPlugin).toContain('normalizeQuickFilterKey(root.find("#defaultQuickFilterTab").val())');
     });
 
     it("renders product labels while retaining internal plugin names as a tooltip", () => {
@@ -184,13 +184,13 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(settingForms).toContain("bindLayoutRangeEvents(root, dependencies.busImg, dependencies.host, dependencies.settings);");
         expect(settingForms).toContain('.off(".jhsSetting")');
         expect(settingForms).toContain('.on("input.jhsSetting"');
-        expect(settingForms).toContain('.on("change.jhsSetting"');
-        expect(settingForms).toContain('settings.set("containerColumns"');
-        expect(settingForms).toContain('settings.set("containerWidth"');
-        expect(settingForms).toContain("await applyImageMode(busImgPlugin)");
+        expect(settingForms).not.toContain('.on("change.jhsSetting"');
+        expect(settingForms).not.toContain('settings.set("containerColumns"');
+        expect(settingForms).not.toContain('settings.set("containerWidth"');
+        expect(settingPlugin).toContain('selector: "#containerColumns"');
+        expect(settingPlugin).toContain('selector: "#containerWidth"');
         const rangeBinding = settingForms.slice(settingForms.indexOf("function bindLayoutRangeEvents"), settingForms.indexOf("async function initQuickSettingForm"));
-        const columnsInput = rangeBinding.slice(rangeBinding.indexOf('on("input.jhsSetting"'), rangeBinding.indexOf('on("change.jhsSetting"'));
-        expect(columnsInput).not.toContain("saveSettingItem");
+        expect(rangeBinding).not.toContain("saveSettingItem");
         const quickForm = settingForms.slice(settingForms.indexOf("async function initQuickSettingForm"));
         expect(quickForm).not.toContain('$("#containerColumns").on("input"');
         expect(quickForm).not.toContain('$("#containerWidth").on("input"');

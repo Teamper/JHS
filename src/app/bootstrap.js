@@ -145,22 +145,24 @@ export async function bootstrapJhs() {
             ...(globalThis.__jhsBrowserTestMetadata ?? {}),
         });
         Object.assign(globalThis, logger);
-        if (localOriginSettings.notice) globalThis.show.info(localOriginSettings.notice);
+        if (localOriginSettings.notice) logger.show.info(localOriginSettings.notice);
         const pluginManager = new PluginManager({ diagnostics: context.services.diagnostics });
         for (const manifest of integrationManifests) context.registries.integrations.register(manifest);
         for (const manifest of featureManifests) context.registries.features.register(manifest);
         registerSitePlugins(pluginManager, context.registries.features, siteContext.site);
-        await context.registries.features.start();
+        // Compatibility infrastructure must be ready before any feature mounts.
+        // A missing logger dependency should fail the whole bootstrap, not leave a half-started page.
         attachCompatibilityFacade({
             pluginManager, utils, gmHttp, storageManager, stateService, jhsEventBus,
-            clog: globalThis.clog, show: globalThis.show, loading: globalThis.loading,
+            clog: logger.clog, show: logger.show, loading: logger.loading,
         }, globalThis.unsafeWindow);
+        await context.registries.features.start();
         window.isDetailPage = route === "detail";
         window.isListPage = route === "list";
         await runDataMigrations(storageManager);
         await stateService.recoverPendingTransaction();
         await Promise.all([pluginManager.processCss(), applyTheme()]);
-        if (r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie)) globalThis.show.error("请切换到中文语言下才可正常使用本脚本", { duration: -1 });
+        if (r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie)) logger.show.error("请切换到中文语言下才可正常使用本脚本", { duration: -1 });
         await pluginManager.processPlugins();
         return context;
     } catch (cause) {

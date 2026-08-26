@@ -22,6 +22,55 @@ export function getSettingBindingHub(settings) {
     return hub;
 }
 
+
+/**
+ * Bind a non-descriptor static control (checkbox/select/range) through the same
+ * shared BindingHub used by dynamic setting rows. This gives static live
+ * controls optimistic sync, cross-surface propagation, rollback and pending
+ * intent retention.
+ *
+ * @param {{
+ *   root: any,
+ *   selector: string,
+ *   key: string,
+ *   getValue: () => unknown,
+ *   setValue: (value: unknown) => void,
+ *   fallback?: unknown,
+ *   label?: string,
+ *   settings: any,
+ *   onChange?: ((key: string, value: unknown) => void) | null
+ * }} options
+ */
+export function bindSettingControl({ root, selector, key, getValue, setValue, fallback = undefined, label = key, settings, onChange = null }) {
+    const hub = getSettingBindingHub(settings);
+    const element = root.find(selector);
+    if (!element.length) return null;
+    /** @type {any} */
+    const binding = {
+        setValue(/** @type {string} */ name, /** @type {unknown} */ value) {
+            if (name === key) setValue(value);
+        },
+        dispose() {
+            element.off(".jhsSettingBinding");
+            hub._dropBinding(binding);
+        },
+    };
+    hub.bindings.add(binding);
+    element.off(".jhsSettingBinding").on("change.jhsSettingBinding", () => {
+        const value = getValue();
+        onChange?.(key, value);
+        hub.userChanged(key, value, fallback, label);
+    });
+    binding.setValue(key, hub.desiredValue(key, settings.snapshot()[key] ?? fallback));
+    return {
+        sync(/** @type {Record<string, unknown>} */ snapshot) {
+            if (Object.prototype.hasOwnProperty.call(snapshot, key)) setValue(snapshot[key]);
+        },
+        flush: () => hub.flush(),
+        dispose: () => binding.dispose(),
+    };
+}
+
 class SettingBindingHub {
     /** @param {any} settings */
     constructor(settings) {
@@ -40,7 +89,12 @@ class SettingBindingHub {
         const detail = event.detail || {};
         const snapshot = detail.snapshot ?? this.settings.snapshot();
         const names = Array.isArray(detail.names) ? detail.names : Object.keys(snapshot);
-        for (const name of names) this.syncAll(name, snapshot[name]);
+        for (const name of names) {
+            const pending = this.pending.get(name);
+            // A newer local intent must never be covered by an intermediate
+            // committed state from an older write (e.g. OFF -> ON -> OFF).
+            this.syncAll(name, pending ? pending.value : snapshot[name]);
+        }
     }
 
     /** @param {string} key @param {unknown} value */
@@ -61,13 +115,17 @@ class SettingBindingHub {
         const token = ++this.revision;
         const promise = this.settings.set(key, value).then(
             () => {
-                if (this.pending.get(key)?.token === token) this.pending.delete(key);
+                if (this.pending.get(key)?.token === token) {
+                    this.pending.delete(key);
+                    this._maybeDispose();
+                }
             },
             (/** @type {unknown} */ error) => {
                 if (this.pending.get(key)?.token === token) {
                     this.pending.delete(key);
                     const committed = this.settings.snapshot()[key] ?? fallback;
                     this.syncAll(key, committed);
+                    this._maybeDispose();
                     if (typeof /** @type {any} */ (globalThis).show?.error === "function") {
                         /** @type {any} */ (globalThis).show.error(`${label || key}保存失败，已恢复原设置`);
                     } else if (typeof /** @type {any} */ (globalThis).clog?.error === "function") {
@@ -88,7 +146,11 @@ class SettingBindingHub {
     /** @param {any} binding */
     _dropBinding(binding) {
         this.bindings.delete(binding);
-        if (!this.bindings.size) {
+        this._maybeDispose();
+    }
+
+    _maybeDispose() {
+        if (this.bindings.size === 0 && this.pending.size === 0) {
             this.settings.removeEventListener("settings.changed", this._onSettingsChanged);
             hubs.delete(this.settings);
         }

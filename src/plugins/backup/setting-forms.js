@@ -130,23 +130,26 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
 }
 
 /** Bind the shared layout range controls without accumulating handlers. */
-/** @param {any} root @param {any} busImgPlugin @param {any} hostAdapter @param {any} settings */
+/**
+ * This only handles live drag preview. The actual commit is owned by
+ * SettingBindingHub through the static control binding created in
+ * SettingPlugin.hydrateLiveSettings(), so persistence and rollback stay unified.
+ *
+ * @param {any} root @param {any} busImgPlugin @param {any} hostAdapter @param {any} settings
+ */
 function bindLayoutRangeEvents(root, busImgPlugin, hostAdapter, settings) {
     root.find("#containerColumns").off(".jhsSetting").on("input.jhsSetting", (() => {
         const columns = root.find("#containerColumns").val();
         root.find("#showContainerColumns").text(columns);
         const listRoot = hostAdapter?.locateListRoot?.();
         listRoot && (listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
-    })).on("change.jhsSetting", (async (/** @type {any} */ event) => {
-        await settings.set("containerColumns", Number($(event.currentTarget).val()) || 5);
-        await applyImageMode(busImgPlugin);
     }));
     root.find("#containerWidth").off(".jhsSetting").on("input.jhsSetting", ((/** @type {any} */ event) => {
         const width = parseInt($(event.target).val()) + 70, widthText = `${width}%`;
         root.find("#showContainerWidth").text(widthText);
         const layoutContainer = hostAdapter?.getListLayoutContainer?.();
         layoutContainer && (layoutContainer.style.minWidth = widthText);
-    })).on("change.jhsSetting", ((/** @type {any} */ event) => settings.set("containerWidth", parseInt($(event.currentTarget).val()) + 70)));
+    }));
 }
 
 /** Initialize quick settings in either the desktop popover or mobile layer. */
