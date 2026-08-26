@@ -400,7 +400,17 @@ export class Fc2Plugin extends BasePlugin {
         old.remove();
         const button = $('<button type="button" class="jhs-btn jhs-btn--ghost jhs-btn--sm" data-jhs-action="filter-native-magnets"></button>'), apply = (/** @type {boolean} */ enabled) => { host.find(".jhs-fc2-magnet-item").show(); enabled && hasMatch && host.find('.jhs-fc2-magnet-item[data-jhs-high-quality="false"]').hide(); button.attr("aria-pressed", String(enabled && hasMatch)).text(hasMatch ? enabled ? "显示全部磁力" : "过滤低质量" : "暂无可过滤项").prop("disabled", !hasMatch); };
         const settings = this.getRuntimeService("settings");
-        context.magnetFilterApply = apply, actions.append(button), apply((settings.snapshot().enableMagnetsFilter ?? _) === _), button.on(`click${context.namespace}`, (async () => { const enabled = "true" !== button.attr("aria-pressed"); apply(enabled), await settings.set("enableMagnetsFilter", enabled ? _ : "no"); }));
+        context.magnetFilterApply = apply, actions.append(button), apply((settings.snapshot().enableMagnetsFilter ?? _) === _), button.on(`click${context.namespace}`, (async () => {
+            const previous = button.attr("aria-pressed") === "true";
+            const enabled = !previous;
+            apply(enabled);
+            try {
+                await settings.set("enableMagnetsFilter", enabled ? _ : "no");
+            } catch (error) {
+                apply(previous);
+                clog.error("磁力过滤设置保存失败，已恢复", error), show.error("磁力过滤设置保存失败，已恢复原设置");
+            }
+        }));
     }
     /** @param {Fc2DetailContext} context @param {Promise<string | null | undefined>} movieIdPromise */
     async mountPanels(context, movieIdPromise) {

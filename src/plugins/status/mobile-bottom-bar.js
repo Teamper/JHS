@@ -440,7 +440,16 @@ export class MobileBottomBarPlugin extends BasePlugin {
         })).on("click", ".jhs-mobile-sort-option", (async (/** @type {any} */ event) => {
             event.stopPropagation();
             const value = $(event.currentTarget).data("jhs-sort");
-            await this.getRuntimeService("settings").set("sortMethod", value), sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true"), await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.(), closeMenu(!0);
+            const previousItem = sortMenu.find('.jhs-mobile-sort-option[aria-checked="true"]').first();
+            sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true");
+            try {
+                await this.getRuntimeService("settings").set("sortMethod", value);
+            } catch (error) {
+                sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), previousItem.attr("aria-checked", "true");
+                clog.error("排序设置保存失败，已恢复", error), show.error("排序设置保存失败，已恢复原设置");
+                return;
+            }
+            await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.(), closeMenu(!0);
         }));
         // 菜单项点击
         menu.on("click", ".jhs-fab-menu-item", (/** @type {any} */ e) => {

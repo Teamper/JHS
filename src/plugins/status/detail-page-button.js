@@ -56,8 +56,18 @@ export class DetailPageButtonPlugin extends BasePlugin {
         $("#enable-magnets-filter").on("click", (async (/** @type {ActionEvent} */ e) => {
             let t = $("#magnets-span");
             if (!a) return;
-            "关闭磁力过滤" === t.text() ? (a.showAll(), t.text("开启磁力过滤"), await settings.set("enableMagnetsFilter", C)) : (a.doFilterMagnet(),
-            t.text("关闭磁力过滤"), await settings.set("enableMagnetsFilter", _));
+            const wasFiltering = "关闭磁力过滤" === t.text();
+            const applyFilter = (/** @type {boolean} */ filtering) => {
+                if (filtering) { a.doFilterMagnet(); t.text("关闭磁力过滤"); }
+                else { a.showAll(); t.text("开启磁力过滤"); }
+            };
+            applyFilter(!wasFiltering);
+            try {
+                await settings.set("enableMagnetsFilter", !wasFiltering ? _ : C);
+            } catch (error) {
+                applyFilter(wasFiltering);
+                clog.error("磁力过滤设置保存失败，已恢复", error), show.error("磁力过滤设置保存失败，已恢复原设置");
+            }
         })), $("#search-subtitle-btn").on("click", ((/** @type {ActionEvent} */ e) => {
             const target = this.getRuntimeService("movie").sourceUrls({ carNum: t }, ["subtitlecat"])[0]?.url;
             if (target) utils.openPage(target, t, !1, e);

@@ -186,21 +186,34 @@ export async function renderPluginMgmtPanel(diagnostics, /** @type {any} */ sett
     $("#pm-enabled").text(enabledCount);
     $("#pm-disabled").text(effectiveDisabled.length);
     $(".pm-toggle").off("change").on("change", async (/** @type {Event} */ e) => {
-        const name = $(e.target).data("plugin");
+        const target = $(e.target);
+        const name = target.data("plugin");
+        const nextEnabled = target.is(":checked");
+        const previousEnabled = !nextEnabled;
         let list = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
         const disabledId = disabledIdForPlugin(name);
-        if ($(e.target).is(":checked")) {
+        if (nextEnabled) {
             list = list.filter(x => x !== name && x !== disabledId);
         } else {
             if (!list.includes(disabledId)) list.push(disabledId);
         }
         if (!settings) throw new Error("SettingsService is unavailable");
-        await settings.set("disabledPlugins", JSON.stringify(list));
-        const all = diagnosticSnapshot.legacyPlugins, currentDisabled = effectiveDisabledNames(list);
-        $("#pm-total").text(all.length);
-        $("#pm-enabled").text(all.length - currentDisabled.length);
-        $("#pm-disabled").text(currentDisabled.length);
-        show.ok(`插件 "${name}" 已${$(e.target).is(":checked") ? "启用" : "禁用"}，刷新后生效`);
+        const renderState = (/** @type {string[]} */ disabledList) => {
+            const all = diagnosticSnapshot.legacyPlugins, currentDisabled = effectiveDisabledNames(disabledList);
+            $("#pm-total").text(all.length);
+            $("#pm-enabled").text(all.length - currentDisabled.length);
+            $("#pm-disabled").text(currentDisabled.length);
+        };
+        renderState(list);
+        try {
+            await settings.set("disabledPlugins", JSON.stringify(list));
+            show.ok(`插件 "${name}" 已${nextEnabled ? "启用" : "禁用"}，刷新后生效`);
+        } catch (error) {
+            target.prop("checked", previousEnabled);
+            const rollbackList = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
+            renderState(rollbackList);
+            clog.error("插件状态保存失败，已恢复", error), show.error(`插件 "${name}" 状态保存失败，已恢复`);
+        }
     });
     const startup = diagnosticSnapshot.legacyStartup, timings = diagnosticSnapshot.legacyTimings;
     const formatMs = (/** @type {number} */ value) => Number.isFinite(value) ? value.toFixed(1) : "0.0";

@@ -54,9 +54,22 @@ export class FoldCategoryPlugin extends BasePlugin {
         let i = $("#foldCategoryBtn"), s = settings.snapshot().foldCategoryCollapsed === !0, [o, r] = s ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];
         i.find("span").text(o).end().find("i").attr("class", r), window.location.href.includes("noFold=1") || t[s ? "hide" : "show"](),
         i.on("click", (async (/** @type {MouseEvent} */ e) => {
-            e.preventDefault(), s = !s, await settings.set("foldCategoryCollapsed", s);
-            const [n, a] = s ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];
-            i.find("span").text(n).end().find("i").attr("class", a), t[s ? "hide" : "show"]();
+            e.preventDefault();
+            const previous = s;
+            s = !s;
+            const applyState = (/** @type {boolean} */ collapsed) => {
+                const [label, icon] = collapsed ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];
+                i.find("span").text(label).end().find("i").attr("class", icon);
+                t[collapsed ? "hide" : "show"]();
+            };
+            applyState(s);
+            try {
+                await settings.set("foldCategoryCollapsed", s);
+            } catch (error) {
+                s = previous;
+                applyState(previous);
+                clog.error("分类折叠设置保存失败，已恢复", error), show.error("分类折叠设置保存失败，已恢复原设置");
+            }
         }));
     }
 }

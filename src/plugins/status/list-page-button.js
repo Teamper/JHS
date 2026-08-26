@@ -109,8 +109,18 @@ export class ListPageButtonPlugin extends BasePlugin {
         }));
         menu.on("click", ".jhs-sort-option", (async (/** @type {any} */ event) => {
             const item = $(event.currentTarget), method = item.data("sort-method");
-            await this.getRuntimeService("settings").set("sortMethod", method), menu.find(".jhs-sort-option").attr("aria-checked", "false"), item.attr("aria-checked", "true"),
-            $("#jhs-sort-current").text(item.text()), close(!0), await this.sortItems().catch((error => clog.error("列表排序失败", error)));
+            const previousItem = menu.find('.jhs-sort-option[aria-checked="true"]').first();
+            const previousLabel = $("#jhs-sort-current").text();
+            menu.find(".jhs-sort-option").attr("aria-checked", "false"), item.attr("aria-checked", "true"),
+            $("#jhs-sort-current").text(item.text()), close(!0);
+            try {
+                await this.getRuntimeService("settings").set("sortMethod", method);
+            } catch (error) {
+                menu.find(".jhs-sort-option").attr("aria-checked", "false"), previousItem.attr("aria-checked", "true"), $("#jhs-sort-current").text(previousLabel);
+                clog.error("排序设置保存失败，已恢复", error), show.error("排序设置保存失败，已恢复原设置");
+                return;
+            }
+            await this.sortItems().catch((error => clog.error("列表排序失败", error)));
         })).on("keydown", ".jhs-sort-option", ((/** @type {any} */ event) => {
             const items = menu.find(".jhs-sort-option"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), close(!0);

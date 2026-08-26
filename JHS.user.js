@@ -8852,21 +8852,34 @@
     $("#pm-enabled").text(enabledCount);
     $("#pm-disabled").text(effectiveDisabled.length);
     $(".pm-toggle").off("change").on("change", async (e2) => {
-      const name = $(e2.target).data("plugin");
+      const target = $(e2.target);
+      const name = target.data("plugin");
+      const nextEnabled = target.is(":checked");
+      const previousEnabled = !nextEnabled;
       let list = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
       const disabledId = disabledIdForPlugin(name);
-      if ($(e2.target).is(":checked")) {
+      if (nextEnabled) {
         list = list.filter((x) => x !== name && x !== disabledId);
       } else {
         if (!list.includes(disabledId)) list.push(disabledId);
       }
       if (!settings) throw new Error("SettingsService is unavailable");
-      await settings.set("disabledPlugins", JSON.stringify(list));
-      const all = diagnosticSnapshot.legacyPlugins, currentDisabled = effectiveDisabledNames(list);
-      $("#pm-total").text(all.length);
-      $("#pm-enabled").text(all.length - currentDisabled.length);
-      $("#pm-disabled").text(currentDisabled.length);
-      show.ok(`插件 "${name}" 已${$(e2.target).is(":checked") ? "启用" : "禁用"}，刷新后生效`);
+      const renderState = /* @__PURE__ */ __name((disabledList) => {
+        const all = diagnosticSnapshot.legacyPlugins, currentDisabled = effectiveDisabledNames(disabledList);
+        $("#pm-total").text(all.length);
+        $("#pm-enabled").text(all.length - currentDisabled.length);
+        $("#pm-disabled").text(currentDisabled.length);
+      }, "renderState");
+      renderState(list);
+      try {
+        await settings.set("disabledPlugins", JSON.stringify(list));
+        show.ok(`插件 "${name}" 已${nextEnabled ? "启用" : "禁用"}，刷新后生效`);
+      } catch (error) {
+        target.prop("checked", previousEnabled);
+        const rollbackList = parseDisabledPlugins(await storageManager.getSetting("disabledPlugins", "[]"));
+        renderState(rollbackList);
+        clog.error("插件状态保存失败，已恢复", error), show.error(`插件 "${name}" 状态保存失败，已恢复`);
+      }
     });
     const startup = diagnosticSnapshot.legacyStartup, timings = diagnosticSnapshot.legacyTimings;
     const formatMs = /* @__PURE__ */ __name((value) => Number.isFinite(value) ? value.toFixed(1) : "0.0", "formatMs");
@@ -11511,8 +11524,15 @@ ${value}\r
       }, "apply");
       const settings = this.getRuntimeService("settings");
       context.magnetFilterApply = apply, actions.append(button), apply((settings.snapshot().enableMagnetsFilter ?? _) === _), button.on(`click${context.namespace}`, (async () => {
-        const enabled = "true" !== button.attr("aria-pressed");
-        apply(enabled), await settings.set("enableMagnetsFilter", enabled ? _ : "no");
+        const previous = button.attr("aria-pressed") === "true";
+        const enabled = !previous;
+        apply(enabled);
+        try {
+          await settings.set("enableMagnetsFilter", enabled ? _ : "no");
+        } catch (error) {
+          apply(previous);
+          clog.error("磁力过滤设置保存失败，已恢复", error), show.error("磁力过滤设置保存失败，已恢复原设置");
+        }
       }));
     }
     async mountPanels(context, movieIdPromise) {
@@ -15850,7 +15870,23 @@ ${failure.stack}` : "");
       a2 || $("#enable-magnets-filter").remove(), $("#magnets-span").text(i2 === _ ? "关闭磁力过滤" : "开启磁力过滤"), i2 === _ && a2?.doFilterMagnet?.(), $("#enable-magnets-filter").on("click", (async (e3) => {
         let t3 = $("#magnets-span");
         if (!a2) return;
-        "关闭磁力过滤" === t3.text() ? (a2.showAll(), t3.text("开启磁力过滤"), await settings.set("enableMagnetsFilter", C)) : (a2.doFilterMagnet(), t3.text("关闭磁力过滤"), await settings.set("enableMagnetsFilter", _));
+        const wasFiltering = "关闭磁力过滤" === t3.text();
+        const applyFilter = /* @__PURE__ */ __name((filtering) => {
+          if (filtering) {
+            a2.doFilterMagnet();
+            t3.text("关闭磁力过滤");
+          } else {
+            a2.showAll();
+            t3.text("开启磁力过滤");
+          }
+        }, "applyFilter");
+        applyFilter(!wasFiltering);
+        try {
+          await settings.set("enableMagnetsFilter", !wasFiltering ? _ : C);
+        } catch (error) {
+          applyFilter(wasFiltering);
+          clog.error("磁力过滤设置保存失败，已恢复", error), show.error("磁力过滤设置保存失败，已恢复原设置");
+        }
       })), $("#search-subtitle-btn").on("click", ((e3) => {
         const target = this.getRuntimeService("movie").sourceUrls({ carNum: t2 }, ["subtitlecat"])[0]?.url;
         if (target) utils.openPage(target, t2, false, e3);
@@ -16337,9 +16373,22 @@ ${failure.stack}` : "");
       const settings = this.getRuntimeService("settings");
       let i2 = $("#foldCategoryBtn"), s2 = settings.snapshot().foldCategoryCollapsed === true, [o2, r2] = s2 ? ["展开", "icon-angle-double-down"] : ["折叠", "icon-angle-double-up"];
       i2.find("span").text(o2).end().find("i").attr("class", r2), window.location.href.includes("noFold=1") || t2[s2 ? "hide" : "show"](), i2.on("click", (async (e2) => {
-        e2.preventDefault(), s2 = !s2, await settings.set("foldCategoryCollapsed", s2);
-        const [n3, a3] = s2 ? ["展开", "icon-angle-double-down"] : ["折叠", "icon-angle-double-up"];
-        i2.find("span").text(n3).end().find("i").attr("class", a3), t2[s2 ? "hide" : "show"]();
+        e2.preventDefault();
+        const previous = s2;
+        s2 = !s2;
+        const applyState = /* @__PURE__ */ __name((collapsed) => {
+          const [label, icon] = collapsed ? ["展开", "icon-angle-double-down"] : ["折叠", "icon-angle-double-up"];
+          i2.find("span").text(label).end().find("i").attr("class", icon);
+          t2[collapsed ? "hide" : "show"]();
+        }, "applyState");
+        applyState(s2);
+        try {
+          await settings.set("foldCategoryCollapsed", s2);
+        } catch (error) {
+          s2 = previous;
+          applyState(previous);
+          clog.error("分类折叠设置保存失败，已恢复", error), show.error("分类折叠设置保存失败，已恢复原设置");
+        }
       }));
     }
   };
@@ -17282,7 +17331,17 @@ ${failure.stack}` : "");
       }));
       menu.on("click", ".jhs-sort-option", (async (event) => {
         const item = $(event.currentTarget), method = item.data("sort-method");
-        await this.getRuntimeService("settings").set("sortMethod", method), menu.find(".jhs-sort-option").attr("aria-checked", "false"), item.attr("aria-checked", "true"), $("#jhs-sort-current").text(item.text()), close(true), await this.sortItems().catch(((error) => clog.error("列表排序失败", error)));
+        const previousItem = menu.find('.jhs-sort-option[aria-checked="true"]').first();
+        const previousLabel = $("#jhs-sort-current").text();
+        menu.find(".jhs-sort-option").attr("aria-checked", "false"), item.attr("aria-checked", "true"), $("#jhs-sort-current").text(item.text()), close(true);
+        try {
+          await this.getRuntimeService("settings").set("sortMethod", method);
+        } catch (error) {
+          menu.find(".jhs-sort-option").attr("aria-checked", "false"), previousItem.attr("aria-checked", "true"), $("#jhs-sort-current").text(previousLabel);
+          clog.error("排序设置保存失败，已恢复", error), show.error("排序设置保存失败，已恢复原设置");
+          return;
+        }
+        await this.sortItems().catch(((error) => clog.error("列表排序失败", error)));
       })).on("keydown", ".jhs-sort-option", ((event) => {
         const items = menu.find(".jhs-sort-option"), index = items.index(event.currentTarget);
         if ("Escape" === event.key) return event.preventDefault(), close(true);
@@ -18475,7 +18534,16 @@ ${failure.stack}` : "");
       })).on("click", ".jhs-mobile-sort-option", (async (event) => {
         event.stopPropagation();
         const value = $(event.currentTarget).data("jhs-sort");
-        await this.getRuntimeService("settings").set("sortMethod", value), sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true"), await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.(), closeMenu(true);
+        const previousItem = sortMenu.find('.jhs-mobile-sort-option[aria-checked="true"]').first();
+        sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true");
+        try {
+          await this.getRuntimeService("settings").set("sortMethod", value);
+        } catch (error) {
+          sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), previousItem.attr("aria-checked", "true");
+          clog.error("排序设置保存失败，已恢复", error), show.error("排序设置保存失败，已恢复原设置");
+          return;
+        }
+        await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.(), closeMenu(true);
       }));
       menu.on("click", ".jhs-fab-menu-item", (e2) => {
         const action = $(e2.currentTarget).data("action");
