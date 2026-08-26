@@ -44,3 +44,12 @@ describe("settings form transaction ownership", () => {
         expect(save).not.toContain('show.ok(`保存成功`');
     });
 });
+
+describe("manual form dirty tracking", () => {
+    it("records changed manual keys and filters the save patch to dirty keys", () => {
+        expect(source).toContain("MANUAL_FORM_SELECTORS");
+        expect(source).toContain("bindManualDirtyTracking");
+        expect(source).toContain('root.data("jhsDirtyManualKeys", new Set())');
+        expect(source).toContain("if (!dirtyKeys.has(key)) delete patch[key]");
+    });
+});

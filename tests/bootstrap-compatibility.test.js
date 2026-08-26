@@ -5,6 +5,7 @@ import { attachCompatibilityFacade } from "../src/app/compatibility-facade.js";
 
 const bootstrap = readFileSync(join(import.meta.dirname, "../src/app/bootstrap.js"), "utf8");
 const logger = readFileSync(join(import.meta.dirname, "../src/core/logger.js"), "utf8");
+const appContext = readFileSync(join(import.meta.dirname, "../src/app/create-app-context.js"), "utf8");
 
 describe("bootstrap compatibility P0", () => {
     it("compatibility facade rejects when clog is missing", () => {
@@ -44,5 +45,11 @@ describe("bootstrap compatibility P0", () => {
     it("logger runtime is frozen and exposes clog/show/loading before mirroring to window", () => {
         expect(logger).toContain("loggerRuntime = Object.freeze({ loading: loggerLoading, show: loggerShow, clog: loggerClog })");
         expect(logger).toContain("window.clog = loggerRuntime.clog");
+    });
+
+    it("refreshes settings on pageshow/BFCache restore", () => {
+        expect(appContext).toContain('rootScope.listen(window, "pageshow"');
+        expect(appContext).toContain("runtime.legacyStorage?.invalidateSettingCache?.()");
+        expect(appContext).toContain("await settings.refresh()");
     });
 });
