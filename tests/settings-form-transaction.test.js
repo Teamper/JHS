@@ -64,4 +64,12 @@ describe("keyword dirty-only save", () => {
         expect(source).toContain('root.data("jhsDirtyReviewKeywords", false)');
         expect(source).toContain('root.data("jhsDirtyTitleKeywords", false)');
     });
+
+    it("marks keyword dirty only after a real add or confirmed remove", () => {
+        expect(source).not.toContain('markDirty("jhsDirtyReviewKeywords")');
+        expect(source).not.toContain('markDirty("jhsDirtyTitleKeywords")');
+        expect(source).toContain('root.data(container === "#reviewKeywordContainer" ? "jhsDirtyReviewKeywords" : "jhsDirtyTitleKeywords", true)');
+        expect(source).toContain("root.data(dirtyKey, true)");
+        expect(source).toContain("if (!value) return;");
+    });
 });

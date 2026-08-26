@@ -27,9 +27,12 @@ export class BusImgPlugin extends BasePlugin {
         }
         return n;
     }
-    async logImageHeightsByRow() {
-        if (await storageManager.getSetting("enableVerticalModel", C) === _) return;
-        const e = this.getSelector().itemSelector, t = await storageManager.getSetting("containerColumns", 5), n = await this.getVisibleImageItems(e, "img");
+    /** @param {{ vertical?: unknown, columns?: unknown, enableVerticalModel?: unknown, containerColumns?: unknown }} [options] */
+    async logImageHeightsByRow(options = {}) {
+        const vertical = options.vertical ?? options.enableVerticalModel ?? await storageManager.getSetting("enableVerticalModel", C);
+        const columns = options.columns ?? options.containerColumns ?? await storageManager.getSetting("containerColumns", 5);
+        if (vertical === _) return;
+        const e = this.getSelector().itemSelector, t = Number(columns) || 5, n = await this.getVisibleImageItems(e, "img");
         if (0 === n.length) return;
         /** @type {Array<Array<{element: Element, imgElement: HTMLImageElement, height: number}>>} */
         const a = [];

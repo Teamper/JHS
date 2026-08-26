@@ -453,7 +453,6 @@ export async function applyImageMode(busImgPlugin = null, enableVerticalModel) {
             `;
         $("<style>").attr("id", "verticalImgStyle").text(e).appendTo("head");
     }
-    l && busImgPlugin?.logImageHeightsByRow?.();
 }
 
 /**
@@ -465,10 +464,14 @@ export async function applyImageMode(busImgPlugin = null, enableVerticalModel) {
  * @param {{ busImgPlugin?: any, hostAdapter?: any }} [options]
  */
 export async function applyLayoutFromSettings(snapshot = {}, { busImgPlugin = null, hostAdapter = null } = {}) {
-    await applyImageMode(busImgPlugin, snapshot.enableVerticalModel);
+    const vertical = snapshot.enableVerticalModel === undefined ? C : snapshot.enableVerticalModel;
+    await applyImageMode(busImgPlugin, vertical);
     const mobile = /** @type {any} */ (globalThis).utils?.isMobileMode?.() ?? false;
     const columns = mobile ? 1 : Number(snapshot.containerColumns ?? 5) || 5;
     const width = mobile ? 100 : Number(snapshot.containerWidth ?? 100) || 100;
+    if (l && busImgPlugin?.logImageHeightsByRow) {
+        await busImgPlugin.logImageHeightsByRow({ vertical, columns });
+    }
     if (hostAdapter) {
         const listRoot = hostAdapter.locateListRoot?.();
         if (listRoot) listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;

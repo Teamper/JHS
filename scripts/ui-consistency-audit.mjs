@@ -188,7 +188,7 @@ requireMatch(detail, /jhs-detail-host-action/, "detail workspace host action app
 
 requireMatch(listButtons, /role="menuitemradio"/, "sort control must use menuitemradio options");
 requireMatch(listButtons, /getRuntimeService\("settings"\)\.set\("sortMethod"/, "sort control must persist through SettingsService");
-requireMatch(await readFile(join(srcRoot, "app", "bootstrap.js"), "utf8"), /localStorage\.getItem\("jhs_sortMethod"\)[\s\S]*settings\.set\("sortMethod"/, "sort control must migrate its legacy storage key");
+requireMatch(await readFile(join(srcRoot, "app", "bootstrap.js"), "utf8"), /localStorage\.getItem\("jhs_sortMethod"\)[\s\S]*draft\.sortMethod == null[\s\S]*draft\.sortMethod = legacySortMethod/, "sort control must migrate its legacy storage key");
 for (const key of ["ArrowDown", "ArrowUp", "Home", "End", "Escape"])
   requireMatch(listButtons, new RegExp(key), `sort control is missing ${key} keyboard behavior`);
 forbidMatch(listButtons, /<select[^>]+sort-toggle-btn/, "native sort select must not return");

@@ -151,4 +151,26 @@ describe("SettingBindingHub race and static control contracts", () => {
         expect(root.find("input").is(":checked")).toBe(false);
         expect(settings.snapshot().k).toBe("no");
     });
+
+    it("does not let a previous surface's rolled-back failure poison a later full flush", async () => {
+        const { jq } = makeJq('<div id="quick"></div><div id="full"></div>');
+        const stored = { setting: { k: "no" } };
+        const settings = new SettingsService({
+            get: async () => stored.setting,
+            set: async () => { throw new Error("storage down"); },
+        });
+        await settings.load();
+
+        const quickRoot = jq("#quick");
+        const quickBinding = checkboxBinding(jq, quickRoot, settings);
+        quickRoot.find("input").prop("checked", true).trigger("change");
+        await quickBinding.flush();
+        expect(quickRoot.find("input").is(":checked")).toBe(false);
+        quickBinding.dispose();
+
+        const fullRoot = jq("#full");
+        const fullBinding = checkboxBinding(jq, fullRoot, settings);
+        await expect(fullBinding.flush({ throwOnFailure: true })).resolves.toBeUndefined();
+        expect(fullRoot.find("input").is(":checked")).toBe(false);
+    });
 });

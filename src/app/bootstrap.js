@@ -118,23 +118,25 @@ export async function bootstrapJhs() {
         // 6.5: expose the single settings write entry so legacy writers (storageManager.saveSetting/saveSettingItem)
         // route through SettingsService with lock + re-read + merge.
         Object.assign(globalThis, { settingsService: context.services.settings });
-        const settingsSnapshot = await context.services.settings.load();
+        await context.services.settings.load();
         await persistDisabledPluginMigration(context.services.settings, disabledMigration);
         await persistLocalOriginMigration(context.services.settings, localOriginSettings);
         await normalizeScreenshotSetting(context.services.settings);
         context.services.profile.start();
         const legacySortMethod = localStorage.getItem("jhs_sortMethod");
-        if (settingsSnapshot.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) {
-            await context.services.settings.set("sortMethod", legacySortMethod);
-        }
         const legacyFoldCategory = localStorage.getItem("jhs_foldCategory");
-        if (settingsSnapshot.foldCategoryCollapsed == null && ["yes", "no"].includes(legacyFoldCategory || "")) {
-            await context.services.settings.set("foldCategoryCollapsed", legacyFoldCategory === "yes");
-        }
         const legacyVideoMuted = localStorage.getItem("jhs_videoMuted");
-        if (settingsSnapshot.videoMuted == null && ["yes", "no"].includes(legacyVideoMuted || "")) {
-            await context.services.settings.set("videoMuted", legacyVideoMuted === "yes");
-        }
+        await context.services.settings.update((draft) => {
+            if (draft.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) {
+                draft.sortMethod = legacySortMethod;
+            }
+            if (draft.foldCategoryCollapsed == null && ["yes", "no"].includes(legacyFoldCategory || "")) {
+                draft.foldCategoryCollapsed = legacyFoldCategory === "yes";
+            }
+            if (draft.videoMuted == null && ["yes", "no"].includes(legacyVideoMuted || "")) {
+                draft.videoMuted = legacyVideoMuted === "yes";
+            }
+        });
         const logger = initializeLoggerRuntime(context.rootScope, {
             clogMsgCount: context.services.settings.snapshot().clogMsgCount,
         });

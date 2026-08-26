@@ -3979,7 +3979,9 @@
       }
     }
     async closePage(options = {}) {
-      if ("yes" !== await storageManager.getSetting("needClosePage", "yes")) return false;
+      const settings = globalThis.settingsService?.snapshot?.();
+      const needClosePage = settings && Object.prototype.hasOwnProperty.call(settings, "needClosePage") ? settings.needClosePage : await storageManager.getSetting("needClosePage", "yes");
+      if ("yes" !== needClosePage) return false;
       const root = options?.root, parseIndex = /* @__PURE__ */ __name((element) => {
         const id = element?.id || "", match = /^layui-layer(\d+)$/.exec(id);
         return match ? Number(match[1]) : null;
@@ -7535,14 +7537,17 @@
             `;
       $("<style>").attr("id", "verticalImgStyle").text(e2).appendTo("head");
     }
-    l && busImgPlugin?.logImageHeightsByRow?.();
   }
   __name(applyImageMode, "applyImageMode");
   async function applyLayoutFromSettings(snapshot = {}, { busImgPlugin = null, hostAdapter = null } = {}) {
-    await applyImageMode(busImgPlugin, snapshot.enableVerticalModel);
+    const vertical = snapshot.enableVerticalModel === void 0 ? C : snapshot.enableVerticalModel;
+    await applyImageMode(busImgPlugin, vertical);
     const mobile = globalThis.utils?.isMobileMode?.() ?? false;
     const columns = mobile ? 1 : Number(snapshot.containerColumns ?? 5) || 5;
     const width = mobile ? 100 : Number(snapshot.containerWidth ?? 100) || 100;
+    if (l && busImgPlugin?.logImageHeightsByRow) {
+      await busImgPlugin.logImageHeightsByRow({ vertical, columns });
+    }
     if (hostAdapter) {
       const listRoot = hostAdapter.locateListRoot?.();
       if (listRoot) listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
@@ -7598,7 +7603,6 @@
       this.bindings = /* @__PURE__ */ new Set();
       this.pending = /* @__PURE__ */ new Map();
       this.revision = 0;
-      this._failures = /* @__PURE__ */ new Map();
       this._onSettingsChanged = this._onSettingsChanged.bind(this);
       this.settings.addEventListener("settings.changed", this._onSettingsChanged);
     }
@@ -7621,18 +7625,18 @@
     userChanged(key, value, fallback, label) {
       this.syncAll(key, value);
       const token = ++this.revision;
+      const item = { token, value, promise: Promise.resolve() };
       const promise = this.settings.set(key, value).then(
         () => {
-          if (this.pending.get(key)?.token === token) {
+          if (this.pending.get(key) === item) {
             this.pending.delete(key);
-            this._failures.delete(key);
             this._maybeDispose();
           }
         },
         (error) => {
-          if (this.pending.get(key)?.token === token) {
+          if (this.pending.get(key) === item) {
             this.pending.delete(key);
-            this._failures.set(key, error);
+            item.error = error;
             const committed = this.settings.snapshot()[key] ?? fallback;
             this.syncAll(key, committed);
             this._maybeDispose();
@@ -7644,19 +7648,22 @@
           }
         }
       );
-      this.pending.set(key, { token, value, promise });
+      item.promise = promise;
+      this.pending.set(key, item);
       return promise;
     }
     async flush({ throwOnFailure = false } = {}) {
-      await Promise.all([...this.pending.values()].map((item) => item.promise));
+      const items = [...this.pending.values()];
+      await Promise.all(items.map((item) => item.promise));
       await this.settings.waitForIdle();
-      if (throwOnFailure && this._failures.size > 0) {
-        const [first] = this._failures.values();
-        const error = new Error("部分实时设置保存失败");
-        error.cause = first;
-        error.liveSettingFailures = [...this._failures.values()];
-        this._failures.clear();
-        throw error;
+      if (throwOnFailure) {
+        const failures = items.filter((item) => item.error).map((item) => item.error);
+        if (failures.length > 0) {
+          const error = new Error("部分实时设置保存失败");
+          error.cause = failures[0];
+          error.liveSettingFailures = failures;
+          throw error;
+        }
       }
     }
     _dropBinding(binding) {
@@ -7664,7 +7671,7 @@
       this._maybeDispose();
     }
     _maybeDispose() {
-      if (this.bindings.size === 0 && this.pending.size === 0 && this._failures.size === 0) {
+      if (this.bindings.size === 0 && this.pending.size === 0) {
         this.settings.removeEventListener("settings.changed", this._onSettingsChanged);
         hubs.delete(this.settings);
       }
@@ -8085,13 +8092,6 @@
   function bindKeywordDirtyTracking(root) {
     root.data("jhsDirtyReviewKeywords", false);
     root.data("jhsDirtyTitleKeywords", false);
-    const markDirty = /* @__PURE__ */ __name((dataKey) => () => root.data(dataKey, true), "markDirty");
-    root.find("#reviewKeywordContainer").off(".jhsKeywordDirty").on("click.jhsKeywordDirty", ".add-tag-btn, .keyword-remove", markDirty("jhsDirtyReviewKeywords")).on("keypress.jhsKeywordDirty", ".keyword-input", (event) => {
-      if ("Enter" === event.key) root.data("jhsDirtyReviewKeywords", true);
-    });
-    root.find("#filterKeywordContainer").off(".jhsKeywordDirty").on("click.jhsKeywordDirty", ".add-tag-btn, .keyword-remove", markDirty("jhsDirtyTitleKeywords")).on("keypress.jhsKeywordDirty", ".keyword-input", (event) => {
-      if ("Enter" === event.key) root.data("jhsDirtyTitleKeywords", true);
-    });
   }
   __name(bindKeywordDirtyTracking, "bindKeywordDirtyTracking");
   async function collectManualSettingPatch(root, dirtyKeys = null) {
@@ -8153,12 +8153,14 @@
     }
     node.append(document.createTextNode(value));
     node.append($("<span>").addClass("keyword-remove").text("×"));
+    const dirtyKey = container === "#reviewKeywordContainer" ? "jhsDirtyReviewKeywords" : "jhsDirtyTitleKeywords";
     node.find(".keyword-remove").click(((event) => {
       event.stopPropagation(), event.preventDefault();
       const current = $(event.currentTarget);
       const keyword = current.closest(".keyword-label").attr("data-keyword").split(" ")[0];
       utils.q(event, `是否移除屏蔽词  ${keyword}?`, (async () => {
         current.parent().remove();
+        root.data(dirtyKey, true);
       }));
     }));
     target.append(node);
@@ -8167,7 +8169,10 @@
   function addKeyword(event, container, root) {
     const input = root.find(`${container} .keyword-input`);
     const value = input.val().trim();
-    value && (addLabelTag(container, value, root), input.val(""));
+    if (!value) return;
+    addLabelTag(container, value, root);
+    input.val("");
+    root.data(container === "#reviewKeywordContainer" ? "jhsDirtyReviewKeywords" : "jhsDirtyTitleKeywords", true);
   }
   __name(addKeyword, "addKeyword");
 
@@ -12875,9 +12880,11 @@ ${failure.stack}` : "");
       }
       return n2;
     }
-    async logImageHeightsByRow() {
-      if (await storageManager.getSetting("enableVerticalModel", C) === _) return;
-      const e2 = this.getSelector().itemSelector, t2 = await storageManager.getSetting("containerColumns", 5), n2 = await this.getVisibleImageItems(e2, "img");
+    async logImageHeightsByRow(options = {}) {
+      const vertical = options.vertical ?? options.enableVerticalModel ?? await storageManager.getSetting("enableVerticalModel", C);
+      const columns = options.columns ?? options.containerColumns ?? await storageManager.getSetting("containerColumns", 5);
+      if (vertical === _) return;
+      const e2 = this.getSelector().itemSelector, t2 = Number(columns) || 5, n2 = await this.getVisibleImageItems(e2, "img");
       if (0 === n2.length) return;
       const a2 = [];
       for (let i2 = 0; i2 < n2.length; i2++) {
@@ -14307,7 +14314,7 @@ ${failure.stack}` : "");
       c2 += '<div id="nv-grid" class="jhs-new-video-grid">';
       for (const n3 of s2) {
         const key = normalizeCarNum(n3.carNum), e3 = escapeHtml(key), t3 = escapeHtml(n3.title || key), cachedCover = this.nvCoverCache.get(key), a3 = escapeHtml((cachedCover || n3.coverUrl || "").replace("thumbs", "covers")), i3 = escapeHtml(n3.url || `${r2}/search?q=${encodeURIComponent(key)}`);
-        let o3 = `番号: ${e3}\\n演员: ${escapeHtml(n3.actressName)}\\n发行: ${n3.publishTime || "未知"}`;
+        let o3 = `番号: ${e3}\\n演员: ${escapeHtml(n3.actressName)}\\n发行: ${escapeHtml(String(n3.publishTime || "未知"))}`;
         n3.voteCount && (o3 += `\\n评价人数: ${n3.voteCount}`);
         const l3 = n3.voteCount ? `<span class="jhs-badge jhs-badge--neutral nv-card__rating">${n3.voteCount}人评价</span>` : "";
         c2 += `<div class="nv-card" data-car="${e3}" title="${o3}"><label class="jhs-option-row"><input type="checkbox" class="nv-select" value="${e3}" ${this.nvSelected.has(key) ? "checked" : ""}><span>选择</span></label>`;
@@ -14318,7 +14325,7 @@ ${failure.stack}` : "");
         c2 += `<div class="nv-card__body">`;
         c2 += `<div class="nv-card__title" title="${e3}">${e3}</div>`;
         c2 += `<div class="nv-card__actress" title="${escapeHtml(n3.actressName)}">${escapeHtml(n3.actressName)}</div>`;
-        n3.publishTime && (c2 += `<div class="nv-card__date">${n3.publishTime}</div>`);
+        n3.publishTime && (c2 += `<div class="nv-card__date">${escapeHtml(String(n3.publishTime))}</div>`);
         n3.decisionState && "pending" !== n3.decisionState && (c2 += `<span class="jhs-badge jhs-badge--neutral">${"ignored" === n3.decisionState ? "已忽略" : "已暂缓"}</span>`), c2 += `</div></a></div>`;
       }
       c2 += "</div>";
@@ -15082,7 +15089,7 @@ ${failure.stack}` : "");
         })());
       }
       const d2 = selectLatestPublishTime(publishTimes), h2 = await storageManager.getCarMap(), p2 = c2.filter((e3) => !h2.has(e3.carNum));
-      p2.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${n2}, 共${p2.length}部</span>`), await storageManager.updateFavoriteActress({
+      p2.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(n2)}, 共${p2.length}部</span>`), await storageManager.updateFavoriteActress({
         starId: t2,
         lastCheckTime: utils.getNowStr(),
         newVideoList: p2,
@@ -15105,7 +15112,7 @@ ${failure.stack}` : "");
         url: item.url || ""
       }));
       const latestPublishTime = selectLatestPublishTime(publishTimes), carMap = await storageManager.getCarMap(), fresh = candidates.filter((item) => !carMap.has(item.carNum));
-      fresh.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${name}, 共${fresh.length}部</span>`);
+      fresh.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(name)}, 共${fresh.length}部</span>`);
       await storageManager.updateFavoriteActress({ starId, lastCheckTime: utils.getNowStr(), newVideoList: fresh, lastPublishTime: latestPublishTime });
       return fresh.length;
     }
@@ -17467,7 +17474,7 @@ ${failure.stack}` : "");
                 <div class="jhs-list-btn-row">
                     ${hasNewVideo ? `<button type="button" id="newVideoBtn" class="jhs-btn jhs-btn--secondary"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></button>` : ""}
                     ${hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}
-                    ${c ? "" : this.sortMenuHtml(l2 || "default", d2)}
+                    ${c || !this.supportsSorting() ? "" : this.sortMenuHtml(l2 || "default", d2)}
                 </div>
             `);
       }
@@ -17489,7 +17496,7 @@ ${failure.stack}` : "");
                         <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>批量收藏</span></button>
                         <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>批量标记已下载</span></button>
                     ` : ""}${!e2 && hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}
-                    ${this.sortMenuHtml(a2)}
+                    ${this.supportsSorting() ? this.sortMenuHtml(a2) : ""}
                 </div>
             `);
       }
@@ -17547,7 +17554,9 @@ ${failure.stack}` : "");
       }));
     }
     bindSortMenu() {
-      const control = $(".jhs-sort-control"), toggle = control.find("#sort-toggle-btn"), menu = control.find(".jhs-sort-menu"), close = /* @__PURE__ */ __name((focus = false) => {
+      const control = $(".jhs-sort-control");
+      if (!control.length) return;
+      const toggle = control.find("#sort-toggle-btn"), menu = control.find(".jhs-sort-menu"), close = /* @__PURE__ */ __name((focus = false) => {
         menu.removeClass("is-open"), toggle.attr("aria-expanded", "false"), focus && toggle.trigger("focus");
       }, "close");
       toggle.on("click", ((event) => {
@@ -17582,7 +17591,7 @@ ${failure.stack}` : "");
     }
     async sortItems(methodOverride) {
       const e2 = this.supportsLiveSorting();
-      if (!e2 && (o.includes("handle") || o.includes("advanced_search"))) return;
+      if (!this.supportsSorting()) return;
       const s2 = this.getRuntimeService("settings").snapshot().autoPage;
       if (c || s2 === _ && !e2 && methodOverride !== "default") return;
       const t2 = methodOverride || this.getRuntimeService("settings").snapshot().sortMethod;
@@ -17610,6 +17619,11 @@ ${failure.stack}` : "");
     }
     isFc2ListPage() {
       return r && "/advanced_search" === window.location.pathname && "3" === new URLSearchParams(window.location.search).get("type");
+    }
+    supportsSorting() {
+      if (this.supportsLiveSorting()) return true;
+      if (r && (o.includes("handle") || o.includes("advanced_search"))) return false;
+      return true;
     }
     supportsLiveSorting() {
       return this.isHitShowPage() || this.isFc2ListPage();
@@ -17932,7 +17946,7 @@ ${failure.stack}` : "");
       if (!window.isListPage) return;
       let e2 = items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray();
       e2.length && (await this.filterMovieList(e2), l && setTimeout((() => {
-        this.getOptionalDependency("BusImgPlugin")?.logImageHeightsByRow?.().catch((e3) => clog.error("JavBus图片高度修正失败", e3));
+        this.getOptionalDependency("BusImgPlugin")?.logImageHeightsByRow?.(this.getRuntimeService("settings").snapshot()).catch((e3) => clog.error("JavBus图片高度修正失败", e3));
       })));
     }
     async yieldListFrame() {
@@ -18284,7 +18298,9 @@ ${failure.stack}` : "");
         }));
       }), { rootMargin: "200px" });
       for (const image of t2) this.hdEagerRemaining > 0 ? (this.hdEagerRemaining--, this._replaceSingleHdImg(image)) : this.hdImageObserver ? (image.dataset.jhsHdObserved = "true", this.hdImageObserver.observe(image)) : this._replaceSingleHdImg(image);
-      storageManager.getSetting("hoverBigImg", C).then((e3) => this.configureHoverPreview(e3 === _ ? "yes" : "no"));
+      const settings = this.getRuntimeService("settings").snapshot();
+      const hoverBigImg = Object.prototype.hasOwnProperty.call(settings, "hoverBigImg") ? settings.hoverBigImg : C;
+      this.configureHoverPreview(hoverBigImg === _ ? "yes" : "no");
     }
     configureHoverPreview(enabled) {
       const runtimeWindow = window;
@@ -22756,23 +22772,25 @@ ${failure.stack}` : "");
         localOrigins: localOriginSettings.origins
       });
       Object.assign(globalThis, { settingsService: context.services.settings });
-      const settingsSnapshot = await context.services.settings.load();
+      await context.services.settings.load();
       await persistDisabledPluginMigration(context.services.settings, disabledMigration);
       await persistLocalOriginMigration(context.services.settings, localOriginSettings);
       await normalizeScreenshotSetting(context.services.settings);
       context.services.profile.start();
       const legacySortMethod = localStorage.getItem("jhs_sortMethod");
-      if (settingsSnapshot.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) {
-        await context.services.settings.set("sortMethod", legacySortMethod);
-      }
       const legacyFoldCategory = localStorage.getItem("jhs_foldCategory");
-      if (settingsSnapshot.foldCategoryCollapsed == null && ["yes", "no"].includes(legacyFoldCategory || "")) {
-        await context.services.settings.set("foldCategoryCollapsed", legacyFoldCategory === "yes");
-      }
       const legacyVideoMuted = localStorage.getItem("jhs_videoMuted");
-      if (settingsSnapshot.videoMuted == null && ["yes", "no"].includes(legacyVideoMuted || "")) {
-        await context.services.settings.set("videoMuted", legacyVideoMuted === "yes");
-      }
+      await context.services.settings.update((draft) => {
+        if (draft.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) {
+          draft.sortMethod = legacySortMethod;
+        }
+        if (draft.foldCategoryCollapsed == null && ["yes", "no"].includes(legacyFoldCategory || "")) {
+          draft.foldCategoryCollapsed = legacyFoldCategory === "yes";
+        }
+        if (draft.videoMuted == null && ["yes", "no"].includes(legacyVideoMuted || "")) {
+          draft.videoMuted = legacyVideoMuted === "yes";
+        }
+      });
       const logger = initializeLoggerRuntime(context.rootScope, {
         clogMsgCount: context.services.settings.snapshot().clogMsgCount
       });

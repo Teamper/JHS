@@ -335,7 +335,7 @@ export class ListPagePlugin extends BasePlugin {
         if (!window.isListPage) return;
         let e = items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray();
         e.length && (await this.filterMovieList(e), l && setTimeout((() => {
-            this.getOptionalDependency("BusImgPlugin")?.logImageHeightsByRow?.().catch((/** @type {unknown} */ e) => clog.error("JavBus图片高度修正失败", e));
+            this.getOptionalDependency("BusImgPlugin")?.logImageHeightsByRow?.(this.getRuntimeService("settings").snapshot()).catch((/** @type {unknown} */ e) => clog.error("JavBus图片高度修正失败", e));
         })));
     }
     async yieldListFrame() {
@@ -662,7 +662,9 @@ export class ListPagePlugin extends BasePlugin {
         }), { rootMargin: "200px" });
         for (const image of t) this.hdEagerRemaining > 0 ? (this.hdEagerRemaining--, this._replaceSingleHdImg(image)) : this.hdImageObserver ? (image.dataset.jhsHdObserved = "true",
         this.hdImageObserver.observe(image)) : this._replaceSingleHdImg(image);
-        storageManager.getSetting("hoverBigImg", C).then((/** @type {unknown} */ e) => this.configureHoverPreview(e === _ ? "yes" : "no"));
+        const settings = this.getRuntimeService("settings").snapshot();
+        const hoverBigImg = Object.prototype.hasOwnProperty.call(settings, "hoverBigImg") ? settings.hoverBigImg : C;
+        this.configureHoverPreview(hoverBigImg === _ ? "yes" : "no");
     }
     /** hoverBigImg 唯一生命周期入口：ON→绑定，OFF→销毁。 */
     /** @param {string} enabled */

@@ -77,11 +77,9 @@ class SettingBindingHub {
         this.settings = settings;
         /** @type {Set<any>} */
         this.bindings = new Set();
-        /** @type {Map<string, { token: number, value: unknown, promise: Promise<unknown> }>} */
+        /** @type {Map<string, { token: number, value: unknown, promise: Promise<unknown>, error?: unknown }>} */
         this.pending = new Map();
         this.revision = 0;
-        /** @type {Map<string, unknown>} */
-        this._failures = new Map();
         this._onSettingsChanged = this._onSettingsChanged.bind(this);
         this.settings.addEventListener("settings.changed", this._onSettingsChanged);
     }
@@ -115,18 +113,19 @@ class SettingBindingHub {
         // Optimistically update every mounted surface.
         this.syncAll(key, value);
         const token = ++this.revision;
+        /** @type {{ token: number, value: unknown, promise: Promise<unknown>, error?: unknown }} */
+        const item = { token, value, promise: Promise.resolve() };
         const promise = this.settings.set(key, value).then(
             () => {
-                if (this.pending.get(key)?.token === token) {
+                if (this.pending.get(key) === item) {
                     this.pending.delete(key);
-                    this._failures.delete(key);
                     this._maybeDispose();
                 }
             },
             (/** @type {unknown} */ error) => {
-                if (this.pending.get(key)?.token === token) {
+                if (this.pending.get(key) === item) {
                     this.pending.delete(key);
-                    this._failures.set(key, error);
+                    item.error = error;
                     const committed = this.settings.snapshot()[key] ?? fallback;
                     this.syncAll(key, committed);
                     this._maybeDispose();
@@ -138,20 +137,23 @@ class SettingBindingHub {
                 }
             }
         );
-        this.pending.set(key, { token, value, promise });
+        item.promise = promise;
+        this.pending.set(key, item);
         return promise;
     }
 
     async flush({ throwOnFailure = false } = {}) {
-        await Promise.all([ ...this.pending.values() ].map((item) => item.promise));
+        const items = [ ...this.pending.values() ];
+        await Promise.all(items.map((item) => item.promise));
         await this.settings.waitForIdle();
-        if (throwOnFailure && this._failures.size > 0) {
-            const [ first ] = this._failures.values();
-            const error = /** @type {any} */ (new Error("部分实时设置保存失败"));
-            error.cause = first;
-            error.liveSettingFailures = [ ...this._failures.values() ];
-            this._failures.clear();
-            throw error;
+        if (throwOnFailure) {
+            const failures = items.filter((item) => item.error).map((item) => item.error);
+            if (failures.length > 0) {
+                const error = /** @type {any} */ (new Error("部分实时设置保存失败"));
+                error.cause = failures[0];
+                error.liveSettingFailures = failures;
+                throw error;
+            }
         }
     }
 
@@ -162,7 +164,7 @@ class SettingBindingHub {
     }
 
     _maybeDispose() {
-        if (this.bindings.size === 0 && this.pending.size === 0 && this._failures.size === 0) {
+        if (this.bindings.size === 0 && this.pending.size === 0) {
             this.settings.removeEventListener("settings.changed", this._onSettingsChanged);
             hubs.delete(this.settings);
         }

@@ -86,6 +86,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         console, URL, Date: ClockDate, Math, Number, Object, Array, Map, Set, Promise, globalThis: null,
         window: Object.assign(dom.window, { isListPage: true }), document: dom.window.document, navigator: { locks }, localStorage, gmHttp, storageManager, $, BasePlugin, StorageQueue,
         T: "javdb", I: "javbus", D: "censored", A: "uncensored", _: "yes", l: false,
+        escapeHtml: value => String(value ?? "").replace(/[&<>"']/g, (/** @type {string} */ c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] || c)),
         utils: { sleep: vi.fn(async () => {}), getNowStr: (a = "-", b = ":", timestamp = null) => format(null == timestamp ? clock.now : timestamp), getHourDifference: (left, right) => Math.floor(Math.abs(right.getTime() - left.getTime()) / 36e5), genericSort: items => [ ...items ], htmlTo$dom: html => $(new JSDOM(html, { url: "https://javdb.com/" }).window.document) },
         clog: { log: vi.fn(), html: vi.fn(), htmlDebug: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() }, show: { info: vi.fn(), error: vi.fn() }, i: (target, key, value) => target[key] = value,
         jhsEventBus, normalizeCarNum: value => String(value || "").toUpperCase(),

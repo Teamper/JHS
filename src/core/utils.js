@@ -99,7 +99,11 @@ export class Utils {
         }
     }
     async closePage(options = {}) {
-        if ("yes" !== await storageManager.getSetting("needClosePage", "yes")) return !1;
+        const settings = /** @type {any} */ (globalThis).settingsService?.snapshot?.();
+        const needClosePage = settings && Object.prototype.hasOwnProperty.call(settings, "needClosePage")
+            ? settings.needClosePage
+            : await storageManager.getSetting("needClosePage", "yes");
+        if ("yes" !== needClosePage) return !1;
         const root = options?.root, parseIndex = element => {
             const id = element?.id || "", match = /^layui-layer(\d+)$/.exec(id);
             return match ? Number(match[1]) : null;

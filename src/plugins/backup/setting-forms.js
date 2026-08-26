@@ -320,15 +320,10 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
 
 /** @param {any} root */
 function bindKeywordDirtyTracking(root) {
+    // Dirty is only set after a keyword is actually added or actually removed.
+    // Event-level marking caused false positives on empty Add and cancelled Delete.
     root.data("jhsDirtyReviewKeywords", false);
     root.data("jhsDirtyTitleKeywords", false);
-    const markDirty = (/** @type {string} */ dataKey) => () => root.data(dataKey, true);
-    root.find("#reviewKeywordContainer").off(".jhsKeywordDirty").on("click.jhsKeywordDirty", ".add-tag-btn, .keyword-remove", markDirty("jhsDirtyReviewKeywords")).on("keypress.jhsKeywordDirty", ".keyword-input", (/** @type {any} */ event) => {
-        if ("Enter" === event.key) root.data("jhsDirtyReviewKeywords", true);
-    });
-    root.find("#filterKeywordContainer").off(".jhsKeywordDirty").on("click.jhsKeywordDirty", ".add-tag-btn, .keyword-remove", markDirty("jhsDirtyTitleKeywords")).on("keypress.jhsKeywordDirty", ".keyword-input", (/** @type {any} */ event) => {
-        if ("Enter" === event.key) root.data("jhsDirtyTitleKeywords", true);
-    });
 }
 
 /** @param {any} root @param {Set<string> | null | undefined} [dirtyKeys] */
@@ -402,12 +397,14 @@ function addLabelTag(container, text, root) {
     }
     node.append(document.createTextNode(value));
     node.append($("<span>").addClass("keyword-remove").text("×"));
+    const dirtyKey = container === "#reviewKeywordContainer" ? "jhsDirtyReviewKeywords" : "jhsDirtyTitleKeywords";
     node.find(".keyword-remove").click(((/** @type {any} */ event) => {
         event.stopPropagation(), event.preventDefault();
         const current = $(event.currentTarget);
         const keyword = current.closest(".keyword-label").attr("data-keyword").split(" ")[0];
         utils.q(event, `是否移除屏蔽词  ${keyword}?`, (async () => {
             current.parent().remove();
+            root.data(dirtyKey, true);
         }));
     }));
     target.append(node);
@@ -418,5 +415,8 @@ function addLabelTag(container, text, root) {
 function addKeyword(event, container, root) {
     const input = root.find(`${container} .keyword-input`);
     const value = input.val().trim();
-    value && (addLabelTag(container, value, root), input.val(""));
+    if (!value) return;
+    addLabelTag(container, value, root);
+    input.val("");
+    root.data(container === "#reviewKeywordContainer" ? "jhsDirtyReviewKeywords" : "jhsDirtyTitleKeywords", true);
 }

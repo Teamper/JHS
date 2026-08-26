@@ -1,6 +1,6 @@
 // @ts-check
 
-import { I, T, _, l, normalizeCarNum } from "../../core/constants.js";
+import { I, T, _, escapeHtml, l, normalizeCarNum } from "../../core/constants.js";
 import { parseNumberSetting, parseTaskTimestamp, selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
@@ -552,7 +552,7 @@ export class TaskPlugin extends BasePlugin {
             })());
         }
         const d = selectLatestPublishTime(publishTimes), h = await storageManager.getCarMap(), p = c.filter((/** @type {TaskRecord} */ e) => !h.has(e.carNum));
-        p.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${n}, 共${p.length}部</span>`),
+        p.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(n)}, 共${p.length}部</span>`),
         await storageManager.updateFavoriteActress({
             starId: t,
             lastCheckTime: utils.getNowStr(),
@@ -572,7 +572,7 @@ export class TaskPlugin extends BasePlugin {
             score: Number(item.score) || 0, voteCount: Number(item.voteCount) || 0, url: item.url || "",
         }));
         const latestPublishTime = selectLatestPublishTime(publishTimes), carMap = await storageManager.getCarMap(), fresh = candidates.filter((/** @type {TaskRecord} */ item) => !carMap.has(item.carNum));
-        fresh.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${name}, 共${fresh.length}部</span>`);
+        fresh.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(name)}, 共${fresh.length}部</span>`);
         await storageManager.updateFavoriteActress({ starId, lastCheckTime: utils.getNowStr(), newVideoList: fresh, lastPublishTime: latestPublishTime });
         return fresh.length;
     }

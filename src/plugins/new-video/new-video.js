@@ -546,7 +546,7 @@ export class NewVideoPlugin extends BasePlugin {
             c += '<div id="nv-grid" class="jhs-new-video-grid">';
             for (const n of s) {
                 const key = normalizeCarNum(n.carNum), e = escapeHtml(key), t = escapeHtml(n.title || key), cachedCover = this.nvCoverCache.get(key), a = escapeHtml((cachedCover || n.coverUrl || "").replace("thumbs", "covers")), i = escapeHtml(n.url || `${r}/search?q=${encodeURIComponent(key)}`);
-                let o = `番号: ${e}\\n演员: ${escapeHtml(n.actressName)}\\n发行: ${n.publishTime || "未知"}`;
+                let o = `番号: ${e}\\n演员: ${escapeHtml(n.actressName)}\\n发行: ${escapeHtml(String(n.publishTime || "未知"))}`;
                 n.voteCount && (o += `\\n评价人数: ${n.voteCount}`);
                 const l = n.voteCount ? `<span class="jhs-badge jhs-badge--neutral nv-card__rating">${n.voteCount}人评价</span>` : "";
                 c += `<div class="nv-card" data-car="${e}" title="${o}"><label class="jhs-option-row"><input type="checkbox" class="nv-select" value="${e}" ${this.nvSelected.has(key) ? "checked" : ""}><span>选择</span></label>`;
@@ -557,7 +557,7 @@ export class NewVideoPlugin extends BasePlugin {
                 c += `<div class="nv-card__body">`;
                 c += `<div class="nv-card__title" title="${e}">${e}</div>`;
                 c += `<div class="nv-card__actress" title="${escapeHtml(n.actressName)}">${escapeHtml(n.actressName)}</div>`;
-                n.publishTime && (c += `<div class="nv-card__date">${n.publishTime}</div>`);
+                n.publishTime && (c += `<div class="nv-card__date">${escapeHtml(String(n.publishTime))}</div>`);
                 n.decisionState && "pending" !== n.decisionState && (c += `<span class="jhs-badge jhs-badge--neutral">${"ignored" === n.decisionState ? "已忽略" : "已暂缓"}</span>`), c += `</div></a></div>`;
             }
             c += "</div>";
