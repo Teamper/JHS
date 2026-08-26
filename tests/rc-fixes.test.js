@@ -56,3 +56,42 @@ describe("RC 收口：UI surface 与宿主 DOM 边界", () => {
         expect(autoPage).toContain("this.waterfallPromise = this.waterfall().finally");
     });
 });
+
+describe("RC 收口：预览 capability / FC2 稳定槽与翻译单入口", () => {
+    const fc2By123 = readTestFile(join(process.cwd(), "src/plugins/external-search/fc2-by-123av.js"), "utf8");
+    const commandbar = readTestFile(join(process.cwd(), "src/plugins/status/mobile-bottom-bar.js"), "utf8");
+    const setting = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8");
+
+    it("card and JavBus preview buttons are gated by real DMM capability", () => {
+        expect(coverButton).toContain("canUseCardPreview(settings)");
+        expect(coverButton).toContain('names.some((name) => name === "enablePreviewVideo" || name === "enableLoadPreviewVideo")');
+        expect(busPreview).toContain("canUseDmmPreview(settings)");
+    });
+
+    it("FC2 translation has exactly one entry and catch paths honor isActive", () => {
+        expect(fc2).toContain("context.translationInFlight");
+        expect(fc2).toContain("generation === this.translationGeneration");
+        expect(fc2By123).not.toContain("renderTranslatedTitle");
+        expect(titleTranslation).toContain("if (options.isActive && !options.isActive()) return;");
+        const catchBlock = titleTranslation.slice(titleTranslation.indexOf("} catch (error) {"), titleTranslation.indexOf('translatedNode.addClass("is-error")'));
+        expect(catchBlock).toContain("options.isActive");
+        expect(catchBlock).toContain("isConnected");
+    });
+
+    it("FC2 slots stay stable and OtherSite generation is per-context", () => {
+        expect(fc2).not.toContain("if (!result && !screenshot.children().length) screenshot.remove()");
+        expect(fc2).toContain("box ? sitesGroup.show() : sitesGroup.hide()");
+        expect(otherSite).toContain("this._mountGenerations = new WeakMap()");
+        expect(otherSite).toContain("rootElement ? generation === this._mountGenerations.get(rootElement)");
+    });
+
+    it("commandbar restores sources before removing the shell and keeps original rows", () => {
+        const unmount = commandbar.slice(commandbar.indexOf("unmountDesktopCommandBar() {"), commandbar.indexOf("buildCommandBar() {"));
+        expect(unmount.indexOf("_commandBarSources || []) ].reverse()")).toBeGreaterThan(-1);
+        expect(unmount.indexOf('#jhs-page-commandbar").remove()')).toBeGreaterThan(unmount.indexOf("_commandBarSources"));
+        expect(commandbar).not.toContain('$(".jhs-list-btn-row").filter');
+        expect(setting).toContain('i(this, "_desktopNavGeneration", 0)');
+        expect(setting).toContain("this._desktopNavGeneration++");
+        expect(setting).toContain("generation !== this._desktopNavGeneration");
+    });
+});

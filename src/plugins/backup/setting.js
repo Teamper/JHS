@@ -18,7 +18,7 @@ import { bindSettingRows, renderSettingRow } from "../../ui/settings/setting-con
 export class SettingPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService()), i(this, "pendingCarImport", null), i(this, "taskStatusUnsubscribe", null),
-i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this, "_settingNavResizeCleanup", null), i(this, "cacheItems", [ {
+i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this, "_settingNavResizeCleanup", null), i(this, "_desktopNavGeneration", 0), i(this, "cacheItems", [ {
             key: "jhs_dmm_video",
             text: "预览视频缓存",
             title: "预览视频缓存"
@@ -121,6 +121,8 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         const scope = this._settingScope;
         if (!scope) return;
         this._desktopSettingNavMounted = true;
+        // surface generation：unmount 后旧 timer/DOM 等待回调不得再把 nav append 回来。
+        const generation = this._desktopNavGeneration;
         if (r) {
             let e = function() {
                 $(".navbar-search").is(":hidden") ? ($(".mini-setting-box").hide(), $(".setting-box").show()) : ($(".mini-setting-box").show(),
@@ -128,6 +130,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             };
             $("#navbar-menu-user .navbar-end").prepend('<div class="navbar-item has-dropdown is-hoverable setting-box jhs-setting-nav-item">\n                    <button type="button" id="setting-btn" class="jhs-btn navbar-link nav-btn jhs-nav-btn jhs-nav-button">\n                        设置\n                    </button>\n                    <div class="simple-setting"></div>\n                </div>'),
             utils.loopDetector((() => $("#miniHistoryBtn").length > 0), (() => {
+                if (generation !== this._desktopNavGeneration || !this._desktopSettingNavMounted) return;
                 $(".miniHistoryBtnBox").before('\n                    <div class="navbar-item mini-setting-box jhs-mini-setting-box">\n                        <button type="button" id="mini-setting-btn" class="jhs-btn navbar-link nav-btn jhs-nav-btn jhs-mini-setting-trigger">\n                            设置\n                        </button>\n                        <div class="mini-simple-setting"></div>\n                    </div>\n                '),
                 e();
             }), 20, 1e4, !0, scope);
@@ -135,6 +138,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             this._settingNavResizeCleanup = scope.listen(window, "resize", e);
         }
         l && (isDetailPage ? $("h3").before('\n                    <div class="container-fluid jhs-setting-detail-anchor">\n                        <div id="top-right-box" class="jhs-setting-anchor">\n                            <div class="setting-box">\n                                <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                    <span>设置</span>\n                                </button>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ') : window.isListPage && utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
+            if (generation !== this._desktopNavGeneration || !this._desktopSettingNavMounted) return;
             $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" class="jhs-setting-anchor">\n                        <div class="setting-box">\n                            <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                <span>设置</span>\n                            </button>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
         }), 1, 1e4, !1, scope)),
         $(".main-nav, .container-fluid").off("mouseenter.jhsSettingQuick mouseleave.jhsSettingQuick").on("mouseenter.jhsSettingQuick", ".setting-box", (async () => {
@@ -152,6 +156,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         }));
     }
     unmountDesktopSettingNav() {
+        this._desktopNavGeneration++;
         this._desktopSettingNavMounted = false;
         this._settingNavResizeCleanup?.();
         this._settingNavResizeCleanup = null;

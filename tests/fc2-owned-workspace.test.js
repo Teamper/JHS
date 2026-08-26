@@ -184,16 +184,20 @@ describe("FC2 owned detail workspace", () => {
     it("keeps asynchronous error variables inside their catch callbacks", () => {
         expect(fc2Source).not.toMatch(/catch\(\(error => [^{\n]*\), clog\.error/);
         expect(fc2By123AvSource).not.toMatch(/catch\(\(error => [^{\n]*\), clog\.error/);
-        expect(fc2Source).toMatch(/catch\(\((?:\/\*\*[^\n]+\*\/\s*)?error\) => \{\n\s+context\.isAlive\(\) && sitesGroup\.remove\(\)/);
+        expect(fc2Source).toMatch(/catch\(\((?:\/\*\*[^\n]+\*\/\s*)?error\) => \{\n\s+if \(!context\.isAlive\(\)\) return;\n\s+sitesGroup\.show\(\);/);
+        expect(fc2Source).toContain("renderFc2State(context.root.find('[data-jhs-role=\"other-sites\"]'), \"外部站点加载失败\")");
         expect(fc2Source).toContain('catch((error => {\n            context.isAlive() && renderFc2State');
     });
 
-    it("initializes screenshot through the single ScreenshotService-owned view and removes empty spacing", () => {
+    it("initializes screenshot through the single ScreenshotService-owned view and keeps stable slots", () => {
         expect(screenshotSource).toContain("renderScreenshotPanel");
         expect(screenshotSource).toContain('service.isEnabled(this.getSettingsSnapshot())');
         expect(fc2Source).toContain('screenshotService.isEnabled(settings.snapshot())');
         expect(fc2Source).toContain(".jhs-fc2-screenshot:empty");
-        expect(fc2Source).toContain("if (context.isAlive() && !box) sitesGroup.remove()");
+        expect(fc2Source).toContain("box ? sitesGroup.show() : sitesGroup.hide()");
+        expect(fc2Source).toContain("sitesGroup.hide();");
+        expect(fc2Source).not.toContain("if (!result && !screenshot.children().length) screenshot.remove()");
+        expect(fc2Source).not.toContain('settings.snapshot().enableLoadScreenShot !== "no" && screenshot.remove()');
     });
 
     it("creates fixed slots in display order and keeps two contexts isolated", () => {

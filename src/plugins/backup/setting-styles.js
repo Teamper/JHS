@@ -152,7 +152,7 @@ export function buildSettingCss(containerWidth, containerColumns, isJavBus, isJa
                 .jhs-table-dialog { height:100%; overflow:hidden; }
                 .jhs-table-dialog__content { margin:auto !important; }
                 .jhs-help-title { margin:0 0 var(--jhs-space-5); padding-bottom:var(--jhs-space-3); border-bottom:1px solid var(--jhs-border); color:var(--jhs-accent); font-size:22px; }
-                .jhs-list-btn-row { display:flex; align-items:center; gap:var(--jhs-space-2); margin:var(--jhs-space-2) 0; }
+                .jhs-list-btn-row { display:flex; flex-wrap:wrap; align-items:center; gap:var(--jhs-space-2); margin:var(--jhs-space-2) 0; }
 
                 .jhs-setting-layout {
                     display: grid;

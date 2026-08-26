@@ -12,8 +12,8 @@ describe("batch action contract (筛选后批量语义)", () => {
         expect(listPage).toContain("scanAllPages({");
         expect(listPage).toContain("startDom: root ? $(root) : $(document)");
         expect(listPage).toContain("currentUrl: root ? null : window.location.href");
-        expect(listPage).toContain("firstPageUrl: root ? null : resolveFirstPageUrl(window.location.href, site)");
-        expect(blacklist).toContain("firstPageUrl: root ? null : resolveFirstPageUrl(window.location.href, site)");
+        expect(listPage).toContain('firstPageUrl: root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href)');
+        expect(blacklist).toContain('firstPageUrl: root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href)');
         expect(listPage).toContain("itemSelector: this.getSelector().requestDomItemSelector");
         expect(listPage).toContain('evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized })');
     });
@@ -30,17 +30,32 @@ describe("batch action contract (筛选后批量语义)", () => {
         expect(listPage).not.toMatch(/for \(const element of items\)[\s\S]{0,200}state\.patch\(carNum/);
     });
 
-    it("keeps the button entry points on the same batch API with per-filter confirmation", () => {
-        expect(listButtons).toContain("batchSaveAllVideos?.(i, h)");
-        expect(listButtons).toContain("batchSaveAllVideos?.(i, g)");
+    it("keeps the button entry points on the scope-based batch API with per-filter confirmation", () => {
+        expect(listButtons).toContain("batchSaveAllVideos?.(scope, h)");
+        expect(listButtons).toContain("batchSaveAllVideos?.(scope, g)");
+        expect(listButtons).toContain("buildBatchScope()");
+        expect(listButtons).toContain('{ kind: "search", displayName: "当前搜索条件", recordName: "" }');
         expect(listButtons).not.toContain("一键收藏所有可见作品?");
         expect(listButtons).toContain("批量屏蔽");
         expect(listButtons).toContain("批量收藏");
         expect(listButtons).toContain("批量标记已下载");
         expect(listButtons).not.toContain('utils.q(n, "一键屏蔽视频列表?"');
+        expect(listPage).toContain("async batchSaveAllVideos(scope, flag");
         expect(listPage).toContain('正在写入，无法取消');
         expect(listPage).toContain('#jhs-batch-cancel").prop("disabled", true');
         expect(scanner).toContain("matchesCurrentFilter === true");
         expect(scanner).toContain("isSamePageUrl(firstPageUrl, currentUrl)");
+    });
+
+    it("runs every batch action through the shared Single Flight coordinator", () => {
+        expect(listPage).toContain("tryBeginBatchRun()");
+        expect(listPage).toContain("isActiveBatchRun(run)");
+        expect(listPage).toContain("endBatchRun(run)");
+        expect(listPage).toContain("已有批量任务正在执行");
+        expect(listPage).toContain("setBatchButtonsDisabled(true)");
+        expect(listPage).toContain("setBatchButtonsDisabled(false)");
+        expect(blacklist).toContain("tryBeginBatchRun()");
+        expect(blacklist).toContain("已有批量任务正在执行");
+        expect(blacklist).toContain("if (isActiveBatchRun(run)) endBatchRun(run)");
     });
 });

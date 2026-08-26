@@ -2,7 +2,6 @@
 
 import { _, escapeHtml, o } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { renderTranslatedTitle } from "../../ui/translation/title-translation.js";
 import { createFc2SourceLinks, renderFc2Gallery, renderFc2State } from "../../ui/detail/fc2-workspace-view.js";
 
 /** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
@@ -119,8 +118,6 @@ export class Fc2By123AvPlugin extends BasePlugin {
             const info = await this.get123AvVideoInfo(context.carNum, url);
             if (!context.isAlive()) return null;
             this.render123AvSummary(context, info);
-            const scope = await this.getRuntimeService("scope")();
-            if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) === _) await renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope });
             return info;
         } catch (error) {
             context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.loadSummary(context, url))), clog.error("123AV 详情加载失败", error);

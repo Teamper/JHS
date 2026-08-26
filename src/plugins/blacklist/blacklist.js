@@ -9,8 +9,8 @@ import { readListItem } from "../../core/list-item-reader.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
 import { QUICK_FILTER_LABELS, normalizeQuickFilterKey } from "../../features/list/list-filters.js";
 import { createListEvaluationContext, evaluateListItem } from "../../features/list/list-evaluator.js";
-import { resolveFirstPageUrl } from "../../features/list/batch-scope.js";
 import { scanAllPages } from "../../features/list/batch-scanner.js";
+import { endBatchRun, isActiveBatchRun, tryBeginBatchRun } from "../../features/list/batch-coordinator.js";
 import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
 import { parseDetailPage } from "../../integrations/host-list/parser.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
@@ -362,39 +362,49 @@ export class BlacklistPlugin extends BasePlugin {
             const proceed = await new Promise((resolve) => utils.q(null, confirmText, () => resolve(true), () => resolve(false)));
             if (!proceed) return { cancelled: true };
         }
+        // Single Flight：与列表批量收藏/已下载共用同一协调器，避免互相打断。
+        const run = tryBeginBatchRun();
+        if (!run) {
+            show.error("已有批量任务正在执行");
+            return { cancelled: true, busy: true };
+        }
+        $("#favoriteAllVideo, #hasDownAllVideo, #filterAllVideo").attr("aria-disabled", "true").addClass("jhs-batch-busy");
         const scope = await this.getRuntimeService("scope")(), listPage = this.getOptionalDependency("ListPagePlugin");
         const context = "function" === typeof listPage?.createEvaluationContext ? await listPage.createEvaluationContext() : createListEvaluationContext({});
-        const batchToken = Symbol("batch"); this.batchToken = batchToken;
-        const isCancelled = () => this.batchToken !== batchToken || Boolean(scope?.disposed);
+        const isCancelled = () => !isActiveBatchRun(run) || Boolean(scope?.disposed);
         const statusHost = () => (this.blacklistRoot || $()).find("#checkBlacklistMsg");
-        const site = this.getRuntimeService("host")?.site ?? (r ? "javdb" : l ? "javbus" : null);
-        const records = await scanAllPages({
-            startDom: root ? $(root) : $(document),
-            currentUrl: root ? null : window.location.href,
-            firstPageUrl: root ? null : resolveFirstPageUrl(window.location.href, site),
-            itemSelector: this.getSelector().requestDomItemSelector,
-            nextPageSelector: this.getSelector().nextPageSelector,
-            fetchHtml: async (/** @type {string} */ url) => requestHostPage(this.getRuntimeService("http"), url, scope),
-            parseItem: (/** @type {any} */ item) => readListItem(item),
-            evaluate: (/** @type {any} */ item) => evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized }),
-            isCancelled,
-            onProgress: (/** @type {{ page: number, scanned: number, matched: number }} */ {page, scanned, matched}) => {
-                const host = statusHost(); host.length && host.text(`正在扫描第 ${page} 页 · 已扫描 ${scanned} · 匹配 ${matched} 个番号`);
-            },
-        });
-        if (isCancelled()) return { cancelled: true };
-        let updated = 0;
-        for (let index = 0; index < records.length; index += 75) {
-            const chunk = records.slice(index, index + 75);
-            await this.getRuntimeService("state").patch(chunk.map((item) => item.carNum), { blocked: !0 }, {
-                type: "actor-page-block",
-                records: chunk.map((item) => ({ carNum: item.carNum, url: item.url || "", names: actressName, publishTime: item.publishTime || "" })),
+        try {
+            const records = await scanAllPages({
+                startDom: root ? $(root) : $(document),
+                currentUrl: root ? null : window.location.href,
+                firstPageUrl: root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href),
+                itemSelector: this.getSelector().requestDomItemSelector,
+                nextPageSelector: this.getSelector().nextPageSelector,
+                fetchHtml: async (/** @type {string} */ url) => requestHostPage(this.getRuntimeService("http"), url, scope),
+                parseItem: (/** @type {any} */ item) => readListItem(item),
+                evaluate: (/** @type {any} */ item) => evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized }),
+                isCancelled,
+                onProgress: (/** @type {{ page: number, scanned: number, matched: number }} */ {page, scanned, matched}) => {
+                    const host = statusHost(); host.length && host.text(`正在扫描第 ${page} 页 · 已扫描 ${scanned} · 匹配 ${matched} 个番号`);
+                },
             });
-            updated += chunk.length;
-            clog.log("一键屏蔽进度", `已屏蔽 ${updated}/${records.length} 个番号`);
+            if (isCancelled()) return { cancelled: true };
+            let updated = 0;
+            for (let index = 0; index < records.length; index += 75) {
+                const chunk = records.slice(index, index + 75);
+                await this.getRuntimeService("state").patch(chunk.map((item) => item.carNum), { blocked: !0 }, {
+                    type: "actor-page-block",
+                    records: chunk.map((item) => ({ carNum: item.carNum, url: item.url || "", names: actressName, publishTime: item.publishTime || "", fc2Source: item.fc2Source })),
+                });
+                updated += chunk.length;
+                clog.log("一键屏蔽进度", `已屏蔽 ${updated}/${records.length} 个番号`);
+            }
+            const host = statusHost(); host.length && host.text(`处理完成 · 共屏蔽 ${updated} 个番号`);
+            return { matched: records.length, updated };
+        } finally {
+            if (isActiveBatchRun(run)) endBatchRun(run);
+            $("#favoriteAllVideo, #hasDownAllVideo, #filterAllVideo").removeAttr("aria-disabled").removeClass("jhs-batch-busy");
         }
-        const host = statusHost(); host.length && host.text(`处理完成 · 共屏蔽 ${updated} 个番号`);
-        return { matched: records.length, updated };
     }
     /** @param {string} e @param {string} t @param {any} n @param {string} [site] @param {number} [page] @param {number} [processed] */
     async filterActorVideo(e, t, n, site = l ? I : T, page = 1, processed = 0) {

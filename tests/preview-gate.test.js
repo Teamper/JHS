@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ScreenshotService } from "../src/services/screenshot-service.js";
-import { fetchDmmPreviewIfEnabled, isDmmEnabled, isPreviewEnabled } from "../src/services/preview-service.js";
+import { canUseCardPreview, canUseDmmPreview, canUseNativePreview, canUsePreview, fetchDmmPreviewIfEnabled, isDmmEnabled, isPreviewEnabled } from "../src/services/preview-service.js";
 
 describe("preview master + DMM sub switch policy", () => {
     it("treats enablePreviewVideo as the master switch", () => {
@@ -13,6 +13,16 @@ describe("preview master + DMM sub switch policy", () => {
         expect(isDmmEnabled({})).toBe(true);
         expect(isDmmEnabled({ enableLoadPreviewVideo: "no" })).toBe(false);
         expect(isDmmEnabled({ enablePreviewVideo: "no", enableLoadPreviewVideo: "yes" })).toBe(true);
+    });
+
+    it("exposes the four capability gates used by each entry", () => {
+        expect(canUsePreview({ enablePreviewVideo: "no", enableLoadPreviewVideo: "yes" })).toBe(false);
+        expect(canUseNativePreview({ enablePreviewVideo: "yes", enableLoadPreviewVideo: "no" })).toBe(true);
+        expect(canUseDmmPreview({ enablePreviewVideo: "yes", enableLoadPreviewVideo: "no" })).toBe(false);
+        expect(canUseDmmPreview({ enablePreviewVideo: "no", enableLoadPreviewVideo: "yes" })).toBe(false);
+        expect(canUseDmmPreview({ enablePreviewVideo: "yes", enableLoadPreviewVideo: "yes" })).toBe(true);
+        expect(canUseCardPreview({ enablePreviewVideo: "yes", enableLoadPreviewVideo: "no" })).toBe(false);
+        expect(canUseCardPreview({ enablePreviewVideo: "yes", enableLoadPreviewVideo: "yes" })).toBe(true);
     });
 
     it("DMM sub switch OFF never issues a DMM request", async () => {

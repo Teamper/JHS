@@ -1,40 +1,69 @@
 import { describe, expect, it } from "vitest";
-import { isSamePageUrl, resolveFirstPageUrl } from "../src/features/list/batch-scope.js";
+import { isSamePageUrl } from "../src/features/list/batch-scope.js";
+import { JavBusHostAdapter } from "../src/platform/hosts/javbus-host-adapter.js";
+import { JavDbHostAdapter } from "../src/platform/hosts/javdb-host-adapter.js";
 
-describe("resolveFirstPageUrl", () => {
-    it("drops the page query param on JavDB and keeps other search conditions", () => {
-        expect(resolveFirstPageUrl("https://javdb.com/actors/abc?page=3&v=1", "javdb"))
+// resolveFirstPageUrl 不触碰 DOM；node 环境显式传 null，避免默认参数引用 document/window。
+const javdb = new JavDbHostAdapter(/** @type {any} */ (null), /** @type {any} */ (null));
+const javbus = new JavBusHostAdapter(/** @type {any} */ (null), /** @type {any} */ (null));
+
+describe("resolveFirstPageUrl (JavDbHostAdapter)", () => {
+    it("drops the page query param and keeps other search conditions", () => {
+        expect(javdb.resolveFirstPageUrl("https://javdb.com/actors/abc?page=3&v=1"))
             .toBe("https://javdb.com/actors/abc?v=1");
-        expect(resolveFirstPageUrl("https://javdb.com/actors/abc?q=test&page=2", "javdb"))
+        expect(javdb.resolveFirstPageUrl("https://javdb.com/actors/abc?q=test&page=2"))
             .toBe("https://javdb.com/actors/abc?q=test");
-        expect(resolveFirstPageUrl("https://javdb.com/actors/abc?page=1", "javdb"))
+        expect(javdb.resolveFirstPageUrl("https://javdb.com/actors/abc?page=1"))
             .toBe("https://javdb.com/actors/abc");
+        expect(javdb.resolveFirstPageUrl("https://javdb.com/search?q=abc&page=5&f=all"))
+            .toBe("https://javdb.com/search?q=abc&f=all");
     });
+});
 
-    it("strips JavBus /page/N", () => {
-        expect(resolveFirstPageUrl("https://www.javbus.com/page/3", "javbus"))
+describe("resolveFirstPageUrl (JavBusHostAdapter)", () => {
+    it("strips /page/N", () => {
+        expect(javbus.resolveFirstPageUrl("https://www.javbus.com/page/3"))
             .toBe("https://www.javbus.com/");
-        expect(resolveFirstPageUrl("https://www.javbus.com/page/3?x=1", "javbus"))
+        expect(javbus.resolveFirstPageUrl("https://www.javbus.com/page/3?x=1"))
             .toBe("https://www.javbus.com/?x=1");
     });
 
-    it("strips JavBus /star/<id>/N and other paged list prefixes", () => {
-        expect(resolveFirstPageUrl("https://www.javbus.com/star/abc/3", "javbus"))
+    it("strips /star/<id>/N and other paged list prefixes", () => {
+        expect(javbus.resolveFirstPageUrl("https://www.javbus.com/star/abc/3"))
             .toBe("https://www.javbus.com/star/abc");
-        expect(resolveFirstPageUrl("https://www.javbus.com/genre/xyz/2", "javbus"))
+        expect(javbus.resolveFirstPageUrl("https://www.javbus.com/genre/xyz/2"))
             .toBe("https://www.javbus.com/genre/xyz");
-        expect(resolveFirstPageUrl("https://www.javbus.com/maker/m/4", "javbus"))
+        expect(javbus.resolveFirstPageUrl("https://www.javbus.com/maker/m/4"))
             .toBe("https://www.javbus.com/maker/m");
     });
 
+    it("strips search/director/studio/label paged routes", () => {
+        expect(javbus.resolveFirstPageUrl("https://www.javbus.com/search/ABC/3"))
+            .toBe("https://www.javbus.com/search/ABC");
+        expect(javbus.resolveFirstPageUrl("https://www.javbus.com/director/x/3"))
+            .toBe("https://www.javbus.com/director/x");
+        expect(javbus.resolveFirstPageUrl("https://www.javbus.com/studio/x/3"))
+            .toBe("https://www.javbus.com/studio/x");
+        expect(javbus.resolveFirstPageUrl("https://www.javbus.com/label/x/3"))
+            .toBe("https://www.javbus.com/label/x");
+    });
+
+    it("handles site/language prefixed paths such as /en/...", () => {
+        expect(javbus.resolveFirstPageUrl("https://www.javbus.com/en/search/ABC/3"))
+            .toBe("https://www.javbus.com/en/search/ABC");
+        expect(javbus.resolveFirstPageUrl("https://www.javbus.com/en/page/3"))
+            .toBe("https://www.javbus.com/en");
+    });
+
     it("leaves unpaged and unknown URLs untouched", () => {
-        expect(resolveFirstPageUrl("https://www.javbus.com/star/abc", "javbus"))
+        expect(javbus.resolveFirstPageUrl("https://www.javbus.com/star/abc"))
             .toBe("https://www.javbus.com/star/abc");
-        expect(resolveFirstPageUrl("https://www.javbus.com/abc-123", "javbus"))
+        expect(javbus.resolveFirstPageUrl("https://www.javbus.com/abc-123"))
             .toBe("https://www.javbus.com/abc-123");
-        expect(resolveFirstPageUrl("https://example.com/x?page=2", "unknown"))
-            .toBe("https://example.com/x?page=2");
-        expect(resolveFirstPageUrl("not-a-url", "javdb")).toBe("not-a-url");
+        expect(javbus.resolveFirstPageUrl("https://www.javbus.com/search/ABC"))
+            .toBe("https://www.javbus.com/search/ABC");
+        expect(javbus.resolveFirstPageUrl("not-a-url"))
+            .toBe("not-a-url");
     });
 });
 

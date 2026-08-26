@@ -3,7 +3,7 @@
 import { L } from "../../core/constants.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { Z, fetchDmmPreview, fetchDmmPreviewIfEnabled, isDmmEnabled, isPreviewEnabled } from "../../services/preview-service.js";
+import { Z, canUseDmmPreview, fetchDmmPreview, fetchDmmPreviewIfEnabled, isDmmEnabled, isPreviewEnabled } from "../../services/preview-service.js";
 
 export class BusPreviewVideoPlugin extends BasePlugin {
     constructor() {
@@ -63,13 +63,12 @@ export class BusPreviewVideoPlugin extends BasePlugin {
         }
         this.reconfigure();
     }
-    /** 统一 reconfigure：总开关 OFF→卸载；DMM 子开关 OFF→停止当前 JHS 播放。 */
+    /** 统一 reconfigure：JavBus 无宿主原生预览，整个 JHS 入口只有 DMM 能力 → 必须 Preview+DMM 都 ON。 */
     reconfigure() {
         this._busPreviewGeneration++;
         const settings = this.getRuntimeService("settings").snapshot();
-        if (!isPreviewEnabled(settings)) return void this.unmountPreview();
+        if (!canUseDmmPreview(settings)) return void this.unmountPreview();
         this.mountPreview();
-        if (!isDmmEnabled(settings)) this.closeVideoModal();
     }
     /** 幂等挂载：modal、入口按钮、DMM 预载。 */
     mountPreview() {

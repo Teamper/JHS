@@ -4,7 +4,7 @@ import { _, d, g, h, k, l, m, p, r, v, y } from "../../core/constants.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
-import { Z, fetchDmmPreviewIfEnabled, isPreviewEnabled } from "../../services/preview-service.js";
+import { Z, canUseCardPreview, fetchDmmPreviewIfEnabled, isPreviewEnabled } from "../../services/preview-service.js";
 
 /** @typedef {any} JQueryHandle */
 /** @typedef {MouseEvent & { ctrlKey?: boolean, metaKey?: boolean }} CardActionEvent */
@@ -45,9 +45,9 @@ export class CoverButtonPlugin extends BasePlugin {
         const settingsService = this.getRuntimeService("settings");
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
-            if (names.includes("enablePreviewVideo")) {
+            if (names.some((name) => name === "enablePreviewVideo" || name === "enableLoadPreviewVideo")) {
                 this.previewGeneration++;
-                if (isPreviewEnabled(settingsService.snapshot())) void this.addSvgBtn().catch((error => clog.error("卡片预览重新挂载失败", error)));
+                if (canUseCardPreview(settingsService.snapshot())) void this.addSvgBtn().catch((error => clog.error("卡片预览重新挂载失败", error)));
                 else {
                     $('[id$="_preview_video"]').each((/** @type {number} */ _, /** @type {HTMLVideoElement} */ element) => {
                         element.pause?.(), $(element).parent().remove();
@@ -118,7 +118,8 @@ export class CoverButtonPlugin extends BasePlugin {
     async enableSvgBtn(items = null) {
         const e = this.getRuntimeService("settings").snapshot(), {enableLoadScreenShot: t = _, enableVideoSvg: n = _, enablePreviewVideo: q = _, enableHandleSvg: a = _, enableSiteSvg: i = _, enableCopySvg: s = _} = e;
         const scope = items ? $(items) : $(document);
-        [ { selector: ".screenSvg", enabled: t === _ && Boolean(this.getOptionalDependency("ScreenShotPlugin")) ? _ : "no" }, { selector: ".videoSvg", enabled: n === _ && q === _ ? _ : "no" }, { selector: ".handleSvg", enabled: a }, { selector: ".siteSvg", enabled: i }, { selector: ".copySvg", enabled: s } ].forEach((({selector: e, enabled: t}) => {
+        // videoSvg 是 DMM-only 入口：Preview 总开关与 DMM 子开关都必须 ON，否则不显示（不留死按钮）。
+        [ { selector: ".screenSvg", enabled: t === _ && Boolean(this.getOptionalDependency("ScreenShotPlugin")) ? _ : "no" }, { selector: ".videoSvg", enabled: n === _ && canUseCardPreview(e) ? _ : "no" }, { selector: ".handleSvg", enabled: a }, { selector: ".siteSvg", enabled: i }, { selector: ".copySvg", enabled: s } ].forEach((({selector: e, enabled: t}) => {
             scope.find(e).toggle(t === _);
         }));
     }
@@ -221,7 +222,7 @@ export class CoverButtonPlugin extends BasePlugin {
     /** @param {JQueryHandle} e @param {JQueryHandle} t @param {string} n */
     async showVideo(e, t, n) {
         const settings = this.getRuntimeService("settings").snapshot();
-        if (!isPreviewEnabled(settings)) return show.error("预览视频已关闭");
+        if (!canUseCardPreview(settings)) return show.error("预览视频已关闭");
         const generation = this.previewGeneration;
         const a = `${n}_preview_video`;
         let i = $(`#${a}`);

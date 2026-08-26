@@ -30,6 +30,26 @@ export function isDmmEnabled(settings) {
     return settings?.enableLoadPreviewVideo !== "no";
 }
 
+/** 预览总开关：任一预览入口可见的前提。 @param {Record<string, any>} settings */
+export function canUsePreview(settings) {
+    return isPreviewEnabled(settings);
+}
+
+/** 宿主原生预览：总开关 ON 即可（不依赖 DMM）。 @param {Record<string, any>} settings */
+export function canUseNativePreview(settings) {
+    return isPreviewEnabled(settings);
+}
+
+/** DMM 高画质能力：总开关与 DMM 子开关都开。 @param {Record<string, any>} settings */
+export function canUseDmmPreview(settings) {
+    return isPreviewEnabled(settings) && isDmmEnabled(settings);
+}
+
+/** 列表卡片 Preview 按钮：当前实现只有 DMM source，因此等价于 canUseDmmPreview。 @param {Record<string, any>} settings */
+export function canUseCardPreview(settings) {
+    return canUseDmmPreview(settings);
+}
+
 class DmmPreviewParser {
     /** @param {string | null} e @param {any} storage @param {any} movie @param {any} scope */
     constructor(e, storage, movie, scope) {

@@ -5,6 +5,17 @@ import { normalizeMovieCarNum } from "../../core/movie-identity.js";
 export class JavDbHostAdapter {
     /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] */
     constructor(documentRuntime = document, locationRuntime = window.location) { this.site = "javdb"; this.document = documentRuntime; this.location = locationRuntime; }
+    /** 解析当前搜索条件第一页：删除 page 查询参数，保留其余搜索条件；非法 URL 原样返回。 */
+    /** @param {string} currentUrl */
+    resolveFirstPageUrl(currentUrl) {
+        try {
+            const url = new URL(currentUrl);
+            url.searchParams.delete("page");
+            return url.href;
+        } catch {
+            return currentUrl;
+        }
+    }
     detectRoute() {
         if (this.location.pathname.startsWith("/v/") || this.location.pathname.startsWith("/movies/")) return "detail";
         if (this.location.pathname === "/users/collection_codes") return "owned-detail";

@@ -91,3 +91,28 @@ describe("mobile detail FAB", () => {
         expect(menu.find('[data-action="logger"]')).toHaveLength(1);
     });
 });
+
+describe("desktop commandbar restore (regular ↔ compact)", () => {
+    it("restores every source control before removing the shell and keeps handlers alive", () => {
+        const { $, plugin } = loadMobilePlugin();
+        plugin.getSelector = () => ({ boxSelector: ".movie-list" });
+        $("body").html('<div class="movie-list"></div><div class="jhs-list-btn-row"><button type="button" id="waitCheckBtn">开始鉴定</button><button type="button" id="newVideoBtn">新作品</button><button type="button" id="favoriteAllVideo">批量收藏</button></div><div id="jhs-quick-filter"></div><div class="jhs-sort-control"><button id="sort-toggle-btn">排序</button></div>');
+        let clicked = 0;
+        $("#waitCheckBtn").on("click", () => { clicked++; });
+        plugin.buildCommandBar();
+        expect($("#jhs-page-commandbar").length).toBe(1);
+        expect($("#waitCheckBtn").closest("#jhs-page-commandbar").length).toBe(1);
+        plugin.unmountDesktopCommandBar();
+        expect($("#jhs-page-commandbar").length).toBe(0);
+        for (const selector of [ "#waitCheckBtn", "#newVideoBtn", "#favoriteAllVideo", "#jhs-quick-filter", ".jhs-sort-control" ]) {
+            expect($(selector).length).toBe(1);
+        }
+        // 回到原始 row 且兄弟顺序保持（waitCheck 在 newVideo 之前）。
+        const row = $("#waitCheckBtn").closest(".jhs-list-btn-row");
+        expect(row.length).toBe(1);
+        expect(row.children().index($("#waitCheckBtn"))).toBeLessThan(row.children().index($("#newVideoBtn")));
+        // 真实点击验证 handler 仍在。
+        $("#waitCheckBtn").trigger("click");
+        expect(clicked).toBe(1);
+    });
+});

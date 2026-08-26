@@ -14,6 +14,7 @@ export class OtherSitePlugin extends BasePlugin {
     constructor() {
         super(...arguments);
         /** @type {number} */ this.mountGeneration = 0;
+        /** @type {WeakMap<object, number>} */ this._mountGenerations = new WeakMap();
         /** @type {SiteConfig[]} */
         this.siteConfigs = [
             { id: "javTrailersBtn" }, { id: "123AvBtn", providerId: "av123" }, { id: "jableBtn" }, { id: "avgleBtn" }, { id: "missAvBtn" }, { id: "supJavBtn" },
@@ -68,14 +69,18 @@ export class OtherSitePlugin extends BasePlugin {
     /** OFF：删除 JHS 自有面板（宿主原生 UI 不做永久销毁），并使在途挂载作废。 */
     unmount() {
         this.mountGeneration++;
+        this._mountGenerations.set(document, (this._mountGenerations.get(document) || 0) + 1);
         $("[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
     }
     /** @param {string | null} e @param {string | null} t @param {OtherSiteLoadOptions} [n] */
     async loadOtherSite(e, t, n = {}) {
         const settingsService = this.getRuntimeService("settings");
         if (settingsService.snapshot().enableLoadOtherSite === "no") return;
-        const generation = ++this.mountGeneration;
-        const isActive = () => generation === this.mountGeneration && ("function" === typeof n.isActive ? n.isActive() : !0) && settingsService.snapshot().enableLoadOtherSite !== "no";
+        // 每个 FC2 context（root）持有自己的 generation，互不失效；无 root 的详情页沿用全局 generation。
+        const rootElement = n.root?.[0] || null;
+        const generation = rootElement ? (this._mountGenerations.get(rootElement) || 0) + 1 : ++this.mountGeneration;
+        rootElement && this._mountGenerations.set(rootElement, generation);
+        const isActive = () => (rootElement ? generation === this._mountGenerations.get(rootElement) : generation === this.mountGeneration) && ("function" === typeof n.isActive ? n.isActive() : !0) && settingsService.snapshot().enableLoadOtherSite !== "no";
         const root = n.root ? $(n.root) : $(document), target = n.target ? $(n.target) : $(this.getRuntimeService("host").locateDetailSlots().summary);
         if (!target.length || !isActive()) return;
         root.find("#otherSiteBox,#settingsArea,[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();

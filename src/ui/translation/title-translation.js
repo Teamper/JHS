@@ -21,6 +21,8 @@ export async function renderTranslatedTitle(options) {
         if (!title[0]?.isConnected || !translatedNode[0]?.isConnected) return;
         translatedNode.text(translated);
     } catch (error) {
+        if (options.isActive && !options.isActive()) return;
+        if (!title[0]?.isConnected || !translatedNode[0]?.isConnected) return;
         const message = error instanceof Error ? error.message : String(error);
         /** @type {any} */ (globalThis).clog?.error("翻译失败:", error);
         translatedNode.addClass("is-error").text(`翻译失败: ${message}`);

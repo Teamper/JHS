@@ -1,8 +1,32 @@
 // @ts-check
 
+/** JavBus 带分页的列表路径前缀（除 /page/N 外的 /<prefix>/<id>/N 形式）。 */
+const JAVBUS_LIST_PREFIXES = new Set([ "star", "genre", "maker", "actress", "series", "tag", "search", "director", "studio", "label" ]);
+
 export class JavBusHostAdapter {
     /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] */
     constructor(documentRuntime = document, locationRuntime = window.location) { this.site = "javbus"; this.document = documentRuntime; this.location = locationRuntime; }
+    /** 解析当前搜索条件第一页：去掉 /page/N 与 /<list-prefix>/<id>/N 的页码段；非法 URL 原样返回。 */
+    /** @param {string} currentUrl */
+    resolveFirstPageUrl(currentUrl) {
+        try {
+            const url = new URL(currentUrl);
+            const segments = url.pathname.split("/").filter(Boolean);
+            const last = segments[segments.length - 1];
+            const secondLast = segments[segments.length - 2];
+            if (segments.length >= 2 && /^\d+$/.test(last)) {
+                const removable = secondLast === "page"
+                    || (segments.length >= 3 && JAVBUS_LIST_PREFIXES.has(segments[segments.length - 3]) && !/^\d+$/.test(secondLast));
+                if (removable) {
+                    const remaining = secondLast === "page" ? segments.slice(0, -2) : segments.slice(0, -1);
+                    url.pathname = remaining.length ? "/" + remaining.join("/") : "/";
+                }
+            }
+            return url.href;
+        } catch {
+            return currentUrl;
+        }
+    }
     detectRoute() { return this.locateNativeMagnets() ? "detail" : this.locateListRoot() ? "list" : "other"; }
     readMovieRef() {
         const carNum = this.document.querySelector(".info p span, [data-car-number]")?.textContent?.trim() ?? null;

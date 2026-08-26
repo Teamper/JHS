@@ -5,13 +5,13 @@ import { jhsEventBus } from "../../core/event-bus.js";
 import { mapLimit, safePlay } from "../../core/feature-helpers.js";
 import { requestHostPage } from "../../core/host-page-request.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { readListItem } from "../../core/list-item-reader.js";
+import { readCardNames, readListItem } from "../../core/list-item-reader.js";
 import { isHitShowPage } from "../../core/site-context.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
 import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isHardHidden, normalizeQuickFilterKey, shouldShowItem } from "../../features/list/list-filters.js";
 import { createListEvaluationContext, evaluateListItem, findMatchedTitleKeyword } from "../../features/list/list-evaluator.js";
-import { resolveFirstPageUrl } from "../../features/list/batch-scope.js";
 import { scanAllPages } from "../../features/list/batch-scanner.js";
+import { endBatchRun, isActiveBatchRun, tryBeginBatchRun } from "../../features/list/batch-coordinator.js";
 
 /** @typedef {Record<string, any>} ListRecord */
 /** @typedef {any} JQueryHandle */
@@ -93,7 +93,7 @@ const Te = {
 
 export class ListPagePlugin extends BasePlugin {
     async initCss() {
-        return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}.jhs-batch-progress{position:fixed;right:16px;bottom:16px;z-index:var(--jhs-z-modal);display:flex;align-items:center;gap:var(--jhs-space-2);padding:var(--jhs-space-2) var(--jhs-space-3);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-md);background:var(--jhs-surface);color:var(--jhs-text);box-shadow:0 4px 16px rgba(0,0,0,.18)}</style>`;
+        return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}.jhs-batch-progress{position:fixed;right:16px;bottom:16px;z-index:var(--jhs-z-modal);display:flex;align-items:center;gap:var(--jhs-space-2);padding:var(--jhs-space-2) var(--jhs-space-3);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-md);background:var(--jhs-surface);color:var(--jhs-text);box-shadow:0 4px 16px rgba(0,0,0,.18)}.jhs-btn.jhs-batch-busy{opacity:.55;cursor:not-allowed}</style>`;
     }
     constructor() {
         super(...arguments);
@@ -441,12 +441,14 @@ export class ListPagePlugin extends BasePlugin {
     /**
      * Batch-mark every item matching the current quick filter across all pages.
      * 语义：全部 = 包含 hard-hidden 的真全集；其他筛选 = 全部分页中符合该筛选的项。
-     * @param {string} actressName @param {string} flag @param {{ filter?: unknown, confirm?: boolean, root?: any }} [options]
+     * @param {{ kind?: "actor" | "search", displayName?: string, recordName?: string }} scope
+     * @param {string} flag @param {{ filter?: unknown, confirm?: boolean, root?: any }} [options]
      */
-    async batchSaveAllVideos(actressName, flag, { filter = this.activeQuickFilter || "waitCheck", confirm = true, root = null } = {}) {
+    async batchSaveAllVideos(scope, flag, { filter = this.activeQuickFilter || "waitCheck", confirm = true, root = null } = {}) {
         const stateFlag = legacyActionToFlag(flag);
         if (!stateFlag) throw new TypeError(`不支持的状态操作: ${flag}`);
         const normalized = normalizeQuickFilterKey(filter), filterLabel = QUICK_FILTER_LABELS[normalized];
+        const actorScope = scope?.kind === "actor", recordName = actorScope ? String(scope.recordName || "") : "";
         const confirmText = "all" === normalized
             ? "将处理当前搜索全部分页的所有作品，包括屏蔽项。"
             : `将处理当前搜索全部分页中符合「${filterLabel}」筛选的作品。`;
@@ -454,10 +456,16 @@ export class ListPagePlugin extends BasePlugin {
             const proceed = await new Promise((resolve) => utils.q(null, confirmText, () => resolve(true), () => resolve(false)));
             if (!proceed) return { cancelled: true };
         }
-        const scope = await this.getRuntimeService("scope")(), context = await this.createEvaluationContext(), batchToken = Symbol("batch");
-        this.batchToken = batchToken;
-        const isCancelled = () => this.batchToken !== batchToken || Boolean(scope?.disposed);
-        const progressElement = this.showBatchProgress();
+        // Single Flight：已有批量任务时不启动第二个任务，避免互相打断/污染进度。
+        const run = tryBeginBatchRun();
+        if (!run) {
+            show.error("已有批量任务正在执行");
+            return { cancelled: true, busy: true };
+        }
+        const runtimeScope = await this.getRuntimeService("scope")(), context = await this.createEvaluationContext();
+        const isCancelled = () => !isActiveBatchRun(run) || Boolean(runtimeScope?.disposed);
+        const progressElement = this.showBatchProgress(run);
+        this.setBatchButtonsDisabled(true);
         const setProgress = (/** @type {string} */ text) => {
             const label = progressElement?.find(".jhs-batch-progress__label");
             label && label.length ? label.text(text) : clog.debug(text);
@@ -467,20 +475,25 @@ export class ListPagePlugin extends BasePlugin {
             clog.debug(`批量扫描第 ${page} 页 · 已扫描 ${scanned} · 匹配 ${matched}`);
         };
         try {
-            const site = this.getRuntimeService("host")?.site ?? (r ? "javdb" : l ? "javbus" : null);
             const records = await scanAllPages({
                 startDom: root ? $(root) : $(document),
                 currentUrl: root ? null : window.location.href,
-                firstPageUrl: root ? null : resolveFirstPageUrl(window.location.href, site),
+                firstPageUrl: root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href),
                 itemSelector: this.getSelector().requestDomItemSelector,
                 nextPageSelector: this.getSelector().nextPageSelector,
-                fetchHtml: async (/** @type {string} */ url) => requestHostPage(this.getRuntimeService("http"), url, scope),
-                parseItem: (/** @type {any} */ item) => readListItem(item),
+                fetchHtml: async (/** @type {string} */ url) => requestHostPage(this.getRuntimeService("http"), url, runtimeScope),
+                parseItem: (/** @type {any} */ item) => {
+                    const parsed = readListItem(item);
+                    return actorScope ? parsed : { ...parsed, names: readCardNames(item) };
+                },
                 evaluate: (/** @type {any} */ item) => evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized }),
                 isCancelled,
                 onProgress,
             });
-            if (isCancelled()) return { cancelled: true };
+            if (isCancelled()) {
+                progressElement?.remove();
+                return { cancelled: true };
+            }
             // 写入阶段不可取消：禁用按钮并给出明确文案，避免出现半批数据状态。
             progressElement?.find("#jhs-batch-cancel").prop("disabled", true).attr("title", "正在写入，无法取消");
             setProgress("正在写入，无法取消…");
@@ -490,7 +503,7 @@ export class ListPagePlugin extends BasePlugin {
                 const chunk = records.slice(index, index + 75);
                 await this.getRuntimeService("state").patch(chunk.map((item) => item.carNum), { [stateFlag]: !0 }, {
                     type: "actor-page-batch-state",
-                    records: chunk.map((item) => ({ carNum: item.carNum, url: item.url || "", names: actressName, publishTime: item.publishTime || "" })),
+                    records: chunk.map((item) => ({ carNum: item.carNum, url: item.url || "", names: item.names ?? recordName, publishTime: item.publishTime || "", fc2Source: item.fc2Source })),
                 });
                 updated += chunk.length;
                 setProgress(`已更新 ${updated}/${records.length} 项`);
@@ -505,17 +518,24 @@ export class ListPagePlugin extends BasePlugin {
             setTimeout(() => progressElement?.remove(), 2500);
             throw error;
         } finally {
-            this.batchToken = null;
+            if (isActiveBatchRun(run)) endBatchRun(run);
+            this.setBatchButtonsDisabled(false);
         }
     }
-    /** 批量进度浮层（带取消按钮）；返回可更新的状态元素。 */
-    showBatchProgress() {
+    /** 批量任务期间禁用/恢复所有批量入口（视觉禁用但保持可点击，点击时由 handler 提示并拒绝启动）。 */
+    /** @param {boolean} disabled */
+    setBatchButtonsDisabled(disabled) {
+        $("#favoriteAllVideo, #hasDownAllVideo, #filterAllVideo").attr("aria-disabled", String(disabled)).toggleClass("jhs-batch-busy", disabled);
+    }
+    /** 批量进度浮层（带取消按钮）；返回可更新的状态元素。每次绑定当前 run 的取消 handler。 */
+    /** @param {any} run */
+    showBatchProgress(run) {
         let element = $("#jhs-batch-progress");
         if (!element.length) {
             element = $('<div id="jhs-batch-progress" class="jhs-ui jhs-batch-progress" role="status"></div>').appendTo("body");
             element.append('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm" id="jhs-batch-cancel">取消</button>');
-            element.find("#jhs-batch-cancel").on("click", () => { this.batchToken = null; });
         }
+        element.find("#jhs-batch-cancel").off("click").on("click", () => endBatchRun(run));
         element.find(".jhs-batch-progress__label").remove().end().prepend($('<span class="jhs-batch-progress__label"></span>').text("正在扫描…"));
         return element;
     }

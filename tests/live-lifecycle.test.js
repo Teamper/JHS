@@ -143,7 +143,8 @@ describe("BusPreviewVideoPlugin live lifecycle", () => {
         await settings.set("enablePreviewVideo", "no");
         expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);
         expect(mountSpy).toHaveBeenCalled(); // 幂等挂载（DMM 子开关切换会再次进入 reconfigure，但不会重复挂载）
-        expect(unmountSpy.mock.calls.length).toBe(2);
+        // JavBus 无原生预览：DMM OFF 等于整个 JHS preview 入口不可用 → unmount（初始 OFF 1 次 + DMM OFF 1 次 + 总开关 OFF 1 次）
+        expect(unmountSpy.mock.calls.length).toBe(3);
     });
 });
 

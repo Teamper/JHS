@@ -3,7 +3,7 @@
 import { L, o } from "../../core/constants.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { Z, fetchDmmPreview, isDmmEnabled, isPreviewEnabled } from "../../services/preview-service.js";
+import { Z, canUseDmmPreview, canUsePreview, fetchDmmPreview, isDmmEnabled, isPreviewEnabled } from "../../services/preview-service.js";
 
 /** @typedef {any} JQueryHandle */
 /** @typedef {{ code?: string, message?: string, retryable?: boolean }} PreviewFailure */
@@ -42,9 +42,9 @@ export class PreviewVideoPlugin extends BasePlugin {
     reconfigure() {
         this.previewGeneration++;
         const settings = this.getRuntimeService("settings").snapshot();
-        if (!isPreviewEnabled(settings)) return void this.unmountPreview();
+        if (!canUsePreview(settings)) return void this.unmountPreview();
         this.mountPreview();
-        if (isDmmEnabled(settings)) void this.initDmm(this.lifecycleScope).catch((error => clog.error("预加载 DMM 失败", error)));
+        if (canUseDmmPreview(settings)) void this.initDmm(this.lifecycleScope).catch((error => clog.error("预加载 DMM 失败", error)));
         else this.unmountDmmPlayer();
     }
     /** 幂等挂载：入口可见、click 绑定；gallery/autoPlay 只处理一次。 */
