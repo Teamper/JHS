@@ -70,7 +70,7 @@ function loadPreviewClass() {
     context.innerHeight = 600;
     context.requestAnimationFrame = (callback) => (frames.push(callback), frames.length);
     context.cancelAnimationFrame = () => {};
-    const source = readTestFile(join(process.cwd(), "src/core/logger.js"), "utf8"), start = source.indexOf("window.ImageHoverPreview = class"), end = source.indexOf("}, async function()", start);
+    const source = readTestFile(join(process.cwd(), "src/core/logger.js"), "utf8"), start = source.indexOf("window.ImageHoverPreview = class"), end = source.indexOf("}, function() {", start);
     vm.runInContext(`${source.slice(start, end + 1)}; globalThis.TestImageHoverPreview = window.ImageHoverPreview;`, vm.createContext(context));
     const flushFrames = () => { while (frames.length) frames.shift()(); };
     return { Preview: context.TestImageHoverPreview, document, firstCover, createCover, head, images, flushFrames };

@@ -4455,8 +4455,10 @@
 
   // src/core/logger.js
   var loggerRuntime;
-  function initializeLoggerRuntime(scope) {
+  function initializeLoggerRuntime(scope, { clogMsgCount = 2e3 } = {}) {
     if (loggerRuntime) return loggerRuntime;
+    const maxLogCount = Math.min(3e3, Math.max(100, Number(clogMsgCount) || 2e3));
+    let loggerClog;
     document.head.insertAdjacentHTML("beforeend", '\n        <style>\n            .loading-container {\n                position: fixed;\n                top: 0;\n                left: 0;\n                width: 100%;\n                height: 100%;\n                display: flex;\n                justify-content: center;\n                align-items: center;\n                background-color: rgba(0, 0, 0, 0.1);\n                z-index: var(--jhs-z-loading);\n            }\n    \n            .loading-animation {\n                position: relative;\n                width: 60px;\n                height: 12px;\n                background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);\n                border-radius: 6px;\n                animation: loading-animate 1.8s ease-in-out infinite;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before,\n            .loading-animation:after {\n                position: absolute;\n                display: block;\n                content: "";\n                animation: loading-animate 1.8s ease-in-out infinite;\n                height: 12px;\n                border-radius: 6px;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before {\n                top: -20px;\n                left: 10px;\n                width: 40px;\n                background: linear-gradient(90deg, #ff758c 0%, #ff7eb3 100%);\n            }\n    \n            .loading-animation:after {\n                bottom: -20px;\n                width: 35px;\n                background: linear-gradient(90deg, #ff9a9e 0%, #fad0c4 100%);\n            }\n    \n            @keyframes loading-animate {\n                0% {\n                    transform: translateX(40px);\n                }\n                50% {\n                    transform: translateX(-30px);\n                }\n                100% {\n                    transform: translateX(40px);\n                }\n            }\n        </style>\n    ');
     window.loading = function() {
       const e2 = document.createElement("div");
@@ -4808,7 +4810,7 @@
         this.preview = null;
         this.currentTarget = null;
       }
-    }, (async function() {
+    }, (function() {
       document.head.insertAdjacentHTML("beforeend", `
         <style>
             .console-logger-container {
@@ -5072,7 +5074,7 @@
         warn: ["warn"],
         error: ["error"],
         debug: ["base", "warn", "error", "debug"]
-      }, n2 = await storageManager.getSetting("clogMsgCount", 2e3), a2 = "jhs_clog_maximize", i2 = "jhs_clog_expand", s2 = "jhs_clog_filter";
+      }, n2 = maxLogCount, a2 = "jhs_clog_maximize", i2 = "jhs_clog_expand", s2 = "jhs_clog_filter";
       const _o = class _o {
         constructor() {
           const t3 = localStorage.getItem(s2);
@@ -5266,9 +5268,9 @@
       __name(_o, "o");
       let o2 = _o;
       try {
-        unsafeWindow.parent !== unsafeWindow && unsafeWindow.parent.clog && "function" == typeof unsafeWindow.parent.clog.log ? window.clog = unsafeWindow.parent.clog : window.clog = new o2();
+        unsafeWindow.parent !== unsafeWindow && unsafeWindow.parent.clog && "function" == typeof unsafeWindow.parent.clog.log ? loggerClog = unsafeWindow.parent.clog : loggerClog = new o2();
       } catch (r2) {
-        console.error("创建日志控制台出现异常", r2), window.clog = new o2();
+        console.error("创建日志控制台出现异常", r2), loggerClog = new o2();
       }
       !(function() {
         const e3 = window.clog || console;
@@ -5338,7 +5340,6 @@
     })();
     const loggerLoading = window.loading;
     const loggerShow = window.show;
-    const loggerClog = window.clog;
     loggerRuntime = Object.freeze({ loading: loggerLoading, show: loggerShow, clog: loggerClog });
     window.loading = loggerRuntime.loading;
     window.show = loggerRuntime.show;
@@ -22650,7 +22651,9 @@ ${failure.stack}` : "");
       if (settingsSnapshot.videoMuted == null && ["yes", "no"].includes(legacyVideoMuted || "")) {
         await context.services.settings.set("videoMuted", legacyVideoMuted === "yes");
       }
-      const logger = initializeLoggerRuntime(context.rootScope);
+      const logger = initializeLoggerRuntime(context.rootScope, {
+        clogMsgCount: context.services.settings.snapshot().clogMsgCount
+      });
       initializeThemeRuntime(context.rootScope);
       initializeUiAccessibility(context.rootScope);
       context.services.diagnostics.setBrowserMetadata({

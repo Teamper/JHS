@@ -136,7 +136,9 @@ export async function bootstrapJhs() {
         if (settingsSnapshot.videoMuted == null && ["yes", "no"].includes(legacyVideoMuted || "")) {
             await context.services.settings.set("videoMuted", legacyVideoMuted === "yes");
         }
-        const logger = initializeLoggerRuntime(context.rootScope);
+        const logger = initializeLoggerRuntime(context.rootScope, {
+            clogMsgCount: context.services.settings.snapshot().clogMsgCount,
+        });
         initializeThemeRuntime(context.rootScope);
         initializeUiAccessibility(context.rootScope);
         context.services.diagnostics.setBrowserMetadata({
