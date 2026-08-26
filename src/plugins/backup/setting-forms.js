@@ -199,21 +199,37 @@ function bindLayoutRangeEvents(root, busImgPlugin, hostAdapter, settings) {
     }));
 }
 
+/** Dispose one quick-setting host's binding and clear its DOM. */
+/** @param {any} host */
+export function disposeQuickSettingHost(host) {
+    const root = $(host);
+    root.data("jhsQuickSettingBinding")?.dispose?.();
+    root.removeData("jhsQuickSettingBinding");
+    root.empty().hide();
+}
+
 /** Initialize quick settings in either the desktop popover or mobile layer. */
-/** @param {SettingDependencies} dependencies @param {() => any} getSelector @param {(panel: string) => void} openSettingDialogFn @param {any} [root] */
-export async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn, root = null) {
+/** @param {SettingDependencies} dependencies @param {() => any} getSelector @param {(panel: string) => void} openSettingDialogFn @param {any} root */
+export async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn, root) {
+    const host = $(root);
+    if (!host.length) {
+        throw new Error("Quick setting root is required");
+    }
     const registry = dependencies.settingsRegistry;
     if (!registry) return;
-    const host = root ? $(root) : $(".simple-setting, .mini-simple-setting, .jhs-quick-setting").first();
-    if (!host.length) return;
     const descriptors = registry.list({ surfaces: [ "quick" ] });
     const binding = bindSettingRows(host, descriptors, { settings: dependencies.settings });
     host.data("jhsQuickSettingBinding", binding);
-    host.find("#moreBtn").off("click").on("click", (() => {
-        host.data("jhsQuickSettingBinding")?.dispose?.();
-        $(".simple-setting, .mini-simple-setting").html("").hide();
-        openSettingDialogFn("base-panel");
-    }));
+    host.find("#moreBtn")
+        .off(".jhsQuickSetting")
+        .on("click.jhsQuickSetting", (async (/** @type {any} */ event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const currentBinding = host.data("jhsQuickSettingBinding");
+            await currentBinding?.flush?.();
+            disposeQuickSettingHost(host);
+            await openSettingDialogFn("base-panel");
+        }));
 }
 
 /** Read all form values and save to storage. */

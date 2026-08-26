@@ -10,7 +10,7 @@ import { JhsSelect } from "../../core/ui-primitives.js";
 import { BUILT_IN_NATIVE_MAGNET_SOURCES, ResourceSettingsService, buildCustomMagnetSource, validateRule } from "../../services/resource-settings-service.js";
 import { BUILT_IN_SCREENSHOT_SOURCES } from "../../services/screenshot-sources.js";
 import { backupDataByWebDav, backupListBtnByWebDav, exportSettingData, importSettingData, openFileListDialog } from "./setting-backup.js";
-import { initQuickSettingForm, loadSettingForm, saveSettingForm } from "./setting-forms.js";
+import { disposeQuickSettingHost, initQuickSettingForm, loadSettingForm, saveSettingForm } from "./setting-forms.js";
 import { renderDataHealthPanel, renderNetworkPanel, renderPluginMgmtPanel, renderSnapshotPanel, repairDataHealthWithBackup, showDiffPreview } from "./setting-panels.js";
 import { applyImageMode, buildSettingCss } from "./setting-styles.js";
 import { buildQuickSettingHtml, buildSettingDialogHtml, injectHealthPanel, injectNetworkPanel, injectPluginMgmtPanel, injectResourceSourcesPanel, injectSnapshotPanel } from "./setting-templates.js";
@@ -114,7 +114,10 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         scope.listen(document, "click", (event => {
             const target = event.target instanceof Element ? event.target.closest("#setting-btn, #mini-setting-btn") : null;
             if (!target) return;
-            event.preventDefault(), $(".simple-setting, .mini-simple-setting").data("jhsQuickSettingBinding")?.dispose?.(), $(".simple-setting, .mini-simple-setting").html("").hide(), clog.lowZIndex(), void openSettings().catch((() => undefined));
+            event.preventDefault();
+            $(".simple-setting, .mini-simple-setting").each((_, element) => disposeQuickSettingHost(element));
+            clog.lowZIndex();
+            void openSettings().catch((() => undefined));
         }));
         scope.addCleanup((() => this.unmountDesktopSettingNav()));
         this.syncDesktopSettingNav(this.getRuntimeService("profile").current() === "compact");
@@ -150,20 +153,22 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             if (generation !== this._desktopNavGeneration || !this._desktopSettingNavMounted) return;
             $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" class="jhs-setting-anchor">\n                        <div class="setting-box">\n                            <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                <span>设置</span>\n                            </button>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
         }), 1, 1e4, !1, scope)),
-        $(".main-nav, .container-fluid").off("mouseenter.jhsSettingQuick mouseleave.jhsSettingQuick").on("mouseenter.jhsSettingQuick", ".setting-box", (async () => {
-            $(".simple-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
-            try { await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this)); } catch (error) { clog.warn("桌面快捷设置初始化失败", error); }
+        $(".main-nav, .container-fluid").off("mouseenter.jhsSettingQuick mouseleave.jhsSettingQuick").on("mouseenter.jhsSettingQuick", ".setting-box", (async (event) => {
+            const host = $(event.currentTarget).find(".simple-setting");
+            disposeQuickSettingHost(host);
+            host.html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
+            try { await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this), host); } catch (error) { clog.warn("桌面快捷设置初始化失败", error); }
             clog.lowZIndex();
-        })).on("mouseleave.jhsSettingQuick", ".setting-box", (() => {
-            $(".simple-setting").data("jhsQuickSettingBinding")?.dispose?.();
-            $(".simple-setting").html("").hide();
-        })).on("mouseenter.jhsSettingQuick", ".mini-setting-box", (async () => {
-            $(".mini-simple-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
-            try { await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this)); } catch (error) { clog.warn("迷你快捷设置初始化失败", error); }
+        })).on("mouseleave.jhsSettingQuick", ".setting-box", ((event) => {
+            disposeQuickSettingHost($(event.currentTarget).find(".simple-setting"));
+        })).on("mouseenter.jhsSettingQuick", ".mini-setting-box", (async (event) => {
+            const host = $(event.currentTarget).find(".mini-simple-setting");
+            disposeQuickSettingHost(host);
+            host.html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
+            try { await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this), host); } catch (error) { clog.warn("迷你快捷设置初始化失败", error); }
             clog.lowZIndex();
-        })).on("mouseleave.jhsSettingQuick", ".mini-setting-box", (() => {
-            $(".mini-simple-setting").data("jhsQuickSettingBinding")?.dispose?.();
-            $(".mini-simple-setting").html("").hide();
+        })).on("mouseleave.jhsSettingQuick", ".mini-setting-box", ((event) => {
+            disposeQuickSettingHost($(event.currentTarget).find(".mini-simple-setting"));
         }));
     }
     unmountDesktopSettingNav() {
@@ -171,9 +176,8 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         this._desktopSettingNavMounted = false;
         this._settingNavResizeCleanup?.();
         this._settingNavResizeCleanup = null;
-        $(".simple-setting, .mini-simple-setting").data("jhsQuickSettingBinding")?.dispose?.();
+        $(".simple-setting, .mini-simple-setting").each((_, element) => disposeQuickSettingHost(element));
         $(".jhs-setting-nav-item, .jhs-mini-setting-box, .jhs-setting-anchor, .jhs-setting-detail-anchor").remove();
-        $(".simple-setting, .mini-simple-setting").html("").hide();
         $(".main-nav, .container-fluid").off("mouseenter.jhsSettingQuick mouseleave.jhsSettingQuick");
     }
     /** Open shared quick settings in the mobile bottom sheet. */
@@ -186,7 +190,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             if (closed) return;
             closed = !0, $(document).off("keydown.jhsQuickSetting");
             const quickRoot = $("#jhs-quick-setting-sheet .jhs-quick-setting");
-            quickRoot.data("jhsQuickSettingBinding")?.dispose?.();
+            disposeQuickSettingHost(quickRoot);
             $("#jhs-quick-setting-backdrop, #jhs-quick-setting-sheet").remove();
             restoreFocus && previousFocus?.isConnected && "function" == typeof previousFocus.focus && previousFocus.focus();
         };
@@ -195,7 +199,8 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             <header class="jhs-quick-setting__header"><h2 id="jhs-quick-setting-title">快捷设置</h2><button type="button" class="jhs-btn jhs-btn--ghost jhs-quick-setting__close" aria-label="关闭快捷设置">×</button></header>
             <div class="jhs-quick-setting"></div>
         </section>`);
-        sheet.find(".jhs-quick-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))), $("body").append(backdrop, sheet), clog.lowZIndex();
+        const quickRoot = sheet.find(".jhs-quick-setting");
+        quickRoot.html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))), $("body").append(backdrop, sheet), clog.lowZIndex();
         backdrop.on("click.jhsQuickSetting", (() => closeQuickSetting())), sheet.on("click.jhsQuickSetting", ".jhs-quick-setting__close", (() => closeQuickSetting())),
         $(document).off("keydown.jhsQuickSetting").on("keydown.jhsQuickSetting", (event => {
             if ("Escape" === event.key) return event.preventDefault(), closeQuickSetting();
@@ -208,7 +213,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         try {
             await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), (panel => {
                 closeQuickSetting(!1), void this.openSettingDialog(panel).catch((error => clog.error("完整设置打开失败", error)));
-            })), sheet.find(".jhs-quick-setting__close").trigger("focus");
+            }), quickRoot), sheet.find(".jhs-quick-setting__close").trigger("focus");
         } catch (error) {
             closeQuickSetting(), clog.error("快捷设置初始化失败", error), show.error("快捷设置加载失败");
         }

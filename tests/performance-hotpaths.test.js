@@ -134,7 +134,7 @@ describe("list mutation hot path", () => {
     it("bounds translation concurrency and delegates translation to the service", async () => {
         const { dom, plugin, $, translate, mapLimit } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
         container.innerHTML = '<div class="item"><div class="video-title"><strong>ABC-123</strong> 原題</div></div><div class="item"><div class="video-title"><strong>ABC-123</strong> 原題</div></div>';
-        const items = $(container).find(".item").toArray().map((item => $(item)));
+        const items = $(container).find(".item").toArray();
         await plugin.translateListItems(items);
         expect(mapLimit).toHaveBeenCalledWith(items, 3, expect.any(Function));
         expect(translate).toHaveBeenCalledTimes(2);

@@ -7909,18 +7909,30 @@
     }));
   }
   __name(bindLayoutRangeEvents, "bindLayoutRangeEvents");
-  async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn, root = null) {
+  function disposeQuickSettingHost(host) {
+    const root = $(host);
+    root.data("jhsQuickSettingBinding")?.dispose?.();
+    root.removeData("jhsQuickSettingBinding");
+    root.empty().hide();
+  }
+  __name(disposeQuickSettingHost, "disposeQuickSettingHost");
+  async function initQuickSettingForm(dependencies, getSelector, openSettingDialogFn, root) {
+    const host = $(root);
+    if (!host.length) {
+      throw new Error("Quick setting root is required");
+    }
     const registry = dependencies.settingsRegistry;
     if (!registry) return;
-    const host = root ? $(root) : $(".simple-setting, .mini-simple-setting, .jhs-quick-setting").first();
-    if (!host.length) return;
     const descriptors = registry.list({ surfaces: ["quick"] });
     const binding = bindSettingRows(host, descriptors, { settings: dependencies.settings });
     host.data("jhsQuickSettingBinding", binding);
-    host.find("#moreBtn").off("click").on("click", (() => {
-      host.data("jhsQuickSettingBinding")?.dispose?.();
-      $(".simple-setting, .mini-simple-setting").html("").hide();
-      openSettingDialogFn("base-panel");
+    host.find("#moreBtn").off(".jhsQuickSetting").on("click.jhsQuickSetting", (async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const currentBinding = host.data("jhsQuickSettingBinding");
+      await currentBinding?.flush?.();
+      disposeQuickSettingHost(host);
+      await openSettingDialogFn("base-panel");
     }));
   }
   __name(initQuickSettingForm, "initQuickSettingForm");
@@ -9123,7 +9135,10 @@
       scope.listen(document, "click", ((event) => {
         const target = event.target instanceof Element ? event.target.closest("#setting-btn, #mini-setting-btn") : null;
         if (!target) return;
-        event.preventDefault(), $(".simple-setting, .mini-simple-setting").data("jhsQuickSettingBinding")?.dispose?.(), $(".simple-setting, .mini-simple-setting").html("").hide(), clog.lowZIndex(), void openSettings().catch((() => void 0));
+        event.preventDefault();
+        $(".simple-setting, .mini-simple-setting").each((_2, element) => disposeQuickSettingHost(element));
+        clog.lowZIndex();
+        void openSettings().catch((() => void 0));
       }));
       scope.addCleanup((() => this.unmountDesktopSettingNav()));
       this.syncDesktopSettingNav(this.getRuntimeService("profile").current() === "compact");
@@ -9152,28 +9167,30 @@
       l && (isDetailPage ? $("h3").before('\n                    <div class="container-fluid jhs-setting-detail-anchor">\n                        <div id="top-right-box" class="jhs-setting-anchor">\n                            <div class="setting-box">\n                                <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                    <span>设置</span>\n                                </button>\n                                <div class="simple-setting"></div>\n                            </div>\n                        </div>\n                    </div>\n               ') : window.isListPage && utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
         if (generation !== this._desktopNavGeneration || !this._desktopSettingNavMounted) return;
         $("#waitCheckBtn").parent().append('\n                    <div id="top-right-box" class="jhs-setting-anchor">\n                        <div class="setting-box">\n                            <button type="button" id="setting-btn" class="jhs-btn jhs-btn--dark">\n                                <span>设置</span>\n                            </button>\n                            <div class="simple-setting"></div>\n                        </div>\n                    </div>\n               ');
-      }), 1, 1e4, false, scope)), $(".main-nav, .container-fluid").off("mouseenter.jhsSettingQuick mouseleave.jhsSettingQuick").on("mouseenter.jhsSettingQuick", ".setting-box", (async () => {
-        $(".simple-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
+      }), 1, 1e4, false, scope)), $(".main-nav, .container-fluid").off("mouseenter.jhsSettingQuick mouseleave.jhsSettingQuick").on("mouseenter.jhsSettingQuick", ".setting-box", (async (event) => {
+        const host = $(event.currentTarget).find(".simple-setting");
+        disposeQuickSettingHost(host);
+        host.html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
         try {
-          await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this));
+          await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this), host);
         } catch (error) {
           clog.warn("桌面快捷设置初始化失败", error);
         }
         clog.lowZIndex();
-      })).on("mouseleave.jhsSettingQuick", ".setting-box", (() => {
-        $(".simple-setting").data("jhsQuickSettingBinding")?.dispose?.();
-        $(".simple-setting").html("").hide();
-      })).on("mouseenter.jhsSettingQuick", ".mini-setting-box", (async () => {
-        $(".mini-simple-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
+      })).on("mouseleave.jhsSettingQuick", ".setting-box", ((event) => {
+        disposeQuickSettingHost($(event.currentTarget).find(".simple-setting"));
+      })).on("mouseenter.jhsSettingQuick", ".mini-setting-box", (async (event) => {
+        const host = $(event.currentTarget).find(".mini-simple-setting");
+        disposeQuickSettingHost(host);
+        host.html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
         try {
-          await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this));
+          await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this), host);
         } catch (error) {
           clog.warn("迷你快捷设置初始化失败", error);
         }
         clog.lowZIndex();
-      })).on("mouseleave.jhsSettingQuick", ".mini-setting-box", (() => {
-        $(".mini-simple-setting").data("jhsQuickSettingBinding")?.dispose?.();
-        $(".mini-simple-setting").html("").hide();
+      })).on("mouseleave.jhsSettingQuick", ".mini-setting-box", ((event) => {
+        disposeQuickSettingHost($(event.currentTarget).find(".mini-simple-setting"));
       }));
     }
     unmountDesktopSettingNav() {
@@ -9181,9 +9198,8 @@
       this._desktopSettingNavMounted = false;
       this._settingNavResizeCleanup?.();
       this._settingNavResizeCleanup = null;
-      $(".simple-setting, .mini-simple-setting").data("jhsQuickSettingBinding")?.dispose?.();
+      $(".simple-setting, .mini-simple-setting").each((_2, element) => disposeQuickSettingHost(element));
       $(".jhs-setting-nav-item, .jhs-mini-setting-box, .jhs-setting-anchor, .jhs-setting-detail-anchor").remove();
-      $(".simple-setting, .mini-simple-setting").html("").hide();
       $(".main-nav, .container-fluid").off("mouseenter.jhsSettingQuick mouseleave.jhsSettingQuick");
     }
     async openQuickSetting() {
@@ -9194,8 +9210,8 @@
       const closeQuickSetting = /* @__PURE__ */ __name((restoreFocus = true) => {
         if (closed) return;
         closed = true, $(document).off("keydown.jhsQuickSetting");
-        const quickRoot = $("#jhs-quick-setting-sheet .jhs-quick-setting");
-        quickRoot.data("jhsQuickSettingBinding")?.dispose?.();
+        const quickRoot2 = $("#jhs-quick-setting-sheet .jhs-quick-setting");
+        disposeQuickSettingHost(quickRoot2);
         $("#jhs-quick-setting-backdrop, #jhs-quick-setting-sheet").remove();
         restoreFocus && previousFocus?.isConnected && "function" == typeof previousFocus.focus && previousFocus.focus();
       }, "closeQuickSetting");
@@ -9204,7 +9220,8 @@
             <header class="jhs-quick-setting__header"><h2 id="jhs-quick-setting-title">快捷设置</h2><button type="button" class="jhs-btn jhs-btn--ghost jhs-quick-setting__close" aria-label="关闭快捷设置">×</button></header>
             <div class="jhs-quick-setting"></div>
         </section>`);
-      sheet.find(".jhs-quick-setting").html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))), $("body").append(backdrop, sheet), clog.lowZIndex();
+      const quickRoot = sheet.find(".jhs-quick-setting");
+      quickRoot.html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))), $("body").append(backdrop, sheet), clog.lowZIndex();
       backdrop.on("click.jhsQuickSetting", (() => closeQuickSetting())), sheet.on("click.jhsQuickSetting", ".jhs-quick-setting__close", (() => closeQuickSetting())), $(document).off("keydown.jhsQuickSetting").on("keydown.jhsQuickSetting", ((event) => {
         if ("Escape" === event.key) return event.preventDefault(), closeQuickSetting();
         if ("Tab" !== event.key) return;
@@ -9216,7 +9233,7 @@
       try {
         await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), ((panel) => {
           closeQuickSetting(false), void this.openSettingDialog(panel).catch(((error) => clog.error("完整设置打开失败", error)));
-        })), sheet.find(".jhs-quick-setting__close").trigger("focus");
+        }), quickRoot), sheet.find(".jhs-quick-setting__close").trigger("focus");
       } catch (error) {
         closeQuickSetting(), clog.error("快捷设置初始化失败", error), show.error("快捷设置加载失败");
       }
@@ -17534,6 +17551,10 @@ ${failure.stack}` : "");
     return jhsEventBus;
   }
   __name(getListEventBus, "getListEventBus");
+  function normalizeCard(item) {
+    return item?.jquery ? item : $(item);
+  }
+  __name(normalizeCard, "normalizeCard");
   var LIST_EFFECT_KEYS = /* @__PURE__ */ new Set(["tagPosition", "defaultQuickFilterTab"]);
   var Te = {
     IS_FILTERED: {
@@ -17873,14 +17894,21 @@ ${failure.stack}` : "");
       }));
     }
     async translateListItems(e2) {
-      if (await storageManager.getSetting("translateTitle", _) !== _) return;
+      if (this.getRuntimeService("settings").snapshot().translateTitle !== _) return;
+      let failed = 0;
+      let firstError = null;
       await mapLimit(e2, 3, (async (item, index) => {
         try {
-          index > 0 && index % 8 == 0 && await this.yieldListFrame(), await this.translate(item);
+          if (index > 0 && index % 8 === 0) await this.yieldListFrame();
+          await this.translate(normalizeCard(item));
         } catch (error) {
-          clog.error("列表标题翻译失败", error);
+          failed++;
+          firstError ?? (firstError = error);
         }
       }));
+      if (failed) {
+        clog.error(`列表标题翻译失败 ${failed} 项`, firstError);
+      }
     }
     async filterMovieList(e2) {
       utils.time("累计耗费时间"), utils.time("读取数据耗时");
@@ -18181,7 +18209,9 @@ ${failure.stack}` : "");
     invalidateTranslations() {
       this.translationGeneration++;
     }
-    async translate(e2) {
+    async translate(input) {
+      const e2 = input?.jquery ? input : $(input);
+      if (!e2.length) return;
       let t2, n2, a2 = e2.find(".video-title");
       if (r ? (t2 = a2.contents().filter(((e3, t3) => 3 === t3.nodeType && "" !== (t3.textContent || "").trim())).text().trim(), n2 = e2.find(".video-title strong").text().trim()) : (t2 = (e2.find("img").attr("data-title") || "").trim(), n2 = (e2.find("a").attr("href") || "").split("/").filter(Boolean).pop()?.trim()), !t2 || !n2) return;
       const generation = this.translationGeneration, settings = this.getRuntimeService("settings");

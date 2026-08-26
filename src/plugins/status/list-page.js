@@ -21,6 +21,12 @@ function getListEventBus() {
     return jhsEventBus;
 }
 
+/** Normalize public list-card translation inputs (DOM Element or jQuery handle). */
+/** @param {any} item @returns {any} */
+function normalizeCard(item) {
+    return item?.jquery ? item : $(item);
+}
+
 /** settings-changed 中需要触发列表全量重判定的 key；其余（主题/Preview/截图/布局等）由各自 Feature 精确处理。 */
 const LIST_EFFECT_KEYS = new Set([ "tagPosition", "defaultQuickFilterTab" ]);
 
@@ -392,12 +398,24 @@ export class ListPagePlugin extends BasePlugin {
             this.recountFrame = null, this.recountStatuses();
         }));
     }
-    /** @param {JQueryHandle[]} e */
+    /** @param {(Element|JQueryHandle)[]} e */
     async translateListItems(e) {
-        if (await storageManager.getSetting("translateTitle", _) !== _) return;
+        if (this.getRuntimeService("settings").snapshot().translateTitle !== _) return;
+        let failed = 0;
+        /** @type {unknown} */
+        let firstError = null;
         await mapLimit(e, 3, (async (item, index) => {
-            try { index > 0 && index % 8 == 0 && await this.yieldListFrame(), await this.translate(item); } catch (error) { clog.error("列表标题翻译失败", error); }
+            try {
+                if (index > 0 && index % 8 === 0) await this.yieldListFrame();
+                await this.translate(normalizeCard(item));
+            } catch (error) {
+                failed++;
+                firstError ??= error;
+            }
         }));
+        if (failed) {
+            clog.error(`列表标题翻译失败 ${failed} 项`, firstError);
+        }
     }
     /** @param {Element[]} e */
     async filterMovieList(e) {
@@ -666,8 +684,10 @@ export class ListPagePlugin extends BasePlugin {
     invalidateTranslations() {
         this.translationGeneration++;
     }
-    /** @param {JQueryHandle} e */
-    async translate(e) {
+    /** @param {Element|JQueryHandle} input */
+    async translate(input) {
+        const e = input?.jquery ? input : $(input);
+        if (!e.length) return;
         let t, n, a = e.find(".video-title");
         if (r ? (t = a.contents().filter(((/** @type {number} */ e, /** @type {Node} */ t) => 3 === t.nodeType && "" !== (t.textContent || "").trim())).text().trim(),
         n = e.find(".video-title strong").text().trim()) : (t = (e.find("img").attr("data-title") || "").trim(),
