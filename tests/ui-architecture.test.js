@@ -196,6 +196,11 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(quickForm).not.toContain('$("#containerWidth").on("input"');
     });
 
+    it("waits for Full settings live writes before showing save success", () => {
+        expect(settingPlugin).toContain("await this._fullSettingBinding?.flush?.()");
+        expect(settingPlugin).toContain('const result = await saveSettingForm(this.getFormDependencies(), root);');
+    });
+
     it("uses semantic review and related layouts with safe external text", () => {
         expect(reviews).toContain("jhs-review-item");
         expect(reviewUi).toContain("document.createTextNode");

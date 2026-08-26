@@ -7889,6 +7889,7 @@
       }));
     });
     bindManualDirtyTracking(root);
+    bindKeywordDirtyTracking(root);
     bindLayoutRangeEvents(root, dependencies.busImg, dependencies.host, dependencies.settings);
   }
   __name(loadSettingForm, "loadSettingForm");
@@ -7924,23 +7925,26 @@
   __name(initQuickSettingForm, "initQuickSettingForm");
   async function saveSettingForm(dependencies, layerRoot = null) {
     const root = formRoot(layerRoot);
-    const nextWebDavUrl = String(root.find("#webDavUrl").val() || "").trim();
+    const dirtyKeys = root.data("jhsDirtyManualKeys") || null;
+    let nextWebDavUrl = null;
     let nextWebDavOrigin = null;
-    if (nextWebDavUrl) {
-      try {
-        const parsed = new URL(nextWebDavUrl);
-        if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("protocol");
-        nextWebDavOrigin = parsed.origin;
-      } catch {
-        throw new Error("WebDAV 地址必须是有效的 HTTP/HTTPS URL");
+    if (!dirtyKeys || dirtyKeys.has("webDavUrl")) {
+      nextWebDavUrl = String(root.find("#webDavUrl").val() || "").trim();
+      if (nextWebDavUrl) {
+        try {
+          const parsed = new URL(nextWebDavUrl);
+          if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("protocol");
+          nextWebDavOrigin = parsed.origin;
+        } catch {
+          throw new Error("WebDAV 地址必须是有效的 HTTP/HTTPS URL");
+        }
+      }
+      const currentTrusted = new Set(Array.isArray(dependencies.settings.snapshot().trustedLocalOrigins) ? dependencies.settings.snapshot().trustedLocalOrigins : []);
+      if (nextWebDavOrigin && !currentTrusted.has(nextWebDavOrigin)) {
+        const authorized = await new Promise((resolve) => utils.q(null, `仅授权 WebDAV 精确来源：${nextWebDavOrigin}，是否继续？`, () => resolve(true), () => resolve(false)));
+        if (!authorized) return { canceled: true };
       }
     }
-    const currentTrusted = new Set(Array.isArray(dependencies.settings.snapshot().trustedLocalOrigins) ? dependencies.settings.snapshot().trustedLocalOrigins : []);
-    if (nextWebDavOrigin && !currentTrusted.has(nextWebDavOrigin)) {
-      const authorized = await new Promise((resolve) => utils.q(null, `仅授权 WebDAV 精确来源：${nextWebDavOrigin}，是否继续？`, () => resolve(true), () => resolve(false)));
-      if (!authorized) return { canceled: true };
-    }
-    const dirtyKeys = root.data("jhsDirtyManualKeys") || null;
     const patch = await collectManualSettingPatch(root, dirtyKeys);
     await dependencies.settings.update((draft) => {
       Object.assign(draft, patch);
@@ -7952,23 +7956,29 @@
     });
     root.data("jhsDirtyManualKeys", /* @__PURE__ */ new Set());
     const keywordErrors = [];
-    try {
-      const reviewKeywords = root.find("#reviewKeywordContainer .keyword-label").toArray().map((element) => {
-        const text = $(element).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
-        return text;
-      });
-      await storageManager.saveReviewFilterKeyword(reviewKeywords);
-    } catch (error) {
-      keywordErrors.push(error);
+    const dirtyReviewKeywords = root.data("jhsDirtyReviewKeywords") === true;
+    const dirtyTitleKeywords = root.data("jhsDirtyTitleKeywords") === true;
+    if (dirtyReviewKeywords) {
+      try {
+        const reviewKeywords = root.find("#reviewKeywordContainer .keyword-label").toArray().map((element) => {
+          const text = $(element).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
+          return text;
+        });
+        await storageManager.saveReviewFilterKeyword(reviewKeywords);
+      } catch (error) {
+        keywordErrors.push(error);
+      }
     }
-    try {
-      const titleKeywords = root.find("#filterKeywordContainer .keyword-label").toArray().map((element) => {
-        const text = $(element).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
-        return text;
-      });
-      await storageManager.saveTitleFilterKeyword(titleKeywords);
-    } catch (error) {
-      keywordErrors.push(error);
+    if (dirtyTitleKeywords) {
+      try {
+        const titleKeywords = root.find("#filterKeywordContainer .keyword-label").toArray().map((element) => {
+          const text = $(element).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
+          return text;
+        });
+        await storageManager.saveTitleFilterKeyword(titleKeywords);
+      } catch (error) {
+        keywordErrors.push(error);
+      }
     }
     if (keywordErrors.length) {
       const error = new Error("部分设置保存失败，请重试");
@@ -7976,6 +7986,8 @@
       error.cause = keywordErrors[0];
       throw error;
     }
+    root.data("jhsDirtyReviewKeywords", false);
+    root.data("jhsDirtyTitleKeywords", false);
     try {
       await settingsEventBus.emit("filter-rules-changed", { scope: "title-keyword" });
       dependencies.newVideo?.resetBtnTip?.();
@@ -7987,6 +7999,18 @@
     return { ok: true };
   }
   __name(saveSettingForm, "saveSettingForm");
+  function bindKeywordDirtyTracking(root) {
+    root.data("jhsDirtyReviewKeywords", false);
+    root.data("jhsDirtyTitleKeywords", false);
+    const markDirty = /* @__PURE__ */ __name((dataKey) => () => root.data(dataKey, true), "markDirty");
+    root.find("#reviewKeywordContainer").off(".jhsKeywordDirty").on("click.jhsKeywordDirty", ".add-tag-btn, .keyword-remove", markDirty("jhsDirtyReviewKeywords")).on("keypress.jhsKeywordDirty", ".keyword-input", (event) => {
+      if ("Enter" === event.key) root.data("jhsDirtyReviewKeywords", true);
+    });
+    root.find("#filterKeywordContainer").off(".jhsKeywordDirty").on("click.jhsKeywordDirty", ".add-tag-btn, .keyword-remove", markDirty("jhsDirtyTitleKeywords")).on("keypress.jhsKeywordDirty", ".keyword-input", (event) => {
+      if ("Enter" === event.key) root.data("jhsDirtyTitleKeywords", true);
+    });
+  }
+  __name(bindKeywordDirtyTracking, "bindKeywordDirtyTracking");
   async function collectManualSettingPatch(root, dirtyKeys = null) {
     const patch = {};
     for (const key of MANUAL_FORM_SETTING_KEYS) {
@@ -9445,6 +9469,7 @@
         if (button.data("jhsBusy") || "true" !== button.attr("data-jhs-settings-ready")) return;
         button.data("jhsBusy", true).prop("disabled", true).attr("aria-busy", "true");
         try {
+          await this._fullSettingBinding?.flush?.();
           const result = await saveSettingForm(this.getFormDependencies(), root);
           if (result?.canceled) return;
           show.ok("保存成功");
@@ -10831,6 +10856,7 @@ ${value}\r
 
   // src/ui/translation/title-translation.js
   async function renderTranslatedTitle(options) {
+    if (options.isActive && options.isActive() === false) return;
     const jq = globalThis.$;
     const root = options.root ? jq(options.root) : jq(document);
     let title = root.find(".origin-title").first();
@@ -11461,9 +11487,10 @@ ${value}\r
       context.root.find('[data-jhs-role="screenshot"]').empty();
     }
     applyFc2Translation(context) {
+      const settings = this.getRuntimeService("settings");
+      if (!context.isAlive() || (settings.snapshot().translateTitle ?? _) !== _) return;
       const generation = (context.translationGeneration || 0) + 1;
       context.translationGeneration = generation;
-      const settings = this.getRuntimeService("settings");
       Promise.resolve().then((() => this.getRuntimeService("scope")())).then((scope) => renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope, isActive: /* @__PURE__ */ __name(() => context.isAlive() && (settings.snapshot().translateTitle ?? _) === _ && generation === context.translationGeneration, "isActive") })).catch(((error) => clog.error("FC2 标题翻译失败", error)));
     }
     revertFc2Translation(context) {
@@ -18426,10 +18453,37 @@ ${failure.stack}` : "");
       if (!window.isListPage || $("#jhs-page-commandbar").length) return;
       this.buildCommandBar();
     }
+    collectDesktopCommandSources() {
+      const selectors = [
+        "#waitCheckBtn",
+        "#newVideoBtn",
+        "#historyBtn",
+        "#statsBtn",
+        "#blacklistBtn",
+        "#jhs-quick-filter",
+        "#addBlacklistBtn",
+        ".jhs-sort-control",
+        "#filterAllVideo",
+        "#favoriteAllVideo",
+        "#hasDownAllVideo"
+      ];
+      const collected = [];
+      for (const selector of selectors) {
+        const item = $(selector).first();
+        if (!item.length) continue;
+        if (item.closest("#jhs-page-commandbar, #jhs-commandbar-parking").length) continue;
+        collected.push({ element: item[0], parent: null, next: null });
+      }
+      return collected;
+    }
     unmountDesktopCommandBar() {
       let parking = $("#jhs-commandbar-parking");
       if (!parking.length) {
         parking = $('<div id="jhs-commandbar-parking" hidden></div>').appendTo("body");
+      }
+      const existing = new Set((this._commandBarSources || []).map((source) => source.element));
+      for (const source of this.collectDesktopCommandSources()) {
+        if (!existing.has(source.element)) this._commandBarSources.push(source);
       }
       const sources = [...this._commandBarSources || []];
       for (const source of sources) {

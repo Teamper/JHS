@@ -93,6 +93,18 @@ describe("mobile detail FAB", () => {
 });
 
 describe("desktop commandbar restore (regular ↔ compact)", () => {
+    it("parks desktop sources even when commandbar was never built (initial compact)", () => {
+        const { $, plugin } = loadMobilePlugin();
+        plugin.getSelector = () => ({ boxSelector: ".movie-list" });
+        $("body").html('<div class="movie-list"></div><button type="button" id="waitCheckBtn">开始鉴定</button><button type="button" id="newVideoBtn">新作品</button><div id="jhs-quick-filter"></div><div class="jhs-sort-control"><button id="sort-toggle-btn">排序</button></div>');
+        plugin.unmountDesktopCommandBar();
+        expect($("#jhs-page-commandbar").length).toBe(0);
+        expect($("#jhs-commandbar-parking").length).toBe(1);
+        for (const selector of [ "#waitCheckBtn", "#newVideoBtn", "#jhs-quick-filter", ".jhs-sort-control" ]) {
+            expect($(selector).closest("#jhs-commandbar-parking").length).toBe(1);
+        }
+    });
+
     it("restores every source control before removing the shell and keeps handlers alive", () => {
         const { $, plugin } = loadMobilePlugin();
         plugin.getSelector = () => ({ boxSelector: ".movie-list" });

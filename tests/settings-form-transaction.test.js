@@ -53,3 +53,14 @@ describe("manual form dirty tracking", () => {
         expect(source).toContain("if (!dirtyKeys.has(key)) delete patch[key]");
     });
 });
+
+describe("keyword dirty-only save", () => {
+    it("only writes keyword stores when the corresponding keywords were changed", () => {
+        expect(source).toContain("jhsDirtyReviewKeywords");
+        expect(source).toContain("jhsDirtyTitleKeywords");
+        expect(source).toContain("if (dirtyReviewKeywords)");
+        expect(source).toContain("if (dirtyTitleKeywords)");
+        expect(source).toContain('root.data("jhsDirtyReviewKeywords", false)');
+        expect(source).toContain('root.data("jhsDirtyTitleKeywords", false)');
+    });
+});

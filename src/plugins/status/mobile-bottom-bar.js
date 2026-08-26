@@ -232,11 +232,32 @@ export class MobileBottomBarPlugin extends BasePlugin {
         if (!window.isListPage || $("#jhs-page-commandbar").length) return;
         this.buildCommandBar();
     }
+    /** 收集当前页面中所有桌面工具栏来源控件（无论是否曾被 buildCommandBar 收拢）。 */
+    collectDesktopCommandSources() {
+        const selectors = [
+            "#waitCheckBtn", "#newVideoBtn", "#historyBtn",
+            "#statsBtn", "#blacklistBtn", "#jhs-quick-filter", "#addBlacklistBtn",
+            ".jhs-sort-control", "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo",
+        ];
+        const collected = [];
+        for (const selector of selectors) {
+            const item = $(selector).first();
+            if (!item.length) continue;
+            if (item.closest("#jhs-page-commandbar, #jhs-commandbar-parking").length) continue;
+            collected.push({ element: item[0], parent: null, next: null });
+        }
+        return collected;
+    }
+
     /** 卸载桌面命令栏并把被收拢的控件移入隐藏 parking，避免 compact 下与 FAB 双 Surface 共存。 */
     unmountDesktopCommandBar() {
         let parking = $("#jhs-commandbar-parking");
         if (!parking.length) {
             parking = $('<div id="jhs-commandbar-parking" hidden></div>').appendTo("body");
+        }
+        const existing = new Set((this._commandBarSources || []).map((source) => source.element));
+        for (const source of this.collectDesktopCommandSources()) {
+            if (!existing.has(source.element)) this._commandBarSources.push(source);
         }
         const sources = [ ...(this._commandBarSources || []) ];
         for (const source of sources) {

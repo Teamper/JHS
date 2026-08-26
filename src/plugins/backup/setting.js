@@ -469,6 +469,9 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             if (button.data("jhsBusy") || "true" !== button.attr("data-jhs-settings-ready")) return;
             button.data("jhsBusy", !0).prop("disabled", !0).attr("aria-busy", "true");
             try {
+                // Success toast must only appear after all pending live writes on
+                // this Full settings surface have settled.
+                await this._fullSettingBinding?.flush?.();
                 const result = await saveSettingForm(this.getFormDependencies(), root);
                 if (result?.canceled) return;
                 show.ok("保存成功");

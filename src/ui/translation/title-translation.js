@@ -4,6 +4,9 @@
  * @param {{root?: any, carNum?: string, translation: import("../../services/translation-service.js").TranslationService, scope?: import("../../core/lifecycle-scope.js").LifecycleScope, isActive?: () => boolean}} options
  */
 export async function renderTranslatedTitle(options) {
+    // Double gate: never create DOM or start a network request when the feature
+    // is already disabled at call time.
+    if (options.isActive && options.isActive() === false) return;
     const jq = /** @type {any} */ (globalThis).$;
     const root = options.root ? jq(options.root) : jq(document);
     let title = root.find(".origin-title").first();

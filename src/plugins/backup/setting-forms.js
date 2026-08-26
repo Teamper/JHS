@@ -172,6 +172,7 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
         }));
     });
     bindManualDirtyTracking(root);
+    bindKeywordDirtyTracking(root);
     bindLayoutRangeEvents(root, dependencies.busImg, dependencies.host, dependencies.settings);
 }
 
@@ -219,24 +220,31 @@ export async function initQuickSettingForm(dependencies, getSelector, openSettin
 /** @param {SettingDependencies} dependencies @param {any} [layerRoot] */
 export async function saveSettingForm(dependencies, layerRoot = null) {
     const root = formRoot(layerRoot);
-    const nextWebDavUrl = String(root.find("#webDavUrl").val() || "").trim();
+    const dirtyKeys = root.data("jhsDirtyManualKeys") || null;
+    /** @type {string | null} */
+    let nextWebDavUrl = null;
+    /** @type {string | null} */
     let nextWebDavOrigin = null;
-    if (nextWebDavUrl) {
-        try {
-            const parsed = new URL(nextWebDavUrl);
-            if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("protocol");
-            nextWebDavOrigin = parsed.origin;
-        } catch {
-            throw new Error("WebDAV 地址必须是有效的 HTTP/HTTPS URL");
+    // WebDAV validation/authorization only applies when the user actually changed
+    // the WebDAV URL; unrelated saves must not be blocked by a historical URL.
+    if (!dirtyKeys || dirtyKeys.has("webDavUrl")) {
+        nextWebDavUrl = String(root.find("#webDavUrl").val() || "").trim();
+        if (nextWebDavUrl) {
+            try {
+                const parsed = new URL(nextWebDavUrl);
+                if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("protocol");
+                nextWebDavOrigin = parsed.origin;
+            } catch {
+                throw new Error("WebDAV 地址必须是有效的 HTTP/HTTPS URL");
+            }
+        }
+        const currentTrusted = new Set(Array.isArray(dependencies.settings.snapshot().trustedLocalOrigins) ? dependencies.settings.snapshot().trustedLocalOrigins : []);
+        if (nextWebDavOrigin && !currentTrusted.has(nextWebDavOrigin)) {
+            const authorized = await new Promise((resolve) => utils.q(null, `仅授权 WebDAV 精确来源：${nextWebDavOrigin}，是否继续？`, () => resolve(true), () => resolve(false)));
+            if (!authorized) return { canceled: true };
         }
     }
-    const currentTrusted = new Set(Array.isArray(dependencies.settings.snapshot().trustedLocalOrigins) ? dependencies.settings.snapshot().trustedLocalOrigins : []);
-    if (nextWebDavOrigin && !currentTrusted.has(nextWebDavOrigin)) {
-        const authorized = await new Promise((resolve) => utils.q(null, `仅授权 WebDAV 精确来源：${nextWebDavOrigin}，是否继续？`, () => resolve(true), () => resolve(false)));
-        if (!authorized) return { canceled: true };
-    }
 
-    const dirtyKeys = root.data("jhsDirtyManualKeys") || null;
     const patch = await collectManualSettingPatch(root, dirtyKeys);
     await dependencies.settings.update((/** @type {Record<string, any>} */ draft) => {
         Object.assign(draft, patch);
@@ -249,23 +257,29 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
     root.data("jhsDirtyManualKeys", new Set());
 
     const keywordErrors = [];
-    try {
-        const reviewKeywords = root.find("#reviewKeywordContainer .keyword-label").toArray().map((/** @type {Element} */ element) => {
-            const text = $(element).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
-            return text;
-        });
-        await storageManager.saveReviewFilterKeyword(reviewKeywords);
-    } catch (error) {
-        keywordErrors.push(error);
+    const dirtyReviewKeywords = root.data("jhsDirtyReviewKeywords") === true;
+    const dirtyTitleKeywords = root.data("jhsDirtyTitleKeywords") === true;
+    if (dirtyReviewKeywords) {
+        try {
+            const reviewKeywords = root.find("#reviewKeywordContainer .keyword-label").toArray().map((/** @type {Element} */ element) => {
+                const text = $(element).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
+                return text;
+            });
+            await storageManager.saveReviewFilterKeyword(reviewKeywords);
+        } catch (error) {
+            keywordErrors.push(error);
+        }
     }
-    try {
-        const titleKeywords = root.find("#filterKeywordContainer .keyword-label").toArray().map((/** @type {Element} */ element) => {
-            const text = $(element).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
-            return text;
-        });
-        await storageManager.saveTitleFilterKeyword(titleKeywords);
-    } catch (error) {
-        keywordErrors.push(error);
+    if (dirtyTitleKeywords) {
+        try {
+            const titleKeywords = root.find("#filterKeywordContainer .keyword-label").toArray().map((/** @type {Element} */ element) => {
+                const text = $(element).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
+                return text;
+            });
+            await storageManager.saveTitleFilterKeyword(titleKeywords);
+        } catch (error) {
+            keywordErrors.push(error);
+        }
     }
     if (keywordErrors.length) {
         const error = /** @type {any} */ (new Error("部分设置保存失败，请重试"));
@@ -273,6 +287,8 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
         error.cause = keywordErrors[0];
         throw error;
     }
+    root.data("jhsDirtyReviewKeywords", false);
+    root.data("jhsDirtyTitleKeywords", false);
 
     // Best-effort UI post-processing; it must never turn a successful save into a failure.
     try {
@@ -284,6 +300,19 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
         if (typeof /** @type {any} */ (globalThis).clog?.error === "function") /** @type {any} */ (globalThis).clog.error("设置保存后 UI 刷新失败（已忽略）", error);
     }
     return { ok: true };
+}
+
+/** @param {any} root */
+function bindKeywordDirtyTracking(root) {
+    root.data("jhsDirtyReviewKeywords", false);
+    root.data("jhsDirtyTitleKeywords", false);
+    const markDirty = (/** @type {string} */ dataKey) => () => root.data(dataKey, true);
+    root.find("#reviewKeywordContainer").off(".jhsKeywordDirty").on("click.jhsKeywordDirty", ".add-tag-btn, .keyword-remove", markDirty("jhsDirtyReviewKeywords")).on("keypress.jhsKeywordDirty", ".keyword-input", (/** @type {any} */ event) => {
+        if ("Enter" === event.key) root.data("jhsDirtyReviewKeywords", true);
+    });
+    root.find("#filterKeywordContainer").off(".jhsKeywordDirty").on("click.jhsKeywordDirty", ".add-tag-btn, .keyword-remove", markDirty("jhsDirtyTitleKeywords")).on("keypress.jhsKeywordDirty", ".keyword-input", (/** @type {any} */ event) => {
+        if ("Enter" === event.key) root.data("jhsDirtyTitleKeywords", true);
+    });
 }
 
 /** @param {any} root @param {Set<string> | null | undefined} [dirtyKeys] */

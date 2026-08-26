@@ -258,9 +258,10 @@ export class Fc2Plugin extends BasePlugin {
     /** ON：按当前 DOM 标题重新翻译（原生/123AV 共用 .current-title）；所有翻译入口唯一实现。 */
     /** @param {Fc2DetailContext} context */
     applyFc2Translation(context) {
+        const settings = this.getRuntimeService("settings");
+        if (!context.isAlive() || (settings.snapshot().translateTitle ?? _) !== _) return;
         const generation = (context.translationGeneration || 0) + 1;
         context.translationGeneration = generation;
-        const settings = this.getRuntimeService("settings");
         Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope, isActive: () => context.isAlive() && (settings.snapshot().translateTitle ?? _) === _ && generation === context.translationGeneration })).catch((error => clog.error("FC2 标题翻译失败", error)));
     }
     /** OFF：移除 FC2 已渲染的翻译节点。 */
