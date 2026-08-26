@@ -17414,7 +17414,7 @@ ${failure.stack}` : "");
     }
     async syncSortUi() {
       const settings = this.getRuntimeService("settings");
-      const autoPage = settings.snapshot().autoPage;
+      const autoPage = settings.snapshot().autoPage ?? _;
       const live = this.supportsLiveSorting();
       const toggle = $("#sort-toggle-btn");
       if (!toggle.length) return;
@@ -17592,7 +17592,7 @@ ${failure.stack}` : "");
     async sortItems(methodOverride) {
       const e2 = this.supportsLiveSorting();
       if (!this.supportsSorting()) return;
-      const s2 = this.getRuntimeService("settings").snapshot().autoPage;
+      const s2 = this.getRuntimeService("settings").snapshot().autoPage ?? _;
       if (c || s2 === _ && !e2 && methodOverride !== "default") return;
       const t2 = methodOverride || this.getRuntimeService("settings").snapshot().sortMethod;
       if (!t2) return;
@@ -18001,7 +18001,7 @@ ${failure.stack}` : "");
       }));
     }
     async translateListItems(e2) {
-      if (this.getRuntimeService("settings").snapshot().translateTitle !== _) return;
+      if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) !== _) return;
       let failed = 0;
       let firstError = null;
       await mapLimit(e2, 3, (async (item, index) => {
@@ -18326,7 +18326,7 @@ ${failure.stack}` : "");
       const generation = this.translationGeneration, settings = this.getRuntimeService("settings");
       const scope = await this.getRuntimeService("scope")();
       const translated = await this.getRuntimeService("translation").translate(t2, { scope });
-      if (generation !== this.translationGeneration || settings?.snapshot?.().translateTitle !== "yes") return;
+      if (generation !== this.translationGeneration || (settings?.snapshot?.().translateTitle ?? _) !== _) return;
       this.applyTranslatedTitle(e2, translated, n2);
     }
     async revertTranslation() {

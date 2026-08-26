@@ -31,7 +31,7 @@ export class ListPageButtonPlugin extends BasePlugin {
     /** 根据 autoPage 与当前站点能力同步排序控件；AutoPage ON 且不支持 live sorting 时明确进入“默认（瀑布流）”。 */
     async syncSortUi() {
         const settings = this.getRuntimeService("settings");
-        const autoPage = settings.snapshot().autoPage;
+        const autoPage = settings.snapshot().autoPage ?? _;
         const live = this.supportsLiveSorting();
         const toggle = $("#sort-toggle-btn");
         if (!toggle.length) return;
@@ -170,7 +170,7 @@ export class ListPageButtonPlugin extends BasePlugin {
     async sortItems(methodOverride) {
         const e = this.supportsLiveSorting();
         if (!this.supportsSorting()) return;
-        const s = this.getRuntimeService("settings").snapshot().autoPage;
+        const s = this.getRuntimeService("settings").snapshot().autoPage ?? _;
         if (c || (s === _ && !e && methodOverride !== "default")) return;
         const t = methodOverride || this.getRuntimeService("settings").snapshot().sortMethod;
         if (!t) return;

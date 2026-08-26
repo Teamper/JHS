@@ -76,6 +76,16 @@ describe("translation DOM/jQuery contract", () => {
         expect(clog.error).not.toHaveBeenCalled();
     });
 
+    it("treats missing translateTitle as enabled by default", async () => {
+        const { dom, listPage, translate } = createListHarness();
+        listPage.runtimeServices.settings.snapshot = () => ({});
+        const items = Array.from(dom.window.document.querySelectorAll(".movie-list .item"));
+
+        await listPage.translateListItems(items);
+
+        expect(translate).toHaveBeenCalledTimes(2);
+    });
+
     it("requires an explicit quick root and throws instead of guessing globally", async () => {
         const rootDom = new JSDOM("<!DOCTYPE html><body></body>", { url: "https://javdb.com/" });
         vi.stubGlobal("$", jqueryFactory(rootDom.window));

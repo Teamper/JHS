@@ -400,7 +400,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {(Element|JQueryHandle)[]} e */
     async translateListItems(e) {
-        if (this.getRuntimeService("settings").snapshot().translateTitle !== _) return;
+        if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) !== _) return;
         let failed = 0;
         /** @type {unknown} */
         let firstError = null;
@@ -697,7 +697,7 @@ export class ListPagePlugin extends BasePlugin {
         const generation = this.translationGeneration, settings = this.getRuntimeService("settings");
         const scope = await this.getRuntimeService("scope")();
         const translated = await this.getRuntimeService("translation").translate(t, { scope });
-        if (generation !== this.translationGeneration || settings?.snapshot?.().translateTitle !== "yes") return;
+        if (generation !== this.translationGeneration || (settings?.snapshot?.().translateTitle ?? _) !== _) return;
         this.applyTranslatedTitle(e, translated, n);
     }
     async revertTranslation() {

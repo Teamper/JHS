@@ -36,6 +36,18 @@ describe("FC2 list sorting", () => {
         expect(loaded.$(".movie-list > .item").map(((index, item) => item.id)).get()).toEqual([ "fifty-five", "thirty-two", "five", "two" ]);
     });
 
+    it("treats missing autoPage as enabled and blocks non-live sorting", async () => {
+        const loaded = loadPlugin("https://javdb.com/actors/abc", `<div class="movie-list">
+            <div class="item" id="two"><div class="score">1.0分, 由2人评价</div></div>
+            <div class="item" id="fifty-five"><div class="score">3.50分, 由55人评价</div></div>
+        </div>`);
+        loaded.setSortMethod("rateCount");
+
+        await loaded.plugin.sortItems("rateCount");
+
+        expect(loaded.$(".movie-list > .item").map(((index, item) => item.id)).get()).toEqual([ "two", "fifty-five" ]);
+    });
+
     it("recognizes FC2 advanced search as a live-sort page", () => {
         const loaded = loadPlugin("https://javdb.com/advanced_search?score_min=0&type=3", '<div class="movie-list"></div>');
         expect(loaded.plugin.isFc2ListPage()).toBe(true);
