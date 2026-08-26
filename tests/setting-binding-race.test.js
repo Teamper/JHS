@@ -134,4 +134,21 @@ describe("SettingBindingHub race and static control contracts", () => {
         expect(root.find("input").is(":checked")).toBe(false);
         expect(settings.snapshot().k).toBe("no");
     });
+
+    it("flush with throwOnFailure reports live persistence failures", async () => {
+        const { jq } = makeJq('<div id="root"></div>');
+        const stored = { setting: { k: "no" } };
+        const settings = new SettingsService({
+            get: async () => stored.setting,
+            set: async () => { throw new Error("storage down"); },
+        });
+        await settings.load();
+
+        const root = jq("#root");
+        const binding = checkboxBinding(jq, root, settings);
+        root.find("input").prop("checked", true).trigger("change");
+        await expect(binding.flush({ throwOnFailure: true })).rejects.toThrow("部分实时设置保存失败");
+        expect(root.find("input").is(":checked")).toBe(false);
+        expect(settings.snapshot().k).toBe("no");
+    });
 });

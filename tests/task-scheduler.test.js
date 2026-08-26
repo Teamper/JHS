@@ -87,7 +87,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         window: Object.assign(dom.window, { isListPage: true }), document: dom.window.document, navigator: { locks }, localStorage, gmHttp, storageManager, $, BasePlugin, StorageQueue,
         T: "javdb", I: "javbus", D: "censored", A: "uncensored", _: "yes", l: false,
         utils: { sleep: vi.fn(async () => {}), getNowStr: (a = "-", b = ":", timestamp = null) => format(null == timestamp ? clock.now : timestamp), getHourDifference: (left, right) => Math.floor(Math.abs(right.getTime() - left.getTime()) / 36e5), genericSort: items => [ ...items ], htmlTo$dom: html => $(new JSDOM(html, { url: "https://javdb.com/" }).window.document) },
-        clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() }, show: { info: vi.fn(), error: vi.fn() }, i: (target, key, value) => target[key] = value,
+        clog: { log: vi.fn(), html: vi.fn(), htmlDebug: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() }, show: { info: vi.fn(), error: vi.fn() }, i: (target, key, value) => target[key] = value,
         jhsEventBus, normalizeCarNum: value => String(value || "").toUpperCase(),
         readListItem: element => ({ carNum: element.attr("data-car"), url: element.attr("data-url"), title: element.attr("data-title") || "", publishTime: element.attr("data-date") || "" }),
         setTimeout, clearTimeout

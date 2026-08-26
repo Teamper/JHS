@@ -400,20 +400,24 @@ export function buildThemeCss() {
 }
 
 /** 将 themeMode 设置(light/dark/auto)解析为具体主题并应用到 documentElement。 */
-export async function applyTheme() {
-    const mode = await storageManager.getSetting("themeMode", "light");
+export function applyThemeMode(mode = "light") {
     let resolved = "light";
     if ("dark" === mode) resolved = "dark";
     else if ("auto" === mode) resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     document.documentElement.setAttribute("data-jhs-theme", resolved);
 }
 
+/** @deprecated Prefer applyThemeMode(snapshot.themeMode) to avoid legacy cache reads. */
+export async function applyTheme() {
+    const mode = await storageManager.getSetting("themeMode", "light");
+    applyThemeMode(mode);
+}
+
 /** @param {import("./lifecycle-scope.js").LifecycleScope} scope */
 export function initializeThemeRuntime(scope) {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     scope.listen(media, "change", () => {
-        storageManager.getSetting("themeMode", "light").then(((/** @type {unknown} */ mode) => {
-            if ("auto" === mode) void applyTheme();
-        }));
+        const mode = /** @type {any} */ (globalThis).settingsService?.snapshot?.().themeMode ?? storageManager.getSettingSync("themeMode", "light");
+        if ("auto" === mode) applyThemeMode(mode);
     });
 }

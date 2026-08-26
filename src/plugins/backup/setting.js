@@ -5,14 +5,14 @@ import { normalizeQuickFilterKey } from "../../features/list/list-filters.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
 import { registerSettingsUiOwner } from "../../core/settings-ui-owner.js";
-import { applyTheme } from "../../core/theme.js";
+import { applyThemeMode } from "../../core/theme.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
 import { BUILT_IN_NATIVE_MAGNET_SOURCES, ResourceSettingsService, buildCustomMagnetSource, validateRule } from "../../services/resource-settings-service.js";
 import { BUILT_IN_SCREENSHOT_SOURCES } from "../../services/screenshot-sources.js";
 import { backupDataByWebDav, backupListBtnByWebDav, exportSettingData, importSettingData, openFileListDialog } from "./setting-backup.js";
 import { disposeQuickSettingHost, initQuickSettingForm, loadSettingForm, saveSettingForm } from "./setting-forms.js";
 import { renderDataHealthPanel, renderNetworkPanel, renderPluginMgmtPanel, renderSnapshotPanel, repairDataHealthWithBackup, showDiffPreview } from "./setting-panels.js";
-import { applyImageMode, buildSettingCss } from "./setting-styles.js";
+import { applyLayoutFromSettings, buildSettingCss } from "./setting-styles.js";
 import { buildQuickSettingHtml, buildSettingDialogHtml, injectHealthPanel, injectNetworkPanel, injectPluginMgmtPanel, injectResourceSourcesPanel, injectSnapshotPanel } from "./setting-templates.js";
 import { bindSettingControl } from "../../ui/settings/setting-binding-controller.js";
 import { bindSettingRows, renderSettingRow } from "../../ui/settings/setting-control-renderer.js";
@@ -71,11 +71,11 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         });
     }
     async initCss() {
-        const e = await storageManager.getSetting();
+        const e = this.getRuntimeService("settings").snapshot();
         let t = (null == e ? void 0 : e.containerWidth) ?? "100";
         utils.isMobileMode() && (t = "100");
         let n = utils.isMobileMode() ? 1 : (null == e ? void 0 : e.containerColumns) ?? 5;
-        applyImageMode(this.getOptionalDependency("BusImgPlugin")).catch((e => clog.error("[JHS] applyImageMode failed:", e)));
+        applyLayoutFromSettings(e, { busImgPlugin: this.getOptionalDependency("BusImgPlugin"), hostAdapter: this.getRuntimeService("host") }).catch((error => clog.error("[JHS] applyLayoutFromSettings failed:", error)));
         return buildSettingCss(t, n, l, r);
     }
     async handle() {
@@ -94,14 +94,14 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
             if (!names.length) return;
-            if (names.includes("themeMode")) void applyTheme();
+            if (names.includes("themeMode")) applyThemeMode(liveSettings.snapshot().themeMode);
             if (names.includes("enableClog")) {
                 const value = liveSettings.snapshot().enableClog;
                 if (value === "yes") clog.show();
                 else clog.hide();
             }
             if (names.some((name) => [ "mobileMode", "enableVerticalModel", "containerColumns", "containerWidth" ].includes(name))) {
-                void applyImageMode(this.getOptionalDependency("BusImgPlugin")).catch((/** @type {unknown} */ error) => clog.error("布局设置应用失败", error));
+                void applyLayoutFromSettings(liveSettings.snapshot(), { busImgPlugin: this.getOptionalDependency("BusImgPlugin"), hostAdapter: this.getRuntimeService("host") }).catch((/** @type {unknown} */ error) => clog.error("布局设置应用失败", error));
             }
         };
         liveSettings.addEventListener("settings.changed", onSettingsChanged);
@@ -347,9 +347,9 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 dynamicBinding?.sync?.(snapshot);
                 for (const binding of staticBindings) binding.sync?.(snapshot);
             },
-            flush: async () => {
-                await dynamicBinding?.flush?.();
-                await Promise.all(staticBindings.map((binding) => binding.flush?.()));
+            flush: async (options) => {
+                await dynamicBinding?.flush?.(options);
+                await Promise.all(staticBindings.map((binding) => binding.flush?.(options)));
             },
             dispose: () => {
                 dynamicBinding?.dispose?.();
@@ -476,7 +476,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             try {
                 // Success toast must only appear after all pending live writes on
                 // this Full settings surface have settled.
-                await this._fullSettingBinding?.flush?.();
+                await this._fullSettingBinding?.flush?.({ throwOnFailure: true });
                 const result = await saveSettingForm(this.getFormDependencies(), root);
                 if (result?.canceled) return;
                 show.ok("保存成功");

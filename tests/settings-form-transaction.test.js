@@ -50,7 +50,8 @@ describe("manual form dirty tracking", () => {
         expect(source).toContain("MANUAL_FORM_SELECTORS");
         expect(source).toContain("bindManualDirtyTracking");
         expect(source).toContain('root.data("jhsDirtyManualKeys", new Set())');
-        expect(source).toContain("if (!dirtyKeys.has(key)) delete patch[key]");
+        expect(source).toContain("MANUAL_FORM_SETTING_KEYS.filter((key) => dirtyKeys.has(key))");
+        expect(source).not.toContain("for (const key of MANUAL_FORM_SETTING_KEYS) {\n        patch[key] = undefined;");
     });
 });
 

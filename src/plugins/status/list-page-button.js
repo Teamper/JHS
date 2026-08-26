@@ -17,10 +17,41 @@ export class ListPageButtonPlugin extends BasePlugin {
     async handle() {
         if (!window.isListPage) return;
         const scope = await this.getRuntimeService("scope")();
+        const settings = this.getRuntimeService("settings");
         await this.createMenuBtn(scope), this.bindEvent();
-        const e = await storageManager.getSetting("autoPage"), t = this.supportsLiveSorting();
-        $("#sort-toggle-btn").prop("disabled", e === _ && !t).attr("title", e === _ && !t ? "瀑布流模式仅支持默认排序" : "选择列表排序方式"),
-        (e !== _ || t) && await this.sortItems();
+        const onSettingsChanged = (/** @type {any} */ event) => {
+            const names = /** @type {string[] | undefined} */ (event.detail?.names);
+            if (!names?.includes("autoPage")) return;
+            void this.syncSortUi().catch((/** @type {unknown} */ error) => clog.error("排序状态同步失败", error));
+        };
+        settings.addEventListener("settings.changed", onSettingsChanged);
+        scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
+        await this.syncSortUi();
+    }
+    /** 根据 autoPage 与当前站点能力同步排序控件；AutoPage ON 且不支持 live sorting 时明确进入“默认（瀑布流）”。 */
+    async syncSortUi() {
+        const settings = this.getRuntimeService("settings");
+        const autoPage = settings.snapshot().autoPage;
+        const live = this.supportsLiveSorting();
+        const toggle = $("#sort-toggle-btn");
+        if (!toggle.length) return;
+        const menu = $(".jhs-sort-menu");
+        if (autoPage === _ && !live) {
+            toggle.prop("disabled", true).attr("title", "瀑布流模式仅支持默认排序");
+            $("#jhs-sort-current").text("默认（瀑布流）");
+            menu.find(".jhs-sort-option").attr("aria-checked", "false");
+            menu.find('[data-sort-method="default"]').attr("aria-checked", "true");
+            await this.sortItems("default");
+            return;
+        }
+        const method = settings.snapshot().sortMethod || "default";
+        const labels = { default: "默认", rateCount: "评价人数", date: "时间" };
+        const current = Object.prototype.hasOwnProperty.call(labels, method) ? /** @type {Record<string, string>} */ (labels)[/** @type {string} */ (method)] : labels.default;
+        toggle.prop("disabled", false).attr("title", "选择列表排序方式");
+        $("#jhs-sort-current").text(current);
+        menu.find(".jhs-sort-option").attr("aria-checked", "false");
+        menu.find(`[data-sort-method="${method}"]`).attr("aria-checked", "true");
+        await this.sortItems();
     }
     /** @param {LifecycleScope} scope */
     async createMenuBtn(scope) {
@@ -133,12 +164,13 @@ export class ListPageButtonPlugin extends BasePlugin {
             $(event.target).closest(control).length || close();
         }));
     }
-    async sortItems() {
+    /** @param {string} [methodOverride] */
+    async sortItems(methodOverride) {
         const e = this.supportsLiveSorting();
         if (!e && (o.includes("handle") || o.includes("advanced_search"))) return;
-        const s = await storageManager.getSetting("autoPage");
-        if (c || s === _ && !e) return;
-        const t = this.getRuntimeService("settings").snapshot().sortMethod;
+        const s = this.getRuntimeService("settings").snapshot().autoPage;
+        if (c || (s === _ && !e && methodOverride !== "default")) return;
+        const t = methodOverride || this.getRuntimeService("settings").snapshot().sortMethod;
         if (!t) return;
         const i = this.getSelector(), d = $(i.boxSelector), h = $(i.itemSelector);
         h.each(((/** @type {number} */ e, /** @type {Element} */ element) => {

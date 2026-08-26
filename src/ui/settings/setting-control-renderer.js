@@ -90,7 +90,7 @@ export function bindSettingRows(root, descriptors, { settings, onChanged = null 
     const binding = new RowBinding(root, descriptors, { settings, hub, onChanged });
     return {
         sync: (/** @type {Record<string, unknown>} */ snapshot) => binding.sync(snapshot),
-        flush: () => hub.flush(),
+        flush: (/** @type {any} */ options) => hub.flush(options),
         dispose: () => binding.dispose(),
         setters: binding.setters,
     };

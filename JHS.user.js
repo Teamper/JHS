@@ -661,20 +661,18 @@
 `;
   }
   __name(buildThemeCss, "buildThemeCss");
-  async function applyTheme() {
-    const mode = await storageManager.getSetting("themeMode", "light");
+  function applyThemeMode(mode = "light") {
     let resolved = "light";
     if ("dark" === mode) resolved = "dark";
     else if ("auto" === mode) resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     document.documentElement.setAttribute("data-jhs-theme", resolved);
   }
-  __name(applyTheme, "applyTheme");
+  __name(applyThemeMode, "applyThemeMode");
   function initializeThemeRuntime(scope) {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     scope.listen(media, "change", () => {
-      storageManager.getSetting("themeMode", "light").then(((mode) => {
-        if ("auto" === mode) void applyTheme();
-      }));
+      const mode = globalThis.settingsService?.snapshot?.().themeMode ?? storageManager.getSettingSync("themeMode", "light");
+      if ("auto" === mode) applyThemeMode(mode);
     });
   }
   __name(initializeThemeRuntime, "initializeThemeRuntime");
@@ -3385,7 +3383,7 @@
       const t2 = await this.getBlacklistCarList(), n2 = JSON.parse(JSON.stringify(t2));
       let a2 = false, i2 = [];
       for (const s2 of e2) {
-        n2.find(((e3) => e3.carNum === s2.carNum)) || (this._saveSingleCar(s2, n2), clog.log(`屏蔽演员番号: <span class="jhs-layout-eeefd8c8">${escapeHtml(s2.names)} ${escapeHtml(s2.carNum)}</span>`), a2 = true, i2.push(s2.carNum));
+        n2.find(((e3) => e3.carNum === s2.carNum)) || (this._saveSingleCar(s2, n2), clog.html(`屏蔽演员番号: <span class="jhs-layout-eeefd8c8">${escapeHtml(s2.names)} ${escapeHtml(s2.carNum)}</span>`), a2 = true, i2.push(s2.carNum));
       }
       if (a2) {
         await this._setItemAndInvalidate(this.blacklist_car_list_key, n2);
@@ -3421,7 +3419,7 @@
           i2 = i2.replace(d2, ""), s2 = s2.map(((e4) => e4.replace(d2, "")));
           let h2 = t2.find(((t3) => t3.starId === e3));
           if (h2) {
-            h2.avatar && h2.avatar.includes("https") || o2 && (clog.log(o2), h2.avatar = o2, clog.log(`<span class="jhs-layout-eeefd8c8">补全女优头像: ${escapeHtml(i2)}</span>`), n2++), !h2.actressType && c2 && (h2.actressType = c2, clog.log(`<span class="jhs-layout-eeefd8c8">补全女优类别: ${escapeHtml(i2)} ${escapeHtml(c2)}</span>`), n2++), h2.name.includes(d2) && (h2.name = i2, h2.allName = s2, clog.log(`<span class="jhs-layout-eeefd8c8">更正女优名字: ${escapeHtml(i2)} ${escapeHtml(s2)}</span>`), n2++);
+            h2.avatar && h2.avatar.includes("https") || o2 && (clog.log(o2), h2.avatar = o2, clog.html(`<span class="jhs-layout-eeefd8c8">补全女优头像: ${escapeHtml(i2)}</span>`), n2++), !h2.actressType && c2 && (h2.actressType = c2, clog.html(`<span class="jhs-layout-eeefd8c8">补全女优类别: ${escapeHtml(i2)} ${escapeHtml(c2)}</span>`), n2++), h2.name.includes(d2) && (h2.name = i2, h2.allName = s2, clog.html(`<span class="jhs-layout-eeefd8c8">更正女优名字: ${escapeHtml(i2)} ${escapeHtml(s2)}</span>`), n2++);
             continue;
           }
           const g2 = utils.getNowStr();
@@ -3435,7 +3433,7 @@
             createDate: g2,
             updateDate: g2,
             actressType: c2
-          }), clog.log(`<span class="jhs-layout-eeefd8c8">同步JavDB已收藏的演员: ${escapeHtml(i2)}</span>`), n2++;
+          }), clog.html(`<span class="jhs-layout-eeefd8c8">同步JavDB已收藏的演员: ${escapeHtml(i2)}</span>`), n2++;
         }
         return n2 > 0 ? await this._setItemAndInvalidate(this.favorite_actresses_key, t2) : clog.log("信息已记录, 无需要进行同步收藏的演员"), n2;
       });
@@ -5133,6 +5131,12 @@
           this.maximizeBtn.classList.toggle("active", e3), e3 ? localStorage.setItem(a2, "maximized") : localStorage.setItem(a2, "minimized"), this.window.classList.contains("collapsed") || (this.content.scrollTop = this.content.scrollHeight);
         }
         addLog(t3, a3 = "base", ...i3) {
+          return this._appendLog(false, t3, a3, ...i3);
+        }
+        addHtmlLog(t3, a3 = "base", ...i3) {
+          return this._appendLog(true, t3, a3, ...i3);
+        }
+        _appendLog(htmlMode, t3, a3 = "base", ...i3) {
           const s3 = this.tryInitialize();
           let o3, r2 = [];
           e2[a3] ? (o3 = a3, r2 = i3) : (o3 = "base", r2 = [a3, ...i3]), o3 = e2[o3] ? o3 : "base";
@@ -5149,15 +5153,18 @@
             else d2.push(String(e3));
           }));
           let h2 = d2.join("  ");
-          h2 = h2.replace(/(?:(?:https?|ftp):\/\/|www\.|(?:\/\/))[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|]/gi, ((e3) => {
-            const t4 = e3.startsWith("http") || e3.startsWith("ftp"), n3 = e3.startsWith("//"), a4 = e3.startsWith("www.");
-            let i4 = e3;
-            return n3 ? i4 = `http:${e3}` : !t4 && a4 && (i4 = `http://${e3}`), `<a href="${escapeHtml(i4)}" target="_blank">${escapeHtml(e3)}</a>`;
-          }));
+          if (htmlMode) {
+            h2 = h2.replace(/(?:(?:https?|ftp):\/\/|www\.|(?:\/\/))[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|]/gi, ((e3) => {
+              const t4 = e3.startsWith("http") || e3.startsWith("ftp"), n3 = e3.startsWith("//"), a4 = e3.startsWith("www.");
+              let i4 = e3;
+              return n3 ? i4 = `http:${e3}` : !t4 && a4 && (i4 = `http://${e3}`), `<a href="${escapeHtml(i4)}" target="_blank">${escapeHtml(e3)}</a>`;
+            }));
+          }
           const g2 = {
             message: h2,
             messageType: c2,
             type: o3,
+            html: htmlMode,
             timestamp: /* @__PURE__ */ new Date(),
             id: Date.now() + Math.random()
           };
@@ -5174,6 +5181,18 @@
           const [t3, ...n3] = e3;
           setTimeout((() => {
             this.addLog(t3, "base", ...n3);
+          }), 0);
+        }
+        html(...e3) {
+          const [t3, ...n3] = e3;
+          setTimeout((() => {
+            this.addHtmlLog(t3, "base", ...n3);
+          }), 0);
+        }
+        htmlDebug(...e3) {
+          const [t3, ...n3] = e3;
+          setTimeout((() => {
+            this.addHtmlLog(t3, "debug", ...n3);
           }), 0);
         }
         error(...e3) {
@@ -5219,10 +5238,36 @@
           const a3 = e2[t3.type] || e2.base;
           n3.style.borderLeft = "3px solid " + a3.borderLeftColor, n3.style.background = a3.background;
           const i3 = (t3.timestamp instanceof Date ? t3.timestamp : new Date(t3.timestamp)).toTimeString().split(" ")[0];
-          return n3.innerHTML = `
-                <span class="console-logger-timestamp">[${i3}]</span>
-                <span class="console-logger-message" data-type="${t3.messageType}">${t3.message}</span>
-            `, n3;
+          const timestamp = document.createElement("span");
+          timestamp.className = "console-logger-timestamp";
+          timestamp.textContent = `[${i3}]`;
+          const message = document.createElement("span");
+          message.className = "console-logger-message";
+          message.dataset.type = t3.messageType;
+          if (t3.html) {
+            message.innerHTML = t3.message;
+          } else {
+            const text = t3.message.replace(/<br\s*\/?>/gi, "\n");
+            const urlPattern = /(?:(?:https?|ftp):\/\/|www\.|(?:\/\/))[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|]/gi;
+            let lastIndex = 0;
+            let match;
+            while (match = urlPattern.exec(text)) {
+              if (match.index > lastIndex) message.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+              let url = match[0];
+              let href = url;
+              if (url.startsWith("//")) href = `http:${url}`;
+              else if (url.startsWith("www.")) href = `http://${url}`;
+              const anchor = document.createElement("a");
+              anchor.href = href;
+              anchor.target = "_blank";
+              anchor.textContent = url;
+              message.appendChild(anchor);
+              lastIndex = match.index + match[0].length;
+            }
+            if (lastIndex < text.length) message.appendChild(document.createTextNode(text.slice(lastIndex)));
+          }
+          n3.append(timestamp, message);
+          return n3;
         }
         setFilter(e3) {
           if (this.currentFilter === e3) return;
@@ -7443,9 +7488,10 @@
         `;
   }
   __name(buildSettingCss, "buildSettingCss");
-  async function applyImageMode(busImgPlugin = null) {
+  async function applyImageMode(busImgPlugin = null, enableVerticalModel) {
     $("#verticalImgStyle").remove();
-    if (await storageManager.getSetting("enableVerticalModel", C) === _) {
+    const vertical = enableVerticalModel === void 0 ? await storageManager.getSetting("enableVerticalModel", C) : enableVerticalModel;
+    if (vertical === _) {
       let e2 = "100% 50% !important";
       window.location.href.includes("/advanced_search?type=100") && (e2 = "50% 50% !important");
       const t2 = `
@@ -7492,6 +7538,19 @@
     l && busImgPlugin?.logImageHeightsByRow?.();
   }
   __name(applyImageMode, "applyImageMode");
+  async function applyLayoutFromSettings(snapshot = {}, { busImgPlugin = null, hostAdapter = null } = {}) {
+    await applyImageMode(busImgPlugin, snapshot.enableVerticalModel);
+    const mobile = globalThis.utils?.isMobileMode?.() ?? false;
+    const columns = mobile ? 1 : Number(snapshot.containerColumns ?? 5) || 5;
+    const width = mobile ? 100 : Number(snapshot.containerWidth ?? 100) || 100;
+    if (hostAdapter) {
+      const listRoot = hostAdapter.locateListRoot?.();
+      if (listRoot) listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+      const layoutContainer = hostAdapter.getListLayoutContainer?.();
+      if (layoutContainer) layoutContainer.style.minWidth = `${width}%`;
+    }
+  }
+  __name(applyLayoutFromSettings, "applyLayoutFromSettings");
 
   // src/ui/settings/setting-binding-controller.js
   var hubs = /* @__PURE__ */ new WeakMap();
@@ -7528,7 +7587,7 @@
       sync(snapshot) {
         if (Object.prototype.hasOwnProperty.call(snapshot, key)) setValue(snapshot[key]);
       },
-      flush: /* @__PURE__ */ __name(() => hub.flush(), "flush"),
+      flush: /* @__PURE__ */ __name((options) => hub.flush(options), "flush"),
       dispose: /* @__PURE__ */ __name(() => binding.dispose(), "dispose")
     };
   }
@@ -7539,6 +7598,7 @@
       this.bindings = /* @__PURE__ */ new Set();
       this.pending = /* @__PURE__ */ new Map();
       this.revision = 0;
+      this._failures = /* @__PURE__ */ new Map();
       this._onSettingsChanged = this._onSettingsChanged.bind(this);
       this.settings.addEventListener("settings.changed", this._onSettingsChanged);
     }
@@ -7565,12 +7625,14 @@
         () => {
           if (this.pending.get(key)?.token === token) {
             this.pending.delete(key);
+            this._failures.delete(key);
             this._maybeDispose();
           }
         },
         (error) => {
           if (this.pending.get(key)?.token === token) {
             this.pending.delete(key);
+            this._failures.set(key, error);
             const committed = this.settings.snapshot()[key] ?? fallback;
             this.syncAll(key, committed);
             this._maybeDispose();
@@ -7585,16 +7647,24 @@
       this.pending.set(key, { token, value, promise });
       return promise;
     }
-    async flush() {
+    async flush({ throwOnFailure = false } = {}) {
       await Promise.all([...this.pending.values()].map((item) => item.promise));
       await this.settings.waitForIdle();
+      if (throwOnFailure && this._failures.size > 0) {
+        const [first] = this._failures.values();
+        const error = new Error("部分实时设置保存失败");
+        error.cause = first;
+        error.liveSettingFailures = [...this._failures.values()];
+        this._failures.clear();
+        throw error;
+      }
     }
     _dropBinding(binding) {
       this.bindings.delete(binding);
       this._maybeDispose();
     }
     _maybeDispose() {
-      if (this.bindings.size === 0 && this.pending.size === 0) {
+      if (this.bindings.size === 0 && this.pending.size === 0 && this._failures.size === 0) {
         this.settings.removeEventListener("settings.changed", this._onSettingsChanged);
         hubs.delete(this.settings);
       }
@@ -7665,7 +7735,7 @@
     const binding = new RowBinding(root, descriptors, { settings, hub, onChanged });
     return {
       sync: /* @__PURE__ */ __name((snapshot) => binding.sync(snapshot), "sync"),
-      flush: /* @__PURE__ */ __name(() => hub.flush(), "flush"),
+      flush: /* @__PURE__ */ __name((options) => hub.flush(options), "flush"),
       dispose: /* @__PURE__ */ __name(() => binding.dispose(), "dispose"),
       setters: binding.setters
     };
@@ -8025,72 +8095,64 @@
   }
   __name(bindKeywordDirtyTracking, "bindKeywordDirtyTracking");
   async function collectManualSettingPatch(root, dirtyKeys = null) {
+    const getters = {
+      videoQuality: /* @__PURE__ */ __name(() => root.find("#videoQuality").val(), "videoQuality"),
+      reviewCount: /* @__PURE__ */ __name(() => root.find("#reviewCount").val(), "reviewCount"),
+      tagPosition: /* @__PURE__ */ __name(() => root.find("#tagPosition").val(), "tagPosition"),
+      autoRemoveNewVideoMarkAfterBrowse: /* @__PURE__ */ __name(() => root.find("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C, "autoRemoveNewVideoMarkAfterBrowse"),
+      waitCheckCount: /* @__PURE__ */ __name(() => root.find("#waitCheckCount").val(), "waitCheckCount"),
+      highlightedTagNumber: /* @__PURE__ */ __name(() => root.find("#highlightedTagNumber").val(), "highlightedTagNumber"),
+      highlightedTagColor: /* @__PURE__ */ __name(() => root.find("#highlightedTagColor").val(), "highlightedTagColor"),
+      checkConcurrencyCount: /* @__PURE__ */ __name(() => root.find("#checkConcurrencyCount").val(), "checkConcurrencyCount"),
+      checkRequestSleep: /* @__PURE__ */ __name(() => root.find("#checkRequestSleep").val(), "checkRequestSleep"),
+      enableCheckBlacklist: /* @__PURE__ */ __name(() => root.find("#enableCheckBlacklist").val(), "enableCheckBlacklist"),
+      checkBlacklist_intervalTime: /* @__PURE__ */ __name(() => root.find("#checkBlacklist_intervalTime").val(), "checkBlacklist_intervalTime"),
+      checkBlacklist_ruleTime: /* @__PURE__ */ __name(() => root.find("#checkBlacklist_ruleTime").val(), "checkBlacklist_ruleTime"),
+      enableCheckFavoriteActress: /* @__PURE__ */ __name(() => root.find("#enableCheckFavoriteActress").val(), "enableCheckFavoriteActress"),
+      checkFavoriteActress_IntervalTime: /* @__PURE__ */ __name(() => root.find("#checkFavoriteActress_IntervalTime").val(), "checkFavoriteActress_IntervalTime"),
+      enableCheckNewVideo: /* @__PURE__ */ __name(() => root.find("#enableCheckNewVideo").val(), "enableCheckNewVideo"),
+      checkNewVideo_intervalTime: /* @__PURE__ */ __name(() => root.find("#checkNewVideo_intervalTime").val(), "checkNewVideo_intervalTime"),
+      checkNewVideo_ruleTime: /* @__PURE__ */ __name(() => root.find("#checkNewVideo_ruleTime").val(), "checkNewVideo_ruleTime"),
+      httpTimeout: /* @__PURE__ */ __name(() => Number(root.find("#httpTimeout").val()) || 5e3, "httpTimeout"),
+      httpRetryCount: /* @__PURE__ */ __name(() => Number(root.find("#httpRetryCount").val()) || 3, "httpRetryCount"),
+      circuitBreakerThreshold: /* @__PURE__ */ __name(() => Number(root.find("#circuitBreakerThreshold").val()) || 3, "circuitBreakerThreshold"),
+      circuitBreakerCooldown: /* @__PURE__ */ __name(() => Number(root.find("#circuitBreakerCooldownSec").val()) * 1e3, "circuitBreakerCooldown"),
+      clogMsgCount: /* @__PURE__ */ __name(() => root.find("#clogMsgCount").val(), "clogMsgCount"),
+      webDavUrl: /* @__PURE__ */ __name(() => String(root.find("#webDavUrl").val() || "").trim(), "webDavUrl"),
+      webDavUsername: /* @__PURE__ */ __name(() => String(root.find("#webDavUsername").val() || ""), "webDavUsername"),
+      webDavPassword: /* @__PURE__ */ __name(async () => encryptCredential(String(root.find("#webDavPassword").val() || "")), "webDavPassword"),
+      missAvUrl: /* @__PURE__ */ __name(() => String(root.find("#missAvUrl").val() || "").replace(/\/$/, ""), "missAvUrl"),
+      jableUrl: /* @__PURE__ */ __name(() => String(root.find("#jableUrl").val() || "").replace(/\/$/, ""), "jableUrl"),
+      avgleUrl: /* @__PURE__ */ __name(() => String(root.find("#avgleUrl").val() || "").replace(/\/$/, ""), "avgleUrl"),
+      javTrailersUrl: /* @__PURE__ */ __name(() => String(root.find("#javTrailersUrl").val() || "").replace(/\/$/, ""), "javTrailersUrl"),
+      av123Url: /* @__PURE__ */ __name(() => String(root.find("#av123Url").val() || "").replace(/\/$/, ""), "av123Url"),
+      javDbUrl: /* @__PURE__ */ __name(() => String(root.find("#javDbUrl").val() || "").replace(/\/$/, ""), "javDbUrl"),
+      javBusUrl: /* @__PURE__ */ __name(() => String(root.find("#javBusUrl").val() || "").replace(/\/$/, ""), "javBusUrl"),
+      supJavUrl: /* @__PURE__ */ __name(() => String(root.find("#supJavUrl").val() || "").replace(/\/$/, ""), "supJavUrl"),
+      enableTitleSelectFilter: /* @__PURE__ */ __name(() => root.find("#enableTitleSelectFilter").is(":checked") ? _ : C, "enableTitleSelectFilter"),
+      enableFavoriteActresses: /* @__PURE__ */ __name(() => root.find("#enableFavoriteActresses").is(":checked") ? _ : C, "enableFavoriteActresses"),
+      enableSaveActressCarInfo: /* @__PURE__ */ __name(() => root.find("#enableSaveActressCarInfo").is(":checked") ? _ : C, "enableSaveActressCarInfo")
+    };
+    const keys = dirtyKeys instanceof Set ? MANUAL_FORM_SETTING_KEYS.filter((key) => dirtyKeys.has(key)) : MANUAL_FORM_SETTING_KEYS;
     const patch = {};
-    for (const key of MANUAL_FORM_SETTING_KEYS) {
-      patch[key] = void 0;
-    }
-    patch.videoQuality = root.find("#videoQuality").val();
-    patch.reviewCount = root.find("#reviewCount").val();
-    patch.tagPosition = root.find("#tagPosition").val();
-    patch.autoRemoveNewVideoMarkAfterBrowse = root.find("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C;
-    patch.waitCheckCount = root.find("#waitCheckCount").val();
-    patch.highlightedTagNumber = root.find("#highlightedTagNumber").val();
-    patch.highlightedTagColor = root.find("#highlightedTagColor").val();
-    patch.checkConcurrencyCount = root.find("#checkConcurrencyCount").val();
-    patch.checkRequestSleep = root.find("#checkRequestSleep").val();
-    patch.enableCheckBlacklist = root.find("#enableCheckBlacklist").val();
-    patch.checkBlacklist_intervalTime = root.find("#checkBlacklist_intervalTime").val();
-    patch.checkBlacklist_ruleTime = root.find("#checkBlacklist_ruleTime").val();
-    patch.enableCheckFavoriteActress = root.find("#enableCheckFavoriteActress").val();
-    patch.checkFavoriteActress_IntervalTime = root.find("#checkFavoriteActress_IntervalTime").val();
-    patch.enableCheckNewVideo = root.find("#enableCheckNewVideo").val();
-    patch.checkNewVideo_intervalTime = root.find("#checkNewVideo_intervalTime").val();
-    patch.checkNewVideo_ruleTime = root.find("#checkNewVideo_ruleTime").val();
-    patch.httpTimeout = Number(root.find("#httpTimeout").val()) || 5e3;
-    patch.httpRetryCount = Number(root.find("#httpRetryCount").val()) || 3;
-    patch.circuitBreakerThreshold = Number(root.find("#circuitBreakerThreshold").val()) || 3;
-    patch.circuitBreakerCooldown = Number(root.find("#circuitBreakerCooldownSec").val()) * 1e3;
-    patch.clogMsgCount = root.find("#clogMsgCount").val();
-    patch.webDavUrl = String(root.find("#webDavUrl").val() || "").trim();
-    patch.webDavUsername = String(root.find("#webDavUsername").val() || "");
-    patch.webDavPassword = await encryptCredential(String(root.find("#webDavPassword").val() || ""));
-    patch.missAvUrl = String(root.find("#missAvUrl").val() || "").replace(/\/$/, "");
-    patch.jableUrl = String(root.find("#jableUrl").val() || "").replace(/\/$/, "");
-    patch.avgleUrl = String(root.find("#avgleUrl").val() || "").replace(/\/$/, "");
-    patch.javTrailersUrl = String(root.find("#javTrailersUrl").val() || "").replace(/\/$/, "");
-    patch.av123Url = String(root.find("#av123Url").val() || "").replace(/\/$/, "");
-    patch.javDbUrl = String(root.find("#javDbUrl").val() || "").replace(/\/$/, "");
-    patch.javBusUrl = String(root.find("#javBusUrl").val() || "").replace(/\/$/, "");
-    patch.supJavUrl = String(root.find("#supJavUrl").val() || "").replace(/\/$/, "");
-    patch.enableTitleSelectFilter = root.find("#enableTitleSelectFilter").is(":checked") ? _ : C;
-    patch.enableFavoriteActresses = root.find("#enableFavoriteActresses").is(":checked") ? _ : C;
-    patch.enableSaveActressCarInfo = root.find("#enableSaveActressCarInfo").is(":checked") ? _ : C;
-    if (dirtyKeys instanceof Set) {
-      for (const key of Object.keys(patch)) {
-        if (!dirtyKeys.has(key)) delete patch[key];
-      }
+    for (const key of keys) {
+      const getter = getters[key];
+      if (getter) patch[key] = await getter();
     }
     return patch;
   }
   __name(collectManualSettingPatch, "collectManualSettingPatch");
   function addLabelTag(container, text, root) {
     const target = root.find(`${container} .tag-box`);
+    const value = String(text);
     let node;
-    if (/^[a-z]{2,}-/i.test(text) && r) {
-      node = $(`
-            <a class="keyword-label keyword-label--link" data-keyword="${text}" href="/video_codes/${text.replace("-", "")}" target="_blank">
-                ${text}
-                <span class="keyword-remove">×</span>
-            </a>
-        `);
+    if (/^[a-z]{2,}-/i.test(value) && r) {
+      node = $("<a>").addClass("keyword-label keyword-label--link").attr("data-keyword", value).attr("href", `/video_codes/${value.replace("-", "")}`).attr("target", "_blank");
     } else {
-      node = $(`
-            <div class="keyword-label" data-keyword="${text}">
-                ${text}
-                <span class="keyword-remove">×</span>
-            </div>
-        `);
+      node = $("<div>").addClass("keyword-label").attr("data-keyword", value);
     }
+    node.append(document.createTextNode(value));
+    node.append($("<span>").addClass("keyword-remove").text("×"));
     node.find(".keyword-remove").click(((event) => {
       event.stopPropagation(), event.preventDefault();
       const current = $(event.currentTarget);
@@ -9089,11 +9151,11 @@
       });
     }
     async initCss() {
-      const e2 = await storageManager.getSetting();
+      const e2 = this.getRuntimeService("settings").snapshot();
       let t2 = (null == e2 ? void 0 : e2.containerWidth) ?? "100";
       utils.isMobileMode() && (t2 = "100");
       let n2 = utils.isMobileMode() ? 1 : (null == e2 ? void 0 : e2.containerColumns) ?? 5;
-      applyImageMode(this.getOptionalDependency("BusImgPlugin")).catch(((e3) => clog.error("[JHS] applyImageMode failed:", e3)));
+      applyLayoutFromSettings(e2, { busImgPlugin: this.getOptionalDependency("BusImgPlugin"), hostAdapter: this.getRuntimeService("host") }).catch(((error) => clog.error("[JHS] applyLayoutFromSettings failed:", error)));
       return buildSettingCss(t2, n2, l, r);
     }
     async handle() {
@@ -9111,14 +9173,14 @@
       const onSettingsChanged = /* @__PURE__ */ __name((event) => {
         const names = event.detail?.names || [];
         if (!names.length) return;
-        if (names.includes("themeMode")) void applyTheme();
+        if (names.includes("themeMode")) applyThemeMode(liveSettings.snapshot().themeMode);
         if (names.includes("enableClog")) {
           const value = liveSettings.snapshot().enableClog;
           if (value === "yes") clog.show();
           else clog.hide();
         }
         if (names.some((name) => ["mobileMode", "enableVerticalModel", "containerColumns", "containerWidth"].includes(name))) {
-          void applyImageMode(this.getOptionalDependency("BusImgPlugin")).catch((error) => clog.error("布局设置应用失败", error));
+          void applyLayoutFromSettings(liveSettings.snapshot(), { busImgPlugin: this.getOptionalDependency("BusImgPlugin"), hostAdapter: this.getRuntimeService("host") }).catch((error) => clog.error("布局设置应用失败", error));
         }
       }, "onSettingsChanged");
       liveSettings.addEventListener("settings.changed", onSettingsChanged);
@@ -9365,9 +9427,9 @@
           dynamicBinding?.sync?.(snapshot);
           for (const binding of staticBindings) binding.sync?.(snapshot);
         }, "sync"),
-        flush: /* @__PURE__ */ __name(async () => {
-          await dynamicBinding?.flush?.();
-          await Promise.all(staticBindings.map((binding) => binding.flush?.()));
+        flush: /* @__PURE__ */ __name(async (options) => {
+          await dynamicBinding?.flush?.(options);
+          await Promise.all(staticBindings.map((binding) => binding.flush?.(options)));
         }, "flush"),
         dispose: /* @__PURE__ */ __name(() => {
           dynamicBinding?.dispose?.();
@@ -9487,7 +9549,7 @@
         if (button.data("jhsBusy") || "true" !== button.attr("data-jhs-settings-ready")) return;
         button.data("jhsBusy", true).prop("disabled", true).attr("aria-busy", "true");
         try {
-          await this._fullSettingBinding?.flush?.();
+          await this._fullSettingBinding?.flush?.({ throwOnFailure: true });
           const result = await saveSettingForm(this.getFormDependencies(), root);
           if (result?.canceled) return;
           show.ok("保存成功");
@@ -14543,7 +14605,7 @@ ${failure.stack}` : "");
             throw e3;
           }
           const o3 = e2.length - i2;
-          o3 > 0 && (clog.debug(`剩余任务数: <span class="jhs-task-emphasis">${o3}</span>`), await utils.sleep(n2));
+          o3 > 0 && (clog.htmlDebug(`剩余任务数: <span class="jhs-task-emphasis">${o3}</span>`), await utils.sleep(n2));
         }
       }));
       const l2 = await Promise.allSettled(r2), c2 = l2.find((e3) => "rejected" === e3.status);
@@ -14823,7 +14885,7 @@ ${failure.stack}` : "");
               site ? eligible.push({ item, site }) : (result.parseFailed++, clog.error(`不支持的黑名单来源站点: ${itemUrl.hostname}`));
             }
           }
-          clog.log(`<span class="jhs-task-emphasis">检测屏蔽黑名单, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
+          clog.html(`<span class="jhs-task-emphasis">检测屏蔽黑名单, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
           try {
             await this.limitConcurrency(eligible, concurrency, sleep, (async (entry) => {
               const { item, site } = entry;
@@ -14936,7 +14998,7 @@ ${failure.stack}` : "");
             else if (shouldSkipStopped(actress.lastPublishTime, rule)) result.skippedStopped++;
             else eligible.push(actress);
           }
-          clog.log(`<span class="jhs-task-emphasis">检测最新作品, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
+          clog.html(`<span class="jhs-task-emphasis">检测最新作品, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
           if (eligible.length > 0) {
             const titleKeywords = await storageManager.getTitleFilterKeyword(), blacklistCars = await storageManager.getBlacklistCarList(), blacklistSet = new Set(blacklistCars.map((item) => item.carNum));
             try {
@@ -14961,7 +15023,7 @@ ${failure.stack}` : "");
             }
           }
           const completed = 0 === result.parseFailed + result.networkFailed + result.aborted;
-          result.completed = completed, await this.finalizeTask("newVideo", completed), finalized = true, clog.log('<span class="jhs-task-emphasis">检测最新作品---结束</span>'), this.renderCheckResult(result, completed ? actresses.length ? "整批检测结束" : "收藏为空，整批检测完成" : "整批检测未完成，5 分钟后补偿未完成项");
+          result.completed = completed, await this.finalizeTask("newVideo", completed), finalized = true, clog.html('<span class="jhs-task-emphasis">检测最新作品---结束</span>'), this.renderCheckResult(result, completed ? actresses.length ? "整批检测结束" : "收藏为空，整批检测完成" : "整批检测未完成，5 分钟后补偿未完成项");
           result.success > 0 && await this.emitNewVideoChanged("task-completed");
           if (blockedError) throw blockedError;
           return result;
@@ -15020,7 +15082,7 @@ ${failure.stack}` : "");
         })());
       }
       const d2 = selectLatestPublishTime(publishTimes), h2 = await storageManager.getCarMap(), p2 = c2.filter((e3) => !h2.has(e3.carNum));
-      p2.length > 0 && clog.log(`<span class="jhs-task-emphasis">检测出新作品, ${n2}, 共${p2.length}部</span>`), await storageManager.updateFavoriteActress({
+      p2.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${n2}, 共${p2.length}部</span>`), await storageManager.updateFavoriteActress({
         starId: t2,
         lastCheckTime: utils.getNowStr(),
         newVideoList: p2,
@@ -15043,7 +15105,7 @@ ${failure.stack}` : "");
         url: item.url || ""
       }));
       const latestPublishTime = selectLatestPublishTime(publishTimes), carMap = await storageManager.getCarMap(), fresh = candidates.filter((item) => !carMap.has(item.carNum));
-      fresh.length > 0 && clog.log(`<span class="jhs-task-emphasis">检测出新作品, ${name}, 共${fresh.length}部</span>`);
+      fresh.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${name}, 共${fresh.length}部</span>`);
       await storageManager.updateFavoriteActress({ starId, lastCheckTime: utils.getNowStr(), newVideoList: fresh, lastPublishTime: latestPublishTime });
       return fresh.length;
     }
@@ -15055,7 +15117,7 @@ ${failure.stack}` : "");
       try {
         clog.log("正在检测最新作品, 演员:", s2, r2), l2.text(`正在检测最新作品, 演员: ${s2}`);
         const movies = await this.getRuntimeService("actressInfo").movies("javdb", { actorId: o2, baseUrl: this.javDbUrl }, { scope: await this.getRuntimeService("scope")(), ttlMs: 0 });
-        await this.parseActorMovies(movies, o2, s2, t2, a2), clog.log('<span class="jhs-task-emphasis">检测最新作品---结束</span>'), l2.text("检测完毕");
+        await this.parseActorMovies(movies, o2, s2, t2, a2), clog.html('<span class="jhs-task-emphasis">检测最新作品---结束</span>'), l2.text("检测完毕");
         await this.emitNewVideoChanged("single-actress-check");
       } catch (c2) {
         clog.error("检测屏蔽演员信息, 发生错误:", r2, c2), show.error("检测屏蔽演员信息, 发生错误:" + c2, "bottom", "right"), l2.text(`检测屏蔽演员信息, 发生错误: ${r2}`);
@@ -17332,9 +17394,40 @@ ${failure.stack}` : "");
     async handle() {
       if (!window.isListPage) return;
       const scope = await this.getRuntimeService("scope")();
+      const settings = this.getRuntimeService("settings");
       await this.createMenuBtn(scope), this.bindEvent();
-      const e2 = await storageManager.getSetting("autoPage"), t2 = this.supportsLiveSorting();
-      $("#sort-toggle-btn").prop("disabled", e2 === _ && !t2).attr("title", e2 === _ && !t2 ? "瀑布流模式仅支持默认排序" : "选择列表排序方式"), (e2 !== _ || t2) && await this.sortItems();
+      const onSettingsChanged = /* @__PURE__ */ __name((event) => {
+        const names = event.detail?.names;
+        if (!names?.includes("autoPage")) return;
+        void this.syncSortUi().catch((error) => clog.error("排序状态同步失败", error));
+      }, "onSettingsChanged");
+      settings.addEventListener("settings.changed", onSettingsChanged);
+      scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
+      await this.syncSortUi();
+    }
+    async syncSortUi() {
+      const settings = this.getRuntimeService("settings");
+      const autoPage = settings.snapshot().autoPage;
+      const live = this.supportsLiveSorting();
+      const toggle = $("#sort-toggle-btn");
+      if (!toggle.length) return;
+      const menu = $(".jhs-sort-menu");
+      if (autoPage === _ && !live) {
+        toggle.prop("disabled", true).attr("title", "瀑布流模式仅支持默认排序");
+        $("#jhs-sort-current").text("默认（瀑布流）");
+        menu.find(".jhs-sort-option").attr("aria-checked", "false");
+        menu.find('[data-sort-method="default"]').attr("aria-checked", "true");
+        await this.sortItems("default");
+        return;
+      }
+      const method = settings.snapshot().sortMethod || "default";
+      const labels = { default: "默认", rateCount: "评价人数", date: "时间" };
+      const current = Object.prototype.hasOwnProperty.call(labels, method) ? labels[method] : labels.default;
+      toggle.prop("disabled", false).attr("title", "选择列表排序方式");
+      $("#jhs-sort-current").text(current);
+      menu.find(".jhs-sort-option").attr("aria-checked", "false");
+      menu.find(`[data-sort-method="${method}"]`).attr("aria-checked", "true");
+      await this.sortItems();
     }
     async createMenuBtn(scope) {
       const hasNewVideo = Boolean(this.getOptionalDependency("NewVideoPlugin")), hasBlacklist = Boolean(this.getOptionalDependency("BlacklistPlugin")), hasListPage = Boolean(this.getOptionalDependency("ListPagePlugin"));
@@ -17487,12 +17580,12 @@ ${failure.stack}` : "");
         $(event.target).closest(control).length || close();
       }));
     }
-    async sortItems() {
+    async sortItems(methodOverride) {
       const e2 = this.supportsLiveSorting();
       if (!e2 && (o.includes("handle") || o.includes("advanced_search"))) return;
-      const s2 = await storageManager.getSetting("autoPage");
-      if (c || s2 === _ && !e2) return;
-      const t2 = this.getRuntimeService("settings").snapshot().sortMethod;
+      const s2 = this.getRuntimeService("settings").snapshot().autoPage;
+      if (c || s2 === _ && !e2 && methodOverride !== "default") return;
+      const t2 = methodOverride || this.getRuntimeService("settings").snapshot().sortMethod;
       if (!t2) return;
       const i2 = this.getSelector(), d2 = $(i2.boxSelector), h2 = $(i2.itemSelector);
       h2.each(((e3, element) => {
@@ -17953,7 +18046,7 @@ ${failure.stack}` : "");
       }
       this.scheduleRecount(), void this.translateListItems(R).catch((e3) => clog.error("列表页翻译任务失败", e3));
       const D2 = utils.time("处理页面耗时"), A2 = utils.time("累计耗费时间");
-      clog.log(`
+      clog.html(`
             <table class="countTable jhs-layout-b12542a5">
                 <tr>
                     <td colspan="2" class="jhs-count-table__cell">${o2}</td>
@@ -22583,23 +22676,20 @@ ${failure.stack}` : "");
     ]) utilsRuntime.importResource(url);
   }
   __name(importVendorStyles, "importVendorStyles");
-  async function migrateDisabledPluginSettings(storageManager2) {
+  async function readDisabledPluginSettings(storageManager2) {
     const raw = await storageManager2.getSetting("disabledPlugins", "[]");
     const previous = parseDisabledPlugins(raw);
     const migrated = migrateDisabledPlugins(previous);
-    if (JSON.stringify(previous) === JSON.stringify(migrated)) return migrated;
-    const journalKey = "jhs_settings_migration_journal";
-    await storageManager2.forage.setItem(journalKey, { status: "pending", previousValues: { disabledPlugins: raw }, createdAt: (/* @__PURE__ */ new Date()).toISOString() });
-    try {
-      await storageManager2.saveSettingItem("disabledPlugins", JSON.stringify(migrated));
-      await storageManager2.forage.removeItem(journalKey);
-      return migrated;
-    } catch (error) {
-      await storageManager2.saveSettingItem("disabledPlugins", raw);
-      throw error;
-    }
+    return { migrated, needsMigration: JSON.stringify(previous) !== JSON.stringify(migrated) };
   }
-  __name(migrateDisabledPluginSettings, "migrateDisabledPluginSettings");
+  __name(readDisabledPluginSettings, "readDisabledPluginSettings");
+  async function persistDisabledPluginMigration(settings, migration) {
+    if (!migration.needsMigration) return;
+    await settings.update((draft) => {
+      draft.disabledPlugins = JSON.stringify(migration.migrated);
+    });
+  }
+  __name(persistDisabledPluginMigration, "persistDisabledPluginMigration");
   async function resolveLocalOrigins(storageManager2) {
     const settings = await storageManager2.getSetting();
     const origins = new Set(Array.isArray(settings.trustedLocalOrigins) ? settings.trustedLocalOrigins : []);
@@ -22641,7 +22731,8 @@ ${failure.stack}` : "");
       patchLayerRuntime(vendors.layer, utils2);
       importVendorStyles(utils2);
       injectCoreCss();
-      const disabled = await migrateDisabledPluginSettings(storageManager2);
+      const disabledMigration = await readDisabledPluginSettings(storageManager2);
+      const disabled = disabledMigration.migrated;
       const localOriginSettings = await resolveLocalOrigins(storageManager2);
       const javdbHostAdapter = new JavDbHostAdapter(), javbusHostAdapter = new JavBusHostAdapter();
       const hostAdapter = r ? javdbHostAdapter : l ? javbusHostAdapter : null;
@@ -22666,6 +22757,7 @@ ${failure.stack}` : "");
       });
       Object.assign(globalThis, { settingsService: context.services.settings });
       const settingsSnapshot = await context.services.settings.load();
+      await persistDisabledPluginMigration(context.services.settings, disabledMigration);
       await persistLocalOriginMigration(context.services.settings, localOriginSettings);
       await normalizeScreenshotSetting(context.services.settings);
       context.services.profile.start();
@@ -22713,7 +22805,7 @@ ${failure.stack}` : "");
       window.isListPage = route === "list";
       await runDataMigrations(storageManager2);
       await stateService.recoverPendingTransaction();
-      await Promise.all([pluginManager.processCss(), applyTheme()]);
+      await Promise.all([pluginManager.processCss(), Promise.resolve(applyThemeMode(context.services.settings.snapshot().themeMode))]);
       if (r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie)) logger.show.error("请切换到中文语言下才可正常使用本脚本", { duration: -1 });
       await pluginManager.processPlugins();
       return context;

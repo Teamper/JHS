@@ -499,6 +499,12 @@ window.loading = function() {
             this.window.classList.contains("collapsed") || (this.content.scrollTop = this.content.scrollHeight);
         }
         addLog(t, a = "base", ...i) {
+            return this._appendLog(false, t, a, ...i);
+        }
+        addHtmlLog(t, a = "base", ...i) {
+            return this._appendLog(true, t, a, ...i);
+        }
+        _appendLog(htmlMode, t, a = "base", ...i) {
             const s = this.tryInitialize();
             let o, r = [];
             e[a] ? (o = a, r = i) : (o = "base", r = [ a, ...i ]), o = e[o] ? o : "base";
@@ -513,15 +519,18 @@ window.loading = function() {
                 } else d.push(String(e));
             }));
             let h = d.join("  ");
-            h = h.replace(/(?:(?:https?|ftp):\/\/|www\.|(?:\/\/))[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|]/gi, (e => {
-                const t = e.startsWith("http") || e.startsWith("ftp"), n = e.startsWith("//"), a = e.startsWith("www.");
-                let i = e;
-                return n ? i = `http:${e}` : !t && a && (i = `http://${e}`), `<a href="${escapeHtml(i)}" target="_blank">${escapeHtml(e)}</a>`;
-            }));
+            if (htmlMode) {
+                h = h.replace(/(?:(?:https?|ftp):\/\/|www\.|(?:\/\/))[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|]/gi, (e => {
+                    const t = e.startsWith("http") || e.startsWith("ftp"), n = e.startsWith("//"), a = e.startsWith("www.");
+                    let i = e;
+                    return n ? i = `http:${e}` : !t && a && (i = `http://${e}`), `<a href="${escapeHtml(i)}" target="_blank">${escapeHtml(e)}</a>`;
+                }));
+            }
             const g = {
                 message: h,
                 messageType: c,
                 type: o,
+                html: htmlMode,
                 timestamp: new Date,
                 id: Date.now() + Math.random()
             };
@@ -538,6 +547,18 @@ window.loading = function() {
             const [t, ...n] = e;
             setTimeout((() => {
                 this.addLog(t, "base", ...n);
+            }), 0);
+        }
+        html(...e) {
+            const [t, ...n] = e;
+            setTimeout((() => {
+                this.addHtmlLog(t, "base", ...n);
+            }), 0);
+        }
+        htmlDebug(...e) {
+            const [t, ...n] = e;
+            setTimeout((() => {
+                this.addHtmlLog(t, "debug", ...n);
             }), 0);
         }
         error(...e) {
@@ -583,8 +604,36 @@ window.loading = function() {
             const a = e[t.type] || e.base;
             n.style.borderLeft = "3px solid " + a.borderLeftColor, n.style.background = a.background;
             const i = (t.timestamp instanceof Date ? t.timestamp : new Date(t.timestamp)).toTimeString().split(" ")[0];
-            return n.innerHTML = `\n                <span class="console-logger-timestamp">[${i}]</span>\n                <span class="console-logger-message" data-type="${t.messageType}">${t.message}</span>\n            `,
-            n;
+            const timestamp = document.createElement("span");
+            timestamp.className = "console-logger-timestamp";
+            timestamp.textContent = `[${i}]`;
+            const message = document.createElement("span");
+            message.className = "console-logger-message";
+            message.dataset.type = t.messageType;
+            if (t.html) {
+                message.innerHTML = t.message;
+            } else {
+                const text = t.message.replace(/<br\s*\/?>/gi, "\n");
+                const urlPattern = /(?:(?:https?|ftp):\/\/|www\.|(?:\/\/))[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|]/gi;
+                let lastIndex = 0;
+                let match;
+                while ((match = urlPattern.exec(text))) {
+                    if (match.index > lastIndex) message.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+                    let url = match[0];
+                    let href = url;
+                    if (url.startsWith("//")) href = `http:${url}`;
+                    else if (url.startsWith("www.")) href = `http://${url}`;
+                    const anchor = document.createElement("a");
+                    anchor.href = href;
+                    anchor.target = "_blank";
+                    anchor.textContent = url;
+                    message.appendChild(anchor);
+                    lastIndex = match.index + match[0].length;
+                }
+                if (lastIndex < text.length) message.appendChild(document.createTextNode(text.slice(lastIndex)));
+            }
+            n.append(timestamp, message);
+            return n;
         }
         setFilter(e) {
             if (this.currentFilter === e) return;

@@ -10,7 +10,7 @@ import { createLegacyRuntime } from "../core/legacy-runtime.js";
 import { initializeEventBus } from "../core/event-bus.js";
 import { migrateDisabledPlugins, parseDisabledPlugins } from "../core/legacy-plugin-contributions.js";
 import { initializeLoggerRuntime } from "../core/logger.js";
-import { applyTheme, initializeThemeRuntime } from "../core/theme.js";
+import { applyThemeMode, initializeThemeRuntime } from "../core/theme.js";
 import { initializeUiAccessibility } from "../core/ui-primitives.js";
 import { getVendorRuntime } from "../platform/userscript/vendor-runtime.js";
 import { JavBusHostAdapter } from "../platform/hosts/javbus-host-adapter.js";
@@ -50,21 +50,18 @@ function importVendorStyles(utilsRuntime) {
     ]) utilsRuntime.importResource(url);
 }
 
-async function migrateDisabledPluginSettings(storageManager) {
+async function readDisabledPluginSettings(storageManager) {
     const raw = await storageManager.getSetting("disabledPlugins", "[]");
     const previous = parseDisabledPlugins(raw);
     const migrated = migrateDisabledPlugins(previous);
-    if (JSON.stringify(previous) === JSON.stringify(migrated)) return migrated;
-    const journalKey = "jhs_settings_migration_journal";
-    await storageManager.forage.setItem(journalKey, { status: "pending", previousValues: { disabledPlugins: raw }, createdAt: new Date().toISOString() });
-    try {
-        await storageManager.saveSettingItem("disabledPlugins", JSON.stringify(migrated));
-        await storageManager.forage.removeItem(journalKey);
-        return migrated;
-    } catch (error) {
-        await storageManager.saveSettingItem("disabledPlugins", raw);
-        throw error;
-    }
+    return { migrated, needsMigration: JSON.stringify(previous) !== JSON.stringify(migrated) };
+}
+
+async function persistDisabledPluginMigration(settings, migration) {
+    if (!migration.needsMigration) return;
+    await settings.update((draft) => {
+        draft.disabledPlugins = JSON.stringify(migration.migrated);
+    });
 }
 
 async function resolveLocalOrigins(storageManager) {
@@ -107,7 +104,8 @@ export async function bootstrapJhs() {
         patchLayerRuntime(vendors.layer, utils);
         importVendorStyles(utils);
         injectCoreCss();
-        const disabled = await migrateDisabledPluginSettings(storageManager);
+        const disabledMigration = await readDisabledPluginSettings(storageManager);
+        const disabled = disabledMigration.migrated;
         const localOriginSettings = await resolveLocalOrigins(storageManager);
         const javdbHostAdapter = new JavDbHostAdapter(), javbusHostAdapter = new JavBusHostAdapter();
         const hostAdapter = r ? javdbHostAdapter : l ? javbusHostAdapter : null;
@@ -121,6 +119,7 @@ export async function bootstrapJhs() {
         // route through SettingsService with lock + re-read + merge.
         Object.assign(globalThis, { settingsService: context.services.settings });
         const settingsSnapshot = await context.services.settings.load();
+        await persistDisabledPluginMigration(context.services.settings, disabledMigration);
         await persistLocalOriginMigration(context.services.settings, localOriginSettings);
         await normalizeScreenshotSetting(context.services.settings);
         context.services.profile.start();
@@ -163,7 +162,7 @@ export async function bootstrapJhs() {
         window.isListPage = route === "list";
         await runDataMigrations(storageManager);
         await stateService.recoverPendingTransaction();
-        await Promise.all([pluginManager.processCss(), applyTheme()]);
+        await Promise.all([pluginManager.processCss(), Promise.resolve(applyThemeMode(context.services.settings.snapshot().themeMode))]);
         if (r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie)) logger.show.error("请切换到中文语言下才可正常使用本脚本", { duration: -1 });
         await pluginManager.processPlugins();
         return context;

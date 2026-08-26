@@ -403,10 +403,13 @@ export function buildSettingCss(containerWidth, containerColumns, isJavBus, isJa
 }
 
 /** Toggle between vertical (cover-fit) and normal (contain) image display modes. */
-/** @param {{ logImageHeightsByRow?: () => void } | null} [busImgPlugin] */
-export async function applyImageMode(busImgPlugin = null) {
+/** @param {{ logImageHeightsByRow?: () => void } | null} [busImgPlugin] @param {unknown} [enableVerticalModel] */
+export async function applyImageMode(busImgPlugin = null, enableVerticalModel) {
     $("#verticalImgStyle").remove();
-    if (await storageManager.getSetting("enableVerticalModel", C) === _) {
+    const vertical = enableVerticalModel === undefined
+        ? await storageManager.getSetting("enableVerticalModel", C)
+        : enableVerticalModel;
+    if (vertical === _) {
         let e = "100% 50% !important";
         window.location.href.includes("/advanced_search?type=100") && (e = "50% 50% !important");
         const t = `
@@ -451,4 +454,25 @@ export async function applyImageMode(busImgPlugin = null) {
         $("<style>").attr("id", "verticalImgStyle").text(e).appendTo("head");
     }
     l && busImgPlugin?.logImageHeightsByRow?.();
+}
+
+/**
+ * Apply all layout-affecting settings from a fresh snapshot without re-reading
+ * legacy storage. Handles vertical image mode, container columns and container
+ * width; used by settings.changed listeners and cross-tab/BFCache refreshes.
+ *
+ * @param {Record<string, unknown>} [snapshot]
+ * @param {{ busImgPlugin?: any, hostAdapter?: any }} [options]
+ */
+export async function applyLayoutFromSettings(snapshot = {}, { busImgPlugin = null, hostAdapter = null } = {}) {
+    await applyImageMode(busImgPlugin, snapshot.enableVerticalModel);
+    const mobile = /** @type {any} */ (globalThis).utils?.isMobileMode?.() ?? false;
+    const columns = mobile ? 1 : Number(snapshot.containerColumns ?? 5) || 5;
+    const width = mobile ? 100 : Number(snapshot.containerWidth ?? 100) || 100;
+    if (hostAdapter) {
+        const listRoot = hostAdapter.locateListRoot?.();
+        if (listRoot) listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+        const layoutContainer = hostAdapter.getListLayoutContainer?.();
+        if (layoutContainer) layoutContainer.style.minWidth = `${width}%`;
+    }
 }

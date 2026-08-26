@@ -66,7 +66,7 @@ export function bindSettingControl({ root, selector, key, getValue, setValue, fa
         sync(/** @type {Record<string, unknown>} */ snapshot) {
             if (Object.prototype.hasOwnProperty.call(snapshot, key)) setValue(snapshot[key]);
         },
-        flush: () => hub.flush(),
+        flush: (/** @type {any} */ options) => hub.flush(options),
         dispose: () => binding.dispose(),
     };
 }
@@ -80,6 +80,8 @@ class SettingBindingHub {
         /** @type {Map<string, { token: number, value: unknown, promise: Promise<unknown> }>} */
         this.pending = new Map();
         this.revision = 0;
+        /** @type {Map<string, unknown>} */
+        this._failures = new Map();
         this._onSettingsChanged = this._onSettingsChanged.bind(this);
         this.settings.addEventListener("settings.changed", this._onSettingsChanged);
     }
@@ -117,12 +119,14 @@ class SettingBindingHub {
             () => {
                 if (this.pending.get(key)?.token === token) {
                     this.pending.delete(key);
+                    this._failures.delete(key);
                     this._maybeDispose();
                 }
             },
             (/** @type {unknown} */ error) => {
                 if (this.pending.get(key)?.token === token) {
                     this.pending.delete(key);
+                    this._failures.set(key, error);
                     const committed = this.settings.snapshot()[key] ?? fallback;
                     this.syncAll(key, committed);
                     this._maybeDispose();
@@ -138,9 +142,17 @@ class SettingBindingHub {
         return promise;
     }
 
-    async flush() {
+    async flush({ throwOnFailure = false } = {}) {
         await Promise.all([ ...this.pending.values() ].map((item) => item.promise));
         await this.settings.waitForIdle();
+        if (throwOnFailure && this._failures.size > 0) {
+            const [ first ] = this._failures.values();
+            const error = /** @type {any} */ (new Error("部分实时设置保存失败"));
+            error.cause = first;
+            error.liveSettingFailures = [ ...this._failures.values() ];
+            this._failures.clear();
+            throw error;
+        }
     }
 
     /** @param {any} binding */
@@ -150,7 +162,7 @@ class SettingBindingHub {
     }
 
     _maybeDispose() {
-        if (this.bindings.size === 0 && this.pending.size === 0) {
+        if (this.bindings.size === 0 && this.pending.size === 0 && this._failures.size === 0) {
             this.settings.removeEventListener("settings.changed", this._onSettingsChanged);
             hubs.delete(this.settings);
         }

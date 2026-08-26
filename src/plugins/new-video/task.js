@@ -60,7 +60,7 @@ export class TaskPlugin extends BasePlugin {
                     throw e;
                 }
                 const o = e.length - i;
-                o > 0 && (clog.debug(`剩余任务数: <span class="jhs-task-emphasis">${o}</span>`), await utils.sleep(n));
+                o > 0 && (clog.htmlDebug(`剩余任务数: <span class="jhs-task-emphasis">${o}</span>`), await utils.sleep(n));
             }
         }));
         const l = await Promise.allSettled(r), c = l.find((/** @type {PromiseSettledResult<void>} */ e) => "rejected" === e.status);
@@ -353,7 +353,7 @@ export class TaskPlugin extends BasePlugin {
                     site ? eligible.push({ item, site }) : (result.parseFailed++, clog.error(`不支持的黑名单来源站点: ${itemUrl.hostname}`));
                 }
             }
-            clog.log(`<span class="jhs-task-emphasis">检测屏蔽黑名单, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
+            clog.html(`<span class="jhs-task-emphasis">检测屏蔽黑名单, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
             try {
                 await this.limitConcurrency(eligible, concurrency, sleep, (async (/** @type {TaskRecord} */ entry) => {
                     const {item, site} = entry;
@@ -466,7 +466,7 @@ export class TaskPlugin extends BasePlugin {
                 else if (shouldSkipStopped(actress.lastPublishTime, rule)) result.skippedStopped++;
                 else eligible.push(actress);
             }
-            clog.log(`<span class="jhs-task-emphasis">检测最新作品, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
+            clog.html(`<span class="jhs-task-emphasis">检测最新作品, 总任务数: ${eligible.length}, 并发限制:${concurrency}, 请求间隔时间:${sleep}ms</span>`);
             if (eligible.length > 0) {
                 const titleKeywords = await storageManager.getTitleFilterKeyword(), blacklistCars = await storageManager.getBlacklistCarList(), blacklistSet = new Set(blacklistCars.map((/** @type {TaskRecord} */ item) => item.carNum));
                 try {
@@ -491,7 +491,7 @@ export class TaskPlugin extends BasePlugin {
                 }
             }
             const completed = 0 === result.parseFailed + result.networkFailed + result.aborted;
-            result.completed = completed, await this.finalizeTask("newVideo", completed), finalized = !0, clog.log('<span class="jhs-task-emphasis">检测最新作品---结束</span>'), this.renderCheckResult(result, completed ? actresses.length ? "整批检测结束" : "收藏为空，整批检测完成" : "整批检测未完成，5 分钟后补偿未完成项");
+            result.completed = completed, await this.finalizeTask("newVideo", completed), finalized = !0, clog.html('<span class="jhs-task-emphasis">检测最新作品---结束</span>'), this.renderCheckResult(result, completed ? actresses.length ? "整批检测结束" : "收藏为空，整批检测完成" : "整批检测未完成，5 分钟后补偿未完成项");
             result.success > 0 && await this.emitNewVideoChanged("task-completed");
             if (blockedError) throw blockedError;
             return result;
@@ -552,7 +552,7 @@ export class TaskPlugin extends BasePlugin {
             })());
         }
         const d = selectLatestPublishTime(publishTimes), h = await storageManager.getCarMap(), p = c.filter((/** @type {TaskRecord} */ e) => !h.has(e.carNum));
-        p.length > 0 && clog.log(`<span class="jhs-task-emphasis">检测出新作品, ${n}, 共${p.length}部</span>`),
+        p.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${n}, 共${p.length}部</span>`),
         await storageManager.updateFavoriteActress({
             starId: t,
             lastCheckTime: utils.getNowStr(),
@@ -572,7 +572,7 @@ export class TaskPlugin extends BasePlugin {
             score: Number(item.score) || 0, voteCount: Number(item.voteCount) || 0, url: item.url || "",
         }));
         const latestPublishTime = selectLatestPublishTime(publishTimes), carMap = await storageManager.getCarMap(), fresh = candidates.filter((/** @type {TaskRecord} */ item) => !carMap.has(item.carNum));
-        fresh.length > 0 && clog.log(`<span class="jhs-task-emphasis">检测出新作品, ${name}, 共${fresh.length}部</span>`);
+        fresh.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${name}, 共${fresh.length}部</span>`);
         await storageManager.updateFavoriteActress({ starId, lastCheckTime: utils.getNowStr(), newVideoList: fresh, lastPublishTime: latestPublishTime });
         return fresh.length;
     }
@@ -585,7 +585,7 @@ export class TaskPlugin extends BasePlugin {
         try {
             clog.log("正在检测最新作品, 演员:", s, r), l.text(`正在检测最新作品, 演员: ${s}`);
             const movies = await this.getRuntimeService("actressInfo").movies("javdb", { actorId: o, baseUrl: this.javDbUrl }, { scope: await this.getRuntimeService("scope")(), ttlMs: 0 });
-            await this.parseActorMovies(movies, o, s, t, a), clog.log('<span class="jhs-task-emphasis">检测最新作品---结束</span>'),
+            await this.parseActorMovies(movies, o, s, t, a), clog.html('<span class="jhs-task-emphasis">检测最新作品---结束</span>'),
             l.text("检测完毕");
             await this.emitNewVideoChanged("single-actress-check");
         } catch (c) {

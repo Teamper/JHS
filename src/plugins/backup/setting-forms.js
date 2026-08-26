@@ -333,50 +333,52 @@ function bindKeywordDirtyTracking(root) {
 
 /** @param {any} root @param {Set<string> | null | undefined} [dirtyKeys] */
 async function collectManualSettingPatch(root, dirtyKeys = null) {
+    /** @type {Record<string, () => unknown | Promise<unknown>>} */
+    const getters = {
+        videoQuality: () => root.find("#videoQuality").val(),
+        reviewCount: () => root.find("#reviewCount").val(),
+        tagPosition: () => root.find("#tagPosition").val(),
+        autoRemoveNewVideoMarkAfterBrowse: () => root.find("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C,
+        waitCheckCount: () => root.find("#waitCheckCount").val(),
+        highlightedTagNumber: () => root.find("#highlightedTagNumber").val(),
+        highlightedTagColor: () => root.find("#highlightedTagColor").val(),
+        checkConcurrencyCount: () => root.find("#checkConcurrencyCount").val(),
+        checkRequestSleep: () => root.find("#checkRequestSleep").val(),
+        enableCheckBlacklist: () => root.find("#enableCheckBlacklist").val(),
+        checkBlacklist_intervalTime: () => root.find("#checkBlacklist_intervalTime").val(),
+        checkBlacklist_ruleTime: () => root.find("#checkBlacklist_ruleTime").val(),
+        enableCheckFavoriteActress: () => root.find("#enableCheckFavoriteActress").val(),
+        checkFavoriteActress_IntervalTime: () => root.find("#checkFavoriteActress_IntervalTime").val(),
+        enableCheckNewVideo: () => root.find("#enableCheckNewVideo").val(),
+        checkNewVideo_intervalTime: () => root.find("#checkNewVideo_intervalTime").val(),
+        checkNewVideo_ruleTime: () => root.find("#checkNewVideo_ruleTime").val(),
+        httpTimeout: () => Number(root.find("#httpTimeout").val()) || 5e3,
+        httpRetryCount: () => Number(root.find("#httpRetryCount").val()) || 3,
+        circuitBreakerThreshold: () => Number(root.find("#circuitBreakerThreshold").val()) || 3,
+        circuitBreakerCooldown: () => Number(root.find("#circuitBreakerCooldownSec").val()) * 1e3,
+        clogMsgCount: () => root.find("#clogMsgCount").val(),
+        webDavUrl: () => String(root.find("#webDavUrl").val() || "").trim(),
+        webDavUsername: () => String(root.find("#webDavUsername").val() || ""),
+        webDavPassword: async () => encryptCredential(String(root.find("#webDavPassword").val() || "")),
+        missAvUrl: () => String(root.find("#missAvUrl").val() || "").replace(/\/$/, ""),
+        jableUrl: () => String(root.find("#jableUrl").val() || "").replace(/\/$/, ""),
+        avgleUrl: () => String(root.find("#avgleUrl").val() || "").replace(/\/$/, ""),
+        javTrailersUrl: () => String(root.find("#javTrailersUrl").val() || "").replace(/\/$/, ""),
+        av123Url: () => String(root.find("#av123Url").val() || "").replace(/\/$/, ""),
+        javDbUrl: () => String(root.find("#javDbUrl").val() || "").replace(/\/$/, ""),
+        javBusUrl: () => String(root.find("#javBusUrl").val() || "").replace(/\/$/, ""),
+        supJavUrl: () => String(root.find("#supJavUrl").val() || "").replace(/\/$/, ""),
+        enableTitleSelectFilter: () => root.find("#enableTitleSelectFilter").is(":checked") ? _ : C,
+        enableFavoriteActresses: () => root.find("#enableFavoriteActresses").is(":checked") ? _ : C,
+        enableSaveActressCarInfo: () => root.find("#enableSaveActressCarInfo").is(":checked") ? _ : C,
+    };
+    const keys = dirtyKeys instanceof Set
+        ? MANUAL_FORM_SETTING_KEYS.filter((key) => dirtyKeys.has(key))
+        : MANUAL_FORM_SETTING_KEYS;
     const patch = /** @type {Record<string, unknown>} */ ({});
-    for (const key of MANUAL_FORM_SETTING_KEYS) {
-        patch[key] = undefined;
-    }
-    patch.videoQuality = root.find("#videoQuality").val();
-    patch.reviewCount = root.find("#reviewCount").val();
-    patch.tagPosition = root.find("#tagPosition").val();
-    patch.autoRemoveNewVideoMarkAfterBrowse = root.find("#autoRemoveNewVideoMarkAfterBrowse").is(":checked") ? _ : C;
-    patch.waitCheckCount = root.find("#waitCheckCount").val();
-    patch.highlightedTagNumber = root.find("#highlightedTagNumber").val();
-    patch.highlightedTagColor = root.find("#highlightedTagColor").val();
-    patch.checkConcurrencyCount = root.find("#checkConcurrencyCount").val();
-    patch.checkRequestSleep = root.find("#checkRequestSleep").val();
-    patch.enableCheckBlacklist = root.find("#enableCheckBlacklist").val();
-    patch.checkBlacklist_intervalTime = root.find("#checkBlacklist_intervalTime").val();
-    patch.checkBlacklist_ruleTime = root.find("#checkBlacklist_ruleTime").val();
-    patch.enableCheckFavoriteActress = root.find("#enableCheckFavoriteActress").val();
-    patch.checkFavoriteActress_IntervalTime = root.find("#checkFavoriteActress_IntervalTime").val();
-    patch.enableCheckNewVideo = root.find("#enableCheckNewVideo").val();
-    patch.checkNewVideo_intervalTime = root.find("#checkNewVideo_intervalTime").val();
-    patch.checkNewVideo_ruleTime = root.find("#checkNewVideo_ruleTime").val();
-    patch.httpTimeout = Number(root.find("#httpTimeout").val()) || 5e3;
-    patch.httpRetryCount = Number(root.find("#httpRetryCount").val()) || 3;
-    patch.circuitBreakerThreshold = Number(root.find("#circuitBreakerThreshold").val()) || 3;
-    patch.circuitBreakerCooldown = Number(root.find("#circuitBreakerCooldownSec").val()) * 1e3;
-    patch.clogMsgCount = root.find("#clogMsgCount").val();
-    patch.webDavUrl = String(root.find("#webDavUrl").val() || "").trim();
-    patch.webDavUsername = String(root.find("#webDavUsername").val() || "");
-    patch.webDavPassword = await encryptCredential(String(root.find("#webDavPassword").val() || ""));
-    patch.missAvUrl = String(root.find("#missAvUrl").val() || "").replace(/\/$/, "");
-    patch.jableUrl = String(root.find("#jableUrl").val() || "").replace(/\/$/, "");
-    patch.avgleUrl = String(root.find("#avgleUrl").val() || "").replace(/\/$/, "");
-    patch.javTrailersUrl = String(root.find("#javTrailersUrl").val() || "").replace(/\/$/, "");
-    patch.av123Url = String(root.find("#av123Url").val() || "").replace(/\/$/, "");
-    patch.javDbUrl = String(root.find("#javDbUrl").val() || "").replace(/\/$/, "");
-    patch.javBusUrl = String(root.find("#javBusUrl").val() || "").replace(/\/$/, "");
-    patch.supJavUrl = String(root.find("#supJavUrl").val() || "").replace(/\/$/, "");
-    patch.enableTitleSelectFilter = root.find("#enableTitleSelectFilter").is(":checked") ? _ : C;
-    patch.enableFavoriteActresses = root.find("#enableFavoriteActresses").is(":checked") ? _ : C;
-    patch.enableSaveActressCarInfo = root.find("#enableSaveActressCarInfo").is(":checked") ? _ : C;
-    if (dirtyKeys instanceof Set) {
-        for (const key of Object.keys(patch)) {
-            if (!dirtyKeys.has(key)) delete patch[key];
-        }
+    for (const key of keys) {
+        const getter = getters[key];
+        if (getter) patch[key] = await getter();
     }
     return patch;
 }
@@ -385,22 +387,21 @@ async function collectManualSettingPatch(root, dirtyKeys = null) {
 /** @param {string} container @param {string} text @param {any} root */
 function addLabelTag(container, text, root) {
     const target = root.find(`${container} .tag-box`);
+    const value = String(text);
     let node;
-    if (/^[a-z]{2,}-/i.test(text) && r) {
-        node = $(`
-            <a class="keyword-label keyword-label--link" data-keyword="${text}" href="/video_codes/${text.replace("-", "")}" target="_blank">
-                ${text}
-                <span class="keyword-remove">×</span>
-            </a>
-        `);
+    if (/^[a-z]{2,}-/i.test(value) && r) {
+        node = $("<a>")
+            .addClass("keyword-label keyword-label--link")
+            .attr("data-keyword", value)
+            .attr("href", `/video_codes/${value.replace("-", "")}`)
+            .attr("target", "_blank");
     } else {
-        node = $(`
-            <div class="keyword-label" data-keyword="${text}">
-                ${text}
-                <span class="keyword-remove">×</span>
-            </div>
-        `);
+        node = $("<div>")
+            .addClass("keyword-label")
+            .attr("data-keyword", value);
     }
+    node.append(document.createTextNode(value));
+    node.append($("<span>").addClass("keyword-remove").text("×"));
     node.find(".keyword-remove").click(((/** @type {any} */ event) => {
         event.stopPropagation(), event.preventDefault();
         const current = $(event.currentTarget);

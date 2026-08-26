@@ -197,7 +197,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     });
 
     it("waits for Full settings live writes before showing save success", () => {
-        expect(settingPlugin).toContain("await this._fullSettingBinding?.flush?.()");
+        expect(settingPlugin).toContain("await this._fullSettingBinding?.flush?.({ throwOnFailure: true })");
         expect(settingPlugin).toContain('const result = await saveSettingForm(this.getFormDependencies(), root);');
     });
 
