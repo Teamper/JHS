@@ -184,9 +184,9 @@ describe("FC2 owned detail workspace", () => {
     it("keeps asynchronous error variables inside their catch callbacks", () => {
         expect(fc2Source).not.toMatch(/catch\(\(error => [^{\n]*\), clog\.error/);
         expect(fc2By123AvSource).not.toMatch(/catch\(\(error => [^{\n]*\), clog\.error/);
-        expect(fc2Source).toMatch(/catch\(\((?:\/\*\*[^\n]+\*\/\s*)?error\) => \{\n\s+if \(!context\.isAlive\(\)\) return;\n\s+sitesGroup\.show\(\);/);
+        expect(fc2Source).toMatch(/catch\(\(\/\*\* @type \{unknown\} \*\/ error\) => \{\n\s+if \(!context\.isAlive\(\) \|\| generation !== context\.otherSiteGeneration\) return;\n\s+sitesGroup\.show\(\);/);
         expect(fc2Source).toContain("renderFc2State(context.root.find('[data-jhs-role=\"other-sites\"]'), \"外部站点加载失败\")");
-        expect(fc2Source).toContain('catch((error => {\n            context.isAlive() && renderFc2State');
+        expect(fc2Source).toContain('catch((/** @type {unknown} */ error) => {');
     });
 
     it("initializes screenshot through the single ScreenshotService-owned view and keeps stable slots", () => {

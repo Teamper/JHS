@@ -130,7 +130,7 @@ describe("list toolbar and UI cleanup contracts", () => {
             expect(settings).not.toContain(id);
             expect(settingForms).not.toContain(id);
         }
-        expect(settingForms).toContain("normalizeQuickFilterKey(e.defaultQuickFilterTab)");
+        expect(settingForms).not.toContain("normalizeQuickFilterKey(e.defaultQuickFilterTab)");
         expect(settingPlugin).toContain('normalizeQuickFilterKey(root.find("#defaultQuickFilterTab").val())');
     });
 

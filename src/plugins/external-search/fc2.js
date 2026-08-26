@@ -30,7 +30,9 @@ import { createFc2DetailContext, createFc2DetailShell } from "../../ui/detail/fc
  * @property {(observer: { disconnect?: () => void }) => unknown} addObserver
  * @property {((enabled: boolean) => void) | undefined} [magnetFilterApply]
  * @property {Set<string> | undefined} galleryUrls
- * @property {boolean | undefined} translationInFlight
+ * @property {number | undefined} translationGeneration
+ * @property {number | undefined} screenshotGeneration
+ * @property {number | undefined} otherSiteGeneration
  */
 /** @typedef {{ id: string, name: string, gender?: number }} MovieActor */
 /** @typedef {{ title?: string, originalTitle?: string, coverUrl?: string | null, carNum?: string, releaseDate?: string, score?: number | string, duration?: number | string, actors?: MovieActor[], imageUrls?: string[] }} Fc2Movie */
@@ -143,7 +145,8 @@ export class Fc2Plugin extends BasePlugin {
         const target = $(host), previous = target.data("jhsFc2Context");
         previous?.destroy?.(), target.empty();
         const shell = createFc2DetailShell(options).appendTo(target), context = /** @type {Fc2DetailContext} */ (/** @type {unknown} */ (createFc2DetailContext(shell, options)));
-        target.data("jhsFc2Context", context), this.initializeWorkspace(context);
+        target.data("jhsFc2Context", context), context.translationGeneration = 0, context.screenshotGeneration = 0, context.otherSiteGeneration = 0;
+        this.initializeWorkspace(context);
         this.bindFc2FeatureLifecycle(context);
         return context;
     }
@@ -193,12 +196,17 @@ export class Fc2Plugin extends BasePlugin {
             const names = /** @type {string[] | undefined} */ (event.detail?.names);
             if (!names?.length) return;
             if (names.includes("enableLoadScreenShot")) {
-                settings.snapshot().enableLoadScreenShot === "no" ? this.unmountFc2Screenshot(context) : void this.loadFc2Screenshot(context);
+                if (settings.snapshot().enableLoadScreenShot === "no") {
+                    context.screenshotGeneration = (context.screenshotGeneration || 0) + 1;
+                    this.unmountFc2Screenshot(context);
+                } else {
+                    void this.loadFc2Screenshot(context);
+                }
             }
             if (names.includes("translateTitle")) {
                 if ((settings.snapshot().translateTitle ?? _) === _) void this.applyFc2Translation(context);
                 else {
-                    this.translationGeneration++;
+                    context.translationGeneration = (context.translationGeneration || 0) + 1;
                     this.revertFc2Translation(context);
                 }
             }
@@ -207,7 +215,12 @@ export class Fc2Plugin extends BasePlugin {
             }
             if (names.includes("enableLoadOtherSite")) {
                 const sitesGroup = context.getSection("resources").find('[data-jhs-role="other-sites"]').closest(".jhs-fc2-resource-group");
-                settings.snapshot().enableLoadOtherSite === "no" ? this.unmountFc2OtherSites(context, sitesGroup) : void this.mountFc2OtherSites(context, sitesGroup, this.getOptionalDependency("OtherSitePlugin"));
+                if (settings.snapshot().enableLoadOtherSite === "no") {
+                    context.otherSiteGeneration = (context.otherSiteGeneration || 0) + 1;
+                    this.unmountFc2OtherSites(context, sitesGroup);
+                } else {
+                    void this.mountFc2OtherSites(context, sitesGroup, this.getOptionalDependency("OtherSitePlugin"));
+                }
             }
         };
         settings.addEventListener("settings.changed", handler);
@@ -218,35 +231,37 @@ export class Fc2Plugin extends BasePlugin {
     loadFc2Screenshot(context) {
         const screenshotService = this.getRuntimeService("screenshot"), settings = this.getRuntimeService("settings"), screenshot = context.root.find('[data-jhs-role="screenshot"]');
         if (!screenshotService.isEnabled(settings.snapshot())) return void screenshot.empty();
+        const generation = (context.screenshotGeneration || 0) + 1;
+        context.screenshotGeneration = generation;
         void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderScreenshotPanel({
             target: screenshot, carNum: context.carNum.replace("FC2-", ""), screenshot: screenshotService,
             settings: settings.snapshot(), scope,
-            isActive: () => context.isAlive() && settings.snapshot().enableLoadScreenShot !== "no",
+            isActive: () => context.isAlive() && settings.snapshot().enableLoadScreenShot !== "no" && generation === context.screenshotGeneration,
             isDuplicate: url => Boolean(context.galleryUrls?.has(url)),
         })).then((/** @type {unknown} */ result) => {
             // 稳定插槽：绝不 remove；渲染函数已写入 empty/error 状态，无需再清空。
-            if (!context.isAlive()) return;
+            if (!context.isAlive() || generation !== context.screenshotGeneration) return;
             if (settings.snapshot().enableLoadScreenShot === "no") return void screenshot.empty();
             if (!result) return;
         }).catch((error) => {
-            context.isAlive() && screenshot.empty();
+            if (!context.isAlive() || generation !== context.screenshotGeneration) return;
+            screenshot.empty();
             clog.error("FC2 剧照初始化失败", error);
         });
     }
     /** OFF：清空 FC2 截图槽（保留节点以便再次开启）。 */
     /** @param {Fc2DetailContext} context */
     unmountFc2Screenshot(context) {
+        context.screenshotGeneration = (context.screenshotGeneration || 0) + 1;
         context.root.find('[data-jhs-role="screenshot"]').empty();
     }
     /** ON：按当前 DOM 标题重新翻译（原生/123AV 共用 .current-title）；所有翻译入口唯一实现。 */
     /** @param {Fc2DetailContext} context */
     applyFc2Translation(context) {
-        if (context.translationInFlight) return;
-        context.translationInFlight = true;
-        const generation = this.translationGeneration, settings = this.getRuntimeService("settings");
-        Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope, isActive: () => context.isAlive() && (settings.snapshot().translateTitle ?? _) === _ && generation === this.translationGeneration })).catch((error => clog.error("FC2 标题翻译失败", error))).finally((() => {
-            context.translationInFlight = false;
-        }));
+        const generation = (context.translationGeneration || 0) + 1;
+        context.translationGeneration = generation;
+        const settings = this.getRuntimeService("settings");
+        Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope, isActive: () => context.isAlive() && (settings.snapshot().translateTitle ?? _) === _ && generation === context.translationGeneration })).catch((error => clog.error("FC2 标题翻译失败", error)));
     }
     /** OFF：移除 FC2 已渲染的翻译节点。 */
     /** @param {Fc2DetailContext} context */
@@ -258,13 +273,15 @@ export class Fc2Plugin extends BasePlugin {
     mountFc2OtherSites(context, sitesGroup, otherSite) {
         if (!otherSite) return void sitesGroup.remove();
         const settings = this.getRuntimeService("settings");
+        const generation = (context.otherSiteGeneration || 0) + 1;
+        context.otherSiteGeneration = generation;
         sitesGroup.length && sitesGroup.show();
-        void Promise.resolve().then((() => otherSite.loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: !1, isActive: () => context.isAlive() && settings.snapshot().enableLoadOtherSite !== "no" }))).then((/** @type {JQueryHandle | null} */ box) => {
+        void Promise.resolve().then((() => otherSite.loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: !1, isActive: () => context.isAlive() && settings.snapshot().enableLoadOtherSite !== "no" && generation === context.otherSiteGeneration }))).then((/** @type {JQueryHandle | null} */ box) => {
             // 稳定插槽：OFF/无结果只隐藏分组，绝不 remove；OFF→ON 仍能重新挂载。
-            if (!context.isAlive()) return;
+            if (!context.isAlive() || generation !== context.otherSiteGeneration) return;
             box ? sitesGroup.show() : sitesGroup.hide();
         }).catch((/** @type {unknown} */ error) => {
-            if (!context.isAlive()) return;
+            if (!context.isAlive() || generation !== context.otherSiteGeneration) return;
             sitesGroup.show();
             renderFc2State(context.root.find('[data-jhs-role="other-sites"]'), "外部站点加载失败");
             clog.error("FC2 外部站点加载失败", error);
@@ -273,6 +290,7 @@ export class Fc2Plugin extends BasePlugin {
     /** OFF：删除 FC2 内外部站点面板并隐藏分组。 */
     /** @param {Fc2DetailContext} context @param {any} sitesGroup */
     unmountFc2OtherSites(context, sitesGroup) {
+        context.otherSiteGeneration = (context.otherSiteGeneration || 0) + 1;
         context.root.find("[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
         sitesGroup.length && sitesGroup.hide();
     }

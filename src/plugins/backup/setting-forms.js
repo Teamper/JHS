@@ -57,6 +57,58 @@ export const MANUAL_FORM_SETTING_KEYS = Object.freeze([
     "autoRemoveNewVideoMarkAfterBrowse",
 ]);
 
+
+/** Selector map used to track dirty manual fields on the full settings form. */
+export const MANUAL_FORM_SELECTORS = Object.freeze({
+    videoQuality: "#videoQuality",
+    reviewCount: "#reviewCount",
+    tagPosition: "#tagPosition",
+    waitCheckCount: "#waitCheckCount",
+    highlightedTagNumber: "#highlightedTagNumber",
+    highlightedTagColor: "#highlightedTagColor",
+    checkConcurrencyCount: "#checkConcurrencyCount",
+    checkRequestSleep: "#checkRequestSleep",
+    enableCheckBlacklist: "#enableCheckBlacklist",
+    checkBlacklist_intervalTime: "#checkBlacklist_intervalTime",
+    checkBlacklist_ruleTime: "#checkBlacklist_ruleTime",
+    enableCheckFavoriteActress: "#enableCheckFavoriteActress",
+    checkFavoriteActress_IntervalTime: "#checkFavoriteActress_IntervalTime",
+    enableCheckNewVideo: "#enableCheckNewVideo",
+    checkNewVideo_intervalTime: "#checkNewVideo_intervalTime",
+    checkNewVideo_ruleTime: "#checkNewVideo_ruleTime",
+    httpTimeout: "#httpTimeout",
+    httpRetryCount: "#httpRetryCount",
+    circuitBreakerThreshold: "#circuitBreakerThreshold",
+    circuitBreakerCooldown: "#circuitBreakerCooldownSec",
+    clogMsgCount: "#clogMsgCount",
+    webDavUrl: "#webDavUrl",
+    webDavUsername: "#webDavUsername",
+    webDavPassword: "#webDavPassword",
+    missAvUrl: "#missAvUrl",
+    jableUrl: "#jableUrl",
+    avgleUrl: "#avgleUrl",
+    javTrailersUrl: "#javTrailersUrl",
+    av123Url: "#av123Url",
+    javDbUrl: "#javDbUrl",
+    javBusUrl: "#javBusUrl",
+    supJavUrl: "#supJavUrl",
+    enableTitleSelectFilter: "#enableTitleSelectFilter",
+    enableFavoriteActresses: "#enableFavoriteActresses",
+    enableSaveActressCarInfo: "#enableSaveActressCarInfo",
+    autoRemoveNewVideoMarkAfterBrowse: "#autoRemoveNewVideoMarkAfterBrowse",
+});
+
+/** @param {any} root */
+function bindManualDirtyTracking(root) {
+    const dirty = new Set();
+    root.data("jhsDirtyManualKeys", dirty);
+    for (const key of MANUAL_FORM_SETTING_KEYS) {
+        const selector = /** @type {Record<string, string>} */ (MANUAL_FORM_SELECTORS)[key];
+        if (!selector) continue;
+        root.find(selector).off(".jhsDirty").on("change.jhsDirty", () => dirty.add(key));
+    }
+}
+
 /** @param {any} layerRoot */
 function formRoot(layerRoot) {
     return layerRoot ? /** @type {any} */ (globalThis).$(layerRoot) : /** @type {any} */ (globalThis).$(document);
@@ -70,8 +122,8 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
     root.find("#videoQuality").val(e.videoQuality);
     root.find("#reviewCount").val(e.reviewCount || 20);
     root.find("#tagPosition").val(e.tagPosition || "rightTop");
-    root.find("#defaultQuickFilterTab").val(normalizeQuickFilterKey(e.defaultQuickFilterTab));
-    root.find("#needClosePageBasic").prop("checked", !e.needClosePage || e.needClosePage === _);
+    // BindingHub-owned live/nextNavigation fields are intentionally NOT hydrated
+    // here: they are owned by SettingPlugin.hydrateLiveSettings().
     root.find("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e.autoRemoveNewVideoMarkAfterBrowse && e.autoRemoveNewVideoMarkAfterBrowse === _);
     root.find("#waitCheckCount").val(e.waitCheckCount || 5);
     root.find("#checkConcurrencyCount").val(parseNumberSetting(e.checkConcurrencyCount, 2, { min: 2, max: 5 }));
@@ -88,10 +140,7 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
     root.find("#highlightedTagNumber").val(e.highlightedTagNumber || 1);
     root.find("#highlightedTagColor").val(e.highlightedTagColor || "#ce2222");
     root.find("#highlightedTagLabel").css("border", `${t}px solid ${n}`);
-    root.find("#enableClog").val(e.enableClog || _);
     root.find("#clogMsgCount").val(e.clogMsgCount || 2e3);
-    root.find("#mobileMode").val(e.mobileMode || "auto");
-    root.find("#themeMode").val(e.themeMode || "light");
     root.find("#httpTimeout").val(e.httpTimeout || 5e3);
     root.find("#httpRetryCount").val(e.httpRetryCount || 3);
     root.find("#webDavUrl").val(e.webDavUrl || "");
@@ -100,10 +149,6 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
     root.find("#enableTitleSelectFilter").prop("checked", !e.enableTitleSelectFilter || e.enableTitleSelectFilter === _);
     root.find("#enableFavoriteActresses").prop("checked", !e.enableFavoriteActresses || e.enableFavoriteActresses === _);
     root.find("#enableSaveActressCarInfo").prop("checked", !!e.enableSaveActressCarInfo && e.enableSaveActressCarInfo === _);
-    root.find("#containerColumns").val(e.containerColumns || 5);
-    root.find("#showContainerColumns").text(e.containerColumns || 5);
-    root.find("#containerWidth").val((e.containerWidth || 100) - 70);
-    root.find("#showContainerWidth").text((e.containerWidth || 100) + "%");
     const movie = dependencies.movie;
     root.find("#missAvUrl").val(movie.externalSiteOrigin("missAvBtn", e));
     root.find("#jableUrl").val(movie.externalSiteOrigin("jableBtn", e));
@@ -126,6 +171,7 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
             "Enter" === event.key && addKeyword(event, container, root);
         }));
     });
+    bindManualDirtyTracking(root);
     bindLayoutRangeEvents(root, dependencies.busImg, dependencies.host, dependencies.settings);
 }
 
@@ -190,7 +236,8 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
         if (!authorized) return { canceled: true };
     }
 
-    const patch = await collectManualSettingPatch(root);
+    const dirtyKeys = root.data("jhsDirtyManualKeys") || null;
+    const patch = await collectManualSettingPatch(root, dirtyKeys);
     await dependencies.settings.update((/** @type {Record<string, any>} */ draft) => {
         Object.assign(draft, patch);
         if (nextWebDavOrigin) {
@@ -199,6 +246,7 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
             draft.trustedLocalOrigins = [ ...origins ];
         }
     });
+    root.data("jhsDirtyManualKeys", new Set());
 
     const keywordErrors = [];
     try {
@@ -238,8 +286,8 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
     return { ok: true };
 }
 
-/** @param {any} root */
-async function collectManualSettingPatch(root) {
+/** @param {any} root @param {Set<string> | null | undefined} [dirtyKeys] */
+async function collectManualSettingPatch(root, dirtyKeys = null) {
     const patch = /** @type {Record<string, unknown>} */ ({});
     for (const key of MANUAL_FORM_SETTING_KEYS) {
         patch[key] = undefined;
@@ -280,6 +328,11 @@ async function collectManualSettingPatch(root) {
     patch.enableTitleSelectFilter = root.find("#enableTitleSelectFilter").is(":checked") ? _ : C;
     patch.enableFavoriteActresses = root.find("#enableFavoriteActresses").is(":checked") ? _ : C;
     patch.enableSaveActressCarInfo = root.find("#enableSaveActressCarInfo").is(":checked") ? _ : C;
+    if (dirtyKeys instanceof Set) {
+        for (const key of Object.keys(patch)) {
+            if (!dirtyKeys.has(key)) delete patch[key];
+        }
+    }
     return patch;
 }
 

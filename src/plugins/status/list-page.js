@@ -11,7 +11,7 @@ import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core
 import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isHardHidden, normalizeQuickFilterKey, shouldShowItem } from "../../features/list/list-filters.js";
 import { createListEvaluationContext, evaluateListItem, findMatchedTitleKeyword } from "../../features/list/list-evaluator.js";
 import { scanAllPages } from "../../features/list/batch-scanner.js";
-import { endBatchRun, isActiveBatchRun, tryBeginBatchRun } from "../../features/list/batch-coordinator.js";
+import { endBatchRun, isActiveBatchRun, isBatchRunCancelled, requestCancelBatchRun, tryBeginBatchRun } from "../../features/list/batch-coordinator.js";
 
 /** @typedef {Record<string, any>} ListRecord */
 /** @typedef {any} JQueryHandle */
@@ -463,7 +463,7 @@ export class ListPagePlugin extends BasePlugin {
             return { cancelled: true, busy: true };
         }
         const runtimeScope = await this.getRuntimeService("scope")(), context = await this.createEvaluationContext();
-        const isCancelled = () => !isActiveBatchRun(run) || Boolean(runtimeScope?.disposed);
+        const isCancelled = () => isBatchRunCancelled(run) || Boolean(runtimeScope?.disposed);
         const progressElement = this.showBatchProgress(run);
         this.setBatchButtonsDisabled(true);
         const setProgress = (/** @type {string} */ text) => {
@@ -535,7 +535,7 @@ export class ListPagePlugin extends BasePlugin {
             element = $('<div id="jhs-batch-progress" class="jhs-ui jhs-batch-progress" role="status"></div>').appendTo("body");
             element.append('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm" id="jhs-batch-cancel">取消</button>');
         }
-        element.find("#jhs-batch-cancel").off("click").on("click", () => endBatchRun(run));
+        element.find("#jhs-batch-cancel").off("click").on("click", () => requestCancelBatchRun(run));
         element.find(".jhs-batch-progress__label").remove().end().prepend($('<span class="jhs-batch-progress__label"></span>').text("正在扫描…"));
         return element;
     }

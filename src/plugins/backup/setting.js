@@ -535,6 +535,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         if (layerRoot && (!root[0]?.isConnected || generation !== this._settingsDialogGeneration)) return;
         const builtInCatalog = [...BUILT_IN_NATIVE_MAGNET_SOURCES, ...this.getRuntimeService("magnet").getBuiltInSources()];
         this.resourceState = { custom, tags, filters, builtIn: builtInCatalog.map((source => ({ ...source, ...(builtInOverrides.find((item => item.id === source.id)) || {}) }))), screenshot: { mode: screenshot.mode, providers: BUILT_IN_SCREENSHOT_SOURCES.map((source => { const merged = { ...source, ...(screenshot.providers.find((item => item.id === source.id)) || {}) }; return false === source.implemented ? { ...merged, enabled: false } : merged; })) } };
+        this.resourceCloudState = { enable123Offline: cloud.enable123Offline, enable115Offline: cloud.enable115Offline, enable115Match: cloud.enable115Match, enable115LoginRedirect: cloud.enable115LoginRedirect, providerMode: cloud.providerMode, concurrency: cloud.concurrency, cacheMinutes: cloud.cacheMinutes };
         this.renderResourceSettings(root);
         root.find("#enable123Offline").prop("checked", cloud.enable123Offline);
         root.find("#enable115Offline").prop("checked", cloud.enable115Offline);
@@ -544,6 +545,12 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         root.find("#oneOneFiveConcurrency").val(cloud.concurrency);
         root.find("#oneOneFiveCacheMinutes").val(cloud.cacheMinutes);
 
+        const applyCloudState = (/** @type {string} */ fieldKey, /** @type {any} */ state) => {
+            if (fieldKey === "enable123Offline" || fieldKey === "enable115Offline" || fieldKey === "enable115Match" || fieldKey === "enable115LoginRedirect") root.find("#" + fieldKey).prop("checked", !!state[fieldKey]);
+            else if (fieldKey === "offlineProviderMode") root.find("#offlineProviderMode").val(state.providerMode);
+            else if (fieldKey === "oneOneFiveConcurrency") root.find("#oneOneFiveConcurrency").val(state.concurrency);
+            else if (fieldKey === "oneOneFiveCacheMinutes") root.find("#oneOneFiveCacheMinutes").val(state.cacheMinutes);
+        };
         root.find("#cloud-services-panel").off("change.jhsResource", "input, select").on("change.jhsResource", "input, select", (event => {
             const field = event.currentTarget;
             const key = field.id;
@@ -553,14 +560,21 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             else if ("oneOneFiveConcurrency" === key) value = Number(field.value) || 4;
             else if ("oneOneFiveCacheMinutes" === key) value = Number(field.value) || 60;
             else return;
+            const previous = { ...this.resourceCloudState };
+            this.resourceCloudState = { ...this.resourceCloudState, [key === "offlineProviderMode" ? "providerMode" : key === "oneOneFiveConcurrency" ? "concurrency" : key === "oneOneFiveCacheMinutes" ? "cacheMinutes" : key]: value };
             void this.resourceSettings.saveCloudSetting(key, value).catch((error) => {
-                clog.error("云盘设置保存失败", error), show.error("云盘设置保存失败");
+                this.resourceCloudState = previous;
+                applyCloudState(key, previous);
+                clog.error("云盘设置保存失败", error), show.error("云盘设置保存失败，已恢复原设置");
             });
         }));
         root.find("#resource-sources-panel").off("change.jhsResource", 'input[name="screenshotMode"]').on("change.jhsResource", 'input[name="screenshotMode"]', (event => {
+            const previous = this.resourceState.screenshot.mode;
             this.resourceState.screenshot.mode = event.currentTarget.value;
             void this.resourceSettings.saveScreenshotMode(this.resourceState.screenshot.mode).catch((error) => {
-                clog.error("截图模式保存失败", error), show.error("截图模式保存失败");
+                this.resourceState.screenshot.mode = previous;
+                root.find(`input[name="screenshotMode"][value="${previous}"]`).prop("checked", true);
+                clog.error("截图模式保存失败", error), show.error("截图模式保存失败，已恢复原设置");
             });
         }));
         root.find("#add-custom-magnet-source").off("click.jhsResource").on("click.jhsResource", (() => this.openSourceDialog(null, root)));
@@ -593,6 +607,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             if (custom) actions.append('<button type="button" class="jhs-btn jhs-source-edit">编辑</button><button type="button" class="jhs-btn jhs-btn--danger jhs-source-delete">删除</button>');
             node.append(actions);
             node.on("change", ".jhs-source-toggle", async event => {
+                const previous = !event.currentTarget.checked;
                 source.enabled = event.currentTarget.checked;
                 try {
                     if ("screenshot" === kind) {
@@ -617,7 +632,11 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                         });
                     }
                     this.renderResourceSettings(root);
-                } catch (error) { show.error(error.message); }
+                } catch (error) {
+                    source.enabled = previous;
+                    $(event.currentTarget).prop("checked", previous);
+                    show.error("来源设置保存失败，已恢复原设置");
+                }
             });
             node.on("click", ".jhs-source-test", event => this.testSource(event.currentTarget, source.baseUrl || source.searchUrlTemplate?.replace("{keyword}", "test"), { custom, source }));
             custom && node.on("click", ".jhs-source-edit", (() => this.openSourceDialog(source, root))).on("click", ".jhs-source-delete", (event => utils.q(event, `确认删除来源「${source.name}」？`, (async () => {

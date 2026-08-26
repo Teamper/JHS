@@ -107,10 +107,11 @@ describe("desktop commandbar restore (regular ↔ compact)", () => {
         for (const selector of [ "#waitCheckBtn", "#newVideoBtn", "#favoriteAllVideo", "#jhs-quick-filter", ".jhs-sort-control" ]) {
             expect($(selector).length).toBe(1);
         }
-        // 回到原始 row 且兄弟顺序保持（waitCheck 在 newVideo 之前）。
-        const row = $("#waitCheckBtn").closest(".jhs-list-btn-row");
-        expect(row.length).toBe(1);
-        expect(row.children().index($("#waitCheckBtn"))).toBeLessThan(row.children().index($("#newVideoBtn")));
+        // 控件进入隐藏 parking，而不是回到可见原始 row，避免 compact 下双 Surface 共存。
+        expect($("#jhs-commandbar-parking").length).toBe(1);
+        for (const selector of [ "#waitCheckBtn", "#newVideoBtn", "#favoriteAllVideo", "#jhs-quick-filter", ".jhs-sort-control" ]) {
+            expect($(selector).closest("#jhs-commandbar-parking").length).toBe(1);
+        }
         // 真实点击验证 handler 仍在。
         $("#waitCheckBtn").trigger("click");
         expect(clicked).toBe(1);

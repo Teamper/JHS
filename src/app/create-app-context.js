@@ -69,6 +69,14 @@ export function createAppContext(runtime) {
         runtime.legacyStorage?.invalidateSettingCache?.();
         await settings.refresh();
     }));
+    if (typeof window !== "undefined") {
+        rootScope.listen(window, "pageshow", async () => {
+            // BFCache restores the page without re-running bootstrap; re-read
+            // settings so any change made in another tab/surface is reflected.
+            runtime.legacyStorage?.invalidateSettingCache?.();
+            await settings.refresh();
+        });
+    }
     const profile = new ProfileService({ scope: rootScope, settings });
     const commands = new CommandRegistry();
     const providers = new ProviderRegistry(diagnostics);

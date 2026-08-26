@@ -7783,6 +7783,54 @@
     "enableSaveActressCarInfo",
     "autoRemoveNewVideoMarkAfterBrowse"
   ]);
+  var MANUAL_FORM_SELECTORS = Object.freeze({
+    videoQuality: "#videoQuality",
+    reviewCount: "#reviewCount",
+    tagPosition: "#tagPosition",
+    waitCheckCount: "#waitCheckCount",
+    highlightedTagNumber: "#highlightedTagNumber",
+    highlightedTagColor: "#highlightedTagColor",
+    checkConcurrencyCount: "#checkConcurrencyCount",
+    checkRequestSleep: "#checkRequestSleep",
+    enableCheckBlacklist: "#enableCheckBlacklist",
+    checkBlacklist_intervalTime: "#checkBlacklist_intervalTime",
+    checkBlacklist_ruleTime: "#checkBlacklist_ruleTime",
+    enableCheckFavoriteActress: "#enableCheckFavoriteActress",
+    checkFavoriteActress_IntervalTime: "#checkFavoriteActress_IntervalTime",
+    enableCheckNewVideo: "#enableCheckNewVideo",
+    checkNewVideo_intervalTime: "#checkNewVideo_intervalTime",
+    checkNewVideo_ruleTime: "#checkNewVideo_ruleTime",
+    httpTimeout: "#httpTimeout",
+    httpRetryCount: "#httpRetryCount",
+    circuitBreakerThreshold: "#circuitBreakerThreshold",
+    circuitBreakerCooldown: "#circuitBreakerCooldownSec",
+    clogMsgCount: "#clogMsgCount",
+    webDavUrl: "#webDavUrl",
+    webDavUsername: "#webDavUsername",
+    webDavPassword: "#webDavPassword",
+    missAvUrl: "#missAvUrl",
+    jableUrl: "#jableUrl",
+    avgleUrl: "#avgleUrl",
+    javTrailersUrl: "#javTrailersUrl",
+    av123Url: "#av123Url",
+    javDbUrl: "#javDbUrl",
+    javBusUrl: "#javBusUrl",
+    supJavUrl: "#supJavUrl",
+    enableTitleSelectFilter: "#enableTitleSelectFilter",
+    enableFavoriteActresses: "#enableFavoriteActresses",
+    enableSaveActressCarInfo: "#enableSaveActressCarInfo",
+    autoRemoveNewVideoMarkAfterBrowse: "#autoRemoveNewVideoMarkAfterBrowse"
+  });
+  function bindManualDirtyTracking(root) {
+    const dirty = /* @__PURE__ */ new Set();
+    root.data("jhsDirtyManualKeys", dirty);
+    for (const key of MANUAL_FORM_SETTING_KEYS) {
+      const selector = MANUAL_FORM_SELECTORS[key];
+      if (!selector) continue;
+      root.find(selector).off(".jhsDirty").on("change.jhsDirty", () => dirty.add(key));
+    }
+  }
+  __name(bindManualDirtyTracking, "bindManualDirtyTracking");
   function formRoot(layerRoot) {
     return layerRoot ? globalThis.$(layerRoot) : globalThis.$(document);
   }
@@ -7793,8 +7841,6 @@
     root.find("#videoQuality").val(e2.videoQuality);
     root.find("#reviewCount").val(e2.reviewCount || 20);
     root.find("#tagPosition").val(e2.tagPosition || "rightTop");
-    root.find("#defaultQuickFilterTab").val(normalizeQuickFilterKey(e2.defaultQuickFilterTab));
-    root.find("#needClosePageBasic").prop("checked", !e2.needClosePage || e2.needClosePage === _);
     root.find("#autoRemoveNewVideoMarkAfterBrowse").prop("checked", !!e2.autoRemoveNewVideoMarkAfterBrowse && e2.autoRemoveNewVideoMarkAfterBrowse === _);
     root.find("#waitCheckCount").val(e2.waitCheckCount || 5);
     root.find("#checkConcurrencyCount").val(parseNumberSetting(e2.checkConcurrencyCount, 2, { min: 2, max: 5 }));
@@ -7811,10 +7857,7 @@
     root.find("#highlightedTagNumber").val(e2.highlightedTagNumber || 1);
     root.find("#highlightedTagColor").val(e2.highlightedTagColor || "#ce2222");
     root.find("#highlightedTagLabel").css("border", `${t2}px solid ${n2}`);
-    root.find("#enableClog").val(e2.enableClog || _);
     root.find("#clogMsgCount").val(e2.clogMsgCount || 2e3);
-    root.find("#mobileMode").val(e2.mobileMode || "auto");
-    root.find("#themeMode").val(e2.themeMode || "light");
     root.find("#httpTimeout").val(e2.httpTimeout || 5e3);
     root.find("#httpRetryCount").val(e2.httpRetryCount || 3);
     root.find("#webDavUrl").val(e2.webDavUrl || "");
@@ -7823,10 +7866,6 @@
     root.find("#enableTitleSelectFilter").prop("checked", !e2.enableTitleSelectFilter || e2.enableTitleSelectFilter === _);
     root.find("#enableFavoriteActresses").prop("checked", !e2.enableFavoriteActresses || e2.enableFavoriteActresses === _);
     root.find("#enableSaveActressCarInfo").prop("checked", !!e2.enableSaveActressCarInfo && e2.enableSaveActressCarInfo === _);
-    root.find("#containerColumns").val(e2.containerColumns || 5);
-    root.find("#showContainerColumns").text(e2.containerColumns || 5);
-    root.find("#containerWidth").val((e2.containerWidth || 100) - 70);
-    root.find("#showContainerWidth").text((e2.containerWidth || 100) + "%");
     const movie = dependencies.movie;
     root.find("#missAvUrl").val(movie.externalSiteOrigin("missAvBtn", e2));
     root.find("#jableUrl").val(movie.externalSiteOrigin("jableBtn", e2));
@@ -7849,6 +7888,7 @@
         "Enter" === event.key && addKeyword(event, container, root);
       }));
     });
+    bindManualDirtyTracking(root);
     bindLayoutRangeEvents(root, dependencies.busImg, dependencies.host, dependencies.settings);
   }
   __name(loadSettingForm, "loadSettingForm");
@@ -7900,7 +7940,8 @@
       const authorized = await new Promise((resolve) => utils.q(null, `仅授权 WebDAV 精确来源：${nextWebDavOrigin}，是否继续？`, () => resolve(true), () => resolve(false)));
       if (!authorized) return { canceled: true };
     }
-    const patch = await collectManualSettingPatch(root);
+    const dirtyKeys = root.data("jhsDirtyManualKeys") || null;
+    const patch = await collectManualSettingPatch(root, dirtyKeys);
     await dependencies.settings.update((draft) => {
       Object.assign(draft, patch);
       if (nextWebDavOrigin) {
@@ -7909,6 +7950,7 @@
         draft.trustedLocalOrigins = [...origins];
       }
     });
+    root.data("jhsDirtyManualKeys", /* @__PURE__ */ new Set());
     const keywordErrors = [];
     try {
       const reviewKeywords = root.find("#reviewKeywordContainer .keyword-label").toArray().map((element) => {
@@ -7945,7 +7987,7 @@
     return { ok: true };
   }
   __name(saveSettingForm, "saveSettingForm");
-  async function collectManualSettingPatch(root) {
+  async function collectManualSettingPatch(root, dirtyKeys = null) {
     const patch = {};
     for (const key of MANUAL_FORM_SETTING_KEYS) {
       patch[key] = void 0;
@@ -7986,6 +8028,11 @@
     patch.enableTitleSelectFilter = root.find("#enableTitleSelectFilter").is(":checked") ? _ : C;
     patch.enableFavoriteActresses = root.find("#enableFavoriteActresses").is(":checked") ? _ : C;
     patch.enableSaveActressCarInfo = root.find("#enableSaveActressCarInfo").is(":checked") ? _ : C;
+    if (dirtyKeys instanceof Set) {
+      for (const key of Object.keys(patch)) {
+        if (!dirtyKeys.has(key)) delete patch[key];
+      }
+    }
     return patch;
   }
   __name(collectManualSettingPatch, "collectManualSettingPatch");
@@ -9469,6 +9516,7 @@
         const merged = { ...source, ...screenshot.providers.find(((item) => item.id === source.id)) || {} };
         return false === source.implemented ? { ...merged, enabled: false } : merged;
       })) } };
+      this.resourceCloudState = { enable123Offline: cloud.enable123Offline, enable115Offline: cloud.enable115Offline, enable115Match: cloud.enable115Match, enable115LoginRedirect: cloud.enable115LoginRedirect, providerMode: cloud.providerMode, concurrency: cloud.concurrency, cacheMinutes: cloud.cacheMinutes };
       this.renderResourceSettings(root);
       root.find("#enable123Offline").prop("checked", cloud.enable123Offline);
       root.find("#enable115Offline").prop("checked", cloud.enable115Offline);
@@ -9477,6 +9525,12 @@
       root.find("#enable115LoginRedirect").prop("checked", cloud.enable115LoginRedirect);
       root.find("#oneOneFiveConcurrency").val(cloud.concurrency);
       root.find("#oneOneFiveCacheMinutes").val(cloud.cacheMinutes);
+      const applyCloudState = /* @__PURE__ */ __name((fieldKey, state) => {
+        if (fieldKey === "enable123Offline" || fieldKey === "enable115Offline" || fieldKey === "enable115Match" || fieldKey === "enable115LoginRedirect") root.find("#" + fieldKey).prop("checked", !!state[fieldKey]);
+        else if (fieldKey === "offlineProviderMode") root.find("#offlineProviderMode").val(state.providerMode);
+        else if (fieldKey === "oneOneFiveConcurrency") root.find("#oneOneFiveConcurrency").val(state.concurrency);
+        else if (fieldKey === "oneOneFiveCacheMinutes") root.find("#oneOneFiveCacheMinutes").val(state.cacheMinutes);
+      }, "applyCloudState");
       root.find("#cloud-services-panel").off("change.jhsResource", "input, select").on("change.jhsResource", "input, select", ((event) => {
         const field = event.currentTarget;
         const key = field.id;
@@ -9486,14 +9540,21 @@
         else if ("oneOneFiveConcurrency" === key) value = Number(field.value) || 4;
         else if ("oneOneFiveCacheMinutes" === key) value = Number(field.value) || 60;
         else return;
+        const previous = { ...this.resourceCloudState };
+        this.resourceCloudState = { ...this.resourceCloudState, [key === "offlineProviderMode" ? "providerMode" : key === "oneOneFiveConcurrency" ? "concurrency" : key === "oneOneFiveCacheMinutes" ? "cacheMinutes" : key]: value };
         void this.resourceSettings.saveCloudSetting(key, value).catch((error) => {
-          clog.error("云盘设置保存失败", error), show.error("云盘设置保存失败");
+          this.resourceCloudState = previous;
+          applyCloudState(key, previous);
+          clog.error("云盘设置保存失败", error), show.error("云盘设置保存失败，已恢复原设置");
         });
       }));
       root.find("#resource-sources-panel").off("change.jhsResource", 'input[name="screenshotMode"]').on("change.jhsResource", 'input[name="screenshotMode"]', ((event) => {
+        const previous = this.resourceState.screenshot.mode;
         this.resourceState.screenshot.mode = event.currentTarget.value;
         void this.resourceSettings.saveScreenshotMode(this.resourceState.screenshot.mode).catch((error) => {
-          clog.error("截图模式保存失败", error), show.error("截图模式保存失败");
+          this.resourceState.screenshot.mode = previous;
+          root.find(`input[name="screenshotMode"][value="${previous}"]`).prop("checked", true);
+          clog.error("截图模式保存失败", error), show.error("截图模式保存失败，已恢复原设置");
         });
       }));
       root.find("#add-custom-magnet-source").off("click.jhsResource").on("click.jhsResource", (() => this.openSourceDialog(null, root)));
@@ -9534,6 +9595,7 @@
         if (custom) actions.append('<button type="button" class="jhs-btn jhs-source-edit">编辑</button><button type="button" class="jhs-btn jhs-btn--danger jhs-source-delete">删除</button>');
         node.append(actions);
         node.on("change", ".jhs-source-toggle", async (event) => {
+          const previous = !event.currentTarget.checked;
           source.enabled = event.currentTarget.checked;
           try {
             if ("screenshot" === kind) {
@@ -9559,7 +9621,9 @@
             }
             this.renderResourceSettings(root);
           } catch (error) {
-            show.error(error.message);
+            source.enabled = previous;
+            $(event.currentTarget).prop("checked", previous);
+            show.error("来源设置保存失败，已恢复原设置");
           }
         });
         node.on("click", ".jhs-source-test", (event) => this.testSource(event.currentTarget, source.baseUrl || source.searchUrlTemplate?.replace("{keyword}", "test"), { custom, source }));
@@ -9892,7 +9956,7 @@
   var activeRun = null;
   function tryBeginBatchRun() {
     if (activeRun) return null;
-    const run = /* @__PURE__ */ Symbol("batch-run");
+    const run = { id: /* @__PURE__ */ Symbol("batch-run"), cancelRequested: false };
     activeRun = run;
     return run;
   }
@@ -9901,6 +9965,14 @@
     return activeRun === run;
   }
   __name(isActiveBatchRun, "isActiveBatchRun");
+  function isBatchRunCancelled(run) {
+    return Boolean(run?.cancelRequested) || !isActiveBatchRun(run);
+  }
+  __name(isBatchRunCancelled, "isBatchRunCancelled");
+  function requestCancelBatchRun(run) {
+    if (activeRun === run && run) run.cancelRequested = true;
+  }
+  __name(requestCancelBatchRun, "requestCancelBatchRun");
   function endBatchRun(run) {
     if (activeRun === run) activeRun = null;
   }
@@ -11283,7 +11355,8 @@ ${value}\r
       const target = $(host), previous = target.data("jhsFc2Context");
       previous?.destroy?.(), target.empty();
       const shell = createFc2DetailShell(options).appendTo(target), context = createFc2DetailContext(shell, options);
-      target.data("jhsFc2Context", context), this.initializeWorkspace(context);
+      target.data("jhsFc2Context", context), context.translationGeneration = 0, context.screenshotGeneration = 0, context.otherSiteGeneration = 0;
+      this.initializeWorkspace(context);
       this.bindFc2FeatureLifecycle(context);
       return context;
     }
@@ -11330,12 +11403,17 @@ ${value}\r
         const names = event.detail?.names;
         if (!names?.length) return;
         if (names.includes("enableLoadScreenShot")) {
-          settings.snapshot().enableLoadScreenShot === "no" ? this.unmountFc2Screenshot(context) : void this.loadFc2Screenshot(context);
+          if (settings.snapshot().enableLoadScreenShot === "no") {
+            context.screenshotGeneration = (context.screenshotGeneration || 0) + 1;
+            this.unmountFc2Screenshot(context);
+          } else {
+            void this.loadFc2Screenshot(context);
+          }
         }
         if (names.includes("translateTitle")) {
           if ((settings.snapshot().translateTitle ?? _) === _) void this.applyFc2Translation(context);
           else {
-            this.translationGeneration++;
+            context.translationGeneration = (context.translationGeneration || 0) + 1;
             this.revertFc2Translation(context);
           }
         }
@@ -11344,7 +11422,12 @@ ${value}\r
         }
         if (names.includes("enableLoadOtherSite")) {
           const sitesGroup = context.getSection("resources").find('[data-jhs-role="other-sites"]').closest(".jhs-fc2-resource-group");
-          settings.snapshot().enableLoadOtherSite === "no" ? this.unmountFc2OtherSites(context, sitesGroup) : void this.mountFc2OtherSites(context, sitesGroup, this.getOptionalDependency("OtherSitePlugin"));
+          if (settings.snapshot().enableLoadOtherSite === "no") {
+            context.otherSiteGeneration = (context.otherSiteGeneration || 0) + 1;
+            this.unmountFc2OtherSites(context, sitesGroup);
+          } else {
+            void this.mountFc2OtherSites(context, sitesGroup, this.getOptionalDependency("OtherSitePlugin"));
+          }
         }
       }, "handler");
       settings.addEventListener("settings.changed", handler);
@@ -11353,33 +11436,35 @@ ${value}\r
     loadFc2Screenshot(context) {
       const screenshotService = this.getRuntimeService("screenshot"), settings = this.getRuntimeService("settings"), screenshot = context.root.find('[data-jhs-role="screenshot"]');
       if (!screenshotService.isEnabled(settings.snapshot())) return void screenshot.empty();
+      const generation = (context.screenshotGeneration || 0) + 1;
+      context.screenshotGeneration = generation;
       void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((scope) => renderScreenshotPanel({
         target: screenshot,
         carNum: context.carNum.replace("FC2-", ""),
         screenshot: screenshotService,
         settings: settings.snapshot(),
         scope,
-        isActive: /* @__PURE__ */ __name(() => context.isAlive() && settings.snapshot().enableLoadScreenShot !== "no", "isActive"),
+        isActive: /* @__PURE__ */ __name(() => context.isAlive() && settings.snapshot().enableLoadScreenShot !== "no" && generation === context.screenshotGeneration, "isActive"),
         isDuplicate: /* @__PURE__ */ __name((url) => Boolean(context.galleryUrls?.has(url)), "isDuplicate")
       })).then((result) => {
-        if (!context.isAlive()) return;
+        if (!context.isAlive() || generation !== context.screenshotGeneration) return;
         if (settings.snapshot().enableLoadScreenShot === "no") return void screenshot.empty();
         if (!result) return;
       }).catch((error) => {
-        context.isAlive() && screenshot.empty();
+        if (!context.isAlive() || generation !== context.screenshotGeneration) return;
+        screenshot.empty();
         clog.error("FC2 剧照初始化失败", error);
       });
     }
     unmountFc2Screenshot(context) {
+      context.screenshotGeneration = (context.screenshotGeneration || 0) + 1;
       context.root.find('[data-jhs-role="screenshot"]').empty();
     }
     applyFc2Translation(context) {
-      if (context.translationInFlight) return;
-      context.translationInFlight = true;
-      const generation = this.translationGeneration, settings = this.getRuntimeService("settings");
-      Promise.resolve().then((() => this.getRuntimeService("scope")())).then((scope) => renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope, isActive: /* @__PURE__ */ __name(() => context.isAlive() && (settings.snapshot().translateTitle ?? _) === _ && generation === this.translationGeneration, "isActive") })).catch(((error) => clog.error("FC2 标题翻译失败", error))).finally((() => {
-        context.translationInFlight = false;
-      }));
+      const generation = (context.translationGeneration || 0) + 1;
+      context.translationGeneration = generation;
+      const settings = this.getRuntimeService("settings");
+      Promise.resolve().then((() => this.getRuntimeService("scope")())).then((scope) => renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope, isActive: /* @__PURE__ */ __name(() => context.isAlive() && (settings.snapshot().translateTitle ?? _) === _ && generation === context.translationGeneration, "isActive") })).catch(((error) => clog.error("FC2 标题翻译失败", error)));
     }
     revertFc2Translation(context) {
       context.root.find(".translated-title").remove();
@@ -11387,18 +11472,21 @@ ${value}\r
     mountFc2OtherSites(context, sitesGroup, otherSite) {
       if (!otherSite) return void sitesGroup.remove();
       const settings = this.getRuntimeService("settings");
+      const generation = (context.otherSiteGeneration || 0) + 1;
+      context.otherSiteGeneration = generation;
       sitesGroup.length && sitesGroup.show();
-      void Promise.resolve().then((() => otherSite.loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: false, isActive: /* @__PURE__ */ __name(() => context.isAlive() && settings.snapshot().enableLoadOtherSite !== "no", "isActive") }))).then((box) => {
-        if (!context.isAlive()) return;
+      void Promise.resolve().then((() => otherSite.loadOtherSite(context.carNum.replace("FC2-", ""), context.carNum, { root: context.root, target: sitesGroup.find('[data-jhs-role="other-sites"]'), autoDetect: false, isActive: /* @__PURE__ */ __name(() => context.isAlive() && settings.snapshot().enableLoadOtherSite !== "no" && generation === context.otherSiteGeneration, "isActive") }))).then((box) => {
+        if (!context.isAlive() || generation !== context.otherSiteGeneration) return;
         box ? sitesGroup.show() : sitesGroup.hide();
       }).catch((error) => {
-        if (!context.isAlive()) return;
+        if (!context.isAlive() || generation !== context.otherSiteGeneration) return;
         sitesGroup.show();
         renderFc2State(context.root.find('[data-jhs-role="other-sites"]'), "外部站点加载失败");
         clog.error("FC2 外部站点加载失败", error);
       });
     }
     unmountFc2OtherSites(context, sitesGroup) {
+      context.otherSiteGeneration = (context.otherSiteGeneration || 0) + 1;
       context.root.find("[data-jhs-other-site-box],[data-jhs-other-site-settings]").remove();
       sitesGroup.length && sitesGroup.hide();
     }
@@ -17878,7 +17966,7 @@ ${failure.stack}` : "");
         return { cancelled: true, busy: true };
       }
       const runtimeScope = await this.getRuntimeService("scope")(), context = await this.createEvaluationContext();
-      const isCancelled = /* @__PURE__ */ __name(() => !isActiveBatchRun(run) || Boolean(runtimeScope?.disposed), "isCancelled");
+      const isCancelled = /* @__PURE__ */ __name(() => isBatchRunCancelled(run) || Boolean(runtimeScope?.disposed), "isCancelled");
       const progressElement = this.showBatchProgress(run);
       this.setBatchButtonsDisabled(true);
       const setProgress = /* @__PURE__ */ __name((text) => {
@@ -17945,7 +18033,7 @@ ${failure.stack}` : "");
         element = $('<div id="jhs-batch-progress" class="jhs-ui jhs-batch-progress" role="status"></div>').appendTo("body");
         element.append('<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm" id="jhs-batch-cancel">取消</button>');
       }
-      element.find("#jhs-batch-cancel").off("click").on("click", () => endBatchRun(run));
+      element.find("#jhs-batch-cancel").off("click").on("click", () => requestCancelBatchRun(run));
       element.find(".jhs-batch-progress__label").remove().end().prepend($('<span class="jhs-batch-progress__label"></span>').text("正在扫描…"));
       return element;
     }
@@ -18339,17 +18427,14 @@ ${failure.stack}` : "");
       this.buildCommandBar();
     }
     unmountDesktopCommandBar() {
-      const sources = [...this._commandBarSources || []].reverse();
+      let parking = $("#jhs-commandbar-parking");
+      if (!parking.length) {
+        parking = $('<div id="jhs-commandbar-parking" hidden></div>').appendTo("body");
+      }
+      const sources = [...this._commandBarSources || []];
       for (const source of sources) {
         const element = source.element;
-        if (!element?.isConnected) continue;
-        if (source.parent?.isConnected) {
-          if (source.next?.isConnected && source.parent.contains(source.next)) source.parent.insertBefore(element, source.next);
-          else source.parent.appendChild(element);
-        } else {
-          const host = $(this.getSelector().boxSelector).first();
-          host.length ? host.before(element) : document.body.appendChild(element);
-        }
+        if (element?.isConnected) parking.append(element);
       }
       this._commandBarSources = [];
       $("#jhs-page-commandbar").remove();
@@ -18359,7 +18444,7 @@ ${failure.stack}` : "");
       if (!window.isListPage || $("#jhs-page-commandbar").length) return;
       this._commandBarSources = [];
       const remember = /* @__PURE__ */ __name((element) => {
-        this._commandBarSources.push({ element, parent: element.parentNode, next: element.nextSibling });
+        this._commandBarSources.push({ element, parent: null, next: null });
       }, "remember");
       const commandbar = $(`
             <div id="jhs-page-commandbar" class="jhs-page-commandbar jhs-ui" role="toolbar" aria-label="JHS 页面工具">
@@ -20814,6 +20899,12 @@ ${failure.stack}` : "");
       runtime.legacyStorage?.invalidateSettingCache?.();
       await settings.refresh();
     }));
+    if (typeof window !== "undefined") {
+      rootScope.listen(window, "pageshow", async () => {
+        runtime.legacyStorage?.invalidateSettingCache?.();
+        await settings.refresh();
+      });
+    }
     const profile = new ProfileService({ scope: rootScope, settings });
     const commands = new CommandRegistry();
     const providers = new ProviderRegistry(diagnostics);

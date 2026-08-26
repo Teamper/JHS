@@ -232,21 +232,16 @@ export class MobileBottomBarPlugin extends BasePlugin {
         if (!window.isListPage || $("#jhs-page-commandbar").length) return;
         this.buildCommandBar();
     }
-    /** 卸载桌面命令栏并把被收拢的控件放回宿主原位（原容器已移除时回退到列表容器前）。 */
+    /** 卸载桌面命令栏并把被收拢的控件移入隐藏 parking，避免 compact 下与 FAB 双 Surface 共存。 */
     unmountDesktopCommandBar() {
-        // 必须先 restore 再 remove：按钮此刻仍在 commandbar 内，先删外壳会让 isConnected=false 导致 restore 被跳过。
-        // 逆序恢复保证兄弟按钮先回到原位，前面的按钮仍能按记录的 nextSibling 精确插回。
-        const sources = [ ...(this._commandBarSources || []) ].reverse();
+        let parking = $("#jhs-commandbar-parking");
+        if (!parking.length) {
+            parking = $('<div id="jhs-commandbar-parking" hidden></div>').appendTo("body");
+        }
+        const sources = [ ...(this._commandBarSources || []) ];
         for (const source of sources) {
             const element = source.element;
-            if (!element?.isConnected) continue;
-            if (source.parent?.isConnected) {
-                if (source.next?.isConnected && source.parent.contains(source.next)) source.parent.insertBefore(element, source.next);
-                else source.parent.appendChild(element);
-            } else {
-                const host = $(this.getSelector().boxSelector).first();
-                host.length ? host.before(element) : document.body.appendChild(element);
-            }
+            if (element?.isConnected) parking.append(element);
         }
         this._commandBarSources = [];
         $("#jhs-page-commandbar").remove();
@@ -257,7 +252,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
         if (!window.isListPage || $("#jhs-page-commandbar").length) return;
         this._commandBarSources = [];
         const remember = (/** @type {Element} */ element) => {
-            this._commandBarSources.push({ element, parent: element.parentNode, next: element.nextSibling });
+            this._commandBarSources.push({ element, parent: null, next: null });
         };
         const commandbar = $(`
             <div id="jhs-page-commandbar" class="jhs-page-commandbar jhs-ui" role="toolbar" aria-label="JHS 页面工具">
@@ -295,7 +290,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
             item.length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batch.find(".jhs-commandbar__menu")));
         }));
         batch.find(".jhs-commandbar__menu").children().length && right.append(batch);
-        // 保留原始 .jhs-list-btn-row 行，unmount 时按钮需要恢复到这些锚点。
+        // 控件从隐藏 parking 或原始位置进入 commandbar；unmount 时统一移入隐藏 parking。
         commandbar.find(".jhs-commandbar__more, .jhs-commandbar__batch").each(((/** @type {number} */ index, /** @type {Element} */ element) => {
             const container = $(element), toggle = container.find(".jhs-commandbar__menu-toggle"), menu = container.find(".jhs-commandbar__menu");
             toggle.on("click", ((/** @type {any} */ event) => {

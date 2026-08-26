@@ -34,8 +34,8 @@ describe("RC 收口：async 回流 gate", () => {
         expect(listPage).toContain("generation !== this.translationGeneration");
         expect(translate).toContain("?.invalidateTranslations?.()");
         expect(titleTranslation).toContain("options.isActive && !options.isActive()");
-        expect(fc2).toContain("this.translationGeneration++");
-        expect(fc2).toContain("generation === this.translationGeneration");
+        expect(fc2).toContain("context.translationGeneration = (context.translationGeneration || 0) + 1");
+        expect(fc2).toContain("generation === context.translationGeneration");
     });
 
     it("other-site invalidates in-flight mounts and combines the settings gate", () => {
@@ -69,8 +69,8 @@ describe("RC 收口：预览 capability / FC2 稳定槽与翻译单入口", () =
     });
 
     it("FC2 translation has exactly one entry and catch paths honor isActive", () => {
-        expect(fc2).toContain("context.translationInFlight");
-        expect(fc2).toContain("generation === this.translationGeneration");
+        expect(fc2).toContain("context.translationGeneration");
+        expect(fc2).toContain("generation === context.translationGeneration");
         expect(fc2By123).not.toContain("renderTranslatedTitle");
         expect(titleTranslation).toContain("if (options.isActive && !options.isActive()) return;");
         const catchBlock = titleTranslation.slice(titleTranslation.indexOf("} catch (error) {"), titleTranslation.indexOf('translatedNode.addClass("is-error")'));
@@ -85,9 +85,11 @@ describe("RC 收口：预览 capability / FC2 稳定槽与翻译单入口", () =
         expect(otherSite).toContain("rootElement ? generation === this._mountGenerations.get(rootElement)");
     });
 
-    it("commandbar restores sources before removing the shell and keeps original rows", () => {
+    it("commandbar parks sources in a hidden container and removes the shell", () => {
         const unmount = commandbar.slice(commandbar.indexOf("unmountDesktopCommandBar() {"), commandbar.indexOf("buildCommandBar() {"));
-        expect(unmount.indexOf("_commandBarSources || []) ].reverse()")).toBeGreaterThan(-1);
+        expect(unmount).toContain("#jhs-commandbar-parking");
+        expect(unmount).toContain("parking.append(element)");
+        expect(unmount).not.toContain("].reverse()");
         expect(unmount.indexOf('#jhs-page-commandbar").remove()')).toBeGreaterThan(unmount.indexOf("_commandBarSources"));
         expect(commandbar).not.toContain('$(".jhs-list-btn-row").filter');
         expect(setting).toContain('i(this, "_desktopNavGeneration", 0)');
