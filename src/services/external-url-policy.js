@@ -18,11 +18,18 @@ function isPrivateLiteral(hostname) {
 export class ExternalUrlPolicy {
     /** @param {{localOrigins?: string[]}} [options] */
     constructor(options = {}) {
-        this.localOrigins = new Set((options.localOrigins ?? []).map((origin) => new URL(origin).origin));
+        this.localOrigins = new Set();
+        this.replaceLocalOrigins(options.localOrigins ?? []);
     }
 
     /** @param {string} origin */
     authorizeLocalOrigin(origin) { this.localOrigins.add(new URL(origin).origin); }
+
+    /** Atomically replaces the exact local origins authorized by the user. @param {readonly string[]} origins */
+    replaceLocalOrigins(origins) {
+        const next = new Set(origins.map((origin) => new URL(origin).origin));
+        this.localOrigins = next;
+    }
 
     /** @param {string | URL} input @param {{trustClass: string, hosts?: string[], expectedOrigin?: string}} policy */
     assertAllowed(input, policy) {

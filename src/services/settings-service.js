@@ -13,21 +13,21 @@ export class SettingsService extends EventTarget {
 
     /** @param {string} key */
     async load(key = "setting") {
-        const stored = await this.storage.get(key);
-        this.snapshotValue = Object.freeze(stored && typeof stored === "object" && !Array.isArray(stored) ? { ...stored } : {});
-        return this.snapshotValue;
+        return this._enqueue(() => this._withSettingLock(() => this._readSnapshot(key)));
     }
 
     /** Refreshes the in-memory snapshot after a transitional legacy or remote write; emits settings.changed only when values actually changed. */
     async refresh(key = "setting") {
-        const previous = this.snapshotValue;
-        await this.load(key);
-        const keys = new Set([ ...Object.keys(previous), ...Object.keys(this.snapshotValue) ]);
-        const changedNames = [ ...keys ].filter((name) => previous[name] !== this.snapshotValue[name]);
-        if (changedNames.length) {
-            this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name: changedNames.length === 1 ? changedNames[0] : null, value: undefined, names: Object.freeze([ ...changedNames ]), snapshot: this.snapshotValue }) }));
-        }
-        return this.snapshotValue;
+        return this._enqueue(() => this._withSettingLock(async () => {
+            const previous = this.snapshotValue;
+            const next = await this._readSnapshot(key);
+            const keys = new Set([ ...Object.keys(previous), ...Object.keys(next) ]);
+            const changedNames = [ ...keys ].filter((name) => previous[name] !== next[name]);
+            if (changedNames.length) {
+                this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name: changedNames.length === 1 ? changedNames[0] : null, value: undefined, names: Object.freeze([ ...changedNames ]), snapshot: next }) }));
+            }
+            return next;
+        }));
     }
 
     snapshot() { return this.snapshotValue; }
@@ -72,7 +72,7 @@ export class SettingsService extends EventTarget {
      */
     async update(mutator, storageKey = "setting") {
         if (typeof mutator !== "function") throw new TypeError("Settings update mutator must be a function");
-        const operation = this.writeChain.then(() => this._withSettingLock(async () => {
+        return this._enqueue(() => this._withSettingLock(async () => {
             const stored = await this.storage.get(storageKey);
             const base = /** @type {Record<string, unknown>} */ (stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {});
             const draft = { ...base };
@@ -105,11 +105,23 @@ export class SettingsService extends EventTarget {
             }
             return next;
         }));
+    }
+
+    /** @param {string} storageKey */
+    async _readSnapshot(storageKey) {
+        const stored = await this.storage.get(storageKey);
+        this.snapshotValue = Object.freeze(stored && typeof stored === "object" && !Array.isArray(stored) ? { ...stored } : {});
+        return this.snapshotValue;
+    }
+
+    /** Keeps reads and writes ordered while allowing the queue to recover after failures. @template T @param {() => Promise<T>} fn */
+    _enqueue(fn) {
+        const operation = this.writeChain.then(fn);
         this.writeChain = operation.then(() => undefined, () => undefined);
         return operation;
     }
 
-    /** Runs the read-modify-write inside the shared jhs_setting_lock so it serializes with legacy writers and other tabs. @param {() => Promise<Record<string, unknown>>} fn */
+    /** Runs a settings operation inside the shared lock so it serializes with legacy writers and other tabs. @template T @param {() => Promise<T>} fn */
     async _withSettingLock(fn) {
         const locks = globalThis.navigator?.locks;
         if (!locks?.request) return fn();

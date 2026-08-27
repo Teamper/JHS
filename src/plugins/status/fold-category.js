@@ -2,6 +2,7 @@
 
 import { o } from "../../core/constants.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
+import { createLatestSettingWriter } from "../../ui/settings/setting-binding-controller.js";
 
 export class FoldCategoryPlugin extends BasePlugin {
     getName() {
@@ -52,24 +53,18 @@ export class FoldCategoryPlugin extends BasePlugin {
         t = $("section > div > div.box")), !t) return;
         const settings = this.getRuntimeService("settings");
         let i = $("#foldCategoryBtn"), s = settings.snapshot().foldCategoryCollapsed === !0, [o, r] = s ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];
-        i.find("span").text(o).end().find("i").attr("class", r), window.location.href.includes("noFold=1") || t[s ? "hide" : "show"](),
+        i.find("span").text(o).end().find("i").attr("class", r), window.location.href.includes("noFold=1") || t[s ? "hide" : "show"]();
+        const createFoldWriter = createLatestSettingWriter({ settings, key: "foldCategoryCollapsed", fallback: false, apply: (value) => {
+            s = value === true;
+            const [label, icon] = s ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];
+            i.find("span").text(label).end().find("i").attr("class", icon);
+            t[s ? "hide" : "show"]();
+        }, onError: (error) => {
+            clog.error("分类折叠设置保存失败，已恢复", error), show.error("分类折叠设置保存失败，已恢复原设置");
+        } });
         i.on("click", (async (/** @type {MouseEvent} */ e) => {
             e.preventDefault();
-            const previous = s;
-            s = !s;
-            const applyState = (/** @type {boolean} */ collapsed) => {
-                const [label, icon] = collapsed ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];
-                i.find("span").text(label).end().find("i").attr("class", icon);
-                t[collapsed ? "hide" : "show"]();
-            };
-            applyState(s);
-            try {
-                await settings.set("foldCategoryCollapsed", s);
-            } catch (error) {
-                s = previous;
-                applyState(previous);
-                clog.error("分类折叠设置保存失败，已恢复", error), show.error("分类折叠设置保存失败，已恢复原设置");
-            }
+            await createFoldWriter(!s);
         }));
     }
 }

@@ -4,6 +4,7 @@ import { C, _, escapeHtml, k, l, m, normalizeCarNum, r, v, y } from "../../core/
 import { DetailStateController } from "../../core/detail-state-controller.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
+import { createLatestSettingWriter } from "../../ui/settings/setting-binding-controller.js";
 
 /** @typedef {MouseEvent} ActionEvent */
 /** @typedef {{ url?: string, extension?: string, [key: string]: any }} SubtitleRecord */
@@ -52,22 +53,19 @@ export class DetailPageButtonPlugin extends BasePlugin {
             });
         }));
         const a = this.getOptionalDependency("HighlightMagnetPlugin"), settings = this.getRuntimeService("settings"), i = settings.snapshot().enableMagnetsFilter ?? _;
-        a || $("#enable-magnets-filter").remove(), $("#magnets-span").text(i === _ ? "关闭磁力过滤" : "开启磁力过滤"), i === _ && a?.doFilterMagnet?.(),
+        a || $("#enable-magnets-filter").remove(), $("#magnets-span").text(i === _ ? "关闭磁力过滤" : "开启磁力过滤"), i === _ && a?.doFilterMagnet?.();
+        const writeMagnetFilter = createLatestSettingWriter({ settings, key: "enableMagnetsFilter", fallback: C, apply: (value) => {
+            const filtering = value === _;
+            const label = $("#magnets-span");
+            if (filtering) { a?.doFilterMagnet?.(); label.text("关闭磁力过滤"); }
+            else { a?.showAll?.(); label.text("开启磁力过滤"); }
+        }, onError: (error) => {
+            clog.error("磁力过滤设置保存失败，已恢复", error), show.error("磁力过滤设置保存失败，已恢复原设置");
+        } });
         $("#enable-magnets-filter").on("click", (async (/** @type {ActionEvent} */ e) => {
-            let t = $("#magnets-span");
             if (!a) return;
-            const wasFiltering = "关闭磁力过滤" === t.text();
-            const applyFilter = (/** @type {boolean} */ filtering) => {
-                if (filtering) { a.doFilterMagnet(); t.text("关闭磁力过滤"); }
-                else { a.showAll(); t.text("开启磁力过滤"); }
-            };
-            applyFilter(!wasFiltering);
-            try {
-                await settings.set("enableMagnetsFilter", !wasFiltering ? _ : C);
-            } catch (error) {
-                applyFilter(wasFiltering);
-                clog.error("磁力过滤设置保存失败，已恢复", error), show.error("磁力过滤设置保存失败，已恢复原设置");
-            }
+            const wasFiltering = "关闭磁力过滤" === $("#magnets-span").text();
+            await writeMagnetFilter(!wasFiltering ? _ : C);
         })), $("#search-subtitle-btn").on("click", ((/** @type {ActionEvent} */ e) => {
             const target = this.getRuntimeService("movie").sourceUrls({ carNum: t }, ["subtitlecat"])[0]?.url;
             if (target) utils.openPage(target, t, !1, e);

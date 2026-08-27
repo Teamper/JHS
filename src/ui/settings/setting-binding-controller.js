@@ -71,6 +71,28 @@ export function bindSettingControl({ root, selector, key, getValue, setValue, fa
     };
 }
 
+/**
+ * Creates an optimistic direct-action writer whose rollback is owned only by
+ * the latest intent for this control.
+ *
+ * @param {{settings: any, key: string, fallback?: unknown, apply: (value: unknown) => void, onError?: (error: unknown) => void}} options
+ */
+export function createLatestSettingWriter({ settings, key, fallback = undefined, apply, onError = () => {} }) {
+    let revision = 0;
+    return async (/** @type {unknown} */ value) => {
+        const token = ++revision;
+        apply(value);
+        try {
+            await settings.set(key, value);
+        } catch (error) {
+            if (token === revision) {
+                apply(settings.snapshot()[key] ?? fallback);
+                onError(error);
+            }
+        }
+    };
+}
+
 class SettingBindingHub {
     /** @param {any} settings */
     constructor(settings) {

@@ -186,17 +186,29 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
  */
 function bindLayoutRangeEvents(root, busImgPlugin, hostAdapter, settings) {
     root.find("#containerColumns").off(".jhsSetting").on("input.jhsSetting", (() => {
-        const columns = root.find("#containerColumns").val();
-        root.find("#showContainerColumns").text(columns);
-        const listRoot = hostAdapter?.locateListRoot?.();
-        listRoot && (listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
+        applyLayoutRangeValue(root, hostAdapter, "containerColumns", root.find("#containerColumns").val());
     }));
     root.find("#containerWidth").off(".jhsSetting").on("input.jhsSetting", ((/** @type {any} */ event) => {
-        const width = parseInt($(event.target).val()) + 70, widthText = `${width}%`;
-        root.find("#showContainerWidth").text(widthText);
-        const layoutContainer = hostAdapter?.getListLayoutContainer?.();
-        layoutContainer && (layoutContainer.style.minWidth = widthText);
+        applyLayoutRangeValue(root, hostAdapter, "containerWidth", parseInt($(event.target).val()) + 70);
     }));
+}
+
+/** Applies one persisted layout value to both the control and the live host DOM. @param {any} root @param {any} hostAdapter @param {"containerColumns" | "containerWidth"} key @param {unknown} value */
+export function applyLayoutRangeValue(root, hostAdapter, key, value) {
+    if (key === "containerColumns") {
+        const columns = Math.min(10, Math.max(2, Math.round(Number(value) || 5)));
+        root.find("#containerColumns").val(String(columns));
+        root.find("#showContainerColumns").text(String(columns));
+        const listRoot = hostAdapter?.locateListRoot?.();
+        if (listRoot) listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+        return;
+    }
+    const width = Math.min(100, Math.max(70, Math.round(Number(value) || 100)));
+    const widthText = `${width}%`;
+    root.find("#containerWidth").val(String(width - 70));
+    root.find("#showContainerWidth").text(widthText);
+    const layoutContainer = hostAdapter?.getListLayoutContainer?.();
+    if (layoutContainer) layoutContainer.style.minWidth = widthText;
 }
 
 /** Dispose one quick-setting host's binding and clear its DOM. */

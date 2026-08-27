@@ -98,12 +98,10 @@ test("Settings opens when optional CoverButton and Blacklist contributions are d
   await injectUserscriptRuntime(page, { disabledPlugins: ["CoverButtonPlugin", "BlacklistPlugin"] });
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
   await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
-  await page.evaluate(() => {
-    const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings"), patch = settings.patch.bind(settings);
-    settings.patch = async (...args) => { window.__jhsSettingsSaved = true; return patch(...args); };
-  });
+  await page.locator('.layui-layer .side-menu-item[data-panel="base-panel"]').click();
+  await page.locator(".layui-layer #reviewCount").selectOption("30", { force: true });
   await page.locator(".layui-layer #saveBtn").click();
-  await expect.poll(() => page.evaluate(() => window.__jhsSettingsSaved)).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().reviewCount)).toBe("30");
   await expect(page.locator(".layui-layer #saveBtn")).not.toHaveAttribute("aria-busy", "true");
 });
 

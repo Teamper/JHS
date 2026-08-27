@@ -1,5 +1,7 @@
 // @ts-check
 
+import { createLatestSettingWriter } from "../settings/setting-binding-controller.js";
+
 const FILTER_KEY = "review_filter_keyword";
 
 export class ReviewPanel {
@@ -22,19 +24,20 @@ export class ReviewPanel {
         target.append(panel); this.bindFilter(panel);
         const enabled = (this.settings.snapshot().enableLoadReview ?? "no") === "yes";
         this.updateToggle(toggle, enabled);
+        const writeExpanded = createLatestSettingWriter({ settings: this.settings, key: "enableLoadReview", fallback: "no", apply: (value) => {
+            const next = value === "yes";
+            this.updateToggle(toggle, next);
+            panel.find(".jhs-review-container, .jhs-review-footer").toggle(next);
+        }, onError: (error) => {
+            /** @type {any} */ (globalThis).clog?.error("评论面板展开设置保存失败，已恢复", error);
+            /** @type {any} */ (globalThis).show?.error?.("评论面板展开设置保存失败，已恢复原设置");
+        } });
         toggle.on("click", (/** @type {any} */ event) => {
             event.preventDefault(); event.stopPropagation();
             const expanded = toggle.find(".toggle-text").text() === "展开";
-            const previous = (this.settings.snapshot().enableLoadReview ?? "no") === "yes";
             const desired = expanded ? "yes" : "no";
-            this.updateToggle(toggle, expanded); panel.find(".jhs-review-container, .jhs-review-footer").toggle(expanded);
             if (expanded && !state.loaded && !state.loading) void this.fetch(state);
-            this.settings.set("enableLoadReview", desired).catch((/** @type {unknown} */ error) => {
-                this.updateToggle(toggle, previous);
-                panel.find(".jhs-review-container, .jhs-review-footer").toggle(previous);
-                /** @type {any} */ (globalThis).clog?.error("评论面板展开设置保存失败，已恢复", error);
-                /** @type {any} */ (globalThis).show?.error?.("评论面板展开设置保存失败，已恢复原设置");
-            });
+            void writeExpanded(desired);
         });
         if (enabled) await this.fetch(state); else panel.find(".jhs-review-container, .jhs-review-footer").hide();
         return panel;

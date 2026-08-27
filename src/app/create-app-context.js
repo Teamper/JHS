@@ -60,6 +60,12 @@ export function createAppContext(runtime) {
         runtime.legacyStorage?.invalidateSettingCache?.();
         await runtime.eventBus?.emit?.("settings-changed", { changedNames, source: "service" });
     } });
+    rootScope.listen(settings, "settings.changed", (/** @type {any} */ event) => {
+        const names = /** @type {string[] | undefined} */ (event.detail?.names) ?? [];
+        if (!names.includes("trustedLocalOrigins")) return;
+        const trusted = settings.snapshot().trustedLocalOrigins;
+        urlPolicy.replaceLocalOrigins(Array.isArray(trusted) ? trusted : []);
+    });
     if (runtime.eventBus) rootScope.addCleanup(runtime.eventBus.on("settings-changed", async (/** @type {any} */ _payload, /** @type {any} */ event) => {
         // Remote tabs must refresh; local legacy writes (source === "legacy") also refresh because they bypassed
         // this SettingsService. Local service writes already updated the snapshot, so they are skipped.

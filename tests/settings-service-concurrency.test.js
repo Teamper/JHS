@@ -62,6 +62,48 @@ describe("SettingsService single write entry", () => {
         await promise;
         expect(storage.read()).toMatchObject({ a: 1, b: 2, c: 3 });
     });
+
+    it("orders refresh behind an in-flight write so a stale read cannot replace the committed snapshot", async () => {
+        const value = { setting: { themeMode: "light" } };
+        let getCalls = 0;
+        let markCommitted;
+        const committed = new Promise((resolve) => { markCommitted = resolve; });
+        const storage = {
+            async get(key) {
+                getCalls += 1;
+                const captured = { ...value[key] };
+                if (getCalls >= 3) await committed;
+                return captured;
+            },
+            async set(key, next) {
+                value[key] = next;
+                markCommitted();
+            },
+        };
+        const service = new SettingsService(storage);
+        await service.load();
+
+        await Promise.all([ service.set("themeMode", "dark"), service.refresh() ]);
+
+        expect(value.setting.themeMode).toBe("dark");
+        expect(service.snapshot().themeMode).toBe("dark");
+    });
+
+    it("recovers the operation queue after refresh fails", async () => {
+        const value = { setting: { themeMode: "light" } };
+        let rejectRead = false;
+        const service = new SettingsService({
+            async get(key) {
+                if (rejectRead) { rejectRead = false; throw new Error("read failed"); }
+                return value[key];
+            },
+            async set(key, next) { value[key] = next; },
+        });
+        await service.load();
+        rejectRead = true;
+        await expect(service.refresh()).rejects.toThrow("read failed");
+        await expect(service.set("themeMode", "dark")).resolves.toMatchObject({ themeMode: "dark" });
+    });
 });
 
 describe("legacy StorageManager delegation", () => {

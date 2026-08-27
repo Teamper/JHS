@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复设置刷新与写入竞态导致内存快照回退、WebDAV 本地来源授权需重载才生效、快速切换失败覆盖最新界面状态，以及布局设置失败后仅恢复控件而未恢复实际页面布局的问题。
+- 修复可选插件关闭场景的浏览器设置保存门禁仍监听旧 `settings.patch` 接口而稳定超时的问题。
+
 ## [6.5.0](../../compare/v6.4.1...v6.5.0) - 2026-08-25
 
 ### Changed

@@ -10,7 +10,7 @@ import { JhsSelect } from "../../core/ui-primitives.js";
 import { BUILT_IN_NATIVE_MAGNET_SOURCES, ResourceSettingsService, buildCustomMagnetSource, validateRule } from "../../services/resource-settings-service.js";
 import { BUILT_IN_SCREENSHOT_SOURCES } from "../../services/screenshot-sources.js";
 import { backupDataByWebDav, backupListBtnByWebDav, exportSettingData, importSettingData, openFileListDialog } from "./setting-backup.js";
-import { disposeQuickSettingHost, initQuickSettingForm, loadSettingForm, saveSettingForm } from "./setting-forms.js";
+import { applyLayoutRangeValue, disposeQuickSettingHost, initQuickSettingForm, loadSettingForm, saveSettingForm } from "./setting-forms.js";
 import { renderDataHealthPanel, renderNetworkPanel, renderPluginMgmtPanel, renderSnapshotPanel, repairDataHealthWithBackup, showDiffPreview } from "./setting-panels.js";
 import { applyLayoutFromSettings, buildSettingCss } from "./setting-styles.js";
 import { buildQuickSettingHtml, buildSettingDialogHtml, injectHealthPanel, injectNetworkPanel, injectPluginMgmtPanel, injectResourceSourcesPanel, injectSnapshotPanel } from "./setting-templates.js";
@@ -263,7 +263,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
     hydrateLiveSettings(layerRoot) {
         const root = $(layerRoot);
         const host = root.find("#jhs-live-settings");
-        const registry = this.getRuntimeService("settingsRegistry"), settings = this.getRuntimeService("settings");
+        const registry = this.getRuntimeService("settingsRegistry"), settings = this.getRuntimeService("settings"), hostAdapter = this.getRuntimeService("host");
         const staticKeys = new Set([ "needClosePage", "themeMode", "mobileMode", "enableClog", "containerColumns", "containerWidth" ]);
         const descriptors = registry.list({ surfaces: [ "full" ] }).filter((descriptor) => (descriptor.effect || "live") === "live" && !staticKeys.has(descriptor.key));
         if (host.length) {
@@ -314,10 +314,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             selector: "#containerColumns",
             key: "containerColumns",
             getValue: () => Number(root.find("#containerColumns").val()) || 5,
-            setValue: (value) => {
-                root.find("#containerColumns").val(value == null ? "" : String(value));
-                root.find("#showContainerColumns").text(value ?? "");
-            },
+            setValue: (value) => applyLayoutRangeValue(root, hostAdapter, "containerColumns", value),
             fallback: 5,
             label: "列表列数",
         });
@@ -325,11 +322,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             selector: "#containerWidth",
             key: "containerWidth",
             getValue: () => Number(root.find("#containerWidth").val()) + 70,
-            setValue: (value) => {
-                const width = Number(value) || 100;
-                root.find("#containerWidth").val(String(width - 70));
-                root.find("#showContainerWidth").text(`${width}%`);
-            },
+            setValue: (value) => applyLayoutRangeValue(root, hostAdapter, "containerWidth", value),
             fallback: 100,
             label: "列表宽度",
         });

@@ -1,5 +1,7 @@
 // @ts-check
 
+import { createLatestSettingWriter } from "../settings/setting-binding-controller.js";
+
 export class RelatedPanel {
     /** @param {{related: any, settings: any, scope: () => Promise<any>}} dependencies */
     constructor(dependencies) { this.related = dependencies.related; this.settings = dependencies.settings; this.scope = dependencies.scope; }
@@ -22,20 +24,20 @@ export class RelatedPanel {
         target.append(panel);
         const enabled = (this.settings.snapshot().enableLoadRelated ?? "no") === "yes";
         this.updateToggle(toggle, enabled);
+        const writeExpanded = createLatestSettingWriter({ settings: this.settings, key: "enableLoadRelated", fallback: "no", apply: (value) => {
+            const next = value === "yes";
+            this.updateToggle(toggle, next);
+            panel.find(".jhs-related-container, .jhs-related-footer").toggle(next);
+        }, onError: (error) => {
+            /** @type {any} */ (globalThis).clog?.error("相关清单展开设置保存失败，已恢复", error);
+            /** @type {any} */ (globalThis).show?.error?.("相关清单展开设置保存失败，已恢复原设置");
+        } });
         toggle.on("click", (/** @type {any} */ event) => {
             event.preventDefault(); event.stopPropagation();
             const expanded = toggle.find(".toggle-text").text() === "展开";
-            const previous = (this.settings.snapshot().enableLoadRelated ?? "no") === "yes";
             const desired = expanded ? "yes" : "no";
-            this.updateToggle(toggle, expanded);
-            panel.find(".jhs-related-container, .jhs-related-footer").toggle(expanded);
             if (expanded && !state.loaded && !state.loading) void this.fetch(state);
-            this.settings.set("enableLoadRelated", desired).catch((/** @type {unknown} */ error) => {
-                this.updateToggle(toggle, previous);
-                panel.find(".jhs-related-container, .jhs-related-footer").toggle(previous);
-                /** @type {any} */ (globalThis).clog?.error("相关清单展开设置保存失败，已恢复", error);
-                /** @type {any} */ (globalThis).show?.error?.("相关清单展开设置保存失败，已恢复原设置");
-            });
+            void writeExpanded(desired);
         });
         if (enabled) await this.fetch(state); else panel.find(".jhs-related-container, .jhs-related-footer").hide();
         return panel;

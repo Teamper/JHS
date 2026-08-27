@@ -7597,6 +7597,23 @@
     };
   }
   __name(bindSettingControl, "bindSettingControl");
+  function createLatestSettingWriter({ settings, key, fallback = void 0, apply, onError = /* @__PURE__ */ __name(() => {
+  }, "onError") }) {
+    let revision = 0;
+    return async (value) => {
+      const token = ++revision;
+      apply(value);
+      try {
+        await settings.set(key, value);
+      } catch (error) {
+        if (token === revision) {
+          apply(settings.snapshot()[key] ?? fallback);
+          onError(error);
+        }
+      }
+    };
+  }
+  __name(createLatestSettingWriter, "createLatestSettingWriter");
   var _SettingBindingHub = class _SettingBindingHub {
     constructor(settings) {
       this.settings = settings;
@@ -7973,19 +7990,30 @@
   __name(loadSettingForm, "loadSettingForm");
   function bindLayoutRangeEvents(root, busImgPlugin, hostAdapter, settings) {
     root.find("#containerColumns").off(".jhsSetting").on("input.jhsSetting", (() => {
-      const columns = root.find("#containerColumns").val();
-      root.find("#showContainerColumns").text(columns);
-      const listRoot = hostAdapter?.locateListRoot?.();
-      listRoot && (listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`);
+      applyLayoutRangeValue(root, hostAdapter, "containerColumns", root.find("#containerColumns").val());
     }));
     root.find("#containerWidth").off(".jhsSetting").on("input.jhsSetting", ((event) => {
-      const width = parseInt($(event.target).val()) + 70, widthText = `${width}%`;
-      root.find("#showContainerWidth").text(widthText);
-      const layoutContainer = hostAdapter?.getListLayoutContainer?.();
-      layoutContainer && (layoutContainer.style.minWidth = widthText);
+      applyLayoutRangeValue(root, hostAdapter, "containerWidth", parseInt($(event.target).val()) + 70);
     }));
   }
   __name(bindLayoutRangeEvents, "bindLayoutRangeEvents");
+  function applyLayoutRangeValue(root, hostAdapter, key, value) {
+    if (key === "containerColumns") {
+      const columns = Math.min(10, Math.max(2, Math.round(Number(value) || 5)));
+      root.find("#containerColumns").val(String(columns));
+      root.find("#showContainerColumns").text(String(columns));
+      const listRoot = hostAdapter?.locateListRoot?.();
+      if (listRoot) listRoot.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+      return;
+    }
+    const width = Math.min(100, Math.max(70, Math.round(Number(value) || 100)));
+    const widthText = `${width}%`;
+    root.find("#containerWidth").val(String(width - 70));
+    root.find("#showContainerWidth").text(widthText);
+    const layoutContainer = hostAdapter?.getListLayoutContainer?.();
+    if (layoutContainer) layoutContainer.style.minWidth = widthText;
+  }
+  __name(applyLayoutRangeValue, "applyLayoutRangeValue");
   function disposeQuickSettingHost(host) {
     const root = $(host);
     root.data("jhsQuickSettingBinding")?.dispose?.();
@@ -9348,7 +9376,7 @@
     hydrateLiveSettings(layerRoot) {
       const root = $(layerRoot);
       const host = root.find("#jhs-live-settings");
-      const registry = this.getRuntimeService("settingsRegistry"), settings = this.getRuntimeService("settings");
+      const registry = this.getRuntimeService("settingsRegistry"), settings = this.getRuntimeService("settings"), hostAdapter = this.getRuntimeService("host");
       const staticKeys = /* @__PURE__ */ new Set(["needClosePage", "themeMode", "mobileMode", "enableClog", "containerColumns", "containerWidth"]);
       const descriptors = registry.list({ surfaces: ["full"] }).filter((descriptor) => (descriptor.effect || "live") === "live" && !staticKeys.has(descriptor.key));
       if (host.length) {
@@ -9399,10 +9427,7 @@
         selector: "#containerColumns",
         key: "containerColumns",
         getValue: /* @__PURE__ */ __name(() => Number(root.find("#containerColumns").val()) || 5, "getValue"),
-        setValue: /* @__PURE__ */ __name((value) => {
-          root.find("#containerColumns").val(value == null ? "" : String(value));
-          root.find("#showContainerColumns").text(value ?? "");
-        }, "setValue"),
+        setValue: /* @__PURE__ */ __name((value) => applyLayoutRangeValue(root, hostAdapter, "containerColumns", value), "setValue"),
         fallback: 5,
         label: "列表列数"
       });
@@ -9410,11 +9435,7 @@
         selector: "#containerWidth",
         key: "containerWidth",
         getValue: /* @__PURE__ */ __name(() => Number(root.find("#containerWidth").val()) + 70, "getValue"),
-        setValue: /* @__PURE__ */ __name((value) => {
-          const width = Number(value) || 100;
-          root.find("#containerWidth").val(String(width - 70));
-          root.find("#showContainerWidth").text(`${width}%`);
-        }, "setValue"),
+        setValue: /* @__PURE__ */ __name((value) => applyLayoutRangeValue(root, hostAdapter, "containerWidth", value), "setValue"),
         fallback: 100,
         label: "列表宽度"
       });
@@ -11057,21 +11078,21 @@ ${value}\r
       target.append(panel);
       const enabled = (this.settings.snapshot().enableLoadRelated ?? "no") === "yes";
       this.updateToggle(toggle, enabled);
+      const writeExpanded = createLatestSettingWriter({ settings: this.settings, key: "enableLoadRelated", fallback: "no", apply: /* @__PURE__ */ __name((value) => {
+        const next = value === "yes";
+        this.updateToggle(toggle, next);
+        panel.find(".jhs-related-container, .jhs-related-footer").toggle(next);
+      }, "apply"), onError: /* @__PURE__ */ __name((error) => {
+        globalThis.clog?.error("相关清单展开设置保存失败，已恢复", error);
+        globalThis.show?.error?.("相关清单展开设置保存失败，已恢复原设置");
+      }, "onError") });
       toggle.on("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
         const expanded = toggle.find(".toggle-text").text() === "展开";
-        const previous = (this.settings.snapshot().enableLoadRelated ?? "no") === "yes";
         const desired = expanded ? "yes" : "no";
-        this.updateToggle(toggle, expanded);
-        panel.find(".jhs-related-container, .jhs-related-footer").toggle(expanded);
         if (expanded && !state.loaded && !state.loading) void this.fetch(state);
-        this.settings.set("enableLoadRelated", desired).catch((error) => {
-          this.updateToggle(toggle, previous);
-          panel.find(".jhs-related-container, .jhs-related-footer").toggle(previous);
-          globalThis.clog?.error("相关清单展开设置保存失败，已恢复", error);
-          globalThis.show?.error?.("相关清单展开设置保存失败，已恢复原设置");
-        });
+        void writeExpanded(desired);
       });
       if (enabled) await this.fetch(state);
       else panel.find(".jhs-related-container, .jhs-related-footer").hide();
@@ -11174,21 +11195,21 @@ ${value}\r
       this.bindFilter(panel);
       const enabled = (this.settings.snapshot().enableLoadReview ?? "no") === "yes";
       this.updateToggle(toggle, enabled);
+      const writeExpanded = createLatestSettingWriter({ settings: this.settings, key: "enableLoadReview", fallback: "no", apply: /* @__PURE__ */ __name((value) => {
+        const next = value === "yes";
+        this.updateToggle(toggle, next);
+        panel.find(".jhs-review-container, .jhs-review-footer").toggle(next);
+      }, "apply"), onError: /* @__PURE__ */ __name((error) => {
+        globalThis.clog?.error("评论面板展开设置保存失败，已恢复", error);
+        globalThis.show?.error?.("评论面板展开设置保存失败，已恢复原设置");
+      }, "onError") });
       toggle.on("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
         const expanded = toggle.find(".toggle-text").text() === "展开";
-        const previous = (this.settings.snapshot().enableLoadReview ?? "no") === "yes";
         const desired = expanded ? "yes" : "no";
-        this.updateToggle(toggle, expanded);
-        panel.find(".jhs-review-container, .jhs-review-footer").toggle(expanded);
         if (expanded && !state.loaded && !state.loading) void this.fetch(state);
-        this.settings.set("enableLoadReview", desired).catch((error) => {
-          this.updateToggle(toggle, previous);
-          panel.find(".jhs-review-container, .jhs-review-footer").toggle(previous);
-          globalThis.clog?.error("评论面板展开设置保存失败，已恢复", error);
-          globalThis.show?.error?.("评论面板展开设置保存失败，已恢复原设置");
-        });
+        void writeExpanded(desired);
       });
       if (enabled) await this.fetch(state);
       else panel.find(".jhs-review-container, .jhs-review-footer").hide();
@@ -11723,16 +11744,12 @@ ${value}\r
         button.attr("aria-pressed", String(enabled && hasMatch)).text(hasMatch ? enabled ? "显示全部磁力" : "过滤低质量" : "暂无可过滤项").prop("disabled", !hasMatch);
       }, "apply");
       const settings = this.getRuntimeService("settings");
+      const writeFilter = createLatestSettingWriter({ settings, key: "enableMagnetsFilter", fallback: "no", apply: /* @__PURE__ */ __name((value) => apply(value === _), "apply"), onError: /* @__PURE__ */ __name((error) => {
+        clog.error("磁力过滤设置保存失败，已恢复", error), show.error("磁力过滤设置保存失败，已恢复原设置");
+      }, "onError") });
       context.magnetFilterApply = apply, actions.append(button), apply((settings.snapshot().enableMagnetsFilter ?? _) === _), button.on(`click${context.namespace}`, (async () => {
-        const previous = button.attr("aria-pressed") === "true";
-        const enabled = !previous;
-        apply(enabled);
-        try {
-          await settings.set("enableMagnetsFilter", enabled ? _ : "no");
-        } catch (error) {
-          apply(previous);
-          clog.error("磁力过滤设置保存失败，已恢复", error), show.error("磁力过滤设置保存失败，已恢复原设置");
-        }
+        const enabled = button.attr("aria-pressed") !== "true";
+        await writeFilter(enabled ? _ : "no");
       }));
     }
     async mountPanels(context, movieIdPromise) {
@@ -16069,26 +16086,24 @@ ${failure.stack}` : "");
         });
       }));
       const a2 = this.getOptionalDependency("HighlightMagnetPlugin"), settings = this.getRuntimeService("settings"), i2 = settings.snapshot().enableMagnetsFilter ?? _;
-      a2 || $("#enable-magnets-filter").remove(), $("#magnets-span").text(i2 === _ ? "关闭磁力过滤" : "开启磁力过滤"), i2 === _ && a2?.doFilterMagnet?.(), $("#enable-magnets-filter").on("click", (async (e3) => {
-        let t3 = $("#magnets-span");
-        if (!a2) return;
-        const wasFiltering = "关闭磁力过滤" === t3.text();
-        const applyFilter = /* @__PURE__ */ __name((filtering) => {
-          if (filtering) {
-            a2.doFilterMagnet();
-            t3.text("关闭磁力过滤");
-          } else {
-            a2.showAll();
-            t3.text("开启磁力过滤");
-          }
-        }, "applyFilter");
-        applyFilter(!wasFiltering);
-        try {
-          await settings.set("enableMagnetsFilter", !wasFiltering ? _ : C);
-        } catch (error) {
-          applyFilter(wasFiltering);
-          clog.error("磁力过滤设置保存失败，已恢复", error), show.error("磁力过滤设置保存失败，已恢复原设置");
+      a2 || $("#enable-magnets-filter").remove(), $("#magnets-span").text(i2 === _ ? "关闭磁力过滤" : "开启磁力过滤"), i2 === _ && a2?.doFilterMagnet?.();
+      const writeMagnetFilter = createLatestSettingWriter({ settings, key: "enableMagnetsFilter", fallback: C, apply: /* @__PURE__ */ __name((value) => {
+        const filtering = value === _;
+        const label = $("#magnets-span");
+        if (filtering) {
+          a2?.doFilterMagnet?.();
+          label.text("关闭磁力过滤");
+        } else {
+          a2?.showAll?.();
+          label.text("开启磁力过滤");
         }
+      }, "apply"), onError: /* @__PURE__ */ __name((error) => {
+        clog.error("磁力过滤设置保存失败，已恢复", error), show.error("磁力过滤设置保存失败，已恢复原设置");
+      }, "onError") });
+      $("#enable-magnets-filter").on("click", (async (e3) => {
+        if (!a2) return;
+        const wasFiltering = "关闭磁力过滤" === $("#magnets-span").text();
+        await writeMagnetFilter(!wasFiltering ? _ : C);
       })), $("#search-subtitle-btn").on("click", ((e3) => {
         const target = this.getRuntimeService("movie").sourceUrls({ carNum: t2 }, ["subtitlecat"])[0]?.url;
         if (target) utils.openPage(target, t2, false, e3);
@@ -16574,23 +16589,18 @@ ${failure.stack}` : "");
       if (a2.length > 0 && (a2.append('\n                <div id="foldCategoryBtn">\n                    <button type="button" class="jhs-btn jhs-btn--ghost jhs-layout-2100e73d">\n                        <span></span>\n                        <i class="jhs-layout-78fa54ea"></i>\n                    </button>\n                </div>\n            '), t2 = $("section > div > div.box")), !t2) return;
       const settings = this.getRuntimeService("settings");
       let i2 = $("#foldCategoryBtn"), s2 = settings.snapshot().foldCategoryCollapsed === true, [o2, r2] = s2 ? ["展开", "icon-angle-double-down"] : ["折叠", "icon-angle-double-up"];
-      i2.find("span").text(o2).end().find("i").attr("class", r2), window.location.href.includes("noFold=1") || t2[s2 ? "hide" : "show"](), i2.on("click", (async (e2) => {
+      i2.find("span").text(o2).end().find("i").attr("class", r2), window.location.href.includes("noFold=1") || t2[s2 ? "hide" : "show"]();
+      const createFoldWriter = createLatestSettingWriter({ settings, key: "foldCategoryCollapsed", fallback: false, apply: /* @__PURE__ */ __name((value) => {
+        s2 = value === true;
+        const [label, icon] = s2 ? ["展开", "icon-angle-double-down"] : ["折叠", "icon-angle-double-up"];
+        i2.find("span").text(label).end().find("i").attr("class", icon);
+        t2[s2 ? "hide" : "show"]();
+      }, "apply"), onError: /* @__PURE__ */ __name((error) => {
+        clog.error("分类折叠设置保存失败，已恢复", error), show.error("分类折叠设置保存失败，已恢复原设置");
+      }, "onError") });
+      i2.on("click", (async (e2) => {
         e2.preventDefault();
-        const previous = s2;
-        s2 = !s2;
-        const applyState = /* @__PURE__ */ __name((collapsed) => {
-          const [label, icon] = collapsed ? ["展开", "icon-angle-double-down"] : ["折叠", "icon-angle-double-up"];
-          i2.find("span").text(label).end().find("i").attr("class", icon);
-          t2[collapsed ? "hide" : "show"]();
-        }, "applyState");
-        applyState(s2);
-        try {
-          await settings.set("foldCategoryCollapsed", s2);
-        } catch (error) {
-          s2 = previous;
-          applyState(previous);
-          clog.error("分类折叠设置保存失败，已恢复", error), show.error("分类折叠设置保存失败，已恢复原设置");
-        }
+        await createFoldWriter(!s2);
       }));
     }
   };
@@ -19627,10 +19637,15 @@ ${failure.stack}` : "");
   __name(isPrivateLiteral, "isPrivateLiteral");
   var _ExternalUrlPolicy = class _ExternalUrlPolicy {
     constructor(options = {}) {
-      this.localOrigins = new Set((options.localOrigins ?? []).map((origin) => new URL(origin).origin));
+      this.localOrigins = /* @__PURE__ */ new Set();
+      this.replaceLocalOrigins(options.localOrigins ?? []);
     }
     authorizeLocalOrigin(origin) {
       this.localOrigins.add(new URL(origin).origin);
+    }
+    replaceLocalOrigins(origins) {
+      const next = new Set(origins.map((origin) => new URL(origin).origin));
+      this.localOrigins = next;
     }
     assertAllowed(input, policy) {
       let url;
@@ -20400,19 +20415,19 @@ ${failure.stack}` : "");
       this.writeChain = Promise.resolve();
     }
     async load(key = "setting") {
-      const stored = await this.storage.get(key);
-      this.snapshotValue = Object.freeze(stored && typeof stored === "object" && !Array.isArray(stored) ? { ...stored } : {});
-      return this.snapshotValue;
+      return this._enqueue(() => this._withSettingLock(() => this._readSnapshot(key)));
     }
     async refresh(key = "setting") {
-      const previous = this.snapshotValue;
-      await this.load(key);
-      const keys = /* @__PURE__ */ new Set([...Object.keys(previous), ...Object.keys(this.snapshotValue)]);
-      const changedNames = [...keys].filter((name) => previous[name] !== this.snapshotValue[name]);
-      if (changedNames.length) {
-        this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name: changedNames.length === 1 ? changedNames[0] : null, value: void 0, names: Object.freeze([...changedNames]), snapshot: this.snapshotValue }) }));
-      }
-      return this.snapshotValue;
+      return this._enqueue(() => this._withSettingLock(async () => {
+        const previous = this.snapshotValue;
+        const next = await this._readSnapshot(key);
+        const keys = /* @__PURE__ */ new Set([...Object.keys(previous), ...Object.keys(next)]);
+        const changedNames = [...keys].filter((name) => previous[name] !== next[name]);
+        if (changedNames.length) {
+          this.dispatchEvent(new CustomEvent("settings.changed", { detail: Object.freeze({ name: changedNames.length === 1 ? changedNames[0] : null, value: void 0, names: Object.freeze([...changedNames]), snapshot: next }) }));
+        }
+        return next;
+      }));
     }
     snapshot() {
       return this.snapshotValue;
@@ -20447,7 +20462,7 @@ ${failure.stack}` : "");
     }
     async update(mutator, storageKey = "setting") {
       if (typeof mutator !== "function") throw new TypeError("Settings update mutator must be a function");
-      const operation = this.writeChain.then(() => this._withSettingLock(async () => {
+      return this._enqueue(() => this._withSettingLock(async () => {
         const stored = await this.storage.get(storageKey);
         const base = stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
         const draft = { ...base };
@@ -20477,6 +20492,14 @@ ${failure.stack}` : "");
         }
         return next;
       }));
+    }
+    async _readSnapshot(storageKey) {
+      const stored = await this.storage.get(storageKey);
+      this.snapshotValue = Object.freeze(stored && typeof stored === "object" && !Array.isArray(stored) ? { ...stored } : {});
+      return this.snapshotValue;
+    }
+    _enqueue(fn) {
+      const operation = this.writeChain.then(fn);
       this.writeChain = operation.then(() => void 0, () => void 0);
       return operation;
     }
@@ -21086,6 +21109,12 @@ ${failure.stack}` : "");
       runtime.legacyStorage?.invalidateSettingCache?.();
       await runtime.eventBus?.emit?.("settings-changed", { changedNames, source: "service" });
     }, "afterPersist") });
+    rootScope.listen(settings, "settings.changed", (event) => {
+      const names = event.detail?.names ?? [];
+      if (!names.includes("trustedLocalOrigins")) return;
+      const trusted = settings.snapshot().trustedLocalOrigins;
+      urlPolicy.replaceLocalOrigins(Array.isArray(trusted) ? trusted : []);
+    });
     if (runtime.eventBus) rootScope.addCleanup(runtime.eventBus.on("settings-changed", async (_payload, event) => {
       const remote = event.originId !== runtime.eventBus.originId;
       const localLegacy = event.originId === runtime.eventBus.originId && event.payload?.source === "legacy";

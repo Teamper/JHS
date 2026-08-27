@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { SettingsService } from "../src/services/settings-service.js";
-import { bindSettingControl } from "../src/ui/settings/setting-binding-controller.js";
+import { bindSettingControl, createLatestSettingWriter } from "../src/ui/settings/setting-binding-controller.js";
 
 function makeJq(html = '<div id="root"></div>') {
     const dom = new JSDOM(html, { url: "https://javdb.com/" });
@@ -172,5 +172,34 @@ describe("SettingBindingHub race and static control contracts", () => {
         const fullBinding = checkboxBinding(jq, fullRoot, settings);
         await expect(fullBinding.flush({ throwOnFailure: true })).resolves.toBeUndefined();
         expect(fullRoot.find("input").is(":checked")).toBe(false);
+    });
+
+    it("rolls a failed latest direct action back to the newest committed snapshot", async () => {
+        const stored = { setting: { expanded: "no" } };
+        let releaseFirst;
+        let calls = 0;
+        const applied = [];
+        const settings = new SettingsService({
+            get: async () => stored.setting,
+            async set(_key, value) {
+                calls += 1;
+                if (calls === 1) {
+                    await new Promise((resolve) => { releaseFirst = resolve; });
+                    stored.setting = value;
+                    return;
+                }
+                throw new Error("storage down");
+            },
+        });
+        await settings.load();
+        const write = createLatestSettingWriter({ settings, key: "expanded", fallback: "no", apply: value => applied.push(value) });
+        const first = write("yes");
+        const second = write("no");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        releaseFirst();
+        await Promise.all([ first, second ]);
+
+        expect(settings.snapshot().expanded).toBe("yes");
+        expect(applied.at(-1)).toBe("yes");
     });
 });
