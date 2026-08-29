@@ -6,7 +6,7 @@ import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
 
-function loadHitShow({ movies = [], fetchScore = vi.fn(), cache = {}, sortMethod = "default" } = {}) {
+function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), cache = {}, sortMethod = "default", withListPage = true } = {}) {
     const dom = new JSDOM('<section class="section"><div class="container"><h2 class="section-title">榜单</h2><div class="box"></div></div></section>', { url: "https://javdb.com/advanced_search?handlePlayback=1&period=daily" });
     const $ = jqueryFactory(dom.window), storage = new Map([["jhs_score_info", JSON.stringify(cache)], ["jhs_sortMethod", sortMethod]]);
     $.expr.pseudos.hidden = element => "none" === element.style.display;
@@ -15,33 +15,68 @@ function loadHitShow({ movies = [], fetchScore = vi.fn(), cache = {}, sortMethod
         set: vi.fn((key, value) => Object.assign(runtimeCache, value)),
     }, settings = { snapshot: () => ({ sortMethod }) };
     const host = {
-        locateListRoot: () => dom.window.document.querySelector(".movie-list") || dom.window.document.querySelector(".container"),
-        getListContainer: () => dom.window.document.querySelector(".container"),
+        locateListRoot: () => dom.window.document.querySelector(".movie-list"),
+        getListContainer: () => dom.window.document.querySelector(".movie-list")?.parentElement ?? null,
+        getListLayoutContainer: () => dom.window.document.querySelector("section .container"),
         createOwnedListRoot(classes = []) { const root = dom.window.document.createElement("div"); root.classList.add("movie-list", ...classes); return root; },
     };
-    const loadingClose = vi.fn(), sortItems = vi.fn().mockResolvedValue(), listPage = {
-        replaceHdImg: vi.fn(), doFilter: vi.fn().mockResolvedValue(), applyVisibility: vi.fn(), bindMovieDetailNavigation: vi.fn(), getSelector: () => ({ itemSelector: ".movie-list .item" })
+    const loadingClose = vi.fn(), sortItems = vi.fn().mockResolvedValue(), mountOwnedRankingControls = vi.fn().mockResolvedValue(), listPage = {
+        configureHoverPreview: vi.fn(), replaceHdImg: vi.fn(), doFilter: vi.fn().mockResolvedValue(), createQuickFilter: vi.fn().mockResolvedValue(), applyVisibility: vi.fn(), rebuildItemIndex: vi.fn(), bindMovieDetailNavigation: vi.fn(), getSelector: () => ({ itemSelector: ".movie-list .item" })
     }, coverButton = { addSvgBtn: vi.fn() };
     const context = vm.createContext({
         BasePlugin: class {
-            getBean(name) { return { ListPagePlugin: listPage, ListPageButtonPlugin: { sortItems }, CoverButtonPlugin: coverButton }[name]; }
-            getRuntimeService(name) { return { host, scope: async () => ({ signal: { aborted: false } }), movie: { rankings: async () => movies, detail: async ({ movieId }) => fetchScore(movieId) }, settings, cache: cacheService }[name]; }
+            getBean(name) { return { ListPagePlugin: withListPage ? listPage : undefined, ListPageButtonPlugin: { sortItems, mountOwnedRankingControls }, CoverButtonPlugin: coverButton }[name]; }
+            getRuntimeService(name) { return { host, scope: async () => ({ signal: { aborted: false } }), movie: { rankings: async () => { if (rankingError) throw rankingError; return movies; }, detail: async ({ movieId }) => fetchScore(movieId) }, settings, cache: cacheService }[name]; }
         },
         i: (target, key, value) => (target[key] = value), $, document: dom.window.document, window: dom.window,
         URLSearchParams, isHitShowPage: () => true,
-        loading: () => ({ close: loadingClose }), clog: { error: vi.fn(), warn: vi.fn() },
+        jhsEventBus: { emit: vi.fn(async () => {}) },
+        loading: () => ({ close: loadingClose }), clog: { error: vi.fn(), warn: vi.fn() }, show: { error: vi.fn() },
         localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
         escapeHtml: value => $("<span></span>").text(String(value ?? "")).html(),
         normalizeHttpUrl: value => value
     });
     const source = readTestFile(join(process.cwd(), "src/plugins/external-search/hit-show.js"), "utf8");
     vm.runInContext(`${source};globalThis.HitShowPlugin=HitShowPlugin`, context);
-    return { plugin: new context.HitShowPlugin(), context, dom, $, storage, runtimeCache, loadingClose, sortItems, listPage, coverButton, fetchScore };
+    return { plugin: new context.HitShowPlugin(), context, dom, $, storage, runtimeCache, loadingClose, sortItems, mountOwnedRankingControls, listPage, coverButton, fetchScore, emitListItems: context.jhsEventBus.emit };
 }
 
-const movie = id => ({ id, number: id.toUpperCase(), release_date: "2026-08-16", origin_title: id, cover_url: "https://example.com/a.jpg", magnets_count: 0 });
+const movie = id => ({ id, number: id.toUpperCase(), release_date: "2026-08-16", origin_title: id, cover_url: "https://c0.jdbstatic.com/covers/a.jpg", magnets_count: 0 });
 
 describe("HitShowPlugin lifecycle", () => {
+    it("creates its owned list when the host page has no native movie list", async () => {
+        const { plugin, dom } = loadHitShow({ movies: [movie("a")] });
+        expect(dom.window.document.querySelector(".movie-list")).toBeNull();
+        await plugin.handlePlayback();
+        expect(dom.window.document.querySelector(".jhs-hitshow-list #a")).not.toBeNull();
+        expect(dom.window.document.querySelector(".section-title")?.textContent).toContain("热播");
+    });
+
+    it("renders explicit empty and retryable error states", async () => {
+        const empty = loadHitShow();
+        await empty.plugin.handlePlayback();
+        expect(empty.dom.window.document.querySelector(".jhs-hitshow-state")?.textContent).toContain("暂无热播数据");
+
+        vi.useFakeTimers();
+        try {
+            const failed = loadHitShow({ rankingError: new Error("offline") });
+            const pending = failed.plugin.handlePlayback();
+            await vi.runAllTimersAsync();
+            await pending;
+            expect(failed.dom.window.document.querySelector(".jhs-hitshow-state--error")?.textContent).toContain("重新加载");
+            expect(failed.loadingClose).toHaveBeenCalledOnce();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it("renders lightweight thumbnails while preserving the full cover URL", () => {
+        const { plugin, $ } = loadHitShow();
+        const image = $(plugin.markDataListHtml([movie("a")])).find("img");
+        expect(image.attr("src")).toContain("/thumbs/");
+        expect(image.attr("data-full")).toContain("/covers/");
+        expect(image.attr("decoding")).toBe("async");
+    });
     it("closes loading after rendering while score requests continue", async () => {
         let resolveScore;
         const pendingScore = new Promise(resolve => { resolveScore = resolve; });
@@ -95,5 +130,41 @@ describe("HitShowPlugin lifecycle", () => {
         await plugin.handlePlayback();
         expect(listPage.bindMovieDetailNavigation).toHaveBeenCalledOnce();
         expect(plugin.markDataListHtml([movie("a")])).not.toContain('target="_blank"');
+    });
+
+    it("restores the quick filter bar after filtering externally driven lists", async () => {
+        const { plugin, listPage, mountOwnedRankingControls } = loadHitShow({ movies: [movie("a")] });
+        await plugin.handlePlayback();
+        expect(listPage.createQuickFilter).toHaveBeenCalledOnce();
+        expect(listPage.createQuickFilter.mock.invocationCallOrder[0]).toBeGreaterThan(listPage.doFilter.mock.invocationCallOrder[0]);
+        expect(listPage.rebuildItemIndex).toHaveBeenCalledOnce();
+        expect(mountOwnedRankingControls).toHaveBeenCalledOnce();
+    });
+
+    it("announces rendered items so deferred FC2 navigation can attach", async () => {
+        const { plugin, emitListItems } = loadHitShow({ movies: [movie("a")] });
+        await plugin.handlePlayback();
+        const [type, payload, options] = emitListItems.mock.calls.at(-1);
+        expect(type).toBe("list-items-added");
+        expect(payload.items).toHaveLength(1);
+        expect(options).toEqual({ broadcast: false });
+    });
+
+    it("loads scores for cards hidden by the default quick filter", async () => {
+        const fetchScore = vi.fn().mockResolvedValue({ score: 4, watchedCount: 12 });
+        const { plugin, $ } = loadHitShow({ movies: [movie("hid")], fetchScore });
+        $(".container").append(`<div class="movie-list">${plugin.markDataListHtml([movie("hid")])}</div>`);
+        $("#hid").hide();
+        await plugin.loadScore([movie("hid")]);
+        expect(fetchScore).toHaveBeenCalledWith("hid");
+        expect($("#hid").attr("data-jhs-rate-count")).toBe("12");
+    });
+
+    it("keeps rendering when ListPagePlugin is disabled", async () => {
+        const { plugin, listPage, dom } = loadHitShow({ movies: [movie("a")], withListPage: false });
+        await plugin.handlePlayback();
+        expect(dom.window.document.querySelector(".jhs-hitshow-list #a")).not.toBeNull();
+        expect(listPage.configureHoverPreview).not.toHaveBeenCalled();
+        expect(listPage.createQuickFilter).not.toHaveBeenCalled();
     });
 });

@@ -63,6 +63,8 @@ export class Top250Plugin extends BasePlugin {
         this.has_cnsub = e.get("has_cnsub") || "";
         let a = Number(e.get("page")) || 1;
         this.hookPage(), this.toolBar(t, n, a);
+        // 操作按钮行（开始鉴定/批量操作）挂进 Top250 自有筛选容器，与热播页同一挂载通道
+        await this.getOptionalDependency("ListPageButtonPlugin")?.mountOwnedRankingControls?.($(".jhs-top250-filters"))?.catch?.((/** @type {unknown} */ error) => clog.error("Top250 操作按钮挂载失败", error));
         let i = this.$listRoot;
         i.html("");
         let s = loading();

@@ -23,14 +23,24 @@ export class Fc2NavigationPlugin extends BasePlugin {
         const fc2 = this.getOptionalDependency("Fc2Plugin");
         if (!fc2) return;
         const host = this.getRuntimeService("host");
-        const listRoot = host?.locateListRoot?.();
-        if (!listRoot) return;
-        const root = $(listRoot).first();
-        if (!root.length) return;
         const scope = await this.getRuntimeService("scope")();
-        await this.protectFc2Navigation(root, fc2);
-        this.bindFc2Navigation(root, fc2);
-        scope.addCleanup(() => root.off(".jhsFc2Navigation"));
+        const initialRoot = host?.locateListRoot?.() ?? null;
+        let boundRoot = null;
+        // JHS 自渲染榜单页（热播/Top250）在启动时还没有列表根，这里必须支持延迟挂载：
+        // 列表渲染后（list-items-added）再保护卡片并绑定对话框导航，否则 FC2 点击被统一详情导航吞掉。
+        const ensureAttached = async () => {
+            const current = host?.locateListRoot?.();
+            if (!current) return;
+            const root = $(current).first();
+            if (!root.length) return;
+            await this.protectFc2Navigation(root, fc2).catch((error) => clog.warn("FC2 导航保护初始化失败", error));
+            if (boundRoot !== current) {
+                boundRoot = current;
+                this.bindFc2Navigation(root, fc2);
+                scope.addCleanup(() => root.off(".jhsFc2Navigation"));
+            }
+        };
+        await ensureAttached();
 
         // 6.5: protect FC2 cards added after initial render (AutoPage waterfall pages, filter re-render).
         // Prefer the list-items-added event; keep a MutationObserver fallback so FC2 navigation keeps
@@ -40,7 +50,7 @@ export class Fc2NavigationPlugin extends BasePlugin {
             if (reprotectTimer != null) return;
             reprotectTimer = setTimeout(() => {
                 reprotectTimer = null;
-                void this.protectFc2Navigation(root, fc2).catch((error) => clog.warn("FC2 动态导航保护失败", error));
+                void ensureAttached().catch((error) => clog.warn("FC2 动态导航保护失败", error));
             }, 80);
         };
         scope.addCleanup(() => {
@@ -48,8 +58,8 @@ export class Fc2NavigationPlugin extends BasePlugin {
         });
         const unsubscribeItems = jhsEventBus.on("list-items-added", (payload) => { if (payload?.items?.length) reprotect(); });
         scope.addCleanup(unsubscribeItems);
-        if (typeof MutationObserver !== "undefined") {
-            scope.observe(listRoot, (records) => {
+        if (initialRoot && typeof MutationObserver !== "undefined") {
+            scope.observe(initialRoot, (records) => {
                 if (records.some((record) => record.addedNodes.length)) reprotect();
             }, { childList: true, subtree: false });
         }

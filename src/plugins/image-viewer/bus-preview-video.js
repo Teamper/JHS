@@ -3,7 +3,7 @@
 import { L } from "../../core/constants.js";
 import { safePlay } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { Z, canUseDmmPreview, fetchDmmPreview, fetchDmmPreviewIfEnabled, isDmmEnabled, isPreviewEnabled } from "../../services/preview-service.js";
+import { Z, canUseDmmPreview, fetchDmmPreviewIfEnabled, isPreviewEnabled } from "../../services/preview-service.js";
 
 export class BusPreviewVideoPlugin extends BasePlugin {
     constructor() {
@@ -74,7 +74,7 @@ export class BusPreviewVideoPlugin extends BasePlugin {
     mountPreview() {
         if (this._busPreviewMounted) return;
         this._busPreviewMounted = true;
-        const scope = this._busScope, settingsService = this.getRuntimeService("settings");
+        const scope = this._busScope;
         this.initModal(scope);
         const e = $("#sample-waterfall .sample-box .photo-frame img:first").attr("src"), t = $(`
             <button type="button" class="jhs-btn preview-video-container sample-box jhs-layout-3b6a3a65">
@@ -86,9 +86,6 @@ export class BusPreviewVideoPlugin extends BasePlugin {
                 </div>
             </button>`);
         $("#sample-waterfall").prepend(t);
-        if (isDmmEnabled(settingsService.snapshot())) {
-            void fetchDmmPreview(this.getPageInfo().carNum, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope).catch((error => clog.warn("预加载 DMM 失败", error)));
-        }
         let n = !1, a = $(".preview-video-container");
         a.on("click", (async (/** @type {MouseEvent} */ e) => {
             if (e.preventDefault(), e.stopPropagation(), n) show.info("正在加载中, 勿重复点击"); else {

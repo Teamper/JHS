@@ -15,7 +15,8 @@ export class ListPageButtonPlugin extends BasePlugin {
         return "ListPageButtonPlugin";
     }
     async handle() {
-        if (!window.isListPage) return;
+        // 热播/Top250 自渲染榜单由渲染方调用 mountHitShowControls 延迟挂载，启动期不注入页面 h2
+        if (!window.isListPage || isHitShowPage() || window.location.search.includes("handleTop=1")) return;
         const scope = await this.getRuntimeService("scope")();
         const settings = this.getRuntimeService("settings");
         await this.createMenuBtn(scope), this.bindEvent();
@@ -26,6 +27,15 @@ export class ListPageButtonPlugin extends BasePlugin {
         };
         settings.addEventListener("settings.changed", onSettingsChanged);
         scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
+        await this.syncSortUi();
+    }
+    /** 自渲染榜单页由渲染方在自有标题/筛选容器就绪后调用：按钮行挂进传入容器（缺省为热播标题），排序/批量能力与普通列表页一致。 @param {any} [target] */
+    async mountOwnedRankingControls(target = null) {
+        const heading = target?.length ? target : $(".jhs-hitshow-heading");
+        if (!heading.length || $("#waitCheckBtn").length) return;
+        const scope = await this.getRuntimeService("scope")();
+        await this.createMenuBtn(scope, heading);
+        this.bindEvent();
         await this.syncSortUi();
     }
     /** 根据 autoPage 与当前站点能力同步排序控件；AutoPage ON 且不支持 live sorting 时明确进入“默认（瀑布流）”。 */
@@ -53,8 +63,8 @@ export class ListPageButtonPlugin extends BasePlugin {
         menu.find(`[data-sort-method="${method}"]`).attr("aria-checked", "true");
         await this.sortItems();
     }
-    /** @param {LifecycleScope} scope */
-    async createMenuBtn(scope) {
+    /** @param {LifecycleScope} scope @param {any} [target] 自渲染榜单传入自有标题容器，避免注入页面 h2。 */
+    async createMenuBtn(scope, target = null) {
         // 6.5 capability：功能被禁用时不渲染按钮，不留 disabled 死按钮。
         const hasNewVideo = Boolean(this.getOptionalDependency("NewVideoPlugin")), hasBlacklist = Boolean(this.getOptionalDependency("BlacklistPlugin")), hasListPage = Boolean(this.getOptionalDependency("ListPagePlugin"));
         if (r) {
@@ -73,7 +83,7 @@ export class ListPageButtonPlugin extends BasePlugin {
                 s = a.find((/** @type {BlacklistRecord} */ e) => e.starId === n), s && (e.addClass("jhs-btn--muted").removeClass("jhs-btn--filter"), $("#addBlacklistBtn span").text("已加入黑名单"));
             }), 20, 1e4, !0, scope);
             const r = o.includes("advanced_search");
-            r && (t = $("h2.section-title"));
+            r && (t = target?.length ? target : $("h2.section-title"));
             const l = this.getRuntimeService("settings").snapshot().sortMethod || "default", d = "当前排序方式: " + ("rateCount" === l ? "评价人数" : "date" === l ? "时间" : "默认");
             t.append(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e && hasBlacklist ? `\n<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>\n<button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>批量屏蔽</span></button>\n` : ""}\n                    ${hasListPage ? `\n<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>批量收藏</span></button>\n<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>批量标记已下载</span></button>\n` : ""}\n                    ${o.includes("/tags") && hasBlacklist ? `\n<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>\n` : ""}\n                </div>\n                <div class="jhs-list-btn-row">\n                    ${hasNewVideo ? `<button type="button" id="newVideoBtn" class="jhs-btn jhs-btn--secondary"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></button>` : ""}\n                    ${hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}\n                    ${c || !this.supportsSorting() ? "" : this.sortMenuHtml(l || "default", d)}\n                </div>\n            `);
         }

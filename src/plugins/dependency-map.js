@@ -31,7 +31,7 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     ],
     MobileBottomBarPlugin: [
         "ListPagePlugin", "DetailPageButtonPlugin", "ListPageButtonPlugin",
-        "NewVideoPlugin", "BlacklistPlugin", "SettingPlugin", "HighlightMagnetPlugin", "MagnetHubPlugin"
+        "NewVideoPlugin", "BlacklistPlugin", "SettingPlugin", "HighlightMagnetPlugin", "MagnetHubPlugin", "HistoryPlugin"
     ],
     NavBarPlugin: ["SearchByImagePlugin"],
     NewVideoPlugin: ["TaskPlugin", "SettingPlugin"],
@@ -43,7 +43,7 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     StatsPlugin: ["NewVideoPlugin", "ListPagePlugin"],
     TaskPlugin: ["BlacklistPlugin"],
     TranslatePlugin: ["ListPagePlugin"],
-    TOP250Plugin: ["HitShowPlugin"],
+    TOP250Plugin: ["HitShowPlugin", "ListPageButtonPlugin"],
     UnifiedOfflinePlugin: ["OneTwoThreeOfflinePlugin"]
 });
 // @ts-check

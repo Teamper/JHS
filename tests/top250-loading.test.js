@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
 
-function loadTop250({ hitShow = null, movies = [] } = {}) {
+function loadTop250({ hitShow = null, movies = [], listPageButton = null } = {}) {
     const dom = new JSDOM('<section class="section"><div class="container"><h2 class="section-title">Top250</h2><div class="box"></div></div></section>', { url: "https://javdb.com/advanced_search?handleTop=1&handleType=all&type_value=" });
     const $ = jqueryFactory(dom.window), q = vi.fn(), loading = vi.fn(() => ({ close: loadingClose })), loadingClose = vi.fn();
     const host = {
@@ -14,9 +14,10 @@ function loadTop250({ hitShow = null, movies = [] } = {}) {
         createOwnedListRoot(classes = []) { const root = dom.window.document.createElement("div"); root.classList.add("movie-list", ...classes); return root; },
     };
     const hitShowMock = hitShow ? { markDataListHtml: vi.fn(() => ""), initializeRenderedList: vi.fn(async () => {}), loadScore: vi.fn(async () => {}) } : null;
+    const listPageButtonMock = listPageButton ?? { mountOwnedRankingControls: vi.fn(async () => {}) };
     const context = vm.createContext({
         BasePlugin: class {
-            getBean(name) { return "HitShowPlugin" === name ? hitShowMock : undefined; }
+            getBean(name) { return { HitShowPlugin: hitShowMock, ListPageButtonPlugin: listPageButtonMock }[name]; }
             getRuntimeService(name) { return { host, scope: async () => ({ signal: { aborted: false } }), movie: {}, settings: { snapshot: () => ({}) } }[name]; }
         },
         i: (target, key, value) => (target[key] = value), $, document: dom.window.document, window: dom.window,
@@ -27,7 +28,7 @@ function loadTop250({ hitShow = null, movies = [] } = {}) {
     });
     const source = readTestFile(join(process.cwd(), "src/plugins/external-search/top250.js"), "utf8");
     vm.runInContext(`${source};globalThis.Top250Plugin=Top250Plugin`, context);
-    return { plugin: new context.Top250Plugin(), $, q, loading, loadingClose, show: context.show, hitShowMock, dom };
+    return { plugin: new context.Top250Plugin(), $, q, loading, loadingClose, show: context.show, hitShowMock, listPageButtonMock, dom };
 }
 
 describe("Top250Plugin handleTop loading lifecycle", () => {
@@ -50,5 +51,15 @@ describe("Top250Plugin handleTop loading lifecycle", () => {
         expect(hitShowMock.markDataListHtml).toHaveBeenCalledOnce();
         expect(hitShowMock.loadScore).toHaveBeenCalledOnce();
         expect(dom.window.document.querySelector(".movie-list")).not.toBeNull();
+    });
+
+    it("mounts list action controls into the owned top250 filter container", async () => {
+        const { plugin, q, listPageButtonMock, dom } = loadTop250({ hitShow: { markDataListHtml: vi.fn(() => ""), initializeRenderedList: vi.fn(async () => {}), loadScore: vi.fn(async () => {}) }, movies: [{ number: "ABC-123", has_cnsub: "0" }] });
+        q.mockResolvedValue({ success: 1, data: { movies: [{ number: "ABC-123", has_cnsub: "0" }] } });
+        await plugin.handleTop();
+        expect(listPageButtonMock.mountOwnedRankingControls).toHaveBeenCalledOnce();
+        const target = listPageButtonMock.mountOwnedRankingControls.mock.calls[0][0];
+        expect(target.is(".jhs-top250-filters")).toBe(true);
+        expect(dom.window.document.querySelector(".jhs-top250-filters")).not.toBeNull();
     });
 });

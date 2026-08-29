@@ -231,7 +231,7 @@ export class CoverButtonPlugin extends BasePlugin {
             notify: !0
         }), void t.hide();
         t.addClass("loading"), t.after('<div class="loading-spinner"></div>');
-        const s = t.attr("src"), scope = await this.getRuntimeService("scope")(), {sources: o, error: previewError} = await fetchDmmPreviewIfEnabled(n, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope, settings);
+        const s = t.attr("data-full") || t.attr("src"), scope = await this.getRuntimeService("scope")(), {sources: o, error: previewError} = await fetchDmmPreviewIfEnabled(n, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope, settings);
         if (generation !== this.previewGeneration || !isPreviewEnabled(this.getRuntimeService("settings").snapshot())) return void this.showImg(e, t, n);
         if (!o) return show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未解析到视频"), void this.showImg(e, t, n);
         let r = this.getRuntimeService("settings").snapshot().videoQuality;

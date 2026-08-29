@@ -1,6 +1,7 @@
 // @ts-check
 
 import { normalizeMovieCarNum } from "../../core/movie-identity.js";
+import { isHitShowPage } from "../../core/site-context.js";
 
 export class JavDbHostAdapter {
     /** @param {Document} [documentRuntime] @param {Location} [locationRuntime] */
@@ -19,6 +20,9 @@ export class JavDbHostAdapter {
     detectRoute() {
         if (this.location.pathname.startsWith("/v/") || this.location.pathname.startsWith("/movies/")) return "detail";
         if (this.location.pathname === "/users/collection_codes") return "owned-detail";
+        // JHS 自渲染榜单页（热播/Top250）没有原生列表节点，但语义是列表页（对齐 site-context.isListPage），
+        // 否则 window.isListPage=false 会让筛选判定与状态刷新监听整体失效。
+        if (this.location.pathname === "/advanced_search" && [ "handlePlayback", "handleTop" ].some((key => new URLSearchParams(this.location.search).get(key) === "1"))) return "list";
         return this.locateListRoot() ? "list" : "other";
     }
     readMovieRef() {

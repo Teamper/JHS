@@ -60,6 +60,63 @@ for (const path of ["/advanced_search?type=3", "/advanced_search?type=100", "/wa
   });
 }
 
+test("HotShow creates an owned list when advanced search has no native list root", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers HotShow host fallback");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/advanced_search?handlePlayback=1&period=daily", { waitUntil: "domcontentloaded" });
+  expect(await page.locator(".movie-list").count()).toBe(0);
+  await injectUserscriptRuntime(page, { rankingMovies: [{
+    id: "hot-fixture", number: "ABC-123", origin_title: "Hot Fixture", release_date: "2026-08-29",
+    cover_url: "https://c0.jdbstatic.com/covers/fixture.jpg", has_cnsub: true, magnets_count: 1, new_magnets: false,
+  }, {
+    id: "hot-fixture-fc2", number: "FC2-PPV-1234567", origin_title: "Hot FC2", release_date: "2026-08-28",
+    cover_url: "https://c0.jdbstatic.com/covers/fc2.jpg", has_cnsub: false, magnets_count: 0, new_magnets: false,
+  }] });
+  await expect.poll(() => page.evaluate(() => window.isListPage)).toBe(true);
+  await expect(page.locator(".jhs-hitshow-list #hot-fixture")).toBeVisible();
+  await expect(page.locator(".jhs-hitshow-title")).toContainText("热播");
+  await expect(page.locator(".empty-message")).toHaveCount(0);
+  const periodToolbar = page.locator("#jhs-hitshow-period");
+  await expect(periodToolbar).toBeVisible();
+  await expect(periodToolbar.locator(".jhs-segmented__item")).toHaveCount(3);
+  // 排序与鉴定操作控件挂进热播标题容器（之后由命令栏收拢），不注入页面 h2
+  await expect(page.locator("#sort-toggle-btn")).toHaveCount(1);
+  await expect(page.locator("#waitCheckBtn")).toHaveCount(1);
+  const image = page.locator(".jhs-hitshow-list #hot-fixture img");
+  await expect(image).toHaveAttribute("src", /\/thumbs\//);
+  await expect(image).toHaveAttribute("data-full", /\/covers\//);
+  const quickFilter = page.locator("#jhs-quick-filter");
+  await expect(quickFilter).toBeVisible();
+  await quickFilter.locator('[data-jhs-filter="all"]').click();
+  await expect(quickFilter.locator('[data-jhs-filter="all"]')).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".jhs-hitshow-list #hot-fixture")).toBeVisible();
+  // 回归场景：在热播页把卡片标记为已下载后，卡片标记必须实时刷新，且各筛选档位显隐正确
+  const card = page.locator(".jhs-hitshow-list #hot-fixture");
+  await page.evaluate(() => window.unsafeWindow.stateService.patch("ABC-123", { downloaded: true }, {
+    type: "list-card-state", record: { carNum: "ABC-123", url: "/v/hot-fixture", names: "", publishTime: "2026-08-29", fc2Source: "fc2" },
+  }));
+  await expect.poll(() => card.getAttribute("data-jhs-flags"), { timeout: 10_000 }).toContain('"downloaded":true');
+  await quickFilter.locator('[data-jhs-filter="waitCheck"]').click();
+  await expect(card).toBeHidden();
+  await quickFilter.locator('[data-jhs-filter="hasDown"]').click();
+  await expect(card).toBeVisible();
+  await quickFilter.locator('[data-jhs-filter="all"]').click();
+  await expect(card).toBeVisible();
+  // 回归场景：自渲染榜单上的 FC2 卡片必须被延迟挂载保护，点击打开 FC2 对话框而不是被详情导航吞掉
+  const fc2Card = page.locator(".jhs-hitshow-list #hot-fixture-fc2");
+  await expect.poll(() => fc2Card.getAttribute("data-jhs-fc2-protected"), { timeout: 10_000 }).toBe("true");
+  await expect(fc2Card.locator("a").first()).toHaveAttribute("href", /collection_codes/);
+  await page.evaluate(() => {
+    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
+    fc2.resolveMovieIdForRecord = async () => null;
+    fc2.resolveFc2Source = async () => "fc2";
+    fc2.openFc2Dialog = (...args) => { window.__jhsFc2Navigation = { mode: "dialog", args }; };
+    fc2.openFc2Page = (...args) => { window.__jhsFc2Navigation = { mode: "page", args }; };
+  });
+  await fc2Card.locator(".video-title").click();
+  expect(await page.evaluate(() => window.__jhsFc2Navigation?.mode)).toBe("dialog");
+});
+
 test("FC2 cards keep dialog navigation and use owned-page anchor fallback", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers navigation semantics");
   await fulfillHostFixtures(context);

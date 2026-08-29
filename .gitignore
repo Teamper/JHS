@@ -4,3 +4,5 @@ output/playwright/
 outputs/
 .learnings/
 CLAUDE.md
+.zcode/
+*.bundle

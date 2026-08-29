@@ -10,12 +10,13 @@ export async function fulfillHostFixtures(context) {
   const javbus = await readFile(join(browserRoot, "fixtures", "javbus-detail.html"), "utf8");
   const javdbList = await readFile(join(browserRoot, "fixtures", "javdb-list.html"), "utf8");
   const javdbFc2List = await readFile(join(browserRoot, "fixtures", "javdb-fc2-list.html"), "utf8");
+  const javdbHitShow = await readFile(join(browserRoot, "fixtures", "javdb-hit-show.html"), "utf8");
   const javbusList = await readFile(join(browserRoot, "fixtures", "javbus-list.html"), "utf8");
   await context.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     if (request.isNavigationRequest()) {
-      if (url.hostname === "javdb.com") return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: url.pathname.startsWith("/v/") ? javdb : url.pathname === "/advanced_search" ? javdbFc2List : javdbList });
+      if (url.hostname === "javdb.com") return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: url.pathname.startsWith("/v/") ? javdb : url.pathname === "/advanced_search" && url.searchParams.has("handlePlayback") ? javdbHitShow : url.pathname === "/advanced_search" ? javdbFc2List : javdbList });
       if (url.hostname === "www.javbus.com") return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: url.pathname === "/" ? javbusList : javbus });
     }
     return route.abort("blockedbyclient");
@@ -44,7 +45,7 @@ export async function injectUserscriptRuntime(page, options = {}) {
       ...settingOverrides,
     });
   }, { disabledPlugins: options.disabledPlugins || [], settingOverrides: options.settingOverrides || {} });
-  await page.evaluate(({ version, nativeTranslation }) => {
+  await page.evaluate(({ version, nativeTranslation, rankingMovies }) => {
     window.__jhsBrowserTestMetadata = { fixture: true, version };
     window.__jhsBrowserDiagnostics = { requests: [], nativeTranslationRequests: 0, startedAt: performance.now() };
     window.unsafeWindow = window;
@@ -55,7 +56,11 @@ export async function injectUserscriptRuntime(page, options = {}) {
       window.__jhsBrowserDiagnostics.requests.push({ method: options.method || "GET", url: String(options.url || "") });
       let aborted = false;
       queueMicrotask(() => {
-        if (!aborted) options.onerror?.({ error: "Browser fixture blocked external request" });
+        if (aborted) return;
+        if (rankingMovies && String(options.url || "").includes("/api/v1/rankings/playback")) {
+          const payload = { success: 1, data: { movies: rankingMovies } };
+          options.onload?.({ status: 200, response: payload, responseText: JSON.stringify(payload), responseHeaders: "content-type: application/json" });
+        } else options.onerror?.({ error: "Browser fixture blocked external request" });
       });
       return { abort() { aborted = true; options.onabort?.(); } };
     };
@@ -145,7 +150,7 @@ export async function injectUserscriptRuntime(page, options = {}) {
       alert(message, options = {}) { return this.open({ ...options, content: String(message) }); },
       msg() {}
     };
-  }, { version: browserVersion, nativeTranslation: options.nativeTranslation || "" });
+  }, { version: browserVersion, nativeTranslation: options.nativeTranslation || "", rankingMovies: options.rankingMovies || null });
   await page.addScriptTag({ path: join(repoRoot, "JHS.user.js") });
   try {
     await page.waitForFunction(() => Boolean(window.unsafeWindow?.pluginManager?.getStartupReport), null, { timeout: 15_000 });

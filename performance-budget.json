@@ -1,14 +1,14 @@
 {
   "version": 1,
   "bundle": {
-    "baselineBytes": 1234900,
+    "baselineBytes": 1237700,
     "maximumGrowthRatio": 0.1,
-    "reason": "Reviewed v6.5 RC baseline including settings synchronization, bounded translation cache migration, native timeout fallback, safe media construction and mobile dialog regression fixes"
+    "reason": "Reviewed v6.5 RC baseline including HotShow owned-list recovery, thumbnail-first image loading, translation cache migration, safe media construction and mobile dialog regression fixes; raised for the HotShow/Top250 route-list restoration (owned ranking pages rerun the list filter pipeline, refresh listeners and deferred FC2 navigation attach)"
   },
   "browserFixture": {
     "maximumInitialRequests": {
       "JavDB": 0,
-      "JavBus": 3
+      "JavBus": 2
     },
     "startupMedianMilliseconds": {
       "JavDB": 220,

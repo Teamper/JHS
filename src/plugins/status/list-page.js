@@ -115,7 +115,8 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {Set<Element>} */ this.pendingItems = new Set();
         /** @type {ReturnType<typeof setTimeout> | null} */ this.processTimer = null;
         /** @type {IntersectionObserver | null} */ this.hdImageObserver = null;
-        this.hdEagerRemaining = 12;
+        /** @type {Map<HTMLImageElement, () => void>} */ this.hdPendingCleanups = new Map();
+        /** @type {string | null} */ this.hoverPreviewState = null;
         this.writeQueue = Promise.resolve();
         /** @type {Map<string, Set<Element>>} */ this.itemIndex = new Map();
         /** @type {number | null} */ this.recountFrame = null;
@@ -126,7 +127,7 @@ export class ListPagePlugin extends BasePlugin {
         return "ListPagePlugin";
     }
     async handle() {
-        if (!window.isListPage || isHitShowPage()) return;
+        if (!window.isListPage) return;
         const scope = await this.getRuntimeService("scope")();
         const settingsService = this.getRuntimeService("settings");
         const onSettingsChanged = (/** @type {any} */ event) => {
@@ -151,13 +152,22 @@ export class ListPagePlugin extends BasePlugin {
             items.length && (await this.doFilterItems(items), this.applyVisibility(items));
             const history = this.getOptionalDependency("HistoryPlugin");
             history?.tableObj && history.tableObj.setData();
-        }))), this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
+        })));
+        // 自有榜单页没有宿主列表 DOM 可劫持，DOM 管线由 HitShowPlugin.initializeRenderedList 驱动；
+        // Top250（handleTop）与 v6.4.1 一致走完整管线（其自有列表在同步前缀阶段已创建）；
+        // 但状态标记/黑名单/设置变更的刷新监听在两类页面都必须保持活跃，否则卡片标记永不更新。
+        if (isHitShowPage()) return;
+        const hoverBigImg = settingsService.snapshot().hoverBigImg;
+        this.configureHoverPreview(hoverBigImg === _ ? "yes" : "no");
+        this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
         await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(),
         this.rememberTagExpand(),
         $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await getListEventBus().emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: !1 }),
         this.checkDom(scope), scope.addCleanup((() => {
             this.processTimer && clearTimeout(this.processTimer), this.processTimer = null, this.pendingItems.clear();
             this.hdImageObserver?.disconnect(), this.hdImageObserver = null;
+            this.hdPendingCleanups.forEach((cleanup => cleanup())), this.hdPendingCleanups.clear();
+            this.configureHoverPreview("no");
             this.recountFrame && (globalThis.cancelAnimationFrame?.(this.recountFrame) ?? clearTimeout(this.recountFrame)), this.recountFrame = null;
             $(this.getSelector().boxSelector).off(".jhsMovieDetail"), $("#jhs-quick-filter").off(), this.itemIndex.clear();
         }));
@@ -627,26 +637,40 @@ export class ListPagePlugin extends BasePlugin {
     /** @param {HTMLImageElement} e */
     _replaceSingleHdImg(e) {
         if ("true" === e.dataset.hdReplaced) return;
+        const originalSrc = e.currentSrc || e.src;
+        let upgradedSrc = e.dataset.full || originalSrc;
         if (r) {
-            const isJavdbCdn = /jdbstatic\.com|javdb\.com/i.test(e.src);
+            const isJavdbCdn = /jdbstatic\.com|javdb\.com/i.test(originalSrc);
             if (isJavdbCdn) {
-                const originalSrc = e.src;
-                e.src = e.src.replace("thumbs", "covers");
+                upgradedSrc = upgradedSrc.replace("thumbs", "covers");
+                e.dataset.full = upgradedSrc;
                 e.dataset.hdReplaced = "true";
                 e.title = "";
-                e.onerror = function() {
-                    if (this.src !== originalSrc) {
-                        this.src = originalSrc;
-                        this.onerror = null;
-                    }
-                };
             }
         } else if (l) {
             const t = /\/(imgs|pics)\/(thumb|thumbs)\//, n = /(\.jpg|\.jpeg|\.png)$/i;
-            t.test(e.src) ? (e.src = e.src.replace(t, "/$1/cover/").replace(n, "_b$1"), e.dataset.hdReplaced = "true",
-            e.dataset.title = e.title, e.title = "") : /ps(\.jpg|\.jpeg|\.png)$/i.test(e.src) && (e.src = e.src.replace(/ps(\.jpg|\.jpeg|\.png)$/i, "pl$1"),
+            t.test(originalSrc) ? (upgradedSrc = upgradedSrc.replace(t, "/$1/cover/").replace(n, "_b$1"), e.dataset.full = upgradedSrc, e.dataset.hdReplaced = "true",
+            e.dataset.title = e.title, e.title = "") : /ps(\.jpg|\.jpeg|\.png)$/i.test(originalSrc) && (upgradedSrc = upgradedSrc.replace(/ps(\.jpg|\.jpeg|\.png)$/i, "pl$1"), e.dataset.full = upgradedSrc,
             e.dataset.hdReplaced = "true", e.dataset.title = e.title, e.title = "");
         }
+        if ("true" !== e.dataset.hdReplaced || upgradedSrc === originalSrc) return;
+        e.src = upgradedSrc;
+        e.onerror = function() {
+            if (this.src !== originalSrc) this.src = originalSrc;
+            this.onerror = null;
+        };
+    }
+    /** 先完成当前缩略图请求，再升级为高清图，避免取消首屏可见内容。 @param {HTMLImageElement} image */
+    _scheduleHdUpgrade(image) {
+        if ("true" === image.dataset.hdReplaced || "true" === image.dataset.jhsHdPending) return;
+        if (image.complete) return void this._replaceSingleHdImg(image);
+        image.dataset.jhsHdPending = "true";
+        const finish = () => {
+            image.removeEventListener("load", finish), image.removeEventListener("error", finish), delete image.dataset.jhsHdPending, this.hdPendingCleanups.delete(image), this._replaceSingleHdImg(image);
+        }, cleanup = () => {
+            image.removeEventListener("load", finish), image.removeEventListener("error", finish), delete image.dataset.jhsHdPending;
+        };
+        this.hdPendingCleanups.set(image, cleanup), image.addEventListener("load", finish, { once: !0 }), image.addEventListener("error", finish, { once: !0 });
     }
     /** @param {any} [e] */
     replaceHdImg(e) {
@@ -657,23 +681,22 @@ export class ListPagePlugin extends BasePlugin {
             entries.forEach((entry => {
                 const image = /** @type {HTMLImageElement} */ (entry.target);
                 entry.isIntersecting && (this.hdImageObserver?.unobserve(image), delete image.dataset.jhsHdObserved,
-                this._replaceSingleHdImg(image));
+                this._scheduleHdUpgrade(image));
             }));
         }), { rootMargin: "200px" });
-        for (const image of t) this.hdEagerRemaining > 0 ? (this.hdEagerRemaining--, this._replaceSingleHdImg(image)) : this.hdImageObserver ? (image.dataset.jhsHdObserved = "true",
-        this.hdImageObserver.observe(image)) : this._replaceSingleHdImg(image);
-        const settings = this.getRuntimeService("settings").snapshot();
-        const hoverBigImg = Object.prototype.hasOwnProperty.call(settings, "hoverBigImg") ? settings.hoverBigImg : C;
-        this.configureHoverPreview(hoverBigImg === _ ? "yes" : "no");
+        for (const image of t) image.decoding = "async", this.hdImageObserver ? (image.dataset.jhsHdObserved = "true",
+        this.hdImageObserver.observe(image)) : this._scheduleHdUpgrade(image);
     }
     /** hoverBigImg 唯一生命周期入口：ON→绑定，OFF→销毁。 */
     /** @param {string} enabled */
     configureHoverPreview(enabled) {
         const runtimeWindow = /** @type {any} */ (window);
+        if (this.hoverPreviewState === enabled && ("no" === enabled || runtimeWindow.imageHoverPreviewObj)) return;
         if (runtimeWindow.imageHoverPreviewObj) {
             runtimeWindow.imageHoverPreviewObj.destroy?.(), runtimeWindow.imageHoverPreviewObj = null;
         }
         if ("yes" === enabled) runtimeWindow.imageHoverPreviewObj = new ImageHoverPreview({ selector: this.getSelector().coverImgSelector });
+        this.hoverPreviewState = enabled;
     }
     /** @param {JQueryHandle} e @param {string} t @param {string} n */
     applyTranslatedTitle(e, t, n) {

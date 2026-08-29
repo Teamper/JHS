@@ -64,6 +64,16 @@ describe("mobile list FAB", () => {
         expect(listButtons.openWaitCheck).toHaveBeenCalledOnce();
     });
 
+    it("adds the history entry when HistoryPlugin is available and opens it via handleAction", async () => {
+        const history = { openHistory: vi.fn() };
+        const { plugin } = loadMobilePlugin({ beans: { ListPagePlugin: { activeQuickFilter: "waitCheck", setQuickFilter: vi.fn(), syncQuickFilterUi: vi.fn() }, ListPageButtonPlugin: { openWaitCheck: vi.fn(async () => {}), sortItems: vi.fn(async () => {}) }, NewVideoPlugin: {}, BlacklistPlugin: {}, SettingPlugin: {}, DetailPageButtonPlugin: {}, HighlightMagnetPlugin: {}, MagnetHubPlugin: {}, HistoryPlugin: history } });
+        const menu = plugin.createMenu();
+        expect(menu.find(".jhs-fab-menu-item")).toHaveLength(8);
+        expect(menu.find('[data-action="history"]')).toHaveLength(1);
+        await plugin.handleAction("history");
+        expect(history.openHistory).toHaveBeenCalledOnce();
+    });
+
     it("reads the normalized car number from the HostAdapter", () => {
         const { host, plugin } = loadMobilePlugin();
         expect(plugin.getCarNum()).toBe("ABC-123");

@@ -1,6 +1,7 @@
 // @ts-check
 
 import { escapeHtml } from "../../core/constants.js";
+import { jhsEventBus } from "../../core/event-bus.js";
 import { normalizeHttpUrl } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { isHitShowPage } from "../../core/site-context.js";
@@ -18,7 +19,7 @@ export class HitShowPlugin extends BasePlugin {
         return "HitShowPlugin";
     }
     async initCss() {
-        return `<style>.jhs-hitshow-heading{display:flex;align-items:center;justify-content:space-between;gap:var(--jhs-space-3);flex-wrap:wrap}.jhs-hitshow-title{margin:0!important}.jhs-hitshow-list{margin-top:var(--jhs-space-3)}</style>`;
+        return `<style>.jhs-hitshow-heading{display:flex;align-items:center;justify-content:space-between;gap:var(--jhs-space-3);flex-wrap:wrap}.jhs-hitshow-title{margin:0!important}.jhs-hitshow-list{margin-top:var(--jhs-space-3)}.jhs-hitshow-state{display:flex;min-height:180px;align-items:center;justify-content:center;flex-direction:column;gap:var(--jhs-space-3);color:var(--jhs-text-muted);text-align:center}</style>`;
     }
     async handle() {
         $('a[href*="rankings/playback"]').on("click", ((/** @type {MouseEvent} */ e) => {
@@ -26,34 +27,47 @@ export class HitShowPlugin extends BasePlugin {
         })), await this.handlePlayback();
     }
     hookPage() {
-        const host = this.getRuntimeService("host"), listRoot = host.locateListRoot?.(), contentBox = host.getListContainer?.();
-        if (!listRoot || !contentBox) throw new Error("JavDB 列表容器不可用");
+        const host = this.getRuntimeService("host"), contentBox = host.getListContainer?.() ?? host.getListLayoutContainer?.();
+        if (!contentBox || !host.createOwnedListRoot) throw new Error("JavDB 列表容器不可用");
         this.$contentBox = $(contentBox), this.$listRoot = $(host.createOwnedListRoot([ "jhs-hitshow-list" ]));
         let e = $("h2.section-title");
-        e.contents().first().replaceWith("热播"), e.addClass("jhs-hitshow-title"), e.parent(".jhs-hitshow-heading").length || e.wrap('<header class="jhs-hitshow-heading"></header>'), $(".empty-message").remove(),
+        e.length || (e = $("<h2></h2>").addClass("section-title").prependTo(this.$contentBox)), e.contents().first().replaceWith("热播"), e.addClass("jhs-hitshow-title"), e.parent(".jhs-hitshow-heading").length || e.wrap('<header class="jhs-hitshow-heading"></header>'), $(".empty-message").remove(),
         this.$contentBox.children(".box").remove(), this.$contentBox.children(".jhs-hitshow-list").remove(), this.$contentBox.append(this.$listRoot);
     }
     async handlePlayback() {
         if (!isHitShowPage()) return;
-        const period = new URLSearchParams(window.location.search).get("period"), generation = ++this.loadGeneration;
-        this.hookPage(), this.toolBar(period);
-        const loadingObj = loading();
+        const period = new URLSearchParams(window.location.search).get("period"), generation = ++this.loadGeneration, loadingObj = loading();
         let loadingClosed = !1;
         try {
+            this.hookPage(), this.toolBar(period);
+            // 操作按钮行（开始鉴定/批量操作/排序）挂进热播自有标题容器，由 ListPageButtonPlugin 提供
+            await this.getOptionalDependency("ListPageButtonPlugin")?.mountOwnedRankingControls?.()?.catch?.((/** @type {unknown} */ error) => clog.error("热播操作按钮挂载失败", error));
             const movies = await this.fetchPlaybackWithRetry(period);
             if (generation !== this.loadGeneration) return;
+            if (!movies.length) return void this.renderState("当前周期暂无热播数据");
             this.$listRoot.html(this.markDataListHtml(movies));
             await this.initializeRenderedList();
             await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.();
+            // 周期工具栏被任何后挂载 UI 挪走时自愈，保证日榜/周榜/月榜切换始终可见
+            $("#jhs-hitshow-period").length || $(".jhs-hitshow-heading").length && this.toolBar(period);
             loadingObj.close(), loadingClosed = !0;
             void this.loadScore(movies, generation).then((async () => {
                 if (generation === this.loadGeneration && "rateCount" === this.getRuntimeService("settings").snapshot().sortMethod) await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.();
             })).catch((error => clog.error("热播评分补全失败", error)));
         } catch (error) {
             clog.error("所有重试尝试均失败，无法获取数据。", error);
+            this.$listRoot?.length ? this.renderState("热播数据加载失败，请稍后重试", !0) : show.error("热播页面初始化失败");
         } finally {
             loadingClosed || loadingObj.close();
         }
+    }
+    /** @param {string} message @param {boolean} [retryable] */
+    renderState(message, retryable = !1) {
+        if (!this.$listRoot?.length) return;
+        const state = $("<div></div>").addClass(`jhs-hitshow-state${retryable ? " jhs-hitshow-state--error" : ""}`).attr("role", retryable ? "alert" : "status"), text = $("<p></p>").text(message);
+        state.append(text);
+        if (retryable) state.append($("<button type=\"button\" class=\"jhs-btn jhs-btn--secondary\"></button>").text("重新加载").on("click", (() => void this.handlePlayback())));
+        this.$listRoot.empty().append(state);
     }
     async fetchPlaybackWithRetry(/** @type {string | null} */ period) {
         let lastError;
@@ -68,8 +82,16 @@ export class HitShowPlugin extends BasePlugin {
     }
     async initializeRenderedList() {
         const listPage = this.getOptionalDependency("ListPagePlugin");
-        listPage && (listPage.replaceHdImg(), await listPage.doFilter(), listPage.applyVisibility(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector));
+        if (listPage) {
+            const hoverBigImg = this.getRuntimeService("settings").snapshot().hoverBigImg;
+            listPage.configureHoverPreview(hoverBigImg === "yes" ? "yes" : "no"), listPage.replaceHdImg(), await listPage.doFilter(),
+            // 自有榜单页（热播/Top250）不走 ListPagePlugin.handle，需手动恢复快速筛选条（待鉴定/已下载/全部等）
+            // 并重建卡片索引，让 car-state-changed 的定向重筛能找到这些卡片
+            await listPage.createQuickFilter?.(), listPage.applyVisibility(), listPage.rebuildItemIndex?.(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector);
+        }
         await this.getOptionalDependency("CoverButtonPlugin")?.addSvgBtn?.();
+        // 通知 Fc2NavigationPlugin 等监听者：自有榜单的卡片已就绪（FC2 保护与对话框导航延迟挂载）
+        await jhsEventBus?.emit("list-items-added", { items: this.$listRoot?.find(".item").toArray() ?? [] }, { broadcast: !1 });
     }
     toolBar(/** @type {string | null} */ e) {
         $("#jhs-hitshow-period").remove();
@@ -98,7 +120,9 @@ export class HitShowPlugin extends BasePlugin {
             try {
                 if (generation !== this.loadGeneration) return;
                 const id = movie.movieId ?? movie.id;
-                if (!$(`#score_${id}`).length || $(`#${id}`).is(":hidden")) continue;
+                // 仅在评分容器不存在时跳过；不能按可见性跳过——默认"待鉴定"筛选下被隐藏的卡片
+                // 切回"全部/下载"后仍需有评分与评价人数，否则按评价人数排序会把它们沉底。
+                if (!$(`#score_${id}`).length) continue;
                 if (cache[id]) {
                     const cached = this.normalizeScoreData(cache[id]);
                     this.appendScore(id, cached.score, cached.watchedCount);
@@ -133,9 +157,9 @@ export class HitShowPlugin extends BasePlugin {
         let t = "";
         return e.forEach(((e, index) => {
             const id = e.movieId ?? e.id, carNum = e.carNum ?? e.number, title = e.title ?? e.origin_title,
-                releaseDate = e.releaseDate ?? e.release_date, coverUrl = normalizeHttpUrl(e.coverUrl ?? e.cover_url),
+                releaseDate = e.releaseDate ?? e.release_date, coverUrl = normalizeHttpUrl(e.coverUrl ?? e.cover_url), thumbUrl = coverUrl ? coverUrl.replace("/covers/", "/thumbs/") : "",
                 hasSubtitle = e.hasSubtitle ?? e.has_cnsub, magnetCount = Number(e.magnetCount ?? e.magnets_count), newMagnets = e.newMagnets ?? e.new_magnets;
-            t += `\n                <div class="item" id="${escapeHtml(id)}" data-jhs-publish-time="${escapeHtml(releaseDate)}" data-jhs-rate-count="0" data-original-index="${index}">\n                    <a href="/v/${escapeHtml(id)}" class="box" title="${escapeHtml(title)}">\n                        <div class="cover ">${coverUrl ? `<img loading="lazy" src="${escapeHtml(coverUrl)}" alt="">` : ""}</div>\n                        <div class="video-title"><strong>${escapeHtml(carNum)}</strong> ${escapeHtml(title)}</div>\n                        <div class="score" id="score_${escapeHtml(id)}"></div>\n                        <div class="meta">${escapeHtml(releaseDate)}</div>\n                        <div class="jhs-toolbar">\n                           ${hasSubtitle ? '<span class="jhs-badge jhs-badge--watch">含中字磁力</span>' : magnetCount > 0 ? '<span class="jhs-badge jhs-badge--success">含磁力</span>' : '<span class="jhs-badge jhs-badge--neutral">无磁力</span>'}\n                           ${newMagnets ? '<span class="jhs-badge jhs-badge--accent">今日新增</span>' : ""}\n                        </div>\n                    </a>\n                </div>\n            `;
+            t += `\n                <div class="item" id="${escapeHtml(id)}" data-jhs-publish-time="${escapeHtml(releaseDate)}" data-jhs-rate-count="0" data-original-index="${index}">\n                    <a href="/v/${escapeHtml(id)}" class="box" title="${escapeHtml(title)}">\n                        <div class="cover ">${coverUrl ? `<img loading="lazy" decoding="async" src="${escapeHtml(thumbUrl)}" data-full="${escapeHtml(coverUrl)}" alt="">` : ""}</div>\n                        <div class="video-title"><strong>${escapeHtml(carNum)}</strong> ${escapeHtml(title)}</div>\n                        <div class="score" id="score_${escapeHtml(id)}"></div>\n                        <div class="meta">${escapeHtml(releaseDate)}</div>\n                        <div class="tags"></div>\n                        <div class="jhs-toolbar">\n                           ${hasSubtitle ? '<span class="jhs-badge jhs-badge--watch">含中字磁力</span>' : magnetCount > 0 ? '<span class="jhs-badge jhs-badge--success">含磁力</span>' : '<span class="jhs-badge jhs-badge--neutral">无磁力</span>'}\n                           ${newMagnets ? '<span class="jhs-badge jhs-badge--accent">今日新增</span>' : ""}\n                        </div>\n                    </a>\n                </div>\n            `;
         })), t;
     }
 }

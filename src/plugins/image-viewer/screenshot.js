@@ -30,7 +30,7 @@ export class ScreenShotPlugin extends BasePlugin {
         };
         settings.addEventListener("settings.changed", onSettingsChanged);
         scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
-        await this.loadScreenShot();
+        void this.loadScreenShot().catch((/** @type {unknown} */ error) => clog.error("长缩略图加载失败", error));
     }
     /** 关闭总开关时删除 JHS 自有截图 UI（宿主原生区域不做永久销毁）。 */
     unmountHosted() {
