@@ -64,7 +64,7 @@ function loadPreviewClass() {
         listen(target, type, listener) { target.addEventListener(type, listener); this.cleanups.push(() => target.removeEventListener(type, listener)); }
         dispose() { this.cleanups.splice(0).reverse().forEach((cleanup) => cleanup()); }
     }
-    const context = { console, document, Image: FakeImage, LifecycleScope: FakeLifecycleScope, Date, JHS_Z_INDEX: { tooltip: 9999999999 }, utils: { isMobileMode: () => false }, setTimeout, clearTimeout };
+    const context = { console, document, Image: FakeImage, LifecycleScope: FakeLifecycleScope, Date, JHS_Z_INDEX: { hoverPreview: 12345690 }, utils: { isMobileMode: () => false }, setTimeout, clearTimeout };
     context.window = context;
     context.innerWidth = 800;
     context.innerHeight = 600;
@@ -82,6 +82,9 @@ describe("ImageHoverPreview lifecycle", () => {
     it("uses one delegated listener set and supports dynamically rendered targets", () => {
         const { Preview, document, firstCover, createCover, images } = loadPreviewClass(), preview = new Preview({ selector: ".cover" });
         expect(document.listeners.get("mouseover")?.size).toBe(1);
+        // 默认层级必须取 hoverPreview 档：低于 modal/layer，弹窗打开后预览不得盖住详情
+        expect(preview.config.zIndex).toBe(12345690);
+        expect(preview.preview.style.zIndex).toBe("12345690");
         document.emit("mouseover", firstCover);
         expect(images).toHaveLength(1);
         const secondCover = createCover("https://example.test/b.jpg");

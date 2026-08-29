@@ -10,6 +10,11 @@ describe("dialog service", () => {
         expect(JHS_Z_INDEX.debug).toBeGreaterThan(JHS_Z_INDEX.loading);
     });
 
+    it("keeps the hover preview below modal dialogs but above host chrome", () => {
+        expect(JHS_Z_INDEX.hoverPreview).toBeGreaterThan(JHS_Z_INDEX.hostTopbar);
+        expect(JHS_Z_INDEX.modal).toBeGreaterThan(JHS_Z_INDEX.hoverPreview);
+    });
+
     it("forwards open, close, confirm and alert through the DialogPort", () => {
         const layer = {
             open: vi.fn(() => 1), close: vi.fn(), confirm: vi.fn(() => 2), alert: vi.fn(() => 3),

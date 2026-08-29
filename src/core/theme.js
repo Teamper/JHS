@@ -15,6 +15,8 @@ export const JHS_Z_INDEX = Object.freeze({
     debugLow: 12345678,
     hostNav: 12345679,
     hostTopbar: 12345689,
+    // 悬停预览必须低于 modal/layer：弹窗打开期间预览不得盖住详情内容（tooltip 档保留给需覆盖弹窗的原生提示）
+    hoverPreview: 12345690,
     modal: 12345699,
     sheetBackdrop: 12345789,
     sheet: 12345790,
@@ -74,6 +76,7 @@ export function buildThemeCss() {
         --jhs-z-debug-low: ${JHS_Z_INDEX.debugLow};
         --jhs-z-host-nav: ${JHS_Z_INDEX.hostNav};
         --jhs-z-host-topbar: ${JHS_Z_INDEX.hostTopbar};
+        --jhs-z-hover-preview: ${JHS_Z_INDEX.hoverPreview};
         --jhs-z-modal: ${JHS_Z_INDEX.modal};
         --jhs-z-sheet-backdrop: ${JHS_Z_INDEX.sheetBackdrop};
         --jhs-z-sheet: ${JHS_Z_INDEX.sheet};

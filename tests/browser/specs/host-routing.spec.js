@@ -117,6 +117,47 @@ test("HotShow creates an owned list when advanced search has no native list root
   expect(await page.evaluate(() => window.__jhsFc2Navigation?.mode)).toBe("dialog");
 });
 
+test("HotShow hover preview stays below the FC2 detail dialog", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers hover/dialog stacking");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/advanced_search?handlePlayback=1&period=daily", { waitUntil: "domcontentloaded" });
+  await page.addStyleTag({ content: ".movie-list{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:20px}.item .cover{position:relative;width:100%;padding-top:60%}.item .cover img{position:absolute;inset:0;width:100%;height:100%}" });
+  await injectUserscriptRuntime(page, {
+    settingOverrides: { hoverBigImg: "yes" },
+    rankingMovies: [{
+      id: "hot-fixture-fc2", number: "FC2-PPV-1234567", origin_title: "Hot FC2", release_date: "2026-08-28",
+      cover_url: "https://c0.jdbstatic.com/covers/fc2.jpg", has_cnsub: false, magnets_count: 0, new_magnets: false,
+    }],
+  });
+  await expect(page.locator(".jhs-hitshow-list #hot-fixture-fc2")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => Boolean(window.imageHoverPreviewObj))).toBe(true);
+  await page.evaluate(() => {
+    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
+    fc2.resolveMovieIdForRecord = async () => null;
+    fc2.resolveFc2Source = async () => "fc2";
+  });
+  const fc2Card = page.locator(".jhs-hitshow-list #hot-fixture-fc2");
+  await expect.poll(() => fc2Card.getAttribute("data-jhs-fc2-protected"), { timeout: 10_000 }).toBe("true");
+  await fc2Card.locator(".cover img").hover();
+  await expect.poll(() => page.evaluate(() => document.querySelector(".image-hover-preview")?.classList.contains("active") === true)).toBe(true);
+  await fc2Card.locator(".cover img").click();
+  await expect.poll(() => page.evaluate(() => Boolean([...document.querySelectorAll(".layui-layer")].find((el) => el.querySelector(".jhs-fc2-dialog-host"))))).toBe(true);
+  // 回归门禁：FC2 详情对话框的层级必须压过悬停预览（hoverPreview 档低于 modal/layer）
+  const ordering = await page.evaluate(() => {
+    const preview = document.querySelector(".image-hover-preview");
+    const dialog = [...document.querySelectorAll(".layui-layer")].find((el) => el.querySelector(".jhs-fc2-dialog-host"));
+    if (!preview || !dialog) return null;
+    return {
+      previewZ: Number.parseInt(preview.style.zIndex, 10),
+      dialogZ: Number.parseInt(dialog.style.zIndex, 10),
+      token: Number.parseInt(getComputedStyle(document.documentElement).getPropertyValue("--jhs-z-hover-preview"), 10),
+    };
+  });
+  expect(ordering).not.toBeNull();
+  expect(ordering.previewZ).toBe(ordering.token);
+  expect(ordering.dialogZ).toBeGreaterThan(ordering.previewZ);
+});
+
 test("FC2 cards keep dialog navigation and use owned-page anchor fallback", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers navigation semantics");
   await fulfillHostFixtures(context);

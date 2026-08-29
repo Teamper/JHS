@@ -145,7 +145,7 @@ window.loading = function() {
             maxHeight: 1e3,
             offsetX: 20,
             offsetY: 20,
-            zIndex: JHS_Z_INDEX.tooltip,
+            zIndex: JHS_Z_INDEX.hoverPreview,
             transition: .2,
             hideDelay: 100,
             loadedUrlLimit: 128,
