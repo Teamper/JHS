@@ -184,6 +184,32 @@ test("HotShow period tabs fetch and render period-specific rankings", async ({ c
   }
 });
 
+test("HotShow sort starts at default and stays page-local", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers owned ranking sort");
+  const rankingMovies = [
+    { id: "sort-a", number: "AAA-001", origin_title: "Older movie", release_date: "2026-08-01", cover_url: "https://c0.jdbstatic.com/covers/a.jpg", has_cnsub: false, magnets_count: 1, new_magnets: false },
+    { id: "sort-b", number: "BBB-002", origin_title: "Newer movie", release_date: "2026-08-29", cover_url: "https://c0.jdbstatic.com/covers/b.jpg", has_cnsub: false, magnets_count: 1, new_magnets: false },
+  ];
+  const cardOrder = () => page.locator(".jhs-hitshow-list .item .video-title strong").allTextContents();
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/advanced_search?handlePlayback=1&period=daily", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page, { settingOverrides: { sortMethod: "rateCount" }, rankingMovies });
+  // 回归门禁：全局排序是“评价人数”，热播也必须以“默认”排序启动（榜单原始顺序）
+  await expect(page.locator("#jhs-sort-current")).toHaveText("默认");
+  await expect.poll(cardOrder).toEqual([ "AAA-001", "BBB-002" ]);
+  // 页内选择“时间”：立即生效，但不写全局设置
+  await page.locator("#sort-toggle-btn").click();
+  await page.locator('[data-sort-method="date"]').click();
+  await expect(page.locator("#jhs-sort-current")).toHaveText("时间");
+  await expect.poll(cardOrder).toEqual([ "BBB-002", "AAA-001" ]);
+  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().sortMethod)).toBe("rateCount");
+  // 页内切回默认：恢复榜单原始顺序
+  await page.locator("#sort-toggle-btn").click();
+  await page.locator('[data-sort-method="default"]').click();
+  await expect(page.locator("#jhs-sort-current")).toHaveText("默认");
+  await expect.poll(cardOrder).toEqual([ "AAA-001", "BBB-002" ]);
+});
+
 test("FC2 cards keep dialog navigation and use owned-page anchor fallback", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers navigation semantics");
   await fulfillHostFixtures(context);

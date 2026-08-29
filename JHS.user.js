@@ -11857,12 +11857,9 @@ ${value}\r
         if (!movies.length) return void this.renderState("当前周期暂无热播数据");
         this.$listRoot.html(this.markDataListHtml(movies));
         await this.initializeRenderedList();
-        await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.();
         $("#jhs-hitshow-period").length || $(".jhs-hitshow-heading").length && this.toolBar(period);
         loadingObj.close(), loadingClosed = true;
-        void this.loadScore(movies, generation).then((async () => {
-          if (generation === this.loadGeneration && "rateCount" === this.getRuntimeService("settings").snapshot().sortMethod) await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.();
-        })).catch(((error) => clog.error("热播评分补全失败", error)));
+        void this.loadScore(movies, generation).catch(((error) => clog.error("热播评分补全失败", error)));
       } catch (error) {
         clog.error("所有重试尝试均失败，无法获取数据。", error);
         this.$listRoot?.length ? this.renderState("热播数据加载失败，请稍后重试", true) : show.error("热播页面初始化失败");
@@ -11924,6 +11921,10 @@ ${value}\r
       const cache = cached.hit && cached.value && typeof cached.value === "object" ? { ...cached.value } : {};
       const queue = [...movies], workers = Array.from({ length: Math.min(4, queue.length) }, (() => this.scoreWorker(queue, cache, generation)));
       await Promise.all(workers), cacheService.set(cacheKey, cache, { scope: "public", ttlMs: 6048e5 });
+      if (generation === this.loadGeneration) {
+        const listButtons = this.getOptionalDependency("ListPageButtonPlugin");
+        if ("rateCount" === (listButtons?.activeSortMethod?.() ?? "default")) await listButtons?.sortItems?.();
+      }
     }
     async scoreWorker(queue, cache, generation) {
       for (; ; ) {
@@ -17455,6 +17456,10 @@ ${failure.stack}` : "");
 
   // src/plugins/status/list-page-button.js
   var _ListPageButtonPlugin = class _ListPageButtonPlugin extends BasePlugin {
+    constructor() {
+      super();
+      this.ownedRankingSortOverride = null;
+    }
     getName() {
       return "ListPageButtonPlugin";
     }
@@ -17495,7 +17500,7 @@ ${failure.stack}` : "");
         await this.sortItems("default");
         return;
       }
-      const method = settings.snapshot().sortMethod || "default";
+      const method = this.activeSortMethod();
       const labels = { default: "默认", rateCount: "评价人数", date: "时间" };
       const current = Object.prototype.hasOwnProperty.call(labels, method) ? labels[method] : labels.default;
       toggle.prop("disabled", false).attr("title", "选择列表排序方式");
@@ -17523,7 +17528,7 @@ ${failure.stack}` : "");
         }), 20, 1e4, true, scope);
         const r2 = o.includes("advanced_search");
         r2 && (t2 = target?.length ? target : $("h2.section-title"));
-        const l2 = this.getRuntimeService("settings").snapshot().sortMethod || "default", d2 = "当前排序方式: " + ("rateCount" === l2 ? "评价人数" : "date" === l2 ? "时间" : "默认");
+        const initialSort = this.activeSortMethod(), d2 = "当前排序方式: " + ("rateCount" === initialSort ? "评价人数" : "date" === initialSort ? "时间" : "默认");
         t2.append(`
                 <div class="jhs-list-btn-row">
                     <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>
@@ -17542,7 +17547,7 @@ ${failure.stack}` : "");
                 <div class="jhs-list-btn-row">
                     ${hasNewVideo ? `<button type="button" id="newVideoBtn" class="jhs-btn jhs-btn--secondary"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></button>` : ""}
                     ${hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}
-                    ${c || !this.supportsSorting() ? "" : this.sortMenuHtml(l2 || "default", d2)}
+                    ${c || !this.supportsSorting() ? "" : this.sortMenuHtml(initialSort, d2)}
                 </div>
             `);
       }
@@ -17553,7 +17558,7 @@ ${failure.stack}` : "");
           const e3 = await storageManager.getBlacklist(), a3 = this.getActressPageInfo();
           e3.find((e4) => e4.starId === a3.starId) && (t2 = "已加入黑名单", n2 = "jhs-btn--muted");
         }
-        const a2 = this.getRuntimeService("settings").snapshot().sortMethod || "default";
+        const a2 = this.activeSortMethod();
         $(".masonry").parent().prepend(`
                 <div class="jhs-list-btn-row">
                     <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>
@@ -17638,13 +17643,11 @@ ${failure.stack}` : "");
         const previousLabel = $("#jhs-sort-current").text();
         menu.find(".jhs-sort-option").attr("aria-checked", "false"), item.attr("aria-checked", "true"), $("#jhs-sort-current").text(item.text()), close(true);
         try {
-          await this.getRuntimeService("settings").set("sortMethod", method);
+          await this.selectSortMethod(method);
         } catch (error) {
           menu.find(".jhs-sort-option").attr("aria-checked", "false"), previousItem.attr("aria-checked", "true"), $("#jhs-sort-current").text(previousLabel);
           clog.error("排序设置保存失败，已恢复", error), show.error("排序设置保存失败，已恢复原设置");
-          return;
         }
-        await this.sortItems().catch(((error) => clog.error("列表排序失败", error)));
       })).on("keydown", ".jhs-sort-option", ((event) => {
         const items = menu.find(".jhs-sort-option"), index = items.index(event.currentTarget);
         if ("Escape" === event.key) return event.preventDefault(), close(true);
@@ -17662,7 +17665,7 @@ ${failure.stack}` : "");
       if (!this.supportsSorting()) return;
       const s2 = this.getRuntimeService("settings").snapshot().autoPage ?? _;
       if (c || s2 === _ && !e2 && methodOverride !== "default") return;
-      const t2 = methodOverride || this.getRuntimeService("settings").snapshot().sortMethod;
+      const t2 = methodOverride || this.activeSortMethod();
       if (!t2) return;
       const i2 = this.getSelector(), d2 = $(i2.boxSelector), h2 = $(i2.itemSelector);
       h2.each(((e3, element) => {
@@ -17684,6 +17687,22 @@ ${failure.stack}` : "");
     }
     isHitShowPage() {
       return isHitShowPage(window.location);
+    }
+    isOwnedRankingPage() {
+      return this.isHitShowPage() || window.location.search.includes("handleTop=1");
+    }
+    activeSortMethod() {
+      if (this.isOwnedRankingPage()) return this.ownedRankingSortOverride || "default";
+      return this.getRuntimeService("settings").snapshot().sortMethod || "default";
+    }
+    async selectSortMethod(method) {
+      if (this.isOwnedRankingPage()) {
+        this.ownedRankingSortOverride = method;
+        await this.sortItems(method);
+        return;
+      }
+      await this.getRuntimeService("settings").set("sortMethod", method);
+      await this.sortItems();
     }
     isFc2ListPage() {
       return r && "/advanced_search" === window.location.pathname && "3" === new URLSearchParams(window.location.search).get("type");
@@ -18813,7 +18832,7 @@ ${failure.stack}` : "");
       const hasListPageButton = !!this.getOptionalDependency("ListPageButtonPlugin"), hasListPage = !!this.getOptionalDependency("ListPagePlugin"), hasNewVideo = !!this.getOptionalDependency("NewVideoPlugin"), hasBlacklist = !!this.getOptionalDependency("BlacklistPlugin"), hasSetting = !!this.getOptionalDependency("SettingPlugin"), hasDetailPageButton = !!this.getOptionalDependency("DetailPageButtonPlugin"), hasHighlightMagnet = !!this.getOptionalDependency("HighlightMagnetPlugin"), hasMagnetHub = !!this.getOptionalDependency("MagnetHubPlugin"), hasHistory = !!this.getOptionalDependency("HistoryPlugin");
       let items;
       if (window.isListPage) {
-        const requestedSortMethod = this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? requestedSortMethod : "default", sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getOptionalDependency("ListPagePlugin")?.activeQuickFilter), filterOptions = [...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""), sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
+        const requestedSortMethod = this.getOptionalDependency("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? requestedSortMethod : "default", sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getOptionalDependency("ListPagePlugin")?.activeQuickFilter), filterOptions = [...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""), sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
         items = group((hasListPageButton ? item("check", "开始鉴定") : "") + (hasNewVideo ? item("newVideo", "新作品") : "") + (hasBlacklist ? item("blacklist", "黑名单") : "") + (hasHistory ? item("history", "鉴定记录") : "") + (hasListPageButton ? item("sort", `排序: ${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') : "") + (hasListPage ? item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"') : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : "")) + (hasListPage ? `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div>` : "") + (hasListPageButton ? `<div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>` : "");
       } else if (window.isDetailPage) {
         const statusDefs = [{ action: "filter", icon: m, label: "屏蔽", key: "filter" }, { action: "fav", icon: v, label: "收藏", key: "fav" }, { action: "down", icon: y, label: "已下载", key: "down" }, { action: "watch", icon: k, label: "已观看", key: "watch" }];
@@ -18866,7 +18885,7 @@ ${failure.stack}` : "");
           menu.addClass("jhs-fab-menu-open").attr("aria-hidden", "false");
           backdrop.addClass("jhs-fab-backdrop-visible");
           if (window.isListPage) {
-            const requestedSortMethod = this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" };
+            const requestedSortMethod = this.getOptionalDependency("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" };
             const sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? requestedSortMethod : "default", sortLabel = sortLabels[sortMethod];
             menu.find('[data-action="sort"]').text(`排序: ${sortLabel}`);
             this.getOptionalDependency("ListPagePlugin")?.syncQuickFilterUi?.();
@@ -18917,13 +18936,14 @@ ${failure.stack}` : "");
         const previousItem = sortMenu.find('.jhs-mobile-sort-option[aria-checked="true"]').first();
         sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true");
         try {
-          await this.getRuntimeService("settings").set("sortMethod", value);
+          await this.getOptionalDependency("ListPageButtonPlugin")?.selectSortMethod?.(value);
         } catch (error) {
           sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), previousItem.attr("aria-checked", "true");
           clog.error("排序设置保存失败，已恢复", error), show.error("排序设置保存失败，已恢复原设置");
           return;
         }
-        await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.(), closeMenu(true);
+        const sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" };
+        menu.find('[data-action="sort"]').text(`排序: ${sortLabels[String(value)] ?? value}`), closeMenu(true);
       }));
       menu.on("click", ".jhs-fab-menu-item", (e2) => {
         const action = $(e2.currentTarget).data("action");

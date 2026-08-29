@@ -362,7 +362,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
         const hasListPageButton = !!this.getOptionalDependency("ListPageButtonPlugin"), hasListPage = !!this.getOptionalDependency("ListPagePlugin"), hasNewVideo = !!this.getOptionalDependency("NewVideoPlugin"), hasBlacklist = !!this.getOptionalDependency("BlacklistPlugin"), hasSetting = !!this.getOptionalDependency("SettingPlugin"), hasDetailPageButton = !!this.getOptionalDependency("DetailPageButtonPlugin"), hasHighlightMagnet = !!this.getOptionalDependency("HighlightMagnetPlugin"), hasMagnetHub = !!this.getOptionalDependency("MagnetHubPlugin"), hasHistory = !!this.getOptionalDependency("HistoryPlugin");
         let items;
         if (window.isListPage) {
-            const requestedSortMethod = this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? /** @type {keyof typeof sortLabels} */ (requestedSortMethod) : "default", sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getOptionalDependency("ListPagePlugin")?.activeQuickFilter),
+            const requestedSortMethod = this.getOptionalDependency("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? /** @type {keyof typeof sortLabels} */ (requestedSortMethod) : "default", sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getOptionalDependency("ListPagePlugin")?.activeQuickFilter),
                 filterOptions = [ ...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS ].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""),
                 sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
             items = group((hasListPageButton ? item("check", "开始鉴定") : "") + (hasNewVideo ? item("newVideo", "新作品") : "") + (hasBlacklist ? item("blacklist", "黑名单") : "") + (hasHistory ? item("history", "鉴定记录") : "") + (hasListPageButton ? item("sort", `排序: ${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') : "") + (hasListPage ? item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"') : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : "")) + (hasListPage ? `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div>` : "") + (hasListPageButton ? `<div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>` : "");
@@ -418,7 +418,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
                 backdrop.addClass("jhs-fab-backdrop-visible");
                 // 刷新排序标签
                 if (window.isListPage) {
-                    const requestedSortMethod = this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" };
+                    const requestedSortMethod = this.getOptionalDependency("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" };
                     const sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? /** @type {keyof typeof sortLabels} */ (requestedSortMethod) : "default", sortLabel = sortLabels[sortMethod];
                     menu.find('[data-action="sort"]').text(`排序: ${sortLabel}`);
                     this.getOptionalDependency("ListPagePlugin")?.syncQuickFilterUi?.();
@@ -473,13 +473,15 @@ export class MobileBottomBarPlugin extends BasePlugin {
             const previousItem = sortMenu.find('.jhs-mobile-sort-option[aria-checked="true"]').first();
             sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), $(event.currentTarget).attr("aria-checked", "true");
             try {
-                await this.getRuntimeService("settings").set("sortMethod", value);
+                // 自有榜单页走页内覆盖（不写全局设置），普通列表页写全局 sortMethod
+                await this.getOptionalDependency("ListPageButtonPlugin")?.selectSortMethod?.(value);
             } catch (error) {
                 sortMenu.find(".jhs-mobile-sort-option").attr("aria-checked", "false"), previousItem.attr("aria-checked", "true");
                 clog.error("排序设置保存失败，已恢复", error), show.error("排序设置保存失败，已恢复原设置");
                 return;
             }
-            await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.(), closeMenu(!0);
+            const sortLabels = /** @type {Record<string, string>} */ ({ default: "默认", rateCount: "评价人数", date: "时间" });
+            menu.find('[data-action="sort"]').text(`排序: ${sortLabels[String(value)] ?? value}`), closeMenu(!0);
         }));
         // 菜单项点击
         menu.on("click", ".jhs-fab-menu-item", (/** @type {any} */ e) => {

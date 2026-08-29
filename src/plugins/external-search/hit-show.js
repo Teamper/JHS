@@ -45,15 +45,13 @@ export class HitShowPlugin extends BasePlugin {
             const movies = await this.fetchPlaybackWithRetry(period);
             if (generation !== this.loadGeneration) return;
             if (!movies.length) return void this.renderState("当前周期暂无热播数据");
+            // 自有榜单初始固定“默认”（榜单原始顺序），排序由页内覆盖控制，不读全局 sortMethod
             this.$listRoot.html(this.markDataListHtml(movies));
             await this.initializeRenderedList();
-            await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.();
             // 周期工具栏被任何后挂载 UI 挪走时自愈，保证日榜/周榜/月榜切换始终可见
             $("#jhs-hitshow-period").length || $(".jhs-hitshow-heading").length && this.toolBar(period);
             loadingObj.close(), loadingClosed = !0;
-            void this.loadScore(movies, generation).then((async () => {
-                if (generation === this.loadGeneration && "rateCount" === this.getRuntimeService("settings").snapshot().sortMethod) await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.();
-            })).catch((error => clog.error("热播评分补全失败", error)));
+            void this.loadScore(movies, generation).catch((error => clog.error("热播评分补全失败", error)));
         } catch (error) {
             clog.error("所有重试尝试均失败，无法获取数据。", error);
             this.$listRoot?.length ? this.renderState("热播数据加载失败，请稍后重试", !0) : show.error("热播页面初始化失败");
@@ -112,6 +110,11 @@ export class HitShowPlugin extends BasePlugin {
         const cache = cached.hit && cached.value && typeof cached.value === "object" ? { ...cached.value } : {};
         const queue = [ ...movies ], workers = Array.from({ length: Math.min(4, queue.length) }, (() => this.scoreWorker(queue, cache, generation)));
         await Promise.all(workers), cacheService.set(cacheKey, cache, { scope: "public", ttlMs: 604_800_000 });
+        // 评分补全后按需重排：仅当生效排序为评价人数（页内覆盖或普通列表页的全局设置）时才需要二次排序
+        if (generation === this.loadGeneration) {
+            const listButtons = this.getOptionalDependency("ListPageButtonPlugin");
+            if ("rateCount" === (listButtons?.activeSortMethod?.() ?? "default")) await listButtons?.sortItems?.();
+        }
     }
     async scoreWorker(/** @type {HitMovie[]} */ queue, /** @type {Record<string, any>} */ cache, /** @type {number} */ generation) {
         for (;;) {

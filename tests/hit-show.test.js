@@ -6,7 +6,7 @@ import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
 
-function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), cache = {}, sortMethod = "default", withListPage = true } = {}) {
+function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), cache = {}, sortMethod = "default", activeSortMethod = null, withListPage = true } = {}) {
     const dom = new JSDOM('<section class="section"><div class="container"><h2 class="section-title">榜单</h2><div class="box"></div></div></section>', { url: "https://javdb.com/advanced_search?handlePlayback=1&period=daily" });
     const $ = jqueryFactory(dom.window), storage = new Map([["jhs_score_info", JSON.stringify(cache)], ["jhs_sortMethod", sortMethod]]);
     $.expr.pseudos.hidden = element => "none" === element.style.display;
@@ -25,7 +25,7 @@ function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), c
     }, coverButton = { addSvgBtn: vi.fn() };
     const context = vm.createContext({
         BasePlugin: class {
-            getBean(name) { return { ListPagePlugin: withListPage ? listPage : undefined, ListPageButtonPlugin: { sortItems, mountOwnedRankingControls }, CoverButtonPlugin: coverButton }[name]; }
+            getBean(name) { return { ListPagePlugin: withListPage ? listPage : undefined, ListPageButtonPlugin: { sortItems, mountOwnedRankingControls, activeSortMethod: () => activeSortMethod ?? "default" }, CoverButtonPlugin: coverButton }[name]; }
             getRuntimeService(name) { return { host, scope: async () => ({ signal: { aborted: false } }), movie: { rankings: async () => { if (rankingError) throw rankingError; return movies; }, detail: async ({ movieId }) => fetchScore(movieId) }, settings, cache: cacheService }[name]; }
         },
         i: (target, key, value) => (target[key] = value), $, document: dom.window.document, window: dom.window,
@@ -117,12 +117,18 @@ describe("HitShowPlugin lifecycle", () => {
         expect(runtimeCache.good.watchedCount).toBe(7);
     });
 
-    it("sorts once after scores only for rate-count mode", async () => {
-        for (const [sortMethod, expected] of [["rateCount", 2], ["date", 1]]) {
-            const { plugin, sortItems } = loadHitShow({ movies: [movie("a")], sortMethod, fetchScore: vi.fn().mockResolvedValue({ score: 4, watchedCount: 9 }) });
-            await plugin.handlePlayback();
-            await vi.waitFor(() => expect(sortItems).toHaveBeenCalledTimes(expected));
-        }
+    it("re-sorts after scores only when the page-local sort is rate count", async () => {
+        const fetchScore = vi.fn().mockResolvedValue({ score: 4, watchedCount: 9 });
+        // 页内覆盖为评价人数：评分补全后重排一次
+        const rateCount = loadHitShow({ movies: [movie("a")], fetchScore, activeSortMethod: "rateCount" });
+        await rateCount.plugin.handlePlayback();
+        await vi.waitFor(() => expect(rateCount.sortItems).toHaveBeenCalledTimes(1));
+        // 全局 sortMethod 不再驱动热播排序：全局评价人数 + 无页内覆盖 → 完全不排序
+        const legacy = loadHitShow({ movies: [movie("a")], fetchScore, sortMethod: "rateCount" });
+        await legacy.plugin.handlePlayback();
+        await vi.waitFor(() => expect(legacy.fetchScore).toHaveBeenCalledOnce());
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(legacy.sortItems).not.toHaveBeenCalled();
     });
 
     it("binds the shared detail navigation instead of forcing new tabs", async () => {

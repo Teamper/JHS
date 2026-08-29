@@ -11,6 +11,11 @@ import { isHardHidden } from "../../features/list/list-filters.js";
 /** @typedef {{ element: Element, key: number, originalIndex: number, index: number }} SortItem */
 
 export class ListPageButtonPlugin extends BasePlugin {
+    constructor() {
+        super();
+        /** @type {string | null} 页内排序覆盖：仅自有榜单页使用，初始固定“默认”，不写全局设置。 */
+        this.ownedRankingSortOverride = null;
+    }
     getName() {
         return "ListPageButtonPlugin";
     }
@@ -54,7 +59,7 @@ export class ListPageButtonPlugin extends BasePlugin {
             await this.sortItems("default");
             return;
         }
-        const method = settings.snapshot().sortMethod || "default";
+        const method = this.activeSortMethod();
         const labels = { default: "默认", rateCount: "评价人数", date: "时间" };
         const current = Object.prototype.hasOwnProperty.call(labels, method) ? /** @type {Record<string, string>} */ (labels)[/** @type {string} */ (method)] : labels.default;
         toggle.prop("disabled", false).attr("title", "选择列表排序方式");
@@ -84,8 +89,8 @@ export class ListPageButtonPlugin extends BasePlugin {
             }), 20, 1e4, !0, scope);
             const r = o.includes("advanced_search");
             r && (t = target?.length ? target : $("h2.section-title"));
-            const l = this.getRuntimeService("settings").snapshot().sortMethod || "default", d = "当前排序方式: " + ("rateCount" === l ? "评价人数" : "date" === l ? "时间" : "默认");
-            t.append(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e && hasBlacklist ? `\n<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>\n<button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>批量屏蔽</span></button>\n` : ""}\n                    ${hasListPage ? `\n<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>批量收藏</span></button>\n<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>批量标记已下载</span></button>\n` : ""}\n                    ${o.includes("/tags") && hasBlacklist ? `\n<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>\n` : ""}\n                </div>\n                <div class="jhs-list-btn-row">\n                    ${hasNewVideo ? `<button type="button" id="newVideoBtn" class="jhs-btn jhs-btn--secondary"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></button>` : ""}\n                    ${hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}\n                    ${c || !this.supportsSorting() ? "" : this.sortMenuHtml(l || "default", d)}\n                </div>\n            `);
+            const initialSort = this.activeSortMethod(), d = "当前排序方式: " + ("rateCount" === initialSort ? "评价人数" : "date" === initialSort ? "时间" : "默认");
+            t.append(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e && hasBlacklist ? `\n<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>\n<button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>批量屏蔽</span></button>\n` : ""}\n                    ${hasListPage ? `\n<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>批量收藏</span></button>\n<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>批量标记已下载</span></button>\n` : ""}\n                    ${o.includes("/tags") && hasBlacklist ? `\n<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>\n` : ""}\n                </div>\n                <div class="jhs-list-btn-row">\n                    ${hasNewVideo ? `<button type="button" id="newVideoBtn" class="jhs-btn jhs-btn--secondary"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></button>` : ""}\n                    ${hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}\n                    ${c || !this.supportsSorting() ? "" : this.sortMenuHtml(initialSort, d)}\n                </div>\n            `);
         }
         if (l) {
             const e = o.includes("/star/");
@@ -94,7 +99,7 @@ export class ListPageButtonPlugin extends BasePlugin {
                 const e = await storageManager.getBlacklist(), a = this.getActressPageInfo();
                 e.find((/** @type {BlacklistRecord} */ e) => e.starId === a.starId) && (t = "已加入黑名单", n = "jhs-btn--muted");
             }
-            const a = this.getRuntimeService("settings").snapshot().sortMethod || "default";
+            const a = this.activeSortMethod();
             $(".masonry").parent().prepend(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e && hasBlacklist ? `    \n                        <button type="button" id="addBlacklistBtn" class="jhs-btn ${n}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${t}</span></button>\n                        <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>批量屏蔽</span></button>\n                    ` : ""}${hasListPage ? `    \n                        <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>批量收藏</span></button>\n                        <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>批量标记已下载</span></button>\n                    ` : ""}${!e && hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}\n                    ${this.supportsSorting() ? this.sortMenuHtml(a) : ""}\n                </div>\n            `);
         }
         $("#waitCheckBtn > span").text("开始鉴定");
@@ -157,13 +162,11 @@ export class ListPageButtonPlugin extends BasePlugin {
             menu.find(".jhs-sort-option").attr("aria-checked", "false"), item.attr("aria-checked", "true"),
             $("#jhs-sort-current").text(item.text()), close(!0);
             try {
-                await this.getRuntimeService("settings").set("sortMethod", method);
+                await this.selectSortMethod(method);
             } catch (error) {
                 menu.find(".jhs-sort-option").attr("aria-checked", "false"), previousItem.attr("aria-checked", "true"), $("#jhs-sort-current").text(previousLabel);
                 clog.error("排序设置保存失败，已恢复", error), show.error("排序设置保存失败，已恢复原设置");
-                return;
             }
-            await this.sortItems().catch((error => clog.error("列表排序失败", error)));
         })).on("keydown", ".jhs-sort-option", ((/** @type {any} */ event) => {
             const items = menu.find(".jhs-sort-option"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), close(!0);
@@ -182,7 +185,7 @@ export class ListPageButtonPlugin extends BasePlugin {
         if (!this.supportsSorting()) return;
         const s = this.getRuntimeService("settings").snapshot().autoPage ?? _;
         if (c || (s === _ && !e && methodOverride !== "default")) return;
-        const t = methodOverride || this.getRuntimeService("settings").snapshot().sortMethod;
+        const t = methodOverride || this.activeSortMethod();
         if (!t) return;
         const i = this.getSelector(), d = $(i.boxSelector), h = $(i.itemSelector);
         h.each(((/** @type {number} */ e, /** @type {Element} */ element) => {
@@ -205,6 +208,26 @@ export class ListPageButtonPlugin extends BasePlugin {
     }
     isHitShowPage() {
         return isHitShowPage(window.location);
+    }
+    /** 自渲染榜单页（热播/Top250）：排序为页内状态，初始固定“默认”，与全局 sortMethod 解耦。 */
+    isOwnedRankingPage() {
+        return this.isHitShowPage() || window.location.search.includes("handleTop=1");
+    }
+    /** 当前生效的排序方式：自有榜单页取页内覆盖（缺省默认），普通列表页取全局设置。 */
+    activeSortMethod() {
+        if (this.isOwnedRankingPage()) return this.ownedRankingSortOverride || "default";
+        return this.getRuntimeService("settings").snapshot().sortMethod || "default";
+    }
+    /** 应用一次排序选择：自有榜单页只改页内覆盖，普通列表页写全局设置。 */
+    /** @param {string} method */
+    async selectSortMethod(method) {
+        if (this.isOwnedRankingPage()) {
+            this.ownedRankingSortOverride = method;
+            await this.sortItems(method);
+            return;
+        }
+        await this.getRuntimeService("settings").set("sortMethod", method);
+        await this.sortItems();
     }
     isFc2ListPage() {
         return r && "/advanced_search" === window.location.pathname && "3" === new URLSearchParams(window.location.search).get("type");
