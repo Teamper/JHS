@@ -58,7 +58,10 @@ export async function injectUserscriptRuntime(page, options = {}) {
       queueMicrotask(() => {
         if (aborted) return;
         if (rankingMovies && String(options.url || "").includes("/api/v1/rankings/playback")) {
-          const payload = { success: 1, data: { movies: rankingMovies } };
+          // rankingMovies 可为数组（所有周期同数据）或按 period 键控的对象（验证周期切换管线）
+          const periodMatch = /[?&]period=(\w+)/.exec(String(options.url || ""));
+          const movies = Array.isArray(rankingMovies) ? rankingMovies : rankingMovies[periodMatch?.[1] || "daily"] ?? rankingMovies.daily ?? [];
+          const payload = { success: 1, data: { movies } };
           options.onload?.({ status: 200, response: payload, responseText: JSON.stringify(payload), responseHeaders: "content-type: application/json" });
         } else options.onerror?.({ error: "Browser fixture blocked external request" });
       });

@@ -158,6 +158,32 @@ test("HotShow hover preview stays below the FC2 detail dialog", async ({ context
   expect(ordering.dialogZ).toBeGreaterThan(ordering.previewZ);
 });
 
+test("HotShow period tabs fetch and render period-specific rankings", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers period switching");
+  const periodMovies = {
+    daily: [{ id: "hot-daily", number: "DAILY-001", origin_title: "Daily movie", release_date: "2026-08-29", cover_url: "https://c0.jdbstatic.com/covers/daily.jpg", has_cnsub: false, magnets_count: 1, new_magnets: false }],
+    weekly: [{ id: "hot-weekly", number: "WEEKLY-001", origin_title: "Weekly movie", release_date: "2026-08-28", cover_url: "https://c0.jdbstatic.com/covers/weekly.jpg", has_cnsub: false, magnets_count: 1, new_magnets: false }],
+    monthly: [{ id: "hot-monthly", number: "MONTHLY-001", origin_title: "Monthly movie", release_date: "2026-08-27", cover_url: "https://c0.jdbstatic.com/covers/monthly.jpg", has_cnsub: false, magnets_count: 1, new_magnets: false }],
+  };
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/advanced_search?handlePlayback=1&period=daily", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page, { rankingMovies: periodMovies });
+  // 回归门禁：周期参数必须贯穿 URL → 请求 query → 渲染，路由重构不得把它拍平成单一榜单
+  await expect(page.locator(".jhs-hitshow-list #hot-daily")).toBeVisible();
+  await expect(page.locator("#jhs-hitshow-period .active")).toHaveAttribute("href", /period=daily/);
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.requests.some((r) => r.url.includes("period=daily")))).toBe(true);
+
+  for (const period of [ "weekly", "monthly" ]) {
+    await page.locator(`#jhs-hitshow-period a[href*="period=${period}"]`).click();
+    await page.waitForURL(new RegExp(`period=${period}`), { timeout: 15_000 });
+    await injectUserscriptRuntime(page, { rankingMovies: periodMovies });
+    await expect(page.locator(`.jhs-hitshow-list #hot-${period}`)).toBeVisible();
+    await expect(page.locator(".jhs-hitshow-list #hot-daily")).toHaveCount(0);
+    await expect(page.locator("#jhs-hitshow-period .active")).toHaveAttribute("href", new RegExp(`period=${period}`));
+    await expect.poll(() => page.evaluate((marker) => window.__jhsBrowserDiagnostics.requests.some((r) => r.url.includes(marker)), `period=${period}`)).toBe(true);
+  }
+});
+
 test("FC2 cards keep dialog navigation and use owned-page anchor fallback", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers navigation semantics");
   await fulfillHostFixtures(context);
