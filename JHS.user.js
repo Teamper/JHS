@@ -277,9 +277,9 @@
     modal: 12345699,
     sheetBackdrop: 12345789,
     sheet: 12345790,
-    loading: 99999999,
-    viewer: 999999990,
     layer: 999999991,
+    viewer: 999999992,
+    loading: 999999993,
     debug: 999999999,
     tooltip: 9999999999
   });
@@ -3978,24 +3978,37 @@
         clog.error("iframe监听失败 (跨域或未加载完毕):", i2);
       }
     }
-    async closePage(options = {}) {
-      const settings = globalThis.settingsService?.snapshot?.();
-      const needClosePage = settings && Object.prototype.hasOwnProperty.call(settings, "needClosePage") ? settings.needClosePage : await storageManager.getSetting("needClosePage", "yes");
-      if ("yes" !== needClosePage) return false;
-      const root = options?.root, parseIndex = /* @__PURE__ */ __name((element) => {
+    getOwningLayerIndex(options = {}) {
+      const parseIndex = /* @__PURE__ */ __name((element) => {
         const id = element?.id || "", match = /^layui-layer(\d+)$/.exec(id);
         return match ? Number(match[1]) : null;
       }, "parseIndex");
       let layerIndex = Number.isInteger(options?.layerIndex) ? options.layerIndex : null;
+      try {
+        if (null === layerIndex && window.frameElement) layerIndex = parseIndex(window.frameElement.closest?.(".layui-layer"));
+      } catch {
+      }
+      const root = options?.root;
       if (null === layerIndex && root) {
         const element = root.jquery ? root[0] : root.nodeType ? root : null, layerElement = element?.matches?.(".layui-layer") ? element : element?.closest?.(".layui-layer");
         layerIndex = parseIndex(layerElement);
       }
-      if (null === layerIndex && window.frameElement) layerIndex = parseIndex(window.frameElement.closest?.(".layui-layer"));
+      return layerIndex;
+    }
+    async closePage(options = {}) {
+      const settings = globalThis.settingsService?.snapshot?.();
+      const needClosePage = settings && Object.prototype.hasOwnProperty.call(settings, "needClosePage") ? settings.needClosePage : await storageManager.getSetting("needClosePage", "yes");
+      if ("yes" !== needClosePage && true !== needClosePage) return false;
+      const layerIndex = this.getOwningLayerIndex(options);
+      if (null !== layerIndex && window.parent && window.parent !== window) try {
+        const parentUtils = globalThis.unsafeWindow?.parent?.utils;
+        if (parentUtils && parentUtils !== this && "function" == typeof parentUtils.closePage) return !!await parentUtils.closePage({ layerIndex });
+      } catch {
+      }
       const ownerWindow = window.parent && window.parent !== window ? window.parent : window, ownerLayer = ownerWindow.layer || globalThis.layer;
       if (null !== layerIndex && "function" == typeof ownerLayer?.close) return ownerLayer.close(layerIndex), true;
-      if (window.opener && !window.opener.closed) return window.close(), true;
-      return false;
+      window.close();
+      return true;
     }
     loopDetector(e2, t2, n2 = 20, a2 = 1e4, i2 = true, scope = null) {
       const s2 = ++this.waitSequence;
@@ -4460,9 +4473,10 @@
     const maxLogCount = Math.min(3e3, Math.max(100, Number(clogMsgCount) || 2e3));
     let loggerClog;
     document.head.insertAdjacentHTML("beforeend", '\n        <style>\n            .loading-container {\n                position: fixed;\n                top: 0;\n                left: 0;\n                width: 100%;\n                height: 100%;\n                display: flex;\n                justify-content: center;\n                align-items: center;\n                background-color: rgba(0, 0, 0, 0.1);\n                z-index: var(--jhs-z-loading);\n            }\n    \n            .loading-animation {\n                position: relative;\n                width: 60px;\n                height: 12px;\n                background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);\n                border-radius: 6px;\n                animation: loading-animate 1.8s ease-in-out infinite;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before,\n            .loading-animation:after {\n                position: absolute;\n                display: block;\n                content: "";\n                animation: loading-animate 1.8s ease-in-out infinite;\n                height: 12px;\n                border-radius: 6px;\n                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);\n            }\n    \n            .loading-animation:before {\n                top: -20px;\n                left: 10px;\n                width: 40px;\n                background: linear-gradient(90deg, #ff758c 0%, #ff7eb3 100%);\n            }\n    \n            .loading-animation:after {\n                bottom: -20px;\n                width: 35px;\n                background: linear-gradient(90deg, #ff9a9e 0%, #fad0c4 100%);\n            }\n    \n            @keyframes loading-animate {\n                0% {\n                    transform: translateX(40px);\n                }\n                50% {\n                    transform: translateX(-30px);\n                }\n                100% {\n                    transform: translateX(40px);\n                }\n            }\n        </style>\n    ');
+    document.head.insertAdjacentHTML("beforeend", "<style>@media (prefers-reduced-motion:reduce){.loading-animation,.loading-animation:before,.loading-animation:after{animation:none}}</style>");
     window.loading = function() {
       const e2 = document.createElement("div");
-      e2.className = "loading-container";
+      e2.className = "loading-container", e2.setAttribute("role", "status"), e2.setAttribute("aria-live", "polite"), e2.setAttribute("aria-label", "处理中"), e2.setAttribute("aria-busy", "true");
       const t2 = document.createElement("div");
       return t2.className = "loading-animation", e2.appendChild(t2), document.body.appendChild(e2), {
         close: /* @__PURE__ */ __name(() => {
@@ -4530,7 +4544,10 @@
       __name(e2, "e");
       document.head.insertAdjacentHTML("beforeend", "\n        <style>\n            .viewer-canvas {\n                overflow: auto !important;\n            }\n            \n            .viewer-close {\n                background: rgba(222, 51, 51, 0.6) !important; /* 状态红 --jhs-status-filter 半透明弱化 */\n            }\n            .viewer-close:hover {\n                background: rgba(222, 51, 51, 0.8) !important;\n            }\n        </style>\n    "), window.showImageViewer = function(t2, n2 = "", options = {}) {
         let a2 = null, i2 = false;
-        "string" == typeof t2 || t2 instanceof String ? (a2 = $('<div class="temporary-container jhs-layout-c8be1ccb">').append(`<img src="${t2}" alt="${n2}">`).appendTo("body"), i2 = true) : a2 = $(t2);
+        if ("string" == typeof t2 || t2 instanceof String) {
+          const container = document.createElement("div"), image = document.createElement("img");
+          container.className = "temporary-container jhs-layout-c8be1ccb", image.src = String(t2), image.alt = String(n2), container.appendChild(image), document.body.appendChild(container), a2 = $(container), i2 = true;
+        } else a2 = $(t2);
         const galleryRoot = options.galleryRoot ? $(options.galleryRoot) : null, viewerHost = galleryRoot?.length ? galleryRoot : a2, selectedImage = "string" == typeof t2 || t2 instanceof String ? a2.find("img")[0] : a2[0], galleryImages = viewerHost.find("img").addBack("img").toArray(), initialViewIndex = Math.max(0, galleryImages.indexOf(selectedImage)), hasGallery = galleryImages.length > 1;
         const s2 = {
           zIndex: JHS_Z_INDEX.viewer,
@@ -5038,7 +5055,7 @@
         </style>
     `);
       document.head.insertAdjacentHTML("beforeend", `<style>
-        .console-logger-container { font-family:inherit; }
+        .console-logger-container { font-family:inherit; z-index:var(--jhs-z-debug); }
         .console-logger-toggle { border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md) var(--jhs-radius-md) 0 0; box-shadow:var(--jhs-shadow-sm); transition:background-color var(--jhs-motion-fast) ease; }
         .console-logger-toggle::after { transition:transform var(--jhs-motion-fast) ease; }
         .console-logger-window { border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md) 0 var(--jhs-radius-md) var(--jhs-radius-md); box-shadow:var(--jhs-shadow-lg); transition:width var(--jhs-motion-fast) ease,height var(--jhs-motion-fast) ease,opacity var(--jhs-motion-fast) ease,transform var(--jhs-motion-fast) ease; }
@@ -6855,12 +6872,14 @@
     if (!n2) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
     const a2 = t2.webDavUsername;
     if (!a2) return void show.error("请填写webDav用户名并保存后, 再试此功能");
-    const i2 = await decryptCredential(t2.webDavPassword);
-    if (!i2) return void show.error("请填写webDav密码并保存后, 再试此功能");
-    let s2 = utils.getNowStr("_", "_") + ".json", o2 = JSON.stringify(await storageManager.exportData());
-    o2 = await encryptData(o2);
-    let r2 = loading();
+    if (!t2.webDavPassword) return void show.error("请填写webDav密码并保存后, 再试此功能");
+    const r2 = loading();
     try {
+      const i2 = await decryptCredential(t2.webDavPassword);
+      if (!i2) return void show.error("请填写webDav密码并保存后, 再试此功能");
+      const s2 = utils.getNowStr("_", "_") + ".json";
+      let o2 = JSON.stringify(await storageManager.exportData());
+      o2 = await encryptData(o2);
       const e2 = webdavService.createClient({ url: n2, username: a2, password: i2 });
       await e2.backup(folderName, s2, o2), show.ok("备份完成");
     } catch (l2) {
@@ -6875,12 +6894,13 @@
     if (!n2) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
     const a2 = t2.webDavUsername;
     if (!a2) return void show.error("请填写webDav用户名并保存后, 再试此功能");
-    const i2 = await decryptCredential(t2.webDavPassword);
-    if (!i2) return void show.error("请填写webDav密码并保存后, 再试此功能");
-    let s2 = loading();
+    if (!t2.webDavPassword) return void show.error("请填写webDav密码并保存后, 再试此功能");
+    const s2 = loading();
     try {
-      const e2 = webdavService.createClient({ url: n2, username: a2, password: i2 }), t3 = await e2.getBackupList(folderName);
-      openFileListDialogFn(t3, e2, "WebDav");
+      const i2 = await decryptCredential(t2.webDavPassword);
+      if (!i2) return void show.error("请填写webDav密码并保存后, 再试此功能");
+      const e2 = webdavService.createClient({ url: n2, username: a2, password: i2 }), files = await e2.getBackupList(folderName);
+      openFileListDialogFn(files, e2, "WebDav");
     } catch (o2) {
       clog.error(o2), show.error(`发生错误: ${errorMessage(o2)}`);
     } finally {
@@ -9556,7 +9576,7 @@
       });
     }
     bindClick(layerRoot = null) {
-      const settingPlugin = this, webdav = this.getRuntimeService("webdav"), dialog = this.getRuntimeService("dialog"), diagnostics = this.getRuntimeService("diagnostics"), storage = this.getRuntimeService("storage"), previewDiff = /* @__PURE__ */ __name((diff, imported, restored = null) => showDiffPreview(diff, imported, restored, dialog), "previewDiff");
+      const settingPlugin = this, webdav = this.getRuntimeService("webdav"), dialog = this.getRuntimeService("dialog"), diagnostics = this.getRuntimeService("diagnostics"), storage = this.getRuntimeService("storage"), translation = this.getRuntimeService("translation"), previewDiff = /* @__PURE__ */ __name((diff, imported, restored = null) => showDiffPreview(diff, imported, restored, dialog), "previewDiff");
       const root = layerRoot ? $(layerRoot) : $(document);
       root.find("#saveBtn").attr("data-jhs-settings-ready", "false").prop("disabled", true).attr("title", "正在加载设置…");
       root.find(".side-menu-item").on("click", (function() {
@@ -9606,12 +9626,12 @@
       }));
       root.find(".clean-btn").on("click", (async (e2) => {
         const key = $(e2.currentTarget).data("key"), cacheItem = this.cacheItems.find(((item) => item.key === key));
-        key === storageManager.third_party_cache_key ? await storageManager.clearThirdPartyCache() : "_circuitBreaker" === key ? diagnostics.resetAllCircuitBreakers() : "_domainStats" === key ? diagnostics.clearDomainStats() : storage.removeLocal(key);
+        key === storageManager.third_party_cache_key ? await storageManager.clearThirdPartyCache() : "_circuitBreaker" === key ? diagnostics.resetAllCircuitBreakers() : "_domainStats" === key ? diagnostics.clearDomainStats() : "jhs_translate" === key ? await translation.clearCache() : storage.removeLocal(key);
         show.ok(`${cacheItem.text} 清理成功`), root.find("#cache-data-display").addClass("jhs-is-hidden");
         "jhs_dmm_video" === key && storage.removeLocal("jhs_other_site_dmm");
       }));
       root.find("#clean-all").on("click", (async () => {
-        this.cacheItems.forEach(((item) => storage.removeLocal(item.key))), show.ok("全部缓存已清理");
+        this.cacheItems.forEach(((item) => "jhs_translate" !== item.key && storage.removeLocal(item.key))), await translation.clearCache(), show.ok("全部缓存已清理");
         root.find("#cache-data-display").addClass("jhs-is-hidden"), storage.removeLocal("jhs_other_site_dmm"), await storageManager.clearThirdPartyCache();
       }));
       root.find(".view-btn").on("click", (async (e2) => {
@@ -9620,6 +9640,7 @@
         if (key === storageManager.third_party_cache_key) raw = JSON.stringify(await storageManager.getThirdPartyCache());
         else if ("_circuitBreaker" === key) raw = JSON.stringify(diagnostics.getNetworkDiagnostics().circuitBreakers);
         else if ("_domainStats" === key) raw = JSON.stringify(diagnostics.getNetworkDiagnostics().domainStats);
+        else if ("jhs_translate" === key) raw = JSON.stringify(await translation.inspectCache());
         else raw = storage.getLocal(key);
         const display = root.find("#cache-data-display"), pre = display.find("pre");
         if (display.removeClass("jhs-is-hidden"), raw) try {
@@ -10975,7 +10996,7 @@ ${value}\r
     if (!translatedNode.length) translatedNode = jq('<div class="translated-title"></div>').insertAfter(title);
     translatedNode.removeClass("is-error").text("翻译中...");
     try {
-      const translated = await options.translation.translate(sourceText, { scope: options.scope });
+      const translated = await options.translation.translate(sourceText, { cacheAlias: options.carNum, scope: options.scope });
       if (options.isActive && !options.isActive()) return;
       if (!title[0]?.isConnected || !translatedNode[0]?.isConnected) return;
       translatedNode.text(translated);
@@ -13138,36 +13159,21 @@ ${failure.stack}` : "");
       let n2 = this.getRuntimeService("settings").snapshot().videoQuality;
       n2 = Z(Object.keys(e2), n2);
       let a2 = e2[n2];
-      t2.html(`
-            <div class="video-player-wrapper">
-                <video id="preview-video" class="jhs-video-player" controls playsinline>
-                    <source src="${a2}" />
-                </video>
-            </div>
-            <div class="jhs-video-toolbar jhs-video-quality-list" role="group" aria-label="视频画质">
-                </div>
-        `);
+      const wrapper = $('<div class="video-player-wrapper"></div>'), video = $('<video id="preview-video" class="jhs-video-player" controls playsinline></video>'), source = $(document.createElement("source")).attr("src", a2), toolbar = $('<div class="jhs-video-toolbar jhs-video-quality-list" role="group" aria-label="视频画质"></div>');
+      video.append(source), wrapper.append(video), t2.empty().append(wrapper, toolbar);
       const i2 = $("#preview-video"), s2 = i2.find("source"), o2 = t2.find(".jhs-video-quality-list");
       if (!i2.length || !s2.length) return;
       const settings = this.getRuntimeService("settings"), r2 = i2[0], muted = settings.snapshot().videoMuted;
       r2.muted = muted == null || muted === true, i2.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {
         void settings.set("videoMuted", r2.muted).catch(((error) => clog.error("保存视频静音设置失败", error)));
       }));
-      let c2 = "";
       L.forEach(((t3) => {
         let a3 = e2[t3.quality];
         if (a3) {
-          const e3 = n2 === t3.quality;
-          c2 += `
-                    <button type="button" class="jhs-btn jhs-video-quality-btn${e3 ? " active" : ""}"
-                            data-quality="${t3.quality}"
-                            data-video-src="${a3}"
-                            aria-pressed="${e3 ? "true" : "false"}">
-                        ${t3.text}
-                    </button>
-                `;
+          const active = n2 === t3.quality, button = $('<button type="button" class="jhs-btn jhs-video-quality-btn"></button>');
+          active && button.addClass("active"), button.attr({ "data-quality": t3.quality, "data-video-src": a3, "aria-pressed": active ? "true" : "false" }).text(t3.text), o2.append(button);
         }
-      })), o2.html(c2);
+      }));
       const d2 = o2.find(".jhs-video-quality-btn");
       o2.off("click.jhsVideo").on("click.jhsVideo", ".jhs-video-quality-btn", (async (e3) => {
         try {
@@ -13413,11 +13419,8 @@ ${failure.stack}` : "");
       if (!o2) return show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未解析到视频"), void this.showImg(e2, t2, n2);
       let r2 = this.getRuntimeService("settings").snapshot().videoQuality;
       r2 = Z(Object.keys(o2), r2);
-      let c2 = o2[r2], d2 = `
-            <div class="jhs-layout-d543acf8">
-                <video src="${c2}" poster="${s2}" id="${a2}" controls loop muted playsinline class="jhs-layout-a38a0e50"></video>
-            </div>`;
-      l && (d2 = `<div><video src="${c2}" poster="${s2}" id="${a2}" controls loop muted playsinline class="jhs-layout-a38a0e50"></video></div>`), t2.parent().append(d2), t2.hide(), t2.removeClass("loading"), t2.next(".loading-spinner").remove(), i2 = $(`#${a2}`);
+      const c2 = o2[r2], wrapper = document.createElement("div"), video = document.createElement("video");
+      l || (wrapper.className = "jhs-layout-d543acf8"), video.src = c2, video.poster = s2 || "", video.id = a2, video.controls = true, video.loop = true, video.muted = true, video.playsInline = true, video.className = "jhs-layout-a38a0e50", wrapper.appendChild(video), t2.parent().append(wrapper), t2.hide(), t2.removeClass("loading"), t2.next(".loading-spinner").remove(), i2 = $(video);
       let h2 = i2[0];
       h2.load(), h2.muted = false, await safePlay(h2, {
         context: "列表卡片预览",
@@ -15270,21 +15273,40 @@ ${failure.stack}` : "");
       const item = button?.closest?.(".item");
       return item?.length ? readListItem(item) : this.getPageInfo();
     }
+    async markDownloadedAndClose(info, closeContext) {
+      if (!info?.carNum) return false;
+      try {
+        await this.getRuntimeService("state").patch(info.carNum, { downloaded: true }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } });
+      } catch (error) {
+        clog.error("离线任务标记已下载失败", error), show.error("离线已提交，但标记已下载失败");
+        return false;
+      }
+      try {
+        const closed = await utils.closePage(closeContext);
+        if (!closed) throw new Error("未找到可关闭的详情页");
+        return true;
+      } catch (error) {
+        clog.error("离线任务完成后关闭详情页失败", error), show.error("已标记下载，但无法自动关闭");
+        return false;
+      }
+    }
     async submitResource(event, resource, button = $(), context = null, retryOf = null, options = {}) {
       if (button.hasClass("loading")) return;
       const candidates = await this.registry.getCandidates(resource, { force: !!options.forceAvailabilityRefresh });
       if (!candidates.length) return void show.error("没有已启用且支持该资源的离线服务，请检查授权与设置");
       const selected = candidates.find(((candidate) => candidate.provider.id === options.preferredProviderId)) || await this.chooseCandidate(event, candidates);
       if (!selected) return;
-      const info = context || this.getVideoInfo(button), original = button.text(), restoreButton = /* @__PURE__ */ __name(() => {
+      const info = context || this.getVideoInfo(button), detailRoot = button[0] || event?.currentTarget || null;
+      const closeContext = { root: detailRoot, layerIndex: utils.getOwningLayerIndex({ root: detailRoot }) };
+      const original = button.text(), restoreButton = /* @__PURE__ */ __name(() => {
         if (!button[0]?.isConnected) return;
         button.removeClass("loading").removeAttr("aria-busy aria-disabled").text(original);
       }, "restoreButton");
       let submitted = false;
       try {
         button.addClass("loading").attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中"), await selected.provider.submit(resource, info), this.registry.updateAvailability(selected.provider.id, { available: true, authState: "ready", reason: "最近提交成功" });
-        await this.getRuntimeService("state").appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "submitted", retryOf }), submitted = true, button.text("已提交"), show.ok(`${selected.provider.name} 离线任务已创建`), utils.q(event, "是否将该作品标记为已下载？", (async () => {
-          info?.carNum && await this.getRuntimeService("state").patch(info.carNum, { downloaded: true }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } });
+        await this.getRuntimeService("state").appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "submitted", retryOf }), submitted = true, button.text("已提交"), show.ok(`${selected.provider.name} 离线任务已创建`), utils.q(event, "是否将该作品标记为已下载？", (() => {
+          void this.markDownloadedAndClose(info, closeContext);
         }));
       } catch (error) {
         const errorRecord = error, code = errorRecord?.code || ("TOKEN_EXPIRED" === error ? "TOKEN_EXPIRED" : "SUBMIT_FAILED"), message = errorRecord?.message || String(error);
@@ -18335,7 +18357,7 @@ ${failure.stack}` : "");
       if (r ? (t2 = a2.contents().filter(((e3, t3) => 3 === t3.nodeType && "" !== (t3.textContent || "").trim())).text().trim(), n2 = e2.find(".video-title strong").text().trim()) : (t2 = (e2.find("img").attr("data-title") || "").trim(), n2 = (e2.find("a").attr("href") || "").split("/").filter(Boolean).pop()?.trim()), !t2 || !n2) return;
       const generation = this.translationGeneration, settings = this.getRuntimeService("settings");
       const scope = await this.getRuntimeService("scope")();
-      const translated = await this.getRuntimeService("translation").translate(t2, { scope });
+      const translated = await this.getRuntimeService("translation").translate(t2, { cacheAlias: n2, scope });
       if (generation !== this.translationGeneration || (settings?.snapshot?.().translateTitle ?? _) !== _) return;
       this.applyTranslatedTitle(e2, translated, n2);
     }
@@ -18418,6 +18440,17 @@ ${failure.stack}` : "");
                 -webkit-tap-highlight-color: transparent;
                 user-select: none;
                 -webkit-user-select: none;
+            }
+            html.jhs-fab-mounted {
+                scroll-padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+            }
+            #jhs-fab-safe-area {
+                display: block;
+                width: 100%;
+                height: calc(104px + env(safe-area-inset-bottom, 0px));
+                clear: both;
+                visibility: hidden;
+                pointer-events: none;
             }
             #jhs-fab:active {
                 transform: scale(0.9);
@@ -18573,15 +18606,18 @@ ${failure.stack}` : "");
     }
     mountBottomBar() {
       if ($("#jhs-fab").length) return;
+      document.documentElement.classList.add("jhs-fab-mounted");
       const backdrop = $('<div class="jhs-fab-backdrop"></div>').appendTo("body");
       const menu = this.createMenu();
       $("body").append(menu);
       const fab = $('<button type="button" id="jhs-fab" class="jhs-btn" aria-label="打开 JHS 工具" aria-controls="jhs-fab-menu" aria-haspopup="menu" aria-expanded="false">＋</button>').appendTo("body");
+      $('<div id="jhs-fab-safe-area" aria-hidden="true"></div>').appendTo("body");
       this.bindEvents(fab, backdrop);
     }
     unmountBottomBar() {
       this._fabGeneration++;
-      $("#jhs-fab, #jhs-fab-menu, .jhs-fab-backdrop").remove();
+      $("#jhs-fab, #jhs-fab-menu, #jhs-fab-safe-area, .jhs-fab-backdrop").remove();
+      document.documentElement.classList.remove("jhs-fab-mounted");
     }
     async afterPluginsReady() {
       this.syncSurfaces();
@@ -19092,7 +19128,8 @@ ${failure.stack}` : "");
       if ((settings.snapshot().translateTitle ?? _) !== _) return;
       l && (t2 = false);
       const scope = await this.getRuntimeService("scope")();
-      await renderTranslatedTitle({ root: options.root, carNum: e2 ?? void 0, translation: this.getRuntimeService("translation"), scope, isActive: /* @__PURE__ */ __name(() => (settings.snapshot().translateTitle ?? _) === _, "isActive") });
+      const carNum = e2 ?? this.getPageInfo().carNum;
+      await renderTranslatedTitle({ root: options.root, carNum, translation: this.getRuntimeService("translation"), scope, isActive: /* @__PURE__ */ __name(() => (settings.snapshot().translateTitle ?? _) === _, "isActive") });
     }
   };
   __name(_TranslatePlugin, "TranslatePlugin");
@@ -19116,7 +19153,7 @@ ${failure.stack}` : "");
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 5 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog, SERVICE.movie, SERVICE.settings, SERVICE.state]),
-    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.profile, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, REGISTRY.settings]),
+    manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.profile, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, SERVICE.translation, REGISTRY.settings]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }, [SERVICE.movie]),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache]),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account]),
@@ -19225,7 +19262,7 @@ ${failure.stack}` : "");
   var PORT_METHODS = Object.freeze({
     navigation: ["open", "assign", "replace"],
     http: ["request"],
-    storage: ["get", "set", "remove", "getLocal", "setLocal", "removeLocal", "getValue", "setValue"],
+    storage: ["get", "set", "remove", "keys", "getLocal", "setLocal", "removeLocal", "getValue", "setValue"],
     dialog: ["open", "close", "confirm", "alert"],
     style: ["register", "remove"]
   });
@@ -19287,6 +19324,9 @@ ${failure.stack}` : "");
     async remove(key) {
       await this.forage.removeItem(key);
     }
+    keys() {
+      return this.forage.keys();
+    }
     getLocal(key) {
       return this.localStore.getItem(key);
     }
@@ -19312,16 +19352,19 @@ ${failure.stack}` : "");
       this.layer = layerRuntime;
     }
     open(options) {
-      return this.layer.open(options);
+      return this.layer.open(this.withDefaultLayer(options));
     }
     close(id) {
       this.layer.close(id);
     }
     confirm(message, options, yes) {
-      return this.layer.confirm(message, options, yes);
+      return this.layer.confirm(message, this.withDefaultLayer(options), yes);
     }
     alert(message, options) {
-      return this.layer.alert(message, options);
+      return this.layer.alert(message, this.withDefaultLayer(options));
+    }
+    withDefaultLayer(options = {}) {
+      return { zIndex: JHS_Z_INDEX.layer, ...options };
     }
   };
   __name(_LayerDialogAdapter, "LayerDialogAdapter");
@@ -19329,11 +19372,52 @@ ${failure.stack}` : "");
 
   // src/platform/userscript/userscript-http-adapter.js
   var _UserscriptHttpAdapter = class _UserscriptHttpAdapter {
-    constructor(requestImplementation) {
+    constructor(requestImplementation, fetchImplementation = globalThis.fetch?.bind(globalThis) ?? null) {
       if (typeof requestImplementation !== "function") throw new TypeError("GM_xmlhttpRequest is required");
-      this.requestImplementation = requestImplementation;
+      this.requestImplementation = requestImplementation, this.fetchImplementation = fetchImplementation;
     }
     request(options) {
+      if ("native-fetch" === options.transport && this.fetchImplementation) return this.requestWithNativeFetch(options).catch(((error) => {
+        if (error instanceof JhsError && "ABORTED" === error.code) throw error;
+        return this.requestWithUserscript(options);
+      }));
+      return this.requestWithUserscript(options);
+    }
+    async requestWithNativeFetch(options) {
+      const controller = new AbortController();
+      let timedOut = false;
+      const timeoutMs = Math.max(0, Number(options.nativeTimeout) || 0);
+      const onAbort = /* @__PURE__ */ __name(() => controller.abort(), "onAbort");
+      const timeoutId = timeoutMs > 0 ? setTimeout((() => {
+        timedOut = true, controller.abort();
+      }), timeoutMs) : null;
+      options.signal?.addEventListener("abort", onAbort, { once: true });
+      try {
+        if (options.signal?.aborted) controller.abort();
+        const response = await this.fetchImplementation(options.url, {
+          method: options.method ?? "GET",
+          headers: options.headers,
+          body: options.body,
+          signal: controller.signal
+        });
+        const responseText = await response.text(), data = "json" === options.responseType ? JSON.parse(responseText) : responseText;
+        return {
+          status: response.status,
+          data,
+          responseText,
+          finalUrl: response.url || options.url,
+          responseHeaders: [...response.headers.entries()].map(((entry) => entry.join(": "))).join("\r\n")
+        };
+      } catch (cause) {
+        if (options.signal?.aborted) throw new JhsError("ABORTED", "网络请求已取消", { source: "UserscriptHttpAdapter", cause });
+        if (timedOut) throw new JhsError("TIMEOUT", "原生网络请求超时", { source: "UserscriptHttpAdapter", cause, retryable: true });
+        throw new JhsError("NETWORK_ERROR", "原生网络请求失败", { source: "UserscriptHttpAdapter", cause, retryable: true });
+      } finally {
+        null !== timeoutId && clearTimeout(timeoutId);
+        options.signal?.removeEventListener("abort", onAbort);
+      }
+    }
+    requestWithUserscript(options) {
       return new Promise((resolve, reject) => {
         let settled = false;
         let handle;
@@ -20351,16 +20435,112 @@ ${failure.stack}` : "");
   var ScreenshotService = _ScreenshotService;
 
   // src/services/translation-service.js
+  var CACHE_TTL2 = 2592e6;
+  var CACHE_LIMIT = 1e3;
+  var CACHE_KEY = "translation_cache_v2";
+  var V1_PREFIX = "translation:v1:";
   var _TranslationService = class _TranslationService {
-    constructor(integrations) {
-      this.integrations = integrations;
+    constructor(integrations, storage = null) {
+      this.integrations = integrations, this.storage = storage, this.memoryCache = /* @__PURE__ */ new Map(), this.inflight = /* @__PURE__ */ new Map(), this.legacyCache = null, this.hydrationPromise = null, this.cacheGeneration = 0, this.persistTimer = null;
+    }
+    cacheKey(text, source, target) {
+      return `${V1_PREFIX}${source}:${target}:${text}`;
+    }
+    readLegacyCache() {
+      if (null !== this.legacyCache) return this.legacyCache;
+      try {
+        const value = JSON.parse(this.storage?.getLocal?.("jhs_translate") || "{}");
+        this.legacyCache = value && "object" === typeof value && !Array.isArray(value) ? value : {};
+      } catch {
+        this.legacyCache = {};
+      }
+      return this.legacyCache;
+    }
+    hydrate() {
+      if (this.hydrationPromise) return this.hydrationPromise;
+      const generation = this.cacheGeneration;
+      return this.hydrationPromise = (async () => {
+        if (!this.storage) return;
+        const storage = this.storage, migrated = [];
+        let changed = false;
+        try {
+          const cache = await storage.get(CACHE_KEY);
+          for (const [key, entry] of Object.entries(cache?.entries || {})) {
+            if (generation === this.cacheGeneration && "string" === typeof entry?.value && Number(entry.expiresAt) > Date.now()) this.memoryCache.set(key, { value: entry.value, expiresAt: Number(entry.expiresAt), lastUsed: Number(entry.lastUsed) || Date.now() });
+            else changed = true;
+          }
+          const keys = await storage.keys();
+          for (const key of keys.filter(((value) => value.startsWith(V1_PREFIX)))) {
+            const entry = await storage.get(key);
+            generation === this.cacheGeneration && "string" === typeof entry?.value && Number(entry.expiresAt) > Date.now() && this.memoryCache.set(key, { value: entry.value, expiresAt: Number(entry.expiresAt), lastUsed: Number(entry.lastUsed) || Date.now() });
+            migrated.push(key), changed = true;
+          }
+          if (generation === this.cacheGeneration && (this.prune() || changed)) void this.persistNow(generation).then((() => Promise.all(migrated.map(((key) => storage.remove(key)))))).catch((() => {
+          }));
+        } catch {
+        }
+      })();
+    }
+    prune() {
+      const now = Date.now();
+      let changed = false;
+      for (const [key, entry] of this.memoryCache) entry.expiresAt <= now && (this.memoryCache.delete(key), changed = true);
+      const overflow = this.memoryCache.size - CACHE_LIMIT;
+      if (overflow > 0) for (const [key] of [...this.memoryCache].sort(((a2, b2) => a2[1].lastUsed - b2[1].lastUsed)).slice(0, overflow)) this.memoryCache.delete(key), changed = true;
+      return changed;
+    }
+    schedulePersist() {
+      if (!this.storage || null !== this.persistTimer) return;
+      const generation = this.cacheGeneration;
+      this.persistTimer = setTimeout((() => {
+        this.persistTimer = null, void this.persistNow(generation).catch((() => {
+        }));
+      }), 300);
+    }
+    async persistNow(generation = this.cacheGeneration) {
+      if (!this.storage || generation !== this.cacheGeneration) return;
+      this.prune(), await this.storage.set(CACHE_KEY, { version: 2, entries: Object.fromEntries(this.memoryCache) });
+    }
+    remember(key, value, generation = this.cacheGeneration) {
+      if (generation === this.cacheGeneration) {
+        const now = Date.now();
+        this.memoryCache.set(key, { value, expiresAt: now + CACHE_TTL2, lastUsed: now }), this.prune(), this.schedulePersist();
+      }
+      return value;
+    }
+    async clearCache() {
+      this.cacheGeneration += 1, null !== this.persistTimer && clearTimeout(this.persistTimer), this.persistTimer = null, this.memoryCache.clear(), this.legacyCache = {}, this.storage?.removeLocal?.("jhs_translate");
+      if (this.storage) {
+        const storage = this.storage;
+        try {
+          const keys = await storage.keys();
+          await storage.remove(CACHE_KEY), await Promise.all(keys.filter(((key) => key.startsWith(V1_PREFIX))).map(((key) => storage.remove(key))));
+        } catch {
+        }
+      }
+      this.hydrationPromise = Promise.resolve();
+    }
+    async inspectCache() {
+      return await this.hydrate(), this.prune(), { version: 2, size: this.memoryCache.size, entries: Object.fromEntries(this.memoryCache) };
     }
     async translate(text, options = {}) {
-      const manifest2 = this.integrations.list("text.translate")[0];
-      if (!manifest2) throw new TypeError("Translation provider is unavailable");
-      const adapter = this.integrations.getAdapter(manifest2.id);
-      if (typeof adapter?.translate !== "function") throw new TypeError(`Translation operation is unavailable: ${manifest2.id}`);
-      return adapter.translate(text, options);
+      const sourceLanguage = options.sourceLanguage ?? "ja", targetLanguage = options.targetLanguage ?? "zh-CN", key = this.cacheKey(text, sourceLanguage, targetLanguage), generation = this.cacheGeneration;
+      let cached = this.memoryCache.get(key);
+      if (cached?.expiresAt > Date.now()) return cached.lastUsed = Date.now(), this.schedulePersist(), cached.value;
+      cached && this.memoryCache.delete(key);
+      const legacy = options.cacheAlias && this.readLegacyCache()[options.cacheAlias];
+      if ("ja" === sourceLanguage && "zh-CN" === targetLanguage && "string" === typeof legacy && legacy) return this.remember(key, legacy, generation);
+      await this.hydrate(), cached = this.memoryCache.get(key);
+      if (cached?.expiresAt > Date.now()) return cached.lastUsed = Date.now(), this.schedulePersist(), cached.value;
+      const pending = this.inflight.get(key);
+      if (pending) return pending;
+      const request = (async () => {
+        const manifest2 = this.integrations.list("text.translate")[0], adapter = manifest2 && this.integrations.getAdapter(manifest2.id);
+        if (typeof adapter?.translate !== "function") throw new TypeError(manifest2 ? `Translation operation is unavailable: ${manifest2.id}` : "Translation provider is unavailable");
+        const translated = await adapter.translate(text, { ...options, sourceLanguage, targetLanguage });
+        return "string" === typeof translated ? this.remember(key, translated, generation) : translated;
+      })().finally((() => this.inflight.delete(key)));
+      return this.inflight.set(key, request), request;
     }
   };
   __name(_TranslationService, "TranslationService");
@@ -20525,6 +20705,9 @@ ${failure.stack}` : "");
     }
     remove(key) {
       return this.port.remove(key);
+    }
+    keys() {
+      return this.port.keys();
     }
     getLocal(key) {
       return this.port.getLocal(key);
@@ -21141,7 +21324,7 @@ ${failure.stack}` : "");
     const related = new RelatedService(integrations);
     const magnet = new MagnetService(providers, integrations);
     const screenshot = new ScreenshotService(providers, integrations);
-    const translation = new TranslationService(integrations);
+    const translation = new TranslationService(integrations, storage);
     const subtitle = new SubtitleService(integrations);
     const account = new AccountService(integrations);
     const offline = new OfflineService(providers, integrations);
@@ -21740,6 +21923,9 @@ ${failure.stack}` : "");
           method: "GET",
           url: url.href,
           responseType: "json",
+          transport: "native-fetch",
+          nativeTimeout: 1500,
+          timeout: 5e3,
           cacheScope: "public",
           ttlMs: 2592e6,
           urlPolicy: { trustClass: "builtin-public", hosts: ["translate-pa.googleapis.com"] }

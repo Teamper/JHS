@@ -58,6 +58,7 @@ export class TranslatePlugin extends BasePlugin {
         if ((settings.snapshot().translateTitle ?? _) !== _) return;
         l && (t = !1);
         const scope = await this.getRuntimeService("scope")();
-        await renderTranslatedTitle({ root: options.root, carNum: e ?? undefined, translation: this.getRuntimeService("translation"), scope, isActive: () => (settings.snapshot().translateTitle ?? _) === _ });
+        const carNum = e ?? this.getPageInfo().carNum;
+        await renderTranslatedTitle({ root: options.root, carNum, translation: this.getRuntimeService("translation"), scope, isActive: () => (settings.snapshot().translateTitle ?? _) === _ });
     }
 }

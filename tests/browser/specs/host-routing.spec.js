@@ -172,6 +172,59 @@ test("detail state controls survive disabled optional magnet contributions", asy
   await expect(page.locator(".jhs-detail-btn-row")).toBeVisible();
 });
 
+test("title translation uses native fetch instead of the GM transport", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers translation transport");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/v/test-id", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page, { settingOverrides: { translateTitle: "yes" }, nativeTranslation: "即时译文" });
+  await expect(page.locator(".translated-title")).toHaveText("即时译文");
+  const diagnostics = await page.evaluate(() => window.__jhsBrowserDiagnostics);
+  expect(diagnostics.nativeTranslationRequests).toBe(1);
+  expect(diagnostics.requests.some((request) => request.url.includes("translate-pa.googleapis.com"))).toBe(false);
+});
+
+test("captured detail ownership survives detached controls, iframe isolation, and legacy boolean settings", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers detail close ownership");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/v/test-id", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page);
+  const result = await page.evaluate(async () => {
+    await window.settingsService.set("needClosePage", true);
+    const layerIndex = window.layer.open({ type: 1, content: '<button id="offline-close-fixture">离线</button>' });
+    const button = document.querySelector("#offline-close-fixture");
+    const capturedLayerIndex = window.utils.getOwningLayerIndex({ root: button });
+    button.remove();
+    const closed = await window.utils.closePage({ root: button, layerIndex: capturedLayerIndex });
+    return { layerIndex, capturedLayerIndex, closed, remaining: document.querySelectorAll(".layui-layer").length };
+  });
+  expect(result).toEqual({ layerIndex: 1, capturedLayerIndex: 1, closed: true, remaining: 0 });
+
+  const iframeNavigation = page.waitForEvent("framenavigated", {
+    predicate: (frame) => frame.url().includes("jhs-close-frame=1"),
+  });
+  await page.evaluate(() => {
+    window.utils.openPage("https://javdb.com/v/test-id?jhs-close-frame=1", "ABC-1");
+  });
+  const detailFrame = await iframeNavigation;
+  const iframeLayerIndex = await page.locator('.layui-layer:has(iframe[src*="jhs-close-frame=1"])').evaluate((element) => Number(element.dataset.layerId));
+  await injectUserscriptRuntime(detailFrame);
+  await detailFrame.evaluate(() => window.settingsService.set("needClosePage", true));
+  await detailFrame.evaluate(async () => {
+    const plugin = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
+    const button = document.createElement("button");
+    button.className = "jhs-offline-btn";
+    button.textContent = "离线";
+    document.body.append(button);
+    plugin.registry = {
+      getCandidates: async () => [{ provider: { id: "123", name: "123 云盘", submit: async () => ({ ok: true }) }, availability: { authState: "ready" } }],
+      updateAvailability() {},
+    };
+    await plugin.submitResource({ currentTarget: button, clientX: 120, clientY: 120 }, "magnet:?xt=urn:btih:fixture", window.jQuery(button), { carNum: "ABC-1" });
+  });
+  await detailFrame.locator(".layui-layer-btn0").click();
+  await expect(page.locator(`#layui-layer${iframeLayerIndex}`)).toHaveCount(0);
+});
+
 test("FC2 core workspace survives disabled optional detail contributions", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers FC2 optional contribution isolation");
   await fulfillHostFixtures(context);

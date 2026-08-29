@@ -19,6 +19,10 @@ export const REQUIRED_MANUAL_SMOKE_CHECKS = Object.freeze([
     "plugin.disabledBlacklist",
     "cloud.115",
     "cloud.123",
+    "translation.nativeFallbackAndCache",
+    "detail.viewerAboveLayer",
+    "backup.loadingAboveSettings",
+    "cloud.123.confirmClose",
 ]);
 
 /** Placeholder version strings that can never count as a real human-verified environment. */

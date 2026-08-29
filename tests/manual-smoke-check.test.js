@@ -60,6 +60,10 @@ describe("manual Tampermonkey smoke gate", () => {
             "plugin.disabledBlacklist",
             "cloud.115",
             "cloud.123",
+            "translation.nativeFallbackAndCache",
+            "detail.viewerAboveLayer",
+            "backup.loadingAboveSettings",
+            "cloud.123.confirmClose",
         ]));
         const record = createRecord();
         record.checks["fc2.autopagePage2"] = false;

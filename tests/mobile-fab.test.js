@@ -28,6 +28,19 @@ function loadMobilePlugin({ beans: beanOverrides = null, isListPage = true, isDe
 }
 
 describe("mobile list FAB", () => {
+    it("mounts and removes one scroll-safe area with the FAB", () => {
+        const { $, plugin } = loadMobilePlugin();
+        plugin.bindEvents = vi.fn();
+        plugin.mountBottomBar();
+        plugin.mountBottomBar();
+        expect($("#jhs-fab")).toHaveLength(1);
+        expect($("#jhs-fab-safe-area")).toHaveLength(1);
+        expect($("html").hasClass("jhs-fab-mounted")).toBe(true);
+        plugin.unmountBottomBar();
+        expect($("#jhs-fab, #jhs-fab-safe-area")).toHaveLength(0);
+        expect($("html").hasClass("jhs-fab-mounted")).toBe(false);
+    });
+
     it("projects list actions, ten quick filters and a radio-style sort submenu", () => {
         const { plugin } = loadMobilePlugin(), menu = plugin.createMenu();
         expect(menu.find(".jhs-fab-menu-item")).toHaveLength(7);

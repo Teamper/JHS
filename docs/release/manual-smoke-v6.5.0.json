@@ -27,7 +27,11 @@
     "plugin.disabledNewVideo": false,
     "plugin.disabledBlacklist": false,
     "cloud.115": false,
-    "cloud.123": false
+    "cloud.123": false,
+    "translation.nativeFallbackAndCache": false,
+    "detail.viewerAboveLayer": false,
+    "backup.loadingAboveSettings": false,
+    "cloud.123.confirmClose": false
   },
   "notes": "PLACEHOLDER — this record is intentionally NOT satisfied. The 6.5.0 release gate must fail until a human runs the real Tampermonkey smoke (docs/release/manual-smoke.md) and commits a humanVerified:true record with the real artifact SHA256."
 }

@@ -96,7 +96,7 @@ export function createAppContext(runtime) {
     const related = new RelatedService(integrations);
     const magnet = new MagnetService(providers, integrations);
     const screenshot = new ScreenshotService(providers, integrations);
-    const translation = new TranslationService(integrations);
+    const translation = new TranslationService(integrations, storage);
     const subtitle = new SubtitleService(integrations);
     const account = new AccountService(integrations);
     const offline = new OfflineService(providers, integrations);

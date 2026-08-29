@@ -696,7 +696,7 @@ export class ListPagePlugin extends BasePlugin {
         n = (e.find("a").attr("href") || "").split("/").filter(Boolean).pop()?.trim()), !t || !n) return;
         const generation = this.translationGeneration, settings = this.getRuntimeService("settings");
         const scope = await this.getRuntimeService("scope")();
-        const translated = await this.getRuntimeService("translation").translate(t, { scope });
+        const translated = await this.getRuntimeService("translation").translate(t, { cacheAlias: n, scope });
         if (generation !== this.translationGeneration || (settings?.snapshot?.().translateTitle ?? _) !== _) return;
         this.applyTranslatedTitle(e, translated, n);
     }

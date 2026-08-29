@@ -54,12 +54,14 @@ export async function backupDataByWebDav(folderName, webdavService) {
     if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
     const a = t.webDavUsername;
     if (!a) return void show.error("请填写webDav用户名并保存后, 再试此功能");
-    const i = await decryptCredential(t.webDavPassword);
-    if (!i) return void show.error("请填写webDav密码并保存后, 再试此功能");
-    let s = utils.getNowStr("_", "_") + ".json", o = JSON.stringify(await storageManager.exportData());
-    o = await encryptData(o);
-    let r = loading();
+    if (!t.webDavPassword) return void show.error("请填写webDav密码并保存后, 再试此功能");
+    const r = loading();
     try {
+        const i = await decryptCredential(t.webDavPassword);
+        if (!i) return void show.error("请填写webDav密码并保存后, 再试此功能");
+        const s = utils.getNowStr("_", "_") + ".json";
+        let o = JSON.stringify(await storageManager.exportData());
+        o = await encryptData(o);
         const e = webdavService.createClient({ url: n, username: a, password: i });
         await e.backup(folderName, s, o), show.ok("备份完成");
     } catch (l) {
@@ -76,12 +78,13 @@ export async function backupListBtnByWebDav(folderName, openFileListDialogFn, we
     if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
     const a = t.webDavUsername;
     if (!a) return void show.error("请填写webDav用户名并保存后, 再试此功能");
-    const i = await decryptCredential(t.webDavPassword);
-    if (!i) return void show.error("请填写webDav密码并保存后, 再试此功能");
-    let s = loading();
+    if (!t.webDavPassword) return void show.error("请填写webDav密码并保存后, 再试此功能");
+    const s = loading();
     try {
-        const e = webdavService.createClient({ url: n, username: a, password: i }), t = await e.getBackupList(folderName);
-        openFileListDialogFn(t, e, "WebDav");
+        const i = await decryptCredential(t.webDavPassword);
+        if (!i) return void show.error("请填写webDav密码并保存后, 再试此功能");
+        const e = webdavService.createClient({ url: n, username: a, password: i }), files = await e.getBackupList(folderName);
+        openFileListDialogFn(files, e, "WebDav");
     } catch (o) {
         clog.error(o), show.error(`发生错误: ${errorMessage(o)}`);
     } finally {

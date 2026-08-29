@@ -11,6 +11,7 @@ export class StorageService {
     set(key, value) { return this.port.set(key, value); }
     /** @param {string} key */
     remove(key) { return this.port.remove(key); }
+    keys() { return this.port.keys(); }
     /** @param {string} key */
     getLocal(key) { return this.port.getLocal(key); }
     /** @param {string} key @param {string} value */

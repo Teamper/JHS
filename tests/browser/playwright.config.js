@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
-const channel = process.env.CI ? undefined : process.env.JHS_BROWSER_CHANNEL || "msedge";
+const visualRegression = process.env.JHS_VISUAL_REGRESSION === "1";
+const channel = visualRegression || process.env.CI ? undefined : process.env.JHS_BROWSER_CHANNEL || "msedge";
 const viewports = [
   ["desktop-wide", 1440, 900, false],
   ["desktop-regular", 1280, 720, false],
@@ -14,7 +15,7 @@ export default defineConfig({
   testDir: "./specs",
   outputDir: "../../output/playwright/test-results",
   snapshotDir: "./screenshots/baseline",
-  snapshotPathTemplate: "{snapshotDir}/{arg}-{projectName}{ext}",
+  snapshotPathTemplate: "{snapshotDir}/{arg}-{projectName}-{platform}{ext}",
   workers: 1,
   retries: process.env.CI ? 1 : 0,
   reporter: [["line"], ["html", { outputFolder: "../../output/playwright/report", open: "never" }]],

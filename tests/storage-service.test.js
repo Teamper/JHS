@@ -9,6 +9,7 @@ describe("storage service", () => {
             getItem: vi.fn(async key => indexed.get(key)),
             setItem: vi.fn(async (key, value) => indexed.set(key, value)),
             removeItem: vi.fn(async key => indexed.delete(key)),
+            keys: vi.fn(async () => [...indexed.keys()]),
         };
         const localStore = {
             getItem: vi.fn(key => local.get(key) ?? null),
@@ -20,6 +21,7 @@ describe("storage service", () => {
         await storage.set("setting", { theme: "dark" });
         storage.setLocal("jhs_tag_expand", "true");
         await expect(storage.get("setting")).resolves.toEqual({ theme: "dark" });
+        await expect(storage.keys()).resolves.toEqual(["setting"]);
         expect(storage.getLocal("jhs_tag_expand")).toBe("true");
         expect(indexed.has("jhs_tag_expand")).toBe(false);
         storage.removeLocal("jhs_tag_expand");

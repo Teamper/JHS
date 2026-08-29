@@ -236,12 +236,9 @@ export class CoverButtonPlugin extends BasePlugin {
         if (!o) return show.error("REGION_BLOCKED" === previewError?.code ? previewError.message : "未解析到视频"), void this.showImg(e, t, n);
         let r = this.getRuntimeService("settings").snapshot().videoQuality;
         r = Z(Object.keys(o), r);
-        let c = o[r], d = `
-            <div class="jhs-layout-d543acf8">
-                <video src="${c}" poster="${s}" id="${a}" controls loop muted playsinline class="jhs-layout-a38a0e50"></video>
-            </div>`;
-        l && (d = `<div><video src="${c}" poster="${s}" id="${a}" controls loop muted playsinline class="jhs-layout-a38a0e50"></video></div>`),
-        t.parent().append(d), t.hide(), t.removeClass("loading"), t.next(".loading-spinner").remove(), i = $(`#${a}`);
+        const c = o[r], wrapper = document.createElement("div"), video = document.createElement("video");
+        l || (wrapper.className = "jhs-layout-d543acf8"), video.src = c, video.poster = s || "", video.id = a, video.controls = !0, video.loop = !0, video.muted = !0, video.playsInline = !0, video.className = "jhs-layout-a38a0e50", wrapper.appendChild(video),
+        t.parent().append(wrapper), t.hide(), t.removeClass("loading"), t.next(".loading-spinner").remove(), i = $(video);
         let h = i[0];
         h.load(), h.muted = !1, await safePlay(h, {
             context: "列表卡片预览",

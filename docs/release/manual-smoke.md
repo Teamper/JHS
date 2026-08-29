@@ -34,13 +34,17 @@
     "plugin.disabledNewVideo": true,
     "plugin.disabledBlacklist": true,
     "cloud.115": true,
-    "cloud.123": true
+    "cloud.123": true,
+    "translation.nativeFallbackAndCache": true,
+    "detail.viewerAboveLayer": true,
+    "backup.loadingAboveSettings": true,
+    "cloud.123.confirmClose": true
   },
   "notes": "可选的异常、账号状态或环境说明"
 }
 ```
 
-6.5 的 Smoke 必须额外覆盖本次重构的危险边界：双标签设置同步、FC2 自动翻页第二页、黑名单→设置→WebDAV 层叠弹窗、禁用 NewVideoPlugin/BlacklistPlugin 后的按钮能力、115 与 123 云盘。
+6.5 的 Smoke 必须额外覆盖本次重构的危险边界：双标签设置同步、FC2 自动翻页第二页、黑名单→设置→WebDAV 层叠弹窗、禁用 NewVideoPlugin/BlacklistPlugin 后的按钮能力、115 与 123 云盘，以及翻译原生请求回退与缓存清理、详情图片预览层级、备份 Loading 层级、123 确认后的详情页关闭。
 
 运行：
 

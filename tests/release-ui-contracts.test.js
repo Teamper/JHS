@@ -43,6 +43,11 @@ describe("v6.4.1 frozen UI contracts", () => {
         expect(logger).toContain("unsafeWindow.parent !== unsafeWindow");
     });
 
+    it("builds string image previews with DOM properties instead of HTML interpolation", () => {
+        expect(logger).toContain('image.src = String(t), image.alt = String(n)');
+        expect(logger).not.toContain('append(`<img src="${t}" alt="${n}">`)');
+    });
+
     it("keeps offline submission focusable while exposing busy semantics", () => {
         expect(offline).toContain('"aria-busy": "true", "aria-disabled": "true"');
         expect(offline).not.toContain('.prop("disabled", !0)');

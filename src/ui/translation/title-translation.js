@@ -19,7 +19,7 @@ export async function renderTranslatedTitle(options) {
     if (!translatedNode.length) translatedNode = jq('<div class="translated-title"></div>').insertAfter(title);
     translatedNode.removeClass("is-error").text("翻译中...");
     try {
-        const translated = await options.translation.translate(sourceText, { scope: options.scope });
+        const translated = await options.translation.translate(sourceText, { cacheAlias: options.carNum, scope: options.scope });
         if (options.isActive && !options.isActive()) return;
         if (!title[0]?.isConnected || !translatedNode[0]?.isConnected) return;
         translatedNode.text(translated);

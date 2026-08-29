@@ -66,10 +66,14 @@ test("mobileMode force on/off swaps FAB and the desktop commandbar/setting surfa
   for (const selector of toolbarSelectors) await expect(page.locator(selector)).toHaveCount(1);
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("mobileMode", "on"));
   await expect(page.locator("#jhs-fab")).toBeVisible();
+  await expect(page.locator("#jhs-fab-safe-area")).toHaveCount(1);
+  await expect(page.locator("html")).toHaveClass(/jhs-fab-mounted/);
   await expect(page.locator("#jhs-page-commandbar")).toHaveCount(0);
   await expect(page.locator("#setting-btn")).toHaveCount(0);
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("mobileMode", "off"));
   await expect(page.locator("#jhs-fab")).toHaveCount(0);
+  await expect(page.locator("#jhs-fab-safe-area")).toHaveCount(0);
+  await expect(page.locator("html")).not.toHaveClass(/jhs-fab-mounted/);
   await expect(page.locator("#jhs-page-commandbar")).toHaveCount(1);
   await expect(page.locator("#setting-btn")).toHaveCount(1);
   for (const selector of toolbarSelectors) await expect(page.locator(selector)).toHaveCount(1);
@@ -165,6 +169,7 @@ test("batch actions are single-flight while a batch is running", async ({ contex
   const batchToggle = ".jhs-commandbar__batch .jhs-commandbar__menu-toggle";
   await page.locator(batchToggle).click();
   await page.locator("#favoriteAllVideo").click();
+  await page.evaluate(() => document.querySelector(".layui-layer-btn0").click());
   await expect(page.locator("#jhs-batch-progress")).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__httpCalls)).toBe(1);
   // 批量任务期间 loading 遮罩会拦截指针事件：用原生 click 验证 Single Flight 拒绝第二个任务。

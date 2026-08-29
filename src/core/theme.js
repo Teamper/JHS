@@ -18,9 +18,9 @@ export const JHS_Z_INDEX = Object.freeze({
     modal: 12345699,
     sheetBackdrop: 12345789,
     sheet: 12345790,
-    loading: 99999999,
-    viewer: 999999990,
     layer: 999999991,
+    viewer: 999999992,
+    loading: 999999993,
     debug: 999999999,
     tooltip: 9999999999
 });

@@ -53,16 +53,48 @@ describe("DetailStateController", () => {
 });
 
 describe("Utils.closePage", () => {
+    it("attempts to close a userscript-opened detail tab even without window.opener", async () => {
+        const dom = new JSDOM('<div id="detail"></div>', { url: "https://javdb.example/v/a" }), $ = jqueryFactory(dom.window), closeWindow = vi.fn();
+        dom.window.close = closeWindow;
+        const context = vm.createContext({
+            console, URL, window: dom.window, document: dom.window.document, $, layer: { close: vi.fn(), open: vi.fn() },
+            storageManager: { getSetting: vi.fn().mockResolvedValue("yes") }, GM_openInTab: vi.fn(), normalizeCarNum: value => value,
+            i: (target, key, value) => (target[key] = value)
+        });
+        vm.runInContext(`${readTestFile(join(repoRoot, "src/core/utils.js"), "utf8")};globalThis.TestUtils=Utils`, context);
+        await expect(new context.TestUtils().closePage({ root: dom.window.document.querySelector("#detail") })).resolves.toBe(true);
+        expect(closeWindow).toHaveBeenCalledOnce();
+    });
+
+    it("prefers the owning iframe detail layer over a nested resource layer", async () => {
+        const parentDom = new JSDOM('<div class="layui-layer" id="layui-layer7"><iframe id="detail-frame"></iframe></div>', { url: "https://javdb.example/" });
+        const frame = parentDom.window.document.querySelector("#detail-frame"), childWindow = frame.contentWindow;
+        childWindow.document.body.innerHTML = '<div class="layui-layer" id="layui-layer8"><button id="offline">离线</button></div>';
+        const $ = jqueryFactory(childWindow), parentClosePage = vi.fn().mockResolvedValue(true), childClose = vi.fn();
+        parentDom.window.utils = { closePage: parentClosePage };
+        const context = vm.createContext({
+            console, URL, window: childWindow, document: childWindow.document, unsafeWindow: childWindow, $, layer: { close: childClose, open: vi.fn() },
+            storageManager: { getSetting: vi.fn().mockResolvedValue("yes") }, GM_openInTab: vi.fn(), normalizeCarNum: value => value,
+            i: (target, key, value) => (target[key] = value)
+        });
+        vm.runInContext(`${readTestFile(join(repoRoot, "src/core/utils.js"), "utf8")};globalThis.TestUtils=Utils`, context);
+        await new context.TestUtils().closePage({ root: childWindow.document.querySelector("#offline") });
+        expect(parentClosePage).toHaveBeenCalledWith({ layerIndex: 7 });
+        expect(childClose).not.toHaveBeenCalled();
+    });
+
     it("closes the layer owning root instead of the last layer", async () => {
         const dom = new JSDOM('<div class="layui-layer" id="layui-layer7"><div id="detail"></div></div><div class="layui-layer" id="layui-layer8"><div id="confirm"></div></div>', { url: "https://javdb.example/v/a" });
         const $ = jqueryFactory(dom.window), close = vi.fn(), context = vm.createContext({
             console, URL, window: dom.window, document: dom.window.document, $, layer: { close, open: vi.fn() },
-            storageManager: { getSetting: vi.fn().mockResolvedValue("yes") }, GM_openInTab: vi.fn(), normalizeCarNum: value => value,
+            storageManager: { getSetting: vi.fn().mockResolvedValue(true) }, GM_openInTab: vi.fn(), normalizeCarNum: value => value,
             i: (target, key, value) => (target[key] = value)
         });
         dom.window.layer = context.layer;
         vm.runInContext(`${readTestFile(join(repoRoot, "src/core/utils.js"), "utf8")};globalThis.TestUtils=Utils`, context);
-        await new context.TestUtils().closePage({ root: dom.window.document.querySelector("#detail") });
+        const utils = new context.TestUtils(), detail = dom.window.document.querySelector("#detail"), layerIndex = utils.getOwningLayerIndex({ root: detail });
+        detail.remove();
+        await utils.closePage({ root: detail, layerIndex });
         expect(close).toHaveBeenCalledOnce();
         expect(close).toHaveBeenCalledWith(7);
     });

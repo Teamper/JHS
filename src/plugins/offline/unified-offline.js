@@ -100,6 +100,24 @@ export class UnifiedOfflinePlugin extends BasePlugin {
         const item = button?.closest?.(".item");
         return item?.length ? readListItem(item) : this.getPageInfo();
     }
+    /** @param {any} info @param {{root: any, layerIndex: number | null}} closeContext */
+    async markDownloadedAndClose(info, closeContext) {
+        if (!info?.carNum) return !1;
+        try {
+            await this.getRuntimeService("state").patch(info.carNum, { downloaded: !0 }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } });
+        } catch (error) {
+            clog.error("离线任务标记已下载失败", error), show.error("离线已提交，但标记已下载失败");
+            return !1;
+        }
+        try {
+            const closed = await utils.closePage(closeContext);
+            if (!closed) throw new Error("未找到可关闭的详情页");
+            return !0;
+        } catch (error) {
+            clog.error("离线任务完成后关闭详情页失败", error), show.error("已标记下载，但无法自动关闭");
+            return !1;
+        }
+    }
     /** @param {unknown} event @param {string} resource @param {JQueryHandle} [button] @param {any} [context] @param {string | null} [retryOf] @param {{ forceAvailabilityRefresh?: boolean, preferredProviderId?: string }} [options] */
     async submitResource(event, resource, button = $(), context = null, retryOf = null, options = {}) {
         if (button.hasClass("loading")) return;
@@ -107,7 +125,9 @@ export class UnifiedOfflinePlugin extends BasePlugin {
         if (!candidates.length) return void show.error("没有已启用且支持该资源的离线服务，请检查授权与设置");
         const selected = candidates.find((candidate => candidate.provider.id === options.preferredProviderId)) || await this.chooseCandidate(event, candidates);
         if (!selected) return;
-        const info = context || this.getVideoInfo(button), original = button.text(), restoreButton = () => {
+        const info = context || this.getVideoInfo(button), detailRoot = button[0] || /** @type {any} */ (event)?.currentTarget || null;
+        const closeContext = { root: detailRoot, layerIndex: utils.getOwningLayerIndex({ root: detailRoot }) };
+        const original = button.text(), restoreButton = () => {
             if (!button[0]?.isConnected) return;
             button.removeClass("loading").removeAttr("aria-busy aria-disabled").text(original);
         };
@@ -115,7 +135,7 @@ export class UnifiedOfflinePlugin extends BasePlugin {
         try {
             button.addClass("loading").attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中"), await selected.provider.submit(resource, info), this.registry.updateAvailability(selected.provider.id, { available: !0, authState: "ready", reason: "最近提交成功" });
             await this.getRuntimeService("state").appendOfflineHistory({ providerId: selected.provider.id, providerName: selected.provider.name, resource, resourceType: /^ed2k:/i.test(resource) ? "ed2k" : "magnet", carNum: info?.carNum, status: "submitted", retryOf }), submitted = !0,
-            button.text("已提交"), show.ok(`${selected.provider.name} 离线任务已创建`), utils.q(event, "是否将该作品标记为已下载？", (async () => { info?.carNum && await this.getRuntimeService("state").patch(info.carNum, { downloaded: !0 }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } }); }));
+            button.text("已提交"), show.ok(`${selected.provider.name} 离线任务已创建`), utils.q(event, "是否将该作品标记为已下载？", (() => { void this.markDownloadedAndClose(info, closeContext); }));
         } catch (error) {
             const errorRecord = /** @type {{ code?: string, message?: string }} */ (error), code = errorRecord?.code || ("TOKEN_EXPIRED" === error ? "TOKEN_EXPIRED" : "SUBMIT_FAILED"), message = errorRecord?.message || String(error);
             [ "AUTH_REQUIRED", "LOGIN_REQUIRED", "TOKEN_EXPIRED", "TOKEN_MISSING" ].includes(code) && this.registry.updateAvailability(selected.provider.id, { available: !1, authState: "115" === selected.provider.id ? "login-required" : "token-missing", reason: message });

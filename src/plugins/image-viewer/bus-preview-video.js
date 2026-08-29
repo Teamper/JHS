@@ -124,21 +124,21 @@ export class BusPreviewVideoPlugin extends BasePlugin {
         let n = this.getRuntimeService("settings").snapshot().videoQuality;
         n = Z(Object.keys(e), n);
         let a = e[n];
-        t.html(`\n            <div class="video-player-wrapper">\n                <video id="preview-video" class="jhs-video-player" controls playsinline>\n                    <source src="${a}" />\n                </video>\n            </div>\n            <div class="jhs-video-toolbar jhs-video-quality-list" role="group" aria-label="视频画质">\n                </div>\n        `);
+        const wrapper = $('<div class="video-player-wrapper"></div>'), video = $('<video id="preview-video" class="jhs-video-player" controls playsinline></video>'), source = $(document.createElement("source")).attr("src", a), toolbar = $('<div class="jhs-video-toolbar jhs-video-quality-list" role="group" aria-label="视频画质"></div>');
+        video.append(source), wrapper.append(video), t.empty().append(wrapper, toolbar);
         const i = $("#preview-video"), s = i.find("source"), o = t.find(".jhs-video-quality-list");
         if (!i.length || !s.length) return;
         const settings = this.getRuntimeService("settings"), r = /** @type {HTMLVideoElement} */ (i[0]), muted = settings.snapshot().videoMuted;
         r.muted = muted == null || muted === !0, i.off("volumechange.jhsVideo").on("volumechange.jhsVideo", (() => {
             void settings.set("videoMuted", r.muted).catch(((/** @type {unknown} */ error) => clog.error("保存视频静音设置失败", error)));
         }));
-        let c = "";
         L.forEach(((/** @type {{quality: string, text: string}} */ t) => {
             let a = e[t.quality];
             if (a) {
-                const e = n === t.quality;
-                c += `\n                    <button type="button" class="jhs-btn jhs-video-quality-btn${e ? " active" : ""}" \n                            data-quality="${t.quality}"\n                            data-video-src="${a}"\n                            aria-pressed="${e ? "true" : "false"}">\n                        ${t.text}\n                    </button>\n                `;
+                const active = n === t.quality, button = $('<button type="button" class="jhs-btn jhs-video-quality-btn"></button>');
+                active && button.addClass("active"), button.attr({ "data-quality": t.quality, "data-video-src": a, "aria-pressed": active ? "true" : "false" }).text(t.text), o.append(button);
             }
-        })), o.html(c);
+        }));
         const d = o.find(".jhs-video-quality-btn");
         o.off("click.jhsVideo").on("click.jhsVideo", ".jhs-video-quality-btn", (async (/** @type {MouseEvent} */ e) => {
             try {

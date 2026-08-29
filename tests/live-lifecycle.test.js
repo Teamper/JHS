@@ -123,6 +123,18 @@ describe("PreviewVideoPlugin live lifecycle", () => {
 });
 
 describe("BusPreviewVideoPlugin live lifecycle", () => {
+    it("creates remote media controls without interpreting URL text as markup", async () => {
+        doc.body.innerHTML = '<div id="target"></div>';
+        const settings = makeSettings({ videoQuality: "mhb_w", videoMuted: true }), plugin = new BusPreviewVideoPlugin();
+        plugin.getRuntimeService = (name) => name === "settings" ? settings : null;
+        const payload = 'https://example.test/video.mp4\" onerror=\"alert(1)\"><img class=\"injected\">';
+        await plugin.createVideoPlayerAndControls({ mhb_w: payload }, $("#target"));
+        expect(doc.querySelector(".injected")).toBeNull();
+        expect(doc.querySelector("[onerror]")).toBeNull();
+        expect($("#preview-video source").attr("src")).toBe(payload);
+        expect($(".jhs-video-quality-btn").attr("data-video-src")).toBe(payload);
+    });
+
     it("registers one listener and dispatches mount/unmount on toggles", async () => {
         win.isDetailPage = true;
         const settings = makeSettings({ enablePreviewVideo: "no", enableLoadPreviewVideo: "yes" });

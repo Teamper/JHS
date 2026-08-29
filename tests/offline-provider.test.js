@@ -13,24 +13,24 @@ function loadRegistry() {
 }
 
 function loadOfflinePlugin(submit, history = vi.fn(async () => {})) {
-    const dom = new JSDOM('<button class="jhs-offline-btn">离线</button>'), $ = jqueryFactory(dom.window);
+    const dom = new JSDOM('<button class="jhs-offline-btn">离线</button>', { url: "https://javdb.example/v/abc-1" }), $ = jqueryFactory(dom.window);
     const layer = {
         close: vi.fn(),
         open: vi.fn(options => { options.content.appendTo("body"); return 7; }),
     };
-    const stateService = { appendOfflineHistory: history, patch: vi.fn() };
+    const stateService = { appendOfflineHistory: history, patch: vi.fn() }, closePage = vi.fn().mockResolvedValue(true), getOwningLayerIndex = vi.fn(() => 9);
     class BasePlugin { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : name === "state" ? stateService : null; } }
     const context = vm.createContext({
         window: dom.window, document: dom.window.document, $, BasePlugin, Map, Array, Date, TypeError,
         r: true, l: false, setTimeout, clearTimeout,
-        show: { ok: vi.fn(), error: vi.fn() }, utils: { q: vi.fn(), getDialogArea: vi.fn(() => []) }, storageManager: { getSetting: vi.fn(async () => "ask") }, layer,
+        show: { ok: vi.fn(), error: vi.fn() }, clog: { error: vi.fn() }, utils: { q: vi.fn(), closePage, getOwningLayerIndex, getDialogArea: vi.fn(() => []) }, storageManager: { getSetting: vi.fn(async () => "ask") }, layer,
         getDetailResourceAdapter: vi.fn(), jhsEventBus: { on: vi.fn() }, readListItem: vi.fn()
     });
     const source = readTestFile(join(import.meta.dirname, "../src/plugins/offline/unified-offline.js"), "utf8");
     vm.runInContext(`${source};globalThis.TestOfflinePlugin=UnifiedOfflinePlugin;`, context);
     const plugin = new context.TestOfflinePlugin(), provider = { id: "115", name: "115", submit };
     plugin.registry = { getCandidates: vi.fn(async () => [ { provider, availability: { authState: "ready" } } ]), updateAvailability: vi.fn() };
-    return { $, button: $("button"), context, history, layer, plugin };
+    return { $, button: $("button"), closePage, context, history, layer, plugin, stateService };
 }
 
 describe("offline provider registry", () => {
@@ -66,6 +66,39 @@ describe("offline provider registry", () => {
 });
 
 describe("unified offline button state", () => {
+    it("closes the owning detail surface after confirming the downloaded state", async () => {
+        const { button, closePage, context, plugin, stateService } = loadOfflinePlugin(vi.fn(async () => {}));
+        context.utils.q.mockImplementation((_event, _message, confirm) => confirm());
+        await plugin.submitResource({ currentTarget: button[0] }, "magnet:?xt=downloaded", button, { carNum: "ABC-1" });
+        await vi.waitFor(() => expect(closePage).toHaveBeenCalledOnce());
+        expect(stateService.patch).toHaveBeenCalledWith("ABC-1", { downloaded: true }, expect.objectContaining({ type: "offline-mark-downloaded" }));
+        expect(closePage).toHaveBeenCalledWith({ root: button[0], layerIndex: 9 });
+        expect(stateService.patch.mock.invocationCallOrder[0]).toBeLessThan(closePage.mock.invocationCallOrder[0]);
+    });
+
+    it("keeps the detail open and reports a targeted error when marking downloaded fails", async () => {
+        const { closePage, context, plugin, stateService } = loadOfflinePlugin(vi.fn(async () => {}));
+        stateService.patch.mockRejectedValueOnce(new Error("write failed"));
+        await expect(plugin.markDownloadedAndClose({ carNum: "ABC-1" }, { layerIndex: 9 })).resolves.toBe(false);
+        expect(closePage).not.toHaveBeenCalled();
+        expect(context.show.error).toHaveBeenCalledWith("离线已提交，但标记已下载失败");
+    });
+
+    it("keeps the downloaded state and reports a close-only error when no owner closes", async () => {
+        const { closePage, context, plugin, stateService } = loadOfflinePlugin(vi.fn(async () => {}));
+        closePage.mockResolvedValueOnce(false);
+        await expect(plugin.markDownloadedAndClose({ carNum: "ABC-1" }, { layerIndex: 9 })).resolves.toBe(false);
+        expect(stateService.patch).toHaveBeenCalledOnce();
+        expect(context.show.error).toHaveBeenCalledWith("已标记下载，但无法自动关闭");
+    });
+
+    it("does nothing when no car number can be identified", async () => {
+        const { closePage, plugin, stateService } = loadOfflinePlugin(vi.fn(async () => {}));
+        await expect(plugin.markDownloadedAndClose({}, { layerIndex: 9 })).resolves.toBe(false);
+        expect(stateService.patch).not.toHaveBeenCalled();
+        expect(closePage).not.toHaveBeenCalled();
+    });
+
     it("uses the declared dialog service when the user must select a provider", async () => {
         const { $, layer, plugin } = loadOfflinePlugin(vi.fn());
         const candidates = [

@@ -98,26 +98,37 @@ export class Utils {
             clog.error("iframe监听失败 (跨域或未加载完毕):", i);
         }
     }
+    getOwningLayerIndex(options = {}) {
+        const parseIndex = element => {
+            const id = element?.id || "", match = /^layui-layer(\d+)$/.exec(id);
+            return match ? Number(match[1]) : null;
+        };
+        let layerIndex = Number.isInteger(options?.layerIndex) ? options.layerIndex : null;
+        try {
+            if (null === layerIndex && window.frameElement) layerIndex = parseIndex(window.frameElement.closest?.(".layui-layer"));
+        } catch {}
+        const root = options?.root;
+        if (null === layerIndex && root) {
+            const element = root.jquery ? root[0] : root.nodeType ? root : null, layerElement = element?.matches?.(".layui-layer") ? element : element?.closest?.(".layui-layer");
+            layerIndex = parseIndex(layerElement);
+        }
+        return layerIndex;
+    }
     async closePage(options = {}) {
         const settings = /** @type {any} */ (globalThis).settingsService?.snapshot?.();
         const needClosePage = settings && Object.prototype.hasOwnProperty.call(settings, "needClosePage")
             ? settings.needClosePage
             : await storageManager.getSetting("needClosePage", "yes");
-        if ("yes" !== needClosePage) return !1;
-        const root = options?.root, parseIndex = element => {
-            const id = element?.id || "", match = /^layui-layer(\d+)$/.exec(id);
-            return match ? Number(match[1]) : null;
-        };
-        let layerIndex = Number.isInteger(options?.layerIndex) ? options.layerIndex : null;
-        if (null === layerIndex && root) {
-            const element = root.jquery ? root[0] : root.nodeType ? root : null, layerElement = element?.matches?.(".layui-layer") ? element : element?.closest?.(".layui-layer");
-            layerIndex = parseIndex(layerElement);
-        }
-        if (null === layerIndex && window.frameElement) layerIndex = parseIndex(window.frameElement.closest?.(".layui-layer"));
+        if ("yes" !== needClosePage && !0 !== needClosePage) return !1;
+        const layerIndex = this.getOwningLayerIndex(options);
+        if (null !== layerIndex && window.parent && window.parent !== window) try {
+            const parentUtils = /** @type {any} */ (globalThis).unsafeWindow?.parent?.utils;
+            if (parentUtils && parentUtils !== this && "function" == typeof parentUtils.closePage) return !!await parentUtils.closePage({ layerIndex });
+        } catch {}
         const ownerWindow = window.parent && window.parent !== window ? window.parent : window, ownerLayer = ownerWindow.layer || globalThis.layer;
         if (null !== layerIndex && "function" == typeof ownerLayer?.close) return ownerLayer.close(layerIndex), !0;
-        if (window.opener && !window.opener.closed) return window.close(), !0;
-        return !1;
+        window.close();
+        return !0;
     }
     loopDetector(e, t, n = 20, a = 1e4, i = !0, scope = null) {
         const s = ++this.waitSequence;

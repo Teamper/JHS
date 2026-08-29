@@ -444,7 +444,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         });
     }
     bindClick(layerRoot = null) {
-        const settingPlugin = this, webdav = this.getRuntimeService("webdav"), dialog = this.getRuntimeService("dialog"), diagnostics = this.getRuntimeService("diagnostics"), storage = this.getRuntimeService("storage"), previewDiff = (diff, imported, restored = null) => showDiffPreview(diff, imported, restored, dialog);
+        const settingPlugin = this, webdav = this.getRuntimeService("webdav"), dialog = this.getRuntimeService("dialog"), diagnostics = this.getRuntimeService("diagnostics"), storage = this.getRuntimeService("storage"), translation = this.getRuntimeService("translation"), previewDiff = (diff, imported, restored = null) => showDiffPreview(diff, imported, restored, dialog);
         const root = layerRoot ? $(layerRoot) : $(document);
         root.find("#saveBtn").attr("data-jhs-settings-ready", "false").prop("disabled", !0).attr("title", "正在加载设置…");
         root.find(".side-menu-item").on("click", (function() {
@@ -498,12 +498,12 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         }));
         root.find(".clean-btn").on("click", (async e => {
             const key = $(e.currentTarget).data("key"), cacheItem = this.cacheItems.find((item => item.key === key));
-            key === storageManager.third_party_cache_key ? await storageManager.clearThirdPartyCache() : "_circuitBreaker" === key ? diagnostics.resetAllCircuitBreakers() : "_domainStats" === key ? diagnostics.clearDomainStats() : storage.removeLocal(key);
+            key === storageManager.third_party_cache_key ? await storageManager.clearThirdPartyCache() : "_circuitBreaker" === key ? diagnostics.resetAllCircuitBreakers() : "_domainStats" === key ? diagnostics.clearDomainStats() : "jhs_translate" === key ? await translation.clearCache() : storage.removeLocal(key);
             show.ok(`${cacheItem.text} 清理成功`), root.find("#cache-data-display").addClass("jhs-is-hidden");
             "jhs_dmm_video" === key && storage.removeLocal("jhs_other_site_dmm");
         }));
         root.find("#clean-all").on("click", (async () => {
-            this.cacheItems.forEach((item => storage.removeLocal(item.key))), show.ok("全部缓存已清理");
+            this.cacheItems.forEach((item => "jhs_translate" !== item.key && storage.removeLocal(item.key))), await translation.clearCache(), show.ok("全部缓存已清理");
             root.find("#cache-data-display").addClass("jhs-is-hidden"), storage.removeLocal("jhs_other_site_dmm"), await storageManager.clearThirdPartyCache();
         }));
         root.find(".view-btn").on("click", (async e => {
@@ -512,6 +512,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             if (key === storageManager.third_party_cache_key) raw = JSON.stringify(await storageManager.getThirdPartyCache());
             else if ("_circuitBreaker" === key) raw = JSON.stringify(diagnostics.getNetworkDiagnostics().circuitBreakers);
             else if ("_domainStats" === key) raw = JSON.stringify(diagnostics.getNetworkDiagnostics().domainStats);
+            else if ("jhs_translate" === key) raw = JSON.stringify(await translation.inspectCache());
             else raw = storage.getLocal(key);
             const display = root.find("#cache-data-display"), pre = display.find("pre");
             if (display.removeClass("jhs-is-hidden"), raw) try {

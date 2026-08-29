@@ -78,6 +78,13 @@ describe("bootstrap compatibility P0", () => {
             expect(typeof runtime.clog.log).toBe("function");
             expect(runtime.show?.error).toBeTypeOf("function");
             expect(typeof runtime.loading).toBe("function");
+            const handle = runtime.loading(), overlay = dom.window.document.querySelector(".loading-container");
+            expect(overlay?.getAttribute("role")).toBe("status");
+            expect(overlay?.getAttribute("aria-live")).toBe("polite");
+            expect(overlay?.getAttribute("aria-busy")).toBe("true");
+            expect(overlay?.getAttribute("aria-label")).toBe("处理中");
+            handle.close();
+            expect(dom.window.document.querySelector(".loading-container")).toBeNull();
         } finally {
             globalThis.window = previous.window;
             globalThis.document = previous.document;

@@ -44,6 +44,17 @@ export class MobileBottomBarPlugin extends BasePlugin {
                 user-select: none;
                 -webkit-user-select: none;
             }
+            html.jhs-fab-mounted {
+                scroll-padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+            }
+            #jhs-fab-safe-area {
+                display: block;
+                width: 100%;
+                height: calc(104px + env(safe-area-inset-bottom, 0px));
+                clear: both;
+                visibility: hidden;
+                pointer-events: none;
+            }
             #jhs-fab:active {
                 transform: scale(0.9);
             }
@@ -198,6 +209,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
     }
     mountBottomBar() {
         if ($("#jhs-fab").length) return;
+        document.documentElement.classList.add("jhs-fab-mounted");
         // 添加遮罩
         const backdrop = $('<div class="jhs-fab-backdrop"></div>').appendTo("body");
         // 添加菜单
@@ -205,11 +217,13 @@ export class MobileBottomBarPlugin extends BasePlugin {
         $("body").append(menu);
         // 添加 FAB 按钮
         const fab = $('<button type="button" id="jhs-fab" class="jhs-btn" aria-label="打开 JHS 工具" aria-controls="jhs-fab-menu" aria-haspopup="menu" aria-expanded="false">＋</button>').appendTo("body");
+        $('<div id="jhs-fab-safe-area" aria-hidden="true"></div>').appendTo("body");
         this.bindEvents(fab, backdrop);
     }
     unmountBottomBar() {
         this._fabGeneration++;
-        $("#jhs-fab, #jhs-fab-menu, .jhs-fab-backdrop").remove();
+        $("#jhs-fab, #jhs-fab-menu, #jhs-fab-safe-area, .jhs-fab-backdrop").remove();
+        document.documentElement.classList.remove("jhs-fab-mounted");
     }
     async afterPluginsReady() {
         this.syncSurfaces();

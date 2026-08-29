@@ -23,6 +23,7 @@ export function createGoogleTranslateAdapter(http) {
             }).toString();
             const response = await http.request({
                 providerId: "google-translate", method: "GET", url: url.href, responseType: "json",
+                transport: "native-fetch", nativeTimeout: 1_500, timeout: 5_000,
                 cacheScope: "public", ttlMs: 2_592_000_000,
                 urlPolicy: { trustClass: "builtin-public", hosts: ["translate-pa.googleapis.com"] },
             }, options.scope);

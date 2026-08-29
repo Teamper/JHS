@@ -61,4 +61,9 @@ describe("preview playback contracts", () => {
         const allRuntime = [ preview, bus, cover, readTestFile(join(import.meta.dirname, "../src/features/list/list-filters.js"), "utf8"), readTestFile(join(import.meta.dirname, "../src/plugins/status/list-page.js"), "utf8") ].join("\n");
         expect(allRuntime).not.toMatch(/\.play\s*\(/);
     });
+    it("does not interpolate remote media URLs into HTML templates", () => {
+        expect(bus).not.toContain('<source src="${a}"');
+        expect(bus).not.toContain('data-video-src="${a}"');
+        expect(cover).not.toContain('<video src="${c}" poster="${s}"');
+    });
 });

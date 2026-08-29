@@ -1,9 +1,9 @@
 {
   "version": 1,
   "bundle": {
-    "baselineBytes": 1229614,
+    "baselineBytes": 1234900,
     "maximumGrowthRatio": 0.1,
-    "reason": "Reviewed v6.5 RC regression baseline after settings synchronization, configurable AV123 routing, FC2 identity guards and authenticated want-watch state checks"
+    "reason": "Reviewed v6.5 RC baseline including settings synchronization, bounded translation cache migration, native timeout fallback, safe media construction and mobile dialog regression fixes"
   },
   "browserFixture": {
     "maximumInitialRequests": {
