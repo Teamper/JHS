@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { CompatibilityController } from "../src/features/compatibility/compatibility-controller.js";
+import { DetailController } from "../src/features/detail/detail-controller.js";
 import { StatsController } from "../src/features/stats/stats-controller.js";
 import { ResponsiveShellController } from "../src/features/system/responsive-shell-controller.js";
 
@@ -17,6 +18,19 @@ describe("feature controller ownership", () => {
         expect(plugin.handle).toHaveBeenCalledOnce();
         expect(plugin.handle).toHaveBeenCalledWith({ scope });
         expect(controller.getApi()).toEqual({ hasEnhancements: true });
+    });
+
+    it("hands the feature scope to the detail workspace contribution", async () => {
+        const scope = createScope(), hostAdapter = {
+            locateDetailRoot: vi.fn(() => null),
+            locateDetailSlots: vi.fn(() => ({})),
+            readMovieRef: vi.fn(() => ({ carNum: "ABC-1" })),
+        }, workspacePlugin = { handle: vi.fn() };
+        const controller = new DetailController({ hostAdapter, workspacePlugin, scope, enabledContributions: ["detail.workspace"] });
+
+        await expect(controller.start()).resolves.toMatchObject({ movieRef: { carNum: "ABC-1" }, contributions: ["detail.workspace"] });
+        expect(workspacePlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(hostAdapter.locateDetailRoot).toHaveBeenCalledOnce();
     });
 
     it("hands the feature scope to the stats contribution and exposes its action", async () => {

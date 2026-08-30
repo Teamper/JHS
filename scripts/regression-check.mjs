@@ -225,6 +225,12 @@ assertIncludes(listControllerSource, "new ListView({", "list view host boundary"
 assertIncludes(listControllerSource, "onFilterChange: (filter, options)", "list view filter callback boundary");
 assertIncludes(listControllerSource, "batchSaveAllVideos: call(\"batchSaveAllVideos\")", "list batch capability boundary");
 assertIncludes(listControllerSource, "this.scope.ownTimeout(setTimeout", "list action deferred lifecycle handoff");
+const detailControllerSource = await read("src/features/detail/detail-controller.js");
+const detailManifestSource = await read("src/features/detail/manifest.js");
+const detailWorkspaceSource = await read("src/plugins/status/detail-workspace.js");
+assertIncludes(detailControllerSource, "workspacePlugin?.handle?.({ scope: this.scope })", "detail workspace feature handoff");
+assertIncludes(detailManifestSource, '"detail.workspace"', "detail workspace contribution selection");
+assertIncludes(detailWorkspaceSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail workspace injected scope");
 assertIncludes(listViewSource, "export class ListView", "real list view");
 assertIncludes(listViewSource, "shouldShowItem({ filter: normalizedFilter", "list view shared filter semantics");
 assertIncludes(listViewSource, "async createQuickFilter(initialFilter)", "list view quick-filter ownership");

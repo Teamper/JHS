@@ -11,8 +11,10 @@ export default defineFeature({
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         if (runtime.route === "owned-detail") return { dispose: () => {} };
-        const controller = new DetailController({ hostAdapter: deps[PORT.host], scope: runtime.scope, enabledContributions: runtime.enabledContributions });
-        controller.start();
-        return { dispose: () => controller.dispose() };
+        const workspacePlugin = runtime.enabledContributions.includes("detail.workspace")
+            ? runtime.resolveLegacyPlugin?.("DetailWorkspacePlugin")
+            : null;
+        const controller = new DetailController({ hostAdapter: deps[PORT.host], workspacePlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
+        return controller.start().then(() => ({ dispose: () => controller.dispose() }));
     },
 });

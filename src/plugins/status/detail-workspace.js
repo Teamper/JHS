@@ -41,9 +41,10 @@ export class DetailWorkspacePlugin extends BasePlugin {
             @media (max-width:767px) { .jhs-detail-owned-slot { padding:var(--jhs-space-4) 0; } }
         </style>`;
     }
-    async handle() {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
         if (!window.isDetailPage) return;
-        this.lifecycleScope = await this.getRuntimeService("scope")();
+        this.lifecycleScope = options.scope ?? await this.getRuntimeService("scope")();
         const cancel = utils.loopDetector((() => !!this.getHostAdapter()), (() => this.ensureWorkspace()), 40, 2500, !0, this.lifecycleScope);
         this.lifecycleScope.addCleanup(cancel);
         this.lifecycleScope.addCleanup((() => {
