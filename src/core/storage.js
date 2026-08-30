@@ -40,7 +40,7 @@ export class StorageManager {
         i(this, "cacheTitleFilterKeyword", null), i(this, "cacheFavoriteActresses", null),
         i(this, "cache_filter_actor_actress_car_list", null), i(this, "cacheSettingObj", null),
         i(this, "cacheCarMap", null), i(this, "cacheStatusMap", null),
-        i(this, "cacheBlacklistMap", null),
+        i(this, "cacheBlacklistMap", null), i(this, "mutationCoordinator", globalThis.storageMutationCoordinator ?? null),
         i(this, "_pendingReads", new Map()), i(this, "_cacheGenerations", new Map()),
         i(this, "_cacheStats", { hits: 0, misses: 0 }),
         StorageManager.instance) throw new Error("StorageManager已被实例化过了!");
@@ -84,6 +84,12 @@ export class StorageManager {
     async _withCrossTabLock(e, t) {
         const n = globalThis.navigator?.locks;
         return n?.request ? n.request(e, t) : t();
+    }
+    /** Route destructive storage writes through the single 7.0 mutation coordinator. */
+    async _withStorageMutation(e) {
+        if (this.mutationCoordinator?.runExclusive) return this.mutationCoordinator.runExclusive(e);
+        const n = globalThis.navigator?.locks;
+        return n?.request ? n.request("jhs_storage_mutation_v1", e) : e();
     }
     async withActressLock(fn) {
         return this._withCrossTabLock("jhs_actress_lock", async () => {
@@ -449,15 +455,17 @@ export class StorageManager {
         validatePortableData(e);
         await hasPortableUserData(this) && await this.createSnapshot("导入前自动备份", "auto-import");
         const validKeys = new Set([ ...IMPORTABLE_DATA_KEYS, "data_version" ]);
-        // 与 state.patch 共用同一把跨标签页锁，避免覆盖后台进行中的状态事务后被恢复流程整体回滚
-        await this._withCrossTabLock("jhs_state_mutation", async () => {
+        // 导入与 state.patch / migration 共用同一把协调锁，避免恢复流程整体回滚并发写入。
+        await this._withStorageMutation(async () => {
             const writes = [];
             for (const key in e) {
                 if (!validKeys.has(key)) { clog.warn(`[导入] 跳过未知数据键: ${key}`); continue; }
                 if ("third_party_ttl_cache" === key) continue;
                 writes.push("data_version" === key ? this.setDataVersion(e[key]) : this._setItemAndInvalidate(key, e[key]));
             }
-            await Promise.all(writes), this._invalidateCache(), await runDataMigrations(this);
+            await Promise.all(writes), this._invalidateCache();
+            if (typeof runDataMigrationsWithoutLock === "function") await runDataMigrationsWithoutLock(this);
+            else await runDataMigrations(this);
         });
         await window.stateService?.recoverPendingTransaction();
     }
@@ -578,7 +586,8 @@ export class StorageManager {
         const w = new Set(n.map((e => e && e.starId)).filter(Boolean)), y = a.filter((e => e && e.starId && !w.has(e.starId))).length;
         return y && r("orphan-blacklist-car", "黑名单作品找不到关联演员", y), s;
     }
-    async repairDataHealth() {
+    async repairDataHealth() { return this._withStorageMutation(() => this._repairDataHealthWithoutLock()); }
+    async _repairDataHealthWithoutLock() {
         let e = 0, t = await this.getCarList(), n = await this.getFavoriteActressList(), a = await this.getBlacklist(), i = await this.getBlacklistCarList();
         const s = this._dedupeByKey(t, "carNum");
         s.changed && (t = s.list, e++);

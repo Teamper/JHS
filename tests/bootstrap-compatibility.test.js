@@ -44,6 +44,17 @@ describe("bootstrap compatibility P0", () => {
         expect(startIndex).toBeGreaterThan(attachIndex);
     });
 
+    it("recovers and migrates persistent state before FeatureRuntime.start", () => {
+        const recoverIndex = bootstrap.indexOf("await stateService.recoverPendingTransaction();");
+        const migrateIndex = bootstrap.indexOf("await runDataMigrations(storageManager, storageMutationCoordinator);");
+        const attachIndex = bootstrap.indexOf("attachCompatibilityFacade({");
+        const startIndex = bootstrap.indexOf("await context.registries.features.start();");
+        expect(recoverIndex).toBeGreaterThan(-1);
+        expect(migrateIndex).toBeGreaterThan(recoverIndex);
+        expect(attachIndex).toBeGreaterThan(migrateIndex);
+        expect(startIndex).toBeGreaterThan(attachIndex);
+    });
+
     it("logger runtime is frozen and exposes clog/show/loading before mirroring to window", () => {
         expect(logger).toContain("loggerRuntime = Object.freeze({ loading: loggerLoading, show: loggerShow, clog: loggerClog })");
         expect(logger).toContain("window.clog = loggerRuntime.clog");

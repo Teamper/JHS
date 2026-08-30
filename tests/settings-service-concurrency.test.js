@@ -122,7 +122,7 @@ describe("legacy StorageManager delegation", () => {
             stateService: { patch: vi.fn(async () => ({ changed: [], transactionId: "tx" })) },
             window: { location: { origin: "https://javdb.example" } }, navigator: {}, utils: {}, clog: {}, escapeHtml: (value) => value,
             settingsService: settingsService ?? null,
-            CURRENT_DATA_VERSION: 2, PORTABLE_DATA_KEYS: [], hasPortableUserData: async () => false, validatePortableData() {}, runDataMigrations() {},
+            CURRENT_DATA_VERSION: 2, PORTABLE_DATA_KEYS: [], IMPORTABLE_DATA_KEYS: [], hasPortableUserData: async () => false, validatePortableData() {}, runDataMigrations() {}, runDataMigrationsWithoutLock: vi.fn(async () => {}),
         });
         vm.runInContext(`${source}; globalThis.Adapter = StorageManager;`, context);
         return { adapter: new context.Adapter, context };
@@ -143,5 +143,15 @@ describe("legacy StorageManager delegation", () => {
         adapter.saveSetting = saveSetting;
         await adapter.saveSettingItem("a", 2);
         expect(saveSetting).toHaveBeenCalledWith({ a: 2 });
+    });
+
+    it("routes import and migration through the injected storage coordinator", async () => {
+        const { adapter, context } = createStorageManager(null);
+        const coordinator = { runExclusive: vi.fn(async operation => operation()) };
+        adapter.mutationCoordinator = coordinator;
+        adapter.forage = { getItem: vi.fn(async () => undefined), setItem: vi.fn(async () => {}), removeItem: vi.fn(async () => {}) };
+        await adapter.importData({ data_version: 2 });
+        expect(coordinator.runExclusive).toHaveBeenCalledOnce();
+        expect(context.runDataMigrationsWithoutLock).toHaveBeenCalledWith(adapter);
     });
 });

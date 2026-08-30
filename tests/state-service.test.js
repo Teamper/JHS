@@ -8,25 +8,37 @@ const repoRoot = join(import.meta.dirname, "..");
 
 function loadStateService() {
     const constants = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), normalizeStart = constants.indexOf("function normalizeCarNum"), normalizeEnd = constants.indexOf("function assertPageInfoContract", normalizeStart);
-    const model = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), service = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8"), serviceEnd = service.indexOf("function attachStateServiceCompatibility");
+    const model = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), domains = readTestFile(join(repoRoot, "src/core/state-domains.js"), "utf8"), service = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8"), serviceEnd = service.indexOf("function attachStateServiceCompatibility");
     const context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON, Math, window: { location: { href: "https://javdb.example/v/1" } }, crypto: { randomUUID: vi.fn().mockImplementation((() => `id-${Math.random()}`)) }, utils: { getNowStr: () => "2026-08-22 12:00:00" }, clog: { warn: vi.fn(), error: vi.fn(), log: vi.fn() }, show: { info: vi.fn(), error: vi.fn(), ok: vi.fn() } });
-    vm.runInContext(`${constants.slice(normalizeStart, normalizeEnd)}\n${model}\n${service.slice(0, serviceEnd)}; globalThis.StateServiceClass = StateService;`, context);
+    vm.runInContext(`${constants.slice(normalizeStart, normalizeEnd)}\n${model}\n${domains}\n${service.slice(0, serviceEnd)}; globalThis.StateServiceClass = StateService;`, context);
     return context.StateServiceClass;
 }
 
-function createHarness(initial = {}) {
-    const data = new Map(Object.entries(initial)), storage = {
+function createHarness(initial = {}, options = {}) {
+    const data = new Map(Object.entries(initial)), journalWrites = [], failAfterKey = options.failAfterKey;
+    let failed = false;
+    const writeAndMaybeFail = (key, value) => {
+        data.set(key, value);
+        if (!failed && key === failAfterKey) {
+            failed = true;
+            throw new Error(`injected failure after ${key}`);
+        }
+    };
+    const storage = {
         car_list_key: "car_list", favorite_actresses_key: "favorite_actresses",
         forage: {
             getItem: vi.fn(async key => data.get(key)),
-            setItem: vi.fn(async (key, value) => data.set(key, value)),
+            setItem: vi.fn(async (key, value) => {
+                if (key === "mutation_journal") journalWrites.push(JSON.parse(JSON.stringify(value)));
+                data.set(key, value);
+            }),
             removeItem: vi.fn(async key => data.delete(key))
         },
-        _setItemAndInvalidate: vi.fn(async (key, value) => data.set(key, value)),
+        _setItemAndInvalidate: vi.fn(async (key, value) => writeAndMaybeFail(key, value)),
         _invalidateCache: vi.fn(),
         getCar: vi.fn(async carNum => (data.get("car_list") || []).find(item => item.carNum === carNum))
     }, eventBus = { emit: vi.fn(async () => {}) }, StateService = loadStateService();
-    return { service: new StateService(storage, eventBus), storage, eventBus, data };
+    return { service: new StateService(storage, eventBus), storage, eventBus, data, journalWrites };
 }
 
 describe("StateService durable transactions", () => {
@@ -62,6 +74,30 @@ describe("StateService durable transactions", () => {
         expect(data.get("car_list")[0]).toMatchObject({ carNum: "FC2-123", fc2Source: "123av" });
         await service.patch("FC2-456", { favorite: true }, { record: { fc2Source: "unknown" } });
         expect(data.get("car_list")[1]).not.toHaveProperty("fc2Source");
+    });
+
+    it("writes a V2 journal containing only the touched domains", async () => {
+        const { service, journalWrites } = createHarness({ car_list: [], favorite_actresses: [{ starId: "a" }], new_video_decisions: {} });
+        await service.setNewVideoDecision("ABC-1", "ignored");
+        expect(journalWrites[0]).toMatchObject({ schemaVersion: 2, touchedDomains: [ "newVideoDecisions", "activity" ] });
+        expect(Object.keys(journalWrites[0].before)).toEqual([ "newVideoDecisions", "activity" ]);
+        expect(Object.keys(journalWrites[0].after)).toEqual([ "newVideoDecisions", "activity" ]);
+    });
+
+    it.each([
+        [ "car list", "car_list" ],
+        [ "activity", "activity_log" ],
+        [ "favorite actress effects", "favorite_actresses" ],
+        [ "decision effects", "new_video_decisions" ],
+    ])("rolls back an injected V2 write failure after %s", async (label, failAfterKey) => {
+        const initial = { car_list: [], favorite_actresses: [{ starId: "a", newVideoList: [{ carNum: "ABC-1" }] }], new_video_decisions: { "ABC-1": { action: "ignored" } } };
+        const { service, data } = createHarness(initial, { failAfterKey });
+        const operation = service.patch("ABC-1", { favorite: true });
+        await expect(operation).rejects.toThrow(`injected failure after ${failAfterKey}`);
+        expect(data.get("car_list")).toEqual(initial.car_list);
+        expect(data.get("favorite_actresses")).toEqual(initial.favorite_actresses);
+        expect(data.get("new_video_decisions")).toEqual(initial.new_video_decisions);
+        expect(data.has("mutation_journal")).toBe(false);
     });
 
     it.each([

@@ -46,6 +46,14 @@ describe("data migration v2", () => {
         expect(snapshots).toHaveLength(1);
     });
 
+    it("uses the injected storage mutation coordinator", async () => {
+        const { run } = loadMigration(), { storage } = fakeStorage(2), calls = [];
+        const coordinator = { runExclusive: vi.fn(async operation => { calls.push("locked"); return operation(); }) };
+        await expect(run(storage, coordinator)).resolves.toBe(2);
+        expect(coordinator.runExclusive).toHaveBeenCalledOnce();
+        expect(calls).toEqual([ "locked" ]);
+    });
+
     it("validates every portable domain before import writes begin", () => {
         const { validate } = loadMigration();
         expect(() => validate({ data_version: 2, car_list: {} })).toThrow("car_list 必须为数组");

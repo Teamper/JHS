@@ -4,6 +4,7 @@ import { initializeRuntimeConstants, l, r } from "../core/constants.js";
 import { injectCoreCss } from "../core/css-injection.js";
 import { JhsError } from "../core/jhs-error.js";
 import { runDataMigrations } from "../core/migration.js";
+import { StorageMutationCoordinator } from "../core/storage-mutation-coordinator.js";
 import { normalizeScreenshotSetting } from "../core/settings-migration.js";
 import { PluginManager } from "../core/plugin-manager.js";
 import { createLegacyRuntime } from "../core/legacy-runtime.js";
@@ -104,7 +105,8 @@ export async function bootstrapJhs() {
         const siteContext = initializeRuntimeConstants(window.location);
         const vendors = getVendorRuntime();
         const jhsEventBus = initializeEventBus();
-        const { utils, gmHttp, storageManager, stateService } = createLegacyRuntime(jhsEventBus);
+        const storageMutationCoordinator = new StorageMutationCoordinator();
+        const { utils, gmHttp, storageManager, stateService } = createLegacyRuntime(jhsEventBus, storageMutationCoordinator);
         markPhase("legacy-runtime");
         Object.assign(globalThis, { utils, gmHttp, storageManager, stateService, jhsEventBus });
         // 黑名单/关键词规则可被其他标签页修改：内存派生缓存不随事件自动失效，必须在此主动清空
@@ -121,7 +123,7 @@ export async function bootstrapJhs() {
         const context = createAppContext({
             gmRequest: globalThis.GM_xmlhttpRequest, gmGetValue: globalThis.GM_getValue, gmSetValue: globalThis.GM_setValue,
             legacyHttp: gmHttp, legacyStorage: storageManager, eventBus: jhsEventBus, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
-            layer: vendors.layer, stateService, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
+            layer: vendors.layer, stateService, storageMutationCoordinator, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
         });
         markPhase("context");
         injectCoreCss(context.services.styles);
@@ -168,6 +170,11 @@ export async function bootstrapJhs() {
         for (const manifest of featureManifests) context.registries.features.register(manifest);
         registerSitePlugins(pluginManager, context.registries.features, siteContext.site);
         markPhase("registry");
+        window.isDetailPage = route === "detail";
+        window.isListPage = route === "list";
+        await stateService.recoverPendingTransaction();
+        await runDataMigrations(storageManager, storageMutationCoordinator);
+        markPhase("data-prepare");
         // Compatibility infrastructure must be ready before any feature mounts.
         // A missing logger dependency should fail the whole bootstrap, not leave a half-started page.
         attachCompatibilityFacade({
@@ -176,11 +183,6 @@ export async function bootstrapJhs() {
         }, globalThis.unsafeWindow);
         await context.registries.features.start();
         markPhase("feature-runtime");
-        window.isDetailPage = route === "detail";
-        window.isListPage = route === "list";
-        await runDataMigrations(storageManager);
-        await stateService.recoverPendingTransaction();
-        markPhase("data-prepare");
         await Promise.all([pluginManager.processCss(), Promise.resolve(applyThemeMode(context.services.settings.snapshot().themeMode))]);
         markPhase("plugin-css");
         if (r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie)) logger.show.error("请切换到中文语言下才可正常使用本脚本", { duration: -1 });

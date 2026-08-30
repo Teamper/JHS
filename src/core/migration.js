@@ -75,18 +75,18 @@ async function migrateStateFlags(/** @type {any} */ storage) {
 /** @type {Readonly<Record<number, (storage: any) => Promise<void>>>} */
 const DATA_MIGRATIONS = Object.freeze({ 1: migrateLegacyStorage, 2: migrateStateFlags });
 
-export async function runDataMigrations(/** @type {any} */ storage) {
-    // 迁移是“读版本→整表覆写→写版本”的多步过程，必须跨标签页互斥，防止双标签页同时执行互相丢数据
-    const locks = globalThis.navigator?.locks;
-    const run = async () => {
-        let version = await storage.getDataVersion();
-        if (version > CURRENT_DATA_VERSION) throw new Error("数据来自更新版本的 JHS，当前版本无法安全读取");
-        for (let target = version + 1; target <= CURRENT_DATA_VERSION; target++) {
-            const migration = DATA_MIGRATIONS[target];
-            if (!migration) throw new Error(`缺少数据迁移: ${target - 1} → ${target}`);
-            await migration(storage), await storage.setDataVersion(target), version = target;
-        }
-        return version;
-    };
-    return locks?.request ? locks.request("jhs_data_migration", run) : run();
+export async function runDataMigrationsWithoutLock(/** @type {any} */ storage) {
+    let version = await storage.getDataVersion();
+    if (version > CURRENT_DATA_VERSION) throw new Error("数据来自更新版本的 JHS，当前版本无法安全读取");
+    for (let target = version + 1; target <= CURRENT_DATA_VERSION; target++) {
+        const migration = DATA_MIGRATIONS[target];
+        if (!migration) throw new Error(`缺少数据迁移: ${target - 1} → ${target}`);
+        await migration(storage), await storage.setDataVersion(target), version = target;
+    }
+    return version;
+}
+
+export async function runDataMigrations(/** @type {any} */ storage, /** @type {{runExclusive?: (operation: () => any) => Promise<any>} | null} */ coordinator = storage.mutationCoordinator ?? null) {
+    // 迁移与状态事务必须共享一个协调器，避免恢复/迁移两个 writer 互相覆盖。
+    return coordinator?.runExclusive ? coordinator.runExclusive(() => runDataMigrationsWithoutLock(storage)) : runDataMigrationsWithoutLock(storage);
 }

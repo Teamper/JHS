@@ -38,6 +38,7 @@ export const SERVICE = Object.freeze({
     offline: createToken("service", "offline"),
     cache: createToken("service", "cache"),
     state: createToken("service", "state"),
+    storageMutation: createToken("service", "storage-mutation"),
     profile: createToken("service", "profile"),
 });
 

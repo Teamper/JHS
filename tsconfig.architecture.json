@@ -37,6 +37,8 @@
     "src/core/settings-ui-owner.js",
     "src/core/settings-migration.js",
     "src/core/storage-queue.js",
+    "src/core/storage-mutation-coordinator.js",
+    "src/core/state-domains.js",
     "src/core/site-context.js",
     "src/core/state-model.js",
     "src/core/state-service.js",

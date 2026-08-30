@@ -47,6 +47,9 @@ const eventBus = await read("src/core/event-bus.js");
 const stateModel = await read("src/core/state-model.js");
 const migration = await read("src/core/migration.js");
 const stateService = await read("src/core/state-service.js");
+const stateDomains = await read("src/core/state-domains.js");
+const mutationCoordinator = await read("src/core/storage-mutation-coordinator.js");
+const bootstrap = await read("src/app/bootstrap.js");
 const registry = await read("src/plugins/registry.js");
 const detailWorkspace = await read("src/plugins/status/detail-workspace.js");
 const fc2DetailWorkspace = await read("src/ui/detail/fc2-detail-workspace.js");
@@ -136,6 +139,19 @@ assertIncludes(buildScript, "minifySyntax: false", "performance bundled build");
 assertIncludes(buildScript, "minifyWhitespace: true", "performance bundled build");
 assertIncludes(buildScript, "minifyIdentifiers: false", "performance bundled build");
 assertIncludes(buildScript, 'contents.replace(/\\/\\*\\*[\\s\\S]*?\\*\\//g, "")', "production bundle strips source-only JSDoc");
+
+assertIncludes(mutationCoordinator, 'STORAGE_MUTATION_LOCK = "jhs_storage_mutation_v1"', "storage mutation lock identity");
+assertIncludes(stateDomains, "favoriteActresses", "canonical state domain registry");
+assertIncludes(stateDomains, "offlineHistory", "canonical state domain registry");
+assertIncludes(stateService, "this.mutationCoordinator?.runExclusive", "state mutation coordinator injection");
+assert(!stateService.includes("jhs_state_mutation"), "state service must not own a second mutation lock");
+assert(!migration.includes("jhs_data_migration"), "migration must not own a second mutation lock");
+assertIncludes(storage, "_withStorageMutation", "storage mutation coordinator boundary");
+assertIncludes(storage, "runDataMigrationsWithoutLock", "import and migration must share one lock scope");
+const recoveryIndex = bootstrap.indexOf("await stateService.recoverPendingTransaction();");
+const migrationIndex = bootstrap.indexOf("await runDataMigrations(storageManager, storageMutationCoordinator);");
+const featureStartIndex = bootstrap.indexOf("await context.registries.features.start();");
+assert(recoveryIndex > -1 && migrationIndex > recoveryIndex && featureStartIndex > migrationIndex, "persistent recovery and migration must precede feature activation");
 
 const stableReleaseChecks = [
   ["storage database identity", storage, 'name: "JAV-JHS"'],
