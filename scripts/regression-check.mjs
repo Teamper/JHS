@@ -218,7 +218,7 @@ assertIncludes(listPageSource, "applyVisibility(items = null)", "list page funct
 assertIncludes(listPageSource, "async filterMovieList(", "list page function signature");
 assertIncludes(listPageSource, "async doFilter(revision =", "list page function signature");
 assertIncludes(listManifestSource, 'id: "list"', "real list feature manifest");
-assertIncludes(listManifestSource, 'contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions", "list.fc2-navigation", "list.cover-state-actions", "list.javbus-images"]', "list feature contribution ownership");
+assertIncludes(listManifestSource, 'contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions", "list.fc2-navigation", "list.cover-state-actions", "list.javbus-images", "list.fc2-lookup"]', "list feature contribution ownership");
 assertIncludes(listManifestSource, 'resolveLegacyPlugin?.("ListPagePlugin")', "list migration adapter resolution");
 assertIncludes(listControllerSource, "this.legacyPlugin.handle({ scope: this.scope, view })", "list feature lifecycle handoff");
 assertIncludes(listControllerSource, "new ListView({", "list view host boundary");
@@ -227,6 +227,7 @@ assertIncludes(listControllerSource, "batchSaveAllVideos: call(\"batchSaveAllVid
 assertIncludes(listControllerSource, "this.scope.ownTimeout(setTimeout", "list action deferred lifecycle handoff");
 assertIncludes(listControllerSource, "fc2NavigationPlugin?.handle?.({ scope: this.scope })", "FC2 list navigation feature handoff");
 assertIncludes(listControllerSource, "coverPlugin?.handle?.({ scope: this.scope, listFeatureApi })", "list card actions feature handoff");
+assertIncludes(listControllerSource, "fc2LookupPlugin?.handle?.({ scope: this.scope })", "123AV lookup feature handoff");
 const detailControllerSource = await read("src/features/detail/detail-controller.js");
 const detailManifestSource = await read("src/features/detail/manifest.js");
 const detailWorkspaceSource = await read("src/plugins/status/detail-workspace.js");

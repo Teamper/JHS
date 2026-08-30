@@ -7,7 +7,7 @@ import { ListView } from "./list-view.js";
  * strangled out of PluginManager.
  */
 export class ListController {
-    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2NavigationPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, coverPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, scope: any, hostAdapter: any}} options */
+    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2NavigationPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, coverPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2LookupPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any}} options */
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin ?? null;
         this.autoPagePlugin = options.autoPagePlugin ?? null;
@@ -15,6 +15,7 @@ export class ListController {
         this.actionsPlugin = options.actionsPlugin ?? null;
         this.fc2NavigationPlugin = options.fc2NavigationPlugin ?? null;
         this.coverPlugin = options.coverPlugin ?? null;
+        this.fc2LookupPlugin = options.fc2LookupPlugin ?? null;
         this.scope = options.scope;
         this.hostAdapter = options.hostAdapter;
         this.view = null;
@@ -53,6 +54,7 @@ export class ListController {
             })
             .then(() => this.fc2NavigationPlugin?.handle?.({ scope: this.scope }))
             .then(() => this.coverPlugin?.handle?.({ scope: this.scope, listFeatureApi }))
+            .then(() => this.fc2LookupPlugin?.handle?.({ scope: this.scope }))
             .catch((error) => {
             this.dispose();
             throw error;

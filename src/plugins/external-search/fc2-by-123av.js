@@ -21,18 +21,40 @@ export class Fc2By123AvPlugin extends BasePlugin {
         /** @type {number | null} */ this.maxPage = null;
         /** @type {number} */ this._queryGeneration = 0;
         /** @type {string | null} */ this.keyword = this.urlParams.get("keyword") || null;
+        /** @type {any} */ this.lifecycleScope = null;
+        /** @type {JQueryHandle | null} */ this.$paginationBox = null;
     }
     getName() {
         return "Fc2By123AvPlugin";
     }
+    async getLifecycleScope() { return this.lifecycleScope || await this.getRuntimeService("scope")(); }
+    /** @param {any} scope */
+    bindLifecycleScope(scope) {
+        if (this.lifecycleScope === scope) return;
+        this.lifecycleScope = scope;
+        if (typeof scope?.addCleanup !== "function") return;
+        scope.addCleanup(() => {
+            $(document).off(".jhsFc2Lookup");
+            $("[data-jhs-owner='fc2-lookup']").remove();
+            this.$listRoot?.remove();
+            this.$paginationBox?.remove();
+            this.$contentBox = null;
+            this.$listRoot = null;
+            this.$paginationBox = null;
+            this._queryGeneration++;
+            this.lifecycleScope = null;
+        });
+    }
     /** @param {string} carNum */
     async resolveMovieId(carNum) {
-        const scope = await this.getRuntimeService("scope")();
+        const scope = await this.getLifecycleScope();
         return (await this.getRuntimeService("movie").resolve({ carNum }, { scope }))?.movieId || null;
     }
-    async handle() {
-        $("#navbar-menu-hero > div > div:nth-child(1) > div > a:nth-child(4)").after('<a class="navbar-item" href="/advanced_search?type=100&released_start=2099-09">123Av-Fc2</a>'),
-        $('.tabs li:contains("FC2")').after('<li><a href="/advanced_search?type=100&released_start=2099-09"><span>123Av-Fc2</span></a></li>'),
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
+        this.bindLifecycleScope(options.scope || await this.getRuntimeService("scope")());
+        $("#navbar-menu-hero > div > div:nth-child(1) > div > a:nth-child(4)").after('<a class="navbar-item" data-jhs-owner="fc2-lookup" href="/advanced_search?type=100&released_start=2099-09">123Av-Fc2</a>'),
+        $('.tabs li:contains("FC2")').after('<li data-jhs-owner="fc2-lookup"><a href="/advanced_search?type=100&released_start=2099-09"><span>123Av-Fc2</span></a></li>'),
         o.includes("/advanced_search?type=100") && (this.hookPage(), await this.handleQuery());
     }
     hookPage() {
@@ -40,32 +62,32 @@ export class Fc2By123AvPlugin extends BasePlugin {
         if (!listRoot || !contentBox) throw new Error("JavDB 列表容器不可用");
         this.$contentBox = $(contentBox), this.$listRoot = $(host.createOwnedListRoot([ "jhs-123av-list", "jhs-layout-d2c171b1" ]));
         let e = $("h2.section-title");
-        e.contents().first().replaceWith("123Av"), e.css("marginBottom", "0"), e.append('\n            <div class="jhs-layout-f5f47b30">\n                <input id="search-123av-keyword" type="text" placeholder="搜索123Av Fc2ppv内容" class="jhs-field">\n                <button type="button" id="search-123av-btn" class="jhs-btn jhs-btn--primary jhs-layout-21a4fe43">搜索</button>\n                <button type="button" id="clear-123av-btn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n            </div>\n        '),
-        $("#search-123av-keyword").val(this.keyword), $("#search-123av-btn").on("click", (async () => {
+        e.contents().first().replaceWith("123Av"), e.css("marginBottom", "0"), e.append('\n            <div class="jhs-layout-f5f47b30" data-jhs-owner="fc2-lookup">\n                <input id="search-123av-keyword" type="text" placeholder="搜索123Av Fc2ppv内容" class="jhs-field">\n                <button type="button" id="search-123av-btn" class="jhs-btn jhs-btn--primary jhs-layout-21a4fe43">搜索</button>\n                <button type="button" id="clear-123av-btn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n            </div>\n        '),
+        $("#search-123av-keyword").val(this.keyword), $("#search-123av-btn").off("click.jhsFc2Lookup").on("click.jhsFc2Lookup", (async () => {
             let e = String($("#search-123av-keyword").val() || "").trim();
             e && (this.keyword = e, utils.setHrefParam("keyword", e), this.currentPage = 1, this.maxPage = null, utils.setHrefParam("page", 1), await this.handleQuery());
-        })), $("#clear-123av-btn").on("click", (async () => {
+        })), $("#clear-123av-btn").off("click.jhsFc2Lookup").on("click.jhsFc2Lookup", (async () => {
             $("#search-123av-keyword").val(""), this.keyword = "", utils.setHrefParam("keyword", ""),
-            this.currentPage = 1, this.maxPage = null, utils.setHrefParam("page", 1), $(".page-box").show(), await this.handleQuery();
+            this.currentPage = 1, this.maxPage = null, utils.setHrefParam("page", 1), this.$paginationBox?.show(), await this.handleQuery();
         })), $(".empty-message").remove(), $("#foldCategoryBtn").remove(), this.$contentBox.children(".box").remove(),
         $("#sort-toggle-btn").remove(),
         this.$contentBox.append(this.$listRoot),
-        this.$contentBox.append('<div class="page-box"></div>');
+        this.$paginationBox = $('<div class="page-box" data-jhs-owner="fc2-lookup"></div>').appendTo(this.$contentBox);
         utils.setHrefParam("page", this.currentPage);
-        $(".page-box").append('\n            <nav class="pagination">\n                <button type="button" class="jhs-btn pagination-previous">上一页</button>\n                <ul class="pagination-list"></ul>\n                <button type="button" class="jhs-btn pagination-next">下一页</button>\n            </nav>\n        '),
-        $(document).on("click", ".pagination-link", ((/** @type {JQueryClickEvent} */ e) => {
+        this.$paginationBox.append('\n            <nav class="pagination">\n                <button type="button" class="jhs-btn pagination-previous">上一页</button>\n                <ul class="pagination-list"></ul>\n                <button type="button" class="jhs-btn pagination-next">下一页</button>\n            </nav>\n        '),
+        $(document).off("click.jhsFc2Lookup", ".pagination-link").on("click.jhsFc2Lookup", ".pagination-link", ((/** @type {JQueryClickEvent} */ e) => {
             e.preventDefault(), this.currentPage = parseInt($(e.target).data("page")), utils.setHrefParam("page", this.currentPage),
             this.renderPagination(), this.handleQuery();
-        })), $(".pagination-previous").on("click", ((/** @type {JQueryClickEvent} */ e) => {
+        })), this.$paginationBox.find(".pagination-previous").off("click.jhsFc2Lookup").on("click.jhsFc2Lookup", ((/** @type {JQueryClickEvent} */ e) => {
             e.preventDefault(), this.currentPage > 1 && (this.currentPage--, utils.setHrefParam("page", this.currentPage),
             this.renderPagination(), this.handleQuery());
-        })), $(".pagination-next").on("click", ((/** @type {JQueryClickEvent} */ e) => {
+        })), this.$paginationBox.find(".pagination-next").off("click.jhsFc2Lookup").on("click.jhsFc2Lookup", ((/** @type {JQueryClickEvent} */ e) => {
             e.preventDefault(), this.currentPage < (this.maxPage ?? 0) && (this.currentPage++, utils.setHrefParam("page", this.currentPage),
             this.renderPagination(), this.handleQuery());
         }));
     }
     renderPagination() {
-        const e = $(".pagination-list");
+        const e = this.$paginationBox?.find(".pagination-list") || $(".pagination-list");
         e.empty();
         const maxPage = this.maxPage ?? 1;
         let t = Math.max(1, this.currentPage - 2), n = Math.min(maxPage, this.currentPage + 2);
@@ -82,8 +104,8 @@ export class Fc2By123AvPlugin extends BasePlugin {
         let e = loading();
         const generation = ++this._queryGeneration;
         try {
-            $(".page-box").show();
-            const scope = await this.getRuntimeService("scope")();
+            this.$paginationBox?.show();
+            const scope = await this.getLifecycleScope();
             if (generation !== this._queryGeneration) return;
             const result = await this.getRuntimeService("movie").catalog("av123", { page: this.currentPage, keyword: this.keyword || "" }, { scope });
             if (generation !== this._queryGeneration) return;
@@ -131,18 +153,18 @@ export class Fc2By123AvPlugin extends BasePlugin {
     }
     /** @param {string} carNum @param {string} e */
     async get123AvVideoInfo(carNum, e) {
-        const scope = await this.getRuntimeService("scope")();
+        const scope = await this.getLifecycleScope();
         const detail = await this.getRuntimeService("movie").detail({ carNum, url: e, providerId: "av123" }, { scope });
         return { title: detail?.title || "", publishDate: detail?.releaseDate || "", moviePoster: null };
     }
     /** @param {string} e */
     async getActressInfo(e) {
-        const scope = await this.getRuntimeService("scope")();
+        const scope = await this.getLifecycleScope();
         return this.getRuntimeService("movie").people("fc2ppvdb", { carNum: e }, { scope });
     }
     /** @param {string} e */
     async getImgList(e) {
-        const scope = await this.getRuntimeService("scope")();
+        const scope = await this.getLifecycleScope();
         return (await this.getRuntimeService("movie").images("fc2content", { carNum: e }, { scope })).map(((/** @type {{ url: string }} */ item) => item.url));
     }
     /** @param {Fc2DetailContext} context */

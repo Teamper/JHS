@@ -77,6 +77,19 @@ describe("List FeatureRuntime ownership", () => {
         scope.dispose();
     });
 
+    it("starts the 123AV lookup contribution through the list feature", async () => {
+        const scope = new LifecycleScope("feature:list"), fc2LookupPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => null }, controller = new ListController({
+            fc2LookupPlugin,
+            hostAdapter,
+            scope,
+        });
+
+        await controller.start();
+
+        expect(fc2LookupPlugin.handle).toHaveBeenCalledWith({ scope });
+        scope.dispose();
+    });
+
     it("defers list actions until the rest of the eager feature APIs can settle", async () => {
         vi.useFakeTimers();
         try {

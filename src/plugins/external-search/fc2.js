@@ -353,6 +353,7 @@ export class Fc2Plugin extends BasePlugin {
     async load123AvDetail(context) {
         const source = /** @type {any} */ (this.getOptionalDependency("Fc2By123AvPlugin"));
         if (!source) return void renderFc2State(context.getSlot("summary"), "123AV 详情功能已禁用");
+        source.bindLifecycleScope?.(await this.getLifecycleScope());
         const movieIdPromise = /** @type {Promise<string | null>} */ (source.resolveMovieId(context.carNum));
         void this.configureJavDbWantButton(context, movieIdPromise), void this.mountPanels(context, movieIdPromise), void movieIdPromise.then((movieId => {
             if (context.isAlive()) return this.fetchAndRenderNativeMagnets(context, movieId);
