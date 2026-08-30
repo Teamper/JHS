@@ -63,7 +63,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
     }
     getFormDependencies() {
         return Object.freeze({
-            otherSite: this.getOptionalDependency("OtherSitePlugin"), listPage: this.getOptionalDependency("ListPagePlugin"), translate: this.getOptionalDependency("TranslatePlugin"),
+            otherSite: this.getOptionalDependency("OtherSitePlugin"), translate: this.getOptionalDependency("TranslatePlugin"),
             actressInfo: this.getOptionalDependency("ActressInfoPlugin"), screenshot: this.getOptionalDependency("ScreenShotPlugin"),
             newVideo: this.getOptionalDependency("NewVideoPlugin"), blacklist: this.getOptionalDependency("BlacklistPlugin"),
             busImg: this.getOptionalDependency("BusImgPlugin"), host: this.getRuntimeService("host"), movie: this.getRuntimeService("movie"), settings: this.getRuntimeService("settings"),

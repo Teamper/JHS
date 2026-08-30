@@ -9,7 +9,6 @@ import { initializeRuntimeConstants } from "../src/core/constants.js";
 
 const DESKTOP_DEPENDENCIES = [
     "OtherSitePlugin",
-    "ListPagePlugin",
     "TranslatePlugin",
     "ActressInfoPlugin",
     "ScreenShotPlugin",
