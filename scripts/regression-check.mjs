@@ -206,6 +206,8 @@ assertIncludes(listViewSource, "async createQuickFilter(initialFilter)", "list v
 assertIncludes(listViewSource, "bindMovieDetailNavigation(container)", "list view navigation ownership");
 assertIncludes(listPageSource, "return this.getListView().createQuickFilter", "list quick-filter compatibility adapter");
 assertIncludes(listPageSource, "return this.getListView().bindMovieDetailNavigation", "list navigation compatibility adapter");
+assertIncludes(hitShow, 'getFeatureApi("list")', "hit-show list feature API boundary");
+assert(!hitShow.includes('getOptionalDependency("ListPagePlugin")'), "hit-show must not resolve ListPagePlugin directly");
 assertIncludes(listPageSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "list feature scope handoff");
 assertIncludes(listPageSource, "this.getListView().applyVisibility", "list view visibility ownership");
 assertIncludes(listPageSource, "element.matches?.(e.itemSelector) && this.indexItems([ element ])", "list reorder index retention");

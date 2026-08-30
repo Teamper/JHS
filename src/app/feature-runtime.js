@@ -86,6 +86,14 @@ export class FeatureRuntime {
         return (await this.activate(featureId)).scope;
     }
 
+    /** Resolve an optional feature API without activating an ineligible feature. */
+    /** @param {string} featureId */
+    async getFeatureApi(featureId) {
+        const manifest = this.manifests.get(featureId);
+        if (!manifest || !this.isEligible(manifest)) return null;
+        return (await this.activate(featureId)).api;
+    }
+
     /** Return a page-lifetime scope owned by one enabled legacy contribution. @param {string} featureId @param {string} contributionId @param {string} legacyPluginId */
     getContributionScope(featureId, contributionId, legacyPluginId) {
         if (!this.isContributionEnabled(featureId, contributionId, legacyPluginId)) {
@@ -131,7 +139,7 @@ export class FeatureRuntime {
             this.diagnostics.setFeature(manifest.id, true);
             enabledContributions.forEach((/** @type {string} */ id) => this.diagnostics.setContribution(id, true));
             this.diagnostics.recordStartup(manifest.id, performance.now() - started);
-            return Object.freeze({ manifest, scope, enabledContributions, dispose: () => {
+            return Object.freeze({ manifest, scope, enabledContributions, api: result?.api ?? null, dispose: () => {
                 result?.dispose?.();
                 // 6.5: contribution scopes belong to the feature that owns their contribution ids;
                 // disposing the feature must tear down those scopes too so listeners/observers/timers

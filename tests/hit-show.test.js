@@ -24,15 +24,16 @@ function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), c
         locateListRoot: () => dom.window.document.querySelector(".movie-list"),
         getListContainer: () => dom.window.document.querySelector(".movie-list")?.parentElement ?? null,
         getListLayoutContainer: () => dom.window.document.querySelector("section .container"),
+        getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }),
         createOwnedListRoot(classes = []) { const root = dom.window.document.createElement("div"); root.classList.add("movie-list", ...classes); return root; },
     };
     const loadingClose = vi.fn(), sortItems = vi.fn().mockResolvedValue(), mountOwnedRankingControls = vi.fn().mockResolvedValue(), listPage = {
-        configureHoverPreview: vi.fn(), replaceHdImg: vi.fn(), doFilter: vi.fn().mockResolvedValue(), createQuickFilter: vi.fn().mockResolvedValue(), applyVisibility: vi.fn(), rebuildItemIndex: vi.fn(), bindMovieDetailNavigation: vi.fn(), getSelector: () => ({ itemSelector: ".movie-list .item" })
-    }, coverButton = { addSvgBtn: vi.fn() };
+        advanceListGeneration: vi.fn(() => "1:0"), configureHoverPreview: vi.fn(), replaceHdImg: vi.fn(), doFilter: vi.fn().mockResolvedValue(), createQuickFilter: vi.fn().mockResolvedValue(), applyVisibility: vi.fn(), reconcileListItems: vi.fn(), rebuildItemIndex: vi.fn(), bindMovieDetailNavigation: vi.fn(), bindClick: vi.fn().mockResolvedValue(), getListSelectors: host.getListSelectors, getSelector: host.getListSelectors
+    }, coverButton = { addSvgBtn: vi.fn() }, features = { getFeatureApi: vi.fn(async () => withListPage ? listPage : null) };
     const context = vm.createContext({
         BasePlugin: class {
             getBean(name) { return { ListPagePlugin: withListPage ? listPage : undefined, ListPageButtonPlugin: { sortItems, mountOwnedRankingControls, activeSortMethod: () => activeSortMethod ?? "default" }, CoverButtonPlugin: coverButton }[name]; }
-            getRuntimeService(name) { return { host, scope: async () => ({ signal: { aborted: false } }), movie: { rankings: async () => { if (rankingError) throw rankingError; return movies; }, detail: async ({ movieId }) => fetchScore(movieId) }, settings }[name]; }
+            getRuntimeService(name) { return { host, features, scope: async () => ({ signal: { aborted: false } }), movie: { rankings: async () => { if (rankingError) throw rankingError; return movies; }, detail: async ({ movieId }) => fetchScore(movieId) }, settings }[name]; }
         },
         i: (target, key, value) => (target[key] = value), $, document: dom.window.document, window: dom.window,
         URLSearchParams, isHitShowPage: () => true, storageManager,

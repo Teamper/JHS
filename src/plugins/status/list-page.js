@@ -150,9 +150,9 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {{scope?: any, view?: any}} [options] */
     async handle(options = {}) {
+        this.listView = options.view ?? null;
         if (!window.isListPage) return;
         const scope = options.scope ?? await this.getRuntimeService("scope")();
-        this.listView = options.view ?? null;
         const settingsService = this.getRuntimeService("settings");
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];

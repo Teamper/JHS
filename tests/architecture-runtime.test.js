@@ -66,6 +66,7 @@ describe("v6.5 architecture runtime contracts", () => {
             const diagnostics = new DiagnosticsService();
             const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.profile, { current: () => "regular" }).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {}).register(SERVICE.state, {}).register(REGISTRY.settings, new SettingsRegistry());
             const runtime = new FeatureRuntime({ container, commands: new CommandRegistry(), diagnostics, disabled, site, route: "list" });
+            container.register(REGISTRY.feature, runtime);
             featureManifests.forEach((manifest) => runtime.register(manifest));
             return runtime;
         };
@@ -134,7 +135,7 @@ describe("v6.5 architecture runtime contracts", () => {
             ["settings", SERVICE.settings], ["cache", SERVICE.cache], ["http", SERVICE.http],
             ["profile", SERVICE.profile], ["actressInfo", SERVICE.actressInfo], ["imageSearch", SERVICE.imageSearch],
             ["screenshot", SERVICE.screenshot], ["translation", SERVICE.translation], ["subtitle", SERVICE.subtitle],
-            ["account", SERVICE.account], ["webdav", SERVICE.webdav], ["storage", SERVICE.storage],
+            ["account", SERVICE.account], ["webdav", SERVICE.webdav], ["storage", SERVICE.storage], ["features", REGISTRY.feature],
             ["state", SERVICE.state], ["offline", SERVICE.offline], ["dialog", SERVICE.dialog],
             ["settingsRegistry", REGISTRY.settings],
         ]);
@@ -199,6 +200,20 @@ describe("v6.5 architecture runtime contracts", () => {
             id: "duplicate-owner", kind: "feature", disableable: true, sites: ["javdb"], routes: ["detail"],
             startup: "on-demand", requires: [], contributes: ["detail.related"], providesCommands: [], activate: () => ({}),
         }))).toThrow(/Duplicate contribution ownership/);
+    });
+
+    it("exposes optional feature APIs only after an eligible activation", async () => {
+        const runtime = new FeatureRuntime({
+            container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics: new DiagnosticsService(),
+            disabled: [], site: "javdb", route: "list",
+        });
+        runtime.register(defineFeature({
+            id: "list-api", kind: "feature", disableable: true, sites: ["javdb"], routes: ["list"], startup: "on-demand",
+            requires: [], contributes: [], providesCommands: [], activate: () => ({ api: { ready: true } }),
+        }));
+
+        await expect(runtime.getFeatureApi("list-api")).resolves.toEqual({ ready: true });
+        await expect(runtime.getFeatureApi("missing-api")).resolves.toBeNull();
     });
 
     it("gives a legacy contribution a route-independent scope without activating its owner feature", async () => {

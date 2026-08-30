@@ -18,6 +18,7 @@ describe("List FeatureRuntime ownership", () => {
         expect(legacyPlugin.handle).toHaveBeenCalledOnce();
         expect(legacyPlugin.handle).toHaveBeenCalledWith({ scope, view: expect.any(ListView) });
         expect(controller.view).toBeInstanceOf(ListView);
+        expect(controller.getApi().getListSelectors()).toEqual({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" });
         controller.dispose();
         expect(scope.disposed).toBe(false);
         scope.dispose();

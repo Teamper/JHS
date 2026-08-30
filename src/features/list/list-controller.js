@@ -7,7 +7,7 @@ import { ListView } from "./list-view.js";
  * strangled out of PluginManager.
  */
 export class ListController {
-    /** @param {{legacyPlugin: {getSelector?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any}, scope: any, hostAdapter: any}} options */
+    /** @param {{legacyPlugin: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any}, scope: any, hostAdapter: any}} options */
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin;
         this.scope = options.scope;
@@ -31,6 +31,25 @@ export class ListController {
         return Promise.resolve(this.legacyPlugin.handle({ scope: this.scope, view: this.view })).catch((error) => {
             this.dispose();
             throw error;
+        });
+    }
+
+    /** Expose the stable list capability surface to other Features. */
+    getApi() {
+        const legacyPlugin = /** @type {any} */ (this.legacyPlugin);
+        const call = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => legacyPlugin[name]?.(...args);
+        return Object.freeze({
+            getListSelectors: () => this.hostAdapter.getListSelectors?.() ?? legacyPlugin.getListSelectors?.() ?? legacyPlugin.getSelector?.(),
+            advanceListGeneration: call("advanceListGeneration"),
+            configureHoverPreview: call("configureHoverPreview"),
+            replaceHdImg: call("replaceHdImg"),
+            doFilter: call("doFilter"),
+            createQuickFilter: call("createQuickFilter"),
+            reconcileListItems: call("reconcileListItems"),
+            applyVisibility: call("applyVisibility"),
+            rebuildItemIndex: call("rebuildItemIndex"),
+            bindMovieDetailNavigation: call("bindMovieDetailNavigation"),
+            bindClick: call("bindClick"),
         });
     }
 

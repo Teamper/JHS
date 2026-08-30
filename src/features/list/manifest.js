@@ -5,7 +5,7 @@ import { PORT, SERVICE } from "../../contracts/tokens.js";
 import { ListController } from "./list-controller.js";
 
 export default defineFeature({
-    id: "list", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list"], startup: "eager",
+    id: "list", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list", "other"], startup: "eager",
     requires: [PORT.host, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings],
     contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions"],
     providesCommands: [],
@@ -16,6 +16,6 @@ export default defineFeature({
         const legacyPlugin = runtime.resolveLegacyPlugin?.("ListPagePlugin");
         if (!legacyPlugin) throw new Error("List feature requires the ListPagePlugin compatibility adapter");
         const controller = new ListController({ legacyPlugin, hostAdapter: deps[PORT.host], scope: runtime.scope });
-        return controller.start().then(() => ({ dispose: () => controller.dispose() }));
+        return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

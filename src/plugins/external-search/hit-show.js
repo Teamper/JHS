@@ -81,16 +81,21 @@ export class HitShowPlugin extends BasePlugin {
         throw lastError;
     }
     async initializeRenderedList() {
-        const listPage = this.getOptionalDependency("ListPagePlugin");
-        if (listPage) {
-            const revision = listPage.advanceListGeneration?.() ?? null;
+        let listFeature = null;
+        try {
+            listFeature = await this.getRuntimeService("features").getFeatureApi("list");
+        } catch (error) {
+            clog.warn("列表 Feature API 不可用，跳过状态管线", error);
+        }
+        if (listFeature) {
+            const revision = listFeature.advanceListGeneration?.() ?? null;
             const hoverBigImg = this.getRuntimeService("settings").snapshot().hoverBigImg;
-            listPage.configureHoverPreview(hoverBigImg === "yes" ? "yes" : "no"), listPage.replaceHdImg(), await listPage.doFilter(revision || undefined),
+            listFeature.configureHoverPreview(hoverBigImg === "yes" ? "yes" : "no"), listFeature.replaceHdImg(), await listFeature.doFilter(revision || undefined),
             // 自有榜单页（热播/Top250）不走 ListPagePlugin.handle，需手动恢复快速筛选条（待鉴定/已下载/全部等）
             // 并重建卡片索引，让 car-state-changed 的定向重筛能找到这些卡片
-            await listPage.createQuickFilter?.(), revision !== null && listPage.reconcileListItems ? listPage.reconcileListItems(null, revision) : listPage.applyVisibility(), listPage.rebuildItemIndex?.(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector),
+            await listFeature.createQuickFilter?.(), revision !== null && listFeature.reconcileListItems ? listFeature.reconcileListItems(null, revision) : listFeature.applyVisibility(), listFeature.rebuildItemIndex?.(), listFeature.bindMovieDetailNavigation(listFeature.getListSelectors().boxSelector),
             // 补齐右键屏蔽与列表视频点击绑定（bindClick 已命名空间化，可重复调用）
-            await listPage.bindClick?.();
+            await listFeature.bindClick?.();
         }
         await this.getOptionalDependency("CoverButtonPlugin")?.addSvgBtn?.();
         // 通知 Fc2NavigationPlugin 等监听者：自有榜单的卡片已就绪（FC2 保护与对话框导航延迟挂载）
