@@ -38,7 +38,7 @@ describe("6.2.0 audit remediation", () => {
         const plugin = new Class();
         plugin.shouldDisablePaging = vi.fn().mockResolvedValue(false);
         plugin.getSelector = () => ({ boxSelector: "#list", nextPageSelector: ".next" });
-        plugin.getRuntimeService = name => "settings" === name ? { snapshot: () => ({ autoPage: "yes" }) } : "scope" === name ? async () => ({ addCleanup: () => {} }) : {};
+        plugin.getRuntimeService = name => "settings" === name ? { snapshot: () => ({ autoPage: "yes" }) } : "scope" === name ? async () => ({ addCleanup: () => {} }) : "features" === name ? { getFeatureApi: async () => ({ getListSelectors: () => ({ boxSelector: "#list", nextPageSelector: ".next" }) }) } : {};
         plugin.checkLoad = vi.fn();
         await plugin.start();
         const live = plugin.liveScope;

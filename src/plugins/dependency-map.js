@@ -11,7 +11,7 @@
  * intentionally empty and enforced by architecture-runtime.test.js.
  */
 export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
-    AutoPagePlugin: ["ListPagePlugin"],
+    AutoPagePlugin: [],
     BlacklistPlugin: ["TaskPlugin", "SettingPlugin", "ListPagePlugin"],
     BusNavBarPlugin: ["SearchByImagePlugin"],
     CompatibilityEnhancementsPlugin: ["ListPagePlugin"],
@@ -24,7 +24,7 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     ],
     HistoryPlugin: ["UnifiedOfflinePlugin", "ListPagePlugin", "Fc2Plugin"],
     HitShowPlugin: ["ListPageButtonPlugin", "CoverButtonPlugin"],
-    ListPageButtonPlugin: ["NewVideoPlugin", "BlacklistPlugin", "ListPagePlugin"],
+    ListPageButtonPlugin: ["NewVideoPlugin", "BlacklistPlugin"],
     ListPagePlugin: [
         "HistoryPlugin", "ListPageButtonPlugin", "CoverButtonPlugin", "AutoPagePlugin",
         "BusImgPlugin", "Fc2Plugin"

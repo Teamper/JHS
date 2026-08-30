@@ -27,6 +27,10 @@ export class AutoPagePlugin extends BasePlugin {
     getName() {
         return "AutoPagePlugin";
     }
+    /** Resolve the list capability used by the waterfall contribution. */
+    async getListFeatureApi() {
+        return this.getRuntimeService("features").getFeatureApi("list");
+    }
     async initCss() {
         return "\n            <style>\n                .jhs-scroll {\n                    text-align: center;\n                    padding-top: 20px;\n                    font-size: 14px;\n                }\n                .jhs-scroll.waterfall-loading { color: var(--jhs-text); }\n                .jhs-scroll.waterfall-error { color: var(--jhs-status-filter); cursor: pointer; }\n                .jhs-scroll.waterfall-no-more { color: var(--jhs-status-down); }\n            </style>\n        ";
     }
@@ -87,7 +91,8 @@ export class AutoPagePlugin extends BasePlugin {
         if (await this.shouldDisablePaging()) return;
         if (!this.started || !this.liveScope || this.liveScope.disposed) return;
         const scope = this.liveScope;
-        const e = this.getSelector();
+        const listFeature = await this.getListFeatureApi(), e = listFeature?.getListSelectors?.();
+        if (!listFeature || !e) return void clog.error("列表功能不可用,停止瀑布流!");
         const container = /** @type {HTMLElement | null} */ (document.querySelector(e.boxSelector));
         if (!container || !container.parentNode) return void clog.error("没有找到容器节点,停止瀑布流!");
         this.container = container;
@@ -119,10 +124,10 @@ export class AutoPagePlugin extends BasePlugin {
         if (this.getRuntimeService("settings").snapshot().autoPage === "no") return void this.setState("waterfall-loading", "");
         if (this.isLoading || !this.nextUrl || !this.container) return;
         // 列表功能被禁用属永久性失败：在发起网络请求前终止并清空翻页游标，避免滚动每帧重抓
-        const listPage = this.getOptionalDependency("ListPagePlugin");
-        if (!listPage) return this.nextUrl = null, this.hasMore = !1, void this.setState("waterfall-error", "列表功能已禁用，无法继续翻页");
+        const listFeature = await this.getListFeatureApi(), selectors = listFeature?.getListSelectors?.();
+        if (!listFeature || !selectors) return this.nextUrl = null, this.hasMore = !1, void this.setState("waterfall-error", "列表功能已禁用，无法继续翻页");
         this.isLoading = !0, this.setState("waterfall-loading", "加载中...");
-        const t = this.getSelector(), generation = this.generation, scope = this.liveScope;
+        const t = selectors, generation = this.generation, scope = this.liveScope;
         try {
             if (!scope || scope.disposed || generation !== this.generation) return;
             const i = await requestHostPage(this.getRuntimeService("http"), this.nextUrl, scope);
@@ -130,7 +135,7 @@ export class AutoPagePlugin extends BasePlugin {
             clog.log("请求下一页内容:", this.nextUrl);
             const s = utils.htmlTo$dom(i);
             l && s.find(".avatar-box").length > 0 && s.find(".avatar-box").parent().remove();
-            let c = s.find(this.getSelector().requestDomItemSelector);
+            let c = s.find(selectors.requestDomItemSelector);
             const d = this.getBoxCarInfoList(), h = this.getBoxCarInfoList(c);
             if (this.checkDuplicateCarNumbers(d, h)) return this.nextUrl = null, this.hasMore = !1,
             void this.setState("waterfall-error", "翻页内容出现重复数据, 页码受JavDB限制, 已停止瀑布流");
@@ -141,8 +146,8 @@ export class AutoPagePlugin extends BasePlugin {
                 top: g,
                 url: this.nextUrl
             });
-            let m = s.find(this.getSelector().coverImgSelector);
-            listPage.replaceHdImg(m), $(this.getSelector().boxSelector).append(c), this.nextUrl = null == (e = s.find(t.nextPageSelector)) ? void 0 : e.attr("href"),
+            let m = s.find(selectors.coverImgSelector);
+            listFeature.replaceHdImg?.(m), $(selectors.boxSelector).append(c), this.nextUrl = null == (e = s.find(t.nextPageSelector)) ? void 0 : e.attr("href"),
             this.hasMore = !!this.nextUrl;
             let u = s.find(".pagination");
             $(".pagination").replaceWith(u), this.setState("waterfall-loading", ""), this.hasMore || this.setState("waterfall-no-more", "已经到底了");

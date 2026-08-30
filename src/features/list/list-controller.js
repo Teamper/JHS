@@ -45,11 +45,13 @@ export class ListController {
             replaceHdImg: call("replaceHdImg"),
             doFilter: call("doFilter"),
             createQuickFilter: call("createQuickFilter"),
+            batchSaveAllVideos: call("batchSaveAllVideos"),
             reconcileListItems: call("reconcileListItems"),
             applyVisibility: call("applyVisibility"),
             rebuildItemIndex: call("rebuildItemIndex"),
             bindMovieDetailNavigation: call("bindMovieDetailNavigation"),
             bindClick: call("bindClick"),
+            openMovieDetail: call("openMovieDetail"),
         });
     }
 

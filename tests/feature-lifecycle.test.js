@@ -59,7 +59,8 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
             globals: { LifecycleScope },
         });
         const plugin = new Plugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : { scope: async () => ({ addCleanup: () => {}, listen: () => {}, ownTimeout: () => {}, disposed: false }), http: {} }[name];
+        const listFeature = { getListSelectors: () => ({ boxSelector: ".movie-list", nextPageSelector: ".pagination-next" }) };
+        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "features" ? { getFeatureApi: async () => listFeature } : { scope: async () => ({ addCleanup: () => {}, listen: () => {}, ownTimeout: () => {}, disposed: false }), http: {} }[name];
         await plugin.reconfigure();
         expect(plugin.started).toBe(false);
         expect(plugin.loader).toBeUndefined();
@@ -139,11 +140,10 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
             globals: { LifecycleScope, requestHostPage: () => pending },
         });
         const plugin = new Plugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "http" ? {} : async () => ({ addCleanup: () => {}, listen: () => {}, ownTimeout: () => {}, disposed: false });
-        plugin.getSelector = () => ({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item", coverImgSelector: ".cover img", nextPageSelector: ".pagination-next" });
+        const listFeature = { getListSelectors: () => ({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item", coverImgSelector: ".cover img", nextPageSelector: ".pagination-next" }), replaceHdImg: vi.fn() };
+        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "http" ? {} : name === "features" ? { getFeatureApi: async () => listFeature } : async () => ({ addCleanup: () => {}, listen: () => {}, ownTimeout: () => {}, disposed: false });
         plugin.shouldDisablePaging = async () => false;
         plugin.getBoxCarInfoList = () => [];
-        plugin.getBean = () => ({ replaceHdImg: () => {} });
         await plugin.reconfigure();
         expect(plugin.started).toBe(true);
         const firstScope = plugin.liveScope;

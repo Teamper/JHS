@@ -191,6 +191,8 @@ const listPageSource = await read("src/plugins/status/list-page.js");
 const listManifestSource = await read("src/features/list/manifest.js");
 const listControllerSource = await read("src/features/list/list-controller.js");
 const listViewSource = await read("src/features/list/list-view.js");
+const listActionsSource = await read("src/plugins/status/list-page-button.js");
+const autoPageSource = await read("src/plugins/status/auto-page.js");
 assertIncludes(listPageSource, "applyVisibility(items = null)", "list page function signature");
 assertIncludes(listPageSource, "async filterMovieList(", "list page function signature");
 assertIncludes(listPageSource, "async doFilter(revision =", "list page function signature");
@@ -200,6 +202,7 @@ assertIncludes(listManifestSource, 'resolveLegacyPlugin?.("ListPagePlugin")', "l
 assertIncludes(listControllerSource, "legacyPlugin.handle({ scope: this.scope, view: this.view })", "list feature lifecycle handoff");
 assertIncludes(listControllerSource, "new ListView({", "list view host boundary");
 assertIncludes(listControllerSource, "onFilterChange: (filter, options)", "list view filter callback boundary");
+assertIncludes(listControllerSource, "batchSaveAllVideos: call(\"batchSaveAllVideos\")", "list batch capability boundary");
 assertIncludes(listViewSource, "export class ListView", "real list view");
 assertIncludes(listViewSource, "shouldShowItem({ filter: normalizedFilter", "list view shared filter semantics");
 assertIncludes(listViewSource, "async createQuickFilter(initialFilter)", "list view quick-filter ownership");
@@ -208,6 +211,10 @@ assertIncludes(listPageSource, "return this.getListView().createQuickFilter", "l
 assertIncludes(listPageSource, "return this.getListView().bindMovieDetailNavigation", "list navigation compatibility adapter");
 assertIncludes(hitShow, 'getFeatureApi("list")', "hit-show list feature API boundary");
 assert(!hitShow.includes('getOptionalDependency("ListPagePlugin")'), "hit-show must not resolve ListPagePlugin directly");
+assertIncludes(listActionsSource, 'getFeatureApi("list")', "list actions feature API boundary");
+assert(!listActionsSource.includes('getOptionalDependency("ListPagePlugin")'), "list actions must not resolve ListPagePlugin directly");
+assertIncludes(autoPageSource, 'getFeatureApi("list")', "auto-page feature API boundary");
+assert(!autoPageSource.includes('getOptionalDependency("ListPagePlugin")'), "auto-page must not resolve ListPagePlugin directly");
 assertIncludes(listPageSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "list feature scope handoff");
 assertIncludes(listPageSource, "this.getListView().applyVisibility", "list view visibility ownership");
 assertIncludes(listPageSource, "element.matches?.(e.itemSelector) && this.indexItems([ element ])", "list reorder index retention");

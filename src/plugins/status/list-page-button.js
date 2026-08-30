@@ -15,9 +15,22 @@ export class ListPageButtonPlugin extends BasePlugin {
         super();
         /** @type {string | null} 页内排序覆盖：仅自有榜单页使用，初始固定“默认”，不写全局设置。 */
         this.ownedRankingSortOverride = null;
+        /** @type {any} */
+        this.listFeatureApi = null;
     }
     getName() {
         return "ListPageButtonPlugin";
+    }
+    /** Resolve the list capability without coupling this contribution to ListPagePlugin. */
+    async getListFeatureApi() {
+        if (this.listFeatureApi) return this.listFeatureApi;
+        try {
+            this.listFeatureApi = await this.getRuntimeService("features").getFeatureApi("list");
+        } catch (error) {
+            clog.warn("列表 Feature API 不可用", error);
+            this.listFeatureApi = null;
+        }
+        return this.listFeatureApi;
     }
     async handle() {
         // 热播/Top250 自渲染榜单由渲染方调用 mountHitShowControls 延迟挂载，启动期不注入页面 h2
@@ -71,7 +84,7 @@ export class ListPageButtonPlugin extends BasePlugin {
     /** @param {LifecycleScope} scope @param {any} [target] 自渲染榜单传入自有标题容器，避免注入页面 h2。 */
     async createMenuBtn(scope, target = null) {
         // 6.5 capability：功能被禁用时不渲染按钮，不留 disabled 死按钮。
-        const hasNewVideo = Boolean(this.getOptionalDependency("NewVideoPlugin")), hasBlacklist = Boolean(this.getOptionalDependency("BlacklistPlugin")), hasListPage = Boolean(this.getOptionalDependency("ListPagePlugin"));
+        const hasNewVideo = Boolean(this.getOptionalDependency("NewVideoPlugin")), hasBlacklist = Boolean(this.getOptionalDependency("BlacklistPlugin")), hasListPage = Boolean(await this.getListFeatureApi());
         if (r) {
             const e = o.includes("/actors/");
             let t = $(".main-tabs, .tabs"), n = "加入黑名单", a = "jhs-btn--filter", s = null;
@@ -120,7 +133,7 @@ export class ListPageButtonPlugin extends BasePlugin {
             this.getOptionalDependency("BlacklistPlugin")?.openBlacklistDialog?.();
         })), this.bindSortMenu();
         // 6.5: capability 渲染在 createMenuBtn 完成，功能禁用时不渲染按钮；此处仅保留业务引用。
-        const blacklist = this.getOptionalDependency("BlacklistPlugin"), listPage = this.getOptionalDependency("ListPagePlugin");
+        const blacklist = this.getOptionalDependency("BlacklistPlugin");
         $("#addBlacklistBtn").on("click", (async (/** @type {any} */ t) => {
             await blacklist?.addBlacklist?.(t);
         })), $("#filterAllVideo").on("click", (async (/** @type {any} */ t) => {
@@ -136,11 +149,11 @@ export class ListPageButtonPlugin extends BasePlugin {
         })), $("#favoriteAllVideo").on("click", (async (/** @type {any} */ t) => {
             const scope = this.buildBatchScope();
             this.loadObj = loading();
-            try { await listPage?.batchSaveAllVideos?.(scope, h); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
+            try { await (await this.getListFeatureApi())?.batchSaveAllVideos?.(scope, h); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
         })), $("#hasDownAllVideo").on("click", (async (/** @type {any} */ t) => {
             const scope = this.buildBatchScope();
             this.loadObj = loading();
-            try { await listPage?.batchSaveAllVideos?.(scope, g); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
+            try { await (await this.getListFeatureApi())?.batchSaveAllVideos?.(scope, g); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
         }));
     }
     /** 绑定排序 popover 的选择与键盘交互。 */
@@ -187,7 +200,9 @@ export class ListPageButtonPlugin extends BasePlugin {
         if (c || (s === _ && !e && methodOverride !== "default")) return;
         const t = methodOverride || this.activeSortMethod();
         if (!t) return;
-        const i = this.getSelector(), d = $(i.boxSelector), h = $(i.itemSelector);
+        const i = this.getRuntimeService("host").getListSelectors?.();
+        if (!i) return;
+        const d = $(i.boxSelector), h = $(i.itemSelector);
         h.each(((/** @type {number} */ e, /** @type {Element} */ element) => {
             $(element).attr("data-original-index") || $(element).attr("data-original-index", e);
         }));
@@ -249,16 +264,15 @@ export class ListPageButtonPlugin extends BasePlugin {
         return { kind: "actor", displayName: info?.name || "", recordName: info?.name || "" };
     }
     async openWaitCheck() {
-        let e = this.getSelector();
+        const listFeature = await this.getListFeatureApi(), e = listFeature?.getListSelectors?.();
         const t = await storageManager.getSetting("waitCheckCount", 5);
         let a = 0;
-        const listPage = this.getOptionalDependency("ListPagePlugin");
-        if (!listPage) return void show.info("列表功能已禁用");
+        if (!listFeature || !e) return void show.info("列表功能已禁用");
         for (const element of $(e.itemSelector).toArray()) {
             if (a >= t) break;
             const item = $(element), flags = normalizeStateFlags(JSON.parse(item.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(item.attr("data-jhs-visibility") || "{}");
             if (hasAnyState(flags) || isHardHidden(flags, visibilityReasons)) continue;
-            await listPage.openMovieDetail(item, { autoplay: !0, newTab: !1 }), a++;
+            await listFeature.openMovieDetail?.(item, { autoplay: !0, newTab: !1 }), a++;
         }
         0 === a && show.info("没有需鉴定的视频");
     }

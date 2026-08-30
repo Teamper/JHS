@@ -10,10 +10,11 @@ function loadPlugin(url, html, { isHitShowPage = false } = {}) {
     const dom = new JSDOM(html, { url }), $ = jqueryFactory(dom.window);
     let sortMethod = "default";
     const settings = { snapshot: () => ({ sortMethod }), set: vi.fn(async (name, value) => { sortMethod = value; }) };
+    const host = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list > .item" }) };
     const context = vm.createContext({
         window: dom.window, document: dom.window.document, URLSearchParams, $, o: dom.window.location.href, r: true, l: false, c: false, _: "yes",
         localStorage: dom.window.localStorage, storageManager: { getSetting: vi.fn(async () => "yes") }, isHitShowPage: () => isHitShowPage,
-        BasePlugin: class { getSelector() { return { boxSelector: ".movie-list", itemSelector: ".movie-list > .item" }; } getRuntimeService() { return settings; } },
+        BasePlugin: class { getSelector() { return { boxSelector: ".movie-list", itemSelector: ".movie-list > .item" }; } getRuntimeService(name) { return "settings" === name ? settings : "host" === name ? host : { getFeatureApi: vi.fn(async () => null) }; } },
         clog: { error: vi.fn() }
     });
     const source = readTestFile(join(import.meta.dirname, "../src/plugins/status/list-page-button.js"), "utf8");
