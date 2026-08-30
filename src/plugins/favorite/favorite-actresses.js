@@ -7,8 +7,10 @@ export class FavoriteActressesPlugin extends BasePlugin {
     getName() {
         return "FavoriteActressesPlugin";
     }
-    async handle() {
-        this.bindEvent(), await this.highlightActress(), this.replaceActressAvatar();
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
+        const scope = options.scope ?? await this.getRuntimeService("scope")();
+        this.bindEvent(scope), await this.highlightActress(), void this.replaceActressAvatar().catch((error) => clog.warn("演员头像替换失败", error));
     }
     async highlightActress() {
         if (!isDetailPage) return;
@@ -32,14 +34,16 @@ export class FavoriteActressesPlugin extends BasePlugin {
     async removeActorFromStorage(/** @type {unknown} */ e) {
         await storageManager.removeFavoriteActress(e) && (clog.log("移除演员成功"), document.dispatchEvent(new CustomEvent("actress-state-changed", { detail: { starId: String(e) } })));
     }
-    bindEvent() {
+    /** @param {any} scope */
+    bindEvent(scope) {
         const e = /\/actors\/(\w+)\/(collect|uncollect)/;
-        $(document).on("confirm:complete", 'a[href*="/actors/"][href*="/uncollect"]', (async (/** @type {any} */ t) => {
+        const onConfirm = async (/** @type {any} */ t) => {
             const [n] = t.detail;
             if (!n) return;
             const a = $(t.currentTarget).attr("href").match(e), i = a ? a[1] : null;
             i && await this.removeActorFromStorage(i);
-        })), $("#button-collect-actor").click((async (/** @type {MouseEvent} */ t) => {
+        };
+        const onCollect = async (/** @type {MouseEvent} */ t) => {
             const n = $("#button-collect-actor").attr("href").match(e), a = n ? n[1] : null;
             /** @type {string[]} */ let i = [];
             let s = $(".actor-section-name");
@@ -59,10 +63,18 @@ export class FavoriteActressesPlugin extends BasePlugin {
                 avatar: l
             };
             1 === await storageManager.addFavoriteActressList([ c ]) ? (clog.log(`收藏演员成功: ${r} (ID: ${a})`), document.dispatchEvent(new CustomEvent("actress-state-changed", { detail: { starId: String(a) } }))) : clog.log(`收藏演员失败: ${r} (ID: ${a})`);
-        })), $("#button-uncollect-actor").click((async (/** @type {MouseEvent} */ t) => {
+        };
+        const onUncollect = async (/** @type {MouseEvent} */ t) => {
             const n = $("#button-uncollect-actor").attr("href").match(e), a = n ? n[1] : null;
             a ? await this.removeActorFromStorage(a) : clog.error("无法获取演员ID进行取消收藏操作。");
-        }));
+        };
+        $(document).on("confirm:complete.jhsFavoriteActress", 'a[href*="/actors/"][href*="/uncollect"]', onConfirm);
+        $("#button-collect-actor").on("click.jhsFavoriteActress", onCollect);
+        $("#button-uncollect-actor").on("click.jhsFavoriteActress", onUncollect);
+        scope.addCleanup(() => {
+            $(document).off(".jhsFavoriteActress");
+            $("#button-collect-actor,#button-uncollect-actor").off(".jhsFavoriteActress");
+        });
     }
     async replaceActressAvatar() {
         const e = this.getActressId();

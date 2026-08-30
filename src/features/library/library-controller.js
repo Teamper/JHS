@@ -5,11 +5,12 @@
  * on the transitional legacy path.
  */
 export class LibraryController {
-    /** @param {{historyPlugin?: {handle: (options?: {scope: any}) => Promise<any> | any, historyRepository?: any}, statePlugin?: {handle: (options?: {scope: any}) => Promise<any> | any}, keywordFilterPlugin?: {handle: (options?: {scope: any}) => Promise<any> | any}, scope: any}} options */
+    /** @param {{historyPlugin?: {handle: (options?: {scope: any}) => Promise<any> | any, historyRepository?: any}, statePlugin?: {handle: (options?: {scope: any}) => Promise<any> | any}, keywordFilterPlugin?: {handle: (options?: {scope: any}) => Promise<any> | any}, favoritePlugin?: {handle: (options?: {scope: any}) => Promise<any> | any}, scope: any}} options */
     constructor(options) {
         this.historyPlugin = options.historyPlugin ?? null;
         this.statePlugin = options.statePlugin ?? null;
         this.keywordFilterPlugin = options.keywordFilterPlugin ?? null;
+        this.favoritePlugin = options.favoritePlugin ?? null;
         this.scope = options.scope;
         this.started = false;
     }
@@ -22,6 +23,7 @@ export class LibraryController {
             await this.historyPlugin?.handle({ scope: this.scope });
             await this.statePlugin?.handle({ scope: this.scope });
             await this.keywordFilterPlugin?.handle({ scope: this.scope });
+            await this.favoritePlugin?.handle({ scope: this.scope });
         }).catch((error) => {
             this.dispose();
             throw error;

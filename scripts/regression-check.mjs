@@ -237,11 +237,13 @@ assertIncludes(libraryManifestSource, 'new LibraryController({', "library featur
 assertIncludes(libraryControllerSource, 'this.historyPlugin?.handle({ scope: this.scope })', "library history lifecycle handoff");
 assertIncludes(libraryControllerSource, 'this.statePlugin?.handle({ scope: this.scope })', "library state lifecycle handoff");
 assertIncludes(libraryControllerSource, 'this.keywordFilterPlugin?.handle({ scope: this.scope })', "library keyword lifecycle handoff");
+assertIncludes(libraryControllerSource, 'this.favoritePlugin?.handle({ scope: this.scope })', "library favorite lifecycle handoff");
 assertIncludes(historySource, "async handle(options = {})", "history feature lifecycle entry");
 assertIncludes(historySource, "scope.addCleanup", "history feature scope cleanup");
 assertIncludes(statusImport, "async handle(options = {})", "state import feature lifecycle entry");
 assertIncludes(statusImport, "jhsStatusImport", "state import feature scope cleanup");
 assertIncludes(await read("src/plugins/blacklist/filter-title-keyword.js"), "scope.addCleanup", "keyword filter feature scope cleanup");
+assertIncludes(await read("src/plugins/favorite/favorite-actresses.js"), "jhsFavoriteActress", "favorite feature scope cleanup");
 assertIncludes(listPageSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "list feature scope handoff");
 assertIncludes(listPageSource, "this.getListView().applyVisibility", "list view visibility ownership");
 assertIncludes(listPageSource, "element.matches?.(e.itemSelector) && this.indexItems([ element ])", "list reorder index retention");
