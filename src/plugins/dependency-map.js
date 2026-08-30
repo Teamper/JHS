@@ -12,7 +12,7 @@
  */
 export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     AutoPagePlugin: [],
-    BlacklistPlugin: ["TaskPlugin", "SettingPlugin", "ListPagePlugin"],
+    BlacklistPlugin: ["TaskPlugin", "SettingPlugin"],
     BusNavBarPlugin: ["SearchByImagePlugin"],
     CompatibilityEnhancementsPlugin: [],
     CoverButtonPlugin: ["ScreenShotPlugin"],
@@ -42,7 +42,7 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     ],
     StatsPlugin: ["NewVideoPlugin", "ListPagePlugin"],
     TaskPlugin: ["BlacklistPlugin"],
-    TranslatePlugin: ["ListPagePlugin"],
+    TranslatePlugin: [],
     TOP250Plugin: ["HitShowPlugin", "ListPageButtonPlugin"],
     UnifiedOfflinePlugin: ["OneTwoThreeOfflinePlugin"]
 });

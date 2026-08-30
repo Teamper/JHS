@@ -54,6 +54,12 @@ export class ListController {
             openMovieDetail: call("openMovieDetail"),
             findCarNumAndHref: call("findCarNumAndHref"),
             parseActressName: call("parseActressName"),
+            getActiveQuickFilter: () => legacyPlugin.activeQuickFilter,
+            createEvaluationContext: call("createEvaluationContext"),
+            translateListItems: call("translateListItems"),
+            revertTranslation: call("revertTranslation"),
+            invalidateTranslations: call("invalidateTranslations"),
+            getCurrentPageSummary: call("getCurrentPageSummary"),
         });
     }
 

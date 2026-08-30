@@ -62,12 +62,18 @@ describe("translation DOM/jQuery contract", () => {
         dom.window.isListPage = true;
 
         const translatePlugin = new TranslatePlugin();
+        const listFeature = {
+            getListSelectors: () => listPage.getSelector(),
+            translateListItems: listPage.translateListItems.bind(listPage),
+            revertTranslation: listPage.revertTranslation.bind(listPage),
+            invalidateTranslations: listPage.invalidateTranslations.bind(listPage),
+        };
         translatePlugin.runtimeServices = {
             settings: { snapshot: () => ({ translateTitle: "yes" }) },
             translation: { translate },
             scope: async () => ({ disposed: false }),
+            features: { getFeatureApi: async () => listFeature },
         };
-        translatePlugin.getOptionalDependency = () => listPage;
 
         await translatePlugin.applyTranslation();
 

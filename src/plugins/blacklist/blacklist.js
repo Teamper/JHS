@@ -353,8 +353,8 @@ export class BlacklistPlugin extends BasePlugin {
      * 一键屏蔽：跨全部分页扫描，仅处理符合当前筛选的记录（"全部"包含屏蔽项）。
      * @param {string} actressName @param {{ filter?: unknown, confirm?: boolean, root?: any }} [options]
      */
-    async filterAllVideo(actressName, { filter = this.getOptionalDependency("ListPagePlugin")?.activeQuickFilter || "waitCheck", confirm = true, root = null } = {}) {
-        const normalized = normalizeQuickFilterKey(filter), filterLabel = QUICK_FILTER_LABELS[normalized];
+    async filterAllVideo(actressName, { filter, confirm = true, root = null } = {}) {
+        const listFeature = await this.getRuntimeService("features").getFeatureApi("list"), normalized = normalizeQuickFilterKey(filter ?? listFeature?.getActiveQuickFilter?.() ?? "waitCheck"), filterLabel = QUICK_FILTER_LABELS[normalized];
         const confirmText = "all" === normalized
             ? "将处理当前搜索全部分页的所有作品（包括屏蔽项）并加入黑名单。"
             : `将处理当前搜索全部分页中符合「${filterLabel}」筛选的作品并加入黑名单。`;
@@ -369,8 +369,8 @@ export class BlacklistPlugin extends BasePlugin {
             return { cancelled: true, busy: true };
         }
         $("#favoriteAllVideo, #hasDownAllVideo, #filterAllVideo").attr("aria-disabled", "true").addClass("jhs-batch-busy");
-        const scope = await this.getRuntimeService("scope")(), listPage = this.getOptionalDependency("ListPagePlugin");
-        const context = "function" === typeof listPage?.createEvaluationContext ? await listPage.createEvaluationContext() : createListEvaluationContext({});
+        const scope = await this.getRuntimeService("scope")();
+        const context = "function" === typeof listFeature?.createEvaluationContext ? await listFeature.createEvaluationContext() : createListEvaluationContext({});
         const isCancelled = () => !isActiveBatchRun(run) || Boolean(scope?.disposed);
         const statusHost = () => (this.blacklistRoot || $()).find("#checkBlacklistMsg");
         try {
@@ -378,8 +378,8 @@ export class BlacklistPlugin extends BasePlugin {
                 startDom: root ? $(root) : $(document),
                 currentUrl: root ? null : window.location.href,
                 firstPageUrl: root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href),
-                itemSelector: this.getSelector().requestDomItemSelector,
-                nextPageSelector: this.getSelector().nextPageSelector,
+                itemSelector: (this.getRuntimeService("host")?.getListSelectors?.() ?? this.getSelector()).requestDomItemSelector,
+                nextPageSelector: (this.getRuntimeService("host")?.getListSelectors?.() ?? this.getSelector()).nextPageSelector,
                 fetchHtml: async (/** @type {string} */ url) => requestHostPage(this.getRuntimeService("http"), url, scope),
                 parseItem: (/** @type {any} */ item) => readListItem(item),
                 evaluate: (/** @type {any} */ item) => evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized }),
