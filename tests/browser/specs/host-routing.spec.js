@@ -39,6 +39,20 @@ for (const [label, url] of [
   });
 }
 
+for (const [label, url] of [
+  ["JavDB", "https://javdb.com/"],
+  ["JavBus", "https://www.javbus.com/"]
+]) {
+  test(`${label} mounts the history entry through the Library feature`, async ({ context, page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-wide", "one desktop project covers the Library history entry");
+    await fulfillHostFixtures(context);
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    await injectUserscriptRuntime(page);
+    await expect.poll(() => page.locator("#historyBtn").count(), { timeout: 5_000 }).toBe(1);
+    await expect(page.locator("#historyBtn")).toContainText("鉴定记录");
+  });
+}
+
 test("Top250 intercepts the native premium route without a favorite-tab label", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the Top250 entry regression");
   await fulfillHostFixtures(context);

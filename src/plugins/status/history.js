@@ -138,23 +138,51 @@ export class HistoryPlugin extends BasePlugin {
         $(".navbar-search").is(":hidden") ? ($(".historyBtnBox").filter(hasButton).show(), $(".historyBtnBox").filter(((/** @type {number} */ index, /** @type {HTMLElement} */ element) => !hasButton(index, element))).hide(), $(".miniHistoryBtnBox").hide()) : ($(".historyBtnBox").hide(),
         $(".miniHistoryBtnBox").show());
     }
-    async handle() {
-        r && ($(".navbar-end").prepend('<div class="navbar-item has-sub-btns is-hoverable historyBtnBox">\n                    <button type="button" id="historyBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>'),
-        $(".navbar-search").css("margin-left", "0").before('\n                <div class="navbar-item miniHistoryBtnBox">\n                    <button type="button" id="miniHistoryBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>\n            '),
-        this.handleResize(), $(window).resize((() => {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
+        const scope = options.scope ?? await this.getRuntimeService("scope")();
+        const openHistory = (/** @type {any} */ _event) => this.openHistory();
+        if (r) {
+            $(".navbar-end").prepend('<div class="navbar-item has-sub-btns is-hoverable historyBtnBox">\n                    <button type="button" id="historyBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>');
+            $(".navbar-search").css("margin-left", "0").before('\n                <div class="navbar-item miniHistoryBtnBox">\n                    <button type="button" id="miniHistoryBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>\n            ');
             this.handleResize();
-        })), $("#historyBtn,#miniHistoryBtn").on("click", ((/** @type {any} */ e) => this.openHistory()))), l && await this.createBusButton();
+            const resize = () => this.handleResize();
+            $(window).on("resize.jhsHistory", resize);
+            $("#historyBtn,#miniHistoryBtn").on("click.jhsHistory", openHistory);
+            scope.addCleanup(() => {
+                $(window).off("resize.jhsHistory", resize);
+                $("#historyBtn,#miniHistoryBtn").off(".jhsHistory");
+                $(".historyBtnBox,.miniHistoryBtnBox").remove();
+                $(".navbar-search").css("margin-left", "");
+            });
+        }
+        if (l) void this.createBusButton(scope, openHistory).catch((error) => clog.warn("鉴定记录入口初始化失败", error));
     }
-    async createBusButton() {
+    /** @param {any} scope @param {(event: any) => void} openHistory */
+    async createBusButton(scope, openHistory) {
         const ready = await new Promise((/** @type {(value: boolean) => void} */ resolve) => {
-            const startedAt = Date.now(), timer = setInterval((() => {
-                if ($("#setting-btn").length && $("#top-right-box").length) return clearInterval(timer), resolve(!0);
-                Date.now() - startedAt >= 2500 && (clearInterval(timer), resolve(!1));
+            let settled = !1;
+            const finish = (/** @type {boolean} */ value) => {
+                if (settled) return;
+                settled = !0;
+                clearInterval(timer);
+                resolve(value);
+            };
+            const timer = setInterval((() => {
+                if ($("#setting-btn").length && $("#top-right-box").length) return finish(!0);
+                Date.now() - startedAt >= 2500 && finish(!1);
             }), 25);
+            const startedAt = Date.now();
+            scope.addCleanup(() => finish(!1));
         });
+        if (scope.disposed) return;
         if (!ready) return void clog.warn("鉴定记录入口未创建：JavBus 顶部工具区未就绪");
-        $("#top-right-box").append('<button type="button" id="historyBtn" class="jhs-btn jhs-btn--secondary">鉴定记录</button>'),
-        $("#historyBtn,#miniHistoryBtn").on("click", ((/** @type {any} */ e) => this.openHistory()));
+        $("#top-right-box").append('<button type="button" id="historyBtn" class="jhs-btn jhs-btn--secondary">鉴定记录</button>');
+        $("#historyBtn,#miniHistoryBtn").on("click.jhsHistory", openHistory);
+        scope.addCleanup(() => {
+            $("#historyBtn,#miniHistoryBtn").off(".jhsHistory");
+            $("#top-right-box #historyBtn").remove();
+        });
     }
     openHistory() {
         let e = `\n            <div class="jhs-layout-7cb3f981 jhs-history-dialog"> \n                 <div id="filterBox" class="jhs-layout-53809f1e">\n                    <select id="dataType" class="jhs-select-source">\n                        <option value="all" selected>所有</option>\n                        <option value="waitCheck">待鉴定</option>\n                        <option value="filter">${u}</option>\n                        <option value="favorite">${b}</option>\n                        <option value="hasDown">${y}</option>\n                        <option value="hasWatch">${k}</option>\n                    </select>\n                    <input id="searchCarNum" type="text" placeholder="搜索番号|演员" class="jhs-field">\n                    <button type="button" id="clearSearchbtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                </div>\n                <div id="allSelectBox" class="jhs-layout-66253c00">\n                    <button type="button" class="jhs-btn jhs-btn--dark multiple-history-deleteBtn jhs-layout-7daea5fa"> <span>移除</span> </button>\n                    <button type="button" class="jhs-btn jhs-btn--watch multiple-history-hasWatchBtn jhs-layout-2e003268">标记观看</button>\n                    <button type="button" class="jhs-btn jhs-btn--down multiple-history-hasDownBtn jhs-layout-2e003268">标记下载</button>\n                    <button type="button" class="jhs-btn jhs-btn--fav multiple-history-favoriteBtn jhs-layout-2e003268">标记收藏</button>\n                    <button type="button" class="jhs-btn jhs-btn--filter multiple-history-filterBtn jhs-layout-2e003268">标记屏蔽</button>\n                </div>\n                <div id="table-container" class="jhs-layout-81eaab28"></div>\n            </div>\n        `;

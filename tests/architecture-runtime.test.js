@@ -52,6 +52,7 @@ describe("v6.5 architecture runtime contracts", () => {
     it("registers legacy contributions from manifests without changing site order", async () => {
         expect(featureManifests).toHaveLength(11);
         expect(featureManifests.find((manifest) => manifest.id === "list")?.contributes).toContain("list.core");
+        expect(featureManifests.find((manifest) => manifest.id === "library")?.contributes).toContain("library.history");
         window.matchMedia ??= () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
         const $ = jquery;
         vi.stubGlobal("$", $);
@@ -62,6 +63,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(new Set(legacyContributionManifests.map((item) => item.id)).size).toBe(legacyContributionManifests.length);
         expect(new Set(legacyContributionManifests.map((item) => item.legacyPluginId)).size).toBe(legacyContributionManifests.length);
         expect(legacyContributionManifests.find((item) => item.id === "discovery.top250")?.legacyPluginId).toBe("TOP250Plugin");
+        expect(legacyContributionManifests.find((item) => item.id === "library.history")?.managedByFeature).toBe(true);
         const createRuntime = (site, disabled = []) => {
             const diagnostics = new DiagnosticsService();
             const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.profile, { current: () => "regular" }).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {}).register(SERVICE.state, {}).register(REGISTRY.settings, new SettingsRegistry());
