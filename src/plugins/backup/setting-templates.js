@@ -10,7 +10,7 @@ import { buildQuickSettingsHtml } from "../../ui/settings/setting-control-render
 export function getPluginCategories() {
     /** @type {Record<string, [string, string]>} */
     const pluginMeta = {
-        SettingPlugin:["设置中心","core"], StatsPlugin:["统计中心","core"], MobileBottomBarPlugin:["工具栏与移动操作","core"],
+        SettingPlugin:["设置中心","core"], MobileBottomBarPlugin:["工具栏与移动操作","core"],
         ListPagePlugin:["列表状态处理","list"], NavBarPlugin:["JavDB 导航","list"], BusNavBarPlugin:["JavBus 导航","list"], ListPageButtonPlugin:["列表操作","list"], HighlightMagnetPlugin:["磁力标记","list"], FoldCategoryPlugin:["分类折叠","list"], AutoPagePlugin:["自动翻页","list"], HitShowPlugin:["热播榜单","list"], TOP250Plugin:["TOP 250","list"],
         DetailPagePlugin:["JavDB 详情页","detail"], BusDetailPagePlugin:["JavBus 详情页","detail"], DetailPageButtonPlugin:["详情操作","detail"], ReviewPlugin:["评论","detail"], RelatedPlugin:["相关影片","detail"], TranslatePlugin:["标题翻译","detail"], WantAndWatchedVideosPlugin:["想看与看过","detail"],
         CoverButtonPlugin:["封面快捷操作","media"], PreviewVideoPlugin:["JavDB 预览视频","media"], BusPreviewVideoPlugin:["JavBus 预览视频","media"], ScreenShotPlugin:["剧照","media"], BusImgPlugin:["JavBus 图片适配","media"], ActressInfoPlugin:["演员资料","media"], SearchByImagePlugin:["以图搜图","media"],

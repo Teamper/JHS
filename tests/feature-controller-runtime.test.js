@@ -67,12 +67,15 @@ describe("feature controller ownership", () => {
         expect(fc2Plugin.handle).toHaveBeenCalledWith({ scope });
     });
 
-    it("hands the feature scope to the stats contribution and exposes its action", async () => {
-        const scope = createScope(), plugin = { handle: vi.fn(), openDialog: vi.fn(() => "opened") }, controller = new StatsController({ statsPlugin: plugin, scope });
+    it("starts the native stats contribution and exposes its action", async () => {
+        const scope = createScope(), controller = new StatsController({
+            diagnostics: { exportSnapshot: vi.fn(() => ({ activeFeatures: [], errors: [] })) },
+            dialog: { open: vi.fn(), close: vi.fn() }, movie: {}, storage: {}, state: { getActivityLog: vi.fn() }, features: {}, route: "detail", scope,
+        });
         await controller.start();
 
-        expect(plugin.handle).toHaveBeenCalledWith({ scope });
-        expect(controller.getApi().openDialog()).toBe("opened");
+        expect(scope.assertActive).toHaveBeenCalledOnce();
+        expect(controller.getApi().openDialog).toEqual(expect.any(Function));
         expect(controller.getApi().hasDashboard).toBe(true);
     });
 

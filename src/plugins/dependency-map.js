@@ -40,7 +40,6 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
         "CoverButtonPlugin", "OtherSitePlugin", "ActressInfoPlugin",
         "ScreenShotPlugin", "BusImgPlugin"
     ],
-    StatsPlugin: [],
     TaskPlugin: [],
     TranslatePlugin: [],
     TOP250Plugin: ["ListPageButtonPlugin"],

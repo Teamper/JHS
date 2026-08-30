@@ -1,73 +1,62 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
-import jqueryFactory from "jquery";
-import { JSDOM } from "jsdom";
-import { describe, expect, it, vi } from "vitest";
-import { StatsRepository, computeLibraryStats } from "../src/features/stats/stats-repository.js";
+// @vitest-environment jsdom
 
-function loadStatsPlugin() {
-    const dom = new JSDOM("<body></body>", { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
-    const listPage = { getCurrentPageSummary: vi.fn(() => ({ blockedItems: 7 })), setQuickFilter: vi.fn() };
-    const listFeature = { getCurrentPageSummary: listPage.getCurrentPageSummary, setQuickFilter: listPage.setQuickFilter };
-    const newVideo = { getPendingNewVideoTotal: vi.fn(async () => 3), openNewVideoDialog: vi.fn() };
-    const discoveryFeature = { hasNewVideo: true, getPendingNewVideoTotal: newVideo.getPendingNewVideoTotal, openNewVideoDialog: newVideo.openNewVideoDialog };
-    const beans = { NewVideoPlugin: newVideo, OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com") } };
-    const stateService = { getActivityLog: vi.fn(async () => ({ entries: [], coverageStart: null })) };
-    class BasePlugin {
-        getBean(name) { return beans[name]; }
-        getOptionalDependency(name) { return beans[name]; }
-        getRuntimeService(name) {
-            if (name === "diagnostics") return { exportSnapshot: () => ({ activeFeatures: ["list"], errors: [] }) };
-            if (name === "dialog") return { open: layer.open, close: layer.close };
-            if (name === "state") return stateService;
-            if (name === "movie") return { externalSiteOrigin: () => "https://javdb.com" };
-            if (name === "features") return { getFeatureApi: vi.fn(async featureId => featureId === "discovery" ? discoveryFeature : listFeature) };
-            return null;
-        }
-    }
-    const layer = {
-        close: vi.fn(),
-        open: vi.fn(options => {
-            const element = $("<div></div>").html(options.content).appendTo("body");
-            options.success(element, 12);
-            return 12;
-        })
-    };
-    const context = vm.createContext({
-        window: dom.window, document: dom.window.document, $, BasePlugin, StatsRepository, computeLibraryStats, layer, URL,
-        storageManager: {
-            getCarList: vi.fn(async () => [ { stateFlags: { blocked: true } }, { stateFlags: { favorite: true, downloaded: true, watched: true } }, { stateFlags: {} } ]),
-            getFavoriteActressList: vi.fn(async () => [ {} ]), getBlacklist: vi.fn(async () => [ {}, {} ]), getSetting: vi.fn(async () => ({}))
-        },
-        utils: { getDialogArea: vi.fn(() => [ "1040px", "760px" ]), setupEscClose: vi.fn() },
-        normalizeStateFlags: flags => ({ blocked: !!flags?.blocked, favorite: !!flags?.favorite, downloaded: !!flags?.downloaded, watched: !!flags?.watched }),
-        hasAnyState: flags => Object.values(flags).some(Boolean), escapeHtml: value => String(value), r: true, l: false
-    });
-    const source = readTestFile(join(import.meta.dirname, "../src/plugins/stats/stats.js"), "utf8");
-    vm.runInContext(`${source};globalThis.TestStatsPlugin=StatsPlugin`, context);
-    return { $, layer, listPage, newVideo, plugin: new context.TestStatsPlugin() };
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { StatsController } from "../src/features/stats/stats-controller.js";
+
+function createScope() {
+    return { assertActive: vi.fn(), addCleanup: vi.fn() };
 }
 
-describe("Stats scope semantics", () => {
+describe("native stats scope semantics", () => {
+    beforeEach(() => {
+        document.body.innerHTML = '<button id="newVideoBtn" type="button">新作品</button>';
+        vi.stubGlobal("utils", { getDialogArea: vi.fn(() => ["1040px", "760px"]), setupEscClose: vi.fn() });
+    });
+
     it("keeps full-library metrics static and only exposes scope-matched actions", async () => {
-        const { $, layer, listPage, newVideo, plugin } = loadStatsPlugin();
-        await plugin.openDialog();
+        const listPage = { getCurrentPageSummary: vi.fn(() => ({ blockedItems: 7 })), setQuickFilter: vi.fn() };
+        const newVideo = { getPendingNewVideoTotal: vi.fn(async () => 3), openNewVideoDialog: vi.fn() };
+        const storage = {
+            get: vi.fn(async (key) => ({
+                car_list: [{ stateFlags: { blocked: true } }, { stateFlags: { favorite: true, downloaded: true, watched: true } }, { stateFlags: {} }],
+                favorite_actresses: [{}], blacklist: [{}, {}], setting: {},
+            }[key])),
+        };
+        const dialog = {
+            close: vi.fn(),
+            open: vi.fn((options) => {
+                const root = document.createElement("div");
+                root.innerHTML = options.content;
+                document.body.append(root);
+                options.success(root, 12);
+                return 12;
+            }),
+        };
+        const controller = new StatsController({
+            diagnostics: { exportSnapshot: () => ({ activeFeatures: ["list"], errors: [] }) }, dialog,
+            movie: { externalSiteOrigin: () => "https://javdb.com" }, storage,
+            state: { getActivityLog: vi.fn(async () => ({ entries: [], coverageStart: null })) },
+            features: { getFeatureApi: vi.fn(async (id) => id === "discovery" ? { hasNewVideo: true, getPendingNewVideoTotal: newVideo.getPendingNewVideoTotal, openNewVideoDialog: newVideo.openNewVideoDialog } : listPage) },
+            route: "list", scope: createScope(),
+        });
 
-        expect(layer.open.mock.calls[0][0].title).toBe("统计");
-        const groups = $(".jhs-stats__group"), overview = groups.eq(0), currentPage = groups.eq(1);
-        expect(overview.find(".jhs-stats__metric")).toHaveLength(11);
-        expect(overview.find("button.jhs-stats__metric")).toHaveLength(1);
-        expect(overview.find("button[data-action='new-video'] span").text()).toBe("新作品待处理");
-        expect(overview.find("[data-filter]")).toHaveLength(0);
-        expect(overview.find(".jhs-stats__metric").filter(((_, element) => $(element).find("span").text() === "手动屏蔽")).find("strong").text()).toBe("1");
+        await controller.start();
+        await controller.openDialog();
 
-        expect(currentPage.find("button[data-action='filter'][data-filter='blockedItems'] strong").text()).toBe("7");
-        overview.find("button[data-action='new-video']").trigger("click");
+        const dialogRoot = document.querySelector(".jhs-stats");
+        expect(dialog.open).toHaveBeenCalledOnce();
+        expect(dialogRoot?.querySelectorAll(".jhs-stats__group")).toHaveLength(4);
+        expect(dialogRoot?.querySelectorAll(".jhs-stats__group:first-child .jhs-stats__metric")).toHaveLength(11);
+        expect(dialogRoot?.querySelectorAll(".jhs-stats__group:first-child button.jhs-stats__metric")).toHaveLength(1);
+        expect(dialogRoot?.querySelector("button[data-action='new-video'] span")?.textContent).toBe("新作品待处理");
+        expect(dialogRoot?.querySelector(".jhs-stats__group:first-child [data-filter]")).toBeNull();
+        expect([...dialogRoot?.querySelectorAll(".jhs-stats__metric") || []].find((element) => element.textContent?.includes("手动屏蔽"))?.querySelector("strong")?.textContent).toBe("1");
+        expect(dialogRoot?.querySelector("button[data-action='filter'][data-filter='blockedItems'] strong")?.textContent).toBe("7");
+
+        dialogRoot?.querySelector("button[data-action='new-video']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        dialogRoot?.querySelector("button[data-action='filter']")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
         expect(newVideo.openNewVideoDialog).toHaveBeenCalledOnce();
-        currentPage.find("button[data-action='filter']").trigger("click");
         expect(listPage.setQuickFilter).toHaveBeenCalledWith("blockedItems");
-        expect(layer.close).toHaveBeenCalledTimes(2);
+        expect(dialog.close).toHaveBeenCalledTimes(2);
     });
 });

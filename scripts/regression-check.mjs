@@ -68,6 +68,7 @@ const compatibilityManifestSource = await read("src/features/compatibility/manif
 const compatibilityControllerSource = await read("src/features/compatibility/compatibility-controller.js");
 const statsManifestSource = await read("src/features/stats/manifest.js");
 const statsControllerSource = await read("src/features/stats/stats-controller.js");
+const statsSource = statsControllerSource;
 const listFiltersSource = await read("src/features/list/list-filters.js");
 const fc2 = await read("src/plugins/external-search/fc2.js");
 const fc2By123Av = await read("src/plugins/external-search/fc2-by-123av.js");
@@ -78,7 +79,6 @@ const review = await read("src/plugins/external-search/review.js");
 const related = await read("src/plugins/external-search/related.js");
 const one23Offline = await read("src/plugins/one-two-three/offline.js");
 const one115Offline = await read("src/plugins/one-one-five/plugins.js");
-const statsSource = await read("src/plugins/stats/stats.js");
 const mobileSource = await read("src/plugins/status/mobile-bottom-bar.js");
 const settingSource = await read("src/plugins/backup/setting.js");
 const settingFormsSource = await read("src/plugins/backup/setting-forms.js");
@@ -471,7 +471,6 @@ const expectedPlugins = [
   ["one-one-five/plugins.js", "OneOneFiveMatchPlugin", "OneOneFiveMatchPlugin"],
   ["offline/unified-offline.js", "UnifiedOfflinePlugin", "UnifiedOfflinePlugin"],
   ["status/compat-enhancements.js", "CompatibilityEnhancementsPlugin", "CompatibilityEnhancementsPlugin"],
-  ["stats/stats.js", "StatsPlugin", "StatsPlugin"],
   ["status/mobile-bottom-bar.js", "MobileBottomBarPlugin", "MobileBottomBarPlugin"]
 ];
 
@@ -488,11 +487,11 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,HistoryPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,FilterTitleKeywordPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,WantAndWatchedVideosPlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,FavoriteActressesPlugin,NewVideoPlugin,TaskPlugin,StatsPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin,CompatibilityEnhancementsPlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,HistoryPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,FilterTitleKeywordPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,WantAndWatchedVideosPlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,FavoriteActressesPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin,CompatibilityEnhancementsPlugin",
   "JavDB plugin registration order changed"
 );
 assert(
-  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,HistoryPlugin,AutoPagePlugin,SearchByImagePlugin,BusNavBarPlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,FilterTitleKeywordPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,BlacklistPlugin,TaskPlugin,StatsPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin,CompatibilityEnhancementsPlugin",
+  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,HistoryPlugin,AutoPagePlugin,SearchByImagePlugin,BusNavBarPlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,FilterTitleKeywordPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,BlacklistPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin,CompatibilityEnhancementsPlugin",
   "JavBus plugin registration order changed"
 );
 assertIncludes(registry, 'OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"]', "shared registry");
@@ -526,6 +525,7 @@ sourceByFile.set("core/migration.js", migration);
 sourceByFile.set("core/state-service.js", stateService);
 sourceByFile.set("core/plugin-manager.js", await read("src/core/plugin-manager.js"));
 sourceByFile.set("core/utils.js", await read("src/core/utils.js"));
+sourceByFile.set("features/stats/stats-controller.js", statsControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
 sourceByFile.set("backup/setting-styles.js", await read("src/plugins/backup/setting-styles.js"));
@@ -543,7 +543,7 @@ const regressionMatrix = [
   ["统一离线提交", [["offline/unified-offline.js", "getAvailability"], ["offline/unified-offline.js", "capabilities"], ["offline/unified-offline.js", "appendOfflineHistory"]]],
   ["新作品检测", [["new-video/task.js", "TaskPlugin"], ["new-video/new-video.js", "NewVideoPlugin"], ["core/storage.js", "newVideoList"]]],
   ["黑名单检测", [["blacklist/blacklist.js", "BlacklistPlugin"], ["blacklist/filter-title-keyword.js", "FilterTitleKeywordPlugin"], ["core/storage.js", "batchSaveBlacklistCarList"]]],
-  ["统计面板", [["stats/stats.js", "StatsPlugin"], ["stats/stats.js", "coverageStart"], ["stats/stats.js", "6.4.0"]]],
+  ["统计面板", [["features/stats/stats-controller.js", "class StatsController"], ["features/stats/stats-controller.js", "coverageStart"], ["features/stats/stats-controller.js", "6.4.0"]]],
   ["数据导入导出", [["backup/setting-backup.js", "importSettingData"], ["backup/setting-backup.js", "exportSettingData"], ["core/storage.js", "exportData"]]],
   ["WebDAV 备份", [["services/webdav-service.js", "class WebDavClient"], ["backup/setting-backup.js", "backupDataByWebDav"], ["services/webdav-service.js", "PROPFIND"]]],
   ["图片查看器", [["core/logger.js", "showImageViewer"], ["core/logger.js", "new Viewer"], ["image-viewer/screenshot.js", "ScreenShotPlugin"]]],
@@ -565,7 +565,7 @@ for (const [file, source] of [
   ["status/list-page.js", listPageSource],
   ["status/detail-page-button.js", sourceByFile.get("status/detail-page-button.js")],
   ["new-video/new-video.js", sourceByFile.get("new-video/new-video.js")],
-  ["stats/stats.js", sourceByFile.get("stats/stats.js")]
+  ["features/stats/stats-controller.js", statsControllerSource]
 ]) {
   assert(!source.includes("window.refresh("), `${file} must use precise events instead of legacy refresh`);
   assert(!source.includes("storageManager.saveCar("), `${file} must use StateService instead of legacy writes`);

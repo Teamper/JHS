@@ -28,7 +28,6 @@ import { TaskPlugin } from "./new-video/task.js";
 import { UnifiedOfflinePlugin } from "./offline/unified-offline.js";
 import { OneOneFiveMatchPlugin } from "./one-one-five/plugins.js";
 import { OneTwoThreeOfflinePlugin } from "./one-two-three/offline.js";
-import { StatsPlugin } from "./stats/stats.js";
 import { AutoPagePlugin } from "./status/auto-page.js";
 import { BusDetailPagePlugin } from "./status/bus-detail-page.js";
 import { BusNavBarPlugin } from "./status/bus-nav-bar.js";
@@ -85,7 +84,6 @@ export const legacyContributionManifests = Object.freeze([
     manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }, [], { managedByFeature: true }),
     manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog, SERVICE.storage, SERVICE.actressInfo, SERVICE.movie, SERVICE.state], { managedByFeature: true }),
     manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }, [SERVICE.storage, SERVICE.http, SERVICE.actressInfo, SERVICE.movie, REGISTRY.feature], { managedByFeature: true }),
-    manifest("stats.dashboard", "stats", StatsPlugin, ["javdb", "javbus"], { javdb: 32, javbus: 23 }, [SERVICE.diagnostics, SERVICE.dialog, SERVICE.movie, SERVICE.state, REGISTRY.feature], { managedByFeature: true }),
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [PORT.host, SERVICE.settings, SERVICE.profile, REGISTRY.feature], { managedByFeature: true }),
     manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }, [PORT.host, SERVICE.dialog, SERVICE.offline], { managedByFeature: true }),
     manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [PORT.host, SERVICE.dialog, SERVICE.offline, SERVICE.state], { managedByFeature: true }),

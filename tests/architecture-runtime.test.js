@@ -122,7 +122,7 @@ describe("v6.5 architecture runtime contracts", () => {
             "Fc2By123AvPlugin", "DetailPagePlugin", "DetailWorkspacePlugin", "ReviewPlugin", "RelatedPlugin", "DetailPageButtonPlugin",
             "HighlightMagnetPlugin", "PreviewVideoPlugin", "FilterTitleKeywordPlugin", "ActressInfoPlugin", "OtherSitePlugin", "TranslatePlugin",
             "WantAndWatchedVideosPlugin", "MagnetHubPlugin", "ScreenShotPlugin", "BlacklistPlugin", "FavoriteActressesPlugin", "NewVideoPlugin",
-            "TaskPlugin", "StatsPlugin", "MobileBottomBarPlugin", "OneOneFiveMatchPlugin", "UnifiedOfflinePlugin", "CompatibilityEnhancementsPlugin",
+            "TaskPlugin", "MobileBottomBarPlugin", "OneOneFiveMatchPlugin", "UnifiedOfflinePlugin", "CompatibilityEnhancementsPlugin",
         ]);
         const javbus = new PluginManager();
         registerSitePlugins(javbus, createRuntime("javbus", ["ReviewPlugin"]), "javbus");
@@ -162,12 +162,12 @@ describe("v6.5 architecture runtime contracts", () => {
         const legacyDiagnostics = new DiagnosticsService();
         const javdbWithStaleSystemDisables = new PluginManager({ diagnostics: legacyDiagnostics });
         registerSitePlugins(javdbWithStaleSystemDisables, createRuntime("javdb", ["settings.core", "stats.dashboard", "responsive-shell.bottom-bar"]), "javdb");
-        expect(javdbWithStaleSystemDisables.getPluginNames()).toEqual(expect.arrayContaining(["SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin"]));
+        expect(javdbWithStaleSystemDisables.getPluginNames()).toEqual(expect.arrayContaining(["SettingPlugin", "MobileBottomBarPlugin"]));
         expect(javdbWithStaleSystemDisables.getPluginDescriptors().filter((plugin) => plugin.disableable === false).map((plugin) => plugin.name)).toEqual([
-            "SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin",
+            "SettingPlugin", "MobileBottomBarPlugin",
         ]);
         expect(legacyDiagnostics.exportSnapshot().legacyPluginDescriptors.filter((plugin) => plugin.disableable === false).map((plugin) => plugin.name)).toEqual([
-            "SettingPlugin", "StatsPlugin", "MobileBottomBarPlugin",
+            "SettingPlugin", "MobileBottomBarPlugin",
         ]);
     }, 15_000);
 

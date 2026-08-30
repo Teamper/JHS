@@ -39,12 +39,19 @@ export class StatsRepository {
     constructor(dependencies) { this.storage = dependencies.storage; this.state = dependencies.state; }
 
     async loadLibrarySnapshot() {
+        /** @param {string} method @param {string} key */
+        const read = (method, key) => typeof this.storage?.[method] === "function" ? this.storage[method]() : this.storage?.get?.(key);
         const [cars, actresses, blacklist, activity] = await Promise.all([
-            this.storage.getCarList(),
-            this.storage.getFavoriteActressList(),
-            this.storage.getBlacklist(),
+            read("getCarList", "car_list"),
+            read("getFavoriteActressList", "favorite_actresses"),
+            read("getBlacklist", "blacklist"),
             this.state.getActivityLog(),
         ]);
-        return Object.freeze({ cars, actresses, blacklist, activity });
+        return Object.freeze({
+            cars: Array.isArray(cars) ? cars : [],
+            actresses: Array.isArray(actresses) ? actresses : [],
+            blacklist: Array.isArray(blacklist) ? blacklist : [],
+            activity: activity && typeof activity === "object" ? activity : { entries: [] },
+        });
     }
 }

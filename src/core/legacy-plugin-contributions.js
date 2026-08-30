@@ -40,7 +40,6 @@ export const LEGACY_PLUGIN_CONTRIBUTION_MAP = Object.freeze({
     FavoriteActressesPlugin: "library.favorite-actresses",
     NewVideoPlugin: "discovery.new-video",
     TaskPlugin: "discovery.scheduler",
-    StatsPlugin: "stats.dashboard",
     MobileBottomBarPlugin: "responsive-shell.bottom-bar",
     OneOneFiveMatchPlugin: "external-bridge.115-match",
     UnifiedOfflinePlugin: "external-bridge.offline",
