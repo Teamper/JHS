@@ -80,7 +80,7 @@ export const legacyContributionManifests = Object.freeze([
     manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings, REGISTRY.feature], { managedByFeature: true }),
     manifest("library.state-actions", "library", WantAndWatchedVideosPlugin, ["javdb"], { javdb: 25 }, [SERVICE.http, SERVICE.state], { managedByFeature: true }),
     manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage, SERVICE.http, SERVICE.magnet]),
-    manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot, SERVICE.settings]),
+    manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot, SERVICE.settings], { managedByFeature: true }),
     manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [PORT.host, SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.state, REGISTRY.feature], { managedByFeature: true }),
     manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }, [], { managedByFeature: true }),
     manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog, SERVICE.storage, SERVICE.actressInfo, SERVICE.movie, SERVICE.state], { managedByFeature: true }),

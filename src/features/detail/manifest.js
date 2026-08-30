@@ -24,7 +24,10 @@ export default defineFeature({
         const relatedPlugin = runtime.enabledContributions.includes("detail.related")
             ? runtime.resolveLegacyPlugin?.("RelatedPlugin")
             : null;
-        const controller = new DetailController({ hostAdapter: deps[PORT.host], nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
+        const screenshotPlugin = runtime.enabledContributions.includes("detail.screenshot")
+            ? runtime.resolveLegacyPlugin?.("ScreenShotPlugin")
+            : null;
+        const controller = new DetailController({ hostAdapter: deps[PORT.host], nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, screenshotPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
         return controller.start().then(() => ({ dispose: () => controller.dispose() }));
     },
 });

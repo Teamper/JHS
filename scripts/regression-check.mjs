@@ -232,6 +232,7 @@ const detailPageSource = await read("src/plugins/status/detail-page.js");
 const busDetailPageSource = await read("src/plugins/status/bus-detail-page.js");
 const detailReviewSource = await read("src/plugins/external-search/review.js");
 const detailRelatedSource = await read("src/plugins/external-search/related.js");
+const screenshotSource = await read("src/plugins/image-viewer/screenshot.js");
 assertIncludes(detailControllerSource, "nativePlugin?.handle?.({ scope: this.scope })", "native detail feature handoff");
 assertIncludes(detailControllerSource, "workspacePlugin?.handle?.({ scope: this.scope })", "detail workspace feature handoff");
 assertIncludes(detailManifestSource, '"detail.workspace"', "detail workspace contribution selection");
@@ -242,8 +243,10 @@ assertIncludes(detailPageSource, "export class DetailPagePlugin", "JavDB native 
 assertIncludes(busDetailPageSource, "export class BusDetailPagePlugin", "JavBus native detail implementation");
 assertIncludes(detailControllerSource, "reviewPlugin?.handle?.({ scope: this.scope })", "detail review feature handoff");
 assertIncludes(detailControllerSource, "relatedPlugin?.handle?.({ scope: this.scope })", "detail related feature handoff");
+assertIncludes(detailControllerSource, "screenshotPlugin?.handle?.({ scope: this.scope })", "detail screenshot feature handoff");
 assertIncludes(detailReviewSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail review injected scope");
 assertIncludes(detailRelatedSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail related injected scope");
+assertIncludes(screenshotSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail screenshot injected scope");
 assertIncludes(listViewSource, "export class ListView", "real list view");
 assertIncludes(listViewSource, "shouldShowItem({ filter: normalizedFilter", "list view shared filter semantics");
 assertIncludes(listViewSource, "async createQuickFilter(initialFilter)", "list view quick-filter ownership");

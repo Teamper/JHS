@@ -19,9 +19,10 @@ export class ScreenShotPlugin extends BasePlugin {
     async initCss() {
         return `<style>.jhs-screenshot-message{margin-top:50px;color:var(--jhs-text-muted);cursor:auto}.jhs-screenshot-message--bus{margin-top:30px}</style>`;
     }
-    async handle() {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
         if (!isDetailPage) return;
-        const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
+        const settings = this.getRuntimeService("settings"), scope = this.lifecycleScope = options.scope ?? await this.getRuntimeService("scope")();
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names);
             if (!names?.includes("enableLoadScreenShot")) return;
@@ -29,7 +30,11 @@ export class ScreenShotPlugin extends BasePlugin {
             else void this.loadScreenShot().catch((/** @type {unknown} */ error) => clog.error("长缩略图重新加载失败", error));
         };
         settings.addEventListener("settings.changed", onSettingsChanged);
-        scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
+        scope.addCleanup((() => {
+            settings.removeEventListener("settings.changed", onSettingsChanged);
+            this.unmountHosted();
+            this.lifecycleScope = null;
+        }));
         void this.loadScreenShot().catch((/** @type {unknown} */ error) => clog.error("长缩略图加载失败", error));
     }
     /** 关闭总开关时删除 JHS 自有截图 UI（宿主原生区域不做永久销毁）。 */
@@ -56,7 +61,7 @@ export class ScreenShotPlugin extends BasePlugin {
         if (!e) throw clog.warn("跳过缩略图解析：番号不可用"), new Error("缩略图番号不可用");
         const service = this.getScreenshotService(), settings = this.getSettingsSnapshot();
         if (!service.isEnabled(settings)) return clog.warn("长缩略图功能已关闭，跳过请求"), null;
-        const scope = await this.getRuntimeService("scope")();
+        const scope = this.lifecycleScope ?? await this.getRuntimeService("scope")();
         const images = await service.resolve({ carNum: e }, { scope, settings });
         const image = Array.isArray(images) ? images[0] : images;
         return image?.url || null;
