@@ -95,6 +95,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.find((item) => item.id === "detail.external-sites")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.fc2-owned")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.fc2-owned")?.managedRoutes).toEqual(["detail", "owned-detail"]);
+        expect(legacyContributionManifests.filter((item) => !item.managedByFeature).map((item) => item.id)).toEqual(["settings.core"]);
         expect(legacyContributionManifests.find((item) => item.id === "responsive-shell.bottom-bar")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "identity").every((item) => item.managedByFeature)).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "external-bridge").every((item) => item.managedByFeature)).toBe(true);
