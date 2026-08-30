@@ -76,6 +76,8 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.find((item) => item.id === "list.auto-page")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "list.fold-category")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "list.actions")?.managedByFeature).toBe(true);
+        expect(legacyContributionManifests.find((item) => item.id === "list.fc2-navigation")?.managedByFeature).toBe(true);
+        expect(legacyContributionManifests.find((item) => item.id === "list.fc2-navigation")?.featureId).toBe("list");
         expect(legacyContributionManifests.find((item) => item.id === "detail.workspace")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.javdb-native")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.javbus-native")?.managedByFeature).toBe(true);
@@ -224,8 +226,8 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(activate).toHaveBeenCalledOnce();
         expect(diagnostics.exportSnapshot().activeContributions).toEqual(["detail.related"]);
         expect(migrateDisabledPlugins(["ReviewPlugin", "UnknownPlugin"])).toEqual(["detail.reviews", "UnknownPlugin"]);
-        expect(migrateDisabledPlugins(["CoverButtonPlugin", "DetailPageButtonPlugin", "BusImgPlugin", "BusPreviewVideoPlugin"])).toEqual([
-            "detail.cover-state-actions", "detail.page-state-actions", "detail.javbus-images", "detail.javbus-preview",
+        expect(migrateDisabledPlugins(["CoverButtonPlugin", "DetailPageButtonPlugin", "BusImgPlugin", "BusPreviewVideoPlugin", "Fc2NavigationPlugin", "detail.fc2-navigation"])).toEqual([
+            "detail.cover-state-actions", "detail.page-state-actions", "detail.javbus-images", "detail.javbus-preview", "list.fc2-navigation",
         ]);
         expect(migrateDisabledPlugins(["detail.native", "detail.state-actions", "detail.gallery"])).toEqual([
             "detail.javdb-native", "detail.javbus-native", "detail.cover-state-actions", "detail.page-state-actions",

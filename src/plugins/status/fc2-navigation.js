@@ -18,12 +18,13 @@ import { readListItem } from "../../core/list-item-reader.js";
 export class Fc2NavigationPlugin extends BasePlugin {
     getName() { return "Fc2NavigationPlugin"; }
 
-    async handle() {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
         if (!window.isListPage) return;
         const fc2 = this.getOptionalDependency("Fc2Plugin");
         if (!fc2) return;
         const host = this.getRuntimeService("host");
-        const scope = await this.getRuntimeService("scope")();
+        const scope = options.scope || await this.getRuntimeService("scope")();
         const initialRoot = host?.locateListRoot?.() ?? null;
         let boundRoot = null;
         // JHS 自渲染榜单页（热播/Top250）在启动时还没有列表根，这里必须支持延迟挂载：

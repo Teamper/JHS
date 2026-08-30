@@ -66,7 +66,7 @@ describe("FC2 dynamic navigation protection", () => {
         plugin.getOptionalDependency = (name) => (name === "Fc2Plugin" ? fc2 : undefined);
         plugin.getRuntimeService = (name) => (name === "host" ? host : name === "scope" ? () => scope : undefined);
 
-        await plugin.handle();
+        await plugin.handle({ scope });
         expect(first.querySelector("a").href).toBe("https://owned.example/detail/FC2-123");
         expect(scope.observe).toHaveBeenCalledWith(list, expect.any(Function), { childList: true, subtree: false });
 

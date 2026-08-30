@@ -4,6 +4,8 @@ export const LEGACY_PLUGIN_CONTRIBUTION_MAP = Object.freeze({
     ListPagePlugin: "list.core",
     AutoPagePlugin: "list.auto-page",
     Fc2Plugin: "detail.fc2-owned",
+    Fc2NavigationPlugin: "list.fc2-navigation",
+    "detail.fc2-navigation": "list.fc2-navigation",
     FoldCategoryPlugin: "list.fold-category",
     ListPageButtonPlugin: "list.actions",
     HistoryPlugin: "library.history",

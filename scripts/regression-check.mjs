@@ -218,13 +218,14 @@ assertIncludes(listPageSource, "applyVisibility(items = null)", "list page funct
 assertIncludes(listPageSource, "async filterMovieList(", "list page function signature");
 assertIncludes(listPageSource, "async doFilter(revision =", "list page function signature");
 assertIncludes(listManifestSource, 'id: "list"', "real list feature manifest");
-assertIncludes(listManifestSource, 'contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions"]', "list feature contribution ownership");
+assertIncludes(listManifestSource, 'contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions", "list.fc2-navigation"]', "list feature contribution ownership");
 assertIncludes(listManifestSource, 'resolveLegacyPlugin?.("ListPagePlugin")', "list migration adapter resolution");
 assertIncludes(listControllerSource, "this.legacyPlugin.handle({ scope: this.scope, view })", "list feature lifecycle handoff");
 assertIncludes(listControllerSource, "new ListView({", "list view host boundary");
 assertIncludes(listControllerSource, "onFilterChange: (filter, options)", "list view filter callback boundary");
 assertIncludes(listControllerSource, "batchSaveAllVideos: call(\"batchSaveAllVideos\")", "list batch capability boundary");
 assertIncludes(listControllerSource, "this.scope.ownTimeout(setTimeout", "list action deferred lifecycle handoff");
+assertIncludes(listControllerSource, "fc2NavigationPlugin?.handle?.({ scope: this.scope })", "FC2 list navigation feature handoff");
 const detailControllerSource = await read("src/features/detail/detail-controller.js");
 const detailManifestSource = await read("src/features/detail/manifest.js");
 const detailWorkspaceSource = await read("src/plugins/status/detail-workspace.js");

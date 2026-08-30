@@ -50,6 +50,19 @@ describe("List FeatureRuntime ownership", () => {
         scope.dispose();
     });
 
+    it("starts FC2 navigation with the feature scope even without the generic list adapter", async () => {
+        const scope = new LifecycleScope("feature:list"), fc2NavigationPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => null }, controller = new ListController({
+            fc2NavigationPlugin,
+            hostAdapter,
+            scope,
+        });
+
+        await controller.start();
+
+        expect(fc2NavigationPlugin.handle).toHaveBeenCalledWith({ scope });
+        scope.dispose();
+    });
+
     it("defers list actions until the rest of the eager feature APIs can settle", async () => {
         vi.useFakeTimers();
         try {
