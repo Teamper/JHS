@@ -73,7 +73,7 @@ const settingFormsSource = await read("src/plugins/backup/setting-forms.js");
 const settingTemplatesSource = await read("src/plugins/backup/setting-templates.js");
 const magnetHubSource = await read("src/plugins/external-search/magnet-hub.js");
 const newVideoTaskSource = await read("src/plugins/new-video/task.js");
-const compatibilitySource = await read("src/plugins/status/compat-enhancements.js");
+const compatibilityListSource = await read("src/plugins/status/compat-enhancements.js");
 const themeSource = await read("src/core/theme.js");
 
 const version = packageJson.version;
@@ -194,6 +194,8 @@ const listViewSource = await read("src/features/list/list-view.js");
 const listActionsSource = await read("src/plugins/status/list-page-button.js");
 const autoPageSource = await read("src/plugins/status/auto-page.js");
 const coverButtonSource = await read("src/plugins/image-viewer/cover-button.js");
+const historySource = await read("src/plugins/status/history.js");
+const compatibilitySource = await read("src/plugins/status/compat-enhancements.js");
 assertIncludes(listPageSource, "applyVisibility(items = null)", "list page function signature");
 assertIncludes(listPageSource, "async filterMovieList(", "list page function signature");
 assertIncludes(listPageSource, "async doFilter(revision =", "list page function signature");
@@ -218,6 +220,10 @@ assertIncludes(autoPageSource, 'getFeatureApi("list")', "auto-page feature API b
 assert(!autoPageSource.includes('getOptionalDependency("ListPagePlugin")'), "auto-page must not resolve ListPagePlugin directly");
 assertIncludes(coverButtonSource, 'getFeatureApi("list")', "cover actions feature API boundary");
 assert(!coverButtonSource.includes('getOptionalDependency("ListPagePlugin")'), "cover actions must not resolve ListPagePlugin directly");
+assertIncludes(historySource, 'getFeatureApi("list")', "history list API boundary");
+assert(!historySource.includes('getOptionalDependency("ListPagePlugin")'), "history must not resolve ListPagePlugin directly");
+assertIncludes(compatibilityListSource, 'getFeatureApi("list")', "compatibility list API boundary");
+assert(!compatibilityListSource.includes('getOptionalDependency("ListPagePlugin")'), "compatibility must not resolve ListPagePlugin directly");
 assertIncludes(listPageSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "list feature scope handoff");
 assertIncludes(listPageSource, "this.getListView().applyVisibility", "list view visibility ownership");
 assertIncludes(listPageSource, "element.matches?.(e.itemSelector) && this.indexItems([ element ])", "list reorder index retention");

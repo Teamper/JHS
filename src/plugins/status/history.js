@@ -575,7 +575,7 @@ export class HistoryPlugin extends BasePlugin {
     handleDelete(e, t) {
         utils.q(e, `是否移除${t}?`, (async () => {
             try {
-                await this.historyRepository.remove(t), this.getOptionalDependency("ListPagePlugin")?.showCarNumBox?.(t),
+                await this.historyRepository.remove(t), (await this.getRuntimeService("features").getFeatureApi("list"))?.showCarNumBox?.(t),
                 await this.reloadTable();
             } catch (error) {
                 clog.error("移除历史记录失败:", error), show.error("移除失败，请稍后重试");

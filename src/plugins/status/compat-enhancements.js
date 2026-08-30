@@ -25,7 +25,7 @@ export class CompatibilityEnhancementsPlugin extends BasePlugin {
         if (!(await storageManager.getCarList()).some(((/** @type {{ carNum?: string }} */ item) => item.carNum === carNum))) return;
         const button = $('<button type="button" class="jhs-btn jhs-btn--danger jhs-remove-car">移除记录</button>');
         $(".jhs-detail-btn-row,.movie-info-container,.container .info").first().append(button);
-        button.on("click", ((/** @type {Event} */ event) => utils.q(event, `确定移除 ${carNum} 的鉴定记录？`, (async () => { await this.getRuntimeService("state").remove(carNum); button.remove(); this.getOptionalDependency("ListPagePlugin")?.showCarNumBox?.(carNum); show.ok("鉴定记录已移除"); }))));
+        button.on("click", ((/** @type {Event} */ event) => utils.q(event, `确定移除 ${carNum} 的鉴定记录？`, (async () => { await this.getRuntimeService("state").remove(carNum); button.remove(); (await this.getRuntimeService("features").getFeatureApi("list"))?.showCarNumBox?.(carNum); show.ok("鉴定记录已移除"); }))));
     }
     async decorateActresses() {
         const favorites = new Set((await storageManager.getFavoriteActressList()).map(((/** @type {{ starId?: string }} */ item) => String(item.starId))));
