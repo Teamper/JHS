@@ -66,6 +66,6 @@ export class OneOneFiveMatchPlugin extends BasePlugin {
     }
     renameWithPreview(/** @type {Event} */ event, /** @type {any} */ match, /** @type {string} */ carNum) {
         const nextName = preview115Rename(match.name, carNum, { uppercase: !0, keepSuffix: !0 });
-        utils.q(event, `确认重命名？<br>${escapeHtml(match.name)}<br>→ ${escapeHtml(nextName)}`, (async () => { await this.getRuntimeService("offline").renameFile("one115", match.fileId, nextName, { scope: this.lifecycleScope }); show.ok("重命名完成"); }));
+        utils.q(event, `确认重命名？<br>${escapeHtml(match.name)}<br>→ ${escapeHtml(nextName)}`, (async () => { try { await this.getRuntimeService("offline").renameFile("one115", match.fileId, nextName, { scope: this.lifecycleScope }), show.ok("重命名完成"); } catch (error) { clog.error("115 重命名失败", error), show.error("重命名失败：" + (error instanceof Error ? error.message : String(error))); } }));
     }
 }

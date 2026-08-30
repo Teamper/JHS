@@ -118,6 +118,9 @@ export class AutoPagePlugin extends BasePlugin {
         if (!this.started) return;
         if (this.getRuntimeService("settings").snapshot().autoPage === "no") return void this.setState("waterfall-loading", "");
         if (this.isLoading || !this.nextUrl || !this.container) return;
+        // 列表功能被禁用属永久性失败：在发起网络请求前终止并清空翻页游标，避免滚动每帧重抓
+        const listPage = this.getOptionalDependency("ListPagePlugin");
+        if (!listPage) return this.nextUrl = null, this.hasMore = !1, void this.setState("waterfall-error", "列表功能已禁用，无法继续翻页");
         this.isLoading = !0, this.setState("waterfall-loading", "加载中...");
         const t = this.getSelector(), generation = this.generation, scope = this.liveScope;
         try {
@@ -138,10 +141,8 @@ export class AutoPagePlugin extends BasePlugin {
                 top: g,
                 url: this.nextUrl
             });
-            const p = this.getOptionalDependency("ListPagePlugin");
-            if (!p) return void this.setState("waterfall-error", "列表功能已禁用，无法继续翻页");
             let m = s.find(this.getSelector().coverImgSelector);
-            p.replaceHdImg(m), $(this.getSelector().boxSelector).append(c), this.nextUrl = null == (e = s.find(t.nextPageSelector)) ? void 0 : e.attr("href"),
+            listPage.replaceHdImg(m), $(this.getSelector().boxSelector).append(c), this.nextUrl = null == (e = s.find(t.nextPageSelector)) ? void 0 : e.attr("href"),
             this.hasMore = !!this.nextUrl;
             let u = s.find(".pagination");
             $(".pagination").replaceWith(u), this.setState("waterfall-loading", ""), this.hasMore || this.setState("waterfall-no-more", "已经到底了");
@@ -163,6 +164,8 @@ export class AutoPagePlugin extends BasePlugin {
     }
     checkLoad() {
         if (!this.loader) return;
+        // 错误态只允许点击重试，滚动不得绕过重试门槛形成请求风暴
+        if (this.loader.classList.contains("waterfall-error")) return;
         this.loader.getBoundingClientRect().top < window.innerHeight + this.preloadDistance && void this.loadNextPage().catch((error => clog.error("瀑布流自动加载失败", error)));
     }
     async shouldDisablePaging() {

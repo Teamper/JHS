@@ -406,18 +406,20 @@ export class BlacklistPlugin extends BasePlugin {
             $("#favoriteAllVideo, #hasDownAllVideo, #filterAllVideo").removeAttr("aria-disabled").removeClass("jhs-batch-busy");
         }
     }
-    /** @param {string} e @param {string} t @param {any} n @param {string} [site] @param {number} [page] @param {number} [processed] */
-    async filterActorVideo(e, t, n, site = l ? I : T, page = 1, processed = 0) {
+    /** @param {string} e @param {string} t @param {any} n @param {string} [site] @param {number} [page] @param {number} [processed] @param {Set<string>} [visited] */
+    async filterActorVideo(e, t, n, site = l ? I : T, page = 1, processed = 0, visited = new Set()) {
         let {nextPageLink: a, recordCount} = await this.parseAndSaveFilterInfo(n, e, t, site);
         processed += recordCount, (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已屏蔽 ${processed} 个番号`);
-        if (this.nextPageLink = a, a) {
+        // 页数上限 + 已访问集合：宿主分页异常自指时不再无限递归
+        if (this.nextPageLink = a, a && page < 200 && !visited.has(a)) {
+            visited.add(a);
             let n;
             this.lastPageLink = a;
             clog.log("正在请求下一页内容:", a);
             const scope = await this.getRuntimeService("scope")(), i = await requestHostPage(this.getRuntimeService("http"), a, scope);
             n = utils.htmlTo$dom(i);
-            await this.filterActorVideo(e, t, n, site, page + 1, processed);
-        } else (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 新增 ${processed} 个番号`);
+            await this.filterActorVideo(e, t, n, site, page + 1, processed, visited);
+        } else page >= 200 ? ((this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`已达到页数上限（200 页），已停止 · 已屏蔽 ${processed} 个番号`), clog.warn("演员视频分页扫描已达上限，已停止")) : (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 新增 ${processed} 个番号`);
     }
     /** @param {any} e @param {string} t @param {string} n @param {string} site */
     async parseAndSaveFilterInfo(e, t, n, site) {

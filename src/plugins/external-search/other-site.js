@@ -141,7 +141,12 @@ export class OtherSitePlugin extends BasePlugin {
         n.removeAttr("href").find(".site-tag").remove(), this.setSiteState(n, "checking");
         if (t.noHandle && !0 === t.noHandle) {
             n.attr("href", this.getRuntimeService("movie").searchUrl(t.providerId, { carNum: e }) || "");
-            const cacheKey = "jhs_other_site_dmm", raw = this.getRuntimeService("storage").getLocal(cacheKey), a = (raw ? JSON.parse(raw) : {})[e];
+            const cacheKey = "jhs_other_site_dmm", raw = this.getRuntimeService("storage").getLocal(cacheKey);
+            let a = null;
+            try {
+                const parsed = raw ? JSON.parse(raw) : {};
+                a = parsed && "object" == typeof parsed ? parsed[e] : null;
+            } catch { a = null; }
             a ? (n.attr("href", a.url), "multiple" === a.type && n.append('<span class="site-tag">多结果</span>'), this.setSiteState(n, "available")) : this.setSiteState(n, "idle");
         } else if (t.providerId) try {
             const scope = await this.getRuntimeService("scope")();

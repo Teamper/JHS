@@ -35,6 +35,7 @@ function loadPlugin(relativePath, overrides = {}) {
         BasePlugin: class {
             getRuntimeService(name) { return runtime[name]; }
             getOptionalDependency(name) { return runtime.optional?.[name]; }
+            getBean(name) { return runtime.optional?.[name]; }
         },
         clog: runtime.clog,
         utils: runtime.utils,
@@ -142,7 +143,7 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
         plugin.getSelector = () => ({ boxSelector: ".movie-list", requestDomItemSelector: ".movie-list .item", coverImgSelector: ".cover img", nextPageSelector: ".pagination-next" });
         plugin.shouldDisablePaging = async () => false;
         plugin.getBoxCarInfoList = () => [];
-        plugin.getOptionalDependency = () => ({ replaceHdImg: () => {} });
+        plugin.getBean = () => ({ replaceHdImg: () => {} });
         await plugin.reconfigure();
         expect(plugin.started).toBe(true);
         const firstScope = plugin.liveScope;

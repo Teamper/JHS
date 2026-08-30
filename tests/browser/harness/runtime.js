@@ -19,6 +19,7 @@ export async function fulfillHostFixtures(context) {
       if (url.hostname === "javdb.com") return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: url.pathname.startsWith("/v/") ? javdb : url.pathname === "/advanced_search" && url.searchParams.has("handlePlayback") ? javdbHitShow : url.pathname === "/advanced_search" ? javdbFc2List : javdbList });
       if (url.hostname === "www.javbus.com") return route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: url.pathname === "/" ? javbusList : javbus });
     }
+    if (url.hostname === "c0.jdbstatic.com" && url.pathname === "/thumbs/top-fixture.jpg") return route.fulfill({ status: 200, contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="3"><rect width="2" height="3" fill="#777"/></svg>' });
     return route.abort("blockedbyclient");
   });
 }
@@ -45,7 +46,7 @@ export async function injectUserscriptRuntime(page, options = {}) {
       ...settingOverrides,
     });
   }, { disabledPlugins: options.disabledPlugins || [], settingOverrides: options.settingOverrides || {} });
-  await page.evaluate(({ version, nativeTranslation, rankingMovies }) => {
+  await page.evaluate(({ version, nativeTranslation, rankingMovies, topMovies }) => {
     window.__jhsBrowserTestMetadata = { fixture: true, version };
     window.__jhsBrowserDiagnostics = { requests: [], nativeTranslationRequests: 0, startedAt: performance.now() };
     window.unsafeWindow = window;
@@ -57,7 +58,10 @@ export async function injectUserscriptRuntime(page, options = {}) {
       let aborted = false;
       queueMicrotask(() => {
         if (aborted) return;
-        if (rankingMovies && String(options.url || "").includes("/api/v1/rankings/playback")) {
+        if (topMovies && String(options.url || "").includes("/api/v1/movies/top")) {
+          const payload = { success: 1, data: { movies: topMovies } };
+          options.onload?.({ status: 200, response: payload, responseText: JSON.stringify(payload), responseHeaders: "content-type: application/json" });
+        } else if (rankingMovies && String(options.url || "").includes("/api/v1/rankings/playback")) {
           // rankingMovies 可为数组（所有周期同数据）或按 period 键控的对象（验证周期切换管线）
           const periodMatch = /[?&]period=(\w+)/.exec(String(options.url || ""));
           const movies = Array.isArray(rankingMovies) ? rankingMovies : rankingMovies[periodMatch?.[1] || "daily"] ?? rankingMovies.daily ?? [];
@@ -153,7 +157,7 @@ export async function injectUserscriptRuntime(page, options = {}) {
       alert(message, options = {}) { return this.open({ ...options, content: String(message) }); },
       msg() {}
     };
-  }, { version: browserVersion, nativeTranslation: options.nativeTranslation || "", rankingMovies: options.rankingMovies || null });
+  }, { version: browserVersion, nativeTranslation: options.nativeTranslation || "", rankingMovies: options.rankingMovies || null, topMovies: options.topMovies || null });
   await page.addScriptTag({ path: join(repoRoot, "JHS.user.js") });
   try {
     await page.waitForFunction(() => Boolean(window.unsafeWindow?.pluginManager?.getStartupReport), null, { timeout: 15_000 });

@@ -39,6 +39,38 @@ for (const [label, url] of [
   });
 }
 
+test("Top250 intercepts the native premium route without a favorite-tab label", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the Top250 entry regression");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
+  await page.locator(".main-tabs").evaluate((root) => {
+    root.innerHTML = '<a id="fixture-top250" href="/rankings/top?t=y2025"><span>Top250</span></a>';
+  });
+  await injectUserscriptRuntime(page);
+  await page.locator("#fixture-top250").click();
+  await expect(page.locator("#username")).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/");
+});
+
+test("Top250 keeps filters above the list and restores API proxy cover URLs", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers Top250 layout and covers");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/advanced_search?handleTop=1&handleType=all&type_value=", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page, { topMovies: [{
+    id: "top-fixture", number: "TOP-001", origin_title: "Top Fixture", release_date: "2026-08-30",
+    cover_url: "https://jdforrepam.com/rhe951l4q/covers/top-fixture.jpg",
+    thumb_url: "https://jdforrepam.com/rhe951l4q/thumbs/top-fixture.jpg",
+    has_cnsub: false, magnets_count: 1, new_magnets: false,
+  }] });
+  const filters = page.locator(".jhs-top250-filters"), list = page.locator(".jhs-top250-list"), image = list.locator("#top-fixture img");
+  await expect(filters).toBeVisible();
+  await expect(list).toBeVisible();
+  expect(await filters.evaluate((node, listNode) => Boolean(node.compareDocumentPosition(listNode) & Node.DOCUMENT_POSITION_FOLLOWING), await list.elementHandle())).toBe(true);
+  await expect(image).toHaveAttribute("src", "https://c0.jdbstatic.com/thumbs/top-fixture.jpg");
+  await expect(image).toHaveAttribute("data-full", "https://c0.jdbstatic.com/covers/top-fixture.jpg");
+  await expect.poll(() => image.evaluate((element) => element.complete && element.naturalWidth > 0)).toBe(true);
+});
+
 test("legacy disabled plugin migrates to one contribution only", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers storage migration");
   await fulfillHostFixtures(context);

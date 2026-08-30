@@ -50,12 +50,11 @@ export class GmHttp {
         let n = this._domainStats.get(e);
         n || (n = { count: 0, errors: 0, lastUsed: 0 }, this._domainStats.set(e, n)), n.count++, n.lastUsed = Date.now();
     }
-    /** @param {string} e */
-    _recordFailure(e) {
+    /** @param {string} e @param {{affectsBreaker?: boolean}} [options] */
+    _recordFailure(e, { affectsBreaker = true } = {}) {
         let t = this._circuitBreakers.get(e);
-        t || (t = { state: "closed", failCount: 0, openTime: 0, cooldownMs: 6e4, threshold: 3 }, this._circuitBreakers.set(e, t)),
-        t.failCount++, ("half-open" === t.state || t.failCount >= (t.threshold || 3)) && (t.state = "open", t.openTime = Date.now(), t.probing = !1,
-        clog.warn(`[熔断] ${e} 连续失败 ${t.failCount} 次，已熔断 ${t.cooldownMs / 1e3} 秒`));
+        t && affectsBreaker && (t.failCount++, ("half-open" === t.state || t.failCount >= (t.threshold || 3)) && (t.state = "open", t.openTime = Date.now(), t.probing = !1,
+        clog.warn(`[熔断] ${e} 连续失败 ${t.failCount} 次，已熔断 ${t.cooldownMs / 1e3} 秒`)));
         let n = this._domainStats.get(e);
         n || (n = { count: 0, errors: 0, lastUsed: 0 }, this._domainStats.set(e, n)), n.count++, n.errors++, n.lastUsed = Date.now();
     }
@@ -105,11 +104,18 @@ export class GmHttp {
         const o = this._getDomain(t), [m, r, b, k] = await Promise.all([this.storageManager.getSetting("httpTimeout", 5e3), this.storageManager.getSetting("httpRetryCount", 3), this.storageManager.getSetting("circuitBreakerThreshold", 3), this.storageManager.getSetting("circuitBreakerCooldown", 6e4)]);
         let u = this._circuitBreakers.get(o);
         u || (u = { state: "closed", failCount: 0, openTime: 0, cooldownMs: k, threshold: b, probing: !1 }, this._circuitBreakers.set(o, u));
+        /* 阈值/冷却时间随设置实时生效，且设置值异常时兜底 */
+        u.threshold = Math.max(1, Number(b) || 3), u.cooldownMs = Math.max(1e3, Number(k) || 6e4);
         const w = this._checkCircuitBreaker(o);
         if (w) {
             const e = /** @type {Error & LegacyHttpRecord} */ (new Error(`站点 ${o} 已熔断，${w.remaining}秒后重试`));
             throw e._circuitBroken = !0, e;
         }
+        /* 熔断计数按“逻辑请求”计：一次请求的重试链最多累计一次，且 4xx 业务性失败不计入熔断 */
+        let E = !1;
+        const recordBreakerFailure = (/** @type {boolean} */ affectsBreaker) => {
+            affectsBreaker && !E ? (E = !0, this._recordFailure(o, { affectsBreaker: !0 })) : this._recordFailure(o, { affectsBreaker: !1 });
+        };
         return n || (n = void 0), await this.utils.retry(() => {
             const c = this._checkCircuitBreaker(o);
             if (c) {
@@ -131,7 +137,7 @@ export class GmHttp {
                     try {
                         if (404 === e.status && requestOptions.ignoreNotFound) return void a(null);
                         if (this._isCloudflareChallenge(e.responseText, e.status)) {
-                            this._recordFailure(o);
+                            recordBreakerFailure(!0);
                             const n = /** @type {Error & LegacyHttpRecord} */ (new Error(`Cloudflare challenge blocked: ${t}`));
                             return n._cfBlocked = !0, n.status = e.status, n.requestUrl = t, n.finalUrl = e.finalUrl,
                             n.cfDiagnostics = { status: e.status, requestUrl: t, finalUrl: e.finalUrl, contentLength: e.responseText?.length || 0 }, void r(n);
@@ -144,7 +150,7 @@ export class GmHttp {
                                 a(e.responseText);
                             } else a(e.responseText || e);
                         } else {
-                            clog.error("请求失败,状态码:", e.status, t), this._recordFailure(o);
+                            clog.error("请求失败,状态码:", e.status, t), recordBreakerFailure(e.status >= 500);
                             if (e.responseText) {
                                 try {
                                     const t = JSON.parse(e.responseText);
@@ -159,14 +165,14 @@ export class GmHttp {
                             }
                         }
                     } catch (n) {
-                        this._recordFailure(o), r(n);
+                        recordBreakerFailure(!0), r(n);
                     }
                 },
                 onerror: (/** @type {LegacyHttpRecord} */ e) => {
-                    clog.error("网络错误:", t), this._recordFailure(o), r(new Error(e.error || "网络错误"));
+                    clog.error("网络错误:", t), recordBreakerFailure(!0), r(new Error(e.error || "网络错误"));
                 },
                 ontimeout: () => {
-                    this._recordFailure(o), r(new Error("请求超时: " + t));
+                    recordBreakerFailure(!0), r(new Error("请求超时: " + t));
                 }
             });
         });

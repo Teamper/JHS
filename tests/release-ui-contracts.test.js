@@ -36,7 +36,7 @@ describe("v6.4.1 frozen UI contracts", () => {
     it("opens mobile logs through the FAB and keeps the floating toggle hidden", () => {
         expect(mobile).toContain('item("logger", "运行日志")');
         expect(mobile).toContain("clog.openDialog?.()");
-        expect(logger).toContain('window.matchMedia?.("(max-width: 768px)").matches');
+        expect(logger).toContain('window.matchMedia?.("(max-width: 767px)").matches');
         expect(logger).toContain("openDialog() {");
         expect(logger).toContain("content: host.outerHTML");
         expect(logger).toContain('find(".jhs-logger-dialog")[0]?.appendChild(this.window)');

@@ -94,13 +94,13 @@ const themeIndex = injection.indexOf('from "./theme.js"');
 const primitivesIndex = injection.indexOf('from "./ui-primitives.js"');
 if (themeIndex < 0 || primitivesIndex < 0 || primitivesIndex < themeIndex)
   failures.push("css-injection.js must import theme before UI primitives");
-requireMatch(injection, /H\(buildUiPrimitivesCss\(\)\)/, "shared UI CSS is not injected");
-requireMatch(injection, /export function injectCoreCss\(\)/, "core CSS injection must be an explicit Bootstrap action");
+requireMatch(injection, /register\("jhs-ui-primitives", buildUiPrimitivesCss\(\)\)/, "shared UI CSS is not registered");
+requireMatch(injection, /export function injectCoreCss\(styles\)/, "core CSS injection must accept the Bootstrap style registry");
 const bootstrap = await readFile(join(srcRoot, "app", "bootstrap.js"), "utf8");
 requireMatch(bootstrap, /import \{ injectCoreCss \} from "\.\.\/core\/css-injection\.js"/, "Bootstrap must own core CSS injection");
-requireMatch(bootstrap, /injectCoreCss\(\)/, "Bootstrap must execute core CSS injection");
+requireMatch(bootstrap, /injectCoreCss\(context\.services\.styles\)/, "Bootstrap must execute core CSS injection through StyleRegistry");
 requireMatch(bootstrap, /initializeUiAccessibility\(context\.rootScope\)/, "dynamic UI accessibility enhancer must use the App Root Lifecycle");
-requireMatch(injection, /H\(F\)/, "clean global support CSS must be injected");
+requireMatch(injection, /register\("jhs-core-layout", F\)/, "clean global support CSS must be registered");
 forbidMatch(injection, /cleanGlobalCss/, "legacy regex CSS cleanup layer must be deleted");
 
 requireMatch(magnet, /role="tablist"/, "magnet source switcher missing tablist semantics");
@@ -132,7 +132,7 @@ requireMatch(commandbar, /jhs-mobile-filter-menu[\s\S]*jhs-mobile-filter-option/
 forbidMatch(commandbar, /\.jhs-commandbar__filters\s*\{[^}]*overflow-x\s*:\s*auto/, "command bar filters must not clip popovers");
 forbidMatch(commandbar, /@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*overflow-x\s*:\s*auto/, "tablet command bar must wrap instead of scroll");
 requireMatch(commandbar, /@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*flex-wrap:\s*wrap[^}]*overflow:\s*visible/, "tablet command bar must wrap with visible popovers");
-requireMatch(commandbar, /@media \(max-width:\s*768px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*display:\s*none/, "mobile command bar must stay hidden");
+requireMatch(commandbar, /@media \(max-width:\s*767px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*display:\s*none/, "mobile command bar must stay hidden");
 forbidMatch(commandbar, /\$\("#waitCheckBtn"\)\.click\(\)/, "mobile identification must call its business API directly");
 requireMatch(commandbar, /\[ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" \]/, "command bar must expose exactly the three primary entries");
 requireMatch(commandbar, /\[ "#statsBtn", "#blacklistBtn" \][\s\S]*jhs-commandbar__menu/, "statistics and blacklist must be grouped in more menu");

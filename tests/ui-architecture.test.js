@@ -90,7 +90,7 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(commandbar).not.toMatch(/\.jhs-commandbar__filters\s*\{[^}]*overflow-x\s*:\s*auto/);
         expect(commandbar).not.toMatch(/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*overflow-x\s*:\s*auto/);
         expect(commandbar).toMatch(/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*flex-wrap:\s*wrap[^}]*overflow:\s*visible/);
-        expect(commandbar).toMatch(/@media \(max-width:\s*768px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*display:\s*none/);
+        expect(commandbar).toMatch(/@media \(max-width:\s*767px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*display:\s*none/);
     });
 
     it("loads hot-ranking scores in the background with bounded concurrency and stable sorting data", () => {
@@ -101,7 +101,7 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(hitShow).toContain("data-jhs-publish-time");
         expect(hitShow).toContain('id="jhs-hitshow-period"');
         expect(hitShow).toContain("jhs-hitshow-heading");
-        expect(hitShow).toContain('aria-selected="${"daily" === e ? "true" : "false"}"');
+        expect(hitShow).toContain('aria-selected="${active === value ? "true" : "false"}"');
         expect(hitShow).not.toMatch(/is-active|aria-current/);
         expect(hitShow).not.toContain('class="tool-box"');
     });
@@ -312,10 +312,10 @@ describe("list toolbar and UI cleanup contracts", () => {
     });
 
     it("defers core CSS side effects to Bootstrap and injects them once", () => {
-        expect(injection).toContain("export function injectCoreCss()");
-        expect(injection).toMatch(/export function injectCoreCss\(\) \{[\s\S]*H\(buildThemeCss\(\)\)[\s\S]*H\(buildUiPrimitivesCss\(\)\)/);
+        expect(injection).toContain("export function injectCoreCss(styles)");
+        expect(injection).toMatch(/register\("jhs-core-theme", buildThemeCss\(\)\)[\s\S]*register\("jhs-ui-primitives", buildUiPrimitivesCss\(\)\)/);
         expect(bootstrap).toContain('import { injectCoreCss } from "../core/css-injection.js"');
-        expect(bootstrap).toContain("injectCoreCss();");
+        expect(bootstrap).toContain("injectCoreCss(context.services.styles);");
     });
 
     it("resets host cover animation without touching hover preview lifecycle", () => {

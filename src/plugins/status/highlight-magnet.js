@@ -75,6 +75,11 @@ export class HighlightMagnetPlugin extends BasePlugin {
     }
     showAll() {
         $("#enable-magnets-filter").removeClass("do-hide").removeAttr("data-tip");
-        this.getRuntimeService("host")?.getDetailResourceBoundary?.()?.rows().forEach(((/** @type {any} */ row) => $(row).show()));
+        const boundary = this.getRuntimeService("host")?.getDetailResourceBoundary?.();
+        boundary?.rows().forEach(((/** @type {any} */ row) => {
+            $(row).removeClass("high-quality").show();
+            const title = boundary.getTitleTarget(row);
+            title && $(title).css("color", "").find(".jhs-magnet-score").remove();
+        }));
     }
 }

@@ -17,8 +17,9 @@ export class Top250Plugin extends BasePlugin {
         return "TOP250Plugin";
     }
     async handle() {
-        $('.main-tabs ul li:contains("猜你喜歡")').html('<a href="/rankings/top"><span>Top250</span></a>'),
-        $('a[href*="rankings/top"]').on("click", ((/** @type {MouseEvent} */ e) => {
+        const topTab = $('.main-tabs ul li:contains("猜你喜歡")').length ? $('.main-tabs ul li:contains("猜你喜歡")') : $('.main-tabs ul li:contains("猜你喜欢")');
+        topTab.length && topTab.html('<a href="/rankings/top"><span>Top250</span></a>');
+        $('a[href*="rankings/top"]').off("click.jhsTop250").on("click.jhsTop250", ((/** @type {MouseEvent} */ e) => {
             e.preventDefault(), e.stopPropagation();
             const t = $(e.target), n = (t.is("a") ? t : t.closest("a")).attr("href");
             if (!n) return;
@@ -28,13 +29,15 @@ export class Top250Plugin extends BasePlugin {
         })), await this.handleTop();
     }
     hookPage() {
-        const host = this.getRuntimeService("host"), listRoot = host.locateListRoot?.(), contentBox = host.getListContainer?.();
-        if (!listRoot || !contentBox) throw new Error("JavDB 列表容器不可用");
+        const host = this.getRuntimeService("host"), contentBox = host.getListContainer?.() ?? host.getListLayoutContainer?.();
+        if (!contentBox || !host.createOwnedListRoot) throw new Error("JavDB 列表容器不可用");
         this.$contentBox = $(contentBox), this.$listRoot = $(host.createOwnedListRoot([ "jhs-top250-list", "jhs-layout-d2c171b1" ]));
-        $("h2.section-title").contents().first().replaceWith("Top250"), $(".empty-message").remove(),
-        this.$contentBox.children(".box").remove(), $("#sort-toggle-btn").remove(), this.$contentBox.append('<div class="tool-box jhs-layout-d2c171b1"></div>'),
-        this.$contentBox.append(this.$listRoot),
-        this.renderPagination();
+        let e = $("h2.section-title");
+        e.length || (e = $("<h2></h2>").addClass("section-title").prependTo(this.$contentBox)), e.contents().first().replaceWith("Top250"),
+        $(".empty-message").remove(), this.$contentBox.children(".box").remove(), $("#sort-toggle-btn").remove(),
+        this.$contentBox.children(".jhs-top250-list").remove(), this.$contentBox.children(".jhs-top250-filters").remove(),
+        this.$contentBox.children(".tool-box.jhs-layout-d2c171b1").remove(), this.$contentBox.children("nav.pagination").remove(),
+        this.$contentBox.append('<div class="tool-box jhs-layout-d2c171b1"></div>'), this.$contentBox.append(this.$listRoot);
     }
     renderPagination() {
         const e = new URLSearchParams(window.location.search);
@@ -62,48 +65,41 @@ export class Top250Plugin extends BasePlugin {
         let t = e.get("handleType") || "all", n = e.get("type_value") || "";
         this.has_cnsub = e.get("has_cnsub") || "";
         let a = Number(e.get("page")) || 1;
-        this.hookPage(), this.toolBar(t, n, a);
+        this.hookPage(), this.toolBar(t, n), this.renderPagination();
         // 操作按钮行（开始鉴定/批量操作）挂进 Top250 自有筛选容器，与热播页同一挂载通道
         await this.getOptionalDependency("ListPageButtonPlugin")?.mountOwnedRankingControls?.($(".jhs-top250-filters"))?.catch?.((/** @type {unknown} */ error) => clog.error("Top250 操作按钮挂载失败", error));
         let i = this.$listRoot;
         i.html("");
         let s = loading();
         let o = !1;
-        for (let l = 1; l <= 3 && !o; l++) try {
+        for (let attempt = 1; attempt <= 3 && !o; attempt++) try {
             const e = await q(t, n, a, 50);
-            let r = e.success, l = e.message, c = e.action;
+            let r = e.success, c = e.action;
             if (1 === r) {
-                let t = e.data.movies;
-                if (0 === t.length) return show.error("无数据"), void s.close();
-                this.movies = t;
-                const n = t.filter(((/** @type {TopMovie} */ e) => "1" === this.has_cnsub ? e.has_cnsub : "0" !== this.has_cnsub || !e.has_cnsub)), r = hitShow.markDataListHtml(n);
-                i.html(r), await hitShow.initializeRenderedList(), await hitShow.loadScore(n), o = !0;
-            } else clog.error(e), i.html(`<h3>${escapeHtml(l)}</h3>`), show.error(l), "JWTVerificationError" === c && (removeStoredEncryptedCredential(me),
+                const movies = e.data.movies;
+                if (0 === movies.length) return show.error("无数据"), void s.close();
+                this.movies = movies;
+                const filtered = movies.filter(((/** @type {TopMovie} */ movie) => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), rendered = hitShow.markDataListHtml(filtered, { thumbnailFirst: !0 });
+                i.html(rendered), await hitShow.initializeRenderedList(), await hitShow.loadScore(filtered), o = !0;
+            } else clog.error(e), i.html(`<h3>${escapeHtml(e.message)}</h3>`), show.error(e.message), "JWTVerificationError" === c && (removeStoredEncryptedCredential(me),
             await this.checkLogin(null, new URLSearchParams(window.location.search))), o = !0;
         } catch (r) {
-            l < 3 ? (clog.error(`获取Top数据失败 (第 ${l} 次重试):`, r), await new Promise((e => setTimeout(e, 1e3)))) : (clog.error("所有重试尝试均失败，无法获取Top数据。", r),
+            attempt < 3 ? (clog.error(`获取Top数据失败 (第 ${attempt} 次重试):`, r), await new Promise((e => setTimeout(e, 1e3)))) : (clog.error("所有重试尝试均失败，无法获取Top数据。", r),
             i.html("<h3>无法加载数据，请稍后再试。</h3>"));
         } finally {
-            (o || 3 === l) && s.close();
+            (o || 3 === attempt) && s.close();
         }
     }
-    toolBar(/** @type {string} */ e, /** @type {string} */ t, /** @type {string | number} */ n) {
-        "5" === n.toString() && $(".pagination-next").remove(), $(".pagination-ellipsis").closest("li").remove(),
-        $(".pagination-list li .pagination-link").each(((/** @type {number} */ _index, /** @type {Element} */ element) => { parseInt($(element).text(), 10) > 5 && $(element).closest("li").remove(); }));
+    toolBar(/** @type {string} */ e, /** @type {string} */ t) {
         let years = "";
         for (let year = (new Date).getFullYear(); year >= 2008; year--) years += `<a class="jhs-segmented__item jhs-layout-186f17ef ${t === String(year) ? "active" : ""}" aria-current="${t === String(year) ? "page" : "false"}" href="/advanced_search?handleTop=1&handleType=year&type_value=${year}&has_cnsub=${this.has_cnsub}">${year}</a>`;
         const typeLink = (/** @type {string} */ value, /** @type {string} */ label, /** @type {string} */ type = "video_type") => `<a class="jhs-segmented__item jhs-layout-186f17ef ${value === ("all" === value ? e : t) ? "active" : ""}" aria-current="${value === ("all" === value ? e : t) ? "page" : "false"}" href="/advanced_search?handleTop=1&handleType=${type}&type_value=${"all" === value ? "" : value}&has_cnsub=${this.has_cnsub}">${label}</a>`;
         const html = `<div class="jhs-top250-filters"><nav class="jhs-segmented jhs-layout-701bf0f9" aria-label="类型条件">${typeLink("all", "全部", "all")}${typeLink("0", "有码")}${typeLink("1", "无码")}${typeLink("2", "欧美")}${typeLink("3", "Fc2")}<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-2335597e ${"1" === this.has_cnsub ? "active" : ""}" aria-pressed="${"1" === this.has_cnsub}" data-cnsub-value="1">含中字磁力</button><button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-186f17ef ${"0" === this.has_cnsub ? "active" : ""}" aria-pressed="${"0" === this.has_cnsub}" data-cnsub-value="0">无字幕</button><button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-186f17ef" aria-pressed="false" data-cnsub-value="">重置</button></nav><nav class="jhs-segmented" aria-label="年份条件">${years}</nav></div>`;
-        this.$contentBox.append(html), $("button[data-cnsub-value]").on("click", (async (/** @type {MouseEvent} */ event) => {
-            const value = $(event.currentTarget).data("cnsub-value");
-            this.has_cnsub = value.toString(), $("button[data-cnsub-value]").removeClass("active").attr("aria-pressed", "false"),
-            $(event.currentTarget).addClass("active").attr("aria-pressed", "true"), $(".jhs-top250-filters a").each(((/** @type {number} */ index, /** @type {HTMLAnchorElement} */ element) => {
-                const link = $(element), url = new URL(link.attr("href"), window.location.origin);
-                url.searchParams.set("has_cnsub", value), link.attr("href", url.toString());
-            }));
-            const movies = this.movies.filter(((/** @type {TopMovie} */ movie) => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), hitShow = this.getOptionalDependency("HitShowPlugin");
-            if (!hitShow) return void show.info("热播列表功能已禁用");
-            this.$listRoot.html(hitShow.markDataListHtml(movies)), await hitShow.initializeRenderedList(), void hitShow.loadScore(movies).catch(((/** @type {unknown} */ error) => clog.error("Top250 评分加载失败", error)));
+        const title = this.$contentBox.children("h2.section-title").first();
+        title.length ? title.after(html) : this.$contentBox.prepend(html), $("button[data-cnsub-value]").on("click", ((/** @type {MouseEvent} */ event) => {
+            const value = String($(event.currentTarget).data("cnsub-value")), params = new URLSearchParams(window.location.search);
+            params.set("handleTop", "1"), params.set("handleType", e), params.set("type_value", t), params.set("has_cnsub", value), params.delete("page"),
+            window.location.href = `/advanced_search?${params.toString()}`;
         }));
     }
     async checkLogin(/** @type {MouseEvent | null} */ e, /** @type {URLSearchParams} */ t) {

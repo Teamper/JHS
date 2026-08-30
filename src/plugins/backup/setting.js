@@ -230,6 +230,8 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             success: async (e, n) => {
                 const generation = ++this._settingsDialogGeneration;
                 const layerRoot = $(e);
+                this._settingsFocusCleanup?.();
+                this._settingsFocusCleanup = utils.trapFocus(layerRoot[0]);
                 layerRoot.data("jhsSettingsGeneration", generation);
                 layerRoot.find(".layui-layer-content").css("position", "relative");
                 this.renderTaskStatuses(layerRoot);
@@ -253,6 +255,8 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 this._settingsDialogGeneration++;
                 this._fullSettingBinding?.dispose?.();
                 this._fullSettingBinding = null;
+                this._settingsFocusCleanup?.();
+                this._settingsFocusCleanup = null;
                 this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null;
                 this.getOptionalDependency("CoverButtonPlugin")?.enableSvgBtn?.();
             }
@@ -382,10 +386,10 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
     }
     collapseAdvancedTabs(layerRoot = null) {
         const advancedPanels = [
-            { id: "health-panel", label: "数据体检", render: renderDataHealthPanel },
+            { id: "health-panel", label: "数据体检", render: () => renderDataHealthPanel(this.getRuntimeService("diagnostics")) },
             { id: "plugin-mgmt-panel", label: "插件管理", render: () => renderPluginMgmtPanel(this.getRuntimeService("diagnostics"), this.getRuntimeService("settings")) },
             { id: "snapshot-panel", label: "恢复点", render: renderSnapshotPanel },
-            { id: "network-panel", label: "外部请求", render: renderNetworkPanel }
+            { id: "network-panel", label: "外部请求", render: () => renderNetworkPanel(this.getRuntimeService("diagnostics")) }
         ];
         const sidebar = $(".jhs-mobile-sidebar");
         const contentParent = $(".content-panel").parent();
@@ -752,15 +756,21 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         const pending = this.pendingCarImport;
         utils.q(event, `确认导入 ${pending.values.length} 条记录？`, (async () => {
             const existing = new Map((await storageManager.getCarList()).map((item => [normalizeCarNum(item.carNum), item]))), summary = { added: 0, updated: 0, failed: 0 }, flag = legacyActionToFlag(pending.actionType);
-            for (const rawCarNum of pending.values) {
-                const carNum = normalizeCarNum(rawCarNum);
+            const state = this.getRuntimeService("state");
+            const records = pending.values.map((rawCarNum) => {
+                const carNum = normalizeCarNum(rawCarNum), current = existing.get(carNum);
+                return carNum ? { carNum, url: current?.url || buildFallbackCarUrl(carNum), names: current?.names || "", publishTime: current?.publishTime || "" } : null;
+            }).filter(Boolean);
+            // 分块批量 patch：逐条 patch 会放大为 O(n) 次全库事务
+            const CHUNK = 75;
+            for (let index = 0; index < records.length; index += CHUNK) {
+                const chunk = records.slice(index, index + CHUNK);
                 try {
-                    const current = existing.get(carNum);
-                    await this.getRuntimeService("state").patch(carNum, { [flag]: !0 }, { type: "manual-car-number-import", record: { carNum, url: current?.url || buildFallbackCarUrl(carNum), names: current?.names || "", publishTime: current?.publishTime || "" } });
-                    current ? summary.updated++ : summary.added++;
+                    await state.patch(chunk.map((record) => record.carNum), { [flag]: !0 }, { type: "manual-car-number-import", records: chunk });
+                    chunk.forEach((record) => existing.has(record.carNum) ? summary.updated++ : summary.added++);
                 } catch (error) {
-                    summary.failed++;
-                    clog.warn(`番号 ${carNum} 导入失败`, error);
+                    summary.failed += chunk.length;
+                    clog.warn("番号批量导入块失败", error);
                 }
             }
             this.pendingCarImport = null;

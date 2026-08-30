@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 const warnings = [], notices = [];
 const context = vm.createContext({ URL, window: { location: { href: "https://javdb.com/" } }, encodeURIComponent, normalizeCarNum: value => typeof value === "string" && value.trim() && !["null", "undefined"].includes(value.trim().toLowerCase()) ? value.trim() : null, escapeHtml: value => value, clog: { warn: (...args) => warnings.push(args), debug: () => {} }, show: { error: message => notices.push(message) } });
 const source = readTestFile(join(import.meta.dirname, "../src/core/feature-helpers.js"), "utf8");
-vm.runInContext(`${source};globalThis.api={mapLimit,parseNumberSetting,parseTaskTimestamp,shouldSkipStopped,selectLatestPublishTime,normalizeDmmCid,normalizeHttpUrl,normalizeBtihHash,resolveHighResCover,parseCarNumberText,buildFallbackCarUrl,linkCommentImageReferences,safePlay}`, context);
+vm.runInContext(`${source};globalThis.api={mapLimit,parseNumberSetting,parseTaskTimestamp,shouldSkipStopped,selectLatestPublishTime,normalizeDmmCid,normalizeHttpUrl,normalizeJavdbMediaUrl,normalizeBtihHash,resolveHighResCover,parseCarNumberText,buildFallbackCarUrl,linkCommentImageReferences,safePlay}`, context);
 const api = context.api;
 
 describe("feature helpers", () => {
@@ -34,6 +34,8 @@ describe("feature helpers", () => {
     it("accepts only HTTP(S) URLs and supported BTIH hashes", () => {
         expect(api.normalizeHttpUrl("/cover.jpg")).toBe("https://javdb.com/cover.jpg");
         expect(api.normalizeHttpUrl("javascript:alert(1)")).toBeNull();
+        expect(api.normalizeJavdbMediaUrl("https://jdforrepam.com/rhe951l4q/thumbs/a.jpg")).toBe("https://c0.jdbstatic.com/thumbs/a.jpg");
+        expect(api.normalizeJavdbMediaUrl("https://c0.jdbstatic.com/covers/a.jpg")).toBe("https://c0.jdbstatic.com/covers/a.jpg");
         expect(api.normalizeBtihHash("a".repeat(40))).toBe("A".repeat(40));
         expect(api.normalizeBtihHash("b".repeat(32))).toBe("B".repeat(32));
         expect(api.normalizeBtihHash("<script>")).toBeNull();

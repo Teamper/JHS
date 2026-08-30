@@ -11,8 +11,8 @@ describe("batch action contract (筛选后批量语义)", () => {
     it("scans every page from the first page through the shared scanner with the frozen filter snapshot", () => {
         expect(listPage).toContain("scanAllPages({");
         expect(listPage).toContain("startDom: root ? $(root) : $(document)");
-        expect(listPage).toContain("currentUrl: root ? null : window.location.href");
-        expect(listPage).toContain('firstPageUrl: root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href)');
+        expect(listPage).toContain("currentUrl: isOwnedRankingPage ? null : (root ? null : window.location.href)");
+        expect(listPage).toContain('firstPageUrl: isOwnedRankingPage ? null : (root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href))');
         expect(blacklist).toContain('firstPageUrl: root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href)');
         expect(listPage).toContain("itemSelector: this.getSelector().requestDomItemSelector");
         expect(listPage).toContain('evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized })');

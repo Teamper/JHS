@@ -20,6 +20,33 @@ export const Z = (e, t) => {
     return e[0] || null;
 }, ee = "jhs_dmm_video";
 
+const DMM_CACHE_TTL = 30 * 864e5, DMM_CACHE_LIMIT = 500;
+
+/** @param {string | null} raw 坏 JSON 返回空对象而不是让整个预览链路瘫痪 */
+function parseJsonMap(raw) {
+    if (!raw) return {};
+    try {
+        const value = JSON.parse(raw);
+        return value && "object" == typeof value && !Array.isArray(value) ? value : {};
+    } catch { return {}; }
+}
+
+/** @param {Record<string, any>} cache 裁掉过期与超量条目 */
+function pruneDmmCache(cache) {
+    const now = Date.now();
+    for (const key of Object.keys(cache)) {
+        const entry = cache[key];
+        // 无时间戳的历史条目视为仍然有效，避免升级后缓存整体失效
+        (!entry || (entry.time && now - entry.time > DMM_CACHE_TTL)) && delete cache[key];
+    }
+    const keys = Object.keys(cache);
+    if (keys.length > DMM_CACHE_LIMIT) {
+        keys.sort(((a, b) => (cache[a].time || 0) - (cache[b].time || 0)));
+        for (const key of keys.slice(0, keys.length - DMM_CACHE_LIMIT)) delete cache[key];
+    }
+    return cache;
+}
+
 /** @param {Record<string, any>} settings */
 export function isPreviewEnabled(settings) {
     return settings?.enablePreviewVideo !== "no";
@@ -57,13 +84,13 @@ class DmmPreviewParser {
         this.carNum = e || "", this.storage = storage, this.movie = movie, this.scope = scope, this.lastError = null;
     }
     _checkCache() {
-        const cached = this.storage.getLocal(ee), e = cached ? JSON.parse(cached) : {};
-        return e[this.carNum] ? (clog.debug("缓存中存在预览视频信息", e[this.carNum]), e[this.carNum]) : null;
+        const cached = pruneDmmCache(parseJsonMap(this.storage.getLocal(ee)));
+        return cached[this.carNum] ? (clog.debug("缓存中存在预览视频信息", cached[this.carNum]), cached[this.carNum]) : null;
     }
     /** @param {Record<string, string>} e */
     _updateCache(e) {
-        const cached = this.storage.getLocal(ee), t = cached ? JSON.parse(cached) : {};
-        t[this.carNum] = e, clog.debug("成功解析出预览视频并已缓存:", e), this.storage.setLocal(ee, JSON.stringify(t));
+        const cached = pruneDmmCache(parseJsonMap(this.storage.getLocal(ee)));
+        cached[this.carNum] = { ...e, time: Date.now() }, clog.debug("成功解析出预览视频并已缓存:", e), this.storage.setLocal(ee, JSON.stringify(cached));
     }
     async _fetchRemote() {
         const result = await this.movie.preview("dmm", { carNum: this.carNum }, { scope: this.scope });
@@ -75,8 +102,8 @@ class DmmPreviewParser {
         }
         button.attr("href", result.pageUrl).css("backgroundColor", "var(--jhs-status-down)");
         if (result.matchType === "multiple") button.append('<span class="site-tag jhs-layout-294497f1">多结果</span>');
-        const cacheKey = "jhs_other_site_dmm", cached = this.storage.getLocal(cacheKey), cache = cached ? JSON.parse(cached) : {};
-        cache[this.carNum] = { type: result.matchType, url: result.pageUrl };
+        const cacheKey = "jhs_other_site_dmm", cache = pruneDmmCache(parseJsonMap(this.storage.getLocal(cacheKey)));
+        cache[this.carNum] = { type: result.matchType, url: result.pageUrl, time: Date.now() };
         this.storage.setLocal(cacheKey, JSON.stringify(cache));
         return result.sources;
     }

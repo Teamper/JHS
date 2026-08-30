@@ -133,7 +133,9 @@ export class HistoryPlugin extends BasePlugin {
             </style>`;
     }
     handleResize() {
-        $(".navbar-search").is(":hidden") ? ($(".historyBtnBox").show(), $(".miniHistoryBtnBox").hide()) : ($(".historyBtnBox").hide(),
+        // 按钮已被命令栏收走时，宿主导航中的空壳容器保持隐藏
+        const hasButton = (/** @type {number} */ _index, /** @type {HTMLElement} */ element) => element.children.length > 0;
+        $(".navbar-search").is(":hidden") ? ($(".historyBtnBox").filter(hasButton).show(), $(".historyBtnBox").filter(((/** @type {number} */ index, /** @type {HTMLElement} */ element) => !hasButton(index, element))).hide(), $(".miniHistoryBtnBox").hide()) : ($(".historyBtnBox").hide(),
         $(".miniHistoryBtnBox").show());
     }
     async handle() {
@@ -172,22 +174,26 @@ export class HistoryPlugin extends BasePlugin {
                 await this.loadTableData(), root.on("click.jhsHistory", "#clearSearchbtn", (async (/** @type {any} */ e) => {
                     root.find("#searchCarNum").val(""), JhsSelect.setValue(root.find("#dataType"), "all"), await this.reloadTable(),
                     root.find("#allSelectBox").hide();
-                })).on("focusout keydown", "#searchCarNum", (async (/** @type {any} */ e) => {
+                })).on("focusout.jhsHistory keydown.jhsHistory", "#searchCarNum", (async (/** @type {any} */ e) => {
                     if ("focusout" === e.type || "Enter" === e.key) {
                         if ("Enter" === e.key && e.preventDefault(), "keydown" === e.type && "Enter" !== e.key) return;
                         await this.reloadTable();
                     }
-                })).on("click", ".table-link-param", (async (/** @type {any} */ e) => {
+                })).on("click.jhsHistory", ".table-link-param", (async (/** @type {any} */ e) => {
                     let t = $(e.currentTarget);
                     root.find("#searchCarNum").val(t.text()), await this.reloadTable();
-                })).on("change", "#dataType", (async () => {
+                })).on("change.jhsHistory", "#dataType", (async () => {
                     await this.reloadTable();
-                })).on("click", "[data-history-view]", (async (/** @type {any} */ event) => {
+                })).on("click.jhsHistory", "[data-history-view]", (async (/** @type {any} */ event) => {
                     const view = $(event.currentTarget).data("history-view");
                     root.find("[data-history-view]").removeClass("active"), $(event.currentTarget).addClass("active"), await this.showHistoryView(view);
                 })).on("click", ".jhs-undo-activity", (async (/** @type {any} */ event) => {
-                    const result = await this.historyRepository.undo($(event.currentTarget).data("transaction"));
-                    show.info(`撤销完成：${result.reverted.length} 项成功，${result.conflicts.length} 项冲突`), await this.renderActivityHistory();
+                    try {
+                        const result = await this.historyRepository.undo($(event.currentTarget).data("transaction"));
+                        show.info(`撤销完成：${result.reverted.length} 项成功，${result.conflicts.length} 项冲突`), await this.renderActivityHistory();
+                    } catch (error) {
+                        clog.error("撤销失败:", error), show.error("撤销失败，请稍后重试");
+                    }
                 })).on("click", ".jhs-copy-offline", (async (/** @type {any} */ event) => {
                     await utils.copyToClipboard("离线资源", $(event.currentTarget).data("resource"));
                 })).on("click", ".jhs-retry-offline", (async (/** @type {any} */ event) => {
@@ -547,7 +553,13 @@ export class HistoryPlugin extends BasePlugin {
                 column: "updateDate",
                 dir: "desc"
             } ]
-        }), this.tableObj.on("dataProcessed", (() => {
+        });
+        // 数据刷新时 Tabulator 会先取消当前页选择；该阶段不应写入“全选筛选结果”的排除集。
+        this.tableObj.on("dataProcessing", (() => {
+            this.historySelectionSyncing = !0;
+        }));
+        this.tableObj.on("dataProcessed", (() => {
+            this.historySelectionSyncing = !1;
             this.isHistoryAllFiltered() ? this.syncHistoryPageSelection() : this.updateHistorySelectionUi();
         })), this.tableObj.on("rowSelected", ((/** @type {TableHandle} */ row) => {
             this.updateHistoryRowSelection(row, !0);
@@ -562,8 +574,12 @@ export class HistoryPlugin extends BasePlugin {
     /** @param {any} e @param {string} t */
     handleDelete(e, t) {
         utils.q(e, `是否移除${t}?`, (async () => {
-            await this.historyRepository.remove(t), this.getOptionalDependency("ListPagePlugin")?.showCarNumBox?.(t),
-            await this.reloadTable();
+            try {
+                await this.historyRepository.remove(t), this.getOptionalDependency("ListPagePlugin")?.showCarNumBox?.(t),
+                await this.reloadTable();
+            } catch (error) {
+                clog.error("移除历史记录失败:", error), show.error("移除失败，请稍后重试");
+            }
         }));
     }
     /** @param {any} e @param {HistoryRecord} t */
@@ -581,8 +597,9 @@ export class HistoryPlugin extends BasePlugin {
             utils.openPage(t.url, t.carNum, !1, e);
         }
         if (l) {
-            const url = t.url || "";
-            url.includes("javdb") ? window.open(url, "_blank") : utils.openPage(url, t.carNum, !1, e);
+            // 无来源链接时不能退化为打开站点首页
+            if (!t.url) return void show.info("该记录没有来源链接");
+            t.url.includes("javdb") ? window.open(t.url, "_blank") : utils.openPage(t.url, t.carNum, !1, e);
         }
     }
     /** @param {HistoryRecord} e */

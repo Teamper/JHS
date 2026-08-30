@@ -15,7 +15,12 @@ import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 /** @param {DiagnosticsHandle} diagnostics */
 export async function renderNetworkPanel(diagnostics) {
     const network = diagnostics.getNetworkDiagnostics(), e = /** @type {Record<string, CircuitBreakerRecord>} */ (network.circuitBreakers), t = /** @type {Record<string, DomainStatsRecord>} */ (network.domainStats), n = await storageManager.getSetting("circuitBreakerThreshold", 3), a = await storageManager.getSetting("circuitBreakerCooldown", 6e4);
-    $("#circuitBreakerThreshold").val(n), $("#circuitBreakerCooldownSec").val(Math.round(a / 1e3));
+    // 仅首次水合：切换面板后重渲染不得覆盖用户尚未保存的编辑
+    $("#circuitBreakerThreshold").each(((/** @type {number} */ _i, /** @type {HTMLInputElement} */ element) => {
+        element.dataset.jhsHydrated || (element.value = String(n), element.dataset.jhsHydrated = "1");
+    })), $("#circuitBreakerCooldownSec").each(((/** @type {number} */ _i, /** @type {HTMLInputElement} */ element) => {
+        element.dataset.jhsHydrated || (element.value = String(Math.round(a / 1e3)), element.dataset.jhsHydrated = "1");
+    }));
     const i = Object.entries(e);
     if (i.length) {
         let t = '<table class="jhs-data-table"><tr><th>域名</th><th class="is-center">状态</th><th class="is-center">失败次数</th><th class="is-center">操作</th></tr>';
@@ -84,7 +89,7 @@ export async function renderSnapshotPanel() {
                             try {
                                 const e = await storageManager.getSnapshot(i.id);
                                 if (!e) throw new Error("快照不存在");
-                                utils.download(JSON.stringify(e.data), `snapshot_${escapeHtml(i.name)}.json`), show.ok("下载成功");
+                                utils.download(JSON.stringify(e.data), `snapshot_${String(i.name || "snapshot").replace(/[\\/:*?"<>|]/g, "_")}.json`), show.ok("下载成功");
                             } catch (n) { show.error("下载失败: " + (n instanceof Error ? n.message : String(n))); } finally { t.close(); }
                         })), s && s.addEventListener("click", (async (/** @type {MouseEvent} */ e) => {
                             utils.q(e, `删除快照「${escapeHtml(i.name)}」?`, (async () => {
@@ -126,15 +131,16 @@ export function showDiffPreview(e, t, n = null, dialog) {
     }
     s += '<div class="jhs-warning-note">导入将覆盖当前数据，建议先创建快照备份</div>';
     s += '</div>';
+    const hasChanges = i.length > 0;
     const r = dialog.open({
         type: 1,
         title: "数据差异预览",
         content: s,
         area: utils.getResponsiveArea(["700px", "auto"]),
-        btn: ["确认导入", "取消"],
+        btn: hasChanges ? ["确认导入", "取消"] : ["知道了", "取消"],
         anim: -1,
         yes: async (/** @type {number} */ s) => {
-            dialog.close(s);
+            if (!hasChanges) return void dialog.close(s);
             let o = loading();
             try {
                 await storageManager.createSnapshot("导入前自动备份", "auto-import"),

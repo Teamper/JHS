@@ -54,16 +54,24 @@ export async function renderScreenshotPanel(options) {
     };
     if (mode !== "manual") return load();
     const tabs = jq('<div class="jhs-screenshot-providers" role="tablist" aria-label="截图来源"></div>');
-    const result = jq('<div class="jhs-screenshot-result"></div>').text("请选择截图来源");
-    enabledProviders.forEach((provider) => {
-        const button = jq('<button type="button" class="jhs-btn jhs-btn--secondary" role="tab" aria-selected="false"></button>').text(provider.name);
+    const resultId = `jhs-screenshot-result-${String(options.carNum).replace(/[^a-z0-9_-]/gi, "-")}`;
+    const result = jq('<div class="jhs-screenshot-result" role="tabpanel"></div>').attr("id", resultId).text("请选择截图来源");
+    enabledProviders.forEach((provider, index) => {
+        const button = jq('<button type="button" class="jhs-btn jhs-btn--secondary" role="tab" aria-selected="false"></button>').attr({ "aria-controls": resultId, tabindex: index === 0 ? "0" : "-1" }).text(provider.name);
         button.on("click", async () => {
-            tabs.find("[role='tab']").attr("aria-selected", "false");
-            button.attr("aria-selected", "true");
+            tabs.find("[role='tab']").attr({ "aria-selected": "false", tabindex: "-1" });
+            button.attr({ "aria-selected": "true", tabindex: "0" });
             await load(result, provider.id);
         });
         tabs.append(button);
     });
+    tabs.on("keydown", "[role='tab']", ((/** @type {KeyboardEvent} */ event) => {
+        if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(event.key)) return;
+        event.preventDefault();
+        const items = tabs.find("[role='tab']"), index = items.index(event.currentTarget);
+        const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : event.key === "ArrowRight" ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+        items.eq(next).trigger("focus").trigger("click");
+    }));
     host.empty().append(tabs, result);
     return host;
 }

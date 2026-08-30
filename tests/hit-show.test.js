@@ -8,11 +8,17 @@ import { describe, expect, it, vi } from "vitest";
 
 function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), cache = {}, sortMethod = "default", activeSortMethod = null, withListPage = true } = {}) {
     const dom = new JSDOM('<section class="section"><div class="container"><h2 class="section-title">榜单</h2><div class="box"></div></div></section>', { url: "https://javdb.com/advanced_search?handlePlayback=1&period=daily" });
-    const $ = jqueryFactory(dom.window), storage = new Map([["jhs_score_info", JSON.stringify(cache)], ["jhs_sortMethod", sortMethod]]);
+    const $ = jqueryFactory(dom.window), storage = new Map([["jhs_sortMethod", sortMethod]]);
     $.expr.pseudos.hidden = element => "none" === element.style.display;
-    const runtimeCache = { ...cache }, cacheService = {
-        get: vi.fn(() => ({ hit: Object.keys(runtimeCache).length > 0, value: runtimeCache })),
-        set: vi.fn((key, value) => Object.assign(runtimeCache, value)),
+    // 持久化评分缓存（storageManager.cachedRequest）的内存替身，并用旧 cache 参数播种
+    const ttlStore = new Map([["jhs_hitshow_scores_v1", { ...cache }]]);
+    const storageManager = {
+        cachedRequest: vi.fn(async (key, ttl, loader) => {
+            if (ttlStore.has(key)) return ttlStore.get(key);
+            const value = await loader();
+            return ttlStore.set(key, value), value;
+        }),
+        cacheSet: vi.fn(async (key, value) => ttlStore.set(key, JSON.parse(JSON.stringify(value)))),
     }, settings = { snapshot: () => ({ sortMethod }) };
     const host = {
         locateListRoot: () => dom.window.document.querySelector(".movie-list"),
@@ -26,10 +32,11 @@ function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), c
     const context = vm.createContext({
         BasePlugin: class {
             getBean(name) { return { ListPagePlugin: withListPage ? listPage : undefined, ListPageButtonPlugin: { sortItems, mountOwnedRankingControls, activeSortMethod: () => activeSortMethod ?? "default" }, CoverButtonPlugin: coverButton }[name]; }
-            getRuntimeService(name) { return { host, scope: async () => ({ signal: { aborted: false } }), movie: { rankings: async () => { if (rankingError) throw rankingError; return movies; }, detail: async ({ movieId }) => fetchScore(movieId) }, settings, cache: cacheService }[name]; }
+            getRuntimeService(name) { return { host, scope: async () => ({ signal: { aborted: false } }), movie: { rankings: async () => { if (rankingError) throw rankingError; return movies; }, detail: async ({ movieId }) => fetchScore(movieId) }, settings }[name]; }
         },
         i: (target, key, value) => (target[key] = value), $, document: dom.window.document, window: dom.window,
-        URLSearchParams, isHitShowPage: () => true,
+        URLSearchParams, isHitShowPage: () => true, storageManager,
+        normalizeJavdbMediaUrl: value => { if (!value) return null; const url = new URL(String(value), dom.window.location.href); return url.href.replace(/^https:\/\/[^/]+\/rhe951l4q(?=\/)/i, "https://c0.jdbstatic.com"); },
         jhsEventBus: { emit: vi.fn(async () => {}) },
         loading: () => ({ close: loadingClose }), clog: { error: vi.fn(), warn: vi.fn() }, show: { error: vi.fn() },
         localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
@@ -38,7 +45,7 @@ function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), c
     });
     const source = readTestFile(join(process.cwd(), "src/plugins/external-search/hit-show.js"), "utf8");
     vm.runInContext(`${source};globalThis.HitShowPlugin=HitShowPlugin`, context);
-    return { plugin: new context.HitShowPlugin(), context, dom, $, storage, runtimeCache, loadingClose, sortItems, mountOwnedRankingControls, listPage, coverButton, fetchScore, emitListItems: context.jhsEventBus.emit };
+    return { plugin: new context.HitShowPlugin(), context, dom, $, storage, ttlStore, storageManager, loadingClose, sortItems, mountOwnedRankingControls, listPage, coverButton, fetchScore, emitListItems: context.jhsEventBus.emit };
 }
 
 const movie = id => ({ id, number: id.toUpperCase(), release_date: "2026-08-16", origin_title: id, cover_url: "https://c0.jdbstatic.com/covers/a.jpg", magnets_count: 0 });
@@ -77,6 +84,34 @@ describe("HitShowPlugin lifecycle", () => {
         expect(image.attr("data-full")).toContain("/covers/");
         expect(image.attr("decoding")).toBe("async");
     });
+    it("can preserve the full cover as the initial source for Top250", () => {
+        const { plugin, $ } = loadHitShow();
+        const image = $(plugin.markDataListHtml([movie("a")], { thumbnailFirst: false })).find("img");
+        expect(image.attr("src")).toContain("/covers/");
+        expect(image.attr("src")).toBe(image.attr("data-full"));
+    });
+    it("uses the API thumb when cover_url is absent", () => {
+        const { plugin, $ } = loadHitShow();
+        const image = $(plugin.markDataListHtml([{ ...movie("a"), cover_url: null, thumb_url: "https://c0.jdbstatic.com/thumbs/a.jpg" }])).find("img");
+        expect(image.attr("src")).toBe("https://c0.jdbstatic.com/thumbs/a.jpg");
+        expect(image.attr("data-full")).toBe("https://c0.jdbstatic.com/thumbs/a.jpg");
+    });
+    it("prefers the API thumb over a synthesized CDN path", () => {
+        const { plugin, $ } = loadHitShow();
+        const image = $(plugin.markDataListHtml([{ ...movie("a"), thumb_url: "https://c0.jdbstatic.com/thumbs/real-a.jpg" }])).find("img");
+        expect(image.attr("src")).toBe("https://c0.jdbstatic.com/thumbs/real-a.jpg");
+        expect(image.attr("data-full")).toContain("/covers/");
+    });
+    it("restores JavDB API proxy media paths to the public CDN", () => {
+        const { plugin, $ } = loadHitShow();
+        const image = $(plugin.markDataListHtml([{
+            ...movie("a"),
+            cover_url: "https://jdforrepam.com/rhe951l4q/covers/a.jpg",
+            thumb_url: "https://jdforrepam.com/rhe951l4q/thumbs/a.jpg",
+        }])).find("img");
+        expect(image.attr("src")).toBe("https://c0.jdbstatic.com/thumbs/a.jpg");
+        expect(image.attr("data-full")).toBe("https://c0.jdbstatic.com/covers/a.jpg");
+    });
     it("closes loading after rendering while score requests continue", async () => {
         let resolveScore;
         const pendingScore = new Promise(resolve => { resolveScore = resolve; });
@@ -105,16 +140,16 @@ describe("HitShowPlugin lifecycle", () => {
         expect(fetchScore).toHaveBeenCalledTimes(12);
     });
 
-    it("uses legacy cache and isolates one failed score request", async () => {
+    it("uses the persistent score cache and isolates one failed score request", async () => {
         const fetchScore = vi.fn(id => "bad" === id ? Promise.reject(new Error("500")) : Promise.resolve({ score: 3.5, watchedCount: 7 }));
-        const movies = [movie("cached"), movie("bad"), movie("good")], { plugin, $, runtimeCache } = loadHitShow({ movies, fetchScore, cache: { cached: { html: "4.2分，由88人评价", watchedCount: 88 } } });
+        const movies = [movie("cached"), movie("bad"), movie("good")], { plugin, $, ttlStore } = loadHitShow({ movies, fetchScore, cache: { cached: { score: 4.2, watchedCount: 88 } } });
         $(".container").append(`<div class="movie-list">${plugin.markDataListHtml(movies)}</div>`);
         await expect(plugin.loadScore(movies)).resolves.toBeUndefined();
         expect(fetchScore).not.toHaveBeenCalledWith("cached");
         expect($("#cached").attr("data-jhs-rate-count")).toBe("88");
         expect($("#bad").attr("data-jhs-rate-count")).toBe("0");
         expect($("#good").attr("data-jhs-rate-count")).toBe("7");
-        expect(runtimeCache.good.watchedCount).toBe(7);
+        expect(ttlStore.get("jhs_hitshow_scores_v1").good.watchedCount).toBe(7);
     });
 
     it("re-sorts after scores only when the page-local sort is rate count", async () => {

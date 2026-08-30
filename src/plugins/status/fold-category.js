@@ -20,23 +20,30 @@ export class FoldCategoryPlugin extends BasePlugin {
             $(t).parent().hasClass("collapse") && t.click();
         }))));
     }
+    /** @param {HTMLElement} element 读取标签名：剥掉高亮按钮与 “(计数)” 后缀，与点击写入口径一致 */
+    readTagName(element) {
+        return $(element).clone().find(".highlight-btn").remove().end().text().trim().replace(/\s*\(\d+\)$/, "");
+    }
     highlightTag() {
         (async () => {
-            const e = await storageManager.getHighlightedTags();
-            e && e.forEach(((/** @type {string} */ e) => {
-                $(`#tags a.tag:contains(${e})`).addClass("highlighted"), $(`.tags a.tag:contains(${e})`).addClass("highlighted");
+            const e = await storageManager.getHighlightedTags(), tags = $("#tags a.tag, .tags a.tag");
+            // 精确匹配：不用 :contains（子串误匹配 + 特殊字符会破坏选择器）
+            e && e.forEach(((/** @type {string} */ tag) => {
+                tags.filter(((/** @type {number} */ _, /** @type {HTMLElement} */ element) => this.readTagName(element) === tag)).addClass("highlighted");
             }));
-        })().catch((error => clog.error("分类高亮恢复失败", error))), $("#tags a.tag, .tags a.tag").hover(((/** @type {MouseEvent} */ event) => {
-            const e = $(event.currentTarget), t = $('<button class="jhs-btn highlight-btn" title="高亮显示">★</button>');
+        })().catch((error => clog.error("分类高亮恢复失败", error)));
+        // 委托绑定：瀑布流后加载的卡片同样获得高亮按钮
+        $(document).off(".jhsHighlight").on("mouseenter.jhsHighlight", "#tags a.tag, .tags a.tag", ((/** @type {MouseEvent} */ event) => {
+            const e = $(event.currentTarget);
+            if (e.find(".highlight-btn").length) return;
+            const t = $('<button class="jhs-btn highlight-btn" title="高亮显示">★</button>');
             e.append(t), t.fadeIn(0);
-        }), ((/** @type {MouseEvent} */ event) => {
+        })).on("mouseleave.jhsHighlight", "#tags a.tag, .tags a.tag", ((/** @type {MouseEvent} */ event) => {
             const button = $(event.currentTarget).find(".highlight-btn");
             button.fadeOut(0, (() => button.remove()));
-        })), $(document).on("click", ".highlight-btn", (async (/** @type {MouseEvent} */ e) => {
+        })).on("click.jhsHighlight", ".highlight-btn", (async (/** @type {MouseEvent} */ e) => {
             e.stopPropagation(), e.preventDefault();
-            const t = $(e.currentTarget).closest("a.tag"), n = t.clone();
-            n.find(".highlight-btn").remove();
-            const a = n.text().trim().replace(/\s*\(\d+\)$/, "");
+            const t = $(e.currentTarget).closest("a.tag"), a = this.readTagName(t[0]);
             let i = await storageManager.getHighlightedTags();
             i.includes(a) ? (i = i.filter(((/** @type {string} */ e) => e !== a)), t.removeClass("highlighted")) : (i.push(a),
             t.addClass("highlighted")), await storageManager.setHighlightedTags(i);
@@ -47,13 +54,14 @@ export class FoldCategoryPlugin extends BasePlugin {
             return $(element).text().replaceAll("\n", "").replaceAll(" ", "");
         })).get().join(" ");
         if (!n) return;
-        $(".tabs").append(`\n            <div class="jhs-layout-8453d189">\n                <div>已选分类: <span id="jhs-check-tag">${n}</span></div>\n                <button type="button" class="jhs-btn jhs-btn--ghost jhs-layout-3a1fc324" id="foldCategoryBtn">\n                    <span></span>\n                    <i class="jhs-layout-78fa54ea"></i>\n                </button>\n\n            </div>\n        `);
+        // 折叠按钮用 class 而非 id：两种挂载位置（.tabs / h2.section-title）可能同时出现，重复 id 会让第二个按钮失效
+        $(".tabs").append(`\n            <div class="jhs-layout-8453d189">\n                <div>已选分类: <span id="jhs-check-tag">${n}</span></div>\n                <button type="button" class="jhs-btn jhs-btn--ghost jhs-layout-3a1fc324 jhs-fold-category-btn">\n                    <span></span>\n                    <i class="jhs-layout-78fa54ea"></i>\n                </button>\n\n            </div>\n        `);
         let a = $("h2.section-title");
-        if (a.length > 0 && (a.append('\n                <div id="foldCategoryBtn">\n                    <button type="button" class="jhs-btn jhs-btn--ghost jhs-layout-2100e73d">\n                        <span></span>\n                        <i class="jhs-layout-78fa54ea"></i>\n                    </button>\n                </div>\n            '),
+        if (a.length > 0 && (a.append('\n                <div class="jhs-fold-category-box">\n                    <button type="button" class="jhs-btn jhs-btn--ghost jhs-layout-2100e73d jhs-fold-category-btn">\n                        <span></span>\n                        <i class="jhs-layout-78fa54ea"></i>\n                    </button>\n                </div>\n            '),
         t = $("section > div > div.box")), !t) return;
         const settings = this.getRuntimeService("settings");
-        let i = $("#foldCategoryBtn"), s = settings.snapshot().foldCategoryCollapsed === !0, [o, r] = s ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];
-        i.find("span").text(o).end().find("i").attr("class", r), window.location.href.includes("noFold=1") || t[s ? "hide" : "show"]();
+        let i = $(".jhs-fold-category-btn"), s = settings.snapshot().foldCategoryCollapsed === !0, [label0, icon0] = s ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];
+        i.find("span").text(label0).end().find("i").attr("class", icon0), window.location.href.includes("noFold=1") || t[s ? "hide" : "show"]();
         const createFoldWriter = createLatestSettingWriter({ settings, key: "foldCategoryCollapsed", fallback: false, apply: (value) => {
             s = value === true;
             const [label, icon] = s ? [ "展开", "icon-angle-double-down" ] : [ "折叠", "icon-angle-double-up" ];

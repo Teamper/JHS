@@ -159,6 +159,11 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
     root.find("#javBusUrl").val(movie.externalSiteOrigin("javBusBtn", e));
     root.find("#supJavUrl").val(movie.externalSiteOrigin("supJavBtn", e));
     let g = await storageManager.getReviewFilterKeywordList(), p = await storageManager.getTitleFilterKeyword();
+    // “重试加载”会重跑本函数：先清空标签容器并解绑旧事件，否则关键词显示两份、添加事件翻倍
+    [ "#reviewKeywordContainer", "#filterKeywordContainer" ].forEach((/** @type {string} */ container) => {
+        root.find(`${container} .tag-box`).empty();
+        root.find(`${container} .add-tag-btn`).off(".jhsKeywordBind"), root.find(`${container} .keyword-input`).off(".jhsKeywordBind");
+    });
     g && g.forEach((/** @type {string} */ item) => {
         addLabelTag("#reviewKeywordContainer", item, root);
     });
@@ -166,8 +171,8 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
         addLabelTag("#filterKeywordContainer", item, root);
     });
     [ "#reviewKeywordContainer", "#filterKeywordContainer" ].forEach((/** @type {string} */ container) => {
-        root.find(`${container} .add-tag-btn`).on("click", ((/** @type {any} */ event) => addKeyword(event, container, root)));
-        root.find(`${container} .keyword-input`).on("keypress", ((/** @type {any} */ event) => {
+        root.find(`${container} .add-tag-btn`).on("click.jhsKeywordBind", ((/** @type {any} */ event) => addKeyword(event, container, root)));
+        root.find(`${container} .keyword-input`).on("keypress.jhsKeywordBind", ((/** @type {any} */ event) => {
             "Enter" === event.key && addKeyword(event, container, root);
         }));
     });
@@ -289,10 +294,11 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
     const dirtyTitleKeywords = root.data("jhsDirtyTitleKeywords") === true;
     if (dirtyReviewKeywords) {
         try {
-            const reviewKeywords = root.find("#reviewKeywordContainer .keyword-label").toArray().map((/** @type {Element} */ element) => {
-                const text = $(element).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
+            // replaceAll 清掉删除按钮的 ×；去重避免重复标签落库
+            const reviewKeywords = [ ...new Set(root.find("#reviewKeywordContainer .keyword-label").toArray().map((/** @type {Element} */ element) => {
+                const text = $(element).text().replaceAll("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
                 return text;
-            });
+            }).filter(Boolean)) ];
             await storageManager.saveReviewFilterKeyword(reviewKeywords);
         } catch (error) {
             keywordErrors.push(error);
@@ -300,10 +306,10 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
     }
     if (dirtyTitleKeywords) {
         try {
-            const titleKeywords = root.find("#filterKeywordContainer .keyword-label").toArray().map((/** @type {Element} */ element) => {
-                const text = $(element).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
+            const titleKeywords = [ ...new Set(root.find("#filterKeywordContainer .keyword-label").toArray().map((/** @type {Element} */ element) => {
+                const text = $(element).text().replaceAll("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
                 return text;
-            });
+            }).filter(Boolean)) ];
             await storageManager.saveTitleFilterKeyword(titleKeywords);
         } catch (error) {
             keywordErrors.push(error);
@@ -340,6 +346,16 @@ function bindKeywordDirtyTracking(root) {
 
 /** @param {any} root @param {Set<string> | null | undefined} [dirtyKeys] */
 async function collectManualSettingPatch(root, dirtyKeys = null) {
+    const clamp = (/** @type {unknown} */ value, /** @type {number} */ fallback, /** @type {number} */ min, /** @type {number} */ max) => Math.min(max, Math.max(min, Number(value) || fallback));
+    const configuredUrl = (/** @type {unknown} */ value, { allowLocalHttp = !1 } = {}) => {
+        const raw = String(value || "").trim().replace(/\/$/, "");
+        if (!raw) return "";
+        let url;
+        try { url = new URL(raw); } catch { throw new TypeError(`无效 URL：${raw}`); }
+        const local = [ "localhost", "127.0.0.1", "[::1]" ].includes(url.hostname);
+        if (url.protocol !== "https:" && !(allowLocalHttp && local && url.protocol === "http:")) throw new TypeError(`仅允许 HTTPS URL${allowLocalHttp ? "（本机地址可使用 HTTP）" : ""}：${raw}`);
+        return url.href.replace(/\/$/, "");
+    };
     /** @type {Record<string, () => unknown | Promise<unknown>>} */
     const getters = {
         videoQuality: () => root.find("#videoQuality").val(),
@@ -359,22 +375,22 @@ async function collectManualSettingPatch(root, dirtyKeys = null) {
         enableCheckNewVideo: () => root.find("#enableCheckNewVideo").val(),
         checkNewVideo_intervalTime: () => root.find("#checkNewVideo_intervalTime").val(),
         checkNewVideo_ruleTime: () => root.find("#checkNewVideo_ruleTime").val(),
-        httpTimeout: () => Number(root.find("#httpTimeout").val()) || 5e3,
-        httpRetryCount: () => Number(root.find("#httpRetryCount").val()) || 3,
-        circuitBreakerThreshold: () => Number(root.find("#circuitBreakerThreshold").val()) || 3,
-        circuitBreakerCooldown: () => Number(root.find("#circuitBreakerCooldownSec").val()) * 1e3,
+        httpTimeout: () => clamp(root.find("#httpTimeout").val(), 5e3, 1e3, 120e3),
+        httpRetryCount: () => clamp(root.find("#httpRetryCount").val(), 3, 1, 10),
+        circuitBreakerThreshold: () => clamp(root.find("#circuitBreakerThreshold").val(), 3, 1, 20),
+        circuitBreakerCooldown: () => clamp(Number(root.find("#circuitBreakerCooldownSec").val()) * 1e3, 6e4, 1e3, 3600e3),
         clogMsgCount: () => root.find("#clogMsgCount").val(),
-        webDavUrl: () => String(root.find("#webDavUrl").val() || "").trim(),
+        webDavUrl: () => configuredUrl(root.find("#webDavUrl").val(), { allowLocalHttp: !0 }),
         webDavUsername: () => String(root.find("#webDavUsername").val() || ""),
         webDavPassword: async () => encryptCredential(String(root.find("#webDavPassword").val() || "")),
-        missAvUrl: () => String(root.find("#missAvUrl").val() || "").replace(/\/$/, ""),
-        jableUrl: () => String(root.find("#jableUrl").val() || "").replace(/\/$/, ""),
-        avgleUrl: () => String(root.find("#avgleUrl").val() || "").replace(/\/$/, ""),
-        javTrailersUrl: () => String(root.find("#javTrailersUrl").val() || "").replace(/\/$/, ""),
-        av123Url: () => String(root.find("#av123Url").val() || "").replace(/\/$/, ""),
-        javDbUrl: () => String(root.find("#javDbUrl").val() || "").replace(/\/$/, ""),
-        javBusUrl: () => String(root.find("#javBusUrl").val() || "").replace(/\/$/, ""),
-        supJavUrl: () => String(root.find("#supJavUrl").val() || "").replace(/\/$/, ""),
+        missAvUrl: () => configuredUrl(root.find("#missAvUrl").val()),
+        jableUrl: () => configuredUrl(root.find("#jableUrl").val()),
+        avgleUrl: () => configuredUrl(root.find("#avgleUrl").val()),
+        javTrailersUrl: () => configuredUrl(root.find("#javTrailersUrl").val()),
+        av123Url: () => configuredUrl(root.find("#av123Url").val()),
+        javDbUrl: () => configuredUrl(root.find("#javDbUrl").val()),
+        javBusUrl: () => configuredUrl(root.find("#javBusUrl").val()),
+        supJavUrl: () => configuredUrl(root.find("#supJavUrl").val()),
         enableTitleSelectFilter: () => root.find("#enableTitleSelectFilter").is(":checked") ? _ : C,
         enableFavoriteActresses: () => root.find("#enableFavoriteActresses").is(":checked") ? _ : C,
         enableSaveActressCarInfo: () => root.find("#enableSaveActressCarInfo").is(":checked") ? _ : C,
@@ -428,7 +444,9 @@ function addKeyword(event, container, root) {
     const input = root.find(`${container} .keyword-input`);
     const value = input.val().trim();
     if (!value) return;
-    addLabelTag(container, value, root);
+    // 与存储层去重语义一致：重复关键词直接忽略，不再各走各的
+    const exists = root.find(`${container} .keyword-label`).toArray().some(((/** @type {Element} */ element) => $(element).text().replaceAll("×", "").trim() === value));
+    if (!exists) addLabelTag(container, value, root);
     input.val("");
     root.data(container === "#reviewKeywordContainer" ? "jhsDirtyReviewKeywords" : "jhsDirtyTitleKeywords", true);
 }

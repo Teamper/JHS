@@ -55,7 +55,7 @@ export function buildSettingCss(containerWidth, containerColumns, isJavBus, isJa
                     transition: all 0.2s ease;
                 }
                 .cache-item:hover {
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    box-shadow: var(--jhs-shadow-sm);
                     transform: translateY(-2px);
                 }
                 .cache-item { padding:var(--jhs-space-3); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); }
@@ -365,7 +365,7 @@ export function buildSettingCss(containerWidth, containerColumns, isJavBus, isJa
                 .jhs-resource-advanced > summary { cursor:pointer; font-weight:600; }
                 #advanced-resource-json { width:100%; box-sizing:border-box; margin-top:var(--jhs-space-3); }
 
-                @media (max-width: 768px) {
+                @media (max-width: 767px) {
                     .jhs-setting-layout {
                         grid-template-columns: minmax(0, 1fr);
                         grid-template-rows: auto minmax(0, 1fr);

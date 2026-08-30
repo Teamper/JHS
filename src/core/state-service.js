@@ -169,7 +169,13 @@ export class StateService {
                 const value = stableStateValue(current[key]);
                 return value !== stableStateValue(journal.before[key]) && value !== stableStateValue(journal.after[key]);
             }));
-            if (conflict) throw new Error("检测到未完成状态事务且数据已发生冲突，请先运行数据健康检查");
+            if (conflict) {
+                // 冲突说明当前数据已被其他（可能已提交的）写入更新：回滚会破坏新数据，抛错会让整个脚本无法启动。
+                // 保守策略：保留当前数据，丢弃陈旧事务日志，并提示用户。
+                clog.warn("[状态] 检测到未完成状态事务且数据已变化，保留当前数据并丢弃陈旧事务日志"), show.info("检测到未完成的状态事务，已保留当前数据；如数据异常请在设置中运行数据健康检查");
+                await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+                return;
+            }
             await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.before.carList), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.before.actresses), await this.storage.forage.setItem("new_video_decisions", journal.before.decisions);
             journal.before.activity ? await this._writeActivity(journal.before.activity) : (log.entries = log.entries.filter((/** @param {StateRecord} entry */ entry => entry.id !== journal.id)), await this._writeActivity(log));
         }
@@ -272,8 +278,16 @@ export class StateService {
                 return effect.actressItems.length > 0 || !!effect.decision;
             }));
             if (!changed.length) return { changed: [], transactionId: null };
+            // 墓碑：被移除的新片若没有任何状态记录，落一条空状态 carList 记录。
+            // 否则下一轮检测（!carMap.has）会把它当 fresh 重新加回，“浏览后移除”形同虚设
+            const existingCarNums = new Set(domains.carList.map((/** @param {StateRecord} record */ record => record.carNum))), now = utils.getNowStr();
+            const tombstones = changed.filter((carNum => !existingCarNums.has(carNum))).map((carNum => {
+                /** @type {StateRecord} */
+                const record = { carNum, url: "", names: "", createDate: now, stateFlags: createEmptyStateFlags() };
+                return record.updateDate = now, syncLegacyStatus(record), record;
+            }));
             const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, changed), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-remove", commitState: "pending", changes: changed.map((carNum => ({ carNum, operation: "new-video-remove", fields: [ "newVideoList", "decision" ], before: null, after: { removed: !0, reason }, newVideoEffect: captureNewVideoEffect(domains.actresses, domains.decisions, carNum), undoState: "pending" }))), createdAt: new Date().toISOString(), undoAttemptedAt: null };
-            await this._commit(domains, { carList: domains.carList, ...effects }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+            await this._commit(domains, { carList: [ ...domains.carList, ...tombstones ], ...effects }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
             return { changed, transactionId: activity.id };
         });
     }

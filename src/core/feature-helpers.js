@@ -75,6 +75,12 @@ export function normalizeHttpUrl(/** @type {unknown} */ value, /** @type {string
     }
 }
 
+/** 将 JavDB API 的代理媒体路径还原为浏览器可直接访问的 CDN 地址。 */
+export function normalizeJavdbMediaUrl(/** @type {unknown} */ value, /** @type {string | URL} */ baseUrl = window.location.href) {
+    const url = normalizeHttpUrl(value, baseUrl);
+    return url?.replace(/^https:\/\/[^/]+\/rhe951l4q(?=\/)/i, "https://c0.jdbstatic.com") ?? null;
+}
+
 /** 规范 BTIH，兼容 40 位十六进制与 32 位 Base32。 */
 export function normalizeBtihHash(/** @type {unknown} */ value) {
     const hash = String(value || "").trim();

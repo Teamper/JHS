@@ -1,6 +1,7 @@
 // @ts-check
 
 import { BasePlugin } from "../../core/plugin-manager.js";
+import { decryptCredential, encryptCredential } from "../../core/credential-crypto.js";
 
 export class OneTwoThreeOfflinePlugin extends BasePlugin {
     constructor() {
@@ -52,18 +53,22 @@ export class OneTwoThreeOfflinePlugin extends BasePlugin {
             source: ""
         };
     }
-    syncTokenOnce() {
+    async syncTokenOnce() {
         const storage = this.getRuntimeService("storage"), e = this.getTokenFrom123Pan();
         if (!e.token) return;
-        const t = storage.getValue(this.tokenKey, ""), n = storage.getValue(this.tokenMetaKey, null);
-        if (t === e.token && n && n.source === e.source) return;
-        storage.setValue(this.tokenKey, e.token), storage.setValue(this.tokenMetaKey, {
+        const secretKey = `${this.tokenKey}_secret`;
+        let secret = storage.getValue(secretKey, "");
+        if (!secret) secret = crypto.randomUUID?.() || `${Date.now()}-${crypto.getRandomValues(new Uint32Array(4)).join("-")}`, storage.setValue(secretKey, secret);
+        const t = storage.getValue(this.tokenKey, ""), current = await decryptCredential(t, secret), n = storage.getValue(this.tokenMetaKey, null);
+        if (current === e.token && t.startsWith("AES:") && n && n.source === e.source) return;
+        storage.setValue(this.tokenKey, await encryptCredential(e.token, secret)), storage.setValue(this.tokenMetaKey, {
             source: e.source,
             updatedAt: (new Date).toISOString()
-        }), t !== e.token && show.info(`123 云盘授权已更新：${e.source}`);
+        }), current !== e.token && show.info(`123 云盘授权已更新：${e.source}`);
     }
-    getStoredToken() {
-        return this.getRuntimeService("storage").getValue(this.tokenKey, "");
+    async getStoredToken() {
+        const storage = this.getRuntimeService("storage"), value = storage.getValue(this.tokenKey, ""), secret = storage.getValue(`${this.tokenKey}_secret`, "");
+        return value && secret ? decryptCredential(value, secret) : value;
     }
     clearStoredToken(/** @type {string} */ e) {
         const storage = this.getRuntimeService("storage");

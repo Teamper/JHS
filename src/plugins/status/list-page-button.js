@@ -238,7 +238,8 @@ export class ListPageButtonPlugin extends BasePlugin {
         return true;
     }
     supportsLiveSorting() {
-        return this.isHitShowPage() || this.isFc2ListPage();
+        // 自有榜单页（热播/Top250）由渲染方加载评分数据，与 FC2 列表一样支持页内即时排序
+        return this.isOwnedRankingPage() || this.isFc2ListPage();
     }
     /** 构造批量任务范围：actor 页携带演员名，搜索/列表页不要求演员名且不写入搜索关键词。 */
     buildBatchScope() {

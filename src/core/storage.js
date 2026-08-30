@@ -5,14 +5,20 @@ import { createIndexedMap, createStatusMap, dedupeByKey, groupDuplicateItems } f
 
 let e = new WeakSet, t = async function(e, t, n) {
     let a;
-    if (Array.isArray(e)) a = [ ...e ]; else {
-        if (a = await this.forage.getItem(t) || [], a.includes(e)) {
-            const t = `${e} ${n}已存在`;
-            throw show.error(t), new Error(t);
+    const locks = globalThis.navigator?.locks;
+    const write = async () => {
+        if (Array.isArray(e)) a = [ ...e ]; else {
+            const list = await this.forage.getItem(t) || [];
+            if (list.includes(e)) {
+                const msg = `${e} ${n}已存在`;
+                throw show.error(msg), new Error(msg);
+            }
+            list.push(e), a = list;
         }
-        a.push(e);
-    }
-    return await this._setItemAndInvalidate(t, a), a;
+        return await this._setItemAndInvalidate(t, a), a;
+    };
+    // 读取-检查-写入需要跨标签页互斥，避免并发添加关键词时互相覆盖
+    return locks?.request ? locks.request("jhs_keyword_lock", write) : write();
 };
 
 export class StorageManager {
@@ -74,13 +80,20 @@ export class StorageManager {
         await this.forage.setItem(e, t);
         this._invalidateCache(e);
     }
+    /** 跨标签页互斥；Web Locks 不可用时退化为直接执行（仍保留页内互斥） */
+    async _withCrossTabLock(e, t) {
+        const n = globalThis.navigator?.locks;
+        return n?.request ? n.request(e, t) : t();
+    }
     async withActressLock(fn) {
-        let release;
-        const lock = new Promise(r => release = r);
-        const prev = this._actressLock;
-        this._actressLock = this._actressLock.then(() => lock);
-        await prev;
-        try { return await fn(); } finally { release(); }
+        return this._withCrossTabLock("jhs_actress_lock", async () => {
+            let release;
+            const lock = new Promise(r => release = r);
+            const prev = this._actressLock;
+            this._actressLock = this._actressLock.then(() => lock);
+            await prev;
+            try { return await fn(); } finally { release(); }
+        });
     }
     async _rawUpdateFavoriteActress(e) {
         const t = await this.getFavoriteActressList();
@@ -241,6 +254,9 @@ export class StorageManager {
         return this.cacheBlacklistMap;
     }
     async addBlacklistItem(e) {
+        return this._withCrossTabLock("jhs_blacklist_lock", () => this._addBlacklistItemWithoutLock(e));
+    }
+    async _addBlacklistItemWithoutLock(e) {
         let {starId: t, name: n, allName: a, role: i, movieType: s, url: o} = e;
         if (!t) throw new Error("缺失starId");
         if (!n) throw new Error("缺失name");
@@ -261,6 +277,9 @@ export class StorageManager {
         await this._setItemAndInvalidate(this.blacklist_key, r);
     }
     async updateBlacklistItem(e) {
+        return this._withCrossTabLock("jhs_blacklist_lock", () => this._updateBlacklistItemWithoutLock(e));
+    }
+    async _updateBlacklistItemWithoutLock(e) {
         if (!e || !e.starId) throw new Error("参数不全");
         const t = await this.getBlacklist(), n = t.find((t => t.starId === e.starId));
         if (!n) throw new Error(`未找到黑名单演员信息:${e.name} ${e.starId}`);
@@ -268,13 +287,16 @@ export class StorageManager {
         await this._setItemAndInvalidate(this.blacklist_key, t);
     }
     async deleteBlacklistItem(e) {
+        return this._withCrossTabLock("jhs_blacklist_lock", async () => {
         const t = await this.getBlacklist(), n = t.filter((t => t.starId !== e));
         t.length !== n.length && await this._setItemAndInvalidate(this.blacklist_key, n);
+        });
     }
     async getBlacklistCarList() {
         return this._readCached("cache_filter_actor_actress_car_list", this.blacklist_car_list_key, []);
     }
     async batchSaveBlacklistCarList(e) {
+        return this._withCrossTabLock("jhs_blacklist_lock", async () => {
         const t = await this.getBlacklistCarList(), n = JSON.parse(JSON.stringify(t));
         let a = !1, i = [];
         for (const s of e) {
@@ -291,6 +313,7 @@ export class StorageManager {
             await window.cleanCache_filter_actor_actress_car_list();
         }
         return { changed: i.map(normalizeCarNum).filter(Boolean) };
+        });
     }
     async removeBlacklistCarList(e) {
         const t = await this.getBlacklistCarList(), n = t.filter((t => t.starId !== e));
@@ -425,13 +448,18 @@ export class StorageManager {
     async importData(e) {
         validatePortableData(e);
         await hasPortableUserData(this) && await this.createSnapshot("导入前自动备份", "auto-import");
-        const validKeys = new Set([ ...IMPORTABLE_DATA_KEYS, "data_version" ]), writes = [];
-        for (const key in e) {
-            if (!validKeys.has(key)) { clog.warn(`[导入] 跳过未知数据键: ${key}`); continue; }
-            if ("third_party_ttl_cache" === key) continue;
-            writes.push("data_version" === key ? this.setDataVersion(e[key]) : this._setItemAndInvalidate(key, e[key]));
-        }
-        await Promise.all(writes), this._invalidateCache(), await runDataMigrations(this), await window.stateService?.recoverPendingTransaction();
+        const validKeys = new Set([ ...IMPORTABLE_DATA_KEYS, "data_version" ]);
+        // 与 state.patch 共用同一把跨标签页锁，避免覆盖后台进行中的状态事务后被恢复流程整体回滚
+        await this._withCrossTabLock("jhs_state_mutation", async () => {
+            const writes = [];
+            for (const key in e) {
+                if (!validKeys.has(key)) { clog.warn(`[导入] 跳过未知数据键: ${key}`); continue; }
+                if ("third_party_ttl_cache" === key) continue;
+                writes.push("data_version" === key ? this.setDataVersion(e[key]) : this._setItemAndInvalidate(key, e[key]));
+            }
+            await Promise.all(writes), this._invalidateCache(), await runDataMigrations(this);
+        });
+        await window.stateService?.recoverPendingTransaction();
     }
     async exportPortableData() {
         const data = { data_version: await this.getDataVersion() };
@@ -466,11 +494,36 @@ export class StorageManager {
         const loaded = await n(), customTtl = loaded && "object" === typeof loaded && "__jhsCacheTtl" in loaded ? loaded.__jhsCacheTtl : t;
         const o = loaded && "object" === typeof loaded && "__jhsCacheTtl" in loaded ? loaded.data : loaded;
         if (void 0 === o || null === o) return o;
-        return i[e] = {
-            time: a,
-            ttl: customTtl,
-            data: o
-        }, await this.setThirdPartyCache(i), o;
+        i[e] = { time: a, ttl: customTtl, data: o }, this._pruneThirdPartyCache(i, a);
+        // 整对象读-改-写需要跨标签页互斥：锁内基于最新缓存合入本条并修剪，避免并发丢条目
+        return await this._withCrossTabLock("jhs_ttl_cache_lock", async () => {
+            const latest = await this.getThirdPartyCache();
+            latest[e] = i[e], this._pruneThirdPartyCache(latest, a);
+            await this.setThirdPartyCache(latest);
+        }), o;
+    }
+    /** 以 TTL 写入一条缓存（与 cachedRequest 共用 third_party_ttl_cache 存储与跨标签页锁）。 */
+    async cacheSet(e, t, n) {
+        const a = Date.now();
+        return this._withCrossTabLock("jhs_ttl_cache_lock", async () => {
+            const latest = await this.getThirdPartyCache();
+            latest[e] = { time: a, ttl: n, data: t }, this._pruneThirdPartyCache(latest, a);
+            await this.setThirdPartyCache(latest);
+        });
+    }
+    /** 清理长期未命中的过期条目并限制总量，防止 third_party_ttl_cache 无界膨胀 */
+    _pruneThirdPartyCache(e, a) {
+        const HARD_TTL = 30 * 864e5, MAX_ENTRIES = 500;
+        for (const key of Object.keys(e)) {
+            const entry = e[key];
+            // 无时间戳的历史条目视为仍然有效，避免升级后缓存整体失效
+            (!entry || (entry.time && a - entry.time > Math.max(entry.ttl || 0, HARD_TTL))) && delete e[key];
+        }
+        const keys = Object.keys(e);
+        if (keys.length > MAX_ENTRIES) {
+            keys.sort(((x, y) => (e[x].time || 0) - (e[y].time || 0)));
+            for (const key of keys.slice(0, keys.length - MAX_ENTRIES)) delete e[key];
+        }
     }
     getCacheHitStats() {
         const e = this._cacheStats.hits + this._cacheStats.misses;

@@ -7,9 +7,10 @@ import jqueryFactory from "jquery";
 import { describe, expect, it } from "vitest";
 
 function loadHitShow() {
-    const dom = new JSDOM('<div id="movie"><div id="score_movie"></div></div>'), $ = jqueryFactory(dom.window), source = readTestFile(join(process.cwd(), "src/plugins/external-search/hit-show.js"), "utf8");
-    const escapeHtml = value => $("<span></span>").text(String(value ?? "")).html(), normalizeHttpUrl = value => { try { const url = new URL(value, "https://javdb.com/"); return ["http:", "https:"].includes(url.protocol) ? url.href : null; } catch { return null; } };
-    const context = vm.createContext({ BasePlugin: class {}, i: (target, key, value) => (target[key] = value), $, document: dom.window.document, escapeHtml, normalizeHttpUrl, loading: () => ({ close() {} }), window: dom.window });
+    const dom = new JSDOM('<div id="movie"><div id="score_movie"></div></div>', { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window), source = readTestFile(join(process.cwd(), "src/plugins/external-search/hit-show.js"), "utf8");
+    const escapeHtml = value => $("<span></span>").text(String(value ?? "")).html(), normalizeHttpUrl = value => { if (value == null || value === "") return null; try { const url = new URL(value, "https://javdb.com/"); return ["http:", "https:"].includes(url.protocol) ? url.href : null; } catch { return null; } };
+    const normalizeJavdbMediaUrl = value => { const url = normalizeHttpUrl(value); return url?.replace(/^https:\/\/[^/]+\/rhe951l4q(?=\/)/i, "https://c0.jdbstatic.com") ?? null; };
+    const context = vm.createContext({ BasePlugin: class {}, i: (target, key, value) => (target[key] = value), $, document: dom.window.document, escapeHtml, normalizeJavdbMediaUrl, loading: () => ({ close() {} }), window: dom.window });
     vm.runInContext(`${source};globalThis.HitShowPlugin=HitShowPlugin`, context);
     return { plugin: new context.HitShowPlugin(), dom };
 }

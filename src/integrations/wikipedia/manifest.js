@@ -13,7 +13,7 @@ export function createWikipediaAdapter(http) {
         async lookup(name, options = {}) {
             const url = this.profileUrl(name);
             const response = await http.request({
-                providerId: "wikipedia", method: "GET", url, responseType: "text", cacheScope: "public", ttlMs: 604_800_000,
+                providerId: "wikipedia", method: "GET", url, responseType: "text", cacheScope: "public", ttlMs: 604_800_000, timeout: 15_000,
                 urlPolicy: { trustClass: "builtin-public", hosts: ["ja.wikipedia.org"] },
             }, options.scope);
             try {

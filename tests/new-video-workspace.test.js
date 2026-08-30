@@ -33,12 +33,14 @@ function createHarness() {
         movie: { externalSiteOrigin: vi.fn(() => "https://javdb.com") },
     };
     class BasePlugin { getBean(name) { return beans[name]; } getRuntimeService(name) { return runtimeServices[name]; } }
-    class ImageHoverPreview { bindEvents() {} }
+    class ImageHoverPreview { constructor() {} bindEvents() {} destroy() {} }
+    dom.window.ImageHoverPreview = ImageHoverPreview;
     const renderStateView = (container, options) => (container.empty().append($("<div></div>").text(options.title || "")), container);
     const context = vm.createContext({
         console, Date, URL, Object, Array, Map, Set, Promise, Number, String, Math,
         window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
         $, BasePlugin, ImageHoverPreview, storageManager, stateService, renderStateView,
+        JHS_Z_INDEX: { dialogHoverPreview: 999999992 },
         i: (target, key, value) => target[key] = value,
         normalizeCarNum,
         normalizeHttpUrl: (value, base = dom.window.location.href) => { try { const url = new URL(String(value), base); return ["http:", "https:"].includes(url.protocol) ? url.href : null; } catch { return null; } },

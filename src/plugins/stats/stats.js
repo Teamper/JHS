@@ -46,7 +46,7 @@ export class StatsPlugin extends BasePlugin {
         const stats = computeLibraryStats(cars), total = stats.total;
         const actressCounts = new Map;
         cars.forEach(((/** @type {StatsRecord} */ car) => {
-            const names = String(car.names || "").split(/[\s,，、]+/).filter(Boolean);
+            const names = String(car.names || "").replace(/([一-鿿])\s+(?=[一-鿿])/g, "$1、").split(/[,，、]+/).map((name => name.trim())).filter(Boolean);
             if (car.starId) {
                 const key = `id:${car.starId}`, current = actressCounts.get(key) || { starId: car.starId, name: names[0] || car.starId, count: 0 };
                 current.count++, actressCounts.set(key, current);

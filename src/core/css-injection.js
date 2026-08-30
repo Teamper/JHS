@@ -65,12 +65,13 @@ const F = `
 
 let coreCssInjected = false;
 
-/** 在 Bootstrap 阶段一次性注入核心、宿主和 UI primitive 样式。 */
-export function injectCoreCss() {
+/** 在 Bootstrap 阶段一次性注入核心、宿主和 UI primitive 样式。 @param {{register?: (id: string, css: string) => unknown}} [styles] */
+export function injectCoreCss(styles) {
     if (coreCssInjected) return;
-    H(buildThemeCss());
-    l && H(buildJavBusCss()), r && H(buildJavDbCss());
-    H(F);
-    H(buildUiPrimitivesCss());
+    const register = (/** @type {string} */ id, /** @type {string} */ css) => styles?.register ? styles.register(id, css.replace(/^\s*<style>|<\/style>\s*$/g, "")) : H(css);
+    register("jhs-core-theme", buildThemeCss());
+    l && register("jhs-host-javbus", buildJavBusCss()), r && register("jhs-host-javdb", buildJavDbCss());
+    register("jhs-core-layout", F);
+    register("jhs-ui-primitives", buildUiPrimitivesCss());
     coreCssInjected = true;
 }

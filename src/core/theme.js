@@ -9,9 +9,9 @@ export const JHS_Z_INDEX = Object.freeze({
     localPopover: 30,
     popover: 100,
     dropdown: 1e3,
-    fabBackdrop: 1e4,
-    fabMenu: 10001,
-    fab: 10002,
+    fabBackdrop: 12345691,
+    fabMenu: 12345692,
+    fab: 12345693,
     debugLow: 12345678,
     hostNav: 12345679,
     hostTopbar: 12345689,
@@ -21,10 +21,12 @@ export const JHS_Z_INDEX = Object.freeze({
     sheetBackdrop: 12345789,
     sheet: 12345790,
     layer: 999999991,
-    viewer: 999999992,
-    loading: 999999993,
+    // 弹窗内部（如新片工作区）的悬停预览：须盖住所属 layer，但让位 viewer/loading
+    dialogHoverPreview: 999999992,
+    viewer: 999999993,
+    loading: 999999994,
     debug: 999999999,
-    tooltip: 9999999999
+    tooltip: 1_000_000_000
 });
 
 export function buildThemeCss() {
@@ -35,6 +37,8 @@ export function buildThemeCss() {
         --jhs-bg: #f4f6f9;
         --jhs-surface: #ffffff;
         --jhs-surface-2: #f2f4f8;
+        --jhs-surface-hover: #e9edf4;
+        --jhs-focus: #3b6ea5;
         --jhs-border: #e3e7ee;
         --jhs-border-strong: #8a94a6;
         --jhs-text: #1f2733;
@@ -80,9 +84,10 @@ export function buildThemeCss() {
         --jhs-z-modal: ${JHS_Z_INDEX.modal};
         --jhs-z-sheet-backdrop: ${JHS_Z_INDEX.sheetBackdrop};
         --jhs-z-sheet: ${JHS_Z_INDEX.sheet};
-        --jhs-z-loading: ${JHS_Z_INDEX.loading};
-        --jhs-z-viewer: ${JHS_Z_INDEX.viewer};
         --jhs-z-layer: ${JHS_Z_INDEX.layer};
+        --jhs-z-dialog-hover-preview: ${JHS_Z_INDEX.dialogHoverPreview};
+        --jhs-z-viewer: ${JHS_Z_INDEX.viewer};
+        --jhs-z-loading: ${JHS_Z_INDEX.loading};
         --jhs-z-debug: ${JHS_Z_INDEX.debug};
         --jhs-z-tooltip: ${JHS_Z_INDEX.tooltip};
 
@@ -154,6 +159,8 @@ export function buildThemeCss() {
         --jhs-bg: #14181d;
         --jhs-surface: #1d232b;
         --jhs-surface-2: #262d37;
+        --jhs-surface-hover: #2e3642;
+        --jhs-focus: #7cb8e8;
         --jhs-border: #333c47;
         --jhs-border-strong: #64728a;
         --jhs-text: #e6ebf1;

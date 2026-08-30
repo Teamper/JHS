@@ -47,7 +47,8 @@ export class NavBarPlugin extends BasePlugin {
             }), 0);
         })), $("#search-btn").on("click", ((/** @type {MouseEvent} */ e) => {
             let t = $("#search-keyword").val(), n = $("#search-type").val();
-            "" !== t && (window.location.href.includes("/search") ? window.location.href = "/search?q=" + t + "&f=" + n : window.open("/search?q=" + t + "&f=" + n));
+            // 关键词须编码：含 &/#/+ 的搜索词会截断或污染查询串
+            "" !== t && (window.location.href.includes("/search") ? window.location.href = "/search?q=" + encodeURIComponent(String(t)) + "&f=" + encodeURIComponent(String(n)) : window.open("/search?q=" + encodeURIComponent(String(t)) + "&f=" + encodeURIComponent(String(n))));
         })), hasSearchByImage && $("#search-img-btn").on("click", (() => {
             this.getOptionalDependency("SearchByImagePlugin")?.open?.();
         }));
@@ -71,8 +72,8 @@ export class NavBarPlugin extends BasePlugin {
         $('a.navbar-link[href="/makers"]').parent().after(dropdown);
     }
     toggleOtherNavItem() {
+        // 覆盖所有宽度区间：>1600 显示 JHS 搜索框，其余（含 ≤1023 与 1600 整数宽）显示宿主搜索栏，避免双搜索框并存
         let e = $("#search-box"), t = $("#search-bar-container");
-        $(window).width() < 1600 && $(window).width() > 1023 && (e.hide(), t.show()), $(window).width() > 1600 && (e.show(),
-        t.hide());
+        $(window).width() > 1600 ? (e.show(), t.hide()) : (e.hide(), t.show());
     }
 }

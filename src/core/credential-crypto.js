@@ -1,11 +1,22 @@
 // @ts-check
 
-const ENCRYPTION_SALT = "x7k9p3";
+const LEGACY_ENCRYPTION_SALT = "x7k9p3";
+const INSTALL_SECRET_KEY = "jhs_credential_install_secret";
 const CREDENTIAL_PREFIX = "AES:";
+let sessionSecret = "";
 
-async function getEncryptionKey() {
+function getInstallationSecret() {
+    let secret = globalThis.localStorage?.getItem?.(INSTALL_SECRET_KEY) || sessionSecret;
+    if (secret) return secret;
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    secret = arrayBufferToBase64(bytes.buffer), sessionSecret = secret, globalThis.localStorage?.setItem?.(INSTALL_SECRET_KEY, secret);
+    return secret;
+}
+
+/** @param {string} secret */
+async function getEncryptionKey(secret) {
     const encoder = new TextEncoder();
-    const material = await crypto.subtle.importKey("raw", encoder.encode(`${ENCRYPTION_SALT}.jhs.v1`), { name: "PBKDF2" }, false, ["deriveKey"]);
+    const material = await crypto.subtle.importKey("raw", encoder.encode(`${secret}.jhs.v1`), { name: "PBKDF2" }, false, ["deriveKey"]);
     return crypto.subtle.deriveKey({ name: "PBKDF2", salt: encoder.encode("jhs-backup"), iterations: 100_000, hash: "SHA-256" }, material, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
 }
 
@@ -25,8 +36,8 @@ function base64ToArrayBuffer(value) {
 }
 
 /** @param {string} value */
-export async function encryptData(value) {
-    const key = await getEncryptionKey(), iv = crypto.getRandomValues(new Uint8Array(12));
+export async function encryptData(value, secret = getInstallationSecret()) {
+    const key = await getEncryptionKey(secret), iv = crypto.getRandomValues(new Uint8Array(12));
     const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(value));
     const combined = new Uint8Array(iv.length + encrypted.byteLength);
     combined.set(iv); combined.set(new Uint8Array(encrypted), iv.length);
@@ -34,16 +45,29 @@ export async function encryptData(value) {
 }
 
 /** @param {string} value */
-export async function decryptData(value) {
-    const key = await getEncryptionKey(), combined = base64ToArrayBuffer(value), iv = combined.slice(0, 12), data = combined.slice(12);
-    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
-    return new TextDecoder().decode(decrypted);
+export async function decryptData(value, secret = getInstallationSecret()) {
+    const combined = base64ToArrayBuffer(value), iv = combined.slice(0, 12), data = combined.slice(12);
+    const decrypt = async (/** @type {string} */ candidate) => new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, await getEncryptionKey(candidate), data));
+    try { return await decrypt(secret); }
+    catch (error) {
+        if (secret === LEGACY_ENCRYPTION_SALT) throw error;
+        return decrypt(LEGACY_ENCRYPTION_SALT);
+    }
 }
 
 /** @param {string} value */
-export async function encryptCredential(value) { return value && !value.startsWith(CREDENTIAL_PREFIX) ? CREDENTIAL_PREFIX + await encryptData(value) : value; }
+export async function encryptCredential(value, secret = getInstallationSecret()) { return value && !value.startsWith(CREDENTIAL_PREFIX) ? CREDENTIAL_PREFIX + await encryptData(value, secret) : value; }
 /** @param {string} value */
-export async function decryptCredential(value) { return value && value.startsWith(CREDENTIAL_PREFIX) ? decryptData(value.slice(CREDENTIAL_PREFIX.length)) : value; }
+export async function decryptCredential(value, secret = getInstallationSecret()) {
+    if (!value || !value.startsWith(CREDENTIAL_PREFIX)) return value;
+    try {
+        return await decryptData(value.slice(CREDENTIAL_PREFIX.length), secret);
+    } catch {
+        // 密文解析失败：可能是明文恰好以 "AES:" 开头的历史值，按原文返回而不是抛错
+        console?.warn?.("[凭证] 凭证解密失败，按原文返回");
+        return value;
+    }
+}
 
 /** @param {string} key */
 export function hasStoredEncryptedCredential(key) { return Boolean(localStorage.getItem(key)); }

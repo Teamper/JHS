@@ -24,7 +24,9 @@ export class FilterTitleKeywordPlugin extends BasePlugin {
                     clientY: e.clientY + 80
                 };
                 utils.q(n, `是否屏蔽标题关键词 ${t}?`, (async () => {
-                    await storageManager.saveTitleFilterKeyword(t), await jhsEventBus?.emit("filter-rules-changed", { scope: "title-keyword" }), utils.closePage({ root: host, layerIndex });
+                    // 选区可能带换行/超长文本：与设置面板保存的规范化保持一致
+                    const keyword = t.replace(/\r?\n+/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, 120);
+                    keyword && await storageManager.saveTitleFilterKeyword(keyword), await jhsEventBus?.emit("filter-rules-changed", { scope: "title-keyword" }), utils.closePage({ root: host, layerIndex });
                 }));
             }
         }));

@@ -212,7 +212,7 @@
   __name(initializeRuntimeConstants, "initializeRuntimeConstants");
   function escapeHtml(e2) {
     const t2 = document.createElement("span");
-    return t2.textContent = e2, t2.innerHTML;
+    return t2.textContent = e2, t2.innerHTML.replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
   __name(escapeHtml, "escapeHtml");
   var CURRENT_DATA_VERSION = 2;
@@ -268,9 +268,9 @@
     localPopover: 30,
     popover: 100,
     dropdown: 1e3,
-    fabBackdrop: 1e4,
-    fabMenu: 10001,
-    fab: 10002,
+    fabBackdrop: 12345691,
+    fabMenu: 12345692,
+    fab: 12345693,
     debugLow: 12345678,
     hostNav: 12345679,
     hostTopbar: 12345689,
@@ -280,10 +280,12 @@
     sheetBackdrop: 12345789,
     sheet: 12345790,
     layer: 999999991,
-    viewer: 999999992,
-    loading: 999999993,
+    // 弹窗内部（如新片工作区）的悬停预览：须盖住所属 layer，但让位 viewer/loading
+    dialogHoverPreview: 999999992,
+    viewer: 999999993,
+    loading: 999999994,
     debug: 999999999,
-    tooltip: 9999999999
+    tooltip: 1e9
   });
   function buildThemeCss() {
     return `
@@ -296,6 +298,8 @@
         --jhs-bg: #f4f6f9;
         --jhs-surface: #ffffff;
         --jhs-surface-2: #f2f4f8;
+        --jhs-surface-hover: #e9edf4;
+        --jhs-focus: #3b6ea5;
         --jhs-border: #e3e7ee;
         --jhs-border-strong: #8a94a6;
         --jhs-text: #1f2733;
@@ -341,9 +345,10 @@
         --jhs-z-modal: ${JHS_Z_INDEX.modal};
         --jhs-z-sheet-backdrop: ${JHS_Z_INDEX.sheetBackdrop};
         --jhs-z-sheet: ${JHS_Z_INDEX.sheet};
-        --jhs-z-loading: ${JHS_Z_INDEX.loading};
-        --jhs-z-viewer: ${JHS_Z_INDEX.viewer};
         --jhs-z-layer: ${JHS_Z_INDEX.layer};
+        --jhs-z-dialog-hover-preview: ${JHS_Z_INDEX.dialogHoverPreview};
+        --jhs-z-viewer: ${JHS_Z_INDEX.viewer};
+        --jhs-z-loading: ${JHS_Z_INDEX.loading};
         --jhs-z-debug: ${JHS_Z_INDEX.debug};
         --jhs-z-tooltip: ${JHS_Z_INDEX.tooltip};
 
@@ -415,6 +420,8 @@
         --jhs-bg: #14181d;
         --jhs-surface: #1d232b;
         --jhs-surface-2: #262d37;
+        --jhs-surface-hover: #2e3642;
+        --jhs-focus: #7cb8e8;
         --jhs-border: #333c47;
         --jhs-border-strong: #64728a;
         --jhs-text: #e6ebf1;
@@ -775,6 +782,27 @@
         background: transparent;
         color: var(--jhs-text-muted);
     }
+    .jhs-btn--dark {
+        border-color: var(--jhs-border-strong);
+        background: var(--jhs-surface-2);
+        color: var(--jhs-text);
+    }
+    .jhs-btn--dark:hover {
+        background: var(--jhs-surface-hover);
+    }
+    /* 图片查看器的离屏临时容器（showImageViewer 字符串入口） */
+    .temporary-container {
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        opacity: 0;
+        pointer-events: none;
+    }
+    /* 识图结果等面板内通用块容器 */
+    .jhs-layout-c8be1ccb { display: block; width: 100%; min-width: 0; }
     .jhs-btn--ghost:hover {
         border-color: transparent;
         background: var(--jhs-surface-2);
@@ -1213,6 +1241,10 @@
     .jhs-state__content { display:grid; gap:var(--jhs-space-1); justify-items:center; }
     .jhs-state__title { margin:0; color:inherit; font-size:var(--jhs-font-size-md); font-weight:700; }
     .jhs-state__description { margin:0; color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
+    .jhs-panel-state { padding:var(--jhs-space-4) 0; color:var(--jhs-text-muted); text-align:center; }
+    .jhs-task-status { padding:var(--jhs-space-2) var(--jhs-space-3); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); background:var(--jhs-surface-2); }
+    .jhs-task-status__name { color:var(--jhs-text); font-weight:700; }
+    .jhs-task-status__meta { display:block; margin-top:var(--jhs-space-1); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
     .jhs-is-hidden { display: none !important; }
     .jhs-dialog-title { padding: 0 var(--jhs-space-2); }
     .jhs-pagination__summary { margin-left: var(--jhs-space-3); color: var(--jhs-text-muted); font-size: var(--jhs-font-size-sm); }
@@ -1233,12 +1265,34 @@
     }
 
     .layui-layer {
+        display: flex;
+        flex-direction: column;
         overflow: hidden;
         border: 1px solid var(--jhs-border);
         border-radius: var(--jhs-radius-lg) !important;
         background: var(--jhs-surface);
         color: var(--jhs-text);
         box-shadow: var(--jhs-shadow-lg) !important;
+    }
+    /* 内容区占满标题/按钮栏以下的剩余空间，配合表格 height:100% 让尾行与分页条始终可达；
+       auto 高度的 layer（消息/确认框）中 flex 退化为自然高度，不受影响 */
+    .layui-layer-content {
+        flex: 1 1 auto;
+        min-height: 0;
+        box-sizing: border-box;
+    }
+    /* 表格类弹窗（黑名单/历史/备份）的通用全高布局，配合 Tabulator height:100% 让尾行与分页条始终可达 */
+    .jhs-table-dialog {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+        padding: var(--jhs-space-3) var(--jhs-space-4);
+    }
+    .jhs-table-dialog .jhs-table-dialog__content,
+    .jhs-table-dialog #table-container {
+        flex: 1;
+        min-height: 0;
     }
     .layui-layer-title {
         min-height: 48px;
@@ -1432,7 +1486,7 @@
         color: var(--jhs-status-down-text) !important;
     }
 
-    @media (max-width: 768px) {
+    @media (max-width: 767px) {
         :is(.jhs-btn, .jhs-filter-btn, .site-btn, .magnet-hub-btn, .pagination-btn, .jhs-icon-btn, .card-btn) {
             min-height: var(--jhs-touch-target);
         }
@@ -1783,14 +1837,14 @@
         event.preventDefault(), event.stopPropagation(), this.source.prop("disabled") || (this.control.hasClass("is-open") ? this.close() : this.open());
       })).on("keydown", ((event) => {
         if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-        event.preventDefault(), this.open("ArrowUp" === event.key || "End" === event.key ? "last" : "selected");
+        event.preventDefault(), this.open("ArrowUp" === event.key || "End" === event.key ? "last" : "Home" === event.key ? "first" : "selected");
       }));
       this.menu.on("click", ".jhs-select-option", ((event) => {
         event.preventDefault(), this.choose($(event.currentTarget));
       })).on("keydown", ".jhs-select-option", ((event) => {
         const items = this.options(), index = items.index(event.currentTarget);
         if ("Escape" === event.key) return event.preventDefault(), this.close(true);
-        if ("Tab" === event.key) return void this.close();
+        if ("Tab" === event.key) return void this.close(true);
         if (["Enter", " "].includes(event.key)) return event.preventDefault(), this.choose($(event.currentTarget));
         if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
         event.preventDefault();
@@ -1805,7 +1859,7 @@
     open(focus = "selected") {
       _JhsSelect.closeAll(this), this.control.addClass("is-open"), this.menu.addClass("is-open"), this.trigger.attr("aria-expanded", "true");
       const items = this.options(), selected = items.filter('[aria-checked="true"]');
-      ("last" === focus ? items.last() : selected.length ? selected.first() : items.first()).trigger("focus");
+      ("last" === focus ? items.last() : "first" === focus ? items.first() : selected.length ? selected.first() : items.first()).trigger("focus");
     }
     close(focus = false) {
       this.control.removeClass("is-open"), this.menu.removeClass("is-open"), this.trigger.attr("aria-expanded", "false"), focus && this.trigger.trigger("focus");
@@ -1891,12 +1945,13 @@
     .tabulator-tableholder { overflow-x:hidden!important; }
 </style>`;
   var coreCssInjected = false;
-  function injectCoreCss() {
+  function injectCoreCss(styles) {
     if (coreCssInjected) return;
-    H(buildThemeCss());
-    l && H(buildJavBusCss()), r && H(buildJavDbCss());
-    H(F);
-    H(buildUiPrimitivesCss());
+    const register = /* @__PURE__ */ __name((id, css) => styles?.register ? styles.register(id, css.replace(/^\s*<style>|<\/style>\s*$/g, "")) : H(css), "register");
+    register("jhs-core-theme", buildThemeCss());
+    l && register("jhs-host-javbus", buildJavBusCss()), r && register("jhs-host-javdb", buildJavDbCss());
+    register("jhs-core-layout", F);
+    register("jhs-ui-primitives", buildUiPrimitivesCss());
     coreCssInjected = true;
   }
   __name(injectCoreCss, "injectCoreCss");
@@ -2053,7 +2108,8 @@
       itemCount: Object.values(data).reduce(((sum, value) => sum + (Array.isArray(value) ? value.length : value && "object" == typeof value ? 1 : 0)), 0),
       data
     };
-    return snapshots.push(snapshot), snapshots.length > 10 && snapshots.splice(0, snapshots.length - 10), await storage._saveSnapshots(snapshots), snapshot;
+    const save = /* @__PURE__ */ __name(async () => (snapshots.push(snapshot), snapshots.length > 10 && snapshots.splice(0, snapshots.length - 10), await storage._saveSnapshots(snapshots), snapshot), "save");
+    return storage._withCrossTabLock ? await storage._withCrossTabLock("jhs_snapshot_lock", save) : await save();
   }
   __name(ensureV2MigrationSnapshot, "ensureV2MigrationSnapshot");
   async function migrateLegacyStorage(storage) {
@@ -2082,14 +2138,18 @@
   __name(migrateStateFlags, "migrateStateFlags");
   var DATA_MIGRATIONS = Object.freeze({ 1: migrateLegacyStorage, 2: migrateStateFlags });
   async function runDataMigrations(storage) {
-    let version = await storage.getDataVersion();
-    if (version > CURRENT_DATA_VERSION) throw new Error("数据来自更新版本的 JHS，当前版本无法安全读取");
-    for (let target = version + 1; target <= CURRENT_DATA_VERSION; target++) {
-      const migration = DATA_MIGRATIONS[target];
-      if (!migration) throw new Error(`缺少数据迁移: ${target - 1} → ${target}`);
-      await migration(storage), await storage.setDataVersion(target), version = target;
-    }
-    return version;
+    const locks = globalThis.navigator?.locks;
+    const run = /* @__PURE__ */ __name(async () => {
+      let version = await storage.getDataVersion();
+      if (version > CURRENT_DATA_VERSION) throw new Error("数据来自更新版本的 JHS，当前版本无法安全读取");
+      for (let target = version + 1; target <= CURRENT_DATA_VERSION; target++) {
+        const migration = DATA_MIGRATIONS[target];
+        if (!migration) throw new Error(`缺少数据迁移: ${target - 1} → ${target}`);
+        await migration(storage), await storage.setDataVersion(target), version = target;
+      }
+      return version;
+    }, "run");
+    return locks?.request ? locks.request("jhs_data_migration", run) : run();
   }
   __name(runDataMigrations, "runDataMigrations");
 
@@ -2649,9 +2709,9 @@
       let n2 = this._domainStats.get(e2);
       n2 || (n2 = { count: 0, errors: 0, lastUsed: 0 }, this._domainStats.set(e2, n2)), n2.count++, n2.lastUsed = Date.now();
     }
-    _recordFailure(e2) {
+    _recordFailure(e2, { affectsBreaker = true } = {}) {
       let t2 = this._circuitBreakers.get(e2);
-      t2 || (t2 = { state: "closed", failCount: 0, openTime: 0, cooldownMs: 6e4, threshold: 3 }, this._circuitBreakers.set(e2, t2)), t2.failCount++, ("half-open" === t2.state || t2.failCount >= (t2.threshold || 3)) && (t2.state = "open", t2.openTime = Date.now(), t2.probing = false, clog.warn(`[熔断] ${e2} 连续失败 ${t2.failCount} 次，已熔断 ${t2.cooldownMs / 1e3} 秒`));
+      t2 && affectsBreaker && (t2.failCount++, ("half-open" === t2.state || t2.failCount >= (t2.threshold || 3)) && (t2.state = "open", t2.openTime = Date.now(), t2.probing = false, clog.warn(`[熔断] ${e2} 连续失败 ${t2.failCount} 次，已熔断 ${t2.cooldownMs / 1e3} 秒`)));
       let n2 = this._domainStats.get(e2);
       n2 || (n2 = { count: 0, errors: 0, lastUsed: 0 }, this._domainStats.set(e2, n2)), n2.count++, n2.errors++, n2.lastUsed = Date.now();
     }
@@ -2695,11 +2755,16 @@
       const o2 = this._getDomain(t2), [m2, r2, b2, k2] = await Promise.all([this.storageManager.getSetting("httpTimeout", 5e3), this.storageManager.getSetting("httpRetryCount", 3), this.storageManager.getSetting("circuitBreakerThreshold", 3), this.storageManager.getSetting("circuitBreakerCooldown", 6e4)]);
       let u2 = this._circuitBreakers.get(o2);
       u2 || (u2 = { state: "closed", failCount: 0, openTime: 0, cooldownMs: k2, threshold: b2, probing: false }, this._circuitBreakers.set(o2, u2));
+      u2.threshold = Math.max(1, Number(b2) || 3), u2.cooldownMs = Math.max(1e3, Number(k2) || 6e4);
       const w = this._checkCircuitBreaker(o2);
       if (w) {
         const e3 = new Error(`站点 ${o2} 已熔断，${w.remaining}秒后重试`);
         throw e3._circuitBroken = true, e3;
       }
+      let E = false;
+      const recordBreakerFailure = /* @__PURE__ */ __name((affectsBreaker) => {
+        affectsBreaker && !E ? (E = true, this._recordFailure(o2, { affectsBreaker: true })) : this._recordFailure(o2, { affectsBreaker: false });
+      }, "recordBreakerFailure");
       return n2 || (n2 = void 0), await this.utils.retry(() => {
         const c2 = this._checkCircuitBreaker(o2);
         if (c2) {
@@ -2721,7 +2786,7 @@
               try {
                 if (404 === e3.status && requestOptions.ignoreNotFound) return void a3(null);
                 if (this._isCloudflareChallenge(e3.responseText, e3.status)) {
-                  this._recordFailure(o2);
+                  recordBreakerFailure(true);
                   const n3 = new Error(`Cloudflare challenge blocked: ${t2}`);
                   return n3._cfBlocked = true, n3.status = e3.status, n3.requestUrl = t2, n3.finalUrl = e3.finalUrl, n3.cfDiagnostics = { status: e3.status, requestUrl: t2, finalUrl: e3.finalUrl, contentLength: e3.responseText?.length || 0 }, void r3(n3);
                 }
@@ -2734,7 +2799,7 @@
                   }
                   else a3(e3.responseText || e3);
                 } else {
-                  clog.error("请求失败,状态码:", e3.status, t2), this._recordFailure(o2);
+                  clog.error("请求失败,状态码:", e3.status, t2), recordBreakerFailure(e3.status >= 500);
                   if (e3.responseText) {
                     try {
                       const t3 = JSON.parse(e3.responseText);
@@ -2749,14 +2814,14 @@
                   }
                 }
               } catch (n3) {
-                this._recordFailure(o2), r3(n3);
+                recordBreakerFailure(true), r3(n3);
               }
             }, "onload"),
             onerror: /* @__PURE__ */ __name((e3) => {
-              clog.error("网络错误:", t2), this._recordFailure(o2), r3(new Error(e3.error || "网络错误"));
+              clog.error("网络错误:", t2), recordBreakerFailure(true), r3(new Error(e3.error || "网络错误"));
             }, "onerror"),
             ontimeout: /* @__PURE__ */ __name(() => {
-              this._recordFailure(o2), r3(new Error("请求超时: " + t2));
+              recordBreakerFailure(true), r3(new Error("请求超时: " + t2));
             }, "ontimeout")
           });
         });
@@ -2909,7 +2974,11 @@
           const value = stableStateValue(current[key]);
           return value !== stableStateValue(journal.before[key]) && value !== stableStateValue(journal.after[key]);
         }));
-        if (conflict) throw new Error("检测到未完成状态事务且数据已发生冲突，请先运行数据健康检查");
+        if (conflict) {
+          clog.warn("[状态] 检测到未完成状态事务且数据已变化，保留当前数据并丢弃陈旧事务日志"), show.info("检测到未完成的状态事务，已保留当前数据；如数据异常请在设置中运行数据健康检查");
+          await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+          return;
+        }
         await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.before.carList), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.before.actresses), await this.storage.forage.setItem("new_video_decisions", journal.before.decisions);
         journal.before.activity ? await this._writeActivity(journal.before.activity) : (log.entries = log.entries.filter(((entry) => entry.id !== journal.id)), await this._writeActivity(log));
       }
@@ -3002,8 +3071,13 @@
           return effect.actressItems.length > 0 || !!effect.decision;
         }));
         if (!changed.length) return { changed: [], transactionId: null };
+        const existingCarNums = new Set(domains.carList.map(((record) => record.carNum))), now = utils.getNowStr();
+        const tombstones = changed.filter(((carNum) => !existingCarNums.has(carNum))).map(((carNum) => {
+          const record = { carNum, url: "", names: "", createDate: now, stateFlags: createEmptyStateFlags() };
+          return record.updateDate = now, syncLegacyStatus(record), record;
+        }));
         const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, changed), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-remove", commitState: "pending", changes: changed.map(((carNum) => ({ carNum, operation: "new-video-remove", fields: ["newVideoList", "decision"], before: null, after: { removed: true, reason }, newVideoEffect: captureNewVideoEffect(domains.actresses, domains.decisions, carNum), undoState: "pending" }))), createdAt: (/* @__PURE__ */ new Date()).toISOString(), undoAttemptedAt: null };
-        await this._commit(domains, { carList: domains.carList, ...effects }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+        await this._commit(domains, { carList: [...domains.carList, ...tombstones], ...effects }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
         return { changed, transactionId: activity.id };
       });
     }
@@ -3113,15 +3187,20 @@
   var e = /* @__PURE__ */ new WeakSet();
   var t = /* @__PURE__ */ __name(async function(e2, t2, n2) {
     let a2;
-    if (Array.isArray(e2)) a2 = [...e2];
-    else {
-      if (a2 = await this.forage.getItem(t2) || [], a2.includes(e2)) {
-        const t3 = `${e2} ${n2}已存在`;
-        throw show.error(t3), new Error(t3);
+    const locks = globalThis.navigator?.locks;
+    const write = /* @__PURE__ */ __name(async () => {
+      if (Array.isArray(e2)) a2 = [...e2];
+      else {
+        const list = await this.forage.getItem(t2) || [];
+        if (list.includes(e2)) {
+          const msg = `${e2} ${n2}已存在`;
+          throw show.error(msg), new Error(msg);
+        }
+        list.push(e2), a2 = list;
       }
-      a2.push(e2);
-    }
-    return await this._setItemAndInvalidate(t2, a2), a2;
+      return await this._setItemAndInvalidate(t2, a2), a2;
+    }, "write");
+    return locks?.request ? locks.request("jhs_keyword_lock", write) : write();
   }, "t");
   var _StorageManager = class _StorageManager {
     constructor() {
@@ -3174,17 +3253,23 @@
       await this.forage.setItem(e2, t2);
       this._invalidateCache(e2);
     }
+    async _withCrossTabLock(e2, t2) {
+      const n2 = globalThis.navigator?.locks;
+      return n2?.request ? n2.request(e2, t2) : t2();
+    }
     async withActressLock(fn) {
-      let release;
-      const lock = new Promise((r2) => release = r2);
-      const prev = this._actressLock;
-      this._actressLock = this._actressLock.then(() => lock);
-      await prev;
-      try {
-        return await fn();
-      } finally {
-        release();
-      }
+      return this._withCrossTabLock("jhs_actress_lock", async () => {
+        let release;
+        const lock = new Promise((r2) => release = r2);
+        const prev = this._actressLock;
+        this._actressLock = this._actressLock.then(() => lock);
+        await prev;
+        try {
+          return await fn();
+        } finally {
+          release();
+        }
+      });
     }
     async _rawUpdateFavoriteActress(e2) {
       const t2 = await this.getFavoriteActressList();
@@ -3349,6 +3434,9 @@
       return this.cacheBlacklistMap;
     }
     async addBlacklistItem(e2) {
+      return this._withCrossTabLock("jhs_blacklist_lock", () => this._addBlacklistItemWithoutLock(e2));
+    }
+    async _addBlacklistItemWithoutLock(e2) {
       let { starId: t2, name: n2, allName: a2, role: i2, movieType: s2, url: o2 } = e2;
       if (!t2) throw new Error("缺失starId");
       if (!n2) throw new Error("缺失name");
@@ -3370,34 +3458,41 @@
       await this._setItemAndInvalidate(this.blacklist_key, r2);
     }
     async updateBlacklistItem(e2) {
+      return this._withCrossTabLock("jhs_blacklist_lock", () => this._updateBlacklistItemWithoutLock(e2));
+    }
+    async _updateBlacklistItemWithoutLock(e2) {
       if (!e2 || !e2.starId) throw new Error("参数不全");
       const t2 = await this.getBlacklist(), n2 = t2.find(((t3) => t3.starId === e2.starId));
       if (!n2) throw new Error(`未找到黑名单演员信息:${e2.name} ${e2.starId}`);
       e2.checkTime && (n2.checkTime = e2.checkTime), e2.lastPublishTime && (n2.lastPublishTime = e2.lastPublishTime), await this._setItemAndInvalidate(this.blacklist_key, t2);
     }
     async deleteBlacklistItem(e2) {
-      const t2 = await this.getBlacklist(), n2 = t2.filter(((t3) => t3.starId !== e2));
-      t2.length !== n2.length && await this._setItemAndInvalidate(this.blacklist_key, n2);
+      return this._withCrossTabLock("jhs_blacklist_lock", async () => {
+        const t2 = await this.getBlacklist(), n2 = t2.filter(((t3) => t3.starId !== e2));
+        t2.length !== n2.length && await this._setItemAndInvalidate(this.blacklist_key, n2);
+      });
     }
     async getBlacklistCarList() {
       return this._readCached("cache_filter_actor_actress_car_list", this.blacklist_car_list_key, []);
     }
     async batchSaveBlacklistCarList(e2) {
-      const t2 = await this.getBlacklistCarList(), n2 = JSON.parse(JSON.stringify(t2));
-      let a2 = false, i2 = [];
-      for (const s2 of e2) {
-        n2.find(((e3) => e3.carNum === s2.carNum)) || (this._saveSingleCar(s2, n2), clog.html(`屏蔽演员番号: <span class="jhs-layout-eeefd8c8">${escapeHtml(s2.names)} ${escapeHtml(s2.carNum)}</span>`), a2 = true, i2.push(s2.carNum));
-      }
-      if (a2) {
-        await this._setItemAndInvalidate(this.blacklist_car_list_key, n2);
-        const result = await this.removeNewVideoList(i2);
-        result.changed.length && await window.jhsEventBus?.emit?.("new-video-changed", {
-          reason: "blacklist-car-removed",
-          carNums: result.changed
-        });
-        await window.cleanCache_filter_actor_actress_car_list();
-      }
-      return { changed: i2.map(normalizeCarNum).filter(Boolean) };
+      return this._withCrossTabLock("jhs_blacklist_lock", async () => {
+        const t2 = await this.getBlacklistCarList(), n2 = JSON.parse(JSON.stringify(t2));
+        let a2 = false, i2 = [];
+        for (const s2 of e2) {
+          n2.find(((e3) => e3.carNum === s2.carNum)) || (this._saveSingleCar(s2, n2), clog.html(`屏蔽演员番号: <span class="jhs-layout-eeefd8c8">${escapeHtml(s2.names)} ${escapeHtml(s2.carNum)}</span>`), a2 = true, i2.push(s2.carNum));
+        }
+        if (a2) {
+          await this._setItemAndInvalidate(this.blacklist_car_list_key, n2);
+          const result = await this.removeNewVideoList(i2);
+          result.changed.length && await window.jhsEventBus?.emit?.("new-video-changed", {
+            reason: "blacklist-car-removed",
+            carNums: result.changed
+          });
+          await window.cleanCache_filter_actor_actress_car_list();
+        }
+        return { changed: i2.map(normalizeCarNum).filter(Boolean) };
+      });
     }
     async removeBlacklistCarList(e2) {
       const t2 = await this.getBlacklistCarList(), n2 = t2.filter(((t3) => t3.starId !== e2));
@@ -3527,16 +3622,20 @@
     async importData(e2) {
       validatePortableData(e2);
       await hasPortableUserData(this) && await this.createSnapshot("导入前自动备份", "auto-import");
-      const validKeys = /* @__PURE__ */ new Set([...IMPORTABLE_DATA_KEYS, "data_version"]), writes = [];
-      for (const key in e2) {
-        if (!validKeys.has(key)) {
-          clog.warn(`[导入] 跳过未知数据键: ${key}`);
-          continue;
+      const validKeys = /* @__PURE__ */ new Set([...IMPORTABLE_DATA_KEYS, "data_version"]);
+      await this._withCrossTabLock("jhs_state_mutation", async () => {
+        const writes = [];
+        for (const key in e2) {
+          if (!validKeys.has(key)) {
+            clog.warn(`[导入] 跳过未知数据键: ${key}`);
+            continue;
+          }
+          if ("third_party_ttl_cache" === key) continue;
+          writes.push("data_version" === key ? this.setDataVersion(e2[key]) : this._setItemAndInvalidate(key, e2[key]));
         }
-        if ("third_party_ttl_cache" === key) continue;
-        writes.push("data_version" === key ? this.setDataVersion(e2[key]) : this._setItemAndInvalidate(key, e2[key]));
-      }
-      await Promise.all(writes), this._invalidateCache(), await runDataMigrations(this), await window.stateService?.recoverPendingTransaction();
+        await Promise.all(writes), this._invalidateCache(), await runDataMigrations(this);
+      });
+      await window.stateService?.recoverPendingTransaction();
     }
     async exportPortableData() {
       const data = { data_version: await this.getDataVersion() };
@@ -3571,11 +3670,32 @@
       const loaded = await n2(), customTtl = loaded && "object" === typeof loaded && "__jhsCacheTtl" in loaded ? loaded.__jhsCacheTtl : t2;
       const o2 = loaded && "object" === typeof loaded && "__jhsCacheTtl" in loaded ? loaded.data : loaded;
       if (void 0 === o2 || null === o2) return o2;
-      return i2[e2] = {
-        time: a2,
-        ttl: customTtl,
-        data: o2
-      }, await this.setThirdPartyCache(i2), o2;
+      i2[e2] = { time: a2, ttl: customTtl, data: o2 }, this._pruneThirdPartyCache(i2, a2);
+      return await this._withCrossTabLock("jhs_ttl_cache_lock", async () => {
+        const latest = await this.getThirdPartyCache();
+        latest[e2] = i2[e2], this._pruneThirdPartyCache(latest, a2);
+        await this.setThirdPartyCache(latest);
+      }), o2;
+    }
+    async cacheSet(e2, t2, n2) {
+      const a2 = Date.now();
+      return this._withCrossTabLock("jhs_ttl_cache_lock", async () => {
+        const latest = await this.getThirdPartyCache();
+        latest[e2] = { time: a2, ttl: n2, data: t2 }, this._pruneThirdPartyCache(latest, a2);
+        await this.setThirdPartyCache(latest);
+      });
+    }
+    _pruneThirdPartyCache(e2, a2) {
+      const HARD_TTL = 30 * 864e5, MAX_ENTRIES = 500;
+      for (const key of Object.keys(e2)) {
+        const entry = e2[key];
+        (!entry || entry.time && a2 - entry.time > Math.max(entry.ttl || 0, HARD_TTL)) && delete e2[key];
+      }
+      const keys = Object.keys(e2);
+      if (keys.length > MAX_ENTRIES) {
+        keys.sort(((x, y2) => (e2[x].time || 0) - (e2[y2].time || 0)));
+        for (const key of keys.slice(0, keys.length - MAX_ENTRIES)) delete e2[key];
+      }
     }
     getCacheHitStats() {
       const e2 = this._cacheStats.hits + this._cacheStats.misses;
@@ -3926,7 +4046,9 @@
     }
     importResource(e2) {
       let t2;
-      e2.indexOf("css") >= 0 ? (t2 = document.createElement("link"), t2.setAttribute("rel", "stylesheet"), t2.href = e2) : (t2 = document.createElement("script"), t2.setAttribute("type", "text/javascript"), t2.src = e2), document.documentElement.appendChild(t2);
+      e2.indexOf("css") >= 0 ? (t2 = document.createElement("link"), t2.setAttribute("rel", "stylesheet"), t2.href = e2) : (t2 = document.createElement("script"), t2.setAttribute("type", "text/javascript"), t2.src = e2);
+      const url = t2.href || t2.src;
+      [...document.head.querySelectorAll("link[href], script[src]")].some(((node) => (node.href || node.src) === url)) || document.head.appendChild(t2);
     }
     openPage(e2, t2, n2, a2) {
       n2 = n2 ?? true;
@@ -3954,7 +4076,10 @@
     _handleGlobalEscKey(e2) {
       if ("Escape" !== e2.key && 27 !== e2.keyCode) return;
       if (0 === this.layerIndexStack.length) return;
-      const t2 = this.layerIndexStack[this.layerIndexStack.length - 1], n2 = $(`#layui-layer${t2}`);
+      for (; this.layerIndexStack.length && !document.getElementById(`layui-layer${this.layerIndexStack[this.layerIndexStack.length - 1]}`); ) this.layerIndexStack.pop();
+      const t2 = this.layerIndexStack[this.layerIndexStack.length - 1];
+      if (null == t2) return;
+      const n2 = $(`#layui-layer${t2}`);
       let a2 = false;
       if (n2.find(".viewer-container").length > 0) a2 = true;
       else {
@@ -3980,6 +4105,30 @@
       } catch (i2) {
         clog.error("iframe监听失败 (跨域或未加载完毕):", i2);
       }
+    }
+    releaseEscClose(e2) {
+      const t2 = null == e2 ? this.layerIndexStack[this.layerIndexStack.length - 1] : e2;
+      null != t2 && (this.layerIndexStack = this.layerIndexStack.filter(((n2) => n2 !== t2)));
+    }
+    trapFocus(container) {
+      if (!container) return () => {
+      };
+      const previous = document.activeElement;
+      const selector = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+      const visible = /* @__PURE__ */ __name(() => [...container.querySelectorAll(selector)].filter(((element) => !element.hidden && "true" !== element.getAttribute("aria-hidden") && null !== element.offsetParent)), "visible");
+      const handleKeydown = /* @__PURE__ */ __name((event) => {
+        if ("Tab" !== event.key) return;
+        const items = visible();
+        if (!items.length) return void event.preventDefault();
+        const first = items[0], last = items[items.length - 1];
+        event.shiftKey && document.activeElement === first ? (event.preventDefault(), last.focus()) : !event.shiftKey && document.activeElement === last && (event.preventDefault(), first.focus());
+      }, "handleKeydown");
+      container.addEventListener("keydown", handleKeydown);
+      queueMicrotask((() => visible()[0]?.focus()));
+      return () => {
+        container.removeEventListener("keydown", handleKeydown);
+        previous?.isConnected && "function" == typeof previous.focus && previous.focus();
+      };
     }
     getOwningLayerIndex(options = {}) {
       const parseIndex = /* @__PURE__ */ __name((element) => {
@@ -4085,6 +4234,7 @@
     getNowStr(e2 = "-", t2 = ":", n2 = null) {
       let a2;
       a2 = n2 ? new Date(n2) : /* @__PURE__ */ new Date();
+      if (isNaN(a2.getTime())) return "";
       const i2 = a2.getFullYear(), s2 = String(a2.getMonth() + 1).padStart(2, "0"), o2 = String(a2.getDate()).padStart(2, "0"), r2 = String(a2.getHours()).padStart(2, "0"), l2 = String(a2.getMinutes()).padStart(2, "0"), c2 = String(a2.getSeconds()).padStart(2, "0");
       return `${[i2, s2, o2].join(e2)} ${[r2, l2, c2].join(t2)}`;
     }
@@ -4489,7 +4639,7 @@
     }, (function() {
       const e2 = /* @__PURE__ */ __name((e3, t2, n2, a2, i2) => {
         let s2;
-        "object" == typeof n2 ? s2 = n2 : (s2 = "object" == typeof a2 ? a2 : i2 || {}, s2.gravity = n2 || "top", s2.position = "string" == typeof a2 ? a2 : "center"), s2.gravity && "center" !== s2.gravity || (s2.offset = {
+        "object" == typeof n2 ? (s2 = n2, s2.gravity || (s2.gravity = "top"), s2.position || (s2.position = "center")) : (s2 = "object" == typeof a2 ? a2 : i2 || {}, s2.gravity = n2 || "top", s2.position = "string" == typeof a2 ? a2 : "center"), s2.gravity && "center" !== s2.gravity || (s2.offset = {
           y: "calc(50vh - 150px)"
         });
         const o2 = "var(--jhs-status-fav)", r2 = "var(--jhs-status-fav-tint)", l2 = "var(--jhs-status-down)", c2 = "var(--jhs-status-down-tint)", d2 = "var(--jhs-status-filter)", h2 = "var(--jhs-status-filter-tint)", g2 = {
@@ -4628,6 +4778,8 @@
         this.onDocumentOver = (event) => this.handleDocumentOver(event);
         this.onDocumentOut = (event) => this.handleDocumentOut(event);
         this.onDocumentMove = (event) => this.handleDocumentMove(event);
+        this.onDocumentScroll = () => this.handleDocumentScroll();
+        this.suppressUntilMouseMove = false;
         this.init();
       }
       init() {
@@ -4683,13 +4835,19 @@
       }
       bindEvents() {
         if (this.eventsBound || this.destroyed) return;
-        this.scope.listen(document, "mouseover", this.onDocumentOver), this.scope.listen(document, "mouseout", this.onDocumentOut), this.scope.listen(document, "mousemove", this.onDocumentMove), this.eventsBound = true;
+        this.scope.listen(document, "mouseover", this.onDocumentOver), this.scope.listen(document, "mouseout", this.onDocumentOut), this.scope.listen(document, "mousemove", this.onDocumentMove), // 滚动会让光标下的卡片变化，浏览器补发的边界 mouse 事件会造成预览反复闪现
+        this.scope.listen(document, "scroll", this.onDocumentScroll, { capture: true, passive: true }), this.scope.listen(document, "wheel", this.onDocumentScroll, { passive: true }), this.eventsBound = true;
+      }
+      handleDocumentScroll() {
+        if (this.destroyed || !this.currentTarget) return;
+        this.suppressUntilMouseMove = true, clearTimeout(this.timer), this.timer = null, this.hidePreview();
       }
       findTarget(event) {
         const target = event.target;
         return target?.closest ? target.closest(this.config.selector) : null;
       }
       handleDocumentOver(event) {
+        if (this.suppressUntilMouseMove) return;
         const target = this.findTarget(event);
         target && (!event.relatedTarget || !target.contains(event.relatedTarget)) && this.handleMouseEnter(event, target);
       }
@@ -4698,6 +4856,7 @@
         target && (!event.relatedTarget || !target.contains(event.relatedTarget)) && this.handleMouseLeave();
       }
       handleDocumentMove(event) {
+        this.suppressUntilMouseMove = false;
         if (!this.currentTarget) return;
         (event.target === this.currentTarget || this.currentTarget.contains(event.target)) && this.handleMouseMove(event);
       }
@@ -4716,7 +4875,9 @@
         if (source === this.currentUrl && this.imgElement) return this.showCurrentPreview();
         if (source === this.pendingUrl) return void this.preview.classList.add("active");
         const cached = this.loadedUrls.get(source);
-        if (cached) return this.loadedUrls.delete(source), this.loadedUrls.set(source, cached), void this.commitPreview(source, cached);
+        if (cached) {
+          return ++this.loadGeneration, this.pendingImage && (this.pendingImage.onload = null, this.pendingImage.onerror = null), this.pendingImage = null, this.pendingUrl = null, this.loadedUrls.delete(source), this.loadedUrls.set(source, cached), void this.commitPreview(source, cached);
+        }
         const generation = ++this.loadGeneration;
         this.pendingImage && (this.pendingImage.onload = null, this.pendingImage.onerror = null);
         this.pendingUrl = source;
@@ -5040,7 +5201,7 @@
                 margin-right: 2px;
             }
 
-            @media (max-width: 768px) {
+            @media (max-width: 767px) {
                 .console-logger-container {
                     right: 10px;
                     bottom: 10px;
@@ -5107,7 +5268,7 @@
           this.createContainer(), this.bindEvents(), this.checkInitialMaximizeState(), this.checkInitialCollapseState();
         }
         createContainer() {
-          this.container = document.createElement("div"), this.container.className = "console-logger-container jhs-ui", this.container.style.display = "none", this.toggleBtn = document.createElement("button"), this.toggleBtn.type = "button", this.toggleBtn.setAttribute("aria-label", "展开或收起运行日志"), this.toggleBtn.className = "console-logger-toggle collapsed", this.container.appendChild(this.toggleBtn), window.matchMedia?.("(max-width: 768px)").matches && (this.toggleBtn.hidden = true, this.toggleBtn.style.display = "none"), this.window = document.createElement("div"), this.window.className = "console-logger-window collapsed";
+          this.container = document.createElement("div"), this.container.className = "console-logger-container jhs-ui", this.container.style.display = "none", this.toggleBtn = document.createElement("button"), this.toggleBtn.type = "button", this.toggleBtn.setAttribute("aria-label", "展开或收起运行日志"), this.toggleBtn.className = "console-logger-toggle collapsed", this.container.appendChild(this.toggleBtn), window.matchMedia?.("(max-width: 767px)").matches && (this.toggleBtn.hidden = true, this.toggleBtn.style.display = "none"), this.window = document.createElement("div"), this.window.className = "console-logger-window collapsed";
           const t3 = document.createElement("div");
           t3.className = "console-logger-header";
           const n3 = document.createElement("div");
@@ -5191,11 +5352,9 @@
             id: Date.now() + Math.random()
           };
           if (this.logs.push(g2), this.logs.length > n2) {
-            const e3 = this.logs[0];
-            if (s3) {
-              const t4 = this.content.querySelector(`.console-logger-entry[data-id="${e3.id}"]`);
-              t4 && (this.logs.shift(), this.content.removeChild(t4));
-            }
+            this.logs.shift();
+            const e3 = this.content.querySelector(".console-logger-entry");
+            e3 && e3.remove();
           }
           s3 && this.renderLog(g2);
         }
@@ -5340,12 +5499,12 @@
         console.error("创建日志控制台出现异常", r2), loggerClog = new o2();
       }
       !(function() {
-        const e3 = window.clog || console;
+        const resolveClog = /* @__PURE__ */ __name(() => window.clog || console, "resolveClog");
         scope.listen(window, "error", (function(t3) {
           const n3 = t3.filename, a3 = t3.message;
-          n3.includes("javdb") || n3.includes("javbus") || e3.error(`[全局 Error 异常捕获] ${a3} 来源: ${n3}`);
+          "string" == typeof n3 && (n3.includes("javdb") || n3.includes("javbus")) || resolveClog().error(`[全局 Error 异常捕获] ${a3} 来源: ${n3 ?? "未知"}`);
         })), scope.listen(window, "unhandledrejection", (function(t3) {
-          const n3 = t3.reason, a3 = (null == n3 ? void 0 : n3.message) ?? "";
+          const e3 = resolveClog(), n3 = t3.reason, a3 = (null == n3 ? void 0 : n3.message) ?? "";
           if (["NotAllowedError", "AbortError", "NotSupportedError"].includes(n3?.name) || a3.includes("play()") || a3.includes("The element has no supported sources")) return e3.warn("[全局媒体播放异常] 当前媒体源无法播放", n3), void t3.preventDefault();
           if (a3.includes("<span>1005</span>") && a3.includes("fc2ppvdb")) return;
           const i3 = `[全局 Promise 异常捕获] ${n3.message || n3}`;
@@ -6120,7 +6279,8 @@
     async handleDetailPage() {
       if ($(".actress-info").length > 0) return;
       const generation = this._generation;
-      const names = $(".female").prev().map(((index, item) => $(item).text().trim())).get();
+      const actressLinks = $(".female");
+      const names = actressLinks.prev().map(((index, item) => $(item).text().trim())).get();
       if (!names.length) return;
       const blocks = [];
       for (const name of names) {
@@ -6148,7 +6308,9 @@
         blocks.push(block);
       }
       if (!this.isStillActive(generation)) return;
-      $('strong:contains("演員")').parent().after(...blocks);
+      const anchor = $("strong").filter(((_index, element) => /^(?:演員|演员)\s*:?$/.test($(element).text().trim()))).first().parent();
+      const fallback = actressLinks.first().closest(".panel-block");
+      anchor.length ? anchor.after(...blocks) : fallback.after(...blocks);
     }
     async handleStarPage() {
       if ($(".actress-info").length > 0) return;
@@ -6360,6 +6522,11 @@
     }
   }
   __name(normalizeHttpUrl, "normalizeHttpUrl");
+  function normalizeJavdbMediaUrl(value, baseUrl = window.location.href) {
+    const url = normalizeHttpUrl(value, baseUrl);
+    return url?.replace(/^https:\/\/[^/]+\/rhe951l4q(?=\/)/i, "https://c0.jdbstatic.com") ?? null;
+  }
+  __name(normalizeJavdbMediaUrl, "normalizeJavdbMediaUrl");
   function normalizeBtihHash(value) {
     const hash = String(value || "").trim();
     return /^(?:[a-f\d]{40}|[a-z2-7]{32})$/i.test(hash) ? hash.toUpperCase() : null;
@@ -6744,11 +6911,21 @@
   ]);
 
   // src/core/credential-crypto.js
-  var ENCRYPTION_SALT = "x7k9p3";
+  var LEGACY_ENCRYPTION_SALT = "x7k9p3";
+  var INSTALL_SECRET_KEY = "jhs_credential_install_secret";
   var CREDENTIAL_PREFIX = "AES:";
-  async function getEncryptionKey() {
+  var sessionSecret = "";
+  function getInstallationSecret() {
+    let secret = globalThis.localStorage?.getItem?.(INSTALL_SECRET_KEY) || sessionSecret;
+    if (secret) return secret;
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    secret = arrayBufferToBase64(bytes.buffer), sessionSecret = secret, globalThis.localStorage?.setItem?.(INSTALL_SECRET_KEY, secret);
+    return secret;
+  }
+  __name(getInstallationSecret, "getInstallationSecret");
+  async function getEncryptionKey(secret) {
     const encoder = new TextEncoder();
-    const material = await crypto.subtle.importKey("raw", encoder.encode(`${ENCRYPTION_SALT}.jhs.v1`), { name: "PBKDF2" }, false, ["deriveKey"]);
+    const material = await crypto.subtle.importKey("raw", encoder.encode(`${secret}.jhs.v1`), { name: "PBKDF2" }, false, ["deriveKey"]);
     return crypto.subtle.deriveKey({ name: "PBKDF2", salt: encoder.encode("jhs-backup"), iterations: 1e5, hash: "SHA-256" }, material, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
   }
   __name(getEncryptionKey, "getEncryptionKey");
@@ -6765,8 +6942,8 @@
     return bytes;
   }
   __name(base64ToArrayBuffer, "base64ToArrayBuffer");
-  async function encryptData(value) {
-    const key = await getEncryptionKey(), iv = crypto.getRandomValues(new Uint8Array(12));
+  async function encryptData(value, secret = getInstallationSecret()) {
+    const key = await getEncryptionKey(secret), iv = crypto.getRandomValues(new Uint8Array(12));
     const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(value));
     const combined = new Uint8Array(iv.length + encrypted.byteLength);
     combined.set(iv);
@@ -6774,18 +6951,29 @@
     return arrayBufferToBase64(combined.buffer);
   }
   __name(encryptData, "encryptData");
-  async function decryptData(value) {
-    const key = await getEncryptionKey(), combined = base64ToArrayBuffer(value), iv = combined.slice(0, 12), data = combined.slice(12);
-    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
-    return new TextDecoder().decode(decrypted);
+  async function decryptData(value, secret = getInstallationSecret()) {
+    const combined = base64ToArrayBuffer(value), iv = combined.slice(0, 12), data = combined.slice(12);
+    const decrypt = /* @__PURE__ */ __name(async (candidate) => new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, await getEncryptionKey(candidate), data)), "decrypt");
+    try {
+      return await decrypt(secret);
+    } catch (error) {
+      if (secret === LEGACY_ENCRYPTION_SALT) throw error;
+      return decrypt(LEGACY_ENCRYPTION_SALT);
+    }
   }
   __name(decryptData, "decryptData");
-  async function encryptCredential(value) {
-    return value && !value.startsWith(CREDENTIAL_PREFIX) ? CREDENTIAL_PREFIX + await encryptData(value) : value;
+  async function encryptCredential(value, secret = getInstallationSecret()) {
+    return value && !value.startsWith(CREDENTIAL_PREFIX) ? CREDENTIAL_PREFIX + await encryptData(value, secret) : value;
   }
   __name(encryptCredential, "encryptCredential");
-  async function decryptCredential(value) {
-    return value && value.startsWith(CREDENTIAL_PREFIX) ? decryptData(value.slice(CREDENTIAL_PREFIX.length)) : value;
+  async function decryptCredential(value, secret = getInstallationSecret()) {
+    if (!value || !value.startsWith(CREDENTIAL_PREFIX)) return value;
+    try {
+      return await decryptData(value.slice(CREDENTIAL_PREFIX.length), secret);
+    } catch {
+      console?.warn?.("[凭证] 凭证解密失败，按原文返回");
+      return value;
+    }
   }
   __name(decryptCredential, "decryptCredential");
   function hasStoredEncryptedCredential(key) {
@@ -6827,6 +7015,9 @@
       responsiveLayout: "collapse",
       pagination: true,
       paginationMode: "local",
+      // 默认 height:100% 启用虚拟滚动并让表格适配弹窗可视高度，避免 .layui-layer 的 overflow:hidden 裁掉尾行与分页条；
+      // 容器高度不确定时（auto 父级）百分比按 CSS 规则退化为 auto，行为与旧版一致
+      height: "100%",
       paginationSize: pageSizes[0] ?? 20,
       ...options,
       paginationSizeSelector: pageSizes,
@@ -7168,7 +7359,7 @@
                     transition: all 0.2s ease;
                 }
                 .cache-item:hover {
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                    box-shadow: var(--jhs-shadow-sm);
                     transform: translateY(-2px);
                 }
                 .cache-item { padding:var(--jhs-space-3); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); }
@@ -7478,7 +7669,7 @@
                 .jhs-resource-advanced > summary { cursor:pointer; font-weight:600; }
                 #advanced-resource-json { width:100%; box-sizing:border-box; margin-top:var(--jhs-space-3); }
 
-                @media (max-width: 768px) {
+                @media (max-width: 767px) {
                     .jhs-setting-layout {
                         grid-template-columns: minmax(0, 1fr);
                         grid-template-rows: auto minmax(0, 1fr);
@@ -7850,7 +8041,9 @@
   var RowBinding = _RowBinding;
   function makeSetValue(type, element) {
     if (type === "boolean") return (next) => element.prop("checked", normalizeBooleanValue("", next));
-    if (type === "select") return (next) => element.val(String(next ?? ""));
+    if (type === "select") return (next) => {
+      element.val(String(next ?? "")), JhsSelect.refresh(element);
+    };
     if (type === "number") return (next) => element.val(next == null ? "" : String(next));
     return (next) => element.val(next == null ? "" : String(next));
   }
@@ -7996,6 +8189,10 @@
     root.find("#javBusUrl").val(movie.externalSiteOrigin("javBusBtn", e2));
     root.find("#supJavUrl").val(movie.externalSiteOrigin("supJavBtn", e2));
     let g2 = await storageManager.getReviewFilterKeywordList(), p2 = await storageManager.getTitleFilterKeyword();
+    ["#reviewKeywordContainer", "#filterKeywordContainer"].forEach((container) => {
+      root.find(`${container} .tag-box`).empty();
+      root.find(`${container} .add-tag-btn`).off(".jhsKeywordBind"), root.find(`${container} .keyword-input`).off(".jhsKeywordBind");
+    });
     g2 && g2.forEach((item) => {
       addLabelTag("#reviewKeywordContainer", item, root);
     });
@@ -8003,8 +8200,8 @@
       addLabelTag("#filterKeywordContainer", item, root);
     });
     ["#reviewKeywordContainer", "#filterKeywordContainer"].forEach((container) => {
-      root.find(`${container} .add-tag-btn`).on("click", ((event) => addKeyword(event, container, root)));
-      root.find(`${container} .keyword-input`).on("keypress", ((event) => {
+      root.find(`${container} .add-tag-btn`).on("click.jhsKeywordBind", ((event) => addKeyword(event, container, root)));
+      root.find(`${container} .keyword-input`).on("keypress.jhsKeywordBind", ((event) => {
         "Enter" === event.key && addKeyword(event, container, root);
       }));
     });
@@ -8103,10 +8300,10 @@
     const dirtyTitleKeywords = root.data("jhsDirtyTitleKeywords") === true;
     if (dirtyReviewKeywords) {
       try {
-        const reviewKeywords = root.find("#reviewKeywordContainer .keyword-label").toArray().map((element) => {
-          const text = $(element).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
+        const reviewKeywords = [...new Set(root.find("#reviewKeywordContainer .keyword-label").toArray().map((element) => {
+          const text = $(element).text().replaceAll("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
           return text;
-        });
+        }).filter(Boolean))];
         await storageManager.saveReviewFilterKeyword(reviewKeywords);
       } catch (error) {
         keywordErrors.push(error);
@@ -8114,10 +8311,10 @@
     }
     if (dirtyTitleKeywords) {
       try {
-        const titleKeywords = root.find("#filterKeywordContainer .keyword-label").toArray().map((element) => {
-          const text = $(element).text().replace("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
+        const titleKeywords = [...new Set(root.find("#filterKeywordContainer .keyword-label").toArray().map((element) => {
+          const text = $(element).text().replaceAll("×", "").replace(/[\r\n]+/g, " ").replace(/\s{2,}/g, " ").trim();
           return text;
-        });
+        }).filter(Boolean))];
         await storageManager.saveTitleFilterKeyword(titleKeywords);
       } catch (error) {
         keywordErrors.push(error);
@@ -8148,6 +8345,20 @@
   }
   __name(bindKeywordDirtyTracking, "bindKeywordDirtyTracking");
   async function collectManualSettingPatch(root, dirtyKeys = null) {
+    const clamp = /* @__PURE__ */ __name((value, fallback, min, max) => Math.min(max, Math.max(min, Number(value) || fallback)), "clamp");
+    const configuredUrl = /* @__PURE__ */ __name((value, { allowLocalHttp = false } = {}) => {
+      const raw = String(value || "").trim().replace(/\/$/, "");
+      if (!raw) return "";
+      let url;
+      try {
+        url = new URL(raw);
+      } catch {
+        throw new TypeError(`无效 URL：${raw}`);
+      }
+      const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+      if (url.protocol !== "https:" && !(allowLocalHttp && local && url.protocol === "http:")) throw new TypeError(`仅允许 HTTPS URL${allowLocalHttp ? "（本机地址可使用 HTTP）" : ""}：${raw}`);
+      return url.href.replace(/\/$/, "");
+    }, "configuredUrl");
     const getters = {
       videoQuality: /* @__PURE__ */ __name(() => root.find("#videoQuality").val(), "videoQuality"),
       reviewCount: /* @__PURE__ */ __name(() => root.find("#reviewCount").val(), "reviewCount"),
@@ -8166,22 +8377,22 @@
       enableCheckNewVideo: /* @__PURE__ */ __name(() => root.find("#enableCheckNewVideo").val(), "enableCheckNewVideo"),
       checkNewVideo_intervalTime: /* @__PURE__ */ __name(() => root.find("#checkNewVideo_intervalTime").val(), "checkNewVideo_intervalTime"),
       checkNewVideo_ruleTime: /* @__PURE__ */ __name(() => root.find("#checkNewVideo_ruleTime").val(), "checkNewVideo_ruleTime"),
-      httpTimeout: /* @__PURE__ */ __name(() => Number(root.find("#httpTimeout").val()) || 5e3, "httpTimeout"),
-      httpRetryCount: /* @__PURE__ */ __name(() => Number(root.find("#httpRetryCount").val()) || 3, "httpRetryCount"),
-      circuitBreakerThreshold: /* @__PURE__ */ __name(() => Number(root.find("#circuitBreakerThreshold").val()) || 3, "circuitBreakerThreshold"),
-      circuitBreakerCooldown: /* @__PURE__ */ __name(() => Number(root.find("#circuitBreakerCooldownSec").val()) * 1e3, "circuitBreakerCooldown"),
+      httpTimeout: /* @__PURE__ */ __name(() => clamp(root.find("#httpTimeout").val(), 5e3, 1e3, 12e4), "httpTimeout"),
+      httpRetryCount: /* @__PURE__ */ __name(() => clamp(root.find("#httpRetryCount").val(), 3, 1, 10), "httpRetryCount"),
+      circuitBreakerThreshold: /* @__PURE__ */ __name(() => clamp(root.find("#circuitBreakerThreshold").val(), 3, 1, 20), "circuitBreakerThreshold"),
+      circuitBreakerCooldown: /* @__PURE__ */ __name(() => clamp(Number(root.find("#circuitBreakerCooldownSec").val()) * 1e3, 6e4, 1e3, 36e5), "circuitBreakerCooldown"),
       clogMsgCount: /* @__PURE__ */ __name(() => root.find("#clogMsgCount").val(), "clogMsgCount"),
-      webDavUrl: /* @__PURE__ */ __name(() => String(root.find("#webDavUrl").val() || "").trim(), "webDavUrl"),
+      webDavUrl: /* @__PURE__ */ __name(() => configuredUrl(root.find("#webDavUrl").val(), { allowLocalHttp: true }), "webDavUrl"),
       webDavUsername: /* @__PURE__ */ __name(() => String(root.find("#webDavUsername").val() || ""), "webDavUsername"),
       webDavPassword: /* @__PURE__ */ __name(async () => encryptCredential(String(root.find("#webDavPassword").val() || "")), "webDavPassword"),
-      missAvUrl: /* @__PURE__ */ __name(() => String(root.find("#missAvUrl").val() || "").replace(/\/$/, ""), "missAvUrl"),
-      jableUrl: /* @__PURE__ */ __name(() => String(root.find("#jableUrl").val() || "").replace(/\/$/, ""), "jableUrl"),
-      avgleUrl: /* @__PURE__ */ __name(() => String(root.find("#avgleUrl").val() || "").replace(/\/$/, ""), "avgleUrl"),
-      javTrailersUrl: /* @__PURE__ */ __name(() => String(root.find("#javTrailersUrl").val() || "").replace(/\/$/, ""), "javTrailersUrl"),
-      av123Url: /* @__PURE__ */ __name(() => String(root.find("#av123Url").val() || "").replace(/\/$/, ""), "av123Url"),
-      javDbUrl: /* @__PURE__ */ __name(() => String(root.find("#javDbUrl").val() || "").replace(/\/$/, ""), "javDbUrl"),
-      javBusUrl: /* @__PURE__ */ __name(() => String(root.find("#javBusUrl").val() || "").replace(/\/$/, ""), "javBusUrl"),
-      supJavUrl: /* @__PURE__ */ __name(() => String(root.find("#supJavUrl").val() || "").replace(/\/$/, ""), "supJavUrl"),
+      missAvUrl: /* @__PURE__ */ __name(() => configuredUrl(root.find("#missAvUrl").val()), "missAvUrl"),
+      jableUrl: /* @__PURE__ */ __name(() => configuredUrl(root.find("#jableUrl").val()), "jableUrl"),
+      avgleUrl: /* @__PURE__ */ __name(() => configuredUrl(root.find("#avgleUrl").val()), "avgleUrl"),
+      javTrailersUrl: /* @__PURE__ */ __name(() => configuredUrl(root.find("#javTrailersUrl").val()), "javTrailersUrl"),
+      av123Url: /* @__PURE__ */ __name(() => configuredUrl(root.find("#av123Url").val()), "av123Url"),
+      javDbUrl: /* @__PURE__ */ __name(() => configuredUrl(root.find("#javDbUrl").val()), "javDbUrl"),
+      javBusUrl: /* @__PURE__ */ __name(() => configuredUrl(root.find("#javBusUrl").val()), "javBusUrl"),
+      supJavUrl: /* @__PURE__ */ __name(() => configuredUrl(root.find("#supJavUrl").val()), "supJavUrl"),
       enableTitleSelectFilter: /* @__PURE__ */ __name(() => root.find("#enableTitleSelectFilter").is(":checked") ? _ : C, "enableTitleSelectFilter"),
       enableFavoriteActresses: /* @__PURE__ */ __name(() => root.find("#enableFavoriteActresses").is(":checked") ? _ : C, "enableFavoriteActresses"),
       enableSaveActressCarInfo: /* @__PURE__ */ __name(() => root.find("#enableSaveActressCarInfo").is(":checked") ? _ : C, "enableSaveActressCarInfo")
@@ -8223,7 +8434,8 @@
     const input = root.find(`${container} .keyword-input`);
     const value = input.val().trim();
     if (!value) return;
-    addLabelTag(container, value, root);
+    const exists = root.find(`${container} .keyword-label`).toArray().some(((element) => $(element).text().replaceAll("×", "").trim() === value));
+    if (!exists) addLabelTag(container, value, root);
     input.val("");
     root.data(container === "#reviewKeywordContainer" ? "jhsDirtyReviewKeywords" : "jhsDirtyTitleKeywords", true);
   }
@@ -8878,7 +9090,11 @@
   // src/plugins/backup/setting-panels.js
   async function renderNetworkPanel(diagnostics) {
     const network = diagnostics.getNetworkDiagnostics(), e2 = network.circuitBreakers, t2 = network.domainStats, n2 = await storageManager.getSetting("circuitBreakerThreshold", 3), a2 = await storageManager.getSetting("circuitBreakerCooldown", 6e4);
-    $("#circuitBreakerThreshold").val(n2), $("#circuitBreakerCooldownSec").val(Math.round(a2 / 1e3));
+    $("#circuitBreakerThreshold").each(((_i, element) => {
+      element.dataset.jhsHydrated || (element.value = String(n2), element.dataset.jhsHydrated = "1");
+    })), $("#circuitBreakerCooldownSec").each(((_i, element) => {
+      element.dataset.jhsHydrated || (element.value = String(Math.round(a2 / 1e3)), element.dataset.jhsHydrated = "1");
+    }));
     const i2 = Object.entries(e2);
     if (i2.length) {
       let t3 = '<table class="jhs-data-table"><tr><th>域名</th><th class="is-center">状态</th><th class="is-center">失败次数</th><th class="is-center">操作</th></tr>';
@@ -8951,7 +9167,7 @@
                 try {
                   const e5 = await storageManager.getSnapshot(i2.id);
                   if (!e5) throw new Error("快照不存在");
-                  utils.download(JSON.stringify(e5.data), `snapshot_${escapeHtml(i2.name)}.json`), show.ok("下载成功");
+                  utils.download(JSON.stringify(e5.data), `snapshot_${String(i2.name || "snapshot").replace(/[\\/:*?"<>|]/g, "_")}.json`), show.ok("下载成功");
                 } catch (n3) {
                   show.error("下载失败: " + (n3 instanceof Error ? n3.message : String(n3)));
                 } finally {
@@ -8997,15 +9213,16 @@
     }
     s2 += '<div class="jhs-warning-note">导入将覆盖当前数据，建议先创建快照备份</div>';
     s2 += "</div>";
+    const hasChanges = i2.length > 0;
     const r2 = dialog.open({
       type: 1,
       title: "数据差异预览",
       content: s2,
       area: utils.getResponsiveArea(["700px", "auto"]),
-      btn: ["确认导入", "取消"],
+      btn: hasChanges ? ["确认导入", "取消"] : ["知道了", "取消"],
       anim: -1,
       yes: /* @__PURE__ */ __name(async (s3) => {
-        dialog.close(s3);
+        if (!hasChanges) return void dialog.close(s3);
         let o2 = loading();
         try {
           await storageManager.createSnapshot("导入前自动备份", "auto-import"), n2 ? (await storageManager.importData(n2), show.ok("导入成功!"), void setTimeout(() => location.reload(), 1e3)) : t2 && (await storageManager.importData(t2), show.ok("导入成功!"), void setTimeout(() => location.reload(), 1e3));
@@ -9370,6 +9587,8 @@
         success: /* @__PURE__ */ __name(async (e3, n2) => {
           const generation = ++this._settingsDialogGeneration;
           const layerRoot = $(e3);
+          this._settingsFocusCleanup?.();
+          this._settingsFocusCleanup = utils.trapFocus(layerRoot[0]);
           layerRoot.data("jhsSettingsGeneration", generation);
           layerRoot.find(".layui-layer-content").css("position", "relative");
           this.renderTaskStatuses(layerRoot);
@@ -9393,6 +9612,8 @@
           this._settingsDialogGeneration++;
           this._fullSettingBinding?.dispose?.();
           this._fullSettingBinding = null;
+          this._settingsFocusCleanup?.();
+          this._settingsFocusCleanup = null;
           this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null;
           this.getOptionalDependency("CoverButtonPlugin")?.enableSvgBtn?.();
         }, "end")
@@ -9519,10 +9740,10 @@
     }
     collapseAdvancedTabs(layerRoot = null) {
       const advancedPanels = [
-        { id: "health-panel", label: "数据体检", render: renderDataHealthPanel },
+        { id: "health-panel", label: "数据体检", render: /* @__PURE__ */ __name(() => renderDataHealthPanel(this.getRuntimeService("diagnostics")), "render") },
         { id: "plugin-mgmt-panel", label: "插件管理", render: /* @__PURE__ */ __name(() => renderPluginMgmtPanel(this.getRuntimeService("diagnostics"), this.getRuntimeService("settings")), "render") },
         { id: "snapshot-panel", label: "恢复点", render: renderSnapshotPanel },
-        { id: "network-panel", label: "外部请求", render: renderNetworkPanel }
+        { id: "network-panel", label: "外部请求", render: /* @__PURE__ */ __name(() => renderNetworkPanel(this.getRuntimeService("diagnostics")), "render") }
       ];
       const sidebar = $(".jhs-mobile-sidebar");
       const contentParent = $(".content-panel").parent();
@@ -9915,15 +10136,20 @@
       const pending = this.pendingCarImport;
       utils.q(event, `确认导入 ${pending.values.length} 条记录？`, (async () => {
         const existing = new Map((await storageManager.getCarList()).map(((item) => [normalizeCarNum(item.carNum), item]))), summary = { added: 0, updated: 0, failed: 0 }, flag = legacyActionToFlag(pending.actionType);
-        for (const rawCarNum of pending.values) {
-          const carNum = normalizeCarNum(rawCarNum);
+        const state = this.getRuntimeService("state");
+        const records = pending.values.map((rawCarNum) => {
+          const carNum = normalizeCarNum(rawCarNum), current = existing.get(carNum);
+          return carNum ? { carNum, url: current?.url || buildFallbackCarUrl(carNum), names: current?.names || "", publishTime: current?.publishTime || "" } : null;
+        }).filter(Boolean);
+        const CHUNK = 75;
+        for (let index = 0; index < records.length; index += CHUNK) {
+          const chunk = records.slice(index, index + CHUNK);
           try {
-            const current = existing.get(carNum);
-            await this.getRuntimeService("state").patch(carNum, { [flag]: true }, { type: "manual-car-number-import", record: { carNum, url: current?.url || buildFallbackCarUrl(carNum), names: current?.names || "", publishTime: current?.publishTime || "" } });
-            current ? summary.updated++ : summary.added++;
+            await state.patch(chunk.map((record) => record.carNum), { [flag]: true }, { type: "manual-car-number-import", records: chunk });
+            chunk.forEach((record) => existing.has(record.carNum) ? summary.updated++ : summary.added++);
           } catch (error) {
-            summary.failed++;
-            clog.warn(`番号 ${carNum} 导入失败`, error);
+            summary.failed += chunk.length;
+            clog.warn("番号批量导入块失败", error);
           }
         }
         this.pendingCarImport = null;
@@ -10558,17 +10784,18 @@
         $("#favoriteAllVideo, #hasDownAllVideo, #filterAllVideo").removeAttr("aria-disabled").removeClass("jhs-batch-busy");
       }
     }
-    async filterActorVideo(e2, t2, n2, site = l ? I : T, page = 1, processed = 0) {
+    async filterActorVideo(e2, t2, n2, site = l ? I : T, page = 1, processed = 0, visited = /* @__PURE__ */ new Set()) {
       let { nextPageLink: a2, recordCount } = await this.parseAndSaveFilterInfo(n2, e2, t2, site);
       processed += recordCount, (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已屏蔽 ${processed} 个番号`);
-      if (this.nextPageLink = a2, a2) {
+      if (this.nextPageLink = a2, a2 && page < 200 && !visited.has(a2)) {
+        visited.add(a2);
         let n3;
         this.lastPageLink = a2;
         clog.log("正在请求下一页内容:", a2);
         const scope = await this.getRuntimeService("scope")(), i2 = await requestHostPage(this.getRuntimeService("http"), a2, scope);
         n3 = utils.htmlTo$dom(i2);
-        await this.filterActorVideo(e2, t2, n3, site, page + 1, processed);
-      } else (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 新增 ${processed} 个番号`);
+        await this.filterActorVideo(e2, t2, n3, site, page + 1, processed, visited);
+      } else page >= 200 ? ((this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`已达到页数上限（200 页），已停止 · 已屏蔽 ${processed} 个番号`), clog.warn("演员视频分页扫描已达上限，已停止")) : (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 新增 ${processed} 个番号`);
     }
     async parseAndSaveFilterInfo(e2, t2, n2, site) {
       if (![T, I].includes(site)) throw new Error(`未知黑名单来源站点: ${site}`);
@@ -10624,7 +10851,8 @@
             clientY: e2.clientY + 80
           };
           utils.q(n2, `是否屏蔽标题关键词 ${t2}?`, (async () => {
-            await storageManager.saveTitleFilterKeyword(t2), await jhsEventBus?.emit("filter-rules-changed", { scope: "title-keyword" }), utils.closePage({ root: host, layerIndex });
+            const keyword = t2.replace(/\r?\n+/g, " ").replace(/\s{2,}/g, " ").trim().slice(0, 120);
+            keyword && await storageManager.saveTitleFilterKeyword(keyword), await jhsEventBus?.emit("filter-rules-changed", { scope: "title-keyword" }), utils.closePage({ root: host, layerIndex });
           }));
         }
       }));
@@ -11065,16 +11293,24 @@ ${value}\r
     }, "load");
     if (mode !== "manual") return load();
     const tabs = jq('<div class="jhs-screenshot-providers" role="tablist" aria-label="截图来源"></div>');
-    const result = jq('<div class="jhs-screenshot-result"></div>').text("请选择截图来源");
-    enabledProviders.forEach((provider) => {
-      const button = jq('<button type="button" class="jhs-btn jhs-btn--secondary" role="tab" aria-selected="false"></button>').text(provider.name);
+    const resultId = `jhs-screenshot-result-${String(options.carNum).replace(/[^a-z0-9_-]/gi, "-")}`;
+    const result = jq('<div class="jhs-screenshot-result" role="tabpanel"></div>').attr("id", resultId).text("请选择截图来源");
+    enabledProviders.forEach((provider, index) => {
+      const button = jq('<button type="button" class="jhs-btn jhs-btn--secondary" role="tab" aria-selected="false"></button>').attr({ "aria-controls": resultId, tabindex: index === 0 ? "0" : "-1" }).text(provider.name);
       button.on("click", async () => {
-        tabs.find("[role='tab']").attr("aria-selected", "false");
-        button.attr("aria-selected", "true");
+        tabs.find("[role='tab']").attr({ "aria-selected": "false", tabindex: "-1" });
+        button.attr({ "aria-selected": "true", tabindex: "0" });
         await load(result, provider.id);
       });
       tabs.append(button);
     });
+    tabs.on("keydown", "[role='tab']", ((event) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const items = tabs.find("[role='tab']"), index = items.index(event.currentTarget);
+      const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : event.key === "ArrowRight" ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+      items.eq(next).trigger("focus").trigger("click");
+    }));
     host.empty().append(tabs, result);
     return host;
   }
@@ -11835,6 +12071,7 @@ ${value}\r
     }
     async handle() {
       $('a[href*="rankings/playback"]').on("click", ((e2) => {
+        if (e2.ctrlKey || e2.metaKey || 1 === e2.button) return void window.open("/advanced_search?handlePlayback=1&period=daily", "_blank");
         e2.preventDefault(), e2.stopPropagation(), window.location.href = "/advanced_search?handlePlayback=1&period=daily";
       })), await this.handlePlayback();
     }
@@ -11891,21 +12128,35 @@ ${value}\r
         const hoverBigImg = this.getRuntimeService("settings").snapshot().hoverBigImg;
         listPage.configureHoverPreview(hoverBigImg === "yes" ? "yes" : "no"), listPage.replaceHdImg(), await listPage.doFilter(), // 自有榜单页（热播/Top250）不走 ListPagePlugin.handle，需手动恢复快速筛选条（待鉴定/已下载/全部等）
         // 并重建卡片索引，让 car-state-changed 的定向重筛能找到这些卡片
-        await listPage.createQuickFilter?.(), listPage.applyVisibility(), listPage.rebuildItemIndex?.(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector);
+        await listPage.createQuickFilter?.(), listPage.applyVisibility(), listPage.rebuildItemIndex?.(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector), // 补齐右键屏蔽与列表视频点击绑定（bindClick 已命名空间化，可重复调用）
+        await listPage.bindClick?.();
       }
       await this.getOptionalDependency("CoverButtonPlugin")?.addSvgBtn?.();
       await jhsEventBus?.emit("list-items-added", { items: this.$listRoot?.find(".item").toArray() ?? [] }, { broadcast: false });
     }
     toolBar(e2) {
       $("#jhs-hitshow-period").remove();
-      let t2 = `
+      const active = "weekly" === e2 ? "weekly" : "monthly" === e2 ? "monthly" : "daily";
+      const tab = /* @__PURE__ */ __name((value, label) => `<a role="tab" class="jhs-segmented__item ${active === value ? "active" : ""}" aria-selected="${active === value ? "true" : "false"}" tabindex="${active === value ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=${value}">${label}</a>`, "tab");
+      const t2 = `
             <nav id="jhs-hitshow-period" class="jhs-segmented" role="tablist" aria-label="热播周期">
-                <a role="tab" class="jhs-segmented__item ${"daily" === e2 ? "active" : ""}" aria-selected="${"daily" === e2 ? "true" : "false"}" tabindex="${"daily" === e2 ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=daily">日榜</a>
-                <a role="tab" class="jhs-segmented__item ${"weekly" === e2 ? "active" : ""}" aria-selected="${"weekly" === e2 ? "true" : "false"}" tabindex="${"weekly" === e2 ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=weekly">周榜</a>
-                <a role="tab" class="jhs-segmented__item ${"monthly" === e2 ? "active" : ""}" aria-selected="${"monthly" === e2 ? "true" : "false"}" tabindex="${"monthly" === e2 ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=monthly">月榜</a>
+                ${tab("daily", "日榜")}
+                ${tab("weekly", "周榜")}
+                ${tab("monthly", "月榜")}
             </nav>
         `;
-      $(".jhs-hitshow-heading").append(t2);
+      const heading = $(".jhs-hitshow-heading");
+      if (!heading.length) return;
+      const title = heading.children("h2.section-title");
+      title.length ? title.after(t2) : heading.append(t2);
+      const nav = $("#jhs-hitshow-period");
+      nav.off("keydown.jhsPeriod").on("keydown.jhsPeriod", ((event) => {
+        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+        event.preventDefault();
+        const items = nav.find('[role="tab"]'), index = items.index(event.target);
+        const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowRight" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+        items.get(next)?.focus();
+      }));
     }
     getStarRating(e2) {
       let t2 = "";
@@ -11916,11 +12167,12 @@ ${value}\r
     }
     async loadScore(movies, generation = this.loadGeneration) {
       if (0 === movies.length) return;
-      const cacheKey = "jhs_score_info";
-      const cacheService = this.getRuntimeService("cache"), cached = cacheService.get(cacheKey, { scope: "public" });
-      const cache = cached.hit && cached.value && typeof cached.value === "object" ? { ...cached.value } : {};
+      const cacheKey = "jhs_hitshow_scores_v1";
+      const persisted = await storageManager.cachedRequest(cacheKey, 6048e5, async () => ({}));
+      const cache = persisted && "object" == typeof persisted && !Array.isArray(persisted) ? { ...persisted } : {};
       const queue = [...movies], workers = Array.from({ length: Math.min(4, queue.length) }, (() => this.scoreWorker(queue, cache, generation)));
-      await Promise.all(workers), cacheService.set(cacheKey, cache, { scope: "public", ttlMs: 6048e5 });
+      await Promise.all(workers);
+      generation === this.loadGeneration && await storageManager.cacheSet(cacheKey, cache, 6048e5);
       if (generation === this.loadGeneration) {
         const listButtons = this.getOptionalDependency("ListPageButtonPlugin");
         if ("rateCount" === (listButtons?.activeSortMethod?.() ?? "default")) await listButtons?.sortItems?.();
@@ -11967,14 +12219,14 @@ ${failure.stack}` : "");
       const value = $('<span class="value"></span>'), stars = $('<span class="score-stars"></span>').html(this.getStarRating(safeScore));
       value.append(stars, document.createTextNode(`  ${safeScore}分，由${safeCount}人评价`)), target.hide().empty().append(value).slideDown(500);
     }
-    markDataListHtml(e2) {
+    markDataListHtml(e2, { thumbnailFirst = true } = {}) {
       let t2 = "";
       return e2.forEach(((e3, index) => {
-        const id = e3.movieId ?? e3.id, carNum = e3.carNum ?? e3.number, title = e3.title ?? e3.origin_title, releaseDate = e3.releaseDate ?? e3.release_date, coverUrl = normalizeHttpUrl(e3.coverUrl ?? e3.cover_url), thumbUrl = coverUrl ? coverUrl.replace("/covers/", "/thumbs/") : "", hasSubtitle = e3.hasSubtitle ?? e3.has_cnsub, magnetCount = Number(e3.magnetCount ?? e3.magnets_count), newMagnets = e3.newMagnets ?? e3.new_magnets;
+        const id = e3.movieId ?? e3.id, carNum = e3.carNum ?? e3.number, title = e3.title ?? e3.origin_title, releaseDate = e3.releaseDate ?? e3.release_date, coverUrl = normalizeJavdbMediaUrl(e3.coverUrl ?? e3.cover_url), explicitThumbUrl = normalizeJavdbMediaUrl(e3.thumbUrl ?? e3.thumb_url), thumbUrl = explicitThumbUrl ?? (coverUrl ? coverUrl.replace("/covers/", "/thumbs/") : null), initialImageUrl = thumbnailFirst ? thumbUrl ?? coverUrl : coverUrl ?? thumbUrl, fullImageUrl = coverUrl ?? thumbUrl ?? "", hasSubtitle = e3.hasSubtitle ?? e3.has_cnsub, magnetCount = Number(e3.magnetCount ?? e3.magnets_count), newMagnets = e3.newMagnets ?? e3.new_magnets;
         t2 += `
                 <div class="item" id="${escapeHtml(id)}" data-jhs-publish-time="${escapeHtml(releaseDate)}" data-jhs-rate-count="0" data-original-index="${index}">
                     <a href="/v/${escapeHtml(id)}" class="box" title="${escapeHtml(title)}">
-                        <div class="cover ">${coverUrl ? `<img loading="lazy" decoding="async" src="${escapeHtml(thumbUrl)}" data-full="${escapeHtml(coverUrl)}" alt="">` : ""}</div>
+                        <div class="cover ">${initialImageUrl ? `<img loading="lazy" decoding="async" src="${escapeHtml(initialImageUrl)}" data-full="${escapeHtml(fullImageUrl)}" alt="">` : ""}</div>
                         <div class="video-title"><strong>${escapeHtml(carNum)}</strong> ${escapeHtml(title)}</div>
                         <div class="score" id="score_${escapeHtml(id)}"></div>
                         <div class="meta">${escapeHtml(releaseDate)}</div>
@@ -12458,7 +12710,14 @@ ${failure.stack}` : "");
       n2.removeAttr("href").find(".site-tag").remove(), this.setSiteState(n2, "checking");
       if (t2.noHandle && true === t2.noHandle) {
         n2.attr("href", this.getRuntimeService("movie").searchUrl(t2.providerId, { carNum: e2 }) || "");
-        const cacheKey = "jhs_other_site_dmm", raw = this.getRuntimeService("storage").getLocal(cacheKey), a2 = (raw ? JSON.parse(raw) : {})[e2];
+        const cacheKey = "jhs_other_site_dmm", raw = this.getRuntimeService("storage").getLocal(cacheKey);
+        let a2 = null;
+        try {
+          const parsed = raw ? JSON.parse(raw) : {};
+          a2 = parsed && "object" == typeof parsed ? parsed[e2] : null;
+        } catch {
+          a2 = null;
+        }
         a2 ? (n2.attr("href", a2.url), "multiple" === a2.type && n2.append('<span class="site-tag">多结果</span>'), this.setSiteState(n2, "available")) : this.setSiteState(n2, "idle");
       } else if (t2.providerId) try {
         const scope = await this.getRuntimeService("scope")();
@@ -12678,7 +12937,9 @@ ${failure.stack}` : "");
       return "TOP250Plugin";
     }
     async handle() {
-      $('.main-tabs ul li:contains("猜你喜歡")').html('<a href="/rankings/top"><span>Top250</span></a>'), $('a[href*="rankings/top"]').on("click", ((e2) => {
+      const topTab = $('.main-tabs ul li:contains("猜你喜歡")').length ? $('.main-tabs ul li:contains("猜你喜歡")') : $('.main-tabs ul li:contains("猜你喜欢")');
+      topTab.length && topTab.html('<a href="/rankings/top"><span>Top250</span></a>');
+      $('a[href*="rankings/top"]').off("click.jhsTop250").on("click.jhsTop250", ((e2) => {
         e2.preventDefault(), e2.stopPropagation();
         const t2 = $(e2.target), n2 = (t2.is("a") ? t2 : t2.closest("a")).attr("href");
         if (!n2) return;
@@ -12688,10 +12949,11 @@ ${failure.stack}` : "");
       })), await this.handleTop();
     }
     hookPage() {
-      const host = this.getRuntimeService("host"), listRoot = host.locateListRoot?.(), contentBox = host.getListContainer?.();
-      if (!listRoot || !contentBox) throw new Error("JavDB 列表容器不可用");
+      const host = this.getRuntimeService("host"), contentBox = host.getListContainer?.() ?? host.getListLayoutContainer?.();
+      if (!contentBox || !host.createOwnedListRoot) throw new Error("JavDB 列表容器不可用");
       this.$contentBox = $(contentBox), this.$listRoot = $(host.createOwnedListRoot(["jhs-top250-list", "jhs-layout-d2c171b1"]));
-      $("h2.section-title").contents().first().replaceWith("Top250"), $(".empty-message").remove(), this.$contentBox.children(".box").remove(), $("#sort-toggle-btn").remove(), this.$contentBox.append('<div class="tool-box jhs-layout-d2c171b1"></div>'), this.$contentBox.append(this.$listRoot), this.renderPagination();
+      let e2 = $("h2.section-title");
+      e2.length || (e2 = $("<h2></h2>").addClass("section-title").prependTo(this.$contentBox)), e2.contents().first().replaceWith("Top250"), $(".empty-message").remove(), this.$contentBox.children(".box").remove(), $("#sort-toggle-btn").remove(), this.$contentBox.children(".jhs-top250-list").remove(), this.$contentBox.children(".jhs-top250-filters").remove(), this.$contentBox.children(".tool-box.jhs-layout-d2c171b1").remove(), this.$contentBox.children("nav.pagination").remove(), this.$contentBox.append('<div class="tool-box jhs-layout-d2c171b1"></div>'), this.$contentBox.append(this.$listRoot);
     }
     renderPagination() {
       const e2 = new URLSearchParams(window.location.search);
@@ -12728,45 +12990,37 @@ ${failure.stack}` : "");
       let t2 = e2.get("handleType") || "all", n2 = e2.get("type_value") || "";
       this.has_cnsub = e2.get("has_cnsub") || "";
       let a2 = Number(e2.get("page")) || 1;
-      this.hookPage(), this.toolBar(t2, n2, a2);
+      this.hookPage(), this.toolBar(t2, n2), this.renderPagination();
       await this.getOptionalDependency("ListPageButtonPlugin")?.mountOwnedRankingControls?.($(".jhs-top250-filters"))?.catch?.((error) => clog.error("Top250 操作按钮挂载失败", error));
       let i2 = this.$listRoot;
       i2.html("");
       let s2 = loading();
       let o2 = false;
-      for (let l2 = 1; l2 <= 3 && !o2; l2++) try {
+      for (let attempt = 1; attempt <= 3 && !o2; attempt++) try {
         const e3 = await q(t2, n2, a2, 50);
-        let r2 = e3.success, l3 = e3.message, c2 = e3.action;
+        let r2 = e3.success, c2 = e3.action;
         if (1 === r2) {
-          let t3 = e3.data.movies;
-          if (0 === t3.length) return show.error("无数据"), void s2.close();
-          this.movies = t3;
-          const n3 = t3.filter(((e4) => "1" === this.has_cnsub ? e4.has_cnsub : "0" !== this.has_cnsub || !e4.has_cnsub)), r3 = hitShow.markDataListHtml(n3);
-          i2.html(r3), await hitShow.initializeRenderedList(), await hitShow.loadScore(n3), o2 = true;
-        } else clog.error(e3), i2.html(`<h3>${escapeHtml(l3)}</h3>`), show.error(l3), "JWTVerificationError" === c2 && (removeStoredEncryptedCredential(me), await this.checkLogin(null, new URLSearchParams(window.location.search))), o2 = true;
+          const movies = e3.data.movies;
+          if (0 === movies.length) return show.error("无数据"), void s2.close();
+          this.movies = movies;
+          const filtered = movies.filter(((movie) => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), rendered = hitShow.markDataListHtml(filtered, { thumbnailFirst: true });
+          i2.html(rendered), await hitShow.initializeRenderedList(), await hitShow.loadScore(filtered), o2 = true;
+        } else clog.error(e3), i2.html(`<h3>${escapeHtml(e3.message)}</h3>`), show.error(e3.message), "JWTVerificationError" === c2 && (removeStoredEncryptedCredential(me), await this.checkLogin(null, new URLSearchParams(window.location.search))), o2 = true;
       } catch (r2) {
-        l2 < 3 ? (clog.error(`获取Top数据失败 (第 ${l2} 次重试):`, r2), await new Promise(((e3) => setTimeout(e3, 1e3)))) : (clog.error("所有重试尝试均失败，无法获取Top数据。", r2), i2.html("<h3>无法加载数据，请稍后再试。</h3>"));
+        attempt < 3 ? (clog.error(`获取Top数据失败 (第 ${attempt} 次重试):`, r2), await new Promise(((e3) => setTimeout(e3, 1e3)))) : (clog.error("所有重试尝试均失败，无法获取Top数据。", r2), i2.html("<h3>无法加载数据，请稍后再试。</h3>"));
       } finally {
-        (o2 || 3 === l2) && s2.close();
+        (o2 || 3 === attempt) && s2.close();
       }
     }
-    toolBar(e2, t2, n2) {
-      "5" === n2.toString() && $(".pagination-next").remove(), $(".pagination-ellipsis").closest("li").remove(), $(".pagination-list li .pagination-link").each(((_index, element) => {
-        parseInt($(element).text(), 10) > 5 && $(element).closest("li").remove();
-      }));
+    toolBar(e2, t2) {
       let years = "";
       for (let year = (/* @__PURE__ */ new Date()).getFullYear(); year >= 2008; year--) years += `<a class="jhs-segmented__item jhs-layout-186f17ef ${t2 === String(year) ? "active" : ""}" aria-current="${t2 === String(year) ? "page" : "false"}" href="/advanced_search?handleTop=1&handleType=year&type_value=${year}&has_cnsub=${this.has_cnsub}">${year}</a>`;
       const typeLink = /* @__PURE__ */ __name((value, label, type = "video_type") => `<a class="jhs-segmented__item jhs-layout-186f17ef ${value === ("all" === value ? e2 : t2) ? "active" : ""}" aria-current="${value === ("all" === value ? e2 : t2) ? "page" : "false"}" href="/advanced_search?handleTop=1&handleType=${type}&type_value=${"all" === value ? "" : value}&has_cnsub=${this.has_cnsub}">${label}</a>`, "typeLink");
       const html = `<div class="jhs-top250-filters"><nav class="jhs-segmented jhs-layout-701bf0f9" aria-label="类型条件">${typeLink("all", "全部", "all")}${typeLink("0", "有码")}${typeLink("1", "无码")}${typeLink("2", "欧美")}${typeLink("3", "Fc2")}<button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-2335597e ${"1" === this.has_cnsub ? "active" : ""}" aria-pressed="${"1" === this.has_cnsub}" data-cnsub-value="1">含中字磁力</button><button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-186f17ef ${"0" === this.has_cnsub ? "active" : ""}" aria-pressed="${"0" === this.has_cnsub}" data-cnsub-value="0">无字幕</button><button type="button" class="jhs-btn jhs-btn--secondary jhs-btn--sm jhs-layout-186f17ef" aria-pressed="false" data-cnsub-value="">重置</button></nav><nav class="jhs-segmented" aria-label="年份条件">${years}</nav></div>`;
-      this.$contentBox.append(html), $("button[data-cnsub-value]").on("click", (async (event) => {
-        const value = $(event.currentTarget).data("cnsub-value");
-        this.has_cnsub = value.toString(), $("button[data-cnsub-value]").removeClass("active").attr("aria-pressed", "false"), $(event.currentTarget).addClass("active").attr("aria-pressed", "true"), $(".jhs-top250-filters a").each(((index, element) => {
-          const link = $(element), url = new URL(link.attr("href"), window.location.origin);
-          url.searchParams.set("has_cnsub", value), link.attr("href", url.toString());
-        }));
-        const movies = this.movies.filter(((movie) => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), hitShow = this.getOptionalDependency("HitShowPlugin");
-        if (!hitShow) return void show.info("热播列表功能已禁用");
-        this.$listRoot.html(hitShow.markDataListHtml(movies)), await hitShow.initializeRenderedList(), void hitShow.loadScore(movies).catch(((error) => clog.error("Top250 评分加载失败", error)));
+      const title = this.$contentBox.children("h2.section-title").first();
+      title.length ? title.after(html) : this.$contentBox.prepend(html), $("button[data-cnsub-value]").on("click", ((event) => {
+        const value = String($(event.currentTarget).data("cnsub-value")), params = new URLSearchParams(window.location.search);
+        params.set("handleTop", "1"), params.set("handleType", e2), params.set("type_value", t2), params.set("has_cnsub", value), params.delete("page"), window.location.href = `/advanced_search?${params.toString()}`;
       }));
     }
     async checkLogin(e2, t2) {
@@ -12980,6 +13234,32 @@ ${failure.stack}` : "");
     return e2[0] || null;
   }, "Z");
   var ee = "jhs_dmm_video";
+  var DMM_CACHE_TTL = 30 * 864e5;
+  var DMM_CACHE_LIMIT = 500;
+  function parseJsonMap(raw) {
+    if (!raw) return {};
+    try {
+      const value = JSON.parse(raw);
+      return value && "object" == typeof value && !Array.isArray(value) ? value : {};
+    } catch {
+      return {};
+    }
+  }
+  __name(parseJsonMap, "parseJsonMap");
+  function pruneDmmCache(cache) {
+    const now = Date.now();
+    for (const key of Object.keys(cache)) {
+      const entry = cache[key];
+      (!entry || entry.time && now - entry.time > DMM_CACHE_TTL) && delete cache[key];
+    }
+    const keys = Object.keys(cache);
+    if (keys.length > DMM_CACHE_LIMIT) {
+      keys.sort(((a2, b2) => (cache[a2].time || 0) - (cache[b2].time || 0)));
+      for (const key of keys.slice(0, keys.length - DMM_CACHE_LIMIT)) delete cache[key];
+    }
+    return cache;
+  }
+  __name(pruneDmmCache, "pruneDmmCache");
   function isPreviewEnabled(settings) {
     return settings?.enablePreviewVideo !== "no";
   }
@@ -13005,12 +13285,12 @@ ${failure.stack}` : "");
       this.carNum = e2 || "", this.storage = storage, this.movie = movie, this.scope = scope, this.lastError = null;
     }
     _checkCache() {
-      const cached = this.storage.getLocal(ee), e2 = cached ? JSON.parse(cached) : {};
-      return e2[this.carNum] ? (clog.debug("缓存中存在预览视频信息", e2[this.carNum]), e2[this.carNum]) : null;
+      const cached = pruneDmmCache(parseJsonMap(this.storage.getLocal(ee)));
+      return cached[this.carNum] ? (clog.debug("缓存中存在预览视频信息", cached[this.carNum]), cached[this.carNum]) : null;
     }
     _updateCache(e2) {
-      const cached = this.storage.getLocal(ee), t2 = cached ? JSON.parse(cached) : {};
-      t2[this.carNum] = e2, clog.debug("成功解析出预览视频并已缓存:", e2), this.storage.setLocal(ee, JSON.stringify(t2));
+      const cached = pruneDmmCache(parseJsonMap(this.storage.getLocal(ee)));
+      cached[this.carNum] = { ...e2, time: Date.now() }, clog.debug("成功解析出预览视频并已缓存:", e2), this.storage.setLocal(ee, JSON.stringify(cached));
     }
     async _fetchRemote() {
       const result = await this.movie.preview("dmm", { carNum: this.carNum }, { scope: this.scope });
@@ -13022,8 +13302,8 @@ ${failure.stack}` : "");
       }
       button.attr("href", result.pageUrl).css("backgroundColor", "var(--jhs-status-down)");
       if (result.matchType === "multiple") button.append('<span class="site-tag jhs-layout-294497f1">多结果</span>');
-      const cacheKey = "jhs_other_site_dmm", cached = this.storage.getLocal(cacheKey), cache = cached ? JSON.parse(cached) : {};
-      cache[this.carNum] = { type: result.matchType, url: result.pageUrl };
+      const cacheKey = "jhs_other_site_dmm", cache = pruneDmmCache(parseJsonMap(this.storage.getLocal(cacheKey)));
+      cache[this.carNum] = { type: result.matchType, url: result.pageUrl, time: Date.now() };
       this.storage.setLocal(cacheKey, JSON.stringify(cache));
       return result.sources;
     }
@@ -13836,7 +14116,7 @@ ${failure.stack}` : "");
   __name(aggregateNewVideoRecords, "aggregateNewVideoRecords");
   var _NewVideoPlugin = class _NewVideoPlugin extends BasePlugin {
     constructor() {
-      super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", /* @__PURE__ */ new Map()), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", /* @__PURE__ */ new Map()), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", /* @__PURE__ */ new Set()), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", /* @__PURE__ */ new Map()), i(this, "nvActorCoverRequests", /* @__PURE__ */ new Map()), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", false), i(this, "nvWorkspaceMounted", false), i(this, "nvEventUnsubscribe", null), i(this, "taskStatusUnsubscribe", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0);
+      super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", /* @__PURE__ */ new Map()), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", /* @__PURE__ */ new Map()), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", /* @__PURE__ */ new Set()), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", /* @__PURE__ */ new Map()), i(this, "nvActorCoverRequests", /* @__PURE__ */ new Map()), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", false), i(this, "nvWorkspaceMounted", false), i(this, "nvEventUnsubscribe", null), i(this, "taskStatusUnsubscribe", null), i(this, "nvCoverPreview", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0);
     }
     getName() {
       return "NewVideoPlugin";
@@ -13869,7 +14149,7 @@ ${failure.stack}` : "");
                 .actress-card__menu { position:relative; }
                 .actress-card__menu summary { list-style:none; }
                 .actress-card__menu summary::-webkit-details-marker { display:none; }
-                .actress-card__menu-popover { position:absolute; right:0; bottom:calc(100% + var(--jhs-space-1)); z-index:var(--jhs-z-elevated); min-width:128px; padding:var(--jhs-space-1); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
+                .actress-card__menu-popover { position:static; min-width:128px; margin-top:var(--jhs-space-1); padding:var(--jhs-space-1); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-md); background:var(--jhs-surface); box-shadow:var(--jhs-shadow-md); }
                 .actress-card__menu-popover button { width:100%; justify-content:flex-start; }
                 .card-tag.is-uncensored { color:var(--jhs-status-down); background:var(--jhs-status-down-tint); }
                 .card-tag.is-censored { color:var(--jhs-status-watch); background:var(--jhs-status-watch-tint); }
@@ -14028,7 +14308,7 @@ ${failure.stack}` : "");
       });
     }
     cleanupNewVideoWorkspace() {
-      this.nvSearchDebounced?.cancel?.(), this.nvSearchDebounced = null, this.nvWorkspaceMounted = false, this.nvRenderGeneration++, this.nvSelected.clear(), this.nvCoverCache = /* @__PURE__ */ new Map(), this.nvActorCoverRequests = /* @__PURE__ */ new Map(), this.nvAllItemsMap.clear(), this.nvFlatListCache = [], this.nvActressesCache = [], this.nvCarMapCache = /* @__PURE__ */ new Map(), this.nvDecisionsCache = {}, this.nvCurrentPageItems = [];
+      this.nvSearchDebounced?.cancel?.(), this.nvSearchDebounced = null, this.nvWorkspaceMounted = false, this.nvRenderGeneration++, this.nvSelected.clear(), this.nvCoverCache = /* @__PURE__ */ new Map(), this.nvActorCoverRequests = /* @__PURE__ */ new Map(), this.nvCoverPreview?.destroy?.(), this.nvCoverPreview = null, this.nvAllItemsMap.clear(), this.nvFlatListCache = [], this.nvActressesCache = [], this.nvCarMapCache = /* @__PURE__ */ new Map(), this.nvDecisionsCache = {}, this.nvCurrentPageItems = [];
     }
     bindClick() {
       const taskPlugin = this.getOptionalDependency("TaskPlugin");
@@ -14258,7 +14538,6 @@ ${failure.stack}` : "");
             }));
             card.find(".nv-placeholder").replaceWith(image), card.find(".nv-card__empty").addClass("jhs-is-hidden"), value.title && card.attr("title", value.title);
           }));
-          window.imageHoverPreviewObj?.bindEvents?.();
         } catch (error) {
           clog.warn(`获取演员封面失败: ${starId}`, error);
         }
@@ -14386,10 +14665,7 @@ ${failure.stack}` : "");
       })), l2.find(".pagination-btn").off("click").on("click", ((e3) => {
         const n3 = parseInt($(e3.currentTarget).data("nvpage"));
         n3 >= 1 && n3 <= o2 && n3 !== this.nvCurrentPage && (this.nvCurrentPage = n3, this.nvRenderGeneration++, this.nvRenderPage(this.nvRenderGeneration), this.renderBatchBar(), l2.scrollTop(0));
-      })), window.imageHoverPreviewObj ? window.imageHoverPreviewObj.bindEvents() : window.imageHoverPreviewObj = new ImageHoverPreview({
-        selector: ".nv-cover-img",
-        dataAttribute: "data-full"
-      }), void this.hydrateVisibleCovers(s2, generation);
+      })), this.nvCoverPreview ?? (this.nvCoverPreview = new window.ImageHoverPreview({ selector: ".nv-cover-img", dataAttribute: "data-full", zIndex: JHS_Z_INDEX.dialogHoverPreview })), void this.hydrateVisibleCovers(s2, generation);
     }
     async editActress(e2) {
       const dialog = this.getRuntimeService("dialog");
@@ -15249,8 +15525,8 @@ ${failure.stack}` : "");
     }
     registerProviders(scope) {
       const one23 = this.getOptionalDependency("OneTwoThreeOfflinePlugin"), offline = this.getRuntimeService("offline");
-      one23 && this.registry.register({ id: "123", name: "123 云盘", capabilities: ["magnet"], retryPolicy: { automaticAttempts: 0 }, isEnabled: /* @__PURE__ */ __name(() => storageManager.getSetting("enable123Offline", true), "isEnabled"), getAvailability: /* @__PURE__ */ __name(async () => one23.getStoredToken() ? { available: true, authState: "ready", reason: "授权已同步" } : { available: false, authState: "token-missing", reason: "尚未同步 123 授权" }, "getAvailability"), submit: /* @__PURE__ */ __name(async (resource) => {
-        const token = one23.getStoredToken();
+      one23 && this.registry.register({ id: "123", name: "123 云盘", capabilities: ["magnet"], retryPolicy: { automaticAttempts: 0 }, isEnabled: /* @__PURE__ */ __name(() => storageManager.getSetting("enable123Offline", true), "isEnabled"), getAvailability: /* @__PURE__ */ __name(async () => await one23.getStoredToken() ? { available: true, authState: "ready", reason: "授权已同步" } : { available: false, authState: "token-missing", reason: "尚未同步 123 授权" }, "getAvailability"), submit: /* @__PURE__ */ __name(async (resource) => {
+        const token = await one23.getStoredToken();
         if (!token) throw Object.assign(new Error("尚未同步 123 授权"), { code: "TOKEN_MISSING" });
         return offline.submitWithIntegration("pan123", resource, { token, scope });
       }, "submit"), openUrl: /* @__PURE__ */ __name(() => offline.getIntegrationHomeUrl("pan123"), "openUrl") });
@@ -15448,8 +15724,11 @@ ${failure.stack}` : "");
     renameWithPreview(event, match, carNum) {
       const nextName = preview115Rename(match.name, carNum, { uppercase: true, keepSuffix: true });
       utils.q(event, `确认重命名？<br>${escapeHtml(match.name)}<br>→ ${escapeHtml(nextName)}`, (async () => {
-        await this.getRuntimeService("offline").renameFile("one115", match.fileId, nextName, { scope: this.lifecycleScope });
-        show.ok("重命名完成");
+        try {
+          await this.getRuntimeService("offline").renameFile("one115", match.fileId, nextName, { scope: this.lifecycleScope }), show.ok("重命名完成");
+        } catch (error) {
+          clog.error("115 重命名失败", error), show.error("重命名失败：" + (error instanceof Error ? error.message : String(error)));
+        }
       }));
     }
   };
@@ -15509,18 +15788,22 @@ ${failure.stack}` : "");
         source: ""
       };
     }
-    syncTokenOnce() {
+    async syncTokenOnce() {
       const storage = this.getRuntimeService("storage"), e2 = this.getTokenFrom123Pan();
       if (!e2.token) return;
-      const t2 = storage.getValue(this.tokenKey, ""), n2 = storage.getValue(this.tokenMetaKey, null);
-      if (t2 === e2.token && n2 && n2.source === e2.source) return;
-      storage.setValue(this.tokenKey, e2.token), storage.setValue(this.tokenMetaKey, {
+      const secretKey = `${this.tokenKey}_secret`;
+      let secret = storage.getValue(secretKey, "");
+      if (!secret) secret = crypto.randomUUID?.() || `${Date.now()}-${crypto.getRandomValues(new Uint32Array(4)).join("-")}`, storage.setValue(secretKey, secret);
+      const t2 = storage.getValue(this.tokenKey, ""), current = await decryptCredential(t2, secret), n2 = storage.getValue(this.tokenMetaKey, null);
+      if (current === e2.token && t2.startsWith("AES:") && n2 && n2.source === e2.source) return;
+      storage.setValue(this.tokenKey, await encryptCredential(e2.token, secret)), storage.setValue(this.tokenMetaKey, {
         source: e2.source,
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-      }), t2 !== e2.token && show.info(`123 云盘授权已更新：${e2.source}`);
+      }), current !== e2.token && show.info(`123 云盘授权已更新：${e2.source}`);
     }
-    getStoredToken() {
-      return this.getRuntimeService("storage").getValue(this.tokenKey, "");
+    async getStoredToken() {
+      const storage = this.getRuntimeService("storage"), value = storage.getValue(this.tokenKey, ""), secret = storage.getValue(`${this.tokenKey}_secret`, "");
+      return value && secret ? decryptCredential(value, secret) : value;
     }
     clearStoredToken(e2) {
       const storage = this.getRuntimeService("storage");
@@ -15635,7 +15918,7 @@ ${failure.stack}` : "");
       const stats = computeLibraryStats(cars), total = stats.total;
       const actressCounts = /* @__PURE__ */ new Map();
       cars.forEach(((car) => {
-        const names = String(car.names || "").split(/[\s,，、]+/).filter(Boolean);
+        const names = String(car.names || "").replace(/([一-鿿])\s+(?=[一-鿿])/g, "$1、").split(/[,，、]+/).map(((name) => name.trim())).filter(Boolean);
         if (car.starId) {
           const key = `id:${car.starId}`, current = actressCounts.get(key) || { starId: car.starId, name: names[0] || car.starId, count: 0 };
           current.count++, actressCounts.set(key, current);
@@ -15812,6 +16095,8 @@ ${failure.stack}` : "");
       if (!this.started) return;
       if (this.getRuntimeService("settings").snapshot().autoPage === "no") return void this.setState("waterfall-loading", "");
       if (this.isLoading || !this.nextUrl || !this.container) return;
+      const listPage = this.getOptionalDependency("ListPagePlugin");
+      if (!listPage) return this.nextUrl = null, this.hasMore = false, void this.setState("waterfall-error", "列表功能已禁用，无法继续翻页");
       this.isLoading = true, this.setState("waterfall-loading", "加载中...");
       const t2 = this.getSelector(), generation = this.generation, scope = this.liveScope;
       try {
@@ -15831,10 +16116,8 @@ ${failure.stack}` : "");
           top: g2,
           url: this.nextUrl
         });
-        const p2 = this.getOptionalDependency("ListPagePlugin");
-        if (!p2) return void this.setState("waterfall-error", "列表功能已禁用，无法继续翻页");
         let m2 = s2.find(this.getSelector().coverImgSelector);
-        p2.replaceHdImg(m2), $(this.getSelector().boxSelector).append(c2), this.nextUrl = null == (e2 = s2.find(t2.nextPageSelector)) ? void 0 : e2.attr("href"), this.hasMore = !!this.nextUrl;
+        listPage.replaceHdImg(m2), $(this.getSelector().boxSelector).append(c2), this.nextUrl = null == (e2 = s2.find(t2.nextPageSelector)) ? void 0 : e2.attr("href"), this.hasMore = !!this.nextUrl;
         let u2 = s2.find(".pagination");
         $(".pagination").replaceWith(u2), this.setState("waterfall-loading", ""), this.hasMore || this.setState("waterfall-no-more", "已经到底了");
       } catch (n2) {
@@ -15855,6 +16138,7 @@ ${failure.stack}` : "");
     }
     checkLoad() {
       if (!this.loader) return;
+      if (this.loader.classList.contains("waterfall-error")) return;
       this.loader.getBoundingClientRect().top < window.innerHeight + this.preloadDistance && void this.loadNextPage().catch(((error) => clog.error("瀑布流自动加载失败", error)));
     }
     async shouldDisablePaging() {
@@ -16600,23 +16884,27 @@ ${failure.stack}` : "");
         $(t2).parent().hasClass("collapse") && t2.click();
       }))));
     }
+    readTagName(element) {
+      return $(element).clone().find(".highlight-btn").remove().end().text().trim().replace(/\s*\(\d+\)$/, "");
+    }
     highlightTag() {
       (async () => {
-        const e2 = await storageManager.getHighlightedTags();
-        e2 && e2.forEach(((e3) => {
-          $(`#tags a.tag:contains(${e3})`).addClass("highlighted"), $(`.tags a.tag:contains(${e3})`).addClass("highlighted");
+        const e2 = await storageManager.getHighlightedTags(), tags = $("#tags a.tag, .tags a.tag");
+        e2 && e2.forEach(((tag) => {
+          tags.filter(((_2, element) => this.readTagName(element) === tag)).addClass("highlighted");
         }));
-      })().catch(((error) => clog.error("分类高亮恢复失败", error))), $("#tags a.tag, .tags a.tag").hover(((event) => {
-        const e2 = $(event.currentTarget), t2 = $('<button class="jhs-btn highlight-btn" title="高亮显示">★</button>');
+      })().catch(((error) => clog.error("分类高亮恢复失败", error)));
+      $(document).off(".jhsHighlight").on("mouseenter.jhsHighlight", "#tags a.tag, .tags a.tag", ((event) => {
+        const e2 = $(event.currentTarget);
+        if (e2.find(".highlight-btn").length) return;
+        const t2 = $('<button class="jhs-btn highlight-btn" title="高亮显示">★</button>');
         e2.append(t2), t2.fadeIn(0);
-      }), ((event) => {
+      })).on("mouseleave.jhsHighlight", "#tags a.tag, .tags a.tag", ((event) => {
         const button = $(event.currentTarget).find(".highlight-btn");
         button.fadeOut(0, (() => button.remove()));
-      })), $(document).on("click", ".highlight-btn", (async (e2) => {
+      })).on("click.jhsHighlight", ".highlight-btn", (async (e2) => {
         e2.stopPropagation(), e2.preventDefault();
-        const t2 = $(e2.currentTarget).closest("a.tag"), n2 = t2.clone();
-        n2.find(".highlight-btn").remove();
-        const a2 = n2.text().trim().replace(/\s*\(\d+\)$/, "");
+        const t2 = $(e2.currentTarget).closest("a.tag"), a2 = this.readTagName(t2[0]);
         let i2 = await storageManager.getHighlightedTags();
         i2.includes(a2) ? (i2 = i2.filter(((e3) => e3 !== a2)), t2.removeClass("highlighted")) : (i2.push(a2), t2.addClass("highlighted")), await storageManager.setHighlightedTags(i2);
       }));
@@ -16629,7 +16917,7 @@ ${failure.stack}` : "");
       $(".tabs").append(`
             <div class="jhs-layout-8453d189">
                 <div>已选分类: <span id="jhs-check-tag">${n2}</span></div>
-                <button type="button" class="jhs-btn jhs-btn--ghost jhs-layout-3a1fc324" id="foldCategoryBtn">
+                <button type="button" class="jhs-btn jhs-btn--ghost jhs-layout-3a1fc324 jhs-fold-category-btn">
                     <span></span>
                     <i class="jhs-layout-78fa54ea"></i>
                 </button>
@@ -16637,10 +16925,10 @@ ${failure.stack}` : "");
             </div>
         `);
       let a2 = $("h2.section-title");
-      if (a2.length > 0 && (a2.append('\n                <div id="foldCategoryBtn">\n                    <button type="button" class="jhs-btn jhs-btn--ghost jhs-layout-2100e73d">\n                        <span></span>\n                        <i class="jhs-layout-78fa54ea"></i>\n                    </button>\n                </div>\n            '), t2 = $("section > div > div.box")), !t2) return;
+      if (a2.length > 0 && (a2.append('\n                <div class="jhs-fold-category-box">\n                    <button type="button" class="jhs-btn jhs-btn--ghost jhs-layout-2100e73d jhs-fold-category-btn">\n                        <span></span>\n                        <i class="jhs-layout-78fa54ea"></i>\n                    </button>\n                </div>\n            '), t2 = $("section > div > div.box")), !t2) return;
       const settings = this.getRuntimeService("settings");
-      let i2 = $("#foldCategoryBtn"), s2 = settings.snapshot().foldCategoryCollapsed === true, [o2, r2] = s2 ? ["展开", "icon-angle-double-down"] : ["折叠", "icon-angle-double-up"];
-      i2.find("span").text(o2).end().find("i").attr("class", r2), window.location.href.includes("noFold=1") || t2[s2 ? "hide" : "show"]();
+      let i2 = $(".jhs-fold-category-btn"), s2 = settings.snapshot().foldCategoryCollapsed === true, [label0, icon0] = s2 ? ["展开", "icon-angle-double-down"] : ["折叠", "icon-angle-double-up"];
+      i2.find("span").text(label0).end().find("i").attr("class", icon0), window.location.href.includes("noFold=1") || t2[s2 ? "hide" : "show"]();
       const createFoldWriter = createLatestSettingWriter({ settings, key: "foldCategoryCollapsed", fallback: false, apply: /* @__PURE__ */ __name((value) => {
         s2 = value === true;
         const [label, icon] = s2 ? ["展开", "icon-angle-double-down"] : ["折叠", "icon-angle-double-up"];
@@ -16729,7 +17017,12 @@ ${failure.stack}` : "");
     }
     showAll() {
       $("#enable-magnets-filter").removeClass("do-hide").removeAttr("data-tip");
-      this.getRuntimeService("host")?.getDetailResourceBoundary?.()?.rows().forEach(((row) => $(row).show()));
+      const boundary = this.getRuntimeService("host")?.getDetailResourceBoundary?.();
+      boundary?.rows().forEach(((row) => {
+        $(row).removeClass("high-quality").show();
+        const title = boundary.getTitleTarget(row);
+        title && $(title).css("color", "").find(".jhs-magnet-score").remove();
+      }));
     }
   };
   __name(_HighlightMagnetPlugin, "HighlightMagnetPlugin");
@@ -16963,7 +17256,8 @@ ${failure.stack}` : "");
             </style>`;
     }
     handleResize() {
-      $(".navbar-search").is(":hidden") ? ($(".historyBtnBox").show(), $(".miniHistoryBtnBox").hide()) : ($(".historyBtnBox").hide(), $(".miniHistoryBtnBox").show());
+      const hasButton = /* @__PURE__ */ __name((_index, element) => element.children.length > 0, "hasButton");
+      $(".navbar-search").is(":hidden") ? ($(".historyBtnBox").filter(hasButton).show(), $(".historyBtnBox").filter(((index, element) => !hasButton(index, element))).hide(), $(".miniHistoryBtnBox").hide()) : ($(".historyBtnBox").hide(), $(".miniHistoryBtnBox").show());
     }
     async handle() {
       r && ($(".navbar-end").prepend('<div class="navbar-item has-sub-btns is-hoverable historyBtnBox">\n                    <button type="button" id="historyBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>'), $(".navbar-search").css("margin-left", "0").before('\n                <div class="navbar-item miniHistoryBtnBox">\n                    <button type="button" id="miniHistoryBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>\n            '), this.handleResize(), $(window).resize((() => {
@@ -17019,22 +17313,26 @@ ${failure.stack}` : "");
           this.historyRoot = root, root.find("#allSelectBox").prepend('<span id="historySelectionSummary" class="jhs-history-selection-summary" role="status" aria-live="polite"></span>'), this.resetHistorySelection(false), JhsSelect.enhance(root);
           await this.loadTableData(), root.on("click.jhsHistory", "#clearSearchbtn", (async (e4) => {
             root.find("#searchCarNum").val(""), JhsSelect.setValue(root.find("#dataType"), "all"), await this.reloadTable(), root.find("#allSelectBox").hide();
-          })).on("focusout keydown", "#searchCarNum", (async (e4) => {
+          })).on("focusout.jhsHistory keydown.jhsHistory", "#searchCarNum", (async (e4) => {
             if ("focusout" === e4.type || "Enter" === e4.key) {
               if ("Enter" === e4.key && e4.preventDefault(), "keydown" === e4.type && "Enter" !== e4.key) return;
               await this.reloadTable();
             }
-          })).on("click", ".table-link-param", (async (e4) => {
+          })).on("click.jhsHistory", ".table-link-param", (async (e4) => {
             let t2 = $(e4.currentTarget);
             root.find("#searchCarNum").val(t2.text()), await this.reloadTable();
-          })).on("change", "#dataType", (async () => {
+          })).on("change.jhsHistory", "#dataType", (async () => {
             await this.reloadTable();
-          })).on("click", "[data-history-view]", (async (event) => {
+          })).on("click.jhsHistory", "[data-history-view]", (async (event) => {
             const view = $(event.currentTarget).data("history-view");
             root.find("[data-history-view]").removeClass("active"), $(event.currentTarget).addClass("active"), await this.showHistoryView(view);
           })).on("click", ".jhs-undo-activity", (async (event) => {
-            const result = await this.historyRepository.undo($(event.currentTarget).data("transaction"));
-            show.info(`撤销完成：${result.reverted.length} 项成功，${result.conflicts.length} 项冲突`), await this.renderActivityHistory();
+            try {
+              const result = await this.historyRepository.undo($(event.currentTarget).data("transaction"));
+              show.info(`撤销完成：${result.reverted.length} 项成功，${result.conflicts.length} 项冲突`), await this.renderActivityHistory();
+            } catch (error) {
+              clog.error("撤销失败:", error), show.error("撤销失败，请稍后重试");
+            }
           })).on("click", ".jhs-copy-offline", (async (event) => {
             await utils.copyToClipboard("离线资源", $(event.currentTarget).data("resource"));
           })).on("click", ".jhs-retry-offline", (async (event) => {
@@ -17376,7 +17674,12 @@ ${failure.stack}` : "");
           column: "updateDate",
           dir: "desc"
         }]
-      }), this.tableObj.on("dataProcessed", (() => {
+      });
+      this.tableObj.on("dataProcessing", (() => {
+        this.historySelectionSyncing = true;
+      }));
+      this.tableObj.on("dataProcessed", (() => {
+        this.historySelectionSyncing = false;
         this.isHistoryAllFiltered() ? this.syncHistoryPageSelection() : this.updateHistorySelectionUi();
       })), this.tableObj.on("rowSelected", ((row) => {
         this.updateHistoryRowSelection(row, true);
@@ -17390,7 +17693,11 @@ ${failure.stack}` : "");
     }
     handleDelete(e2, t2) {
       utils.q(e2, `是否移除${t2}?`, (async () => {
-        await this.historyRepository.remove(t2), this.getOptionalDependency("ListPagePlugin")?.showCarNumBox?.(t2), await this.reloadTable();
+        try {
+          await this.historyRepository.remove(t2), this.getOptionalDependency("ListPagePlugin")?.showCarNumBox?.(t2), await this.reloadTable();
+        } catch (error) {
+          clog.error("移除历史记录失败:", error), show.error("移除失败，请稍后重试");
+        }
       }));
     }
     async handleClickDetail(e2, t2) {
@@ -17407,8 +17714,8 @@ ${failure.stack}` : "");
         utils.openPage(t2.url, t2.carNum, false, e2);
       }
       if (l) {
-        const url = t2.url || "";
-        url.includes("javdb") ? window.open(url, "_blank") : utils.openPage(url, t2.carNum, false, e2);
+        if (!t2.url) return void show.info("该记录没有来源链接");
+        t2.url.includes("javdb") ? window.open(t2.url, "_blank") : utils.openPage(t2.url, t2.carNum, false, e2);
       }
     }
     async editRecord(e2) {
@@ -17713,7 +18020,7 @@ ${failure.stack}` : "");
       return true;
     }
     supportsLiveSorting() {
-      return this.isHitShowPage() || this.isFc2ListPage();
+      return this.isOwnedRankingPage() || this.isFc2ListPage();
     }
     buildBatchScope() {
       const isActorPage = r ? o.includes("/actors/") : o.includes("/star/");
@@ -17878,7 +18185,7 @@ ${failure.stack}` : "");
         this.hdPendingCleanups.forEach(((cleanup) => cleanup())), this.hdPendingCleanups.clear();
         this.configureHoverPreview("no");
         this.recountFrame && (globalThis.cancelAnimationFrame?.(this.recountFrame) ?? clearTimeout(this.recountFrame)), this.recountFrame = null;
-        $(this.getSelector().boxSelector).off(".jhsMovieDetail"), $("#jhs-quick-filter").off(), this.itemIndex.clear();
+        $(this.getSelector().boxSelector).off(".jhsMovieDetail .jhsListVideo .jhsListMenu"), $("#jhs-quick-filter").off(), this.itemIndex.clear();
       }));
     }
     async createQuickFilter() {
@@ -17947,7 +18254,7 @@ ${failure.stack}` : "");
       }));
     }
     checkDom(scope = null) {
-      if (!window.isListPage || isHitShowPage()) return;
+      if (!window.isListPage || isHitShowPage() || window.location.search.includes("handleTop=1")) return;
       const e2 = this.getSelector(), t2 = document.querySelector(e2.boxSelector);
       if (!t2) return void clog.error("没有找到容器节点!");
       if (!scope) return;
@@ -18212,7 +18519,8 @@ ${failure.stack}` : "");
       if (!stateFlag) throw new TypeError(`不支持的状态操作: ${flag}`);
       const normalized = normalizeQuickFilterKey(filter), filterLabel = QUICK_FILTER_LABELS[normalized];
       const actorScope = scope?.kind === "actor", recordName = actorScope ? String(scope.recordName || "") : "";
-      const confirmText = "all" === normalized ? "将处理当前搜索全部分页的所有作品，包括屏蔽项。" : `将处理当前搜索全部分页中符合「${filterLabel}」筛选的作品。`;
+      const isOwnedRankingPage = isHitShowPage(window.location) || window.location.search.includes("handleTop=1");
+      const confirmText = isOwnedRankingPage ? "all" === normalized ? "将处理当前榜单页内的所有作品，包括屏蔽项。" : `将处理当前榜单页内符合「${filterLabel}」筛选的作品。` : "all" === normalized ? "将处理当前搜索全部分页的所有作品，包括屏蔽项。" : `将处理当前搜索全部分页中符合「${filterLabel}」筛选的作品。`;
       if (confirm) {
         const proceed = await new Promise((resolve) => utils.q(null, confirmText, () => resolve(true), () => resolve(false)));
         if (!proceed) return { cancelled: true };
@@ -18237,8 +18545,8 @@ ${failure.stack}` : "");
       try {
         const records = await scanAllPages({
           startDom: root ? $(root) : $(document),
-          currentUrl: root ? null : window.location.href,
-          firstPageUrl: root ? null : this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href,
+          currentUrl: isOwnedRankingPage ? null : root ? null : window.location.href,
+          firstPageUrl: isOwnedRankingPage ? null : root ? null : this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href,
           itemSelector: this.getSelector().requestDomItemSelector,
           nextPageSelector: this.getSelector().nextPageSelector,
           fetchHtml: /* @__PURE__ */ __name(async (url) => requestHostPage(this.getRuntimeService("http"), url, runtimeScope), "fetchHtml"),
@@ -18295,14 +18603,14 @@ ${failure.stack}` : "");
       return element;
     }
     async bindClick() {
-      let e2 = this.getSelector();
-      this.bindMovieDetailNavigation(e2.boxSelector), $(e2.boxSelector).on("click", ".item video", (async (e3) => {
+      const e2 = this.getSelector();
+      this.bindMovieDetailNavigation(e2.boxSelector), $(e2.boxSelector).off("click.jhsListVideo").on("click.jhsListVideo", ".item video", (async (e3) => {
         const t2 = e3.currentTarget;
         t2.paused ? await safePlay(t2, {
           context: "列表视频",
           notify: true
         }) : t2.pause(), e3.preventDefault(), e3.stopPropagation();
-      })), $(e2.boxSelector).on("contextmenu", ".item img, .item video", (async (e3) => {
+      })), $(e2.boxSelector).off("contextmenu.jhsListMenu").on("contextmenu.jhsListMenu", ".item img, .item video", (async (e3) => {
         try {
           e3.preventDefault();
           const t2 = $(e3.target).closest(".item"), { carNum: n2, url: a2, publishTime: i2, fc2Source } = this.findCarNumAndHref(t2);
@@ -18668,7 +18976,7 @@ ${failure.stack}` : "");
                 .jhs-commandbar__left { flex-basis:100%; }
                 .jhs-commandbar__right { margin-left:auto; }
             }
-            @media (max-width: 768px) {
+            @media (max-width: 767px) {
                 .jhs-page-commandbar { display: none; }
             }
         `;
@@ -18710,8 +19018,85 @@ ${failure.stack}` : "");
       }
     }
     mountDesktopCommandBar() {
-      if (!window.isListPage || $("#jhs-page-commandbar").length) return;
-      this.buildCommandBar();
+      if (!window.isListPage) return;
+      const existing = $("#jhs-page-commandbar");
+      existing.length ? this.collectCommandControls(existing) : this.buildCommandBar();
+    }
+    collectCommandControls(commandbar) {
+      const isCollected = /* @__PURE__ */ __name((selector) => {
+        const item = $(selector).first();
+        return !item.length || !!item.closest("#jhs-page-commandbar").length;
+      }, "isCollected");
+      const remember = /* @__PURE__ */ __name((element) => {
+        (this._commandBarSources || (this._commandBarSources = [])).push({ element, parent: null, next: null });
+      }, "remember");
+      const left = commandbar.find(".jhs-commandbar__left"), right = commandbar.find(".jhs-commandbar__right");
+      if (!left.length || !right.length) return;
+      if (!commandbar.find(".jhs-commandbar__primary").length && !isCollected("#waitCheckBtn")) left.append('<div class="jhs-commandbar__primary"></div>');
+      const primary = commandbar.find(".jhs-commandbar__primary");
+      ["#waitCheckBtn", "#newVideoBtn", "#historyBtn"].forEach(((selector) => {
+        if (isCollected(selector)) return;
+        const item = $(selector).first();
+        item.length && (remember(item[0]), item.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo(primary));
+      }));
+      primary.children().length && left.append(primary);
+      if (!commandbar.find(".jhs-commandbar__more").length && !["#statsBtn", "#blacklistBtn"].every(isCollected)) {
+        commandbar.find(".jhs-commandbar__left").append('<div class="jhs-commandbar__more"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-more-menu" aria-expanded="false">更多</button><div id="jhs-commandbar-more-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
+      }
+      const more = commandbar.find(".jhs-commandbar__more");
+      ["#statsBtn", "#blacklistBtn"].forEach(((selector) => {
+        if (isCollected(selector)) return;
+        const item = $(selector).first();
+        item.length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(more.find(".jhs-commandbar__menu")));
+      }));
+      more.find(".jhs-commandbar__menu").children().length && more.appendTo(left);
+      const quickFilter = $("#jhs-quick-filter").first();
+      quickFilter.length && !quickFilter.closest("#jhs-page-commandbar").length && (remember(quickFilter[0]), left.append($('<div class="jhs-commandbar__filters"></div>').append(quickFilter.detach())));
+      const contextItem = $("#addBlacklistBtn").first();
+      contextItem.length && !contextItem.closest("#jhs-page-commandbar").length && (remember(contextItem[0]), contextItem.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo($('<div class="jhs-commandbar__context"></div>').appendTo(right)));
+      const sort = $(".jhs-sort-control").first();
+      if (sort.length && !sort.closest("#jhs-page-commandbar").length) {
+        const view = $('<label class="jhs-commandbar__view"><span class="jhs-commandbar__sort-label">排序</span></label>');
+        remember(sort[0]), sort.detach().appendTo(view), right.append(view);
+      }
+      if (!commandbar.find(".jhs-commandbar__batch").length && !["#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo"].every(isCollected)) {
+        right.append('<div class="jhs-commandbar__batch"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-batch-menu" aria-expanded="false">批量操作</button><div id="jhs-commandbar-batch-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
+      }
+      const batch = commandbar.find(".jhs-commandbar__batch");
+      ["#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo"].forEach(((selector) => {
+        if (isCollected(selector)) return;
+        const item = $(selector).first();
+        item.length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batch.find(".jhs-commandbar__menu")));
+      }));
+      batch.find(".jhs-commandbar__menu").children().length && batch.appendTo(right);
+      commandbar.find(".jhs-commandbar__more, .jhs-commandbar__batch").each(((index, element) => {
+        const container = $(element);
+        if (container.data("jhsCommandbarBound")) return;
+        container.data("jhsCommandbarBound", true);
+        const toggle = container.find(".jhs-commandbar__menu-toggle"), menu = container.find(".jhs-commandbar__menu");
+        toggle.on("click", ((event) => {
+          event.stopPropagation();
+          const open = !menu.hasClass("is-open");
+          commandbar.find(".jhs-commandbar__menu").removeClass("is-open"), commandbar.find(".jhs-commandbar__menu-toggle").attr("aria-expanded", "false"), menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && menu.children().first().trigger("focus");
+        })), menu.on("keydown", "[role='menuitem']", ((event) => {
+          const items = menu.find("[role='menuitem']"), index2 = items.index(event.currentTarget);
+          if ("Escape" === event.key) return event.preventDefault(), menu.removeClass("is-open"), toggle.attr("aria-expanded", "false").trigger("focus");
+          if ("Tab" === event.key) return menu.removeClass("is-open"), void toggle.attr("aria-expanded", "false");
+          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+          event.preventDefault();
+          const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index2 + 1) % items.length : (index2 - 1 + items.length) % items.length;
+          items.eq(next).trigger("focus");
+        })).on("click", "[role='menuitem']", (() => {
+          menu.removeClass("is-open"), toggle.attr("aria-expanded", "false").trigger("focus");
+        }));
+      }));
+      $(document).off("click.jhsCommandbar").on("click.jhsCommandbar", ((event) => {
+        $(event.target).closest(".jhs-commandbar__more, .jhs-commandbar__batch").length || (commandbar.find(".jhs-commandbar__menu").removeClass("is-open"), commandbar.find(".jhs-commandbar__menu-toggle").attr("aria-expanded", "false"));
+      }));
+      $(".historyBtnBox").each(((_index, element) => {
+        element.children.length || (element.style.display = "none");
+      }));
+      this.getOptionalDependency("ListPagePlugin")?.syncQuickFilterUi?.();
     }
     collectDesktopCommandSources() {
       const selectors = [
@@ -18757,9 +19142,6 @@ ${failure.stack}` : "");
     buildCommandBar() {
       if (!window.isListPage || $("#jhs-page-commandbar").length) return;
       this._commandBarSources = [];
-      const remember = /* @__PURE__ */ __name((element) => {
-        this._commandBarSources.push({ element, parent: null, next: null });
-      }, "remember");
       const commandbar = $(`
             <div id="jhs-page-commandbar" class="jhs-page-commandbar jhs-ui" role="toolbar" aria-label="JHS 页面工具">
                 <div class="jhs-commandbar__left"></div>
@@ -18768,56 +19150,7 @@ ${failure.stack}` : "");
       const listBox = r ? $(this.getSelector().boxSelector).first() : $(".masonry").first();
       if (!listBox.length) return void clog.warn("JHS 页面工具栏未创建：列表容器尚未就绪");
       listBox.before(commandbar);
-      const left = commandbar.find(".jhs-commandbar__left"), right = commandbar.find(".jhs-commandbar__right");
-      const primary = $('<div class="jhs-commandbar__primary"></div>');
-      ["#waitCheckBtn", "#newVideoBtn", "#historyBtn"].forEach(((selector) => {
-        const item = $(selector).first();
-        item.length && (remember(item[0]), item.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo(primary));
-      }));
-      primary.children().length && left.append(primary);
-      const more = $('<div class="jhs-commandbar__more"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-more-menu" aria-expanded="false">更多</button><div id="jhs-commandbar-more-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
-      ["#statsBtn", "#blacklistBtn"].forEach(((selector) => {
-        const item = $(selector).first();
-        item.length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(more.find(".jhs-commandbar__menu")));
-      }));
-      more.find(".jhs-commandbar__menu").children().length && left.append(more);
-      const quickFilter = $("#jhs-quick-filter").first();
-      quickFilter.length && (remember(quickFilter[0]), left.append($('<div class="jhs-commandbar__filters"></div>').append(quickFilter.detach())));
-      const contextItem = $("#addBlacklistBtn").first();
-      contextItem.length && (remember(contextItem[0]), contextItem.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo($('<div class="jhs-commandbar__context"></div>').appendTo(right)));
-      const sort = $(".jhs-sort-control").first();
-      if (sort.length) {
-        const view = $('<label class="jhs-commandbar__view"><span class="jhs-commandbar__sort-label">排序</span></label>');
-        remember(sort[0]), sort.detach().appendTo(view), right.append(view);
-      }
-      const batch = $('<div class="jhs-commandbar__batch"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-batch-menu" aria-expanded="false">批量操作</button><div id="jhs-commandbar-batch-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
-      ["#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo"].forEach(((selector) => {
-        const item = $(selector).first();
-        item.length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batch.find(".jhs-commandbar__menu")));
-      }));
-      batch.find(".jhs-commandbar__menu").children().length && right.append(batch);
-      commandbar.find(".jhs-commandbar__more, .jhs-commandbar__batch").each(((index, element) => {
-        const container = $(element), toggle = container.find(".jhs-commandbar__menu-toggle"), menu = container.find(".jhs-commandbar__menu");
-        toggle.on("click", ((event) => {
-          event.stopPropagation();
-          const open = !menu.hasClass("is-open");
-          commandbar.find(".jhs-commandbar__menu").removeClass("is-open"), commandbar.find(".jhs-commandbar__menu-toggle").attr("aria-expanded", "false"), menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && menu.children().first().trigger("focus");
-        })), menu.on("keydown", "[role='menuitem']", ((event) => {
-          const items = menu.find("[role='menuitem']"), index2 = items.index(event.currentTarget);
-          if ("Escape" === event.key) return event.preventDefault(), menu.removeClass("is-open"), toggle.attr("aria-expanded", "false").trigger("focus");
-          if ("Tab" === event.key) return menu.removeClass("is-open"), void toggle.attr("aria-expanded", "false");
-          if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-          event.preventDefault();
-          const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index2 + 1) % items.length : (index2 - 1 + items.length) % items.length;
-          items.eq(next).trigger("focus");
-        })).on("click", "[role='menuitem']", (() => {
-          menu.removeClass("is-open"), toggle.attr("aria-expanded", "false").trigger("focus");
-        }));
-      }));
-      $(document).off("click.jhsCommandbar").on("click.jhsCommandbar", ((event) => {
-        $(event.target).closest(".jhs-commandbar__more, .jhs-commandbar__batch").length || (commandbar.find(".jhs-commandbar__menu").removeClass("is-open"), commandbar.find(".jhs-commandbar__menu-toggle").attr("aria-expanded", "false"));
-      }));
-      this.getOptionalDependency("ListPagePlugin")?.syncQuickFilterUi?.();
+      this.collectCommandControls(commandbar);
     }
     getCarNum() {
       try {
@@ -19056,7 +19389,7 @@ ${failure.stack}` : "");
         }), 0);
       })), $("#search-btn").on("click", ((e2) => {
         let t2 = $("#search-keyword").val(), n2 = $("#search-type").val();
-        "" !== t2 && (window.location.href.includes("/search") ? window.location.href = "/search?q=" + t2 + "&f=" + n2 : window.open("/search?q=" + t2 + "&f=" + n2));
+        "" !== t2 && (window.location.href.includes("/search") ? window.location.href = "/search?q=" + encodeURIComponent(String(t2)) + "&f=" + encodeURIComponent(String(n2)) : window.open("/search?q=" + encodeURIComponent(String(t2)) + "&f=" + encodeURIComponent(String(n2))));
       })), hasSearchByImage && $("#search-img-btn").on("click", (() => {
         this.getOptionalDependency("SearchByImagePlugin")?.open?.();
       }));
@@ -19080,7 +19413,7 @@ ${failure.stack}` : "");
     }
     toggleOtherNavItem() {
       let e2 = $("#search-box"), t2 = $("#search-bar-container");
-      $(window).width() < 1600 && $(window).width() > 1023 && (e2.hide(), t2.show()), $(window).width() > 1600 && (e2.show(), t2.hide());
+      $(window).width() > 1600 ? (e2.show(), t2.hide()) : (e2.hide(), t2.show());
     }
   };
   __name(_NavBarPlugin, "NavBarPlugin");
@@ -20816,7 +21149,10 @@ ${failure.stack}` : "");
       this.folderName = null;
     }
     authHeaders() {
-      return { Authorization: `Basic ${btoa(`${this.username}:${this.password}`)}`, Depth: "1" };
+      const bytes = new TextEncoder().encode(`${this.username}:${this.password}`);
+      let binary = "";
+      for (const byte of bytes) binary += String.fromCharCode(byte);
+      return { Authorization: `Basic ${btoa(binary)}`, Depth: "1" };
     }
     async request(method, path, headers = {}, body) {
       const url = new URL(path.replace(/^\/+/, ""), this.baseUrl);
@@ -21337,7 +21673,7 @@ ${failure.stack}` : "");
       defaultValue: no
     });
     registry.register({ key: "mobileMode", owner: "LayoutFeature", label: "移动模式", type: "select", defaultValue: "auto", effect: "live", surfaces: ["full"], options: Object.freeze([{ value: "auto", label: "自动检测" }, { value: "on", label: "强制开启" }, { value: "off", label: "强制关闭" }]) });
-    registry.register({ key: "themeMode", owner: "ThemeFeature", label: "主题", type: "select", defaultValue: "light", effect: "live", surfaces: ["full"], options: Object.freeze([{ value: "light", label: "浅色" }, { value: "dark", label: "深色" }]) });
+    registry.register({ key: "themeMode", owner: "ThemeFeature", label: "主题", type: "select", defaultValue: "light", effect: "live", surfaces: ["full"], options: Object.freeze([{ value: "light", label: "浅色" }, { value: "dark", label: "深色" }, { value: "auto", label: "跟随系统" }]) });
     registry.register({ key: "containerColumns", owner: "LayoutFeature", label: "列表列数", type: "number", defaultValue: 5, effect: "live", surfaces: ["full"] });
     registry.register({ key: "containerWidth", owner: "LayoutFeature", label: "列表宽度", type: "number", defaultValue: 100, effect: "live", surfaces: ["full"] });
     registry.register({ key: "screenshotMode", owner: "ScreenshotFeature", label: "截图来源模式", type: "select", defaultValue: "auto", effect: "manual", surfaces: ["full"], options: Object.freeze([{ value: "auto", label: "自动选择" }, { value: "manual", label: "手动选择" }]) });
@@ -22067,6 +22403,7 @@ ${failure.stack}` : "");
           responseType: "json",
           cacheScope: "public",
           ttlMs: 6048e5,
+          timeout: 2e4,
           urlPolicy: { trustClass: "builtin-public", hosts: [new URL(source.catalogUrl).hostname] }
         }, options.scope);
         const index = parseGfriendsCatalog(response.data, source.contentBaseUrl), results = /* @__PURE__ */ new Set();
@@ -22148,7 +22485,8 @@ ${failure.stack}` : "");
           headers: { Authorization: `Client-ID ${IMGUR_CLIENT_ID}` },
           responseType: "json",
           cacheScope: "none",
-          urlPolicy: URL_POLICY
+          urlPolicy: URL_POLICY,
+          timeout: 3e4
         }, options.scope);
         return parseImgurUpload(response.data);
       },
@@ -22859,6 +23197,7 @@ ${failure.stack}` : "");
           responseType: "text",
           cacheScope: "public",
           ttlMs: 6048e5,
+          timeout: 15e3,
           urlPolicy: { trustClass: "builtin-public", hosts: ["ja.wikipedia.org"] }
         }, options.scope);
         try {
@@ -22960,6 +23299,7 @@ ${failure.stack}` : "");
     const originalClose = layerRuntime.close;
     layerRuntime.close = function(id) {
       const result = originalClose.call(this, id);
+      utilsRuntime?.releaseEscClose?.(id);
       setTimeout(() => {
         const shades = document.querySelectorAll(".layui-layer-shade").length;
         document.documentElement.style.overflow = shades > 0 ? "hidden" : "";
@@ -22992,10 +23332,11 @@ ${failure.stack}` : "");
     return { migrated, needsMigration: JSON.stringify(previous) !== JSON.stringify(migrated) };
   }
   __name(readDisabledPluginSettings, "readDisabledPluginSettings");
-  async function persistDisabledPluginMigration(settings, migration) {
-    if (!migration.needsMigration) return;
+  async function persistDisabledPluginMigration(settings) {
     await settings.update((draft) => {
-      draft.disabledPlugins = JSON.stringify(migration.migrated);
+      const previous = parseDisabledPlugins(typeof draft.disabledPlugins === "string" ? draft.disabledPlugins : "[]");
+      const migrated = migrateDisabledPlugins(previous);
+      if (JSON.stringify(previous) !== JSON.stringify(migrated)) draft.disabledPlugins = JSON.stringify(migrated);
     });
   }
   __name(persistDisabledPluginMigration, "persistDisabledPluginMigration");
@@ -23037,9 +23378,9 @@ ${failure.stack}` : "");
       const jhsEventBus2 = initializeEventBus();
       const { utils: utils2, gmHttp: gmHttp2, storageManager: storageManager2, stateService } = createLegacyRuntime(jhsEventBus2);
       Object.assign(globalThis, { utils: utils2, gmHttp: gmHttp2, storageManager: storageManager2, stateService, jhsEventBus: jhsEventBus2 });
+      ["blacklist-rules-changed", "filter-rules-changed", "legacy-refresh"].forEach(((type) => jhsEventBus2.on(type, (() => storageManager2._invalidateCache()))));
       patchLayerRuntime(vendors.layer, utils2);
       importVendorStyles(utils2);
-      injectCoreCss();
       const disabledMigration = await readDisabledPluginSettings(storageManager2);
       const disabled = disabledMigration.migrated;
       const localOriginSettings = await resolveLocalOrigins(storageManager2);
@@ -23064,9 +23405,10 @@ ${failure.stack}` : "");
         disabled,
         localOrigins: localOriginSettings.origins
       });
+      injectCoreCss(context.services.styles);
       Object.assign(globalThis, { settingsService: context.services.settings });
       await context.services.settings.load();
-      await persistDisabledPluginMigration(context.services.settings, disabledMigration);
+      await persistDisabledPluginMigration(context.services.settings);
       await persistLocalOriginMigration(context.services.settings, localOriginSettings);
       await normalizeScreenshotSetting(context.services.settings);
       context.services.profile.start();

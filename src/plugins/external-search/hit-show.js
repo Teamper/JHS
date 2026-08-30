@@ -2,7 +2,7 @@
 
 import { escapeHtml } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
-import { normalizeHttpUrl } from "../../core/feature-helpers.js";
+import { normalizeJavdbMediaUrl } from "../../core/feature-helpers.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { isHitShowPage } from "../../core/site-context.js";
 
@@ -23,6 +23,8 @@ export class HitShowPlugin extends BasePlugin {
     }
     async handle() {
         $('a[href*="rankings/playback"]').on("click", ((/** @type {MouseEvent} */ e) => {
+            // 修饰键/中键点击保留“新标签打开”的原生语义
+            if (e.ctrlKey || e.metaKey || 1 === e.button) return void window.open("/advanced_search?handlePlayback=1&period=daily", "_blank");
             e.preventDefault(), e.stopPropagation(), window.location.href = "/advanced_search?handlePlayback=1&period=daily";
         })), await this.handlePlayback();
     }
@@ -85,7 +87,9 @@ export class HitShowPlugin extends BasePlugin {
             listPage.configureHoverPreview(hoverBigImg === "yes" ? "yes" : "no"), listPage.replaceHdImg(), await listPage.doFilter(),
             // 自有榜单页（热播/Top250）不走 ListPagePlugin.handle，需手动恢复快速筛选条（待鉴定/已下载/全部等）
             // 并重建卡片索引，让 car-state-changed 的定向重筛能找到这些卡片
-            await listPage.createQuickFilter?.(), listPage.applyVisibility(), listPage.rebuildItemIndex?.(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector);
+            await listPage.createQuickFilter?.(), listPage.applyVisibility(), listPage.rebuildItemIndex?.(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector),
+            // 补齐右键屏蔽与列表视频点击绑定（bindClick 已命名空间化，可重复调用）
+            await listPage.bindClick?.();
         }
         await this.getOptionalDependency("CoverButtonPlugin")?.addSvgBtn?.();
         // 通知 Fc2NavigationPlugin 等监听者：自有榜单的卡片已就绪（FC2 保护与对话框导航延迟挂载）
@@ -93,8 +97,24 @@ export class HitShowPlugin extends BasePlugin {
     }
     toolBar(/** @type {string | null} */ e) {
         $("#jhs-hitshow-period").remove();
-        let t = `\n            <nav id="jhs-hitshow-period" class="jhs-segmented" role="tablist" aria-label="热播周期">\n                <a role="tab" class="jhs-segmented__item ${"daily" === e ? "active" : ""}" aria-selected="${"daily" === e ? "true" : "false"}" tabindex="${"daily" === e ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=daily">日榜</a>\n                <a role="tab" class="jhs-segmented__item ${"weekly" === e ? "active" : ""}" aria-selected="${"weekly" === e ? "true" : "false"}" tabindex="${"weekly" === e ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=weekly">周榜</a>\n                <a role="tab" class="jhs-segmented__item ${"monthly" === e ? "active" : ""}" aria-selected="${"monthly" === e ? "true" : "false"}" tabindex="${"monthly" === e ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=monthly">月榜</a>\n            </nav>\n        `;
-        $(".jhs-hitshow-heading").append(t);
+        // URL 缺 period 参数时数据按日榜兜底，激活态须与之一致
+        const active = "weekly" === e ? "weekly" : "monthly" === e ? "monthly" : "daily";
+        const tab = (/** @type {string} */ value, /** @type {string} */ label) => `<a role="tab" class="jhs-segmented__item ${active === value ? "active" : ""}" aria-selected="${active === value ? "true" : "false"}" tabindex="${active === value ? "0" : "-1"}" href="/advanced_search?handlePlayback=1&period=${value}">${label}</a>`;
+        const t = `\n            <nav id="jhs-hitshow-period" class="jhs-segmented" role="tablist" aria-label="热播周期">\n                ${tab("daily", "日榜")}\n                ${tab("weekly", "周榜")}\n                ${tab("monthly", "月榜")}\n            </nav>\n        `;
+        const heading = $(".jhs-hitshow-heading");
+        if (!heading.length) return;
+        // 插到标题之后而非容器末尾，避免自愈重排时被按钮行挤到下一行
+        const title = heading.children("h2.section-title");
+        title.length ? title.after(t) : heading.append(t);
+        // roving tabindex 的方向键导航（左/右/Home/End）
+        const nav = $("#jhs-hitshow-period");
+        nav.off("keydown.jhsPeriod").on("keydown.jhsPeriod", ((/** @type {any} */ event) => {
+            if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(event.key)) return;
+            event.preventDefault();
+            const items = nav.find("[role=\"tab\"]"), index = items.index(event.target);
+            const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowRight" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
+            items.get(next)?.focus();
+        }));
     }
     getStarRating(/** @type {number} */ e) {
         let t = "";
@@ -105,11 +125,14 @@ export class HitShowPlugin extends BasePlugin {
     }
     async loadScore(/** @type {HitMovie[]} */ movies, /** @type {number} */ generation = this.loadGeneration) {
         if (0 === movies.length) return;
-        const cacheKey = "jhs_score_info";
-        const cacheService = this.getRuntimeService("cache"), cached = cacheService.get(cacheKey, { scope: "public" });
-        const cache = cached.hit && cached.value && typeof cached.value === "object" ? { ...cached.value } : {};
+        // 持久化评分缓存（7 天 TTL）：此前为页内内存缓存，每次整页导航（含周期切换）后清零，评分逐个重拉
+        const cacheKey = "jhs_hitshow_scores_v1";
+        const persisted = await storageManager.cachedRequest(cacheKey, 604_800_000, async () => ({}));
+        const cache = persisted && "object" == typeof persisted && !Array.isArray(persisted) ? { ...persisted } : {};
         const queue = [ ...movies ], workers = Array.from({ length: Math.min(4, queue.length) }, (() => this.scoreWorker(queue, cache, generation)));
-        await Promise.all(workers), cacheService.set(cacheKey, cache, { scope: "public", ttlMs: 604_800_000 });
+        await Promise.all(workers);
+        // 错误态“重新加载”连点时，旧代际的结果不得写回缓存
+        generation === this.loadGeneration && await storageManager.cacheSet(cacheKey, cache, 604_800_000);
         // 评分补全后按需重排：仅当生效排序为评价人数（页内覆盖或普通列表页的全局设置）时才需要二次排序
         if (generation === this.loadGeneration) {
             const listButtons = this.getOptionalDependency("ListPageButtonPlugin");
@@ -156,13 +179,15 @@ export class HitShowPlugin extends BasePlugin {
         const value = $('<span class="value"></span>'), stars = $('<span class="score-stars"></span>').html(this.getStarRating(safeScore));
         value.append(stars, document.createTextNode(`  ${safeScore}分，由${safeCount}人评价`)), target.hide().empty().append(value).slideDown(500);
     }
-    markDataListHtml(/** @type {HitMovie[]} */ e) {
+    /** @param {HitMovie[]} e @param {{thumbnailFirst?: boolean}} [options] */
+    markDataListHtml(e, { thumbnailFirst = !0 } = {}) {
         let t = "";
         return e.forEach(((e, index) => {
             const id = e.movieId ?? e.id, carNum = e.carNum ?? e.number, title = e.title ?? e.origin_title,
-                releaseDate = e.releaseDate ?? e.release_date, coverUrl = normalizeHttpUrl(e.coverUrl ?? e.cover_url), thumbUrl = coverUrl ? coverUrl.replace("/covers/", "/thumbs/") : "",
+                releaseDate = e.releaseDate ?? e.release_date, coverUrl = normalizeJavdbMediaUrl(e.coverUrl ?? e.cover_url), explicitThumbUrl = normalizeJavdbMediaUrl(e.thumbUrl ?? e.thumb_url),
+                thumbUrl = explicitThumbUrl ?? (coverUrl ? coverUrl.replace("/covers/", "/thumbs/") : null), initialImageUrl = thumbnailFirst ? thumbUrl ?? coverUrl : coverUrl ?? thumbUrl, fullImageUrl = coverUrl ?? thumbUrl ?? "",
                 hasSubtitle = e.hasSubtitle ?? e.has_cnsub, magnetCount = Number(e.magnetCount ?? e.magnets_count), newMagnets = e.newMagnets ?? e.new_magnets;
-            t += `\n                <div class="item" id="${escapeHtml(id)}" data-jhs-publish-time="${escapeHtml(releaseDate)}" data-jhs-rate-count="0" data-original-index="${index}">\n                    <a href="/v/${escapeHtml(id)}" class="box" title="${escapeHtml(title)}">\n                        <div class="cover ">${coverUrl ? `<img loading="lazy" decoding="async" src="${escapeHtml(thumbUrl)}" data-full="${escapeHtml(coverUrl)}" alt="">` : ""}</div>\n                        <div class="video-title"><strong>${escapeHtml(carNum)}</strong> ${escapeHtml(title)}</div>\n                        <div class="score" id="score_${escapeHtml(id)}"></div>\n                        <div class="meta">${escapeHtml(releaseDate)}</div>\n                        <div class="tags"></div>\n                        <div class="jhs-toolbar">\n                           ${hasSubtitle ? '<span class="jhs-badge jhs-badge--watch">含中字磁力</span>' : magnetCount > 0 ? '<span class="jhs-badge jhs-badge--success">含磁力</span>' : '<span class="jhs-badge jhs-badge--neutral">无磁力</span>'}\n                           ${newMagnets ? '<span class="jhs-badge jhs-badge--accent">今日新增</span>' : ""}\n                        </div>\n                    </a>\n                </div>\n            `;
+            t += `\n                <div class="item" id="${escapeHtml(id)}" data-jhs-publish-time="${escapeHtml(releaseDate)}" data-jhs-rate-count="0" data-original-index="${index}">\n                    <a href="/v/${escapeHtml(id)}" class="box" title="${escapeHtml(title)}">\n                        <div class="cover ">${initialImageUrl ? `<img loading="lazy" decoding="async" src="${escapeHtml(initialImageUrl)}" data-full="${escapeHtml(fullImageUrl)}" alt="">` : ""}</div>\n                        <div class="video-title"><strong>${escapeHtml(carNum)}</strong> ${escapeHtml(title)}</div>\n                        <div class="score" id="score_${escapeHtml(id)}"></div>\n                        <div class="meta">${escapeHtml(releaseDate)}</div>\n                        <div class="tags"></div>\n                        <div class="jhs-toolbar">\n                           ${hasSubtitle ? '<span class="jhs-badge jhs-badge--watch">含中字磁力</span>' : magnetCount > 0 ? '<span class="jhs-badge jhs-badge--success">含磁力</span>' : '<span class="jhs-badge jhs-badge--neutral">无磁力</span>'}\n                           ${newMagnets ? '<span class="jhs-badge jhs-badge--accent">今日新增</span>' : ""}\n                        </div>\n                    </a>\n                </div>\n            `;
         })), t;
     }
 }

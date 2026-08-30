@@ -169,7 +169,7 @@ export class ListPagePlugin extends BasePlugin {
             this.hdPendingCleanups.forEach((cleanup => cleanup())), this.hdPendingCleanups.clear();
             this.configureHoverPreview("no");
             this.recountFrame && (globalThis.cancelAnimationFrame?.(this.recountFrame) ?? clearTimeout(this.recountFrame)), this.recountFrame = null;
-            $(this.getSelector().boxSelector).off(".jhsMovieDetail"), $("#jhs-quick-filter").off(), this.itemIndex.clear();
+            $(this.getSelector().boxSelector).off(".jhsMovieDetail .jhsListVideo .jhsListMenu"), $("#jhs-quick-filter").off(), this.itemIndex.clear();
         }));
     }
     async createQuickFilter() {
@@ -244,7 +244,8 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {any} [scope] */
     checkDom(scope = null) {
-        if (!window.isListPage || isHitShowPage()) return;
+        // 自有榜单页（热播/Top250）由渲染方自行管理容器与增量，不走宿主容器探测
+        if (!window.isListPage || isHitShowPage() || window.location.search.includes("handleTop=1")) return;
         const e = this.getSelector(), t = document.querySelector(e.boxSelector);
         if (!t) return void clog.error("没有找到容器节点!");
         if (!scope) return;
@@ -477,9 +478,15 @@ export class ListPagePlugin extends BasePlugin {
         if (!stateFlag) throw new TypeError(`不支持的状态操作: ${flag}`);
         const normalized = normalizeQuickFilterKey(filter), filterLabel = QUICK_FILTER_LABELS[normalized];
         const actorScope = scope?.kind === "actor", recordName = actorScope ? String(scope.recordName || "") : "";
-        const confirmText = "all" === normalized
-            ? "将处理当前搜索全部分页的所有作品，包括屏蔽项。"
-            : `将处理当前搜索全部分页中符合「${filterLabel}」筛选的作品。`;
+        // 自有榜单页（热播/Top250）的分页是自绘按钮，跨页抓取不可用：批量语义收敛为“当前榜单页”
+        const isOwnedRankingPage = isHitShowPage(window.location) || window.location.search.includes("handleTop=1");
+        const confirmText = isOwnedRankingPage
+            ? ("all" === normalized
+                ? "将处理当前榜单页内的所有作品，包括屏蔽项。"
+                : `将处理当前榜单页内符合「${filterLabel}」筛选的作品。`)
+            : ("all" === normalized
+                ? "将处理当前搜索全部分页的所有作品，包括屏蔽项。"
+                : `将处理当前搜索全部分页中符合「${filterLabel}」筛选的作品。`);
         if (confirm) {
             const proceed = await new Promise((resolve) => utils.q(null, confirmText, () => resolve(true), () => resolve(false)));
             if (!proceed) return { cancelled: true };
@@ -505,8 +512,8 @@ export class ListPagePlugin extends BasePlugin {
         try {
             const records = await scanAllPages({
                 startDom: root ? $(root) : $(document),
-                currentUrl: root ? null : window.location.href,
-                firstPageUrl: root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href),
+                currentUrl: isOwnedRankingPage ? null : (root ? null : window.location.href),
+                firstPageUrl: isOwnedRankingPage ? null : (root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href)),
                 itemSelector: this.getSelector().requestDomItemSelector,
                 nextPageSelector: this.getSelector().nextPageSelector,
                 fetchHtml: async (/** @type {string} */ url) => requestHostPage(this.getRuntimeService("http"), url, runtimeScope),
@@ -568,15 +575,15 @@ export class ListPagePlugin extends BasePlugin {
         return element;
     }
     async bindClick() {
-        let e = this.getSelector();
-        this.bindMovieDetailNavigation(e.boxSelector), $(e.boxSelector).on("click", ".item video", (async (/** @type {any} */ e) => {
+        const e = this.getSelector();
+        this.bindMovieDetailNavigation(e.boxSelector), $(e.boxSelector).off("click.jhsListVideo").on("click.jhsListVideo", ".item video", (async (/** @type {any} */ e) => {
             const t = e.currentTarget;
             t.paused ? await safePlay(t, {
                 context: "列表视频",
                 notify: !0
             }) : t.pause(), e.preventDefault(),
             e.stopPropagation();
-        })), $(e.boxSelector).on("contextmenu", ".item img, .item video", (async (/** @type {any} */ e) => {
+        })), $(e.boxSelector).off("contextmenu.jhsListMenu").on("contextmenu.jhsListMenu", ".item img, .item video", (async (/** @type {any} */ e) => {
             try {
                 e.preventDefault();
                 const t = $(e.target).closest(".item"), {carNum: n, url: a, publishTime: i, fc2Source} = this.findCarNumAndHref(t);

@@ -25,6 +25,8 @@ function patchLayerRuntime(layerRuntime, utilsRuntime) {
     const originalClose = layerRuntime.close;
     layerRuntime.close = function(id) {
         const result = originalClose.call(this, id);
+        // 非 Esc 途径（X 按钮/shadeClick/close 调用）关闭时同步清理 Esc 栈，避免 Esc 被陈旧索引吞掉
+        utilsRuntime?.releaseEscClose?.(id);
         setTimeout(() => {
             const shades = document.querySelectorAll(".layui-layer-shade").length;
             document.documentElement.style.overflow = shades > 0 ? "hidden" : "";
@@ -57,10 +59,12 @@ async function readDisabledPluginSettings(storageManager) {
     return { migrated, needsMigration: JSON.stringify(previous) !== JSON.stringify(migrated) };
 }
 
-async function persistDisabledPluginMigration(settings, migration) {
-    if (!migration.needsMigration) return;
+async function persistDisabledPluginMigration(settings) {
+    // 在 update 的最新草稿上重算迁移：update 无变更时不落盘，也不会覆盖并发期间其他标签页写入的禁用项
     await settings.update((draft) => {
-        draft.disabledPlugins = JSON.stringify(migration.migrated);
+        const previous = parseDisabledPlugins(typeof draft.disabledPlugins === "string" ? draft.disabledPlugins : "[]");
+        const migrated = migrateDisabledPlugins(previous);
+        if (JSON.stringify(previous) !== JSON.stringify(migrated)) draft.disabledPlugins = JSON.stringify(migrated);
     });
 }
 
@@ -101,9 +105,10 @@ export async function bootstrapJhs() {
         const jhsEventBus = initializeEventBus();
         const { utils, gmHttp, storageManager, stateService } = createLegacyRuntime(jhsEventBus);
         Object.assign(globalThis, { utils, gmHttp, storageManager, stateService, jhsEventBus });
+        // 黑名单/关键词规则可被其他标签页修改：内存派生缓存不随事件自动失效，必须在此主动清空
+        [ "blacklist-rules-changed", "filter-rules-changed", "legacy-refresh" ].forEach((type => jhsEventBus.on(type, (() => storageManager._invalidateCache()))));
         patchLayerRuntime(vendors.layer, utils);
         importVendorStyles(utils);
-        injectCoreCss();
         const disabledMigration = await readDisabledPluginSettings(storageManager);
         const disabled = disabledMigration.migrated;
         const localOriginSettings = await resolveLocalOrigins(storageManager);
@@ -115,11 +120,12 @@ export async function bootstrapJhs() {
             legacyHttp: gmHttp, legacyStorage: storageManager, eventBus: jhsEventBus, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
             layer: vendors.layer, stateService, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
         });
+        injectCoreCss(context.services.styles);
         // 6.5: expose the single settings write entry so legacy writers (storageManager.saveSetting/saveSettingItem)
         // route through SettingsService with lock + re-read + merge.
         Object.assign(globalThis, { settingsService: context.services.settings });
         await context.services.settings.load();
-        await persistDisabledPluginMigration(context.services.settings, disabledMigration);
+        await persistDisabledPluginMigration(context.services.settings);
         await persistLocalOriginMigration(context.services.settings, localOriginSettings);
         await normalizeScreenshotSetting(context.services.settings);
         context.services.profile.start();

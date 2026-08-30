@@ -9,7 +9,7 @@ const repoRoot = join(import.meta.dirname, "..");
 function loadStateService() {
     const constants = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), normalizeStart = constants.indexOf("function normalizeCarNum"), normalizeEnd = constants.indexOf("function assertPageInfoContract", normalizeStart);
     const model = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), service = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8"), serviceEnd = service.indexOf("function attachStateServiceCompatibility");
-    const context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON, Math, window: { location: { href: "https://javdb.example/v/1" } }, crypto: { randomUUID: vi.fn().mockImplementation((() => `id-${Math.random()}`)) }, utils: { getNowStr: () => "2026-08-22 12:00:00" } });
+    const context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON, Math, window: { location: { href: "https://javdb.example/v/1" } }, crypto: { randomUUID: vi.fn().mockImplementation((() => `id-${Math.random()}`)) }, utils: { getNowStr: () => "2026-08-22 12:00:00" }, clog: { warn: vi.fn(), error: vi.fn(), log: vi.fn() }, show: { info: vi.fn(), error: vi.fn(), ok: vi.fn() } });
     vm.runInContext(`${constants.slice(normalizeStart, normalizeEnd)}\n${model}\n${service.slice(0, serviceEnd)}; globalThis.StateServiceClass = StateService;`, context);
     return context.StateServiceClass;
 }
@@ -89,8 +89,10 @@ describe("StateService durable transactions", () => {
         expect(committed.data.get("car_list")).toEqual(after.carList);
 
         const conflict = createHarness({ car_list: [{ carNum: "OTHER" }], favorite_actresses: [], new_video_decisions: {}, activity_log: { entries: [] }, mutation_journal: { id: "tx", before, after } });
-        await expect(conflict.service.recoverPendingTransaction()).rejects.toThrow("数据已发生冲突");
-        expect(conflict.data.has("mutation_journal")).toBe(true);
+        // 冲突时保守策略：保留当前（更新的）数据，丢弃陈旧事务日志，不抛错以免阻塞整个脚本启动
+        await expect(conflict.service.recoverPendingTransaction()).resolves.toBe(true);
+        expect(conflict.data.get("car_list")).toEqual([{ carNum: "OTHER" }]);
+        expect(conflict.data.has("mutation_journal")).toBe(false);
     });
 
     it("records partial undo and restores only unchanged state/new-video effects", async () => {

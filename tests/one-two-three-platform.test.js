@@ -27,13 +27,13 @@ function createHarness(localEntries = []) {
 }
 
 describe("123Pan platform boundary", () => {
-    it("preserves token keys while separating site-local discovery from GM storage", () => {
+    it("encrypts the shared token while separating site-local discovery from GM storage", async () => {
         const { plugin, storage, values } = createHarness([["authorToken", "site-token"]]);
-        plugin.syncTokenOnce();
-        expect(values.get("jhs_123pan_author_token")).toBe("site-token");
+        await plugin.syncTokenOnce();
+        expect(values.get("jhs_123pan_author_token")).toMatch(/^AES:/);
+        expect(values.get("jhs_123pan_author_token")).not.toContain("site-token");
         expect(values.get("jhs_123pan_author_token_meta")).toMatchObject({ source: "authorToken" });
-        expect(storage.setValue).toHaveBeenCalledTimes(2);
-        expect(plugin.getStoredToken()).toBe("site-token");
+        await expect(plugin.getStoredToken()).resolves.toBe("site-token");
     });
 
     it("removes all global listeners and polling when the Feature scope is disposed", async () => {

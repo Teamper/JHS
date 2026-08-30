@@ -91,8 +91,8 @@ export function initializeRuntimeConstants(locationLike = window.location) {
     return detected;
 }
 
-/** @param {string} e */
-export function escapeHtml(e) { const t = document.createElement("span"); return t.textContent = e, t.innerHTML; }
+/** @param {string} e 同时转义引号，保证可用于属性上下文（href/data-* 等） */
+export function escapeHtml(e) { const t = document.createElement("span"); return t.textContent = e, t.innerHTML.replaceAll('"', "&quot;").replaceAll("'", "&#39;"); }
 
 export const CURRENT_DATA_VERSION = 2;
 

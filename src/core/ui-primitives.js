@@ -95,6 +95,27 @@ export function buildUiPrimitivesCss() {
         background: transparent;
         color: var(--jhs-text-muted);
     }
+    .jhs-btn--dark {
+        border-color: var(--jhs-border-strong);
+        background: var(--jhs-surface-2);
+        color: var(--jhs-text);
+    }
+    .jhs-btn--dark:hover {
+        background: var(--jhs-surface-hover);
+    }
+    /* 图片查看器的离屏临时容器（showImageViewer 字符串入口） */
+    .temporary-container {
+        position: absolute;
+        left: -9999px;
+        top: 0;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        opacity: 0;
+        pointer-events: none;
+    }
+    /* 识图结果等面板内通用块容器 */
+    .jhs-layout-c8be1ccb { display: block; width: 100%; min-width: 0; }
     .jhs-btn--ghost:hover {
         border-color: transparent;
         background: var(--jhs-surface-2);
@@ -533,6 +554,10 @@ export function buildUiPrimitivesCss() {
     .jhs-state__content { display:grid; gap:var(--jhs-space-1); justify-items:center; }
     .jhs-state__title { margin:0; color:inherit; font-size:var(--jhs-font-size-md); font-weight:700; }
     .jhs-state__description { margin:0; color:var(--jhs-text-muted); font-size:var(--jhs-font-size-sm); }
+    .jhs-panel-state { padding:var(--jhs-space-4) 0; color:var(--jhs-text-muted); text-align:center; }
+    .jhs-task-status { padding:var(--jhs-space-2) var(--jhs-space-3); border:1px solid var(--jhs-border); border-radius:var(--jhs-radius-sm); background:var(--jhs-surface-2); }
+    .jhs-task-status__name { color:var(--jhs-text); font-weight:700; }
+    .jhs-task-status__meta { display:block; margin-top:var(--jhs-space-1); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
     .jhs-is-hidden { display: none !important; }
     .jhs-dialog-title { padding: 0 var(--jhs-space-2); }
     .jhs-pagination__summary { margin-left: var(--jhs-space-3); color: var(--jhs-text-muted); font-size: var(--jhs-font-size-sm); }
@@ -553,12 +578,34 @@ export function buildUiPrimitivesCss() {
     }
 
     .layui-layer {
+        display: flex;
+        flex-direction: column;
         overflow: hidden;
         border: 1px solid var(--jhs-border);
         border-radius: var(--jhs-radius-lg) !important;
         background: var(--jhs-surface);
         color: var(--jhs-text);
         box-shadow: var(--jhs-shadow-lg) !important;
+    }
+    /* 内容区占满标题/按钮栏以下的剩余空间，配合表格 height:100% 让尾行与分页条始终可达；
+       auto 高度的 layer（消息/确认框）中 flex 退化为自然高度，不受影响 */
+    .layui-layer-content {
+        flex: 1 1 auto;
+        min-height: 0;
+        box-sizing: border-box;
+    }
+    /* 表格类弹窗（黑名单/历史/备份）的通用全高布局，配合 Tabulator height:100% 让尾行与分页条始终可达 */
+    .jhs-table-dialog {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+        padding: var(--jhs-space-3) var(--jhs-space-4);
+    }
+    .jhs-table-dialog .jhs-table-dialog__content,
+    .jhs-table-dialog #table-container {
+        flex: 1;
+        min-height: 0;
     }
     .layui-layer-title {
         min-height: 48px;
@@ -752,7 +799,7 @@ export function buildUiPrimitivesCss() {
         color: var(--jhs-status-down-text) !important;
     }
 
-    @media (max-width: 768px) {
+    @media (max-width: 767px) {
         :is(.jhs-btn, .jhs-filter-btn, .site-btn, .magnet-hub-btn, .pagination-btn, .jhs-icon-btn, .card-btn) {
             min-height: var(--jhs-touch-target);
         }
@@ -1123,14 +1170,14 @@ export class JhsSelect {
             event.preventDefault(), event.stopPropagation(), this.source.prop("disabled") || (this.control.hasClass("is-open") ? this.close() : this.open());
         })).on("keydown", ((/** @type {any} */ event) => {
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
-            event.preventDefault(), this.open("ArrowUp" === event.key || "End" === event.key ? "last" : "selected");
+            event.preventDefault(), this.open("ArrowUp" === event.key || "End" === event.key ? "last" : "Home" === event.key ? "first" : "selected");
         }));
         this.menu.on("click", ".jhs-select-option", ((/** @type {any} */ event) => {
             event.preventDefault(), this.choose($(event.currentTarget));
         })).on("keydown", ".jhs-select-option", ((/** @type {any} */ event) => {
             const items = this.options(), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), this.close(!0);
-            if ("Tab" === event.key) return void this.close();
+            if ("Tab" === event.key) return void this.close(!0);
             if ([ "Enter", " " ].includes(event.key)) return event.preventDefault(), this.choose($(event.currentTarget));
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
@@ -1145,7 +1192,7 @@ export class JhsSelect {
     open(focus = "selected") {
         JhsSelect.closeAll(this), this.control.addClass("is-open"), this.menu.addClass("is-open"), this.trigger.attr("aria-expanded", "true");
         const items = this.options(), selected = items.filter('[aria-checked="true"]');
-        ("last" === focus ? items.last() : selected.length ? selected.first() : items.first()).trigger("focus");
+        ("last" === focus ? items.last() : "first" === focus ? items.first() : selected.length ? selected.first() : items.first()).trigger("focus");
     }
     close(focus = !1) {
         this.control.removeClass("is-open"), this.menu.removeClass("is-open"), this.trigger.attr("aria-expanded", "false"), focus && this.trigger.trigger("focus");

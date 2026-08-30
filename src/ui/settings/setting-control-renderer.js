@@ -1,5 +1,6 @@
 // @ts-check
 
+import { JhsSelect } from "../../core/ui-primitives.js";
 import { getSettingBindingHub } from "./setting-binding-controller.js";
 
 /**
@@ -190,7 +191,7 @@ class RowBinding {
 /** @param {string} type @param {any} element @returns {(value: unknown) => void} */
 function makeSetValue(type, element) {
     if (type === "boolean") return (next) => element.prop("checked", normalizeBooleanValue("", next));
-    if (type === "select") return (next) => element.val(String(next ?? ""));
+    if (type === "select") return (next) => { element.val(String(next ?? "")), JhsSelect.refresh(element); };
     if (type === "number") return (next) => element.val(next == null ? "" : String(next));
     return (next) => element.val(next == null ? "" : String(next));
 }

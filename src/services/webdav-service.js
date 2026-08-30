@@ -9,7 +9,13 @@ export class WebDavClient {
         this.password = password;
         this.folderName = null;
     }
-    authHeaders() { return { Authorization: `Basic ${btoa(`${this.username}:${this.password}`)}`, Depth: "1" }; }
+    authHeaders() {
+        // TextEncoder 编码后再 btoa，兼容非 Latin1（中文）用户名/密码
+        const bytes = new TextEncoder().encode(`${this.username}:${this.password}`);
+        let binary = "";
+        for (const byte of bytes) binary += String.fromCharCode(byte);
+        return { Authorization: `Basic ${btoa(binary)}`, Depth: "1" };
+    }
     /** @param {string} method @param {string} path @param {Record<string, string>} [headers] @param {unknown} [body] */
     async request(method, path, headers = {}, body) {
         const url = new URL(path.replace(/^\/+/, ""), this.baseUrl);

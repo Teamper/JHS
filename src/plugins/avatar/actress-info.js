@@ -45,7 +45,8 @@ export class ActressInfoPlugin extends BasePlugin {
     async handleDetailPage() {
         if ($(".actress-info").length > 0) return;
         const generation = this._generation;
-        const names = $(".female").prev().map(((/** @type {number} */ index, /** @type {Element} */ item) => $(item).text().trim())).get();
+        const actressLinks = $(".female");
+        const names = actressLinks.prev().map(((/** @type {number} */ index, /** @type {Element} */ item) => $(item).text().trim())).get();
         if (!names.length) return;
         /** @type {any[]} */ const blocks = [];
         for (const name of names) {
@@ -69,7 +70,9 @@ export class ActressInfoPlugin extends BasePlugin {
             blocks.push(block);
         }
         if (!this.isStillActive(generation)) return;
-        $('strong:contains("演員")').parent().after(...blocks);
+        const anchor = $("strong").filter(((/** @type {number} */ _index, /** @type {HTMLElement} */ element) => /^(?:演員|演员)\s*:?$/.test($(element).text().trim()))).first().parent();
+        const fallback = actressLinks.first().closest(".panel-block");
+        anchor.length ? anchor.after(...blocks) : fallback.after(...blocks);
     }
     async handleStarPage() {
         if ($(".actress-info").length > 0) return;

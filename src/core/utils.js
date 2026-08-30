@@ -42,7 +42,10 @@ export class Utils {
         let t;
         e.indexOf("css") >= 0 ? (t = document.createElement("link"), t.setAttribute("rel", "stylesheet"),
         t.href = e) : (t = document.createElement("script"), t.setAttribute("type", "text/javascript"),
-        t.src = e), document.documentElement.appendChild(t);
+        t.src = e);
+        // 挂到 head：挂在 documentElement 末尾会让 vendor CSS 在级联中晚于 JHS 样式而反超令牌；并按 URL 去重
+        const url = t.href || t.src;
+        [ ...document.head.querySelectorAll("link[href], script[src]") ].some((node => (node.href || node.src) === url)) || document.head.appendChild(t);
     }
     openPage(e, t, n, a) {
         n = n ?? !0;
@@ -70,7 +73,11 @@ export class Utils {
     _handleGlobalEscKey(e) {
         if ("Escape" !== e.key && 27 !== e.keyCode) return;
         if (0 === this.layerIndexStack.length) return;
-        const t = this.layerIndexStack[this.layerIndexStack.length - 1], n = $(`#layui-layer${t}`);
+        /* 先剔除已被 X 按钮/shadeClick 等途径关闭的陈旧索引，避免 Esc 被空操作吞掉 */
+        for (;this.layerIndexStack.length && !document.getElementById(`layui-layer${this.layerIndexStack[this.layerIndexStack.length - 1]}`); ) this.layerIndexStack.pop();
+        const t = this.layerIndexStack[this.layerIndexStack.length - 1];
+        if (null == t) return;
+        const n = $(`#layui-layer${t}`);
         let a = !1;
         if (n.find(".viewer-container").length > 0) a = !0; else {
             const e = n.find(`#layui-layer-iframe${t}`)[0];
@@ -97,6 +104,31 @@ export class Utils {
         } catch (i) {
             clog.error("iframe监听失败 (跨域或未加载完毕):", i);
         }
+    }
+    /** 弹层经非 Esc 途径（X 按钮/shadeClick/layer.close）关闭时清理 Esc 栈，缺省清理栈顶 */
+    releaseEscClose(e) {
+        const t = null == e ? this.layerIndexStack[this.layerIndexStack.length - 1] : e;
+        null != t && (this.layerIndexStack = this.layerIndexStack.filter((n => n !== t)));
+    }
+    /** 将 Tab 焦点限制在弹窗内，并在释放时恢复原焦点。 @param {Element} container */
+    trapFocus(container) {
+        if (!container) return () => {};
+        const previous = document.activeElement;
+        const selector = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+        const visible = () => [ ...container.querySelectorAll(selector) ].filter((element => !element.hidden && "true" !== element.getAttribute("aria-hidden") && null !== element.offsetParent));
+        const handleKeydown = (/** @type {KeyboardEvent} */ event) => {
+            if ("Tab" !== event.key) return;
+            const items = visible();
+            if (!items.length) return void event.preventDefault();
+            const first = /** @type {HTMLElement} */ (items[0]), last = /** @type {HTMLElement} */ (items[items.length - 1]);
+            event.shiftKey && document.activeElement === first ? (event.preventDefault(), last.focus()) : !event.shiftKey && document.activeElement === last && (event.preventDefault(), first.focus());
+        };
+        container.addEventListener("keydown", handleKeydown);
+        queueMicrotask((() => /** @type {HTMLElement | undefined} */ (visible()[0])?.focus()));
+        return () => {
+            container.removeEventListener("keydown", handleKeydown);
+            previous?.isConnected && "function" == typeof /** @type {HTMLElement} */ (previous).focus && /** @type {HTMLElement} */ (previous).focus();
+        };
     }
     getOwningLayerIndex(options = {}) {
         const parseIndex = element => {
@@ -199,6 +231,7 @@ export class Utils {
     getNowStr(e = "-", t = ":", n = null) {
         let a;
         a = n ? new Date(n) : new Date;
+        if (isNaN(a.getTime())) return "";
         const i = a.getFullYear(), s = String(a.getMonth() + 1).padStart(2, "0"), o = String(a.getDate()).padStart(2, "0"), r = String(a.getHours()).padStart(2, "0"), l = String(a.getMinutes()).padStart(2, "0"), c = String(a.getSeconds()).padStart(2, "0");
         return `${[ i, s, o ].join(e)} ${[ r, l, c ].join(t)}`;
     }
