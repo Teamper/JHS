@@ -167,9 +167,8 @@ describe("CoverButtonPlugin listener accumulation", () => {
         const cleanups = [];
         const scope = { addCleanup: (fn) => cleanups.push(fn) };
         const plugin = new CoverButtonPlugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "scope" ? async () => scope : {};
+        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "scope" ? async () => scope : name === "features" ? { getFeatureApi: async () => ({ getListSelectors: () => ({ itemSelector: ".item" }) }) } : name === "movie" ? { externalSiteOrigin: () => "", providerOrigin: () => "" } : {};
         plugin.getOptionalDependency = () => null;
-        plugin.getSelector = () => ({ itemSelector: ".item", boxSelector: ".movie-list" });
 
         await plugin.handle();
         await plugin.handle();

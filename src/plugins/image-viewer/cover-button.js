@@ -17,6 +17,15 @@ export class CoverButtonPlugin extends BasePlugin {
     getName() {
         return "CoverButtonPlugin";
     }
+    /** Resolve the list capability used by card actions. */
+    async getListFeatureApi() {
+        try {
+            return await this.getRuntimeService("features").getFeatureApi("list");
+        } catch (error) {
+            clog.warn("列表 Feature API 不可用，跳过卡片操作", error);
+            return null;
+        }
+    }
     async initCss() {
         return `
             <style>
@@ -106,8 +115,9 @@ export class CoverButtonPlugin extends BasePlugin {
     }
     /** @param {JQueryHandle | Element | null} [items] */
     async addSvgBtn(items = null) {
-        if (!this.getOptionalDependency("ListPagePlugin")) return;
-        (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach(((/** @type {Element} */ element) => {
+        const listFeature = await this.getListFeatureApi(), selectors = listFeature?.getListSelectors?.();
+        if (!listFeature || !selectors) return;
+        (items ? $(items).toArray() : $(selectors.itemSelector).toArray()).forEach(((/** @type {Element} */ element) => {
             const item = $(element);
             if (item.find(".tool-box").length || l && item.find(".avatar-box").length) return;
             const host = r ? item.find(".tags").first() : item.find(".photo-info").first();
@@ -129,9 +139,8 @@ export class CoverButtonPlugin extends BasePlugin {
     }
     /** @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope */
     async bindClick(scope) {
-        this.getSelector();
-        const e = this.getOptionalDependency("ListPagePlugin");
-        if (!e) return;
+        const e = await this.getListFeatureApi(), selectors = e?.getListSelectors?.();
+        if (!e || !selectors) return;
         const documentRoot = $(document);
         documentRoot.off(".jhsCoverButton");
         scope.addCleanup((() => documentRoot.off(".jhsCoverButton")));
@@ -191,7 +200,7 @@ export class CoverButtonPlugin extends BasePlugin {
             } catch (t) { clog.error("按钮点击处理失败:", t); }
         }));
         const settings = this.getRuntimeService("settings").snapshot(), movie = this.getRuntimeService("movie"), n = movie.externalSiteOrigin("missAvBtn", settings), a = movie.externalSiteOrigin("jableBtn", settings), i = movie.externalSiteOrigin("avgleBtn", settings), s = movie.providerOrigin("av123") || "";
-        $(this.getSelector().itemSelector).each(((/** @type {number} */ t, /** @type {HTMLElement} */ o) => {
+        $(selectors.itemSelector).each(((/** @type {number} */ t, /** @type {HTMLElement} */ o) => {
             const r = $(o), {carNum: l} = e.findCarNumAndHref(r);
             r.find(".site-jable").attr({ href: `${a}/search/${l}/`, target: "_blank", rel: "noopener noreferrer" }),
             r.find(".site-avgle").attr({ href: `${i}/vod/search.html?wd=${l}`, target: "_blank", rel: "noopener noreferrer" }),

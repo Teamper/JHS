@@ -193,6 +193,7 @@ const listControllerSource = await read("src/features/list/list-controller.js");
 const listViewSource = await read("src/features/list/list-view.js");
 const listActionsSource = await read("src/plugins/status/list-page-button.js");
 const autoPageSource = await read("src/plugins/status/auto-page.js");
+const coverButtonSource = await read("src/plugins/image-viewer/cover-button.js");
 assertIncludes(listPageSource, "applyVisibility(items = null)", "list page function signature");
 assertIncludes(listPageSource, "async filterMovieList(", "list page function signature");
 assertIncludes(listPageSource, "async doFilter(revision =", "list page function signature");
@@ -215,6 +216,8 @@ assertIncludes(listActionsSource, 'getFeatureApi("list")', "list actions feature
 assert(!listActionsSource.includes('getOptionalDependency("ListPagePlugin")'), "list actions must not resolve ListPagePlugin directly");
 assertIncludes(autoPageSource, 'getFeatureApi("list")', "auto-page feature API boundary");
 assert(!autoPageSource.includes('getOptionalDependency("ListPagePlugin")'), "auto-page must not resolve ListPagePlugin directly");
+assertIncludes(coverButtonSource, 'getFeatureApi("list")', "cover actions feature API boundary");
+assert(!coverButtonSource.includes('getOptionalDependency("ListPagePlugin")'), "cover actions must not resolve ListPagePlugin directly");
 assertIncludes(listPageSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "list feature scope handoff");
 assertIncludes(listPageSource, "this.getListView().applyVisibility", "list view visibility ownership");
 assertIncludes(listPageSource, "element.matches?.(e.itemSelector) && this.indexItems([ element ])", "list reorder index retention");

@@ -6,7 +6,7 @@ import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 
 describe("List FeatureRuntime ownership", () => {
     it("passes the feature lifecycle scope to the legacy migration adapter", async () => {
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
             legacyPlugin,
             hostAdapter,
             scope,
@@ -22,8 +22,12 @@ describe("List FeatureRuntime ownership", () => {
         expect(api.getListSelectors()).toEqual({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" });
         api.batchSaveAllVideos("scope", "favorite");
         api.openMovieDetail("item", { newTab: false });
+        api.findCarNumAndHref("item");
+        api.parseActressName("/movie/ABC-123");
         expect(legacyPlugin.batchSaveAllVideos).toHaveBeenCalledWith("scope", "favorite");
         expect(legacyPlugin.openMovieDetail).toHaveBeenCalledWith("item", { newTab: false });
+        expect(legacyPlugin.findCarNumAndHref).toHaveBeenCalledWith("item");
+        expect(legacyPlugin.parseActressName).toHaveBeenCalledWith("/movie/ABC-123");
         controller.dispose();
         expect(scope.disposed).toBe(false);
         scope.dispose();
