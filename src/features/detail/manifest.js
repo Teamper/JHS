@@ -10,7 +10,13 @@ export default defineFeature({
     contributes: ["detail.javdb-native", "detail.javbus-native", "detail.workspace", "detail.fc2-owned", "detail.fc2-navigation", "detail.fc2-lookup", "detail.cover-state-actions", "detail.page-state-actions", "detail.javdb-preview", "detail.javbus-images", "detail.javbus-preview", "detail.reviews", "detail.related", "detail.native-magnets", "detail.external-magnets", "detail.screenshot", "detail.external-sites"],
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
-        if (runtime.route === "owned-detail") return { dispose: () => {} };
+        const fc2Plugin = runtime.enabledContributions.includes("detail.fc2-owned")
+            ? runtime.resolveLegacyPlugin?.("Fc2Plugin")
+            : null;
+        if (runtime.route === "owned-detail") {
+            const controller = new DetailController({ hostAdapter: deps[PORT.host], fc2Plugin, ownedDetail: true, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
+            return controller.start().then(() => ({ dispose: () => controller.dispose() }));
+        }
         const nativeContribution = deps[PORT.host].site === "javbus" ? "detail.javbus-native" : "detail.javdb-native";
         const nativePlugin = runtime.enabledContributions.includes(nativeContribution)
             ? runtime.resolveLegacyPlugin?.(deps[PORT.host].site === "javbus" ? "BusDetailPagePlugin" : "DetailPagePlugin")
@@ -40,7 +46,7 @@ export default defineFeature({
         const externalSitesPlugin = runtime.enabledContributions.includes("detail.external-sites")
             ? runtime.resolveLegacyPlugin?.("OtherSitePlugin")
             : null;
-        const controller = new DetailController({ hostAdapter: deps[PORT.host], nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, pageActionsPlugin, magnetPlugin, previewPlugin, externalSitesPlugin, screenshotPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
+        const controller = new DetailController({ hostAdapter: deps[PORT.host], fc2Plugin, nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, pageActionsPlugin, magnetPlugin, previewPlugin, externalSitesPlugin, screenshotPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
         return controller.start().then(() => ({ dispose: () => controller.dispose() }));
     },
 });

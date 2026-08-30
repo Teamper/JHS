@@ -87,22 +87,28 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.find((item) => item.id === "detail.javdb-preview")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.javbus-preview")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.external-sites")?.managedByFeature).toBe(true);
+        expect(legacyContributionManifests.find((item) => item.id === "detail.fc2-owned")?.managedByFeature).toBe(true);
+        expect(legacyContributionManifests.find((item) => item.id === "detail.fc2-owned")?.managedRoutes).toEqual(["detail", "owned-detail"]);
         expect(legacyContributionManifests.find((item) => item.id === "responsive-shell.bottom-bar")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "identity").every((item) => item.managedByFeature)).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "external-bridge").every((item) => item.managedByFeature)).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "discovery").every((item) => item.managedByFeature)).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "compatibility").every((item) => item.managedByFeature)).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "stats").every((item) => item.managedByFeature)).toBe(true);
-        const createRuntime = (site, disabled = []) => {
+        const createRuntime = (site, disabled = [], route = "list") => {
             const diagnostics = new DiagnosticsService();
             const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.profile, { current: () => "regular" }).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {}).register(SERVICE.state, {}).register(REGISTRY.settings, new SettingsRegistry());
-            const runtime = new FeatureRuntime({ container, commands: new CommandRegistry(), diagnostics, disabled, site, route: "list" });
+            const runtime = new FeatureRuntime({ container, commands: new CommandRegistry(), diagnostics, disabled, site, route });
             container.register(REGISTRY.feature, runtime);
             featureManifests.forEach((manifest) => runtime.register(manifest));
             return runtime;
         };
         const javdb = new PluginManager();
         registerSitePlugins(javdb, createRuntime("javdb"), "javdb");
+        expect(javdb.getBean("Fc2Plugin").managedByFeature).toBe(false);
+        const javdbDetail = new PluginManager();
+        registerSitePlugins(javdbDetail, createRuntime("javdb", [], "detail"), "javdb");
+        expect(javdbDetail.getBean("Fc2Plugin").managedByFeature).toBe(true);
         expect(javdb.getPluginNames()).toEqual([
             "OneTwoThreeOfflinePlugin", "ListPagePlugin", "AutoPagePlugin", "Fc2Plugin", "Fc2NavigationPlugin", "FoldCategoryPlugin", "ListPageButtonPlugin",
             "HistoryPlugin", "SettingPlugin", "NavBarPlugin", "HitShowPlugin", "TOP250Plugin", "SearchByImagePlugin", "CoverButtonPlugin",

@@ -53,7 +53,8 @@ export function defineContribution(manifest) {
     requireUniqueTokens(manifest.requires, "requires");
     if (typeof manifest.plugin !== "function") throw new TypeError("Contribution plugin must be a class");
     if (!manifest.order || typeof manifest.order !== "object") throw new TypeError("Contribution order must be explicit");
-    return Object.freeze({ ...manifest, sites: Object.freeze([...(/** @type {unknown[]} */ (manifest.sites))]), order: Object.freeze({ ...manifest.order }) });
+    if (manifest.managedRoutes !== undefined) requireUniqueStrings(manifest.managedRoutes, "managedRoutes");
+    return Object.freeze({ ...manifest, sites: Object.freeze([...(/** @type {unknown[]} */ (manifest.sites))]), order: Object.freeze({ ...manifest.order }), ...(manifest.managedRoutes === undefined ? {} : { managedRoutes: Object.freeze([...(/** @type {unknown[]} */ (manifest.managedRoutes))]) }) });
 }
 
 /** @param {Record<string, unknown>} manifest */

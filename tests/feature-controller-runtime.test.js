@@ -38,12 +38,13 @@ describe("feature controller ownership", () => {
             locateDetailRoot: vi.fn(() => null),
             locateDetailSlots: vi.fn(() => ({})),
             readMovieRef: vi.fn(() => null),
-        }, calls = [], nativePlugin = { handle: vi.fn(() => calls.push("native")) }, workspacePlugin = { handle: vi.fn(() => calls.push("workspace")) }, reviewPlugin = { handle: vi.fn(() => calls.push("reviews")) }, relatedPlugin = { handle: vi.fn(() => calls.push("related")) }, pageActionsPlugin = { handle: vi.fn(() => calls.push("page-actions")) }, magnetPlugin = { handle: vi.fn(() => calls.push("magnet")) }, previewPlugin = { handle: vi.fn(() => calls.push("preview")) }, externalSitesPlugin = { handle: vi.fn(() => calls.push("external-sites")) }, screenshotPlugin = { handle: vi.fn(() => calls.push("screenshot")) };
-        const controller = new DetailController({ hostAdapter, nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, pageActionsPlugin, screenshotPlugin, magnetPlugin, previewPlugin, externalSitesPlugin, scope, enabledContributions: [] });
+        }, calls = [], fc2Plugin = { handle: vi.fn(() => calls.push("fc2")) }, nativePlugin = { handle: vi.fn(() => calls.push("native")) }, workspacePlugin = { handle: vi.fn(() => calls.push("workspace")) }, reviewPlugin = { handle: vi.fn(() => calls.push("reviews")) }, relatedPlugin = { handle: vi.fn(() => calls.push("related")) }, pageActionsPlugin = { handle: vi.fn(() => calls.push("page-actions")) }, magnetPlugin = { handle: vi.fn(() => calls.push("magnet")) }, previewPlugin = { handle: vi.fn(() => calls.push("preview")) }, externalSitesPlugin = { handle: vi.fn(() => calls.push("external-sites")) }, screenshotPlugin = { handle: vi.fn(() => calls.push("screenshot")) };
+        const controller = new DetailController({ hostAdapter, fc2Plugin, nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, pageActionsPlugin, screenshotPlugin, magnetPlugin, previewPlugin, externalSitesPlugin, scope, enabledContributions: [] });
 
         await controller.start();
 
-        expect(calls).toEqual(["native", "workspace", "reviews", "related", "page-actions", "magnet", "preview", "external-sites", "screenshot"]);
+        expect(calls).toEqual(["fc2", "native", "workspace", "reviews", "related", "page-actions", "magnet", "preview", "external-sites", "screenshot"]);
+        expect(fc2Plugin.handle).toHaveBeenCalledWith({ scope });
         expect(nativePlugin.handle).toHaveBeenCalledWith({ scope });
         expect(workspacePlugin.handle).toHaveBeenCalledWith({ scope });
         expect(reviewPlugin.handle).toHaveBeenCalledWith({ scope });
@@ -53,6 +54,17 @@ describe("feature controller ownership", () => {
         expect(magnetPlugin.handle).toHaveBeenCalledWith({ scope });
         expect(previewPlugin.handle).toHaveBeenCalledWith({ scope });
         expect(externalSitesPlugin.handle).toHaveBeenCalledWith({ scope });
+    });
+
+    it("mounts only the FC2-owned contribution on an owned-detail route", async () => {
+        const scope = createScope(), hostAdapter = { locateDetailRoot: vi.fn(), locateDetailSlots: vi.fn(), readMovieRef: vi.fn() }, calls = [], fc2Plugin = { handle: vi.fn(() => calls.push("fc2")) }, nativePlugin = { handle: vi.fn(() => calls.push("native")) };
+        const controller = new DetailController({ hostAdapter, fc2Plugin, nativePlugin, ownedDetail: true, scope, enabledContributions: ["detail.fc2-owned"] });
+
+        await controller.start();
+
+        expect(calls).toEqual(["fc2"]);
+        expect(hostAdapter.locateDetailRoot).not.toHaveBeenCalled();
+        expect(fc2Plugin.handle).toHaveBeenCalledWith({ scope });
     });
 
     it("hands the feature scope to the stats contribution and exposes its action", async () => {

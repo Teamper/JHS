@@ -55,6 +55,8 @@ export class Fc2Plugin extends BasePlugin {
         /** @type {number} */ this.translationGeneration = 0;
         /** @type {any} */ this.libraryFeatureApi = null;
         /** @type {any} */ this.discoveryFeatureApi = null;
+        /** @type {any} */ this.lifecycleScope = null;
+        /** @type {Fc2DetailContext | null} */ this.pageContext = null;
     }
     getName() { return "Fc2Plugin"; }
     /** Resolve library-owned keyword filtering without coupling FC2 to its legacy plugin. */
@@ -82,9 +84,22 @@ export class Fc2Plugin extends BasePlugin {
     getDetailStateController() {
         return this.detailStateController ||= new DetailStateController(this.getRuntimeService("state"));
     }
+    async getLifecycleScope() { return this.lifecycleScope || await this.getRuntimeService("scope")(); }
+    /** @param {any} scope */
+    bindLifecycleScope(scope) {
+        if (this.lifecycleScope === scope) return;
+        this.lifecycleScope = scope;
+        if (typeof scope?.addCleanup !== "function") return;
+        scope.addCleanup(() => {
+            this.pageContext?.destroy?.();
+            this.pageContext = null;
+            $(window).off("pagehide.jhsFc2Detail");
+            this.lifecycleScope = null;
+        });
+    }
     /** @param {string} carNum */
     async resolveMovieId(carNum) {
-        const scope = await this.getRuntimeService("scope")();
+        const scope = await this.getLifecycleScope();
         return (await this.getRuntimeService("movie").resolve({ carNum }, { scope }))?.movieId || null;
     }
     /** @param {string} carNum @param {string} [url] */
@@ -142,7 +157,9 @@ export class Fc2Plugin extends BasePlugin {
             @media (prefers-reduced-motion:reduce) { .jhs-fc2-workspace * { scroll-behavior:auto!important; transition-duration:0.01ms!important; } }
         </style>`;
     }
-    async handle() {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
+        this.bindLifecycleScope(options.scope || await this.getRuntimeService("scope")());
         const fc2Href = "/advanced_search?type=3&score_min=0&d=1";
         $('.navbar-item:contains("FC2")').attr("href", fc2Href), $('.tabs a:contains("FC2")').attr("href", fc2Href);
         if (o.includes("advanced_search?type=3")) $("h2.section-title").contents().first().replaceWith("Fc2PPV"), $(".section .container > .box").remove();
@@ -152,6 +169,7 @@ export class Fc2Plugin extends BasePlugin {
         const movieId = requestedMovieId && "search" !== requestedMovieId ? requestedMovieId : await this.resolveMovieIdForRecord(carNum, url);
         const source = [ "fc2", "123av" ].includes(explicitSource || "") ? /** @type {string} */ (explicitSource) : await this.resolveFc2Source({ url });
         const context = this.mountFc2Detail(host, { movieId, carNum, url, source, mode: "page" });
+        this.pageContext = context;
         $(window).off("pagehide.jhsFc2Detail").one("pagehide.jhsFc2Detail", (() => context.destroy()));
     }
     /** @param {string | null} movieId @param {string} carNum @param {string} url @param {{ source?: string }} [options] */
@@ -260,7 +278,7 @@ export class Fc2Plugin extends BasePlugin {
         if (!screenshotService.isEnabled(settings.snapshot())) return void screenshot.empty();
         const generation = (context.screenshotGeneration || 0) + 1;
         context.screenshotGeneration = generation;
-        void Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderScreenshotPanel({
+        void Promise.resolve().then((() => this.getLifecycleScope())).then((/** @type {any} */ scope) => renderScreenshotPanel({
             target: screenshot, carNum: context.carNum.replace("FC2-", ""), screenshot: screenshotService,
             settings: settings.snapshot(), scope,
             isActive: () => context.isAlive() && settings.snapshot().enableLoadScreenShot !== "no" && generation === context.screenshotGeneration,
@@ -289,7 +307,7 @@ export class Fc2Plugin extends BasePlugin {
         if (!context.isAlive() || (settings.snapshot().translateTitle ?? _) !== _) return;
         const generation = (context.translationGeneration || 0) + 1;
         context.translationGeneration = generation;
-        Promise.resolve().then((() => this.getRuntimeService("scope")())).then((/** @type {any} */ scope) => renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope, isActive: () => context.isAlive() && (settings.snapshot().translateTitle ?? _) === _ && generation === context.translationGeneration })).catch((error => clog.error("FC2 标题翻译失败", error)));
+        Promise.resolve().then((() => this.getLifecycleScope())).then((/** @type {any} */ scope) => renderTranslatedTitle({ root: context.root, carNum: context.carNum, translation: this.getRuntimeService("translation"), scope, isActive: () => context.isAlive() && (settings.snapshot().translateTitle ?? _) === _ && generation === context.translationGeneration })).catch((error => clog.error("FC2 标题翻译失败", error)));
     }
     /** OFF：移除 FC2 已渲染的翻译节点。 */
     /** @param {Fc2DetailContext} context */
@@ -394,7 +412,7 @@ export class Fc2Plugin extends BasePlugin {
     /** @param {Fc2DetailContext} context */
     async fetchAndRenderNativeDetail(context) {
         try {
-            const scope = await this.getRuntimeService("scope")();
+            const scope = await this.getLifecycleScope();
             const movie = await this.getRuntimeService("movie").detail({ movieId: context.movieId, carNum: context.carNum, providerId: "javdb" }, { scope });
             if (!movie) throw new Error("JavDB 影片详情不存在");
             if (!context.isAlive()) return;
@@ -422,7 +440,7 @@ export class Fc2Plugin extends BasePlugin {
         renderFc2State(host, "正在加载站内磁力…");
         try {
             if (!movieId) return renderFc2State(host, "JavDB 暂无对应作品");
-            const scope = await this.getRuntimeService("scope")();
+            const scope = await this.getLifecycleScope();
             const magnets = /** @type {NativeMagnet[]} */ (await this.getRuntimeService("magnet").listNative({ movieId, providerId: "javdb" }, { scope }));
             if (!context.isAlive()) return;
             host.empty();
@@ -461,7 +479,7 @@ export class Fc2Plugin extends BasePlugin {
             if (!context.isAlive()) return;
             if (!movieId) return this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related"), renderFc2State(context.getSlot("reviews"), "JavDB 暂无对应作品"), renderFc2State(context.getSlot("related"), "JavDB 暂无对应作品");
             this.clearOwnedPanel(context, "reviews"), this.clearOwnedPanel(context, "related");
-            const scope = () => this.getRuntimeService("scope")(), relatedPanel = new RelatedPanel({ related: this.getRuntimeService("related"), settings: this.getRuntimeService("settings"), scope }), reviewPanel = new ReviewPanel({ review: this.getRuntimeService("review"), settings: this.getRuntimeService("settings"), storage: this.getRuntimeService("storage"), scope });
+            const scope = () => this.getLifecycleScope(), relatedPanel = new RelatedPanel({ related: this.getRuntimeService("related"), settings: this.getRuntimeService("settings"), scope }), reviewPanel = new ReviewPanel({ review: this.getRuntimeService("review"), settings: this.getRuntimeService("settings"), storage: this.getRuntimeService("storage"), scope });
             await Promise.allSettled([ reviewPanel.show(movieId, context.getSlot("reviews"), { ownedSection: context.getSection("reviews"), isActive: context.isAlive }), relatedPanel.show(context.getSlot("related"), movieId, { ownedSection: context.getSection("related"), isActive: context.isAlive }) ]);
         } catch (error) {
             if (!context.isAlive()) return;
