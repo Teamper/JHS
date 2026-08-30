@@ -39,9 +39,26 @@ describe("StorageMutationCoordinator", () => {
         await expect(coordinator.runExclusive(() => "next mutation")).resolves.toBe("next mutation");
     });
 
-    it("allows migration/import composition to reuse the active lock without deadlock", async () => {
-        const locks = createFakeLocks(), coordinator = new StorageMutationCoordinator({ lockManager: locks });
-        await expect(coordinator.runExclusive(() => coordinator.runExclusive(() => "nested"))).resolves.toBe("nested");
-        expect(locks.names).toEqual([ STORAGE_MUTATION_LOCK ]);
+    it("serializes concurrent fallback operations in one tab", async () => {
+        const coordinator = new StorageMutationCoordinator({ lockManager: null });
+        let active = 0, maximum = 0, release;
+        const gate = new Promise((resolve) => { release = resolve; });
+        const first = coordinator.runExclusive(async () => {
+            active += 1, maximum = Math.max(maximum, active);
+            await gate;
+            active -= 1;
+            return "first";
+        });
+        await Promise.resolve();
+        const second = coordinator.runExclusive(async () => {
+            active += 1, maximum = Math.max(maximum, active);
+            active -= 1;
+            return "second";
+        });
+        expect(active).toBe(1);
+        release();
+        await expect(Promise.all([ first, second ])).resolves.toEqual([ "first", "second" ]);
+        expect(maximum).toBe(1);
     });
+
 });

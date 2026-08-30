@@ -258,6 +258,9 @@ export class StateService {
         const journal = await this.storage.forage.getItem("mutation_journal");
         return journal ? (await this._recoverJournal(journal), !0) : !1;
     }
+    async recoverPendingTransactionWithoutLock() {
+        return this._recoverWithoutLock();
+    }
     async recoverPendingTransaction() {
         return this._withLock((() => this._recoverWithoutLock()));
     }

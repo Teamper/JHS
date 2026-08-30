@@ -51,6 +51,16 @@ describe("SettingsService single write entry", () => {
         expect(storage.read()).toMatchObject({ themeMode: "dark" });
     });
 
+    it("uses the shared storage mutation coordinator when supplied", async () => {
+        const storage = createSharedStorage({}), calls = [];
+        const mutationCoordinator = { runExclusive: vi.fn(async (operation) => { calls.push("locked"); return operation(); }) };
+        const service = new SettingsService(storage, { mutationCoordinator });
+        await service.set("themeMode", "dark");
+        expect(mutationCoordinator.runExclusive).toHaveBeenCalledOnce();
+        expect(calls).toEqual(["locked"]);
+        expect(storage.read()).toMatchObject({ themeMode: "dark" });
+    });
+
     it("patch preserves keys written by other tabs between read and write", async () => {
         vi.stubGlobal("navigator", { locks: createFakeLocks() });
         const storage = createSharedStorage({ a: 1 });

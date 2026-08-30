@@ -3,7 +3,7 @@
 import { initializeRuntimeConstants, l, r } from "../core/constants.js";
 import { injectCoreCss } from "../core/css-injection.js";
 import { JhsError } from "../core/jhs-error.js";
-import { runDataMigrations } from "../core/migration.js";
+import { runDataMigrationsWithoutLock } from "../core/migration.js";
 import { StorageMutationCoordinator } from "../core/storage-mutation-coordinator.js";
 import { normalizeScreenshotSetting } from "../core/settings-migration.js";
 import { PluginManager } from "../core/plugin-manager.js";
@@ -173,8 +173,10 @@ export async function bootstrapJhs() {
         markPhase("registry");
         window.isDetailPage = route === "detail";
         window.isListPage = route === "list";
-        await stateService.recoverPendingTransaction();
-        await runDataMigrations(storageManager, storageMutationCoordinator);
+        await storageMutationCoordinator.runExclusive(async () => {
+            await stateService.recoverPendingTransactionWithoutLock();
+            await runDataMigrationsWithoutLock(storageManager);
+        });
         markPhase("data-prepare");
         // Compatibility infrastructure must be ready before any feature mounts.
         // A missing logger dependency should fail the whole bootstrap, not leave a half-started page.

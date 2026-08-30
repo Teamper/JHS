@@ -9,7 +9,7 @@ export class UserscriptHttpAdapter {
         this.requestImplementation = requestImplementation, this.fetchImplementation = fetchImplementation;
     }
 
-    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, timeout?: number, nativeTimeout?: number, signal?: AbortSignal, requestOptions?: Record<string, unknown>, transport?: string}} options */
+    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, timeout?: number, nativeTimeout?: number, signal?: AbortSignal, requestOptions?: Record<string, unknown>, transport?: string, redirect?: "follow" | "error" | "manual"}} options */
     request(options) {
         if ("native-fetch" === options.transport && this.fetchImplementation) return this.requestWithNativeFetch(options).catch((error => {
             if (error instanceof JhsError && "ABORTED" === error.code) throw error;
@@ -18,7 +18,7 @@ export class UserscriptHttpAdapter {
         return this.requestWithUserscript(options);
     }
 
-    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, nativeTimeout?: number, signal?: AbortSignal}} options */
+    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, nativeTimeout?: number, signal?: AbortSignal, redirect?: "follow" | "error" | "manual"}} options */
     async requestWithNativeFetch(options) {
         const controller = new AbortController();
         let timedOut = false;
@@ -29,7 +29,7 @@ export class UserscriptHttpAdapter {
         try {
             if (options.signal?.aborted) controller.abort();
             const response = await /** @type {typeof fetch} */ (this.fetchImplementation)(options.url, {
-                method: options.method ?? "GET", headers: options.headers, body: /** @type {BodyInit | null | undefined} */ (options.body), signal: controller.signal,
+                method: options.method ?? "GET", headers: options.headers, body: /** @type {BodyInit | null | undefined} */ (options.body), signal: controller.signal, redirect: options.redirect,
             });
             const responseText = await response.text(), data = "json" === options.responseType ? JSON.parse(responseText) : responseText;
             return {
@@ -46,7 +46,7 @@ export class UserscriptHttpAdapter {
         }
     }
 
-    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, timeout?: number, signal?: AbortSignal, requestOptions?: Record<string, unknown>}} options */
+    /** @param {{url: string, method?: string, headers?: Record<string, string>, body?: unknown, responseType?: string, timeout?: number, signal?: AbortSignal, requestOptions?: Record<string, unknown>, redirect?: "follow" | "error" | "manual"}} options */
     requestWithUserscript(options) {
         return new Promise((resolve, reject) => {
             let settled = false;
@@ -66,7 +66,7 @@ export class UserscriptHttpAdapter {
             handle = this.requestImplementation({
                 ...options.requestOptions,
                 method: options.method ?? "GET", url: options.url, headers: options.headers,
-                data: options.body, responseType: options.responseType, timeout: options.timeout,
+                data: options.body, responseType: options.responseType, timeout: options.timeout, redirect: options.redirect,
                 onload: (/** @type {any} */ response) => finish(resolve, {
                     status: response.status, data: response.response ?? response.responseText,
                     responseText: response.responseText ?? "", finalUrl: response.finalUrl || options.url,

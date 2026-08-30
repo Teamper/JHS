@@ -1,12 +1,13 @@
 // @ts-check
 
 export class SettingsService extends EventTarget {
-    /** @param {{get: (key: string) => Promise<unknown>, set: (key: string, value: unknown) => Promise<void>}} storage @param {{validators?: Record<string, (value: unknown) => boolean>, afterPersist?: (snapshot: Readonly<Record<string, unknown>>, changedNames: readonly string[]) => Promise<void> | void}} [options] */
+    /** @param {{get: (key: string) => Promise<unknown>, set: (key: string, value: unknown) => Promise<void>}} storage @param {{validators?: Record<string, (value: unknown) => boolean>, afterPersist?: (snapshot: Readonly<Record<string, unknown>>, changedNames: readonly string[]) => Promise<void> | void, mutationCoordinator?: {runExclusive: (operation: () => any) => Promise<any>} | null}} [options] */
     constructor(storage, options = {}) {
         super();
         this.storage = storage;
         this.validators = options.validators ?? {};
         this.afterPersist = options.afterPersist ?? null;
+        this.mutationCoordinator = options.mutationCoordinator ?? null;
         /** @type {Readonly<Record<string, unknown>>} */ this.snapshotValue = Object.freeze({});
         this.writeChain = Promise.resolve();
     }
@@ -123,6 +124,7 @@ export class SettingsService extends EventTarget {
 
     /** Runs a settings operation inside the shared lock so it serializes with legacy writers and other tabs. @template T @param {() => Promise<T>} fn */
     async _withSettingLock(fn) {
+        if (this.mutationCoordinator?.runExclusive) return this.mutationCoordinator.runExclusive(fn);
         const locks = globalThis.navigator?.locks;
         if (!locks?.request) return fn();
         return locks.request("jhs_setting_lock", () => fn());

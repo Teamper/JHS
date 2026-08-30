@@ -49,6 +49,27 @@ function waitForRetry(delayMs, signal) {
     });
 }
 
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const REDIRECT_STRATEGIES = new Set(["follow", "error", "manual"]);
+
+/** @param {unknown} value @param {string} trustClass */
+function resolveRedirectStrategy(value, trustClass) {
+    const strategy = value ?? (["custom-public", "user-local"].includes(trustClass) ? "error" : "follow");
+    if (typeof strategy !== "string" || !REDIRECT_STRATEGIES.has(strategy)) throw new TypeError("redirectStrategy must be follow, error or manual");
+    if (["custom-public", "user-local"].includes(trustClass) && strategy === "follow") {
+        throw new JhsError("INVALID_URL", "用户控制来源必须使用可控的重定向策略", { source: "HttpService" });
+    }
+    return /** @type {"follow" | "error" | "manual"} */ (strategy);
+}
+
+/** @param {unknown} headers @returns {string | null} */
+function getRedirectLocation(headers) {
+    if (headers && typeof /** @type {any} */ (headers).get === "function") return /** @type {any} */ (headers).get("location");
+    if (typeof headers !== "string") return null;
+    const match = /(?:^|\r?\n)location\s*:\s*([^\r\n]+)/i.exec(headers);
+    return match?.[1]?.trim() || null;
+}
+
 /** @param {Record<string, any>} options */
 export async function createRequestKey(options) {
     const method = String(options.method ?? "GET").toUpperCase();
@@ -85,9 +106,11 @@ export class HttpService {
         const method = String(options.method ?? "GET").toUpperCase();
         const cacheScope = options.cacheScope ?? "none";
         if (method !== "GET" && cacheScope !== "none") throw new TypeError("Mutation requests cannot use generic cache/dedupe");
-        const urlPolicy = /** @type {{trustClass: string, hosts?: string[], expectedOrigin?: string}} */ (options.urlPolicy);
+        const urlPolicy = /** @type {{trustClass: string, hosts?: string[], expectedOrigin?: string, redirectStrategy?: string}} */ (options.urlPolicy);
         const initialUrl = this.urlPolicy.assertAllowed(options.url, urlPolicy);
-        if (method !== "GET" || cacheScope === "none") return this.executeUnderlying({ ...options, method, url: initialUrl.href, signal: scope?.signal }, urlPolicy);
+        const redirectStrategy = resolveRedirectStrategy(options.redirectStrategy ?? urlPolicy.redirectStrategy, urlPolicy.trustClass);
+        const requestOptions = { ...options, method, url: initialUrl.href, redirectStrategy, signal: scope?.signal };
+        if (method !== "GET" || cacheScope === "none") return this.executeUnderlying(requestOptions, urlPolicy);
         const requestKey = await createRequestKey({ ...options, method, url: initialUrl.href, cacheScope });
         const serializedKey = stableSerialize(requestKey);
         const cachePolicy = { scope: cacheScope, sessionScopeId: options.sessionScopeId };
@@ -99,7 +122,7 @@ export class HttpService {
         if (!entry) {
             const controller = new AbortController();
             entry = { controller, consumers: 0, promise: Promise.resolve() };
-            entry.promise = this.executeUnderlying({ ...options, method, url: initialUrl.href, signal: controller.signal }, urlPolicy)
+            entry.promise = this.executeUnderlying({ ...requestOptions, signal: controller.signal }, urlPolicy)
                 .then((response) => {
                     this.cache?.set(serializedKey, response, { ...cachePolicy, ttlMs: options.ttlMs ?? 0, negative: options.negative === true });
                     return response;
@@ -113,11 +136,14 @@ export class HttpService {
         return this.consume(entry, scope);
     }
 
-    /** @param {Record<string, any>} options @param {{trustClass: string, hosts?: string[], expectedOrigin?: string}} urlPolicy */
+    /** @param {Record<string, any>} options @param {{trustClass: string, hosts?: string[], expectedOrigin?: string, redirectStrategy?: string}} urlPolicy */
     async executeUnderlying(options, urlPolicy) {
-        const domain = new URL(options.url).hostname, retryCount = Math.max(0, Math.min(5, Number(options.retryCount ?? 0) || 0));
+        const redirectStrategy = resolveRedirectStrategy(options.redirectStrategy ?? urlPolicy.redirectStrategy, urlPolicy.trustClass);
+        let requestUrl = options.url, redirectCount = 0;
+        const retryCount = Math.max(0, Math.min(5, Number(options.retryCount ?? 0) || 0));
         let finalError = null;
         for (let attempt = 0; attempt <= retryCount; attempt += 1) {
+            const domain = new URL(requestUrl).hostname;
             const blocked = this.checkCircuit(domain);
             if (blocked) {
                 finalError = new JhsError("CIRCUIT_OPEN", `站点 ${domain} 已熔断，${blocked.remaining}秒后重试`, { source: options.providerId, details: { domain, remainingSeconds: blocked.remaining } });
@@ -126,8 +152,22 @@ export class HttpService {
             const state = this.ensureCircuit(domain, options);
             if (state.state === "half-open") state.probing = true;
             try {
-                const response = await this.port.request(options);
-                this.urlPolicy.assertFinalUrl(response.finalUrl || options.url, urlPolicy);
+                const response = await this.port.request({ ...options, url: requestUrl, redirect: redirectStrategy });
+                const responseUrl = response.finalUrl || requestUrl;
+                if (REDIRECT_STATUSES.has(Number(response.status)) && redirectStrategy === "manual") {
+                    const location = getRedirectLocation(response.responseHeaders);
+                    if (!location) throw new JhsError("INVALID_URL", "重定向响应缺少 Location", { source: options.providerId, details: { status: response.status, domain } });
+                    if (redirectCount >= 5) throw new JhsError("INVALID_URL", "重定向次数超过安全上限", { source: options.providerId, details: { domain } });
+                    const nextUrl = new URL(location, responseUrl);
+                    this.urlPolicy.assertAllowed(nextUrl, urlPolicy);
+                    requestUrl = nextUrl.href, redirectCount += 1;
+                    attempt -= 1;
+                    continue;
+                }
+                if (REDIRECT_STATUSES.has(Number(response.status)) && redirectStrategy === "error") {
+                    throw new JhsError("INVALID_URL", "请求重定向已被策略阻止", { source: options.providerId, details: { status: response.status, domain } });
+                }
+                this.urlPolicy.assertFinalUrl(responseUrl, urlPolicy);
                 if (isCloudflareChallenge(response.responseText ?? response.data, response.status)) {
                     throw new JhsError("CF_BLOCKED", `Cloudflare challenge blocked: ${domain}`, {
                         source: options.providerId, details: { domain, status: Number(response.status) || 0, contentLength: String(response.responseText ?? "").length },

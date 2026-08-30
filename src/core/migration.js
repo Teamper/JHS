@@ -44,7 +44,7 @@ async function ensureV2MigrationSnapshot(/** @type {any} */ storage) {
     };
     // 与 createSnapshot 共用同一把快照锁，避免并发迁移/快照互相覆盖
     const save = async () => (snapshots.push(snapshot), snapshots.length > 10 && snapshots.splice(0, snapshots.length - 10), await storage._saveSnapshots(snapshots), snapshot);
-    return storage._withCrossTabLock ? await storage._withCrossTabLock("jhs_snapshot_lock", save) : await save();
+    return storage._withSnapshotLockWithoutMutation ? await storage._withSnapshotLockWithoutMutation(save) : storage._withCrossTabLock ? await storage._withCrossTabLock("jhs_snapshot_lock", save) : await save();
 }
 
 async function migrateLegacyStorage(/** @type {any} */ storage) {
@@ -81,7 +81,7 @@ export async function runDataMigrationsWithoutLock(/** @type {any} */ storage) {
     for (let target = version + 1; target <= CURRENT_DATA_VERSION; target++) {
         const migration = DATA_MIGRATIONS[target];
         if (!migration) throw new Error(`缺少数据迁移: ${target - 1} → ${target}`);
-        await migration(storage), await storage.setDataVersion(target), version = target;
+        await migration(storage), await (storage.setDataVersionWithoutLock ? storage.setDataVersionWithoutLock(target) : storage.setDataVersion(target)), version = target;
     }
     return version;
 }

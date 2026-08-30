@@ -160,10 +160,11 @@ assert(!stateService.includes("jhs_state_mutation"), "state service must not own
 assert(!migration.includes("jhs_data_migration"), "migration must not own a second mutation lock");
 assertIncludes(storage, "_withStorageMutation", "storage mutation coordinator boundary");
 assertIncludes(storage, "runDataMigrationsWithoutLock", "import and migration must share one lock scope");
-const recoveryIndex = bootstrap.indexOf("await stateService.recoverPendingTransaction();");
-const migrationIndex = bootstrap.indexOf("await runDataMigrations(storageManager, storageMutationCoordinator);");
+const recoveryIndex = bootstrap.indexOf("await stateService.recoverPendingTransactionWithoutLock();");
+const migrationIndex = bootstrap.indexOf("await runDataMigrationsWithoutLock(storageManager);");
 const featureStartIndex = bootstrap.indexOf("await context.registries.features.start();");
-assert(recoveryIndex > -1 && migrationIndex > recoveryIndex && featureStartIndex > migrationIndex, "persistent recovery and migration must precede feature activation");
+const preparationLockIndex = bootstrap.indexOf("await storageMutationCoordinator.runExclusive(async () => {");
+assert(preparationLockIndex > -1 && recoveryIndex > preparationLockIndex && migrationIndex > recoveryIndex && featureStartIndex > migrationIndex, "persistent recovery and migration must precede feature activation under one mutation lock");
 
 const stableReleaseChecks = [
   ["storage database identity", storage, 'name: "JAV-JHS"'],
@@ -175,7 +176,7 @@ const stableReleaseChecks = [
   ["third-party cache identity", storage, 'i(this, "third_party_cache_key", "third_party_ttl_cache")'],
   ["import format compatibility", storage, "async importData(e)"],
   ["import format compatibility", migration, "validatePortableData"],
-  ["import format compatibility", storage, "runDataMigrations(this)"],
+  ["import format compatibility", storage, "runDataMigrationsWithoutLock(this)"],
   ["export format compatibility", storage, "async exportData()"],
   ["export format compatibility", storage, "exportPortableData"],
   ["build source chain", buildScript, 'const srcPath = join(repoRoot, "src", "main.js")'],

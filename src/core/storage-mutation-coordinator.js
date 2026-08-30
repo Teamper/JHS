@@ -15,7 +15,6 @@ export class StorageMutationCoordinator {
     /** @template T @param {() => Promise<T> | T} operation @returns {Promise<T>} */
     runExclusive(operation) {
         if (typeof operation !== "function") throw new TypeError("Storage mutation must be a function");
-        if (this._active > 0) return Promise.resolve().then(operation);
         const run = async () => {
             this._active++;
             try { return await operation(); }
@@ -26,4 +25,5 @@ export class StorageMutationCoordinator {
         this._queue = next.then(() => undefined, () => undefined);
         return next;
     }
+
 }

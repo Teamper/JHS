@@ -56,7 +56,7 @@ export function createAppContext(runtime) {
     const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache });
     diagnostics.setNetworkController(http);
     const webdav = new WebDavService(http);
-    const settings = new SettingsService(storage, { afterPersist: async (_snapshot, changedNames) => {
+    const settings = new SettingsService(storage, { mutationCoordinator: runtime.storageMutationCoordinator ?? null, afterPersist: async (_snapshot, changedNames) => {
         runtime.legacyStorage?.invalidateSettingCache?.();
         await runtime.eventBus?.emit?.("settings-changed", { changedNames, source: "service" });
     } });

@@ -45,6 +45,33 @@ describe("HTTP, URL and settings contracts", () => {
         await expect(service.request({ providerId: "example", url: "https://api.example.test/data", urlPolicy: { trustClass: "builtin-public", hosts: ["api.example.test"] }, cacheScope: "none" })).rejects.toMatchObject({ code: "INVALID_URL" });
     });
 
+    it("validates every manual redirect hop before following it", async () => {
+        const request = vi.fn()
+            .mockResolvedValueOnce({ status: 302, responseHeaders: "Location: https://api.example.test/next\r\n", finalUrl: "https://api.example.test/start" })
+            .mockResolvedValueOnce({ status: 200, data: "ok", finalUrl: "https://api.example.test/next" });
+        const service = new HttpService({ request }, new ExternalUrlPolicy());
+        await expect(service.request({ providerId: "example", url: "https://api.example.test/start", cacheScope: "none", redirectStrategy: "manual", urlPolicy: { trustClass: "builtin-public", hosts: ["api.example.test"] } })).resolves.toMatchObject({ data: "ok" });
+        expect(request).toHaveBeenNthCalledWith(1, expect.objectContaining({ url: "https://api.example.test/start", redirect: "manual" }));
+        expect(request).toHaveBeenNthCalledWith(2, expect.objectContaining({ url: "https://api.example.test/next", redirect: "manual" }));
+    });
+
+    it("rejects a manual redirect that leaves the declared public host", async () => {
+        const request = vi.fn(async () => ({ status: 302, responseHeaders: "Location: http://127.0.0.1/admin\r\n", finalUrl: "https://api.example.test/start" }));
+        const service = new HttpService({ request }, new ExternalUrlPolicy());
+        await expect(service.request({ providerId: "example", url: "https://api.example.test/start", cacheScope: "none", redirectStrategy: "manual", urlPolicy: { trustClass: "builtin-public", hosts: ["api.example.test"] } })).rejects.toMatchObject({ code: "INVALID_URL" });
+        expect(request).toHaveBeenCalledOnce();
+    });
+
+    it("defaults user-local requests to redirect error and forbids unsafe follow", async () => {
+        const request = vi.fn(async options => ({ status: 302, responseHeaders: "Location: http://192.168.1.10:5244/next\r\n", finalUrl: options.url }));
+        const policy = new ExternalUrlPolicy({ localOrigins: ["http://192.168.1.10:5244"] });
+        const service = new HttpService({ request }, policy);
+        await expect(service.request({ providerId: "webdav", url: "http://192.168.1.10:5244/dav", cacheScope: "none", urlPolicy: { trustClass: "user-local", expectedOrigin: "http://192.168.1.10:5244" } })).rejects.toMatchObject({ code: "INVALID_URL" });
+        await expect(service.request({ providerId: "webdav", url: "http://192.168.1.10:5244/dav", cacheScope: "none", redirectStrategy: "follow", urlPolicy: { trustClass: "user-local", expectedOrigin: "http://192.168.1.10:5244" } })).rejects.toMatchObject({ code: "INVALID_URL" });
+        expect(request).toHaveBeenCalledOnce();
+        expect(request).toHaveBeenCalledWith(expect.objectContaining({ redirect: "error" }));
+    });
+
     it("cancels non-cached requests with their LifecycleScope", async () => {
         const request = vi.fn(options => new Promise((resolve, reject) => options.signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true })));
         const service = new HttpService({ request }, new ExternalUrlPolicy()), scope = new LifecycleScope("settings:test-source");

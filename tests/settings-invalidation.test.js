@@ -15,7 +15,7 @@ function methodBody(source, start, end) {
 
 describe("settings invalidation ownership", () => {
     it("emits exactly once from saveSetting and never duplicates it in saveSettingItem", () => {
-        const saveSetting = methodBody(storage, "async saveSetting(e)", "async saveSettingItem");
+        const saveSetting = methodBody(storage, "async _saveSettingWithoutLock(e)", "async saveSetting(e)");
         const saveSettingItem = methodBody(storage, "async saveSettingItem", "async getSetting");
         expect(saveSetting.match(/clean_cacheSettingObj/g)).toHaveLength(1);
         expect(saveSettingItem).not.toContain("clean_cacheSettingObj");

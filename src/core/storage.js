@@ -1,11 +1,10 @@
 import { A, B, D, P, a, d, escapeHtml, g, h, i, normalizeCarNum, p, s } from "./constants.js";
-import { IMPORTABLE_DATA_KEYS, PORTABLE_DATA_KEYS, hasPortableUserData, runDataMigrations, validatePortableData } from "./migration.js";
+import { IMPORTABLE_DATA_KEYS, PORTABLE_DATA_KEYS, hasPortableUserData, runDataMigrationsWithoutLock, validatePortableData } from "./migration.js";
 import { legacyActionToFlag, normalizeStateFlags } from "./state-model.js";
 import { createIndexedMap, createStatusMap, dedupeByKey, groupDuplicateItems } from "./storage-index.js";
 
 let e = new WeakSet, t = async function(e, t, n) {
     let a;
-    const locks = globalThis.navigator?.locks;
     const write = async () => {
         if (Array.isArray(e)) a = [ ...e ]; else {
             const list = await this.forage.getItem(t) || [];
@@ -17,8 +16,8 @@ let e = new WeakSet, t = async function(e, t, n) {
         }
         return await this._setItemAndInvalidate(t, a), a;
     };
-    // 读取-检查-写入需要跨标签页互斥，避免并发添加关键词时互相覆盖
-    return locks?.request ? locks.request("jhs_keyword_lock", write) : write();
+    // 读取-检查-写入必须进入统一 mutation boundary，避免与状态事务互相覆盖
+    return e._withStorageMutation ? e._withStorageMutation(() => e._withCrossTabLock("jhs_keyword_lock", write)) : write();
 };
 
 export class StorageManager {
@@ -47,7 +46,8 @@ export class StorageManager {
         StorageManager.instance = this;
     }
     async getDataVersion() { return await this.forage.getItem("data_version") || 0; }
-    async setDataVersion(e) { await this.forage.setItem("data_version", e); }
+    async setDataVersionWithoutLock(e) { await this.forage.setItem("data_version", e); }
+    async setDataVersion(e) { return this._withStorageMutation(() => this.setDataVersionWithoutLock(e)); }
     _getCacheGeneration(e) { return this._cacheGenerations.get(e) || 0; }
     _invalidateRead(e) {
         this._cacheGenerations.set(e, this._getCacheGeneration(e) + 1);
@@ -91,7 +91,7 @@ export class StorageManager {
         const n = globalThis.navigator?.locks;
         return n?.request ? n.request("jhs_storage_mutation_v1", e) : e();
     }
-    async withActressLock(fn) {
+    async _withActressLockWithoutMutation(fn) {
         return this._withCrossTabLock("jhs_actress_lock", async () => {
             let release;
             const lock = new Promise(r => release = r);
@@ -100,6 +100,9 @@ export class StorageManager {
             await prev;
             try { return await fn(); } finally { release(); }
         });
+    }
+    async withActressLock(fn) {
+        return this._withStorageMutation(() => this._withActressLockWithoutMutation(fn));
     }
     async _rawUpdateFavoriteActress(e) {
         const t = await this.getFavoriteActressList();
@@ -226,7 +229,9 @@ export class StorageManager {
         for (const [flag, records] of groups) await this.stateService.patch(records.map((item => item.carNum)), { [flag]: !0 }, { type: "legacy-batch-save", records });
     }
     async removeNewVideoList(e) {
-        return this.withActressLock(async () => {
+        return this.withActressLock(() => this._removeNewVideoListWithoutMutation(e));
+    }
+    async _removeNewVideoListWithoutMutation(e) {
             const targets = new Set((Array.isArray(e) ? e : [ e ]).map(normalizeCarNum).filter(Boolean));
             const t = await this.getFavoriteActressList(), changed = new Set;
             const a = t.map((t => {
@@ -239,7 +244,6 @@ export class StorageManager {
             }));
             changed.size && await this._setItemAndInvalidate(this.favorite_actresses_key, a);
             return { changed: [ ...changed ] };
-        });
     }
     async removeCar(e) {
         const result = await this.stateService.remove(e);
@@ -260,7 +264,7 @@ export class StorageManager {
         return this.cacheBlacklistMap;
     }
     async addBlacklistItem(e) {
-        return this._withCrossTabLock("jhs_blacklist_lock", () => this._addBlacklistItemWithoutLock(e));
+        return this._withStorageMutation(() => this._withCrossTabLock("jhs_blacklist_lock", () => this._addBlacklistItemWithoutLock(e)));
     }
     async _addBlacklistItemWithoutLock(e) {
         let {starId: t, name: n, allName: a, role: i, movieType: s, url: o} = e;
@@ -283,7 +287,7 @@ export class StorageManager {
         await this._setItemAndInvalidate(this.blacklist_key, r);
     }
     async updateBlacklistItem(e) {
-        return this._withCrossTabLock("jhs_blacklist_lock", () => this._updateBlacklistItemWithoutLock(e));
+        return this._withStorageMutation(() => this._withCrossTabLock("jhs_blacklist_lock", () => this._updateBlacklistItemWithoutLock(e)));
     }
     async _updateBlacklistItemWithoutLock(e) {
         if (!e || !e.starId) throw new Error("参数不全");
@@ -293,16 +297,16 @@ export class StorageManager {
         await this._setItemAndInvalidate(this.blacklist_key, t);
     }
     async deleteBlacklistItem(e) {
-        return this._withCrossTabLock("jhs_blacklist_lock", async () => {
+        return this._withStorageMutation(() => this._withCrossTabLock("jhs_blacklist_lock", async () => {
         const t = await this.getBlacklist(), n = t.filter((t => t.starId !== e));
         t.length !== n.length && await this._setItemAndInvalidate(this.blacklist_key, n);
-        });
+        }));
     }
     async getBlacklistCarList() {
         return this._readCached("cache_filter_actor_actress_car_list", this.blacklist_car_list_key, []);
     }
     async batchSaveBlacklistCarList(e) {
-        return this._withCrossTabLock("jhs_blacklist_lock", async () => {
+        return this._withStorageMutation(() => this._withCrossTabLock("jhs_blacklist_lock", async () => {
         const t = await this.getBlacklistCarList(), n = JSON.parse(JSON.stringify(t));
         let a = !1, i = [];
         for (const s of e) {
@@ -311,7 +315,7 @@ export class StorageManager {
         }
         if (a) {
             await this._setItemAndInvalidate(this.blacklist_car_list_key, n);
-            const result = await this.removeNewVideoList(i);
+            const result = await this._removeNewVideoListWithoutMutation(i);
             result.changed.length && await window.jhsEventBus?.emit?.("new-video-changed", {
                 reason: "blacklist-car-removed",
                 carNums: result.changed
@@ -319,12 +323,14 @@ export class StorageManager {
             await window.cleanCache_filter_actor_actress_car_list();
         }
         return { changed: i.map(normalizeCarNum).filter(Boolean) };
-        });
+        }));
     }
     async removeBlacklistCarList(e) {
-        const t = await this.getBlacklistCarList(), n = t.filter((t => t.starId !== e));
-        n.length !== t.length && (await this._setItemAndInvalidate(this.blacklist_car_list_key, n),
-        window.cleanCache_filter_actor_actress_car_list());
+        return this._withStorageMutation(async () => {
+            const t = await this.getBlacklistCarList(), n = t.filter((t => t.starId !== e));
+            n.length !== t.length && (await this._setItemAndInvalidate(this.blacklist_car_list_key, n),
+            window.cleanCache_filter_actor_actress_car_list());
+        });
     }
     async getFavoriteActressList() {
         return this._readCached("cacheFavoriteActresses", this.favorite_actresses_key, []);
@@ -381,7 +387,7 @@ export class StorageManager {
         return await this.forage.getItem(this.highlighted_tags_key) || [];
     }
     async setHighlightedTags(e) {
-        return await this.forage.setItem(this.highlighted_tags_key, e);
+        return this._withStorageMutation(() => this.forage.setItem(this.highlighted_tags_key, e));
     }
     async saveTitleFilterKeyword(n) {
         if (await s(this, e, t).call(this, n, this.filter_keyword_title_key, "标题关键词"), Array.isArray(n)) return null;
@@ -424,50 +430,52 @@ export class StorageManager {
         const n = this.cacheSettingObj[e];
         return "true" === n || "false" === n ? "true" === n.toLowerCase() : "string" != typeof n || "" === n.trim() || isNaN(Number(n)) ? n : Number(n);
     }
+    async _saveSettingWithoutLock(e) {
+        e ? (await this._setItemAndInvalidate(this.setting_key, e), await window.clean_cacheSettingObj()) : show.error("设置对象为空");
+    }
     async saveSetting(e) {
         if (globalThis.settingsService?.replace) return globalThis.settingsService.replace(e);
-        e ? (await this._setItemAndInvalidate(this.setting_key, e), await window.clean_cacheSettingObj()) : show.error("设置对象为空");
+        return this._withStorageMutation(() => this._saveSettingWithoutLock(e));
     }
     invalidateSettingCache() { this._invalidateCache(this.setting_key); }
     async saveSettingItem(e, t) {
         if (!e) return void show.error("key 不能为空");
         // 6.5: route through the single SettingsService write entry when it is available.
         if (globalThis.settingsService?.set) return globalThis.settingsService.set(e, t);
-        const locks = globalThis.navigator?.locks;
         const write = async () => {
             let n = await this.getSetting();
-            n[e] = t, await this.saveSetting(n);
+            n[e] = t;
+            const save = this.saveSetting === StorageManager.prototype.saveSetting ? this._saveSettingWithoutLock.bind(this) : this.saveSetting.bind(this);
+            await save(n);
         };
-        return locks?.request ? locks.request("jhs_setting_lock", write) : write();
+        return this._withStorageMutation(write);
     }
     /** Atomic read-modify-write for settings. Delegates to SettingsService when available. */
     async updateSetting(mutator) {
         if (globalThis.settingsService?.update) return globalThis.settingsService.update(mutator);
-        const locks = globalThis.navigator?.locks;
         const write = async () => {
             const settings = await this.getSetting();
             mutator(settings);
-            await this.saveSetting(settings);
+            await this._saveSettingWithoutLock(settings);
         };
-        return locks?.request ? locks.request("jhs_setting_lock", write) : write();
+        return this._withStorageMutation(write);
     }
     async importData(e) {
         validatePortableData(e);
-        await hasPortableUserData(this) && await this.createSnapshot("导入前自动备份", "auto-import");
+        return this._withStorageMutation(() => this._importDataWithoutLock(e));
+    }
+    async _importDataWithoutLock(e) {
+        await hasPortableUserData(this) && await this._createSnapshotWithoutMutation("导入前自动备份", "auto-import");
         const validKeys = new Set([ ...IMPORTABLE_DATA_KEYS, "data_version" ]);
-        // 导入与 state.patch / migration 共用同一把协调锁，避免恢复流程整体回滚并发写入。
-        await this._withStorageMutation(async () => {
-            const writes = [];
-            for (const key in e) {
-                if (!validKeys.has(key)) { clog.warn(`[导入] 跳过未知数据键: ${key}`); continue; }
-                if ("third_party_ttl_cache" === key) continue;
-                writes.push("data_version" === key ? this.setDataVersion(e[key]) : this._setItemAndInvalidate(key, e[key]));
-            }
-            await Promise.all(writes), this._invalidateCache();
-            if (typeof runDataMigrationsWithoutLock === "function") await runDataMigrationsWithoutLock(this);
-            else await runDataMigrations(this);
-        });
-        await window.stateService?.recoverPendingTransaction();
+        const writes = [];
+        for (const key in e) {
+            if (!validKeys.has(key)) { clog.warn(`[导入] 跳过未知数据键: ${key}`); continue; }
+            if ("third_party_ttl_cache" === key) continue;
+            writes.push("data_version" === key ? this.setDataVersionWithoutLock(e[key]) : this._setItemAndInvalidate(key, e[key]));
+        }
+        await Promise.all(writes), this._invalidateCache();
+        await runDataMigrationsWithoutLock(this);
+        await window.stateService?.recoverPendingTransactionWithoutLock?.();
     }
     async exportPortableData() {
         const data = { data_version: await this.getDataVersion() };
@@ -485,15 +493,20 @@ export class StorageManager {
     async getThirdPartyCache() {
         return await this.forage.getItem(this.third_party_cache_key) || {};
     }
-    async setThirdPartyCache(e) {
+    async _setThirdPartyCacheWithoutLock(e) {
         await this.forage.setItem(this.third_party_cache_key, e || {});
     }
+    async setThirdPartyCache(e) {
+        return this._withStorageMutation(() => this._setThirdPartyCacheWithoutLock(e));
+    }
     async clearThirdPartyCache() {
-        await this.forage.removeItem(this.third_party_cache_key);
+        return this._withStorageMutation(() => this.forage.removeItem(this.third_party_cache_key));
     }
     async deleteCachedRequest(key) {
-        const cache = await this.getThirdPartyCache();
-        Object.prototype.hasOwnProperty.call(cache, key) && (delete cache[key], await this.setThirdPartyCache(cache));
+        return this._withStorageMutation(async () => {
+            const cache = await this.getThirdPartyCache();
+            Object.prototype.hasOwnProperty.call(cache, key) && (delete cache[key], await this._setThirdPartyCacheWithoutLock(cache));
+        });
     }
     async cachedRequest(e, t, n) {
         const a = Date.now(), i = await this.getThirdPartyCache(), s = i[e];
@@ -504,20 +517,20 @@ export class StorageManager {
         if (void 0 === o || null === o) return o;
         i[e] = { time: a, ttl: customTtl, data: o }, this._pruneThirdPartyCache(i, a);
         // 整对象读-改-写需要跨标签页互斥：锁内基于最新缓存合入本条并修剪，避免并发丢条目
-        return await this._withCrossTabLock("jhs_ttl_cache_lock", async () => {
+        return await this._withStorageMutation(() => this._withCrossTabLock("jhs_ttl_cache_lock", async () => {
             const latest = await this.getThirdPartyCache();
             latest[e] = i[e], this._pruneThirdPartyCache(latest, a);
-            await this.setThirdPartyCache(latest);
-        }), o;
+            await this._setThirdPartyCacheWithoutLock(latest);
+        })), o;
     }
     /** 以 TTL 写入一条缓存（与 cachedRequest 共用 third_party_ttl_cache 存储与跨标签页锁）。 */
     async cacheSet(e, t, n) {
         const a = Date.now();
-        return this._withCrossTabLock("jhs_ttl_cache_lock", async () => {
+        return this._withStorageMutation(() => this._withCrossTabLock("jhs_ttl_cache_lock", async () => {
             const latest = await this.getThirdPartyCache();
             latest[e] = { time: a, ttl: n, data: t }, this._pruneThirdPartyCache(latest, a);
-            await this.setThirdPartyCache(latest);
-        });
+            await this._setThirdPartyCacheWithoutLock(latest);
+        }));
     }
     /** 清理长期未命中的过期条目并限制总量，防止 third_party_ttl_cache 无界膨胀 */
     _pruneThirdPartyCache(e, a) {
@@ -747,11 +760,15 @@ export class StorageManager {
     _snapshotMetaKeys() { return [ "snapshots", "data_version" ]; }
     async _getSnapshots() { return await this.forage.getItem(this._snapshotKey()) || []; }
     async _saveSnapshots(e) { await this._setItemAndInvalidate(this._snapshotKey(), e); }
-    async _withSnapshotLock(e) {
-        return await navigator.locks.request("jhs_snapshot_lock", async () => await e());
+    async _withSnapshotLockWithoutMutation(e) {
+        const locks = globalThis.navigator?.locks;
+        return locks?.request ? await locks.request("jhs_snapshot_lock", async () => await e()) : await e();
     }
-    async createSnapshot(e = "", t = "manual") {
-        return this._withSnapshotLock(async () => {
+    async _withSnapshotLock(e) {
+        return this._withStorageMutation(() => this._withSnapshotLockWithoutMutation(e));
+    }
+    async _createSnapshotWithoutMutation(e = "", t = "manual") {
+        return this._withSnapshotLockWithoutMutation(async () => {
             const n = await this._getSnapshots(), a = await this.exportData();
             for (const i of this._snapshotMetaKeys()) delete a[i];
             let i = 0;
@@ -769,6 +786,9 @@ export class StorageManager {
             return await this._saveSnapshots(n), clog.log(`创建快照: ${s.name} (${t})`), s;
         });
     }
+    async createSnapshot(e = "", t = "manual") {
+        return this._withStorageMutation(() => this._createSnapshotWithoutMutation(e, t));
+    }
     async getSnapshotList() {
         return (await this._getSnapshots()).map((e => ({ id: e.id, name: e.name, source: e.source, time: e.time, itemCount: e.itemCount, kind: e.kind || "snapshot", targetDataVersion: e.targetDataVersion, appVersion: e.appVersion })));
     }
@@ -776,21 +796,24 @@ export class StorageManager {
         return (await this._getSnapshots()).find((t => t.id === e)) || null;
     }
     async deleteSnapshot(e) {
-        return this._withSnapshotLock(async () => {
+        return this._withStorageMutation(() => this._withSnapshotLockWithoutMutation(async () => {
             const t = await this._getSnapshots(), n = t.filter((t => t.id !== e));
             if (n.length === t.length) return void clog.warn("删除快照失败, ID不存在: " + e);
             await this._saveSnapshots(n), clog.log("删除快照: " + e);
-        });
+        }));
     }
     async restoreSnapshot(e) {
-        const t = await this.getSnapshot(e);
-        if (!t) throw new Error("快照不存在: " + e);
-        if (!t.data || "object" != typeof t.data) throw new Error("快照数据损坏");
-        const n = { ...t.data };
-        for (const a of this._snapshotMetaKeys()) delete n[a];
-        await this.importData(n);
-        clog.log("已恢复快照: " + t.name);
-        return t;
+        return this._withStorageMutation(async () => {
+            const t = await this.getSnapshot(e);
+            if (!t) throw new Error("快照不存在: " + e);
+            if (!t.data || "object" != typeof t.data) throw new Error("快照数据损坏");
+            const n = { ...t.data };
+            for (const a of this._snapshotMetaKeys()) delete n[a];
+            validatePortableData(n);
+            await this._importDataWithoutLock(n);
+            clog.log("已恢复快照: " + t.name);
+            return t;
+        });
     }
     /* ───── 差异对比引擎 ───── */
     _stableStringify(e) {

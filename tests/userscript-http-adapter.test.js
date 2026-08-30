@@ -17,6 +17,17 @@ describe("UserscriptHttpAdapter", () => {
         }));
     });
 
+    it("passes the controlled redirect strategy to the userscript transport", async () => {
+        const request = vi.fn(options => {
+            options.onload({ status: 200, responseText: "ok", finalUrl: options.url });
+            return { abort: vi.fn() };
+        });
+        await new UserscriptHttpAdapter(request).request({
+            method: "GET", url: "https://api.example.test/data", redirect: "manual",
+        });
+        expect(request).toHaveBeenCalledWith(expect.objectContaining({ redirect: "manual" }));
+    });
+
     it("uses native fetch for latency-sensitive public requests", async () => {
         const request = vi.fn(), nativeFetch = vi.fn(async url => ({
             status: 200, url, headers: new Headers({ "content-type": "application/json" }),

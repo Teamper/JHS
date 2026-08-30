@@ -15,7 +15,7 @@ function loadStateService() {
 }
 
 function createHarness(initial = {}, options = {}) {
-    const data = new Map(Object.entries(initial)), journalWrites = [], failAfterKey = options.failAfterKey;
+    const data = new Map(Object.entries(initial)), journalWrites = [], failAfterKey = options.failAfterKey, failAfterForageKey = options.failAfterForageKey;
     let failed = false;
     const writeAndMaybeFail = (key, value) => {
         data.set(key, value);
@@ -31,6 +31,10 @@ function createHarness(initial = {}, options = {}) {
             setItem: vi.fn(async (key, value) => {
                 if (key === "mutation_journal") journalWrites.push(JSON.parse(JSON.stringify(value)));
                 data.set(key, value);
+                if (!failed && key === failAfterForageKey) {
+                    failed = true;
+                    throw new Error(`injected failure after forage ${key}`);
+                }
             }),
             removeItem: vi.fn(async key => data.delete(key))
         },
@@ -38,7 +42,7 @@ function createHarness(initial = {}, options = {}) {
         _invalidateCache: vi.fn(),
         getCar: vi.fn(async carNum => (data.get("car_list") || []).find(item => item.carNum === carNum))
     }, eventBus = { emit: vi.fn(async () => {}) }, StateService = loadStateService();
-    return { service: new StateService(storage, eventBus), storage, eventBus, data, journalWrites };
+    return { service: new StateService(storage, eventBus), StateService, storage, eventBus, data, journalWrites };
 }
 
 describe("StateService durable transactions", () => {
@@ -116,6 +120,52 @@ describe("StateService durable transactions", () => {
         expect(data.get("new_video_decisions")).toEqual(before.decisions);
         expect(data.get("activity_log").entries).toEqual([]);
         expect(data.has("mutation_journal")).toBe(false);
+    });
+
+    it("recovers a V2 journal left immediately after its durable write", async () => {
+        const initial = { car_list: [], favorite_actresses: [], new_video_decisions: {}, activity_log: { entries: [] } };
+        const harness = createHarness(initial, { failAfterForageKey: "mutation_journal" });
+        await expect(harness.service.patch("ABC-1", { favorite: true })).rejects.toThrow("injected failure after forage mutation_journal");
+        expect(harness.data.has("mutation_journal")).toBe(true);
+        const restarted = new harness.StateService(harness.storage, harness.eventBus);
+        await expect(restarted.recoverPendingTransaction()).resolves.toBe(true);
+        expect(harness.data.get("car_list")).toEqual([]);
+        expect(harness.data.get("activity_log").entries).toEqual([]);
+        expect(harness.data.has("mutation_journal")).toBe(false);
+    });
+
+    it.each([
+        [ "prepared", false, false, false, false ],
+        [ "carList written", true, false, false, false ],
+        [ "activity written", true, true, false, false ],
+        [ "favoriteActresses written", true, true, true, false ],
+        [ "newVideoDecisions written", true, true, true, true ],
+    ])("recovers a V2 journal after restart and %s", async (_label, carWritten, activityWritten, actressesWritten, decisionsWritten) => {
+        const before = { carList: [{ carNum: "ABC-1" }], favoriteActresses: [{ starId: "a", newVideoList: ["ABC-1"] }], newVideoDecisions: { "ABC-1": { action: "ignored" } }, activity: { entries: [] } };
+        const after = { carList: [{ carNum: "ABC-1", changed: true }], favoriteActresses: [{ starId: "a", newVideoList: [] }], newVideoDecisions: {}, activity: { entries: [{ id: "tx", commitState: "pending", createdAt: "2026-08-22" }] } };
+        const harness = createHarness({
+            car_list: carWritten ? after.carList : before.carList,
+            favorite_actresses: actressesWritten ? after.favoriteActresses : before.favoriteActresses,
+            new_video_decisions: decisionsWritten ? after.newVideoDecisions : before.newVideoDecisions,
+            activity_log: activityWritten ? after.activity : before.activity,
+            mutation_journal: { schemaVersion: 2, id: "tx", state: "prepared", touchedDomains: [ "carList", "favoriteActresses", "newVideoDecisions", "activity" ], before, after },
+        });
+        await expect(harness.service.recoverPendingTransaction()).resolves.toBe(true);
+        expect(harness.data.get("car_list")).toEqual(before.carList);
+        expect(harness.data.get("favorite_actresses")).toEqual(before.favoriteActresses);
+        expect(harness.data.get("new_video_decisions")).toEqual(before.newVideoDecisions);
+        expect(harness.data.get("activity_log")).toMatchObject({ entries: before.activity.entries });
+        expect(harness.data.has("mutation_journal")).toBe(false);
+    });
+
+    it("rolls a committed V2 journal forward before deleting it", async () => {
+        const before = { carList: [], favoriteActresses: [], newVideoDecisions: {}, activity: { entries: [] } };
+        const after = { carList: [{ carNum: "ABC-1" }], favoriteActresses: [], newVideoDecisions: {}, activity: { entries: [{ id: "tx", commitState: "pending", createdAt: "2026-08-22" }] } };
+        const harness = createHarness({ car_list: before.carList, favorite_actresses: [], new_video_decisions: {}, activity_log: before.activity, mutation_journal: { schemaVersion: 2, id: "tx", state: "committed", touchedDomains: [ "carList", "activity" ], before, after } });
+        await harness.service.recoverPendingTransaction();
+        expect(harness.data.get("car_list")).toEqual(after.carList);
+        expect(harness.data.get("activity_log").entries[0]).toMatchObject({ id: "tx", commitState: "committed" });
+        expect(harness.data.has("mutation_journal")).toBe(false);
     });
 
     it("rolls a committed journal forward and retains a conflicting journal", async () => {

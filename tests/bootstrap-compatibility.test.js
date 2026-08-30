@@ -44,12 +44,15 @@ describe("bootstrap compatibility P0", () => {
         expect(startIndex).toBeGreaterThan(attachIndex);
     });
 
-    it("recovers and migrates persistent state before FeatureRuntime.start", () => {
-        const recoverIndex = bootstrap.indexOf("await stateService.recoverPendingTransaction();");
-        const migrateIndex = bootstrap.indexOf("await runDataMigrations(storageManager, storageMutationCoordinator);");
+    it("recovers and migrates persistent state under one lock before FeatureRuntime.start", () => {
+        const lockIndex = bootstrap.indexOf("await storageMutationCoordinator.runExclusive(async () => {");
+        const recoverIndex = bootstrap.indexOf("await stateService.recoverPendingTransactionWithoutLock();");
+        const migrateIndex = bootstrap.indexOf("await runDataMigrationsWithoutLock(storageManager);");
         const attachIndex = bootstrap.indexOf("attachCompatibilityFacade({");
         const startIndex = bootstrap.indexOf("await context.registries.features.start();");
+        expect(lockIndex).toBeGreaterThan(-1);
         expect(recoverIndex).toBeGreaterThan(-1);
+        expect(recoverIndex).toBeGreaterThan(lockIndex);
         expect(migrateIndex).toBeGreaterThan(recoverIndex);
         expect(attachIndex).toBeGreaterThan(migrateIndex);
         expect(startIndex).toBeGreaterThan(attachIndex);
