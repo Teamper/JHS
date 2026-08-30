@@ -50,6 +50,26 @@ describe("List FeatureRuntime ownership", () => {
         scope.dispose();
     });
 
+    it("defers list actions until the rest of the eager feature APIs can settle", async () => {
+        vi.useFakeTimers();
+        try {
+            const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}) }, actionsPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
+                legacyPlugin,
+                actionsPlugin,
+                hostAdapter,
+                scope,
+            });
+
+            await controller.start();
+            expect(actionsPlugin.handle).not.toHaveBeenCalled();
+            await vi.advanceTimersByTimeAsync(0);
+            expect(actionsPlugin.handle).toHaveBeenCalledWith({ scope, listFeatureApi: expect.any(Object) });
+            scope.dispose();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it("does not mount a feature-owned legacy plugin through PluginManager", async () => {
         const handle = vi.fn(), insertStyle = vi.fn();
         class FeatureOwnedPlugin extends BasePlugin {

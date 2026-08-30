@@ -224,6 +224,7 @@ assertIncludes(listControllerSource, "this.legacyPlugin.handle({ scope: this.sco
 assertIncludes(listControllerSource, "new ListView({", "list view host boundary");
 assertIncludes(listControllerSource, "onFilterChange: (filter, options)", "list view filter callback boundary");
 assertIncludes(listControllerSource, "batchSaveAllVideos: call(\"batchSaveAllVideos\")", "list batch capability boundary");
+assertIncludes(listControllerSource, "this.scope.ownTimeout(setTimeout", "list action deferred lifecycle handoff");
 assertIncludes(listViewSource, "export class ListView", "real list view");
 assertIncludes(listViewSource, "shouldShowItem({ filter: normalizedFilter", "list view shared filter semantics");
 assertIncludes(listViewSource, "async createQuickFilter(initialFilter)", "list view quick-filter ownership");

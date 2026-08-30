@@ -19,6 +19,8 @@ export class ListPageButtonPlugin extends BasePlugin {
         this.listFeatureApi = null;
         /** @type {any} */
         this.discoveryFeatureApi = null;
+        /** @type {any} */
+        this.lifecycleScope = null;
     }
     getName() {
         return "ListPageButtonPlugin";
@@ -56,10 +58,13 @@ export class ListPageButtonPlugin extends BasePlugin {
         }
         return this.discoveryFeatureApi;
     }
-    async handle() {
+    /** @param {{scope?: any, listFeatureApi?: any}} [options] */
+    async handle(options = {}) {
+        this.listFeatureApi = options.listFeatureApi ?? this.listFeatureApi;
+        this.lifecycleScope = options.scope ?? this.lifecycleScope;
         // 热播/Top250 自渲染榜单由渲染方调用 mountHitShowControls 延迟挂载，启动期不注入页面 h2
         if (!window.isListPage || isHitShowPage() || window.location.search.includes("handleTop=1")) return;
-        const scope = await this.getRuntimeService("scope")();
+        const scope = this.lifecycleScope ?? await this.getRuntimeService("scope")();
         const settings = this.getRuntimeService("settings");
         const [libraryFeatureApi, discoveryFeatureApi] = await Promise.all([this.getLibraryFeatureApi(), this.getDiscoveryFeatureApi()]);
         this.discoveryFeatureApi = discoveryFeatureApi;
@@ -71,13 +76,18 @@ export class ListPageButtonPlugin extends BasePlugin {
         };
         settings.addEventListener("settings.changed", onSettingsChanged);
         scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
+        scope.addCleanup(() => {
+            $("#waitCheckBtn, #newVideoBtn, #blacklistBtn, #addBlacklistBtn, #filterAllVideo, #favoriteAllVideo, #hasDownAllVideo, .jhs-sort-control").off(".jhsListActions").remove();
+            $("#jhs-page-commandbar, #jhs-commandbar-parking").find("#waitCheckBtn, #newVideoBtn, #blacklistBtn, #addBlacklistBtn, #filterAllVideo, #favoriteAllVideo, #hasDownAllVideo, .jhs-sort-control").remove();
+            $(document).off(".jhsSortMenu");
+        });
         await this.syncSortUi();
     }
     /** 自渲染榜单页由渲染方在自有标题/筛选容器就绪后调用：按钮行挂进传入容器（缺省为热播标题），排序/批量能力与普通列表页一致。 @param {any} [target] */
     async mountOwnedRankingControls(target = null, discoveryFeatureApi = null) {
         const heading = target?.length ? target : $(".jhs-hitshow-heading");
         if (!heading.length || $("#waitCheckBtn").length) return;
-        const scope = await this.getRuntimeService("scope")();
+        const scope = this.lifecycleScope ?? await this.getRuntimeService("scope")();
         const libraryFeatureApi = await this.getLibraryFeatureApi();
         this.discoveryFeatureApi = discoveryFeatureApi ?? this.discoveryFeatureApi ?? await this.getDiscoveryFeatureApi();
         await this.createMenuBtn(scope, heading, libraryFeatureApi, this.discoveryFeatureApi);
@@ -155,18 +165,18 @@ export class ListPageButtonPlugin extends BasePlugin {
         return `<div class="jhs-sort-control"><button type="button" id="sort-toggle-btn" class="jhs-btn jhs-btn--secondary" aria-haspopup="menu" aria-expanded="false" title="${title}"><span id="jhs-sort-current">${current}</span></button><div class="jhs-popover jhs-sort-menu" role="menu" aria-label="排序方式">${Object.entries(labels).map((([value, label]) => `<button type="button" class="jhs-btn jhs-btn--ghost jhs-sort-option" role="menuitemradio" aria-checked="${value === method ? "true" : "false"}" data-sort-method="${value}" tabindex="-1">${label}</button>`)).join("")}</div></div>`;
     }
     bindEvent(libraryFeatureApi = null) {
-        $("#waitCheckBtn").on("click", ((/** @type {any} */ e) => {
+        $("#waitCheckBtn").on("click.jhsListActions", ((/** @type {any} */ e) => {
             void this.openWaitCheck().catch((error => clog.error("待鉴定列表打开失败", error)));
-        })), $("#newVideoBtn").on("click", ((/** @type {any} */ e) => {
+        })), $("#newVideoBtn").on("click.jhsListActions", ((/** @type {any} */ e) => {
             this.discoveryFeatureApi?.openNewVideoDialog?.();
-        })), $("#blacklistBtn").on("click", ((/** @type {any} */ e) => {
+        })), $("#blacklistBtn").on("click.jhsListActions", ((/** @type {any} */ e) => {
             (libraryFeatureApi ?? this.libraryFeatureApi)?.openBlacklistDialog?.();
         })), this.bindSortMenu();
         // 6.5: capability 渲染在 createMenuBtn 完成，功能禁用时不渲染按钮；此处仅保留业务引用。
         const blacklist = libraryFeatureApi ?? this.libraryFeatureApi;
-        $("#addBlacklistBtn").on("click", (async (/** @type {any} */ t) => {
+        $("#addBlacklistBtn").on("click.jhsListActions", (async (/** @type {any} */ t) => {
             await blacklist?.addBlacklist?.(t);
-        })), $("#filterAllVideo").on("click", (async (/** @type {any} */ t) => {
+        })), $("#filterAllVideo").on("click.jhsListActions", (async (/** @type {any} */ t) => {
             const a = r ? $(".actor-section-name") : $(".avatar-box .photo-info .pb10");
             if (0 === a.length) return void show.error("获取演员名称失败");
             const i = a.text().trim().split(",")[0];
@@ -176,11 +186,11 @@ export class ListPageButtonPlugin extends BasePlugin {
             } catch (t) {
                 clog.error(t);
             } finally { this.loadObj.close(); }
-        })), $("#favoriteAllVideo").on("click", (async (/** @type {any} */ t) => {
+        })), $("#favoriteAllVideo").on("click.jhsListActions", (async (/** @type {any} */ t) => {
             const scope = this.buildBatchScope();
             this.loadObj = loading();
             try { await (await this.getListFeatureApi())?.batchSaveAllVideos?.(scope, h); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
-        })), $("#hasDownAllVideo").on("click", (async (/** @type {any} */ t) => {
+        })), $("#hasDownAllVideo").on("click.jhsListActions", (async (/** @type {any} */ t) => {
             const scope = this.buildBatchScope();
             this.loadObj = loading();
             try { await (await this.getListFeatureApi())?.batchSaveAllVideos?.(scope, g); } catch (t) { clog.error(t); } finally { this.loadObj.close(); }
@@ -193,12 +203,12 @@ export class ListPageButtonPlugin extends BasePlugin {
         const toggle = control.find("#sort-toggle-btn"), menu = control.find(".jhs-sort-menu"), close = (focus = !1) => {
             menu.removeClass("is-open"), toggle.attr("aria-expanded", "false"), focus && toggle.trigger("focus");
         };
-        toggle.on("click", ((/** @type {any} */ event) => {
+        toggle.on("click.jhsListActions", ((/** @type {any} */ event) => {
             event.preventDefault(), event.stopPropagation();
             const open = !menu.hasClass("is-open");
             menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && menu.find('[aria-checked="true"]').trigger("focus");
         }));
-        menu.on("click", ".jhs-sort-option", (async (/** @type {any} */ event) => {
+        menu.on("click.jhsSortMenu", ".jhs-sort-option", (async (/** @type {any} */ event) => {
             const item = $(event.currentTarget), method = item.data("sort-method");
             const previousItem = menu.find('.jhs-sort-option[aria-checked="true"]').first();
             const previousLabel = $("#jhs-sort-current").text();
@@ -210,7 +220,7 @@ export class ListPageButtonPlugin extends BasePlugin {
                 menu.find(".jhs-sort-option").attr("aria-checked", "false"), previousItem.attr("aria-checked", "true"), $("#jhs-sort-current").text(previousLabel);
                 clog.error("排序设置保存失败，已恢复", error), show.error("排序设置保存失败，已恢复原设置");
             }
-        })).on("keydown", ".jhs-sort-option", ((/** @type {any} */ event) => {
+        })).on("keydown.jhsSortMenu", ".jhs-sort-option", ((/** @type {any} */ event) => {
             const items = menu.find(".jhs-sort-option"), index = items.index(event.currentTarget);
             if ("Escape" === event.key) return event.preventDefault(), close(!0);
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;

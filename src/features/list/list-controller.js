@@ -7,11 +7,12 @@ import { ListView } from "./list-view.js";
  * strangled out of PluginManager.
  */
 export class ListController {
-    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any}} options */
+    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, scope: any, hostAdapter: any}} options */
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin ?? null;
         this.autoPagePlugin = options.autoPagePlugin ?? null;
         this.foldCategoryPlugin = options.foldCategoryPlugin ?? null;
+        this.actionsPlugin = options.actionsPlugin ?? null;
         this.scope = options.scope;
         this.hostAdapter = options.hostAdapter;
         this.view = null;
@@ -38,6 +39,15 @@ export class ListController {
             .then(() => this.legacyPlugin && view ? this.legacyPlugin.handle({ scope: this.scope, view }) : undefined)
             .then(() => this.autoPagePlugin?.handle?.({ scope: this.scope, listFeatureApi }))
             .then(() => this.foldCategoryPlugin?.handle?.({ scope: this.scope }))
+            .then(() => {
+                if (!this.actionsPlugin) return;
+                this.scope.ownTimeout(setTimeout(() => {
+                    if (this.scope.disposed) return;
+                    void Promise.resolve(this.actionsPlugin?.handle?.({ scope: this.scope, listFeatureApi })).catch((/** @type {unknown} */ error) => {
+                        clog.error("列表操作初始化失败", error);
+                    });
+                }, 0));
+            })
             .catch((error) => {
             this.dispose();
             throw error;
@@ -65,7 +75,7 @@ export class ListController {
             findCarNumAndHref: call("findCarNumAndHref"),
             parseActressName: call("parseActressName"),
             setQuickFilter: call("setQuickFilter"),
-            getActiveQuickFilter: () => legacyPlugin.activeQuickFilter,
+            getActiveQuickFilter: () => legacyPlugin?.activeQuickFilter,
             createEvaluationContext: call("createEvaluationContext"),
             translateListItems: call("translateListItems"),
             revertTranslation: call("revertTranslation"),
