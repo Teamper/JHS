@@ -237,6 +237,7 @@ const highlightMagnetSource = await read("src/plugins/status/highlight-magnet.js
 const detailPageButtonSource = await read("src/plugins/status/detail-page-button.js");
 const previewVideoSource = await read("src/plugins/image-viewer/preview-video.js");
 const busPreviewVideoSource = await read("src/plugins/image-viewer/bus-preview-video.js");
+const otherSiteSource = await read("src/plugins/external-search/other-site.js");
 assertIncludes(detailControllerSource, "nativePlugin?.handle?.({ scope: this.scope })", "native detail feature handoff");
 assertIncludes(detailControllerSource, "workspacePlugin?.handle?.({ scope: this.scope })", "detail workspace feature handoff");
 assertIncludes(detailManifestSource, '"detail.workspace"', "detail workspace contribution selection");
@@ -258,6 +259,8 @@ assertIncludes(detailPageButtonSource, "options.scope ?? await this.getRuntimeSe
 assertIncludes(detailControllerSource, "previewPlugin?.handle?.({ scope: this.scope })", "detail preview feature handoff");
 assertIncludes(previewVideoSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "JavDB preview injected scope");
 assertIncludes(busPreviewVideoSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "JavBus preview injected scope");
+assertIncludes(detailControllerSource, "externalSitesPlugin?.handle?.({ scope: this.scope })", "detail external sites feature handoff");
+assertIncludes(otherSiteSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail external sites injected scope");
 assertIncludes(listViewSource, "export class ListView", "real list view");
 assertIncludes(listViewSource, "shouldShowItem({ filter: normalizedFilter", "list view shared filter semantics");
 assertIncludes(listViewSource, "async createQuickFilter(initialFilter)", "list view quick-filter ownership");

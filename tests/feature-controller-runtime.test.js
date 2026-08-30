@@ -38,12 +38,12 @@ describe("feature controller ownership", () => {
             locateDetailRoot: vi.fn(() => null),
             locateDetailSlots: vi.fn(() => ({})),
             readMovieRef: vi.fn(() => null),
-        }, calls = [], nativePlugin = { handle: vi.fn(() => calls.push("native")) }, workspacePlugin = { handle: vi.fn(() => calls.push("workspace")) }, reviewPlugin = { handle: vi.fn(() => calls.push("reviews")) }, relatedPlugin = { handle: vi.fn(() => calls.push("related")) }, pageActionsPlugin = { handle: vi.fn(() => calls.push("page-actions")) }, magnetPlugin = { handle: vi.fn(() => calls.push("magnet")) }, previewPlugin = { handle: vi.fn(() => calls.push("preview")) }, screenshotPlugin = { handle: vi.fn(() => calls.push("screenshot")) };
-        const controller = new DetailController({ hostAdapter, nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, pageActionsPlugin, screenshotPlugin, magnetPlugin, previewPlugin, scope, enabledContributions: [] });
+        }, calls = [], nativePlugin = { handle: vi.fn(() => calls.push("native")) }, workspacePlugin = { handle: vi.fn(() => calls.push("workspace")) }, reviewPlugin = { handle: vi.fn(() => calls.push("reviews")) }, relatedPlugin = { handle: vi.fn(() => calls.push("related")) }, pageActionsPlugin = { handle: vi.fn(() => calls.push("page-actions")) }, magnetPlugin = { handle: vi.fn(() => calls.push("magnet")) }, previewPlugin = { handle: vi.fn(() => calls.push("preview")) }, externalSitesPlugin = { handle: vi.fn(() => calls.push("external-sites")) }, screenshotPlugin = { handle: vi.fn(() => calls.push("screenshot")) };
+        const controller = new DetailController({ hostAdapter, nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, pageActionsPlugin, screenshotPlugin, magnetPlugin, previewPlugin, externalSitesPlugin, scope, enabledContributions: [] });
 
         await controller.start();
 
-        expect(calls).toEqual(["native", "workspace", "reviews", "related", "page-actions", "magnet", "preview", "screenshot"]);
+        expect(calls).toEqual(["native", "workspace", "reviews", "related", "page-actions", "magnet", "preview", "external-sites", "screenshot"]);
         expect(nativePlugin.handle).toHaveBeenCalledWith({ scope });
         expect(workspacePlugin.handle).toHaveBeenCalledWith({ scope });
         expect(reviewPlugin.handle).toHaveBeenCalledWith({ scope });
@@ -52,6 +52,7 @@ describe("feature controller ownership", () => {
         expect(screenshotPlugin.handle).toHaveBeenCalledWith({ scope });
         expect(magnetPlugin.handle).toHaveBeenCalledWith({ scope });
         expect(previewPlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(externalSitesPlugin.handle).toHaveBeenCalledWith({ scope });
     });
 
     it("hands the feature scope to the stats contribution and exposes its action", async () => {

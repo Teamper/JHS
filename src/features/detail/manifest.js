@@ -37,7 +37,10 @@ export default defineFeature({
         const previewPlugin = runtime.enabledContributions.includes(previewContribution)
             ? runtime.resolveLegacyPlugin?.(deps[PORT.host].site === "javbus" ? "BusPreviewVideoPlugin" : "PreviewVideoPlugin")
             : null;
-        const controller = new DetailController({ hostAdapter: deps[PORT.host], nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, pageActionsPlugin, magnetPlugin, previewPlugin, screenshotPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
+        const externalSitesPlugin = runtime.enabledContributions.includes("detail.external-sites")
+            ? runtime.resolveLegacyPlugin?.("OtherSitePlugin")
+            : null;
+        const controller = new DetailController({ hostAdapter: deps[PORT.host], nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, pageActionsPlugin, magnetPlugin, previewPlugin, externalSitesPlugin, screenshotPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
         return controller.start().then(() => ({ dispose: () => controller.dispose() }));
     },
 });

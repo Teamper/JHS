@@ -48,8 +48,9 @@ export class OtherSitePlugin extends BasePlugin {
                 .jhs-site-option { display:flex; align-items:center; gap:var(--jhs-space-2); }
             </style>`;
     }
-    async handle() {
-        const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
+        const settings = this.getRuntimeService("settings"), scope = this.lifecycleScope = options.scope ?? await this.getRuntimeService("scope")();
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names);
             if (!names?.includes("enableLoadOtherSite")) return;
@@ -57,7 +58,11 @@ export class OtherSitePlugin extends BasePlugin {
             else void this.mount().catch((error => clog.error("外部站点重新挂载失败", error)));
         };
         settings.addEventListener("settings.changed", onSettingsChanged);
-        scope.addCleanup((() => settings.removeEventListener("settings.changed", onSettingsChanged)));
+        scope.addCleanup((() => {
+            settings.removeEventListener("settings.changed", onSettingsChanged);
+            this.unmount();
+            this.lifecycleScope = null;
+        }));
         await this.mount();
     }
     /** ON：在当前详情页挂载外部站点面板。 */
@@ -149,7 +154,7 @@ export class OtherSitePlugin extends BasePlugin {
             } catch { a = null; }
             a ? (n.attr("href", a.url), "multiple" === a.type && n.append('<span class="site-tag">多结果</span>'), this.setSiteState(n, "available")) : this.setSiteState(n, "idle");
         } else if (t.providerId) try {
-            const scope = await this.getRuntimeService("scope")();
+            const scope = this.lifecycleScope ?? await this.getRuntimeService("scope")();
             const result = await this.getRuntimeService("movie").resolve({ carNum: e, providerId: t.providerId }, { scope });
             if (view.isActive?.() === false) return;
             const searchUrl = this.getRuntimeService("movie").searchUrl(t.providerId, { carNum: e });
@@ -163,7 +168,7 @@ export class OtherSitePlugin extends BasePlugin {
             if (utils.isHidden(n)) return;
             const a = "jhs_other_site", storage = this.getRuntimeService("storage"), raw = storage.getLocal(a), i = raw ? JSON.parse(raw) : {}, s = e + "_" + t.id.replace("Btn", ""), o = i[s], m = Date.now();
             if (o && o.time && m - o.time < 864e5) return void (n.attr("href", o.url), "multiple" === o.type && n.append('<span class="site-tag">多结果</span>'), this.setSiteState(n, "available"));
-            const scope = await this.getRuntimeService("scope")(), result = await this.getRuntimeService("movie").searchExternalSite(t.id, e, { settings: await this.getSettingCache(), scope }), l = result.searchUrl;
+            const scope = this.lifecycleScope ?? await this.getRuntimeService("scope")(), result = await this.getRuntimeService("movie").searchExternalSite(t.id, e, { settings: await this.getSettingCache(), scope }), l = result.searchUrl;
             n.attr("href", l);
             if (view.isActive?.() === false) return;
             const h = result.matches;
