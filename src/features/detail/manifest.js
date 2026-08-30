@@ -24,13 +24,16 @@ export default defineFeature({
         const relatedPlugin = runtime.enabledContributions.includes("detail.related")
             ? runtime.resolveLegacyPlugin?.("RelatedPlugin")
             : null;
+        const pageActionsPlugin = runtime.enabledContributions.includes("detail.page-state-actions")
+            ? runtime.resolveLegacyPlugin?.("DetailPageButtonPlugin")
+            : null;
         const screenshotPlugin = runtime.enabledContributions.includes("detail.screenshot")
             ? runtime.resolveLegacyPlugin?.("ScreenShotPlugin")
             : null;
         const magnetPlugin = runtime.enabledContributions.includes("detail.native-magnets")
             ? runtime.resolveLegacyPlugin?.("HighlightMagnetPlugin")
             : null;
-        const controller = new DetailController({ hostAdapter: deps[PORT.host], nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, screenshotPlugin, magnetPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
+        const controller = new DetailController({ hostAdapter: deps[PORT.host], nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, pageActionsPlugin, screenshotPlugin, magnetPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
         return controller.start().then(() => ({ dispose: () => controller.dispose() }));
     },
 });

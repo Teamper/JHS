@@ -17,12 +17,14 @@ export class DetailPageButtonPlugin extends BasePlugin {
         super(), this.answerCount = 1;
         /** @type {any} */ this.stateBinding = null;
         /** @type {DetailStateController | null} */ this.detailStateController = null;
+        /** @type {any} */ this.lifecycleScope = null;
     }
     getDetailStateController() {
         return this.detailStateController ||= new DetailStateController(this.getRuntimeService("state"));
     }
-    async handle() {
-        const scope = await this.getRuntimeService("scope")();
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
+        const scope = this.lifecycleScope = options.scope ?? await this.getRuntimeService("scope")();
         this.hideVideoControls(scope), window.isDetailPage && (await this.createMenuBtn(), await this.autoRemoveNewVideoMark());
     }
     async autoRemoveNewVideoMark() {
@@ -37,7 +39,8 @@ export class DetailPageButtonPlugin extends BasePlugin {
     async createMenuBtn() {
         const e = this.getPageInfo(), t = e.carNum, n = `\n            <div class="jhs-detail-btn-row jhs-layout-e2965a97">\n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="filterBtn" class="jhs-btn jhs-btn--filter jhs-layout-44293084">\n                        <span>${m}</span>\n                    </button>\n                    <button type="button" id="favoriteBtn" class="jhs-btn jhs-btn--fav jhs-layout-44293084">\n                        <span>${v}</span>\n                    </button>\n                    <button type="button" id="hasDownBtn" class="jhs-btn jhs-btn--down jhs-layout-44293084">\n                        <span>${y}</span>\n                    </button>\n                    <button type="button" id="hasWatchBtn" class="jhs-btn jhs-btn--watch jhs-layout-44293084">\n                        <span>${k}</span>\n                    </button>\n                </div>\n        \n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="enable-magnets-filter" class="jhs-btn jhs-btn--watch jhs-layout-5f3e3549">\n                        <span id="magnets-span">关闭磁力过滤</span>\n                    </button>\n                    <button type="button" id="magnetSearchBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>磁力搜索</span>\n                    </button>\n                    <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>字幕 (迅雷)</span>\n                    </button>\n                    <button type="button" id="search-subtitle-btn" class="jhs-btn jhs-btn--accent jhs-layout-f43f0d6d">\n                        <span>字幕 (SubTitleCat)</span>\n                    </button>\n                </div>\n            </div>\n        `;
         const workspaceSlot = this.getOptionalDependency("DetailWorkspacePlugin")?.getSlot?.("summary-actions");
-        workspaceSlot?.length ? workspaceSlot.append(n) : r ? $(".tabs").after(n) : l && $("#mag-submit-show").before(n), $("#magnetSearchBtn").on("click", (async () => {
+        const menu = $(n);
+        workspaceSlot?.length ? workspaceSlot.append(menu) : r ? $(".tabs").after(menu) : l && $("#mag-submit-show").before(menu), menu.find("#magnetSearchBtn").on("click.jhsDetailActions", (async () => {
             const magnetHub = this.getOptionalDependency("MagnetHubPlugin");
             if (!magnetHub) return void show.info("磁力搜索功能已禁用");
             let t = await magnetHub.createMagnetHub(e.carNum);
@@ -53,29 +56,34 @@ export class DetailPageButtonPlugin extends BasePlugin {
             });
         }));
         const a = this.getOptionalDependency("HighlightMagnetPlugin"), settings = this.getRuntimeService("settings"), i = settings.snapshot().enableMagnetsFilter ?? _;
-        a || $("#enable-magnets-filter").remove(), $("#magnets-span").text(i === _ ? "关闭磁力过滤" : "开启磁力过滤"), i === _ && a?.doFilterMagnet?.();
+        a || menu.find("#enable-magnets-filter").remove(), menu.find("#magnets-span").text(i === _ ? "关闭磁力过滤" : "开启磁力过滤"), i === _ && a?.doFilterMagnet?.();
         const writeMagnetFilter = createLatestSettingWriter({ settings, key: "enableMagnetsFilter", fallback: C, apply: (value) => {
             const filtering = value === _;
-            const label = $("#magnets-span");
+            const label = menu.find("#magnets-span");
             if (filtering) { a?.doFilterMagnet?.(); label.text("关闭磁力过滤"); }
             else { a?.showAll?.(); label.text("开启磁力过滤"); }
         }, onError: (error) => {
             clog.error("磁力过滤设置保存失败，已恢复", error), show.error("磁力过滤设置保存失败，已恢复原设置");
         } });
-        $("#enable-magnets-filter").on("click", (async (/** @type {ActionEvent} */ e) => {
+        menu.find("#enable-magnets-filter").on("click.jhsDetailActions", (async (/** @type {ActionEvent} */ e) => {
             if (!a) return;
             const wasFiltering = "关闭磁力过滤" === $("#magnets-span").text();
             await writeMagnetFilter(!wasFiltering ? _ : C);
-        })), $("#search-subtitle-btn").on("click", ((/** @type {ActionEvent} */ e) => {
+        })), menu.find("#search-subtitle-btn").on("click.jhsDetailActions", ((/** @type {ActionEvent} */ e) => {
             const target = this.getRuntimeService("movie").sourceUrls({ carNum: t }, ["subtitlecat"])[0]?.url;
             if (target) utils.openPage(target, t, !1, e);
         })),
-        $("#xunLeiSubtitleBtn").on("click", (() => this.searchXunLeiSubtitle(t)));
+        menu.find("#xunLeiSubtitleBtn").on("click.jhsDetailActions", (() => this.searchXunLeiSubtitle(t)));
         if (!t) {
             $("#filterBtn, #favoriteBtn, #hasDownBtn, #hasWatchBtn, #magnetSearchBtn, #xunLeiSubtitleBtn, #search-subtitle-btn").prop("disabled", !0).attr("title", "番号不可用");
             return void clog.warn("详情操作不可用：番号不可用");
         }
         this.stateBinding = this.getDetailStateController().bind({ root: document, carNum: t, activityType: "detail-state", getRecord: () => this.getStateRecord() });
+        this.lifecycleScope?.addCleanup(() => {
+            menu.off(".jhsDetailActions").remove();
+            this.stateBinding = null;
+            this.lifecycleScope = null;
+        });
     }
     /** @param {string} e */
     async showStatus(e) {
@@ -104,7 +112,7 @@ export class DetailPageButtonPlugin extends BasePlugin {
     }
     /** @param {string} e */
     async searchXunLeiSubtitle(e) {
-        const dialog = this.getRuntimeService("dialog"), subtitle = this.getRuntimeService("subtitle"), scope = await this.getRuntimeService("scope")();
+        const dialog = this.getRuntimeService("dialog"), subtitle = this.getRuntimeService("subtitle"), scope = this.lifecycleScope ?? await this.getRuntimeService("scope")();
         let t = loading();
         try {
             const n = await subtitle.search("xunlei", { carNum: e }, { scope });
@@ -184,7 +192,7 @@ export class DetailPageButtonPlugin extends BasePlugin {
         const n = String(subtitle.extension || "").toLowerCase();
         if ("ass" === n || "srt" === n) try {
             const dialog = this.getRuntimeService("dialog");
-            const scope = await this.getRuntimeService("scope")();
+            const scope = this.lifecycleScope ?? await this.getRuntimeService("scope")();
             let a = await this.getRuntimeService("subtitle").download("xunlei", subtitle, { scope }), i = "字幕预览";
             "ass" === n ? i = "ASS字幕预览 - " + t : "srt" === n && (i = "SRT字幕预览 - " + t);
             const s = a.split("\n");

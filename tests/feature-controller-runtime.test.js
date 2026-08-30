@@ -38,16 +38,17 @@ describe("feature controller ownership", () => {
             locateDetailRoot: vi.fn(() => null),
             locateDetailSlots: vi.fn(() => ({})),
             readMovieRef: vi.fn(() => null),
-        }, calls = [], nativePlugin = { handle: vi.fn(() => calls.push("native")) }, workspacePlugin = { handle: vi.fn(() => calls.push("workspace")) }, reviewPlugin = { handle: vi.fn(() => calls.push("reviews")) }, relatedPlugin = { handle: vi.fn(() => calls.push("related")) }, screenshotPlugin = { handle: vi.fn(() => calls.push("screenshot")) }, magnetPlugin = { handle: vi.fn(() => calls.push("magnet")) };
-        const controller = new DetailController({ hostAdapter, nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, screenshotPlugin, magnetPlugin, scope, enabledContributions: [] });
+        }, calls = [], nativePlugin = { handle: vi.fn(() => calls.push("native")) }, workspacePlugin = { handle: vi.fn(() => calls.push("workspace")) }, reviewPlugin = { handle: vi.fn(() => calls.push("reviews")) }, relatedPlugin = { handle: vi.fn(() => calls.push("related")) }, pageActionsPlugin = { handle: vi.fn(() => calls.push("page-actions")) }, screenshotPlugin = { handle: vi.fn(() => calls.push("screenshot")) }, magnetPlugin = { handle: vi.fn(() => calls.push("magnet")) };
+        const controller = new DetailController({ hostAdapter, nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, pageActionsPlugin, screenshotPlugin, magnetPlugin, scope, enabledContributions: [] });
 
         await controller.start();
 
-        expect(calls).toEqual(["native", "workspace", "reviews", "related", "screenshot", "magnet"]);
+        expect(calls).toEqual(["native", "workspace", "reviews", "related", "page-actions", "magnet", "screenshot"]);
         expect(nativePlugin.handle).toHaveBeenCalledWith({ scope });
         expect(workspacePlugin.handle).toHaveBeenCalledWith({ scope });
         expect(reviewPlugin.handle).toHaveBeenCalledWith({ scope });
         expect(relatedPlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(pageActionsPlugin.handle).toHaveBeenCalledWith({ scope });
         expect(screenshotPlugin.handle).toHaveBeenCalledWith({ scope });
         expect(magnetPlugin.handle).toHaveBeenCalledWith({ scope });
     });
