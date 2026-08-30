@@ -33,6 +33,21 @@ describe("feature controller ownership", () => {
         expect(hostAdapter.locateDetailRoot).toHaveBeenCalledOnce();
     });
 
+    it("runs native detail enhancement before the workspace contribution", async () => {
+        const scope = createScope(), hostAdapter = {
+            locateDetailRoot: vi.fn(() => null),
+            locateDetailSlots: vi.fn(() => ({})),
+            readMovieRef: vi.fn(() => null),
+        }, calls = [], nativePlugin = { handle: vi.fn(() => calls.push("native")) }, workspacePlugin = { handle: vi.fn(() => calls.push("workspace")) };
+        const controller = new DetailController({ hostAdapter, nativePlugin, workspacePlugin, scope, enabledContributions: [] });
+
+        await controller.start();
+
+        expect(calls).toEqual(["native", "workspace"]);
+        expect(nativePlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(workspacePlugin.handle).toHaveBeenCalledWith({ scope });
+    });
+
     it("hands the feature scope to the stats contribution and exposes its action", async () => {
         const scope = createScope(), plugin = { handle: vi.fn(), openDialog: vi.fn(() => "opened") }, controller = new StatsController({ statsPlugin: plugin, scope });
         await controller.start();

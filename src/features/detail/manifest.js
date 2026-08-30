@@ -11,10 +11,14 @@ export default defineFeature({
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         if (runtime.route === "owned-detail") return { dispose: () => {} };
+        const nativeContribution = deps[PORT.host].site === "javbus" ? "detail.javbus-native" : "detail.javdb-native";
+        const nativePlugin = runtime.enabledContributions.includes(nativeContribution)
+            ? runtime.resolveLegacyPlugin?.(deps[PORT.host].site === "javbus" ? "BusDetailPagePlugin" : "DetailPagePlugin")
+            : null;
         const workspacePlugin = runtime.enabledContributions.includes("detail.workspace")
             ? runtime.resolveLegacyPlugin?.("DetailWorkspacePlugin")
             : null;
-        const controller = new DetailController({ hostAdapter: deps[PORT.host], workspacePlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
+        const controller = new DetailController({ hostAdapter: deps[PORT.host], nativePlugin, workspacePlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
         return controller.start().then(() => ({ dispose: () => controller.dispose() }));
     },
 });

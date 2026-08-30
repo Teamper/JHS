@@ -228,9 +228,16 @@ assertIncludes(listControllerSource, "this.scope.ownTimeout(setTimeout", "list a
 const detailControllerSource = await read("src/features/detail/detail-controller.js");
 const detailManifestSource = await read("src/features/detail/manifest.js");
 const detailWorkspaceSource = await read("src/plugins/status/detail-workspace.js");
+const detailPageSource = await read("src/plugins/status/detail-page.js");
+const busDetailPageSource = await read("src/plugins/status/bus-detail-page.js");
+assertIncludes(detailControllerSource, "nativePlugin?.handle?.({ scope: this.scope })", "native detail feature handoff");
 assertIncludes(detailControllerSource, "workspacePlugin?.handle?.({ scope: this.scope })", "detail workspace feature handoff");
 assertIncludes(detailManifestSource, '"detail.workspace"', "detail workspace contribution selection");
+assertIncludes(detailManifestSource, '"detail.javdb-native"', "JavDB native detail contribution selection");
+assertIncludes(detailManifestSource, '"detail.javbus-native"', "JavBus native detail contribution selection");
 assertIncludes(detailWorkspaceSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail workspace injected scope");
+assertIncludes(detailPageSource, "export class DetailPagePlugin", "JavDB native detail implementation");
+assertIncludes(busDetailPageSource, "export class BusDetailPagePlugin", "JavBus native detail implementation");
 assertIncludes(listViewSource, "export class ListView", "real list view");
 assertIncludes(listViewSource, "shouldShowItem({ filter: normalizedFilter", "list view shared filter semantics");
 assertIncludes(listViewSource, "async createQuickFilter(initialFilter)", "list view quick-filter ownership");

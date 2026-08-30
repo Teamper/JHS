@@ -77,6 +77,8 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.find((item) => item.id === "list.fold-category")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "list.actions")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.workspace")?.managedByFeature).toBe(true);
+        expect(legacyContributionManifests.find((item) => item.id === "detail.javdb-native")?.managedByFeature).toBe(true);
+        expect(legacyContributionManifests.find((item) => item.id === "detail.javbus-native")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "responsive-shell.bottom-bar")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "identity").every((item) => item.managedByFeature)).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "external-bridge").every((item) => item.managedByFeature)).toBe(true);
