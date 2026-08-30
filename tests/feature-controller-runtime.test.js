@@ -38,14 +38,16 @@ describe("feature controller ownership", () => {
             locateDetailRoot: vi.fn(() => null),
             locateDetailSlots: vi.fn(() => ({})),
             readMovieRef: vi.fn(() => null),
-        }, calls = [], nativePlugin = { handle: vi.fn(() => calls.push("native")) }, workspacePlugin = { handle: vi.fn(() => calls.push("workspace")) };
-        const controller = new DetailController({ hostAdapter, nativePlugin, workspacePlugin, scope, enabledContributions: [] });
+        }, calls = [], nativePlugin = { handle: vi.fn(() => calls.push("native")) }, workspacePlugin = { handle: vi.fn(() => calls.push("workspace")) }, reviewPlugin = { handle: vi.fn(() => calls.push("reviews")) }, relatedPlugin = { handle: vi.fn(() => calls.push("related")) };
+        const controller = new DetailController({ hostAdapter, nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, scope, enabledContributions: [] });
 
         await controller.start();
 
-        expect(calls).toEqual(["native", "workspace"]);
+        expect(calls).toEqual(["native", "workspace", "reviews", "related"]);
         expect(nativePlugin.handle).toHaveBeenCalledWith({ scope });
         expect(workspacePlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(reviewPlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(relatedPlugin.handle).toHaveBeenCalledWith({ scope });
     });
 
     it("hands the feature scope to the stats contribution and exposes its action", async () => {

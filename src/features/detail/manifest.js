@@ -18,7 +18,13 @@ export default defineFeature({
         const workspacePlugin = runtime.enabledContributions.includes("detail.workspace")
             ? runtime.resolveLegacyPlugin?.("DetailWorkspacePlugin")
             : null;
-        const controller = new DetailController({ hostAdapter: deps[PORT.host], nativePlugin, workspacePlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
+        const reviewPlugin = runtime.enabledContributions.includes("detail.reviews")
+            ? runtime.resolveLegacyPlugin?.("ReviewPlugin")
+            : null;
+        const relatedPlugin = runtime.enabledContributions.includes("detail.related")
+            ? runtime.resolveLegacyPlugin?.("RelatedPlugin")
+            : null;
+        const controller = new DetailController({ hostAdapter: deps[PORT.host], nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
         return controller.start().then(() => ({ dispose: () => controller.dispose() }));
     },
 });

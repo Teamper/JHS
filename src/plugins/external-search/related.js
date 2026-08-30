@@ -22,17 +22,18 @@ export class RelatedPlugin extends BasePlugin {
                 .jhs-related-time { color:var(--jhs-text-faint); font-size:14px; white-space:nowrap; }
             </style>`;
     }
-    async handle() {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
         if (!window.isDetailPage || !r) return;
         const movieId = new URL(window.location.href).pathname.split("/").filter(Boolean).pop();
-        if (movieId) await this.showRelated(this.getHostedSlot("related"), movieId);
+        if (movieId) await this.showRelated(this.getHostedSlot("related"), movieId, { scope: options.scope ?? await this.getRuntimeService("scope")() });
     }
     getHostedSlot(/** @type {string} */ name) {
         const element = this.getRuntimeService("host").locateDetailSlots()[name];
         return element ? $(element) : $();
     }
     async showRelated(/** @type {any} */ target, /** @type {string} */ movieId, /** @type {Record<string, unknown>} */ options = {}) {
-        const panel = new RelatedPanel({ related: this.getRuntimeService("related"), settings: this.getRuntimeService("settings"), scope: () => this.getRuntimeService("scope")() });
+        const panel = new RelatedPanel({ related: this.getRuntimeService("related"), settings: this.getRuntimeService("settings"), scope: () => options.scope ? Promise.resolve(options.scope) : this.getRuntimeService("scope")() });
         return panel.show(target?.length ? target : this.getHostedSlot("related"), movieId, options);
     }
 }

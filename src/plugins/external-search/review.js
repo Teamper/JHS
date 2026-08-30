@@ -35,18 +35,19 @@ export class ReviewPlugin extends BasePlugin {
                 @media (max-width:767px) { .jhs-review-floor { width:100%; margin-left:0; } }
             </style>`;
     }
-    async handle() {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
         if (!window.isDetailPage) return;
+        const scope = options.scope ?? await this.getRuntimeService("scope")();
         if (r) {
             const movieId = this.parseMovieId(window.location.href);
-            await this.showReview(movieId, this.getHostedSlot("reviews"));
+            await this.showReview(movieId, this.getHostedSlot("reviews"), { scope });
         }
         if (l) {
             const carNumber = this.getPageInfo().carNum;
             if (!carNumber) return void clog.warn("跳过 JavBus 评论解析：番号不可用");
-            const scope = await this.getRuntimeService("scope")();
             const movieRef = await this.getRuntimeService("movie").resolve({ carNum: carNumber }, { scope });
-            movieRef?.movieId && await this.showReview(movieRef.movieId, this.getHostedSlot("reviews"));
+            movieRef?.movieId && await this.showReview(movieRef.movieId, this.getHostedSlot("reviews"), { scope });
         }
     }
     getHostedSlot(/** @type {string} */ name) {
@@ -54,7 +55,7 @@ export class ReviewPlugin extends BasePlugin {
         return element ? $(element) : $();
     }
     async showReview(/** @type {string} */ movieId, /** @type {any} */ target, /** @type {Record<string, unknown>} */ options = {}) {
-        const panel = new ReviewPanel({ review: this.getRuntimeService("review"), settings: this.getRuntimeService("settings"), storage: this.getRuntimeService("storage"), scope: () => this.getRuntimeService("scope")() });
+        const panel = new ReviewPanel({ review: this.getRuntimeService("review"), settings: this.getRuntimeService("settings"), storage: this.getRuntimeService("storage"), scope: () => options.scope ? Promise.resolve(options.scope) : this.getRuntimeService("scope")() });
         return panel.show(movieId, target?.length ? target : this.getHostedSlot("reviews"), options);
     }
 }
