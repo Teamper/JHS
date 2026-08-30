@@ -192,6 +192,11 @@ assert(!eventBus.includes("this.channel.postMessage(event);\n        await this.
 
 // List page function signature assertions
 const listPageSource = await read("src/plugins/status/list-page.js");
+const identityManifestSource = await read("src/features/identity/manifest.js");
+const identityControllerSource = await read("src/features/identity/identity-controller.js");
+const navBarSource = await read("src/plugins/status/nav-bar.js");
+const busNavBarSource = await read("src/plugins/status/bus-nav-bar.js");
+const identityActressSource = await read("src/plugins/avatar/actress-info.js");
 const listManifestSource = await read("src/features/list/manifest.js");
 const listControllerSource = await read("src/features/list/list-controller.js");
 const listViewSource = await read("src/features/list/list-view.js");
@@ -248,6 +253,15 @@ assertIncludes(libraryControllerSource, 'hasBlacklist: Boolean(this.blacklistPlu
 assertIncludes(libraryControllerSource, 'historyCall("openHistory")', "library history API boundary");
 assertIncludes(libraryControllerSource, 'keywordFilterCall("bindDetailRoot")', "library keyword API boundary");
 assertIncludes(libraryControllerSource, 'this.favoritePlugin?.handle({ scope: this.scope })', "library favorite lifecycle handoff");
+assertIncludes(identityManifestSource, 'id: "identity"', "real identity feature manifest");
+assertIncludes(identityManifestSource, 'new IdentityController({', "identity feature controller ownership");
+assertIncludes(identityControllerSource, 'this.javdbNavigationPlugin?.handle({ scope: this.scope, identityApi: api })', "identity navigation lifecycle handoff");
+assertIncludes(identityControllerSource, 'hasSearchByImage: Boolean(this.imageSearchPlugin)', "identity image-search API boundary");
+assertIncludes(navBarSource, 'this.identityApi?.openSearchByImage?.()', "JavDB navigation identity API boundary");
+assertIncludes(busNavBarSource, 'identityApi.openSearchByImage?.()', "JavBus navigation identity API boundary");
+assertIncludes(identityActressSource, 'options.scope ?? await this.getRuntimeService("scope")()', "identity actress scope handoff");
+assert(!navBarSource.includes('getOptionalDependency("SearchByImagePlugin")'), "JavDB navigation must not resolve SearchByImagePlugin directly");
+assert(!busNavBarSource.includes('getOptionalDependency("SearchByImagePlugin")'), "JavBus navigation must not resolve SearchByImagePlugin directly");
 assertIncludes(historySource, "async handle(options = {})", "history feature lifecycle entry");
 assertIncludes(historySource, "scope.addCleanup", "history feature scope cleanup");
 assertIncludes(statusImport, "async handle(options = {})", "state import feature lifecycle entry");

@@ -53,6 +53,25 @@ for (const [label, url] of [
   });
 }
 
+for (const [label, url, setup, selector, expectedPlugins] of [
+  ["JavDB", "https://javdb.com/", () => {
+    document.body.insertAdjacentHTML("afterbegin", '<div id="navbar-menu-hero"></div><div id="search-bar-container"></div>');
+  }, "#search-box #search-img-btn", ["NavBarPlugin", "SearchByImagePlugin", "ActressInfoPlugin"]],
+  ["JavBus", "https://www.javbus.com/", () => {
+    document.body.insertAdjacentHTML("afterbegin", '<nav id="navbar"><div><div><span></span></div></div></nav>');
+  }, "#search-img-btn.jhs-identity-search-image-btn", ["BusNavBarPlugin", "SearchByImagePlugin"]],
+]) {
+  test(`${label} identity navigation is mounted by the Identity feature`, async ({ context, page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers each Identity host entry");
+    await fulfillHostFixtures(context);
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    await page.evaluate(setup);
+    await injectUserscriptRuntime(page);
+    await expect(page.locator(selector)).toHaveCount(1);
+    await expect.poll(() => page.evaluate((names) => names.every((name) => window.unsafeWindow.pluginManager.getTimings().find((timing) => timing.name === name)?.status === "managed-feature"), expectedPlugins)).toBe(true);
+  });
+}
+
 test("Top250 intercepts the native premium route without a favorite-tab label", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the Top250 entry regression");
   await fulfillHostFixtures(context);

@@ -8,8 +8,9 @@ export class ActressInfoPlugin extends BasePlugin {
         /** @type {number} */ this._generation = 0;
     }
     getName() { return "ActressInfoPlugin"; }
-    async handle() {
-        const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
+        const settings = this.getRuntimeService("settings"), scope = options.scope ?? await this.getRuntimeService("scope")();
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names);
             if (!names?.includes("enableLoadActressInfo")) return;
