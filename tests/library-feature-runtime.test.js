@@ -7,8 +7,11 @@ describe("Library FeatureRuntime ownership", () => {
         const scope = new LifecycleScope("feature:library"), repository = {}, historyPlugin = {
             handle: vi.fn(async () => {}),
             get historyRepository() { return repository; },
-        }, statePlugin = { handle: vi.fn(async () => {}) }, keywordFilterPlugin = { handle: vi.fn(async () => {}) }, favoritePlugin = { handle: vi.fn(async () => {}) };
-        const controller = new LibraryController({ historyPlugin, statePlugin, keywordFilterPlugin, favoritePlugin, scope });
+        }, statePlugin = { handle: vi.fn(async () => {}) }, keywordFilterPlugin = { handle: vi.fn(async () => {}) }, blacklistPlugin = {
+            openBlacklistDialog: vi.fn(),
+            parseAndSaveFilterInfo: vi.fn(),
+        }, favoritePlugin = { handle: vi.fn(async () => {}) };
+        const controller = new LibraryController({ historyPlugin, statePlugin, keywordFilterPlugin, blacklistPlugin, favoritePlugin, scope });
 
         await controller.start();
         await controller.start();
@@ -22,6 +25,9 @@ describe("Library FeatureRuntime ownership", () => {
         expect(favoritePlugin.handle).toHaveBeenCalledOnce();
         expect(favoritePlugin.handle).toHaveBeenCalledWith({ scope });
         expect(controller.getApi().getHistoryRepository()).toBe(repository);
+        expect(controller.getApi().hasBlacklist).toBe(true);
+        controller.getApi().openBlacklistDialog("event");
+        expect(blacklistPlugin.openBlacklistDialog).toHaveBeenCalledWith("event");
         controller.dispose();
         expect(scope.disposed).toBe(false);
         scope.dispose();
@@ -32,6 +38,7 @@ describe("Library FeatureRuntime ownership", () => {
 
         await expect(controller.start()).resolves.toBeUndefined();
         expect(controller.getApi().getHistoryRepository()).toBeNull();
+        expect(controller.getApi().hasBlacklist).toBe(false);
         scope.dispose();
     });
 });

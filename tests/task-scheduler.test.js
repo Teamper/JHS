@@ -66,6 +66,11 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         getRuntimeService(name) {
             if ("storage" === name) return storage;
             if ("scope" === name) return () => scope;
+            if ("features" === name) return { getFeatureApi: vi.fn(async () => beans.BlacklistPlugin ? {
+                hasBlacklist: true,
+                parseAndSaveFilterInfo: (...args) => beans.BlacklistPlugin.parseAndSaveFilterInfo?.(...args),
+                resetBtnTip: (...args) => beans.BlacklistPlugin.resetBtnTip?.(...args),
+            } : null) };
             if ("http" === name) return http;
             if ("actressInfo" === name) return actressInfo;
             if ("movie" === name) return {

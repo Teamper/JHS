@@ -39,9 +39,21 @@ export class TaskPlugin extends BasePlugin {
         /** @type {Promise<any> | null} */ this.configRefreshPromise = null;
         this.configRefreshQueued = !1;
         /** @type {Set<string>} */ this.activeTasks = new Set();
+        /** @type {any} */ this.libraryFeatureApi = null;
     }
     getName() {
         return "TaskPlugin";
+    }
+    /** Resolve blacklist operations through the owning Library Feature. */
+    async getLibraryFeatureApi() {
+        if (this.libraryFeatureApi) return this.libraryFeatureApi;
+        try {
+            this.libraryFeatureApi = await this.getRuntimeService("features").getFeatureApi("library");
+        } catch (error) {
+            clog.warn("Library Feature API 不可用，跳过黑名单任务", error);
+            this.libraryFeatureApi = null;
+        }
+        return this.libraryFeatureApi;
     }
     getStartupMode() {
         return "idle";
@@ -322,8 +334,8 @@ export class TaskPlugin extends BasePlugin {
     }
     async checkBlacklist(force = !1) {
         const result = this.createTaskResult({ skippedHost: 0 });
-        const blacklistPlugin = this.getOptionalDependency("BlacklistPlugin");
-        if (!blacklistPlugin) return clog.warn("黑名单功能已禁用，跳过自动检测"), result;
+        const libraryFeatureApi = await this.getLibraryFeatureApi();
+        if (!libraryFeatureApi?.hasBlacklist) return clog.warn("黑名单功能已禁用，跳过自动检测"), result;
         await this.ensureReady();
         if (!await this.shouldStartTask("blacklist", force)) return clog.debug("检测黑名单未到整批执行时间"), result;
         this.beginTaskAttempt("blacklist"), result.attempted = !0;
@@ -369,7 +381,7 @@ export class TaskPlugin extends BasePlugin {
                     try {
                         const page = utils.htmlTo$dom(responseText);
                         await this.storageQueue.addTask((async () => {
-                            const parsed = await blacklistPlugin.parseAndSaveFilterInfo(page, name, starId, site);
+                            const parsed = await libraryFeatureApi.parseAndSaveFilterInfo(page, name, starId, site);
                             await storageManager.updateBlacklistItem({ starId, name, checkTime: utils.getNowStr(), lastPublishTime: parsed.lastPublishTime });
                         })), result.success++;
                     } catch (error) {
@@ -382,7 +394,7 @@ export class TaskPlugin extends BasePlugin {
             }
             const completed = 0 === result.parseFailed + result.networkFailed + result.aborted;
             result.completed = completed, result.fatal = !!blockedError, await this.finalizeTask("blacklist", completed), finalized = !0, this.renderBlacklistResult(result, completed);
-            try { await blacklistPlugin.resetBtnTip(); } catch (error) { clog.error("刷新黑名单检测提示失败", error); }
+            try { await libraryFeatureApi.resetBtnTip?.(); } catch (error) { clog.error("刷新黑名单检测提示失败", error); }
             if (blockedError) throw blockedError;
             return result;
             } catch (error) {

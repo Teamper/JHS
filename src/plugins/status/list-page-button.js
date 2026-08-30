@@ -32,12 +32,24 @@ export class ListPageButtonPlugin extends BasePlugin {
         }
         return this.listFeatureApi;
     }
+    /** Resolve the library capability without coupling this contribution to BlacklistPlugin. */
+    async getLibraryFeatureApi() {
+        if (this.libraryFeatureApi) return this.libraryFeatureApi;
+        try {
+            this.libraryFeatureApi = await this.getRuntimeService("features").getFeatureApi("library");
+        } catch (error) {
+            clog.warn("Library Feature API 不可用", error);
+            this.libraryFeatureApi = null;
+        }
+        return this.libraryFeatureApi;
+    }
     async handle() {
         // 热播/Top250 自渲染榜单由渲染方调用 mountHitShowControls 延迟挂载，启动期不注入页面 h2
         if (!window.isListPage || isHitShowPage() || window.location.search.includes("handleTop=1")) return;
         const scope = await this.getRuntimeService("scope")();
         const settings = this.getRuntimeService("settings");
-        await this.createMenuBtn(scope), this.bindEvent();
+        const libraryFeatureApi = await this.getLibraryFeatureApi();
+        await this.createMenuBtn(scope, null, libraryFeatureApi), this.bindEvent(libraryFeatureApi);
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names);
             if (!names?.includes("autoPage")) return;
@@ -52,8 +64,9 @@ export class ListPageButtonPlugin extends BasePlugin {
         const heading = target?.length ? target : $(".jhs-hitshow-heading");
         if (!heading.length || $("#waitCheckBtn").length) return;
         const scope = await this.getRuntimeService("scope")();
-        await this.createMenuBtn(scope, heading);
-        this.bindEvent();
+        const libraryFeatureApi = await this.getLibraryFeatureApi();
+        await this.createMenuBtn(scope, heading, libraryFeatureApi);
+        this.bindEvent(libraryFeatureApi);
         await this.syncSortUi();
     }
     /** 根据 autoPage 与当前站点能力同步排序控件；AutoPage ON 且不支持 live sorting 时明确进入“默认（瀑布流）”。 */
@@ -81,10 +94,11 @@ export class ListPageButtonPlugin extends BasePlugin {
         menu.find(`[data-sort-method="${method}"]`).attr("aria-checked", "true");
         await this.sortItems();
     }
-    /** @param {LifecycleScope} scope @param {any} [target] 自渲染榜单传入自有标题容器，避免注入页面 h2。 */
-    async createMenuBtn(scope, target = null) {
+    /** @param {LifecycleScope} scope @param {any} [target] 自渲染榜单传入自有标题容器，避免注入页面 h2。 @param {any} [libraryFeatureApi] */
+    async createMenuBtn(scope, target = null, libraryFeatureApi = null) {
         // 6.5 capability：功能被禁用时不渲染按钮，不留 disabled 死按钮。
-        const hasNewVideo = Boolean(this.getOptionalDependency("NewVideoPlugin")), hasBlacklist = Boolean(this.getOptionalDependency("BlacklistPlugin")), hasListPage = Boolean(await this.getListFeatureApi());
+        libraryFeatureApi ??= await this.getLibraryFeatureApi();
+        const hasNewVideo = Boolean(this.getOptionalDependency("NewVideoPlugin")), hasBlacklist = Boolean(libraryFeatureApi?.hasBlacklist), hasListPage = Boolean(await this.getListFeatureApi());
         if (r) {
             const e = o.includes("/actors/");
             let t = $(".main-tabs, .tabs"), n = "加入黑名单", a = "jhs-btn--filter", s = null;
@@ -124,16 +138,16 @@ export class ListPageButtonPlugin extends BasePlugin {
         const labels = { default: "默认", rateCount: "评价人数", date: "时间" }, key = "string" === typeof method && method in labels ? /** @type {keyof typeof labels} */ (method) : "default", current = labels[key];
         return `<div class="jhs-sort-control"><button type="button" id="sort-toggle-btn" class="jhs-btn jhs-btn--secondary" aria-haspopup="menu" aria-expanded="false" title="${title}"><span id="jhs-sort-current">${current}</span></button><div class="jhs-popover jhs-sort-menu" role="menu" aria-label="排序方式">${Object.entries(labels).map((([value, label]) => `<button type="button" class="jhs-btn jhs-btn--ghost jhs-sort-option" role="menuitemradio" aria-checked="${value === method ? "true" : "false"}" data-sort-method="${value}" tabindex="-1">${label}</button>`)).join("")}</div></div>`;
     }
-    bindEvent() {
+    bindEvent(libraryFeatureApi = null) {
         $("#waitCheckBtn").on("click", ((/** @type {any} */ e) => {
             void this.openWaitCheck().catch((error => clog.error("待鉴定列表打开失败", error)));
         })), $("#newVideoBtn").on("click", ((/** @type {any} */ e) => {
             this.getOptionalDependency("NewVideoPlugin")?.openDialog?.();
         })), $("#blacklistBtn").on("click", ((/** @type {any} */ e) => {
-            this.getOptionalDependency("BlacklistPlugin")?.openBlacklistDialog?.();
+            (libraryFeatureApi ?? this.libraryFeatureApi)?.openBlacklistDialog?.();
         })), this.bindSortMenu();
         // 6.5: capability 渲染在 createMenuBtn 完成，功能禁用时不渲染按钮；此处仅保留业务引用。
-        const blacklist = this.getOptionalDependency("BlacklistPlugin");
+        const blacklist = libraryFeatureApi ?? this.libraryFeatureApi;
         $("#addBlacklistBtn").on("click", (async (/** @type {any} */ t) => {
             await blacklist?.addBlacklist?.(t);
         })), $("#filterAllVideo").on("click", (async (/** @type {any} */ t) => {

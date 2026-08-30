@@ -26,6 +26,7 @@ function loadMobilePlugin({ beans: beanOverrides = null, isListPage = true, isDe
     vm.runInContext(`${source};globalThis.TestMobilePlugin=MobileBottomBarPlugin`, context);
     const plugin = new context.TestMobilePlugin();
     if (beans.ListPagePlugin) plugin.listFeatureApi = { getActiveQuickFilter: () => listPage.activeQuickFilter, setQuickFilter: listPage.setQuickFilter, syncQuickFilterUi: listPage.syncQuickFilterUi };
+    if (beans.BlacklistPlugin) plugin.libraryFeatureApi = { hasBlacklist: true, openBlacklistDialog: beans.BlacklistPlugin.openBlacklistDialog };
     return { $, host, listButtons, listPage, plugin };
 }
 

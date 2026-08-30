@@ -24,24 +24,24 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     ],
     HistoryPlugin: ["UnifiedOfflinePlugin", "Fc2Plugin"],
     HitShowPlugin: ["ListPageButtonPlugin", "CoverButtonPlugin"],
-    ListPageButtonPlugin: ["NewVideoPlugin", "BlacklistPlugin"],
+    ListPageButtonPlugin: ["NewVideoPlugin"],
     ListPagePlugin: [
         "HistoryPlugin", "ListPageButtonPlugin", "CoverButtonPlugin", "AutoPagePlugin",
         "BusImgPlugin", "Fc2Plugin"
     ],
     MobileBottomBarPlugin: [
         "DetailPageButtonPlugin", "ListPageButtonPlugin",
-        "NewVideoPlugin", "BlacklistPlugin", "SettingPlugin", "HighlightMagnetPlugin", "MagnetHubPlugin", "HistoryPlugin"
+        "NewVideoPlugin", "SettingPlugin", "HighlightMagnetPlugin", "MagnetHubPlugin", "HistoryPlugin"
     ],
     NavBarPlugin: ["SearchByImagePlugin"],
     NewVideoPlugin: ["TaskPlugin", "SettingPlugin"],
     PreviewVideoPlugin: ["DetailPageButtonPlugin"],
     SettingPlugin: [
         "CoverButtonPlugin", "TaskPlugin", "OtherSitePlugin", "TranslatePlugin",
-        "ActressInfoPlugin", "ScreenShotPlugin", "NewVideoPlugin", "BlacklistPlugin", "BusImgPlugin"
+        "ActressInfoPlugin", "ScreenShotPlugin", "NewVideoPlugin", "BusImgPlugin"
     ],
     StatsPlugin: ["NewVideoPlugin"],
-    TaskPlugin: ["BlacklistPlugin"],
+    TaskPlugin: [],
     TranslatePlugin: [],
     TOP250Plugin: ["HitShowPlugin", "ListPageButtonPlugin"],
     UnifiedOfflinePlugin: ["OneTwoThreeOfflinePlugin"]

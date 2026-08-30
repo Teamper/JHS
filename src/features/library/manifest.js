@@ -18,10 +18,13 @@ export default defineFeature({
         const keywordFilterPlugin = runtime.enabledContributions.includes("library.keyword-filter")
             ? runtime.resolveLegacyPlugin?.("FilterTitleKeywordPlugin")
             : null;
+        const blacklistPlugin = runtime.enabledContributions.includes("library.blacklist")
+            ? runtime.resolveLegacyPlugin?.("BlacklistPlugin")
+            : null;
         const favoritePlugin = runtime.enabledContributions.includes("library.favorite-actresses")
             ? runtime.resolveLegacyPlugin?.("FavoriteActressesPlugin")
             : null;
-        const controller = new LibraryController({ historyPlugin, statePlugin, keywordFilterPlugin, favoritePlugin, scope: runtime.scope });
+        const controller = new LibraryController({ historyPlugin, statePlugin, keywordFilterPlugin, blacklistPlugin, favoritePlugin, scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

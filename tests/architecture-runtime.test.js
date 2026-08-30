@@ -66,6 +66,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.find((item) => item.id === "library.history")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "library.state-actions")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "library.keyword-filter")?.managedByFeature).toBe(true);
+        expect(legacyContributionManifests.find((item) => item.id === "library.blacklist")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "library.favorite-actresses")?.managedByFeature).toBe(true);
         const createRuntime = (site, disabled = []) => {
             const diagnostics = new DiagnosticsService();

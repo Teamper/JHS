@@ -1,15 +1,16 @@
 // @ts-check
 
 /**
- * Own the first library contribution while the remaining library plugins stay
- * on the transitional legacy path.
+ * Own the library contributions while their legacy implementations are being
+ * migrated away from direct plugin-to-plugin calls.
  */
 export class LibraryController {
-    /** @param {{historyPlugin?: {handle: (options?: {scope: any}) => Promise<any> | any, historyRepository?: any}, statePlugin?: {handle: (options?: {scope: any}) => Promise<any> | any}, keywordFilterPlugin?: {handle: (options?: {scope: any}) => Promise<any> | any}, favoritePlugin?: {handle: (options?: {scope: any}) => Promise<any> | any}, scope: any}} options */
+    /** @param {{historyPlugin?: {handle: (options?: {scope: any}) => Promise<any> | any, historyRepository?: any}, statePlugin?: {handle: (options?: {scope: any}) => Promise<any> | any}, keywordFilterPlugin?: {handle: (options?: {scope: any}) => Promise<any> | any}, blacklistPlugin?: Record<string, any>, favoritePlugin?: {handle: (options?: {scope: any}) => Promise<any> | any}, scope: any}} options */
     constructor(options) {
         this.historyPlugin = options.historyPlugin ?? null;
         this.statePlugin = options.statePlugin ?? null;
         this.keywordFilterPlugin = options.keywordFilterPlugin ?? null;
+        this.blacklistPlugin = options.blacklistPlugin ?? null;
         this.favoritePlugin = options.favoritePlugin ?? null;
         this.scope = options.scope;
         this.started = false;
@@ -32,8 +33,16 @@ export class LibraryController {
 
     /** Expose the stable library capability surface for later migrations. */
     getApi() {
+        const blacklistCall = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => this.blacklistPlugin?.[name]?.(...args);
         return Object.freeze({
             getHistoryRepository: () => this.historyPlugin?.historyRepository ?? null,
+            hasBlacklist: Boolean(this.blacklistPlugin),
+            addBlacklist: blacklistCall("addBlacklist"),
+            openBlacklistDialog: blacklistCall("openBlacklistDialog"),
+            filterAllVideo: blacklistCall("filterAllVideo"),
+            parseAndSaveFilterInfo: blacklistCall("parseAndSaveFilterInfo"),
+            resetBtnTip: blacklistCall("resetBtnTip"),
+            reloadTable: blacklistCall("reloadTable"),
         });
     }
 

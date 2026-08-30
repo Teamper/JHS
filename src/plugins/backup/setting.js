@@ -61,11 +61,17 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
     getName() {
         return "SettingPlugin";
     }
-    getFormDependencies() {
+    async getFormDependencies() {
+        let blacklist = null;
+        try {
+            blacklist = await this.getRuntimeService("features").getFeatureApi("library");
+        } catch (error) {
+            clog.warn("Library Feature API 不可用，跳过黑名单设置刷新", error);
+        }
         return Object.freeze({
             otherSite: this.getOptionalDependency("OtherSitePlugin"), translate: this.getOptionalDependency("TranslatePlugin"),
             actressInfo: this.getOptionalDependency("ActressInfoPlugin"), screenshot: this.getOptionalDependency("ScreenShotPlugin"),
-            newVideo: this.getOptionalDependency("NewVideoPlugin"), blacklist: this.getOptionalDependency("BlacklistPlugin"),
+            newVideo: this.getOptionalDependency("NewVideoPlugin"), blacklist,
             busImg: this.getOptionalDependency("BusImgPlugin"), host: this.getRuntimeService("host"), movie: this.getRuntimeService("movie"), settings: this.getRuntimeService("settings"),
             settingsRegistry: this.getRuntimeService("settingsRegistry"),
         });
@@ -157,7 +163,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             const host = $(event.currentTarget).find(".simple-setting");
             disposeQuickSettingHost(host);
             host.html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
-            try { await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this), host); } catch (error) { clog.warn("桌面快捷设置初始化失败", error); }
+            try { await initQuickSettingForm(await this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this), host); } catch (error) { clog.warn("桌面快捷设置初始化失败", error); }
             clog.lowZIndex();
         })).on("mouseleave.jhsSettingQuick", ".setting-box", ((event) => {
             disposeQuickSettingHost($(event.currentTarget).find(".simple-setting"));
@@ -165,7 +171,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             const host = $(event.currentTarget).find(".mini-simple-setting");
             disposeQuickSettingHost(host);
             host.html(buildQuickSettingHtml(this.getRuntimeService("settingsRegistry"))).show();
-            try { await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this), host); } catch (error) { clog.warn("迷你快捷设置初始化失败", error); }
+            try { await initQuickSettingForm(await this.getFormDependencies(), this.getSelector.bind(this), this.openSettingDialog.bind(this), host); } catch (error) { clog.warn("迷你快捷设置初始化失败", error); }
             clog.lowZIndex();
         })).on("mouseleave.jhsSettingQuick", ".mini-setting-box", ((event) => {
             disposeQuickSettingHost($(event.currentTarget).find(".mini-simple-setting"));
@@ -211,7 +217,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             event.shiftKey && document.activeElement === first ? (event.preventDefault(), last.focus()) : !event.shiftKey && document.activeElement === last && (event.preventDefault(), first.focus());
         }));
         try {
-            await initQuickSettingForm(this.getFormDependencies(), this.getSelector.bind(this), (panel => {
+            await initQuickSettingForm(await this.getFormDependencies(), this.getSelector.bind(this), (panel => {
                 closeQuickSetting(!1), void this.openSettingDialog(panel).catch((error => clog.error("完整设置打开失败", error)));
             }), quickRoot), sheet.find(".jhs-quick-setting__close").trigger("focus");
         } catch (error) {
@@ -361,7 +367,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         button.attr("data-jhs-settings-ready", "false").prop("disabled", !0).attr("title", "正在加载设置…"), status.empty().text("正在加载设置…");
         const root = $(layerRoot);
         try {
-            await loadSettingForm(this.getFormDependencies(), root);
+            await loadSettingForm(await this.getFormDependencies(), root);
             if (!button[0]?.isConnected || generation !== this._settingsDialogGeneration || root.data("jhsSettingsGeneration") !== generation) return !1;
             JhsSelect.refreshAll(layerRoot), button.attr("data-jhs-settings-ready", "true").prop("disabled", !1).removeAttr("title"), status.empty().text("设置已加载");
             return !0;
@@ -474,7 +480,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 // Success toast must only appear after all pending live writes on
                 // this Full settings surface have settled.
                 await this._fullSettingBinding?.flush?.({ throwOnFailure: true });
-                const result = await saveSettingForm(this.getFormDependencies(), root);
+                const result = await saveSettingForm(await this.getFormDependencies(), root);
                 if (result?.canceled) return;
                 show.ok("保存成功");
             } catch (error) {
