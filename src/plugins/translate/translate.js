@@ -21,8 +21,10 @@ export class TranslatePlugin extends BasePlugin {
         return "\n            <style>\n                .translated-title { margin-top:var(--jhs-space-2); color:var(--jhs-text); font-size:clamp(16px,1.5vw,18px); font-weight:500; line-height:1.5; }\n                .translated-title.is-error { color:var(--jhs-danger); }\n            </style>";
     }
     /** 标题翻译 live 生命周期：listener 只注册一次，OFF→revert，ON→re-apply。 */
-    async handle() {
-        const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
+        const settings = this.getRuntimeService("settings"), scope = options.scope ?? await this.getRuntimeService("scope")();
+        this.lifecycleScope = scope;
         if (!this._settingsListenerBound) {
             this._settingsListenerBound = true;
             const onSettingsChanged = (/** @type {any} */ event) => {
@@ -45,7 +47,7 @@ export class TranslatePlugin extends BasePlugin {
     }
     /** ON：详情页插入/刷新翻译标题；列表页翻译当前所有卡片。 */
     async applyTranslation() {
-        if (isDetailPage) return this.translate();
+        if (isDetailPage) return this.translate(null, !0, { scope: this.lifecycleScope });
         if (!window.isListPage) return;
         const listFeature = await this.getListFeatureApi(), selectors = listFeature?.getListSelectors?.();
         if (!listFeature?.translateListItems || !selectors) return;
@@ -59,12 +61,12 @@ export class TranslatePlugin extends BasePlugin {
         listFeature?.invalidateTranslations?.();
         await listFeature?.revertTranslation?.();
     }
-    /** @param {string | null} [e] @param {boolean} [t] @param {{root?: ParentNode}} [options] */
+    /** @param {string | null} [e] @param {boolean} [t] @param {{root?: ParentNode, scope?: any}} [options] */
     async translate(e, t = !0, options = {}) {
         const settings = this.getRuntimeService("settings");
         if ((settings.snapshot().translateTitle ?? _) !== _) return;
         l && (t = !1);
-        const scope = await this.getRuntimeService("scope")();
+        const scope = options.scope ?? this.lifecycleScope ?? await this.getRuntimeService("scope")();
         const carNum = e ?? this.getPageInfo().carNum;
         await renderTranslatedTitle({ root: options.root, carNum, translation: this.getRuntimeService("translation"), scope, isActive: () => (settings.snapshot().translateTitle ?? _) === _ });
     }

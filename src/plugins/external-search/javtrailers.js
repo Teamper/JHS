@@ -11,7 +11,8 @@ export class JavTrailersPlugin extends BasePlugin {
     constructor() {
         super(), this.hasBand = !1;
     }
-    async handle() {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
         let e = window.location.href;
         if (!e.includes("handle=1")) return;
         if ($("h1:contains('Page not found')").length) {
@@ -24,7 +25,7 @@ export class JavTrailersPlugin extends BasePlugin {
             const n = e.split("?")[0].split("search/")[1].toLowerCase(), a = t.find(((/** @type {Element} */ e) => $(e).find(".vid-title").text().toLowerCase().includes(n)));
             if (a) return void (window.location.href = $(a).attr("href") + window.location.search);
         }
-        const scope = await this.getRuntimeService("scope")();
+        const scope = options.scope ?? await this.getRuntimeService("scope")();
         this.handlePlayJavTrailers(scope), this.bindPlaybackControls(scope);
     }
     bindPlaybackControls(/** @type {any} */ scope) {

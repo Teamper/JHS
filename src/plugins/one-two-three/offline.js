@@ -11,9 +11,10 @@ export class OneTwoThreeOfflinePlugin extends BasePlugin {
     getName() {
         return "OneTwoThreeOfflinePlugin";
     }
-    async handle() {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
         if ("yun.123pan.com" !== window.location.hostname) return;
-        this.startTokenSync(await this.getRuntimeService("scope")());
+        this.startTokenSync(options.scope ?? await this.getRuntimeService("scope")());
     }
     /** @param {any} scope */
     startTokenSync(scope) {

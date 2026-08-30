@@ -69,7 +69,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             clog.warn("Library Feature API 不可用，跳过黑名单设置刷新", error);
         }
         return Object.freeze({
-            otherSite: this.getOptionalDependency("OtherSitePlugin"), translate: this.getOptionalDependency("TranslatePlugin"),
+            otherSite: this.getOptionalDependency("OtherSitePlugin"),
             actressInfo: this.getOptionalDependency("ActressInfoPlugin"), screenshot: this.getOptionalDependency("ScreenShotPlugin"),
             newVideo: this.getOptionalDependency("NewVideoPlugin"), blacklist,
             busImg: this.getOptionalDependency("BusImgPlugin"), host: this.getRuntimeService("host"), movie: this.getRuntimeService("movie"), settings: this.getRuntimeService("settings"),

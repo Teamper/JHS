@@ -49,15 +49,17 @@ export class UnifiedOfflinePlugin extends BasePlugin {
     constructor() { super(), this.registry = new OfflineProviderRegistry, this.BUTTON_COOLDOWN_MS = 1800; }
     getName() { return "UnifiedOfflinePlugin"; }
     async initCss() { return '<style>.jhs-offline-btn.loading{cursor:wait;opacity:.65}.jhs-offline-native{margin-left:6px;padding:3px 8px}</style>'; }
-    async handle() {
+    /** @param {{scope?: any, oneTwoThreePlugin?: any}} [options] */
+    async handle(options = {}) {
         if (!(r || l)) return;
-        const scope = await this.getRuntimeService("scope")();
-        this.registerProviders(scope), this.bindSubmit(), scope.addCleanup((() => $(document).off(".jhsUnifiedOffline")));
+        const scope = options.scope ?? await this.getRuntimeService("scope")();
+        this.registerProviders(scope, options.oneTwoThreePlugin), this.bindSubmit(), scope.addCleanup((() => $(document).off(".jhsUnifiedOffline")));
         if (window.isDetailPage) this.injectNativeButtons(), jhsEventBus && scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
     }
     /** @param {any} scope */
-    registerProviders(scope) {
-        const one23 = this.getOptionalDependency("OneTwoThreeOfflinePlugin"), offline = this.getRuntimeService("offline");
+    /** @param {any} scope @param {any} [one23] */
+    registerProviders(scope, one23 = null) {
+        const offline = this.getRuntimeService("offline");
         one23 && this.registry.register({ id: "123", name: "123 云盘", capabilities: [ "magnet" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: () => storageManager.getSetting("enable123Offline", !0), getAvailability: async () => await one23.getStoredToken() ? { available: !0, authState: "ready", reason: "授权已同步" } : { available: !1, authState: "token-missing", reason: "尚未同步 123 授权" }, submit: async (/** @type {string} */ resource) => { const token = await one23.getStoredToken(); if (!token) throw Object.assign(new Error("尚未同步 123 授权"), { code: "TOKEN_MISSING" }); return offline.submitWithIntegration("pan123", resource, { token, scope }); }, openUrl: () => offline.getIntegrationHomeUrl("pan123") });
         this.registry.register({ id: "115", name: "115", capabilities: [ "magnet", "ed2k" ], retryPolicy: { automaticAttempts: 0 }, isEnabled: () => storageManager.getSetting("enable115Offline", !1), getAvailability: async () => ({ available: !0, authState: "unknown", reason: "提交时确认登录状态" }), submit: (/** @type {string} */ resource) => offline.submitWithIntegration("one115", resource, { scope }), openUrl: () => offline.getIntegrationHomeUrl("one115") });
         (/** @type {any} */ (window)).offlineProviderRegistry = this.registry;

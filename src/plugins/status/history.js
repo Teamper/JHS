@@ -113,6 +113,14 @@ export class HistoryPlugin extends BasePlugin {
     get historyRepository() {
         return this._historyRepository ||= new HistoryRepository({ storage: storageManager, state: this.getRuntimeService("state") });
     }
+    async getExternalBridgeFeatureApi() {
+        try {
+            return await this.getRuntimeService("features").getFeatureApi("external-bridge");
+        } catch (error) {
+            clog.warn("External Bridge Feature API 不可用，跳过离线操作", error);
+            return null;
+        }
+    }
     async initCss() {
         return `
             <style>
@@ -226,10 +234,10 @@ export class HistoryPlugin extends BasePlugin {
                     await utils.copyToClipboard("离线资源", $(event.currentTarget).data("resource"));
                 })).on("click", ".jhs-retry-offline", (async (/** @type {any} */ event) => {
                     const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id);
-                    const offline = this.getOptionalDependency("UnifiedOfflinePlugin");
-                    item && offline && await offline.submitResource(event, item.resource, $(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: !0, preferredProviderId: item.providerId }), await this.renderOfflineHistory();
+                    const externalBridge = await this.getExternalBridgeFeatureApi();
+                    item && externalBridge?.hasOffline && await externalBridge.submitOffline(event, item.resource, $(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: !0, preferredProviderId: item.providerId }), await this.renderOfflineHistory();
                 })).on("click", ".jhs-open-offline", (async (/** @type {any} */ event) => {
-                    const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id), provider = this.getOptionalDependency("UnifiedOfflinePlugin")?.registry?.providers?.get(item?.providerId), url = provider?.openUrl?.();
+                    const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id), externalBridge = await this.getExternalBridgeFeatureApi(), provider = externalBridge?.getOfflineProvider?.(item?.providerId), url = provider?.openUrl?.();
                     url && window.open(url, "_blank", "noopener,noreferrer");
                 })).on("click", ".jhs-delete-offline", (async (/** @type {any} */ event) => {
                     await this.historyRepository.removeOffline($(event.currentTarget).data("id")), await this.renderOfflineHistory();
@@ -255,12 +263,12 @@ export class HistoryPlugin extends BasePlugin {
         });
     }
     async renderOfflineHistory() {
-        const history = await this.historyRepository.offline(), host = this.historyRoot.find("#table-container").empty();
+        const history = await this.historyRepository.offline(), externalBridge = await this.getExternalBridgeFeatureApi(), host = this.historyRoot.find("#table-container").empty();
         if (!history.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无离线任务</div>');
         history.slice().reverse().forEach((/** @type {HistoryRecord} */ item) => {
-            const offline = this.getOptionalDependency("UnifiedOfflinePlugin"), provider = offline?.registry?.providers?.get?.(item.providerId);
+            const provider = externalBridge?.getOfflineProvider?.(item.providerId);
             const actions = $("<div class=\"jhs-toolbar\"></div>").append($("<button type=\"button\" class=\"jhs-btn jhs-copy-offline\">复制资源</button>").attr("data-resource", item.resource));
-            if (offline && provider) actions.append($("<button type=\"button\" class=\"jhs-btn jhs-retry-offline\">重试</button>").attr("data-id", item.id));
+            if (externalBridge?.hasOffline && provider) actions.append($("<button type=\"button\" class=\"jhs-btn jhs-retry-offline\">重试</button>").attr("data-id", item.id));
             if (provider && typeof provider.openUrl === "function") actions.append($("<button type=\"button\" class=\"jhs-btn jhs-open-offline\">打开服务</button>").attr("data-id", item.id));
             actions.append($("<button type=\"button\" class=\"jhs-btn jhs-btn--danger jhs-delete-offline\">移除记录</button>").attr("data-id", item.id));
             host.append($("<article class=\"jhs-card\"></article>").append($("<strong></strong>").text(`${item.providerName || item.providerId} · ${item.status}`), $("<p></p>").text(`${item.carNum || "未关联番号"} · ${new Date(item.createdAt).toLocaleString()}${item.retryOf ? ` · 重试自 ${item.retryOf}` : ""}`), $("<p></p>").text(item.errorMessage || item.resource), actions));

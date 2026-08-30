@@ -22,7 +22,7 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
         "DetailPageButtonPlugin", "MagnetHubPlugin", "OtherSitePlugin",
         "Fc2By123AvPlugin", "TOP250Plugin", "ScreenShotPlugin"
     ],
-    HistoryPlugin: ["UnifiedOfflinePlugin", "Fc2Plugin"],
+    HistoryPlugin: ["Fc2Plugin"],
     HitShowPlugin: ["ListPageButtonPlugin", "CoverButtonPlugin"],
     ListPageButtonPlugin: ["NewVideoPlugin"],
     ListPagePlugin: [
@@ -37,13 +37,13 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     NewVideoPlugin: ["TaskPlugin", "SettingPlugin"],
     PreviewVideoPlugin: ["DetailPageButtonPlugin"],
     SettingPlugin: [
-        "CoverButtonPlugin", "TaskPlugin", "OtherSitePlugin", "TranslatePlugin",
+        "CoverButtonPlugin", "TaskPlugin", "OtherSitePlugin",
         "ActressInfoPlugin", "ScreenShotPlugin", "NewVideoPlugin", "BusImgPlugin"
     ],
     StatsPlugin: ["NewVideoPlugin"],
     TaskPlugin: [],
     TranslatePlugin: [],
     TOP250Plugin: ["HitShowPlugin", "ListPageButtonPlugin"],
-    UnifiedOfflinePlugin: ["OneTwoThreeOfflinePlugin"]
+    UnifiedOfflinePlugin: []
 });
 // @ts-check

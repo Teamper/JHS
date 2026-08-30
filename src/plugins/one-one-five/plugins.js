@@ -9,10 +9,11 @@ import { format115Size, normalize115Keyword, preview115Rename } from "./client.j
 export class OneOneFiveMatchPlugin extends BasePlugin {
     constructor() { super(), this.observer = null, this.unsubscribeItems = null, this.pendingCards = new Set, this.flushTimer = null, this.lifecycleScope = null, this.concurrency = 4, this.cacheMinutes = 60; }
     getName() { return "OneOneFiveMatchPlugin"; }
-    async handle() {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
         if (!await storageManager.getSetting("enable115Match", !1)) return;
         const hostAdapter = this.getRuntimeService("host"), offline = this.getRuntimeService("offline");
-        this.lifecycleScope = await this.getRuntimeService("scope")();
+        this.lifecycleScope = options.scope ?? await this.getRuntimeService("scope")();
         if (!isDetailPage) {
             await this.setupListMatching(hostAdapter), this.lifecycleScope.ownObserver(this.observer), this.lifecycleScope.addCleanup((() => {
                 this.unsubscribeItems?.(), this.unsubscribeItems = null, this.flushTimer && clearTimeout(this.flushTimer), this.flushTimer = null, this.pendingCards.clear();

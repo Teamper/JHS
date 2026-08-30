@@ -6,7 +6,7 @@ export class SubTitleCatPlugin extends BasePlugin {
     getName() {
         return "SubTitleCatPlugin";
     }
-    handle() {
+    handle(/** @type {{scope?: any}} */ _options = {}) {
         $(".t-banner-inner").hide(), $("#navbar").hide();
         let e = (new URLSearchParams(window.location.search).get("search") || "").toLowerCase(), t = $(".sub-table tr td a").toArray(), n = 0;
         t.forEach(((/** @type {Element} */ t) => {
