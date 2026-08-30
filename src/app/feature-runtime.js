@@ -23,7 +23,15 @@ export class FeatureRuntime {
         this.activations = new Map();
         /** @type {Map<string, LifecycleScope>} */
         this.contributionScopes = new Map();
+        /** @type {((name: string) => any) | null} */
+        this.legacyResolver = null;
         this.commands.setActivator((featureId) => this.activate(featureId).then(() => undefined));
+    }
+
+    /** @param {(name: string) => any} resolver */
+    setLegacyResolver(resolver) {
+        if (typeof resolver !== "function") throw new TypeError("Legacy resolver must be a function");
+        this.legacyResolver = resolver;
     }
 
     /** @param {Record<string, any>} manifest */
@@ -111,7 +119,10 @@ export class FeatureRuntime {
         try {
             const dependencies = this.container.resolveDeclared(manifest.requires);
             const enabledContributions = Object.freeze(manifest.contributes.filter((/** @type {string} */ id) => !this.disabled.has(id)));
-            const result = await manifest.activate(dependencies, Object.freeze({ scope, enabledContributions, route: this.route }));
+            const result = await manifest.activate(dependencies, Object.freeze({
+                scope, enabledContributions, route: this.route,
+                resolveLegacyPlugin: (/** @type {string} */ name) => this.legacyResolver?.(name),
+            }));
             for (const command of manifest.providesCommands) {
                 const handler = result?.commands?.[command];
                 if (typeof handler !== "function") throw new Error(`Feature ${manifest.id} did not provide command ${command}`);

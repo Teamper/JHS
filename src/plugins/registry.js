@@ -48,12 +48,12 @@ import { WantAndWatchedVideosPlugin } from "./status/want-and-watched-videos.js"
 import { SubTitleCatPlugin } from "./subtitle/subtitle-cat.js";
 import { TranslatePlugin } from "./translate/translate.js";
 
-const manifest = (id, featureId, plugin, sites, order, requires = []) => defineContribution({
-    id, featureId, legacyPluginId: plugin.legacyPluginId ?? plugin.name, plugin, sites, order, requires,
+const manifest = (id, featureId, plugin, sites, order, requires = [], options = {}) => defineContribution({
+    id, featureId, legacyPluginId: plugin.legacyPluginId ?? plugin.name, plugin, sites, order, requires, ...options,
 });
 
 export const legacyContributionManifests = Object.freeze([
-    manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [PORT.host, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings]),
+    manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [PORT.host, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings], { managedByFeature: true }),
     manifest("list.auto-page", "list", AutoPagePlugin, ["javdb", "javbus"], { javdb: 2, javbus: 5 }, [SERVICE.http, SERVICE.settings]),
     manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related, SERVICE.state]),
     manifest("detail.fc2-navigation", "detail", Fc2NavigationPlugin, ["javdb"], { javdb: 4 }, [PORT.host]),
@@ -144,6 +144,6 @@ export function registerSitePlugins(pluginManager, featureRuntime, site) {
                 if (!name) throw new Error(`Legacy contribution ${item.id} has no runtime name for ${String(token)}`);
                 runtimeServices[name] = dependencies[token];
             }
-            pluginManager.register(item.plugin, runtimeServices, { disableable: featureRuntime.isFeatureDisableable(item.featureId) });
+            pluginManager.register(item.plugin, runtimeServices, { disableable: featureRuntime.isFeatureDisableable(item.featureId), managedByFeature: item.managedByFeature === true });
         });
 }

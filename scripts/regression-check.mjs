@@ -20,7 +20,7 @@ function extractMetadata(source, key) {
 
 function extractContributionOrder(registrySource, site) {
   return registrySource.split(/\r?\n/).flatMap((line) => {
-    const match = line.match(/manifest\("[^"]+",\s*"[^"]+",\s*(\w+),\s*\[([^\]]+)\],\s*\{([^}]+)\}(?:,\s*\[[^\]]*\])?\)/);
+    const match = line.match(/manifest\("[^"]+",\s*"[^"]+",\s*(\w+),\s*\[([^\]]+)\],\s*\{([^}]+)\}(?:,\s*\[[^\]]*\])?(?:,\s*\{[^}]*\})?\)/);
     if (!match || !match[2].includes(`"${site}"`)) return [];
     const order = match[3].match(new RegExp(`(?:^|,\\s*)\\s*(?:"${site}"|${site})\\s*:\\s*(\\d+)`));
     assert(order, `Missing ${site} order for ${match[1]}`);
@@ -188,9 +188,17 @@ assert(!eventBus.includes("this.channel.postMessage(event);\n        await this.
 
 // List page function signature assertions
 const listPageSource = await read("src/plugins/status/list-page.js");
+const listManifestSource = await read("src/features/list/manifest.js");
+const listControllerSource = await read("src/features/list/list-controller.js");
 assertIncludes(listPageSource, "applyVisibility(items = null)", "list page function signature");
 assertIncludes(listPageSource, "async filterMovieList(", "list page function signature");
 assertIncludes(listPageSource, "async doFilter(revision =", "list page function signature");
+assertIncludes(listManifestSource, 'id: "list"', "real list feature manifest");
+assertIncludes(listManifestSource, 'contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions"]', "list feature contribution ownership");
+assertIncludes(listManifestSource, 'resolveLegacyPlugin?.("ListPagePlugin")', "list migration adapter resolution");
+assertIncludes(listControllerSource, "legacyPlugin.handle({ scope: this.scope })", "list feature lifecycle handoff");
+assertIncludes(listPageSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "list feature scope handoff");
+assertIncludes(listPageSource, "element.matches?.(e.itemSelector) && this.indexItems([ element ])", "list reorder index retention");
 assertIncludes(javDbHostAdapter, 'querySelector("#magnets-content")', "protected JavDB resource boundary");
 assert(!detailWorkspace.includes('controller.find("#magnets-content")'), "detail workspace must use the JavDB HostAdapter resource boundary");
 assert(!/routeSections|moveToSection|movePanelToSection/.test(detailWorkspace), "detail workspace must not remount host sections");

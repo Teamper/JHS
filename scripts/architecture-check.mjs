@@ -9,6 +9,7 @@ const baselinePath = path.join(rootDir, "architecture-baseline.json");
 
 const rules = [
     { id: "internal-getbean", pattern: /\.getBean\s*\(/, phase: 6 },
+    { id: "feature-import-plugin-manager", pattern: /from\s+["'][^"']*core\/plugin-manager\.js["']/, phase: 7, featuresOnly: true },
     { id: "feature-direct-gmhttp", pattern: /\bgmHttp\s*\./, phase: 5, featureOnly: true },
     { id: "feature-direct-state-service", pattern: /(?<![.$\w])stateService\s*\./, phase: 6, featureOnly: true },
     { id: "feature-import-state-service", pattern: /from\s+["'][^"']*core\/state-service\.js["']/, phase: 6, featureOnly: true },
@@ -53,6 +54,7 @@ async function scan() {
         const lines = (await readFile(file, "utf8")).split(/\r?\n/);
         for (const rule of rules) {
             if (rule.featureOnly && !isFeature) continue;
+            if (rule.featuresOnly && !relativeFile.startsWith("src/features/")) continue;
             if (rule.featureOrUi && !isFeatureOrUi) continue;
             lines.forEach((line, index) => {
                 if (rule.id === "host-selector" && /host-adapter\.js$/.test(relativeFile)) return;

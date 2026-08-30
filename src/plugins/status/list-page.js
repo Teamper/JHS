@@ -128,9 +128,10 @@ export class ListPagePlugin extends BasePlugin {
     getName() {
         return "ListPagePlugin";
     }
-    async handle() {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
         if (!window.isListPage) return;
-        const scope = await this.getRuntimeService("scope")();
+        const scope = options.scope ?? await this.getRuntimeService("scope")();
         const settingsService = this.getRuntimeService("settings");
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
@@ -287,8 +288,10 @@ export class ListPagePlugin extends BasePlugin {
                 for (const node of record.addedNodes) {
                 if (node.nodeType !== Node.ELEMENT_NODE) continue;
                 const element = /** @type {Element} */ (node);
+                element.matches?.(e.itemSelector) && this.indexItems([ element ]),
                 element.matches?.(e.itemSelector) && "true" !== /** @type {HTMLElement} */ (element).dataset.jhsProcessed && this.pendingItems.add(element),
                 element.querySelectorAll?.(e.itemSelector).forEach((/** @type {Element} */ item) => {
+                    this.indexItems([ item ]),
                     "true" !== /** @type {HTMLElement} */ (item).dataset.jhsProcessed && this.pendingItems.add(item);
                 });
                 }

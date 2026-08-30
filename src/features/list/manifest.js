@@ -1,0 +1,21 @@
+// @ts-check
+
+import { defineFeature } from "../../contracts/manifests.js";
+import { PORT, SERVICE } from "../../contracts/tokens.js";
+import { ListController } from "./list-controller.js";
+
+export default defineFeature({
+    id: "list", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list"], startup: "eager",
+    requires: [PORT.host, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings],
+    contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions"],
+    providesCommands: [],
+    activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
+        // Disabling the historical ListPagePlugin id disables only list.core;
+        // other list contributions must retain their previous optional behavior.
+        if (!runtime.enabledContributions.includes("list.core")) return { dispose: () => {} };
+        const legacyPlugin = runtime.resolveLegacyPlugin?.("ListPagePlugin");
+        if (!legacyPlugin) throw new Error("List feature requires the ListPagePlugin compatibility adapter");
+        const controller = new ListController({ legacyPlugin, hostAdapter: deps[PORT.host], scope: runtime.scope });
+        return controller.start().then(() => ({ dispose: () => controller.dispose() }));
+    },
+});

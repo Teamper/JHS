@@ -51,6 +51,7 @@ describe("v6.5 architecture runtime contracts", () => {
 
     it("registers legacy contributions from manifests without changing site order", async () => {
         expect(featureManifests).toHaveLength(11);
+        expect(featureManifests.find((manifest) => manifest.id === "list")?.contributes).toContain("list.core");
         window.matchMedia ??= () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
         const $ = jquery;
         vi.stubGlobal("$", $);

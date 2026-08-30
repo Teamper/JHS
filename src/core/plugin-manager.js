@@ -36,7 +36,7 @@ export class PluginManager {
         this._catalogDescriptors = new Map(descriptors.map((item) => [item.name, Object.freeze({ ...item })]));
         this._syncDiagnostics();
     }
-    /** @param {new (...args: any[]) => any} e @param {Record<string, any>} [runtimeServices] @param {{disableable?: boolean}} [options] */
+    /** @param {new (...args: any[]) => any} e @param {Record<string, any>} [runtimeServices] @param {{disableable?: boolean, managedByFeature?: boolean}} [options] */
     register(e, runtimeServices = {}, options = {}) {
         if ("function" != typeof e) throw new Error("插件必须是一个类");
         const a = performance.now();
@@ -47,6 +47,7 @@ export class PluginManager {
         t.declaredDependencies = new Set(this._dependencyDeclarations[n] || []);
         t.runtimeServices = Object.freeze({ ...runtimeServices });
         t.disableable = options.disableable ?? true;
+        t.managedByFeature = options.managedByFeature === true;
         this.plugins.set(n, t);
         this._registrationMs += performance.now() - a;
         this._syncDiagnostics();
@@ -142,6 +143,11 @@ export class PluginManager {
     async _runPlugin(e) {
         const t = performance.now();
         try {
+            if (e.plugin.managedByFeature === true) {
+                e.timing.elapsed = 0;
+                e.timing.status = "managed-feature";
+                return;
+            }
             if ("function" == typeof e.plugin.handle) await e.plugin.handle();
             e.timing.elapsed = performance.now() - t;
             e.timing.status = "ok";
@@ -179,7 +185,7 @@ export class PluginManager {
         for (const [s, o] of this.plugins) {
             const r = "function" == typeof o.getStartupMode && "idle" === o.getStartupMode() ? "idle" : "immediate";
             const l = { name: s, elapsed: 0, status: "pending", startupMode: r };
-            if (e.has(s)) l.status = "disabled", i.push(l); else if (t && "function" == typeof o.shouldSkipOnMobile && o.shouldSkipOnMobile()) l.status = "skipped-mobile",
+            if (e.has(s)) l.status = "disabled", i.push(l); else if (o.managedByFeature === true) l.status = "managed-feature", i.push(l); else if (t && "function" == typeof o.shouldSkipOnMobile && o.shouldSkipOnMobile()) l.status = "skipped-mobile",
             i.push(l); else {
                 const e = { name: s, plugin: o, mode: r, timing: l, startedAt: 0 };
                 "idle" === r ? (l.status = "pending-idle", a.push(e)) : n.push(e), i.push(l);
