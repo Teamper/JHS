@@ -43,7 +43,6 @@ export const LEGACY_PLUGIN_CONTRIBUTION_MAP = Object.freeze({
     MobileBottomBarPlugin: "responsive-shell.bottom-bar",
     OneOneFiveMatchPlugin: "external-bridge.115-match",
     UnifiedOfflinePlugin: "external-bridge.offline",
-    CompatibilityEnhancementsPlugin: "compatibility.enhancements",
     BusImgPlugin: "list.javbus-images",
     "detail.javbus-images": "list.javbus-images",
     BusPreviewVideoPlugin: "detail.javbus-preview",

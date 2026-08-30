@@ -14,7 +14,6 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     AutoPagePlugin: [],
     BlacklistPlugin: ["SettingPlugin"],
     BusNavBarPlugin: [],
-    CompatibilityEnhancementsPlugin: [],
     CoverButtonPlugin: ["ScreenShotPlugin"],
     DetailPageButtonPlugin: ["DetailWorkspacePlugin", "MagnetHubPlugin", "HighlightMagnetPlugin"],
     Fc2NavigationPlugin: ["Fc2Plugin"],

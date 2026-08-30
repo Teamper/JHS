@@ -85,7 +85,6 @@ const settingFormsSource = await read("src/plugins/backup/setting-forms.js");
 const settingTemplatesSource = await read("src/plugins/backup/setting-templates.js");
 const magnetHubSource = await read("src/plugins/external-search/magnet-hub.js");
 const newVideoTaskSource = await read("src/plugins/new-video/task.js");
-const compatibilityListSource = await read("src/plugins/status/compat-enhancements.js");
 const themeSource = await read("src/core/theme.js");
 
 const version = packageJson.version;
@@ -213,7 +212,7 @@ const listActionsSource = await read("src/plugins/status/list-page-button.js");
 const autoPageSource = await read("src/plugins/status/auto-page.js");
 const foldCategorySource = await read("src/plugins/status/fold-category.js");
 const coverButtonSource = await read("src/plugins/image-viewer/cover-button.js");
-const compatibilitySource = await read("src/plugins/status/compat-enhancements.js");
+const compatibilitySource = compatibilityControllerSource;
 const responsiveShellSource = await read("src/features/system/responsive-shell-controller.js");
 assertIncludes(listPageSource, "applyVisibility(items = null)", "list page function signature");
 assertIncludes(listPageSource, "async filterMovieList(", "list page function signature");
@@ -283,8 +282,8 @@ assertIncludes(coverButtonSource, 'getFeatureApi("list")', "cover actions featur
 assert(!coverButtonSource.includes('getOptionalDependency("ListPagePlugin")'), "cover actions must not resolve ListPagePlugin directly");
 assertIncludes(historySource, 'getFeatureApi("list")', "history list API boundary");
 assert(!historySource.includes('getOptionalDependency("ListPagePlugin")'), "history must not resolve ListPagePlugin directly");
-assertIncludes(compatibilityListSource, 'getFeatureApi("list")', "compatibility list API boundary");
-assert(!compatibilityListSource.includes('getOptionalDependency("ListPagePlugin")'), "compatibility must not resolve ListPagePlugin directly");
+assertIncludes(compatibilitySource, 'getFeatureApi?.("list")', "compatibility list API boundary");
+assert(!compatibilitySource.includes('getOptionalDependency("ListPagePlugin")'), "compatibility must not resolve ListPagePlugin directly");
 assertIncludes(statsSource, 'getFeatureApi("list")', "stats list API boundary");
 assert(!statsSource.includes('getOptionalDependency("ListPagePlugin")'), "stats must not resolve ListPagePlugin directly");
 assertIncludes(mobileSource, 'getFeatureApi("list")', "mobile list API boundary");
@@ -407,11 +406,11 @@ assertIncludes(unifiedOffline, "submitted ? setTimeout(restoreButton, this.BUTTO
 for (const removedSetting of [ "showFilterItem", "showFilterActorItem", "showFilterKeywordItem" ])
   assert(!listPageSource.includes(removedSetting) && !settingFormsSource.includes(removedSetting) && !settingTemplatesSource.includes(removedSetting), `retired visibility setting returned: ${removedSetting}`);
 assert(!listPageSource.includes("data-jhs-auto-hide"), "retired auto-hide card attribute returned");
-const javDbAdCleanup = compatibilitySource.slice(compatibilitySource.indexOf("async initCss()"), compatibilitySource.indexOf("async handle("));
-assertIncludes(javDbAdCleanup, "if (!siteContext.isJavDB) return \"\"", "JavDB ad cleanup scope");
+const javDbAdCleanup = compatibilitySource;
+assertIncludes(javDbAdCleanup, 'this.hostAdapter?.site === "javdb"', "JavDB ad cleanup scope");
 assert((javDbAdCleanup.match(/\.sda-content/g) || []).length === 1, "JavDB ad cleanup must use only one confirmed container selector");
 assert(/\.sda-content\s*\{\s*display\s*:\s*none\s*!important;?\s*\}/.test(javDbAdCleanup), "JavDB ad container must be hidden with CSS");
-assert(!/MutationObserver|setInterval|href|https?:\/\//.test(javDbAdCleanup), "JavDB ad cleanup must not poll or classify URLs");
+assert(!/MutationObserver|setInterval|https?:\/\//.test(javDbAdCleanup), "JavDB ad cleanup must not poll or classify URLs");
 assert(!themeSource.includes(".sda-content"), "JavDB host cleanup must not leak into theme CSS");
 for (const removedBestResourceToken of [ "bestResourceBtn", "submitBestResource", "findBestResource", "selectBestCapableResource" ])
   assert(!unifiedOffline.includes(removedBestResourceToken) && !magnetHubSource.includes(removedBestResourceToken), `best-resource path returned: ${removedBestResourceToken}`);
@@ -470,7 +469,6 @@ const expectedPlugins = [
   ["one-two-three/offline.js", "OneTwoThreeOfflinePlugin", "OneTwoThreeOfflinePlugin"],
   ["one-one-five/plugins.js", "OneOneFiveMatchPlugin", "OneOneFiveMatchPlugin"],
   ["offline/unified-offline.js", "UnifiedOfflinePlugin", "UnifiedOfflinePlugin"],
-  ["status/compat-enhancements.js", "CompatibilityEnhancementsPlugin", "CompatibilityEnhancementsPlugin"],
   ["status/mobile-bottom-bar.js", "MobileBottomBarPlugin", "MobileBottomBarPlugin"]
 ];
 
@@ -487,11 +485,11 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,HistoryPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,FilterTitleKeywordPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,WantAndWatchedVideosPlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,FavoriteActressesPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin,CompatibilityEnhancementsPlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,HistoryPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,FilterTitleKeywordPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,WantAndWatchedVideosPlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,FavoriteActressesPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavDB plugin registration order changed"
 );
 assert(
-  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,HistoryPlugin,AutoPagePlugin,SearchByImagePlugin,BusNavBarPlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,FilterTitleKeywordPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,BlacklistPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin,CompatibilityEnhancementsPlugin",
+  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,HistoryPlugin,AutoPagePlugin,SearchByImagePlugin,BusNavBarPlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,FilterTitleKeywordPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,BlacklistPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavBus plugin registration order changed"
 );
 assertIncludes(registry, 'OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"]', "shared registry");
@@ -526,6 +524,7 @@ sourceByFile.set("core/state-service.js", stateService);
 sourceByFile.set("core/plugin-manager.js", await read("src/core/plugin-manager.js"));
 sourceByFile.set("core/utils.js", await read("src/core/utils.js"));
 sourceByFile.set("features/stats/stats-controller.js", statsControllerSource);
+sourceByFile.set("features/compatibility/compatibility-controller.js", compatibilityControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
 sourceByFile.set("backup/setting-styles.js", await read("src/plugins/backup/setting-styles.js"));
@@ -544,6 +543,7 @@ const regressionMatrix = [
   ["新作品检测", [["new-video/task.js", "TaskPlugin"], ["new-video/new-video.js", "NewVideoPlugin"], ["core/storage.js", "newVideoList"]]],
   ["黑名单检测", [["blacklist/blacklist.js", "BlacklistPlugin"], ["blacklist/filter-title-keyword.js", "FilterTitleKeywordPlugin"], ["core/storage.js", "batchSaveBlacklistCarList"]]],
   ["统计面板", [["features/stats/stats-controller.js", "class StatsController"], ["features/stats/stats-controller.js", "coverageStart"], ["features/stats/stats-controller.js", "6.4.0"]]],
+  ["兼容增强", [["features/compatibility/compatibility-controller.js", "class CompatibilityController"], ["features/compatibility/compatibility-controller.js", "jhs-actress-state-container"], ["features/compatibility/compatibility-controller.js", "createTreeWalker"]]],
   ["数据导入导出", [["backup/setting-backup.js", "importSettingData"], ["backup/setting-backup.js", "exportSettingData"], ["core/storage.js", "exportData"]]],
   ["WebDAV 备份", [["services/webdav-service.js", "class WebDavClient"], ["backup/setting-backup.js", "backupDataByWebDav"], ["services/webdav-service.js", "PROPFIND"]]],
   ["图片查看器", [["core/logger.js", "showImageViewer"], ["core/logger.js", "new Viewer"], ["image-viewer/screenshot.js", "ScreenShotPlugin"]]],

@@ -9,14 +9,16 @@ function createScope() {
 }
 
 describe("feature controller ownership", () => {
-    it("hands the feature scope to compatibility and starts only once", async () => {
-        const scope = createScope(), plugin = { handle: vi.fn() }, controller = new CompatibilityController({ plugin, scope });
+    it("starts native compatibility enhancements only once", async () => {
+        const scope = createScope(), document = { querySelectorAll: vi.fn(() => []), addEventListener: vi.fn(), removeEventListener: vi.fn() }, controller = new CompatibilityController({
+            hostAdapter: { site: "javbus", document, location: { pathname: "/", href: "https://javbus.com/" } },
+            storage: { get: vi.fn(async () => []) }, state: {}, features: {}, styles: { register: vi.fn() }, route: "other", scope,
+        });
         await controller.start();
         await controller.start();
 
         expect(scope.assertActive).toHaveBeenCalledTimes(2);
-        expect(plugin.handle).toHaveBeenCalledOnce();
-        expect(plugin.handle).toHaveBeenCalledWith({ scope });
+        expect(document.addEventListener).toHaveBeenCalledOnce();
         expect(controller.getApi()).toEqual({ hasEnhancements: true });
     });
 

@@ -79,6 +79,7 @@ export class ListController {
             bindMovieDetailNavigation: call("bindMovieDetailNavigation"),
             bindClick: call("bindClick"),
             openMovieDetail: call("openMovieDetail"),
+            showCarNumBox: call("showCarNumBox"),
             findCarNumAndHref: call("findCarNumAndHref"),
             parseActressName: call("parseActressName"),
             setQuickFilter: call("setQuickFilter"),
