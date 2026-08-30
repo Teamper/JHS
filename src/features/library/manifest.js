@@ -15,7 +15,10 @@ export default defineFeature({
         const statePlugin = runtime.enabledContributions.includes("library.state-actions")
             ? runtime.resolveLegacyPlugin?.("WantAndWatchedVideosPlugin")
             : null;
-        const controller = new LibraryController({ historyPlugin, statePlugin, scope: runtime.scope });
+        const keywordFilterPlugin = runtime.enabledContributions.includes("library.keyword-filter")
+            ? runtime.resolveLegacyPlugin?.("FilterTitleKeywordPlugin")
+            : null;
+        const controller = new LibraryController({ historyPlugin, statePlugin, keywordFilterPlugin, scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

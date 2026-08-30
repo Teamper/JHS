@@ -7,8 +7,8 @@ describe("Library FeatureRuntime ownership", () => {
         const scope = new LifecycleScope("feature:library"), repository = {}, historyPlugin = {
             handle: vi.fn(async () => {}),
             get historyRepository() { return repository; },
-        }, statePlugin = { handle: vi.fn(async () => {}) };
-        const controller = new LibraryController({ historyPlugin, statePlugin, scope });
+        }, statePlugin = { handle: vi.fn(async () => {}) }, keywordFilterPlugin = { handle: vi.fn(async () => {}) };
+        const controller = new LibraryController({ historyPlugin, statePlugin, keywordFilterPlugin, scope });
 
         await controller.start();
         await controller.start();
@@ -17,6 +17,8 @@ describe("Library FeatureRuntime ownership", () => {
         expect(historyPlugin.handle).toHaveBeenCalledWith({ scope });
         expect(statePlugin.handle).toHaveBeenCalledOnce();
         expect(statePlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(keywordFilterPlugin.handle).toHaveBeenCalledOnce();
+        expect(keywordFilterPlugin.handle).toHaveBeenCalledWith({ scope });
         expect(controller.getApi().getHistoryRepository()).toBe(repository);
         controller.dispose();
         expect(scope.disposed).toBe(false);

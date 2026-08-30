@@ -8,9 +8,13 @@ export class FilterTitleKeywordPlugin extends BasePlugin {
     getName() {
         return "FilterTitleKeywordPlugin";
     }
-    async handle() {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
+        const scope = options.scope ?? await this.getRuntimeService("scope")();
         if (!isDetailPage) return;
         await this.bindDetailRoot(document);
+        const selector = r ? ".title strong, .current-title" : l ? "h3" : ".current-title, .origin-title, .jhs-detail-title";
+        scope.addCleanup(() => $(document).off("contextmenu.jhsTitleFilter", selector));
     }
     async bindDetailRoot(/** @type {ParentNode} */ root, /** @type {{layerIndex?: number | null}} */ { layerIndex = null } = {}) {
         if (await storageManager.getSetting("enableTitleSelectFilter", _) !== _) return;
