@@ -235,6 +235,8 @@ const detailRelatedSource = await read("src/plugins/external-search/related.js")
 const screenshotSource = await read("src/plugins/image-viewer/screenshot.js");
 const highlightMagnetSource = await read("src/plugins/status/highlight-magnet.js");
 const detailPageButtonSource = await read("src/plugins/status/detail-page-button.js");
+const previewVideoSource = await read("src/plugins/image-viewer/preview-video.js");
+const busPreviewVideoSource = await read("src/plugins/image-viewer/bus-preview-video.js");
 assertIncludes(detailControllerSource, "nativePlugin?.handle?.({ scope: this.scope })", "native detail feature handoff");
 assertIncludes(detailControllerSource, "workspacePlugin?.handle?.({ scope: this.scope })", "detail workspace feature handoff");
 assertIncludes(detailManifestSource, '"detail.workspace"', "detail workspace contribution selection");
@@ -253,6 +255,9 @@ assertIncludes(detailRelatedSource, "options.scope ?? await this.getRuntimeServi
 assertIncludes(screenshotSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail screenshot injected scope");
 assertIncludes(highlightMagnetSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail magnet injected scope");
 assertIncludes(detailPageButtonSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail page actions injected scope");
+assertIncludes(detailControllerSource, "previewPlugin?.handle?.({ scope: this.scope })", "detail preview feature handoff");
+assertIncludes(previewVideoSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "JavDB preview injected scope");
+assertIncludes(busPreviewVideoSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "JavBus preview injected scope");
 assertIncludes(listViewSource, "export class ListView", "real list view");
 assertIncludes(listViewSource, "shouldShowItem({ filter: normalizedFilter", "list view shared filter semantics");
 assertIncludes(listViewSource, "async createQuickFilter(initialFilter)", "list view quick-filter ownership");

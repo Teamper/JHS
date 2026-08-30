@@ -33,7 +33,11 @@ export default defineFeature({
         const magnetPlugin = runtime.enabledContributions.includes("detail.native-magnets")
             ? runtime.resolveLegacyPlugin?.("HighlightMagnetPlugin")
             : null;
-        const controller = new DetailController({ hostAdapter: deps[PORT.host], nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, pageActionsPlugin, screenshotPlugin, magnetPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
+        const previewContribution = deps[PORT.host].site === "javbus" ? "detail.javbus-preview" : "detail.javdb-preview";
+        const previewPlugin = runtime.enabledContributions.includes(previewContribution)
+            ? runtime.resolveLegacyPlugin?.(deps[PORT.host].site === "javbus" ? "BusPreviewVideoPlugin" : "PreviewVideoPlugin")
+            : null;
+        const controller = new DetailController({ hostAdapter: deps[PORT.host], nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, pageActionsPlugin, magnetPlugin, previewPlugin, screenshotPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
         return controller.start().then(() => ({ dispose: () => controller.dispose() }));
     },
 });

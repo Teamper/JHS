@@ -19,10 +19,11 @@ export class PreviewVideoPlugin extends BasePlugin {
     async initCss() {
         return ".jhs-dmm-preview-player{display:none;width:100%;height:auto}.jhs-dmm-preview-player.is-active{display:block}.jhs-native-preview-hidden{display:none!important}";
     }
-    async handle() {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
         if (!isDetailPage) return;
         const settingsService = this.getRuntimeService("settings");
-        if (!this.lifecycleScope) this.lifecycleScope = await this.getRuntimeService("scope")();
+        if (!this.lifecycleScope) this.lifecycleScope = options.scope ?? await this.getRuntimeService("scope")();
         if (!this._settingsListenerBound) {
             this._settingsListenerBound = true;
             const onSettingsChanged = (/** @type {any} */ event) => {
@@ -34,6 +35,9 @@ export class PreviewVideoPlugin extends BasePlugin {
             this.lifecycleScope.addCleanup((() => {
                 settingsService.removeEventListener("settings.changed", onSettingsChanged);
                 this._settingsListenerBound = false;
+                this.previewGeneration++;
+                this.unmountPreview();
+                this.lifecycleScope = null;
             }));
         }
         this.reconfigure();

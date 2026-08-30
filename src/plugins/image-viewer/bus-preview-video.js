@@ -44,10 +44,11 @@ export class BusPreviewVideoPlugin extends BasePlugin {
         $("#bus-preview-modal").remove();
         $(".preview-video-container").off("click.jhsBusPreview").remove();
     }
-    async handle() {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
         if (!isDetailPage) return;
         const settingsService = this.getRuntimeService("settings");
-        if (!this._busScope) this._busScope = await this.getRuntimeService("scope")();
+        if (!this._busScope) this._busScope = options.scope ?? await this.getRuntimeService("scope")();
         if (!this._settingsListenerBound) {
             this._settingsListenerBound = true;
             const onSettingsChanged = (/** @type {any} */ event) => {
@@ -59,6 +60,9 @@ export class BusPreviewVideoPlugin extends BasePlugin {
             this._busScope.addCleanup((() => {
                 settingsService.removeEventListener("settings.changed", onSettingsChanged);
                 this._settingsListenerBound = false;
+                this._busPreviewGeneration++;
+                this.unmountPreview();
+                this._busScope = null;
             }));
         }
         this.reconfigure();
@@ -108,7 +112,7 @@ export class BusPreviewVideoPlugin extends BasePlugin {
             notify: !0
         });
         let a = this.getPageInfo().carNum;
-        const scope = await this.getRuntimeService("scope")(), {sources: i, error: previewError} = await fetchDmmPreviewIfEnabled(a, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope, this.getRuntimeService("settings").snapshot());
+        const scope = this._busScope ?? await this.getRuntimeService("scope")(), {sources: i, error: previewError} = await fetchDmmPreviewIfEnabled(a, this.getRuntimeService("storage"), this.getRuntimeService("movie"), scope, this.getRuntimeService("settings").snapshot());
         if (generation !== this._busPreviewGeneration || !isPreviewEnabled(this.getRuntimeService("settings").snapshot())) return;
         i && 0 !== Object.keys(i).length ? (await this.createVideoPlayerAndControls(i, t),
         n = $("#preview-video"), n.length > 0 ? (e.addClass("is-open"), await safePlay(n[0], {
