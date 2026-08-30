@@ -234,9 +234,12 @@ assert(!mobileSource.includes('getOptionalDependency("ListPagePlugin")'), "mobil
 assert(!settingSource.includes('getOptionalDependency("ListPagePlugin")'), "settings must not resolve ListPagePlugin directly");
 assertIncludes(libraryManifestSource, 'id: "library"', "real library feature manifest");
 assertIncludes(libraryManifestSource, 'new LibraryController({', "library feature controller ownership");
-assertIncludes(libraryControllerSource, 'historyPlugin.handle({ scope: this.scope })', "library history lifecycle handoff");
+assertIncludes(libraryControllerSource, 'this.historyPlugin?.handle({ scope: this.scope })', "library history lifecycle handoff");
+assertIncludes(libraryControllerSource, 'this.statePlugin?.handle({ scope: this.scope })', "library state lifecycle handoff");
 assertIncludes(historySource, "async handle(options = {})", "history feature lifecycle entry");
 assertIncludes(historySource, "scope.addCleanup", "history feature scope cleanup");
+assertIncludes(statusImport, "async handle(options = {})", "state import feature lifecycle entry");
+assertIncludes(statusImport, "jhsStatusImport", "state import feature scope cleanup");
 assertIncludes(listPageSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "list feature scope handoff");
 assertIncludes(listPageSource, "this.getListView().applyVisibility", "list view visibility ownership");
 assertIncludes(listPageSource, "element.matches?.(e.itemSelector) && this.indexItems([ element ])", "list reorder index retention");

@@ -106,6 +106,20 @@ for (const path of ["/advanced_search?type=3", "/advanced_search?type=100", "/wa
   });
 }
 
+test("JavDB state import entry is mounted by the Library feature", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one desktop project covers the Library state import entry");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/watched_videos", { waitUntil: "domcontentloaded" });
+  await page.locator("main.container").evaluate((root) => {
+    const heading = document.createElement("h3");
+    heading.textContent = "已观看";
+    root.prepend(heading);
+  });
+  await injectUserscriptRuntime(page);
+  await expect(page.locator("#wantWatchBtn")).toHaveCount(1);
+  await expect(page.locator("#wantWatchBtn")).toContainText("导入至 JHS");
+});
+
 test("HotShow creates an owned list when advanced search has no native list root", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers HotShow host fallback");
   await fulfillHostFixtures(context);

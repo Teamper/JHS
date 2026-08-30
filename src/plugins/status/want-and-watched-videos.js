@@ -6,19 +6,32 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class WantAndWatchedVideosPlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "flag", null);
+        super(...arguments), i(this, "flag", null), i(this, "scope", null);
     }
     getName() {
         return "WantAndWatchedVideosPlugin";
     }
-    async handle() {
-        window.location.href.includes("/want_watch_videos") && ($("h3").append('<button type="button" class="jhs-btn jhs-btn--primary jhs-layout-481ed7e7" id="wantWatchBtn">导入至 JHS</button>'),
-        $("#wantWatchBtn").on("click", ((/** @type {MouseEvent} */ e) => {
-            this.flag = "favorite", this.importWantWatchVideos(e, "是否将想看的影片导入到 JHS 收藏？");
-        }))), window.location.href.includes("/watched_videos") && ($("h3").append('<button type="button" class="jhs-btn jhs-btn--primary jhs-layout-481ed7e7" id="wantWatchBtn">导入至 JHS</button>'),
-        $("#wantWatchBtn").on("click", ((/** @type {MouseEvent} */ e) => {
-            this.flag = "watched", this.importWantWatchVideos(e, "是否将看过的影片导入到 JHS 已观看？");
-        })));
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
+        const scope = options.scope ?? await this.getRuntimeService("scope")();
+        this.scope = scope;
+        const path = window.location.href;
+        if (path.includes("/want_watch_videos")) {
+            $("h3").append('<button type="button" class="jhs-btn jhs-btn--primary jhs-layout-481ed7e7" id="wantWatchBtn">导入至 JHS</button>');
+            $("#wantWatchBtn").on("click.jhsStatusImport", ((/** @type {MouseEvent} */ e) => {
+                this.flag = "favorite", void this.importWantWatchVideos(e, "是否将想看的影片导入到 JHS 收藏？");
+            }));
+        } else if (path.includes("/watched_videos")) {
+            $("h3").append('<button type="button" class="jhs-btn jhs-btn--primary jhs-layout-481ed7e7" id="wantWatchBtn">导入至 JHS</button>');
+            $("#wantWatchBtn").on("click.jhsStatusImport", ((/** @type {MouseEvent} */ e) => {
+                this.flag = "watched", void this.importWantWatchVideos(e, "是否将看过的影片导入到 JHS 已观看？");
+            }));
+        }
+        scope.addCleanup(() => {
+            $("#wantWatchBtn").off(".jhsStatusImport").remove();
+            this.flag = null;
+            this.scope = null;
+        });
     }
     importWantWatchVideos(/** @type {MouseEvent} */ e, /** @type {string} */ t) {
         utils.q(null, `${t} <br/> <span class="jhs-task-emphasis">执行此功能前请记得备份数据</span>`, (async () => {
@@ -49,7 +62,7 @@ export class WantAndWatchedVideosPlugin extends BasePlugin {
         }
         if (!n) return result;
         await utils.sleep(1e3);
-        const scope = await this.getRuntimeService("scope")();
+        const scope = this.scope ?? await this.getRuntimeService("scope")();
         const html = await requestHostPage(this.getRuntimeService("http"), new URL(n, window.location.href), scope), nextPage = utils.htmlTo$dom(html);
         return this.parseMovieList(nextPage, result);
     }

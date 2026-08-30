@@ -12,7 +12,10 @@ export default defineFeature({
         const historyPlugin = runtime.enabledContributions.includes("library.history")
             ? runtime.resolveLegacyPlugin?.("HistoryPlugin")
             : null;
-        const controller = new LibraryController({ historyPlugin, scope: runtime.scope });
+        const statePlugin = runtime.enabledContributions.includes("library.state-actions")
+            ? runtime.resolveLegacyPlugin?.("WantAndWatchedVideosPlugin")
+            : null;
+        const controller = new LibraryController({ historyPlugin, statePlugin, scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

@@ -5,9 +5,10 @@
  * on the transitional legacy path.
  */
 export class LibraryController {
-    /** @param {{historyPlugin?: {handle: (options?: {scope: any}) => Promise<any> | any, historyRepository?: any}, scope: any}} options */
+    /** @param {{historyPlugin?: {handle: (options?: {scope: any}) => Promise<any> | any, historyRepository?: any}, statePlugin?: {handle: (options?: {scope: any}) => Promise<any> | any}, scope: any}} options */
     constructor(options) {
         this.historyPlugin = options.historyPlugin ?? null;
+        this.statePlugin = options.statePlugin ?? null;
         this.scope = options.scope;
         this.started = false;
     }
@@ -16,8 +17,10 @@ export class LibraryController {
         this.scope.assertActive();
         if (this.started) return Promise.resolve();
         this.started = true;
-        if (!this.historyPlugin) return Promise.resolve();
-        return Promise.resolve(this.historyPlugin.handle({ scope: this.scope })).catch((error) => {
+        return Promise.resolve().then(async () => {
+            await this.historyPlugin?.handle({ scope: this.scope });
+            await this.statePlugin?.handle({ scope: this.scope });
+        }).catch((error) => {
             this.dispose();
             throw error;
         });
