@@ -63,6 +63,20 @@ describe("List FeatureRuntime ownership", () => {
         scope.dispose();
     });
 
+    it("passes the feature-owned list API to card actions", async () => {
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), getSelector: vi.fn(() => ({ boxSelector: ".movie-list" })) }, coverPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
+            legacyPlugin,
+            coverPlugin,
+            hostAdapter,
+            scope,
+        });
+
+        await controller.start();
+
+        expect(coverPlugin.handle).toHaveBeenCalledWith({ scope, listFeatureApi: expect.objectContaining({ getListSelectors: expect.any(Function) }) });
+        scope.dispose();
+    });
+
     it("defers list actions until the rest of the eager feature APIs can settle", async () => {
         vi.useFakeTimers();
         try {

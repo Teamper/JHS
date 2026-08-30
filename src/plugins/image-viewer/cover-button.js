@@ -18,7 +18,8 @@ export class CoverButtonPlugin extends BasePlugin {
         return "CoverButtonPlugin";
     }
     /** Resolve the list capability used by card actions. */
-    async getListFeatureApi() {
+    async getListFeatureApi(fallback = null) {
+        if (fallback) return fallback;
         try {
             return await this.getRuntimeService("features").getFeatureApi("list");
         } catch (error) {
@@ -48,9 +49,11 @@ export class CoverButtonPlugin extends BasePlugin {
                 @keyframes spin { to { transform:translate(-50%,-50%) rotate(360deg); } }
             </style>`;
     }
-    async handle() {
+    /** @param {{scope?: any, listFeatureApi?: any}} [options] */
+    async handle(options = {}) {
         if (!window.isListPage) return;
-        const scope = await this.getRuntimeService("scope")();
+        const scope = options.scope || await this.getRuntimeService("scope")();
+        const listFeatureApi = options.listFeatureApi || await this.getListFeatureApi();
         const settingsService = this.getRuntimeService("settings");
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
@@ -76,8 +79,8 @@ export class CoverButtonPlugin extends BasePlugin {
                 this._settingsListenerBound = false;
             }));
         }
-        this.addSvgBtn();
-        await this.bindClick(scope);
+        this.addSvgBtn(null, listFeatureApi);
+        await this.bindClick(scope, listFeatureApi);
     }
     /** 构建卡片工具和三个卡片内 popover。 */
     buildToolBox() {
@@ -114,8 +117,8 @@ export class CoverButtonPlugin extends BasePlugin {
             </div>`;
     }
     /** @param {JQueryHandle | Element | null} [items] */
-    async addSvgBtn(items = null) {
-        const listFeature = await this.getListFeatureApi(), selectors = listFeature?.getListSelectors?.();
+    async addSvgBtn(items = null, listFeatureApi = null) {
+        const listFeature = await this.getListFeatureApi(listFeatureApi), selectors = listFeature?.getListSelectors?.();
         if (!listFeature || !selectors) return;
         (items ? $(items).toArray() : $(selectors.itemSelector).toArray()).forEach(((/** @type {Element} */ element) => {
             const item = $(element);
@@ -138,8 +141,8 @@ export class CoverButtonPlugin extends BasePlugin {
         openMenus.removeClass("is-open"), triggers.attr("aria-expanded", "false"), focus && triggers.first().trigger("focus");
     }
     /** @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope */
-    async bindClick(scope) {
-        const e = await this.getListFeatureApi(), selectors = e?.getListSelectors?.();
+    async bindClick(scope, listFeatureApi = null) {
+        const e = await this.getListFeatureApi(listFeatureApi), selectors = e?.getListSelectors?.();
         if (!e || !selectors) return;
         const documentRoot = $(document);
         documentRoot.off(".jhsCoverButton");
