@@ -213,6 +213,7 @@ const autoPageSource = await read("src/plugins/status/auto-page.js");
 const foldCategorySource = await read("src/plugins/status/fold-category.js");
 const coverButtonSource = await read("src/plugins/image-viewer/cover-button.js");
 const compatibilitySource = await read("src/plugins/status/compat-enhancements.js");
+const responsiveShellSource = await read("src/features/system/responsive-shell-controller.js");
 assertIncludes(listPageSource, "applyVisibility(items = null)", "list page function signature");
 assertIncludes(listPageSource, "async filterMovieList(", "list page function signature");
 assertIncludes(listPageSource, "async doFilter(revision =", "list page function signature");
@@ -236,6 +237,7 @@ assert(!listActionsSource.includes('getOptionalDependency("ListPagePlugin")'), "
 assertIncludes(autoPageSource, 'getFeatureApi("list")', "auto-page feature API boundary");
 assert(!autoPageSource.includes('getOptionalDependency("ListPagePlugin")'), "auto-page must not resolve ListPagePlugin directly");
 assertIncludes(foldCategorySource, "options.scope", "fold category feature lifecycle handoff");
+assertIncludes(responsiveShellSource, "this.plugin?.handle?.({ scope: this.scope })", "responsive shell feature lifecycle handoff");
 assertIncludes(coverButtonSource, 'getFeatureApi("list")', "cover actions feature API boundary");
 assert(!coverButtonSource.includes('getOptionalDependency("ListPagePlugin")'), "cover actions must not resolve ListPagePlugin directly");
 assertIncludes(historySource, 'getFeatureApi("list")', "history list API boundary");

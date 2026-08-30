@@ -3,6 +3,7 @@
 import { defineFeature } from "../../contracts/manifests.js";
 import { SERVICE } from "../../contracts/tokens.js";
 import { openSettingsUi } from "../../core/settings-ui-owner.js";
+import { ResponsiveShellController } from "./responsive-shell-controller.js";
 
 export const systemFeatureManifests = Object.freeze([
     defineFeature({
@@ -17,6 +18,10 @@ export const systemFeatureManifests = Object.freeze([
     }),
     defineFeature({
         id: "responsive-shell", kind: "system", disableable: false, sites: [], routes: [], startup: "eager",
-        requires: [SERVICE.profile], contributes: ["responsive-shell.bottom-bar"], providesCommands: [], activate: (/** @type {any} */ deps) => ({ profile: deps[SERVICE.profile].current() }),
+        requires: [SERVICE.profile], contributes: ["responsive-shell.bottom-bar"], providesCommands: [], activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
+            const plugin = runtime.resolveLegacyPlugin?.("MobileBottomBarPlugin");
+            const controller = new ResponsiveShellController({ plugin, scope: runtime.scope });
+            return controller.start().then(() => ({ profile: deps[SERVICE.profile].current(), dispose: () => controller.dispose() }));
+        },
     }),
 ]);

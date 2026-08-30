@@ -241,11 +241,19 @@ export class MobileBottomBarPlugin extends BasePlugin {
             }
         `;
     }
-    async handle() {
-        const profile = this.getRuntimeService("profile"), scope = await this.getRuntimeService("scope")();
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
+        const profile = this.getRuntimeService("profile"), scope = options.scope ?? await this.getRuntimeService("scope")();
         await Promise.all([ this.getListFeatureApi(), this.getLibraryFeatureApi(), this.getDiscoveryFeatureApi() ]);
         scope.listen(profile, "profile.changed", () => this.syncSurfaces());
+        scope.addCleanup(() => {
+            this.unmountBottomBar();
+            this.unmountDesktopCommandBar();
+        });
         this.syncSurfaces();
+        scope.ownTimeout(setTimeout(() => {
+            if (!scope.disposed) this.syncSurfaces();
+        }, 0));
     }
     mountBottomBar() {
         if ($("#jhs-fab").length) return;

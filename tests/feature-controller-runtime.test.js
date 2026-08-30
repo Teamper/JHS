@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CompatibilityController } from "../src/features/compatibility/compatibility-controller.js";
 import { StatsController } from "../src/features/stats/stats-controller.js";
+import { ResponsiveShellController } from "../src/features/system/responsive-shell-controller.js";
 
 function createScope() {
     return { assertActive: vi.fn() };
@@ -25,5 +26,15 @@ describe("feature controller ownership", () => {
         expect(plugin.handle).toHaveBeenCalledWith({ scope });
         expect(controller.getApi().openDialog()).toBe("opened");
         expect(controller.getApi().hasDashboard).toBe(true);
+    });
+
+    it("hands the feature scope to the responsive shell contribution", async () => {
+        const scope = createScope(), plugin = { handle: vi.fn() }, controller = new ResponsiveShellController({ plugin, scope });
+        await controller.start();
+        await controller.start();
+
+        expect(scope.assertActive).toHaveBeenCalledTimes(2);
+        expect(plugin.handle).toHaveBeenCalledOnce();
+        expect(plugin.handle).toHaveBeenCalledWith({ scope });
     });
 });
