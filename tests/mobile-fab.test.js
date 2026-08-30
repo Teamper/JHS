@@ -24,7 +24,9 @@ function loadMobilePlugin({ beans: beanOverrides = null, isListPage = true, isDe
     });
     const source = readTestFile(join(import.meta.dirname, "../src/plugins/status/mobile-bottom-bar.js"), "utf8");
     vm.runInContext(`${source};globalThis.TestMobilePlugin=MobileBottomBarPlugin`, context);
-    return { $, host, listButtons, listPage, plugin: new context.TestMobilePlugin() };
+    const plugin = new context.TestMobilePlugin();
+    if (beans.ListPagePlugin) plugin.listFeatureApi = { getActiveQuickFilter: () => listPage.activeQuickFilter, setQuickFilter: listPage.setQuickFilter, syncQuickFilterUi: listPage.syncQuickFilterUi };
+    return { $, host, listButtons, listPage, plugin };
 }
 
 describe("mobile list FAB", () => {

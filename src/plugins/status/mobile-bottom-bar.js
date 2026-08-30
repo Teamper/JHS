@@ -11,9 +11,22 @@ export class MobileBottomBarPlugin extends BasePlugin {
         this._fabGeneration = 0;
         /** @type {Array<{ element: Element, parent: Node | null, next: Node | null }>} */
         this._commandBarSources = [];
+        /** @type {any} */
+        this.listFeatureApi = null;
     }
     getName() {
         return "MobileBottomBarPlugin";
+    }
+    /** Resolve the list capability before synchronous mobile menu rendering. */
+    async getListFeatureApi() {
+        if (this.listFeatureApi) return this.listFeatureApi;
+        try {
+            this.listFeatureApi = await this.getRuntimeService("features").getFeatureApi("list");
+        } catch (error) {
+            clog.warn("列表 Feature API 不可用，隐藏移动端筛选", error);
+            this.listFeatureApi = null;
+        }
+        return this.listFeatureApi;
     }
     shouldSkipOnMobile() {
         return false; // this plugin only runs on mobile
@@ -204,6 +217,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
     }
     async handle() {
         const profile = this.getRuntimeService("profile"), scope = await this.getRuntimeService("scope")();
+        await this.getListFeatureApi();
         scope.listen(profile, "profile.changed", () => this.syncSurfaces());
         this.syncSurfaces();
     }
@@ -326,7 +340,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
         $(".historyBtnBox").each(((/** @type {number} */ _index, /** @type {HTMLElement} */ element) => {
             element.children.length || (element.style.display = "none");
         }));
-        this.getOptionalDependency("ListPagePlugin")?.syncQuickFilterUi?.();
+        this.listFeatureApi?.syncQuickFilterUi?.();
     }
     /** 收集当前页面中所有桌面工具栏来源控件（无论是否曾被 buildCommandBar 收拢）。 */
     collectDesktopCommandSources() {
@@ -373,7 +387,8 @@ export class MobileBottomBarPlugin extends BasePlugin {
                 <div class="jhs-commandbar__left"></div>
                 <div class="jhs-commandbar__right"></div>
             </div>`);
-        const listBox = r ? $(this.getSelector().boxSelector).first() : $(".masonry").first();
+        const listSelectors = this.getRuntimeService("host").getListSelectors?.();
+        const listBox = r ? $(listSelectors?.boxSelector || this.getSelector().boxSelector).first() : $(".masonry").first();
         if (!listBox.length) return void clog.warn("JHS 页面工具栏未创建：列表容器尚未就绪");
         listBox.before(commandbar);
         this.collectCommandControls(commandbar);
@@ -387,10 +402,10 @@ export class MobileBottomBarPlugin extends BasePlugin {
     }
     createMenu() {
         const item = (/** @type {string} */ action, /** @type {string} */ label, /** @type {string} */ attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = (/** @type {string} */ content) => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
-        const hasListPageButton = !!this.getOptionalDependency("ListPageButtonPlugin"), hasListPage = !!this.getOptionalDependency("ListPagePlugin"), hasNewVideo = !!this.getOptionalDependency("NewVideoPlugin"), hasBlacklist = !!this.getOptionalDependency("BlacklistPlugin"), hasSetting = !!this.getOptionalDependency("SettingPlugin"), hasDetailPageButton = !!this.getOptionalDependency("DetailPageButtonPlugin"), hasHighlightMagnet = !!this.getOptionalDependency("HighlightMagnetPlugin"), hasMagnetHub = !!this.getOptionalDependency("MagnetHubPlugin"), hasHistory = !!this.getOptionalDependency("HistoryPlugin");
+        const hasListPageButton = !!this.getOptionalDependency("ListPageButtonPlugin"), hasListPage = Boolean(this.listFeatureApi), hasNewVideo = !!this.getOptionalDependency("NewVideoPlugin"), hasBlacklist = !!this.getOptionalDependency("BlacklistPlugin"), hasSetting = !!this.getOptionalDependency("SettingPlugin"), hasDetailPageButton = !!this.getOptionalDependency("DetailPageButtonPlugin"), hasHighlightMagnet = !!this.getOptionalDependency("HighlightMagnetPlugin"), hasMagnetHub = !!this.getOptionalDependency("MagnetHubPlugin"), hasHistory = !!this.getOptionalDependency("HistoryPlugin");
         let items;
         if (window.isListPage) {
-            const requestedSortMethod = this.getOptionalDependency("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? /** @type {keyof typeof sortLabels} */ (requestedSortMethod) : "default", sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.getOptionalDependency("ListPagePlugin")?.activeQuickFilter),
+            const requestedSortMethod = this.getOptionalDependency("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? /** @type {keyof typeof sortLabels} */ (requestedSortMethod) : "default", sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.listFeatureApi?.getActiveQuickFilter?.()),
                 filterOptions = [ ...PRIMARY_QUICK_FILTERS, ...SECONDARY_QUICK_FILTERS ].map(((filter, index) => `${index === PRIMARY_QUICK_FILTERS.length ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-filter-option" aria-checked="${filter === activeFilter}" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""),
                 sortOptions = Object.entries(sortLabels).map((([value, label]) => `<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-mobile-sort-option" aria-checked="${value === sortMethod}" tabindex="-1" data-jhs-sort="${value}">${label}</button>`)).join("");
             items = group((hasListPageButton ? item("check", "开始鉴定") : "") + (hasNewVideo ? item("newVideo", "新作品") : "") + (hasBlacklist ? item("blacklist", "黑名单") : "") + (hasHistory ? item("history", "鉴定记录") : "") + (hasListPageButton ? item("sort", `排序: ${sortLabel}`, 'aria-haspopup="menu" aria-expanded="false"') : "") + (hasListPage ? item("quickFilter", `<span class="jhs-mobile-filter-label">筛选：${QUICK_FILTER_LABELS[activeFilter]}</span>`, 'aria-haspopup="menu" aria-expanded="false"') : "")) + divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : "")) + (hasListPage ? `<div class="jhs-mobile-filter-menu" role="menu" aria-label="列表筛选">${filterOptions}</div>` : "") + (hasListPageButton ? `<div class="jhs-mobile-sort-menu" role="menu" aria-label="列表排序">${sortOptions}</div>` : "");
@@ -449,7 +464,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
                     const requestedSortMethod = this.getOptionalDependency("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" };
                     const sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? /** @type {keyof typeof sortLabels} */ (requestedSortMethod) : "default", sortLabel = sortLabels[sortMethod];
                     menu.find('[data-action="sort"]').text(`排序: ${sortLabel}`);
-                    this.getOptionalDependency("ListPagePlugin")?.syncQuickFilterUi?.();
+                    this.listFeatureApi?.syncQuickFilterUi?.();
                 }
                 // 刷新详情页状态
                 if (window.isDetailPage) void this.refreshDetailStatus().catch((error => clog.warn("移动端详情状态刷新失败", error)));
@@ -486,7 +501,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
             const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
             items.eq(next).trigger("focus");
         })).on("click", ".jhs-mobile-filter-option", ((/** @type {any} */ event) => {
-            event.stopPropagation(), this.getOptionalDependency("ListPagePlugin")?.setQuickFilter?.($(event.currentTarget).data("jhs-filter")), closeMenu(!0);
+            event.stopPropagation(), this.listFeatureApi?.setQuickFilter?.($(event.currentTarget).data("jhs-filter")), closeMenu(!0);
         }));
         sortMenu.on("keydown", ".jhs-mobile-sort-option", ((/** @type {any} */ event) => {
             const items = sortMenu.find(".jhs-mobile-sort-option"), index = items.index(event.currentTarget);

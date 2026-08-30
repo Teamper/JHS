@@ -10,8 +10,9 @@ import { StatsRepository, computeLibraryStats } from "../src/features/stats/stat
 function loadStatsPlugin() {
     const dom = new JSDOM("<body></body>", { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
     const listPage = { getCurrentPageSummary: vi.fn(() => ({ blockedItems: 7 })), setQuickFilter: vi.fn() };
+    const listFeature = { getCurrentPageSummary: listPage.getCurrentPageSummary, setQuickFilter: listPage.setQuickFilter };
     const newVideo = { getPendingNewVideoTotal: vi.fn(async () => 3), openDialog: vi.fn() };
-    const beans = { ListPagePlugin: listPage, NewVideoPlugin: newVideo, OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com") } };
+    const beans = { NewVideoPlugin: newVideo, OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com") } };
     const stateService = { getActivityLog: vi.fn(async () => ({ entries: [], coverageStart: null })) };
     class BasePlugin {
         getBean(name) { return beans[name]; }
@@ -21,6 +22,7 @@ function loadStatsPlugin() {
             if (name === "dialog") return { open: layer.open, close: layer.close };
             if (name === "state") return stateService;
             if (name === "movie") return { externalSiteOrigin: () => "https://javdb.com" };
+            if (name === "features") return { getFeatureApi: vi.fn(async () => listFeature) };
             return null;
         }
     }

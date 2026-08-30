@@ -224,6 +224,10 @@ assertIncludes(historySource, 'getFeatureApi("list")', "history list API boundar
 assert(!historySource.includes('getOptionalDependency("ListPagePlugin")'), "history must not resolve ListPagePlugin directly");
 assertIncludes(compatibilityListSource, 'getFeatureApi("list")', "compatibility list API boundary");
 assert(!compatibilityListSource.includes('getOptionalDependency("ListPagePlugin")'), "compatibility must not resolve ListPagePlugin directly");
+assertIncludes(statsSource, 'getFeatureApi("list")', "stats list API boundary");
+assert(!statsSource.includes('getOptionalDependency("ListPagePlugin")'), "stats must not resolve ListPagePlugin directly");
+assertIncludes(mobileSource, 'getFeatureApi("list")', "mobile list API boundary");
+assert(!mobileSource.includes('getOptionalDependency("ListPagePlugin")'), "mobile must not resolve ListPagePlugin directly");
 assertIncludes(listPageSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "list feature scope handoff");
 assertIncludes(listPageSource, "this.getListView().applyVisibility", "list view visibility ownership");
 assertIncludes(listPageSource, "element.matches?.(e.itemSelector) && this.indexItems([ element ])", "list reorder index retention");

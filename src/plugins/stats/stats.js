@@ -15,6 +15,15 @@ export class StatsPlugin extends BasePlugin {
     }
     getStatsRepository() { return this.statsRepository ||= new StatsRepository({ storage: storageManager, state: this.getRuntimeService("state") }); }
     getName() { return "StatsPlugin"; }
+    /** Resolve the list capability used by the current-page stats action. */
+    async getListFeatureApi() {
+        try {
+            return await this.getRuntimeService("features").getFeatureApi("list");
+        } catch (error) {
+            clog.warn("列表 Feature API 不可用，跳过当前页统计", error);
+            return null;
+        }
+    }
     async initCss() {
         return `
             <style>
@@ -53,7 +62,7 @@ export class StatsPlugin extends BasePlugin {
             } else names.forEach((name => { const key = `name:${name}`, current = actressCounts.get(key) || { starId: "", name, count: 0 }; current.count++, actressCounts.set(key, current); }));
         }));
         const topActresses = [ ...actressCounts.values() ].sort(((left, right) => right.count - left.count || left.name.localeCompare(right.name))).slice(0, 10), topValue = topActresses[0]?.count || 1, javDbUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", await storageManager.getSetting());
-        const pending = stats.pending, counter = this.getOptionalDependency("NewVideoPlugin"), listPage = this.getOptionalDependency("ListPagePlugin"), newVideos = counter ? await counter.getPendingNewVideoTotal() : 0, pageSummary = listPage?.getCurrentPageSummary?.() || { blockedItems: 0 };
+        const pending = stats.pending, counter = this.getOptionalDependency("NewVideoPlugin"), listFeature = await this.getListFeatureApi(), newVideos = counter ? await counter.getPendingNewVideoTotal() : 0, pageSummary = await listFeature?.getCurrentPageSummary?.() || { blockedItems: 0 };
         const metrics = [
             { label: "总记录", value: total, action: null },
             { label: "收藏", value: stats.favoriteRaw, action: null },
@@ -95,7 +104,7 @@ export class StatsPlugin extends BasePlugin {
                 const metric = $(event.currentTarget), action = metric.data("action");
                 dialog.close(layerIndex);
                 if ("new-video" === action) return counter?.openDialog?.();
-                if ("filter" === action) listPage?.setQuickFilter?.(metric.data("filter"));
+                if ("filter" === action) listFeature?.setQuickFilter?.(metric.data("filter"));
             }));
             utils.setupEscClose(layerIndex);
         } });

@@ -30,7 +30,7 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
         "BusImgPlugin", "Fc2Plugin"
     ],
     MobileBottomBarPlugin: [
-        "ListPagePlugin", "DetailPageButtonPlugin", "ListPageButtonPlugin",
+        "DetailPageButtonPlugin", "ListPageButtonPlugin",
         "NewVideoPlugin", "BlacklistPlugin", "SettingPlugin", "HighlightMagnetPlugin", "MagnetHubPlugin", "HistoryPlugin"
     ],
     NavBarPlugin: ["SearchByImagePlugin"],
@@ -40,7 +40,7 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
         "CoverButtonPlugin", "TaskPlugin", "OtherSitePlugin", "ListPagePlugin", "TranslatePlugin",
         "ActressInfoPlugin", "ScreenShotPlugin", "NewVideoPlugin", "BlacklistPlugin", "BusImgPlugin"
     ],
-    StatsPlugin: ["NewVideoPlugin", "ListPagePlugin"],
+    StatsPlugin: ["NewVideoPlugin"],
     TaskPlugin: ["BlacklistPlugin"],
     TranslatePlugin: [],
     TOP250Plugin: ["HitShowPlugin", "ListPageButtonPlugin"],

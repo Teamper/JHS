@@ -54,6 +54,7 @@ export class ListController {
             openMovieDetail: call("openMovieDetail"),
             findCarNumAndHref: call("findCarNumAndHref"),
             parseActressName: call("parseActressName"),
+            setQuickFilter: call("setQuickFilter"),
             getActiveQuickFilter: () => legacyPlugin.activeQuickFilter,
             createEvaluationContext: call("createEvaluationContext"),
             translateListItems: call("translateListItems"),
