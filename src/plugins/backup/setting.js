@@ -20,7 +20,7 @@ import { bindSettingRows, renderSettingRow } from "../../ui/settings/setting-con
 export class SettingPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService()), i(this, "pendingCarImport", null), i(this, "taskStatusUnsubscribe", null),
-i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this, "_settingNavResizeCleanup", null), i(this, "_desktopNavGeneration", 0), i(this, "_settingsDialogGeneration", 0), i(this, "_fullSettingBinding", null), i(this, "cacheItems", [ {
+i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this, "_settingNavResizeCleanup", null), i(this, "_desktopNavGeneration", 0), i(this, "_settingsDialogGeneration", 0), i(this, "_fullSettingBinding", null), i(this, "discoveryFeatureApi", null), i(this, "cacheItems", [ {
             key: "jhs_dmm_video",
             text: "预览视频缓存",
             title: "预览视频缓存"
@@ -61,6 +61,17 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
     getName() {
         return "SettingPlugin";
     }
+    /** Resolve discovery-owned task status and new-video actions. */
+    async getDiscoveryFeatureApi() {
+        if (this.discoveryFeatureApi) return this.discoveryFeatureApi;
+        try {
+            this.discoveryFeatureApi = await this.getRuntimeService("features").getFeatureApi("discovery");
+        } catch (error) {
+            clog.warn("Discovery Feature API 不可用，跳过任务设置刷新", error);
+            this.discoveryFeatureApi = null;
+        }
+        return this.discoveryFeatureApi;
+    }
     async getFormDependencies() {
         let blacklist = null;
         try {
@@ -68,10 +79,11 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         } catch (error) {
             clog.warn("Library Feature API 不可用，跳过黑名单设置刷新", error);
         }
+        const discovery = await this.getDiscoveryFeatureApi();
         return Object.freeze({
             otherSite: this.getOptionalDependency("OtherSitePlugin"),
             actressInfo: this.getOptionalDependency("ActressInfoPlugin"), screenshot: this.getOptionalDependency("ScreenShotPlugin"),
-            newVideo: this.getOptionalDependency("NewVideoPlugin"), blacklist,
+            newVideo: discovery?.hasNewVideo ? discovery : null, blacklist,
             busImg: this.getOptionalDependency("BusImgPlugin"), host: this.getRuntimeService("host"), movie: this.getRuntimeService("movie"), settings: this.getRuntimeService("settings"),
             settingsRegistry: this.getRuntimeService("settingsRegistry"),
         });
@@ -382,7 +394,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
     renderTaskStatuses(layerRoot = null) {
         const container = layerRoot ? $(layerRoot).find("#setting-task-status-list") : $("#setting-task-status-list");
         if (!container.length) return;
-        const taskPlugin = this.getOptionalDependency("TaskPlugin");
+        const taskPlugin = this.discoveryFeatureApi;
         if (!taskPlugin?.getTaskStatusSnapshot) return void container.empty();
         const names = { blacklist: "黑名单", favoriteActress: "演员同步", newVideo: "新作品" }, labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = value => value ? new Date(value).toLocaleString() : "无";
         container.empty(), [ "blacklist", "favoriteActress", "newVideo" ].forEach((name => {

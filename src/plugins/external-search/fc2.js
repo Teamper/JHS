@@ -54,6 +54,7 @@ export class Fc2Plugin extends BasePlugin {
         this.detailStateController = null;
         /** @type {number} */ this.translationGeneration = 0;
         /** @type {any} */ this.libraryFeatureApi = null;
+        /** @type {any} */ this.discoveryFeatureApi = null;
     }
     getName() { return "Fc2Plugin"; }
     /** Resolve library-owned keyword filtering without coupling FC2 to its legacy plugin. */
@@ -66,6 +67,17 @@ export class Fc2Plugin extends BasePlugin {
             this.libraryFeatureApi = null;
         }
         return this.libraryFeatureApi;
+    }
+    /** Resolve discovery-owned login actions without coupling FC2 to Top250. */
+    async getDiscoveryFeatureApi() {
+        if (this.discoveryFeatureApi) return this.discoveryFeatureApi;
+        try {
+            this.discoveryFeatureApi = await this.getRuntimeService("features").getFeatureApi("discovery");
+        } catch (error) {
+            clog.warn("Discovery Feature API 不可用，跳过 JavDB 登录", error);
+            this.discoveryFeatureApi = null;
+        }
+        return this.discoveryFeatureApi;
     }
     getDetailStateController() {
         return this.detailStateController ||= new DetailStateController(this.getRuntimeService("state"));
@@ -371,8 +383,8 @@ export class Fc2Plugin extends BasePlugin {
             const normalizedError = /** @type {{ code?: string, message?: string }} */ (error);
             if ("LOGIN_REQUIRED" === normalizedError?.code) {
                 button.attr("aria-disabled", "false").text("JavDB 想看");
-                const loginPlugin = this.getOptionalDependency("TOP250Plugin");
-                return loginPlugin?.openLoginDialog({ onSuccess: () => this.submitJavDbWant(context, movieId, button) });
+                const discovery = await this.getDiscoveryFeatureApi();
+                return discovery?.openLoginDialog?.({ onSuccess: () => this.submitJavDbWant(context, movieId, button) });
             }
             button.attr("aria-disabled", "false").text("JavDB 想看"), show.error(normalizedError?.message || "加入 JavDB 想看失败"), clog.error("加入 JavDB 想看失败", error);
         } finally {

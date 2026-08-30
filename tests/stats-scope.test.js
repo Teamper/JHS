@@ -11,7 +11,8 @@ function loadStatsPlugin() {
     const dom = new JSDOM("<body></body>", { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
     const listPage = { getCurrentPageSummary: vi.fn(() => ({ blockedItems: 7 })), setQuickFilter: vi.fn() };
     const listFeature = { getCurrentPageSummary: listPage.getCurrentPageSummary, setQuickFilter: listPage.setQuickFilter };
-    const newVideo = { getPendingNewVideoTotal: vi.fn(async () => 3), openDialog: vi.fn() };
+    const newVideo = { getPendingNewVideoTotal: vi.fn(async () => 3), openNewVideoDialog: vi.fn() };
+    const discoveryFeature = { hasNewVideo: true, getPendingNewVideoTotal: newVideo.getPendingNewVideoTotal, openNewVideoDialog: newVideo.openNewVideoDialog };
     const beans = { NewVideoPlugin: newVideo, OtherSitePlugin: { getJavDbUrl: vi.fn(async () => "https://javdb.com") } };
     const stateService = { getActivityLog: vi.fn(async () => ({ entries: [], coverageStart: null })) };
     class BasePlugin {
@@ -22,7 +23,7 @@ function loadStatsPlugin() {
             if (name === "dialog") return { open: layer.open, close: layer.close };
             if (name === "state") return stateService;
             if (name === "movie") return { externalSiteOrigin: () => "https://javdb.com" };
-            if (name === "features") return { getFeatureApi: vi.fn(async () => listFeature) };
+            if (name === "features") return { getFeatureApi: vi.fn(async featureId => featureId === "discovery" ? discoveryFeature : listFeature) };
             return null;
         }
     }
@@ -64,7 +65,7 @@ describe("Stats scope semantics", () => {
 
         expect(currentPage.find("button[data-action='filter'][data-filter='blockedItems'] strong").text()).toBe("7");
         overview.find("button[data-action='new-video']").trigger("click");
-        expect(newVideo.openDialog).toHaveBeenCalledOnce();
+        expect(newVideo.openNewVideoDialog).toHaveBeenCalledOnce();
         currentPage.find("button[data-action='filter']").trigger("click");
         expect(listPage.setQuickFilter).toHaveBeenCalledWith("blockedItems");
         expect(layer.close).toHaveBeenCalledTimes(2);

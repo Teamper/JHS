@@ -14,6 +14,8 @@ export class HitShowPlugin extends BasePlugin {
         /** @type {any} */ this.$contentBox = null;
         /** @type {any} */ this.$listRoot = null;
         this.loadGeneration = 0;
+        /** @type {any} */ this.lifecycleScope = null;
+        /** @type {any} */ this.discoveryApi = null;
     }
     getName() {
         return "HitShowPlugin";
@@ -21,12 +23,20 @@ export class HitShowPlugin extends BasePlugin {
     async initCss() {
         return `<style>.jhs-hitshow-heading{display:flex;align-items:center;justify-content:space-between;gap:var(--jhs-space-3);flex-wrap:wrap}.jhs-hitshow-title{margin:0!important}.jhs-hitshow-list{margin-top:var(--jhs-space-3)}.jhs-hitshow-state{display:flex;min-height:180px;align-items:center;justify-content:center;flex-direction:column;gap:var(--jhs-space-3);color:var(--jhs-text-muted);text-align:center}</style>`;
     }
-    async handle() {
-        $('a[href*="rankings/playback"]').on("click", ((/** @type {MouseEvent} */ e) => {
+    async handle({ scope = null, discoveryApi = undefined } = {}) {
+        this.lifecycleScope = scope ?? await this.getRuntimeService("scope")();
+        if (discoveryApi !== undefined) this.discoveryApi = discoveryApi;
+        const links = $('a[href*="rankings/playback"]');
+        links.off("click.jhsHitShow").on("click.jhsHitShow", ((/** @type {MouseEvent} */ e) => {
             // 修饰键/中键点击保留“新标签打开”的原生语义
             if (e.ctrlKey || e.metaKey || 1 === e.button) return void window.open("/advanced_search?handlePlayback=1&period=daily", "_blank");
             e.preventDefault(), e.stopPropagation(), window.location.href = "/advanced_search?handlePlayback=1&period=daily";
-        })), await this.handlePlayback();
+        }));
+        this.lifecycleScope?.addCleanup?.(() => {
+            links.off("click.jhsHitShow");
+            this.loadGeneration++;
+        });
+        await this.handlePlayback();
     }
     hookPage() {
         const host = this.getRuntimeService("host"), contentBox = host.getListContainer?.() ?? host.getListLayoutContainer?.();
@@ -43,7 +53,7 @@ export class HitShowPlugin extends BasePlugin {
         try {
             this.hookPage(), this.toolBar(period);
             // 操作按钮行（开始鉴定/批量操作/排序）挂进热播自有标题容器，由 ListPageButtonPlugin 提供
-            await this.getOptionalDependency("ListPageButtonPlugin")?.mountOwnedRankingControls?.()?.catch?.((/** @type {unknown} */ error) => clog.error("热播操作按钮挂载失败", error));
+            await this.getOptionalDependency("ListPageButtonPlugin")?.mountOwnedRankingControls?.(null, this.discoveryApi)?.catch?.((/** @type {unknown} */ error) => clog.error("热播操作按钮挂载失败", error));
             const movies = await this.fetchPlaybackWithRetry(period);
             if (generation !== this.loadGeneration) return;
             if (!movies.length) return void this.renderState("当前周期暂无热播数据");
@@ -72,7 +82,7 @@ export class HitShowPlugin extends BasePlugin {
     async fetchPlaybackWithRetry(/** @type {string | null} */ period) {
         let lastError;
         for (let attempt = 1; attempt <= 3; attempt++) try {
-            const scope = await this.getRuntimeService("scope")();
+            const scope = this.lifecycleScope ?? await this.getRuntimeService("scope")();
             return await this.getRuntimeService("movie").rankings({ period, scope });
         } catch (error) {
             lastError = error;
@@ -160,7 +170,7 @@ export class HitShowPlugin extends BasePlugin {
                     this.appendScore(id, cached.score, cached.watchedCount);
                     continue;
                 }
-                const scope = await this.getRuntimeService("scope")();
+                const scope = this.lifecycleScope ?? await this.getRuntimeService("scope")();
                 const result = await this.getRuntimeService("movie").detail({ movieId: id, providerId: "javdb" }, { scope });
                 if (!result) throw new Error("JavDB 影片详情不存在");
                 if (generation !== this.loadGeneration) return;

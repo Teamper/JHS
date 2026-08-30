@@ -96,7 +96,7 @@ export class TaskPlugin extends BasePlugin {
                 timeout: this.taskConfig?.httpTimeout, retryCount: Math.max(0, (this.taskConfig?.httpRetryCount ?? 1) - 1),
                 circuitThreshold: this.taskConfig?.circuitBreakerThreshold, circuitCooldownMs: this.taskConfig?.circuitBreakerCooldown,
                 urlPolicy,
-            }, await this.getRuntimeService("scope")());
+            }, this.lifecycleScope ?? await this.getRuntimeService("scope")());
             if (typeof response.data !== "string") throw new TypeError("宿主页面响应不是 HTML 文本");
             return response.data;
         } catch (error) { const taskError = /** @type {any} */ (error); taskError._taskNetwork = true; throw taskError; }
@@ -226,9 +226,16 @@ export class TaskPlugin extends BasePlugin {
             this.configRefreshPromise = null;
         })), this.configRefreshPromise;
     }
-    async handle() {
+    async handle({ scope = null } = {}) {
         if (!window.isListPage) return;
-        this.lifecycleScope ||= await this.getRuntimeService("scope")();
+        const nextScope = scope ?? await this.getRuntimeService("scope")();
+        if (this.lifecycleScope !== nextScope || this.lifecycleScope?.disposed) {
+            this.lifecycleScope = nextScope;
+            this.visibilityHandler = null;
+            this.pageHideHandler = null;
+            this.settingsHandler = null;
+            this.lifecycleScope.addCleanup?.(() => this.clearSchedule());
+        }
         this.visibilityHandler || (this.visibilityHandler = () => {
             document.hidden ? this.clearSchedule() : this.scheduleTask(0);
         }, this.pageHideHandler = () => this.clearSchedule(), this.lifecycleScope.listen(document, "visibilitychange", this.visibilityHandler),
@@ -443,7 +450,7 @@ export class TaskPlugin extends BasePlugin {
                 if (visitedUrls.has(currentUrl.href)) throw new Error(`收藏演员分页循环: ${currentUrl.href}`);
                 if (pages >= 200) throw new Error("收藏演员分页超过 200 页");
                 visitedUrls.add(currentUrl.href), pages++, clog.log(`正在抓取页面: ${currentUrl.href}`), $("#checkNewVideoMsg").text(`正在解析已收藏的演员: ${currentUrl.href}`);
-                const parsed = /** @type {any} */ (await this.getRuntimeService("actressInfo").collection("javdb", { baseUrl: this.javDbUrl, pageUrl: currentUrl.href }, { scope: await this.getRuntimeService("scope")() }));
+                const parsed = /** @type {any} */ (await this.getRuntimeService("actressInfo").collection("javdb", { baseUrl: this.javDbUrl, pageUrl: currentUrl.href }, { scope: this.lifecycleScope ?? await this.getRuntimeService("scope")() }));
                 if ("valid" !== parsed.state) throw Object.assign(new Error(`收藏演员页面无效: ${parsed.state}`), { _taskParse: !0 });
                 if (parsed.isEmpty && parsed.nextUrl) throw Object.assign(new Error("收藏演员空页面包含下一页"), { _taskParse: !0 });
                 target.push(...parsed.actors), currentUrl = parsed.nextUrl ? new URL(parsed.nextUrl, currentUrl.href) : null;
@@ -486,7 +493,7 @@ export class TaskPlugin extends BasePlugin {
                         const {name, starId} = actress, url = `${this.javDbUrl}/actors/${starId}?t=d`;
                         try {
                             clog.log("正在检测最新作品, 演员:", name, url), $("#checkNewVideoMsg").text(`正在检测最新作品, 演员: ${name}`);
-                            const movies = await this.getRuntimeService("actressInfo").movies("javdb", { actorId: starId, baseUrl: this.javDbUrl }, { scope: await this.getRuntimeService("scope")(), ttlMs: 0 });
+                            const movies = await this.getRuntimeService("actressInfo").movies("javdb", { actorId: starId, baseUrl: this.javDbUrl }, { scope: this.lifecycleScope ?? await this.getRuntimeService("scope")(), ttlMs: 0 });
                             try {
                                 await this.storageQueue.addTask((async () => this.parseActorMovies(movies, starId, name, titleKeywords, blacklistSet))), result.success++;
                             } catch (error) {
@@ -596,7 +603,7 @@ export class TaskPlugin extends BasePlugin {
         const l = $("#checkNewVideoMsg");
         try {
             clog.log("正在检测最新作品, 演员:", s, r), l.text(`正在检测最新作品, 演员: ${s}`);
-            const movies = await this.getRuntimeService("actressInfo").movies("javdb", { actorId: o, baseUrl: this.javDbUrl }, { scope: await this.getRuntimeService("scope")(), ttlMs: 0 });
+            const movies = await this.getRuntimeService("actressInfo").movies("javdb", { actorId: o, baseUrl: this.javDbUrl }, { scope: this.lifecycleScope ?? await this.getRuntimeService("scope")(), ttlMs: 0 });
             await this.parseActorMovies(movies, o, s, t, a), clog.html('<span class="jhs-task-emphasis">检测最新作品---结束</span>'),
             l.text("检测完毕");
             await this.emitNewVideoChanged("single-actress-check");

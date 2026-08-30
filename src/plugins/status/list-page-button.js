@@ -17,6 +17,8 @@ export class ListPageButtonPlugin extends BasePlugin {
         this.ownedRankingSortOverride = null;
         /** @type {any} */
         this.listFeatureApi = null;
+        /** @type {any} */
+        this.discoveryFeatureApi = null;
     }
     getName() {
         return "ListPageButtonPlugin";
@@ -43,13 +45,25 @@ export class ListPageButtonPlugin extends BasePlugin {
         }
         return this.libraryFeatureApi;
     }
+    /** Resolve discovery actions without coupling this contribution to its legacy plugins. */
+    async getDiscoveryFeatureApi() {
+        if (this.discoveryFeatureApi) return this.discoveryFeatureApi;
+        try {
+            this.discoveryFeatureApi = await this.getRuntimeService("features").getFeatureApi("discovery");
+        } catch (error) {
+            clog.warn("Discovery Feature API 不可用", error);
+            this.discoveryFeatureApi = null;
+        }
+        return this.discoveryFeatureApi;
+    }
     async handle() {
         // 热播/Top250 自渲染榜单由渲染方调用 mountHitShowControls 延迟挂载，启动期不注入页面 h2
         if (!window.isListPage || isHitShowPage() || window.location.search.includes("handleTop=1")) return;
         const scope = await this.getRuntimeService("scope")();
         const settings = this.getRuntimeService("settings");
-        const libraryFeatureApi = await this.getLibraryFeatureApi();
-        await this.createMenuBtn(scope, null, libraryFeatureApi), this.bindEvent(libraryFeatureApi);
+        const [libraryFeatureApi, discoveryFeatureApi] = await Promise.all([this.getLibraryFeatureApi(), this.getDiscoveryFeatureApi()]);
+        this.discoveryFeatureApi = discoveryFeatureApi;
+        await this.createMenuBtn(scope, null, libraryFeatureApi, discoveryFeatureApi), this.bindEvent(libraryFeatureApi);
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names);
             if (!names?.includes("autoPage")) return;
@@ -60,12 +74,13 @@ export class ListPageButtonPlugin extends BasePlugin {
         await this.syncSortUi();
     }
     /** 自渲染榜单页由渲染方在自有标题/筛选容器就绪后调用：按钮行挂进传入容器（缺省为热播标题），排序/批量能力与普通列表页一致。 @param {any} [target] */
-    async mountOwnedRankingControls(target = null) {
+    async mountOwnedRankingControls(target = null, discoveryFeatureApi = null) {
         const heading = target?.length ? target : $(".jhs-hitshow-heading");
         if (!heading.length || $("#waitCheckBtn").length) return;
         const scope = await this.getRuntimeService("scope")();
         const libraryFeatureApi = await this.getLibraryFeatureApi();
-        await this.createMenuBtn(scope, heading, libraryFeatureApi);
+        this.discoveryFeatureApi = discoveryFeatureApi ?? this.discoveryFeatureApi ?? await this.getDiscoveryFeatureApi();
+        await this.createMenuBtn(scope, heading, libraryFeatureApi, this.discoveryFeatureApi);
         this.bindEvent(libraryFeatureApi);
         await this.syncSortUi();
     }
@@ -95,10 +110,11 @@ export class ListPageButtonPlugin extends BasePlugin {
         await this.sortItems();
     }
     /** @param {LifecycleScope} scope @param {any} [target] 自渲染榜单传入自有标题容器，避免注入页面 h2。 @param {any} [libraryFeatureApi] */
-    async createMenuBtn(scope, target = null, libraryFeatureApi = null) {
+    async createMenuBtn(scope, target = null, libraryFeatureApi = null, discoveryFeatureApi = null) {
         // 6.5 capability：功能被禁用时不渲染按钮，不留 disabled 死按钮。
         libraryFeatureApi ??= await this.getLibraryFeatureApi();
-        const hasNewVideo = Boolean(this.getOptionalDependency("NewVideoPlugin")), hasBlacklist = Boolean(libraryFeatureApi?.hasBlacklist), hasListPage = Boolean(await this.getListFeatureApi());
+        this.discoveryFeatureApi = discoveryFeatureApi ?? this.discoveryFeatureApi;
+        const hasNewVideo = Boolean(this.discoveryFeatureApi?.hasNewVideo), hasBlacklist = Boolean(libraryFeatureApi?.hasBlacklist), hasListPage = Boolean(await this.getListFeatureApi());
         if (r) {
             const e = o.includes("/actors/");
             let t = $(".main-tabs, .tabs"), n = "加入黑名单", a = "jhs-btn--filter", s = null;
@@ -142,7 +158,7 @@ export class ListPageButtonPlugin extends BasePlugin {
         $("#waitCheckBtn").on("click", ((/** @type {any} */ e) => {
             void this.openWaitCheck().catch((error => clog.error("待鉴定列表打开失败", error)));
         })), $("#newVideoBtn").on("click", ((/** @type {any} */ e) => {
-            this.getOptionalDependency("NewVideoPlugin")?.openDialog?.();
+            this.discoveryFeatureApi?.openNewVideoDialog?.();
         })), $("#blacklistBtn").on("click", ((/** @type {any} */ e) => {
             (libraryFeatureApi ?? this.libraryFeatureApi)?.openBlacklistDialog?.();
         })), this.bindSortMenu();

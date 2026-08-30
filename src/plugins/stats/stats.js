@@ -12,6 +12,8 @@ export class StatsPlugin extends BasePlugin {
         super(...arguments);
         /** @type {StatsRepository | null} */
         this.statsRepository = null;
+        /** @type {any} */
+        this.discoveryFeatureApi = null;
     }
     getStatsRepository() { return this.statsRepository ||= new StatsRepository({ storage: storageManager, state: this.getRuntimeService("state") }); }
     getName() { return "StatsPlugin"; }
@@ -23,6 +25,17 @@ export class StatsPlugin extends BasePlugin {
             clog.warn("列表 Feature API 不可用，跳过当前页统计", error);
             return null;
         }
+    }
+    /** Resolve discovery actions without coupling statistics to its legacy plugins. */
+    async getDiscoveryFeatureApi() {
+        if (this.discoveryFeatureApi) return this.discoveryFeatureApi;
+        try {
+            this.discoveryFeatureApi = await this.getRuntimeService("features").getFeatureApi("discovery");
+        } catch (error) {
+            clog.warn("Discovery Feature API 不可用，跳过新作品统计", error);
+            this.discoveryFeatureApi = null;
+        }
+        return this.discoveryFeatureApi;
     }
     async initCss() {
         return `
@@ -62,7 +75,7 @@ export class StatsPlugin extends BasePlugin {
             } else names.forEach((name => { const key = `name:${name}`, current = actressCounts.get(key) || { starId: "", name, count: 0 }; current.count++, actressCounts.set(key, current); }));
         }));
         const topActresses = [ ...actressCounts.values() ].sort(((left, right) => right.count - left.count || left.name.localeCompare(right.name))).slice(0, 10), topValue = topActresses[0]?.count || 1, javDbUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", await storageManager.getSetting());
-        const pending = stats.pending, counter = this.getOptionalDependency("NewVideoPlugin"), listFeature = await this.getListFeatureApi(), newVideos = counter ? await counter.getPendingNewVideoTotal() : 0, pageSummary = await listFeature?.getCurrentPageSummary?.() || { blockedItems: 0 };
+        const pending = stats.pending, counter = await this.getDiscoveryFeatureApi(), listFeature = await this.getListFeatureApi(), newVideos = counter?.hasNewVideo ? await counter.getPendingNewVideoTotal() : 0, pageSummary = await listFeature?.getCurrentPageSummary?.() || { blockedItems: 0 };
         const metrics = [
             { label: "总记录", value: total, action: null },
             { label: "收藏", value: stats.favoriteRaw, action: null },
@@ -103,7 +116,7 @@ export class StatsPlugin extends BasePlugin {
             $(layerElement).find("button.jhs-stats__metric[data-action]").on("click", ((/** @type {MouseEvent} */ event) => {
                 const metric = $(event.currentTarget), action = metric.data("action");
                 dialog.close(layerIndex);
-                if ("new-video" === action) return counter?.openDialog?.();
+                if ("new-video" === action) return counter?.openNewVideoDialog?.();
                 if ("filter" === action) listFeature?.setQuickFilter?.(metric.data("filter"));
             }));
             utils.setupEscClose(layerIndex);

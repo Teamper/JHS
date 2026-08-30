@@ -29,7 +29,7 @@ describe("capability availability (无死按钮)", () => {
     it("legacy list toolbar renders buttons only when the capability exists", () => {
         expect(listButtons).toContain('${hasNewVideo ? `<button type="button" id="newVideoBtn"');
         expect(listButtons).toContain('${hasBlacklist ? `<button type="button" id="blacklistBtn"');
-        expect(listButtons).toContain('const hasNewVideo = Boolean(this.getBean("NewVideoPlugin"))');
+        expect(listButtons).toContain("const hasNewVideo = Boolean(this.discoveryFeatureApi?.hasNewVideo)");
         expect(listButtons).not.toContain("黑名单功能已禁用");
     });
 

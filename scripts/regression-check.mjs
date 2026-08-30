@@ -62,6 +62,8 @@ const libraryManifestSource = await read("src/features/library/manifest.js");
 const libraryControllerSource = await read("src/features/library/library-controller.js");
 const externalBridgeManifestSource = await read("src/features/external-bridge/manifest.js");
 const externalBridgeControllerSource = await read("src/features/external-bridge/external-bridge-controller.js");
+const discoveryManifestSource = await read("src/features/discovery/manifest.js");
+const discoveryControllerSource = await read("src/features/discovery/discovery-controller.js");
 const listFiltersSource = await read("src/features/list/list-filters.js");
 const fc2 = await read("src/plugins/external-search/fc2.js");
 const fc2By123Av = await read("src/plugins/external-search/fc2-by-123av.js");
@@ -263,6 +265,13 @@ assertIncludes(externalBridgeManifestSource, 'id: "external-bridge"', "real exte
 assertIncludes(externalBridgeManifestSource, 'new ExternalBridgeController({', "external bridge feature controller ownership");
 assertIncludes(externalBridgeControllerSource, 'this.unifiedOfflinePlugin?.handle({ scope: this.scope, oneTwoThreePlugin: this.oneTwoThreePlugin })', "external bridge offline lifecycle handoff");
 assertIncludes(externalBridgeControllerSource, 'getOfflineProvider:', "external bridge offline API boundary");
+assertIncludes(discoveryManifestSource, 'id: "discovery"', "real discovery feature manifest");
+assertIncludes(discoveryManifestSource, 'new DiscoveryController({', "discovery feature controller ownership");
+assertIncludes(discoveryControllerSource, 'this.newVideoPlugin?.handle?.({ scope: this.scope, taskApi })', "discovery idle new-video handoff");
+assertIncludes(discoveryControllerSource, 'openNewVideoDialog:', "discovery new-video API boundary");
+for (const source of [hitShow, await read("src/plugins/external-search/top250.js"), newVideoTaskSource, await read("src/plugins/new-video/new-video.js")]) {
+  assert(!source.includes('getOptionalDependency("TaskPlugin")') && !source.includes('getOptionalDependency("HitShowPlugin")') && !source.includes('getOptionalDependency("TOP250Plugin")'), "Discovery consumers must use Feature APIs");
+}
 assertIncludes(navBarSource, 'this.identityApi?.openSearchByImage?.()', "JavDB navigation identity API boundary");
 assertIncludes(busNavBarSource, 'identityApi.openSearchByImage?.()', "JavBus navigation identity API boundary");
 assertIncludes(identityActressSource, 'options.scope ?? await this.getRuntimeService("scope")()', "identity actress scope handoff");

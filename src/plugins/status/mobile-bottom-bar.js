@@ -15,6 +15,8 @@ export class MobileBottomBarPlugin extends BasePlugin {
         this.listFeatureApi = null;
         /** @type {any} */
         this.libraryFeatureApi = null;
+        /** @type {any} */
+        this.discoveryFeatureApi = null;
     }
     getName() {
         return "MobileBottomBarPlugin";
@@ -40,6 +42,17 @@ export class MobileBottomBarPlugin extends BasePlugin {
             this.libraryFeatureApi = null;
         }
         return this.libraryFeatureApi;
+    }
+    /** Resolve discovery actions without coupling this contribution to its legacy plugins. */
+    async getDiscoveryFeatureApi() {
+        if (this.discoveryFeatureApi) return this.discoveryFeatureApi;
+        try {
+            this.discoveryFeatureApi = await this.getRuntimeService("features").getFeatureApi("discovery");
+        } catch (error) {
+            clog.warn("Discovery Feature API 不可用，隐藏移动端新作品", error);
+            this.discoveryFeatureApi = null;
+        }
+        return this.discoveryFeatureApi;
     }
     shouldSkipOnMobile() {
         return false; // this plugin only runs on mobile
@@ -230,7 +243,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
     }
     async handle() {
         const profile = this.getRuntimeService("profile"), scope = await this.getRuntimeService("scope")();
-        await Promise.all([ this.getListFeatureApi(), this.getLibraryFeatureApi() ]);
+        await Promise.all([ this.getListFeatureApi(), this.getLibraryFeatureApi(), this.getDiscoveryFeatureApi() ]);
         scope.listen(profile, "profile.changed", () => this.syncSurfaces());
         this.syncSurfaces();
     }
@@ -418,7 +431,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
     }
     createMenu() {
         const item = (/** @type {string} */ action, /** @type {string} */ label, /** @type {string} */ attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = (/** @type {string} */ content) => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
-        const hasListPageButton = !!this.getOptionalDependency("ListPageButtonPlugin"), hasListPage = Boolean(this.listFeatureApi), hasNewVideo = !!this.getOptionalDependency("NewVideoPlugin"), hasBlacklist = Boolean(this.libraryFeatureApi?.hasBlacklist), hasSetting = !!this.getOptionalDependency("SettingPlugin"), hasDetailPageButton = !!this.getOptionalDependency("DetailPageButtonPlugin"), hasHighlightMagnet = !!this.getOptionalDependency("HighlightMagnetPlugin"), hasMagnetHub = !!this.getOptionalDependency("MagnetHubPlugin"), hasHistory = Boolean(this.libraryFeatureApi?.hasHistory);
+        const hasListPageButton = !!this.getOptionalDependency("ListPageButtonPlugin"), hasListPage = Boolean(this.listFeatureApi), hasNewVideo = Boolean(this.discoveryFeatureApi?.hasNewVideo), hasBlacklist = Boolean(this.libraryFeatureApi?.hasBlacklist), hasSetting = !!this.getOptionalDependency("SettingPlugin"), hasDetailPageButton = !!this.getOptionalDependency("DetailPageButtonPlugin"), hasHighlightMagnet = !!this.getOptionalDependency("HighlightMagnetPlugin"), hasMagnetHub = !!this.getOptionalDependency("MagnetHubPlugin"), hasHistory = Boolean(this.libraryFeatureApi?.hasHistory);
         let items;
         if (window.isListPage) {
             const requestedSortMethod = this.getOptionalDependency("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? /** @type {keyof typeof sortLabels} */ (requestedSortMethod) : "default", sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.listFeatureApi?.getActiveQuickFilter?.()),
@@ -567,7 +580,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
                 await this.getOptionalDependency("ListPageButtonPlugin")?.openWaitCheck?.();
                 break;
             case "newVideo":
-                this.getOptionalDependency("NewVideoPlugin")?.openDialog?.();
+                this.discoveryFeatureApi?.openNewVideoDialog?.();
                 break;
             case "blacklist":
                 this.libraryFeatureApi?.openBlacklistDialog?.();

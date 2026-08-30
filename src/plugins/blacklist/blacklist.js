@@ -27,9 +27,21 @@ export class BlacklistPlugin extends BasePlugin {
         super(...arguments);
         /** @type {any} */ this.blacklistSearchDebounced = null;
         /** @type {null | (() => void)} */ this.taskStatusUnsubscribe = null;
+        /** @type {any} */ this.discoveryFeatureApi = null;
     }
     getName() {
         return "BlacklistPlugin";
+    }
+    /** Resolve discovery-owned task operations without coupling the library feature to TaskPlugin. */
+    async getDiscoveryFeatureApi() {
+        if (this.discoveryFeatureApi) return this.discoveryFeatureApi;
+        try {
+            this.discoveryFeatureApi = await this.getRuntimeService("features").getFeatureApi("discovery");
+        } catch (error) {
+            clog.warn("Discovery Feature API 不可用，跳过黑名单任务", error);
+            this.discoveryFeatureApi = null;
+        }
+        return this.discoveryFeatureApi;
     }
     async initCss() {
         return `<style>
@@ -74,7 +86,7 @@ export class BlacklistPlugin extends BasePlugin {
             }
         }
         utils.q(t, i, (async () => {
-            const e = this.getOptionalDependency("TaskPlugin");
+            const e = await this.getDiscoveryFeatureApi();
             if (!e) return void show.error("后台任务功能已禁用，无法执行黑名单抓取");
             navigator.locks.request(e.singleTaskKey, {
                 ifAvailable: !0
@@ -116,12 +128,12 @@ export class BlacklistPlugin extends BasePlugin {
         }));
     }
     async resetBtnTip() {
-        const e = this.getOptionalDependency("TaskPlugin"), t = e ? this.getRuntimeService("storage").getLocal(e.lastCheckBlacklistTimeKey) || "无" : "任务已禁用", n = await storageManager.getSetting("checkBlacklist_intervalTime", 12);
+        const e = await this.getDiscoveryFeatureApi(), t = e?.getTaskSchedule ? this.getRuntimeService("storage").getLocal(e.getTaskSchedule("blacklist").completedKey) || "无" : "任务已禁用", n = await storageManager.getSetting("checkBlacklist_intervalTime", 12);
         this.checkBlacklist_ruleTime = await storageManager.getSetting("checkBlacklist_ruleTime", 8760),
         (this.blacklistRoot || $()).find("#checkBlacklistBtn").attr("data-tip", `上次整批检测: ${t}; 检测间隔时间: ${n}小时`);
     }
     async openBlacklistDialog() {
-        const e = this.getOptionalDependency("TaskPlugin"), t = await storageManager.getSetting(), lastCheck = e ? this.getRuntimeService("storage").getLocal(e.lastCheckBlacklistTimeKey) || "无" : "任务已禁用";
+        const e = await this.getDiscoveryFeatureApi(), t = await storageManager.getSetting(), lastCheck = e?.getTaskSchedule ? this.getRuntimeService("storage").getLocal(e.getTaskSchedule("blacklist").completedKey) || "无" : "任务已禁用";
         let n = `\n            <div class="jhs-layout-7cb3f981"> \n                 <div class="jhs-layout-da5a4919">\n                    <div class="jhs-layout-31a824a2">\n                        <button type="button" id="checkBlacklistBtn" class="jhs-btn jhs-btn--secondary" data-tip="上次整批检测: ${lastCheck}; 检测间隔时间: ${t.checkBlacklist_intervalTime}小时">${this.blacklistSvg}<span>手动检测黑名单</span></button>\n                        <button type="button" class="jhs-btn jhs-btn--ghost" id="toSetting">${this.settingSvg}<span>配置</span></button>\n                    </div>\n                    <div class="jhs-layout-31a824a2">\n                        <select id="dataType" class="jhs-select-source">\n                            <option value="" selected>所有</option>\n                            <option value="actor">男演员</option>\n                            <option value="actress">女演员</option>\n                        </select>\n                        <select id="statusType" class="jhs-select-source">\n                            <option value="" selected>全部状态</option>\n                            <option value="normal">继续检测</option>\n                            <option value="stop">停更跳过</option>\n                        </select>\n                        <select id="urlType" data-tip="在演员页屏蔽时,是否选择了分类" class="jhs-select-source${r ? "" : " jhs-is-hidden"}">\n                            <option value="" selected>--屏蔽类型--</option>\n                            <option value="hasT">按所选分类屏蔽</option>\n                            <option value="noT">未筛选分类</option>\n                        </select>\n                        <input id="searchValue" type="search" placeholder="搜索名称、别名或 ID" class="jhs-field">\n                        <button type="button" id="cleanQueryBtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                    </div>\n\n                </div>\n                <div id="table-container" class="jhs-layout-d44e70c7"></div>\n            </div>\n        `;
         this.getRuntimeService("dialog").open({
             type: 1,
@@ -174,7 +186,7 @@ export class BlacklistPlugin extends BasePlugin {
     renderTaskStatus() {
         const container = (this.blacklistRoot || $()).find("#blacklist-task-status");
         if (!container.length) return;
-        const task = this.getOptionalDependency("TaskPlugin");
+        const task = this.discoveryFeatureApi;
         if (!task) return void container.empty().text("后台任务功能已禁用");
         const snapshot = task.getTaskStatusSnapshot("blacklist"), labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = (/** @type {unknown} */ value) => value ? new Date(/** @type {string | number | Date} */ (value)).toLocaleString() : "无", state = /** @type {keyof typeof labels} */ (snapshot.state);
         container.empty().append($("<span class=\"jhs-task-status__name\"></span>").text(`黑名单：${labels[state] || labels.idle}`), $("<span class=\"jhs-task-status__meta\"></span>").text(`上次完成 ${format(snapshot.completedAt)}；下次检查 ${snapshot.nextAt ? format(snapshot.nextAt) : "立即"}`));

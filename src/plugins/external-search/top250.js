@@ -12,21 +12,28 @@ export class Top250Plugin extends BasePlugin {
     static legacyPluginId = "TOP250Plugin";
     constructor() {
         super(), i(this, "has_cnsub", ""), i(this, "$contentBox", null), i(this, "$listRoot", null), i(this, "movies", []);
+        /** @type {any} */ this.lifecycleScope = null;
+        /** @type {any} */ this.discoveryApi = null;
     }
     getName() {
         return "TOP250Plugin";
     }
-    async handle() {
+    async handle({ scope = null, discoveryApi = undefined } = {}) {
+        this.lifecycleScope = scope ?? await this.getRuntimeService("scope")();
+        if (discoveryApi !== undefined) this.discoveryApi = discoveryApi;
         const topTab = $('.main-tabs ul li:contains("猜你喜歡")').length ? $('.main-tabs ul li:contains("猜你喜歡")') : $('.main-tabs ul li:contains("猜你喜欢")');
         topTab.length && topTab.html('<a href="/rankings/top"><span>Top250</span></a>');
-        $('a[href*="rankings/top"]').off("click.jhsTop250").on("click.jhsTop250", ((/** @type {MouseEvent} */ e) => {
+        const links = $('a[href*="rankings/top"]');
+        links.off("click.jhsTop250").on("click.jhsTop250", ((/** @type {MouseEvent} */ e) => {
             e.preventDefault(), e.stopPropagation();
             const t = $(e.target), n = (t.is("a") ? t : t.closest("a")).attr("href");
             if (!n) return;
             let a = n.includes("?") ? n.split("?")[1] : n;
             const i = new URLSearchParams(a);
             this.checkLogin(e, i);
-        })), await this.handleTop();
+        }));
+        this.lifecycleScope?.addCleanup?.(() => links.off("click.jhsTop250"));
+        await this.handleTop();
     }
     hookPage() {
         const host = this.getRuntimeService("host"), contentBox = host.getListContainer?.() ?? host.getListLayoutContainer?.();
@@ -59,15 +66,15 @@ export class Top250Plugin extends BasePlugin {
     }
     async handleTop() {
         if (!window.location.href.includes("handleTop=1")) return;
-        const hitShow = this.getOptionalDependency("HitShowPlugin");
-        if (!hitShow) return void show.info("热播列表功能已禁用");
+        const hitShow = this.discoveryApi;
+        if (!hitShow?.hasHitShow) return void show.info("热播列表功能已禁用");
         const e = new URLSearchParams(window.location.search);
         let t = e.get("handleType") || "all", n = e.get("type_value") || "";
         this.has_cnsub = e.get("has_cnsub") || "";
         let a = Number(e.get("page")) || 1;
         this.hookPage(), this.toolBar(t, n), this.renderPagination();
         // 操作按钮行（开始鉴定/批量操作）挂进 Top250 自有筛选容器，与热播页同一挂载通道
-        await this.getOptionalDependency("ListPageButtonPlugin")?.mountOwnedRankingControls?.($(".jhs-top250-filters"))?.catch?.((/** @type {unknown} */ error) => clog.error("Top250 操作按钮挂载失败", error));
+        await this.getOptionalDependency("ListPageButtonPlugin")?.mountOwnedRankingControls?.($(".jhs-top250-filters"), this.discoveryApi)?.catch?.((/** @type {unknown} */ error) => clog.error("Top250 操作按钮挂载失败", error));
         let i = this.$listRoot;
         i.html("");
         let s = loading();
@@ -114,7 +121,7 @@ export class Top250Plugin extends BasePlugin {
     }
     /** @param {{onSuccess?: (() => unknown | Promise<unknown>) | null}} [options] */
     openLoginDialog({ onSuccess = null } = {}) {
-        const dialog = this.getRuntimeService("dialog"), account = this.getRuntimeService("account"), getScope = this.getRuntimeService("scope");
+        const dialog = this.getRuntimeService("dialog"), account = this.getRuntimeService("account"), getScope = () => this.lifecycleScope ?? this.getRuntimeService("scope")();
         dialog.open({
             type: 1,
             title: "JavDB",

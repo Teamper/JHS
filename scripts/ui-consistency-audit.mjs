@@ -138,7 +138,7 @@ requireMatch(commandbar, /\[ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" \]/,
 requireMatch(commandbar, /\[ "#statsBtn", "#blacklistBtn" \][\s\S]*jhs-commandbar__menu/, "statistics and blacklist must be grouped in more menu");
 requireMatch(commandbar, /#addBlacklistBtn[\s\S]*jhs-commandbar__context/, "actor context action must remain directly visible");
 requireMatch(commandbar, /#filterAllVideo[\s\S]*#favoriteAllVideo[\s\S]*#hasDownAllVideo/, "batch menu must contain exactly the three bulk actions");
-requireMatch(hitShow, /async handle\(\)[\s\S]*await this\.handlePlayback/, "hit show handle must await its data flow");
+requireMatch(hitShow, /async handle\(\{[\s\S]*?\}\s*=\s*\{\}\)[\s\S]*await this\.handlePlayback/, "hit show handle must await its data flow");
 requireMatch(hitShow, /jhs-hitshow-heading/, "hit show title and period must share a dedicated heading row");
 requireMatch(hitShow, /class="jhs-segmented__item \$\{[^}]+\? "active"/, "hit show period must use the active class");
 requireMatch(hitShow, /aria-selected="\$\{[^}]+\? "true" : "false"\}"/, "hit show period must expose aria-selected");

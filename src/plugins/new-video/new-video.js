@@ -29,7 +29,7 @@ function aggregateNewVideoRecords(actresses, carMap, decisions, now = Date.now()
 
 export class NewVideoPlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", new Map), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", new Map), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", new Map), i(this, "nvActorCoverRequests", new Map), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", !1), i(this, "nvWorkspaceMounted", !1), i(this, "nvEventUnsubscribe", null), i(this, "taskStatusUnsubscribe", null), i(this, "nvCoverPreview", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0);
+        super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", new Map), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", new Map), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", new Map), i(this, "nvActorCoverRequests", new Map), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", !1), i(this, "nvWorkspaceMounted", !1), i(this, "nvEventUnsubscribe", null), i(this, "taskStatusUnsubscribe", null), i(this, "nvCoverPreview", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0), i(this, "lifecycleScope", null), i(this, "taskApi", null), i(this, "scopeCleanupRegistered", !1);
     }
     getName() {
         return "NewVideoPlugin";
@@ -115,11 +115,31 @@ export class NewVideoPlugin extends BasePlugin {
             </style>
         `;
     }
-    async handle() {
+    async handle({ scope = null, taskApi = undefined } = {}) {
+        const nextScope = scope ?? await this.getRuntimeService("scope")();
+        if (this.lifecycleScope !== nextScope || this.lifecycleScope?.disposed) {
+            this.lifecycleScope = nextScope;
+            this.scopeCleanupRegistered = !1;
+        }
+        if (taskApi !== undefined) this.taskApi = taskApi;
+        if (!this.scopeCleanupRegistered && typeof this.lifecycleScope?.addCleanup === "function") {
+            this.scopeCleanupRegistered = !0;
+            this.lifecycleScope.addCleanup(() => {
+                this.nvEventUnsubscribe?.();
+                this.nvEventUnsubscribe = null;
+                this.taskStatusUnsubscribe?.();
+                this.taskStatusUnsubscribe = null;
+                this.cleanupNewVideoWorkspace();
+            });
+        }
         this.initializeLocalState();
         this.nvEventUnsubscribe || (this.nvEventUnsubscribe = jhsEventBus.on("new-video-changed", (() => this.scheduleWorkspaceReload())));
         this.taskStatusUnsubscribe || (this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.isWorkspaceMounted() && this.renderTaskStatuses())));
         await this.showNewVideoCount();
+    }
+    /** Set the task capability supplied by the owning Discovery Feature. */
+    setTaskApi(taskApi) {
+        this.taskApi = taskApi ?? null;
     }
     initializeLocalState() {
         this.avatarSources = this.getRuntimeService("actressInfo").getAvatarSources();
@@ -168,13 +188,13 @@ export class NewVideoPlugin extends BasePlugin {
         $("#newVideoCount").text(`${e}`);
     }
     async resetBtnTip() {
-        const storage = this.getRuntimeService("storage"), e = this.getOptionalDependency("TaskPlugin"), t = await storageManager.getSetting(), n = e ? storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无" : "任务已禁用", a = t.checkFavoriteActress_IntervalTime, i = e ? storage.getLocal(e.lastCheckNewVideoTimeKey) || "无" : "任务已禁用", s = t.checkNewVideo_intervalTime;
+        const storage = this.getRuntimeService("storage"), e = this.taskApi, t = await storageManager.getSetting(), n = e ? storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无" : "任务已禁用", a = t.checkFavoriteActress_IntervalTime, i = e ? storage.getLocal(e.lastCheckNewVideoTimeKey) || "无" : "任务已禁用", s = t.checkNewVideo_intervalTime;
         $("#checkFavoriteActress").attr("data-tip", `上次完整同步: ${n}; 检测间隔时间: ${a}小时`), $("#checkNewVideo").attr("data-tip", `上次整批检测: ${i}; 检测间隔时间: ${s}小时`);
     }
     async openDialog() {
         const storage = this.getRuntimeService("storage");
         this.cleanupNewVideoWorkspace(), this._viewMode = "list" === storage.getLocal("jhs_newVideoViewMode") ? "list" : "actress", this.currentPage = 1, this.nvCurrentPage = 1, this.nvSelected = new Set, this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map, this.nvRenderGeneration++;
-        const e = this.getOptionalDependency("TaskPlugin"), t = await storageManager.getSetting(), n = e ? storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无" : "任务已禁用", a = t.checkFavoriteActress_IntervalTime, i = e ? storage.getLocal(e.lastCheckNewVideoTimeKey) || "无" : "任务已禁用", s = t.checkNewVideo_intervalTime;
+        const e = this.taskApi, t = await storageManager.getSetting(), n = e ? storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无" : "任务已禁用", a = t.checkFavoriteActress_IntervalTime, i = e ? storage.getLocal(e.lastCheckNewVideoTimeKey) || "无" : "任务已禁用", s = t.checkNewVideo_intervalTime;
         let o = `
             <div class="newVideoToolBox jhs-ui">
                 <div class="jhs-new-video-toolbar" role="toolbar" aria-label="新作品工作区工具">
@@ -221,12 +241,12 @@ export class NewVideoPlugin extends BasePlugin {
         });
     }
     cleanupNewVideoWorkspace() {
-        this.nvSearchDebounced?.cancel?.(), this.nvSearchDebounced = null, this.nvWorkspaceMounted = !1, this.nvRenderGeneration++, this.nvSelected.clear(), this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map,
+        this.nvSearchDebounced?.cancel?.(), this.nvSearchDebounced = null, this.nvInvalidationTimer && (clearTimeout(this.nvInvalidationTimer), this.nvInvalidationTimer = null), this.nvWorkspaceMounted = !1, this.nvRenderGeneration++, this.nvSelected.clear(), this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map,
         this.nvCoverPreview?.destroy?.(), this.nvCoverPreview = null,
         this.nvAllItemsMap.clear(), this.nvFlatListCache = [], this.nvActressesCache = [], this.nvCarMapCache = new Map, this.nvDecisionsCache = {}, this.nvCurrentPageItems = [];
     }
     bindClick() {
-        const taskPlugin = this.getOptionalDependency("TaskPlugin");
+        const taskPlugin = this.taskApi;
         taskPlugin || $("#checkFavoriteActress,#checkNewVideo").prop("disabled", !0).attr("title", "后台任务功能已禁用");
         $("#reLoad").on("click", (() => {
             void this.reloadNewVideoWorkspaceData(), $("#checkNewVideoMsg").text("");
@@ -277,7 +297,7 @@ export class NewVideoPlugin extends BasePlugin {
     }
     async runManualTask(button, busyLabel, runner) {
         if (button.attr("aria-busy") === "true") return;
-        const task = this.getOptionalDependency("TaskPlugin");
+        const task = this.taskApi;
         if (!task) return void show.info("后台任务功能已禁用");
         const label = button.find("span").last(), previous = label.text();
         button.attr("aria-busy", "true").prop("disabled", !0), label.text(busyLabel);
@@ -331,7 +351,7 @@ export class NewVideoPlugin extends BasePlugin {
     renderTaskStatuses() {
         const container = $("#jhs-task-status-list");
         if (!container.length) return;
-        const taskPlugin = this.getOptionalDependency("TaskPlugin"), names = { favoriteActress: "演员同步", newVideo: "新作品", blacklist: "黑名单" }, labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = value => value ? new Date(value).toLocaleString() : "无";
+        const taskPlugin = this.taskApi, names = { favoriteActress: "演员同步", newVideo: "新作品", blacklist: "黑名单" }, labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = value => value ? new Date(value).toLocaleString() : "无";
         if (!taskPlugin) return void container.empty().text("后台任务功能已禁用");
         container.empty(), [ "favoriteActress", "newVideo", "blacklist" ].forEach((name => {
             const snapshot = taskPlugin.getTaskStatusSnapshot(name), item = $('<div class="jhs-task-status"></div>');
@@ -365,7 +385,7 @@ export class NewVideoPlugin extends BasePlugin {
         const sortedActresses = utils.genericSort(t, sortMap[sortBy] || defaultSort);
         const totalCount = sortedActresses.length, totalPages = Math.ceil(totalCount / this.pageSize), pageStart = (this.currentPage - 1) * this.pageSize, pageEnd = pageStart + this.pageSize;
         totalPages > 0 && this.currentPage > totalPages && (this.currentPage = totalPages);
-        const safePageStart = (this.currentPage - 1) * this.pageSize, pageActresses = sortedActresses.slice(safePageStart, safePageStart + this.pageSize), javDbUrl = this.nvJavDbUrl, taskPlugin = this.getOptionalDependency("TaskPlugin"), ruleTime = this.nvRuleTime;
+        const safePageStart = (this.currentPage - 1) * this.pageSize, pageActresses = sortedActresses.slice(safePageStart, safePageStart + this.pageSize), javDbUrl = this.nvJavDbUrl, taskPlugin = this.taskApi, ruleTime = this.nvRuleTime;
         if (0 === pageActresses.length) {
             renderStateView(e, { type: "empty", title: this.nvActressesCache.length ? "没有符合当前筛选条件的演员" : "暂无收藏演员" });
             return void this.renderPagination(totalCount, totalPages);
@@ -393,7 +413,7 @@ export class NewVideoPlugin extends BasePlugin {
             const t = $(e.currentTarget).attr("data-starId"), n = sortedActresses.find((e => e.starId === t));
             utils.q(e, `是否取消收藏 ${n.name}?`, (async () => {
                 const baseUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", await storageManager.getSetting()), csrfToken = document.querySelector("meta[name=csrf-token]").content;
-                const result = await this.getRuntimeService("actressInfo").uncollect("javdb", { actorId: t, baseUrl, csrfToken }, { scope: await this.getRuntimeService("scope")() });
+                const result = await this.getRuntimeService("actressInfo").uncollect("javdb", { actorId: t, baseUrl, csrfToken }, { scope: this.lifecycleScope ?? await this.getRuntimeService("scope")() });
                 result.success ? (await storageManager.removeFavoriteActress(t), await jhsEventBus.emit("new-video-changed", { reason: "favorite-actress-removed" })) : (show.error("移除失败"),
                 clog.error("移除失败,返回值:", result));
             }));
@@ -427,7 +447,7 @@ export class NewVideoPlugin extends BasePlugin {
     getActorCoverRequest(starId, requestMap) {
         const existing = requestMap.get(starId);
         if (existing) return existing;
-        const request = this.getRuntimeService("scope")().then((scope => this.getRuntimeService("actressInfo").movies("javdb", { actorId: starId, baseUrl: this.nvJavDbUrl }, { scope }))).then((movies => {
+        const request = Promise.resolve(this.lifecycleScope ?? this.getRuntimeService("scope")()).then((scope => this.getRuntimeService("actressInfo").movies("javdb", { actorId: starId, baseUrl: this.nvJavDbUrl }, { scope }))).then((movies => {
             const covers = new Map;
             movies.forEach((movie => movie.carNum && movie.coverUrl && covers.set(normalizeCarNum(movie.carNum), { coverUrl: movie.coverUrl, title: movie.title })));
             return covers;
@@ -674,7 +694,7 @@ export class NewVideoPlugin extends BasePlugin {
         const i = loading("正在搜索头像...");
         let s = [];
         try {
-            const source = this.avatarSources[this.avatarSourceIndex], scope = await this.getRuntimeService("scope")();
+            const source = this.avatarSources[this.avatarSourceIndex], scope = this.lifecycleScope ?? await this.getRuntimeService("scope")();
             s = source ? await this.getRuntimeService("actressInfo").searchAvatars(a, source.id, { scope }) : [];
         } catch (c) {
             return void show.error(`头像数据加载或搜索失败: ${c.message || c}`);

@@ -12,7 +12,7 @@
  */
 export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     AutoPagePlugin: [],
-    BlacklistPlugin: ["TaskPlugin", "SettingPlugin"],
+    BlacklistPlugin: ["SettingPlugin"],
     BusNavBarPlugin: [],
     CompatibilityEnhancementsPlugin: [],
     CoverButtonPlugin: ["ScreenShotPlugin"],
@@ -20,30 +20,30 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     Fc2NavigationPlugin: ["Fc2Plugin"],
     Fc2Plugin: [
         "DetailPageButtonPlugin", "MagnetHubPlugin", "OtherSitePlugin",
-        "Fc2By123AvPlugin", "TOP250Plugin", "ScreenShotPlugin"
+        "Fc2By123AvPlugin", "ScreenShotPlugin"
     ],
     HistoryPlugin: ["Fc2Plugin"],
     HitShowPlugin: ["ListPageButtonPlugin", "CoverButtonPlugin"],
-    ListPageButtonPlugin: ["NewVideoPlugin"],
+    ListPageButtonPlugin: [],
     ListPagePlugin: [
         "ListPageButtonPlugin", "CoverButtonPlugin", "AutoPagePlugin",
         "BusImgPlugin", "Fc2Plugin"
     ],
     MobileBottomBarPlugin: [
         "DetailPageButtonPlugin", "ListPageButtonPlugin",
-        "NewVideoPlugin", "SettingPlugin", "HighlightMagnetPlugin", "MagnetHubPlugin"
+        "SettingPlugin", "HighlightMagnetPlugin", "MagnetHubPlugin"
     ],
     NavBarPlugin: [],
-    NewVideoPlugin: ["TaskPlugin", "SettingPlugin"],
+    NewVideoPlugin: ["SettingPlugin"],
     PreviewVideoPlugin: ["DetailPageButtonPlugin"],
     SettingPlugin: [
-        "CoverButtonPlugin", "TaskPlugin", "OtherSitePlugin",
-        "ActressInfoPlugin", "ScreenShotPlugin", "NewVideoPlugin", "BusImgPlugin"
+        "CoverButtonPlugin", "OtherSitePlugin", "ActressInfoPlugin",
+        "ScreenShotPlugin", "BusImgPlugin"
     ],
-    StatsPlugin: ["NewVideoPlugin"],
+    StatsPlugin: [],
     TaskPlugin: [],
     TranslatePlugin: [],
-    TOP250Plugin: ["HitShowPlugin", "ListPageButtonPlugin"],
+    TOP250Plugin: ["ListPageButtonPlugin"],
     UnifiedOfflinePlugin: []
 });
 // @ts-check

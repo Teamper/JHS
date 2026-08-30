@@ -31,7 +31,9 @@ function loadTop250({ hitShow = null, movies = [], listPageButton = null, html =
     });
     const source = readTestFile(join(process.cwd(), "src/plugins/external-search/top250.js"), "utf8");
     vm.runInContext(`${source};globalThis.Top250Plugin=Top250Plugin`, context);
-    return { plugin: new context.Top250Plugin(), $, q, loading, loadingClose, show: context.show, hitShowMock, listPageButtonMock, dom };
+    const plugin = new context.Top250Plugin();
+    plugin.discoveryApi = hitShowMock ? { hasHitShow: true, ...hitShowMock } : { hasHitShow: false };
+    return { plugin, $, q, loading, loadingClose, show: context.show, hitShowMock, listPageButtonMock, dom };
 }
 
 describe("Top250Plugin handleTop loading lifecycle", () => {
