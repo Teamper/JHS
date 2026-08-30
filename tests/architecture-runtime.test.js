@@ -74,6 +74,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.find((item) => item.id === "library.blacklist")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "library.favorite-actresses")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "list.auto-page")?.managedByFeature).toBe(true);
+        expect(legacyContributionManifests.find((item) => item.id === "list.fold-category")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "identity").every((item) => item.managedByFeature)).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "external-bridge").every((item) => item.managedByFeature)).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "discovery").every((item) => item.managedByFeature)).toBe(true);

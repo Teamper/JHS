@@ -7,10 +7,11 @@ import { ListView } from "./list-view.js";
  * strangled out of PluginManager.
  */
 export class ListController {
-    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, scope: any, hostAdapter: any}} options */
+    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any}} options */
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin ?? null;
         this.autoPagePlugin = options.autoPagePlugin ?? null;
+        this.foldCategoryPlugin = options.foldCategoryPlugin ?? null;
         this.scope = options.scope;
         this.hostAdapter = options.hostAdapter;
         this.view = null;
@@ -36,6 +37,7 @@ export class ListController {
         return Promise.resolve()
             .then(() => this.legacyPlugin && view ? this.legacyPlugin.handle({ scope: this.scope, view }) : undefined)
             .then(() => this.autoPagePlugin?.handle?.({ scope: this.scope, listFeatureApi }))
+            .then(() => this.foldCategoryPlugin?.handle?.({ scope: this.scope }))
             .catch((error) => {
             this.dispose();
             throw error;

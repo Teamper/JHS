@@ -210,6 +210,7 @@ const listControllerSource = await read("src/features/list/list-controller.js");
 const listViewSource = await read("src/features/list/list-view.js");
 const listActionsSource = await read("src/plugins/status/list-page-button.js");
 const autoPageSource = await read("src/plugins/status/auto-page.js");
+const foldCategorySource = await read("src/plugins/status/fold-category.js");
 const coverButtonSource = await read("src/plugins/image-viewer/cover-button.js");
 const compatibilitySource = await read("src/plugins/status/compat-enhancements.js");
 assertIncludes(listPageSource, "applyVisibility(items = null)", "list page function signature");
@@ -234,6 +235,7 @@ assertIncludes(listActionsSource, 'getFeatureApi("list")', "list actions feature
 assert(!listActionsSource.includes('getOptionalDependency("ListPagePlugin")'), "list actions must not resolve ListPagePlugin directly");
 assertIncludes(autoPageSource, 'getFeatureApi("list")', "auto-page feature API boundary");
 assert(!autoPageSource.includes('getOptionalDependency("ListPagePlugin")'), "auto-page must not resolve ListPagePlugin directly");
+assertIncludes(foldCategorySource, "options.scope", "fold category feature lifecycle handoff");
 assertIncludes(coverButtonSource, 'getFeatureApi("list")', "cover actions feature API boundary");
 assert(!coverButtonSource.includes('getOptionalDependency("ListPagePlugin")'), "cover actions must not resolve ListPagePlugin directly");
 assertIncludes(historySource, 'getFeatureApi("list")', "history list API boundary");

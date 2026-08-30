@@ -17,8 +17,11 @@ export default defineFeature({
         const autoPagePlugin = runtime.enabledContributions.includes("list.auto-page")
             ? runtime.resolveLegacyPlugin?.("AutoPagePlugin")
             : null;
+        const foldCategoryPlugin = runtime.enabledContributions.includes("list.fold-category")
+            ? runtime.resolveLegacyPlugin?.("FoldCategoryPlugin")
+            : null;
         if (!legacyPlugin) throw new Error("List feature requires the ListPagePlugin compatibility adapter");
-        const controller = new ListController({ legacyPlugin, autoPagePlugin, hostAdapter: deps[PORT.host], scope: runtime.scope });
+        const controller = new ListController({ legacyPlugin, autoPagePlugin, foldCategoryPlugin, hostAdapter: deps[PORT.host], scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

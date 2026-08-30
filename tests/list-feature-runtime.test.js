@@ -34,9 +34,10 @@ describe("List FeatureRuntime ownership", () => {
     });
 
     it("starts the waterfall contribution with the feature-owned list API", async () => {
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), getSelector: vi.fn(() => ({ boxSelector: ".movie-list" })) }, autoPagePlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), getSelector: vi.fn(() => ({ boxSelector: ".movie-list" })) }, autoPagePlugin = { handle: vi.fn(async () => {}) }, foldCategoryPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
             legacyPlugin,
             autoPagePlugin,
+            foldCategoryPlugin,
             hostAdapter,
             scope,
         });
@@ -44,6 +45,7 @@ describe("List FeatureRuntime ownership", () => {
         await controller.start();
 
         expect(autoPagePlugin.handle).toHaveBeenCalledWith({ scope, listFeatureApi: expect.objectContaining({ getListSelectors: expect.any(Function) }) });
+        expect(foldCategoryPlugin.handle).toHaveBeenCalledWith({ scope });
         expect(controller.getApi().getListSelectors()).toEqual({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" });
         scope.dispose();
     });

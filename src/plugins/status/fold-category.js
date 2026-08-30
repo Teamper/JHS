@@ -12,10 +12,16 @@ export class FoldCategoryPlugin extends BasePlugin {
         const e = await storageManager.getSetting();
         return `\n            <style>\n                #tags a.tag, .tags a.tag {\n                    position:relative;\n                }\n                .highlight-btn {\n                    position: absolute;\n                    top: -10px;\n                    right: -10px;\n                    background-color: var(--jhs-status-down);\n                    color: var(--jhs-status-down-on);\n                    border: none;\n                    border-radius: 50%;\n                    width: 24px;\n                    height: 24px;\n                    font-size: 14px;\n                    line-height: 24px;\n                    text-align: center;\n                    cursor: pointer;\n                    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);\n                    display: none;\n                    z-index: var(--jhs-z-dropdown);\n                }\n                /* 当父元素被高亮时，按钮变为其他颜色 */\n                .highlighted .highlight-btn {\n                    background-color: var(--jhs-status-watch);\n                }\n                /* 高亮状态下的标签样式 */\n                .highlighted {\n                    /* 浅黄色 */\n                    border: ${e.highlightedTagNumber || 1}px solid ${e.highlightedTagColor || "var(--jhs-status-filter)"};\n                }\n            </style>\n        `;
     }
-    async handle() {
-        const scope = await this.getRuntimeService("scope")();
-        window.isListPage && (o.includes("advanced_search") || (this.highlightTag(), utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
-            this.createFoldBtn();
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
+        const scope = options.scope ?? await this.getRuntimeService("scope")();
+        scope.addCleanup(() => {
+            $(document).off(".jhsHighlight");
+            $(document).off(".jhsFoldCategory");
+            $(".jhs-layout-8453d189, .jhs-fold-category-box").remove();
+        });
+        window.isListPage && (o.includes("advanced_search") || (this.highlightTag(scope), utils.loopDetector((() => $("#waitCheckBtn").length), (() => {
+            this.createFoldBtn(scope);
         }), 1, 1e4, !0, scope), $("#tags .tag-category .tag-expand").each(((/** @type {number} */ e, /** @type {HTMLElement} */ t) => {
             $(t).parent().hasClass("collapse") && t.click();
         }))));
@@ -24,9 +30,11 @@ export class FoldCategoryPlugin extends BasePlugin {
     readTagName(element) {
         return $(element).clone().find(".highlight-btn").remove().end().text().trim().replace(/\s*\(\d+\)$/, "");
     }
-    highlightTag() {
+    /** @param {any} [scope] */
+    highlightTag(scope) {
         (async () => {
             const e = await storageManager.getHighlightedTags(), tags = $("#tags a.tag, .tags a.tag");
+            if (scope?.disposed) return;
             // 精确匹配：不用 :contains（子串误匹配 + 特殊字符会破坏选择器）
             e && e.forEach(((/** @type {string} */ tag) => {
                 tags.filter(((/** @type {number} */ _, /** @type {HTMLElement} */ element) => this.readTagName(element) === tag)).addClass("highlighted");
@@ -49,7 +57,9 @@ export class FoldCategoryPlugin extends BasePlugin {
             t.addClass("highlighted")), await storageManager.setHighlightedTags(i);
         }));
     }
-    async createFoldBtn() {
+    /** @param {any} [scope] */
+    async createFoldBtn(scope) {
+        if (scope?.disposed) return;
         let t = $("#tags"), n = $("#tags dl div.tag.is-info").map(((/** @type {number} */ _index, /** @type {Element} */ element) => {
             return $(element).text().replaceAll("\n", "").replaceAll(" ", "");
         })).get().join(" ");
@@ -70,7 +80,7 @@ export class FoldCategoryPlugin extends BasePlugin {
         }, onError: (error) => {
             clog.error("分类折叠设置保存失败，已恢复", error), show.error("分类折叠设置保存失败，已恢复原设置");
         } });
-        i.on("click", (async (/** @type {MouseEvent} */ e) => {
+        i.on("click.jhsFoldCategory", (async (/** @type {MouseEvent} */ e) => {
             e.preventDefault();
             await createFoldWriter(!s);
         }));
