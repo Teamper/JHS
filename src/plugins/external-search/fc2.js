@@ -53,8 +53,20 @@ export class Fc2Plugin extends BasePlugin {
         /** @type {DetailStateController | null} */
         this.detailStateController = null;
         /** @type {number} */ this.translationGeneration = 0;
+        /** @type {any} */ this.libraryFeatureApi = null;
     }
     getName() { return "Fc2Plugin"; }
+    /** Resolve library-owned keyword filtering without coupling FC2 to its legacy plugin. */
+    async getLibraryFeatureApi() {
+        if (this.libraryFeatureApi) return this.libraryFeatureApi;
+        try {
+            this.libraryFeatureApi = await this.getRuntimeService("features").getFeatureApi("library");
+        } catch (error) {
+            clog.warn("Library Feature API 不可用，跳过 FC2 关键词过滤", error);
+            this.libraryFeatureApi = null;
+        }
+        return this.libraryFeatureApi;
+    }
     getDetailStateController() {
         return this.detailStateController ||= new DetailStateController(this.getRuntimeService("state"));
     }
@@ -185,8 +197,10 @@ export class Fc2Plugin extends BasePlugin {
         }));
         this.getDetailStateController().bind({ root: context.root, layerIndex: context.layerIndex ?? null, carNum: context.carNum, activityType: "fc2-state", getRecord: () => ({ carNum: context.carNum, url: context.url, fc2Source: context.source, names: context.root.find('[data-jhs-role="actress-data"]').text(), publishTime: context.root.find('[data-jhs-role="publish-time"]').text() }) });
         "123av" === context.source ? void this.load123AvDetail(context) : void this.loadNativeDetail(context);
-        const keywordFilter = this.getOptionalDependency("FilterTitleKeywordPlugin");
-        keywordFilter && void Promise.resolve().then((() => keywordFilter.bindDetailRoot(context.root, { layerIndex: context.layerIndex ?? null }))).catch((error => clog.error("FC2 关键词过滤初始化失败", error)));
+        void this.getLibraryFeatureApi().then((libraryFeatureApi) => {
+            if (!libraryFeatureApi?.hasKeywordFilter) return;
+            return libraryFeatureApi.bindDetailKeywordFilter(context.root, { layerIndex: context.layerIndex ?? null });
+        }).catch((error => clog.error("FC2 关键词过滤初始化失败", error)));
         this.mountFc2OtherSites(context, sitesGroup, this.getOptionalDependency("OtherSitePlugin"));
         this.loadFc2Screenshot(context);
     }

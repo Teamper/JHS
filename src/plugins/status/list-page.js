@@ -126,9 +126,21 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {number} */ this.listGeneration = 0;
         /** @type {number} */ this.filterRevision = 0;
         /** @type {any} */ this.listView = null;
+        /** @type {any} */ this.libraryFeatureApi = null;
     }
     getName() {
         return "ListPagePlugin";
+    }
+    /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
+    async getLibraryFeatureApi() {
+        if (this.libraryFeatureApi) return this.libraryFeatureApi;
+        try {
+            this.libraryFeatureApi = await this.getRuntimeService("features").getFeatureApi("library");
+        } catch (error) {
+            clog.warn("Library Feature API 不可用，跳过鉴定记录刷新", error);
+            this.libraryFeatureApi = null;
+        }
+        return this.libraryFeatureApi;
     }
     /** Resolve list selectors from the HostAdapter while retaining a test/legacy fallback. */
     getListSelectors() {
@@ -154,6 +166,9 @@ export class ListPagePlugin extends BasePlugin {
         if (!window.isListPage) return;
         const scope = options.scope ?? await this.getRuntimeService("scope")();
         const settingsService = this.getRuntimeService("settings");
+        const reloadHistoryTable = () => {
+            void this.getLibraryFeatureApi().then((libraryFeatureApi) => libraryFeatureApi?.reloadHistoryTable?.()).catch((error) => clog.warn("鉴定记录刷新失败", error));
+        };
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
             if (names.includes("hoverBigImg")) this.configureHoverPreview(settingsService.snapshot().hoverBigImg === "yes" ? "yes" : "no");
@@ -167,16 +182,14 @@ export class ListPagePlugin extends BasePlugin {
                 if (changedNames && !changedNames.some((name) => LIST_EFFECT_KEYS.has(name))) return;
                 const revision = this.advanceListGeneration();
                 this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(revision), this.reconcileListItems(null, revision);
-                const e = this.getOptionalDependency("HistoryPlugin");
-                e?.tableObj && e.tableObj.setData();
+                reloadHistoryTable();
         };
         [ "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed" ].forEach((type => scope.addCleanup(getListEventBus().on(type, refreshAll)))),
         scope.addCleanup(getListEventBus().on("car-state-changed", (async payload => {
             this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key);
             const items = this.getIndexedItems(payload.carNums || []), revision = this.captureListRevision();
             items.length && (await this.doFilterItems(items, revision), this.reconcileListItems(items, revision));
-            const history = this.getOptionalDependency("HistoryPlugin");
-            history?.tableObj && history.tableObj.setData();
+            reloadHistoryTable();
         })));
         // 自有榜单页没有宿主列表 DOM 可劫持，DOM 管线由 HitShowPlugin.initializeRenderedList 驱动；
         // Top250（handleTop）与 v6.4.1 一致走完整管线（其自有列表在同步前缀阶段已创建）；

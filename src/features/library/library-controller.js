@@ -33,9 +33,16 @@ export class LibraryController {
 
     /** Expose the stable library capability surface for later migrations. */
     getApi() {
+        const historyCall = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => /** @type {any} */ (this.historyPlugin)?.[name]?.(...args);
+        const keywordFilterCall = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => /** @type {any} */ (this.keywordFilterPlugin)?.[name]?.(...args);
         const blacklistCall = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => this.blacklistPlugin?.[name]?.(...args);
         return Object.freeze({
             getHistoryRepository: () => this.historyPlugin?.historyRepository ?? null,
+            hasHistory: Boolean(this.historyPlugin),
+            openHistory: historyCall("openHistory"),
+            reloadHistoryTable: historyCall("reloadTable"),
+            hasKeywordFilter: Boolean(this.keywordFilterPlugin),
+            bindDetailKeywordFilter: keywordFilterCall("bindDetailRoot"),
             hasBlacklist: Boolean(this.blacklistPlugin),
             addBlacklist: blacklistCall("addBlacklist"),
             openBlacklistDialog: blacklistCall("openBlacklistDialog"),

@@ -236,6 +236,8 @@ assert(!settingSource.includes('getOptionalDependency("ListPagePlugin")'), "sett
 assert(!settingSource.includes('getOptionalDependency("BlacklistPlugin")'), "settings must not resolve BlacklistPlugin directly");
 assert(!newVideoTaskSource.includes('getOptionalDependency("BlacklistPlugin")'), "scheduler must not resolve BlacklistPlugin directly");
 assert(!listPageButton.includes('getOptionalDependency("BlacklistPlugin")'), "list actions must not resolve BlacklistPlugin directly");
+assert(!listPageButton.includes('getOptionalDependency("HistoryPlugin")'), "list actions must not resolve HistoryPlugin directly");
+assert(!fc2.includes('getOptionalDependency("FilterTitleKeywordPlugin")'), "FC2 must not resolve FilterTitleKeywordPlugin directly");
 assertIncludes(libraryManifestSource, 'id: "library"', "real library feature manifest");
 assertIncludes(libraryManifestSource, 'new LibraryController({', "library feature controller ownership");
 assertIncludes(libraryControllerSource, 'this.historyPlugin?.handle({ scope: this.scope })', "library history lifecycle handoff");
@@ -243,6 +245,8 @@ assertIncludes(libraryControllerSource, 'this.statePlugin?.handle({ scope: this.
 assertIncludes(libraryControllerSource, 'this.keywordFilterPlugin?.handle({ scope: this.scope })', "library keyword lifecycle handoff");
 assertIncludes(libraryControllerSource, 'blacklistCall("parseAndSaveFilterInfo")', "library blacklist API boundary");
 assertIncludes(libraryControllerSource, 'hasBlacklist: Boolean(this.blacklistPlugin)', "library blacklist availability");
+assertIncludes(libraryControllerSource, 'historyCall("openHistory")', "library history API boundary");
+assertIncludes(libraryControllerSource, 'keywordFilterCall("bindDetailRoot")', "library keyword API boundary");
 assertIncludes(libraryControllerSource, 'this.favoritePlugin?.handle({ scope: this.scope })', "library favorite lifecycle handoff");
 assertIncludes(historySource, "async handle(options = {})", "history feature lifecycle entry");
 assertIncludes(historySource, "scope.addCleanup", "history feature scope cleanup");

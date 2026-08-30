@@ -286,12 +286,15 @@ export class MobileBottomBarPlugin extends BasePlugin {
         };
         const left = commandbar.find(".jhs-commandbar__left"), right = commandbar.find(".jhs-commandbar__right");
         if (!left.length || !right.length) return;
-        if (!commandbar.find(".jhs-commandbar__primary").length && !isCollected("#waitCheckBtn")) left.append('<div class="jhs-commandbar__primary"></div>');
+        if (!commandbar.find(".jhs-commandbar__primary").length && [ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" ].some((selector) => !isCollected(selector))) left.append('<div class="jhs-commandbar__primary"></div>');
         const primary = commandbar.find(".jhs-commandbar__primary");
         [ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" ].forEach((selector => {
             if (isCollected(selector)) return;
             const item = $(selector).first();
-            item.length && (remember(item[0]), item.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo(primary));
+            if (item.length) {
+                remember(item[0]);
+                item.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo(primary);
+            }
         }));
         primary.children().length && left.append(primary);
         if (!commandbar.find(".jhs-commandbar__more").length && ![ "#statsBtn", "#blacklistBtn" ].every(isCollected)) {
@@ -415,7 +418,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
     }
     createMenu() {
         const item = (/** @type {string} */ action, /** @type {string} */ label, /** @type {string} */ attributes = "") => `<button type="button" role="menuitem" class="jhs-btn jhs-fab-menu-item" data-action="${action}" ${attributes}>${label}</button>`, group = (/** @type {string} */ content) => `<div class="jhs-fab-group">${content}</div>`, divider = '<div class="jhs-fab-divider" role="separator"></div>';
-        const hasListPageButton = !!this.getOptionalDependency("ListPageButtonPlugin"), hasListPage = Boolean(this.listFeatureApi), hasNewVideo = !!this.getOptionalDependency("NewVideoPlugin"), hasBlacklist = Boolean(this.libraryFeatureApi?.hasBlacklist), hasSetting = !!this.getOptionalDependency("SettingPlugin"), hasDetailPageButton = !!this.getOptionalDependency("DetailPageButtonPlugin"), hasHighlightMagnet = !!this.getOptionalDependency("HighlightMagnetPlugin"), hasMagnetHub = !!this.getOptionalDependency("MagnetHubPlugin"), hasHistory = !!this.getOptionalDependency("HistoryPlugin");
+        const hasListPageButton = !!this.getOptionalDependency("ListPageButtonPlugin"), hasListPage = Boolean(this.listFeatureApi), hasNewVideo = !!this.getOptionalDependency("NewVideoPlugin"), hasBlacklist = Boolean(this.libraryFeatureApi?.hasBlacklist), hasSetting = !!this.getOptionalDependency("SettingPlugin"), hasDetailPageButton = !!this.getOptionalDependency("DetailPageButtonPlugin"), hasHighlightMagnet = !!this.getOptionalDependency("HighlightMagnetPlugin"), hasMagnetHub = !!this.getOptionalDependency("MagnetHubPlugin"), hasHistory = Boolean(this.libraryFeatureApi?.hasHistory);
         let items;
         if (window.isListPage) {
             const requestedSortMethod = this.getOptionalDependency("ListPageButtonPlugin")?.activeSortMethod?.() ?? this.getRuntimeService("settings").snapshot().sortMethod, sortLabels = { default: "默认", rateCount: "评价人数", date: "时间" }, sortMethod = "string" === typeof requestedSortMethod && requestedSortMethod in sortLabels ? /** @type {keyof typeof sortLabels} */ (requestedSortMethod) : "default", sortLabel = sortLabels[sortMethod], activeFilter = normalizeQuickFilterKey(this.listFeatureApi?.getActiveQuickFilter?.()),
@@ -570,7 +573,7 @@ export class MobileBottomBarPlugin extends BasePlugin {
                 this.libraryFeatureApi?.openBlacklistDialog?.();
                 break;
             case "history":
-                await this.getOptionalDependency("HistoryPlugin")?.openHistory?.();
+                await this.libraryFeatureApi?.openHistory?.();
                 break;
             case "sort":
                 break;

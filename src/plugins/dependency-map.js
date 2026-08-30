@@ -19,19 +19,19 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     DetailPageButtonPlugin: ["DetailWorkspacePlugin", "MagnetHubPlugin", "HighlightMagnetPlugin"],
     Fc2NavigationPlugin: ["Fc2Plugin"],
     Fc2Plugin: [
-        "DetailPageButtonPlugin", "MagnetHubPlugin", "FilterTitleKeywordPlugin", "OtherSitePlugin",
+        "DetailPageButtonPlugin", "MagnetHubPlugin", "OtherSitePlugin",
         "Fc2By123AvPlugin", "TOP250Plugin", "ScreenShotPlugin"
     ],
     HistoryPlugin: ["UnifiedOfflinePlugin", "Fc2Plugin"],
     HitShowPlugin: ["ListPageButtonPlugin", "CoverButtonPlugin"],
     ListPageButtonPlugin: ["NewVideoPlugin"],
     ListPagePlugin: [
-        "HistoryPlugin", "ListPageButtonPlugin", "CoverButtonPlugin", "AutoPagePlugin",
+        "ListPageButtonPlugin", "CoverButtonPlugin", "AutoPagePlugin",
         "BusImgPlugin", "Fc2Plugin"
     ],
     MobileBottomBarPlugin: [
         "DetailPageButtonPlugin", "ListPageButtonPlugin",
-        "NewVideoPlugin", "SettingPlugin", "HighlightMagnetPlugin", "MagnetHubPlugin", "HistoryPlugin"
+        "NewVideoPlugin", "SettingPlugin", "HighlightMagnetPlugin", "MagnetHubPlugin"
     ],
     NavBarPlugin: ["SearchByImagePlugin"],
     NewVideoPlugin: ["TaskPlugin", "SettingPlugin"],
