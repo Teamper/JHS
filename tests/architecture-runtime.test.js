@@ -56,6 +56,8 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(featureManifests.find((manifest) => manifest.id === "identity")?.contributes).toContain("identity.image-search");
         expect(featureManifests.find((manifest) => manifest.id === "external-bridge")?.contributes).toContain("external-bridge.offline");
         expect(featureManifests.find((manifest) => manifest.id === "discovery")?.contributes).toContain("discovery.scheduler");
+        expect(featureManifests.find((manifest) => manifest.id === "compatibility")?.contributes).toContain("compatibility.enhancements");
+        expect(featureManifests.find((manifest) => manifest.id === "stats")?.contributes).toContain("stats.dashboard");
         window.matchMedia ??= () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
         const $ = jquery;
         vi.stubGlobal("$", $);
@@ -74,6 +76,8 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.filter((item) => item.featureId === "identity").every((item) => item.managedByFeature)).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "external-bridge").every((item) => item.managedByFeature)).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "discovery").every((item) => item.managedByFeature)).toBe(true);
+        expect(legacyContributionManifests.filter((item) => item.featureId === "compatibility").every((item) => item.managedByFeature)).toBe(true);
+        expect(legacyContributionManifests.filter((item) => item.featureId === "stats").every((item) => item.managedByFeature)).toBe(true);
         const createRuntime = (site, disabled = []) => {
             const diagnostics = new DiagnosticsService();
             const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.profile, { current: () => "regular" }).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {}).register(SERVICE.state, {}).register(REGISTRY.settings, new SettingsRegistry());

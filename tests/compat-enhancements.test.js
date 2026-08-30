@@ -17,12 +17,13 @@ describe("status and media UX contracts", () => {
         expect(javdbCss).toMatch(/display\s*:\s*none\s*!important/);
         expect(await loadCss({ isJavDB: false, isJavBus: true })).toBe("");
         expect(await loadCss({ isJavDB: false, is123Pan: true })).toBe("");
-        const cleanup = source.slice(source.indexOf("async initCss()"), source.indexOf("async handle()"));
+        const cleanup = source.slice(source.indexOf("async initCss()"), source.indexOf("async handle("));
         expect(cleanup.match(/\.sda-content/g)).toHaveLength(1);
         expect(cleanup).not.toMatch(/MutationObserver|setInterval|href|https?:\/\//);
     });
     it("removes records through the declared transactional StateService", () => expect(source).toContain('getRuntimeService("state").remove(carNum)'));
-    it("loads actress state once into sets", () => { expect(source).toContain("new Set((await storageManager.getFavoriteActressList())"); expect(source).toContain("new Set((await storageManager.getBlacklist())"); });
+    it("loads actress state once through the transitional storage bridge", () => { expect(source).toContain("getStorage()"); expect(source).toContain("new Set((await storage.getFavoriteActressList())"); expect(source).toContain("new Set((await storage.getBlacklist())"); });
+    it("binds document and injected controls to the feature scope", () => { expect(source).toContain("options.scope"); expect(source).toContain("scope.addCleanup"); });
     it("links bounded comment images without rebuilding review DOM", () => { expect(source).toContain("createTreeWalker"); expect(source).toContain("SHOW_TEXT"); expect(source).toContain("showImageViewer"); expect(source).not.toContain("node.html("); });
     it("intercepts image paste only on the navigation search input", () => { expect(nav).toContain('$("#search-keyword").on("paste.jhsIdentityNav"'); expect(nav).toContain('type.indexOf("image")'); });
     it("uses configured 115 concurrency and cache lifetime", () => { const one15 = readTestFile(join(import.meta.dirname, "../src/plugins/one-one-five/plugins.js"), "utf8"); expect(one15).toContain("mapLimit(cards, this.concurrency"); expect(one15).toContain('getSetting("oneOneFiveConcurrency"'); expect(one15).toContain('getSetting("oneOneFiveCacheMinutes"'); expect(one15).toContain('rootMargin: "200px"'); });

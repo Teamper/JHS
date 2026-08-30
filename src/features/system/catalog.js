@@ -19,9 +19,4 @@ export const systemFeatureManifests = Object.freeze([
         id: "responsive-shell", kind: "system", disableable: false, sites: [], routes: [], startup: "eager",
         requires: [SERVICE.profile], contributes: ["responsive-shell.bottom-bar"], providesCommands: [], activate: (/** @type {any} */ deps) => ({ profile: deps[SERVICE.profile].current() }),
     }),
-    defineFeature({
-        id: "stats", kind: "system", disableable: false, sites: ["javdb", "javbus"], routes: [], startup: "idle",
-        requires: [SERVICE.diagnostics], contributes: ["stats.dashboard"], providesCommands: [],
-        activate: (/** @type {any} */ deps) => ({ diagnostics: deps[SERVICE.diagnostics] }),
-    }),
 ]);

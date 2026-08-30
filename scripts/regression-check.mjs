@@ -64,6 +64,10 @@ const externalBridgeManifestSource = await read("src/features/external-bridge/ma
 const externalBridgeControllerSource = await read("src/features/external-bridge/external-bridge-controller.js");
 const discoveryManifestSource = await read("src/features/discovery/manifest.js");
 const discoveryControllerSource = await read("src/features/discovery/discovery-controller.js");
+const compatibilityManifestSource = await read("src/features/compatibility/manifest.js");
+const compatibilityControllerSource = await read("src/features/compatibility/compatibility-controller.js");
+const statsManifestSource = await read("src/features/stats/manifest.js");
+const statsControllerSource = await read("src/features/stats/stats-controller.js");
 const listFiltersSource = await read("src/features/list/list-filters.js");
 const fc2 = await read("src/plugins/external-search/fc2.js");
 const fc2By123Av = await read("src/plugins/external-search/fc2-by-123av.js");
@@ -267,6 +271,10 @@ assertIncludes(externalBridgeControllerSource, 'this.unifiedOfflinePlugin?.handl
 assertIncludes(externalBridgeControllerSource, 'getOfflineProvider:', "external bridge offline API boundary");
 assertIncludes(discoveryManifestSource, 'id: "discovery"', "real discovery feature manifest");
 assertIncludes(discoveryManifestSource, 'new DiscoveryController({', "discovery feature controller ownership");
+assertIncludes(compatibilityManifestSource, 'id: "compatibility"', "real compatibility feature manifest");
+assertIncludes(compatibilityControllerSource, "scope", "compatibility feature controller ownership");
+assertIncludes(statsManifestSource, 'id: "stats"', "real stats feature manifest");
+assertIncludes(statsControllerSource, "openDialog", "stats feature controller ownership");
 assertIncludes(discoveryControllerSource, 'this.newVideoPlugin?.handle?.({ scope: this.scope, taskApi })', "discovery idle new-video handoff");
 assertIncludes(discoveryControllerSource, 'openNewVideoDialog:', "discovery new-video API boundary");
 for (const source of [hitShow, await read("src/plugins/external-search/top250.js"), newVideoTaskSource, await read("src/plugins/new-video/new-video.js")]) {
@@ -354,7 +362,7 @@ assertIncludes(unifiedOffline, "submitted ? setTimeout(restoreButton, this.BUTTO
 for (const removedSetting of [ "showFilterItem", "showFilterActorItem", "showFilterKeywordItem" ])
   assert(!listPageSource.includes(removedSetting) && !settingFormsSource.includes(removedSetting) && !settingTemplatesSource.includes(removedSetting), `retired visibility setting returned: ${removedSetting}`);
 assert(!listPageSource.includes("data-jhs-auto-hide"), "retired auto-hide card attribute returned");
-const javDbAdCleanup = compatibilitySource.slice(compatibilitySource.indexOf("async initCss()"), compatibilitySource.indexOf("async handle()"));
+const javDbAdCleanup = compatibilitySource.slice(compatibilitySource.indexOf("async initCss()"), compatibilitySource.indexOf("async handle("));
 assertIncludes(javDbAdCleanup, "if (!siteContext.isJavDB) return \"\"", "JavDB ad cleanup scope");
 assert((javDbAdCleanup.match(/\.sda-content/g) || []).length === 1, "JavDB ad cleanup must use only one confirmed container selector");
 assert(/\.sda-content\s*\{\s*display\s*:\s*none\s*!important;?\s*\}/.test(javDbAdCleanup), "JavDB ad container must be hidden with CSS");

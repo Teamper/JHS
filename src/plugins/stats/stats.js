@@ -14,8 +14,11 @@ export class StatsPlugin extends BasePlugin {
         this.statsRepository = null;
         /** @type {any} */
         this.discoveryFeatureApi = null;
+        /** @type {any} */
+        this.lifecycleScope = null;
     }
-    getStatsRepository() { return this.statsRepository ||= new StatsRepository({ storage: storageManager, state: this.getRuntimeService("state") }); }
+    getStorage() { return storageManager; }
+    getStatsRepository() { return this.statsRepository ||= new StatsRepository({ storage: this.getStorage(), state: this.getRuntimeService("state") }); }
     getName() { return "StatsPlugin"; }
     /** Resolve the list capability used by the current-page stats action. */
     async getListFeatureApi() {
@@ -57,10 +60,15 @@ export class StatsPlugin extends BasePlugin {
                 @media (max-width:767px) { .jhs-stats__metrics { grid-template-columns:repeat(2,minmax(0,1fr)); } .jhs-stats__row { grid-template-columns:72px minmax(0,1fr) 58px; gap:var(--jhs-space-2); } }
             </style>`;
     }
-    async handle() { window.isListPage && this.createBtn(); }
+    async handle(/** @type {{scope?: any}} */ options = {}) {
+        this.lifecycleScope = options.scope ?? await this.getRuntimeService("scope")();
+        window.isListPage && this.createBtn();
+    }
     createBtn() {
+        if ($("#statsBtn").length) return;
         const e = '<button type="button" id="statsBtn" class="jhs-btn jhs-btn--secondary"><span>统计</span></button>';
-        $("#newVideoBtn").after(e), $("#statsBtn").on("click", (() => this.openDialog()));
+        $("#newVideoBtn").after(e), $("#statsBtn").on("click.jhsStats", (() => this.openDialog()));
+        this.lifecycleScope?.addCleanup?.(() => $("#statsBtn").off(".jhsStats").remove());
     }
     async openDialog() {
         const diagnostics = this.getRuntimeService("diagnostics").exportSnapshot();
@@ -74,7 +82,7 @@ export class StatsPlugin extends BasePlugin {
                 current.count++, actressCounts.set(key, current);
             } else names.forEach((name => { const key = `name:${name}`, current = actressCounts.get(key) || { starId: "", name, count: 0 }; current.count++, actressCounts.set(key, current); }));
         }));
-        const topActresses = [ ...actressCounts.values() ].sort(((left, right) => right.count - left.count || left.name.localeCompare(right.name))).slice(0, 10), topValue = topActresses[0]?.count || 1, javDbUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", await storageManager.getSetting());
+        const storage = this.getStorage(), topActresses = [ ...actressCounts.values() ].sort(((left, right) => right.count - left.count || left.name.localeCompare(right.name))).slice(0, 10), topValue = topActresses[0]?.count || 1, javDbUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", await storage.getSetting());
         const pending = stats.pending, counter = await this.getDiscoveryFeatureApi(), listFeature = await this.getListFeatureApi(), newVideos = counter?.hasNewVideo ? await counter.getPendingNewVideoTotal() : 0, pageSummary = await listFeature?.getCurrentPageSummary?.() || { blockedItems: 0 };
         const metrics = [
             { label: "总记录", value: total, action: null },
