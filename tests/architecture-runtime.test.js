@@ -82,6 +82,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.find((item) => item.id === "detail.reviews")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.related")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.screenshot")?.managedByFeature).toBe(true);
+        expect(legacyContributionManifests.find((item) => item.id === "detail.native-magnets")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "responsive-shell.bottom-bar")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "identity").every((item) => item.managedByFeature)).toBe(true);
         expect(legacyContributionManifests.filter((item) => item.featureId === "external-bridge").every((item) => item.managedByFeature)).toBe(true);

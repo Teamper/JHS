@@ -27,7 +27,10 @@ export default defineFeature({
         const screenshotPlugin = runtime.enabledContributions.includes("detail.screenshot")
             ? runtime.resolveLegacyPlugin?.("ScreenShotPlugin")
             : null;
-        const controller = new DetailController({ hostAdapter: deps[PORT.host], nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, screenshotPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
+        const magnetPlugin = runtime.enabledContributions.includes("detail.native-magnets")
+            ? runtime.resolveLegacyPlugin?.("HighlightMagnetPlugin")
+            : null;
+        const controller = new DetailController({ hostAdapter: deps[PORT.host], nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, screenshotPlugin, magnetPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
         return controller.start().then(() => ({ dispose: () => controller.dispose() }));
     },
 });

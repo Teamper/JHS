@@ -6,9 +6,10 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 import { calcMagnetScore, getMagnetQualitySignals } from "../../core/magnet-quality.js";
 
 export class HighlightMagnetPlugin extends BasePlugin {
-    async handle() {
+    /** @param {{scope?: any}} [options] */
+    async handle(options = {}) {
         if (!window.isDetailPage) return;
-        const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
+        const settings = this.getRuntimeService("settings"), scope = options.scope ?? await this.getRuntimeService("scope")();
         if (!this._settingsListenerBound) {
             this._settingsListenerBound = true;
             const onSettingsChanged = (/** @type {any} */ event) => {
@@ -20,6 +21,7 @@ export class HighlightMagnetPlugin extends BasePlugin {
             scope.addCleanup((() => {
                 settings.removeEventListener("settings.changed", onSettingsChanged);
                 this._settingsListenerBound = false;
+                this.showAll();
             }));
         }
         scope.addCleanup(jhsEventBus?.on("magnet-items-updated", (() => this.reconfigure())) || (() => {}));
