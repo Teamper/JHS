@@ -88,6 +88,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.find((item) => item.id === "detail.related")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.screenshot")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.native-magnets")?.managedByFeature).toBe(true);
+        expect(legacyContributionManifests.find((item) => item.id === "detail.external-magnets")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.page-state-actions")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.javdb-preview")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.javbus-preview")?.managedByFeature).toBe(true);

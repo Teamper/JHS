@@ -46,8 +46,12 @@ export class ReviewPlugin extends BasePlugin {
         if (l) {
             const carNumber = this.getPageInfo().carNum;
             if (!carNumber) return void clog.warn("跳过 JavBus 评论解析：番号不可用");
-            const movieRef = await this.getRuntimeService("movie").resolve({ carNum: carNumber }, { scope });
-            movieRef?.movieId && await this.showReview(movieRef.movieId, this.getHostedSlot("reviews"), { scope });
+            try {
+                const movieRef = await this.getRuntimeService("movie").resolve({ carNum: carNumber }, { scope });
+                movieRef?.movieId && await this.showReview(movieRef.movieId, this.getHostedSlot("reviews"), { scope });
+            } catch (error) {
+                clog.warn("跳过 JavBus 评论解析：番号解析失败", error);
+            }
         }
     }
     getHostedSlot(/** @type {string} */ name) {
