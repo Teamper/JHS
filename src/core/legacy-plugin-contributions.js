@@ -44,7 +44,8 @@ export const LEGACY_PLUGIN_CONTRIBUTION_MAP = Object.freeze({
     OneOneFiveMatchPlugin: "external-bridge.115-match",
     UnifiedOfflinePlugin: "external-bridge.offline",
     CompatibilityEnhancementsPlugin: "compatibility.enhancements",
-    BusImgPlugin: "detail.javbus-images",
+    BusImgPlugin: "list.javbus-images",
+    "detail.javbus-images": "list.javbus-images",
     BusPreviewVideoPlugin: "detail.javbus-preview",
     OneTwoThreeOfflinePlugin: "external-bridge.123pan",
     JavTrailersPlugin: "external-bridge.javtrailers",
@@ -54,7 +55,7 @@ const LEGACY_SHARED_CONTRIBUTION_MAP = Object.freeze({
     "detail.subtitle": ["external-bridge.subtitle"],
     "detail.native": ["detail.javdb-native", "detail.javbus-native"],
     "detail.state-actions": ["list.cover-state-actions", "detail.page-state-actions"],
-    "detail.gallery": ["detail.javdb-preview", "detail.javbus-images", "detail.javbus-preview"],
+    "detail.gallery": ["detail.javdb-preview", "list.javbus-images", "detail.javbus-preview"],
 });
 
 /** @param {unknown} value */

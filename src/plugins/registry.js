@@ -91,7 +91,7 @@ export const legacyContributionManifests = Object.freeze([
     manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [PORT.host, SERVICE.dialog, SERVICE.offline, SERVICE.state], { managedByFeature: true }),
     manifest("compatibility.enhancements", "compatibility", CompatibilityEnhancementsPlugin, ["javdb", "javbus"], { javdb: 36, javbus: 27 }, [SERVICE.state, REGISTRY.feature], { managedByFeature: true }),
     manifest("identity.javbus-navigation", "identity", BusNavBarPlugin, ["javbus"], { javbus: 7 }, [], { managedByFeature: true }),
-    manifest("detail.javbus-images", "detail", BusImgPlugin, ["javbus"], { javbus: 9 }),
+    manifest("list.javbus-images", "list", BusImgPlugin, ["javbus"], { javbus: 9 }, [], { managedByFeature: true }),
     manifest("detail.javbus-native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }, [], { managedByFeature: true }),
     manifest("detail.javbus-preview", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings, SERVICE.storage, SERVICE.movie], { managedByFeature: true }),
     manifest("external-bridge.123pan", "external-bridge", OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"], { javdb: 0, javbus: 0, "123pan": 1 }, [SERVICE.storage], { managedByFeature: true }),

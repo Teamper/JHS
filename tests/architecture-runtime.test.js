@@ -79,6 +79,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.find((item) => item.id === "list.fc2-navigation")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "list.fc2-navigation")?.featureId).toBe("list");
         expect(legacyContributionManifests.find((item) => item.id === "list.cover-state-actions")?.managedByFeature).toBe(true);
+        expect(legacyContributionManifests.find((item) => item.id === "list.javbus-images")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.workspace")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.javdb-native")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "detail.javbus-native")?.managedByFeature).toBe(true);
@@ -228,11 +229,11 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(diagnostics.exportSnapshot().activeContributions).toEqual(["detail.related"]);
         expect(migrateDisabledPlugins(["ReviewPlugin", "UnknownPlugin"])).toEqual(["detail.reviews", "UnknownPlugin"]);
         expect(migrateDisabledPlugins(["CoverButtonPlugin", "DetailPageButtonPlugin", "BusImgPlugin", "BusPreviewVideoPlugin", "Fc2NavigationPlugin", "detail.fc2-navigation"])).toEqual([
-            "list.cover-state-actions", "detail.page-state-actions", "detail.javbus-images", "detail.javbus-preview", "list.fc2-navigation",
+            "list.cover-state-actions", "detail.page-state-actions", "list.javbus-images", "detail.javbus-preview", "list.fc2-navigation",
         ]);
         expect(migrateDisabledPlugins(["detail.native", "detail.state-actions", "detail.gallery"])).toEqual([
             "detail.javdb-native", "detail.javbus-native", "list.cover-state-actions", "detail.page-state-actions",
-            "detail.javdb-preview", "detail.javbus-images", "detail.javbus-preview",
+            "detail.javdb-preview", "list.javbus-images", "detail.javbus-preview",
         ]);
         expect(migrateDisabledPlugins(["SubTitleCatPlugin", "detail.subtitle"])).toEqual(["external-bridge.subtitle"]);
 

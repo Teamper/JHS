@@ -7,7 +7,7 @@ import { ListController } from "./list-controller.js";
 export default defineFeature({
     id: "list", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list", "other"], startup: "eager",
     requires: [PORT.host, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings],
-    contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions", "list.fc2-navigation", "list.cover-state-actions"],
+    contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions", "list.fc2-navigation", "list.cover-state-actions", "list.javbus-images"],
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         // Disabling the historical ListPagePlugin id disables only list.core;
