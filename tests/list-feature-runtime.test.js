@@ -1,13 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { ListController } from "../src/features/list/list-controller.js";
+import { ListView } from "../src/features/list/list-view.js";
 import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 
 describe("List FeatureRuntime ownership", () => {
     it("passes the feature lifecycle scope to the legacy migration adapter", async () => {
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}) }, controller = new ListController({
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
             legacyPlugin,
-            hostAdapter: {},
+            hostAdapter,
             scope,
         });
 
@@ -15,7 +16,8 @@ describe("List FeatureRuntime ownership", () => {
         await controller.start();
 
         expect(legacyPlugin.handle).toHaveBeenCalledOnce();
-        expect(legacyPlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(legacyPlugin.handle).toHaveBeenCalledWith({ scope, view: expect.any(ListView) });
+        expect(controller.view).toBeInstanceOf(ListView);
         controller.dispose();
         expect(scope.disposed).toBe(false);
         scope.dispose();

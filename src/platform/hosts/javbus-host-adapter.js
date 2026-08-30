@@ -35,6 +35,12 @@ export class JavBusHostAdapter {
     locateListRoot() { return this.document.querySelector(".masonry"); }
     locateListItems() { return [...(this.locateListRoot()?.querySelectorAll(":scope > .item, :scope > .movie-box") ?? [])]; }
     getListContainer() { return this.locateListRoot()?.parentElement ?? null; }
+    getListSelectors() {
+        return Object.freeze({
+            boxSelector: ".masonry", itemSelector: ".masonry .item", coverImgSelector: ".masonry .movie-box .photo-frame img",
+            requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next",
+        });
+    }
     getListLayoutContainer() { return this.document.querySelector(".container-fluid .row"); }
     /** @param {string[]} [classes] */
     createOwnedListRoot(classes = []) {

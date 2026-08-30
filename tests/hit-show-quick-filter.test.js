@@ -41,6 +41,7 @@ function loadRealListPage({ carList = [] } = {}) {
         "initializeRuntimeConstants(window.location);",
         readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"),
         readTestFile(join(repoRoot, "src/features/list/list-filters.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/features/list/list-view.js"), "utf8"),
         readTestFile(join(repoRoot, "src/features/list/list-evaluator.js"), "utf8"),
         readTestFile(join(repoRoot, "src/core/list-item-reader.js"), "utf8"),
         readTestFile(join(repoRoot, "src/core/storage-index.js"), "utf8"),

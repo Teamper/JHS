@@ -8,10 +8,11 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 import { readCardNames, readListItem } from "../../core/list-item-reader.js";
 import { isHitShowPage } from "../../core/site-context.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
-import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, isHardHidden, normalizeQuickFilterKey, shouldShowItem } from "../../features/list/list-filters.js";
+import { QUICK_FILTER_LABELS, isHardHidden, normalizeQuickFilterKey } from "../../features/list/list-filters.js";
 import { createListEvaluationContext, evaluateListItem, findMatchedTitleKeyword } from "../../features/list/list-evaluator.js";
 import { scanAllPages } from "../../features/list/batch-scanner.js";
 import { endBatchRun, isActiveBatchRun, isBatchRunCancelled, requestCancelBatchRun, tryBeginBatchRun } from "../../features/list/batch-coordinator.js";
+import { ListView } from "../../features/list/list-view.js";
 
 /** @typedef {Record<string, any>} ListRecord */
 /** @typedef {any} JQueryHandle */
@@ -124,14 +125,34 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {number} */ this.translationGeneration = 0;
         /** @type {number} */ this.listGeneration = 0;
         /** @type {number} */ this.filterRevision = 0;
+        /** @type {any} */ this.listView = null;
     }
     getName() {
         return "ListPagePlugin";
     }
-    /** @param {{scope?: any}} [options] */
+    /** Resolve list selectors from the HostAdapter while retaining a test/legacy fallback. */
+    getListSelectors() {
+        try {
+            return this.getRuntimeService("host").getListSelectors?.() ?? this.getSelector();
+        } catch {
+            return this.getSelector();
+        }
+    }
+    /** Resolve the feature-owned view, with a legacy test/compatibility fallback. */
+    getListView() {
+        if (!this.listView) this.listView = new ListView({
+            hostAdapter: { site: r ? "javdb" : "javbus" },
+            selectors: this.getListSelectors(),
+            onFilterChange: (filter, options) => this.setQuickFilter(filter, options),
+            onOpenMovieDetail: (item, options) => this.openMovieDetail(item, options),
+        });
+        return this.listView;
+    }
+    /** @param {{scope?: any, view?: any}} [options] */
     async handle(options = {}) {
         if (!window.isListPage) return;
         const scope = options.scope ?? await this.getRuntimeService("scope")();
+        this.listView = options.view ?? null;
         const settingsService = this.getRuntimeService("settings");
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
@@ -167,14 +188,15 @@ export class ListPagePlugin extends BasePlugin {
         const revision = this.advanceListGeneration();
         await this.doFilter(revision), await this.createQuickFilter(), this.reconcileListItems(null, revision), await this.bindClick(),
         this.rememberTagExpand(),
-        $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await getListEventBus().emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: !1 }),
+        $(this.getListSelectors().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await getListEventBus().emit("list-items-added", { items: $(this.getListSelectors().itemSelector).toArray() }, { broadcast: !1 }),
         this.checkDom(scope), scope.addCleanup((() => {
             this.processTimer && clearTimeout(this.processTimer), this.processTimer = null, this.pendingItems.clear();
             this.hdImageObserver?.disconnect(), this.hdImageObserver = null;
             this.hdPendingCleanups.forEach((cleanup => cleanup())), this.hdPendingCleanups.clear();
             this.configureHoverPreview("no");
             this.recountFrame && (globalThis.cancelAnimationFrame?.(this.recountFrame) ?? clearTimeout(this.recountFrame)), this.recountFrame = null;
-            $(this.getSelector().boxSelector).off(".jhsMovieDetail .jhsListVideo .jhsListMenu"), $("#jhs-quick-filter").off(), this.itemIndex.clear();
+            $(this.getListSelectors().boxSelector).off(".jhsMovieDetail .jhsListVideo .jhsListMenu"), this.itemIndex.clear();
+            this.listView?.dispose(), this.listView = null;
         }));
     }
     /** @returns {string} */
@@ -195,7 +217,7 @@ export class ListPagePlugin extends BasePlugin {
         const diagnostics = /** @type {any} */ (globalThis).__jhsBrowserDiagnostics;
         if (!diagnostics) return;
         const phases = diagnostics.listPhases ||= [];
-        phases.push({ phase, generation: this.listGeneration, filterRevision: this.filterRevision, activeQuickFilter: this.activeQuickFilter || "waitCheck", itemCount: itemCount ?? $(this.getSelector().itemSelector).length });
+        phases.push({ phase, generation: this.listGeneration, filterRevision: this.filterRevision, activeQuickFilter: this.activeQuickFilter || "waitCheck", itemCount: itemCount ?? $(this.getListSelectors().itemSelector).length });
         phases.length > 200 && phases.splice(0, phases.length - 200);
     }
     /** @param {Element[] | null} items @param {string} revision */
@@ -205,65 +227,20 @@ export class ListPagePlugin extends BasePlugin {
         return !0;
     }
     async createQuickFilter() {
-        if ($("#jhs-quick-filter").length) return;
-        const e = this.getSelector(), primaryHtml = PRIMARY_QUICK_FILTERS.map((filter => `<button type="button" role="tab" class="jhs-btn jhs-segmented__item" aria-selected="false" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""),
-            secondaryHtml = SECONDARY_QUICK_FILTERS.map(((filter, index) => `${1 === index ? '<div class="jhs-filter-menu__separator" role="separator"></div>' : ""}<button type="button" role="menuitemradio" class="jhs-btn jhs-btn--ghost jhs-filter-option" aria-checked="false" tabindex="-1" data-jhs-filter="${filter}">${QUICK_FILTER_LABELS[filter]}</button>`)).join(""),
-            t = `<div id="jhs-quick-filter" class="jhs-quick-filter">
-                <div class="jhs-quick-filter__primary jhs-segmented" role="tablist" aria-label="状态筛选">${primaryHtml}</div>
-                <div class="jhs-quick-filter__more">
-                    <button type="button" class="jhs-btn jhs-btn--secondary jhs-quick-filter__toggle" aria-haspopup="menu" aria-expanded="false"><span class="jhs-quick-filter__label">更多筛选</span> ▾</button>
-                    <div class="jhs-popover jhs-commandbar__menu jhs-quick-filter__menu" role="menu" aria-label="更多筛选">${secondaryHtml}</div>
-                </div>
-            </div>`;
-        r ? $(e.boxSelector).before(t) : l && $(".masonry").before(t);
-        const root = $("#jhs-quick-filter"), toggle = root.find(".jhs-quick-filter__toggle"), menu = root.find(".jhs-quick-filter__menu"), closeMenu = (restoreFocus = !1) => {
-            menu.removeClass("is-open"), toggle.attr("aria-expanded", "false"), restoreFocus && toggle.trigger("focus");
-        };
-        root.on("click", ".jhs-segmented__item", ((/** @type {any} */ event) => this.setQuickFilter($(event.currentTarget).data("jhs-filter"))))
-            .on("keydown", ".jhs-segmented__item", ((/** @type {any} */ event) => {
-                if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(event.key)) return;
-                event.preventDefault();
-                const tabs = root.find(".jhs-segmented__item"), index = tabs.index(event.currentTarget), next = "Home" === event.key ? 0 : "End" === event.key ? tabs.length - 1 : "ArrowRight" === event.key ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
-                tabs.eq(next).trigger("click").trigger("focus");
-            })).on("click", ".jhs-filter-option", ((/** @type {any} */ event) => {
-                this.setQuickFilter($(event.currentTarget).data("jhs-filter")), closeMenu(!0);
-            })).on("keydown", ".jhs-filter-option", ((/** @type {any} */ event) => {
-                const items = menu.find(".jhs-filter-option"), index = items.index(event.currentTarget);
-                if ("Escape" === event.key) return event.preventDefault(), closeMenu(!0);
-                if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(event.key)) return;
-                event.preventDefault();
-                const next = "Home" === event.key ? 0 : "End" === event.key ? items.length - 1 : "ArrowDown" === event.key ? (index + 1) % items.length : (index - 1 + items.length) % items.length;
-                items.eq(next).trigger("focus");
-            }));
-        toggle.on("click", ((/** @type {any} */ event) => {
-            event.preventDefault(), event.stopPropagation();
-            const open = !menu.hasClass("is-open");
-            menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && (menu.find('[aria-checked="true"]').first().length ? menu.find('[aria-checked="true"]').first() : menu.find(".jhs-filter-option").first()).trigger("focus");
-        })), $(document).off("click.jhsQuickFilter").on("click.jhsQuickFilter", ((/** @type {any} */ event) => {
-            $(event.target).closest(root).length || closeMenu();
-        }));
-        this.setQuickFilter(await storageManager.getSetting("defaultQuickFilterTab", "waitCheck"));
+        return this.getListView().createQuickFilter(await storageManager.getSetting("defaultQuickFilterTab", "waitCheck"));
     }
     /** @param {Element[] | null} [items] */
     applyVisibility(items = null) {
-        const e = this.activeQuickFilter || "waitCheck", t = this.getSelector().itemSelector;
-        const elements = items ? $(items) : $(t);
-        this.recordListPhase("applyVisibility", elements.length), elements.each(((/** @type {number} */ index, /** @type {Element} */ element) => {
-            const t = $(element), flags = normalizeStateFlags(JSON.parse(t.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(t.attr("data-jhs-visibility") || "{}"), recent = "yes" === t.attr("data-jhs-recent");
-            shouldShowItem({ filter: e, flags, visibilityReasons, recent }) ? t.show() : t.hide();
-        }));
+        const elements = items ? $(items) : $(this.getListSelectors().itemSelector);
+        this.recordListPhase("applyVisibility", elements.length);
+        return this.getListView().applyVisibility(items, this.activeQuickFilter);
     }
     /** @param {unknown} filter @param {{ syncUi?: boolean }} [options] */
     setQuickFilter(filter, { syncUi = !0 } = {}) {
         this.filterRevision += 1, this.activeQuickFilter = normalizeQuickFilterKey(filter), this.advanceListGeneration(), this.recordListPhase("setQuickFilter"), this.reconcileListItems(null, this.captureListRevision()), syncUi && this.syncQuickFilterUi();
     }
     syncQuickFilterUi() {
-        const filter = normalizeQuickFilterKey(this.activeQuickFilter), isPrimary = PRIMARY_QUICK_FILTERS.includes(filter), root = $("#jhs-quick-filter"), tabs = root.find(".jhs-segmented__item"), options = root.find(".jhs-filter-option");
-        tabs.removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" });
-        isPrimary ? tabs.filter(`[data-jhs-filter="${filter}"]`).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }) : tabs.first().attr("tabindex", "0");
-        options.attr("aria-checked", "false").filter(`[data-jhs-filter="${filter}"]`).attr("aria-checked", "true");
-        root.find(".jhs-quick-filter__label").text(isPrimary ? "更多筛选" : `筛选：${QUICK_FILTER_LABELS[filter]}`);
-        $(".jhs-mobile-filter-label").text(`筛选：${QUICK_FILTER_LABELS[filter]}`), $(".jhs-mobile-filter-option").attr("aria-checked", "false").filter(`[data-jhs-filter="${filter}"]`).attr("aria-checked", "true");
+        return this.getListView().syncQuickFilterUi(this.activeQuickFilter);
     }
     rememberTagExpand() {
         if (!window.location.href.includes("actors")) return;
@@ -279,7 +256,7 @@ export class ListPagePlugin extends BasePlugin {
     checkDom(scope = null) {
         // 自有榜单页（热播/Top250）由渲染方自行管理容器与增量，不走宿主容器探测
         if (!window.isListPage || isHitShowPage() || window.location.search.includes("handleTop=1")) return;
-        const e = this.getSelector(), t = document.querySelector(e.boxSelector);
+        const e = this.getListSelectors(), t = document.querySelector(e.boxSelector);
         if (!t) return void clog.error("没有找到容器节点!");
         if (!scope) return;
         scope.observe(t, ((/** @type {MutationRecord[]} */ records) => {
@@ -307,7 +284,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {Element[]} items @param {string} [revision] @returns {Promise<void>} */
     async processAddedItems(items, revision = this.captureListRevision()) {
-        const selector = this.getSelector(), covers = items.flatMap((/** @type {Element} */ item) => [ ...item.querySelectorAll(selector.coverImgSelector) ]);
+        const selector = this.getListSelectors(), covers = items.flatMap((/** @type {Element} */ item) => [ ...item.querySelectorAll(selector.coverImgSelector) ]);
         this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items);
         const filtered = await this.doFilterItems(items, revision);
         if (!filtered && !this.isCurrentListGeneration(revision)) {
@@ -320,7 +297,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     rebuildItemIndex() {
         this.itemIndex.clear();
-        const items = $(this.getSelector().itemSelector).toArray();
+        const items = $(this.getListSelectors().itemSelector).toArray();
         this.indexItems(items), this.recordListPhase("rebuildItemIndex", items.length);
     }
     /** @param {Element[]} items */
@@ -341,7 +318,7 @@ export class ListPagePlugin extends BasePlugin {
         const removed = new Set;
         Array.from(nodes || []).forEach((/** @type {Node} */ node) => {
             const element = /** @type {Element} */ (node);
-            node.nodeType === Node.ELEMENT_NODE && (removed.add(element), element.querySelectorAll?.(this.getSelector().itemSelector).forEach((/** @type {Element} */ item) => removed.add(item)));
+            node.nodeType === Node.ELEMENT_NODE && (removed.add(element), element.querySelectorAll?.(this.getListSelectors().itemSelector).forEach((/** @type {Element} */ item) => removed.add(item)));
         });
         if (!removed.size) return;
         this.itemIndex.forEach(((/** @type {Set<Element>} */ items, /** @type {string} */ key) => {
@@ -361,7 +338,7 @@ export class ListPagePlugin extends BasePlugin {
     /** @param {Element[] | null} [items] */
     fixBusTitleBox(items = null) {
         if (!l) return;
-        (items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray()).forEach((/** @type {Element} */ e) => {
+        (items ? $(items).toArray() : $(this.getListSelectors().itemSelector).toArray()).forEach((/** @type {Element} */ e) => {
             var t;
             let n = $(e);
             if (n.find(".avatar-box").length > 0) return;
@@ -387,7 +364,7 @@ export class ListPagePlugin extends BasePlugin {
     /** @param {Element[] | null} [items] @param {string} [revision] */
     async doFilterItems(items = null, revision = this.captureListRevision()) {
         if (!window.isListPage) return !1;
-        let e = items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray();
+        let e = items ? $(items).toArray() : $(this.getListSelectors().itemSelector).toArray();
         if (!e.length) return !0;
         const filtered = await this.filterMovieList(e, revision);
         return filtered && l && setTimeout((() => {
@@ -427,7 +404,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     collectCurrentPageSummary() {
         const summary = { total: 0, pending: 0, blockedItems: 0, favorite: 0, downloaded: 0, watched: 0, debug: { manualBlocked: 0, keywordBlocked: 0, actorBlocked: 0, actressBlocked: 0 } };
-        $(this.getSelector().itemSelector).each(((/** @type {number} */ e, /** @type {Element} */ item) => {
+        $(this.getListSelectors().itemSelector).each(((/** @type {number} */ e, /** @type {Element} */ item) => {
             const card = $(item);
             if (l && card.find(".avatar-box").length > 0) return;
             const flags = normalizeStateFlags(JSON.parse(card.attr("data-jhs-flags") || "{}")), reasons = JSON.parse(card.attr("data-jhs-visibility") || "{}"), hardHidden = isHardHidden(flags, reasons);
@@ -565,8 +542,8 @@ export class ListPagePlugin extends BasePlugin {
                 startDom: root ? $(root) : $(document),
                 currentUrl: isOwnedRankingPage ? null : (root ? null : window.location.href),
                 firstPageUrl: isOwnedRankingPage ? null : (root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href)),
-                itemSelector: this.getSelector().requestDomItemSelector,
-                nextPageSelector: this.getSelector().nextPageSelector,
+                itemSelector: this.getListSelectors().requestDomItemSelector,
+                nextPageSelector: this.getListSelectors().nextPageSelector,
                 fetchHtml: async (/** @type {string} */ url) => requestHostPage(this.getRuntimeService("http"), url, runtimeScope),
                 parseItem: (/** @type {any} */ item) => {
                     const parsed = readListItem(item);
@@ -626,7 +603,7 @@ export class ListPagePlugin extends BasePlugin {
         return element;
     }
     async bindClick() {
-        const e = this.getSelector();
+        const e = this.getListSelectors();
         this.bindMovieDetailNavigation(e.boxSelector), $(e.boxSelector).off("click.jhsListVideo").on("click.jhsListVideo", ".item video", (async (/** @type {any} */ e) => {
             const t = e.currentTarget;
             t.paused ? await safePlay(t, {
@@ -660,13 +637,7 @@ export class ListPagePlugin extends BasePlugin {
     /** 为宿主与合成列表统一绑定左键、修饰键和中键导航。 */
     /** @param {any} container */
     bindMovieDetailNavigation(container) {
-        const root = $(container), selector = ".item img, .item .video-title";
-        root.off("click.jhsMovieDetail auxclick.jhsMovieDetail", selector).on("click.jhsMovieDetail auxclick.jhsMovieDetail", selector, ((/** @type {any} */ event) => {
-            if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
-            if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
-            event.preventDefault(), event.stopPropagation();
-            void this.openMovieDetail($(event.currentTarget).closest(".item"), { event }).catch((error => clog.error("打开影片详情失败", error)));
-        }));
+        return this.getListView().bindMovieDetailNavigation(container);
     }
     /** @param {string} e */
     async parseActressName(e) {
@@ -732,7 +703,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {any} [e] */
     replaceHdImg(e) {
-        if (e && "string" == typeof e.jquery && (e = e.toArray()), e || (e = document.querySelectorAll(this.getSelector().coverImgSelector)),
+        if (e && "string" == typeof e.jquery && (e = e.toArray()), e || (e = document.querySelectorAll(this.getListSelectors().coverImgSelector)),
         !e.length) return;
         const t = Array.from(/** @type {Iterable<HTMLImageElement>} */ (e)).filter((/** @type {HTMLImageElement} */ e) => "true" !== e.dataset.hdReplaced && "true" !== e.dataset.jhsHdObserved);
         if ("IntersectionObserver" in window && !this.hdImageObserver) this.hdImageObserver = new IntersectionObserver((entries => {
@@ -753,7 +724,7 @@ export class ListPagePlugin extends BasePlugin {
         if (runtimeWindow.imageHoverPreviewObj) {
             runtimeWindow.imageHoverPreviewObj.destroy?.(), runtimeWindow.imageHoverPreviewObj = null;
         }
-        if ("yes" === enabled) runtimeWindow.imageHoverPreviewObj = new ImageHoverPreview({ selector: this.getSelector().coverImgSelector });
+        if ("yes" === enabled) runtimeWindow.imageHoverPreviewObj = new ImageHoverPreview({ selector: this.getListSelectors().coverImgSelector });
         this.hoverPreviewState = enabled;
     }
     /** @param {JQueryHandle} e @param {string} t @param {string} n */
@@ -782,7 +753,7 @@ export class ListPagePlugin extends BasePlugin {
         this.applyTranslatedTitle(e, translated, n);
     }
     async revertTranslation() {
-        $(this.getSelector().itemSelector).toArray().forEach((/** @type {Element} */ e) => {
+        $(this.getListSelectors().itemSelector).toArray().forEach((/** @type {Element} */ e) => {
             let t = $(e);
             const n = t.find(".box").attr("title") || t.find(".video-title").attr("title") || t.find("img").attr("data-title");
             /** @type {string | undefined} */

@@ -32,6 +32,12 @@ export class JavDbHostAdapter {
     locateListRoot() { return this.document.querySelector(".movie-list"); }
     locateListItems() { return [...(this.locateListRoot()?.querySelectorAll(":scope > .item") ?? [])]; }
     getListContainer() { return this.locateListRoot()?.parentElement ?? null; }
+    getListSelectors() {
+        return Object.freeze({
+            boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img",
+            requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next",
+        });
+    }
     getListLayoutContainer() { return this.document.querySelector("section .container"); }
     /** @param {string[]} [classes] */
     createOwnedListRoot(classes = []) {

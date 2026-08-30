@@ -63,6 +63,7 @@ function loadListObserver() {
     });
     const source = [
         readTestFile(join(repoRoot, "src/features/list/list-filters.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/features/list/list-view.js"), "utf8"),
         readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8"),
         "globalThis.TestListPagePlugin=ListPagePlugin;"
     ].join("\n");

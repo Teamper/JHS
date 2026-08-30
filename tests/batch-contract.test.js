@@ -14,7 +14,7 @@ describe("batch action contract (筛选后批量语义)", () => {
         expect(listPage).toContain("currentUrl: isOwnedRankingPage ? null : (root ? null : window.location.href)");
         expect(listPage).toContain('firstPageUrl: isOwnedRankingPage ? null : (root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href))');
         expect(blacklist).toContain('firstPageUrl: root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href)');
-        expect(listPage).toContain("itemSelector: this.getSelector().requestDomItemSelector");
+        expect(listPage).toContain("itemSelector: this.getListSelectors().requestDomItemSelector");
         expect(listPage).toContain('evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized })');
     });
 
