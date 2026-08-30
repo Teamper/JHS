@@ -122,6 +122,8 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {number | null} */ this.recountFrame = null;
         /** @type {any} */ this.$currentImage = null;
         /** @type {number} */ this.translationGeneration = 0;
+        /** @type {number} */ this.listGeneration = 0;
+        /** @type {number} */ this.filterRevision = 0;
     }
     getName() {
         return "ListPagePlugin";
@@ -141,15 +143,16 @@ export class ListPagePlugin extends BasePlugin {
                 // 等由各自 Feature 精确处理，不再触发 doFilter/applyVisibility/History setData。
                 const changedNames = /** @type {string[] | undefined} */ (payload?.changedNames);
                 if (changedNames && !changedNames.some((name) => LIST_EFFECT_KEYS.has(name))) return;
-                this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(), this.applyVisibility();
+                const revision = this.advanceListGeneration();
+                this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(revision), this.reconcileListItems(null, revision);
                 const e = this.getOptionalDependency("HistoryPlugin");
                 e?.tableObj && e.tableObj.setData();
         };
         [ "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed" ].forEach((type => scope.addCleanup(getListEventBus().on(type, refreshAll)))),
         scope.addCleanup(getListEventBus().on("car-state-changed", (async payload => {
             this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key);
-            const items = this.getIndexedItems(payload.carNums || []);
-            items.length && (await this.doFilterItems(items), this.applyVisibility(items));
+            const items = this.getIndexedItems(payload.carNums || []), revision = this.captureListRevision();
+            items.length && (await this.doFilterItems(items, revision), this.reconcileListItems(items, revision));
             const history = this.getOptionalDependency("HistoryPlugin");
             history?.tableObj && history.tableObj.setData();
         })));
@@ -159,8 +162,9 @@ export class ListPagePlugin extends BasePlugin {
         if (isHitShowPage()) return;
         const hoverBigImg = settingsService.snapshot().hoverBigImg;
         this.configureHoverPreview(hoverBigImg === _ ? "yes" : "no");
-        this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox(),
-        await this.doFilter(), await this.createQuickFilter(), this.applyVisibility(), await this.bindClick(),
+        this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox();
+        const revision = this.advanceListGeneration();
+        await this.doFilter(revision), await this.createQuickFilter(), this.reconcileListItems(null, revision), await this.bindClick(),
         this.rememberTagExpand(),
         $(this.getSelector().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await getListEventBus().emit("list-items-added", { items: $(this.getSelector().itemSelector).toArray() }, { broadcast: !1 }),
         this.checkDom(scope), scope.addCleanup((() => {
@@ -171,6 +175,33 @@ export class ListPagePlugin extends BasePlugin {
             this.recountFrame && (globalThis.cancelAnimationFrame?.(this.recountFrame) ?? clearTimeout(this.recountFrame)), this.recountFrame = null;
             $(this.getSelector().boxSelector).off(".jhsMovieDetail .jhsListVideo .jhsListMenu"), $("#jhs-quick-filter").off(), this.itemIndex.clear();
         }));
+    }
+    /** @returns {string} */
+    advanceListGeneration() {
+        this.listGeneration += 1;
+        return this.captureListRevision();
+    }
+    /** @returns {string} */
+    captureListRevision() {
+        return `${this.listGeneration}:${this.filterRevision}`;
+    }
+    /** @param {string} revision */
+    isCurrentListGeneration(revision) {
+        return revision === this.captureListRevision();
+    }
+    /** @param {string} phase @param {number | null} [itemCount] */
+    recordListPhase(phase, itemCount = null) {
+        const diagnostics = /** @type {any} */ (globalThis).__jhsBrowserDiagnostics;
+        if (!diagnostics) return;
+        const phases = diagnostics.listPhases ||= [];
+        phases.push({ phase, generation: this.listGeneration, filterRevision: this.filterRevision, activeQuickFilter: this.activeQuickFilter || "waitCheck", itemCount: itemCount ?? $(this.getSelector().itemSelector).length });
+        phases.length > 200 && phases.splice(0, phases.length - 200);
+    }
+    /** @param {Element[] | null} items @param {string} revision */
+    reconcileListItems(items, revision) {
+        if (!this.isCurrentListGeneration(revision)) return !1;
+        this.applyVisibility(items);
+        return !0;
     }
     async createQuickFilter() {
         if ($("#jhs-quick-filter").length) return;
@@ -215,14 +246,15 @@ export class ListPagePlugin extends BasePlugin {
     /** @param {Element[] | null} [items] */
     applyVisibility(items = null) {
         const e = this.activeQuickFilter || "waitCheck", t = this.getSelector().itemSelector;
-        (items ? $(items) : $(t)).each(((/** @type {number} */ index, /** @type {Element} */ element) => {
+        const elements = items ? $(items) : $(t);
+        this.recordListPhase("applyVisibility", elements.length), elements.each(((/** @type {number} */ index, /** @type {Element} */ element) => {
             const t = $(element), flags = normalizeStateFlags(JSON.parse(t.attr("data-jhs-flags") || "{}")), visibilityReasons = JSON.parse(t.attr("data-jhs-visibility") || "{}"), recent = "yes" === t.attr("data-jhs-recent");
             shouldShowItem({ filter: e, flags, visibilityReasons, recent }) ? t.show() : t.hide();
         }));
     }
     /** @param {unknown} filter @param {{ syncUi?: boolean }} [options] */
     setQuickFilter(filter, { syncUi = !0 } = {}) {
-        this.activeQuickFilter = normalizeQuickFilterKey(filter), this.applyVisibility(), syncUi && this.syncQuickFilterUi();
+        this.filterRevision += 1, this.activeQuickFilter = normalizeQuickFilterKey(filter), this.advanceListGeneration(), this.recordListPhase("setQuickFilter"), this.reconcileListItems(null, this.captureListRevision()), syncUi && this.syncQuickFilterUi();
     }
     syncQuickFilterUi() {
         const filter = normalizeQuickFilterKey(this.activeQuickFilter), isPrimary = PRIMARY_QUICK_FILTERS.includes(filter), root = $("#jhs-quick-filter"), tabs = root.find(".jhs-segmented__item"), options = root.find(".jhs-filter-option");
@@ -251,7 +283,7 @@ export class ListPagePlugin extends BasePlugin {
         if (!scope) return;
         scope.observe(t, ((/** @type {MutationRecord[]} */ records) => {
             for (const record of records) {
-                this.removeIndexedItems(record.removedNodes);
+                this.removeIndexedItems(record.removedNodes), (record.removedNodes.length || record.addedNodes.length) && this.advanceListGeneration(), record.addedNodes.length && this.recordListPhase("dom-added", record.addedNodes.length);
                 for (const node of record.addedNodes) {
                 if (node.nodeType !== Node.ELEMENT_NODE) continue;
                 const element = /** @type {Element} */ (node);
@@ -262,23 +294,31 @@ export class ListPagePlugin extends BasePlugin {
                 }
             }
             this.pendingItems.size && (this.processTimer && clearTimeout(this.processTimer), this.processTimer = setTimeout((() => {
-                const items = [ ...this.pendingItems ].filter((/** @type {Element} */ item) => item.isConnected && "true" !== /** @type {HTMLElement} */ (item).dataset.jhsProcessed);
-                this.pendingItems.clear(), this.processTimer = null, items.length && void this.processAddedItems(items).catch((error => clog.error("列表增量处理失败", error)));
+                const items = [ ...this.pendingItems ].filter((/** @type {Element} */ item) => item.isConnected && "true" !== /** @type {HTMLElement} */ (item).dataset.jhsProcessed), revision = this.captureListRevision();
+                this.pendingItems.clear(), this.processTimer = null, items.length && void this.processAddedItems(items, revision).catch((/** @type {unknown} */ error) => clog.error("列表增量处理失败", error));
             }), 100));
         }), {
             childList: !0,
             subtree: !1
         });
     }
-    /** @param {Element[]} items */
-    async processAddedItems(items) {
+    /** @param {Element[]} items @param {string} [revision] @returns {Promise<void>} */
+    async processAddedItems(items, revision = this.captureListRevision()) {
         const selector = this.getSelector(), covers = items.flatMap((/** @type {Element} */ item) => [ ...item.querySelectorAll(selector.coverImgSelector) ]);
-        this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items), await this.doFilterItems(items), this.applyVisibility(items),
+        this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items);
+        const filtered = await this.doFilterItems(items, revision);
+        if (!filtered && !this.isCurrentListGeneration(revision)) {
+            const connected = items.filter((item) => item.isConnected && "true" !== /** @type {HTMLElement} */ (item).dataset.jhsProcessed);
+            return connected.length ? this.processAddedItems(connected, this.captureListRevision()) : undefined;
+        }
+        if (!this.reconcileListItems(items, revision)) return;
         await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.(), await this.getOptionalDependency("CoverButtonPlugin")?.addSvgBtn?.(items),
         items.forEach((/** @type {Element} */ item) => /** @type {HTMLElement} */ (item).dataset.jhsProcessed = "true"), this.indexItems(items), await getListEventBus().emit("list-items-added", { items }, { broadcast: !1 }), this.getOptionalDependency("AutoPagePlugin")?.checkLoad?.();
     }
     rebuildItemIndex() {
-        this.itemIndex.clear(), this.indexItems($(this.getSelector().itemSelector).toArray());
+        this.itemIndex.clear();
+        const items = $(this.getSelector().itemSelector).toArray();
+        this.indexItems(items), this.recordListPhase("rebuildItemIndex", items.length);
     }
     /** @param {Element[]} items */
     indexItems(items) {
@@ -338,16 +378,18 @@ export class ListPagePlugin extends BasePlugin {
             }
         }));
     }
-    async doFilter() {
-        return this.doFilterItems();
+    async doFilter(revision = this.captureListRevision()) {
+        return this.doFilterItems(null, revision);
     }
-    /** @param {Element[] | null} [items] */
-    async doFilterItems(items = null) {
-        if (!window.isListPage) return;
+    /** @param {Element[] | null} [items] @param {string} [revision] */
+    async doFilterItems(items = null, revision = this.captureListRevision()) {
+        if (!window.isListPage) return !1;
         let e = items ? $(items).toArray() : $(this.getSelector().itemSelector).toArray();
-        e.length && (await this.filterMovieList(e), l && setTimeout((() => {
+        if (!e.length) return !0;
+        const filtered = await this.filterMovieList(e, revision);
+        return filtered && l && setTimeout((() => {
             this.getOptionalDependency("BusImgPlugin")?.logImageHeightsByRow?.(this.getRuntimeService("settings").snapshot()).catch((/** @type {unknown} */ e) => clog.error("JavBus图片高度修正失败", e));
-        })));
+        })), filtered;
     }
     async yieldListFrame() {
         await new Promise((/** @type {(value: void) => void} */ e) => {
@@ -428,10 +470,14 @@ export class ListPagePlugin extends BasePlugin {
             clog.error(`列表标题翻译失败 ${failed} 项`, firstError);
         }
     }
-    /** @param {Element[]} e */
-    async filterMovieList(e) {
+    /** @param {Element[]} e @param {string} [revision] */
+    async filterMovieList(e, revision = this.captureListRevision()) {
+        this.recordListPhase("doFilter-start", e.length);
+        if (!this.isCurrentListGeneration(revision)) return !1;
+        const activeFilter = this.activeQuickFilter || "waitCheck";
         utils.time("累计耗费时间"), utils.time("读取数据耗时");
         const {titleKeywords: n, settings: s, carMap: m, recentCarNums: recent, actorCarNumToNameMap: f, actressCarNumToNameMap: v} = await this.getFilterContext(), o = utils.time("读取数据耗时");
+        if (!this.isCurrentListGeneration(revision)) return !1;
         const evaluationContext = createListEvaluationContext({ titleKeywords: n, settings: s, carMap: m, recentCarNums: recent, actorCarNumToNameMap: f, actressCarNumToNameMap: v });
         utils.time("组装数据耗时");
         const b = utils.time("组装数据耗时"), P = (null == s ? void 0 : s.tagPosition) || "rightTop";
@@ -440,10 +486,11 @@ export class ListPagePlugin extends BasePlugin {
         this.currentPageWaitCheckCount = 0, this.currentPageTotalCount = 0, utils.time("处理页面耗时");
         const R = [];
         for (let n = 0; n < e.length; n++) {
+            if (!this.isCurrentListGeneration(revision)) return !1;
             n > 0 && n % 12 == 0 && await this.yieldListFrame();
             let t = $(e[n]);
             if (l && t.find(".avatar-box").length > 0) continue;
-            const {carNum: a, title: i} = this.findCarNumAndHref(t), {flags, visibilityReasons, hardHidden} = evaluateListItem({ carNum: a, title: i }, evaluationContext, { filter: this.activeQuickFilter || "waitCheck" }), keyword = visibilityReasons.keyword ? findMatchedTitleKeyword(evaluationContext.titleKeywords, i, a) : null;
+            const {carNum: a, title: i} = this.findCarNumAndHref(t), {flags, visibilityReasons, hardHidden} = evaluateListItem({ carNum: a, title: i }, evaluationContext, { filter: activeFilter }), keyword = visibilityReasons.keyword ? findMatchedTitleKeyword(evaluationContext.titleKeywords, i, a) : null;
             t.attr("data-jhs-flags", JSON.stringify(flags)).attr("data-jhs-visibility", JSON.stringify(visibilityReasons)).attr("data-jhs-recent", recent.has(a) ? _ : C).attr("data-jhs-tag-position", P);
             const signature = JSON.stringify({ flags, visibilityReasons, P });
             if (t.attr("data-jhs-state-signature") !== signature) {
@@ -464,6 +511,7 @@ export class ListPagePlugin extends BasePlugin {
             hardHidden || R.push(t);
         }
         this.scheduleRecount(), void this.translateListItems(R).catch((/** @type {unknown} */ e) => clog.error("列表页翻译任务失败", e));
+        this.recordListPhase("doFilter-end", e.length);
         const D = utils.time("处理页面耗时"), A = utils.time("累计耗费时间");
         clog.html(`\n            <table class="countTable jhs-layout-b12542a5">\n                <tr>\n                    <td colspan="2" class="jhs-count-table__cell">${o}</td>\n                    <td colspan="2" class="jhs-count-table__cell">${b}</td>\n                </tr>\n                \n                <tr>\n                    <td colspan="2" class="jhs-count-table__cell">${D}</td>\n                    <td colspan="2" class="jhs-count-table__cell">${A}</td>\n                </tr>\n                <tr>\n                    <td class="jhs-count-table__head">项目</td>\n                    <td class="jhs-count-table__head">数量</td>\n                    <td class="jhs-count-table__head">项目</td>\n                    <td class="jhs-count-table__head">数量</td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽单番号</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageFilterCount}</strong></td>\n                     <td class="jhs-count-table__cell">收藏</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageFavoriteCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽演员</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageActorFilterCount}</strong></td>\n                    <td class="jhs-count-table__cell">已下载</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasDownCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">屏蔽关键词</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageKeywordFilterCount}</strong></td>\n                    <td class="jhs-count-table__cell">已观看</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageHasWatchCount}</strong></td>\n                </tr>\n                \n                <tr>\n                    <td class="jhs-count-table__cell">待鉴定</td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageWaitCheckCount}</strong></td>\n                    <td class="jhs-count-table__cell"></td>\n                    <td class="jhs-count-table__cell"></td>\n                </tr>\n        \n                <tr>\n                    <td class="jhs-count-table__cell"><strong>总数</strong></td>\n                    <td class="jhs-count-table__cell"><strong>${this.currentPageTotalCount}</strong></td>\n                </tr>\n            </table>\n        `);
     }

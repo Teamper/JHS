@@ -34,7 +34,7 @@ export async function buildUserscript({ outputPaths = [distPath, rootPath], tran
     legalComments: "none",
     keepNames: true,
     minifySyntax: false,
-    minifyWhitespace: false,
+    minifyWhitespace: true,
     minifyIdentifiers: false,
     write: false,
     logLevel: "silent",
@@ -49,8 +49,8 @@ export async function buildUserscript({ outputPaths = [distPath, rootPath], tran
       }
     }]
   });
-  const readableBundle = buildResult.outputFiles[0].text.trimStart().split(/\r?\n/).map((line) => line.trimEnd()).join("\n");
-  const output = `${metadata}\n\n${readableBundle}`;
+  const bundledOutput = buildResult.outputFiles[0].text.trimStart().split(/\r?\n/).map((line) => line.trimEnd()).join("\n");
+  const output = `${metadata}\n\n${bundledOutput}`;
   const outputBytes = Buffer.byteLength(output, "utf8");
 
   for (const outputPath of outputPaths) {

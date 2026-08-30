@@ -100,15 +100,18 @@ async function persistLocalOriginMigration(settings, resolved) {
 
 export async function bootstrapJhs() {
     try {
+        const bootstrapStartedAt = performance.now(), diagnostics = globalThis.__jhsBrowserDiagnostics, markPhase = (phase) => diagnostics && ((diagnostics.bootstrapPhases ||= {})[phase] = performance.now() - bootstrapStartedAt);
         const siteContext = initializeRuntimeConstants(window.location);
         const vendors = getVendorRuntime();
         const jhsEventBus = initializeEventBus();
         const { utils, gmHttp, storageManager, stateService } = createLegacyRuntime(jhsEventBus);
+        markPhase("legacy-runtime");
         Object.assign(globalThis, { utils, gmHttp, storageManager, stateService, jhsEventBus });
         // 黑名单/关键词规则可被其他标签页修改：内存派生缓存不随事件自动失效，必须在此主动清空
         [ "blacklist-rules-changed", "filter-rules-changed", "legacy-refresh" ].forEach((type => jhsEventBus.on(type, (() => storageManager._invalidateCache()))));
         patchLayerRuntime(vendors.layer, utils);
         importVendorStyles(utils);
+        markPhase("pre-settings");
         const disabledMigration = await readDisabledPluginSettings(storageManager);
         const disabled = disabledMigration.migrated;
         const localOriginSettings = await resolveLocalOrigins(storageManager);
@@ -120,11 +123,13 @@ export async function bootstrapJhs() {
             legacyHttp: gmHttp, legacyStorage: storageManager, eventBus: jhsEventBus, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
             layer: vendors.layer, stateService, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
         });
+        markPhase("context");
         injectCoreCss(context.services.styles);
         // 6.5: expose the single settings write entry so legacy writers (storageManager.saveSetting/saveSettingItem)
         // route through SettingsService with lock + re-read + merge.
         Object.assign(globalThis, { settingsService: context.services.settings });
         await context.services.settings.load();
+        markPhase("settings-load");
         await persistDisabledPluginMigration(context.services.settings);
         await persistLocalOriginMigration(context.services.settings, localOriginSettings);
         await normalizeScreenshotSetting(context.services.settings);
@@ -143,11 +148,14 @@ export async function bootstrapJhs() {
                 draft.videoMuted = legacyVideoMuted === "yes";
             }
         });
+        markPhase("settings-migration");
         const logger = initializeLoggerRuntime(context.rootScope, {
             clogMsgCount: context.services.settings.snapshot().clogMsgCount,
         });
+        markPhase("logger");
         initializeThemeRuntime(context.rootScope);
         initializeUiAccessibility(context.rootScope);
+        markPhase("theme-ui");
         context.services.diagnostics.setBrowserMetadata({
             userAgent: navigator.userAgent,
             platform: navigator.platform,
@@ -159,6 +167,7 @@ export async function bootstrapJhs() {
         for (const manifest of integrationManifests) context.registries.integrations.register(manifest);
         for (const manifest of featureManifests) context.registries.features.register(manifest);
         registerSitePlugins(pluginManager, context.registries.features, siteContext.site);
+        markPhase("registry");
         // Compatibility infrastructure must be ready before any feature mounts.
         // A missing logger dependency should fail the whole bootstrap, not leave a half-started page.
         attachCompatibilityFacade({
@@ -166,13 +175,19 @@ export async function bootstrapJhs() {
             clog: logger.clog, show: logger.show, loading: logger.loading,
         }, globalThis.unsafeWindow);
         await context.registries.features.start();
+        markPhase("feature-runtime");
         window.isDetailPage = route === "detail";
         window.isListPage = route === "list";
         await runDataMigrations(storageManager);
         await stateService.recoverPendingTransaction();
+        markPhase("data-prepare");
         await Promise.all([pluginManager.processCss(), Promise.resolve(applyThemeMode(context.services.settings.snapshot().themeMode))]);
+        markPhase("plugin-css");
         if (r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie)) logger.show.error("请切换到中文语言下才可正常使用本脚本", { duration: -1 });
         await pluginManager.processPlugins();
+        markPhase("plugin-runtime");
+        markPhase("first-ready");
+        markPhase("total");
         return context;
     } catch (cause) {
         throw cause instanceof JhsError ? cause : new JhsError("BOOTSTRAP_FAILED", cause instanceof Error ? cause.message : "JHS 启动失败", { source: "bootstrap", cause });

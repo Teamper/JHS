@@ -116,6 +116,15 @@ describe("background task lifecycle", () => {
 });
 
 describe("list mutation hot path", () => {
+    it("does not commit visibility from a stale list generation", () => {
+        const { plugin } = loadListObserver(), applyVisibility = vi.spyOn(plugin, "applyVisibility"), stale = plugin.advanceListGeneration();
+        plugin.advanceListGeneration();
+        expect(plugin.reconcileListItems(null, stale)).toBe(false);
+        expect(applyVisibility).not.toHaveBeenCalled();
+        expect(plugin.reconcileListItems(null, plugin.captureListRevision())).toBe(true);
+        expect(applyVisibility).toHaveBeenCalledOnce();
+    });
+
     it("processes an appended card once and ignores later sort-style moves", async () => {
         const { dom, plugin } = loadListObserver(), container = dom.window.document.querySelector(".movie-list");
         plugin.processAddedItems = vi.fn(async (items) => items.forEach((item => item.dataset.jhsProcessed = "true")));

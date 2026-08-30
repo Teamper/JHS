@@ -83,11 +83,12 @@ export class HitShowPlugin extends BasePlugin {
     async initializeRenderedList() {
         const listPage = this.getOptionalDependency("ListPagePlugin");
         if (listPage) {
+            const revision = listPage.advanceListGeneration?.() ?? null;
             const hoverBigImg = this.getRuntimeService("settings").snapshot().hoverBigImg;
-            listPage.configureHoverPreview(hoverBigImg === "yes" ? "yes" : "no"), listPage.replaceHdImg(), await listPage.doFilter(),
+            listPage.configureHoverPreview(hoverBigImg === "yes" ? "yes" : "no"), listPage.replaceHdImg(), await listPage.doFilter(revision || undefined),
             // 自有榜单页（热播/Top250）不走 ListPagePlugin.handle，需手动恢复快速筛选条（待鉴定/已下载/全部等）
             // 并重建卡片索引，让 car-state-changed 的定向重筛能找到这些卡片
-            await listPage.createQuickFilter?.(), listPage.applyVisibility(), listPage.rebuildItemIndex?.(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector),
+            await listPage.createQuickFilter?.(), revision !== null && listPage.reconcileListItems ? listPage.reconcileListItems(null, revision) : listPage.applyVisibility(), listPage.rebuildItemIndex?.(), listPage.bindMovieDetailNavigation(listPage.getSelector().boxSelector),
             // 补齐右键屏蔽与列表视频点击绑定（bindClick 已命名空间化，可重复调用）
             await listPage.bindClick?.();
         }

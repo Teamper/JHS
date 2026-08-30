@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { performance } from "node:perf_hooks";
 
 const browserRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(browserRoot, "..", "..");
@@ -28,14 +29,20 @@ export async function injectUserscriptRuntime(page, options = {}) {
   const startupErrors = [];
   const hostPage = typeof page.context === "function" ? page : page.page();
   const browserVersion = hostPage.context().browser()?.version() || "unknown";
+  const phaseStartedAt = performance.now(), bootstrapPhases = {};
+  const markPhase = (name) => { bootstrapPhases[name] = performance.now() - phaseStartedAt; };
   hostPage.on("pageerror", (error) => startupErrors.push(error.stack || error.message));
   hostPage.on("console", (message) => {
     if (message.type() === "error") startupErrors.push(message.text());
   });
   await page.addScriptTag({ path: join(browserRoot, "node_modules", "jquery", "dist", "jquery.min.js") });
+  markPhase("jquery");
   await page.addScriptTag({ path: join(browserRoot, "node_modules", "localforage", "dist", "localforage.min.js") });
+  markPhase("localforage");
   await page.addScriptTag({ path: join(browserRoot, "node_modules", "tabulator-tables", "dist", "js", "tabulator.min.js") });
+  markPhase("tabulator");
   await page.addStyleTag({ path: join(browserRoot, "node_modules", "tabulator-tables", "dist", "css", "tabulator.min.css") });
+  markPhase("vendor-style");
   await page.evaluate(async ({ disabledPlugins, settingOverrides }) => {
     const forage = window.localforage.createInstance({ driver: window.localforage.INDEXEDDB, name: "JAV-JHS", version: 1, storeName: "appData" });
     await forage.setItem("setting", {
@@ -158,9 +165,13 @@ export async function injectUserscriptRuntime(page, options = {}) {
       msg() {}
     };
   }, { version: browserVersion, nativeTranslation: options.nativeTranslation || "", rankingMovies: options.rankingMovies || null, topMovies: options.topMovies || null });
+  markPhase("fixture-setup");
   await page.addScriptTag({ path: join(repoRoot, "JHS.user.js") });
+  markPhase("userscript-eval");
   try {
     await page.waitForFunction(() => Boolean(window.unsafeWindow?.pluginManager?.getStartupReport), null, { timeout: 15_000 });
+    markPhase("startup-ready");
+    await page.evaluate((phases) => { window.__jhsBrowserDiagnostics.bootstrapPhases = { ...(window.__jhsBrowserDiagnostics.bootstrapPhases || {}), harness: phases }; }, bootstrapPhases);
   } catch (error) {
     throw new Error(`JHS fixture bootstrap failed: ${startupErrors.join("\n") || error.message}`);
   }

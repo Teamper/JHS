@@ -53,6 +53,38 @@ test("all quick filter is the true full set including blocked items", async ({ c
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector(".movie-list .item")).display)).not.toBe("none");
 });
 
+test("quick-filter and DOM generations reject stale filter commits", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project owns the list generation stress check");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page);
+  await page.evaluate(async () => {
+    const listPage = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
+    const originalGetFilterContext = listPage.getFilterContext.bind(listPage);
+    for (let index = 0; index < 50; index += 1) {
+      const context = listPage.filterContext || await originalGetFilterContext();
+      let release;
+      listPage.filterContext = null;
+      listPage.getFilterContext = () => new Promise((resolve) => { release = resolve; });
+      const pending = listPage.doFilter(listPage.captureListRevision());
+      index % 2 && listPage.advanceListGeneration();
+      listPage.setQuickFilter(index % 2 ? "favorite" : "blockedItems");
+      release(context);
+      listPage.filterContext = context;
+      await pending;
+    }
+    listPage.getFilterContext = originalGetFilterContext;
+    listPage.setQuickFilter("all");
+    return window.__jhsBrowserDiagnostics.listPhases || [];
+  });
+  const phases = await page.evaluate(() => window.__jhsBrowserDiagnostics.listPhases || []);
+  expect(phases.some(({ phase }) => phase === "doFilter-start")).toBe(true);
+  expect(phases.some(({ phase }) => phase === "doFilter-end")).toBe(true);
+  expect(phases.some(({ phase }) => phase === "setQuickFilter")).toBe(true);
+  expect(phases.every(({ generation, filterRevision, activeQuickFilter, itemCount }) => Number.isInteger(generation) && Number.isInteger(filterRevision) && typeof activeQuickFilter === "string" && Number.isInteger(itemCount))).toBe(true);
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector(".movie-list .item")).display)).not.toBe("none");
+});
+
 
 test("mobileMode force on/off swaps FAB and the desktop commandbar/setting surfaces", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers mobileMode live layout");

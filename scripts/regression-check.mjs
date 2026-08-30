@@ -130,11 +130,11 @@ assertIncludes(ciWorkflow, "gh release create", "immutable release creation");
 assert(!ciWorkflow.includes("--clobber"), "release workflow must not overwrite an existing asset");
 assert(!ciWorkflow.includes("gh release upload"), "release workflow must not update an existing release");
 assert(!ciWorkflow.includes("JHS-dev.user.js"), "release workflow must not build dev artifacts");
-assertIncludes(buildScript, "bundle: true", "readable bundled build");
-assertIncludes(buildScript, "keepNames: true", "readable bundled build");
-assertIncludes(buildScript, "minifySyntax: false", "readable bundled build");
-assertIncludes(buildScript, "minifyWhitespace: false", "readable bundled build");
-assertIncludes(buildScript, "minifyIdentifiers: false", "readable bundled build");
+assertIncludes(buildScript, "bundle: true", "performance bundled build");
+assertIncludes(buildScript, "keepNames: true", "performance bundled build");
+assertIncludes(buildScript, "minifySyntax: false", "performance bundled build");
+assertIncludes(buildScript, "minifyWhitespace: true", "performance bundled build");
+assertIncludes(buildScript, "minifyIdentifiers: false", "performance bundled build");
 assertIncludes(buildScript, 'contents.replace(/\\/\\*\\*[\\s\\S]*?\\*\\//g, "")', "production bundle strips source-only JSDoc");
 
 const stableReleaseChecks = [
@@ -172,9 +172,9 @@ assert(!eventBus.includes("this.channel.postMessage(event);\n        await this.
 
 // List page function signature assertions
 const listPageSource = await read("src/plugins/status/list-page.js");
-assertIncludes(listPageSource, "applyVisibility()", "list page function signature");
+assertIncludes(listPageSource, "applyVisibility(items = null)", "list page function signature");
 assertIncludes(listPageSource, "async filterMovieList(", "list page function signature");
-assertIncludes(listPageSource, "async doFilter()", "list page function signature");
+assertIncludes(listPageSource, "async doFilter(revision =", "list page function signature");
 assertIncludes(javDbHostAdapter, 'querySelector("#magnets-content")', "protected JavDB resource boundary");
 assert(!detailWorkspace.includes('controller.find("#magnets-content")'), "detail workspace must use the JavDB HostAdapter resource boundary");
 assert(!/routeSections|moveToSection|movePanelToSection/.test(detailWorkspace), "detail workspace must not remount host sections");
