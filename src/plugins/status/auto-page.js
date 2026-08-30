@@ -23,19 +23,23 @@ export class AutoPagePlugin extends BasePlugin {
         this.nextUrl = null;
         this.hasMore = false;
         this.isLoading = false;
+        /** @type {any} */ this.listFeatureApi = null;
     }
     getName() {
         return "AutoPagePlugin";
     }
     /** Resolve the list capability used by the waterfall contribution. */
     async getListFeatureApi() {
+        if (this.listFeatureApi) return this.listFeatureApi;
         return this.getRuntimeService("features").getFeatureApi("list");
     }
     async initCss() {
         return "\n            <style>\n                .jhs-scroll {\n                    text-align: center;\n                    padding-top: 20px;\n                    font-size: 14px;\n                }\n                .jhs-scroll.waterfall-loading { color: var(--jhs-text); }\n                .jhs-scroll.waterfall-error { color: var(--jhs-status-filter); cursor: pointer; }\n                .jhs-scroll.waterfall-no-more { color: var(--jhs-status-down); }\n            </style>\n        ";
     }
-    async handle() {
-        const settings = this.getRuntimeService("settings"), scope = await this.getRuntimeService("scope")();
+    /** @param {{scope?: any, listFeatureApi?: any}} [options] */
+    async handle(options = {}) {
+        this.listFeatureApi = options.listFeatureApi ?? this.listFeatureApi;
+        const settings = this.getRuntimeService("settings"), scope = options.scope ?? await this.getRuntimeService("scope")();
         const onSettingsChanged = (/** @type {any} */ event) => {
             const names = /** @type {string[] | undefined} */ (event.detail?.names);
             if (!names?.includes("autoPage")) return;

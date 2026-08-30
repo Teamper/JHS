@@ -7,9 +7,10 @@ import { ListView } from "./list-view.js";
  * strangled out of PluginManager.
  */
 export class ListController {
-    /** @param {{legacyPlugin: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any}, scope: any, hostAdapter: any}} options */
+    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, scope: any, hostAdapter: any}} options */
     constructor(options) {
-        this.legacyPlugin = options.legacyPlugin;
+        this.legacyPlugin = options.legacyPlugin ?? null;
+        this.autoPagePlugin = options.autoPagePlugin ?? null;
         this.scope = options.scope;
         this.hostAdapter = options.hostAdapter;
         this.view = null;
@@ -19,27 +20,34 @@ export class ListController {
     start() {
         this.scope.assertActive();
         if (this.started) return Promise.resolve();
-        const selectors = this.hostAdapter.getListSelectors?.() ?? this.legacyPlugin.getSelector?.();
-        if (!selectors) throw new Error("List feature requires a list selector contract");
-        this.view = new ListView({
-            hostAdapter: this.hostAdapter,
-            selectors,
-            onFilterChange: (filter, options) => this.legacyPlugin.setQuickFilter?.(filter, options),
-            onOpenMovieDetail: (item, options) => this.legacyPlugin.openMovieDetail?.(item, options),
-        });
+        const selectors = this.hostAdapter.getListSelectors?.() ?? this.legacyPlugin?.getSelector?.();
+        if (this.legacyPlugin && !selectors) throw new Error("List feature requires a list selector contract");
+        if (this.legacyPlugin) {
+            this.view = new ListView({
+                hostAdapter: this.hostAdapter,
+                selectors,
+                onFilterChange: (filter, options) => this.legacyPlugin?.setQuickFilter?.(filter, options),
+                onOpenMovieDetail: (item, options) => this.legacyPlugin?.openMovieDetail?.(item, options),
+            });
+        }
         this.started = true;
-        return Promise.resolve(this.legacyPlugin.handle({ scope: this.scope, view: this.view })).catch((error) => {
+        const listFeatureApi = this.getApi();
+        const view = this.view;
+        return Promise.resolve()
+            .then(() => this.legacyPlugin && view ? this.legacyPlugin.handle({ scope: this.scope, view }) : undefined)
+            .then(() => this.autoPagePlugin?.handle?.({ scope: this.scope, listFeatureApi }))
+            .catch((error) => {
             this.dispose();
             throw error;
-        });
+            });
     }
 
     /** Expose the stable list capability surface to other Features. */
     getApi() {
         const legacyPlugin = /** @type {any} */ (this.legacyPlugin);
-        const call = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => legacyPlugin[name]?.(...args);
+        const call = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => legacyPlugin?.[name]?.(...args);
         return Object.freeze({
-            getListSelectors: () => this.hostAdapter.getListSelectors?.() ?? legacyPlugin.getListSelectors?.() ?? legacyPlugin.getSelector?.(),
+            getListSelectors: () => this.hostAdapter.getListSelectors?.() ?? legacyPlugin?.getListSelectors?.() ?? legacyPlugin?.getSelector?.(),
             advanceListGeneration: call("advanceListGeneration"),
             configureHoverPreview: call("configureHoverPreview"),
             replaceHdImg: call("replaceHdImg"),

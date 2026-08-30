@@ -218,7 +218,7 @@ assertIncludes(listPageSource, "async doFilter(revision =", "list page function 
 assertIncludes(listManifestSource, 'id: "list"', "real list feature manifest");
 assertIncludes(listManifestSource, 'contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions"]', "list feature contribution ownership");
 assertIncludes(listManifestSource, 'resolveLegacyPlugin?.("ListPagePlugin")', "list migration adapter resolution");
-assertIncludes(listControllerSource, "legacyPlugin.handle({ scope: this.scope, view: this.view })", "list feature lifecycle handoff");
+assertIncludes(listControllerSource, "this.legacyPlugin.handle({ scope: this.scope, view })", "list feature lifecycle handoff");
 assertIncludes(listControllerSource, "new ListView({", "list view host boundary");
 assertIncludes(listControllerSource, "onFilterChange: (filter, options)", "list view filter callback boundary");
 assertIncludes(listControllerSource, "batchSaveAllVideos: call(\"batchSaveAllVideos\")", "list batch capability boundary");

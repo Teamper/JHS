@@ -14,8 +14,11 @@ export default defineFeature({
         // other list contributions must retain their previous optional behavior.
         if (!runtime.enabledContributions.includes("list.core")) return { dispose: () => {} };
         const legacyPlugin = runtime.resolveLegacyPlugin?.("ListPagePlugin");
+        const autoPagePlugin = runtime.enabledContributions.includes("list.auto-page")
+            ? runtime.resolveLegacyPlugin?.("AutoPagePlugin")
+            : null;
         if (!legacyPlugin) throw new Error("List feature requires the ListPagePlugin compatibility adapter");
-        const controller = new ListController({ legacyPlugin, hostAdapter: deps[PORT.host], scope: runtime.scope });
+        const controller = new ListController({ legacyPlugin, autoPagePlugin, hostAdapter: deps[PORT.host], scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });
