@@ -1,14 +1,15 @@
-import { A, C, D, _, escapeHtml, i, normalizeCarNum } from "../../core/constants.js";
-import { jhsEventBus } from "../../core/event-bus.js";
+import { A, C, D, _, escapeHtml, normalizeCarNum } from "../../core/constants.js";
 import { mapLimit, normalizeHttpUrl, parseNumberSetting, shouldSkipStopped } from "../../core/feature-helpers.js";
-import { BasePlugin } from "../../core/plugin-manager.js";
 import { hasAnyState, normalizeStateFlags } from "../../core/state-model.js";
 import { JHS_Z_INDEX } from "../../core/theme.js";
 import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
 
 const AVATAR_SOURCE_INDEX_KEY = "jhs_img_cdn_index";
 
-function aggregateNewVideoRecords(actresses, carMap, decisions, now = Date.now()) {
+/** @typedef {Record<string, any>} NewVideoRecord */
+
+/** @param {any[]} actresses @param {Map<string, any>} carMap @param {Record<string, any>} decisions @param {number} [now] */
+export function aggregateNewVideoRecords(actresses, carMap, decisions, now = Date.now()) {
     const grouped = new Map;
     for (const actress of actresses) {
         if (!Array.isArray(actress.newVideoList)) continue;
@@ -27,15 +28,69 @@ function aggregateNewVideoRecords(actresses, carMap, decisions, now = Date.now()
     }));
 }
 
-export class NewVideoPlugin extends BasePlugin {
-    constructor() {
-        super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", new Map), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", new Map), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", new Map), i(this, "nvActorCoverRequests", new Map), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", !1), i(this, "nvWorkspaceMounted", !1), i(this, "nvEventUnsubscribe", null), i(this, "taskStatusUnsubscribe", null), i(this, "nvCoverPreview", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0), i(this, "lifecycleScope", null), i(this, "taskApi", null), i(this, "scopeCleanupRegistered", !1);
+export class NewVideoController {
+    /** @param {{document?: Document, window?: any, settings: any, storage: any, legacyStorage: any, dialog: any, actressInfo: any, movie: any, state: any, eventBus?: any, settingPlugin?: any, scope: any}} options */
+    constructor(options) {
+        this.document = options.document ?? globalThis.document;
+        this.window = options.window ?? this.document?.defaultView ?? globalThis.window;
+        this.settings = options.settings;
+        this.storage = options.storage;
+        this.legacyStorage = options.legacyStorage;
+        this.dialog = options.dialog;
+        this.actressInfo = options.actressInfo;
+        this.movie = options.movie;
+        this.state = options.state;
+        this.eventBus = options.eventBus;
+        this.settingPlugin = options.settingPlugin;
+        this.scope = options.scope;
+        this.currentPage = 1;
+        this.pageSize = 30;
+        this.nvCurrentPage = 1;
+        this.nvPageSize = 60;
+        /** @type {NewVideoRecord[]} */ this.nvFlatListCache = [];
+        /** @type {Map<string, NewVideoRecord>} */ this.nvAllItemsMap = new Map;
+        /** @type {any[]} */ this.nvActressesCache = [];
+        /** @type {Map<string, any>} */ this.nvCarMapCache = new Map;
+        this.nvSortBy = "publishTime_desc";
+        /** @type {Set<string>} */ this.nvSelected = new Set;
+        /** @type {Record<string, any>} */ this.nvDecisionsCache = {};
+        /** @type {Map<string, string>} */ this.nvCoverCache = new Map;
+        /** @type {Map<string, Promise<Map<string, any>>>} */ this.nvActorCoverRequests = new Map;
+        this.nvRenderGeneration = 0;
+        this.nvSearchDebounced = null;
+        this.nvInvalidationTimer = null;
+        this.nvWorkspaceReloadPromise = null;
+        this.nvWorkspaceReloadDirty = !1;
+        this.nvWorkspaceMounted = !1;
+        /** @type {"actress" | "list"} */ this._viewMode = "actress";
+        /** @type {NewVideoRecord[]} */ this.nvCurrentPageItems = [];
+        this.nvEventUnsubscribe = null;
+        this.taskStatusUnsubscribe = null;
+        /** @type {any} */ this.nvCoverPreview = null;
+        this.nvJavDbUrl = "";
+        this.nvRuleTime = 8760;
+        /** @type {{name: string, id?: string, recommended?: boolean}[]} */ this.avatarSources = [];
+        this.avatarSourceIndex = 0;
+        this.taskApi = null;
+        this.started = false;
+        this.settingSvg = '<svg class="jhs-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 2a7 7 0 1 1 0 14 7 7 0 0 1 0-14Z"/></svg>';
+        this.actressSvg = '<svg class="jhs-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0H4Z"/></svg>';
+        this.newSvg = '<svg class="jhs-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 7h8M8 11h8M8 15h5"/></svg>';
+        this.refreshSvg = '<svg class="jhs-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0 1 4M20 5v6h-6"/></svg>';
+        this.checkSvg = '<svg class="jhs-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
+        this.deleteSvg = '<svg class="jhs-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"/></svg>';
+        this.editSvg = '<svg class="jhs-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 16-1 4 4-1L19 8l-3-3L5 16Zm9-9 3 3"/></svg>';
     }
-    getName() {
-        return "NewVideoPlugin";
-    }
-    getStartupMode() {
-        return "idle";
+    getJQuery() { return /** @type {any} */ (globalThis).$ ?? this.window?.jQuery; }
+    getShow() { return /** @type {any} */ (globalThis).show ?? {}; }
+    getClog() { return /** @type {any} */ (globalThis).clog ?? {}; }
+    getLoading() { return /** @type {any} */ (globalThis).loading; }
+    getUtils() { return /** @type {any} */ (globalThis).utils ?? {}; }
+    /** @param {string | undefined} [key] @param {any} [fallback] */
+    async getSetting(key, fallback) {
+        const snapshot = this.settings?.snapshot?.() ?? {};
+        if (key === undefined) return Object.keys(snapshot).length ? snapshot : this.legacyStorage.getSetting();
+        return Object.prototype.hasOwnProperty.call(snapshot, key) ? snapshot[key] : this.legacyStorage.getSetting(key, fallback);
     }
     async initCss() {
         return `
@@ -115,35 +170,36 @@ export class NewVideoPlugin extends BasePlugin {
             </style>
         `;
     }
-    async handle({ scope = null, taskApi = undefined } = {}) {
-        const nextScope = scope ?? await this.getRuntimeService("scope")();
-        if (this.lifecycleScope !== nextScope || this.lifecycleScope?.disposed) {
-            this.lifecycleScope = nextScope;
-            this.scopeCleanupRegistered = !1;
-        }
+    /** @param {{taskApi?: any}} [options] */
+    async start({ taskApi = undefined } = {}) {
+        this.scope.assertActive();
+        if (this.started) return;
+        this.started = true;
+        this.lifecycleScope = this.scope;
         if (taskApi !== undefined) this.taskApi = taskApi;
-        if (!this.scopeCleanupRegistered && typeof this.lifecycleScope?.addCleanup === "function") {
-            this.scopeCleanupRegistered = !0;
-            this.lifecycleScope.addCleanup(() => {
+        if (typeof this.scope.addCleanup === "function") {
+            this.scope.addCleanup(() => {
                 this.nvEventUnsubscribe?.();
                 this.nvEventUnsubscribe = null;
                 this.taskStatusUnsubscribe?.();
                 this.taskStatusUnsubscribe = null;
                 this.cleanupNewVideoWorkspace();
+                this.started = false;
             });
         }
         this.initializeLocalState();
-        this.nvEventUnsubscribe || (this.nvEventUnsubscribe = jhsEventBus.on("new-video-changed", (() => this.scheduleWorkspaceReload())));
-        this.taskStatusUnsubscribe || (this.taskStatusUnsubscribe = jhsEventBus.on("task-status-changed", (() => this.isWorkspaceMounted() && this.renderTaskStatuses())));
+        this.nvEventUnsubscribe || (this.nvEventUnsubscribe = this.eventBus?.on?.("new-video-changed", (() => this.scheduleWorkspaceReload())));
+        this.taskStatusUnsubscribe || (this.taskStatusUnsubscribe = this.eventBus?.on?.("task-status-changed", (() => this.isWorkspaceMounted() && this.renderTaskStatuses())));
         await this.showNewVideoCount();
     }
     /** Set the task capability supplied by the owning Discovery Feature. */
+    /** @param {any} taskApi */
     setTaskApi(taskApi) {
         this.taskApi = taskApi ?? null;
     }
     initializeLocalState() {
-        this.avatarSources = this.getRuntimeService("actressInfo").getAvatarSources();
-        const value = parseInt(this.getRuntimeService("storage").getLocal(AVATAR_SOURCE_INDEX_KEY) || "0", 10);
+        this.avatarSources = this.actressInfo.getAvatarSources();
+        const value = parseInt(this.storage.getLocal(AVATAR_SOURCE_INDEX_KEY) || "0", 10);
         this.avatarSourceIndex = Number.isInteger(value) && value >= 0 && value < this.avatarSources.length ? value : 0;
     }
     isWorkspaceMounted() {
@@ -162,25 +218,31 @@ export class NewVideoPlugin extends BasePlugin {
                 this.nvWorkspaceReloadDirty = !1, await this.showNewVideoCount();
                 this.isWorkspaceMounted() && await this.reloadNewVideoWorkspaceData({ preservePage: !0 });
             } while (this.nvWorkspaceReloadDirty);
-        })().catch((error => clog.error("新作品数据刷新失败", error))).finally((() => {
+        })().catch((error => this.getClog().error?.("新作品数据刷新失败", error))).finally((() => {
             this.nvWorkspaceReloadPromise = null;
         })), this.nvWorkspaceReloadPromise;
     }
+    /** @param {any} e @param {Map<string, any>} t */
     getPendingNewVideoCount(e, t) {
-        return Array.isArray(e?.newVideoList) ? new Set(e.newVideoList.map((item => normalizeCarNum("string" == typeof item ? item : item.carNum))).filter((carNum => carNum && !t.has(carNum) && !this.isDecisionHidden(carNum)))).size : 0;
+        return Array.isArray(e?.newVideoList) ? new Set(e.newVideoList.map((/** @param {any} item */ item => normalizeCarNum("string" == typeof item ? item : item.carNum))).filter((/** @param {string | null} carNum */ carNum => carNum && !t.has(carNum) && !this.isDecisionHidden(carNum)))).size : 0;
     }
+    /** @param {string} carNum */
     isDecisionHidden(carNum) {
-        const decision = this.nvDecisionsCache[normalizeCarNum(carNum)];
+        const normalizedCarNum = normalizeCarNum(carNum);
+        const decision = normalizedCarNum ? this.nvDecisionsCache[normalizedCarNum] : null;
         if (!decision) return !1;
         return "ignored" === decision.action || "snoozed" === decision.action && (!decision.until || Date.parse(decision.until) > Date.now());
     }
     async getPendingNewVideoTotal() {
-        const e = await storageManager.getCarMap(), keys = new Set;
-        this.nvDecisionsCache = await this.getRuntimeService("state").getNewVideoDecisions();
-        (await storageManager.getFavoriteActressList()).forEach((actress => Array.isArray(actress.newVideoList) && actress.newVideoList.forEach((item => {
-            const carNum = normalizeCarNum("string" == typeof item ? item : item.carNum);
-            carNum && !e.has(carNum) && !this.isDecisionHidden(carNum) && keys.add(carNum);
-        }))));
+        const e = await this.legacyStorage.getCarMap(), keys = new Set;
+        this.nvDecisionsCache = await this.state.getNewVideoDecisions();
+        (await this.legacyStorage.getFavoriteActressList()).forEach((/** @type {any} */ actress) => {
+            if (!Array.isArray(actress.newVideoList)) return;
+            actress.newVideoList.forEach((/** @type {any} */ item) => {
+                const carNum = normalizeCarNum("string" == typeof item ? item : item.carNum);
+                carNum && !e.has(carNum) && !this.isDecisionHidden(carNum) && keys.add(carNum);
+            });
+        });
         return keys.size;
     }
     async showNewVideoCount() {
@@ -188,13 +250,13 @@ export class NewVideoPlugin extends BasePlugin {
         $("#newVideoCount").text(`${e}`);
     }
     async resetBtnTip() {
-        const storage = this.getRuntimeService("storage"), e = this.taskApi, t = await storageManager.getSetting(), n = e ? storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无" : "任务已禁用", a = t.checkFavoriteActress_IntervalTime, i = e ? storage.getLocal(e.lastCheckNewVideoTimeKey) || "无" : "任务已禁用", s = t.checkNewVideo_intervalTime;
+        const storage = this.storage, e = this.taskApi, t = await this.getSetting(), n = e ? storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无" : "任务已禁用", a = t.checkFavoriteActress_IntervalTime, i = e ? storage.getLocal(e.lastCheckNewVideoTimeKey) || "无" : "任务已禁用", s = t.checkNewVideo_intervalTime;
         $("#checkFavoriteActress").attr("data-tip", `上次完整同步: ${n}; 检测间隔时间: ${a}小时`), $("#checkNewVideo").attr("data-tip", `上次整批检测: ${i}; 检测间隔时间: ${s}小时`);
     }
     async openDialog() {
-        const storage = this.getRuntimeService("storage");
+        const storage = this.storage;
         this.cleanupNewVideoWorkspace(), this._viewMode = "list" === storage.getLocal("jhs_newVideoViewMode") ? "list" : "actress", this.currentPage = 1, this.nvCurrentPage = 1, this.nvSelected = new Set, this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map, this.nvRenderGeneration++;
-        const e = this.taskApi, t = await storageManager.getSetting(), n = e ? storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无" : "任务已禁用", a = t.checkFavoriteActress_IntervalTime, i = e ? storage.getLocal(e.lastCheckNewVideoTimeKey) || "无" : "任务已禁用", s = t.checkNewVideo_intervalTime;
+        const e = this.taskApi, t = await this.getSetting(), n = e ? storage.getLocal(e.lastCheckFavoriteActressTimeKey) || "无" : "任务已禁用", a = t.checkFavoriteActress_IntervalTime, i = e ? storage.getLocal(e.lastCheckNewVideoTimeKey) || "无" : "任务已禁用", s = t.checkNewVideo_intervalTime;
         let o = `
             <div class="newVideoToolBox jhs-ui">
                 <div class="jhs-new-video-toolbar" role="toolbar" aria-label="新作品工作区工具">
@@ -227,15 +289,15 @@ export class NewVideoPlugin extends BasePlugin {
                 <div id="new-video-list-footer"></div>
                 <div id="actress-pagination"></div>
             </div>`;
-        this.getRuntimeService("dialog").open({
+        this.dialog.open({
             type: 1,
             title: '<span class="jhs-dialog-title" data-tip="数据来源: 女优页面首页,含磁链分类">新作品检测</span>',
             content: o,
             scrollbar: !1,
-            area: utils.getDialogArea("workspace"),
+            area: this.getUtils().getDialogArea("workspace"),
             anim: -1,
-            success: async (e, t) => {
-                this.nvWorkspaceMounted = !0, JhsSelect.enhance(e), this.bindClick(), this.applyViewMode(), this.renderTaskStatuses(), await this.reloadNewVideoWorkspaceData(), utils.setupEscClose(t);
+            success: async (/** @type {Element} */ e, /** @type {any} */ t) => {
+                this.nvWorkspaceMounted = !0, JhsSelect.enhance(e), this.bindClick(), this.applyViewMode(), this.renderTaskStatuses(), await this.reloadNewVideoWorkspaceData(), this.getUtils().setupEscClose(t);
             },
             end: () => this.cleanupNewVideoWorkspace()
         });
@@ -250,18 +312,18 @@ export class NewVideoPlugin extends BasePlugin {
         taskPlugin || $("#checkFavoriteActress,#checkNewVideo").prop("disabled", !0).attr("title", "后台任务功能已禁用");
         $("#reLoad").on("click", (() => {
             void this.reloadNewVideoWorkspaceData(), $("#checkNewVideoMsg").text("");
-        })), $("#new-video-list-container").on("click", ".nv-card__link", (async e => {
+        })), $("#new-video-list-container").on("click", ".nv-card__link", (async (/** @type {any} */ e) => {
             const t = $(e.currentTarget).closest(".nv-card").attr("data-car");
             if (!t) return;
             try {
-                const enabled = await storageManager.getSetting("autoRemoveNewVideoMarkAfterBrowse", C);
+                const enabled = await this.getSetting("autoRemoveNewVideoMarkAfterBrowse", C);
                 if (enabled !== _) return;
-                await this.getRuntimeService("state").removeFromNewVideoList([ t ], "browse");
+                await this.state.removeFromNewVideoList([ t ], "browse");
             } catch (n) {
-                clog.error("移除新作品标记失败:", n);
+                this.getClog().error?.("移除新作品标记失败:", n);
             }
-        })), $("#toSetting").on("click", (e => {
-            this.getOptionalDependency("SettingPlugin")?.openSettingDialog?.("task-panel", (() => {
+        })), $("#toSetting").on("click", ((/** @type {any} */ e) => {
+            this.settingPlugin?.openSettingDialog?.("task-panel", (() => {
                 $("#setting-checkFavoriteActress").css({
                     border: "1px solid var(--jhs-status-filter)"
                 }), $("#setting-checkNewVideo").css({
@@ -269,56 +331,58 @@ export class NewVideoPlugin extends BasePlugin {
                 });
             }));
         }));
-        $("#checkFavoriteActress").on("click", (event => {
+        $("#checkFavoriteActress").on("click", ((/** @type {any} */ event) => {
             void this.runManualTask($(event.currentTarget), "同步中…", (async () => {
-                if (!$('a[href*="/users/profile"]').length) return void show.error("未登录 JavDB，同步失败");
+                if (!$('a[href*="/users/profile"]').length) return void this.getShow().error?.("未登录 JavDB，同步失败");
                 await taskPlugin?.checkFavoriteActress?.(!0);
             }));
-        })), $("#checkNewVideo").on("click", (event => {
+        })), $("#checkNewVideo").on("click", ((/** @type {any} */ event) => {
             void this.runManualTask($(event.currentTarget), "检测中…", (() => taskPlugin?.checkNewVideo?.(!0)));
-        })), $("#paramActressType").on("change", (e => {
+        })), $("#paramActressType").on("change", ((/** @type {any} */ e) => {
             this.currentPage = 1, this.nvRenderGeneration++, "actress" === this._viewMode && this.renderActressCards();
-        })), $("#paramSortBy").on("change", (e => {
+        })), $("#paramSortBy").on("change", ((/** @type {any} */ e) => {
             this.currentPage = 1, this.nvRenderGeneration++, "actress" === this._viewMode && this.renderActressCards();
-        })), $("#nvSortBy").on("change", (e => {
+        })), $("#nvSortBy").on("change", ((/** @type {any} */ e) => {
             this.nvSortBy = $("#nvSortBy").val(), this.nvCurrentPage = 1, this.nvRenderGeneration++, this.renderNewVideoList();
-        })), $("#nvCategoryFilter,#nvStateFilter,#nvDecisionFilter").on("change", (e => {
+        })), $("#nvCategoryFilter,#nvStateFilter,#nvDecisionFilter").on("change", ((/** @type {any} */ e) => {
             this.nvCurrentPage = 1, this.nvRenderGeneration++, "list" === this._viewMode && this.renderNewVideoList();
-        })), this.nvSearchDebounced = utils.debounce((() => {
+        })), this.nvSearchDebounced = this.getUtils().debounce((() => {
             this.nvCurrentPage = 1, this.nvRenderGeneration++, "list" === this._viewMode && this.renderNewVideoList();
-        }), 200), $("#nvSearch").on("input", this.nvSearchDebounced), $(".jhs-new-video-view").on("click", '[role="tab"]', (event => {
+        }), 200), $("#nvSearch").on("input", this.nvSearchDebounced), $(".jhs-new-video-view").on("click", '[role="tab"]', ((/** @type {any} */ event) => {
             this.setViewMode($(event.currentTarget).data("view"));
-        })).on("keydown", '[role="tab"]', (event => {
+        })).on("keydown", '[role="tab"]', ((/** @type {any} */ event) => {
             if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();
             const tabs = $(event.delegateTarget).find('[role="tab"]'), index = tabs.index(event.currentTarget), next = "Home" === event.key ? 0 : "End" === event.key ? tabs.length - 1 : "ArrowRight" === event.key ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
             tabs.eq(next).trigger("click").trigger("focus");
         })), this.bindBatchActions();
     }
+    /** @param {any} button @param {string} busyLabel @param {() => Promise<any>} runner */
     async runManualTask(button, busyLabel, runner) {
         if (button.attr("aria-busy") === "true") return;
         const task = this.taskApi;
-        if (!task) return void show.info("后台任务功能已禁用");
+        if (!task) return void this.getShow().info?.("后台任务功能已禁用");
         const label = button.find("span").last(), previous = label.text();
         button.attr("aria-busy", "true").prop("disabled", !0), label.text(busyLabel);
         try {
-            await navigator.locks.request(task.singleTaskKey, { ifAvailable: !0 }, (async lock => {
-                if (!lock) return void show.error("后台任务正在运行，请稍后再试");
+            await this.window.navigator?.locks?.request?.(task.singleTaskKey, { ifAvailable: !0 }, (async (/** @type {any} */ lock) => {
+                if (!lock) return void this.getShow().error?.("后台任务正在运行，请稍后再试");
                 await runner();
             }));
         } catch (error) {
-            clog.error("手动任务执行失败", error), task.isNetworkBlocked(error) && show.error(error.message || "任务执行失败");
+            this.getClog().error?.("手动任务执行失败", error), task.isNetworkBlocked(error) && this.getShow().error?.(error instanceof Error ? error.message : "任务执行失败");
         } finally {
             button.removeAttr("aria-busy").prop("disabled", !1), label.text(previous), this.renderTaskStatuses();
         }
     }
+    /** @param {string} mode */
     setViewMode(mode) {
         if (![ "actress", "list" ].includes(mode) || mode === this._viewMode) return;
-        this._viewMode = mode, this.getRuntimeService("storage").setLocal("jhs_newVideoViewMode", mode), "list" === mode ? this.nvCurrentPage = 1 : this.currentPage = 1, this.nvRenderGeneration++, this.applyViewMode(), this.renderCurrentView();
+        this._viewMode = /** @type {"actress" | "list"} */ (mode), this.storage.setLocal("jhs_newVideoViewMode", mode), "list" === mode ? this.nvCurrentPage = 1 : this.currentPage = 1, this.nvRenderGeneration++, this.applyViewMode(), this.renderCurrentView();
     }
     applyViewMode() {
         const list = "list" === this._viewMode;
-        $("#actress-card-container").toggle(!list), $("#actress-pagination").toggle(!list), $("#new-video-list-container").toggle(list), $("#new-video-list-footer").toggle(list), JhsSelect.setVisible("#paramSortBy", !list), JhsSelect.setVisible("#nvSortBy", list), JhsSelect.setVisible("#paramActressType", !list), JhsSelect.setVisible("#nvCategoryFilter", list), JhsSelect.setVisible("#nvStateFilter", list), JhsSelect.setVisible("#nvDecisionFilter", list), $("#nvSearch").toggleClass("jhs-is-hidden", !list), $(".jhs-new-video-view [role='tab']").each(((index, tab) => {
+        $("#actress-card-container").toggle(!list), $("#actress-pagination").toggle(!list), $("#new-video-list-container").toggle(list), $("#new-video-list-footer").toggle(list), JhsSelect.setVisible("#paramSortBy", !list), JhsSelect.setVisible("#nvSortBy", list), JhsSelect.setVisible("#paramActressType", !list), JhsSelect.setVisible("#nvCategoryFilter", list), JhsSelect.setVisible("#nvStateFilter", list), JhsSelect.setVisible("#nvDecisionFilter", list), $("#nvSearch").toggleClass("jhs-is-hidden", !list), $(".jhs-new-video-view [role='tab']").each(((/** @type {number} */ index, /** @type {any} */ tab) => {
             const active = $(tab).data("view") === this._viewMode;
             $(tab).attr({ "aria-selected": String(active), tabindex: active ? "0" : "-1" }).toggleClass("active", active);
         }));
@@ -330,13 +394,14 @@ export class NewVideoPlugin extends BasePlugin {
         this.currentPage = 1;
         return this.reloadNewVideoWorkspaceData();
     }
+    /** @param {{preservePage?: boolean}} [options] */
     async reloadNewVideoWorkspaceData({ preservePage = !1 } = {}) {
         if (!this.isWorkspaceMounted()) return;
         const generation = ++this.nvRenderGeneration, container = "list" === this._viewMode ? $("#new-video-list-container") : $("#actress-card-container");
         renderStateView(container, { type: "loading", title: "加载中" });
         try {
-            const settings = await storageManager.getSetting();
-            const [ actresses, carMap, decisions, ruleTime ] = await Promise.all([ storageManager.getFavoriteActressList(), storageManager.getCarMap(), this.getRuntimeService("state").getNewVideoDecisions(), storageManager.getSetting("checkNewVideo_ruleTime", 8760) ]), javDbUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", settings);
+            const settings = await this.getSetting();
+            const [ actresses, carMap, decisions, ruleTime ] = await Promise.all([ this.legacyStorage.getFavoriteActressList(), this.legacyStorage.getCarMap(), this.state.getNewVideoDecisions(), this.getSetting("checkNewVideo_ruleTime", 8760) ]), javDbUrl = this.movie.externalSiteOrigin("javDbBtn", settings);
             if (!this.isWorkspaceMounted() || generation !== this.nvRenderGeneration) return;
             this.nvActressesCache = actresses, this.nvCarMapCache = carMap, this.nvDecisionsCache = decisions, this.nvJavDbUrl = javDbUrl, this.nvRuleTime = parseNumberSetting(ruleTime, 8760, { min: 0 });
             const items = aggregateNewVideoRecords(actresses, carMap, decisions), nextMap = new Map;
@@ -345,18 +410,18 @@ export class NewVideoPlugin extends BasePlugin {
             preservePage || (this.currentPage = 1, this.nvCurrentPage = 1), await this.renderCurrentView(), this.renderTaskStatuses();
         } catch (error) {
             if (generation !== this.nvRenderGeneration || !this.isWorkspaceMounted()) return;
-            clog.error("加载新作品工作区失败", error), renderStateView(container, { type: "error", title: "加载失败", description: error.message || String(error), actionLabel: "重试", onAction: () => this.reloadNewVideoWorkspaceData({ preservePage: !0 }) });
+            this.getClog().error?.("加载新作品工作区失败", error), renderStateView(container, { type: "error", title: "加载失败", description: error instanceof Error ? error.message : String(error), actionLabel: "重试", onAction: () => this.reloadNewVideoWorkspaceData({ preservePage: !0 }) });
         }
     }
     renderTaskStatuses() {
         const container = $("#jhs-task-status-list");
         if (!container.length) return;
-        const taskPlugin = this.taskApi, names = { favoriteActress: "演员同步", newVideo: "新作品", blacklist: "黑名单" }, labels = { idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }, format = value => value ? new Date(value).toLocaleString() : "无";
+        const taskPlugin = this.taskApi, names = /** @type {Record<string, string>} */ ({ favoriteActress: "演员同步", newVideo: "新作品", blacklist: "黑名单" }), labels = /** @type {Record<string, string>} */ ({ idle: "正常", running: "运行中", pending: "等待下一次任务检查", due: "待运行" }), format = (/** @type {any} */ value) => value ? new Date(value).toLocaleString() : "无";
         if (!taskPlugin) return void container.empty().text("后台任务功能已禁用");
-        container.empty(), [ "favoriteActress", "newVideo", "blacklist" ].forEach((name => {
+        container.empty(), [ "favoriteActress", "newVideo", "blacklist" ].forEach((/** @type {string} */ name) => {
             const snapshot = taskPlugin.getTaskStatusSnapshot(name), item = $('<div class="jhs-task-status"></div>');
             item.append($('<span class="jhs-task-status__name"></span>').text(`${names[name]}：${labels[snapshot.state]}`)), item.append($('<span class="jhs-task-status__meta"></span>').text(`上次完成 ${format(snapshot.completedAt)}；下次检查 ${snapshot.nextAt ? format(snapshot.nextAt) : "立即"}`)), container.append(item);
-        }));
+        });
     }
     async renderActressCards() {
         const e = $("#actress-card-container");
@@ -365,16 +430,16 @@ export class NewVideoPlugin extends BasePlugin {
         const n = $("#paramActressType").val();
         "all" !== n && (t = t.filter((e => e.actressType === n)));
         const _carSet = this.nvCarMapCache;
-        const _newVideoCount = e => this.getPendingNewVideoCount(e, _carSet);
+        const _newVideoCount = (/** @type {any} */ e) => this.getPendingNewVideoCount(e, _carSet);
         const sortBy = $("#paramSortBy").val();
-        const sortMap = {
+        const sortMap = /** @type {Record<string, any>} */ ({
             "lastPublishTime_desc": [{ key: "lastPublishTime", order: "desc" }],
             "lastPublishTime_asc":  [{ key: "lastPublishTime", order: "asc" }],
             "lastCheckTime_desc":   [{ key: "lastCheckTime", order: "desc" }],
             "lastCheckTime_asc":    [{ key: "lastCheckTime", order: "asc" }],
             "newVideoCount_desc":   [{ key: _newVideoCount, order: "desc" }],
             "newVideoCount_asc":    [{ key: _newVideoCount, order: "asc" }]
-        };
+        });
         const defaultSort = [{
             key: _newVideoCount,
             order: "desc"
@@ -382,7 +447,7 @@ export class NewVideoPlugin extends BasePlugin {
             key: "lastPublishTime",
             order: "desc"
         }];
-        const sortedActresses = utils.genericSort(t, sortMap[sortBy] || defaultSort);
+        const sortedActresses = /** @type {any[]} */ (this.getUtils().genericSort(t, sortMap[sortBy] || defaultSort));
         const totalCount = sortedActresses.length, totalPages = Math.ceil(totalCount / this.pageSize), pageStart = (this.currentPage - 1) * this.pageSize, pageEnd = pageStart + this.pageSize;
         totalPages > 0 && this.currentPage > totalPages && (this.currentPage = totalPages);
         const safePageStart = (this.currentPage - 1) * this.pageSize, pageActresses = sortedActresses.slice(safePageStart, safePageStart + this.pageSize), javDbUrl = this.nvJavDbUrl, taskPlugin = this.taskApi, ruleTime = this.nvRuleTime;
@@ -394,7 +459,7 @@ export class NewVideoPlugin extends BasePlugin {
             const allNames = Array.isArray(actress.allName) ? actress.allName.join("，") : "";
             const name = String(actress.name || ""), remark = String(actress.remark || ""), starId = String(actress.starId || "");
             const newVideoCount = this.getPendingNewVideoCount(actress, _carSet), latestPublishTime = actress.lastPublishTime || "";
-            const profileUrl = normalizeHttpUrl(`/actors/${encodeURIComponent(starId)}?t=d`, javDbUrl), avatarUrl = normalizeHttpUrl(actress.avatar, javDbUrl) || this.getRuntimeService("actressInfo").placeholderUrl("javdb");
+            const profileUrl = normalizeHttpUrl(`/actors/${encodeURIComponent(starId)}?t=d`, javDbUrl), avatarUrl = normalizeHttpUrl(actress.avatar, javDbUrl) || this.actressInfo.placeholderUrl("javdb");
             const isPaused = shouldSkipStopped(latestPublishTime, ruleTime);
             let typeLabel = "未知", typeClass = "is-unknown";
             actress.actressType === A ? (typeLabel = "无码", typeClass = "is-uncensored") : actress.actressType === D && (typeLabel = "有码", typeClass = "is-censored");
@@ -408,31 +473,31 @@ export class NewVideoPlugin extends BasePlugin {
             actions.append(check, remove, $('<details class="actress-card__menu"><summary class="jhs-btn jhs-btn--icon jhs-btn--ghost" aria-label="更多操作" title="更多操作">•••</summary><div class="actress-card__menu-popover" role="menu"></div></details>').find(".actress-card__menu-popover").append(edit).end());
             return card.append(badges, profile, meta, $("<p class=\"actress-card__note\"></p>").attr("title", noteText).text(noteText), actions)[0];
         }));
-        e.empty().append(cards), $(".btn-delete-actress").off("click").on("click", (e => {
+        e.empty().append(cards), $(".btn-delete-actress").off("click").on("click", (/** @type {any} */ e) => {
             e.preventDefault();
             const t = $(e.currentTarget).attr("data-starId"), n = sortedActresses.find((e => e.starId === t));
-            utils.q(e, `是否取消收藏 ${n.name}?`, (async () => {
-                const baseUrl = this.getRuntimeService("movie").externalSiteOrigin("javDbBtn", await storageManager.getSetting()), csrfToken = document.querySelector("meta[name=csrf-token]").content;
-                const result = await this.getRuntimeService("actressInfo").uncollect("javdb", { actorId: t, baseUrl, csrfToken }, { scope: this.lifecycleScope ?? await this.getRuntimeService("scope")() });
-                result.success ? (await storageManager.removeFavoriteActress(t), await jhsEventBus.emit("new-video-changed", { reason: "favorite-actress-removed" })) : (show.error("移除失败"),
-                clog.error("移除失败,返回值:", result));
+            this.getUtils().q(e, `是否取消收藏 ${n.name}?`, (async () => {
+                const baseUrl = this.movie.externalSiteOrigin("javDbBtn", await this.getSetting()), csrfToken = this.document.querySelector("meta[name=csrf-token]")?.getAttribute("content") || "";
+                const result = await this.actressInfo.uncollect("javdb", { actorId: t, baseUrl, csrfToken }, { scope: this.lifecycleScope });
+                result.success ? (await this.legacyStorage.removeFavoriteActress(t), await this.eventBus?.emit?.("new-video-changed", { reason: "favorite-actress-removed" })) : (this.getShow().error?.("移除失败"),
+                this.getClog().error?.("移除失败,返回值:", result));
             }));
-        })), $(".btn-edit-actress").off("click").on("click", (e => {
+        }), $(".btn-edit-actress").off("click").on("click", (/** @type {any} */ e) => {
             e.preventDefault();
             const t = $(e.currentTarget).attr("data-starId"), n = sortedActresses.find((e => e.starId === t));
-            n ? this.editActress(n) : show.error(`未找到 starId 为 ${t} 的女优记录。`);
-        })), $(".btn-check-actress").off("click").on("click", (e => {
+            n ? this.editActress(n) : this.getShow().error?.(`未找到 starId 为 ${t} 的女优记录。`);
+        }), $(".btn-check-actress").off("click").on("click", (/** @type {any} */ e) => {
             e.preventDefault();
             const button = $(e.currentTarget), starId = button.attr("data-starId"), actress = sortedActresses.find((item => item.starId === starId));
             void this.runManualTask(button, "检测中…", (() => taskPlugin?.checkOneNewVideo?.(actress)));
-        })), $(".actress-card__menu").on("keydown", (event => {
+        }), $(".actress-card__menu").on("keydown", (/** @type {any} */ event) => {
             if ("Escape" !== event.key) return;
             event.preventDefault();
             const details = $(event.currentTarget);
             details.prop("open", !1).find("summary").trigger("focus");
-        })).on("click", "[role='menuitem']", (event => {
+        }).on("click", "[role='menuitem']", (/** @type {any} */ event) => {
             $(event.currentTarget).closest("details").prop("open", !1);
-        })), this.renderPagination(totalCount, totalPages);
+        }), this.renderPagination(totalCount, totalPages);
     }
     async getNewVideoFlatList() {
         const category = $("#nvCategoryFilter").val() || "all", stateFilter = $("#nvStateFilter").val() || "pending", decisionFilter = $("#nvDecisionFilter").val() || "pending", query = String($("#nvSearch").val() || "").trim().toUpperCase();
@@ -444,38 +509,46 @@ export class NewVideoPlugin extends BasePlugin {
             return categoryMatch && stateMatch && decisionMatch && searchMatch;
         })).sort(((left, right) => (right.publishTime || "").localeCompare(left.publishTime || "")));
     }
+    /** @param {string} starId @param {Map<string, Promise<Map<string, any>>>} requestMap */
     getActorCoverRequest(starId, requestMap) {
         const existing = requestMap.get(starId);
         if (existing) return existing;
-        const request = Promise.resolve(this.lifecycleScope ?? this.getRuntimeService("scope")()).then((scope => this.getRuntimeService("actressInfo").movies("javdb", { actorId: starId, baseUrl: this.nvJavDbUrl }, { scope }))).then((movies => {
+        const request = Promise.resolve(this.lifecycleScope).then((scope => this.actressInfo.movies("javdb", { actorId: starId, baseUrl: this.nvJavDbUrl }, { scope }))).then((/** @type {any[]} */ movies) => {
             const covers = new Map;
-            movies.forEach((movie => movie.carNum && movie.coverUrl && covers.set(normalizeCarNum(movie.carNum), { coverUrl: movie.coverUrl, title: movie.title })));
+            movies.forEach((/** @type {any} */ movie) => {
+                const carNum = normalizeCarNum(movie.carNum);
+                carNum && movie.coverUrl && covers.set(carNum, { coverUrl: movie.coverUrl, title: movie.title });
+            });
             return covers;
-        })).finally((() => {
+        }).finally((() => {
             requestMap.get(starId) === request && requestMap.delete(starId);
         }));
         return requestMap.set(starId, request), request;
     }
+    /** @param {NewVideoRecord[]} items @param {number} [generation] */
     async loadCoverForItems(items, generation = this.nvRenderGeneration) {
         return this.hydrateVisibleCovers(items, generation);
     }
+    /** @param {NewVideoRecord[]} items @param {number} generation */
     async hydrateVisibleCovers(items, generation) {
-        const coverCache = this.nvCoverCache, requestMap = this.nvActorCoverRequests, starIds = [ ...new Set(items.filter((item => !item.coverUrl && !coverCache.has(normalizeCarNum(item.carNum)) && item.starId)).map((item => item.starId))) ];
-        await mapLimit(starIds, 3, (async starId => {
+        const coverCache = this.nvCoverCache, requestMap = this.nvActorCoverRequests, starIds = [ ...new Set(items.filter((/** @type {NewVideoRecord} */ item) => !item.coverUrl && !coverCache.has(normalizeCarNum(item.carNum) || "") && item.starId).map((/** @type {NewVideoRecord} */ item) => item.starId)) ];
+        await mapLimit(starIds, 3, (async (/** @type {string} */ starId) => {
             try {
                 const covers = await this.getActorCoverRequest(starId, requestMap);
                 if (generation !== this.nvRenderGeneration || coverCache !== this.nvCoverCache || !this.isWorkspaceMounted()) return;
-                covers.forEach(((value, carNum) => {
-                    coverCache.set(normalizeCarNum(carNum), value.coverUrl);
-                    const card = $(".nv-card").filter(((_, element) => normalizeCarNum($(element).attr("data-car")) === normalizeCarNum(carNum)));
+                covers.forEach(((/** @type {any} */ value, /** @type {string} */ carNum) => {
+                    const normalizedCarNum = normalizeCarNum(carNum);
+                    if (!normalizedCarNum) return;
+                    coverCache.set(normalizedCarNum, value.coverUrl);
+                    const card = $(".nv-card").filter(((/** @type {number} */ _, /** @type {any} */ element) => normalizeCarNum($(element).attr("data-car")) === normalizedCarNum));
                     if (!card.length) return;
-                    const image = $('<img class="nv-cover-img" loading="lazy">').attr({ src: value.coverUrl, "data-full": value.coverUrl }).on("error", (function() {
+                    const image = $('<img class="nv-cover-img" loading="lazy">').attr({ src: value.coverUrl, "data-full": value.coverUrl }).on("error", (/** @this {any} */ function() {
                         $(this).addClass("jhs-is-hidden").siblings(".nv-card__empty").removeClass("jhs-is-hidden");
                     }));
                     card.find(".nv-placeholder").replaceWith(image), card.find(".nv-card__empty").addClass("jhs-is-hidden"), value.title && card.attr("title", value.title);
                 }));
             } catch (error) {
-                clog.warn(`获取演员封面失败: ${starId}`, error);
+                this.getClog().warn?.(`获取演员封面失败: ${starId}`, error);
             }
         }));
     }
@@ -498,46 +571,74 @@ export class NewVideoPlugin extends BasePlugin {
         }
         this.nvRenderPage(generation), this.renderBatchBar();
     }
+    /** @returns {NewVideoRecord[]} */
     selectedItems() {
-        return [ ...this.nvSelected ].map((carNum => this.nvAllItemsMap.get(normalizeCarNum(carNum)))).filter(Boolean);
+        return /** @type {NewVideoRecord[]} */ ([ ...this.nvSelected ].map((/** @type {string} */ carNum) => {
+            const normalizedCarNum = normalizeCarNum(carNum);
+            return normalizedCarNum ? this.nvAllItemsMap.get(normalizedCarNum) : undefined;
+        }).filter(Boolean));
     }
+    /** @param {any} result */
     applyProcessedSelection(result) {
-        (result?.changed || []).map(normalizeCarNum).filter(Boolean).forEach((carNum => this.nvSelected.delete(carNum))), this.renderBatchBar();
+        (result?.changed || []).forEach((/** @type {any} */ carNum) => {
+            const normalizedCarNum = normalizeCarNum(carNum);
+            normalizedCarNum && this.nvSelected.delete(normalizedCarNum);
+        }), this.renderBatchBar();
     }
+    /** @param {(items: NewVideoRecord[]) => Promise<any>} mutate @param {string} successLabel */
     async runBatchMutation(mutate, successLabel) {
         const items = this.selectedItems();
-        if (!items.length) return void show.info("请先选择作品");
+        if (!items.length) return void this.getShow().info?.("请先选择作品");
         try {
             const result = await mutate(items);
-            this.applyProcessedSelection(result), result?.changed?.length ? show.ok(`${successLabel} ${result.changed.length} 个番号`) : show.info("没有需要更新的项目");
+            this.applyProcessedSelection(result), result?.changed?.length ? this.getShow().ok?.(`${successLabel} ${result.changed.length} 个番号`) : this.getShow().info?.("没有需要更新的项目");
         } catch (error) {
-            clog.error("批量操作失败", error), show.error(`批量操作失败: ${error.message || error}`);
+            this.getClog().error?.("批量操作失败", error), this.getShow().error?.(`批量操作失败: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
     bindBatchActions() {
         const footer = $("#new-video-list-footer");
-        footer.off(".jhsNvBatch").on("click.jhsNvBatch", "#nvSelectPage", (() => {
-            (this.nvCurrentPageItems || []).forEach((item => this.nvSelected.add(normalizeCarNum(item.carNum)))), $("#new-video-list-container .nv-select").prop("checked", !0), this.renderBatchBar();
-        })).on("click.jhsNvBatch", "#nvClearSelection", (() => {
-            this.nvSelected.clear(), $("#new-video-list-container .nv-select").prop("checked", !1), this.renderBatchBar();
-        })).on("click.jhsNvBatch", "#batchMarkFavorite,#batchMarkWatched,#batchMarkDownloaded", (event => {
-            const flag = { batchMarkFavorite: "favorite", batchMarkWatched: "watched", batchMarkDownloaded: "downloaded" }[event.currentTarget.id];
-            void this.runBatchMutation((items => this.getRuntimeService("state").patch(items.map((item => item.carNum)), { [flag]: !0 }, { type: "new-video-batch-state", records: items.map((item => ({ carNum: item.carNum, url: item.url || `/search?q=${encodeURIComponent(item.carNum)}`, names: item.actressName, publishTime: item.publishTime }))) })), "已处理");
-        })).on("click.jhsNvBatch", "#batchIgnore", (() => void this.runBatchMutation((items => this.getRuntimeService("state").setNewVideoDecision(items.map((item => item.carNum)), "ignored")), "已忽略"))).on("click.jhsNvBatch", "#batchSnooze", (() => void this.runBatchMutation((items => this.getRuntimeService("state").setNewVideoDecision(items.map((item => item.carNum)), "snoozed", new Date(Date.now() + 7 * 864e5).toISOString())), "已暂缓"))).on("click.jhsNvBatch", "#batchRestore", (() => void this.runBatchMutation((items => this.getRuntimeService("state").setNewVideoDecision(items.map((item => item.carNum)), null)), "已恢复"))).on("click.jhsNvBatch", "#batchRemoveFromNewVideo", (event => {
+        footer.off(".jhsNvBatch");
+        footer.on("click.jhsNvBatch", "#nvSelectPage", () => {
+            (this.nvCurrentPageItems || []).forEach((/** @type {NewVideoRecord} */ item) => {
+                const carNum = normalizeCarNum(item.carNum);
+                carNum && this.nvSelected.add(carNum);
+            });
+            $("#new-video-list-container .nv-select").prop("checked", !0);
+            this.renderBatchBar();
+        });
+        footer.on("click.jhsNvBatch", "#nvClearSelection", () => {
+            this.nvSelected.clear();
+            $("#new-video-list-container .nv-select").prop("checked", !1);
+            this.renderBatchBar();
+        });
+        footer.on("click.jhsNvBatch", "#batchMarkFavorite,#batchMarkWatched,#batchMarkDownloaded", (/** @type {any} */ event) => {
+            const flag = /** @type {Record<string, string>} */ ({ batchMarkFavorite: "favorite", batchMarkWatched: "watched", batchMarkDownloaded: "downloaded" })[event.currentTarget.id];
+            void this.runBatchMutation((/** @param {NewVideoRecord[]} items */ items) => this.state.patch(items.map((/** @type {NewVideoRecord} */ item) => item.carNum), { [flag]: !0 }, { type: "new-video-batch-state", records: items.map((/** @type {NewVideoRecord} */ item) => ({ carNum: item.carNum, url: item.url || `/search?q=${encodeURIComponent(item.carNum)}`, names: item.actressName, publishTime: item.publishTime })) }), "已处理");
+        });
+        footer.on("click.jhsNvBatch", "#batchIgnore", () => void this.runBatchMutation((/** @param {NewVideoRecord[]} items */ items) => this.state.setNewVideoDecision(items.map((/** @type {NewVideoRecord} */ item) => item.carNum), "ignored"), "已忽略"));
+        footer.on("click.jhsNvBatch", "#batchSnooze", () => void this.runBatchMutation((/** @param {NewVideoRecord[]} items */ items) => this.state.setNewVideoDecision(items.map((/** @type {NewVideoRecord} */ item) => item.carNum), "snoozed", new Date(Date.now() + 7 * 864e5).toISOString()), "已暂缓"));
+        footer.on("click.jhsNvBatch", "#batchRestore", () => void this.runBatchMutation((/** @param {NewVideoRecord[]} items */ items) => this.state.setNewVideoDecision(items.map((/** @type {NewVideoRecord} */ item) => item.carNum), null), "已恢复"));
+        footer.on("click.jhsNvBatch", "#batchRemoveFromNewVideo", (/** @type {any} */ event) => {
             const items = this.selectedItems();
-            items.length && utils.q(event, `确认将 ${items.length} 个作品从新作列表移除？<br>不会删除作品状态记录。`, (() => void this.runBatchMutation((selected => this.getRuntimeService("state").removeFromNewVideoList(selected.map((item => item.carNum)), "manual")), "已移除")));
-        }));
+            if (!items.length) return;
+            this.getUtils().q(event, `确认将 ${items.length} 个作品从新作列表移除？<br>不会删除作品状态记录。`, () => void this.runBatchMutation((/** @param {NewVideoRecord[]} selected */ selected) => this.state.removeFromNewVideoList(selected.map((/** @type {NewVideoRecord} */ item) => item.carNum), "manual"), "已移除"));
+        });
     }
     renderBatchBar() {
         const footer = $("#new-video-list-footer");
         if (!footer.length) return;
-        const actresses = new Set(this.nvFlatListCache.flatMap((item => item.actresses || [ item.actressName ])).filter(Boolean)), selected = this.nvSelected.size, visibleSelected = this.nvFlatListCache.filter((item => this.nvSelected.has(normalizeCarNum(item.carNum)))).length;
+        const actresses = new Set(this.nvFlatListCache.flatMap((/** @type {NewVideoRecord} */ item) => item.actresses || [ item.actressName ]).filter(Boolean)), selected = this.nvSelected.size, visibleSelected = this.nvFlatListCache.filter((/** @type {NewVideoRecord} */ item) => {
+            const carNum = normalizeCarNum(item.carNum);
+            return !!carNum && this.nvSelected.has(carNum);
+        }).length;
         if (!selected) return void footer.html(`<div class="jhs-new-video-batch"><span>共 <b>${this.nvFlatListCache.length}</b> 个番号，涉及 <b>${actresses.size}</b> 位演员</span><button type="button" class="jhs-btn jhs-btn--secondary" id="nvSelectPage">全选当前页</button></div>`);
         footer.html(`<div class="jhs-new-video-batch"><span>已选择 <b>${selected}</b> 项${visibleSelected !== selected ? `，当前结果中 ${visibleSelected} 项` : ""}</span><div class="jhs-new-video-batch__actions"><button type="button" class="jhs-btn jhs-btn--secondary" id="batchMarkFavorite">收藏</button><button type="button" class="jhs-btn jhs-btn--secondary" id="batchMarkWatched">已看</button><button type="button" class="jhs-btn jhs-btn--secondary" id="batchMarkDownloaded">已下载</button><details class="jhs-new-video-batch__more"><summary class="jhs-btn jhs-btn--ghost">更多 ▾</summary><div class="jhs-popover jhs-new-video-batch__menu is-open" role="menu"><button type="button" class="jhs-btn jhs-btn--ghost" role="menuitem" id="batchIgnore">忽略</button><button type="button" class="jhs-btn jhs-btn--ghost" role="menuitem" id="batchSnooze">暂缓 7 天</button><button type="button" class="jhs-btn jhs-btn--ghost" role="menuitem" id="batchRestore">恢复</button><button type="button" class="jhs-btn jhs-btn--danger" role="menuitem" id="batchRemoveFromNewVideo">从新作列表移除</button></div></details><button type="button" class="jhs-btn jhs-btn--ghost" id="nvClearSelection">取消选择</button></div></div>`);
     }
+    /** @param {NewVideoRecord[]} e @returns {NewVideoRecord[]} */
     nvSortList(e) {
         const t = this.nvSortBy || "publishTime_desc", [n, a] = t.split("_");
-        return e.slice().sort(((e, t) => {
+        return e.slice().sort(((/** @type {NewVideoRecord} */ e, /** @type {NewVideoRecord} */ t) => {
             let i = 0;
             switch (n) {
               case "publishTime":
@@ -556,6 +657,7 @@ export class NewVideoPlugin extends BasePlugin {
             return "desc" === a ? -i : i;
         }));
     }
+    /** @param {number} [generation] */
     nvRenderPage(generation = this.nvRenderGeneration) {
         const e = this.nvFlatListCache;
         if (!e || 0 === e.length) return;
@@ -566,7 +668,7 @@ export class NewVideoPlugin extends BasePlugin {
             let c = "";
             c += '<div id="nv-grid" class="jhs-new-video-grid">';
             for (const n of s) {
-                const key = normalizeCarNum(n.carNum), e = escapeHtml(key), t = escapeHtml(n.title || key), cachedCover = this.nvCoverCache.get(key), a = escapeHtml((cachedCover || n.coverUrl || "").replace("thumbs", "covers")), i = escapeHtml(n.url || `${r}/search?q=${encodeURIComponent(key)}`);
+                const key = normalizeCarNum(n.carNum) || "", e = escapeHtml(key), t = escapeHtml(n.title || key), cachedCover = this.nvCoverCache.get(key), a = escapeHtml((cachedCover || n.coverUrl || "").replace("thumbs", "covers")), i = escapeHtml(n.url || `${r}/search?q=${encodeURIComponent(key)}`);
                 let o = `番号: ${e}\\n演员: ${escapeHtml(n.actressName)}\\n发行: ${escapeHtml(String(n.publishTime || "未知"))}`;
                 n.voteCount && (o += `\\n评价人数: ${n.voteCount}`);
                 const l = n.voteCount ? `<span class="jhs-badge jhs-badge--neutral nv-card__rating">${n.voteCount}人评价</span>` : "";
@@ -591,38 +693,39 @@ export class NewVideoPlugin extends BasePlugin {
                 this.nvCurrentPage < o && (c += `<button type="button" class="jhs-btn jhs-btn--secondary pagination-btn" data-nvpage="${this.nvCurrentPage + 1}">下一页</button>`),
                 c += `<span class="jhs-pagination__summary">第 ${this.nvCurrentPage}/${o} 页，共 ${t.length} 条</span>`, c += "</div>";
             }
-            l.html(c), l.find(".nv-cover-img").on("error", (function() { $(this).addClass("jhs-is-hidden").siblings(".nv-card__empty").removeClass("jhs-is-hidden"); })), l.find(".nv-select").on("change", (event => { const carNum = normalizeCarNum(event.currentTarget.value); event.currentTarget.checked ? this.nvSelected.add(carNum) : this.nvSelected.delete(carNum), this.renderBatchBar(); })), l.find(".pagination-btn").off("click").on("click", (e => {
+            l.html(c), l.find(".nv-cover-img").on("error", (/** @this {any} */ function() { $(this).addClass("jhs-is-hidden").siblings(".nv-card__empty").removeClass("jhs-is-hidden"); })), l.find(".nv-select").on("change", (/** @type {any} */ event) => { const carNum = normalizeCarNum(event.currentTarget.value); carNum && (event.currentTarget.checked ? this.nvSelected.add(carNum) : this.nvSelected.delete(carNum)), this.renderBatchBar(); }), l.find(".pagination-btn").off("click").on("click", (/** @type {any} */ e) => {
                 const n = parseInt($(e.currentTarget).data("nvpage"));
                 n >= 1 && n <= o && n !== this.nvCurrentPage && (this.nvCurrentPage = n, this.nvRenderGeneration++, this.nvRenderPage(this.nvRenderGeneration), this.renderBatchBar(), l.scrollTop(0));
-            })), this.nvCoverPreview ??= new window.ImageHoverPreview({ selector: ".nv-cover-img", dataAttribute: "data-full", zIndex: JHS_Z_INDEX.dialogHoverPreview }), void this.hydrateVisibleCovers(s, generation);
+            }), this.nvCoverPreview ??= new this.window.ImageHoverPreview({ selector: ".nv-cover-img", dataAttribute: "data-full", zIndex: JHS_Z_INDEX.dialogHoverPreview }), void this.hydrateVisibleCovers(s, generation);
     }
+    /** @param {any} e */
     async editActress(e) {
-        const dialog = this.getRuntimeService("dialog");
+        const dialog = this.dialog;
         /** @type {any} */ let editRoot = null;
-        const t = String(e.name || ""), n = normalizeHttpUrl(e.avatar, this.nvJavDbUrl) || "", a = String(e.remark || ""), i = Array.isArray(e.allName) ? e.allName.join("，") : "", s = Array.isArray(e.newVideoList) ? e.newVideoList.map((e => "string" == typeof e ? e : e.carNum)).join("，") : "", o = String(e.starId || ""), l = e.actressType || "", safe = value => escapeHtml(String(value || "")), c = `\n            <div class="jhs-form-dialog">\n                <div class="jhs-avatar-editor">\n                    <img id="edit-avatar-preview" src="${safe(n)}" alt="Avatar Preview" \n                         class="jhs-avatar-editor__preview">\n                    <div class="jhs-form-dialog__body">\n                        <label class="jhs-form-label">头像链接:</label>\n                        <input type="text" id="edit-actress-avatar" value="${safe(n)}" \n                               class="jhs-field">\n                       <div class="jhs-toolbar jhs-avatar-editor__actions">\n                            <button type="button" id="search-avatar-btn" \n                                class="jhs-btn jhs-btn--secondary">\n                                搜索头像\n                            </button>\n                            <button type="button" id="select-cdn-btn" \n                                class="jhs-btn jhs-btn--secondary">\n                                选择 CDN 源\n                            </button>\n                        </div>\n                    </div>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">主名称:</label>\n                    <input type="text" id="edit-actress-name" value="${safe(t)}" \n                           class="jhs-field">\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">所有别名(用逗号隔开):</label>\n                    <textarea id="edit-actress-allname" class="jhs-textarea">${safe(i)}</textarea>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">演员类别:</label>\n                    <select id="actressType" class="jhs-select-source">\n                        <option value="" ${"" === l ? "selected" : ""}>未知</option>\n                        <option value="censored" ${"censored" === l ? "selected" : ""}>有码</option>\n                        <option value="uncensored" ${"uncensored" === l ? "selected" : ""}>无码</option>\n                    </select>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">最新作品(用逗号隔开):</label>\n                    <textarea id="edit-actress-newvideolist" class="jhs-textarea">${safe(s)}</textarea>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">备注:</label>\n                   <textarea id="edit-remark" class="jhs-textarea">${safe(a)}</textarea>\n                </div>\n            </div>\n        `;
+        const t = String(e.name || ""), n = normalizeHttpUrl(e.avatar, this.nvJavDbUrl) || "", a = String(e.remark || ""), i = Array.isArray(e.allName) ? e.allName.join("，") : "", s = Array.isArray(e.newVideoList) ? e.newVideoList.map((/** @type {any} */ e) => "string" == typeof e ? e : e.carNum).join("，") : "", o = String(e.starId || ""), l = e.actressType || "", safe = (/** @type {any} */ value) => escapeHtml(String(value || "")), c = `\n            <div class="jhs-form-dialog">\n                <div class="jhs-avatar-editor">\n                    <img id="edit-avatar-preview" src="${safe(n)}" alt="Avatar Preview" \n                         class="jhs-avatar-editor__preview">\n                    <div class="jhs-form-dialog__body">\n                        <label class="jhs-form-label">头像链接:</label>\n                        <input type="text" id="edit-actress-avatar" value="${safe(n)}" \n                               class="jhs-field">\n                       <div class="jhs-toolbar jhs-avatar-editor__actions">\n                            <button type="button" id="search-avatar-btn" \n                                class="jhs-btn jhs-btn--secondary">\n                                搜索头像\n                            </button>\n                            <button type="button" id="select-cdn-btn" \n                                class="jhs-btn jhs-btn--secondary">\n                                选择 CDN 源\n                            </button>\n                        </div>\n                    </div>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">主名称:</label>\n                    <input type="text" id="edit-actress-name" value="${safe(t)}" \n                           class="jhs-field">\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">所有别名(用逗号隔开):</label>\n                    <textarea id="edit-actress-allname" class="jhs-textarea">${safe(i)}</textarea>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">演员类别:</label>\n                    <select id="actressType" class="jhs-select-source">\n                        <option value="" ${"" === l ? "selected" : ""}>未知</option>\n                        <option value="censored" ${"censored" === l ? "selected" : ""}>有码</option>\n                        <option value="uncensored" ${"uncensored" === l ? "selected" : ""}>无码</option>\n                    </select>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">最新作品(用逗号隔开):</label>\n                    <textarea id="edit-actress-newvideolist" class="jhs-textarea">${safe(s)}</textarea>\n                </div>\n                <div class="jhs-form-field">\n                    <label class="jhs-form-label">备注:</label>\n                   <textarea id="edit-remark" class="jhs-textarea">${safe(a)}</textarea>\n                </div>\n            </div>\n        `;
         dialog.open({
             type: 1,
             title: `编辑女优: ${safe(t)} (${safe(o)})`,
-            area: utils.getDialogArea("sm"),
+            area: this.getUtils().getDialogArea("sm"),
             content: c,
             btn: [ "保存", "取消" ],
-            success: (e, t) => {
+            success: (/** @type {any} */ e, /** @type {any} */ t) => {
                 editRoot = $(e);
                 this._editActressRoot = editRoot;
                 JhsSelect.enhance(e);
-                const n = e => {
+                const n = (/** @type {any} */ e) => {
                     e.css("height", "auto"), e.css("height", e[0].scrollHeight + 15 + "px");
                 };
-                editRoot.find("#edit-actress-avatar").on("input", (function() {
+                editRoot.find("#edit-actress-avatar").on("input", (/** @this {any} */ function() {
                     const e = $(this).val();
                     editRoot.find("#edit-avatar-preview").attr("src", e);
                 }));
                 const a = editRoot.find("#edit-actress-allname");
-                a.on("input", (function() {
+                a.on("input", (/** @this {any} */ function() {
                     n($(this));
                 })), n(a);
                 const i = editRoot.find("#edit-actress-newvideolist");
-                i.on("input", (function() {
+                i.on("input", (/** @this {any} */ function() {
                     n($(this));
                 })), n(i), editRoot.find("#search-avatar-btn").on("click", (async () => {
                     await this.searchAvatar();
@@ -632,40 +735,41 @@ export class NewVideoPlugin extends BasePlugin {
                         dialog.open({
                             type: 1,
                             title: "选择 CDN 源",
-                            area: utils.getResponsiveArea([ "400px", "auto" ]),
+                            area: this.getUtils().getResponsiveArea([ "400px", "auto" ]),
                             content: n,
                             btn: [ "确定", "取消" ],
-                            success: (e, t) => {
-                                utils.setupEscClose(t);
+                            success: (/** @type {any} */ e, /** @type {any} */ t) => {
+                                this.getUtils().setupEscClose(t);
                             },
-                            yes: async e => {
+                            yes: async (/** @type {any} */ e) => {
                                 const t = $('input[name="cdn-source"]:checked').val(), n = parseInt(t, 10);
                                 if (n !== this.avatarSourceIndex && this.avatarSources[n]) {
-                                    this.avatarSourceIndex = n, this.getRuntimeService("storage").setLocal(AVATAR_SOURCE_INDEX_KEY, n.toString()),
-                                    show.ok(`CDN 源已切换为: ${this.avatarSources[n].name}`), dialog.close(e);
+                                    this.avatarSourceIndex = n, this.storage.setLocal(AVATAR_SOURCE_INDEX_KEY, n.toString()),
+                                    this.getShow().ok?.(`CDN 源已切换为: ${this.avatarSources[n].name}`), dialog.close(e);
                                 } else dialog.close(e);
                             }
                         });
                     })();
-                })), utils.setupEscClose(t);
+                })), this.getUtils().setupEscClose(t);
             },
-            yes: async t => {
+            yes: async (/** @type {any} */ t) => {
                 const root = editRoot || $(document), n = root.find("#edit-actress-avatar").val().trim(), a = root.find("#edit-actress-name").val().trim(), i = root.find("#edit-actress-allname").val().trim(), s = root.find("#edit-actress-newvideolist").val().trim(), o = root.find("#edit-remark").val().trim(), r = root.find("#actressType").val();
-                if (!a) return show.error("主名称不能为空"), !1;
-                const l = i.split(/[\uff0c,]/).map((e => e.trim())).filter((e => e.length > 0)), c = s.split(/[\uff0c,]/).map((e => e.trim())).filter((e => e.length > 0));
+                if (!a) return this.getShow().error?.("主名称不能为空"), !1;
+                const l = i.split(/[\uff0c,]/).map((/** @type {string} */ e) => e.trim()).filter((/** @type {string} */ e) => e.length > 0), c = s.split(/[\uff0c,]/).map((/** @type {string} */ e) => e.trim()).filter((/** @type {string} */ e) => e.length > 0);
                 e.avatar = n, e.name = a, e.allName = l, e.newVideoList = c, e.actressType = r,
                 e.remark = o;
                 try {
-                    await storageManager.updateFavoriteActress(e);
-                    await jhsEventBus.emit("new-video-changed", { reason: "favorite-actress-edited" });
-                    show.ok(`女优 ${a} 信息已更新`);
+                    await this.legacyStorage.updateFavoriteActress(e);
+                    await this.eventBus?.emit?.("new-video-changed", { reason: "favorite-actress-edited" });
+                    this.getShow().ok?.(`女优 ${a} 信息已更新`);
                     dialog.close(t);
                 } catch(err) {
-                    show.error("修改失败: " + (err.message || err));
+                    this.getShow().error?.("修改失败: " + (err instanceof Error ? err.message : String(err)));
                 }
             }
         });
     }
+    /** @param {number} e @param {number} t */
     renderPagination(e, t) {
         const n = this.currentPage;
         let a = "";
@@ -681,31 +785,31 @@ export class NewVideoPlugin extends BasePlugin {
         n < t && (a += `<button type="button" class="jhs-btn pagination-btn" data-page="${n + 1}">下一页</button>`),
         n < t && t > 5 && (a += `<button type="button" class="jhs-btn pagination-btn" data-page="${t}">尾页</button>`),
         a += `<span class="jhs-pagination__summary">共 ${e} 条记录 (第 ${n}/${t} 页)</span>`,
-        i.html(a), i.find(".pagination-btn").off("click").on("click", (e => {
+        i.html(a), i.find(".pagination-btn").off("click").on("click", (/** @type {any} */ e) => {
             if ($(e.currentTarget).is("[disabled]")) return;
             const n = parseInt($(e.currentTarget).data("page"));
             n >= 1 && n <= t && n !== this.currentPage && (this.currentPage = n, this.renderActressCards());
-        }));
+        });
     }
     async searchAvatar() {
-        const dialog = this.getRuntimeService("dialog");
-        const root = this._editActressRoot || $(document), e = root.find("#edit-actress-name"), t = root.find("#edit-actress-allname"), n = e.val().trim(), a = t.val().trim().split(/[\uff0c,]/).map((e => e.trim())).filter((e => e.length > 0));
-        if (n && a.unshift(n), 0 === a.length) return void show.error("请先填写女优主名称或别名进行搜索。");
-        const i = loading("正在搜索头像...");
-        let s = [];
+        const dialog = this.dialog;
+        const root = this._editActressRoot || $(this.document), e = root.find("#edit-actress-name"), t = root.find("#edit-actress-allname"), n = e.val().trim(), a = t.val().trim().split(/[\uff0c,]/).map((/** @type {string} */ e) => e.trim()).filter((/** @type {string} */ e) => e.length > 0);
+        if (n && a.unshift(n), 0 === a.length) return void this.getShow().error?.("请先填写女优主名称或别名进行搜索。");
+        const i = this.getLoading()?.("正在搜索头像...");
+        /** @type {string[]} */ let s = [];
         try {
-            const source = this.avatarSources[this.avatarSourceIndex], scope = this.lifecycleScope ?? await this.getRuntimeService("scope")();
-            s = source ? await this.getRuntimeService("actressInfo").searchAvatars(a, source.id, { scope }) : [];
+            const source = this.avatarSources[this.avatarSourceIndex], scope = this.lifecycleScope;
+            s = source ? await this.actressInfo.searchAvatars(a, source.id, { scope }) : [];
         } catch (c) {
-            return void show.error(`头像数据加载或搜索失败: ${c.message || c}`);
+            return void this.getShow().error?.(`头像数据加载或搜索失败: ${c instanceof Error ? c.message : String(c)}`);
         } finally {
-            i.close();
+            i?.close?.();
         }
-        if (0 === s.length) return void show.error(`未找到与 '${a.join("、")}' 相关的头像。请检查名称。`);
+        if (0 === s.length) return void this.getShow().error?.(`未找到与 '${a.join("、")}' 相关的头像。请检查名称。`);
         const r = $('<div id="gfriends-image-list-container"><p id="gfriends-prompt"></p><div id="gfriends-image-list" role="group" aria-label="头像候选"></div></div>');
         r.find("#gfriends-prompt").text(`点击图片即可选择（初始共 ${s.length} 张）`);
         const avatarList = r.find("#gfriends-image-list");
-        s.forEach(((url, index) => {
+        s.forEach(((/** @type {string} */ url, /** @type {number} */ index) => {
             const candidate = $('<button type="button" class="jhs-btn gfriends-image-item-wrapper" aria-pressed="false"></button>').attr({ "data-url": url, "aria-label": `选择第 ${index + 1} 张头像` });
             candidate.append($("<img class=\"gfriends-selectable-img\" alt=\"\">").attr("src", url)), candidate.append($('<span class="gfriends-size-tag">载入中</span>')), avatarList.append(candidate);
         }));
@@ -713,28 +817,29 @@ export class NewVideoPlugin extends BasePlugin {
         dialog.open({
             type: 1,
             title: `选择女优头像 (${s.length} 张)`,
-            area: utils.getResponsiveArea([ "900px", "85%" ]),
+            area: this.getUtils().getResponsiveArea([ "900px", "85%" ]),
             content: r[0],
             btn: [ "关闭" ],
-            success: (e, t) => {
+            success: (/** @type {any} */ e, /** @type {any} */ t) => {
                 const n = $(e), a = n.find(".gfriends-selectable-img"), i = n.find("#gfriends-prompt"), candidates = n.find(".gfriends-image-item-wrapper");
-                a.each((function() {
+                const controller = this;
+                a.each((/** @this {any} */ function() {
                     const image = $(this), wrapper = image.closest(".gfriends-image-item-wrapper"), size = wrapper.find(".gfriends-size-tag");
-                    image.on("load", (function() {
+                    image.on("load", (/** @this {any} */ function() {
                         size.text(`${this.naturalWidth} x ${this.naturalHeight}`);
-                    })), image.on("error", (function() {
+                    })), image.on("error", (/** @this {any} */ function() {
                         wrapper.remove(), l++;
                         const e = s.length - l;
-                        i.text(`点击图片即可选择（已移除 ${l} 张错误图片，剩余 ${e} 张）`), 0 === e && (show.error("所有搜索到的头像链接均已失效，无法选择。"),
+                        i.text(`点击图片即可选择（已移除 ${l} 张错误图片，剩余 ${e} 张）`), 0 === e && (controller.getShow().error?.("所有搜索到的头像链接均已失效，无法选择。"),
                         dialog.close(t));
                     })), this.complete && (this.naturalWidth > 0 ? image.trigger("load") : image.trigger("error"));
-                })), candidates.on("click", (function() {
+                })), candidates.on("click", (/** @this {any} */ function() {
                     const candidate = $(this), url = candidate.attr("data-url");
                     root.find("#edit-actress-avatar").val(url), root.find("#edit-avatar-preview").attr("src", url), candidates.attr("aria-pressed", "false"),
                     candidate.attr("aria-pressed", "true"), setTimeout((() => {
                         dialog.close(t);
                     }), 150);
-                })), utils.setupEscClose(t);
+                })), this.getUtils().setupEscClose(t);
             }
         });
     }

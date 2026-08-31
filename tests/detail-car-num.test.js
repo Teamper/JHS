@@ -239,7 +239,7 @@ describe("source regression contracts", () => {
     });
 
     it("uses readable non-shadowing variables for actress profile links", () => {
-        const source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8");
+        const source = readTestFile(join(repoRoot, "src/features/discovery/new-video-controller.js"), "utf8");
         expect(source).toContain("const profileUrl = normalizeHttpUrl(`/actors/${encodeURIComponent(starId)}?t=d`, javDbUrl)");
         expect(source).toContain("noteText = isPaused");
         expect(source).not.toContain("`${c}/actors/${e.starId}?t=d`");

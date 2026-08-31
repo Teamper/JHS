@@ -5,10 +5,11 @@ import { PORT, REGISTRY, SERVICE } from "../../contracts/tokens.js";
 import { DiscoveryController } from "./discovery-controller.js";
 import { HitShowController } from "./hit-show-controller.js";
 import { Top250Controller } from "./top250-controller.js";
+import { NewVideoController } from "./new-video-controller.js";
 
 export default defineFeature({
     id: "discovery", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: [], startup: "eager",
-    requires: [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache, SERVICE.dialog, SERVICE.account, SERVICE.storage, SERVICE.actressInfo, SERVICE.state, SERVICE.http, SERVICE.eventBus, REGISTRY.feature],
+    requires: [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache, SERVICE.dialog, SERVICE.account, SERVICE.storage, SERVICE.legacyStorage, SERVICE.actressInfo, SERVICE.state, SERVICE.http, SERVICE.eventBus, REGISTRY.feature],
     contributes: ["discovery.hit-show", "discovery.top250", "discovery.new-video", "discovery.scheduler"],
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
@@ -18,13 +19,13 @@ export default defineFeature({
         const top250Controller = runtime.enabledContributions.includes("discovery.top250") && deps[PORT.host]?.site === "javdb"
             ? new Top250Controller({ document: globalThis.document, window: globalThis.window, hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], dialog: deps[SERVICE.dialog], account: deps[SERVICE.account], storage: deps[SERVICE.storage], listActions: runtime.resolveLegacyPlugin?.("ListPageButtonPlugin"), scope: runtime.scope })
             : null;
-        const newVideoPlugin = runtime.enabledContributions.includes("discovery.new-video")
-            ? runtime.resolveLegacyPlugin?.("NewVideoPlugin")
+        const newVideoController = runtime.enabledContributions.includes("discovery.new-video")
+            ? new NewVideoController({ document: globalThis.document, window: globalThis.window, settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], legacyStorage: deps[SERVICE.legacyStorage], dialog: deps[SERVICE.dialog], actressInfo: deps[SERVICE.actressInfo], movie: deps[SERVICE.movie], state: deps[SERVICE.state], eventBus: deps[SERVICE.eventBus], settingPlugin: runtime.resolveLegacyPlugin?.("SettingPlugin"), scope: runtime.scope })
             : null;
         const taskPlugin = runtime.enabledContributions.includes("discovery.scheduler")
             ? runtime.resolveLegacyPlugin?.("TaskPlugin")
             : null;
-        const controller = new DiscoveryController({ hitShowController, top250Controller, newVideoPlugin, taskPlugin, scope: runtime.scope });
+        const controller = new DiscoveryController({ hitShowController, top250Controller, newVideoController, taskPlugin, scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

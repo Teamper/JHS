@@ -5,11 +5,11 @@
  * the Discovery Feature API.
  */
 export class DiscoveryController {
-    /** @param {{hitShowController?: any, hitShowPlugin?: any, top250Controller?: any, top250Plugin?: any, newVideoPlugin?: any, taskPlugin?: any, scope: any}} options */
+    /** @param {{hitShowController?: any, hitShowPlugin?: any, top250Controller?: any, top250Plugin?: any, newVideoController?: any, newVideoPlugin?: any, taskPlugin?: any, scope: any}} options */
     constructor(options) {
         this.hitShowController = options.hitShowController ?? options.hitShowPlugin ?? null;
         this.top250Controller = options.top250Controller ?? options.top250Plugin ?? null;
-        this.newVideoPlugin = options.newVideoPlugin ?? null;
+        this.newVideoController = options.newVideoController ?? options.newVideoPlugin ?? null;
         this.taskPlugin = options.taskPlugin ?? null;
         this.scope = options.scope;
         this.started = false;
@@ -22,18 +22,18 @@ export class DiscoveryController {
         if (this.started) return Promise.resolve();
         this.started = true;
         const taskApi = this.getApi();
-        this.newVideoPlugin?.setTaskApi?.(taskApi);
+        this.newVideoController?.setTaskApi?.(taskApi);
         return Promise.resolve()
             .then(() => this.hitShowController?.start ? this.hitShowController.start({ discoveryApi: this.getApi() }) : this.hitShowController?.handle?.({ scope: this.scope, discoveryApi: this.getApi() }))
             .then(() => this.top250Controller?.start ? this.top250Controller.start({ discoveryApi: this.getApi() }) : this.top250Controller?.handle?.({ scope: this.scope, discoveryApi: this.getApi() }))
             .then(() => {
-                if (!this.newVideoPlugin && !this.taskPlugin) return;
+                if (!this.newVideoController && !this.taskPlugin) return;
                 const runIdle = () => {
                     this.idleHandle = null;
                     this.idleIsCallback = false;
                     if (this.scope.disposed || !this.started) return;
                     Promise.resolve()
-                        .then(() => this.newVideoPlugin?.handle?.({ scope: this.scope, taskApi }))
+                        .then(() => this.newVideoController?.start ? this.newVideoController.start({ taskApi }) : this.newVideoController?.handle?.({ scope: this.scope, taskApi }))
                         .then(() => this.taskPlugin?.handle?.({ scope: this.scope }))
                         .catch((error) => {
                             clog.error("Discovery 空闲初始化失败", error);
@@ -66,11 +66,11 @@ export class DiscoveryController {
             loadScore: expose(this.hitShowController, "loadScore"),
             hasTop250: Boolean(this.top250Controller),
             openLoginDialog: expose(this.top250Controller, "openLoginDialog"),
-            hasNewVideo: Boolean(this.newVideoPlugin),
-            openNewVideoDialog: expose(this.newVideoPlugin, "openDialog"),
-            getPendingNewVideoTotal: expose(this.newVideoPlugin, "getPendingNewVideoTotal"),
-            resetNewVideoButtonTip: expose(this.newVideoPlugin, "resetBtnTip"),
-            resetBtnTip: expose(this.newVideoPlugin, "resetBtnTip"),
+            hasNewVideo: Boolean(this.newVideoController),
+            openNewVideoDialog: expose(this.newVideoController, "openDialog"),
+            getPendingNewVideoTotal: expose(this.newVideoController, "getPendingNewVideoTotal"),
+            resetNewVideoButtonTip: expose(this.newVideoController, "resetBtnTip"),
+            resetBtnTip: expose(this.newVideoController, "resetBtnTip"),
             hasTask: Boolean(this.taskPlugin),
             lastCheckFavoriteActressTimeKey: this.taskPlugin?.lastCheckFavoriteActressTimeKey ?? null,
             lastCheckNewVideoTimeKey: this.taskPlugin?.lastCheckNewVideoTimeKey ?? null,

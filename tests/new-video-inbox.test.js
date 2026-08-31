@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 const repoRoot = join(import.meta.dirname, "..");
 
 function loadAggregator() {
-    const constants = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), start = constants.indexOf("function normalizeCarNum"), end = constants.indexOf("function assertPageInfoContract", start), model = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8"), aggregateStart = source.indexOf("function aggregateNewVideoRecords"), aggregateEnd = source.indexOf("class NewVideoPlugin", aggregateStart), context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON });
+    const constants = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), start = constants.indexOf("function normalizeCarNum"), end = constants.indexOf("function assertPageInfoContract", start), model = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), source = readTestFile(join(repoRoot, "src/features/discovery/new-video-controller.js"), "utf8"), aggregateStart = source.indexOf("function aggregateNewVideoRecords"), aggregateEnd = source.indexOf("export class NewVideoController", aggregateStart), context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON });
     vm.runInContext(`${constants.slice(start, end)}\n${model}\n${source.slice(aggregateStart, aggregateEnd)}; globalThis.aggregate = aggregateNewVideoRecords;`, context);
     return context.aggregate;
 }

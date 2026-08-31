@@ -34,7 +34,7 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, fc2
   readFile(join(srcRoot, "plugins", "status", "detail-workspace.js"), "utf8"),
   readFile(join(srcRoot, "ui", "detail", "fc2-detail-workspace.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "status", "mobile-bottom-bar.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "new-video", "new-video.js"), "utf8"),
+  readFile(join(srcRoot, "features", "discovery", "new-video-controller.js"), "utf8"),
   readFile(join(srcRoot, "core", "plugin-manager.js"), "utf8"),
   readFile(join(srcRoot, "features", "discovery", "hit-show-controller.js"), "utf8"),
   readFile(join(srcRoot, "features", "external-bridge", "translation-controller.js"), "utf8"),

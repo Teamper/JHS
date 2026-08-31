@@ -54,7 +54,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     const reviewUi = readTestFile(join(process.cwd(), "src/ui/detail/review-panel.js"), "utf8");
     const oneTwoThreeOffline = readTestFile(join(process.cwd(), "src/features/external-bridge/one-two-three-controller.js"), "utf8");
     const pan123Integration = readTestFile(join(process.cwd(), "src/integrations/pan123/manifest.js"), "utf8");
-    const newVideo = readTestFile(join(process.cwd(), "src/plugins/new-video/new-video.js"), "utf8");
+    const newVideo = readTestFile(join(process.cwd(), "src/features/discovery/new-video-controller.js"), "utf8");
     const related = readTestFile(join(process.cwd(), "src/plugins/external-search/related.js"), "utf8");
     const relatedUi = readTestFile(join(process.cwd(), "src/ui/detail/related-panel.js"), "utf8");
     const otherSite = readTestFile(join(process.cwd(), "src/plugins/external-search/other-site.js"), "utf8");
@@ -272,13 +272,13 @@ describe("list toolbar and UI cleanup contracts", () => {
     it("keeps NewVideo module import free of local storage side effects", () => {
         expect(newVideo).not.toContain("localStorage.");
         expect(newVideo).not.toContain("gmHttp");
-        expect(newVideo).toContain('getRuntimeService("actressInfo").movies');
-        expect(newVideo).toContain('getRuntimeService("actressInfo").uncollect');
+        expect(newVideo).toContain("this.actressInfo.movies");
+        expect(newVideo).toContain("this.actressInfo.uncollect");
         expect(newVideo).toContain("initializeLocalState()");
         expect(newVideo).toContain('getLocal("jhs_newVideoViewMode")');
         expect(newVideo).toContain('setLocal("jhs_newVideoViewMode", mode)');
         expect(newVideo).toContain('setLocal(AVATAR_SOURCE_INDEX_KEY, n.toString())');
-        expect(newVideo).toContain('getRuntimeService("actressInfo").searchAvatars');
+        expect(newVideo).toContain("this.actressInfo.searchAvatars");
     });
 
     it("uses semantic keyboard popovers and stable sort storage", () => {

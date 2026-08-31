@@ -1,10 +1,9 @@
 import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import vm from "node:vm";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { NewVideoController } from "../src/features/discovery/new-video-controller.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 
@@ -32,44 +31,26 @@ function createHarness() {
         state: stateService,
         movie: { externalSiteOrigin: vi.fn(() => "https://javdb.com") },
     };
-    class BasePlugin { getBean(name) { return beans[name]; } getRuntimeService(name) { return runtimeServices[name]; } }
     class ImageHoverPreview { constructor() {} bindEvents() {} destroy() {} }
     dom.window.ImageHoverPreview = ImageHoverPreview;
     const renderStateView = (container, options) => (container.empty().append($("<div></div>").text(options.title || "")), container);
-    const context = vm.createContext({
-        console, Date, URL, Object, Array, Map, Set, Promise, Number, String, Math,
-        window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
-        $, BasePlugin, ImageHoverPreview, storageManager, stateService, renderStateView,
-        JHS_Z_INDEX: { dialogHoverPreview: 999999992 },
-        i: (target, key, value) => target[key] = value,
-        normalizeCarNum,
-        normalizeHttpUrl: (value, base = dom.window.location.href) => { try { const url = new URL(String(value), base); return ["http:", "https:"].includes(url.protocol) ? url.href : null; } catch { return null; } },
-        normalizeStateFlags: flags => ({ favorite: !!flags?.favorite, downloaded: !!flags?.downloaded, watched: !!flags?.watched, blocked: !!flags?.blocked }),
-        hasAnyState: flags => Object.values(flags).some(Boolean),
-        parseNumberSetting: (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback,
-        mapLimit: async (items, limit, worker) => Promise.all(items.map(worker)),
-        escapeHtml: value => String(value ?? "").replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]),
-        utils: { genericSort: items => [...items], htmlTo$dom: html => $(new JSDOM(html).window.document), q: vi.fn() },
-        gmHttp: { get: vi.fn() }, JhsSelect: { setValue: vi.fn() },
-        show: { info: vi.fn(), ok: vi.fn(), error: vi.fn() }, clog: { error: vi.fn(), warn: vi.fn(), log: vi.fn(), debug: vi.fn() },
-        jhsEventBus: { on: vi.fn() }, setTimeout, clearTimeout, fetch: vi.fn(), indexedDB: {}, loading: vi.fn(),
-        shouldSkipStopped: () => false,
-        T: "javdb", I: "javbus", D: "filter", A: "uncensored", _: "yes", l: false
-    });
-    context.globalThis = context;
-    const source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8"), start = source.indexOf("function aggregateNewVideoRecords");
-    vm.runInContext(`${source.slice(start)};globalThis.TestPlugin=NewVideoPlugin`, context);
-    const plugin = new context.TestPlugin;
+    const settings = { snapshot: vi.fn(() => ({ checkFavoriteActress_IntervalTime: 24, checkNewVideo_intervalTime: 12, checkNewVideo_ruleTime: 8760, autoRemoveNewVideoMarkAfterBrowse: "yes" })) };
+    const scope = { assertActive: vi.fn(), addCleanup: vi.fn(), disposed: false }, eventBus = { on: vi.fn(), emit: vi.fn() };
+    vi.stubGlobal("$", $), vi.stubGlobal("window", dom.window), vi.stubGlobal("document", dom.window.document);
+    vi.stubGlobal("utils", { genericSort: items => [...items], q: vi.fn(), debounce: (callback) => Object.assign(callback, { cancel: vi.fn() }), getDialogArea: vi.fn(), getResponsiveArea: vi.fn(), setupEscClose: vi.fn() });
+    vi.stubGlobal("show", { info: vi.fn(), ok: vi.fn(), error: vi.fn() }), vi.stubGlobal("clog", { error: vi.fn(), warn: vi.fn(), log: vi.fn(), debug: vi.fn() }), vi.stubGlobal("loading", vi.fn(() => ({ close: vi.fn() })));
+    const plugin = new NewVideoController({ document: dom.window.document, window: dom.window, settings, storage: runtimeServices.storage, legacyStorage: storageManager, dialog: {}, actressInfo: runtimeServices.actressInfo, movie: runtimeServices.movie, state: stateService, eventBus, scope });
     plugin.nvWorkspaceMounted = true, plugin._viewMode = "list";
     return { plugin, $, actresses, storageManager, stateService, beans, runtimeServices };
 }
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("new video workspace snapshot", () => {
     it("routes workspace, editor, CDN and avatar dialogs through DialogService", () => {
-        const source = readTestFile(join(repoRoot, "src/plugins/new-video/new-video.js"), "utf8");
-        expect(source).toContain('getRuntimeService("dialog")');
+        const source = readTestFile(join(repoRoot, "src/features/discovery/new-video-controller.js"), "utf8");
+        expect(source).toContain("this.dialog.open");
+        expect(source).not.toContain("getRuntimeService(");
         expect(source).not.toContain("layer.open");
         expect(source).not.toContain("layer.close");
     });

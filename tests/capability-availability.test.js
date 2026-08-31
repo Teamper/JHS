@@ -8,7 +8,7 @@ import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 import { defineFeature } from "../src/contracts/manifests.js";
 
 const listButtons = readTestFile(join(process.cwd(), "src/plugins/status/list-page-button.js"), "utf8");
-const newVideo = readTestFile(join(process.cwd(), "src/plugins/new-video/new-video.js"), "utf8");
+const newVideo = readTestFile(join(process.cwd(), "src/features/discovery/new-video-controller.js"), "utf8");
 const coverButtons = readTestFile(join(process.cwd(), "src/plugins/image-viewer/cover-button.js"), "utf8");
 const registrySource = readTestFile(join(process.cwd(), "src/app/command-registry.js"), "utf8");
 const runtimeSource = readTestFile(join(process.cwd(), "src/app/feature-runtime.js"), "utf8");

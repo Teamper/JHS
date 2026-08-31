@@ -26,9 +26,9 @@
       "removalVersion": "6.6"
     },
     {
-      "file": "src/plugins/new-video/new-video.js",
+      "file": "src/features/discovery/new-video-controller.js",
       "category": "compatibility-glue",
-      "reason": "Transitional NewVideoPlugin UI entry bridges the typed scheduler, state and service boundaries for legacy registration.",
+      "reason": "Discovery NewVideo controller retains the compatibility-heavy workspace UI while its scheduler and state dependencies finish migrating.",
       "removalVersion": "6.6"
     }
   ]

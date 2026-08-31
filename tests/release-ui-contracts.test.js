@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 const read = file => readTestFile(join(process.cwd(), file), "utf8");
 
 describe("v6.4.1 frozen UI contracts", () => {
-    const newVideo = read("src/plugins/new-video/new-video.js");
+    const newVideo = read("src/features/discovery/new-video-controller.js");
     const mobile = read("src/plugins/status/mobile-bottom-bar.js");
     const logger = read("src/core/logger.js");
     const offline = read("src/features/external-bridge/unified-offline-controller.js");

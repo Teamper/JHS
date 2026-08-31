@@ -30,7 +30,6 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
         "SettingPlugin", "HighlightMagnetPlugin", "MagnetHubPlugin"
     ],
     NavBarPlugin: [],
-    NewVideoPlugin: ["SettingPlugin"],
     PreviewVideoPlugin: ["DetailPageButtonPlugin"],
     SettingPlugin: [
         "CoverButtonPlugin", "OtherSitePlugin", "ActressInfoPlugin",
