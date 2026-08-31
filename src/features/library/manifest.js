@@ -13,7 +13,7 @@ export default defineFeature({
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const historyController = runtime.enabledContributions.includes("library.history")
-            ? new HistoryController({ hostAdapter: deps[PORT.host], dialog: deps[PORT.dialog], movie: deps[SERVICE.movie], settings: deps[SERVICE.settings], state: deps[SERVICE.state], storage: deps[SERVICE.storage], styles: deps[PORT.style], features: deps[REGISTRY.feature], fc2Plugin: runtime.resolveLegacyPlugin?.("Fc2Plugin"), ui: deps[SERVICE.ui], scope: runtime.scope })
+            ? new HistoryController({ hostAdapter: deps[PORT.host], dialog: deps[PORT.dialog], movie: deps[SERVICE.movie], settings: deps[SERVICE.settings], state: deps[SERVICE.state], storage: deps[SERVICE.storage], styles: deps[PORT.style], features: deps[REGISTRY.feature], fc2Plugin: runtime.resolveLegacyContribution?.("detail.fc2-owned"), ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
         const blacklistController = runtime.enabledContributions.includes("library.blacklist")
             ? new BlacklistController({ hostAdapter: deps[PORT.host], dialog: deps[PORT.dialog], storage: deps[SERVICE.storage], settings: deps[SERVICE.settings], state: deps[SERVICE.state], http: deps[SERVICE.http], eventBus: deps[SERVICE.eventBus], mutation: deps[SERVICE.storageMutation], features: deps[REGISTRY.feature], styles: deps[PORT.style], ui: deps[SERVICE.ui], scope: runtime.scope })

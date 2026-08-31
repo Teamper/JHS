@@ -14,25 +14,25 @@ export default defineFeature({
         // Disabling list.core disables the List Feature while optional contributions retain their own switches.
         if (!runtime.enabledContributions.includes("list.core")) return { dispose: () => {} };
         const autoPagePlugin = runtime.enabledContributions.includes("list.auto-page")
-            ? runtime.resolveLegacyPlugin?.("AutoPagePlugin")
+            ? runtime.resolveLegacyContribution?.("list.auto-page")
             : null;
         const foldCategoryPlugin = runtime.enabledContributions.includes("list.fold-category")
-            ? runtime.resolveLegacyPlugin?.("FoldCategoryPlugin")
+            ? runtime.resolveLegacyContribution?.("list.fold-category")
             : null;
         const actionsPlugin = runtime.enabledContributions.includes("list.actions")
-            ? runtime.resolveLegacyPlugin?.("ListPageButtonPlugin")
+            ? runtime.resolveLegacyContribution?.("list.actions")
             : null;
         const fc2NavigationPlugin = runtime.enabledContributions.includes("list.fc2-navigation")
-            ? runtime.resolveLegacyPlugin?.("Fc2NavigationPlugin")
+            ? runtime.resolveLegacyContribution?.("list.fc2-navigation")
             : null;
         const coverPlugin = runtime.enabledContributions.includes("list.cover-state-actions")
-            ? runtime.resolveLegacyPlugin?.("CoverButtonPlugin")
+            ? runtime.resolveLegacyContribution?.("list.cover-state-actions")
             : null;
         const fc2LookupPlugin = runtime.enabledContributions.includes("list.fc2-lookup")
-            ? runtime.resolveLegacyPlugin?.("Fc2By123AvPlugin")
+            ? runtime.resolveLegacyContribution?.("list.fc2-lookup")
             : null;
         const busImgPlugin = runtime.enabledContributions.includes("list.javbus-images")
-            ? runtime.resolveLegacyPlugin?.("BusImgPlugin")
+            ? runtime.resolveLegacyContribution?.("list.javbus-images")
             : null;
         const controller = new ListController(/** @type {any} */ ({ features: deps[REGISTRY.feature], busImgPlugin, autoPagePlugin, foldCategoryPlugin, actionsPlugin, fc2NavigationPlugin, coverPlugin, fc2LookupPlugin, hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], eventBus: deps[SERVICE.eventBus], http: deps[SERVICE.http], stateService: deps[SERVICE.state], translation: deps[SERVICE.translation], styles: deps[PORT.style], ui: deps[SERVICE.ui], scope: runtime.scope }));
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));

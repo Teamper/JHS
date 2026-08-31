@@ -112,6 +112,7 @@ export function registerSitePlugins(pluginManager, featureRuntime, site, legacyR
             }
             const managedByFeature = item.managedByFeature === true && (!item.managedRoutes || item.managedRoutes.includes(featureRuntime.route));
             const target = managedByFeature ? legacyRegistry : pluginManager;
-            target.register(item.plugin, runtimeServices, { disableable: featureRuntime.isFeatureDisableable(item.featureId), managedByFeature, dependencyResolver: legacyRegistry }, { featureId: item.featureId, contributionId: item.id });
+            const plugin = target.register(item.plugin, runtimeServices, { disableable: featureRuntime.isFeatureDisableable(item.featureId), managedByFeature, dependencyResolver: legacyRegistry }, { featureId: item.featureId, contributionId: item.id });
+            if (!managedByFeature) legacyRegistry.bindContribution(item.featureId, item.id, plugin);
         });
 }

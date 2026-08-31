@@ -11,7 +11,7 @@ export default defineFeature({
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const fc2Plugin = runtime.enabledContributions.includes("detail.fc2-owned")
-            ? runtime.resolveLegacyPlugin?.("Fc2Plugin")
+            ? runtime.resolveLegacyContribution?.("detail.fc2-owned")
             : null;
         if (runtime.route === "owned-detail") {
             const controller = new DetailController({ hostAdapter: deps[PORT.host], fc2Plugin, ownedDetail: true, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
@@ -19,32 +19,32 @@ export default defineFeature({
         }
         const nativeContribution = deps[PORT.host].site === "javbus" ? "detail.javbus-native" : "detail.javdb-native";
         const nativePlugin = runtime.enabledContributions.includes(nativeContribution)
-            ? runtime.resolveLegacyPlugin?.(deps[PORT.host].site === "javbus" ? "BusDetailPagePlugin" : "DetailPagePlugin")
+            ? runtime.resolveLegacyContribution?.(nativeContribution)
             : null;
         const workspacePlugin = runtime.enabledContributions.includes("detail.workspace")
-            ? runtime.resolveLegacyPlugin?.("DetailWorkspacePlugin")
+            ? runtime.resolveLegacyContribution?.("detail.workspace")
             : null;
         const reviewPlugin = runtime.enabledContributions.includes("detail.reviews")
-            ? runtime.resolveLegacyPlugin?.("ReviewPlugin")
+            ? runtime.resolveLegacyContribution?.("detail.reviews")
             : null;
         const relatedPlugin = runtime.enabledContributions.includes("detail.related")
-            ? runtime.resolveLegacyPlugin?.("RelatedPlugin")
+            ? runtime.resolveLegacyContribution?.("detail.related")
             : null;
         const pageActionsPlugin = runtime.enabledContributions.includes("detail.page-state-actions")
-            ? runtime.resolveLegacyPlugin?.("DetailPageButtonPlugin")
+            ? runtime.resolveLegacyContribution?.("detail.page-state-actions")
             : null;
         const screenshotPlugin = runtime.enabledContributions.includes("detail.screenshot")
-            ? runtime.resolveLegacyPlugin?.("ScreenShotPlugin")
+            ? runtime.resolveLegacyContribution?.("detail.screenshot")
             : null;
         const magnetPlugin = runtime.enabledContributions.includes("detail.native-magnets")
-            ? runtime.resolveLegacyPlugin?.("HighlightMagnetPlugin")
+            ? runtime.resolveLegacyContribution?.("detail.native-magnets")
             : null;
         const previewContribution = deps[PORT.host].site === "javbus" ? "detail.javbus-preview" : "detail.javdb-preview";
         const previewPlugin = runtime.enabledContributions.includes(previewContribution)
-            ? runtime.resolveLegacyPlugin?.(deps[PORT.host].site === "javbus" ? "BusPreviewVideoPlugin" : "PreviewVideoPlugin")
+            ? runtime.resolveLegacyContribution?.(previewContribution)
             : null;
         const externalSitesPlugin = runtime.enabledContributions.includes("detail.external-sites")
-            ? runtime.resolveLegacyPlugin?.("OtherSitePlugin")
+            ? runtime.resolveLegacyContribution?.("detail.external-sites")
             : null;
         const controller = new DetailController({ hostAdapter: deps[PORT.host], fc2Plugin, nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, pageActionsPlugin, magnetPlugin, previewPlugin, externalSitesPlugin, screenshotPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
         return controller.start().then(() => ({ dispose: () => controller.dispose() }));

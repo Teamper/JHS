@@ -19,7 +19,7 @@ export const systemFeatureManifests = Object.freeze([
     defineFeature({
         id: "responsive-shell", kind: "system", disableable: false, sites: [], routes: [], startup: "eager",
         requires: [SERVICE.profile], contributes: ["responsive-shell.bottom-bar"], providesCommands: [], activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
-            const plugin = runtime.resolveLegacyPlugin?.("MobileBottomBarPlugin");
+            const plugin = runtime.resolveLegacyContribution?.("responsive-shell.bottom-bar");
             const controller = new ResponsiveShellController({ plugin, scope: runtime.scope });
             return controller.start().then(() => ({ profile: deps[SERVICE.profile].current(), dispose: () => controller.dispose() }));
         },

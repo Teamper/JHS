@@ -44,6 +44,15 @@ export class LegacyContributionRegistry {
     /** @param {string} name @returns {any} */
     resolveDeclaredPlugin(name) { return this.plugins.get(name) ?? this._fallbackResolver?.(name); }
 
+    /** @param {string} contributionId @returns {any} */
+    getContributionPlugin(contributionId) { return this.contributions.get(contributionId)?.plugin; }
+
+    /** @param {string} featureId @param {string} contributionId @param {any} plugin */
+    bindContribution(featureId, contributionId, plugin) {
+        if (!plugin) return;
+        this.contributions.set(contributionId, Object.freeze({ featureId, contributionId, plugin }));
+    }
+
     /** @param {new (...args: any[]) => any} Plugin @param {Record<string, any>} [runtimeServices] @param {{disableable?: boolean, managedByFeature?: boolean}} [options] @param {{featureId?: string, contributionId?: string}} [contribution] */
     register(Plugin, runtimeServices = {}, options = {}, contribution = {}) {
         if (typeof Plugin !== "function") throw new Error("插件必须是一个类");
@@ -58,9 +67,10 @@ export class LegacyContributionRegistry {
         plugin.managedByFeature = options.managedByFeature === true;
         this.plugins.set(name, plugin);
         if (contribution.featureId && contribution.contributionId) {
-            this.contributions.set(contribution.contributionId, Object.freeze({ featureId: contribution.featureId, contributionId: contribution.contributionId, plugin }));
+            this.bindContribution(contribution.featureId, contribution.contributionId, plugin);
         }
         this._registrationMs += performance.now() - startedAt;
+        return plugin;
     }
 
     /** @param {string} plugin @param {string} dependency @param {Error} error */

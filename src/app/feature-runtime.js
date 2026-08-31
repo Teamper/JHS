@@ -155,7 +155,7 @@ export class FeatureRuntime {
             await this.mountLegacyStyles(manifest, enabledContributions, scope);
             const result = await manifest.activate(dependencies, Object.freeze({
                 scope, enabledContributions, route: this.route,
-                resolveLegacyPlugin: (/** @type {string} */ name) => this.legacyResolver?.(name),
+                resolveLegacyContribution: (/** @type {string} */ contributionId) => this.legacyContributionRegistry?.getContributionPlugin?.(contributionId),
             }));
             const legacyApiAliases = manifest.legacyApiAliases ?? [];
             legacyApiAliases.forEach((/** @type {string} */ name) => this.legacyResolver?.(name)?.setFeatureApi?.(result?.api ?? null));

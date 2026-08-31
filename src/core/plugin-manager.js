@@ -63,6 +63,7 @@ export class PluginManager {
         this.plugins.set(n, t);
         this._registrationMs += performance.now() - a;
         this._syncDiagnostics();
+        return t;
     }
     // 仅供 6.6 前的外部 Compatibility Facade 使用。
     /** @param {string} e @returns {any} */
