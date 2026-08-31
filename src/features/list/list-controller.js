@@ -8,6 +8,7 @@ import { ListMediaController } from "./list-media-controller.js";
 import { ListImageController } from "./list-image-controller.js";
 import { ListEventController } from "./list-event-controller.js";
 import { ListBatchService } from "./list-batch-service.js";
+import { ListEvaluationService } from "./list-evaluation-service.js";
 import { scanAllPages } from "./batch-scanner.js";
 import { evaluateListItem } from "./list-evaluator.js";
 import { readListItem as parseListItem } from "../../core/list-item-reader.js";
@@ -17,7 +18,7 @@ import { readListItem as parseListItem } from "../../core/list-item-reader.js";
  * strangled out of PluginManager.
  */
 export class ListController {
-    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any, findCarNumAndHref?: (item: any) => {carNum?: unknown} | null, recordListPhase?: (phase: string, itemCount?: number | null) => void, attachListState?: (state: ListStateController) => void, attachListIndex?: (index: ListIndexController) => void, attachListDomObserver?: (observer: ListDomObserver) => void, attachListMedia?: (media: ListMediaController) => void, attachListImages?: (images: ListImageController) => void, attachListEvents?: (events: ListEventController) => void, attachListBatch?: (batch: ListBatchService) => void, processAddedItems?: (items: Element[], revision: string) => Promise<void> | void, getLibraryFeatureApi?: () => Promise<any>, createEvaluationContext?: () => Promise<any>, createQuickFilter?: (initialFilter?: unknown) => Promise<any> | any, initCss?: () => Promise<string> | string}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2NavigationPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, coverPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2LookupPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any, settings?: {snapshot: () => Record<string, any>}, storage?: any, eventBus?: any, http?: any, stateService?: any, styles?: {register: (id: string, css: string) => () => void}}} options */
+    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any, findCarNumAndHref?: (item: any) => {carNum?: unknown} | null, recordListPhase?: (phase: string, itemCount?: number | null) => void, attachListState?: (state: ListStateController) => void, attachListIndex?: (index: ListIndexController) => void, attachListDomObserver?: (observer: ListDomObserver) => void, attachListMedia?: (media: ListMediaController) => void, attachListImages?: (images: ListImageController) => void, attachListEvents?: (events: ListEventController) => void, attachListBatch?: (batch: ListBatchService) => void, attachListEvaluation?: (evaluation: ListEvaluationService) => void, processAddedItems?: (items: Element[], revision: string) => Promise<void> | void, getLibraryFeatureApi?: () => Promise<any>, createEvaluationContext?: () => Promise<any>, createQuickFilter?: (initialFilter?: unknown) => Promise<any> | any, initCss?: () => Promise<string> | string}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2NavigationPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, coverPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2LookupPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any, settings?: {snapshot: () => Record<string, any>}, storage?: any, eventBus?: any, http?: any, stateService?: any, styles?: {register: (id: string, css: string) => () => void}}} options */
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin ?? null;
         this.autoPagePlugin = options.autoPagePlugin ?? null;
@@ -47,6 +48,7 @@ export class ListController {
         this.images = null;
         this.events = null;
         this.batch = null;
+        this.evaluation = null;
         this.started = false;
     }
 
@@ -82,6 +84,7 @@ export class ListController {
             });
             this.media = new ListMediaController({ scope: this.scope, document: this.hostAdapter.document, selectors });
             this.images = new ListImageController({ scope: this.scope, document: this.hostAdapter.document, window: this.hostAdapter.document?.defaultView ?? globalThis.window, site: this.hostAdapter.site, selector: selectors.coverImgSelector });
+            this.evaluation = this.stateService && this.storage ? new ListEvaluationService({ scope: this.scope, storage: this.storage, stateService: this.stateService }) : null;
             this.events = new ListEventController({
                 scope: this.scope,
                 settings: this.settings,
@@ -90,6 +93,7 @@ export class ListController {
                 state: this.state,
                 index: this.index,
                 legacyPlugin: this.legacyPlugin,
+                evaluation: this.evaluation,
                 onHoverSettingChanged: (event) => {
                     const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
                     if (names.includes("hoverBigImg")) this.images?.configureHoverPreview(this.settings?.snapshot?.().hoverBigImg === "yes" ? "yes" : "no");
@@ -105,7 +109,7 @@ export class ListController {
                 selectors,
                 stateService: this.stateService,
                 http: this.http,
-                getEvaluationContext: () => this.legacyPlugin?.createEvaluationContext?.(),
+                getEvaluationContext: () => this.evaluation?.createEvaluationContext?.() ?? this.legacyPlugin?.createEvaluationContext?.(),
             });
         }
         this.legacyPlugin?.attachListState?.(this.state);
@@ -115,6 +119,7 @@ export class ListController {
         this.images && this.legacyPlugin?.attachListImages?.(this.images);
         this.events && this.legacyPlugin?.attachListEvents?.(this.events);
         this.batch && this.legacyPlugin?.attachListBatch?.(this.batch);
+        this.evaluation && this.legacyPlugin?.attachListEvaluation?.(this.evaluation);
         this.started = true;
         const listFeatureApi = this.getApi();
         const view = this.view;
@@ -191,6 +196,8 @@ export class ListController {
         this.batch = null;
         this.events?.dispose();
         this.events = null;
+        this.evaluation?.dispose();
+        this.evaluation = null;
         this.images?.dispose();
         this.images = null;
         this.media?.dispose();

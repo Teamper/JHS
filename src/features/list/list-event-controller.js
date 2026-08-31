@@ -4,7 +4,7 @@ const LIST_EFFECT_KEYS = new Set([ "tagPosition", "defaultQuickFilterTab" ]);
 
 /** Own list-wide refresh subscriptions while delegating the legacy filter work. */
 export class ListEventController {
-    /** @param {{scope: any, settings?: any, eventBus?: any, storage?: any, state: any, index: any, legacyPlugin?: any, onHoverSettingChanged?: (event: any) => void, onReloadHistory?: () => Promise<void> | void}} options */
+    /** @param {{scope: any, settings?: any, eventBus?: any, storage?: any, state: any, index: any, legacyPlugin?: any, evaluation?: any, onHoverSettingChanged?: (event: any) => void, onReloadHistory?: () => Promise<void> | void}} options */
     constructor(options) {
         this.scope = options.scope;
         this.settings = options.settings ?? null;
@@ -13,6 +13,7 @@ export class ListEventController {
         this.state = options.state;
         this.index = options.index;
         this.legacyPlugin = options.legacyPlugin ?? null;
+        this.evaluation = options.evaluation ?? null;
         this.onHoverSettingChanged = options.onHoverSettingChanged ?? (() => {});
         this.onReloadHistory = options.onReloadHistory ?? (() => {});
         /** @type {(() => void)[]} */ this.cleanups = [];
@@ -39,6 +40,7 @@ export class ListEventController {
         const changedNames = /** @type {string[] | undefined} */ (payload?.changedNames);
         if (changedNames && !changedNames.some((name) => LIST_EFFECT_KEYS.has(name))) return;
         const revision = this.state.advanceListGeneration();
+        this.evaluation?.invalidate();
         this.legacyPlugin.filterContext = null;
         this.storage?._invalidateCache?.(this.storage.car_list_key);
         await this.legacyPlugin.doFilter?.(revision);
@@ -49,6 +51,7 @@ export class ListEventController {
     /** @param {any} payload */
     async refreshCarState(payload = {}) {
         if (this.disposed) return;
+        this.evaluation?.invalidate();
         this.legacyPlugin.filterContext = null;
         this.storage?._invalidateCache?.(this.storage.car_list_key);
         const items = this.index?.getIndexedItems(payload?.carNums || []) ?? [];

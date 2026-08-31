@@ -134,6 +134,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {any} */ this.listImages = null;
         /** @type {any} */ this.listEvents = null;
         /** @type {any} */ this.listBatch = null;
+        /** @type {any} */ this.listEvaluation = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -165,6 +166,10 @@ export class ListPagePlugin extends BasePlugin {
     /** Attach the FeatureRuntime-owned batch service during migration. @param {any} batch */
     attachListBatch(batch) {
         this.listBatch = batch;
+    }
+    /** Attach the FeatureRuntime-owned evaluation context during migration. @param {any} evaluation */
+    attachListEvaluation(evaluation) {
+        this.listEvaluation = evaluation;
     }
     /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
     async getLibraryFeatureApi() {
@@ -446,9 +451,11 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** 供页面展示与跨页批量操作共用的唯一判定上下文。 */
     async createEvaluationContext() {
+        if (this.listEvaluation) return this.listEvaluation.createEvaluationContext();
         return createListEvaluationContext(await this.getFilterContext());
     }
     async getFilterContext() {
+        if (this.listEvaluation) return this.listEvaluation.getContext();
         if (this.filterContext) return this.filterContext;
         const [titleKeywords, blacklistMap, blacklistCars, settings, carMap, activity] = await Promise.all([ storageManager.getTitleFilterKeyword(), storageManager.getBlacklistMap(), storageManager.getBlacklistCarList(), storageManager.getSetting(), storageManager.getCarMap(), this.getRuntimeService("state").getActivityLog() ]), actorCarNumToNameMap = new Map, actressCarNumToNameMap = new Map, recentCarNums = new Set;
         const cutoff = Date.now() - 7 * 864e5;
