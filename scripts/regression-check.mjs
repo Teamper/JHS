@@ -245,6 +245,7 @@ assertIncludes(listPageAdapterSource, "const delegate = new ListPagePlugin()", "
 assertIncludes(registry, 'ListPagePluginAdapter as ListPagePlugin', "list registry compatibility shell");
 assertIncludes(listControllerSource, "this.domObserver?.start()", "list DOM observer startup ownership");
 assert(!listControllerSource.includes("this.legacyPlugin?.attachList"), "list controller must not hand off owned services to the legacy plugin");
+assert(!listControllerSource.includes("legacyPlugin"), "list controller must not depend on the legacy plugin");
 assertIncludes(listControllerSource, ".then(() => this.startListLifecycle())", "list initial lifecycle startup ownership");
 assert(!listControllerSource.includes("skipOwnedListLifecycle"), "list controller must not delegate its lifecycle to the legacy plugin");
 assertIncludes(listControllerSource, "async startListLifecycle()", "list initial lifecycle ownership");
@@ -262,16 +263,16 @@ assertIncludes(listControllerSource, "new ListImageController({", "list image li
 assertIncludes(listControllerSource, "new ListEventController({", "list event lifecycle ownership");
 assertIncludes(listControllerSource, "new ListEvaluationService({", "list evaluation context ownership");
 assertIncludes(listControllerSource, "new ListSummaryService({", "list summary ownership");
-assertIncludes(listControllerSource, 'this.features.getFeatureApi("library")', "list Library Feature API ownership");
+assertIncludes(listControllerSource, 'this.features?.getFeatureApi?.("library")', "list Library Feature API ownership");
 assertIncludes(listControllerSource, "this.busImgPlugin?.logImageHeightsByRow", "list JavBus image contribution ownership");
-assertIncludes(listControllerSource, "createEvaluationContext(...args)", "list evaluation capability boundary");
+assertIncludes(listControllerSource, "createEvaluationContext()", "list evaluation capability boundary");
 assert(!listEventSource.includes("legacyPlugin"), "list events must not depend on the legacy filter plugin");
 assertIncludes(listControllerSource, "new ListTranslationService({", "list translation ownership");
 assertIncludes(listControllerSource, "new ListFilterService({", "list filter service ownership");
 assertIncludes(listControllerSource, "this.hostAdapter.prepareListItems?.(items)", "list host incremental normalization");
 assertIncludes(listControllerSource, "new ListContextMenuController({", "list context-menu ownership");
 assertIncludes(listControllerSource, "new ListPaginationController({", "list pagination ownership");
-assertIncludes(listControllerSource, "this.pagination ? this.pagination.start()", "list pagination lifecycle ownership");
+assertIncludes(listControllerSource, "this.pagination?.start()", "list pagination lifecycle ownership");
 assertIncludes(listControllerSource, "new ListTagExpandController({", "list actor-tag ownership");
 assertIncludes(listControllerSource, "onOpenMovieDetail:", "list navigation action ownership");
 assertIncludes(listControllerSource, "this.openMovieDetail(item, options)", "list navigation API ownership");
@@ -280,7 +281,7 @@ assertIncludes(listControllerSource, "bindClick: () => this.bindClick()", "list 
 assertIncludes(listControllerSource, 'configureHoverPreview: route(this.images, "configureHoverPreview")', "list image API ownership");
 assertIncludes(listControllerSource, 'rebuildItemIndex: route(this.index, "rebuildItemIndex")', "list index API ownership");
 assertIncludes(listControllerSource, 'bindMovieDetailNavigation: route(this.view, "bindMovieDetailNavigation")', "list view API ownership");
-assertIncludes(listControllerSource, "createEvaluationContext(...args)", "list evaluation API ownership");
+assertIncludes(listControllerSource, "createEvaluationContext()", "list evaluation API ownership");
 assertIncludes(listControllerSource, 'getCurrentPageSummary: route(this.summary, "collectCurrentPageSummary")', "list summary API ownership");
 assertIncludes(listControllerSource, "new ListBatchService({", "list batch service ownership");
 assertIncludes(listControllerSource, "new ListIncrementalService({", "list incremental service ownership");

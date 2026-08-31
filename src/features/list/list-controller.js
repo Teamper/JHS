@@ -24,14 +24,10 @@ import { readListItem as parseListItem } from "../../core/list-item-reader.js";
 import { isHitShowPage } from "../../core/site-context.js";
 import { LIST_FEATURE_CSS } from "./list-styles.js";
 
-/**
- * Own the list feature lifecycle while the legacy page implementation is being
- * strangled out of the legacy runtime.
- */
+/** Own the list feature lifecycle through HostAdapter and feature-owned services. */
 export class ListController {
-    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView, skipOwnedDomObserver?: boolean}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any, findCarNumAndHref?: (item: any) => {carNum?: unknown} | null, recordListPhase?: (phase: string, itemCount?: number | null) => void, attachListHost?: (host: any) => void, attachListState?: (state: ListStateController) => void, attachListIndex?: (index: ListIndexController) => void, attachListDomObserver?: (observer: ListDomObserver) => void, attachListMedia?: (media: ListMediaController) => void, attachListImages?: (images: ListImageController) => void, attachListEvents?: (events: ListEventController) => void, attachListBatch?: (batch: ListBatchService) => void, attachListEvaluation?: (evaluation: ListEvaluationService) => void, attachListSummary?: (summary: ListSummaryService) => void, attachListTranslation?: (translation: any) => void, attachListFilter?: (filter: ListFilterService) => void, attachListIncremental?: (incremental: ListIncrementalService) => void, attachListContextMenu?: (contextMenu: ListContextMenuController) => void, processAddedItems?: (items: Element[], revision: string) => Promise<void> | void, getLibraryFeatureApi?: () => Promise<any>, createEvaluationContext?: () => Promise<any>, createQuickFilter?: (initialFilter?: unknown) => Promise<any> | any, initCss?: () => Promise<string> | string}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2NavigationPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, coverPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2LookupPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any, settings?: {snapshot: () => Record<string, any>}, storage?: any, eventBus?: any, http?: any, stateService?: any, styles?: {register: (id: string, css: string) => () => void}}} options */
+    /** @param {Record<string, any>} options */
     constructor(options) {
-        this.legacyPlugin = options.legacyPlugin ?? null;
         this.features = /** @type {any} */ (options).features ?? null;
         this.busImgPlugin = /** @type {any} */ (options).busImgPlugin ?? null;
         this.autoPagePlugin = options.autoPagePlugin ?? null;
@@ -78,8 +74,7 @@ export class ListController {
     start() {
         this.scope.assertActive();
         if (this.started) return Promise.resolve();
-        const selectors = this.hostAdapter.getListSelectors?.() ?? this.legacyPlugin?.getSelector?.();
-        if (this.legacyPlugin && !selectors) throw new Error("List feature requires a list selector contract");
+        const selectors = this.hostAdapter.getListSelectors?.();
         if (selectors) {
             this.diagnostics = new ListDiagnosticsService({ scope: this.scope, document: this.hostAdapter.document, selectors, state: this.state });
             this.view = new ListView({
@@ -103,7 +98,7 @@ export class ListController {
                 location: this.hostAdapter.location,
                 state: this.state,
                 index: this.index,
-                processAddedItems: (items, revision) => this.incremental ? this.incremental.processAddedItems(items, revision) : this.legacyPlugin?.processAddedItems?.(items, revision),
+                processAddedItems: (items, revision) => this.incremental?.processAddedItems?.(items, revision),
                 onPhase: (phase, itemCount) => this.diagnostics?.recordPhase(phase, itemCount),
             });
             this.media = new ListMediaController({ scope: this.scope, document: this.hostAdapter.document, selectors });
@@ -138,7 +133,7 @@ export class ListController {
                 readItem: (item) => this.readListItem(item),
                 recordPhase: (phase, itemCount) => this.diagnostics?.recordPhase(phase, itemCount),
                 scheduleRecount: () => this.summary?.scheduleRecount?.(),
-                translateItems: (items) => this.titleTranslation?.translateListItems?.(items) ?? (/** @type {any} */ (this.legacyPlugin))?.translateListItems?.(items),
+                translateItems: (items) => { this.titleTranslation?.translateListItems?.(items); },
                 onJavBusFiltered: () => this.busImgPlugin?.logImageHeightsByRow?.(this.settings?.snapshot?.()),
             });
             this.incremental = new ListIncrementalService({
@@ -147,11 +142,11 @@ export class ListController {
                 images: this.images,
                 captureRevision: () => this.state.captureListRevision(),
                 isCurrentRevision: (revision) => this.state.isCurrentListGeneration(revision),
-                filterItems: (items, revision) => this.filter?.doFilterItems(items, revision) ?? (/** @type {any} */ (this.legacyPlugin))?.doFilterItems?.(items, revision) ?? false,
+                filterItems: (items, revision) => this.filter?.doFilterItems(items, revision) ?? false,
                 reconcileItems: (items, revision) => this.state.reconcileListItems(items, revision),
                 prepareLayout: (items) => {
                     this.hostAdapter.prepareListItems?.(items);
-                    this.pagination ? this.pagination.start() : (/** @type {any} */ (this.legacyPlugin))?.addJumpPageControl?.();
+                    this.pagination?.start();
                 },
                 sortItems: () => (/** @type {any} */ (this.actionsPlugin))?.sortItems?.(),
                 addCardActions: (items) => (/** @type {any} */ (this.coverPlugin))?.addSvgBtn?.(items),
@@ -235,7 +230,7 @@ export class ListController {
         if (!runtimeWindow?.isListPage) return;
         this.events?.start();
         if (isHitShowPage(this.hostAdapter.location ?? this.hostAdapter.document?.location ?? runtimeWindow.location)) return;
-        const selectors = this.hostAdapter.getListSelectors?.() ?? (/** @type {any} */ (this.legacyPlugin))?.getListSelectors?.() ?? (/** @type {any} */ (this.legacyPlugin))?.getSelector?.();
+        const selectors = this.hostAdapter.getListSelectors?.();
         if (!selectors?.boxSelector) return;
         const hoverBigImg = this.settings?.snapshot?.().hoverBigImg;
         this.images?.configureHoverPreview(hoverBigImg === "yes" ? "yes" : "no");
@@ -243,7 +238,7 @@ export class ListController {
         this.images?.replaceHdImg?.();
         this.pagination?.start();
         const revision = this.state.advanceListGeneration();
-        await (this.filter?.doFilter?.(revision) ?? (/** @type {any} */ (this.legacyPlugin))?.doFilter?.(revision));
+        await this.filter?.doFilter?.(revision);
         await this.state.createQuickFilter();
         this.state.reconcileListItems(null, revision);
         this.bindClick();
@@ -257,19 +252,18 @@ export class ListController {
 
     /** Expose the stable list capability surface to other Features. */
     getApi() {
-        const legacyPlugin = /** @type {any} */ (this.legacyPlugin);
-        const route = (/** @type {any} */ feature, /** @type {string} */ name) => (/** @type {any[]} */ ...args) => feature && "function" === typeof feature[name] ? feature[name](...args) : legacyPlugin?.[name]?.(...args);
+        const route = (/** @type {any} */ feature, /** @type {string} */ name) => (/** @type {any[]} */ ...args) => feature?.[name]?.(...args);
         return Object.freeze({
-            getListSelectors: () => this.hostAdapter.getListSelectors?.() ?? legacyPlugin?.getListSelectors?.() ?? legacyPlugin?.getSelector?.(),
+            getListSelectors: () => this.hostAdapter.getListSelectors?.(),
             advanceListGeneration: () => this.state.advanceListGeneration(),
             captureListRevision: () => this.state.captureListRevision(),
             configureHoverPreview: route(this.images, "configureHoverPreview"),
             replaceHdImg: route(this.images, "replaceHdImg"),
-            doFilter: (/** @type {any[]} */ ...args) => this.filter ? this.filter.doFilter(...args) : legacyPlugin?.doFilter?.(...args),
+            doFilter: (/** @type {any[]} */ ...args) => this.filter?.doFilter?.(...args),
             createQuickFilter: (/** @type {unknown} */ initialFilter) => this.state.createQuickFilter(initialFilter),
             batchSaveAllVideos: (/** @type {any[]} */ ...args) => {
                 const batch = /** @type {any} */ (this.batch);
-                return batch ? batch.batchSaveAllVideos(...args) : legacyPlugin?.batchSaveAllVideos?.(...args);
+                return batch?.batchSaveAllVideos?.(...args);
             },
             reconcileListItems: (/** @type {Element[] | null} */ items, /** @type {string} */ revision) => this.state.reconcileListItems(items, revision),
             applyVisibility: (/** @type {Element[] | null} */ items) => this.state.applyVisibility(items),
@@ -283,14 +277,14 @@ export class ListController {
             parseActressName: (/** @type {string} */ url) => this.parseActressName(url),
             setQuickFilter: (/** @type {unknown} */ filter, /** @type {{syncUi?: boolean}} [options] */ options) => this.setQuickFilter(filter, options),
             getActiveQuickFilter: () => this.state.activeQuickFilter,
-            createEvaluationContext: (/** @type {any[]} */ ...args) => this.createEvaluationContext(...args),
+            createEvaluationContext: () => this.createEvaluationContext(),
             translateListItems: (/** @type {any[]} */ ...args) => {
                 const translation = /** @type {any} */ (this.titleTranslation);
-                return translation ? translation.translateListItems(...args) : legacyPlugin?.translateListItems?.(...args);
+                return translation?.translateListItems?.(...args);
             },
             revertTranslation: (/** @type {any[]} */ ...args) => {
                 const translation = /** @type {any} */ (this.titleTranslation);
-                return translation ? translation.revertTranslation(...args) : legacyPlugin?.revertTranslation?.(...args);
+                return translation?.revertTranslation?.(...args);
             },
             invalidateTranslations: route(this.titleTranslation, "invalidateTranslations"),
             getCurrentPageSummary: route(this.summary, "collectCurrentPageSummary"),
@@ -363,35 +357,32 @@ export class ListController {
         /** @type {any} */ (globalThis).utils?.openPage?.(destination.href, carNum, true, { event, newTab: shouldOpenTab });
     }
 
-    /** Resolve optional detail-page actress names while preserving the legacy fallback. */
+    /** Resolve optional detail-page actress names through the feature-owned service. */
     /** @param {string} url */
     parseActressName(url) {
-        if (this.actressNames) return this.actressNames.parse(url);
-        return (/** @type {any} */ (this.legacyPlugin))?.parseActressName?.(url);
+        return this.actressNames ? this.actressNames.parse(url) : null;
     }
 
-    /** Resolve the Library capability directly, retaining the legacy fallback for isolated callers. */
+    /** Resolve the Library capability directly through FeatureRuntime. */
     getLibraryFeatureApi() {
-        if (this.features?.getFeatureApi) return Promise.resolve(this.features.getFeatureApi("library"));
-        return Promise.resolve((/** @type {any} */ (this.legacyPlugin))?.getLibraryFeatureApi?.() ?? null);
+        return Promise.resolve(this.features?.getFeatureApi?.("library") ?? null);
     }
 
-    /** Resolve the canonical evaluator context, retaining the legacy fallback for isolated callers. @param {...any} args */
-    createEvaluationContext(...args) {
-        if (this.evaluation) return (/** @type {any} */ (this.evaluation)).createEvaluationContext(...args);
-        return (/** @type {any} */ (this.legacyPlugin))?.createEvaluationContext?.(...args);
+    /** Resolve the canonical evaluator context through the feature-owned service. */
+    createEvaluationContext() {
+        return this.evaluation?.createEvaluationContext?.();
     }
 
     /** Bind list navigation, video playback, and context-menu interactions through owned services. */
     bindClick() {
-        const selectors = this.hostAdapter.getListSelectors?.() ?? (/** @type {any} */ (this.legacyPlugin))?.getListSelectors?.() ?? (/** @type {any} */ (this.legacyPlugin))?.getSelector?.();
+        const selectors = this.hostAdapter.getListSelectors?.();
         if (!selectors?.boxSelector) return;
         if (this.view && this.media && this.contextMenu) {
             this.view.bindMovieDetailNavigation(selectors.boxSelector);
             this.media.start();
             return this.contextMenu.start();
         }
-        return (/** @type {any} */ (this.legacyPlugin))?.bindClick?.();
+        return undefined;
     }
 
     /** Reveal a hidden list card through the HostAdapter-owned item boundary. */

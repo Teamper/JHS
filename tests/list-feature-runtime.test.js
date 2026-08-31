@@ -54,18 +54,13 @@ describe("List FeatureRuntime ownership", () => {
         const card = globalThis.$(".item").eq(0);
         const openPage = vi.fn();
         globalThis.utils = { openPage };
-        api.batchSaveAllVideos("scope", "favorite");
         await api.openMovieDetail(card, { newTab: false });
         const filterRequest = vi.spyOn(controller.filter, "doFilter").mockResolvedValue(true);
         await api.doFilter("1:0");
         expect(api.findCarNumAndHref(card)).toMatchObject({ carNum: "ABC-123", url: "/v/ABC-123" });
-        api.parseActressName("/movie/ABC-123");
         api.setQuickFilter("favorite", { syncUi: false });
-        expect(legacyPlugin.batchSaveAllVideos).toHaveBeenCalledWith("scope", "favorite");
         expect(filterRequest).toHaveBeenCalledWith("1:0");
-        expect(legacyPlugin.doFilter).not.toHaveBeenCalled();
         expect(openPage).toHaveBeenCalledWith("https://javdb.com/v/ABC-123", "ABC-123", true, { event: null, newTab: false });
-        expect(legacyPlugin.openMovieDetail).not.toHaveBeenCalled();
         openPage.mockClear();
         const modifiedEvent = new dom.window.MouseEvent("click", { ctrlKey: true, button: 0 });
         await api.openMovieDetail(card, { event: modifiedEvent, autoplay: true });
@@ -77,12 +72,7 @@ describe("List FeatureRuntime ownership", () => {
         const revealed = dom.window.document.querySelectorAll(".item")[1];
         expect(revealed.getAttribute("data-hide")).toBeNull();
         expect(revealed.style.display).toBe("");
-        expect(legacyPlugin.findCarNumAndHref).not.toHaveBeenCalled();
-        expect(legacyPlugin.parseActressName).toHaveBeenCalledWith("/movie/ABC-123");
-        expect(legacyPlugin.setQuickFilter).not.toHaveBeenCalled();
-        expect(legacyPlugin.recordListPhase).not.toHaveBeenCalled();
         controller.summary.recountStatuses();
-        expect(legacyPlugin.applyListSummary).not.toHaveBeenCalled();
         expect(globalThis.__jhsBrowserDiagnostics.listPhases).toEqual(expect.arrayContaining([ expect.objectContaining({ phase: "setQuickFilter" }) ]));
         expect(api.getActiveQuickFilter()).toBe("favorite");
         controller.dispose();
@@ -96,62 +86,52 @@ describe("List FeatureRuntime ownership", () => {
         const scope = new LifecycleScope("feature:list"), stateService = { patch: vi.fn(async () => {}), getActivityLog: vi.fn(async () => ({ entries: [] })) }, storage = {
             getTitleFilterKeyword: vi.fn(async () => []), getBlacklistMap: vi.fn(async () => new Map()), getBlacklistCarList: vi.fn(async () => []),
             getSetting: vi.fn(async () => ({})), getCarMap: vi.fn(async () => new Map([["ABC-123", { stateFlags: { favorite: true } }]])),
-        }, legacyPlugin = {
-            handle: vi.fn(async () => {}),
-            attachListBatch: vi.fn(),
-            attachListEvaluation: vi.fn(),
-            createEvaluationContext: vi.fn(),
         }, hostAdapter = {
             document: dom.window.document,
             location: dom.window.location,
             getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }),
-        }, controller = new ListController({ legacyPlugin, hostAdapter, stateService, storage, http: { request: vi.fn() }, scope });
+        }, controller = new ListController({ hostAdapter, stateService, storage, http: { request: vi.fn() }, scope });
 
         await controller.start();
         const api = controller.getApi();
         await expect(api.batchSaveAllVideos({ kind: "search" }, "favorite", { filter: "favorite", confirm: false })).resolves.toMatchObject({ matched: 1, updated: 1 });
 
         expect(controller.batch).toBeInstanceOf(ListBatchService);
-        expect(legacyPlugin.attachListBatch).not.toHaveBeenCalled();
-        expect(legacyPlugin.attachListEvaluation).not.toHaveBeenCalled();
         expect(stateService.patch).toHaveBeenCalledOnce();
-        expect(legacyPlugin.createEvaluationContext).not.toHaveBeenCalled();
         controller.dispose();
         expect(controller.batch).toBeNull();
         scope.dispose();
     });
 
     it("reloads Library history through the direct Feature API", async () => {
-        const scope = new LifecycleScope("feature:list"), reloadHistoryTable = vi.fn(), libraryApi = { reloadHistoryTable }, features = { getFeatureApi: vi.fn(async (id) => id === "library" ? libraryApi : null) }, legacyPlugin = { handle: vi.fn(async () => {}), getLibraryFeatureApi: vi.fn(async () => null) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({ legacyPlugin, features, hostAdapter, scope });
+        const scope = new LifecycleScope("feature:list"), reloadHistoryTable = vi.fn(), libraryApi = { reloadHistoryTable }, features = { getFeatureApi: vi.fn(async (id) => id === "library" ? libraryApi : null) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({ features, hostAdapter, scope });
 
         await controller.start();
         await controller.events.onReloadHistory();
 
         expect(features.getFeatureApi).toHaveBeenCalledWith("library");
         expect(reloadHistoryTable).toHaveBeenCalledOnce();
-        expect(legacyPlugin.getLibraryFeatureApi).not.toHaveBeenCalled();
         scope.dispose();
     });
 
     it("routes JavBus image row correction through the direct contribution", async () => {
-        const scope = new LifecycleScope("feature:list"), logImageHeightsByRow = vi.fn(), busImgPlugin = { logImageHeightsByRow }, legacyPlugin = { handle: vi.fn(async () => {}), getOptionalDependency: vi.fn() }, hostAdapter = { site: "javbus", getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({ legacyPlugin, busImgPlugin, hostAdapter, settings: { snapshot: () => ({}) }, scope });
+        const scope = new LifecycleScope("feature:list"), logImageHeightsByRow = vi.fn(), busImgPlugin = { logImageHeightsByRow }, hostAdapter = { site: "javbus", getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({ busImgPlugin, hostAdapter, settings: { snapshot: () => ({}) }, scope });
 
         await controller.start();
         await controller.filter.onJavBusFiltered();
 
         expect(logImageHeightsByRow).toHaveBeenCalledWith({});
-        expect(legacyPlugin.getOptionalDependency).not.toHaveBeenCalled();
         scope.dispose();
     });
 
     it("binds list interactions through the controller-owned services", async () => {
         const dom = new JSDOM('<div class="movie-list"><div class="item"><img src="cover.jpg"><video></video></div></div>', { url: "https://javdb.com/search" });
         globalThis.$ = jqueryFactory(dom.window);
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), bindClick: vi.fn(async () => {}) }, hostAdapter = {
+        const scope = new LifecycleScope("feature:list"), hostAdapter = {
             document: dom.window.document,
             location: dom.window.location,
             getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }),
-        }, controller = new ListController({ legacyPlugin, hostAdapter, scope });
+        }, controller = new ListController({ hostAdapter, scope });
 
         await controller.start();
         await controller.getApi().bindClick();
@@ -159,7 +139,6 @@ describe("List FeatureRuntime ownership", () => {
         expect(controller.view.navigationRoot).not.toBeNull();
         expect(controller.media.started).toBe(true);
         expect(controller.contextMenu.started).toBe(true);
-        expect(legacyPlugin.bindClick).not.toHaveBeenCalled();
         controller.dispose();
         scope.dispose();
     });
@@ -168,11 +147,11 @@ describe("List FeatureRuntime ownership", () => {
         const dom = new JSDOM('<div class="movie-list"></div>', { url: "https://javdb.com/search" });
         dom.window.isListPage = true;
         globalThis.$ = jqueryFactory(dom.window);
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = {
+        const scope = new LifecycleScope("feature:list"), hostAdapter = {
             document: dom.window.document,
             location: dom.window.location,
             getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }),
-        }, controller = new ListController({ legacyPlugin, hostAdapter, scope });
+        }, controller = new ListController({ hostAdapter, scope });
         const previousMutationObserver = globalThis.MutationObserver;
         const previousDocument = globalThis.document;
         globalThis.MutationObserver = dom.window.MutationObserver;
@@ -183,7 +162,6 @@ describe("List FeatureRuntime ownership", () => {
 
             expect(controller.domObserver.started).toBe(true);
             expect(controller.domObserver.observer).not.toBeNull();
-            expect(legacyPlugin.handle).not.toHaveBeenCalled();
             controller.dispose();
             scope.dispose();
         } finally {
@@ -195,8 +173,7 @@ describe("List FeatureRuntime ownership", () => {
     });
 
     it("starts the waterfall contribution with the feature-owned list API", async () => {
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), getSelector: vi.fn(() => ({ boxSelector: ".movie-list" })) }, autoPagePlugin = { handle: vi.fn(async () => {}) }, foldCategoryPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
-            legacyPlugin,
+        const scope = new LifecycleScope("feature:list"), autoPagePlugin = { handle: vi.fn(async () => {}) }, foldCategoryPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
             autoPagePlugin,
             foldCategoryPlugin,
             hostAdapter,
@@ -225,8 +202,7 @@ describe("List FeatureRuntime ownership", () => {
     });
 
     it("passes the feature-owned list API to card actions", async () => {
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), getSelector: vi.fn(() => ({ boxSelector: ".movie-list" })) }, coverPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
-            legacyPlugin,
+        const scope = new LifecycleScope("feature:list"), coverPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
             coverPlugin,
             hostAdapter,
             scope,
@@ -254,8 +230,7 @@ describe("List FeatureRuntime ownership", () => {
     it("defers list actions until the rest of the eager feature APIs can settle", async () => {
         vi.useFakeTimers();
         try {
-            const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}) }, actionsPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
-                legacyPlugin,
+            const scope = new LifecycleScope("feature:list"), actionsPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
                 actionsPlugin,
                 hostAdapter,
                 scope,
