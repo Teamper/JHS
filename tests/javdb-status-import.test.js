@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import { join } from "node:path";
 import { JSDOM } from "jsdom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LibraryController } from "../src/features/library/library-controller.js";

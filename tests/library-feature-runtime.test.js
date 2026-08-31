@@ -12,16 +12,14 @@ describe("Library FeatureRuntime ownership", () => {
         }, blacklistPlugin = {
             openBlacklistDialog: vi.fn(),
             parseAndSaveFilterInfo: vi.fn(),
-        }, favoritePlugin = { handle: vi.fn(async () => {}) };
-        const controller = new LibraryController({ historyPlugin, blacklistPlugin, favoritePlugin, route: "other", scope });
+        };
+        const controller = new LibraryController({ historyPlugin, blacklistPlugin, favoriteActressesEnabled: false, route: "other", scope });
 
         await controller.start();
         await controller.start();
 
         expect(historyPlugin.handle).toHaveBeenCalledOnce();
         expect(historyPlugin.handle).toHaveBeenCalledWith({ scope });
-        expect(favoritePlugin.handle).toHaveBeenCalledOnce();
-        expect(favoritePlugin.handle).toHaveBeenCalledWith({ scope });
         expect(controller.getApi().getHistoryRepository()).toBe(repository);
         expect(controller.getApi().hasBlacklist).toBe(true);
         controller.getApi().openBlacklistDialog("event");
@@ -61,6 +59,57 @@ describe("Library FeatureRuntime ownership", () => {
         await expect(controller.start()).resolves.toBeUndefined();
         expect(controller.getApi().getHistoryRepository()).toBeNull();
         expect(controller.getApi().hasBlacklist).toBe(false);
+        scope.dispose();
+    });
+
+    it("highlights a saved actress and replaces the actor page avatar through native DOM", async () => {
+        document.body.innerHTML = '<a href="/actors/actor-1">演员甲</a><span class="female">演员甲</span><div class="section-columns"></div><div class="actor-section-name">演员甲</div>';
+        const scope = new LifecycleScope("feature:library"), storage = { get: vi.fn(async () => [{ starId: "actor-1", avatar: "https://cdn.example/avatar.jpg" }]), set: vi.fn(async () => {}) };
+        const controller = new LibraryController({
+            hostAdapter: { site: "javdb", document, location: { href: "https://javdb.com/actors/actor-1", pathname: "/actors/actor-1" } },
+            storage, settings: { snapshot: () => ({}) }, route: "detail", scope,
+        });
+
+        await controller.start();
+
+        expect(document.querySelector('a[href="/actors/actor-1"]')?.classList.contains("highlighted")).toBe(true);
+        expect(document.querySelector('a[href="/actors/actor-1"]')?.getAttribute("title")).toContain("高亮已收藏演员");
+        expect(document.querySelector(".avatar")?.style.backgroundImage).toContain("avatar.jpg");
+        scope.dispose();
+    });
+
+    it("persists actor collection through the mutation coordinator and emits the native state event", async () => {
+        document.body.innerHTML = '<div class="section-columns"></div><div class="actor-section-name">演员甲, 别名甲</div><a id="button-collect-actor" href="/actors/actor-1/collect">收藏</a>';
+        const scope = new LifecycleScope("feature:library"), values = [], storage = { get: vi.fn(async () => []), set: vi.fn(async (_key, value) => values.push(value)) }, eventBus = { emit: vi.fn(async () => {}) };
+        const controller = new LibraryController({
+            hostAdapter: { site: "javdb", document, location: { href: "https://javdb.com/actors/actor-1", pathname: "/actors/actor-1" } },
+            storage, settings: { snapshot: () => ({}) }, eventBus, storageMutation: { runExclusive: vi.fn((operation) => operation()) }, route: "other", scope,
+        });
+
+        await controller.start();
+        const button = document.querySelector("#button-collect-actor");
+        button?.addEventListener("click", (event) => event.preventDefault(), { once: true });
+        button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(values[0][0]).toMatchObject({ starId: "actor-1", name: "演员甲", allName: ["演员甲", "别名甲"] });
+        expect(eventBus.emit).toHaveBeenCalledWith("actress-state-changed", { starId: "actor-1" });
+        scope.dispose();
+    });
+
+    it("removes an actress on the confirmed uncollect event", async () => {
+        document.body.innerHTML = '<a id="button-uncollect-actor" href="/actors/actor-1/uncollect">取消收藏</a>';
+        const scope = new LifecycleScope("feature:library"), storage = { get: vi.fn(async () => [{ starId: "actor-1" }]), set: vi.fn(async (_key, value) => { storage.value = value; }) }, eventBus = { emit: vi.fn(async () => {}) };
+        const controller = new LibraryController({
+            hostAdapter: { site: "javdb", document, location: { href: "https://javdb.com/actors/actor-1", pathname: "/actors/actor-1" } },
+            storage, settings: { snapshot: () => ({}) }, eventBus, route: "other", scope,
+        });
+
+        await controller.start();
+        document.querySelector("#button-uncollect-actor")?.dispatchEvent(new CustomEvent("confirm:complete", { detail: [true], bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(storage.value).toEqual([]);
         scope.dispose();
     });
 });

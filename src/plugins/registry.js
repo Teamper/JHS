@@ -16,7 +16,6 @@ import { OtherSitePlugin } from "./external-search/other-site.js";
 import { RelatedPlugin } from "./external-search/related.js";
 import { ReviewPlugin } from "./external-search/review.js";
 import { Top250Plugin } from "./external-search/top250.js";
-import { FavoriteActressesPlugin } from "./favorite/favorite-actresses.js";
 import { BusImgPlugin } from "./image-viewer/bus-img.js";
 import { BusPreviewVideoPlugin } from "./image-viewer/bus-preview-video.js";
 import { CoverButtonPlugin } from "./image-viewer/cover-button.js";
@@ -76,7 +75,6 @@ export const legacyContributionManifests = Object.freeze([
     manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage, SERVICE.http, SERVICE.magnet], { managedByFeature: true }),
     manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot, SERVICE.settings], { managedByFeature: true }),
     manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [PORT.host, SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.state, REGISTRY.feature], { managedByFeature: true }),
-    manifest("library.favorite-actresses", "library", FavoriteActressesPlugin, ["javdb"], { javdb: 29 }, [], { managedByFeature: true }),
     manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog, SERVICE.storage, SERVICE.actressInfo, SERVICE.movie, SERVICE.state], { managedByFeature: true }),
     manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }, [SERVICE.storage, SERVICE.http, SERVICE.actressInfo, SERVICE.movie, REGISTRY.feature], { managedByFeature: true }),
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [PORT.host, SERVICE.settings, SERVICE.profile, REGISTRY.feature], { managedByFeature: true }),

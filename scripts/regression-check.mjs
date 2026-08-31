@@ -305,7 +305,8 @@ assertIncludes(libraryControllerSource, 'hasBlacklist: Boolean(this.blacklistPlu
 assertIncludes(libraryControllerSource, 'historyCall("openHistory")', "library history API boundary");
 assertIncludes(libraryControllerSource, 'bindDetailKeywordFilter: (/** @type {any[]} */ ...args) => this.bindDetailKeywordFilter(...args)', "library keyword API boundary");
 assertIncludes(libraryControllerSource, 'filter_keyword_title', "library keyword storage boundary");
-assertIncludes(libraryControllerSource, 'this.favoritePlugin?.handle({ scope: this.scope })', "library favorite lifecycle handoff");
+assertIncludes(libraryControllerSource, "mountFavoriteActresses()", "library favorite lifecycle handoff");
+assertIncludes(libraryControllerSource, 'favorite_actresses', "library favorite storage boundary");
 assertIncludes(identityManifestSource, 'id: "identity"', "real identity feature manifest");
 assertIncludes(identityManifestSource, 'new IdentityController({', "identity feature controller ownership");
 assertIncludes(identityControllerSource, 'this.javdbNavigationPlugin?.handle({ scope: this.scope, identityApi: api })', "identity navigation lifecycle handoff");
@@ -338,7 +339,7 @@ assertIncludes(historySource, "scope.addCleanup", "history feature scope cleanup
 assertIncludes(statusImport, "mountStateImportAction()", "state import feature lifecycle entry");
 assertIncludes(statusImport, 'id = "wantWatchBtn"', "state import feature scope cleanup");
 assertIncludes(libraryControllerSource, "scope.addCleanup", "keyword filter feature scope cleanup");
-assertIncludes(await read("src/plugins/favorite/favorite-actresses.js"), "jhsFavoriteActress", "favorite feature scope cleanup");
+assertIncludes(libraryControllerSource, 'registerListener("click", onClick)', "favorite feature scope cleanup");
 assertIncludes(listPageSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "list feature scope handoff");
 assertIncludes(listPageSource, "this.getListView().applyVisibility", "list view visibility ownership");
 assertIncludes(listPageSource, "element.matches?.(e.itemSelector) && this.indexItems([ element ])", "list reorder index retention");
@@ -460,7 +461,6 @@ const expectedPlugins = [
   ["external-search/fc2-by-123av.js", "Fc2By123AvPlugin", "Fc2By123AvPlugin"],
   ["external-search/magnet-hub.js", "MagnetHubPlugin", "MagnetHubPlugin"],
   ["image-viewer/screenshot.js", "ScreenShotPlugin", "ScreenShotPlugin"],
-  ["favorite/favorite-actresses.js", "FavoriteActressesPlugin", "FavoriteActressesPlugin"],
   ["image-viewer/bus-img.js", "BusImgPlugin", "BusImgPlugin"],
   ["translate/translate.js", "TranslatePlugin", "TranslatePlugin"],
   ["new-video/task.js", "TaskPlugin", "TaskPlugin"],
@@ -484,7 +484,7 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,HistoryPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,FavoriteActressesPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,HistoryPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavDB plugin registration order changed"
 );
 assert(
@@ -535,7 +535,7 @@ sourceByFile.set("backup/setting-forms.js", await read("src/plugins/backup/setti
 const regressionMatrix = [
   ["JavDB 列表页", [["status/list-page.js", "filterMovieList"], ["status/list-page-button.js", "ListPageButtonPlugin"], ["image-viewer/cover-button.js", "CoverButtonPlugin"], ["core/storage.js", "getStatusMap"]]],
   ["JavDB 详情页", [["status/detail-page.js", "DetailPagePlugin"], ["status/detail-page-button.js", "showStatus"], ["image-viewer/preview-video.js", "PreviewVideoPlugin"]]],
-  ["JavDB 演员页", [["favorite/favorite-actresses.js", "FavoriteActressesPlugin"], ["avatar/actress-info.js", "ActressInfoPlugin"], ["core/plugin-manager.js", "getActressPageInfo"]]],
+  ["JavDB 演员页", [["features/library/library-controller.js", "mountFavoriteActresses"], ["avatar/actress-info.js", "ActressInfoPlugin"], ["core/plugin-manager.js", "getActressPageInfo"]]],
   ["JavBus 列表页", [["status/list-page.js", "fixBusTitleBox"], ["image-viewer/bus-img.js", "BusImgPlugin"], ["status/list-page-button.js", "ListPageButtonPlugin"]]],
   ["JavBus 详情页", [["status/bus-detail-page.js", "BusDetailPagePlugin"], ["image-viewer/bus-preview-video.js", "BusPreviewVideoPlugin"], ["status/bus-nav-bar.js", "BusNavBarPlugin"]]],
   ["123pan 授权同步", [["one-two-three/offline.js", "startTokenSync"], ["one-two-three/offline.js", "visibilitychange"], ["one-two-three/offline.js", "syncFallbackMs = 3e5"]]],

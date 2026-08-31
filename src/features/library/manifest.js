@@ -6,7 +6,7 @@ import { LibraryController } from "./library-controller.js";
 
 export default defineFeature({
     id: "library", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list", "detail", "other"], startup: "eager",
-    requires: [PORT.host, SERVICE.storage, SERVICE.settings, SERVICE.eventBus, SERVICE.storageMutation],
+    requires: [PORT.host, SERVICE.storage, SERVICE.settings, SERVICE.eventBus, SERVICE.storageMutation, SERVICE.state, SERVICE.http],
     contributes: ["library.history", "library.keyword-filter", "library.state-actions", "library.blacklist", "library.favorite-actresses"],
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
@@ -16,10 +16,7 @@ export default defineFeature({
         const blacklistPlugin = runtime.enabledContributions.includes("library.blacklist")
             ? runtime.resolveLegacyPlugin?.("BlacklistPlugin")
             : null;
-        const favoritePlugin = runtime.enabledContributions.includes("library.favorite-actresses")
-            ? runtime.resolveLegacyPlugin?.("FavoriteActressesPlugin")
-            : null;
-        const controller = new LibraryController({ historyPlugin, blacklistPlugin, favoritePlugin, keywordFilterEnabled: runtime.enabledContributions.includes("library.keyword-filter"), stateImportEnabled: runtime.enabledContributions.includes("library.state-actions"), hostAdapter: deps[PORT.host], storage: deps[SERVICE.storage], settings: deps[SERVICE.settings], eventBus: deps[SERVICE.eventBus], storageMutation: deps[SERVICE.storageMutation], state: deps[SERVICE.state], http: deps[SERVICE.http], route: runtime.route, scope: runtime.scope });
+        const controller = new LibraryController({ historyPlugin, blacklistPlugin, keywordFilterEnabled: runtime.enabledContributions.includes("library.keyword-filter"), stateImportEnabled: runtime.enabledContributions.includes("library.state-actions"), favoriteActressesEnabled: runtime.enabledContributions.includes("library.favorite-actresses"), hostAdapter: deps[PORT.host], storage: deps[SERVICE.storage], settings: deps[SERVICE.settings], eventBus: deps[SERVICE.eventBus], storageMutation: deps[SERVICE.storageMutation], state: deps[SERVICE.state], http: deps[SERVICE.http], route: runtime.route, scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

@@ -72,7 +72,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.find((item) => item.id === "library.state-actions")).toBeUndefined();
         expect(legacyContributionManifests.find((item) => item.id === "library.keyword-filter")).toBeUndefined();
         expect(legacyContributionManifests.find((item) => item.id === "library.blacklist")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "library.favorite-actresses")?.managedByFeature).toBe(true);
+        expect(legacyContributionManifests.find((item) => item.id === "library.favorite-actresses")).toBeUndefined();
         expect(legacyContributionManifests.find((item) => item.id === "list.auto-page")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "list.fold-category")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "list.actions")?.managedByFeature).toBe(true);
@@ -121,7 +121,7 @@ describe("v6.5 architecture runtime contracts", () => {
             "HistoryPlugin", "SettingPlugin", "NavBarPlugin", "HitShowPlugin", "TOP250Plugin", "SearchByImagePlugin", "CoverButtonPlugin",
             "Fc2By123AvPlugin", "DetailPagePlugin", "DetailWorkspacePlugin", "ReviewPlugin", "RelatedPlugin", "DetailPageButtonPlugin",
             "HighlightMagnetPlugin", "PreviewVideoPlugin", "ActressInfoPlugin", "OtherSitePlugin", "TranslatePlugin",
-            "MagnetHubPlugin", "ScreenShotPlugin", "BlacklistPlugin", "FavoriteActressesPlugin", "NewVideoPlugin",
+            "MagnetHubPlugin", "ScreenShotPlugin", "BlacklistPlugin", "NewVideoPlugin",
             "TaskPlugin", "MobileBottomBarPlugin", "OneOneFiveMatchPlugin", "UnifiedOfflinePlugin",
         ]);
         const javbus = new PluginManager();

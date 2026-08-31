@@ -7,13 +7,13 @@ import { requestHostPage } from "../../core/host-page-request.js";
  * migrated away from direct plugin-to-plugin calls.
  */
 export class LibraryController {
-    /** @param {{historyPlugin?: {handle: (options?: {scope: any}) => Promise<any> | any, historyRepository?: any}, blacklistPlugin?: Record<string, any>, favoritePlugin?: {handle: (options?: {scope: any}) => Promise<any> | any}, keywordFilterEnabled?: boolean, stateImportEnabled?: boolean, hostAdapter?: any, storage?: any, settings?: any, eventBus?: any, storageMutation?: any, state?: any, http?: any, route?: string, scope: any}} options */
+    /** @param {{historyPlugin?: {handle: (options?: {scope: any}) => Promise<any> | any, historyRepository?: any}, blacklistPlugin?: Record<string, any>, keywordFilterEnabled?: boolean, stateImportEnabled?: boolean, favoriteActressesEnabled?: boolean, hostAdapter?: any, storage?: any, settings?: any, eventBus?: any, storageMutation?: any, state?: any, http?: any, route?: string, scope: any}} options */
     constructor(options) {
         this.historyPlugin = options.historyPlugin ?? null;
         this.blacklistPlugin = options.blacklistPlugin ?? null;
-        this.favoritePlugin = options.favoritePlugin ?? null;
         this.keywordFilterEnabled = options.keywordFilterEnabled !== false;
         this.stateImportEnabled = options.stateImportEnabled !== false;
+        this.favoriteActressesEnabled = options.favoriteActressesEnabled !== false;
         this.hostAdapter = options.hostAdapter;
         this.document = options.hostAdapter?.document ?? globalThis.document;
         this.storage = options.storage;
@@ -24,6 +24,7 @@ export class LibraryController {
         this.http = options.http;
         this.route = options.route ?? "unknown";
         this.keywordFilterBindings = new WeakMap();
+        this.favoriteActressBound = false;
         this.scope = options.scope;
         this.started = false;
     }
@@ -34,7 +35,7 @@ export class LibraryController {
         this.started = true;
         return Promise.resolve().then(async () => {
             await this.historyPlugin?.handle({ scope: this.scope });
-            await this.favoritePlugin?.handle({ scope: this.scope });
+            await this.mountFavoriteActresses();
             if (this.route === "detail") this.bindDetailKeywordFilter(this.document);
             this.mountStateImportAction();
         }).catch((error) => {
@@ -122,6 +123,192 @@ export class LibraryController {
         };
         if (this.storageMutation?.runExclusive) return this.storageMutation.runExclusive(write);
         return write();
+    }
+
+    async mountFavoriteActresses() {
+        if (!this.favoriteActressesEnabled || this.hostAdapter?.site && this.hostAdapter.site !== "javdb" || !this.isFavoriteActressesEnabled()) return;
+        if (this.route === "detail") await this.highlightActress();
+        await this.replaceActressAvatar();
+        this.bindFavoriteActressEvents();
+    }
+
+    isFavoriteActressesEnabled() {
+        const value = this.settings?.snapshot?.().enableFavoriteActresses;
+        return value == null || value === true || value === "yes" || value === "true";
+    }
+
+    async readFavoriteActresses() {
+        const value = await this.storage?.get?.("favorite_actresses");
+        return Array.isArray(value) ? value : [];
+    }
+
+    async mutateFavoriteActresses(/** @type {(list: any[]) => {changed: boolean, value?: any, result?: any}} */ mutator) {
+        const operation = async () => {
+            const current = await this.readFavoriteActresses();
+            const result = mutator([ ...current ]);
+            if (result.changed) await this.storage.set("favorite_actresses", result.value);
+            return result.result ?? result.value;
+        };
+        if (this.storageMutation?.runExclusive) return this.storageMutation.runExclusive(operation);
+        return operation();
+    }
+
+    async highlightActress() {
+        const favorites = new Set((await this.readFavoriteActresses()).map((item) => String(item?.starId ?? "").trim()).filter(Boolean));
+        if (!favorites.size) return;
+        const baseUrl = this.hostAdapter?.location?.href ?? this.document?.defaultView?.location?.href;
+        for (const element of /** @type {Element[]} */ ([ ...this.document?.querySelectorAll?.(".female") ?? [] ])) {
+            const link = element.previousElementSibling;
+            const starId = this.readActressIdFromHref(link?.getAttribute?.("href"), baseUrl);
+            if (!starId || !favorites.has(starId) || !link) continue;
+            link.classList.add("highlighted");
+            link.setAttribute("title", "高亮已收藏演员, 可在设置-基础配置中关闭");
+        }
+    }
+
+    /** @param {string | null | undefined} href @param {string | undefined} [baseUrl] */
+    readActressIdFromHref(href, baseUrl) {
+        if (!href) return null;
+        try {
+            const url = new URL(href, baseUrl ?? this.document?.defaultView?.location?.href), match = url.pathname.match(/^\/actors\/([^/?#]+)(?:\/(?:collect|uncollect))?\/?$/);
+            return match ? decodeURIComponent(match[1]) : null;
+        } catch { return null; }
+    }
+
+    /** @param {Element | null | undefined} element */
+    getActressActionId(element) {
+        const href = element?.getAttribute?.("href"), baseUrl = this.hostAdapter?.location?.href ?? this.document?.defaultView?.location?.href;
+        return this.readActressIdFromHref(href, baseUrl);
+    }
+
+    getCurrentActressNames() {
+        /** @type {string[]} */ const names = [];
+        const append = (/** @type {unknown} */ text) => String(text || "").split(/[,，]/).map((name) => name.trim()).filter(Boolean).forEach((name) => names.push(name));
+        append(this.document?.querySelector?.(".actor-section-name")?.textContent);
+        for (const element of /** @type {Element[]} */ ([ ...this.document?.querySelectorAll?.(".section-meta") ?? [] ])) {
+            if (!element.textContent?.includes("影片")) append(element.textContent);
+        }
+        return names;
+    }
+
+    getAvatarUrl() {
+        const avatar = this.document?.querySelector?.(".avatar");
+        if (!avatar) return "";
+        const computed = this.document.defaultView?.getComputedStyle?.(avatar)?.backgroundImage || "";
+        const raw = computed && computed !== "none" ? computed : avatar.style.backgroundImage;
+        const match = String(raw || "").match(/^url\(["']?(.*?)["']?\)$/);
+        return match?.[1] && match[1] !== "none" ? match[1] : "";
+    }
+
+    /** @param {Element} element */
+    async addActressToStorage(element) {
+        const starId = this.getActressActionId(element), names = this.getCurrentActressNames();
+        if (!names.length) {
+            /** @type {any} */ (globalThis).clog?.error?.("获取演员名称失败");
+            return;
+        }
+        if (!starId) {
+            /** @type {any} */ (globalThis).clog?.error?.("无法获取演员ID进行收藏操作。");
+            return;
+        }
+        const uncensored = names.some((name) => name.includes("(無碼)")), cleanNames = names.map((name) => name.replace("(無碼)", "")), now = /** @type {any} */ (globalThis).utils?.getNowStr?.() ?? new Date().toISOString();
+        const record = { starId, name: cleanNames[0], allName: cleanNames, avatar: this.getAvatarUrl(), createDate: now, updateDate: now, actressType: uncensored ? "uncensored" : "censored" };
+        try {
+            const added = await this.mutateFavoriteActresses((list) => {
+                if (list.some((item) => String(item?.starId ?? "") === starId)) return { changed: false, result: 0 };
+                list.push(record);
+                return { changed: true, value: list, result: 1 };
+            });
+            if (added === 1) {
+                /** @type {any} */ (globalThis).clog?.log?.(`收藏演员成功: ${record.name} (ID: ${starId})`);
+                await this.notifyActressStateChanged(starId);
+            } else /** @type {any} */ (globalThis).clog?.log?.(`演员已收藏: ${record.name} (ID: ${starId})`);
+        } catch (error) {
+            /** @type {any} */ (globalThis).clog?.error?.("收藏演员失败", error);
+        }
+    }
+
+    /** @param {string} starId */
+    async removeActorFromStorage(starId) {
+        const removed = await this.mutateFavoriteActresses((list) => {
+            const next = list.filter((item) => String(item?.starId ?? "") !== String(starId));
+            return { changed: next.length !== list.length, value: next, result: next.length !== list.length };
+        });
+        if (removed) {
+            /** @type {any} */ (globalThis).clog?.log?.("移除演员成功");
+            await this.notifyActressStateChanged(String(starId));
+        }
+        return Boolean(removed);
+    }
+
+    /** @param {string} starId */
+    async notifyActressStateChanged(starId) {
+        const CustomEventConstructor = this.document?.defaultView?.CustomEvent ?? globalThis.CustomEvent;
+        this.document?.dispatchEvent?.(new CustomEventConstructor("actress-state-changed", { detail: { starId: String(starId) } }));
+        await this.eventBus?.emit?.("actress-state-changed", { starId: String(starId) });
+    }
+
+    bindFavoriteActressEvents() {
+        if (this.favoriteActressBound || !this.document?.addEventListener) return;
+        this.favoriteActressBound = true;
+        const actionSelector = "#button-collect-actor,#button-uncollect-actor";
+        const actionPattern = /\/actors\/([^/?#]+)\/(collect|uncollect)/;
+        const onConfirm = (/** @type {Event} */ rawEvent) => {
+            const event = /** @type {CustomEvent} */ (rawEvent), target = /** @type {Element | null} */ (event.target)?.closest?.('a[href*="/actors/"][href*="/uncollect"]');
+            if (!Array.isArray(event.detail) || !event.detail[0] || !target) return;
+            const match = target.getAttribute("href")?.match(actionPattern);
+            if (match) void this.removeActorFromStorage(match[1]);
+        };
+        const onClick = (/** @type {Event} */ rawEvent) => {
+            const event = /** @type {MouseEvent} */ (rawEvent), target = /** @type {Element | null} */ (event.target)?.closest?.(actionSelector);
+            if (!target || !this.document.contains(target)) return;
+            if (target.id === "button-collect-actor") void this.addActressToStorage(target);
+            else {
+                const starId = this.getActressActionId(target);
+                if (starId) void this.removeActorFromStorage(starId);
+            }
+        };
+        const listenerTarget = this.document;
+        const registerListener = (/** @type {string} */ type, /** @type {EventListener} */ handler) => {
+            if (typeof this.scope.listen === "function") this.scope.listen(listenerTarget, type, handler);
+            else {
+                listenerTarget.addEventListener(type, handler);
+                this.scope.addCleanup?.(() => listenerTarget.removeEventListener(type, handler));
+            }
+        };
+        registerListener("confirm:complete", onConfirm);
+        registerListener("click", onClick);
+        this.scope.addCleanup?.(() => { this.favoriteActressBound = false; });
+    }
+
+    async replaceActressAvatar() {
+        const starId = this.getCurrentActressPageId();
+        if (!starId) return;
+        const actress = (await this.readFavoriteActresses()).find((item) => String(item?.starId ?? "") === starId);
+        if (!actress?.avatar) return;
+        let avatar = this.document?.querySelector?.(".avatar");
+        if (!avatar) {
+            const columns = this.document?.querySelector?.(".section-columns");
+            if (!columns) return;
+            const column = this.document.createElement("div"), image = this.document.createElement("div");
+            column.className = "column actor-avatar";
+            image.className = "image";
+            avatar = this.document.createElement("span");
+            avatar.className = "avatar";
+            image.append(avatar), column.append(image), columns.prepend(column);
+        }
+        const background = `url('${String(actress.avatar).replaceAll("'", "%27")}')`;
+        if (avatar.style.backgroundImage.trim().toLowerCase() === background.trim().toLowerCase()) return;
+        avatar.style.backgroundImage = background;
+        avatar.style.backgroundSize = "cover";
+        avatar.style.backgroundPosition = "top center";
+        avatar.style.backgroundRepeat = "no-repeat";
+    }
+
+    getCurrentActressPageId() {
+        const pathname = this.hostAdapter?.location?.pathname ?? this.document?.defaultView?.location?.pathname ?? "";
+        const match = pathname.match(/^\/actors\/([^/?#]+)\/?$/);
+        return match ? decodeURIComponent(match[1]) : null;
     }
 
     mountStateImportAction() {
