@@ -53,7 +53,6 @@
     "src/platform/**/*.js",
     "src/services/**/*.js",
     "src/ui/**/*.js",
-    "src/plugins/avatar/actress-info.js",
     "src/plugins/backup/setting-backup.js",
     "src/plugins/backup/setting-forms.js",
     "src/plugins/backup/setting-panels.js",

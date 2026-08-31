@@ -3,7 +3,6 @@
 import { defineContribution } from "../contracts/manifests.js";
 import { PORT, REGISTRY, SERVICE } from "../contracts/tokens.js";
 import { LEGACY_PLUGIN_DEPENDENCY_MAP } from "./dependency-map.js";
-import { ActressInfoPlugin } from "./avatar/actress-info.js";
 import { SettingPlugin } from "./backup/setting.js";
 import { Fc2By123AvPlugin } from "./external-search/fc2-by-123av.js";
 import { Fc2Plugin } from "./external-search/fc2.js";
@@ -61,7 +60,6 @@ export const legacyContributionManifests = Object.freeze([
     manifest("detail.page-state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle, SERVICE.state, SERVICE.settings], { managedByFeature: true }),
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [PORT.host, SERVICE.settings], { managedByFeature: true }),
     manifest("detail.javdb-preview", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie], { managedByFeature: true }),
-    manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo, SERVICE.settings], { managedByFeature: true }),
     manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie, SERVICE.storage, SERVICE.settings], { managedByFeature: true }),
     manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings, REGISTRY.feature], { managedByFeature: true }),
     manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage, SERVICE.http, SERVICE.magnet], { managedByFeature: true }),

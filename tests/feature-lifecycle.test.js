@@ -76,20 +76,6 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
         expect(plugin.pageItems).toEqual([]);
     });
 
-    it("ActressInfo: OFF→mount 不渲染，unmount 删除 JHS DOM", async () => {
-        const { Plugin } = loadPlugin("src/plugins/avatar/actress-info.js", {
-            className: "ActressInfoPlugin",
-            settingsSnapshot: { enableLoadActressInfo: "no" },
-        });
-        $("body").append('<div class="actress-info">旧节点</div>');
-        const plugin = new Plugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? { snapshot: () => ({ enableLoadActressInfo: "no" }) } : async () => ({});
-        await plugin.mount();
-        expect($(".actress-info").length).toBe(1);
-        plugin.unmount();
-        expect($(".actress-info").length).toBe(0);
-    });
-
     it("OtherSite: 使用 SettingsService 快照（无私有缓存），OFF 只删 JHS 自有面板", async () => {
         const { Plugin, settings } = loadPlugin("src/plugins/external-search/other-site.js", {
             className: "OtherSitePlugin",
@@ -160,24 +146,4 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
         expect($(".movie-list").children().length).toBe(0);
     });
 
-    it("ActressInfo: 查询中切 OFF 后异步返回不再 append", async () => {
-        let resolveInfo;
-        const pending = new Promise((resolve) => { resolveInfo = resolve; });
-        const { Plugin, settings } = loadPlugin("src/plugins/avatar/actress-info.js", {
-            className: "ActressInfoPlugin",
-            settingsSnapshot: { enableLoadActressInfo: "yes" },
-        });
-        win.history.replaceState({}, "", "/v/test-id");
-        const plugin = new Plugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "actressInfo" ? { lookup: () => pending, profileUrl: () => "" } : name === "scope" ? async () => ({}) : null;
-        $("body").append('<div>女優A</div><a class="female"></a><div><strong>演員</strong></div>');
-        const mountPromise = plugin.mount();
-        await Promise.resolve();
-        plugin.unmount();
-        expect($(".actress-info").length).toBe(0);
-        resolveInfo({ url: "https://example.test", birthday: "1990-01-01", age: "30", height: "160", weight: "45", threeSizeText: "B", braSize: "B70" });
-        await mountPromise;
-        expect($(".actress-info").length).toBe(0);
-        expect($(".female").next(".actress-info").length).toBe(0);
-    });
 });

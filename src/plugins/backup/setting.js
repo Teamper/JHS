@@ -20,7 +20,7 @@ import { bindSettingRows, renderSettingRow } from "../../ui/settings/setting-con
 export class SettingPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService()), i(this, "pendingCarImport", null), i(this, "taskStatusUnsubscribe", null),
-i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this, "_settingNavResizeCleanup", null), i(this, "_desktopNavGeneration", 0), i(this, "_settingsDialogGeneration", 0), i(this, "_fullSettingBinding", null), i(this, "discoveryFeatureApi", null), i(this, "cacheItems", [ {
+i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this, "_settingNavResizeCleanup", null), i(this, "_desktopNavGeneration", 0), i(this, "_settingsDialogGeneration", 0), i(this, "_fullSettingBinding", null), i(this, "discoveryFeatureApi", null), i(this, "identityFeatureApi", null), i(this, "cacheItems", [ {
             key: "jhs_dmm_video",
             text: "预览视频缓存",
             title: "预览视频缓存"
@@ -72,6 +72,17 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         }
         return this.discoveryFeatureApi;
     }
+    /** Resolve identity-owned actress information capabilities for settings UI. */
+    async getIdentityFeatureApi() {
+        if (this.identityFeatureApi) return this.identityFeatureApi;
+        try {
+            this.identityFeatureApi = await this.getRuntimeService("features").getFeatureApi("identity");
+        } catch (error) {
+            clog.warn("Identity Feature API 不可用，跳过演员信息设置刷新", error);
+            this.identityFeatureApi = null;
+        }
+        return this.identityFeatureApi;
+    }
     async getFormDependencies() {
         let blacklist = null;
         try {
@@ -80,9 +91,10 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             clog.warn("Library Feature API 不可用，跳过黑名单设置刷新", error);
         }
         const discovery = await this.getDiscoveryFeatureApi();
+        const identity = await this.getIdentityFeatureApi();
         return Object.freeze({
             otherSite: this.getOptionalDependency("OtherSitePlugin"),
-            actressInfo: this.getOptionalDependency("ActressInfoPlugin"), screenshot: this.getOptionalDependency("ScreenShotPlugin"),
+            actressInfo: identity?.hasActressInfo ? identity : null, screenshot: this.getOptionalDependency("ScreenShotPlugin"),
             newVideo: discovery?.hasNewVideo ? discovery : null, blacklist,
             busImg: this.getOptionalDependency("BusImgPlugin"), host: this.getRuntimeService("host"), movie: this.getRuntimeService("movie"), settings: this.getRuntimeService("settings"),
             settingsRegistry: this.getRuntimeService("settingsRegistry"),

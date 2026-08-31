@@ -3,14 +3,13 @@ import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { IdentityController } from "../src/features/identity/identity-controller.js";
 
 describe("Identity FeatureRuntime ownership", () => {
-    it("passes one feature scope through navigation and actress-info contributions", async () => {
+    it("passes one feature scope through navigation and identity contributions", async () => {
         const scope = new LifecycleScope("feature:identity");
-        const imageSearchPlugin = { open: vi.fn(), handleImageFile: vi.fn(), resetSearchUI: vi.fn() };
-        const imageSearchController = { start: vi.fn(async () => {}), ...imageSearchPlugin };
+        const imageSearchController = { start: vi.fn(async () => {}), open: vi.fn(), handleImageFile: vi.fn(), resetSearchUI: vi.fn() };
         const javdbNavigationController = { start: vi.fn(async () => {}) };
         const javbusNavigationController = { start: vi.fn(async () => {}) };
-        const actressInfoPlugin = { handle: vi.fn(async () => {}) };
-        const controller = new IdentityController({ javdbNavigationController, javbusNavigationController, imageSearchController, actressInfoPlugin, scope });
+        const actressInfoController = { start: vi.fn(async () => {}) };
+        const controller = new IdentityController({ javdbNavigationController, javbusNavigationController, imageSearchController, actressInfoController, scope });
 
         await controller.start();
         await controller.start();
@@ -20,7 +19,7 @@ describe("Identity FeatureRuntime ownership", () => {
         expect(javdbNavigationController.start).toHaveBeenCalledWith({ scope, identityApi: controller.getApi() });
         expect(javbusNavigationController.start).toHaveBeenCalledOnce();
         expect(javbusNavigationController.start).toHaveBeenCalledWith({ scope, identityApi: controller.getApi() });
-        expect(actressInfoPlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(actressInfoController.start).toHaveBeenCalledOnce();
         expect(controller.getApi().hasSearchByImage).toBe(true);
         controller.getApi().openSearchByImage("callback");
         expect(imageSearchController.open).toHaveBeenCalledWith("callback");

@@ -209,7 +209,7 @@ const identityControllerSource = await read("src/features/identity/identity-cont
 const identityNavigationSource = await read("src/features/identity/identity-navigation-controller.js");
 const identityBusNavigationSource = await read("src/features/identity/identity-bus-navigation-controller.js");
 const identityImageSearchSource = await read("src/features/identity/identity-image-search-controller.js");
-const identityActressSource = await read("src/plugins/avatar/actress-info.js");
+const identityActressSource = await read("src/features/identity/identity-actress-info-controller.js");
 const listManifestSource = await read("src/features/list/manifest.js");
 const listControllerSource = await read("src/features/list/list-controller.js");
 const listDomObserverSource = await read("src/features/list/list-dom-observer.js");
@@ -433,6 +433,11 @@ assertIncludes(identityControllerSource, 'hasSearchByImage: Boolean(this.imageSe
 assertIncludes(identityImageSearchSource, 'this.scope.addCleanup?.(() => this.dispose())', "identity image-search scope cleanup");
 assertIncludes(identityImageSearchSource, 'this.imageSearch.resolve(source, { scope: this.scope })', "identity image-search service boundary");
 assert(!identityImageSearchSource.includes('getRuntimeService('), "identity image-search must not resolve legacy runtime services");
+assertIncludes(identityManifestSource, 'new IdentityActressInfoController({', "identity actress controller ownership");
+assertIncludes(identityControllerSource, 'await this.actressInfoController?.start()', "identity actress lifecycle handoff");
+assertIncludes(identityActressSource, 'this.scope.addCleanup?.(() => this.dispose())', "identity actress scope cleanup");
+assertIncludes(identityActressSource, 'this.actressInfo.lookup(name, { scope: this.scope })', "identity actress service boundary");
+assert(!identityActressSource.includes('getRuntimeService('), "identity actress must not resolve legacy runtime services");
 assertIncludes(externalBridgeManifestSource, 'id: "external-bridge"', "real external bridge feature manifest");
 assertIncludes(externalBridgeManifestSource, 'new ExternalBridgeController({', "external bridge feature controller ownership");
 assertIncludes(externalBridgeControllerSource, 'this.unifiedOfflinePlugin?.handle({ scope: this.scope, oneTwoThreePlugin: this.oneTwoThreePlugin })', "external bridge offline lifecycle handoff");
@@ -450,12 +455,13 @@ for (const source of [hitShow, await read("src/plugins/external-search/top250.js
 }
 assertIncludes(identityNavigationSource, 'this.identityApi?.openSearchByImage?.()', "JavDB navigation identity API boundary");
 assertIncludes(identityBusNavigationSource, 'identityApi.openSearchByImage?.()', "JavBus navigation identity API boundary");
-assertIncludes(identityActressSource, 'options.scope ?? await this.getRuntimeService("scope")()', "identity actress scope handoff");
 assert(!identityNavigationSource.includes('getOptionalDependency("SearchByImagePlugin")'), "JavDB navigation must not resolve SearchByImagePlugin directly");
 assert(!identityBusNavigationSource.includes('getOptionalDependency("SearchByImagePlugin")'), "JavBus navigation must not resolve SearchByImagePlugin directly");
 assert(!historySource.includes('getOptionalDependency("UnifiedOfflinePlugin")'), "history must use the external bridge API");
 assert(!unifiedOffline.includes('getOptionalDependency("OneTwoThreeOfflinePlugin")'), "unified offline must receive providers from the external bridge controller");
 assert(!settingSource.includes('getOptionalDependency("TranslatePlugin")'), "settings must not resolve the translation plugin directly");
+assert(!settingSource.includes('getOptionalDependency("ActressInfoPlugin")'), "settings must not resolve the actress information plugin directly");
+assertIncludes(settingSource, 'getFeatureApi("identity")', "settings identity feature API boundary");
 assertIncludes(historySource, "async start(options = {})", "history feature lifecycle entry");
 assertIncludes(historySource, "scope.addCleanup", "history feature scope cleanup");
 assertIncludes(statusImport, "mountStateImportAction()", "state import feature lifecycle entry");
@@ -560,7 +566,6 @@ const expectedPlugins = [
   ["external-search/fc2.js", "Fc2Plugin", "Fc2Plugin"],
   ["status/highlight-magnet.js", "HighlightMagnetPlugin", "HighlightMagnetPlugin"],
   ["status/fold-category.js", "FoldCategoryPlugin", "FoldCategoryPlugin"],
-  ["avatar/actress-info.js", "ActressInfoPlugin", "ActressInfoPlugin"],
   ["external-search/hit-show.js", "HitShowPlugin", "HitShowPlugin"],
   ["external-search/top250.js", "Top250Plugin", "TOP250Plugin"],
   ["external-search/other-site.js", "OtherSitePlugin", "OtherSitePlugin"],
@@ -601,7 +606,7 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,HitShowPlugin,Top250Plugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,HitShowPlugin,Top250Plugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,OtherSitePlugin,TranslatePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavDB plugin registration order changed"
 );
 assert(
@@ -647,6 +652,7 @@ sourceByFile.set("features/library/blacklist-repository.js", blacklistRepository
 sourceByFile.set("features/identity/identity-navigation-controller.js", identityNavigationSource);
 sourceByFile.set("features/identity/identity-bus-navigation-controller.js", identityBusNavigationSource);
 sourceByFile.set("features/identity/identity-image-search-controller.js", identityImageSearchSource);
+sourceByFile.set("features/identity/identity-actress-info-controller.js", identityActressSource);
 sourceByFile.set("features/compatibility/compatibility-controller.js", compatibilityControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
@@ -658,7 +664,7 @@ sourceByFile.set("backup/setting-forms.js", await read("src/plugins/backup/setti
 const regressionMatrix = [
   ["JavDB 列表页", [["status/list-page.js", "filterMovieList"], ["status/list-page-button.js", "ListPageButtonPlugin"], ["image-viewer/cover-button.js", "CoverButtonPlugin"], ["core/storage.js", "getStatusMap"]]],
   ["JavDB 详情页", [["status/detail-page.js", "DetailPagePlugin"], ["status/detail-page-button.js", "showStatus"], ["image-viewer/preview-video.js", "PreviewVideoPlugin"]]],
-  ["JavDB 演员页", [["features/library/library-controller.js", "mountFavoriteActresses"], ["avatar/actress-info.js", "ActressInfoPlugin"], ["core/plugin-manager.js", "getActressPageInfo"]]],
+  ["JavDB 演员页", [["features/library/library-controller.js", "mountFavoriteActresses"], ["features/identity/identity-actress-info-controller.js", "class IdentityActressInfoController"], ["core/plugin-manager.js", "getActressPageInfo"]]],
   ["JavBus 列表页", [["status/list-page.js", "fixBusTitleBox"], ["image-viewer/bus-img.js", "BusImgPlugin"], ["status/list-page-button.js", "ListPageButtonPlugin"]]],
   ["JavBus 详情页", [["status/bus-detail-page.js", "BusDetailPagePlugin"], ["image-viewer/bus-preview-video.js", "BusPreviewVideoPlugin"]]],
   ["123pan 授权同步", [["one-two-three/offline.js", "startTokenSync"], ["one-two-three/offline.js", "visibilitychange"], ["one-two-three/offline.js", "syncFallbackMs = 3e5"]]],
