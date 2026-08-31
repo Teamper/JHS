@@ -199,30 +199,11 @@ export class ListController {
                 getEvaluationContext: () => this.createEvaluationContext(),
             });
         }
-        this.legacyPlugin?.attachListHost?.(this.hostAdapter);
-        this.legacyPlugin?.attachListState?.(this.state);
-        this.index && this.legacyPlugin?.attachListIndex?.(this.index);
-        this.domObserver && this.legacyPlugin?.attachListDomObserver?.(this.domObserver);
-        this.media && this.legacyPlugin?.attachListMedia?.(this.media);
-        this.images && this.legacyPlugin?.attachListImages?.(this.images);
-        this.events && this.legacyPlugin?.attachListEvents?.(this.events);
-        this.batch && this.legacyPlugin?.attachListBatch?.(this.batch);
-        this.evaluation && this.legacyPlugin?.attachListEvaluation?.(this.evaluation);
-        this.summary && this.legacyPlugin?.attachListSummary?.(this.summary);
-        this.titleTranslation && (/** @type {any} */ (this.legacyPlugin))?.attachListTranslation?.(this.titleTranslation);
-        this.filter && (/** @type {any} */ (this.legacyPlugin))?.attachListFilter?.(this.filter);
-        this.incremental && (/** @type {any} */ (this.legacyPlugin))?.attachListIncremental?.(this.incremental);
-        this.contextMenu && (/** @type {any} */ (this.legacyPlugin))?.attachListContextMenu?.(this.contextMenu);
-        this.pagination && (/** @type {any} */ (this.legacyPlugin))?.attachListPagination?.(this.pagination);
-        this.tagExpand && (/** @type {any} */ (this.legacyPlugin))?.attachListTagExpand?.(this.tagExpand);
         this.started = true;
         const listFeatureApi = this.getApi();
-        const view = this.view;
         const hasCore = Boolean(this.view);
-        const ownsListInteractions = Boolean(this.hostAdapter.document && this.view && this.media && this.contextMenu);
         return Promise.resolve()
             .then(() => this.registerStyles())
-            .then(() => this.legacyPlugin && view ? (/** @type {any} */ (this.legacyPlugin)).handle({ scope: this.scope, view, skipOwnedDomObserver: Boolean(this.domObserver), skipOwnedInteractions: ownsListInteractions, skipOwnedListLifecycle: hasCore }) : undefined)
             .then(() => this.startListLifecycle())
             .then(() => hasCore ? this.autoPagePlugin?.handle?.({ scope: this.scope, listFeatureApi }) : undefined)
             .then(() => hasCore ? this.foldCategoryPlugin?.handle?.({ scope: this.scope }) : undefined)

@@ -18,7 +18,7 @@ import { ListDiagnosticsService } from "../src/features/list/list-diagnostics-se
 import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 
 describe("List FeatureRuntime ownership", () => {
-    it("passes the feature lifecycle scope to the legacy migration adapter", async () => {
+    it("keeps the feature lifecycle independent from the legacy plugin", async () => {
         const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListHost: vi.fn(), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), attachListEvents: vi.fn(), attachListFilter: vi.fn(), attachListIncremental: vi.fn(), attachListContextMenu: vi.fn(), attachListPagination: vi.fn(), attachListTagExpand: vi.fn(), recordListPhase: vi.fn(), applyListSummary: vi.fn(), doFilter: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
             legacyPlugin,
             hostAdapter,
@@ -29,19 +29,18 @@ describe("List FeatureRuntime ownership", () => {
         await controller.start();
         await controller.start();
 
-        expect(legacyPlugin.handle).toHaveBeenCalledOnce();
-        expect(legacyPlugin.handle).toHaveBeenCalledWith({ scope, view: expect.any(ListView), skipOwnedDomObserver: true, skipOwnedInteractions: false, skipOwnedListLifecycle: true });
-        expect(legacyPlugin.attachListHost).toHaveBeenCalledWith(hostAdapter);
+        expect(legacyPlugin.handle).not.toHaveBeenCalled();
         expect(controller.view).toBeInstanceOf(ListView);
-        expect(legacyPlugin.attachListDomObserver).toHaveBeenCalledWith(expect.any(ListDomObserver));
-        expect(legacyPlugin.attachListMedia).toHaveBeenCalledWith(expect.any(ListMediaController));
-        expect(legacyPlugin.attachListImages).toHaveBeenCalledWith(expect.any(ListImageController));
-        expect(legacyPlugin.attachListEvents).toHaveBeenCalledWith(expect.any(ListEventController));
-        expect(legacyPlugin.attachListFilter).toHaveBeenCalledWith(expect.any(ListFilterService));
-        expect(legacyPlugin.attachListIncremental).toHaveBeenCalledWith(expect.any(ListIncrementalService));
-        expect(legacyPlugin.attachListContextMenu).toHaveBeenCalledWith(expect.any(ListContextMenuController));
-        expect(legacyPlugin.attachListPagination).toHaveBeenCalledWith(expect.any(ListPaginationController));
-        expect(legacyPlugin.attachListTagExpand).toHaveBeenCalledWith(expect.any(ListTagExpandController));
+        expect(legacyPlugin.attachListHost).not.toHaveBeenCalled();
+        expect(legacyPlugin.attachListDomObserver).not.toHaveBeenCalled();
+        expect(legacyPlugin.attachListMedia).not.toHaveBeenCalled();
+        expect(legacyPlugin.attachListImages).not.toHaveBeenCalled();
+        expect(legacyPlugin.attachListEvents).not.toHaveBeenCalled();
+        expect(legacyPlugin.attachListFilter).not.toHaveBeenCalled();
+        expect(legacyPlugin.attachListIncremental).not.toHaveBeenCalled();
+        expect(legacyPlugin.attachListContextMenu).not.toHaveBeenCalled();
+        expect(legacyPlugin.attachListPagination).not.toHaveBeenCalled();
+        expect(legacyPlugin.attachListTagExpand).not.toHaveBeenCalled();
         expect(controller.diagnostics).toBeInstanceOf(ListDiagnosticsService);
         const api = controller.getApi();
         globalThis.__jhsBrowserDiagnostics = {};
@@ -113,8 +112,8 @@ describe("List FeatureRuntime ownership", () => {
         await expect(api.batchSaveAllVideos({ kind: "search" }, "favorite", { filter: "favorite", confirm: false })).resolves.toMatchObject({ matched: 1, updated: 1 });
 
         expect(controller.batch).toBeInstanceOf(ListBatchService);
-        expect(legacyPlugin.attachListBatch).toHaveBeenCalledWith(controller.batch);
-        expect(legacyPlugin.attachListEvaluation).toHaveBeenCalledWith(controller.evaluation);
+        expect(legacyPlugin.attachListBatch).not.toHaveBeenCalled();
+        expect(legacyPlugin.attachListEvaluation).not.toHaveBeenCalled();
         expect(stateService.patch).toHaveBeenCalledOnce();
         expect(legacyPlugin.createEvaluationContext).not.toHaveBeenCalled();
         controller.dispose();
@@ -184,7 +183,7 @@ describe("List FeatureRuntime ownership", () => {
 
             expect(controller.domObserver.started).toBe(true);
             expect(controller.domObserver.observer).not.toBeNull();
-            expect(legacyPlugin.handle).toHaveBeenCalledWith(expect.objectContaining({ skipOwnedDomObserver: true }));
+            expect(legacyPlugin.handle).not.toHaveBeenCalled();
             controller.dispose();
             scope.dispose();
         } finally {
