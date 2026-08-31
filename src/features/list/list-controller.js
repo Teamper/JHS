@@ -17,6 +17,7 @@ import { ListContextMenuController } from "./list-context-menu-controller.js";
 import { ListActressNameService } from "./list-actress-name-service.js";
 import { ListPaginationController } from "./list-pagination-controller.js";
 import { ListTagExpandController } from "./list-tag-expand-controller.js";
+import { ListDiagnosticsService } from "./list-diagnostics-service.js";
 import { scanAllPages } from "./batch-scanner.js";
 import { evaluateListItem } from "./list-evaluator.js";
 import { readListItem as parseListItem } from "../../core/list-item-reader.js";
@@ -48,7 +49,7 @@ export class ListController {
         this.state = new ListStateController({
             scope: this.scope,
             defaultFilter: () => options.settings?.snapshot?.().defaultQuickFilterTab ?? "waitCheck",
-            onPhase: (phase, itemCount) => this.legacyPlugin?.recordListPhase?.(phase, itemCount),
+            onPhase: (phase, itemCount) => this.diagnostics?.recordPhase(phase, itemCount),
         });
         this.index = null;
         this.domObserver = null;
@@ -65,6 +66,7 @@ export class ListController {
         this.actressNames = null;
         this.pagination = null;
         this.tagExpand = null;
+        this.diagnostics = null;
         this.translation = /** @type {any} */ (options).translation ?? null;
         this.started = false;
     }
@@ -75,6 +77,7 @@ export class ListController {
         const selectors = this.hostAdapter.getListSelectors?.() ?? this.legacyPlugin?.getSelector?.();
         if (this.legacyPlugin && !selectors) throw new Error("List feature requires a list selector contract");
         if (this.legacyPlugin) {
+            this.diagnostics = new ListDiagnosticsService({ scope: this.scope, document: this.hostAdapter.document, selectors, state: this.state });
             this.view = new ListView({
                 hostAdapter: this.hostAdapter,
                 selectors,
@@ -97,7 +100,7 @@ export class ListController {
                 state: this.state,
                 index: this.index,
                 processAddedItems: (items, revision) => this.incremental ? this.incremental.processAddedItems(items, revision) : this.legacyPlugin?.processAddedItems?.(items, revision),
-                onPhase: (phase, itemCount) => this.legacyPlugin?.recordListPhase?.(phase, itemCount),
+                onPhase: (phase, itemCount) => this.diagnostics?.recordPhase(phase, itemCount),
             });
             this.media = new ListMediaController({ scope: this.scope, document: this.hostAdapter.document, selectors });
             this.images = new ListImageController({ scope: this.scope, document: this.hostAdapter.document, window: this.hostAdapter.document?.defaultView ?? globalThis.window, site: this.hostAdapter.site, selector: selectors.coverImgSelector });
@@ -130,7 +133,7 @@ export class ListController {
                 isCurrentRevision: (revision) => this.state.isCurrentListGeneration(revision),
                 getEvaluationContext: () => this.evaluation?.createEvaluationContext?.() ?? (/** @type {any} */ (this.legacyPlugin))?.createEvaluationContext?.(),
                 readItem: (item) => this.readListItem(item),
-                recordPhase: (phase, itemCount) => this.legacyPlugin?.recordListPhase?.(phase, itemCount),
+                recordPhase: (phase, itemCount) => this.diagnostics?.recordPhase(phase, itemCount),
                 scheduleRecount: () => this.summary?.scheduleRecount?.(),
                 translateItems: (items) => this.titleTranslation?.translateListItems?.(items) ?? (/** @type {any} */ (this.legacyPlugin))?.translateListItems?.(items),
                 onJavBusFiltered: () => (/** @type {any} */ (this.legacyPlugin))?.getOptionalDependency?.("BusImgPlugin")?.logImageHeightsByRow?.(this.settings?.snapshot?.()),
@@ -310,6 +313,8 @@ export class ListController {
         this.pagination = null;
         this.tagExpand?.dispose();
         this.tagExpand = null;
+        this.diagnostics?.dispose();
+        this.diagnostics = null;
         this.images?.dispose();
         this.images = null;
         this.media?.dispose();

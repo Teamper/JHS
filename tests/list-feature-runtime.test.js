@@ -14,11 +14,12 @@ import { ListIncrementalService } from "../src/features/list/list-incremental-se
 import { ListContextMenuController } from "../src/features/list/list-context-menu-controller.js";
 import { ListPaginationController } from "../src/features/list/list-pagination-controller.js";
 import { ListTagExpandController } from "../src/features/list/list-tag-expand-controller.js";
+import { ListDiagnosticsService } from "../src/features/list/list-diagnostics-service.js";
 import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 
 describe("List FeatureRuntime ownership", () => {
     it("passes the feature lifecycle scope to the legacy migration adapter", async () => {
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListHost: vi.fn(), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), attachListEvents: vi.fn(), attachListFilter: vi.fn(), attachListIncremental: vi.fn(), attachListContextMenu: vi.fn(), attachListPagination: vi.fn(), attachListTagExpand: vi.fn(), doFilter: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListHost: vi.fn(), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), attachListEvents: vi.fn(), attachListFilter: vi.fn(), attachListIncremental: vi.fn(), attachListContextMenu: vi.fn(), attachListPagination: vi.fn(), attachListTagExpand: vi.fn(), recordListPhase: vi.fn(), doFilter: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
             legacyPlugin,
             hostAdapter,
             storage: { getLocal: () => null, setLocal: () => {} },
@@ -41,7 +42,9 @@ describe("List FeatureRuntime ownership", () => {
         expect(legacyPlugin.attachListContextMenu).toHaveBeenCalledWith(expect.any(ListContextMenuController));
         expect(legacyPlugin.attachListPagination).toHaveBeenCalledWith(expect.any(ListPaginationController));
         expect(legacyPlugin.attachListTagExpand).toHaveBeenCalledWith(expect.any(ListTagExpandController));
+        expect(controller.diagnostics).toBeInstanceOf(ListDiagnosticsService);
         const api = controller.getApi();
+        globalThis.__jhsBrowserDiagnostics = {};
         expect(api.getListSelectors()).toEqual({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" });
         controller.state.setView({ applyVisibility: vi.fn(), syncQuickFilterUi: vi.fn() });
         const dom = new JSDOM('<div class="item"><a href="/v/ABC-123"><div class="video-title"><strong>ABC-123</strong> title</div></a></div><div class="item" data-hide="yes" style="display:none"><div class="video-title"><strong>HIDDEN-1</strong> hidden</div></div>', { url: "https://javdb.com/search" });
@@ -78,6 +81,8 @@ describe("List FeatureRuntime ownership", () => {
         expect(legacyPlugin.findCarNumAndHref).not.toHaveBeenCalled();
         expect(legacyPlugin.parseActressName).toHaveBeenCalledWith("/movie/ABC-123");
         expect(legacyPlugin.setQuickFilter).not.toHaveBeenCalled();
+        expect(legacyPlugin.recordListPhase).not.toHaveBeenCalled();
+        expect(globalThis.__jhsBrowserDiagnostics.listPhases).toEqual(expect.arrayContaining([ expect.objectContaining({ phase: "setQuickFilter" }) ]));
         expect(api.getActiveQuickFilter()).toBe("favorite");
         controller.dispose();
         expect(scope.disposed).toBe(false);
@@ -223,4 +228,4 @@ describe("List FeatureRuntime ownership", () => {
     });
 });
 
-afterEach(() => { delete globalThis.$; delete globalThis.utils; });
+afterEach(() => { delete globalThis.$; delete globalThis.utils; delete globalThis.__jhsBrowserDiagnostics; });

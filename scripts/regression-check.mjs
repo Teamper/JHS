@@ -217,6 +217,7 @@ const listImageSource = await read("src/features/list/list-image-controller.js")
 const listEventSource = await read("src/features/list/list-event-controller.js");
 const listEvaluationSource = await read("src/features/list/list-evaluation-service.js");
 const listSummarySource = await read("src/features/list/list-summary-service.js");
+const listDiagnosticsSource = await read("src/features/list/list-diagnostics-service.js");
 const listTranslationSource = await read("src/features/list/list-translation-service.js");
 const listPageAdapterSource = await read("src/compat/list-page-adapter.js");
 const listViewSource = await read("src/features/list/list-view.js");
@@ -317,6 +318,10 @@ assertIncludes(listEvaluationSource, "stateService.getActivityLog()", "list eval
 assertIncludes(listEvaluationSource, "invalidate()", "list evaluation cache lifecycle ownership");
 assertIncludes(listSummarySource, "scope.ownTimeout(timer)", "list summary timer lifecycle ownership");
 assertIncludes(listSummarySource, "collectCurrentPageSummary()", "list summary aggregation ownership");
+assertIncludes(listControllerSource, "new ListDiagnosticsService({", "list diagnostics ownership");
+assertIncludes(listControllerSource, "this.diagnostics?.recordPhase", "list diagnostics lifecycle handoff");
+assertIncludes(listDiagnosticsSource, "globalThis).__jhsBrowserDiagnostics", "list browser diagnostics boundary");
+assertIncludes(listDiagnosticsSource, "phases.length > 200", "list diagnostics bounded history");
 assertIncludes(listTranslationSource, "translationGeneration", "list translation generation ownership");
 assertIncludes(listTranslationSource, "mapLimit(items, 3", "list translation concurrency ownership");
 const detailControllerSource = await read("src/features/detail/detail-controller.js");
