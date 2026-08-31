@@ -240,9 +240,10 @@ export class ListPagePlugin extends BasePlugin {
         });
         return this.listView;
     }
-    /** @param {{scope?: any, view?: any, skipOwnedDomObserver?: boolean, skipOwnedInteractions?: boolean}} [options] */
+    /** @param {{scope?: any, view?: any, skipOwnedDomObserver?: boolean, skipOwnedInteractions?: boolean, skipOwnedListLifecycle?: boolean}} [options] */
     async handle(options = {}) {
         this.listView = options.view ?? null;
+        if (options.skipOwnedListLifecycle) return;
         if (!window.isListPage) return;
         const scope = options.scope ?? await this.getRuntimeService("scope")();
         const settingsService = this.getRuntimeService("settings");

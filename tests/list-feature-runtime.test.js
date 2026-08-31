@@ -30,7 +30,7 @@ describe("List FeatureRuntime ownership", () => {
         await controller.start();
 
         expect(legacyPlugin.handle).toHaveBeenCalledOnce();
-        expect(legacyPlugin.handle).toHaveBeenCalledWith({ scope, view: expect.any(ListView), skipOwnedDomObserver: true, skipOwnedInteractions: false });
+        expect(legacyPlugin.handle).toHaveBeenCalledWith({ scope, view: expect.any(ListView), skipOwnedDomObserver: true, skipOwnedInteractions: false, skipOwnedListLifecycle: true });
         expect(legacyPlugin.attachListHost).toHaveBeenCalledWith(hostAdapter);
         expect(controller.view).toBeInstanceOf(ListView);
         expect(legacyPlugin.attachListDomObserver).toHaveBeenCalledWith(expect.any(ListDomObserver));
@@ -175,7 +175,9 @@ describe("List FeatureRuntime ownership", () => {
             getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }),
         }, controller = new ListController({ legacyPlugin, hostAdapter, scope });
         const previousMutationObserver = globalThis.MutationObserver;
+        const previousDocument = globalThis.document;
         globalThis.MutationObserver = dom.window.MutationObserver;
+        globalThis.document = dom.window.document;
 
         try {
             await controller.start();
@@ -188,6 +190,8 @@ describe("List FeatureRuntime ownership", () => {
         } finally {
             if (previousMutationObserver) globalThis.MutationObserver = previousMutationObserver;
             else delete globalThis.MutationObserver;
+            if (previousDocument) globalThis.document = previousDocument;
+            else delete globalThis.document;
         }
     });
 

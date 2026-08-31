@@ -21,6 +21,7 @@ import { ListDiagnosticsService } from "./list-diagnostics-service.js";
 import { scanAllPages } from "./batch-scanner.js";
 import { evaluateListItem } from "./list-evaluator.js";
 import { readListItem as parseListItem } from "../../core/list-item-reader.js";
+import { isHitShowPage } from "../../core/site-context.js";
 
 /**
  * Own the list feature lifecycle while the legacy page implementation is being
@@ -220,11 +221,8 @@ export class ListController {
         const ownsListInteractions = Boolean(this.hostAdapter.document && this.view && this.media && this.contextMenu);
         return Promise.resolve()
             .then(() => this.registerStyles())
-            .then(() => {
-                if (hasCore) this.domObserver?.start();
-                return this.legacyPlugin && view ? (/** @type {any} */ (this.legacyPlugin)).handle({ scope: this.scope, view, skipOwnedDomObserver: Boolean(this.domObserver), skipOwnedInteractions: ownsListInteractions }) : undefined;
-            })
-            .then(() => ownsListInteractions ? this.bindClick() : undefined)
+            .then(() => this.legacyPlugin && view ? (/** @type {any} */ (this.legacyPlugin)).handle({ scope: this.scope, view, skipOwnedDomObserver: Boolean(this.domObserver), skipOwnedInteractions: ownsListInteractions, skipOwnedListLifecycle: hasCore }) : undefined)
+            .then(() => this.startListLifecycle())
             .then(() => hasCore ? this.autoPagePlugin?.handle?.({ scope: this.scope, listFeatureApi }) : undefined)
             .then(() => hasCore ? this.foldCategoryPlugin?.handle?.({ scope: this.scope }) : undefined)
             .then(() => {
@@ -250,6 +248,32 @@ export class ListController {
         const css = await this.legacyPlugin.initCss();
         if (!css) return;
         this.styleRelease = this.styles.register("jhs-list-feature-style", css.replace(/^\s*<style>|<\/style>\s*$/g, ""));
+    }
+
+    /** Run the initial native-list pipeline owned by FeatureRuntime. */
+    async startListLifecycle() {
+        const runtimeWindow = this.hostAdapter.document?.defaultView ?? globalThis.window;
+        if (!runtimeWindow?.isListPage) return;
+        this.events?.start();
+        if (isHitShowPage(this.hostAdapter.location ?? this.hostAdapter.document?.location ?? runtimeWindow.location)) return;
+        const selectors = this.hostAdapter.getListSelectors?.() ?? (/** @type {any} */ (this.legacyPlugin))?.getListSelectors?.() ?? (/** @type {any} */ (this.legacyPlugin))?.getSelector?.();
+        if (!selectors?.boxSelector) return;
+        const hoverBigImg = this.settings?.snapshot?.().hoverBigImg;
+        this.images?.configureHoverPreview(hoverBigImg === "yes" ? "yes" : "no");
+        this.hostAdapter.prepareList?.();
+        this.images?.replaceHdImg?.();
+        this.pagination?.start();
+        const revision = this.state.advanceListGeneration();
+        await (this.filter?.doFilter?.(revision) ?? (/** @type {any} */ (this.legacyPlugin))?.doFilter?.(revision));
+        await this.state.createQuickFilter();
+        this.state.reconcileListItems(null, revision);
+        this.bindClick();
+        this.tagExpand?.start();
+        const items = this.hostAdapter.document ? [ ...this.hostAdapter.document.querySelectorAll(selectors.itemSelector) ] : [];
+        items.forEach((/** @type {Element} */ item) => { /** @type {HTMLElement} */ (item).dataset.jhsProcessed = "true"; });
+        this.index?.rebuildItemIndex();
+        await this.eventBus?.emit?.("list-items-added", { items }, { broadcast: false });
+        this.domObserver?.start();
     }
 
     /** Expose the stable list capability surface to other Features. */
