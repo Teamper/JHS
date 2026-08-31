@@ -9,12 +9,10 @@ describe("ListView", () => {
     it("owns item visibility from the shared filter semantics", () => {
         const dom = new JSDOM('<div class="movie-list"><div class="item" id="favorite" data-jhs-flags=\'{"favorite":true}\' data-jhs-visibility=\'{}\' data-jhs-recent="no"></div><div class="item" id="pending" data-jhs-flags=\'{}\' data-jhs-visibility=\'{}\' data-jhs-recent="no"></div></div>');
         const $ = jqueryFactory(dom.window), view = new ListView({
-            hostAdapter: { site: "javdb" },
+            hostAdapter: { site: "javdb", document: dom.window.document },
             selectors: { boxSelector: ".movie-list", itemSelector: ".movie-list .item" },
+            ui: { getJQuery: () => $, getClog: () => ({}) },
         });
-        vi.stubGlobal("window", dom.window);
-        vi.stubGlobal("document", dom.window.document);
-        vi.stubGlobal("$", $);
 
         view.applyVisibility(null, "favorite");
 
@@ -27,13 +25,11 @@ describe("ListView", () => {
         const dom = new JSDOM('<div class="movie-list"><div class="item"><img></div></div>');
         const $ = jqueryFactory(dom.window), onFilterChange = vi.fn();
         const view = new ListView({
-            hostAdapter: { site: "javdb" },
+            hostAdapter: { site: "javdb", document: dom.window.document },
             selectors: { boxSelector: ".movie-list", itemSelector: ".movie-list .item" },
             onFilterChange,
+            ui: { getJQuery: () => $, getClog: () => ({}) },
         });
-        vi.stubGlobal("window", dom.window);
-        vi.stubGlobal("document", dom.window.document);
-        vi.stubGlobal("$", $);
 
         await view.createQuickFilter("favorite");
         expect($("#jhs-quick-filter").length).toBe(1);
@@ -50,13 +46,11 @@ describe("ListView", () => {
         const dom = new JSDOM('<div class="movie-list"><div class="item"><img></div></div>');
         const $ = jqueryFactory(dom.window), onOpenMovieDetail = vi.fn();
         const view = new ListView({
-            hostAdapter: { site: "javdb" },
+            hostAdapter: { site: "javdb", document: dom.window.document },
             selectors: { boxSelector: ".movie-list", itemSelector: ".movie-list .item" },
             onOpenMovieDetail,
+            ui: { getJQuery: () => $, getClog: () => ({}) },
         });
-        vi.stubGlobal("window", dom.window);
-        vi.stubGlobal("document", dom.window.document);
-        vi.stubGlobal("$", $);
 
         view.bindMovieDetailNavigation(".movie-list");
         $(".movie-list img").trigger($.Event("click", { button: 0 }));

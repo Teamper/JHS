@@ -83,6 +83,7 @@ export class ListController {
                 selectors,
                 onFilterChange: (filter, options) => this.setQuickFilter(filter, options),
                 onOpenMovieDetail: (item, options) => this.openMovieDetail(item, options),
+                ui: this.ui,
             });
             this.state.setView(this.view);
             this.index = new ListIndexController({
@@ -90,6 +91,7 @@ export class ListController {
                 selectors,
                 document: this.hostAdapter.document,
                 readItem: (item) => this.readListItem(item),
+                ui: this.ui,
             });
             this.domObserver = new ListDomObserver({
                 scope: this.scope,
@@ -101,6 +103,7 @@ export class ListController {
                 index: this.index,
                 processAddedItems: (items, revision) => this.incremental?.processAddedItems?.(items, revision),
                 onPhase: (phase, itemCount) => this.diagnostics?.recordPhase(phase, itemCount),
+                ui: this.ui,
             });
             this.media = new ListMediaController({ scope: this.scope, document: this.hostAdapter.document, selectors });
             this.images = new ListImageController({ scope: this.scope, document: this.hostAdapter.document, window: this.hostAdapter.document?.defaultView ?? globalThis.window, site: this.hostAdapter.site, selector: selectors.coverImgSelector });

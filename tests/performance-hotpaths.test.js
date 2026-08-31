@@ -51,6 +51,7 @@ function loadListObserver() {
         getRuntimeService(name) {
             if (name === "translation") return { translate };
             if (name === "settings") return { snapshot: () => ({ translateTitle: "yes" }) };
+            if (name === "ui") return { getJQuery: () => $, getClog: () => ({}) };
             return async () => undefined;
         }
     }

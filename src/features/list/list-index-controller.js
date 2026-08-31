@@ -4,12 +4,13 @@ import { normalizeCarNum } from "../../core/constants.js";
 
 /** Own the live list-card index used by state-change refreshes. */
 export class ListIndexController {
-    /** @param {{scope: any, selectors: Record<string, string>, document?: Document, readItem: (item: Element) => {carNum?: unknown} | null | undefined}} options */
+    /** @param {{scope: any, selectors: Record<string, string>, document?: Document, readItem: (item: Element) => {carNum?: unknown} | null | undefined, ui?: any}} options */
     constructor(options) {
         this.scope = options.scope;
         this.selectors = Object.freeze({ ...options.selectors });
         this.document = options.document ?? globalThis.document ?? null;
         this.readItem = options.readItem;
+        this.ui = options.ui ?? null;
         /** @type {Map<string, Set<Element>>} */
         this.items = new Map();
         this.disposed = false;
@@ -26,7 +27,7 @@ export class ListIndexController {
                 indexed.add(item);
                 this.items.set(key, indexed);
             } catch (error) {
-                clog.debug("列表项索引跳过无效卡片", error);
+                this.ui?.getClog?.().debug?.("列表项索引跳过无效卡片", error);
             }
         }
     }

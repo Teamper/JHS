@@ -25,6 +25,7 @@ function loadRealListPage({ carList = [] } = {}) {
             if (name === "translation") return { translate: vi.fn(async () => "译文") };
             if (name === "settings") return { snapshot: () => ({ translateTitle: "no", hoverBigImg: "no" }) };
             if (name === "state") return { getActivityLog: async () => ({ entries: [] }) };
+            if (name === "ui") return { getJQuery: () => $, getClog: () => ({}) };
             return async () => undefined;
         }
     }

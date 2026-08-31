@@ -5,12 +5,13 @@
  * the Discovery Feature API.
  */
 export class DiscoveryController {
-    /** @param {{hitShowController?: any, hitShowPlugin?: any, top250Controller?: any, top250Plugin?: any, newVideoController?: any, newVideoPlugin?: any, taskController?: any, scope: any}} options */
+    /** @param {{hitShowController?: any, hitShowPlugin?: any, top250Controller?: any, top250Plugin?: any, newVideoController?: any, newVideoPlugin?: any, taskController?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.hitShowController = options.hitShowController ?? options.hitShowPlugin ?? null;
         this.top250Controller = options.top250Controller ?? options.top250Plugin ?? null;
         this.newVideoController = options.newVideoController ?? options.newVideoPlugin ?? null;
         this.taskController = options.taskController ?? null;
+        this.ui = options.ui ?? null;
         this.scope = options.scope;
         this.started = false;
         this.idleHandle = null;
@@ -36,7 +37,7 @@ export class DiscoveryController {
                         .then(() => this.newVideoController?.start ? this.newVideoController.start({ taskApi }) : this.newVideoController?.handle?.({ scope: this.scope, taskApi }))
                         .then(() => this.taskController?.start?.())
                         .catch((error) => {
-                            clog.error("Discovery 空闲初始化失败", error);
+                            this.ui?.getClog?.().error?.("Discovery 空闲初始化失败", error);
                             this.dispose();
                         });
                 };

@@ -152,7 +152,11 @@ describe("List FeatureRuntime ownership", () => {
             document: dom.window.document,
             location: dom.window.location,
             getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }),
-        }, controller = new ListController({ hostAdapter, scope });
+        }, controller = new ListController({
+            hostAdapter,
+            scope,
+            ui: { getJQuery: () => globalThis.$, getClog: () => ({}), show: {}, confirm: vi.fn(), time: () => undefined, openPage: vi.fn() },
+        });
 
         await controller.start();
         await controller.getApi().bindClick();
@@ -172,7 +176,11 @@ describe("List FeatureRuntime ownership", () => {
             document: dom.window.document,
             location: dom.window.location,
             getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }),
-        }, controller = new ListController({ hostAdapter, scope });
+        }, controller = new ListController({
+            hostAdapter,
+            scope,
+            ui: { getJQuery: () => globalThis.$, getClog: () => ({}), show: {}, confirm: vi.fn(), time: () => undefined, openPage: vi.fn() },
+        });
         const previousMutationObserver = globalThis.MutationObserver;
         const previousDocument = globalThis.document;
         globalThis.MutationObserver = dom.window.MutationObserver;
@@ -311,7 +319,12 @@ describe("List FeatureRuntime ownership", () => {
             location: dom.window.location,
             getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }),
             prepareList,
-        }, controller = new ListController({ hostAdapter, scope, styles: { register: vi.fn(() => vi.fn()) } });
+        }, controller = new ListController({
+            hostAdapter,
+            scope,
+            styles: { register: vi.fn(() => vi.fn()) },
+            ui: { getJQuery: () => globalThis.$, getClog: () => ({}), show: {}, confirm: vi.fn(), time: () => undefined, openPage: vi.fn() },
+        });
 
         try {
             await controller.start();

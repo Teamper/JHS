@@ -238,6 +238,7 @@ export class ListPagePlugin extends BasePlugin {
             selectors: this.getListSelectors(),
             onFilterChange: (filter, options) => this.setQuickFilter(filter, options),
             onOpenMovieDetail: (item, options) => this.openMovieDetail(item, options),
+            ui: this.getRuntimeService("ui"),
         });
         return this.listView;
     }

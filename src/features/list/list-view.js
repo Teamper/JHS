@@ -9,9 +9,11 @@ function parseData(value, fallback) {
 
 /** Own list-item visibility, quick-filter controls, and list navigation. */
 export class ListView {
-    /** @param {{hostAdapter: any, selectors: Record<string, string>, onFilterChange?: (filter: unknown, options?: any) => any, onOpenMovieDetail?: (item: any, options?: any) => any}} options */
+    /** @param {{hostAdapter: any, selectors: Record<string, string>, onFilterChange?: (filter: unknown, options?: any) => any, onOpenMovieDetail?: (item: any, options?: any) => any, ui?: any}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
+        this.document = options.hostAdapter?.document ?? null;
+        this.ui = options.ui ?? null;
         this.selectors = Object.freeze({ ...options.selectors });
         this.onFilterChange = options.onFilterChange ?? (() => {});
         this.onOpenMovieDetail = options.onOpenMovieDetail ?? (() => {});
@@ -19,9 +21,15 @@ export class ListView {
         /** @type {any} */ this.navigationRoot = null;
     }
 
+    getJQuery() {
+        const jq = this.ui?.getJQuery?.();
+        if (typeof jq !== "function") throw new TypeError("列表视图需要 jQuery");
+        return jq;
+    }
+
     /** @param {Element[] | null} items @param {unknown} filter */
     applyVisibility(items, filter) {
-        const elements = items ? $(items) : $(this.selectors.itemSelector), normalizedFilter = normalizeQuickFilterKey(filter);
+        const $ = this.getJQuery(), elements = items ? $(items) : $(this.selectors.itemSelector), normalizedFilter = normalizeQuickFilterKey(filter);
         elements.each(((/** @type {number} */ _index, /** @type {Element} */ element) => {
             const item = $(element), flags = parseData(item.attr("data-jhs-flags") || "{}", {}), visibilityReasons = parseData(item.attr("data-jhs-visibility") || "{}", {}), recent = item.attr("data-jhs-recent") === "yes";
             shouldShowItem({ filter: normalizedFilter, flags, visibilityReasons, recent }) ? item.show() : item.hide();
@@ -30,6 +38,7 @@ export class ListView {
 
     /** @param {unknown} initialFilter */
     async createQuickFilter(initialFilter) {
+        const $ = this.getJQuery();
         if (this.quickFilterRoot?.length) {
             this.syncQuickFilterUi(initialFilter);
             return;
@@ -69,7 +78,7 @@ export class ListView {
             event.preventDefault(), event.stopPropagation();
             const open = !menu.hasClass("is-open");
             menu.toggleClass("is-open", open), toggle.attr("aria-expanded", String(open)), open && (menu.find('[aria-checked="true"]').first().length ? menu.find('[aria-checked="true"]').first() : menu.find(".jhs-filter-option").first()).trigger("focus");
-        })), $(document).off("click.jhsQuickFilter").on("click.jhsQuickFilter", ((/** @type {any} */ event) => {
+        })), this.document && $(this.document).off("click.jhsQuickFilter").on("click.jhsQuickFilter", ((/** @type {any} */ event) => {
             $(event.target).closest(root).length || closeMenu();
         }));
         this.quickFilterRoot = root;
@@ -78,7 +87,7 @@ export class ListView {
 
     /** @param {unknown} filter */
     syncQuickFilterUi(filter) {
-        const normalizedFilter = normalizeQuickFilterKey(filter), isPrimary = PRIMARY_QUICK_FILTERS.includes(normalizedFilter), root = this.quickFilterRoot?.length ? this.quickFilterRoot : $("#jhs-quick-filter"), tabs = root.find(".jhs-segmented__item"), options = root.find(".jhs-filter-option");
+        const $ = this.getJQuery(), normalizedFilter = normalizeQuickFilterKey(filter), isPrimary = PRIMARY_QUICK_FILTERS.includes(normalizedFilter), root = this.quickFilterRoot?.length ? this.quickFilterRoot : $("#jhs-quick-filter"), tabs = root.find(".jhs-segmented__item"), options = root.find(".jhs-filter-option");
         tabs.removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" });
         isPrimary ? tabs.filter(`[data-jhs-filter="${normalizedFilter}"]`).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }) : tabs.first().attr("tabindex", "0");
         options.attr("aria-checked", "false").filter(`[data-jhs-filter="${normalizedFilter}"]`).attr("aria-checked", "true");
@@ -88,19 +97,20 @@ export class ListView {
 
     /** @param {any} container */
     bindMovieDetailNavigation(container) {
-        const root = $(container), selector = ".item img, .item .video-title";
+        const $ = this.getJQuery(), root = $(container), selector = ".item img, .item .video-title";
         root.off("click.jhsMovieDetail auxclick.jhsMovieDetail", selector).on("click.jhsMovieDetail auxclick.jhsMovieDetail", selector, ((/** @type {any} */ event) => {
             if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
             if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
             event.preventDefault(), event.stopPropagation();
-            void Promise.resolve(this.onOpenMovieDetail($(event.currentTarget).closest(".item"), { event })).catch((error => clog.error("打开影片详情失败", error)));
+            void Promise.resolve(this.onOpenMovieDetail($(event.currentTarget).closest(".item"), { event })).catch((error => this.ui?.getClog?.().error?.("打开影片详情失败", error)));
         }));
         this.navigationRoot = root;
     }
 
     dispose() {
         this.quickFilterRoot?.off(".jhsListView"), this.navigationRoot?.off("click.jhsMovieDetail auxclick.jhsMovieDetail", ".item img, .item .video-title");
-        typeof document !== "undefined" && typeof $ === "function" && $(document).off("click.jhsQuickFilter");
+        const $ = this.ui?.getJQuery?.();
+        this.document && typeof $ === "function" && $(this.document).off("click.jhsQuickFilter");
         this.quickFilterRoot = null, this.navigationRoot = null;
     }
 }

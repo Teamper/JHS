@@ -4,7 +4,7 @@ import { isHitShowPage } from "../../core/site-context.js";
 
 /** Own list DOM mutations and debounce incremental card processing. */
 export class ListDomObserver {
-    /** @param {{scope: any, selectors: Record<string, string>, document?: Document, window?: Window & {isListPage?: boolean}, location?: Location | URL | string, state: {advanceListGeneration: () => string, captureListRevision: () => string}, index: {indexItems: (items: Element[]) => void, removeIndexedItems: (nodes: NodeList | Node[]) => void}, processAddedItems: (items: Element[], revision: string) => Promise<void> | void, onPhase?: (phase: string, itemCount?: number | null) => void, onError?: (error: unknown) => void}} options */
+    /** @param {{scope: any, selectors: Record<string, string>, document?: Document, window?: Window & {isListPage?: boolean}, location?: Location | URL | string, state: {advanceListGeneration: () => string, captureListRevision: () => string}, index: {indexItems: (items: Element[]) => void, removeIndexedItems: (nodes: NodeList | Node[]) => void}, processAddedItems: (items: Element[], revision: string) => Promise<void> | void, onPhase?: (phase: string, itemCount?: number | null) => void, onError?: (error: unknown) => void, ui?: any}} options */
     constructor(options) {
         this.scope = options.scope;
         this.selectors = Object.freeze({ ...options.selectors });
@@ -15,7 +15,8 @@ export class ListDomObserver {
         this.index = options.index;
         this.processAddedItems = options.processAddedItems;
         this.onPhase = options.onPhase ?? (() => {});
-        this.onError = options.onError ?? ((error) => clog.error("列表增量处理失败", error));
+        this.ui = options.ui ?? null;
+        this.onError = options.onError ?? ((error) => this.ui?.getClog?.().error?.("列表增量处理失败", error));
         /** @type {Set<Element>} */ this.pendingItems = new Set();
         /** @type {ReturnType<typeof setTimeout> | null} */ this.processTimer = null;
         /** @type {(() => void) | null} */ this.timerCleanup = null;
@@ -34,7 +35,7 @@ export class ListDomObserver {
         if (!this.document) return null;
         const root = this.document.querySelector(this.selectors.boxSelector);
         if (!root) {
-            clog.error("没有找到容器节点!");
+            this.ui?.getClog?.().error?.("没有找到容器节点!");
             return null;
         }
         this.observer = this.scope.observe(root, (/** @type {MutationRecord[]} */ records) => this.handleMutations(records), { childList: true, subtree: false });
