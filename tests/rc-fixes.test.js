@@ -10,7 +10,7 @@ const translate = readTestFile(join(process.cwd(), "src/plugins/translate/transl
 const titleTranslation = readTestFile(join(process.cwd(), "src/ui/translation/title-translation.js"), "utf8");
 const fc2 = readTestFile(join(process.cwd(), "src/plugins/external-search/fc2.js"), "utf8");
 const otherSite = readTestFile(join(process.cwd(), "src/plugins/external-search/other-site.js"), "utf8");
-const navBar = readTestFile(join(process.cwd(), "src/plugins/status/nav-bar.js"), "utf8");
+const navBar = readTestFile(join(process.cwd(), "src/features/identity/identity-navigation-controller.js"), "utf8");
 const autoPage = readTestFile(join(process.cwd(), "src/plugins/status/auto-page.js"), "utf8");
 
 describe("RC 收口：async 回流 gate", () => {
@@ -50,7 +50,7 @@ describe("RC 收口：async 回流 gate", () => {
 
 describe("RC 收口：UI surface 与宿主 DOM 边界", () => {
     it("old search image is left untouched when the image-search plugin is disabled", () => {
-        expect(navBar).toMatch(/hookOldSearch\(\)\s*\{[\s\S]{0,240}?const hasSearchByImage = Boolean\(this\.identityApi\?\.hasSearchByImage\);[\s\S]{0,120}?if \(!hasSearchByImage\) return;[\s\S]{0,200}?cloneNode/);
+        expect(navBar).toMatch(/hookOldSearch\(\)\s*\{[\s\S]{0,160}?if \(!this\.identityApi\?\.hasSearchByImage\) return;[\s\S]{0,200}?cloneNode/);
     });
 
     it("AutoPage stops on feature scope dispose and unifies the first-start promise", () => {

@@ -104,7 +104,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.filter((item) => item.featureId === "stats").every((item) => item.managedByFeature)).toBe(true);
         const createRuntime = (site, disabled = [], route = "list") => {
             const diagnostics = new DiagnosticsService();
-            const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.profile, { current: () => "regular" }).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {}).register(SERVICE.state, {}).register(REGISTRY.settings, new SettingsRegistry());
+            const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(PORT.style, {}).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.profile, { current: () => "regular" }).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {}).register(SERVICE.state, {}).register(REGISTRY.settings, new SettingsRegistry());
             const runtime = new FeatureRuntime({ container, commands: new CommandRegistry(), diagnostics, disabled, site, route });
             container.register(REGISTRY.feature, runtime);
             featureManifests.forEach((manifest) => runtime.register(manifest));
@@ -118,7 +118,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(javdbDetail.getBean("Fc2Plugin").managedByFeature).toBe(true);
         expect(javdb.getPluginNames()).toEqual([
             "OneTwoThreeOfflinePlugin", "ListPagePlugin", "AutoPagePlugin", "Fc2Plugin", "Fc2NavigationPlugin", "FoldCategoryPlugin", "ListPageButtonPlugin",
-            "SettingPlugin", "NavBarPlugin", "HitShowPlugin", "TOP250Plugin", "SearchByImagePlugin", "CoverButtonPlugin",
+            "SettingPlugin", "HitShowPlugin", "TOP250Plugin", "SearchByImagePlugin", "CoverButtonPlugin",
             "Fc2By123AvPlugin", "DetailPagePlugin", "DetailWorkspacePlugin", "ReviewPlugin", "RelatedPlugin", "DetailPageButtonPlugin",
             "HighlightMagnetPlugin", "PreviewVideoPlugin", "ActressInfoPlugin", "OtherSitePlugin", "TranslatePlugin",
             "MagnetHubPlugin", "ScreenShotPlugin", "NewVideoPlugin",

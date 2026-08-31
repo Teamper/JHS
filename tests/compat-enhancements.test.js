@@ -4,7 +4,7 @@ import { readTestFile } from "./helpers/read-test-file.js";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { CompatibilityController } from "../src/features/compatibility/compatibility-controller.js";
-const nav = readTestFile(join(import.meta.dirname, "../src/plugins/status/nav-bar.js"), "utf8");
+const nav = readTestFile(join(import.meta.dirname, "../src/features/identity/identity-navigation-controller.js"), "utf8");
 
 function createController(html, options = {}) {
     const dom = new DOMParser().parseFromString(html, "text/html");
@@ -56,6 +56,6 @@ describe("status and media UX contracts", () => {
         link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
         expect(imageViewer).toHaveBeenCalledWith(fixture.dom.querySelector(".preview-images img"));
     });
-    it("intercepts image paste only on the navigation search input", () => { expect(nav).toContain('$("#search-keyword").on("paste.jhsIdentityNav"'); expect(nav).toContain('type.indexOf("image")'); });
+    it("intercepts image paste only on the navigation search input", () => { expect(nav).toContain('$("#search-keyword").on("paste.jhsIdentityNav"'); expect(nav).toContain('type.includes("image")'); });
     it("uses configured 115 concurrency and cache lifetime", () => { const one15 = readTestFile(join(import.meta.dirname, "../src/plugins/one-one-five/plugins.js"), "utf8"); expect(one15).toContain("mapLimit(cards, this.concurrency"); expect(one15).toContain('getSetting("oneOneFiveConcurrency"'); expect(one15).toContain('getSetting("oneOneFiveCacheMinutes"'); expect(one15).toContain('rootMargin: "200px"'); });
 });

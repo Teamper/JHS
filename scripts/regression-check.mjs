@@ -206,7 +206,7 @@ assert(!eventBus.includes("this.channel.postMessage(event);\n        await this.
 const listPageSource = await read("src/plugins/status/list-page.js");
 const identityManifestSource = await read("src/features/identity/manifest.js");
 const identityControllerSource = await read("src/features/identity/identity-controller.js");
-const navBarSource = await read("src/plugins/status/nav-bar.js");
+const identityNavigationSource = await read("src/features/identity/identity-navigation-controller.js");
 const busNavBarSource = await read("src/plugins/status/bus-nav-bar.js");
 const identityActressSource = await read("src/plugins/avatar/actress-info.js");
 const listManifestSource = await read("src/features/list/manifest.js");
@@ -420,7 +420,10 @@ assertIncludes(libraryControllerSource, "mountFavoriteActresses()", "library fav
 assertIncludes(libraryControllerSource, 'favorite_actresses', "library favorite storage boundary");
 assertIncludes(identityManifestSource, 'id: "identity"', "real identity feature manifest");
 assertIncludes(identityManifestSource, 'new IdentityController({', "identity feature controller ownership");
-assertIncludes(identityControllerSource, 'this.javdbNavigationPlugin?.handle({ scope: this.scope, identityApi: api })', "identity navigation lifecycle handoff");
+assertIncludes(identityControllerSource, 'this.javdbNavigationController?.start({ scope: this.scope, identityApi: api })', "identity navigation lifecycle handoff");
+assertIncludes(identityManifestSource, 'new IdentityNavigationController({', "identity navigation controller ownership");
+assertIncludes(identityNavigationSource, 'this.scope.addCleanup?.(() => {', "identity navigation scope cleanup");
+assertIncludes(identityNavigationSource, 'this.getJQuery()("#search-keyword")', "identity navigation DOM ownership");
 assertIncludes(identityControllerSource, 'hasSearchByImage: Boolean(this.imageSearchPlugin)', "identity image-search API boundary");
 assertIncludes(externalBridgeManifestSource, 'id: "external-bridge"', "real external bridge feature manifest");
 assertIncludes(externalBridgeManifestSource, 'new ExternalBridgeController({', "external bridge feature controller ownership");
@@ -437,10 +440,10 @@ assertIncludes(discoveryControllerSource, 'openNewVideoDialog:', "discovery new-
 for (const source of [hitShow, await read("src/plugins/external-search/top250.js"), newVideoTaskSource, await read("src/plugins/new-video/new-video.js")]) {
   assert(!source.includes('getOptionalDependency("TaskPlugin")') && !source.includes('getOptionalDependency("HitShowPlugin")') && !source.includes('getOptionalDependency("TOP250Plugin")'), "Discovery consumers must use Feature APIs");
 }
-assertIncludes(navBarSource, 'this.identityApi?.openSearchByImage?.()', "JavDB navigation identity API boundary");
+assertIncludes(identityNavigationSource, 'this.identityApi?.openSearchByImage?.()', "JavDB navigation identity API boundary");
 assertIncludes(busNavBarSource, 'identityApi.openSearchByImage?.()', "JavBus navigation identity API boundary");
 assertIncludes(identityActressSource, 'options.scope ?? await this.getRuntimeService("scope")()', "identity actress scope handoff");
-assert(!navBarSource.includes('getOptionalDependency("SearchByImagePlugin")'), "JavDB navigation must not resolve SearchByImagePlugin directly");
+assert(!identityNavigationSource.includes('getOptionalDependency("SearchByImagePlugin")'), "JavDB navigation must not resolve SearchByImagePlugin directly");
 assert(!busNavBarSource.includes('getOptionalDependency("SearchByImagePlugin")'), "JavBus navigation must not resolve SearchByImagePlugin directly");
 assert(!historySource.includes('getOptionalDependency("UnifiedOfflinePlugin")'), "history must use the external bridge API");
 assert(!unifiedOffline.includes('getOptionalDependency("OneTwoThreeOfflinePlugin")'), "unified offline must receive providers from the external bridge controller");
@@ -552,7 +555,6 @@ const expectedPlugins = [
   ["avatar/actress-info.js", "ActressInfoPlugin", "ActressInfoPlugin"],
   ["external-search/hit-show.js", "HitShowPlugin", "HitShowPlugin"],
   ["external-search/top250.js", "Top250Plugin", "TOP250Plugin"],
-  ["status/nav-bar.js", "NavBarPlugin", "NavBarPlugin"],
   ["external-search/other-site.js", "OtherSitePlugin", "OtherSitePlugin"],
   ["status/bus-detail-page.js", "BusDetailPagePlugin", "BusDetailPagePlugin"],
   ["status/detail-page-button.js", "DetailPageButtonPlugin", "DetailPageButtonPlugin"],
@@ -593,7 +595,7 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavDB plugin registration order changed"
 );
 assert(
@@ -636,6 +638,7 @@ sourceByFile.set("features/library/library-controller.js", libraryControllerSour
 sourceByFile.set("features/library/history-controller.js", historySource);
 sourceByFile.set("features/library/blacklist-controller.js", blacklistControllerSource);
 sourceByFile.set("features/library/blacklist-repository.js", blacklistRepositorySource);
+sourceByFile.set("features/identity/identity-navigation-controller.js", identityNavigationSource);
 sourceByFile.set("features/compatibility/compatibility-controller.js", compatibilityControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));

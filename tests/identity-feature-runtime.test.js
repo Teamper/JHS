@@ -6,15 +6,15 @@ describe("Identity FeatureRuntime ownership", () => {
     it("passes one feature scope through navigation and actress-info contributions", async () => {
         const scope = new LifecycleScope("feature:identity");
         const imageSearchPlugin = { open: vi.fn(), handleImageFile: vi.fn(), resetSearchUI: vi.fn() };
-        const javdbNavigationPlugin = { handle: vi.fn(async () => {}) };
+        const javdbNavigationController = { start: vi.fn(async () => {}) };
         const actressInfoPlugin = { handle: vi.fn(async () => {}) };
-        const controller = new IdentityController({ javdbNavigationPlugin, imageSearchPlugin, actressInfoPlugin, scope });
+        const controller = new IdentityController({ javdbNavigationController, imageSearchPlugin, actressInfoPlugin, scope });
 
         await controller.start();
         await controller.start();
 
-        expect(javdbNavigationPlugin.handle).toHaveBeenCalledOnce();
-        expect(javdbNavigationPlugin.handle).toHaveBeenCalledWith({ scope, identityApi: controller.getApi() });
+        expect(javdbNavigationController.start).toHaveBeenCalledOnce();
+        expect(javdbNavigationController.start).toHaveBeenCalledWith({ scope, identityApi: controller.getApi() });
         expect(actressInfoPlugin.handle).toHaveBeenCalledWith({ scope });
         expect(controller.getApi().hasSearchByImage).toBe(true);
         controller.getApi().openSearchByImage("callback");

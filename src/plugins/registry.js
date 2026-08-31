@@ -37,7 +37,6 @@ import { HighlightMagnetPlugin } from "./status/highlight-magnet.js";
 import { ListPageButtonPlugin } from "./status/list-page-button.js";
 import { ListPagePluginAdapter as ListPagePlugin } from "../compat/list-page-adapter.js";
 import { MobileBottomBarPlugin } from "./status/mobile-bottom-bar.js";
-import { NavBarPlugin } from "./status/nav-bar.js";
 import { SubTitleCatPlugin } from "./subtitle/subtitle-cat.js";
 import { TranslatePlugin } from "./translate/translate.js";
 
@@ -53,7 +52,6 @@ export const legacyContributionManifests = Object.freeze([
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 5 }, [SERVICE.settings], { managedByFeature: true }),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [PORT.host, SERVICE.settings, REGISTRY.feature], { managedByFeature: true }),
     manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.profile, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, SERVICE.translation, REGISTRY.settings, REGISTRY.feature]),
-    manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }, [SERVICE.movie], { managedByFeature: true }),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache, REGISTRY.feature], { managedByFeature: true }),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account], { managedByFeature: true }),
     manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch], { managedByFeature: true }),
