@@ -10,6 +10,7 @@ import { ListEventController } from "./list-event-controller.js";
 import { ListBatchService } from "./list-batch-service.js";
 import { ListEvaluationService } from "./list-evaluation-service.js";
 import { ListSummaryService } from "./list-summary-service.js";
+import { ListTranslationService } from "./list-translation-service.js";
 import { scanAllPages } from "./batch-scanner.js";
 import { evaluateListItem } from "./list-evaluator.js";
 import { readListItem as parseListItem } from "../../core/list-item-reader.js";
@@ -51,6 +52,8 @@ export class ListController {
         this.batch = null;
         this.evaluation = null;
         this.summary = null;
+        this.titleTranslation = null;
+        this.translation = /** @type {any} */ (options).translation ?? null;
         this.started = false;
     }
 
@@ -95,6 +98,15 @@ export class ListController {
                 site: this.hostAdapter.site,
                 onSummary: (summary) => /** @type {any} */ (this.legacyPlugin)?.applyListSummary?.(summary),
             });
+            this.titleTranslation = this.settings && this.translation ? new ListTranslationService({
+                scope: this.scope,
+                document: this.hostAdapter.document,
+                window: this.hostAdapter.document?.defaultView ?? globalThis.window,
+                selectors,
+                site: this.hostAdapter.site,
+                settings: this.settings,
+                translation: this.translation,
+            }) : null;
             this.events = new ListEventController({
                 scope: this.scope,
                 settings: this.settings,
@@ -131,6 +143,7 @@ export class ListController {
         this.batch && this.legacyPlugin?.attachListBatch?.(this.batch);
         this.evaluation && this.legacyPlugin?.attachListEvaluation?.(this.evaluation);
         this.summary && this.legacyPlugin?.attachListSummary?.(this.summary);
+        this.titleTranslation && (/** @type {any} */ (this.legacyPlugin))?.attachListTranslation?.(this.titleTranslation);
         this.started = true;
         const listFeatureApi = this.getApi();
         const view = this.view;
@@ -193,9 +206,15 @@ export class ListController {
             setQuickFilter: (/** @type {unknown} */ filter, /** @type {{syncUi?: boolean}} [options] */ options) => this.setQuickFilter(filter, options),
             getActiveQuickFilter: () => this.state.activeQuickFilter,
             createEvaluationContext: call("createEvaluationContext"),
-            translateListItems: call("translateListItems"),
-            revertTranslation: call("revertTranslation"),
-            invalidateTranslations: call("invalidateTranslations"),
+            translateListItems: (/** @type {any[]} */ ...args) => {
+                const translation = /** @type {any} */ (this.titleTranslation);
+                return translation ? translation.translateListItems(...args) : legacyPlugin?.translateListItems?.(...args);
+            },
+            revertTranslation: (/** @type {any[]} */ ...args) => {
+                const translation = /** @type {any} */ (this.titleTranslation);
+                return translation ? translation.revertTranslation(...args) : legacyPlugin?.revertTranslation?.(...args);
+            },
+            invalidateTranslations: () => this.titleTranslation ? this.titleTranslation.invalidateTranslations() : legacyPlugin?.invalidateTranslations?.(),
             getCurrentPageSummary: () => this.summary ? this.summary.collectCurrentPageSummary() : legacyPlugin?.getCurrentPageSummary?.(),
             scanAllPages: (/** @type {any} */ options) => scanAllPages(options),
             evaluateListItem: (/** @type {any} */ record, /** @type {any} */ context, /** @type {any} */ options) => evaluateListItem(record, context, options),
@@ -211,6 +230,8 @@ export class ListController {
         this.evaluation = null;
         this.summary?.dispose();
         this.summary = null;
+        this.titleTranslation?.dispose();
+        this.titleTranslation = null;
         this.images?.dispose();
         this.images = null;
         this.media?.dispose();

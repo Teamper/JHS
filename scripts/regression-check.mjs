@@ -215,6 +215,7 @@ const listImageSource = await read("src/features/list/list-image-controller.js")
 const listEventSource = await read("src/features/list/list-event-controller.js");
 const listEvaluationSource = await read("src/features/list/list-evaluation-service.js");
 const listSummarySource = await read("src/features/list/list-summary-service.js");
+const listTranslationSource = await read("src/features/list/list-translation-service.js");
 const listPageAdapterSource = await read("src/compat/list-page-adapter.js");
 const listViewSource = await read("src/features/list/list-view.js");
 const listActionsSource = await read("src/plugins/status/list-page-button.js");
@@ -250,6 +251,8 @@ assertIncludes(listControllerSource, "new ListEvaluationService({", "list evalua
 assertIncludes(listControllerSource, "attachListEvaluation", "list evaluation migration handoff");
 assertIncludes(listControllerSource, "new ListSummaryService({", "list summary ownership");
 assertIncludes(listControllerSource, "attachListSummary", "list summary migration handoff");
+assertIncludes(listControllerSource, "new ListTranslationService({", "list translation ownership");
+assertIncludes(listControllerSource, "attachListTranslation", "list translation migration handoff");
 assertIncludes(listControllerSource, "new ListBatchService({", "list batch service ownership");
 assertIncludes(listControllerSource, "attachListBatch", "list batch migration handoff");
 assertIncludes(listControllerSource, "readItem: (item) => this.readListItem(item)", "list card reader ownership");
@@ -280,6 +283,8 @@ assertIncludes(listEvaluationSource, "stateService.getActivityLog()", "list eval
 assertIncludes(listEvaluationSource, "invalidate()", "list evaluation cache lifecycle ownership");
 assertIncludes(listSummarySource, "scope.ownTimeout(timer)", "list summary timer lifecycle ownership");
 assertIncludes(listSummarySource, "collectCurrentPageSummary()", "list summary aggregation ownership");
+assertIncludes(listTranslationSource, "translationGeneration", "list translation generation ownership");
+assertIncludes(listTranslationSource, "mapLimit(items, 3", "list translation concurrency ownership");
 const detailControllerSource = await read("src/features/detail/detail-controller.js");
 const detailManifestSource = await read("src/features/detail/manifest.js");
 const detailWorkspaceSource = await read("src/plugins/status/detail-workspace.js");

@@ -136,6 +136,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {any} */ this.listBatch = null;
         /** @type {any} */ this.listEvaluation = null;
         /** @type {any} */ this.listSummary = null;
+        /** @type {any} */ this.listTranslation = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -175,6 +176,10 @@ export class ListPagePlugin extends BasePlugin {
     /** Attach the FeatureRuntime-owned current-page summary during migration. @param {any} summary */
     attachListSummary(summary) {
         this.listSummary = summary;
+    }
+    /** Attach the FeatureRuntime-owned title translation service during migration. @param {any} translation */
+    attachListTranslation(translation) {
+        this.listTranslation = translation;
     }
     /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
     async getLibraryFeatureApi() {
@@ -520,6 +525,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {(Element|JQueryHandle)[]} e */
     async translateListItems(e) {
+        if (this.listTranslation) return this.listTranslation.translateListItems(e);
         if ((this.getRuntimeService("settings").snapshot().translateTitle ?? _) !== _) return;
         let failed = 0;
         /** @type {unknown} */
@@ -826,10 +832,12 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** 使在途列表翻译作废（Translate OFF 时调用）。 */
     invalidateTranslations() {
+        if (this.listTranslation) return this.listTranslation.invalidateTranslations();
         this.translationGeneration++;
     }
     /** @param {Element|JQueryHandle} input */
     async translate(input) {
+        if (this.listTranslation) return this.listTranslation.translate(input);
         const e = input?.jquery ? input : $(input);
         if (!e.length) return;
         let t, n, a = e.find(".video-title");
@@ -843,6 +851,7 @@ export class ListPagePlugin extends BasePlugin {
         this.applyTranslatedTitle(e, translated, n);
     }
     async revertTranslation() {
+        if (this.listTranslation) return this.listTranslation.revertTranslation();
         $(this.getListSelectors().itemSelector).toArray().forEach((/** @type {Element} */ e) => {
             let t = $(e);
             const n = t.find(".box").attr("title") || t.find(".video-title").attr("title") || t.find("img").attr("data-title");
