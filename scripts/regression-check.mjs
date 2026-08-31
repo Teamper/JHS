@@ -210,6 +210,7 @@ const listManifestSource = await read("src/features/list/manifest.js");
 const listControllerSource = await read("src/features/list/list-controller.js");
 const listDomObserverSource = await read("src/features/list/list-dom-observer.js");
 const listMediaSource = await read("src/features/list/list-media-controller.js");
+const listImageSource = await read("src/features/list/list-image-controller.js");
 const listPageAdapterSource = await read("src/compat/list-page-adapter.js");
 const listViewSource = await read("src/features/list/list-view.js");
 const listActionsSource = await read("src/plugins/status/list-page-button.js");
@@ -235,6 +236,8 @@ assertIncludes(listControllerSource, "new ListDomObserver({", "list DOM observer
 assertIncludes(listControllerSource, "attachListDomObserver", "list DOM observer migration handoff");
 assertIncludes(listControllerSource, "new ListMediaController({", "list media lifecycle ownership");
 assertIncludes(listControllerSource, "attachListMedia", "list media migration handoff");
+assertIncludes(listControllerSource, "new ListImageController({", "list image lifecycle ownership");
+assertIncludes(listControllerSource, "attachListImages", "list image migration handoff");
 assertIncludes(listControllerSource, "readItem: (item) => this.readListItem(item)", "list card reader ownership");
 assertIncludes(listControllerSource, "findCarNumAndHref: (/** @type {any} */ item) => this.readListItem(item)", "list card reader capability");
 assertIncludes(listControllerSource, "onFilterChange: (filter, options)", "list view filter callback boundary");
@@ -246,7 +249,10 @@ assertIncludes(listControllerSource, "fc2LookupPlugin?.handle?.({ scope: this.sc
 assertIncludes(listDomObserverSource, "scope.observe(root", "list DOM observer lifecycle ownership");
 assertIncludes(listDomObserverSource, "scope.ownTimeout(this.processTimer)", "list DOM debounce lifecycle ownership");
 assertIncludes(listMediaSource, "scope.listen(root, \"click\"", "list media listener lifecycle ownership");
+assertIncludes(listImageSource, "scope.ownObserver(this.hdImageObserver)", "list image observer lifecycle ownership");
+assertIncludes(listImageSource, "hdPendingCleanups", "list image pending listener ownership");
 assertIncludes(listPageSource, "this.listMedia ? this.listMedia.start()", "legacy list media compatibility handoff");
+assertIncludes(listPageSource, "if (this.listImages) return this.listImages.replaceHdImg(e);", "legacy list image compatibility handoff");
 assertIncludes(listPageSource, "if (this.listDomObserver) return this.listDomObserver.start();", "legacy list DOM observer compatibility handoff");
 const detailControllerSource = await read("src/features/detail/detail-controller.js");
 const detailManifestSource = await read("src/features/detail/manifest.js");

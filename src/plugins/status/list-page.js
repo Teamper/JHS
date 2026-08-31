@@ -131,6 +131,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {any} */ this.listIndex = null;
         /** @type {any} */ this.listDomObserver = null;
         /** @type {any} */ this.listMedia = null;
+        /** @type {any} */ this.listImages = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -150,6 +151,10 @@ export class ListPagePlugin extends BasePlugin {
     /** Attach the FeatureRuntime-owned media interaction during migration. @param {any} media */
     attachListMedia(media) {
         this.listMedia = media;
+    }
+    /** Attach the FeatureRuntime-owned image lifecycle during migration. @param {any} images */
+    attachListImages(images) {
+        this.listImages = images;
     }
     /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
     async getLibraryFeatureApi() {
@@ -753,6 +758,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {any} [e] */
     replaceHdImg(e) {
+        if (this.listImages) return this.listImages.replaceHdImg(e);
         if (e && "string" == typeof e.jquery && (e = e.toArray()), e || (e = document.querySelectorAll(this.getListSelectors().coverImgSelector)),
         !e.length) return;
         const t = Array.from(/** @type {Iterable<HTMLImageElement>} */ (e)).filter((/** @type {HTMLImageElement} */ e) => "true" !== e.dataset.hdReplaced && "true" !== e.dataset.jhsHdObserved);
@@ -769,6 +775,7 @@ export class ListPagePlugin extends BasePlugin {
     /** hoverBigImg 唯一生命周期入口：ON→绑定，OFF→销毁。 */
     /** @param {string} enabled */
     configureHoverPreview(enabled) {
+        if (this.listImages) return this.listImages.configureHoverPreview(enabled);
         const runtimeWindow = /** @type {any} */ (window);
         if (this.hoverPreviewState === enabled && ("no" === enabled || runtimeWindow.imageHoverPreviewObj)) return;
         if (runtimeWindow.imageHoverPreviewObj) {
