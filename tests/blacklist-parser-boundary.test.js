@@ -18,6 +18,7 @@ function loadBlacklist(html, pageUrl = "https://javdb.com/actors/a", write = vi.
         get: vi.fn(async () => []),
         set: write,
     };
+    const utils = { htmlTo$dom: source => $(new JSDOM(source, { url: pageUrl }).window.document) }, clog = { error: vi.fn(), log: vi.fn(), warn: vi.fn() };
     const controller = new BlacklistController({
         hostAdapter: {
             site,
@@ -29,13 +30,14 @@ function loadBlacklist(html, pageUrl = "https://javdb.com/actors/a", write = vi.
         },
         storage,
         http: { request: vi.fn(async () => ({ data: listMarkup("javbus") })) },
+        ui: { getJQuery: () => $, getUtils: () => utils, show: {}, getLoading: () => () => ({ close() {} }), getClog: () => clog },
         scope: { disposed: false, assertActive() {}, addCleanup() {} },
     });
     vi.stubGlobal("$", $);
     vi.stubGlobal("window", dom.window);
     vi.stubGlobal("document", dom.window.document);
-    vi.stubGlobal("utils", { htmlTo$dom: source => $(new JSDOM(source, { url: pageUrl }).window.document) });
-    vi.stubGlobal("clog", { error: vi.fn(), log: vi.fn(), warn: vi.fn() });
+    vi.stubGlobal("utils", utils);
+    vi.stubGlobal("clog", clog);
     return { controller, $page: $(dom.window.document), storage, write, http: controller.http };
 }
 

@@ -20,6 +20,7 @@ function createController() {
     const controller = new BlacklistController({
         hostAdapter: { site: "javdb", document: dom.window.document, location: dom.window.location, getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }) },
         storage,
+        ui: { getJQuery: () => $, getUtils: () => ({}), show: {}, getLoading: () => () => ({ close() {} }), getClog: () => ({}) },
         scope: { disposed: false, assertActive() {}, addCleanup() {} },
     });
     vi.stubGlobal("$", $);

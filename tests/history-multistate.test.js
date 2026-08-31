@@ -17,7 +17,7 @@ function loadHistory() {
         r: true, l: false, d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", m: "屏蔽", v: "收藏", y: "下载", k: "观看"
     });
     vm.runInContext(`${readTestFile(join(process.cwd(), "src/features/library/history-controller.js"), "utf8")};globalThis.History=HistoryController`, context);
-    const plugin = new context.History({ dialog: runtimeServices.dialog, state: stateService, storage: {}, movie: {}, settings: { snapshot: () => ({}) }, features: {}, hostAdapter: { site: "javdb" }, scope: {} });
+    const plugin = new context.History({ dialog: runtimeServices.dialog, state: stateService, storage: {}, movie: {}, settings: { snapshot: () => ({}) }, features: {}, hostAdapter: { site: "javdb" }, ui: { getJQuery: () => $, getUtils: () => ({ getDialogArea: () => [], q: confirm }), show: { error: vi.fn() }, getClog: () => ({ debug: vi.fn(), error: vi.fn() }) }, scope: {} });
     plugin.tableObj = { setData: vi.fn() };
     return { plugin, $, patch, toggle, layer, confirm, runtimeServices };
 }

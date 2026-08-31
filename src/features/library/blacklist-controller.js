@@ -15,7 +15,7 @@ import { BlacklistRepository } from "./blacklist-repository.js";
 /** @typedef {Record<string, any>} BlacklistRecord */
 
 export class BlacklistController {
-    /** @param {{hostAdapter?: any, dialog?: any, storage?: any, settings?: any, state?: any, http?: any, eventBus?: any, mutation?: any, features?: any, styles?: any, scope: any}} options */
+    /** @param {{hostAdapter?: any, dialog?: any, storage?: any, settings?: any, state?: any, http?: any, eventBus?: any, mutation?: any, features?: any, styles?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.document = options.hostAdapter?.document ?? globalThis.document;
@@ -30,6 +30,7 @@ export class BlacklistController {
         this.eventBus = options.eventBus;
         this.features = options.features;
         this.styles = options.styles;
+        this.ui = options.ui ?? null;
         this.scope = options.scope;
         this.repository = new BlacklistRepository({ storage: this.storage, state: this.state, eventBus: this.eventBus, mutation: options.mutation });
         /** @type {any} */ this.blacklistSearchDebounced = null;
@@ -43,6 +44,16 @@ export class BlacklistController {
         this.blacklistSvg = '<svg class="jhs-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm5.2 15.2L6.8 6.8a7.96 7.96 0 0 1 10.4 10.4ZM5.4 8.2l10.4 10.4A7.96 7.96 0 0 1 5.4 8.2Z"/></svg>';
         this.settingSvg = '<svg class="jhs-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m19.4 13.5 2-1.5-2-1.5.2-2.5-2.5-.2-1.5-2-1.5 2-2.5.2.2 2.5-2 1.5 2 1.5-.2 2.5 2.5.2 1.5 2 1.5-2 2.5-.2-.2-2.5ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z"/></svg>';
     }
+
+    getJQuery() {
+        const jq = this.ui?.getJQuery?.();
+        if (typeof jq !== "function") throw new TypeError("黑名单需要 jQuery");
+        return jq;
+    }
+    getUtils() { return this.ui?.getUtils?.() ?? {}; }
+    getShow() { return this.ui?.show ?? {}; }
+    getLoading() { return this.ui?.getLoading?.() ?? (() => ({ close() {} })); }
+    getClog() { return this.ui?.getClog?.() ?? {}; }
 
     getCurrentUrl() { return this.hostAdapter?.location?.href ?? this.document?.defaultView?.location?.href ?? ""; }
 
@@ -88,7 +99,7 @@ export class BlacklistController {
 
     async getListFeatureApi() {
         try { return await this.features?.getFeatureApi("list"); }
-        catch (error) { clog.warn("List Feature API 不可用，跳过列表筛选", error); return null; }
+        catch (error) { this.getClog().warn?.("List Feature API 不可用，跳过列表筛选", error); return null; }
     }
 
     /** Resolve discovery-owned task operations without coupling the library feature to TaskPlugin. */
@@ -97,7 +108,7 @@ export class BlacklistController {
         try {
             this.discoveryFeatureApi = await this.features?.getFeatureApi("discovery");
         } catch (error) {
-            clog.warn("Discovery Feature API 不可用，跳过黑名单任务", error);
+            this.getClog().warn?.("Discovery Feature API 不可用，跳过黑名单任务", error);
             this.discoveryFeatureApi = null;
         }
         return this.discoveryFeatureApi;
@@ -130,6 +141,7 @@ export class BlacklistController {
     }
     /** @param {any} e */
     async addBlacklist(e) {
+        const $ = this.getJQuery(), utils = this.getUtils(), show = this.getShow(), clog = this.getClog(), loading = this.getLoading();
         let t = {
             clientX: e.clientX,
             clientY: e.clientY + 80
@@ -202,11 +214,13 @@ export class BlacklistController {
         }));
     }
     async resetBtnTip() {
+        const $ = this.getJQuery();
         const e = await this.getDiscoveryFeatureApi(), t = e?.getTaskSchedule ? this.storage?.getLocal?.(e.getTaskSchedule("blacklist").completedKey) || "无" : "任务已禁用", n = this.getSetting("checkBlacklist_intervalTime", 12);
         this.checkBlacklist_ruleTime = this.getSetting("checkBlacklist_ruleTime", 8760),
         (this.blacklistRoot || $()).find("#checkBlacklistBtn").attr("data-tip", `上次整批检测: ${t}; 检测间隔时间: ${n}小时`);
     }
     async openBlacklistDialog() {
+        const $ = this.getJQuery(), utils = this.getUtils(), show = this.getShow(), clog = this.getClog();
         const r = this.isJavDB;
         const e = await this.getDiscoveryFeatureApi(), t = this.getSettings(), lastCheck = e?.getTaskSchedule ? this.storage?.getLocal?.(e.getTaskSchedule("blacklist").completedKey) || "无" : "任务已禁用";
         let n = `\n            <div class="jhs-layout-7cb3f981"> \n                 <div class="jhs-layout-da5a4919">\n                    <div class="jhs-layout-31a824a2">\n                        <button type="button" id="checkBlacklistBtn" class="jhs-btn jhs-btn--secondary" data-tip="上次整批检测: ${lastCheck}; 检测间隔时间: ${t.checkBlacklist_intervalTime}小时">${this.blacklistSvg}<span>手动检测黑名单</span></button>\n                        <button type="button" class="jhs-btn jhs-btn--ghost" id="toSetting">${this.settingSvg}<span>配置</span></button>\n                    </div>\n                    <div class="jhs-layout-31a824a2">\n                        <select id="dataType" class="jhs-select-source">\n                            <option value="" selected>所有</option>\n                            <option value="actor">男演员</option>\n                            <option value="actress">女演员</option>\n                        </select>\n                        <select id="statusType" class="jhs-select-source">\n                            <option value="" selected>全部状态</option>\n                            <option value="normal">继续检测</option>\n                            <option value="stop">停更跳过</option>\n                        </select>\n                        <select id="urlType" data-tip="在演员页屏蔽时,是否选择了分类" class="jhs-select-source${r ? "" : " jhs-is-hidden"}">\n                            <option value="" selected>--屏蔽类型--</option>\n                            <option value="hasT">按所选分类屏蔽</option>\n                            <option value="noT">未筛选分类</option>\n                        </select>\n                        <input id="searchValue" type="search" placeholder="搜索名称、别名或 ID" class="jhs-field">\n                        <button type="button" id="cleanQueryBtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                    </div>\n\n                </div>\n                <div id="table-container" class="jhs-layout-d44e70c7"></div>\n            </div>\n        `;
@@ -265,6 +279,7 @@ export class BlacklistController {
         });
     }
     renderTaskStatus() {
+        const $ = this.getJQuery();
         const container = (this.blacklistRoot || $()).find("#blacklist-task-status");
         if (!container.length) return;
         const task = this.discoveryFeatureApi;
@@ -278,6 +293,7 @@ export class BlacklistController {
         this.tableObj.setData(e);
     }
     async getTableData() {
+        const $ = this.getJQuery();
         const root = this.blacklistRoot || $(), t = await this.repository.list(), n = await this.repository.listCars(), a = String(root.find("#searchValue").val() || "").trim().toLocaleLowerCase(), i = root.find("#statusType").val(), s = root.find("#dataType"), o = s.val(), r = root.find("#urlType").val(), l = t.length;
         let c = 0, d = 0;
         const h = t.map((/** @type {BlacklistRecord} */ t) => {
@@ -310,6 +326,7 @@ export class BlacklistController {
         return this.currentCarCount = p.reduce(((/** @type {number} */ e, /** @type {BlacklistRecord} */ t) => e + (t.count || 0)), 0), p;
     }
     async loadTableData() {
+        const $ = this.getJQuery(), utils = this.getUtils(), show = this.getShow(), clog = this.getClog();
         this.checkBlacklist_ruleTime = parseNumberSetting(this.getSetting("checkBlacklist_ruleTime", 8760), 8760, { min: 0 });
         const e = await this.getTableData(), placeholder = this.document.createElement("div");
         renderStateView(placeholder, { type: "empty", title: "没有符合当前筛选条件的黑名单记录" });
@@ -447,6 +464,7 @@ export class BlacklistController {
      * @param {string} actressName @param {{ filter?: unknown, confirm?: boolean, root?: any }} [options]
      */
     async filterAllVideo(actressName, { filter, confirm = true, root = null } = {}) {
+        const $ = this.getJQuery(), utils = this.getUtils(), show = this.getShow(), clog = this.getClog();
         const listFeature = await this.getListFeatureApi();
         if (!listFeature?.scanAllPages || !listFeature.evaluateListItem) return { cancelled: true, unavailable: true };
         const requestedFilter = String(filter ?? listFeature.getActiveQuickFilter?.() ?? "waitCheck"), normalized = [ "all", "waitCheck", "filter", "favorite", "hasDown", "hasWatch" ].includes(requestedFilter) ? requestedFilter : "waitCheck", filterLabel = { all: "全部", waitCheck: "待鉴定", filter: "已屏蔽", favorite: "已收藏", hasDown: "已下载", hasWatch: "已观看" }[normalized];
@@ -503,6 +521,7 @@ export class BlacklistController {
     }
     /** @param {string} e @param {string} t @param {any} n @param {string} [site] @param {number} [page] @param {number} [processed] @param {Set<string>} [visited] */
     async filterActorVideo(e, t, n, site = this.isJavBus ? I : T, page = 1, processed = 0, visited = new Set()) {
+        const $ = this.getJQuery(), utils = this.getUtils(), clog = this.getClog();
         let {nextPageLink: a, recordCount} = await this.parseAndSaveFilterInfo(n, e, t, site);
         processed += recordCount, (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已屏蔽 ${processed} 个番号`);
         // 页数上限 + 已访问集合：宿主分页异常自指时不再无限递归
@@ -518,6 +537,7 @@ export class BlacklistController {
     }
     /** @param {any} e @param {string} t @param {string} n @param {string} site */
     async parseAndSaveFilterInfo(e, t, n, site) {
+        const $ = this.getJQuery();
         if (![ T, I ].includes(site)) throw new Error(`未知黑名单来源站点: ${site}`);
         const page = e || $(this.document), selector = this.getSelector(site);
         site === I && page.find(".avatar-box").length > 0 && page.find(".avatar-box").parent().remove();

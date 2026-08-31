@@ -78,10 +78,11 @@ export function buildEditRecordForm(flags) {
 }
 
 export class HistoryController {
-    /** @param {{hostAdapter?: any, dialog?: any, movie?: any, settings?: any, state?: any, storage?: any, styles?: any, features?: any, fc2Plugin?: any, scope: any}} options */
+    /** @param {{hostAdapter?: any, dialog?: any, movie?: any, settings?: any, state?: any, storage?: any, styles?: any, features?: any, fc2Plugin?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.document = options.hostAdapter?.document ?? globalThis.document;
+        this.window = this.document?.defaultView ?? globalThis.window;
         this.site = options.hostAdapter?.site ?? "unknown";
         this.isJavDB = this.site === "javdb";
         this.isJavBus = this.site === "javbus";
@@ -93,6 +94,7 @@ export class HistoryController {
         this.styles = options.styles;
         this.features = options.features;
         this.fc2Plugin = options.fc2Plugin ?? null;
+        this.ui = options.ui ?? null;
         this.scope = options.scope;
         /** @type {TableHandle | null} */ this.tableObj = null;
         /** @type {JQueryHandle | null} */ this.historyRoot = null;
@@ -109,6 +111,14 @@ export class HistoryController {
         this.waitCheckCount = 0;
         this.started = false;
     }
+    getJQuery() {
+        const jq = this.ui?.getJQuery?.();
+        if (typeof jq !== "function") throw new TypeError("鉴定记录需要 jQuery");
+        return jq;
+    }
+    getUtils() { return this.ui?.getUtils?.() ?? {}; }
+    getShow() { return this.ui?.show ?? {}; }
+    getClog() { return this.ui?.getClog?.() ?? {}; }
     /** @param {string} value */
     getSourceLabel(value) {
         if (!value) return "";
@@ -128,7 +138,7 @@ export class HistoryController {
         try {
             return await this.features?.getFeatureApi("external-bridge");
         } catch (error) {
-            clog.warn("External Bridge Feature API 不可用，跳过离线操作", error);
+            this.getClog().warn?.("External Bridge Feature API 不可用，跳过离线操作", error);
             return null;
         }
     }
@@ -152,6 +162,7 @@ export class HistoryController {
             </style>`;
     }
     handleResize() {
+        const $ = this.getJQuery();
         // 按钮已被命令栏收走时，宿主导航中的空壳容器保持隐藏
         const hasButton = (/** @type {number} */ _index, /** @type {HTMLElement} */ element) => element.children.length > 0;
         $(".navbar-search").is(":hidden") ? ($(".historyBtnBox").filter(hasButton).show(), $(".historyBtnBox").filter(((/** @type {number} */ index, /** @type {HTMLElement} */ element) => !hasButton(index, element))).hide(), $(".miniHistoryBtnBox").hide()) : ($(".historyBtnBox").hide(),
@@ -159,6 +170,7 @@ export class HistoryController {
     }
     /** @param {{scope?: any}} [options] */
     async start(options = {}) {
+        const $ = this.getJQuery();
         const scope = options.scope ?? this.scope;
         if (this.started) return;
         this.started = true;
@@ -176,19 +188,20 @@ export class HistoryController {
             $(".navbar-search").css("margin-left", "0").before('\n                <div class="navbar-item miniHistoryBtnBox">\n                    <button type="button" id="miniHistoryBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>\n            ');
             this.handleResize();
             const resize = () => this.handleResize();
-            $(window).on("resize.jhsHistory", resize);
+            $(this.window).on("resize.jhsHistory", resize);
             $("#historyBtn,#miniHistoryBtn").on("click.jhsHistory", openHistory);
             scope?.addCleanup?.(() => {
-                $(window).off("resize.jhsHistory", resize);
+                $(this.window).off("resize.jhsHistory", resize);
                 $("#historyBtn,#miniHistoryBtn").off(".jhsHistory");
                 $(".historyBtnBox,.miniHistoryBtnBox").remove();
                 $(".navbar-search").css("margin-left", "");
             });
         }
-        if (this.isJavBus) void this.createBusButton(scope, openHistory).catch((error) => clog.warn("鉴定记录入口初始化失败", error));
+        if (this.isJavBus) void this.createBusButton(scope, openHistory).catch((error) => this.getClog().warn?.("鉴定记录入口初始化失败", error));
     }
     /** @param {any} scope @param {(event: any) => void} openHistory */
     async createBusButton(scope, openHistory) {
+        const $ = this.getJQuery();
         const ready = await new Promise((/** @type {(value: boolean) => void} */ resolve) => {
             let settled = !1;
             const finish = (/** @type {boolean} */ value) => {
@@ -205,7 +218,7 @@ export class HistoryController {
             scope?.addCleanup?.(() => finish(!1));
         });
         if (scope.disposed) return;
-        if (!ready) return void clog.warn("鉴定记录入口未创建：JavBus 顶部工具区未就绪");
+        if (!ready) return void this.getClog().warn?.("鉴定记录入口未创建：JavBus 顶部工具区未就绪");
         $("#top-right-box").append('<button type="button" id="historyBtn" class="jhs-btn jhs-btn--secondary">鉴定记录</button>');
         $("#historyBtn,#miniHistoryBtn").on("click.jhsHistory", openHistory);
         scope?.addCleanup?.(() => {
@@ -215,6 +228,7 @@ export class HistoryController {
     }
     dispose() { this.started = false; }
     openHistory() {
+        const $ = this.getJQuery(), utils = this.getUtils(), show = this.getShow(), clog = this.getClog();
         let e = `\n            <div class="jhs-layout-7cb3f981 jhs-history-dialog"> \n                 <div id="filterBox" class="jhs-layout-53809f1e">\n                    <select id="dataType" class="jhs-select-source">\n                        <option value="all" selected>所有</option>\n                        <option value="waitCheck">待鉴定</option>\n                        <option value="filter">${u}</option>\n                        <option value="favorite">${b}</option>\n                        <option value="hasDown">${y}</option>\n                        <option value="hasWatch">${k}</option>\n                    </select>\n                    <input id="searchCarNum" type="text" placeholder="搜索番号|演员" class="jhs-field">\n                    <button type="button" id="clearSearchbtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                </div>\n                <div id="allSelectBox" class="jhs-layout-66253c00">\n                    <button type="button" class="jhs-btn jhs-btn--dark multiple-history-deleteBtn jhs-layout-7daea5fa"> <span>移除</span> </button>\n                    <button type="button" class="jhs-btn jhs-btn--watch multiple-history-hasWatchBtn jhs-layout-2e003268">标记观看</button>\n                    <button type="button" class="jhs-btn jhs-btn--down multiple-history-hasDownBtn jhs-layout-2e003268">标记下载</button>\n                    <button type="button" class="jhs-btn jhs-btn--fav multiple-history-favoriteBtn jhs-layout-2e003268">标记收藏</button>\n                    <button type="button" class="jhs-btn jhs-btn--filter multiple-history-filterBtn jhs-layout-2e003268">标记屏蔽</button>\n                </div>\n                <div id="table-container" class="jhs-layout-81eaab28"></div>\n            </div>\n        `;
         e = e.replace('<div id="filterBox"', '<div id="historyViewTabs" class="jhs-segmented" role="tablist"><button type="button" class="jhs-btn jhs-segmented__item active" data-history-view="state">作品状态</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="activity">操作记录</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="offline">离线任务</button></div><div id="filterBox"');
         this.dialog.open({
@@ -260,7 +274,7 @@ export class HistoryController {
                     item && externalBridge?.hasOffline && await externalBridge.submitOffline(event, item.resource, $(event.currentTarget), { carNum: item.carNum }, item.id, { forceAvailabilityRefresh: !0, preferredProviderId: item.providerId }), await this.renderOfflineHistory();
                 })).on("click", ".jhs-open-offline", (async (/** @type {any} */ event) => {
                     const id = $(event.currentTarget).data("id"), item = (await this.historyRepository.offline()).find((/** @type {HistoryRecord} */ entry) => entry.id === id), externalBridge = await this.getExternalBridgeFeatureApi(), provider = externalBridge?.getOfflineProvider?.(item?.providerId), url = provider?.openUrl?.();
-                    url && window.open(url, "_blank", "noopener,noreferrer");
+                    url && this.window?.open?.(url, "_blank", "noopener,noreferrer");
                 })).on("click", ".jhs-delete-offline", (async (/** @type {any} */ event) => {
                     await this.historyRepository.removeOffline($(event.currentTarget).data("id")), await this.renderOfflineHistory();
                 })), this.bindHistoryActions(root);
@@ -277,6 +291,7 @@ export class HistoryController {
         return stateView ? this.loadTableData() : "activity" === view ? this.renderActivityHistory() : this.renderOfflineHistory();
     }
     async renderActivityHistory() {
+        const $ = this.getJQuery();
         const log = await this.historyRepository.activity(), host = this.historyRoot.find("#table-container").empty();
         if (!log.entries.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无操作记录</div>');
         log.entries.slice().reverse().forEach((/** @type {HistoryRecord} */ entry) => {
@@ -285,6 +300,7 @@ export class HistoryController {
         });
     }
     async renderOfflineHistory() {
+        const $ = this.getJQuery();
         const history = await this.historyRepository.offline(), externalBridge = await this.getExternalBridgeFeatureApi(), host = this.historyRoot.find("#table-container").empty();
         if (!history.length) return void host.html('<div class="jhs-state jhs-state--empty">暂无离线任务</div>');
         history.slice().reverse().forEach((/** @type {HistoryRecord} */ item) => {
@@ -374,6 +390,7 @@ export class HistoryController {
     }
     /** @param {JQueryHandle} root */
     bindHistoryActions(root) {
+        const $ = this.getJQuery(), utils = this.getUtils(), show = this.getShow(), clog = this.getClog(), loading = this.ui?.getLoading?.() ?? (() => ({ close() {} }));
         root.on("click.jhsHistory", (function(/** @type {any} */ e) {
             if (e.target.closest(".sub-btns-toggle")) {
                 const button = e.target.closest(".sub-btns-toggle"), t = button.closest(".sub-btns").querySelector(".sub-btns-menu");
@@ -384,7 +401,7 @@ export class HistoryController {
                 e.classList.remove("show"), e.previousElementSibling?.setAttribute("aria-expanded", "false");
             }));
         })), root.on("keydown.jhsHistory", ".sub-btns", ((/** @type {any} */ e) => {
-            const menu = $(e.currentTarget).find(".sub-btns-menu"), items = menu.find('[role="menuitem"]'), current = items.index(document.activeElement);
+            const menu = $(e.currentTarget).find(".sub-btns-menu"), items = menu.find('[role="menuitem"]'), current = items.index(this.document?.activeElement);
             if ("Escape" === e.key) return e.preventDefault(), menu.removeClass("show"), $(e.currentTarget).find(".sub-btns-toggle").attr("aria-expanded", "false").trigger("focus");
             if (![ "ArrowDown", "ArrowUp", "Home", "End" ].includes(e.key) || !menu.hasClass("show")) return;
             e.preventDefault();
@@ -631,6 +648,7 @@ export class HistoryController {
     }
     /** @param {any} e @param {string} t */
     handleDelete(e, t) {
+        const utils = this.getUtils(), show = this.getShow(), clog = this.getClog();
         utils.q(e, `是否移除${t}?`, (async () => {
             try {
                 await this.historyRepository.remove(t), (await this.features?.getFeatureApi("list"))?.showCarNumBox?.(t),
@@ -642,6 +660,7 @@ export class HistoryController {
     }
     /** @param {any} e @param {HistoryRecord} t */
     async handleClickDetail(e, t) {
+        const utils = this.getUtils(), show = this.getShow();
         if (t.carNum.includes("FC2-")) {
             const plugin = this.fc2Plugin;
             if (!plugin) return t.url ? void utils.openPage(t.url, t.carNum, !1, e) : void show.info("FC2 详情功能已禁用");
@@ -651,17 +670,18 @@ export class HistoryController {
             return;
         }
         if (this.isJavDB) {
-            if (!t.url) return void window.open("/search?q=" + t.carNum, "_blank");
+            if (!t.url) return void this.window?.open?.("/search?q=" + t.carNum, "_blank");
             utils.openPage(t.url, t.carNum, !1, e);
         }
         if (this.isJavBus) {
             // 无来源链接时不能退化为打开站点首页
             if (!t.url) return void show.info("该记录没有来源链接");
-            t.url.includes("javdb") ? window.open(t.url, "_blank") : utils.openPage(t.url, t.carNum, !1, e);
+            t.url.includes("javdb") ? this.window?.open?.(t.url, "_blank") : utils.openPage(t.url, t.carNum, !1, e);
         }
     }
     /** @param {HistoryRecord} e */
     async editRecord(e) {
+        const $ = this.getJQuery(), utils = this.getUtils();
         const carNum = e.carNum, names = e.names || "", url = e.url || "", remark = e.remark || "", flags = normalizeStateFlags(e.stateFlags);
         let editRoot = $();
         const c = buildEditRecordForm(flags);

@@ -76,7 +76,7 @@ function loadHistory(records = createRecords()) {
         k: "观看"
     });
     vm.runInContext(`${readTestFile(join(process.cwd(), "src/features/library/history-controller.js"), "utf8")};globalThis.History=HistoryController`, context);
-    const plugin = new context.History({ dialog: { open: layer.open, close: layer.close }, state: stateService, storage: { getCarList }, movie: {}, settings: { snapshot: () => ({}) }, features: {}, hostAdapter: { site: "javdb" }, scope: {} }), root = $("#history");
+    const plugin = new context.History({ dialog: { open: layer.open, close: layer.close }, state: stateService, storage: { getCarList }, movie: {}, settings: { snapshot: () => ({}) }, features: {}, hostAdapter: { site: "javdb" }, ui: { getJQuery: () => $, getUtils: () => ({ q: confirmation }), show, getClog: () => ({ error: vi.fn(), warn: vi.fn(), debug: vi.fn() }) }, scope: {} }), root = $("#history");
     const table = {
         currentData: records.slice(0, 50),
         selectedData: [],
