@@ -56,6 +56,7 @@ const fc2DetailWorkspace = await read("src/ui/detail/fc2-detail-workspace.js");
 const javDbHostAdapter = await read("src/platform/hosts/javdb-host-adapter.js");
 const unifiedOfflineControllerSource = await read("src/features/external-bridge/unified-offline-controller.js");
 const hitShow = await read("src/features/discovery/hit-show-controller.js");
+const top250 = await read("src/features/discovery/top250-controller.js");
 const listPageButton = await read("src/plugins/status/list-page-button.js");
 const historySource = await read("src/features/library/history-controller.js");
 const blacklistControllerSource = await read("src/features/library/blacklist-controller.js");
@@ -466,13 +467,15 @@ assertIncludes(externalBridgeControllerSource, 'getOfflineProvider:', "external 
 assertIncludes(discoveryManifestSource, 'id: "discovery"', "real discovery feature manifest");
 assertIncludes(discoveryManifestSource, 'new DiscoveryController({', "discovery feature controller ownership");
 assertIncludes(discoveryManifestSource, 'new HitShowController({', "discovery hot-ranking controller ownership");
+assertIncludes(discoveryManifestSource, 'new Top250Controller({', "discovery Top250 controller ownership");
+assertIncludes(discoveryControllerSource, 'this.top250Controller?.start', "discovery Top250 lifecycle handoff");
 assertIncludes(compatibilityManifestSource, 'id: "compatibility"', "real compatibility feature manifest");
 assertIncludes(compatibilityControllerSource, "scope", "compatibility feature controller ownership");
 assertIncludes(statsManifestSource, 'id: "stats"', "real stats feature manifest");
 assertIncludes(statsControllerSource, "openDialog", "stats feature controller ownership");
 assertIncludes(discoveryControllerSource, 'this.newVideoPlugin?.handle?.({ scope: this.scope, taskApi })', "discovery idle new-video handoff");
 assertIncludes(discoveryControllerSource, 'openNewVideoDialog:', "discovery new-video API boundary");
-for (const source of [hitShow, await read("src/plugins/external-search/top250.js"), newVideoTaskSource, await read("src/plugins/new-video/new-video.js")]) {
+for (const source of [hitShow, top250, newVideoTaskSource, await read("src/plugins/new-video/new-video.js")]) {
   assert(!source.includes('getOptionalDependency("TaskPlugin")') && !source.includes('getOptionalDependency("HitShowPlugin")') && !source.includes('getOptionalDependency("TOP250Plugin")'), "Discovery consumers must use Feature APIs");
 }
 assertIncludes(identityNavigationSource, 'this.identityApi?.openSearchByImage?.()', "JavDB navigation identity API boundary");
@@ -586,7 +589,6 @@ const expectedPlugins = [
   ["external-search/fc2.js", "Fc2Plugin", "Fc2Plugin"],
   ["status/highlight-magnet.js", "HighlightMagnetPlugin", "HighlightMagnetPlugin"],
   ["status/fold-category.js", "FoldCategoryPlugin", "FoldCategoryPlugin"],
-  ["external-search/top250.js", "Top250Plugin", "TOP250Plugin"],
   ["external-search/other-site.js", "OtherSitePlugin", "OtherSitePlugin"],
   ["status/bus-detail-page.js", "BusDetailPagePlugin", "BusDetailPagePlugin"],
   ["status/detail-page-button.js", "DetailPageButtonPlugin", "DetailPageButtonPlugin"],
@@ -621,7 +623,7 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,Top250Plugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,OtherSitePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,OtherSitePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin",
   "JavDB plugin registration order changed"
 );
 assert(
@@ -678,6 +680,7 @@ sourceByFile.set("features/external-bridge/unified-offline-controller.js", unifi
 sourceByFile.set("features/external-bridge/javtrailers-controller.js", javTrailersControllerSource);
 sourceByFile.set("features/external-bridge/subtitle-cat-controller.js", subtitleControllerSource);
 sourceByFile.set("features/discovery/hit-show-controller.js", hitShow);
+sourceByFile.set("features/discovery/top250-controller.js", top250);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
 sourceByFile.set("backup/setting-styles.js", await read("src/plugins/backup/setting-styles.js"));
@@ -696,6 +699,7 @@ const regressionMatrix = [
   ["SubtitleCat 筛选", [["features/external-bridge/subtitle-cat-controller.js", "class SubtitleCatController"], ["features/external-bridge/subtitle-cat-controller.js", "sub-table"], ["features/external-bridge/subtitle-cat-controller.js", "该番号无字幕"]]],
   ["统一离线提交", [["features/external-bridge/unified-offline-controller.js", "getAvailability"], ["features/external-bridge/unified-offline-controller.js", "capabilities"], ["features/external-bridge/unified-offline-controller.js", "appendOfflineHistory"]]],
   ["热播榜单", [["features/discovery/hit-show-controller.js", "class HitShowController"], ["features/discovery/hit-show-controller.js", "handlePlayback"], ["features/discovery/hit-show-controller.js", "loadScore"]]],
+  ["Top250", [["features/discovery/top250-controller.js", "class Top250Controller"], ["features/discovery/top250-controller.js", "handleTop"], ["features/discovery/top250-controller.js", "openLoginDialog"]]],
   ["新作品检测", [["new-video/task.js", "TaskPlugin"], ["new-video/new-video.js", "NewVideoPlugin"], ["core/storage.js", "newVideoList"]]],
   ["黑名单检测", [["features/library/blacklist-controller.js", "class BlacklistController"], ["features/library/blacklist-repository.js", "class BlacklistRepository"], ["features/library/library-controller.js", "filter_keyword_title"], ["core/storage.js", "batchSaveBlacklistCarList"]]],
   ["统计面板", [["features/stats/stats-controller.js", "class StatsController"], ["features/stats/stats-controller.js", "coverageStart"], ["features/stats/stats-controller.js", "6.4.0"]]],

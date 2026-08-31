@@ -10,7 +10,6 @@ import { MagnetHubPlugin } from "./external-search/magnet-hub.js";
 import { OtherSitePlugin } from "./external-search/other-site.js";
 import { RelatedPlugin } from "./external-search/related.js";
 import { ReviewPlugin } from "./external-search/review.js";
-import { Top250Plugin } from "./external-search/top250.js";
 import { BusImgPlugin } from "./image-viewer/bus-img.js";
 import { BusPreviewVideoPlugin } from "./image-viewer/bus-preview-video.js";
 import { CoverButtonPlugin } from "./image-viewer/cover-button.js";
@@ -42,7 +41,6 @@ export const legacyContributionManifests = Object.freeze([
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 5 }, [SERVICE.settings], { managedByFeature: true }),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [PORT.host, SERVICE.settings, REGISTRY.feature], { managedByFeature: true }),
     manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.profile, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, SERVICE.translation, REGISTRY.settings, REGISTRY.feature]),
-    manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account], { managedByFeature: true }),
     manifest("list.cover-state-actions", "list", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie, SERVICE.state, REGISTRY.feature], { managedByFeature: true }),
     manifest("list.fc2-lookup", "list", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [PORT.host, SERVICE.movie, SERVICE.translation, SERVICE.settings], { managedByFeature: true }),
     manifest("detail.javdb-native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }, [], { managedByFeature: true }),

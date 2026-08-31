@@ -66,7 +66,6 @@
     "src/plugins/external-search/other-site.js",
     "src/plugins/external-search/related.js",
     "src/plugins/external-search/review.js",
-    "src/plugins/external-search/top250.js",
     "src/plugins/favorite/favorite-actresses.js",
     "src/plugins/image-viewer/bus-img.js",
     "src/plugins/image-viewer/bus-preview-video.js",

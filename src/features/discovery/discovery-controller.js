@@ -5,10 +5,10 @@
  * the Discovery Feature API.
  */
 export class DiscoveryController {
-    /** @param {{hitShowController?: any, hitShowPlugin?: any, top250Plugin?: any, newVideoPlugin?: any, taskPlugin?: any, scope: any}} options */
+    /** @param {{hitShowController?: any, hitShowPlugin?: any, top250Controller?: any, top250Plugin?: any, newVideoPlugin?: any, taskPlugin?: any, scope: any}} options */
     constructor(options) {
         this.hitShowController = options.hitShowController ?? options.hitShowPlugin ?? null;
-        this.top250Plugin = options.top250Plugin ?? null;
+        this.top250Controller = options.top250Controller ?? options.top250Plugin ?? null;
         this.newVideoPlugin = options.newVideoPlugin ?? null;
         this.taskPlugin = options.taskPlugin ?? null;
         this.scope = options.scope;
@@ -25,7 +25,7 @@ export class DiscoveryController {
         this.newVideoPlugin?.setTaskApi?.(taskApi);
         return Promise.resolve()
             .then(() => this.hitShowController?.start ? this.hitShowController.start({ discoveryApi: this.getApi() }) : this.hitShowController?.handle?.({ scope: this.scope, discoveryApi: this.getApi() }))
-            .then(() => this.top250Plugin?.handle?.({ scope: this.scope, discoveryApi: this.getApi() }))
+            .then(() => this.top250Controller?.start ? this.top250Controller.start({ discoveryApi: this.getApi() }) : this.top250Controller?.handle?.({ scope: this.scope, discoveryApi: this.getApi() }))
             .then(() => {
                 if (!this.newVideoPlugin && !this.taskPlugin) return;
                 const runIdle = () => {
@@ -64,8 +64,8 @@ export class DiscoveryController {
             markDataListHtml: expose(this.hitShowController, "markDataListHtml"),
             initializeRenderedList: expose(this.hitShowController, "initializeRenderedList"),
             loadScore: expose(this.hitShowController, "loadScore"),
-            hasTop250: Boolean(this.top250Plugin),
-            openLoginDialog: expose(this.top250Plugin, "openLoginDialog"),
+            hasTop250: Boolean(this.top250Controller),
+            openLoginDialog: expose(this.top250Controller, "openLoginDialog"),
             hasNewVideo: Boolean(this.newVideoPlugin),
             openNewVideoDialog: expose(this.newVideoPlugin, "openDialog"),
             getPendingNewVideoTotal: expose(this.newVideoPlugin, "getPendingNewVideoTotal"),

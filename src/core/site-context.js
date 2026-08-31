@@ -30,6 +30,13 @@ export function isHitShowPage(locationLike = window.location) {
     return "/advanced_search" === locationUrl.pathname && "1" === locationUrl.searchParams.get("handlePlayback");
 }
 
+/** 识别由 JHS 接管渲染的 JavDB Top250 页面。 */
+/** @param {Location | URL | string} [locationLike] */
+export function isTop250Page(locationLike = window.location) {
+    const locationUrl = normalizeLocation(locationLike);
+    return "/advanced_search" === locationUrl.pathname && "1" === locationUrl.searchParams.get("handleTop");
+}
+
 /** 识别保留站点原生列表生命周期的页面。 */
 /** @param {Location | URL | string} [locationLike] @param {boolean | null} [hasMovieList] */
 function isNormalListPage(locationLike = window.location, hasMovieList = false) {

@@ -22,6 +22,8 @@ it("rejects malformed JavDB API contracts", async () => {
     await expect(adapter.getDetail({ movieId: "m1" })).rejects.toThrow(/invalid/);
     await expect(adapter.listMagnets({ movieId: "m1" })).rejects.toThrow(/invalid/);
     await expect(adapter.listRankings()).rejects.toThrow(/invalid/);
+    const malformedTopAdapter = createJavDbAdapter({ request: async () => ({ data: { success: 1, data: {} } }) }, () => "signature");
+    await expect(malformedTopAdapter.listTopRankings()).rejects.toThrow(/invalid/);
 });
 
 it("rejects malformed JavDB login responses", async () => {

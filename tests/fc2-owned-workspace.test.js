@@ -24,7 +24,7 @@ const titleFilterSource = readTestFile(join(repoRoot, "src/features/library/libr
 const highlightMagnetSource = readTestFile(join(repoRoot, "src/plugins/status/highlight-magnet.js"), "utf8");
 const primitivesSource = readTestFile(join(repoRoot, "src/core/ui-primitives.js"), "utf8");
 const loggerSource = readTestFile(join(repoRoot, "src/core/logger.js"), "utf8");
-const top250Source = readTestFile(join(repoRoot, "src/plugins/external-search/top250.js"), "utf8");
+const top250Source = readTestFile(join(repoRoot, "src/features/discovery/top250-controller.js"), "utf8");
 
 function loadWorkspace() {
     const dom = new JSDOM('<main id="host"></main>', { url: "https://javdb.com/users/collection_codes" }), $ = jqueryFactory(dom.window);
@@ -169,7 +169,7 @@ describe("FC2 owned detail workspace", () => {
         expect(fc2Source).toContain('data-jhs-action="javdb-want"');
         expect(fc2Source).toContain("markJavDbWantWatch(movieId)");
         expect(fc2Source).toContain("this.getDiscoveryFeatureApi()");
-        expect(top250Source).toContain('"function" === typeof onSuccess ? await onSuccess()');
+        expect(top250Source).toContain('if (typeof onSuccess === "function") await onSuccess();');
     });
 
     it("supports exact layer closing, reusable MagnetHub and hardened mobile layout", () => {

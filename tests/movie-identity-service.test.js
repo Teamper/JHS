@@ -40,6 +40,14 @@ describe("MovieIdentityService", () => {
         await expect(new MovieIdentityService(integrations).rankings({ period: "daily" })).resolves.toEqual([{ movieId: "9" }]);
         expect(listRankings).toHaveBeenCalledWith({ period: "daily" });
     });
+    it("routes Top250 queries through the declared ranking capability", async () => {
+        const listTopRankings = vi.fn(async () => ({ success: 1, movies: [{ movieId: "9" }] }));
+        const integrations = { list: vi.fn(() => [{ id: "javdb" }]), getAdapter: vi.fn(() => ({ listTopRankings })) };
+        const options = { type: "year", typeValue: "2025", page: 2, limit: 50, scope: "scope" };
+        await expect(new MovieIdentityService(integrations).topRankings(options)).resolves.toEqual({ success: 1, movies: [{ movieId: "9" }] });
+        expect(integrations.list).toHaveBeenCalledWith("movie.ranking");
+        expect(listTopRankings).toHaveBeenCalledWith(options);
+    });
 
     it("routes catalog queries only to the selected provider", async () => {
         const listCatalog = vi.fn(async () => ({ items: [{ carNum: "FC2-1" }], maxPage: 2 }));

@@ -51,6 +51,14 @@ export class MovieIdentityService {
         }
         return [];
     }
+    /** @param {{type?: string, typeValue?: string, page?: number, limit?: number, scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
+    async topRankings(options = {}) {
+        for (const manifest of this.integrations?.list("movie.ranking") ?? []) {
+            const adapter = this.integrations?.getAdapter(manifest.id);
+            if (typeof adapter?.listTopRankings === "function") return adapter.listTopRankings(options);
+        }
+        return { success: 0, action: "UNAVAILABLE", message: "Top250 provider is unavailable", movies: [] };
+    }
     /** @param {string} providerId @param {Record<string, unknown>} query @param {{scope?: import("../core/lifecycle-scope.js").LifecycleScope}} [options] */
     async catalog(providerId, query = {}, options = {}) {
         const manifest = (this.integrations?.list("movie.catalog") ?? []).find((item) => item.id === providerId);

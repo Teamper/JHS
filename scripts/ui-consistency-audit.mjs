@@ -308,9 +308,9 @@ for (const file of sourceFiles) {
   }
   forbidMatch(source, /class\s*=\s*["'][^"']*\bjhs-btn\b[^"']*\s(?:button|is-(?:info|small|primary|success|danger|warning))(?:\s|["'])/i,
     `${path} mixes JHS and Bulma button classes`);
-  if (["src/plugins/external-search/top250.js", "src/features/discovery/hit-show-controller.js", "src/plugins/external-search/fc2.js", "src/plugins/status/list-page.js"].includes(path))
+  if (["src/features/discovery/top250-controller.js", "src/features/discovery/hit-show-controller.js", "src/plugins/external-search/fc2.js", "src/plugins/status/list-page.js"].includes(path))
     forbidMatch(source, /class=["'][^"']*(?:\bbutton\b|\bbuttons\b|\btag\s+is-(?:primary|warning|success|info))/, `${path} contains legacy Bulma controls`);
-  if (["src/plugins/external-search/top250.js", "src/features/discovery/hit-show-controller.js"].includes(path))
+  if (["src/features/discovery/top250-controller.js", "src/features/discovery/hit-show-controller.js"].includes(path))
     forbidMatch(source, /上一頁|下一頁|人評價/, `${path} contains traditional JHS UI copy`);
   forbidMatch(source, /id=["']conditionBox["']/, `${path} contains the duplicate Top250 condition id`);
   forbidMatch(source, /menu-btn|main-tab-btn|(?:class|removeClass|addClass|querySelector)[^\n]{0,80}a-(?:normal|primary|success|danger|warning|info)/,

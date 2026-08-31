@@ -66,7 +66,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     const injection = readFileSync(join(process.cwd(), "src/core/css-injection.js"), "utf8");
     const bootstrap = readFileSync(join(process.cwd(), "src/app/bootstrap.js"), "utf8");
     const detailButtons = readTestFile(join(process.cwd(), "src/plugins/status/detail-page-button.js"), "utf8");
-    const top250 = readTestFile(join(process.cwd(), "src/plugins/external-search/top250.js"), "utf8");
+    const top250 = readTestFile(join(process.cwd(), "src/features/discovery/top250-controller.js"), "utf8");
 
     it("builds the command bar after plugin initialization and keeps semantic actions separate", () => {
         expect(commandbar).toContain("async afterPluginsReady()");
@@ -260,7 +260,7 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(top250).not.toContain("gmHttp");
         expect(top250).not.toContain("/v1/sessions");
         expect(top250).not.toContain("device_uuid");
-        expect(top250).toContain('account.login("javdb"');
+        expect(top250).toContain('this.account.login("javdb"');
     });
 
     it("uses an explicit unknown category without conflating it with all", () => {

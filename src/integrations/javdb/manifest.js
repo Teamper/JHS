@@ -3,10 +3,20 @@
 import { defineIntegration } from "../../contracts/manifests.js";
 import { CACHE, PORT, SERVICE } from "../../contracts/tokens.js";
 import { normalizeMovieCarNum } from "../../core/movie-identity.js";
+import { decryptData } from "../../core/credential-crypto.js";
 import { createJavDbSignature } from "./signature.js";
 import { JhsError } from "../../core/jhs-error.js";
 
 const API_ORIGIN = "https://jdforrepam.com";
+
+/** @param {any} movie */
+function normalizeRankingMovie(movie) {
+    return Object.freeze({
+        movieId: String(movie.id || ""), carNum: normalizeMovieCarNum(movie.number), title: String(movie.origin_title || movie.title || ""),
+        coverUrl: String(movie.cover_url || "").replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com"), releaseDate: movie.release_date || null,
+        hasSubtitle: Boolean(movie.has_cnsub), magnetCount: Number(movie.magnets_count) || 0, newMagnets: Boolean(movie.new_magnets), providerId: "javdb",
+    });
+}
 
 /** @param {{request: (options: Record<string, any>, scope?: any) => Promise<any>}} http @param {() => string} sign @param {{parseActorMovies?: (html: string, baseUrl: string) => any, parseActorCollection?: (html: string, baseUrl: string) => any} | null} hostAdapter */
 export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapter = null) {
@@ -21,7 +31,7 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
         Object.entries(query).forEach(([key, value]) => url.searchParams.set(key, String(value)));
         const response = await http.request({
             providerId: "javdb", method: "GET", url: url.href, responseType: "json",
-            headers: { jdSignature: sign(), ...headers }, cacheScope: "public", ttlMs: options.ttlMs ?? 86_400_000,
+            headers: { jdSignature: sign(), ...headers }, cacheScope: options.ttlMs === 0 ? "none" : "public", ttlMs: options.ttlMs ?? 86_400_000,
             urlPolicy: { trustClass: "builtin-public", hosts: ["jdforrepam.com"] },
         }, options.scope);
         return response.data;
@@ -119,11 +129,21 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
         async listRankings(options = {}) {
             const payload = await request("/api/v1/rankings/playback", { period: options.period || "daily", filter_by: options.filter || "high_score" }, options);
             if (!Array.isArray(payload?.data?.movies)) throw new Error(payload?.message || "JavDB ranking response is invalid");
-            return payload.data.movies.map((/** @type {any} */ movie) => Object.freeze({
-                movieId: String(movie.id), carNum: normalizeMovieCarNum(movie.number), title: String(movie.origin_title || ""),
-                coverUrl: String(movie.cover_url || "").replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com"), releaseDate: movie.release_date || null,
-                hasSubtitle: Boolean(movie.has_cnsub), magnetCount: Number(movie.magnets_count) || 0, newMagnets: Boolean(movie.new_magnets), providerId: "javdb",
-            }));
+            return payload.data.movies.map(normalizeRankingMovie);
+        },
+        /** @param {{type?: string, typeValue?: string, page?: number, limit?: number, scope?: any}} [options] */
+        async listTopRankings(options = {}) {
+            const encryptedToken = globalThis.localStorage?.getItem?.("jhs_appAuthorization") || "", token = encryptedToken ? await decryptData(encryptedToken) : "";
+            const payload = await request("/api/v1/movies/top", {
+                start_rank: 1, type: options.type || "all", type_value: options.typeValue || "", ignore_watched: false,
+                page: options.page ?? 1, limit: options.limit ?? 50,
+            }, { ...options, ttlMs: 0 }, {
+                "user-agent": "Dart/3.5 (dart:io)", "accept-language": "zh-TW", host: "jdforrepam.com", authorization: `Bearer ${token}`,
+            });
+            const success = Number(payload?.success) || 0;
+            if (success === 1 && !Array.isArray(payload?.data?.movies)) throw new Error(payload?.message || "JavDB Top250 response is invalid");
+            const movies = Array.isArray(payload?.data?.movies) ? payload.data.movies.map(normalizeRankingMovie) : [];
+            return Object.freeze({ success, action: String(payload?.action || ""), message: String(payload?.message || ""), movies: Object.freeze(movies) });
         },
         /** @param {Record<string, unknown>} movieRef @param {{scope?: any, page?: number, limit?: number}} [options] */
         async listReviews(movieRef, options = {}) {

@@ -38,7 +38,6 @@ export const LEGACY_PLUGIN_DEPENDENCY_MAP = Object.freeze({
     ],
     TaskPlugin: [],
     TranslatePlugin: [],
-    TOP250Plugin: ["ListPageButtonPlugin"],
     UnifiedOfflinePlugin: []
 });
 // @ts-check

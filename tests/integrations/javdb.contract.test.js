@@ -110,3 +110,17 @@ it("normalizes JavDB ranking contracts", async () => {
     ]);
     expect(request.mock.calls[0][0].url).toContain("period=weekly");
 });
+
+it("normalizes authenticated JavDB Top250 contracts without caching user results", async () => {
+    localStorage.removeItem("jhs_appAuthorization");
+    const request = vi.fn(async () => ({ data: { success: 1, data: { movies: [{ id: 10, number: "TOP-001", origin_title: "Top Title", cover_url: "https://old/rhe951l4q/covers/top.jpg", release_date: "2026-08-30", has_cnsub: false, magnets_count: 1 }] } } }));
+    const adapter = createJavDbAdapter({ request }, () => "signature");
+    await expect(adapter.listTopRankings({ type: "year", typeValue: "2025", page: 2, limit: 50 })).resolves.toEqual({
+        success: 1, action: "", message: "", movies: [{ movieId: "10", carNum: "TOP-001", title: "Top Title", coverUrl: "https://c0.jdbstatic.com/covers/top.jpg", releaseDate: "2026-08-30", hasSubtitle: false, magnetCount: 1, newMagnets: false, providerId: "javdb" }],
+    });
+    expect(request.mock.calls[0][0].url).toContain("type=year");
+    expect(request.mock.calls[0][0].url).toContain("type_value=2025");
+    expect(request.mock.calls[0][0].url).toContain("page=2");
+    expect(request.mock.calls[0][0].cacheScope).toBe("none");
+    expect(request.mock.calls[0][0].headers.authorization).toBe("Bearer ");
+});
