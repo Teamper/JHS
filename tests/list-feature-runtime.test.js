@@ -132,6 +132,17 @@ describe("List FeatureRuntime ownership", () => {
         scope.dispose();
     });
 
+    it("routes JavBus image row correction through the direct contribution", async () => {
+        const scope = new LifecycleScope("feature:list"), logImageHeightsByRow = vi.fn(), busImgPlugin = { logImageHeightsByRow }, legacyPlugin = { handle: vi.fn(async () => {}), getOptionalDependency: vi.fn() }, hostAdapter = { site: "javbus", getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({ legacyPlugin, busImgPlugin, hostAdapter, settings: { snapshot: () => ({}) }, scope });
+
+        await controller.start();
+        await controller.filter.onJavBusFiltered();
+
+        expect(logImageHeightsByRow).toHaveBeenCalledWith({});
+        expect(legacyPlugin.getOptionalDependency).not.toHaveBeenCalled();
+        scope.dispose();
+    });
+
     it("starts the waterfall contribution with the feature-owned list API", async () => {
         const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), getSelector: vi.fn(() => ({ boxSelector: ".movie-list" })) }, autoPagePlugin = { handle: vi.fn(async () => {}) }, foldCategoryPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
             legacyPlugin,

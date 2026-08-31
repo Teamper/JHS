@@ -33,7 +33,10 @@ export default defineFeature({
         const fc2LookupPlugin = runtime.enabledContributions.includes("list.fc2-lookup")
             ? runtime.resolveLegacyPlugin?.("Fc2By123AvPlugin")
             : null;
-        const controller = new ListController(/** @type {any} */ ({ legacyPlugin, features: deps[REGISTRY.feature], autoPagePlugin, foldCategoryPlugin, actionsPlugin, fc2NavigationPlugin, coverPlugin, fc2LookupPlugin, hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], eventBus: deps[SERVICE.eventBus], http: deps[SERVICE.http], stateService: deps[SERVICE.state], translation: deps[SERVICE.translation], styles: deps[PORT.style], scope: runtime.scope }));
+        const busImgPlugin = runtime.enabledContributions.includes("list.javbus-images")
+            ? runtime.resolveLegacyPlugin?.("BusImgPlugin")
+            : null;
+        const controller = new ListController(/** @type {any} */ ({ legacyPlugin, features: deps[REGISTRY.feature], busImgPlugin, autoPagePlugin, foldCategoryPlugin, actionsPlugin, fc2NavigationPlugin, coverPlugin, fc2LookupPlugin, hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], eventBus: deps[SERVICE.eventBus], http: deps[SERVICE.http], stateService: deps[SERVICE.state], translation: deps[SERVICE.translation], styles: deps[PORT.style], scope: runtime.scope }));
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

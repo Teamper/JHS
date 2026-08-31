@@ -234,6 +234,7 @@ assertIncludes(listPageSource, "async doFilter(revision =", "list page function 
 assertIncludes(listManifestSource, 'id: "list"', "real list feature manifest");
 assertIncludes(listManifestSource, 'contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions", "list.fc2-navigation", "list.cover-state-actions", "list.javbus-images", "list.fc2-lookup"]', "list feature contribution ownership");
 assertIncludes(listManifestSource, "REGISTRY.feature", "list direct Feature API dependency");
+assertIncludes(listManifestSource, 'resolveLegacyPlugin?.("BusImgPlugin")', "list JavBus image contribution boundary");
 assertIncludes(listManifestSource, 'resolveLegacyPlugin?.("ListPagePlugin")', "list migration adapter resolution");
 assertIncludes(listManifestSource, 'ensureDelegate?.({ scope: () => Promise.resolve(runtime.scope) })', "list feature delegate ownership");
 assertIncludes(listManifestSource, "http: deps[SERVICE.http]", "list batch HTTP service injection");
@@ -256,6 +257,7 @@ assertIncludes(listControllerSource, "attachListEvaluation", "list evaluation mi
 assertIncludes(listControllerSource, "new ListSummaryService({", "list summary ownership");
 assertIncludes(listControllerSource, "attachListSummary", "list summary migration handoff");
 assertIncludes(listControllerSource, 'this.features.getFeatureApi("library")', "list Library Feature API ownership");
+assertIncludes(listControllerSource, "this.busImgPlugin?.logImageHeightsByRow", "list JavBus image contribution ownership");
 assertIncludes(listControllerSource, "new ListTranslationService({", "list translation ownership");
 assertIncludes(listControllerSource, "attachListTranslation", "list translation migration handoff");
 assertIncludes(listControllerSource, "new ListFilterService({", "list filter service ownership");

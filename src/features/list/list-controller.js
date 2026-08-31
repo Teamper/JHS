@@ -31,6 +31,7 @@ export class ListController {
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin ?? null;
         this.features = /** @type {any} */ (options).features ?? null;
+        this.busImgPlugin = /** @type {any} */ (options).busImgPlugin ?? null;
         this.autoPagePlugin = options.autoPagePlugin ?? null;
         this.foldCategoryPlugin = options.foldCategoryPlugin ?? null;
         this.actionsPlugin = options.actionsPlugin ?? null;
@@ -136,7 +137,7 @@ export class ListController {
                 recordPhase: (phase, itemCount) => this.diagnostics?.recordPhase(phase, itemCount),
                 scheduleRecount: () => this.summary?.scheduleRecount?.(),
                 translateItems: (items) => this.titleTranslation?.translateListItems?.(items) ?? (/** @type {any} */ (this.legacyPlugin))?.translateListItems?.(items),
-                onJavBusFiltered: () => (/** @type {any} */ (this.legacyPlugin))?.getOptionalDependency?.("BusImgPlugin")?.logImageHeightsByRow?.(this.settings?.snapshot?.()),
+                onJavBusFiltered: () => this.busImgPlugin?.logImageHeightsByRow?.(this.settings?.snapshot?.()),
             });
             this.incremental = new ListIncrementalService({
                 scope: this.scope,
