@@ -30,6 +30,7 @@ export class ListController {
     /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any, findCarNumAndHref?: (item: any) => {carNum?: unknown} | null, recordListPhase?: (phase: string, itemCount?: number | null) => void, attachListHost?: (host: any) => void, attachListState?: (state: ListStateController) => void, attachListIndex?: (index: ListIndexController) => void, attachListDomObserver?: (observer: ListDomObserver) => void, attachListMedia?: (media: ListMediaController) => void, attachListImages?: (images: ListImageController) => void, attachListEvents?: (events: ListEventController) => void, attachListBatch?: (batch: ListBatchService) => void, attachListEvaluation?: (evaluation: ListEvaluationService) => void, attachListSummary?: (summary: ListSummaryService) => void, attachListTranslation?: (translation: any) => void, attachListFilter?: (filter: ListFilterService) => void, attachListIncremental?: (incremental: ListIncrementalService) => void, attachListContextMenu?: (contextMenu: ListContextMenuController) => void, processAddedItems?: (items: Element[], revision: string) => Promise<void> | void, getLibraryFeatureApi?: () => Promise<any>, createEvaluationContext?: () => Promise<any>, createQuickFilter?: (initialFilter?: unknown) => Promise<any> | any, initCss?: () => Promise<string> | string}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2NavigationPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, coverPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2LookupPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any, settings?: {snapshot: () => Record<string, any>}, storage?: any, eventBus?: any, http?: any, stateService?: any, styles?: {register: (id: string, css: string) => () => void}}} options */
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin ?? null;
+        this.features = /** @type {any} */ (options).features ?? null;
         this.autoPagePlugin = options.autoPagePlugin ?? null;
         this.foldCategoryPlugin = options.foldCategoryPlugin ?? null;
         this.actionsPlugin = options.actionsPlugin ?? null;
@@ -181,7 +182,7 @@ export class ListController {
                     const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
                     if (names.includes("hoverBigImg")) this.images?.configureHoverPreview(this.settings?.snapshot?.().hoverBigImg === "yes" ? "yes" : "no");
                 },
-                onReloadHistory: () => this.legacyPlugin?.getLibraryFeatureApi?.().then((/** @type {any} */ api) => api?.reloadHistoryTable?.()).catch((/** @type {unknown} */ error) => clog.warn("鉴定记录刷新失败", error)),
+                onReloadHistory: () => this.getLibraryFeatureApi().then((/** @type {any} */ api) => api?.reloadHistoryTable?.()).catch((/** @type {unknown} */ error) => clog.warn("鉴定记录刷新失败", error)),
             });
             if (this.stateService && this.http) this.batch = new ListBatchService({
                 scope: this.scope,
@@ -358,6 +359,12 @@ export class ListController {
     parseActressName(url) {
         if (this.actressNames) return this.actressNames.parse(url);
         return (/** @type {any} */ (this.legacyPlugin))?.parseActressName?.(url);
+    }
+
+    /** Resolve the Library capability directly, retaining the legacy fallback for isolated callers. */
+    getLibraryFeatureApi() {
+        if (this.features?.getFeatureApi) return Promise.resolve(this.features.getFeatureApi("library"));
+        return Promise.resolve((/** @type {any} */ (this.legacyPlugin))?.getLibraryFeatureApi?.() ?? null);
     }
 
     /** Reveal a hidden list card through the HostAdapter-owned item boundary. */
