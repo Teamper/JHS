@@ -219,6 +219,7 @@ const listEvaluationSource = await read("src/features/list/list-evaluation-servi
 const listSummarySource = await read("src/features/list/list-summary-service.js");
 const listDiagnosticsSource = await read("src/features/list/list-diagnostics-service.js");
 const listTranslationSource = await read("src/features/list/list-translation-service.js");
+const architectureSource = await read("scripts/architecture-check.mjs");
 const listPageAdapterSource = await read("src/compat/list-page-adapter.js");
 const listViewSource = await read("src/features/list/list-view.js");
 const listActionsSource = await read("src/plugins/status/list-page-button.js");
@@ -329,6 +330,9 @@ assertIncludes(listControllerSource, "new ListDiagnosticsService({", "list diagn
 assertIncludes(listControllerSource, "this.diagnostics?.recordPhase", "list diagnostics lifecycle handoff");
 assertIncludes(listDiagnosticsSource, "globalThis).__jhsBrowserDiagnostics", "list browser diagnostics boundary");
 assertIncludes(listDiagnosticsSource, "phases.length > 200", "list diagnostics bounded history");
+assertIncludes(architectureSource, 'id: "business-legacy-runtime-reference"', "business legacy runtime architecture gate");
+assertIncludes(architectureSource, 'id: "business-unsafe-window"', "business unsafeWindow architecture gate");
+assertIncludes(architectureSource, 'id: "business-global-service"', "business global service architecture gate");
 assertIncludes(listTranslationSource, "translationGeneration", "list translation generation ownership");
 assertIncludes(listTranslationSource, "mapLimit(items, 3", "list translation concurrency ownership");
 const detailControllerSource = await read("src/features/detail/detail-controller.js");

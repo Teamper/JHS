@@ -6,6 +6,7 @@ import { scanImportTimeEffects } from "./import-time-purity.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const baselinePath = path.join(rootDir, "architecture-baseline.json");
+const businessLayers = new Set(["features", "services", "integrations", "platform", "ui"]);
 
 const rules = [
     { id: "internal-getbean", pattern: /\.getBean\s*\(/, phase: 6 },
@@ -16,6 +17,9 @@ const rules = [
     { id: "feature-direct-layer", pattern: /\blayer\s*\.\s*(?:open|close|closeAll|confirm|alert|msg|load|tips|prompt|photos|tab)\s*\(/, phase: 5, featureOnly: true },
     { id: "feature-direct-localstorage", pattern: /\blocalStorage\s*\./, phase: 5, featureOnly: true },
     { id: "feature-third-party-url", pattern: /https?:\/\//, phase: 4, featureOnly: true },
+    { id: "business-legacy-runtime-reference", pattern: /\b(?:PluginManager|BasePlugin|getBean)\b|\.getBean\s*\(/, phase: 7, businessOnly: true },
+    { id: "business-unsafe-window", pattern: /\bunsafeWindow\./, phase: 7, businessOnly: true },
+    { id: "business-global-service", pattern: /\bglobalThis\.(?:storageManager|stateService|gmHttp|utils|show|loading)\b/, phase: 7, businessOnly: true },
     { id: "host-selector", pattern: /(?:\.movie-panel-info|#magnet-table|\.movie-list)/, phase: 4, featureOrUi: true },
     { id: "app-global-listener", pattern: /(?:window|document)\.addEventListener\s*\(/, phase: 7 },
     { id: "app-global-observer", pattern: /new\s+MutationObserver\s*\(/, phase: 7 },
@@ -51,10 +55,12 @@ async function scan() {
         const relativeFile = path.relative(rootDir, file).replaceAll("\\", "/");
         const isFeature = relativeFile.startsWith("src/plugins/") || relativeFile.startsWith("src/features/");
         const isFeatureOrUi = isFeature || relativeFile.startsWith("src/ui/");
+        const isBusinessLayer = businessLayers.has(relativeFile.split("/")[1]);
         const lines = (await readFile(file, "utf8")).split(/\r?\n/);
         for (const rule of rules) {
             if (rule.featureOnly && !isFeature) continue;
             if (rule.featuresOnly && !relativeFile.startsWith("src/features/")) continue;
+            if (rule.businessOnly && !isBusinessLayer) continue;
             if (rule.featureOrUi && !isFeatureOrUi) continue;
             lines.forEach((line, index) => {
                 if (rule.id === "host-selector" && /host-adapter\.js$/.test(relativeFile)) return;
