@@ -404,6 +404,9 @@ assert(!fc2.includes('getOptionalDependency("FilterTitleKeywordPlugin")'), "FC2 
 assertIncludes(libraryManifestSource, 'id: "library"', "real library feature manifest");
 assertIncludes(libraryManifestSource, 'new LibraryController({', "library feature controller ownership");
 assertIncludes(libraryManifestSource, 'new BlacklistController({', "library blacklist controller ownership");
+assert(!libraryManifestSource.includes('resolveLegacyPlugin?.("SettingPlugin")'), "library must not resolve SettingPlugin directly");
+assertIncludes(blacklistControllerSource, 'openSettingsUi("task-panel"', "library settings UI owner boundary");
+assert(!blacklistControllerSource.includes("settingPlugin"), "library blacklist must not depend on SettingPlugin");
 assertIncludes(libraryControllerSource, 'this.historyController?.start({ scope: this.scope })', "library history lifecycle handoff");
 assertIncludes(libraryControllerSource, 'this.blacklistController?.start?.({ scope: this.scope })', "library blacklist lifecycle handoff");
 assertIncludes(libraryControllerSource, "this.state.patch", "library state import lifecycle handoff");

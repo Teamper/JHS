@@ -313,9 +313,9 @@ describe("v6.5 architecture runtime contracts", () => {
     });
 
     it("opens Settings through its registered owner without a DOM trigger", async () => {
-        const owner = vi.fn(async () => "opened"), cleanup = registerSettingsUiOwner(owner);
-        await expect(openSettingsUi("filter-panel")).resolves.toBe("opened");
-        expect(owner).toHaveBeenCalledWith("filter-panel");
+        const owner = vi.fn(async () => "opened"), cleanup = registerSettingsUiOwner(owner), onReady = vi.fn();
+        await expect(openSettingsUi("filter-panel", onReady)).resolves.toBe("opened");
+        expect(owner).toHaveBeenCalledWith("filter-panel", onReady);
         cleanup();
         expect(() => openSettingsUi()).toThrow(/not ready/);
     });

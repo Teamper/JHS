@@ -7,6 +7,7 @@ import { requestHostPage } from "../../core/host-page-request.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
 import { endBatchRun, isActiveBatchRun, tryBeginBatchRun } from "../../core/batch-coordinator.js";
+import { openSettingsUi } from "../../core/settings-ui-owner.js";
 import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 import { BlacklistRepository } from "./blacklist-repository.js";
@@ -14,7 +15,7 @@ import { BlacklistRepository } from "./blacklist-repository.js";
 /** @typedef {Record<string, any>} BlacklistRecord */
 
 export class BlacklistController {
-    /** @param {{hostAdapter?: any, dialog?: any, storage?: any, settings?: any, state?: any, http?: any, eventBus?: any, mutation?: any, features?: any, settingPlugin?: any, styles?: any, scope: any}} options */
+    /** @param {{hostAdapter?: any, dialog?: any, storage?: any, settings?: any, state?: any, http?: any, eventBus?: any, mutation?: any, features?: any, styles?: any, scope: any}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.document = options.hostAdapter?.document ?? globalThis.document;
@@ -28,7 +29,6 @@ export class BlacklistController {
         this.http = options.http;
         this.eventBus = options.eventBus;
         this.features = options.features;
-        this.settingPlugin = options.settingPlugin ?? null;
         this.styles = options.styles;
         this.scope = options.scope;
         this.repository = new BlacklistRepository({ storage: this.storage, state: this.state, eventBus: this.eventBus, mutation: options.mutation });
@@ -232,11 +232,15 @@ export class BlacklistController {
                 })).on("input", "#searchValue", this.blacklistSearchDebounced).on("change", "#dataType,#statusType,#urlType", (async () => {
                     await this.reloadTable();
                 })).on("click", "#toSetting", (() => {
-                    this.settingPlugin?.openSettingDialog?.("task-panel", (() => {
-                        $("#setting-blacklist").css({
-                            border: "1px solid var(--jhs-status-filter)"
-                        });
-                    }));
+                    try {
+                        openSettingsUi("task-panel", (() => {
+                            $("#setting-blacklist").css({
+                                border: "1px solid var(--jhs-status-filter)"
+                            });
+                        }));
+                    } catch (error) {
+                        clog.warn("设置中心未就绪，无法打开黑名单配置", error);
+                    }
                 })).on("click", ".open-url", ((/** @type {any} */ e) => {
                     e.preventDefault();
                     const t = $(e.currentTarget), n = t.attr("data-url"), a = t.attr("data-name");

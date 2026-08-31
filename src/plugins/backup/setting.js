@@ -124,8 +124,8 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         };
         liveSettings.addEventListener("settings.changed", onSettingsChanged);
         scope.addCleanup((() => liveSettings.removeEventListener("settings.changed", onSettingsChanged)));
-        const openSettings = async (panel = "backup-panel") => {
-            try { return await this.openSettingDialog(panel); }
+        const openSettings = async (panel = "backup-panel", onReady) => {
+            try { return await this.openSettingDialog(panel, onReady); }
             catch (error) { clog.error("设置中心打开失败", error), show.error("设置中心打开失败"); throw error; }
         };
         scope.addCleanup(registerSettingsUiOwner(openSettings));
