@@ -129,6 +129,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {any} */ this.libraryFeatureApi = null;
         /** @type {any} */ this.listState = null;
         /** @type {any} */ this.listIndex = null;
+        /** @type {any} */ this.listDomObserver = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -140,6 +141,10 @@ export class ListPagePlugin extends BasePlugin {
     /** Attach the FeatureRuntime-owned card index during migration. @param {any} index */
     attachListIndex(index) {
         this.listIndex = index;
+    }
+    /** Attach the FeatureRuntime-owned DOM observer during migration. @param {any} observer */
+    attachListDomObserver(observer) {
+        this.listDomObserver = observer;
     }
     /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
     async getLibraryFeatureApi() {
@@ -285,6 +290,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {any} [scope] */
     checkDom(scope = null) {
+        if (this.listDomObserver) return this.listDomObserver.start();
         // 自有榜单页（热播/Top250）由渲染方自行管理容器与增量，不走宿主容器探测
         if (!window.isListPage || isHitShowPage() || window.location.search.includes("handleTop=1")) return;
         const e = this.getListSelectors(), t = document.querySelector(e.boxSelector);
