@@ -7,7 +7,6 @@ import { ActressInfoPlugin } from "./avatar/actress-info.js";
 import { SearchByImagePlugin } from "./avatar/search-by-image.js";
 import { SettingPlugin } from "./backup/setting.js";
 import { BlacklistPlugin } from "./blacklist/blacklist.js";
-import { FilterTitleKeywordPlugin } from "./blacklist/filter-title-keyword.js";
 import { Fc2By123AvPlugin } from "./external-search/fc2-by-123av.js";
 import { Fc2Plugin } from "./external-search/fc2.js";
 import { HitShowPlugin } from "./external-search/hit-show.js";
@@ -72,7 +71,6 @@ export const legacyContributionManifests = Object.freeze([
     manifest("detail.page-state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle, SERVICE.state, SERVICE.settings], { managedByFeature: true }),
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [PORT.host, SERVICE.settings], { managedByFeature: true }),
     manifest("detail.javdb-preview", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie], { managedByFeature: true }),
-    manifest("library.keyword-filter", "library", FilterTitleKeywordPlugin, ["javdb", "javbus"], { javdb: 21, javbus: 14 }, [], { managedByFeature: true }),
     manifest("identity.actress-info", "identity", ActressInfoPlugin, ["javdb"], { javdb: 22 }, [SERVICE.actressInfo, SERVICE.settings], { managedByFeature: true }),
     manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie, SERVICE.storage, SERVICE.settings], { managedByFeature: true }),
     manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings, REGISTRY.feature], { managedByFeature: true }),

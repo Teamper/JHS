@@ -20,7 +20,7 @@ const screenshotSource = readTestFile(join(repoRoot, "src/plugins/image-viewer/s
 const listPageSource = readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8");
 const historySource = readTestFile(join(repoRoot, "src/plugins/status/history.js"), "utf8");
 const stateServiceSource = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8");
-const titleFilterSource = readTestFile(join(repoRoot, "src/plugins/blacklist/filter-title-keyword.js"), "utf8");
+const titleFilterSource = readTestFile(join(repoRoot, "src/features/library/library-controller.js"), "utf8");
 const highlightMagnetSource = readTestFile(join(repoRoot, "src/plugins/status/highlight-magnet.js"), "utf8");
 const primitivesSource = readTestFile(join(repoRoot, "src/core/ui-primitives.js"), "utf8");
 const loggerSource = readTestFile(join(repoRoot, "src/core/logger.js"), "utf8");
@@ -173,7 +173,7 @@ describe("FC2 owned detail workspace", () => {
     });
 
     it("supports exact layer closing, reusable MagnetHub and hardened mobile layout", () => {
-        expect(titleFilterSource).toContain("utils.closePage({ root: host, layerIndex })");
+        expect(titleFilterSource).toContain("utils?.closePage?.({ root, layerIndex })");
         expect(fc2Source).toContain('hubButton.attr("aria-expanded", "false")');
         expect(fc2Source).toContain("magnetHubPromise ||=");
         expect(primitivesSource).toMatch(/\.magnet-tabs > div \{[^}]*width: 100%;[^}]*min-width: 0;[^}]*overflow-x: auto;/);

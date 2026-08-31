@@ -107,7 +107,7 @@ export function createAppContext(runtime) {
         .register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy)
         .register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.webdav, webdav)
         .register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile)
-        .register(SERVICE.state, runtime.stateService).register(SERVICE.storageMutation, runtime.storageMutationCoordinator ?? null)
+        .register(SERVICE.state, runtime.stateService).register(SERVICE.eventBus, runtime.eventBus ?? null).register(SERVICE.storageMutation, runtime.storageMutationCoordinator ?? null)
         .register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.imageSearch, imageSearch).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet)
         .register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline)
         .register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.account, account)

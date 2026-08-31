@@ -4,7 +4,7 @@
  * Own compatibility-only page decorations and their page-lifetime listeners.
  */
 export class CompatibilityController {
-    /** @param {{hostAdapter: any, storage: any, state: any, features: any, styles: any, scope: any, route?: string}} options */
+    /** @param {{hostAdapter: any, storage: any, state: any, features: any, styles: any, scope: any, route?: string, enabled?: boolean}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.document = options.hostAdapter?.document ?? globalThis.document;
@@ -14,6 +14,7 @@ export class CompatibilityController {
         this.styles = options.styles;
         this.scope = options.scope;
         this.route = options.route ?? "unknown";
+        this.enabled = options.enabled !== false;
         this.started = false;
     }
 
@@ -21,6 +22,7 @@ export class CompatibilityController {
         this.scope.assertActive();
         if (this.started) return Promise.resolve();
         this.started = true;
+        if (!this.enabled) return Promise.resolve();
         return Promise.resolve().then(async () => {
             if (this.hostAdapter?.site === "javdb") {
                 const removeStyle = this.styles?.register?.("jhs-compatibility", ".sda-content { display:none!important; }");
@@ -41,7 +43,7 @@ export class CompatibilityController {
         });
     }
 
-    getApi() { return Object.freeze({ hasEnhancements: true }); }
+    getApi() { return Object.freeze({ hasEnhancements: this.enabled }); }
 
     /** @param {string} key */
     async readArray(key) {

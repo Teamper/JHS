@@ -70,7 +70,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.find((item) => item.id === "discovery.top250")?.legacyPluginId).toBe("TOP250Plugin");
         expect(legacyContributionManifests.find((item) => item.id === "library.history")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "library.state-actions")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "library.keyword-filter")?.managedByFeature).toBe(true);
+        expect(legacyContributionManifests.find((item) => item.id === "library.keyword-filter")).toBeUndefined();
         expect(legacyContributionManifests.find((item) => item.id === "library.blacklist")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "library.favorite-actresses")?.managedByFeature).toBe(true);
         expect(legacyContributionManifests.find((item) => item.id === "list.auto-page")?.managedByFeature).toBe(true);
@@ -120,7 +120,7 @@ describe("v6.5 architecture runtime contracts", () => {
             "OneTwoThreeOfflinePlugin", "ListPagePlugin", "AutoPagePlugin", "Fc2Plugin", "Fc2NavigationPlugin", "FoldCategoryPlugin", "ListPageButtonPlugin",
             "HistoryPlugin", "SettingPlugin", "NavBarPlugin", "HitShowPlugin", "TOP250Plugin", "SearchByImagePlugin", "CoverButtonPlugin",
             "Fc2By123AvPlugin", "DetailPagePlugin", "DetailWorkspacePlugin", "ReviewPlugin", "RelatedPlugin", "DetailPageButtonPlugin",
-            "HighlightMagnetPlugin", "PreviewVideoPlugin", "FilterTitleKeywordPlugin", "ActressInfoPlugin", "OtherSitePlugin", "TranslatePlugin",
+            "HighlightMagnetPlugin", "PreviewVideoPlugin", "ActressInfoPlugin", "OtherSitePlugin", "TranslatePlugin",
             "WantAndWatchedVideosPlugin", "MagnetHubPlugin", "ScreenShotPlugin", "BlacklistPlugin", "FavoriteActressesPlugin", "NewVideoPlugin",
             "TaskPlugin", "MobileBottomBarPlugin", "OneOneFiveMatchPlugin", "UnifiedOfflinePlugin",
         ]);
@@ -239,6 +239,7 @@ describe("v6.5 architecture runtime contracts", () => {
             "detail.javdb-preview", "list.javbus-images", "detail.javbus-preview",
         ]);
         expect(migrateDisabledPlugins(["SubTitleCatPlugin", "detail.subtitle"])).toEqual(["external-bridge.subtitle"]);
+        expect(migrateDisabledPlugins(["FilterTitleKeywordPlugin", "CompatibilityEnhancementsPlugin"])).toEqual(["library.keyword-filter", "compatibility.enhancements"]);
 
         expect(() => runtime.register(defineFeature({
             id: "duplicate-owner", kind: "feature", disableable: true, sites: ["javdb"], routes: ["detail"],

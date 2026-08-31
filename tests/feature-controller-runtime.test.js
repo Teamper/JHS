@@ -22,6 +22,17 @@ describe("feature controller ownership", () => {
         expect(controller.getApi()).toEqual({ hasEnhancements: true });
     });
 
+    it("keeps a disabled compatibility contribution inert", async () => {
+        const scope = createScope(), document = { querySelectorAll: vi.fn(() => []), addEventListener: vi.fn(), removeEventListener: vi.fn() }, controller = new CompatibilityController({
+            hostAdapter: { site: "javdb", document, location: { pathname: "/", href: "https://javdb.com/" } },
+            storage: { get: vi.fn(async () => []) }, state: {}, features: {}, styles: { register: vi.fn() }, enabled: false, route: "other", scope,
+        });
+        await controller.start();
+
+        expect(document.addEventListener).not.toHaveBeenCalled();
+        expect(controller.getApi()).toEqual({ hasEnhancements: false });
+    });
+
     it("hands the feature scope to the detail workspace contribution", async () => {
         const scope = createScope(), hostAdapter = {
             locateDetailRoot: vi.fn(() => null),
