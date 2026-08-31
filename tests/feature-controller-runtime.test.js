@@ -5,14 +5,20 @@ import { StatsController } from "../src/features/stats/stats-controller.js";
 import { ResponsiveShellController } from "../src/features/system/responsive-shell-controller.js";
 
 function createScope() {
-    return { assertActive: vi.fn() };
+    return {
+        assertActive: vi.fn(),
+        listen: vi.fn((target, type, listener, options) => {
+            target.addEventListener?.(type, listener, options);
+            return () => target.removeEventListener?.(type, listener, options);
+        }),
+    };
 }
 
 describe("feature controller ownership", () => {
     it("starts native compatibility enhancements only once", async () => {
         const scope = createScope(), document = { querySelectorAll: vi.fn(() => []), addEventListener: vi.fn(), removeEventListener: vi.fn() }, controller = new CompatibilityController({
             hostAdapter: { site: "javbus", document, location: { pathname: "/", href: "https://javbus.com/" } },
-            storage: { get: vi.fn(async () => []) }, state: {}, features: {}, styles: { register: vi.fn() }, route: "other", scope,
+            storage: { get: vi.fn(async () => []) }, state: {}, features: {}, styles: { register: vi.fn() }, ui: {}, route: "other", scope,
         });
         await controller.start();
         await controller.start();
@@ -25,7 +31,7 @@ describe("feature controller ownership", () => {
     it("keeps a disabled compatibility contribution inert", async () => {
         const scope = createScope(), document = { querySelectorAll: vi.fn(() => []), addEventListener: vi.fn(), removeEventListener: vi.fn() }, controller = new CompatibilityController({
             hostAdapter: { site: "javdb", document, location: { pathname: "/", href: "https://javdb.com/" } },
-            storage: { get: vi.fn(async () => []) }, state: {}, features: {}, styles: { register: vi.fn() }, enabled: false, route: "other", scope,
+            storage: { get: vi.fn(async () => []) }, state: {}, features: {}, styles: { register: vi.fn() }, ui: {}, enabled: false, route: "other", scope,
         });
         await controller.start();
 

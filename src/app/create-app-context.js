@@ -36,6 +36,7 @@ import { IntegrationRegistry } from "./integration-registry.js";
 import { SettingsRegistry } from "./settings-registry.js";
 import { registerDefaultSettings } from "./settings-catalog.js";
 import { LifecycleScope } from "../core/lifecycle-scope.js";
+import { UiService } from "../services/ui-service.js";
 
 /** @param {{gmRequest: (options: Record<string, any>) => any, gmGetValue: (key: string, fallback?: unknown) => unknown, gmSetValue: (key: string, value: unknown) => void, legacyHttp?: any, legacyStorage?: any, eventBus?: any, storageForage: any, localStorage: Storage, layer: any, stateService: any, storageMutationCoordinator?: any, hostAdapter?: any, hostAdapters?: {javdb?: any, javbus?: any}, disabled?: string[], site?: string, route?: string, localOrigins?: string[]}} runtime */
 export function createAppContext(runtime) {
@@ -53,6 +54,7 @@ export function createAppContext(runtime) {
     const storage = new StorageService(storagePort);
     const dialog = new DialogService(dialogPort);
     const styles = new StyleRegistry(stylePort);
+    const ui = new UiService();
     const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache });
     diagnostics.setNetworkController(http);
     const webdav = new WebDavService(http);
@@ -110,7 +112,7 @@ export function createAppContext(runtime) {
         .register(SERVICE.state, runtime.stateService).register(SERVICE.eventBus, runtime.eventBus ?? null).register(SERVICE.storageMutation, runtime.storageMutationCoordinator ?? null)
         .register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.imageSearch, imageSearch).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet)
         .register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline)
-        .register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.account, account)
+        .register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.account, account).register(SERVICE.ui, ui)
         .register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
     container.register(PORT.host, runtime.hostAdapter ?? null);
     if (runtime.hostAdapters?.javdb) container.register(PORT.javdbHost, runtime.hostAdapters.javdb);
@@ -118,5 +120,5 @@ export function createAppContext(runtime) {
 
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, legacyStorage: runtime.legacyStorage ?? null, webdav, dialog, styles, settings, cache, profile, state: runtime.stateService, storageMutation: runtime.storageMutationCoordinator ?? null, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, legacyStorage: runtime.legacyStorage ?? null, webdav, dialog, styles, ui, settings, cache, profile, state: runtime.stateService, storageMutation: runtime.storageMutationCoordinator ?? null, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
 }

@@ -9,7 +9,7 @@ async function render(html, url, favorites = [], blacklist = []) {
     const controller = new CompatibilityController({
         hostAdapter: { site: "javdb", document: dom.window.document, location: dom.window.location },
         storage: { get: vi.fn(async key => ({ favorite_actresses: favorites, blacklist }[key] ?? [])) },
-        state: {}, features: {}, styles: {}, route: "other",
+        state: {}, features: {}, styles: {}, ui: {}, route: "other",
         scope: { assertActive: vi.fn(), addCleanup: vi.fn() },
     });
     await controller.decorateActresses();

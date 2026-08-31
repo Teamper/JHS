@@ -42,6 +42,7 @@ export const SERVICE = Object.freeze({
     eventBus: createToken("service", "event-bus"),
     storageMutation: createToken("service", "storage-mutation"),
     profile: createToken("service", "profile"),
+    ui: createToken("service", "ui"),
 });
 
 export const REGISTRY = Object.freeze({

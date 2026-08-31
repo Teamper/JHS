@@ -9,14 +9,25 @@ const nav = readTestFile(join(import.meta.dirname, "../src/features/identity/ide
 function createController(html, options = {}) {
     const dom = new DOMParser().parseFromString(html, "text/html");
     const styles = options.styles ?? { register: vi.fn() };
-    const scope = { assertActive: vi.fn(), addCleanup: vi.fn() };
+    const scope = {
+        assertActive: vi.fn(),
+        listen: (target, type, listener, options) => {
+            target.addEventListener(type, listener, options);
+            return () => target.removeEventListener(type, listener, options);
+        },
+        addCleanup: vi.fn(),
+    };
     const controller = new CompatibilityController({
         hostAdapter: {
             site: options.site ?? "javdb", document: dom, location: { href: options.url ?? "https://javdb.com/", pathname: new URL(options.url ?? "https://javdb.com/").pathname },
             readMovieRef: options.readMovieRef,
         },
         storage: { get: vi.fn(async key => options.storage?.[key] ?? []) }, state: options.state ?? {},
-        features: options.features ?? {}, styles, route: options.route ?? "other", scope,
+        features: options.features ?? {}, styles, ui: options.ui ?? {
+            show: globalThis.show ?? {},
+            confirm: globalThis.utils?.q,
+            showImageViewer: globalThis.showImageViewer,
+        }, route: options.route ?? "other", scope,
     });
     return { dom, controller, styles, scope };
 }

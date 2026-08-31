@@ -4,7 +4,7 @@
  * Own compatibility-only page decorations and their page-lifetime listeners.
  */
 export class CompatibilityController {
-    /** @param {{hostAdapter: any, storage: any, state: any, features: any, styles: any, scope: any, route?: string, enabled?: boolean}} options */
+    /** @param {{hostAdapter: any, storage: any, state: any, features: any, styles: any, ui: any, scope: any, route?: string, enabled?: boolean}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.document = options.hostAdapter?.document ?? globalThis.document;
@@ -12,6 +12,7 @@ export class CompatibilityController {
         this.state = options.state;
         this.features = options.features;
         this.styles = options.styles;
+        this.ui = options.ui;
         this.scope = options.scope;
         this.route = options.route ?? "unknown";
         this.enabled = options.enabled !== false;
@@ -33,8 +34,7 @@ export class CompatibilityController {
                 this.document?.querySelectorAll?.(".jhs-actress-state-container").forEach((/** @type {Element} */ element) => element.remove());
                 void this.decorateActresses();
             };
-            this.document?.addEventListener?.("actress-state-changed", actressStateChanged);
-            this.scope.addCleanup?.(() => this.document?.removeEventListener?.("actress-state-changed", actressStateChanged));
+            this.scope.listen(this.document, "actress-state-changed", actressStateChanged);
             if (this.route === "detail") await this.addRemoveRecord();
             this.linkCommentImages();
         }).catch((error) => {
@@ -65,11 +65,10 @@ export class CompatibilityController {
             button.remove();
             const list = await this.features?.getFeatureApi?.("list");
             list?.showCarNumBox?.(carNum);
-            (/** @type {any} */ (globalThis)).show?.ok?.("鉴定记录已移除");
+            this.ui?.show?.ok?.("鉴定记录已移除");
         };
         button.addEventListener("click", (/** @type {Event} */ event) => {
-            const confirm = /** @type {any} */ (globalThis).utils?.q;
-            if (confirm) confirm(event, `确定移除 ${carNum} 的鉴定记录？`, removeRecord);
+            if (this.ui?.confirm) this.ui.confirm(event, `确定移除 ${carNum} 的鉴定记录？`, removeRecord);
             else void removeRecord();
         });
         host.append(button);
@@ -141,10 +140,9 @@ export class CompatibilityController {
             if (!target) return;
             event.preventDefault();
             const image = images[Number(target.getAttribute("data-image-index"))];
-            image && (/** @type {any} */ (globalThis)).showImageViewer?.(image);
+            image && this.ui?.showImageViewer?.(image);
         };
-        this.document?.addEventListener?.("click", commentImageClick);
-        this.scope.addCleanup?.(() => this.document.removeEventListener("click", commentImageClick));
+        this.scope.listen(this.document, "click", commentImageClick);
     }
 
     /** @param {Element} element @param {number} imageCount */
