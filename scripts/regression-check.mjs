@@ -318,6 +318,7 @@ assertIncludes(listEvaluationSource, "stateService.getActivityLog()", "list eval
 assertIncludes(listEvaluationSource, "invalidate()", "list evaluation cache lifecycle ownership");
 assertIncludes(listSummarySource, "scope.ownTimeout(timer)", "list summary timer lifecycle ownership");
 assertIncludes(listSummarySource, "collectCurrentPageSummary()", "list summary aggregation ownership");
+assert(!listControllerSource.includes("applyListSummary"), "feature list summary must not project to legacy plugin");
 assertIncludes(listControllerSource, "new ListDiagnosticsService({", "list diagnostics ownership");
 assertIncludes(listControllerSource, "this.diagnostics?.recordPhase", "list diagnostics lifecycle handoff");
 assertIncludes(listDiagnosticsSource, "globalThis).__jhsBrowserDiagnostics", "list browser diagnostics boundary");

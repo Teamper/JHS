@@ -111,7 +111,6 @@ export class ListController {
                 window: this.hostAdapter.document?.defaultView ?? globalThis.window,
                 selectors,
                 site: this.hostAdapter.site,
-                onSummary: (summary) => /** @type {any} */ (this.legacyPlugin)?.applyListSummary?.(summary),
             });
             this.titleTranslation = this.settings && this.translation ? new ListTranslationService({
                 scope: this.scope,

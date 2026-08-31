@@ -19,7 +19,7 @@ import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 
 describe("List FeatureRuntime ownership", () => {
     it("passes the feature lifecycle scope to the legacy migration adapter", async () => {
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListHost: vi.fn(), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), attachListEvents: vi.fn(), attachListFilter: vi.fn(), attachListIncremental: vi.fn(), attachListContextMenu: vi.fn(), attachListPagination: vi.fn(), attachListTagExpand: vi.fn(), recordListPhase: vi.fn(), doFilter: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListHost: vi.fn(), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), attachListEvents: vi.fn(), attachListFilter: vi.fn(), attachListIncremental: vi.fn(), attachListContextMenu: vi.fn(), attachListPagination: vi.fn(), attachListTagExpand: vi.fn(), recordListPhase: vi.fn(), applyListSummary: vi.fn(), doFilter: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
             legacyPlugin,
             hostAdapter,
             storage: { getLocal: () => null, setLocal: () => {} },
@@ -82,6 +82,8 @@ describe("List FeatureRuntime ownership", () => {
         expect(legacyPlugin.parseActressName).toHaveBeenCalledWith("/movie/ABC-123");
         expect(legacyPlugin.setQuickFilter).not.toHaveBeenCalled();
         expect(legacyPlugin.recordListPhase).not.toHaveBeenCalled();
+        controller.summary.recountStatuses();
+        expect(legacyPlugin.applyListSummary).not.toHaveBeenCalled();
         expect(globalThis.__jhsBrowserDiagnostics.listPhases).toEqual(expect.arrayContaining([ expect.objectContaining({ phase: "setQuickFilter" }) ]));
         expect(api.getActiveQuickFilter()).toBe("favorite");
         controller.dispose();
