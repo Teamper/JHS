@@ -87,6 +87,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         const date = new ClockDate(timestamp), pad = value => String(value).padStart(2, "0");
         return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     };
+    Object.defineProperty(dom.window.navigator, "locks", { configurable: true, value: locks });
     const context = vm.createContext({
         console, URL, Date: ClockDate, Math, Number, Object, Array, Map, Set, Promise, globalThis: null,
         window: Object.assign(dom.window, { isListPage: true }), document: dom.window.document, navigator: { locks }, localStorage, gmHttp, storageManager, $, BasePlugin, StorageQueue,
@@ -99,9 +100,34 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         setTimeout, clearTimeout
     });
     context.globalThis = context;
-    const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js", "src/plugins/new-video/task.js" ].map(file => readTestFile(join(repoRoot, file), "utf8")).join("\n");
-    vm.runInContext(`${source};globalThis.Task=TaskPlugin`, context);
-    const plugin = new context.Task;
+    vi.stubGlobal("$", $);
+    vi.stubGlobal("utils", context.utils);
+    vi.stubGlobal("clog", context.clog);
+    vi.stubGlobal("show", context.show);
+    vi.stubGlobal("_", "yes");
+    vi.stubGlobal("escapeHtml", context.escapeHtml);
+    const taskSource = readTestFile(join(repoRoot, "src/features/discovery/task-controller.js"), "utf8")
+        .replace(/^import .*;\r?\n/gm, "")
+        .replace("export class TaskController", "class TaskController");
+    const source = [ "src/core/site-context.js", "src/core/feature-helpers.js", "src/integrations/javdb/parser.js", "src/core/host-list-parser.js", taskSource ].map(file => file.startsWith("src/") ? readTestFile(join(repoRoot, file), "utf8") : file).join("\n");
+    vm.runInContext(`${source};globalThis.Task=TaskController`, context);
+    const plugin = new context.Task({
+        document: context.document,
+        window: context.window,
+        storage,
+        legacyStorage: storageManager,
+        http,
+        actressInfo,
+        movie: { externalSiteOrigin: siteId => "javBusBtn" === siteId ? beans.OtherSitePlugin.getJavBusUrl() : beans.OtherSitePlugin.getJavDbUrl() },
+        features: { getFeatureApi: vi.fn(async () => ({
+            hasBlacklist: true,
+            parseAndSaveFilterInfo: (...args) => beans.BlacklistPlugin.parseAndSaveFilterInfo?.(...args),
+            resetBtnTip: (...args) => beans.BlacklistPlugin.resetBtnTip?.(...args),
+        })) },
+        settings: { snapshot: vi.fn(() => ({})) },
+        eventBus: jhsEventBus,
+        scope,
+    });
     return { plugin, clock, values, settings, favorites, blacklistItems, storageManager, gmHttp, http, actressInfo, beans, locks, jhsEventBus, scope, $, htmlToPage: context.utils.htmlTo$dom };
 }
 
@@ -198,7 +224,7 @@ describe("task scheduler state machine", () => {
         const harness = createHarness();
         harness.plugin.runAndSchedule = vi.fn(async () => {}), harness.plugin.scheduleTask = vi.fn();
         const recalculate = vi.spyOn(harness.plugin, "recalculateSchedules");
-        await harness.plugin.handle();
+        await harness.plugin.start();
         await harness.jhsEventBus.emit("settings-changed", {});
         expect(recalculate).toHaveBeenCalledOnce();
         expect(harness.scope.snapshot().listeners).toBe(2);

@@ -6,6 +6,7 @@ import { DiscoveryController } from "./discovery-controller.js";
 import { HitShowController } from "./hit-show-controller.js";
 import { Top250Controller } from "./top250-controller.js";
 import { NewVideoController } from "./new-video-controller.js";
+import { TaskController } from "./task-controller.js";
 
 export default defineFeature({
     id: "discovery", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: [], startup: "eager",
@@ -22,10 +23,22 @@ export default defineFeature({
         const newVideoController = runtime.enabledContributions.includes("discovery.new-video")
             ? new NewVideoController({ document: globalThis.document, window: globalThis.window, settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], legacyStorage: deps[SERVICE.legacyStorage], dialog: deps[SERVICE.dialog], actressInfo: deps[SERVICE.actressInfo], movie: deps[SERVICE.movie], state: deps[SERVICE.state], eventBus: deps[SERVICE.eventBus], settingPlugin: runtime.resolveLegacyPlugin?.("SettingPlugin"), scope: runtime.scope })
             : null;
-        const taskPlugin = runtime.enabledContributions.includes("discovery.scheduler")
-            ? runtime.resolveLegacyPlugin?.("TaskPlugin")
+        const taskController = runtime.enabledContributions.includes("discovery.scheduler")
+            ? new TaskController({
+                document: globalThis.document,
+                window: globalThis.window,
+                storage: deps[SERVICE.storage],
+                legacyStorage: deps[SERVICE.legacyStorage],
+                http: deps[SERVICE.http],
+                actressInfo: deps[SERVICE.actressInfo],
+                movie: deps[SERVICE.movie],
+                features: deps[REGISTRY.feature],
+                settings: deps[SERVICE.settings],
+                eventBus: deps[SERVICE.eventBus],
+                scope: runtime.scope,
+            })
             : null;
-        const controller = new DiscoveryController({ hitShowController, top250Controller, newVideoController, taskPlugin, scope: runtime.scope });
+        const controller = new DiscoveryController({ hitShowController, top250Controller, newVideoController, taskController, scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

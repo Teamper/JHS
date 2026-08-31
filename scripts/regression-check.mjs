@@ -92,7 +92,7 @@ const settingSource = await read("src/plugins/backup/setting.js");
 const settingFormsSource = await read("src/plugins/backup/setting-forms.js");
 const settingTemplatesSource = await read("src/plugins/backup/setting-templates.js");
 const magnetHubSource = await read("src/plugins/external-search/magnet-hub.js");
-const newVideoTaskSource = await read("src/plugins/new-video/task.js");
+const taskControllerSource = await read("src/features/discovery/task-controller.js");
 const newVideoControllerSource = await read("src/features/discovery/new-video-controller.js");
 const themeSource = await read("src/core/theme.js");
 
@@ -403,7 +403,7 @@ assert(!mobileSource.includes('getOptionalDependency("ListPagePlugin")'), "mobil
 assert(!mobileSource.includes('getOptionalDependency("BlacklistPlugin")'), "mobile must not resolve BlacklistPlugin directly");
 assert(!settingSource.includes('getOptionalDependency("ListPagePlugin")'), "settings must not resolve ListPagePlugin directly");
 assert(!settingSource.includes('getOptionalDependency("BlacklistPlugin")'), "settings must not resolve BlacklistPlugin directly");
-assert(!newVideoTaskSource.includes('getOptionalDependency("BlacklistPlugin")'), "scheduler must not resolve BlacklistPlugin directly");
+assert(!taskControllerSource.includes('getOptionalDependency("BlacklistPlugin")'), "scheduler must not resolve BlacklistPlugin directly");
 assert(!listPageButton.includes('getOptionalDependency("BlacklistPlugin")'), "list actions must not resolve BlacklistPlugin directly");
 assert(!listPageButton.includes('getOptionalDependency("HistoryPlugin")'), "list actions must not resolve HistoryPlugin directly");
 assert(!fc2.includes('getOptionalDependency("FilterTitleKeywordPlugin")'), "FC2 must not resolve FilterTitleKeywordPlugin directly");
@@ -469,16 +469,19 @@ assertIncludes(discoveryManifestSource, 'id: "discovery"', "real discovery featu
 assertIncludes(discoveryManifestSource, 'new DiscoveryController({', "discovery feature controller ownership");
 assertIncludes(discoveryManifestSource, 'new HitShowController({', "discovery hot-ranking controller ownership");
 assertIncludes(discoveryManifestSource, 'new Top250Controller({', "discovery Top250 controller ownership");
+assertIncludes(discoveryManifestSource, 'new TaskController({', "discovery task controller ownership");
 assertIncludes(discoveryControllerSource, 'this.top250Controller?.start', "discovery Top250 lifecycle handoff");
 assertIncludes(compatibilityManifestSource, 'id: "compatibility"', "real compatibility feature manifest");
 assertIncludes(compatibilityControllerSource, "scope", "compatibility feature controller ownership");
 assertIncludes(statsManifestSource, 'id: "stats"', "real stats feature manifest");
 assertIncludes(statsControllerSource, "openDialog", "stats feature controller ownership");
 assertIncludes(discoveryControllerSource, 'this.newVideoController?.start ? this.newVideoController.start({ taskApi })', "discovery idle new-video handoff");
+assertIncludes(discoveryControllerSource, 'this.taskController?.start?.()', "discovery task controller lifecycle handoff");
 assertIncludes(discoveryControllerSource, 'openNewVideoDialog:', "discovery new-video API boundary");
 assertIncludes(discoveryManifestSource, 'new NewVideoController({', "discovery new-video controller ownership");
 assert(!newVideoControllerSource.includes("getRuntimeService("), "new-video controller must not resolve legacy runtime services");
-for (const source of [hitShow, top250, newVideoTaskSource, newVideoControllerSource]) {
+assert(!taskControllerSource.includes("getRuntimeService("), "task controller must not resolve legacy runtime services");
+for (const source of [hitShow, top250, taskControllerSource, newVideoControllerSource]) {
   assert(!source.includes('getOptionalDependency("TaskPlugin")') && !source.includes('getOptionalDependency("HitShowPlugin")') && !source.includes('getOptionalDependency("TOP250Plugin")'), "Discovery consumers must use Feature APIs");
 }
 assertIncludes(identityNavigationSource, 'this.identityApi?.openSearchByImage?.()', "JavDB navigation identity API boundary");
@@ -556,7 +559,7 @@ assert(/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*fle
 assert(/@media \(max-width:\s*767px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*display\s*:\s*none/.test(mobileSource), "mobile command bar must stay hidden");
 assert(!listPageButton.includes(":visible") && !listPageButton.includes("span.tag:contains"), "start identification must use card data across the full list");
 assert(!listPageSource.includes("currentPageBlockedItemCount"), "unused blocked-item counter must stay removed");
-assert((newVideoTaskSource.match(/锁任务出现错误:/g) || []).length === 1, "background lock failures must be logged once");
+assert((taskControllerSource.match(/锁任务出现错误:/g) || []).length === 1, "background lock failures must be logged once");
 assertIncludes(unifiedOfflineControllerSource, '.attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中")', "focusable offline submitting button state");
 assertIncludes(unifiedOfflineControllerSource, '.removeAttr("aria-busy aria-disabled").text(original)', "offline idle button restoration");
 assert(!unifiedOfflineControllerSource.includes('.prop("disabled", !0)'), "offline submission must preserve button focus");
@@ -608,7 +611,6 @@ const expectedPlugins = [
   ["external-search/magnet-hub.js", "MagnetHubPlugin", "MagnetHubPlugin"],
   ["image-viewer/screenshot.js", "ScreenShotPlugin", "ScreenShotPlugin"],
   ["image-viewer/bus-img.js", "BusImgPlugin", "BusImgPlugin"],
-  ["new-video/task.js", "TaskPlugin", "TaskPlugin"],
   ["status/mobile-bottom-bar.js", "MobileBottomBarPlugin", "MobileBottomBarPlugin"]
 ];
 
@@ -625,11 +627,11 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,OtherSitePlugin,MagnetHubPlugin,ScreenShotPlugin,TaskPlugin,MobileBottomBarPlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,OtherSitePlugin,MagnetHubPlugin,ScreenShotPlugin,MobileBottomBarPlugin",
   "JavDB plugin registration order changed"
 );
 assert(
-  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TaskPlugin,MobileBottomBarPlugin",
+  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,MobileBottomBarPlugin",
   "JavBus plugin registration order changed"
 );
 assert(!registry.includes("OneTwoThreeOfflinePlugin"), "123Pan auth must not be registered as a legacy plugin");
@@ -683,6 +685,7 @@ sourceByFile.set("features/external-bridge/javtrailers-controller.js", javTraile
 sourceByFile.set("features/external-bridge/subtitle-cat-controller.js", subtitleControllerSource);
 sourceByFile.set("features/discovery/hit-show-controller.js", hitShow);
 sourceByFile.set("features/discovery/top250-controller.js", top250);
+sourceByFile.set("features/discovery/task-controller.js", taskControllerSource);
 sourceByFile.set("features/discovery/new-video-controller.js", newVideoControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
@@ -703,7 +706,7 @@ const regressionMatrix = [
   ["统一离线提交", [["features/external-bridge/unified-offline-controller.js", "getAvailability"], ["features/external-bridge/unified-offline-controller.js", "capabilities"], ["features/external-bridge/unified-offline-controller.js", "appendOfflineHistory"]]],
   ["热播榜单", [["features/discovery/hit-show-controller.js", "class HitShowController"], ["features/discovery/hit-show-controller.js", "handlePlayback"], ["features/discovery/hit-show-controller.js", "loadScore"]]],
   ["Top250", [["features/discovery/top250-controller.js", "class Top250Controller"], ["features/discovery/top250-controller.js", "handleTop"], ["features/discovery/top250-controller.js", "openLoginDialog"]]],
-  ["新作品检测", [["new-video/task.js", "TaskPlugin"], ["features/discovery/new-video-controller.js", "class NewVideoController"], ["core/storage.js", "newVideoList"]]],
+  ["新作品检测", [["features/discovery/task-controller.js", "class TaskController"], ["features/discovery/new-video-controller.js", "class NewVideoController"], ["core/storage.js", "newVideoList"]]],
   ["黑名单检测", [["features/library/blacklist-controller.js", "class BlacklistController"], ["features/library/blacklist-repository.js", "class BlacklistRepository"], ["features/library/library-controller.js", "filter_keyword_title"], ["core/storage.js", "batchSaveBlacklistCarList"]]],
   ["统计面板", [["features/stats/stats-controller.js", "class StatsController"], ["features/stats/stats-controller.js", "coverageStart"], ["features/stats/stats-controller.js", "6.4.0"]]],
   ["兼容增强", [["features/compatibility/compatibility-controller.js", "class CompatibilityController"], ["features/compatibility/compatibility-controller.js", "jhs-actress-state-container"], ["features/compatibility/compatibility-controller.js", "createTreeWalker"]]],

@@ -42,7 +42,11 @@ function loadStorageManager(forage) {
 
 function loadTaskPlugin(gmHttp, overrides = {}) {
   const defaultUtils = { sleep: vi.fn(async () => {}), getNowStr: vi.fn(() => "2026-08-11 20:00:00") };
-  const context = vm.createContext({
+    const storageManager = { getSetting: vi.fn(async () => ({})), ...(overrides.storageManager || {}) };
+    const window = { location: new URL("https://javdb.example/"), isListPage: true, navigator: { locks: { request: vi.fn(async (_key, _options, callback) => callback({})) } } };
+    const document = { hidden: false, addEventListener: vi.fn(), removeEventListener: vi.fn() };
+    const scope = { assertActive: vi.fn(), listen: vi.fn(), addCleanup: vi.fn(), disposed: false };
+    const context = vm.createContext({
     console,
     URL,
     gmHttp,
@@ -56,16 +60,39 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
     clog: { log: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
     show: { info: vi.fn(), error: vi.fn() },
     utils: { ...defaultUtils, ...overrides.utils },
-    storageManager: overrides.storageManager || { getSetting: vi.fn(async () => ({})) },
+    storageManager,
+    window,
+    document,
+    storage: { getLocal: vi.fn(), setLocal: vi.fn() },
+    scope,
+    readListItem: () => ({ carNum: "TEST-1", url: "", title: "", publishTime: "" }),
+    parseNumberSetting: (value, fallback, { min = -Infinity, max = Infinity } = {}) => { const number = Number(value); return Number.isFinite(number) && number >= min && number <= max ? number : fallback; },
+    parseTaskTimestamp: value => { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : null; },
+    selectLatestPublishTime: values => values.filter(Boolean).sort().pop() || null,
+    shouldSkipStopped: () => false,
+    normalizeCarNum: value => String(value || "").toUpperCase(),
+    escapeHtml: value => String(value ?? ""),
     $: () => ({ text: vi.fn() })
   });
-  const parsers = ["src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js"].map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
-  const source = `${parsers}\n${readTestFile(join(repoRoot, "src/plugins/new-video/task.js"), "utf8")}\nglobalThis.TestTaskPlugin = TaskPlugin;`;
+  const parsers = ["src/integrations/javdb/parser.js", "src/core/host-list-parser.js"].map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
+  const taskSource = readTestFile(join(repoRoot, "src/features/discovery/task-controller.js"), "utf8")
+    .replace(/^import .*;\r?\n/gm, "")
+    .replace("export class TaskController", "class TaskController");
+  const source = `${parsers}\n${taskSource}\nglobalThis.TestTaskController = TaskController;`;
   vm.runInContext(source, context);
-  const task = new context.TestTaskPlugin();
-  task.getRuntimeService = name => name === "actressInfo" ? {
-    collection: async (_integrationId, input) => gmHttp.get(input.pageUrl)
-  } : name === "scope" ? async () => null : name === "movie" ? { externalSiteOrigin: () => "https://javdb.example" } : null;
+  const task = new context.TestTaskController({
+    document,
+    window,
+    storage: context.storage,
+    legacyStorage: storageManager,
+    http: {},
+    actressInfo: { collection: async (_integrationId, input) => gmHttp.get(input.pageUrl) },
+    movie: { externalSiteOrigin: () => "https://javdb.example" },
+    features: {},
+    settings: { snapshot: () => ({}) },
+    eventBus: {},
+    scope,
+  });
   return task;
 }
 

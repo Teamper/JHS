@@ -15,7 +15,6 @@ import { BusPreviewVideoPlugin } from "./image-viewer/bus-preview-video.js";
 import { CoverButtonPlugin } from "./image-viewer/cover-button.js";
 import { PreviewVideoPlugin } from "./image-viewer/preview-video.js";
 import { ScreenShotPlugin } from "./image-viewer/screenshot.js";
-import { TaskPlugin } from "./new-video/task.js";
 import { AutoPagePlugin } from "./status/auto-page.js";
 import { BusDetailPagePlugin } from "./status/bus-detail-page.js";
 import { DetailPageButtonPlugin } from "./status/detail-page-button.js";
@@ -52,7 +51,6 @@ export const legacyContributionManifests = Object.freeze([
     manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie, SERVICE.storage, SERVICE.settings], { managedByFeature: true }),
     manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage, SERVICE.http, SERVICE.magnet], { managedByFeature: true }),
     manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot, SERVICE.settings], { managedByFeature: true }),
-    manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }, [SERVICE.storage, SERVICE.http, SERVICE.actressInfo, SERVICE.movie, REGISTRY.feature], { managedByFeature: true }),
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [PORT.host, SERVICE.settings, SERVICE.profile, REGISTRY.feature], { managedByFeature: true }),
     manifest("list.javbus-images", "list", BusImgPlugin, ["javbus"], { javbus: 9 }, [], { managedByFeature: true }),
     manifest("detail.javbus-native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }, [], { managedByFeature: true }),

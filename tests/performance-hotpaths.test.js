@@ -10,15 +10,15 @@ const repoRoot = join(import.meta.dirname, "..");
 
 function loadTaskLifecycle({ isListPage = false, hidden = false } = {}) {
     const listeners = new Map(), documentListeners = new Map(), setTimeoutSpy = vi.fn(() => 1), clearTimeoutSpy = vi.fn(), cleanups = [];
-    const location = new URL("https://javdb.com/v/test"), window = {
-        location, isListPage, addEventListener: (type, listener) => listeners.set(type, listener), removeEventListener: type => listeners.delete(type)
+    const locks = { request: vi.fn(async (key, options, callback) => callback({ key })) }, location = new URL("https://javdb.com/v/test"), window = {
+        location, isListPage, navigator: { locks }, addEventListener: (type, listener) => listeners.set(type, listener), removeEventListener: type => listeners.delete(type)
     }, document = {
         hidden, addEventListener: (type, listener) => documentListeners.set(type, listener), removeEventListener: type => documentListeners.delete(type)
-    }, locks = { request: vi.fn(async (key, options, callback) => callback({ key })) };
+    };
     const storage = { getLocal: vi.fn(), setLocal: vi.fn() }, scope = {
         listen(target, type, listener) { target.addEventListener(type, listener); cleanups.push(() => target.removeEventListener(type, listener)); },
         addCleanup(cleanup) { cleanups.push(cleanup); },
-        dispose() { [...cleanups].reverse().forEach(cleanup => cleanup()); }
+        dispose() { [...cleanups].reverse().forEach(cleanup => cleanup()); }, assertActive() {}
     };
     const context = vm.createContext({
         console, URL, window, document, navigator: { locks }, setTimeout: setTimeoutSpy, clearTimeout: clearTimeoutSpy,
@@ -32,12 +32,14 @@ function loadTaskLifecycle({ isListPage = false, hidden = false } = {}) {
     const source = [
         readTestFile(join(repoRoot, "src/core/site-context.js"), "utf8"),
         readTestFile(join(repoRoot, "src/integrations/javdb/parser.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/integrations/host-list/parser.js"), "utf8"),
-        readTestFile(join(repoRoot, "src/plugins/new-video/task.js"), "utf8"),
-        "globalThis.TestTaskPlugin=TaskPlugin;"
+        readTestFile(join(repoRoot, "src/core/host-list-parser.js"), "utf8"),
+        readTestFile(join(repoRoot, "src/features/discovery/task-controller.js"), "utf8")
+            .replace(/^import .*;\r?\n/gm, "")
+            .replace("export class TaskController", "class TaskController"),
+        "globalThis.TestTaskController=TaskController;"
     ].join("\n");
     vm.runInContext(source, context);
-    return { plugin: new context.TestTaskPlugin(), window, document, listeners, documentListeners, locks, setTimeoutSpy, scope };
+    return { plugin: new context.TestTaskController({ document, window, storage, legacyStorage: { getSetting: vi.fn(async () => ({})) }, http: {}, actressInfo: {}, movie: { externalSiteOrigin: () => "https://javdb.com" }, features: {}, settings: { snapshot: () => ({}) }, eventBus: {}, scope }), window, document, listeners, documentListeners, locks, setTimeoutSpy, scope };
 }
 
 function loadListObserver() {
@@ -84,7 +86,7 @@ describe("background task lifecycle", () => {
     it("does not initialize or schedule on a detail page despite the lexical isListPage helper", async () => {
         const { plugin, documentListeners, setTimeoutSpy } = loadTaskLifecycle({ isListPage: false });
         plugin.doTask = vi.fn();
-        await plugin.handle();
+        await plugin.start();
         expect(plugin.doTask).not.toHaveBeenCalled();
         expect(documentListeners.size).toBe(0);
         expect(setTimeoutSpy).not.toHaveBeenCalled();
@@ -93,7 +95,7 @@ describe("background task lifecycle", () => {
     it("runs once on a visible list page and schedules the next visible check", async () => {
         const { plugin, setTimeoutSpy, scope, listeners, documentListeners } = loadTaskLifecycle({ isListPage: true });
         plugin.doTask = vi.fn(async () => {});
-        await plugin.handle();
+        await plugin.start();
         expect(plugin.doTask).toHaveBeenCalledTimes(1);
         expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 3e5);
         expect(listeners.has("pagehide")).toBe(true);
@@ -105,7 +107,7 @@ describe("background task lifecycle", () => {
 
     it("keeps hidden list pages dormant and retains the cross-tab lock", async () => {
         const hidden = loadTaskLifecycle({ isListPage: true, hidden: true });
-        hidden.plugin.doTask = vi.fn(), await hidden.plugin.handle();
+        hidden.plugin.doTask = vi.fn(), await hidden.plugin.start();
         expect(hidden.plugin.doTask).not.toHaveBeenCalled();
         expect(hidden.setTimeoutSpy).not.toHaveBeenCalled();
 

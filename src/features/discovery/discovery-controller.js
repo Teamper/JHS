@@ -5,12 +5,12 @@
  * the Discovery Feature API.
  */
 export class DiscoveryController {
-    /** @param {{hitShowController?: any, hitShowPlugin?: any, top250Controller?: any, top250Plugin?: any, newVideoController?: any, newVideoPlugin?: any, taskPlugin?: any, scope: any}} options */
+    /** @param {{hitShowController?: any, hitShowPlugin?: any, top250Controller?: any, top250Plugin?: any, newVideoController?: any, newVideoPlugin?: any, taskController?: any, scope: any}} options */
     constructor(options) {
         this.hitShowController = options.hitShowController ?? options.hitShowPlugin ?? null;
         this.top250Controller = options.top250Controller ?? options.top250Plugin ?? null;
         this.newVideoController = options.newVideoController ?? options.newVideoPlugin ?? null;
-        this.taskPlugin = options.taskPlugin ?? null;
+        this.taskController = options.taskController ?? null;
         this.scope = options.scope;
         this.started = false;
         this.idleHandle = null;
@@ -27,14 +27,14 @@ export class DiscoveryController {
             .then(() => this.hitShowController?.start ? this.hitShowController.start({ discoveryApi: this.getApi() }) : this.hitShowController?.handle?.({ scope: this.scope, discoveryApi: this.getApi() }))
             .then(() => this.top250Controller?.start ? this.top250Controller.start({ discoveryApi: this.getApi() }) : this.top250Controller?.handle?.({ scope: this.scope, discoveryApi: this.getApi() }))
             .then(() => {
-                if (!this.newVideoController && !this.taskPlugin) return;
+                if (!this.newVideoController && !this.taskController) return;
                 const runIdle = () => {
                     this.idleHandle = null;
                     this.idleIsCallback = false;
                     if (this.scope.disposed || !this.started) return;
                     Promise.resolve()
                         .then(() => this.newVideoController?.start ? this.newVideoController.start({ taskApi }) : this.newVideoController?.handle?.({ scope: this.scope, taskApi }))
-                        .then(() => this.taskPlugin?.handle?.({ scope: this.scope }))
+                        .then(() => this.taskController?.start?.())
                         .catch((error) => {
                             clog.error("Discovery 空闲初始化失败", error);
                             this.dispose();
@@ -71,17 +71,17 @@ export class DiscoveryController {
             getPendingNewVideoTotal: expose(this.newVideoController, "getPendingNewVideoTotal"),
             resetNewVideoButtonTip: expose(this.newVideoController, "resetBtnTip"),
             resetBtnTip: expose(this.newVideoController, "resetBtnTip"),
-            hasTask: Boolean(this.taskPlugin),
-            lastCheckFavoriteActressTimeKey: this.taskPlugin?.lastCheckFavoriteActressTimeKey ?? null,
-            lastCheckNewVideoTimeKey: this.taskPlugin?.lastCheckNewVideoTimeKey ?? null,
-            getTaskSchedule: expose(this.taskPlugin, "getTaskSchedule"),
-            getTaskStatusSnapshot: expose(this.taskPlugin, "getTaskStatusSnapshot"),
-            checkBlacklist: expose(this.taskPlugin, "checkBlacklist"),
-            checkFavoriteActress: expose(this.taskPlugin, "checkFavoriteActress"),
-            checkNewVideo: expose(this.taskPlugin, "checkNewVideo"),
-            checkOneNewVideo: expose(this.taskPlugin, "checkOneNewVideo"),
-            isNetworkBlocked: expose(this.taskPlugin, "isNetworkBlocked"),
-            singleTaskKey: this.taskPlugin?.singleTaskKey ?? null,
+            hasTask: Boolean(this.taskController),
+            lastCheckFavoriteActressTimeKey: this.taskController?.lastCheckFavoriteActressTimeKey ?? null,
+            lastCheckNewVideoTimeKey: this.taskController?.lastCheckNewVideoTimeKey ?? null,
+            getTaskSchedule: expose(this.taskController, "getTaskSchedule"),
+            getTaskStatusSnapshot: expose(this.taskController, "getTaskStatusSnapshot"),
+            checkBlacklist: expose(this.taskController, "checkBlacklist"),
+            checkFavoriteActress: expose(this.taskController, "checkFavoriteActress"),
+            checkNewVideo: expose(this.taskController, "checkNewVideo"),
+            checkOneNewVideo: expose(this.taskController, "checkOneNewVideo"),
+            isNetworkBlocked: expose(this.taskController, "isNetworkBlocked"),
+            singleTaskKey: this.taskController?.singleTaskKey ?? null,
         });
     }
 

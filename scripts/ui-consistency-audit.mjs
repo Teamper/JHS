@@ -51,7 +51,7 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, fc2
   readFile(join(srcRoot, "plugins", "status", "list-page-button.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "image-viewer", "cover-button.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "status", "highlight-magnet.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "new-video", "task.js"), "utf8"),
+  readFile(join(srcRoot, "features", "discovery", "task-controller.js"), "utf8"),
   readFile(join(srcRoot, "core", "storage-queue.js"), "utf8"),
   readFile(join(srcRoot, "core", "constants.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "image-viewer", "preview-video.js"), "utf8"),
