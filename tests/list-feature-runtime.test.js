@@ -15,7 +15,7 @@ import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 
 describe("List FeatureRuntime ownership", () => {
     it("passes the feature lifecycle scope to the legacy migration adapter", async () => {
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), attachListEvents: vi.fn(), attachListFilter: vi.fn(), attachListIncremental: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), attachListEvents: vi.fn(), attachListFilter: vi.fn(), attachListIncremental: vi.fn(), doFilter: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
             legacyPlugin,
             hostAdapter,
             scope,
@@ -41,10 +41,14 @@ describe("List FeatureRuntime ownership", () => {
         const card = globalThis.$(".item");
         api.batchSaveAllVideos("scope", "favorite");
         api.openMovieDetail("item", { newTab: false });
+        const filterRequest = vi.spyOn(controller.filter, "doFilter").mockResolvedValue(true);
+        await api.doFilter("1:0");
         expect(api.findCarNumAndHref(card)).toMatchObject({ carNum: "ABC-123", url: "/v/ABC-123" });
         api.parseActressName("/movie/ABC-123");
         api.setQuickFilter("favorite", { syncUi: false });
         expect(legacyPlugin.batchSaveAllVideos).toHaveBeenCalledWith("scope", "favorite");
+        expect(filterRequest).toHaveBeenCalledWith("1:0");
+        expect(legacyPlugin.doFilter).not.toHaveBeenCalled();
         expect(legacyPlugin.openMovieDetail).toHaveBeenCalledWith("item", { newTab: false });
         expect(legacyPlugin.findCarNumAndHref).not.toHaveBeenCalled();
         expect(legacyPlugin.parseActressName).toHaveBeenCalledWith("/movie/ABC-123");

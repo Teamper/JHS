@@ -223,11 +223,12 @@ export class ListController {
     getApi() {
         const legacyPlugin = /** @type {any} */ (this.legacyPlugin);
         const call = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => legacyPlugin?.[name]?.(...args);
+        const route = (/** @type {any} */ feature, /** @type {string} */ name) => (/** @type {any[]} */ ...args) => feature && "function" === typeof feature[name] ? feature[name](...args) : legacyPlugin?.[name]?.(...args);
         return Object.freeze({
             getListSelectors: () => this.hostAdapter.getListSelectors?.() ?? legacyPlugin?.getListSelectors?.() ?? legacyPlugin?.getSelector?.(),
             advanceListGeneration: () => this.state.advanceListGeneration(),
-            configureHoverPreview: call("configureHoverPreview"),
-            replaceHdImg: call("replaceHdImg"),
+            configureHoverPreview: route(this.images, "configureHoverPreview"),
+            replaceHdImg: route(this.images, "replaceHdImg"),
             doFilter: (/** @type {any[]} */ ...args) => this.filter ? this.filter.doFilter(...args) : legacyPlugin?.doFilter?.(...args),
             createQuickFilter: (/** @type {unknown} */ initialFilter) => this.state.createQuickFilter(initialFilter),
             batchSaveAllVideos: (/** @type {any[]} */ ...args) => {
@@ -237,8 +238,8 @@ export class ListController {
             reconcileListItems: (/** @type {Element[] | null} */ items, /** @type {string} */ revision) => this.state.reconcileListItems(items, revision),
             applyVisibility: (/** @type {Element[] | null} */ items) => this.state.applyVisibility(items),
             syncQuickFilterUi: () => this.state.syncQuickFilterUi(),
-            rebuildItemIndex: call("rebuildItemIndex"),
-            bindMovieDetailNavigation: call("bindMovieDetailNavigation"),
+            rebuildItemIndex: route(this.index, "rebuildItemIndex"),
+            bindMovieDetailNavigation: route(this.view, "bindMovieDetailNavigation"),
             bindClick: call("bindClick"),
             openMovieDetail: call("openMovieDetail"),
             showCarNumBox: call("showCarNumBox"),
@@ -246,7 +247,7 @@ export class ListController {
             parseActressName: call("parseActressName"),
             setQuickFilter: (/** @type {unknown} */ filter, /** @type {{syncUi?: boolean}} [options] */ options) => this.setQuickFilter(filter, options),
             getActiveQuickFilter: () => this.state.activeQuickFilter,
-            createEvaluationContext: call("createEvaluationContext"),
+            createEvaluationContext: (/** @type {any[]} */ ...args) => this.evaluation ? (/** @type {any} */ (this.evaluation)).createEvaluationContext(...args) : legacyPlugin?.createEvaluationContext?.(...args),
             translateListItems: (/** @type {any[]} */ ...args) => {
                 const translation = /** @type {any} */ (this.titleTranslation);
                 return translation ? translation.translateListItems(...args) : legacyPlugin?.translateListItems?.(...args);
@@ -255,8 +256,8 @@ export class ListController {
                 const translation = /** @type {any} */ (this.titleTranslation);
                 return translation ? translation.revertTranslation(...args) : legacyPlugin?.revertTranslation?.(...args);
             },
-            invalidateTranslations: () => this.titleTranslation ? this.titleTranslation.invalidateTranslations() : legacyPlugin?.invalidateTranslations?.(),
-            getCurrentPageSummary: () => this.summary ? this.summary.collectCurrentPageSummary() : legacyPlugin?.getCurrentPageSummary?.(),
+            invalidateTranslations: route(this.titleTranslation, "invalidateTranslations"),
+            getCurrentPageSummary: route(this.summary, "collectCurrentPageSummary"),
             scanAllPages: (/** @type {any} */ options) => scanAllPages(options),
             evaluateListItem: (/** @type {any} */ record, /** @type {any} */ context, /** @type {any} */ options) => evaluateListItem(record, context, options),
         });

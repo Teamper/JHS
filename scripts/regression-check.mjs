@@ -257,6 +257,11 @@ assertIncludes(listControllerSource, "new ListTranslationService({", "list trans
 assertIncludes(listControllerSource, "attachListTranslation", "list translation migration handoff");
 assertIncludes(listControllerSource, "new ListFilterService({", "list filter service ownership");
 assertIncludes(listControllerSource, "attachListFilter", "list filter migration handoff");
+assertIncludes(listControllerSource, 'configureHoverPreview: route(this.images, "configureHoverPreview")', "list image API ownership");
+assertIncludes(listControllerSource, 'rebuildItemIndex: route(this.index, "rebuildItemIndex")', "list index API ownership");
+assertIncludes(listControllerSource, 'bindMovieDetailNavigation: route(this.view, "bindMovieDetailNavigation")', "list view API ownership");
+assertIncludes(listControllerSource, "createEvaluationContext(...args)", "list evaluation API ownership");
+assertIncludes(listControllerSource, 'getCurrentPageSummary: route(this.summary, "collectCurrentPageSummary")', "list summary API ownership");
 assertIncludes(listControllerSource, "new ListBatchService({", "list batch service ownership");
 assertIncludes(listControllerSource, "attachListBatch", "list batch migration handoff");
 assertIncludes(listControllerSource, "new ListIncrementalService({", "list incremental service ownership");
