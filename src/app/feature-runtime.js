@@ -195,15 +195,15 @@ export class FeatureRuntime {
 
     async start() {
         const eagerActivations = [];
+        const idleManifests = [];
         for (const manifest of this.manifests.values()) {
             if (!this.isEligible(manifest)) continue;
             if (manifest.startup === "eager") eagerActivations.push(this.activate(manifest.id));
-            else if (manifest.startup === "idle") {
-                const schedule = globalThis.requestIdleCallback ?? ((callback) => setTimeout(callback, 0));
-                schedule(() => void this.activate(manifest.id).catch(() => undefined));
-            }
+            else if (manifest.startup === "idle") idleManifests.push(manifest);
         }
         await Promise.all(eagerActivations);
+        const schedule = globalThis.requestIdleCallback ?? ((callback) => setTimeout(callback, 0));
+        idleManifests.forEach((manifest) => schedule(() => void this.activate(manifest.id).catch(() => undefined)));
     }
 
     getActiveFeatureIds() { return [...this.activations.keys()]; }
