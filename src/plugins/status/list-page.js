@@ -137,6 +137,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {any} */ this.listEvaluation = null;
         /** @type {any} */ this.listSummary = null;
         /** @type {any} */ this.listTranslation = null;
+        /** @type {any} */ this.listIncremental = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -180,6 +181,10 @@ export class ListPagePlugin extends BasePlugin {
     /** Attach the FeatureRuntime-owned title translation service during migration. @param {any} translation */
     attachListTranslation(translation) {
         this.listTranslation = translation;
+    }
+    /** Attach the FeatureRuntime-owned incremental list service during migration. @param {any} incremental */
+    attachListIncremental(incremental) {
+        this.listIncremental = incremental;
     }
     /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
     async getLibraryFeatureApi() {
@@ -359,6 +364,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {Element[]} items @param {string} [revision] @returns {Promise<void>} */
     async processAddedItems(items, revision = this.captureListRevision()) {
+        if (this.listIncremental) return this.listIncremental.processAddedItems(items, revision);
         const selector = this.getListSelectors(), covers = items.flatMap((/** @type {Element} */ item) => [ ...item.querySelectorAll(selector.coverImgSelector) ]);
         this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items);
         const filtered = await this.doFilterItems(items, revision);
