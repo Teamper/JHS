@@ -214,6 +214,7 @@ const listMediaSource = await read("src/features/list/list-media-controller.js")
 const listImageSource = await read("src/features/list/list-image-controller.js");
 const listEventSource = await read("src/features/list/list-event-controller.js");
 const listEvaluationSource = await read("src/features/list/list-evaluation-service.js");
+const listSummarySource = await read("src/features/list/list-summary-service.js");
 const listPageAdapterSource = await read("src/compat/list-page-adapter.js");
 const listViewSource = await read("src/features/list/list-view.js");
 const listActionsSource = await read("src/plugins/status/list-page-button.js");
@@ -247,6 +248,8 @@ assertIncludes(listControllerSource, "new ListEventController({", "list event li
 assertIncludes(listControllerSource, "attachListEvents", "list event migration handoff");
 assertIncludes(listControllerSource, "new ListEvaluationService({", "list evaluation context ownership");
 assertIncludes(listControllerSource, "attachListEvaluation", "list evaluation migration handoff");
+assertIncludes(listControllerSource, "new ListSummaryService({", "list summary ownership");
+assertIncludes(listControllerSource, "attachListSummary", "list summary migration handoff");
 assertIncludes(listControllerSource, "new ListBatchService({", "list batch service ownership");
 assertIncludes(listControllerSource, "attachListBatch", "list batch migration handoff");
 assertIncludes(listControllerSource, "readItem: (item) => this.readListItem(item)", "list card reader ownership");
@@ -267,6 +270,7 @@ assertIncludes(listEventSource, "legacy-refresh", "list refresh event ownership"
 assertIncludes(listEventSource, "this.evaluation?.invalidate()", "list evaluation cache invalidation");
 assertIncludes(listPageSource, "this.listMedia ? this.listMedia.start()", "legacy list media compatibility handoff");
 assertIncludes(listPageSource, "if (this.listBatch) return this.listBatch.batchSaveAllVideos", "legacy list batch compatibility handoff");
+assertIncludes(listPageSource, "applyListSummary(summary)", "legacy list summary compatibility handoff");
 assertIncludes(listPageSource, "if (this.listImages) return this.listImages.replaceHdImg(e);", "legacy list image compatibility handoff");
 assertIncludes(listPageSource, "if (this.listDomObserver) return this.listDomObserver.start();", "legacy list DOM observer compatibility handoff");
 assertIncludes(listBatchServiceSource, "scanAllPages({", "list batch scanner ownership");
@@ -274,6 +278,8 @@ assertIncludes(listBatchServiceSource, "stateService.patch(chunk.map((item) => i
 assertIncludes(listBatchServiceSource, "scope.ownTimeout(timer)", "list batch progress lifecycle ownership");
 assertIncludes(listEvaluationSource, "stateService.getActivityLog()", "list evaluation activity snapshot ownership");
 assertIncludes(listEvaluationSource, "invalidate()", "list evaluation cache lifecycle ownership");
+assertIncludes(listSummarySource, "scope.ownTimeout(timer)", "list summary timer lifecycle ownership");
+assertIncludes(listSummarySource, "collectCurrentPageSummary()", "list summary aggregation ownership");
 const detailControllerSource = await read("src/features/detail/detail-controller.js");
 const detailManifestSource = await read("src/features/detail/manifest.js");
 const detailWorkspaceSource = await read("src/plugins/status/detail-workspace.js");

@@ -135,6 +135,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {any} */ this.listEvents = null;
         /** @type {any} */ this.listBatch = null;
         /** @type {any} */ this.listEvaluation = null;
+        /** @type {any} */ this.listSummary = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -170,6 +171,10 @@ export class ListPagePlugin extends BasePlugin {
     /** Attach the FeatureRuntime-owned evaluation context during migration. @param {any} evaluation */
     attachListEvaluation(evaluation) {
         this.listEvaluation = evaluation;
+    }
+    /** Attach the FeatureRuntime-owned current-page summary during migration. @param {any} summary */
+    attachListSummary(summary) {
+        this.listSummary = summary;
     }
     /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
     async getLibraryFeatureApi() {
@@ -478,6 +483,7 @@ export class ListPagePlugin extends BasePlugin {
         return this.filterContext = { titleKeywords, settings, carMap, recentCarNums, actorCarNumToNameMap, actressCarNumToNameMap };
     }
     collectCurrentPageSummary() {
+        if (this.listSummary) return this.listSummary.collectCurrentPageSummary();
         const summary = { total: 0, pending: 0, blockedItems: 0, favorite: 0, downloaded: 0, watched: 0, debug: { manualBlocked: 0, keywordBlocked: 0, actorBlocked: 0, actressBlocked: 0 } };
         $(this.getListSelectors().itemSelector).each(((/** @type {number} */ e, /** @type {Element} */ item) => {
             const card = $(item);
@@ -491,15 +497,21 @@ export class ListPagePlugin extends BasePlugin {
     getCurrentPageSummary() {
         return this.collectCurrentPageSummary();
     }
-    recountStatuses() {
-        const summary = this.collectCurrentPageSummary();
+    /** Project the Feature-owned summary into legacy fields still rendered by the old page template. @param {any} summary */
+    applyListSummary(summary) {
         this.currentPageFilterCount = summary.debug.manualBlocked, this.currentPageFavoriteCount = summary.favorite, this.currentPageHasDownCount = summary.downloaded,
         this.currentPageHasWatchCount = summary.watched, this.currentPageKeywordFilterCount = summary.debug.keywordBlocked,
         this.currentPageActorFilterCount = summary.debug.actorBlocked + summary.debug.actressBlocked, this.currentPageWaitCheckCount = summary.pending,
         this.currentPageTotalCount = summary.total;
         return summary;
     }
+    recountStatuses() {
+        if (this.listSummary) return this.listSummary.recountStatuses();
+        const summary = this.collectCurrentPageSummary();
+        return this.applyListSummary(summary);
+    }
     scheduleRecount() {
+        if (this.listSummary) return this.listSummary.scheduleRecount();
         if (this.recountFrame) return;
         const schedule = window.requestAnimationFrame || ((/** @type {FrameRequestCallback} */ callback) => setTimeout(callback, 0));
         this.recountFrame = schedule((() => {
