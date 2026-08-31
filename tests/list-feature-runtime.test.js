@@ -291,7 +291,7 @@ describe("List FeatureRuntime ownership", () => {
         await manager.processCss();
         await manager.processPlugins();
 
-        expect(insertStyle).toHaveBeenCalledOnce();
+        expect(insertStyle).not.toHaveBeenCalled();
         expect(handle).not.toHaveBeenCalled();
         expect(manager.getTimings()).toEqual([expect.objectContaining({ name: "FeatureOwnedPlugin", status: "managed-feature" })]);
     });

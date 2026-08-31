@@ -7,7 +7,7 @@ import { defineFeature } from "../contracts/manifests.js";
 export { LEGACY_PLUGIN_CONTRIBUTION_MAP, migrateDisabledPlugins } from "../core/legacy-plugin-contributions.js";
 
 export class FeatureRuntime {
-    /** @param {{container: import("./dependency-container.js").DependencyContainer, commands: import("./command-registry.js").CommandRegistry, diagnostics: import("../services/diagnostics-service.js").DiagnosticsService, disabled?: string[], site?: string, route?: string}} options */
+    /** @param {{container: import("./dependency-container.js").DependencyContainer, commands: import("./command-registry.js").CommandRegistry, diagnostics: import("../services/diagnostics-service.js").DiagnosticsService, disabled?: string[], site?: string, route?: string, styles?: any}} options */
     constructor(options) {
         this.container = options.container;
         this.commands = options.commands;
@@ -15,6 +15,7 @@ export class FeatureRuntime {
         this.disabled = new Set(migrateDisabledPlugins(options.disabled));
         this.site = options.site ?? "unknown";
         this.route = options.route ?? "unknown";
+        this.styles = options.styles ?? null;
         /** @type {Map<string, Record<string, any>>} */
         this.manifests = new Map();
         /** @type {Map<string, string>} */
@@ -25,6 +26,7 @@ export class FeatureRuntime {
         this.contributionScopes = new Map();
         /** @type {((name: string) => any) | null} */
         this.legacyResolver = null;
+        /** @type {any} */ this.legacyContributionRegistry = null;
         this.commands.setActivator((featureId) => this.activate(featureId).then(() => undefined));
     }
 
@@ -32,6 +34,29 @@ export class FeatureRuntime {
     setLegacyResolver(resolver) {
         if (typeof resolver !== "function") throw new TypeError("Legacy resolver must be a function");
         this.legacyResolver = resolver;
+    }
+
+    /** @param {any} registry */
+    setLegacyContributionRegistry(registry) {
+        this.legacyContributionRegistry = registry;
+    }
+
+    /** @param {Record<string, any>} manifest @param {readonly string[]} enabledContributions @param {LifecycleScope} scope */
+    async mountLegacyStyles(manifest, enabledContributions, scope) {
+        if (!this.styles?.register || !this.legacyContributionRegistry?.getFeaturePlugins) return;
+        for (const { contributionId, plugin } of this.legacyContributionRegistry.getFeaturePlugins(manifest.id, enabledContributions)) {
+            if (plugin.managedByFeature !== true || typeof plugin.initCss !== "function") continue;
+            try {
+                const css = await plugin.initCss();
+                if (!css) continue;
+                const styleId = `jhs-feature-${manifest.id}-${contributionId}`.replace(/[^a-zA-Z0-9_-]/g, "-");
+                const release = this.styles.register(styleId, css);
+                typeof release === "function" && scope.addCleanup(release);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                this.diagnostics.recordError({ source: "legacy-plugin", plugin: plugin.getName?.() || contributionId, phase: "initCss", message });
+            }
+        }
     }
 
     /** @param {Record<string, any>} manifest */
@@ -127,6 +152,7 @@ export class FeatureRuntime {
         try {
             const dependencies = this.container.resolveDeclared(manifest.requires);
             const enabledContributions = Object.freeze(manifest.contributes.filter((/** @type {string} */ id) => !this.disabled.has(id)));
+            await this.mountLegacyStyles(manifest, enabledContributions, scope);
             const result = await manifest.activate(dependencies, Object.freeze({
                 scope, enabledContributions, route: this.route,
                 resolveLegacyPlugin: (/** @type {string} */ name) => this.legacyResolver?.(name),

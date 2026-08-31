@@ -30,6 +30,7 @@
     "src/core/http.js",
     "src/core/javdb-api.js",
     "src/core/legacy-plugin-contributions.js",
+    "src/core/legacy-contribution-registry.js",
     "src/core/lifecycle-scope.js",
     "src/core/list-item-reader.js",
     "src/core/magnet-quality.js",

@@ -3,6 +3,7 @@
 import { defineContribution } from "../contracts/manifests.js";
 import { PORT, REGISTRY, SERVICE } from "../contracts/tokens.js";
 import { LEGACY_PLUGIN_DEPENDENCY_MAP } from "./dependency-map.js";
+import { LegacyContributionRegistry } from "../core/legacy-contribution-registry.js";
 import { SettingPlugin } from "./backup/setting.js";
 import { Fc2By123AvPlugin } from "./external-search/fc2-by-123av.js";
 import { Fc2Plugin } from "./external-search/fc2.js";
@@ -66,12 +67,18 @@ for (const contribution of legacyContributionManifests) {
     legacyPluginIds.add(contribution.legacyPluginId);
 }
 
-/** @param {import("../core/plugin-manager.js").PluginManager} pluginManager @param {import("../app/feature-runtime.js").FeatureRuntime} featureRuntime @param {string} site */
-export function registerSitePlugins(pluginManager, featureRuntime, site) {
+/** @param {import("../core/plugin-manager.js").PluginManager} pluginManager @param {import("../app/feature-runtime.js").FeatureRuntime} featureRuntime @param {string} site @param {LegacyContributionRegistry} [legacyRegistry] */
+export function registerSitePlugins(pluginManager, featureRuntime, site, legacyRegistry = new LegacyContributionRegistry({ diagnostics: pluginManager.diagnostics })) {
     pluginManager.setDependencyDeclarations(LEGACY_PLUGIN_DEPENDENCY_MAP);
-    pluginManager.setCatalogDescriptors(legacyContributionManifests
+    legacyRegistry.setDependencyDeclarations(LEGACY_PLUGIN_DEPENDENCY_MAP);
+    const descriptors = legacyContributionManifests
         .filter((item) => item.sites.includes(site))
-        .map((item) => ({ name: item.legacyPluginId, disableable: featureRuntime.isFeatureDisableable(item.featureId) })));
+        .map((item) => ({ name: item.legacyPluginId, disableable: featureRuntime.isFeatureDisableable(item.featureId) }));
+    pluginManager.setCatalogDescriptors(descriptors);
+    legacyRegistry.setCatalogDescriptors(descriptors);
+    pluginManager.attachCompatibilityRegistry(legacyRegistry);
+    featureRuntime.setLegacyResolver((name) => pluginManager.resolveDeclaredPlugin(name));
+    featureRuntime.setLegacyContributionRegistry(legacyRegistry);
     legacyContributionManifests
         .filter((item) => item.sites.includes(site) && featureRuntime.isContributionEnabled(item.featureId, item.id, item.legacyPluginId))
         .sort((left, right) => Number(left.order[site]) - Number(right.order[site]))
@@ -103,6 +110,8 @@ export function registerSitePlugins(pluginManager, featureRuntime, site) {
                 if (!name) throw new Error(`Legacy contribution ${item.id} has no runtime name for ${String(token)}`);
                 runtimeServices[name] = dependencies[token];
             }
-            pluginManager.register(item.plugin, runtimeServices, { disableable: featureRuntime.isFeatureDisableable(item.featureId), managedByFeature: item.managedByFeature === true && (!item.managedRoutes || item.managedRoutes.includes(featureRuntime.route)) });
+            const managedByFeature = item.managedByFeature === true && (!item.managedRoutes || item.managedRoutes.includes(featureRuntime.route));
+            const target = managedByFeature ? legacyRegistry : pluginManager;
+            target.register(item.plugin, runtimeServices, { disableable: featureRuntime.isFeatureDisableable(item.featureId), managedByFeature, dependencyResolver: legacyRegistry }, { featureId: item.featureId, contributionId: item.id });
         });
 }

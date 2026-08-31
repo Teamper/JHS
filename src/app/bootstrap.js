@@ -170,7 +170,6 @@ export async function bootstrapJhs() {
         for (const manifest of integrationManifests) context.registries.integrations.register(manifest);
         for (const manifest of featureManifests) context.registries.features.register(manifest);
         registerSitePlugins(pluginManager, context.registries.features, siteContext.site);
-        context.registries.features.setLegacyResolver((name) => pluginManager.resolveDeclaredPlugin(name));
         markPhase("registry");
         window.isDetailPage = route === "detail";
         window.isListPage = route === "list";

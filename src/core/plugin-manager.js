@@ -8,7 +8,7 @@ import { disabledIdForPlugin, parseDisabledPlugins } from "./legacy-plugin-contr
 /** @typedef {{ name: string, plugin: any, mode: string, timing: PluginTiming, startedAt: number }} PluginRun */
 
 export class PluginManager {
-    /** @param {{ diagnostics?: any }} [options] */
+    /** @param {{ diagnostics?: any, legacyRegistry?: any }} [options] */
     constructor(options = {}) {
         /** @type {Map<string, any>} */ this.plugins = new Map;
         /** @type {PluginError[]} */ this._errorLog = [];
@@ -23,7 +23,19 @@ export class PluginManager {
         this._disabledPluginsPromise = null;
         /** @type {Readonly<Record<string, string[]>>} */ this._dependencyDeclarations = Object.freeze({});
         /** @type {Map<string, {name: string, disableable: boolean}>} */ this._catalogDescriptors = new Map();
+        /** @type {any} */ this.compatibilityRegistry = options.legacyRegistry ?? null;
         this.diagnostics = options.diagnostics ?? null;
+    }
+
+    /** @param {string} name @returns {any} */
+    getOwnBean(name) { return this.plugins.get(name); }
+
+    /** @param {any} registry */
+    attachCompatibilityRegistry(registry) {
+        if (!registry || typeof registry.getOwnBean !== "function") throw new TypeError("Invalid legacy contribution registry");
+        this.compatibilityRegistry = registry;
+        registry.setFallbackResolver?.((/** @type {string} */ name) => this.getOwnBean(name));
+        this._syncDiagnostics();
     }
     /** @param {Readonly<Record<string, string[]>>} declarations */
     setDependencyDeclarations(declarations) {
@@ -36,12 +48,12 @@ export class PluginManager {
         this._catalogDescriptors = new Map(descriptors.map((item) => [item.name, Object.freeze({ ...item })]));
         this._syncDiagnostics();
     }
-    /** @param {new (...args: any[]) => any} e @param {Record<string, any>} [runtimeServices] @param {{disableable?: boolean, managedByFeature?: boolean}} [options] */
+    /** @param {new (...args: any[]) => any} e @param {Record<string, any>} [runtimeServices] @param {{disableable?: boolean, managedByFeature?: boolean, dependencyResolver?: any}} [options] */
     register(e, runtimeServices = {}, options = {}) {
         if ("function" != typeof e) throw new Error("插件必须是一个类");
         const a = performance.now();
         const t = new e;
-        t.pluginManager = this;
+        t.pluginManager = options.dependencyResolver ?? this;
         const n = t.getName();
         if (this.plugins.has(n)) throw new Error(`插件"${n}"已注册`);
         t.declaredDependencies = new Set(this._dependencyDeclarations[n] || []);
@@ -55,11 +67,11 @@ export class PluginManager {
     // 仅供 6.6 前的外部 Compatibility Facade 使用。
     /** @param {string} e @returns {any} */
     getBean(e) {
-        return this.plugins.get(e);
+        return this.plugins.get(e) ?? this.compatibilityRegistry?.getOwnBean?.(e);
     }
     /** @param {string} e @returns {any} */
     resolveDeclaredPlugin(e) {
-        return this.plugins.get(e);
+        return this.plugins.get(e) ?? this.compatibilityRegistry?.getOwnBean?.(e);
     }
     /** @param {string} plugin @param {string} dependency @param {Error} error */
     recordDependencyError(plugin, dependency, error) {
@@ -82,17 +94,22 @@ export class PluginManager {
     }
     getErrorLog() { return [...this._errorLog]; }
     clearErrorLog() { this._errorLog = []; this.diagnostics?.clearErrors(); }
-    getTimings() { return [...this._lastTimings]; }
-    getPluginNames() { return Array.from(this.plugins.keys()); }
+    getTimings() { return [...this._lastTimings, ...(this.compatibilityRegistry?.getTimings?.() ?? [])]; }
+    getPluginNames() {
+        const available = new Set([...this.plugins.keys(), ...(this.compatibilityRegistry?.getPluginNames?.() ?? [])]);
+        const ordered = [...this._catalogDescriptors.keys()].filter((name) => available.has(name));
+        return [...ordered, ...[...available].filter((name) => !ordered.includes(name))];
+    }
     getPluginDescriptors() {
         const descriptors = new Map(this._catalogDescriptors);
         for (const [name, plugin] of this.plugins) descriptors.set(name, Object.freeze({ name, disableable: plugin.disableable !== false }));
+        for (const descriptor of this.compatibilityRegistry?.getPluginDescriptors?.() ?? []) descriptors.set(descriptor.name, descriptor);
         return [...descriptors.values()];
     }
     getStartupReport() {
         return {
-            registeredPlugins: this.plugins.size,
-            registrationMs: this._registrationMs,
+            registeredPlugins: this.plugins.size + (this.compatibilityRegistry?.getStartupReport?.().registeredPlugins ?? 0),
+            registrationMs: this._registrationMs + (this.compatibilityRegistry?.getStartupReport?.().registrationMs ?? 0),
             cssMs: this._cssMs,
             immediateMs: this._immediateMs,
             readyMs: this._readyMs,
@@ -115,6 +132,7 @@ export class PluginManager {
         const s = await Promise.all(Array.from(this.plugins).map((async ([e, n]) => {
             try {
                 if (t.has(e)) return { name: e, status: "disabled" };
+                if (n.managedByFeature === true) return { name: e, status: "managed-feature" };
                 if (m && "function" == typeof n.shouldSkipOnMobile && n.shouldSkipOnMobile()) return { name: e, status: "skipped" };
                 if ("function" == typeof n.initCss) {
                     const t = await n.initCss();
