@@ -2,6 +2,7 @@
 
 import { ListView } from "./list-view.js";
 import { ListStateController } from "./list-state-controller.js";
+import { ListIndexController } from "./list-index-controller.js";
 import { scanAllPages } from "./batch-scanner.js";
 import { evaluateListItem } from "./list-evaluator.js";
 
@@ -10,7 +11,7 @@ import { evaluateListItem } from "./list-evaluator.js";
  * strangled out of PluginManager.
  */
 export class ListController {
-    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any, recordListPhase?: (phase: string, itemCount?: number | null) => void, attachListState?: (state: ListStateController) => void, createQuickFilter?: (initialFilter?: unknown) => Promise<any> | any, initCss?: () => Promise<string> | string}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2NavigationPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, coverPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2LookupPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any, settings?: {snapshot: () => Record<string, any>}, styles?: {register: (id: string, css: string) => () => void}}} options */
+    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any, findCarNumAndHref?: (item: any) => {carNum?: unknown} | null, recordListPhase?: (phase: string, itemCount?: number | null) => void, attachListState?: (state: ListStateController) => void, attachListIndex?: (index: ListIndexController) => void, createQuickFilter?: (initialFilter?: unknown) => Promise<any> | any, initCss?: () => Promise<string> | string}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2NavigationPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, coverPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2LookupPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any, settings?: {snapshot: () => Record<string, any>}, styles?: {register: (id: string, css: string) => () => void}}} options */
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin ?? null;
         this.autoPagePlugin = options.autoPagePlugin ?? null;
@@ -29,6 +30,7 @@ export class ListController {
             defaultFilter: () => options.settings?.snapshot?.().defaultQuickFilterTab ?? "waitCheck",
             onPhase: (phase, itemCount) => this.legacyPlugin?.recordListPhase?.(phase, itemCount),
         });
+        this.index = null;
         this.started = false;
     }
 
@@ -45,8 +47,15 @@ export class ListController {
                 onOpenMovieDetail: (item, options) => this.legacyPlugin?.openMovieDetail?.(item, options),
             });
             this.state.setView(this.view);
+            this.index = new ListIndexController({
+                scope: this.scope,
+                selectors,
+                document: this.hostAdapter.document,
+                readItem: (item) => this.legacyPlugin?.findCarNumAndHref?.(item),
+            });
         }
         this.legacyPlugin?.attachListState?.(this.state);
+        this.index && this.legacyPlugin?.attachListIndex?.(this.index);
         this.started = true;
         const listFeatureApi = this.getApi();
         const view = this.view;
@@ -117,6 +126,8 @@ export class ListController {
 
     dispose() {
         this.state.dispose();
+        this.index?.dispose();
+        this.index = null;
         this.view?.dispose();
         this.styleRelease?.();
         this.styleRelease = null;

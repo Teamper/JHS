@@ -128,6 +128,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {any} */ this.listView = null;
         /** @type {any} */ this.libraryFeatureApi = null;
         /** @type {any} */ this.listState = null;
+        /** @type {any} */ this.listIndex = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -135,6 +136,10 @@ export class ListPagePlugin extends BasePlugin {
     /** Attach the FeatureRuntime-owned list state during migration. @param {any} state */
     attachListState(state) {
         this.listState = state;
+    }
+    /** Attach the FeatureRuntime-owned card index during migration. @param {any} index */
+    attachListIndex(index) {
+        this.listIndex = index;
     }
     /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
     async getLibraryFeatureApi() {
@@ -322,12 +327,18 @@ export class ListPagePlugin extends BasePlugin {
         items.forEach((/** @type {Element} */ item) => /** @type {HTMLElement} */ (item).dataset.jhsProcessed = "true"), this.indexItems(items), await getListEventBus().emit("list-items-added", { items }, { broadcast: !1 }), this.getOptionalDependency("AutoPagePlugin")?.checkLoad?.();
     }
     rebuildItemIndex() {
+        if (this.listIndex) {
+            const items = this.listIndex.rebuildItemIndex();
+            this.recordListPhase("rebuildItemIndex", items.length);
+            return;
+        }
         this.itemIndex.clear();
         const items = $(this.getListSelectors().itemSelector).toArray();
         this.indexItems(items), this.recordListPhase("rebuildItemIndex", items.length);
     }
     /** @param {Element[]} items */
     indexItems(items) {
+        if (this.listIndex) return this.listIndex.indexItems(items);
         items.forEach((/** @type {Element} */ item) => {
             try {
                 const key = normalizeCarNum(this.findCarNumAndHref($(item)).carNum);
@@ -341,6 +352,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {NodeList | Node[]} nodes */
     removeIndexedItems(nodes) {
+        if (this.listIndex) return this.listIndex.removeIndexedItems(nodes);
         const removed = new Set;
         Array.from(nodes || []).forEach((/** @type {Node} */ node) => {
             const element = /** @type {Element} */ (node);
@@ -353,6 +365,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {unknown[]} carNums */
     getIndexedItems(carNums) {
+        if (this.listIndex) return this.listIndex.getIndexedItems(carNums);
         const result = new Set;
         carNums.map(normalizeCarNum).forEach((/** @type {string | null} */ key) => {
             if (!key) return;
@@ -679,7 +692,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {JQueryHandle} e */
     findCarNumAndHref(e) {
-        try { return readListItem(e); } catch (error) { show.error("提取番号信息失败"); throw error; }
+        try { return readListItem(e?.jquery ? e : $(e)); } catch (error) { show.error("提取番号信息失败"); throw error; }
     }
     /** @param {string} e */
     showCarNumBox(e) {
