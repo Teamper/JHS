@@ -35,7 +35,7 @@ import { Fc2NavigationPlugin } from "./status/fc2-navigation.js";
 import { FoldCategoryPlugin } from "./status/fold-category.js";
 import { HighlightMagnetPlugin } from "./status/highlight-magnet.js";
 import { ListPageButtonPlugin } from "./status/list-page-button.js";
-import { ListPagePlugin } from "./status/list-page.js";
+import { ListPagePluginAdapter as ListPagePlugin } from "../compat/list-page-adapter.js";
 import { MobileBottomBarPlugin } from "./status/mobile-bottom-bar.js";
 import { NavBarPlugin } from "./status/nav-bar.js";
 import { SubTitleCatPlugin } from "./subtitle/subtitle-cat.js";

@@ -13,6 +13,7 @@
   "include": [
     "src/main.js",
     "src/app/**/*.js",
+    "src/compat/**/*.js",
     "src/app/bootstrap.d.ts",
     "src/contracts/**/*",
     "src/core/jhs-error.js",

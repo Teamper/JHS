@@ -134,4 +134,15 @@ describe("List FeatureRuntime ownership", () => {
         expect(handle).not.toHaveBeenCalled();
         expect(manager.getTimings()).toEqual([expect.objectContaining({ name: "FeatureOwnedPlugin", status: "managed-feature" })]);
     });
+
+    it("registers feature-owned styles outside PluginManager", async () => {
+        const scope = new LifecycleScope("feature:list"), release = vi.fn(), styles = { register: vi.fn(() => release) }, legacyPlugin = { initCss: vi.fn(() => "<style>.list-test{color:red}</style>"), handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({ legacyPlugin, hostAdapter, styles, scope });
+
+        await controller.start();
+
+        expect(styles.register).toHaveBeenCalledWith("jhs-list-feature-style", ".list-test{color:red}");
+        controller.dispose();
+        expect(release).toHaveBeenCalledOnce();
+        scope.dispose();
+    });
 });

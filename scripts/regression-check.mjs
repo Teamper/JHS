@@ -208,6 +208,7 @@ const busNavBarSource = await read("src/plugins/status/bus-nav-bar.js");
 const identityActressSource = await read("src/plugins/avatar/actress-info.js");
 const listManifestSource = await read("src/features/list/manifest.js");
 const listControllerSource = await read("src/features/list/list-controller.js");
+const listPageAdapterSource = await read("src/compat/list-page-adapter.js");
 const listViewSource = await read("src/features/list/list-view.js");
 const listActionsSource = await read("src/plugins/status/list-page-button.js");
 const autoPageSource = await read("src/plugins/status/auto-page.js");
@@ -222,6 +223,10 @@ assertIncludes(listPageSource, "async doFilter(revision =", "list page function 
 assertIncludes(listManifestSource, 'id: "list"', "real list feature manifest");
 assertIncludes(listManifestSource, 'contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions", "list.fc2-navigation", "list.cover-state-actions", "list.javbus-images", "list.fc2-lookup"]', "list feature contribution ownership");
 assertIncludes(listManifestSource, 'resolveLegacyPlugin?.("ListPagePlugin")', "list migration adapter resolution");
+assertIncludes(listManifestSource, 'ensureDelegate?.({ scope: () => Promise.resolve(runtime.scope) })', "list feature delegate ownership");
+assertIncludes(listPageAdapterSource, "class ListPagePluginAdapter extends BasePlugin", "list compatibility shell");
+assertIncludes(listPageAdapterSource, "const delegate = new ListPagePlugin()", "list feature delegate construction");
+assertIncludes(registry, 'ListPagePluginAdapter as ListPagePlugin', "list registry compatibility shell");
 assertIncludes(listControllerSource, "this.legacyPlugin.handle({ scope: this.scope, view })", "list feature lifecycle handoff");
 assertIncludes(listControllerSource, "new ListView({", "list view host boundary");
 assertIncludes(listControllerSource, "onFilterChange: (filter, options)", "list view filter callback boundary");

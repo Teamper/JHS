@@ -86,7 +86,8 @@ async function checkImportGraph() {
     const allowedLayers = {
         core: new Set(["core"]),
         features: new Set(["services", "ui", "contracts", "core"]),
-        plugins: new Set(["core", "contracts", "services", "ui", "features", "integrations", "platform"]),
+        plugins: new Set(["core", "contracts", "services", "ui", "features", "integrations", "platform", "compat"]),
+        compat: new Set(["core", "plugins"]),
         services: new Set(["contracts", "core"]),
         integrations: new Set(["contracts", "core"]),
         ui: new Set(["contracts", "core"]),
