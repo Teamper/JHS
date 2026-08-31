@@ -142,6 +142,12 @@ export class StateService {
     async getOfflineHistory() {
         return this.domains.offlineHistory.read();
     }
+    /** Read one normalized car record through the state-owned storage boundary. */
+    /** @param {unknown} carNum */
+    async getCar(carNum) {
+        const key = normalizeCarNum(carNum);
+        return key ? this.storage.getCar(key) : null;
+    }
     /** @param {StateRecord} record */
     async appendOfflineHistory(record) {
         return this._withLock(async () => {

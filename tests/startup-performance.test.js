@@ -91,6 +91,7 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
     features: {},
     settings: { snapshot: () => ({}) },
     eventBus: {},
+    ui: { getJQuery: () => context.$, getUtils: () => context.utils, getClog: () => context.clog, show: context.show },
     scope,
   });
   return task;

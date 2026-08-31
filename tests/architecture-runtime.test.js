@@ -180,7 +180,7 @@ describe("v6.5 architecture runtime contracts", () => {
             ["screenshot", SERVICE.screenshot], ["translation", SERVICE.translation], ["subtitle", SERVICE.subtitle],
             ["account", SERVICE.account], ["webdav", SERVICE.webdav], ["storage", SERVICE.storage], ["features", REGISTRY.feature],
             ["state", SERVICE.state], ["offline", SERVICE.offline], ["dialog", SERVICE.dialog],
-            ["settingsRegistry", REGISTRY.settings],
+            ["settingsRegistry", REGISTRY.settings], ["ui", SERVICE.ui],
         ]);
         for (const contribution of legacyContributionManifests) {
             const source = contribution.plugin.toString();

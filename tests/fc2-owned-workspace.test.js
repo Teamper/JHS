@@ -85,7 +85,7 @@ describe("FC2 owned detail workspace", () => {
         expect(fc2Source).toMatch(/\.jhs-fc2-workspace \{[^}]*grid-auto-rows:max-content;[^}]*align-content:start;/);
         expect(fc2Source).toMatch(/\.jhs-fc2-gallery-grid \{[^}]*minmax\(112px,144px\)/);
         expect(fc2ViewSource).toContain('class="jhs-btn jhs-fc2-gallery-item"');
-        expect(fc2Source).toContain('showImageViewer(image, "", { galleryRoot: gallery[0] })');
+        expect(fc2Source).toContain('this.getRuntimeService("ui").showImageViewer?.(image, "", { galleryRoot: gallery[0] })');
         expect(fc2Source).not.toContain('"data-fancybox"');
         expect(loggerSource).toContain("initialViewIndex");
         expect(loggerSource).toContain("prev: hasGallery ? 1 : 0");

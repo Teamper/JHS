@@ -6,7 +6,7 @@ import { format115Size, normalize115Keyword, preview115Rename } from "./one-one-
 
 /** Own 115 matching UI, incremental list work, and scoped cleanup. */
 export class OneOneFiveMatchController {
-    /** @param {{document?: Document, window?: any, route?: string, hostAdapter: any, offline: any, dialog: any, settings: any, eventBus: any, scope: any}} options */
+    /** @param {{document?: Document, window?: any, route?: string, hostAdapter: any, offline: any, dialog: any, settings: any, eventBus: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.document = options.document ?? globalThis.document;
         this.window = options.window ?? this.document?.defaultView ?? globalThis.window;
@@ -16,6 +16,7 @@ export class OneOneFiveMatchController {
         this.dialog = options.dialog;
         this.settings = options.settings;
         this.eventBus = options.eventBus;
+        this.ui = options.ui;
         this.scope = options.scope;
         this.observer = null;
         this.observerCleanup = null;
@@ -28,10 +29,10 @@ export class OneOneFiveMatchController {
         this.disposed = false;
     }
 
-    getJQuery() { return /** @type {any} */ (globalThis).$ ?? this.window?.jQuery; }
-    getClog() { return /** @type {any} */ (globalThis).clog ?? {}; }
-    getShow() { return /** @type {any} */ (globalThis).show ?? {}; }
-    getUtils() { return /** @type {any} */ (globalThis).utils ?? {}; }
+    getJQuery() { return this.ui?.getJQuery?.() ?? this.window?.jQuery; }
+    getClog() { return this.ui?.getClog?.() ?? {}; }
+    getShow() { return this.ui?.show ?? {}; }
+    getUtils() { return this.ui?.getUtils?.() ?? {}; }
 
     /** @param {string} key @param {unknown} fallback */
     getSetting(key, fallback) {

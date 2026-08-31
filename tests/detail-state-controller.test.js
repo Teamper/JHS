@@ -14,6 +14,8 @@ function loadController() {
     const closePage = vi.fn().mockResolvedValue(true), confirm = vi.fn((event, message, callback) => callback()), toggle = vi.fn(async (carNum, flag) => {
         records.get(carNum).stateFlags[flag] = !records.get(carNum).stateFlags[flag];
     });
+    const stateService = { getCar: async carNum => records.get(carNum), toggle };
+    const ui = { getJQuery: () => $, getUtils: () => ({ q: confirm, closePage }), getShow: () => ({ error: vi.fn() }), show: { error: vi.fn() }, getClog: () => ({ error: vi.fn() }), confirm };
     const context = vm.createContext({
         document: dom.window.document, $, m: "屏蔽", u: "取消屏蔽", v: "收藏", b: "取消收藏", y: "标记下载", k: "标记观看",
         normalizeCarNum: value => String(value).trim().toUpperCase(),
@@ -23,7 +25,7 @@ function loadController() {
     });
     const source = readTestFile(join(repoRoot, "src/core/detail-state-controller.js"), "utf8");
     vm.runInContext(`${source};globalThis.Controller=DetailStateController`, context);
-    return { controller: new context.Controller({ toggle }), dom, $, records, toggle, confirm, closePage };
+    return { controller: new context.Controller(stateService, ui), dom, $, records, toggle, confirm, closePage };
 }
 
 describe("DetailStateController", () => {

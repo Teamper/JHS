@@ -6,7 +6,7 @@ import { DetailController } from "./detail-controller.js";
 
 export default defineFeature({
     id: "detail", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["detail", "owned-detail"], startup: "eager",
-    requires: [PORT.host, SERVICE.movie, SERVICE.review, SERVICE.related, SERVICE.magnet, SERVICE.screenshot],
+    requires: [PORT.host, SERVICE.movie, SERVICE.review, SERVICE.related, SERVICE.magnet, SERVICE.screenshot, SERVICE.ui],
     contributes: ["detail.javdb-native", "detail.javbus-native", "detail.workspace", "detail.fc2-owned", "detail.page-state-actions", "detail.javdb-preview", "detail.javbus-preview", "detail.reviews", "detail.related", "detail.native-magnets", "detail.external-magnets", "detail.screenshot", "detail.external-sites"],
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {

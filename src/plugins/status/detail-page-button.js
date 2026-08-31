@@ -19,8 +19,13 @@ export class DetailPageButtonPlugin extends BasePlugin {
         /** @type {DetailStateController | null} */ this.detailStateController = null;
         /** @type {any} */ this.lifecycleScope = null;
     }
+    getJQuery() { return this.getRuntimeService("ui").getJQuery?.(); }
+    getShow() { return this.getRuntimeService("ui").show ?? {}; }
+    getClog() { return this.getRuntimeService("ui").getClog?.() ?? {}; }
+    getLoading() { return this.getRuntimeService("ui").getLoading?.() ?? (() => ({ close() {} })); }
+    getUtils() { return this.getRuntimeService("ui").getUtils?.() ?? {}; }
     getDetailStateController() {
-        return this.detailStateController ||= new DetailStateController(this.getRuntimeService("state"));
+        return this.detailStateController ||= new DetailStateController(this.getRuntimeService("state"), this.getRuntimeService("ui"));
     }
     /** @param {{scope?: any}} [options] */
     async handle(options = {}) {
@@ -29,14 +34,15 @@ export class DetailPageButtonPlugin extends BasePlugin {
     }
     async autoRemoveNewVideoMark() {
         try {
-            const e = await storageManager.getSetting("autoRemoveNewVideoMarkAfterBrowse", C);
+            const e = this.getRuntimeService("settings").snapshot().autoRemoveNewVideoMarkAfterBrowse ?? C;
             if (e !== _) return;
             const t = this.getPageInfo();
             if (!t.carNum) return;
             await this.getRuntimeService("state").removeFromNewVideoList([ t.carNum ], "browse");
-        } catch (e) { clog.error("自动移除新作品标记失败:", e); }
+        } catch (e) { this.getClog().error?.("自动移除新作品标记失败:", e); }
     }
     async createMenuBtn() {
+        const $ = this.getJQuery(), utils = this.getUtils(), show = this.getShow(), clog = this.getClog();
         const e = this.getPageInfo(), t = e.carNum, n = `\n            <div class="jhs-detail-btn-row jhs-layout-e2965a97">\n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="filterBtn" class="jhs-btn jhs-btn--filter jhs-layout-44293084">\n                        <span>${m}</span>\n                    </button>\n                    <button type="button" id="favoriteBtn" class="jhs-btn jhs-btn--fav jhs-layout-44293084">\n                        <span>${v}</span>\n                    </button>\n                    <button type="button" id="hasDownBtn" class="jhs-btn jhs-btn--down jhs-layout-44293084">\n                        <span>${y}</span>\n                    </button>\n                    <button type="button" id="hasWatchBtn" class="jhs-btn jhs-btn--watch jhs-layout-44293084">\n                        <span>${k}</span>\n                    </button>\n                </div>\n        \n                <div class="jhs-layout-1e90930a">\n                    <button type="button" id="enable-magnets-filter" class="jhs-btn jhs-btn--watch jhs-layout-5f3e3549">\n                        <span id="magnets-span">关闭磁力过滤</span>\n                    </button>\n                    <button type="button" id="magnetSearchBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>磁力搜索</span>\n                    </button>\n                    <button type="button" id="xunLeiSubtitleBtn" class="jhs-btn jhs-btn--accent jhs-layout-44293084">\n                        <span>字幕 (迅雷)</span>\n                    </button>\n                    <button type="button" id="search-subtitle-btn" class="jhs-btn jhs-btn--accent jhs-layout-f43f0d6d">\n                        <span>字幕 (SubTitleCat)</span>\n                    </button>\n                </div>\n            </div>\n        `;
         const workspaceSlot = this.getOptionalDependency("DetailWorkspacePlugin")?.getSlot?.("summary-actions");
         const menu = $(n);
@@ -113,7 +119,8 @@ export class DetailPageButtonPlugin extends BasePlugin {
     /** @param {string} e */
     async searchXunLeiSubtitle(e) {
         const dialog = this.getRuntimeService("dialog"), subtitle = this.getRuntimeService("subtitle"), scope = this.lifecycleScope ?? await this.getRuntimeService("scope")();
-        let t = loading();
+        const utils = this.getUtils(), show = this.getShow(), clog = this.getClog();
+        let t = this.getLoading()();
         try {
             const n = await subtitle.search("xunlei", { carNum: e }, { scope });
             n && 0 !== n.length ? dialog.open({
@@ -180,7 +187,7 @@ export class DetailPageButtonPlugin extends BasePlugin {
     }
     /** @param {import("../../core/lifecycle-scope.js").LifecycleScope} scope */
     hideVideoControls(scope) {
-        const documentRoot = $(document);
+        const $ = this.getJQuery(), documentRoot = $(document);
         documentRoot.off("mouseenter.jhsDetailVideo").on("mouseenter.jhsDetailVideo", "#preview-video", ((/** @type {Event} */ event) => {
             $(event.currentTarget).prop("controls", !0);
         }));
@@ -188,7 +195,8 @@ export class DetailPageButtonPlugin extends BasePlugin {
     }
     /** @param {SubtitleRecord} subtitle @param {string} t */
     async previewSubtitle(subtitle, t) {
-        if (!subtitle?.url) return void clog.error("未提供文件URL");
+        const utils = this.getUtils(), show = this.getShow(), clog = this.getClog();
+        if (!subtitle?.url) return void clog.error?.("未提供文件URL");
         const n = String(subtitle.extension || "").toLowerCase();
         if ("ass" === n || "srt" === n) try {
             const dialog = this.getRuntimeService("dialog");

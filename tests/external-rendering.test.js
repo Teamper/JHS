@@ -8,7 +8,7 @@ function loadHitShow() {
     const dom = new JSDOM('<div id="movie"><div id="score_movie"></div></div>', { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
     vi.stubGlobal("$", $);
     vi.stubGlobal("document", dom.window.document);
-    const plugin = new HitShowController({ document: dom.window.document, window: dom.window, hostAdapter: {}, movie: {}, settings: { snapshot: () => ({}) }, storage: {}, features: {}, scope: new LifecycleScope("test:rendering") });
+    const plugin = new HitShowController({ document: dom.window.document, window: dom.window, hostAdapter: {}, movie: {}, settings: { snapshot: () => ({}) }, storage: {}, features: {}, ui: { getJQuery: () => $, getLoading: () => () => ({ close() {} }), show: {}, getClog: () => ({}) }, scope: new LifecycleScope("test:rendering") });
     return { plugin, dom };
 }
 

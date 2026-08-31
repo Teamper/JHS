@@ -27,7 +27,8 @@ function loadTop250({ hitShow = null, movies = [], rankingError = null, html = '
     vi.stubGlobal("loading", loading);
     vi.stubGlobal("show", show);
     vi.stubGlobal("clog", { error: vi.fn(), warn: vi.fn() });
-    const scope = new LifecycleScope("test:top250"), discoveryApi = hitShow ? { hasHitShow: true, ...hitShow } : { hasHitShow: false }, controller = new Top250Controller({ document: dom.window.document, window: dom.window, hostAdapter: host, movie, dialog, account, storage, listActions, scope });
+    const clog = { error: vi.fn(), warn: vi.fn() }, ui = { getJQuery: () => $, getLoading: () => loading, show, getClog: () => clog, getUtils: () => ({ getResponsiveArea: value => value }) };
+    const scope = new LifecycleScope("test:top250"), discoveryApi = hitShow ? { hasHitShow: true, ...hitShow } : { hasHitShow: false }, controller = new Top250Controller({ document: dom.window.document, window: dom.window, hostAdapter: host, movie, dialog, account, storage, listActions, ui, scope });
     controller.discoveryApi = discoveryApi;
     return { controller, $, movie, loading, loadingClose, show, dialog, listActions, dom, discoveryApi };
 }

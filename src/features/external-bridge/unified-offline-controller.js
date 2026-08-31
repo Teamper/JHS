@@ -50,7 +50,7 @@ export class OfflineProviderRegistry {
 
 /** Own unified offline providers, resource actions, and submission state. */
 export class UnifiedOfflineController {
-    /** @param {{document?: Document, window?: any, route?: string, hostAdapter: any, offline: any, dialog: any, state: any, settings: any, styles?: any, eventBus?: any, oneTwoThreeController?: any, scope: any}} options */
+    /** @param {{document?: Document, window?: any, route?: string, hostAdapter: any, offline: any, dialog: any, state: any, settings: any, styles?: any, eventBus?: any, oneTwoThreeController?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.document = options.document ?? globalThis.document;
         this.window = options.window ?? this.document?.defaultView ?? globalThis.window;
@@ -63,6 +63,7 @@ export class UnifiedOfflineController {
         this.styles = options.styles;
         this.eventBus = options.eventBus;
         this.oneTwoThreeController = options.oneTwoThreeController ?? null;
+        this.ui = options.ui;
         this.scope = options.scope;
         this.registry = new OfflineProviderRegistry;
         this.BUTTON_COOLDOWN_MS = 1800;
@@ -72,10 +73,10 @@ export class UnifiedOfflineController {
         this.disposed = false;
     }
 
-    getJQuery() { return /** @type {any} */ (globalThis).$ ?? this.window?.jQuery; }
-    getShow() { return /** @type {any} */ (globalThis).show ?? {}; }
-    getClog() { return /** @type {any} */ (globalThis).clog ?? {}; }
-    getUtils() { return /** @type {any} */ (globalThis).utils ?? {}; }
+    getJQuery() { return this.ui?.getJQuery?.() ?? this.window?.jQuery; }
+    getShow() { return this.ui?.show ?? {}; }
+    getClog() { return this.ui?.getClog?.() ?? {}; }
+    getUtils() { return this.ui?.getUtils?.() ?? {}; }
 
     /** @param {string} key @param {unknown} fallback */
     getSetting(key, fallback) {

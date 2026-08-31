@@ -4,11 +4,12 @@ import { decryptCredential, encryptCredential } from "../../core/credential-cryp
 
 /** Own 123Pan site-token discovery and the shared encrypted credential. */
 export class OneTwoThreeAuthController {
-    /** @param {{document?: Document, window?: Window, storage: any, scope: any}} options */
+    /** @param {{document?: Document, window?: Window, storage: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.document = options.document ?? globalThis.document;
         this.window = options.window ?? this.document?.defaultView ?? globalThis.window;
         this.storage = options.storage;
+        this.ui = options.ui;
         this.scope = options.scope;
         this.tokenKey = "jhs_123pan_author_token";
         this.tokenMetaKey = "jhs_123pan_author_token_meta";
@@ -17,8 +18,8 @@ export class OneTwoThreeAuthController {
         this.started = false;
     }
 
-    getClog() { return /** @type {any} */ (globalThis).clog ?? {}; }
-    getShow() { return /** @type {any} */ (globalThis).show ?? {}; }
+    getClog() { return this.ui?.getClog?.() ?? {}; }
+    getShow() { return this.ui?.show ?? {}; }
 
     /** Start 123Pan token synchronization on the 123Pan host only. */
     start() {

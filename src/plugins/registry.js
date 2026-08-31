@@ -34,7 +34,7 @@ const manifest = (id, featureId, plugin, sites, order, requires = [], options = 
 export const legacyContributionManifests = Object.freeze([
     manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [PORT.host, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings, SERVICE.ui, REGISTRY.feature], { managedByFeature: true }),
     manifest("list.auto-page", "list", AutoPagePlugin, ["javdb", "javbus"], { javdb: 2, javbus: 5 }, [SERVICE.http, SERVICE.settings, REGISTRY.feature], { managedByFeature: true }),
-    manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related, SERVICE.state, REGISTRY.feature], { managedByFeature: true, managedRoutes: ["detail", "owned-detail"] }),
+    manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related, SERVICE.state, SERVICE.ui, REGISTRY.feature], { managedByFeature: true, managedRoutes: ["detail", "owned-detail"] }),
     manifest("list.fc2-navigation", "list", Fc2NavigationPlugin, ["javdb"], { javdb: 4 }, [PORT.host], { managedByFeature: true }),
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 5 }, [SERVICE.settings], { managedByFeature: true }),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [PORT.host, SERVICE.settings, REGISTRY.feature], { managedByFeature: true }),
@@ -45,7 +45,7 @@ export const legacyContributionManifests = Object.freeze([
     manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }, [PORT.host], { managedByFeature: true }),
     manifest("detail.reviews", "detail", ReviewPlugin, ["javdb", "javbus"], { javdb: 16, javbus: 13 }, [PORT.host, SERVICE.review, SERVICE.movie, SERVICE.settings, SERVICE.storage], { managedByFeature: true }),
     manifest("detail.related", "detail", RelatedPlugin, ["javdb"], { javdb: 17 }, [PORT.host, SERVICE.related, SERVICE.settings], { managedByFeature: true }),
-    manifest("detail.page-state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle, SERVICE.state, SERVICE.settings], { managedByFeature: true }),
+    manifest("detail.page-state-actions", "detail", DetailPageButtonPlugin, ["javdb", "javbus"], { javdb: 18, javbus: 12 }, [SERVICE.movie, SERVICE.dialog, SERVICE.subtitle, SERVICE.state, SERVICE.settings, SERVICE.ui], { managedByFeature: true }),
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [PORT.host, SERVICE.settings], { managedByFeature: true }),
     manifest("detail.javdb-preview", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie], { managedByFeature: true }),
     manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie, SERVICE.storage, SERVICE.settings], { managedByFeature: true }),

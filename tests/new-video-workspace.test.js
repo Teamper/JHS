@@ -37,9 +37,10 @@ function createHarness() {
     const settings = { snapshot: vi.fn(() => ({ checkFavoriteActress_IntervalTime: 24, checkNewVideo_intervalTime: 12, checkNewVideo_ruleTime: 8760, autoRemoveNewVideoMarkAfterBrowse: "yes" })) };
     const scope = { assertActive: vi.fn(), addCleanup: vi.fn(), disposed: false }, eventBus = { on: vi.fn(), emit: vi.fn() };
     vi.stubGlobal("$", $), vi.stubGlobal("window", dom.window), vi.stubGlobal("document", dom.window.document);
-    vi.stubGlobal("utils", { genericSort: items => [...items], q: vi.fn(), debounce: (callback) => Object.assign(callback, { cancel: vi.fn() }), getDialogArea: vi.fn(), getResponsiveArea: vi.fn(), setupEscClose: vi.fn() });
-    vi.stubGlobal("show", { info: vi.fn(), ok: vi.fn(), error: vi.fn() }), vi.stubGlobal("clog", { error: vi.fn(), warn: vi.fn(), log: vi.fn(), debug: vi.fn() }), vi.stubGlobal("loading", vi.fn(() => ({ close: vi.fn() })));
-    const plugin = new NewVideoController({ document: dom.window.document, window: dom.window, settings, storage: runtimeServices.storage, legacyStorage: storageManager, dialog: {}, actressInfo: runtimeServices.actressInfo, movie: runtimeServices.movie, state: stateService, eventBus, scope });
+    const utils = { genericSort: items => [...items], q: vi.fn(), debounce: (callback) => Object.assign(callback, { cancel: vi.fn() }), getDialogArea: vi.fn(), getResponsiveArea: vi.fn(), setupEscClose: vi.fn() }, show = { info: vi.fn(), ok: vi.fn(), error: vi.fn() }, clog = { error: vi.fn(), warn: vi.fn(), log: vi.fn(), debug: vi.fn() }, loading = vi.fn(() => ({ close: vi.fn() }));
+    const ui = { getJQuery: () => $, getUtils: () => utils, show, getClog: () => clog, getLoading: () => loading };
+    vi.stubGlobal("utils", utils), vi.stubGlobal("show", show), vi.stubGlobal("clog", clog), vi.stubGlobal("loading", loading);
+    const plugin = new NewVideoController({ document: dom.window.document, window: dom.window, settings, storage: runtimeServices.storage, legacyStorage: storageManager, dialog: {}, actressInfo: runtimeServices.actressInfo, movie: runtimeServices.movie, state: stateService, eventBus, ui, scope });
     plugin.nvWorkspaceMounted = true, plugin._viewMode = "list";
     return { plugin, $, actresses, storageManager, stateService, beans, runtimeServices };
 }

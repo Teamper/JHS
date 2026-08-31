@@ -27,6 +27,7 @@ function loadOfflineController(submit, history = vi.fn(async () => {})) {
         dialog: { open: layer.open, close: layer.close },
         state: stateService,
         settings: { snapshot: () => ({ offlineProviderMode: "ask" }) },
+        ui: { getJQuery: () => $, show, getClog: () => ({ error: vi.fn() }), getUtils: () => utils },
         scope,
     });
     const provider = { id: "115", name: "115", submit };

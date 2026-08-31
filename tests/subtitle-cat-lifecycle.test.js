@@ -12,7 +12,7 @@ function createController() {
     vi.stubGlobal("$", jquery);
     const show = { error: vi.fn() };
     vi.stubGlobal("show", show);
-    const scope = new LifecycleScope("feature:external-bridge"), controller = new SubtitleCatController({ document, window, scope });
+    const ui = { getJQuery: () => jquery, show }, scope = new LifecycleScope("feature:external-bridge"), controller = new SubtitleCatController({ document, window, ui, scope });
     return { controller, scope, show };
 }
 

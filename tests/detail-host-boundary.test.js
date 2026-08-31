@@ -60,6 +60,7 @@ function createOfflineController(dom, host, scope) {
         dialog: {},
         state: {},
         settings: { snapshot: () => ({}) },
+        ui: { getJQuery: () => $, show: {}, getClog: () => ({}), getUtils: () => ({}) },
         scope,
     });
 }

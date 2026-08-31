@@ -39,7 +39,7 @@ function loadTaskLifecycle({ isListPage = false, hidden = false } = {}) {
         "globalThis.TestTaskController=TaskController;"
     ].join("\n");
     vm.runInContext(source, context);
-    return { plugin: new context.TestTaskController({ document, window, storage, legacyStorage: { getSetting: vi.fn(async () => ({})) }, http: {}, actressInfo: {}, movie: { externalSiteOrigin: () => "https://javdb.com" }, features: {}, settings: { snapshot: () => ({}) }, eventBus: {}, scope }), window, document, listeners, documentListeners, locks, setTimeoutSpy, scope };
+    return { plugin: new context.TestTaskController({ document, window, storage, legacyStorage: { getSetting: vi.fn(async () => ({})) }, http: {}, actressInfo: {}, movie: { externalSiteOrigin: () => "https://javdb.com" }, features: {}, settings: { snapshot: () => ({}) }, eventBus: {}, ui: { getJQuery: () => context.$, getUtils: () => context.utils, getClog: () => context.clog, show: context.show }, scope }), window, document, listeners, documentListeners, locks, setTimeoutSpy, scope };
 }
 
 function loadListObserver() {

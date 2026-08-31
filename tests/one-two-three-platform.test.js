@@ -21,7 +21,7 @@ function createHarness(localEntries = []) {
     vi.stubGlobal("document", dom.window.document);
     vi.stubGlobal("show", { info: vi.fn() });
     vi.stubGlobal("clog", { debug: vi.fn() });
-    const controller = new OneTwoThreeAuthController({ document: dom.window.document, window: dom.window, storage, scope });
+    const ui = { getClog: () => ({ debug: vi.fn() }), show: { info: vi.fn() } }, controller = new OneTwoThreeAuthController({ document: dom.window.document, window: dom.window, storage, ui, scope });
     return { controller, scope, storage, values };
 }
 

@@ -8,7 +8,7 @@ import { isHitShowPage } from "../../core/site-context.js";
 
 /** Own the JavDB hot-ranking page and its score completion pipeline. */
 export class HitShowController {
-    /** @param {{document?: Document, window?: any, hostAdapter: any, movie: any, settings: any, storage: any, features: any, listActions?: any, coverActions?: any, eventBus?: any, scope: any}} options */
+    /** @param {{document?: Document, window?: any, hostAdapter: any, movie: any, settings: any, storage: any, features: any, listActions?: any, coverActions?: any, eventBus?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.document = options.document ?? globalThis.document;
         this.window = options.window ?? this.document?.defaultView ?? globalThis.window;
@@ -20,6 +20,7 @@ export class HitShowController {
         this.listActions = options.listActions;
         this.coverActions = options.coverActions;
         this.eventBus = options.eventBus;
+        this.ui = options.ui;
         this.scope = options.scope;
         /** @type {any} */ this.$contentBox = null;
         /** @type {any} */ this.$listRoot = null;
@@ -28,10 +29,10 @@ export class HitShowController {
         this.started = false;
     }
 
-    getJQuery() { return /** @type {any} */ (globalThis).$ ?? this.window?.jQuery; }
-    getLoading() { return /** @type {any} */ (globalThis).loading; }
-    getShow() { return /** @type {any} */ (globalThis).show ?? {}; }
-    getClog() { return /** @type {any} */ (globalThis).clog ?? {}; }
+    getJQuery() { return this.ui?.getJQuery?.() ?? this.window?.jQuery; }
+    getLoading() { return this.ui?.getLoading?.(); }
+    getShow() { return this.ui?.show ?? {}; }
+    getClog() { return this.ui?.getClog?.() ?? {}; }
 
     /** Start the hot-ranking page enhancement. */
     /** @param {{discoveryApi?: any}} [options] */

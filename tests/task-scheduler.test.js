@@ -126,6 +126,7 @@ function createHarness(initialTime = "2026-08-23T13:20:00.789", pageUrl = "https
         })) },
         settings: { snapshot: vi.fn(() => ({})) },
         eventBus: jhsEventBus,
+        ui: { getJQuery: () => context.$, getUtils: () => context.utils, getClog: () => context.clog, show: context.show },
         scope,
     });
     return { plugin, clock, values, settings, favorites, blacklistItems, storageManager, gmHttp, http, actressInfo, beans, locks, jhsEventBus, scope, $, htmlToPage: context.utils.htmlTo$dom };

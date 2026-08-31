@@ -5,7 +5,7 @@ import { renderTranslatedTitle } from "../../ui/translation/title-translation.js
 
 /** Own detail/list title translation lifecycle behind the TranslationService. */
 export class ExternalBridgeTranslationController {
-    /** @param {{document?: Document, window?: any, route?: string, settings: any, translation: any, features: any, styles?: any, scope: any}} options */
+    /** @param {{document?: Document, window?: any, route?: string, settings: any, translation: any, features: any, styles?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.document = options.document ?? globalThis.document;
         this.window = options.window ?? this.document?.defaultView ?? globalThis.window;
@@ -14,14 +14,15 @@ export class ExternalBridgeTranslationController {
         this.translation = options.translation;
         this.features = options.features;
         this.styles = options.styles;
+        this.ui = options.ui;
         this.scope = options.scope;
         this.listFeatureApi = null;
         this.translationGeneration = 0;
         this.started = false;
     }
 
-    getJQuery() { return /** @type {any} */ (globalThis).$ ?? this.window?.jQuery; }
-    getClog() { return /** @type {any} */ (globalThis).clog ?? {}; }
+    getJQuery() { return this.ui?.getJQuery?.() ?? this.window?.jQuery; }
+    getClog() { return this.ui?.getClog?.() ?? {}; }
 
     /** Start translation and own settings-driven reconfiguration. */
     async start() {

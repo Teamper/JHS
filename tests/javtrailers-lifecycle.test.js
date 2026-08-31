@@ -14,7 +14,7 @@ describe("JavTrailers lifecycle", () => {
     it("disposes playback message and jQuery click listeners with the Feature scope", () => {
         document.body.innerHTML = '<div id="videoPlayerContainer"></div><video id="vjs_video_3_html5_api"></video>';
         vi.stubGlobal("$", jquery);
-        const scope = new LifecycleScope("feature:external-bridge"), plugin = new JavTrailersController({ document, window, scope });
+        const ui = { getJQuery: () => jquery, getUtils: () => ({}), getClog: () => ({}) }, scope = new LifecycleScope("feature:external-bridge"), plugin = new JavTrailersController({ document, window, ui, scope });
         vi.spyOn(plugin, "handlePlayJavTrailers").mockImplementation(() => {});
         plugin.bindPlaybackControls(scope);
         expect(scope.snapshot().listeners).toBe(1);
@@ -44,7 +44,12 @@ describe("JavTrailers lifecycle", () => {
             cancellations.push(cancel);
             return cancel;
         } });
-        const scope = new LifecycleScope("feature:external-bridge"), plugin = new JavTrailersController({ document, window, scope }), video = document.getElementById("vjs_video_3_html5_api");
+        const ui = { getJQuery: () => jquery, getUtils: () => ({ loopDetector: (condition, callback) => {
+            if (condition()) callback();
+            const cancel = vi.fn();
+            cancellations.push(cancel);
+            return cancel;
+        } }), getClog: () => ({ debug: vi.fn() }) }, scope = new LifecycleScope("feature:external-bridge"), plugin = new JavTrailersController({ document, window, ui, scope }), video = document.getElementById("vjs_video_3_html5_api");
         video.play = vi.fn(async () => {});
         plugin.handlePlayJavTrailers(scope);
         await vi.advanceTimersByTimeAsync(100);

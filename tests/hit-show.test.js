@@ -33,8 +33,9 @@ function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), c
     vi.stubGlobal("$", $);
     vi.stubGlobal("loading", () => ({ close: loadingClose }));
     vi.stubGlobal("clog", { error: vi.fn(), warn: vi.fn() });
-    vi.stubGlobal("show", { error: vi.fn() });
-    const scope = new LifecycleScope("test:hit-show"), plugin = new HitShowController({ document: dom.window.document, window: dom.window, hostAdapter: host, movie, settings, storage, features, listActions, coverActions: coverButton, eventBus, scope });
+    const show = { error: vi.fn() }, clog = { error: vi.fn(), warn: vi.fn() }, ui = { getJQuery: () => $, getLoading: () => () => ({ close: loadingClose }), show, getClog: () => clog };
+    vi.stubGlobal("show", show);
+    const scope = new LifecycleScope("test:hit-show"), plugin = new HitShowController({ document: dom.window.document, window: dom.window, hostAdapter: host, movie, settings, storage, features, listActions, coverActions: coverButton, eventBus, ui, scope });
     return { plugin, dom, $, storage, ttlStore, storageManager: storage, loadingClose, sortItems, mountOwnedRankingControls, listPage, coverButton, fetchScore, emitListItems: eventBus.emit };
 }
 

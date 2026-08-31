@@ -5,18 +5,19 @@ import { JHS_Z_INDEX } from "../../core/theme.js";
 
 /** Own JavTrailers preview playback and its page navigation lifecycle. */
 export class JavTrailersController {
-    /** @param {{document?: Document, window?: any, scope: any}} options */
+    /** @param {{document?: Document, window?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.document = options.document ?? globalThis.document;
         this.window = options.window ?? this.document?.defaultView ?? globalThis.window;
+        this.ui = options.ui;
         this.scope = options.scope;
         this.hasBand = false;
         this.started = false;
     }
 
-    getJQuery() { return /** @type {any} */ (globalThis).$ ?? this.window?.jQuery; }
-    getUtils() { return /** @type {any} */ (globalThis).utils ?? {}; }
-    getClog() { return /** @type {any} */ (globalThis).clog ?? {}; }
+    getJQuery() { return this.ui?.getJQuery?.() ?? this.window?.jQuery; }
+    getUtils() { return this.ui?.getUtils?.() ?? {}; }
+    getClog() { return this.ui?.getClog?.() ?? {}; }
 
     /** Start the JavTrailers page enhancement. */
     async start() {

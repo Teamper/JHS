@@ -183,7 +183,7 @@ describe("ExternalBridgeTranslationController live lifecycle", () => {
         $("body").append('<h1 class="jhs-fc2-title"><strong class="current-title">ABC-123 タイトル</strong></h1>');
         const settings = makeSettings({ translateTitle: "yes" });
         const scope = new LifecycleScope("feature:external-bridge");
-        const controller = new ExternalBridgeTranslationController({ document: doc, window: win, route: "detail", settings, translation: { translate: async () => "译名" }, features: {}, scope });
+        const controller = new ExternalBridgeTranslationController({ document: doc, window: win, route: "detail", settings, translation: { translate: async () => "译名" }, features: {}, ui: { getJQuery: () => $, getClog: () => globalThis.clog, }, scope });
 
         await controller.start();
         expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);

@@ -2,10 +2,11 @@
 
 /** Own SubtitleCat result filtering and page visibility lifecycle. */
 export class SubtitleCatController {
-    /** @param {{document?: Document, window?: any, scope: any}} options */
+    /** @param {{document?: Document, window?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.document = options.document ?? globalThis.document;
         this.window = options.window ?? this.document?.defaultView ?? globalThis.window;
+        this.ui = options.ui;
         this.scope = options.scope;
         /** @type {Map<Element, string>} */ this.displayValues = new Map;
         this.title = null;
@@ -13,8 +14,8 @@ export class SubtitleCatController {
         this.started = false;
     }
 
-    getJQuery() { return /** @type {any} */ (globalThis).$ ?? this.window?.jQuery; }
-    getShow() { return /** @type {any} */ (globalThis).show ?? {}; }
+    getJQuery() { return this.ui?.getJQuery?.() ?? this.window?.jQuery; }
+    getShow() { return this.ui?.show ?? {}; }
 
     /** Start SubtitleCat filtering. */
     start() {

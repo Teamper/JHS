@@ -76,6 +76,7 @@ describe("translation DOM/jQuery contract", () => {
             settings: { snapshot: () => ({ translateTitle: "yes" }) },
             translation: { translate },
             features: { getFeatureApi: async () => listFeature },
+            ui: { getJQuery: () => jq, getClog: () => clog },
             scope,
         });
 

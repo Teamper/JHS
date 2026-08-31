@@ -9,7 +9,7 @@ const CREDENTIAL_KEY = "jhs_appAuthorization";
 
 /** Own the JavDB Top250 page, including auth, filters, pagination, and rendering. */
 export class Top250Controller {
-    /** @param {{document?: Document, window?: any, hostAdapter: any, movie: any, dialog: any, account: any, storage: any, listActions?: any, scope: any}} options */
+    /** @param {{document?: Document, window?: any, hostAdapter: any, movie: any, dialog: any, account: any, storage: any, listActions?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.document = options.document ?? globalThis.document;
         this.window = options.window ?? this.document?.defaultView ?? globalThis.window;
@@ -19,6 +19,7 @@ export class Top250Controller {
         this.account = options.account;
         this.storage = options.storage;
         this.listActions = options.listActions;
+        this.ui = options.ui;
         this.scope = options.scope;
         /** @type {any} */ this.$contentBox = null;
         /** @type {any} */ this.$listRoot = null;
@@ -28,11 +29,11 @@ export class Top250Controller {
         this.started = false;
     }
 
-    getJQuery() { return /** @type {any} */ (globalThis).$ ?? this.window?.jQuery; }
-    getLoading() { return /** @type {any} */ (globalThis).loading; }
-    getShow() { return /** @type {any} */ (globalThis).show ?? {}; }
-    getClog() { return /** @type {any} */ (globalThis).clog ?? {}; }
-    getUtils() { return /** @type {any} */ (globalThis).utils ?? {}; }
+    getJQuery() { return this.ui?.getJQuery?.() ?? this.window?.jQuery; }
+    getLoading() { return this.ui?.getLoading?.(); }
+    getShow() { return this.ui?.show ?? {}; }
+    getClog() { return this.ui?.getClog?.() ?? {}; }
+    getUtils() { return this.ui?.getUtils?.() ?? {}; }
 
     /** Start the Top250 page enhancement. */
     /** @param {{discoveryApi?: any}} [options] */

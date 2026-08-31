@@ -12,7 +12,7 @@ import { StorageQueue } from "../../core/storage-queue.js";
 /** @typedef {{ attempted: boolean, completed: boolean, fatal: boolean, success: number, networkFailed: number, parseFailed: number, aborted: number, skippedInterval: number, skippedStopped: number, [key: string]: any }} TaskResult */
 
 export class TaskController {
-    /** @param {{document?: Document, window?: any, storage: any, legacyStorage: any, http: any, actressInfo: any, movie: any, features?: any, settings?: any, eventBus?: any, scope: any}} options */
+    /** @param {{document?: Document, window?: any, storage: any, legacyStorage: any, http: any, actressInfo: any, movie: any, features?: any, settings?: any, eventBus?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.document = options.document ?? globalThis.document;
         this.window = options.window ?? this.document?.defaultView ?? globalThis.window;
@@ -24,6 +24,7 @@ export class TaskController {
         this.features = options.features;
         this.settings = options.settings;
         this.eventBus = options.eventBus;
+        this.ui = options.ui;
         this.scope = options.scope;
         this.singleTaskKey = "checkNewActressActorFilterCar";
         /** @type {any} */ this.taskConfig = null;
@@ -53,10 +54,10 @@ export class TaskController {
         this.started = false;
         /** @type {null | (() => void)} */ this.settingsUnsubscribe = null;
     }
-    getJQuery() { return /** @type {any} */ (globalThis).$ ?? this.window?.jQuery; }
-    getUtils() { return /** @type {any} */ (globalThis).utils ?? {}; }
-    getClog() { return /** @type {any} */ (globalThis).clog ?? {}; }
-    getShow() { return /** @type {any} */ (globalThis).show ?? {}; }
+    getJQuery() { return this.ui?.getJQuery?.() ?? this.window?.jQuery; }
+    getUtils() { return this.ui?.getUtils?.() ?? {}; }
+    getClog() { return this.ui?.getClog?.() ?? {}; }
+    getShow() { return this.ui?.show ?? {}; }
     /** @returns {Promise<Record<string, any>>} */
     async getSettings() {
         const snapshot = this.settings?.snapshot?.() ?? {};
