@@ -1,44 +1,46 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
-import { JSDOM } from "jsdom";
-import jqueryFactory from "jquery";
-import { describe, expect, it, vi } from "vitest";
+// @vitest-environment jsdom
 
-function loadImporter(html = '<div class="movie-list"><div class="item"><a href="/v/a"><div class="video-title"><strong>ABC-1</strong></div><div class="meta">2026</div></a></div></div>', responses = []) {
-    const dom = new JSDOM(html, { url: "https://javdb.com/users/watched_videos" }), $ = jqueryFactory(dom.window), patch = vi.fn().mockResolvedValue(), get = vi.fn();
-    responses.forEach((response => get.mockResolvedValueOnce(response)));
-    const context = vm.createContext({
-        document: dom.window.document, window: dom.window, DOMParser: dom.window.DOMParser, $,
-        BasePlugin: class { getSelector() { return { itemSelector: ".movie-list .item" }; } getRuntimeService(name) { return "scope" === name ? () => ({}) : "state" === name ? { patch } : {}; } }, requestHostPage: (_http, url) => get(String(url)), utils: { q: vi.fn(), sleep: vi.fn(), htmlTo$dom: value => jqueryFactory(dom.window)(new dom.window.DOMParser().parseFromString(value, "text/html")) }, show: { info: vi.fn(), ok: vi.fn(), error: vi.fn() }, clog: { error: vi.fn() }, loading: () => ({ close() {} }), i: (target, key, value) => (target[key] = value), setTimeout, URL
+import { join } from "node:path";
+import { JSDOM } from "jsdom";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { LibraryController } from "../src/features/library/library-controller.js";
+
+function loadImporter(html = '<div class="movie-list"><div class="item"><a href="/v/a"><div class="video-title"><strong>ABC-1</strong></div><div class="meta">2026</div></a></div></div>', responses = [], path = "/users/watched_videos") {
+    const dom = new JSDOM(html, { url: `https://javdb.com${path}` }), patch = vi.fn(async () => {}), get = vi.fn(async () => ({ data: responses.shift() }));
+    const controller = new LibraryController({
+        hostAdapter: { site: "javdb", document: dom.window.document, location: dom.window.location, getListSelectors: () => ({ itemSelector: ".movie-list .item" }) },
+        state: { patch }, http: { request: get }, route: "other", scope: { assertActive: vi.fn(), addCleanup: vi.fn() },
     });
-    vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/status/want-and-watched-videos.js"), "utf8")};globalThis.Importer=WantAndWatchedVideosPlugin`, context);
-    return { plugin: new context.Importer, patch, get };
+    vi.stubGlobal("utils", { sleep: vi.fn(async () => {}) });
+    vi.stubGlobal("show", { info: vi.fn(), ok: vi.fn(), error: vi.fn() });
+    vi.stubGlobal("clog", { error: vi.fn() });
+    return { controller, patch, get };
 }
 
 describe("JavDB status imports", () => {
     it.each([["favorite", { favorite: true }], ["watched", { watched: true }]])("maps %s directly without legacy downloaded projection", async (flag, expected) => {
-        const { plugin, patch } = loadImporter();
-        plugin.flag = flag;
-        await plugin.parseMovieList();
+        const { controller, patch } = loadImporter(undefined, [], flag === "favorite" ? "/users/want_watch_videos" : "/users/watched_videos");
+        await controller.parseMovieList();
         expect(patch).toHaveBeenCalledWith("ABC-1", expected, expect.objectContaining({ type: "javdb-list-import" }));
         expect(patch.mock.calls[0][1].downloaded).toBeUndefined();
     });
 
     it("resolves only after all three pages have been imported", async () => {
         const page = (carNum, next = "") => `<div class="movie-list"><div class="item"><a href="/v/${carNum}"><div class="video-title"><strong>${carNum}</strong></div><div class="meta">2026</div></a></div></div>${next ? `<a class="pagination-next" href="${next}"></a>` : ""}`;
-        const { plugin, patch, get } = loadImporter(page("ABC-1", "/p2"), [ page("ABC-2", "/p3"), page("ABC-3") ]);
-        plugin.flag = "watched";
-        const result = await plugin.parseMovieList();
+        const { controller, patch, get } = loadImporter(page("ABC-1", "https://javdb.com/p2"), [ page("ABC-2", "https://javdb.com/p3"), page("ABC-3") ]);
+        const result = await controller.parseMovieList();
         expect(result).toEqual({ imported: 3, failed: 0, pages: 3 });
         expect(patch).toHaveBeenCalledTimes(3);
         expect(get).toHaveBeenCalledTimes(2);
     });
 
     it("rejects the whole import when fetching a later page fails", async () => {
-        const { plugin, get } = loadImporter('<div class="movie-list"></div><a class="pagination-next" href="/p2"></a>');
+        const { controller, get } = loadImporter('<div class="movie-list"></div><a class="pagination-next" href="https://javdb.com/p2"></a>');
         get.mockRejectedValueOnce(new Error("page failed"));
-        await expect(plugin.parseMovieList()).rejects.toThrow("page failed");
+        await expect(controller.parseMovieList()).rejects.toThrow("page failed");
     });
+});
+
+afterEach(() => {
+    vi.unstubAllGlobals();
 });

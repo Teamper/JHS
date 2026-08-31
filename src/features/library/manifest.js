@@ -13,16 +13,13 @@ export default defineFeature({
         const historyPlugin = runtime.enabledContributions.includes("library.history")
             ? runtime.resolveLegacyPlugin?.("HistoryPlugin")
             : null;
-        const statePlugin = runtime.enabledContributions.includes("library.state-actions")
-            ? runtime.resolveLegacyPlugin?.("WantAndWatchedVideosPlugin")
-            : null;
         const blacklistPlugin = runtime.enabledContributions.includes("library.blacklist")
             ? runtime.resolveLegacyPlugin?.("BlacklistPlugin")
             : null;
         const favoritePlugin = runtime.enabledContributions.includes("library.favorite-actresses")
             ? runtime.resolveLegacyPlugin?.("FavoriteActressesPlugin")
             : null;
-        const controller = new LibraryController({ historyPlugin, statePlugin, blacklistPlugin, favoritePlugin, keywordFilterEnabled: runtime.enabledContributions.includes("library.keyword-filter"), hostAdapter: deps[PORT.host], storage: deps[SERVICE.storage], settings: deps[SERVICE.settings], eventBus: deps[SERVICE.eventBus], storageMutation: deps[SERVICE.storageMutation], route: runtime.route, scope: runtime.scope });
+        const controller = new LibraryController({ historyPlugin, blacklistPlugin, favoritePlugin, keywordFilterEnabled: runtime.enabledContributions.includes("library.keyword-filter"), stateImportEnabled: runtime.enabledContributions.includes("library.state-actions"), hostAdapter: deps[PORT.host], storage: deps[SERVICE.storage], settings: deps[SERVICE.settings], eventBus: deps[SERVICE.eventBus], storageMutation: deps[SERVICE.storageMutation], state: deps[SERVICE.state], http: deps[SERVICE.http], route: runtime.route, scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

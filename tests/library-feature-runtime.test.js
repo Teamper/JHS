@@ -9,19 +9,17 @@ describe("Library FeatureRuntime ownership", () => {
         const scope = new LifecycleScope("feature:library"), repository = {}, historyPlugin = {
             handle: vi.fn(async () => {}),
             get historyRepository() { return repository; },
-        }, statePlugin = { handle: vi.fn(async () => {}) }, blacklistPlugin = {
+        }, blacklistPlugin = {
             openBlacklistDialog: vi.fn(),
             parseAndSaveFilterInfo: vi.fn(),
         }, favoritePlugin = { handle: vi.fn(async () => {}) };
-        const controller = new LibraryController({ historyPlugin, statePlugin, blacklistPlugin, favoritePlugin, route: "other", scope });
+        const controller = new LibraryController({ historyPlugin, blacklistPlugin, favoritePlugin, route: "other", scope });
 
         await controller.start();
         await controller.start();
 
         expect(historyPlugin.handle).toHaveBeenCalledOnce();
         expect(historyPlugin.handle).toHaveBeenCalledWith({ scope });
-        expect(statePlugin.handle).toHaveBeenCalledOnce();
-        expect(statePlugin.handle).toHaveBeenCalledWith({ scope });
         expect(favoritePlugin.handle).toHaveBeenCalledOnce();
         expect(favoritePlugin.handle).toHaveBeenCalledWith({ scope });
         expect(controller.getApi().getHistoryRepository()).toBe(repository);

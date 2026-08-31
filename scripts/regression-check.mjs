@@ -74,7 +74,6 @@ const fc2 = await read("src/plugins/external-search/fc2.js");
 const fc2By123Av = await read("src/plugins/external-search/fc2-by-123av.js");
 const uiPrimitives = await read("src/core/ui-primitives.js");
 const history = await read("src/plugins/status/history.js");
-const statusImport = await read("src/plugins/status/want-and-watched-videos.js");
 const review = await read("src/plugins/external-search/review.js");
 const related = await read("src/plugins/external-search/related.js");
 const one23Offline = await read("src/plugins/one-two-three/offline.js");
@@ -213,6 +212,7 @@ const autoPageSource = await read("src/plugins/status/auto-page.js");
 const foldCategorySource = await read("src/plugins/status/fold-category.js");
 const coverButtonSource = await read("src/plugins/image-viewer/cover-button.js");
 const compatibilitySource = compatibilityControllerSource;
+const statusImport = libraryControllerSource;
 const responsiveShellSource = await read("src/features/system/responsive-shell-controller.js");
 assertIncludes(listPageSource, "applyVisibility(items = null)", "list page function signature");
 assertIncludes(listPageSource, "async filterMovieList(", "list page function signature");
@@ -298,7 +298,7 @@ assert(!fc2.includes('getOptionalDependency("FilterTitleKeywordPlugin")'), "FC2 
 assertIncludes(libraryManifestSource, 'id: "library"', "real library feature manifest");
 assertIncludes(libraryManifestSource, 'new LibraryController({', "library feature controller ownership");
 assertIncludes(libraryControllerSource, 'this.historyPlugin?.handle({ scope: this.scope })', "library history lifecycle handoff");
-assertIncludes(libraryControllerSource, 'this.statePlugin?.handle({ scope: this.scope })', "library state lifecycle handoff");
+assertIncludes(libraryControllerSource, "this.state.patch", "library state import lifecycle handoff");
 assertIncludes(libraryControllerSource, 'if (this.route === "detail") this.bindDetailKeywordFilter(this.document);', "library native keyword lifecycle");
 assertIncludes(libraryControllerSource, 'blacklistCall("parseAndSaveFilterInfo")', "library blacklist API boundary");
 assertIncludes(libraryControllerSource, 'hasBlacklist: Boolean(this.blacklistPlugin)', "library blacklist availability");
@@ -335,8 +335,8 @@ assert(!unifiedOffline.includes('getOptionalDependency("OneTwoThreeOfflinePlugin
 assert(!settingSource.includes('getOptionalDependency("TranslatePlugin")'), "settings must not resolve the translation plugin directly");
 assertIncludes(historySource, "async handle(options = {})", "history feature lifecycle entry");
 assertIncludes(historySource, "scope.addCleanup", "history feature scope cleanup");
-assertIncludes(statusImport, "async handle(options = {})", "state import feature lifecycle entry");
-assertIncludes(statusImport, "jhsStatusImport", "state import feature scope cleanup");
+assertIncludes(statusImport, "mountStateImportAction()", "state import feature lifecycle entry");
+assertIncludes(statusImport, 'id = "wantWatchBtn"', "state import feature scope cleanup");
 assertIncludes(libraryControllerSource, "scope.addCleanup", "keyword filter feature scope cleanup");
 assertIncludes(await read("src/plugins/favorite/favorite-actresses.js"), "jhsFavoriteActress", "favorite feature scope cleanup");
 assertIncludes(listPageSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "list feature scope handoff");
@@ -420,13 +420,13 @@ for (const removedPlugin of [ "OneOneFiveOfflinePlugin", "OneOneFiveRenamePlugin
 assertIncludes(unifiedOffline, "forceAvailabilityRefresh", "offline retries must bypass availability cache");
 assertIncludes(unifiedOffline, "preferredProviderId", "offline retries must prefer their original provider");
 assert(!statusImport.includes("$.ajax("), "multi-page import must use one awaited promise chain");
-assertIncludes(statusImport, "return this.parseMovieList(nextPage, result)", "multi-page import recursion must be awaited by return");
+assertIncludes(statusImport, 'return this.parseMovieList(new DOMParser().parseFromString(html, "text/html"), result)', "multi-page import recursion must be awaited by return");
 assert(!history.includes('$(".layui-layer-content")'), "history events must be scoped to their own layer");
 assertIncludes(history, "this.historyRepository.toggle(a, flag", "single history actions must toggle state through HistoryRepository");
 assert(!review.includes('id="reviews'), "review panels must not expose fixed instance ids");
 assert(!related.includes('id="related'), "related panels must not expose fixed instance ids");
-assertIncludes(statusImport, 'this.flag = "watched"', "JavDB watched import mapping");
-assert(!/watched_videos[\s\S]{0,500}this\.(?:flag|type)\s*=\s*g/.test(statusImport), "JavDB watched import must not map to downloaded");
+assertIncludes(statusImport, 'return href.includes("/watched_videos") ? "watched" : "favorite"', "JavDB watched import mapping");
+assert(!statusImport.includes("downloaded"), "JavDB watched import must not map to downloaded");
 
 const expectedPlugins = [
   ["status/detail-page.js", "DetailPagePlugin", "DetailPagePlugin"],
@@ -456,7 +456,6 @@ const expectedPlugins = [
   ["avatar/search-by-image.js", "SearchByImagePlugin", "SearchByImagePlugin"],
   ["status/bus-nav-bar.js", "BusNavBarPlugin", "BusNavBarPlugin"],
   ["external-search/related.js", "RelatedPlugin", "RelatedPlugin"],
-  ["status/want-and-watched-videos.js", "WantAndWatchedVideosPlugin", "WantAndWatchedVideosPlugin"],
   ["image-viewer/cover-button.js", "CoverButtonPlugin", "CoverButtonPlugin"],
   ["external-search/fc2-by-123av.js", "Fc2By123AvPlugin", "Fc2By123AvPlugin"],
   ["external-search/magnet-hub.js", "MagnetHubPlugin", "MagnetHubPlugin"],
@@ -485,7 +484,7 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,HistoryPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,WantAndWatchedVideosPlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,FavoriteActressesPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,HistoryPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,FavoriteActressesPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavDB plugin registration order changed"
 );
 assert(
