@@ -44,7 +44,7 @@ describe("detail workspace adapters", () => {
 describe("list toolbar and UI cleanup contracts", () => {
     const commandbar = readTestFile(join(process.cwd(), "src/plugins/status/mobile-bottom-bar.js"), "utf8");
     const hitShow = readTestFile(join(process.cwd(), "src/plugins/external-search/hit-show.js"), "utf8");
-    const translate = readTestFile(join(process.cwd(), "src/plugins/translate/translate.js"), "utf8");
+    const translate = readTestFile(join(process.cwd(), "src/features/external-bridge/translation-controller.js"), "utf8");
     const translationUi = readTestFile(join(process.cwd(), "src/ui/translation/title-translation.js"), "utf8");
     const settings = readTestFile(join(process.cwd(), "src/plugins/backup/setting-templates.js"), "utf8");
     const settingPlugin = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8");
@@ -108,7 +108,7 @@ describe("list toolbar and UI cleanup contracts", () => {
 
     it("uses an idempotent translation node and a safe cache key", () => {
         expect(translationUi).toContain('nextAll(".translated-title").first()');
-        expect(translate).toContain('getRuntimeService("translation")');
+        expect(translate).toContain("this.translation");
         expect(translate).not.toContain("localStorage");
         expect(translationUi).not.toMatch(/\.html\(/);
         expect(translate).not.toMatch(/\.html\(/);

@@ -64,6 +64,7 @@ const libraryManifestSource = await read("src/features/library/manifest.js");
 const libraryControllerSource = await read("src/features/library/library-controller.js");
 const externalBridgeManifestSource = await read("src/features/external-bridge/manifest.js");
 const externalBridgeControllerSource = await read("src/features/external-bridge/external-bridge-controller.js");
+const externalBridgeTranslationSource = await read("src/features/external-bridge/translation-controller.js");
 const discoveryManifestSource = await read("src/features/discovery/manifest.js");
 const discoveryControllerSource = await read("src/features/discovery/discovery-controller.js");
 const compatibilityManifestSource = await read("src/features/compatibility/manifest.js");
@@ -440,6 +441,11 @@ assertIncludes(identityActressSource, 'this.actressInfo.lookup(name, { scope: th
 assert(!identityActressSource.includes('getRuntimeService('), "identity actress must not resolve legacy runtime services");
 assertIncludes(externalBridgeManifestSource, 'id: "external-bridge"', "real external bridge feature manifest");
 assertIncludes(externalBridgeManifestSource, 'new ExternalBridgeController({', "external bridge feature controller ownership");
+assertIncludes(externalBridgeManifestSource, 'new ExternalBridgeTranslationController({', "external bridge translation controller ownership");
+assertIncludes(externalBridgeControllerSource, 'this.translationController?.start()', "external bridge translation lifecycle handoff");
+assertIncludes(externalBridgeTranslationSource, 'translation: this.translation', "external bridge translation service boundary");
+assertIncludes(externalBridgeTranslationSource, 'this.scope.addCleanup?.(() => this.dispose())', "external bridge translation scope cleanup");
+assert(!externalBridgeTranslationSource.includes('getRuntimeService('), "external bridge translation must not resolve legacy runtime services");
 assertIncludes(externalBridgeControllerSource, 'this.unifiedOfflinePlugin?.handle({ scope: this.scope, oneTwoThreePlugin: this.oneTwoThreePlugin })', "external bridge offline lifecycle handoff");
 assertIncludes(externalBridgeControllerSource, 'getOfflineProvider:', "external bridge offline API boundary");
 assertIncludes(discoveryManifestSource, 'id: "discovery"', "real discovery feature manifest");
@@ -584,7 +590,6 @@ const expectedPlugins = [
   ["external-search/magnet-hub.js", "MagnetHubPlugin", "MagnetHubPlugin"],
   ["image-viewer/screenshot.js", "ScreenShotPlugin", "ScreenShotPlugin"],
   ["image-viewer/bus-img.js", "BusImgPlugin", "BusImgPlugin"],
-  ["translate/translate.js", "TranslatePlugin", "TranslatePlugin"],
   ["new-video/task.js", "TaskPlugin", "TaskPlugin"],
   ["new-video/new-video.js", "NewVideoPlugin", "NewVideoPlugin"],
   ["one-two-three/offline.js", "OneTwoThreeOfflinePlugin", "OneTwoThreeOfflinePlugin"],
@@ -606,11 +611,11 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,HitShowPlugin,Top250Plugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,OtherSitePlugin,TranslatePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,HitShowPlugin,Top250Plugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,OtherSitePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavDB plugin registration order changed"
 );
 assert(
-  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavBus plugin registration order changed"
 );
 assertIncludes(registry, 'OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"]', "shared registry");
@@ -654,6 +659,7 @@ sourceByFile.set("features/identity/identity-bus-navigation-controller.js", iden
 sourceByFile.set("features/identity/identity-image-search-controller.js", identityImageSearchSource);
 sourceByFile.set("features/identity/identity-actress-info-controller.js", identityActressSource);
 sourceByFile.set("features/compatibility/compatibility-controller.js", compatibilityControllerSource);
+sourceByFile.set("features/external-bridge/translation-controller.js", externalBridgeTranslationSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
 sourceByFile.set("backup/setting-styles.js", await read("src/plugins/backup/setting-styles.js"));

@@ -6,7 +6,7 @@ const previewVideo = readTestFile(join(process.cwd(), "src/plugins/image-viewer/
 const coverButton = readTestFile(join(process.cwd(), "src/plugins/image-viewer/cover-button.js"), "utf8");
 const busPreview = readTestFile(join(process.cwd(), "src/plugins/image-viewer/bus-preview-video.js"), "utf8");
 const listPage = readTestFile(join(process.cwd(), "src/plugins/status/list-page.js"), "utf8");
-const translate = readTestFile(join(process.cwd(), "src/plugins/translate/translate.js"), "utf8");
+const translate = readTestFile(join(process.cwd(), "src/features/external-bridge/translation-controller.js"), "utf8");
 const titleTranslation = readTestFile(join(process.cwd(), "src/ui/translation/title-translation.js"), "utf8");
 const fc2 = readTestFile(join(process.cwd(), "src/plugins/external-search/fc2.js"), "utf8");
 const otherSite = readTestFile(join(process.cwd(), "src/plugins/external-search/other-site.js"), "utf8");
@@ -32,7 +32,7 @@ describe("RC 收口：async 回流 gate", () => {
         expect(listPage).toContain("this.translationGeneration = 0");
         expect(listPage).toContain("invalidateTranslations()");
         expect(listPage).toContain("generation !== this.translationGeneration");
-        expect(translate).toContain("?.invalidateTranslations?.()");
+        expect(translate).toContain("invalidateTranslations?.()");
         expect(titleTranslation).toContain("options.isActive && !options.isActive()");
         expect(titleTranslation).toContain("if (options.isActive && options.isActive() === false) return;");
         expect(fc2).toContain("if (!context.isAlive() || (settings.snapshot().translateTitle ?? _) !== _) return;");

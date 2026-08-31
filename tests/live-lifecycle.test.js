@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CoverButtonPlugin } from "../src/plugins/image-viewer/cover-button.js";
 import { PreviewVideoPlugin } from "../src/plugins/image-viewer/preview-video.js";
 import { BusPreviewVideoPlugin } from "../src/plugins/image-viewer/bus-preview-video.js";
-import { TranslatePlugin } from "../src/plugins/translate/translate.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { ExternalBridgeTranslationController } from "../src/features/external-bridge/translation-controller.js";
 import { HighlightMagnetPlugin } from "../src/plugins/status/highlight-magnet.js";
 
 const $ = jquery;
@@ -176,18 +177,15 @@ describe("CoverButtonPlugin listener accumulation", () => {
     });
 });
 
-describe("TranslatePlugin live lifecycle", () => {
+describe("ExternalBridgeTranslationController live lifecycle", () => {
     it("reverts on OFF and re-applies on ON with a single listener", async () => {
         win.isDetailPage = true;
         $("body").append('<h1 class="jhs-fc2-title"><strong class="current-title">ABC-123 タイトル</strong></h1>');
         const settings = makeSettings({ translateTitle: "yes" });
-        const cleanups = [];
-        const scope = { addCleanup: (fn) => cleanups.push(fn) };
-        const plugin = new TranslatePlugin();
-        plugin.getRuntimeService = (name) => name === "settings" ? settings : name === "scope" ? async () => scope : name === "translation" ? { translate: async () => "译名" } : null;
-        plugin.getOptionalDependency = () => null;
+        const scope = new LifecycleScope("feature:external-bridge");
+        const controller = new ExternalBridgeTranslationController({ document: doc, window: win, route: "detail", settings, translation: { translate: async () => "译名" }, features: {}, scope });
 
-        await plugin.handle();
+        await controller.start();
         expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);
         await vi.waitFor(() => expect($(".translated-title").length).toBe(1));
         expect($(".translated-title").text()).toBe("译名");
@@ -198,6 +196,7 @@ describe("TranslatePlugin live lifecycle", () => {
         await settings.set("translateTitle", "yes");
         await vi.waitFor(() => expect($(".translated-title").length).toBe(1));
         expect(settings.listeners.filter((item) => item.name === "settings.changed")).toHaveLength(1);
+        scope.dispose();
     });
 });
 

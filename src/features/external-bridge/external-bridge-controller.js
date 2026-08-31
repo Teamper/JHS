@@ -5,9 +5,9 @@
  * the Feature API.
  */
 export class ExternalBridgeController {
-    /** @param {{translationPlugin?: any, oneOneFivePlugin?: any, unifiedOfflinePlugin?: any, oneTwoThreePlugin?: any, javTrailersPlugin?: any, subtitlePlugin?: any, scope: any}} options */
+    /** @param {{translationController?: any, oneOneFivePlugin?: any, unifiedOfflinePlugin?: any, oneTwoThreePlugin?: any, javTrailersPlugin?: any, subtitlePlugin?: any, scope: any}} options */
     constructor(options) {
-        this.translationPlugin = options.translationPlugin ?? null;
+        this.translationController = options.translationController ?? null;
         this.oneOneFivePlugin = options.oneOneFivePlugin ?? null;
         this.unifiedOfflinePlugin = options.unifiedOfflinePlugin ?? null;
         this.oneTwoThreePlugin = options.oneTwoThreePlugin ?? null;
@@ -23,7 +23,7 @@ export class ExternalBridgeController {
         this.started = true;
         return Promise.resolve().then(() => Promise.all([
             this.oneTwoThreePlugin?.handle({ scope: this.scope }),
-            this.translationPlugin?.handle({ scope: this.scope }),
+            this.translationController?.start(),
             this.oneOneFivePlugin?.handle({ scope: this.scope }),
             this.unifiedOfflinePlugin?.handle({ scope: this.scope, oneTwoThreePlugin: this.oneTwoThreePlugin }),
             this.javTrailersPlugin?.handle({ scope: this.scope }),
@@ -37,7 +37,7 @@ export class ExternalBridgeController {
     /** Expose only the external-bridge capabilities needed by other Features. */
     getApi() {
         return Object.freeze({
-            hasTranslation: Boolean(this.translationPlugin),
+            hasTranslation: Boolean(this.translationController),
             hasOffline: Boolean(this.unifiedOfflinePlugin),
             submitOffline: (/** @type {any[]} */ ...args) => this.unifiedOfflinePlugin?.submitResource?.(...args),
             getOfflineProvider: (/** @type {string} */ id) => this.unifiedOfflinePlugin?.registry?.providers?.get?.(id) ?? null,

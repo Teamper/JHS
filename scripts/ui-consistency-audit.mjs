@@ -37,7 +37,7 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, fc2
   readFile(join(srcRoot, "plugins", "new-video", "new-video.js"), "utf8"),
   readFile(join(srcRoot, "core", "plugin-manager.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "external-search", "hit-show.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "translate", "translate.js"), "utf8"),
+  readFile(join(srcRoot, "features", "external-bridge", "translation-controller.js"), "utf8"),
   readFile(join(srcRoot, "ui", "translation", "title-translation.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "backup", "setting-styles.js"), "utf8"),
   readFile(join(srcRoot, "main.js"), "utf8"),
@@ -146,7 +146,7 @@ forbidMatch(hitShow, /is-active|aria-current/, "hit show period must not retain 
 for (const field of ["data-jhs-rate-count", "data-jhs-publish-time", "data-original-index"])
   requireMatch(hitShow, new RegExp(field), `hit show sorting field missing ${field}`);
 forbidMatch(hitShow, /tool-box|button is-small/, "hit show must use the shared segmented toolbar");
-requireMatch(translate, /getRuntimeService\("translation"\)/, "translation feature must use the declared service");
+requireMatch(translate, /translation:\s*this\.translation/, "translation feature must use the declared service");
 forbidMatch(translate, /localStorage|fetch\(/, "translation feature must not own network or cache persistence");
 requireMatch(translationUi, /nextAll\("\.translated-title"\)/, "translation output must update an existing node");
 forbidMatch(translationUi, /translated-title[\s\S]{0,400}\.html\(/, "translated external text must not use html()");

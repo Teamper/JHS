@@ -35,7 +35,6 @@ import { ListPageButtonPlugin } from "./status/list-page-button.js";
 import { ListPagePluginAdapter as ListPagePlugin } from "../compat/list-page-adapter.js";
 import { MobileBottomBarPlugin } from "./status/mobile-bottom-bar.js";
 import { SubTitleCatPlugin } from "./subtitle/subtitle-cat.js";
-import { TranslatePlugin } from "./translate/translate.js";
 
 const manifest = (id, featureId, plugin, sites, order, requires = [], options = {}) => defineContribution({
     id, featureId, legacyPluginId: plugin.legacyPluginId ?? plugin.name, plugin, sites, order, requires, ...options,
@@ -61,7 +60,6 @@ export const legacyContributionManifests = Object.freeze([
     manifest("detail.native-magnets", "detail", HighlightMagnetPlugin, ["javdb", "javbus"], { javdb: 19, javbus: 15 }, [PORT.host, SERVICE.settings], { managedByFeature: true }),
     manifest("detail.javdb-preview", "detail", PreviewVideoPlugin, ["javdb"], { javdb: 20 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie], { managedByFeature: true }),
     manifest("detail.external-sites", "detail", OtherSitePlugin, ["javdb", "javbus"], { javdb: 23, javbus: 19 }, [PORT.host, SERVICE.movie, SERVICE.storage, SERVICE.settings], { managedByFeature: true }),
-    manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings, REGISTRY.feature], { managedByFeature: true }),
     manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage, SERVICE.http, SERVICE.magnet], { managedByFeature: true }),
     manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot, SERVICE.settings], { managedByFeature: true }),
     manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog, SERVICE.storage, SERVICE.actressInfo, SERVICE.movie, SERVICE.state], { managedByFeature: true }),

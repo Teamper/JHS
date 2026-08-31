@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { ListPagePlugin } from "../src/plugins/status/list-page.js";
-import { TranslatePlugin } from "../src/plugins/translate/translate.js";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { ExternalBridgeTranslationController } from "../src/features/external-bridge/translation-controller.js";
 import { initializeRuntimeConstants } from "../src/core/constants.js";
 
 function flush() {
@@ -57,29 +58,33 @@ describe("translation DOM/jQuery contract", () => {
         expect(clog.error).not.toHaveBeenCalled();
     });
 
-    it("runs TranslatePlugin.applyTranslation through the real ListPagePlugin with DOM Element[]", async () => {
-        const { dom, jq, listPage, translate, clog } = createListHarness();
+    it("runs the translation controller through the real ListPagePlugin with DOM Element[]", async () => {
+        const { dom, listPage, translate, clog } = createListHarness();
         dom.window.isListPage = true;
 
-        const translatePlugin = new TranslatePlugin();
         const listFeature = {
             getListSelectors: () => listPage.getSelector(),
             translateListItems: listPage.translateListItems.bind(listPage),
             revertTranslation: listPage.revertTranslation.bind(listPage),
             invalidateTranslations: listPage.invalidateTranslations.bind(listPage),
         };
-        translatePlugin.runtimeServices = {
+        const scope = new LifecycleScope("feature:external-bridge");
+        const translateController = new ExternalBridgeTranslationController({
+            document: dom.window.document,
+            window: dom.window,
+            route: "list",
             settings: { snapshot: () => ({ translateTitle: "yes" }) },
             translation: { translate },
-            scope: async () => ({ disposed: false }),
             features: { getFeatureApi: async () => listFeature },
-        };
+            scope,
+        });
 
-        await translatePlugin.applyTranslation();
+        await translateController.applyTranslation();
 
         expect(translate).toHaveBeenCalledTimes(2);
         expect(dom.window.document.querySelector(".item").getAttribute("data-jhs-translation-key")).toBe("ABC-123");
         expect(clog.error).not.toHaveBeenCalled();
+        scope.dispose();
     });
 
     it("treats missing translateTitle as enabled by default", async () => {

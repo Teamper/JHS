@@ -5,7 +5,7 @@ import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 describe("ExternalBridgeController", () => {
     it("starts enabled bridge contributions with one Feature scope", async () => {
         const scope = new LifecycleScope("feature:external-bridge"), plugins = Object.fromEntries([
-            ["translationPlugin", { handle: vi.fn() }],
+            ["translationController", { start: vi.fn() }],
             ["oneOneFivePlugin", { handle: vi.fn() }],
             ["unifiedOfflinePlugin", { handle: vi.fn(), registry: { providers: new Map([["115", { id: "115" }]]) } }],
             ["oneTwoThreePlugin", { handle: vi.fn() }],
@@ -17,7 +17,7 @@ describe("ExternalBridgeController", () => {
         await controller.start();
 
         expect(plugins.oneTwoThreePlugin.handle).toHaveBeenCalledWith({ scope });
-        expect(plugins.translationPlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(plugins.translationController.start).toHaveBeenCalledOnce();
         expect(plugins.oneOneFivePlugin.handle).toHaveBeenCalledWith({ scope });
         expect(plugins.unifiedOfflinePlugin.handle).toHaveBeenCalledWith({ scope, oneTwoThreePlugin: plugins.oneTwoThreePlugin });
         expect(plugins.javTrailersPlugin.handle).toHaveBeenCalledWith({ scope });
@@ -27,13 +27,13 @@ describe("ExternalBridgeController", () => {
     });
 
     it("does not start a second time and releases the started state on failure", async () => {
-        const scope = new LifecycleScope("feature:external-bridge"), handle = vi.fn().mockRejectedValue(new Error("bridge failed"));
-        const controller = new ExternalBridgeController({ translationPlugin: { handle }, scope });
+        const scope = new LifecycleScope("feature:external-bridge"), start = vi.fn().mockRejectedValue(new Error("bridge failed"));
+        const controller = new ExternalBridgeController({ translationController: { start }, scope });
 
         await expect(controller.start()).rejects.toThrow("bridge failed");
         expect(controller.started).toBe(false);
-        handle.mockResolvedValue(undefined);
+        start.mockResolvedValue(undefined);
         await controller.start();
-        expect(handle).toHaveBeenCalledTimes(2);
+        expect(start).toHaveBeenCalledTimes(2);
     });
 });

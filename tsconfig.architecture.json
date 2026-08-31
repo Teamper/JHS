@@ -93,8 +93,7 @@
     "src/plugins/status/list-page.js",
     "src/plugins/status/mobile-bottom-bar.js",
     "src/plugins/status/want-and-watched-videos.js",
-    "src/plugins/subtitle/subtitle-cat.js",
-    "src/plugins/translate/translate.js"
+    "src/plugins/subtitle/subtitle-cat.js"
   ],
   "exclude": ["src/app/bootstrap.js"]
 }

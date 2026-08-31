@@ -221,8 +221,8 @@ describe("source regression contracts", () => {
             expect(source).toContain("getPageInfo()");
             expect(source).not.toContain("getPageInfo()?.carNum");
         }
-        const translate = readTestFile(join(repoRoot, "src/plugins/translate/translate.js"), "utf8");
-        expect(translate).toContain('getRuntimeService("translation")');
+        const translate = readTestFile(join(repoRoot, "src/features/external-bridge/translation-controller.js"), "utf8");
+        expect(translate).toContain("readCarNum()");
         expect(translate).not.toContain("getPageInfo()?.carNum");
     });
 
