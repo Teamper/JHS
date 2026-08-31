@@ -49,8 +49,9 @@ export class FeatureRuntime {
             try {
                 const css = await plugin.initCss();
                 if (!css) continue;
+                const normalizedCss = css.replace(/^\s*<style(?:\s[^>]*)?>/i, "").replace(/<\/style>\s*$/i, "");
                 const styleId = `jhs-feature-${manifest.id}-${contributionId}`.replace(/[^a-zA-Z0-9_-]/g, "-");
-                const release = this.styles.register(styleId, css);
+                const release = this.styles.register(styleId, normalizedCss);
                 typeof release === "function" && scope.addCleanup(release);
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);

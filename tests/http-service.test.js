@@ -62,6 +62,31 @@ describe("HTTP, URL and settings contracts", () => {
         expect(request).toHaveBeenCalledOnce();
     });
 
+    it("rejects an HTTPS to HTTP redirect before the next hop", async () => {
+        const request = vi.fn(async () => ({ status: 301, responseHeaders: "Location: http://api.example.test/insecure\r\n", finalUrl: "https://api.example.test/start" }));
+        const service = new HttpService({ request }, new ExternalUrlPolicy());
+        await expect(service.request({ providerId: "example", url: "https://api.example.test/start", cacheScope: "none", redirectStrategy: "manual", urlPolicy: { trustClass: "builtin-public", hosts: ["api.example.test"] } })).rejects.toMatchObject({ code: "INVALID_URL" });
+        expect(request).toHaveBeenCalledOnce();
+    });
+
+    it("validates every hop of a multi-hop redirect chain", async () => {
+        const request = vi.fn()
+            .mockResolvedValueOnce({ status: 302, responseHeaders: "Location: /middle\r\n", finalUrl: "https://api.example.test/start" })
+            .mockResolvedValueOnce({ status: 307, responseHeaders: "Location: /final\r\n", finalUrl: "https://api.example.test/middle" })
+            .mockResolvedValueOnce({ status: 200, data: "ok", finalUrl: "https://api.example.test/final" });
+        const service = new HttpService({ request }, new ExternalUrlPolicy());
+        await expect(service.request({ providerId: "example", url: "https://api.example.test/start", cacheScope: "none", redirectStrategy: "manual", urlPolicy: { trustClass: "builtin-public", hosts: ["api.example.test"] } })).resolves.toMatchObject({ data: "ok" });
+        expect(request).toHaveBeenNthCalledWith(2, expect.objectContaining({ url: "https://api.example.test/middle", redirect: "manual" }));
+        expect(request).toHaveBeenNthCalledWith(3, expect.objectContaining({ url: "https://api.example.test/final", redirect: "manual" }));
+    });
+
+    it("rejects an allowed-to-disallowed-host redirect before following it", async () => {
+        const request = vi.fn(async () => ({ status: 302, responseHeaders: "Location: https://evil.example.test/landing\r\n", finalUrl: "https://api.example.test/start" }));
+        const service = new HttpService({ request }, new ExternalUrlPolicy());
+        await expect(service.request({ providerId: "example", url: "https://api.example.test/start", cacheScope: "none", redirectStrategy: "manual", urlPolicy: { trustClass: "builtin-public", hosts: ["api.example.test"] } })).rejects.toMatchObject({ code: "INVALID_URL" });
+        expect(request).toHaveBeenCalledOnce();
+    });
+
     it("defaults user-local requests to redirect error and forbids unsafe follow", async () => {
         const request = vi.fn(async options => ({ status: 302, responseHeaders: "Location: http://192.168.1.10:5244/next\r\n", finalUrl: options.url }));
         const policy = new ExternalUrlPolicy({ localOrigins: ["http://192.168.1.10:5244"] });

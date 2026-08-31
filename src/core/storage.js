@@ -460,6 +460,19 @@ export class StorageManager {
         };
         return this._withStorageMutation(write);
     }
+    /** Atomic settings migration primitive for callers that already own the shared mutation lock. */
+    async updateSettingWithoutLock(mutator) {
+        if (typeof mutator !== "function") throw new TypeError("Settings update mutator must be a function");
+        const stored = await this.getSetting();
+        const base = stored && typeof stored === "object" && !Array.isArray(stored) ? stored : {};
+        const settings = { ...base };
+        const maybePromise = mutator(settings);
+        if (maybePromise && typeof maybePromise === "object" && typeof maybePromise.then === "function") throw new TypeError("Settings update mutator must be synchronous");
+        const changed = Object.keys({ ...base, ...settings }).some((key) => base[key] !== settings[key]) || Object.keys(base).some((key) => !Object.prototype.hasOwnProperty.call(settings, key));
+        if (changed) await this._saveSettingWithoutLock(settings);
+        globalThis.settingsService?.adoptPersistedSnapshot?.(settings);
+        return settings;
+    }
     async importData(e) {
         validatePortableData(e);
         return this._withStorageMutation(() => this._importDataWithoutLock(e));
@@ -684,7 +697,7 @@ export class StorageManager {
             checkIntervalTime_newVideo: "checkNewVideo_intervalTime",
             checkIntervalTime_favoriteActress: "checkFavoriteActress_IntervalTime"
         };
-        await this.updateSetting((e) => {
+        await this.updateSettingWithoutLock((e) => {
             for (const a in n) {
                 const i = n[a];
                 Object.prototype.hasOwnProperty.call(e, a) && (e[i] = e[a], delete e[a], t = !0);

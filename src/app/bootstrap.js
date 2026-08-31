@@ -5,7 +5,7 @@ import { injectCoreCss } from "../core/css-injection.js";
 import { JhsError } from "../core/jhs-error.js";
 import { runDataMigrationsWithoutLock } from "../core/migration.js";
 import { StorageMutationCoordinator } from "../core/storage-mutation-coordinator.js";
-import { normalizeScreenshotSetting } from "../core/settings-migration.js";
+import { normalizeScreenshotSettingDraft } from "../core/settings-migration.js";
 import { PluginManager } from "../core/plugin-manager.js";
 import { createLegacyRuntime } from "../core/legacy-runtime.js";
 import { initializeEventBus } from "../core/event-bus.js";
@@ -60,15 +60,6 @@ async function readDisabledPluginSettings(storageManager) {
     return { migrated, needsMigration: JSON.stringify(previous) !== JSON.stringify(migrated) };
 }
 
-async function persistDisabledPluginMigration(settings) {
-    // 在 update 的最新草稿上重算迁移：update 无变更时不落盘，也不会覆盖并发期间其他标签页写入的禁用项
-    await settings.update((draft) => {
-        const previous = parseDisabledPlugins(typeof draft.disabledPlugins === "string" ? draft.disabledPlugins : "[]");
-        const migrated = migrateDisabledPlugins(previous);
-        if (JSON.stringify(previous) !== JSON.stringify(migrated)) draft.disabledPlugins = JSON.stringify(migrated);
-    });
-}
-
 async function resolveLocalOrigins(storageManager) {
     // Read-only phase. Persisting is deferred until SettingsService exists so
     // the migration can run as an atomic patch on the freshest stored draft.
@@ -86,9 +77,13 @@ async function resolveLocalOrigins(storageManager) {
     return { origins: [...origins], notice: null };
 }
 
-async function persistLocalOriginMigration(settings, resolved) {
-    if (!resolved.needsOrigin && !resolved.needsNotice) return;
-    await settings.update((draft) => {
+/** @param {Record<string, unknown>} draft @param {{origins: string[], needsOrigin?: boolean, needsNotice?: boolean}} resolved @param {{sortMethod: string|null, foldCategory: string|null, videoMuted: string|null}} legacy */
+function applyBootstrapSettingMigrations(draft, resolved, legacy) {
+    const previous = parseDisabledPlugins(typeof draft.disabledPlugins === "string" ? draft.disabledPlugins : "[]");
+    const migrated = migrateDisabledPlugins(previous);
+    if (JSON.stringify(previous) !== JSON.stringify(migrated)) draft.disabledPlugins = JSON.stringify(migrated);
+    normalizeScreenshotSettingDraft(draft);
+    if (resolved.needsOrigin || resolved.needsNotice) {
         if (resolved.needsOrigin) {
             const origins = new Set(Array.isArray(draft.trustedLocalOrigins) ? draft.trustedLocalOrigins : []);
             const legacyOrigin = resolved.origins[resolved.origins.length - 1];
@@ -96,7 +91,10 @@ async function persistLocalOriginMigration(settings, resolved) {
             draft.trustedLocalOrigins = [ ...origins ];
         }
         draft.localOriginTrustNoticeV1 = true;
-    });
+    }
+    if (draft.sortMethod == null && ["default", "rateCount", "date"].includes(legacy.sortMethod || "")) draft.sortMethod = legacy.sortMethod;
+    if (draft.foldCategoryCollapsed == null && ["yes", "no"].includes(legacy.foldCategory || "")) draft.foldCategoryCollapsed = legacy.foldCategory === "yes";
+    if (draft.videoMuted == null && ["yes", "no"].includes(legacy.videoMuted || "")) draft.videoMuted = legacy.videoMuted === "yes";
 }
 
 export async function bootstrapJhs() {
@@ -132,24 +130,13 @@ export async function bootstrapJhs() {
         Object.assign(globalThis, { settingsService: context.services.settings });
         await context.services.settings.load();
         markPhase("settings-load");
-        await persistDisabledPluginMigration(context.services.settings);
-        await persistLocalOriginMigration(context.services.settings, localOriginSettings);
-        await normalizeScreenshotSetting(context.services.settings);
-        context.services.profile.start();
         const legacySortMethod = localStorage.getItem("jhs_sortMethod");
         const legacyFoldCategory = localStorage.getItem("jhs_foldCategory");
         const legacyVideoMuted = localStorage.getItem("jhs_videoMuted");
         await context.services.settings.update((draft) => {
-            if (draft.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) {
-                draft.sortMethod = legacySortMethod;
-            }
-            if (draft.foldCategoryCollapsed == null && ["yes", "no"].includes(legacyFoldCategory || "")) {
-                draft.foldCategoryCollapsed = legacyFoldCategory === "yes";
-            }
-            if (draft.videoMuted == null && ["yes", "no"].includes(legacyVideoMuted || "")) {
-                draft.videoMuted = legacyVideoMuted === "yes";
-            }
+            applyBootstrapSettingMigrations(draft, localOriginSettings, { sortMethod: legacySortMethod, foldCategory: legacyFoldCategory, videoMuted: legacyVideoMuted });
         });
+        context.services.profile.start();
         markPhase("settings-migration");
         const logger = initializeLoggerRuntime(context.rootScope, {
             clogMsgCount: context.services.settings.snapshot().clogMsgCount,

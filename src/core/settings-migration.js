@@ -15,14 +15,17 @@
  * storage，后续 bootstrap 永远不会再次读取它。
  */
 
+/** @param {Record<string, unknown>} draft */
+export function normalizeScreenshotSettingDraft(draft) {
+    if (!Object.prototype.hasOwnProperty.call(draft, "enableScreenSvg")) return;
+    const legacy = draft.enableScreenSvg;
+    const current = draft.enableLoadScreenShot;
+    const master = (legacy === "no" || current === "no") ? "no" : (current ?? "yes");
+    draft.enableLoadScreenShot = master;
+    delete draft.enableScreenSvg;
+}
+
 /** @param {import("../services/settings-service.js").SettingsService} settings */
 export async function normalizeScreenshotSetting(settings) {
-    return settings.update((draft) => {
-        if (!Object.prototype.hasOwnProperty.call(draft, "enableScreenSvg")) return;
-        const legacy = draft.enableScreenSvg;
-        const current = draft.enableLoadScreenShot;
-        const master = (legacy === "no" || current === "no") ? "no" : (current ?? "yes");
-        draft.enableLoadScreenShot = master;
-        delete draft.enableScreenSvg;
-    });
+    return settings.update(normalizeScreenshotSettingDraft);
 }

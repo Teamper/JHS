@@ -33,7 +33,9 @@ export async function injectUserscriptRuntime(page, options = {}) {
   const markPhase = (name) => { bootstrapPhases[name] = performance.now() - phaseStartedAt; };
   hostPage.on("pageerror", (error) => startupErrors.push(error.stack || error.message));
   hostPage.on("console", (message) => {
-    if (message.type() === "error") startupErrors.push(message.text());
+    // The fixture router intentionally aborts every non-whitelisted external
+    // resource; Chromium reports that expected abort as a console resource error.
+    if (message.type() === "error" && !/^Failed to load resource: net::ERR_BLOCKED_BY_CLIENT(?:\.[A-Za-z]+)?$/.test(message.text())) startupErrors.push(message.text());
   });
   await page.addScriptTag({ path: join(browserRoot, "node_modules", "jquery", "dist", "jquery.min.js") });
   markPhase("jquery");
@@ -173,7 +175,13 @@ export async function injectUserscriptRuntime(page, options = {}) {
     markPhase("startup-ready");
     await page.evaluate((phases) => { window.__jhsBrowserDiagnostics.bootstrapPhases = { ...(window.__jhsBrowserDiagnostics.bootstrapPhases || {}), harness: phases }; }, bootstrapPhases);
   } catch (error) {
-    throw new Error(`JHS fixture bootstrap failed: ${startupErrors.join("\n") || error.message}`);
+    const state = await page.evaluate(() => ({
+      phases: window.__jhsBrowserDiagnostics?.bootstrapPhases || {},
+      hasPluginManager: Boolean(window.unsafeWindow?.pluginManager),
+      bootstrapError: document.querySelector("#jhs-bootstrap-error")?.textContent || "",
+    })).catch(() => ({}));
+    const detail = startupErrors.join("\n") || error.message;
+    throw new Error(`JHS fixture bootstrap failed: ${detail}; state=${JSON.stringify(state)}`);
   }
 }
 

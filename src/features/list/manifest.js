@@ -7,7 +7,7 @@ import { ListController } from "./list-controller.js";
 export default defineFeature({
     id: "list", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list", "other"], startup: "eager",
     legacyApiAliases: ["ListPagePlugin"],
-    requires: [PORT.host, PORT.style, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings, SERVICE.eventBus, SERVICE.ui, REGISTRY.feature],
+    requires: [PORT.host, PORT.style, SERVICE.translation, SERVICE.http, SERVICE.legacyStorage, SERVICE.state, SERVICE.settings, SERVICE.eventBus, SERVICE.ui, REGISTRY.feature],
     contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions", "list.fc2-navigation", "list.cover-state-actions", "list.javbus-images", "list.fc2-lookup"],
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
@@ -34,7 +34,7 @@ export default defineFeature({
         const busImgPlugin = runtime.enabledContributions.includes("list.javbus-images")
             ? runtime.resolveLegacyContribution?.("list.javbus-images")
             : null;
-        const controller = new ListController(/** @type {any} */ ({ features: deps[REGISTRY.feature], busImgPlugin, autoPagePlugin, foldCategoryPlugin, actionsPlugin, fc2NavigationPlugin, coverPlugin, fc2LookupPlugin, hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], eventBus: deps[SERVICE.eventBus], http: deps[SERVICE.http], stateService: deps[SERVICE.state], translation: deps[SERVICE.translation], styles: deps[PORT.style], ui: deps[SERVICE.ui], scope: runtime.scope }));
+        const controller = new ListController(/** @type {any} */ ({ features: deps[REGISTRY.feature], busImgPlugin, autoPagePlugin, foldCategoryPlugin, actionsPlugin, fc2NavigationPlugin, coverPlugin, fc2LookupPlugin, hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], storage: deps[SERVICE.legacyStorage], eventBus: deps[SERVICE.eventBus], http: deps[SERVICE.http], stateService: deps[SERVICE.state], translation: deps[SERVICE.translation], styles: deps[PORT.style], ui: deps[SERVICE.ui], scope: runtime.scope }));
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

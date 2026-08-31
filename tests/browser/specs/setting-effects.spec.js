@@ -181,15 +181,20 @@ test("batch actions are single-flight while a batch is running", async ({ contex
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers batch single flight");
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
-  await injectUserscriptRuntime(page);
+  await injectUserscriptRuntime(page, { settingOverrides: { autoPage: "no" } });
   await page.evaluate(() => {
-    const listPage = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
-    const original = listPage.getRuntimeService.bind(listPage);
+    const listPlugin = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
+    const http = listPlugin.getRuntimeService("http");
+    const original = http.request.bind(http);
     window.__httpCalls = 0;
+    window.__httpUrls = [];
     window.__releaseBatch = null;
-    listPage.getRuntimeService = (name) => name === "http" ? {
-      request: () => { window.__httpCalls++; return new Promise((resolve) => { window.__releaseBatch = resolve; }); },
-    } : original(name);
+    http.request = (options) => {
+      window.__httpCalls++;
+      window.__httpUrls.push(options?.url || "");
+      return new Promise((resolve) => { window.__releaseBatch = resolve; });
+    };
+    window.__restoreBatchHttp = () => { http.request = original; };
   });
   const batchToggle = ".jhs-commandbar__batch .jhs-commandbar__menu-toggle";
   await page.locator(batchToggle).click();
@@ -206,6 +211,7 @@ test("batch actions are single-flight while a batch is running", async ({ contex
   await page.evaluate(() => window.__releaseBatch?.({ data: "" }));
   await expect(page.locator("#jhs-batch-progress")).toHaveCount(0, { timeout: 5000 });
   await expect(page.locator("#favoriteAllVideo")).not.toHaveAttribute("aria-disabled", "true");
+  await page.evaluate(() => window.__restoreBatchHttp?.());
 });
 
 test("FC2 detail screenshot slot follows the master switch live", async ({ context, page }, testInfo) => {

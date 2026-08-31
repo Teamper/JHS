@@ -67,19 +67,32 @@ describe("migration write ownership", () => {
 
     it("bootstrap local-origin migration is deferred to an atomic settings update", () => {
         expect(bootstrap).toContain("async function resolveLocalOrigins");
-        expect(bootstrap).toContain("async function persistLocalOriginMigration");
+        expect(bootstrap).toContain("function applyBootstrapSettingMigrations");
+        expect(bootstrap).toContain("await context.services.settings.update");
+        expect(bootstrap).toContain("normalizeScreenshotSettingDraft(draft)");
+        expect(bootstrap).not.toContain("persistDisabledPluginMigration");
+        expect(bootstrap).not.toContain("persistLocalOriginMigration");
         expect(bootstrap).not.toContain("saveSetting({ ...settings");
     });
 
     it("runtime screenshot migration deletes the legacy key atomically and never replace()s", () => {
-        expect(migration).toContain("settings.update");
+        expect(migration).toContain("normalizeScreenshotSettingDraft");
+        expect(migration).toContain("settings.update(normalizeScreenshotSettingDraft)");
         expect(migration).toContain("delete draft.enableScreenSvg");
         expect(migration).not.toContain("settings.replace");
     });
 
-    it("async_merge_other uses updateSetting instead of whole-object saveSetting(e)", () => {
+    it("async_merge_other uses the lock-owned migration update instead of whole-object saveSetting(e)", () => {
         const merge = methodBody(storage, "async async_merge_other", "merge_blacklist");
-        expect(merge).toContain("this.updateSetting");
+        expect(merge).toContain("this.updateSettingWithoutLock");
         expect(merge).not.toContain("await this.saveSetting(e)");
+    });
+
+    it("lock-owned settings migration updates the SettingsService snapshot without re-entering mutation", () => {
+        const update = methodBody(storage, "async updateSettingWithoutLock", "async importData");
+        expect(update).toContain("_saveSettingWithoutLock");
+        expect(update).toContain("adoptPersistedSnapshot");
+        expect(update).not.toContain("_withStorageMutation");
+        expect(settingsService).toContain("adoptPersistedSnapshot");
     });
 });

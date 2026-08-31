@@ -98,7 +98,7 @@ export function registerSitePlugins(pluginManager, featureRuntime, site, legacyR
                 [SERVICE.subtitle, "subtitle"],
                 [SERVICE.account, "account"],
                 [SERVICE.webdav, "webdav"],
-                [SERVICE.storage, "storage"],
+                [SERVICE.storage, "storage"], [SERVICE.legacyStorage, "legacyStorage"],
                 [SERVICE.state, "state"],
                 [SERVICE.ui, "ui"],
                 [SERVICE.offline, "offline"],

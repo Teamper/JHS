@@ -33,6 +33,12 @@ export class SettingsService extends EventTarget {
 
     snapshot() { return this.snapshotValue; }
 
+    /** Adopt a value persisted by a lock-owning migration without re-entering the shared mutation lock. @param {unknown} value */
+    adoptPersistedSnapshot(value) {
+        this.snapshotValue = Object.freeze(value && typeof value === "object" && !Array.isArray(value) ? { ...value } : {});
+        return this.snapshotValue;
+    }
+
     /** Returns the current write queue; resolves when all queued writes have settled. */
     waitForIdle() { return this.writeChain; }
 

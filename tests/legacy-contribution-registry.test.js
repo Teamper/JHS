@@ -28,7 +28,7 @@ describe("LegacyContributionRegistry", () => {
     it("mounts feature-owned legacy styles in the FeatureRuntime scope", async () => {
         class StyledPlugin extends BasePlugin {
             getName() { return "StyledPlugin"; }
-            initCss() { return ".styled-plugin { color: red; }"; }
+            initCss() { return "<style data-test=feature-owned>.styled-plugin { color: red; }</style>"; }
         }
         const release = vi.fn(), styles = { register: vi.fn(() => release) }, registry = new LegacyContributionRegistry();
         registry.register(StyledPlugin, {}, { managedByFeature: true }, { featureId: "styled", contributionId: "styled.css" });
