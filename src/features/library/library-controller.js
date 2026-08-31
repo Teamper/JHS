@@ -7,10 +7,10 @@ import { requestHostPage } from "../../core/host-page-request.js";
  * migrated away from direct plugin-to-plugin calls.
  */
 export class LibraryController {
-    /** @param {{historyController?: {start: (options?: {scope: any}) => Promise<any> | any, historyRepository?: any} | null, blacklistPlugin?: Record<string, any>, keywordFilterEnabled?: boolean, stateImportEnabled?: boolean, favoriteActressesEnabled?: boolean, hostAdapter?: any, storage?: any, settings?: any, eventBus?: any, storageMutation?: any, state?: any, http?: any, route?: string, scope: any}} options */
+    /** @param {{historyController?: {start: (options?: {scope: any}) => Promise<any> | any, historyRepository?: any} | null, blacklistController?: Record<string, any> | null, blacklistPlugin?: Record<string, any>, keywordFilterEnabled?: boolean, stateImportEnabled?: boolean, favoriteActressesEnabled?: boolean, hostAdapter?: any, storage?: any, settings?: any, eventBus?: any, storageMutation?: any, state?: any, http?: any, route?: string, scope: any}} options */
     constructor(options) {
         this.historyController = options.historyController ?? null;
-        this.blacklistPlugin = options.blacklistPlugin ?? null;
+        this.blacklistController = options.blacklistController ?? options.blacklistPlugin ?? null;
         this.keywordFilterEnabled = options.keywordFilterEnabled !== false;
         this.stateImportEnabled = options.stateImportEnabled !== false;
         this.favoriteActressesEnabled = options.favoriteActressesEnabled !== false;
@@ -35,6 +35,7 @@ export class LibraryController {
         this.started = true;
         return Promise.resolve().then(async () => {
             await this.historyController?.start({ scope: this.scope });
+            await this.blacklistController?.start?.({ scope: this.scope });
             await this.mountFavoriteActresses();
             if (this.route === "detail") this.bindDetailKeywordFilter(this.document);
             this.mountStateImportAction();
@@ -47,7 +48,7 @@ export class LibraryController {
     /** Expose the stable library capability surface for later migrations. */
     getApi() {
         const historyCall = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => /** @type {any} */ (this.historyController)?.[name]?.(...args);
-        const blacklistCall = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => this.blacklistPlugin?.[name]?.(...args);
+        const blacklistCall = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => this.blacklistController?.[name]?.(...args);
         return Object.freeze({
             getHistoryRepository: () => this.historyController?.historyRepository ?? null,
             hasHistory: Boolean(this.historyController),
@@ -55,7 +56,7 @@ export class LibraryController {
             reloadHistoryTable: historyCall("reloadTable"),
             hasKeywordFilter: this.keywordFilterEnabled,
             bindDetailKeywordFilter: (/** @type {any[]} */ ...args) => this.bindDetailKeywordFilter(...args),
-            hasBlacklist: Boolean(this.blacklistPlugin),
+            hasBlacklist: Boolean(this.blacklistController),
             addBlacklist: blacklistCall("addBlacklist"),
             openBlacklistDialog: blacklistCall("openBlacklistDialog"),
             filterAllVideo: blacklistCall("filterAllVideo"),

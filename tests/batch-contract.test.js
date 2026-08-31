@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const listPage = readTestFile(join(process.cwd(), "src/plugins/status/list-page.js"), "utf8");
 const listButtons = readTestFile(join(process.cwd(), "src/plugins/status/list-page-button.js"), "utf8");
-const blacklist = readTestFile(join(process.cwd(), "src/plugins/blacklist/blacklist.js"), "utf8");
+const blacklist = readTestFile(join(process.cwd(), "src/features/library/blacklist-controller.js"), "utf8");
 const scanner = readTestFile(join(process.cwd(), "src/features/list/batch-scanner.js"), "utf8");
 
 describe("batch action contract (筛选后批量语义)", () => {
@@ -13,7 +13,7 @@ describe("batch action contract (筛选后批量语义)", () => {
         expect(listPage).toContain("startDom: root ? $(root) : $(document)");
         expect(listPage).toContain("currentUrl: isOwnedRankingPage ? null : (root ? null : window.location.href)");
         expect(listPage).toContain('firstPageUrl: isOwnedRankingPage ? null : (root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href))');
-        expect(blacklist).toContain('firstPageUrl: root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href)');
+        expect(blacklist).toContain("firstPageUrl: root ? null : (this.hostAdapter?.resolveFirstPageUrl?.(this.getCurrentUrl()) ?? this.getCurrentUrl())");
         expect(listPage).toContain("itemSelector: this.getListSelectors().requestDomItemSelector");
         expect(listPage).toContain('evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized })');
     });
@@ -26,7 +26,8 @@ describe("batch action contract (筛选后批量语义)", () => {
 
     it("writes in chunks through StateService.batch patch instead of per-item transactions", () => {
         expect(listPage).toMatch(/index \+= 75[\s\S]{0,220}state"\)\.patch\(chunk\.map\(\(item\) => item\.carNum\)/);
-        expect(blacklist).toMatch(/index \+= 75[\s\S]{0,220}state"\)\.patch\(chunk\.map\(\(item\) => item\.carNum\)/);
+        expect(blacklist).toContain("for (let index = 0; index < records.length; index += 75)");
+        expect(blacklist).toContain("this.state.patch(chunk.map((/** @type {BlacklistRecord} */ item) => item.carNum)");
         expect(listPage).not.toMatch(/for \(const element of items\)[\s\S]{0,200}state\.patch\(carNum/);
     });
 

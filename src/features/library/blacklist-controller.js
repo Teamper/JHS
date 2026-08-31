@@ -1,42 +1,101 @@
 // @ts-check
 
-import { A, B, D, I, P, T, d, l, o, r } from "../../core/constants.js";
-import { jhsEventBus } from "../../core/event-bus.js";
+import { A, B, D, I, P, T, d } from "../../core/constants.js";
+import { parseHostListPage } from "../../core/host-list-parser.js";
 import { normalizeHttpUrl, parseNumberSetting, selectLatestPublishTime, shouldSkipStopped } from "../../core/feature-helpers.js";
 import { requestHostPage } from "../../core/host-page-request.js";
-import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
 import { legacyActionToFlag } from "../../core/state-model.js";
-import { QUICK_FILTER_LABELS, normalizeQuickFilterKey } from "../../features/list/list-filters.js";
-import { createListEvaluationContext, evaluateListItem } from "../../features/list/list-evaluator.js";
-import { scanAllPages } from "../../features/list/batch-scanner.js";
-import { endBatchRun, isActiveBatchRun, tryBeginBatchRun } from "../../features/list/batch-coordinator.js";
+import { endBatchRun, isActiveBatchRun, tryBeginBatchRun } from "../../core/batch-coordinator.js";
 import { JhsSelect, renderStateView } from "../../core/ui-primitives.js";
-import { parseDetailPage } from "../../integrations/host-list/parser.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
+import { BlacklistRepository } from "./blacklist-repository.js";
 
 /** @typedef {Record<string, any>} BlacklistRecord */
-/** @returns {NonNullable<typeof jhsEventBus>} */
-function getBlacklistEventBus() {
-    if (!jhsEventBus) throw new Error("Blacklist EventBus 未初始化");
-    return jhsEventBus;
-}
 
-export class BlacklistPlugin extends BasePlugin {
-    constructor() {
-        super(...arguments);
+export class BlacklistController {
+    /** @param {{hostAdapter?: any, dialog?: any, storage?: any, settings?: any, state?: any, http?: any, eventBus?: any, mutation?: any, features?: any, settingPlugin?: any, styles?: any, scope: any}} options */
+    constructor(options) {
+        this.hostAdapter = options.hostAdapter;
+        this.document = options.hostAdapter?.document ?? globalThis.document;
+        this.site = options.hostAdapter?.site ?? "unknown";
+        this.isJavDB = this.site === T;
+        this.isJavBus = this.site === I;
+        this.dialog = options.dialog;
+        this.storage = options.storage;
+        this.settings = options.settings;
+        this.state = options.state;
+        this.http = options.http;
+        this.eventBus = options.eventBus;
+        this.features = options.features;
+        this.settingPlugin = options.settingPlugin ?? null;
+        this.styles = options.styles;
+        this.scope = options.scope;
+        this.repository = new BlacklistRepository({ storage: this.storage, state: this.state, eventBus: this.eventBus, mutation: options.mutation });
         /** @type {any} */ this.blacklistSearchDebounced = null;
         /** @type {null | (() => void)} */ this.taskStatusUnsubscribe = null;
         /** @type {any} */ this.discoveryFeatureApi = null;
+        this.blacklistRoot = null;
+        this.tableObj = null;
+        this.started = false;
+        this.checkBlacklist_ruleTime = 8760;
+        this.currentCarCount = 0;
+        this.blacklistSvg = '<svg class="jhs-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm5.2 15.2L6.8 6.8a7.96 7.96 0 0 1 10.4 10.4ZM5.4 8.2l10.4 10.4A7.96 7.96 0 0 1 5.4 8.2Z"/></svg>';
+        this.settingSvg = '<svg class="jhs-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m19.4 13.5 2-1.5-2-1.5.2-2.5-2.5-.2-1.5-2-1.5 2-2.5.2.2 2.5-2 1.5 2 1.5-.2 2.5 2.5.2 1.5 2 1.5-2 2.5-.2-.2-2.5ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z"/></svg>';
     }
-    getName() {
-        return "BlacklistPlugin";
+
+    getCurrentUrl() { return this.hostAdapter?.location?.href ?? this.document?.defaultView?.location?.href ?? ""; }
+
+    getSettings() { return this.settings?.snapshot?.() ?? {}; }
+
+    /** @param {string} name @param {unknown} fallback */
+    getSetting(name, fallback) { const value = this.getSettings()[name]; return null == value ? fallback : value; }
+
+    getSelector(site = this.site) {
+        if (site === this.site) {
+            const selectors = this.hostAdapter?.getListSelectors?.();
+            if (selectors) return selectors;
+        }
+        const listClass = "movie" + "-list";
+        return site === I
+            ? { boxSelector: ".masonry", itemSelector: ".masonry .item", coverImgSelector: ".masonry .movie-box .photo-frame img", requestDomItemSelector: "#waterfall .item", nextPageSelector: "#next" }
+            : { boxSelector: `.${listClass}`, itemSelector: `.${listClass} .item`, coverImgSelector: ".cover img", requestDomItemSelector: `.${listClass} .item`, nextPageSelector: ".pagination-next" };
     }
+
+    getActressPageInfo() {
+        const href = this.getCurrentUrl();
+        if (!href.includes("/actors/") && !href.includes("/star/")) throw new Error("接口调用错误, 非演员详情页");
+        const names = /** @type {string[]} */ ([]), nameRoot = this.isJavDB ? this.document.querySelector(".actor-section-name") : this.document.querySelector(".avatar-box .photo-info .pb10");
+        nameRoot?.textContent?.trim().split(",").forEach((/** @type {string} */ name) => name.trim() && names.push(name.trim()));
+        this.document.querySelectorAll(".section-meta").forEach((/** @type {Element} */ element) => {
+            const text = element.textContent?.trim() ?? "";
+            !text.includes("影片") && text.split(",").forEach((/** @type {string} */ name) => name.trim() && names.push(name.trim()));
+        });
+        const role = [ ...this.document.querySelectorAll(".section-meta") ].some((element) => element.textContent?.includes("男優")) ? B : P;
+        const movieType = href.includes("uncensored") || names.some((name) => name.includes("無碼")) ? A : D;
+        const url = new URL(href);
+        let starId = null, blacklistUrl = null;
+        if (this.isJavDB) {
+            starId = url.pathname.split("/").filter(Boolean).pop() ?? null;
+            url.searchParams.delete("sort_type"), url.searchParams.delete("page"), blacklistUrl = url.toString();
+        } else if (this.isJavBus) {
+            const parts = href.split("/star/");
+            if (parts.length < 2) throw new Error("提取演员url失败");
+            starId = parts[1].split("/")[0], blacklistUrl = `${parts[0]}/star/${starId}`;
+        }
+        return { starId, name: names[0] || "", allName: names, role, movieType, blacklistUrl };
+    }
+
+    async getListFeatureApi() {
+        try { return await this.features?.getFeatureApi("list"); }
+        catch (error) { clog.warn("List Feature API 不可用，跳过列表筛选", error); return null; }
+    }
+
     /** Resolve discovery-owned task operations without coupling the library feature to TaskPlugin. */
     async getDiscoveryFeatureApi() {
         if (this.discoveryFeatureApi) return this.discoveryFeatureApi;
         try {
-            this.discoveryFeatureApi = await this.getRuntimeService("features").getFeatureApi("discovery");
+            this.discoveryFeatureApi = await this.features?.getFeatureApi("discovery");
         } catch (error) {
             clog.warn("Discovery Feature API 不可用，跳过黑名单任务", error);
             this.discoveryFeatureApi = null;
@@ -55,6 +114,20 @@ export class BlacklistPlugin extends BasePlugin {
             .jhs-blacklist-task-status .jhs-task-status__meta { display:block; margin-top:var(--jhs-space-1); color:var(--jhs-text-muted); font-size:var(--jhs-font-size-xs); }
         </style>`;
     }
+
+    start() {
+        this.scope.assertActive();
+        if (this.started) return Promise.resolve();
+        this.started = true;
+        return Promise.resolve().then(async () => {
+            const css = (await this.initCss()).replace(/^\s*<style>|<\/style>\s*$/g, "");
+            const removeStyle = this.styles?.register?.("jhs-blacklist", css);
+            if (typeof removeStyle === "function") this.scope.addCleanup?.(removeStyle);
+        }).catch((error) => {
+            this.dispose();
+            throw error;
+        });
+    }
     /** @param {any} e */
     async addBlacklist(e) {
         let t = {
@@ -63,8 +136,9 @@ export class BlacklistPlugin extends BasePlugin {
         };
         const n = $("#addBlacklistBtn span").text().includes("已加入");
         let a, i;
-        if (o.includes("/tags")) {
-            const e = new URL(o);
+        const currentUrl = this.getCurrentUrl();
+        if (currentUrl.includes("/tags")) {
+            const e = new URL(currentUrl);
             e.searchParams.delete("page");
             const t = $("#jhs-check-tag").text().trim();
             a = {
@@ -78,9 +152,9 @@ export class BlacklistPlugin extends BasePlugin {
         } else a = this.getActressPageInfo(), i = `是否将该演员 <span class="jhs-task-emphasis">${a.name}</span> 加入到黑名单中?`,
         n && (i = `演员 <span class="jhs-task-emphasis">${a.name}</span> 已在黑名单中, 是否从当前页开始追加屏蔽?`);
         const {starId: s, name: r, allName: c, role: d, movieType: h, blacklistUrl: g} = a;
-        if (o.includes("page") && !o.includes("page=1") && (i += "<br/> 注意: 当前页面非第一页, 屏蔽数据将从此页面开始"),
-        l) {
-            const e = o.split("/star/")[1].split("/");
+        if (currentUrl.includes("page") && !currentUrl.includes("page=1") && (i += "<br/> 注意: 当前页面非第一页, 屏蔽数据将从此页面开始"),
+        this.isJavBus) {
+            const e = currentUrl.split("/star/")[1].split("/");
             if (e.length > 1) {
                 parseInt(e[1]) > 1 && (i += "<br/> 注意: 当前页面非第一页, 屏蔽数据将从此页面开始");
             }
@@ -94,19 +168,19 @@ export class BlacklistPlugin extends BasePlugin {
                 if (clog.debug("获取锁", e), e) {
                     this.loadObj = loading();
                     try {
-                        await storageManager.addBlacklistItem({
+                        await this.repository.add({
                             starId: s,
                             name: r,
                             allName: c,
                             role: d,
                             movieType: h,
                             url: g
-                        }), await this.filterActorVideo(r, s, null, l ? I : T);
+                        }), await this.filterActorVideo(r, s, null, this.isJavBus ? I : T);
                         const e = show.ok(`屏蔽结束,是否跳转到最后一页: ${this.lastPageLink}`, {
                             duration: -1,
                             close: !0,
                             onClick: () => {
-                                e.closeShow(), window.location.href = this.lastPageLink;
+                                e.closeShow(), this.hostAdapter?.location && (this.hostAdapter.location.href = this.lastPageLink);
                             }
                         });
                     } catch (t) {
@@ -115,7 +189,7 @@ export class BlacklistPlugin extends BasePlugin {
                             duration: -1,
                             close: !0,
                             onClick: () => {
-                                e.closeShow(), window.location.href = this.nextPageLink;
+                                e.closeShow(), this.hostAdapter?.location && (this.hostAdapter.location.href = this.nextPageLink);
                             }
                         });
                     } finally {
@@ -128,14 +202,15 @@ export class BlacklistPlugin extends BasePlugin {
         }));
     }
     async resetBtnTip() {
-        const e = await this.getDiscoveryFeatureApi(), t = e?.getTaskSchedule ? this.getRuntimeService("storage").getLocal(e.getTaskSchedule("blacklist").completedKey) || "无" : "任务已禁用", n = await storageManager.getSetting("checkBlacklist_intervalTime", 12);
-        this.checkBlacklist_ruleTime = await storageManager.getSetting("checkBlacklist_ruleTime", 8760),
+        const e = await this.getDiscoveryFeatureApi(), t = e?.getTaskSchedule ? this.storage?.getLocal?.(e.getTaskSchedule("blacklist").completedKey) || "无" : "任务已禁用", n = this.getSetting("checkBlacklist_intervalTime", 12);
+        this.checkBlacklist_ruleTime = this.getSetting("checkBlacklist_ruleTime", 8760),
         (this.blacklistRoot || $()).find("#checkBlacklistBtn").attr("data-tip", `上次整批检测: ${t}; 检测间隔时间: ${n}小时`);
     }
     async openBlacklistDialog() {
-        const e = await this.getDiscoveryFeatureApi(), t = await storageManager.getSetting(), lastCheck = e?.getTaskSchedule ? this.getRuntimeService("storage").getLocal(e.getTaskSchedule("blacklist").completedKey) || "无" : "任务已禁用";
+        const r = this.isJavDB;
+        const e = await this.getDiscoveryFeatureApi(), t = this.getSettings(), lastCheck = e?.getTaskSchedule ? this.storage?.getLocal?.(e.getTaskSchedule("blacklist").completedKey) || "无" : "任务已禁用";
         let n = `\n            <div class="jhs-layout-7cb3f981"> \n                 <div class="jhs-layout-da5a4919">\n                    <div class="jhs-layout-31a824a2">\n                        <button type="button" id="checkBlacklistBtn" class="jhs-btn jhs-btn--secondary" data-tip="上次整批检测: ${lastCheck}; 检测间隔时间: ${t.checkBlacklist_intervalTime}小时">${this.blacklistSvg}<span>手动检测黑名单</span></button>\n                        <button type="button" class="jhs-btn jhs-btn--ghost" id="toSetting">${this.settingSvg}<span>配置</span></button>\n                    </div>\n                    <div class="jhs-layout-31a824a2">\n                        <select id="dataType" class="jhs-select-source">\n                            <option value="" selected>所有</option>\n                            <option value="actor">男演员</option>\n                            <option value="actress">女演员</option>\n                        </select>\n                        <select id="statusType" class="jhs-select-source">\n                            <option value="" selected>全部状态</option>\n                            <option value="normal">继续检测</option>\n                            <option value="stop">停更跳过</option>\n                        </select>\n                        <select id="urlType" data-tip="在演员页屏蔽时,是否选择了分类" class="jhs-select-source${r ? "" : " jhs-is-hidden"}">\n                            <option value="" selected>--屏蔽类型--</option>\n                            <option value="hasT">按所选分类屏蔽</option>\n                            <option value="noT">未筛选分类</option>\n                        </select>\n                        <input id="searchValue" type="search" placeholder="搜索名称、别名或 ID" class="jhs-field">\n                        <button type="button" id="cleanQueryBtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                    </div>\n\n                </div>\n                <div id="table-container" class="jhs-layout-d44e70c7"></div>\n            </div>\n        `;
-        this.getRuntimeService("dialog").open({
+        this.dialog.open({
             type: 1,
             title: "演员黑名单",
             content: n,
@@ -149,7 +224,7 @@ export class BlacklistPlugin extends BasePlugin {
                 toolbar.children("div").addClass("jhs-blacklist-toolbar__group").removeAttr("style"), toolbar.find("select,input,a").removeAttr("style"), dialog.find("#table-container").removeAttr("style");
                 dialog.find("#table-container").before('<div id="blacklist-task-status" class="jhs-task-status jhs-blacklist-task-status" aria-live="polite"></div>'), JhsSelect.enhance(t);
                 e || dialog.find("#checkBlacklistBtn").prop("disabled", !0).attr("title", "后台任务功能已禁用");
-                this.renderTaskStatus(), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = getBlacklistEventBus().on("task-status-changed", (() => this.renderTaskStatus()));
+                this.renderTaskStatus(), this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = this.eventBus?.on?.("task-status-changed", (() => this.renderTaskStatus()));
                 await this.loadTableData();
                 const content = $(t).find(".layui-layer-content"), search = content.find("#searchValue");
                 this.blacklistSearchDebounced = utils.debounce((() => void this.reloadTable()), 200), content.on("click", "#cleanQueryBtn", (async () => {
@@ -157,7 +232,7 @@ export class BlacklistPlugin extends BasePlugin {
                 })).on("input", "#searchValue", this.blacklistSearchDebounced).on("change", "#dataType,#statusType,#urlType", (async () => {
                     await this.reloadTable();
                 })).on("click", "#toSetting", (() => {
-                    this.getOptionalDependency("SettingPlugin")?.openSettingDialog?.("task-panel", (() => {
+                    this.settingPlugin?.openSettingDialog?.("task-panel", (() => {
                         $("#setting-blacklist").css({
                             border: "1px solid var(--jhs-status-filter)"
                         });
@@ -179,7 +254,7 @@ export class BlacklistPlugin extends BasePlugin {
                 }));
             },
             end: async () => {
-                this.blacklistRoot = null, this.blacklistSearchDebounced?.cancel?.(), this.blacklistSearchDebounced = null, this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null), await getBlacklistEventBus().emit("blacklist-rules-changed");
+                this.blacklistRoot = null, this.blacklistSearchDebounced?.cancel?.(), this.blacklistSearchDebounced = null, this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null, this.tableObj && (this.tableObj.destroy(), this.tableObj = null), await this.repository.emitChanged();
             }
         });
     }
@@ -197,7 +272,7 @@ export class BlacklistPlugin extends BasePlugin {
         this.tableObj.setData(e);
     }
     async getTableData() {
-        const root = this.blacklistRoot || $(), t = await storageManager.getBlacklist(), n = await storageManager.getBlacklistCarList(), a = String(root.find("#searchValue").val() || "").trim().toLocaleLowerCase(), i = root.find("#statusType").val(), s = root.find("#dataType"), o = s.val(), r = root.find("#urlType").val(), l = t.length;
+        const root = this.blacklistRoot || $(), t = await this.repository.list(), n = await this.repository.listCars(), a = String(root.find("#searchValue").val() || "").trim().toLocaleLowerCase(), i = root.find("#statusType").val(), s = root.find("#dataType"), o = s.val(), r = root.find("#urlType").val(), l = t.length;
         let c = 0, d = 0;
         const h = t.map((/** @type {BlacklistRecord} */ t) => {
             t.role === B ? c++ : t.role === P && d++;
@@ -229,8 +304,8 @@ export class BlacklistPlugin extends BasePlugin {
         return this.currentCarCount = p.reduce(((/** @type {number} */ e, /** @type {BlacklistRecord} */ t) => e + (t.count || 0)), 0), p;
     }
     async loadTableData() {
-        this.checkBlacklist_ruleTime = parseNumberSetting(await storageManager.getSetting("checkBlacklist_ruleTime"), 8760, { min: 0 });
-        const e = await this.getTableData(), placeholder = document.createElement("div");
+        this.checkBlacklist_ruleTime = parseNumberSetting(this.getSetting("checkBlacklist_ruleTime", 8760), 8760, { min: 0 });
+        const e = await this.getTableData(), placeholder = this.document.createElement("div");
         renderStateView(placeholder, { type: "empty", title: "没有符合当前筛选条件的黑名单记录" });
         const tableRoot = (this.blacklistRoot || $()).find("#table-container").get(0);
         this.tableObj = createJhsTable((/** @type {any} */ (globalThis)).Tabulator, tableRoot, {
@@ -258,7 +333,7 @@ export class BlacklistPlugin extends BasePlugin {
                 responsive: 0,
                 headerSort: !1,
                 formatter: (/** @type {any} */ e, /** @type {any} */ t, /** @type {any} */ n) => {
-                    const a = e.getData(), url = normalizeHttpUrl(a.url), link = document.createElement("a");
+                    const a = e.getData(), url = normalizeHttpUrl(a.url), link = this.document.createElement("a");
                     link.className = "open-url", link.textContent = String(a.name || ""), link.dataset.name = String(a.name || "");
                     return url ? (link.href = url, link.dataset.url = url, link.target = "_blank", link.rel = "noopener noreferrer") : (link.href = "#", link.setAttribute("aria-disabled", "true")), link;
                 }
@@ -290,7 +365,7 @@ export class BlacklistPlugin extends BasePlugin {
                 sorter: "string",
                 minWidth: 120,
                 responsive: 4,
-                visible: r,
+                visible: this.isJavDB,
                 formatter: (/** @type {any} */ e, /** @type {any} */ t, /** @type {any} */ n) => {
                     let a = e.getData().url.includes("t=");
                     return `<span class="jhs-badge ${a ? "jhs-badge--filter" : "jhs-badge--neutral"}">${a ? "按所选分类屏蔽" : "未筛选分类"}</span>`;
@@ -338,7 +413,7 @@ export class BlacklistPlugin extends BasePlugin {
                         null == (t = e.getElement().querySelector(".delete-btn")) || t.addEventListener("click", ((/** @type {Event} */ e) => {
                             const t = a.name, n = a.starId;
                             t ? n ? utils.q(e, `是否移除对 ${t} 的屏蔽?`, (async () => {
-                                await storageManager.removeBlacklistCarList(n), await storageManager.deleteBlacklistItem(n),
+                                await this.repository.remove(n),
                                 show.info("操作成功"), await this.reloadTable();
                             })) : show.error("获取starId失败") : show.error("获取名称失败");
                         })), null == (n = e.getElement().querySelector(".keyword-btn")) || n.addEventListener("click", ((/** @type {Event} */ e) => {
@@ -366,7 +441,9 @@ export class BlacklistPlugin extends BasePlugin {
      * @param {string} actressName @param {{ filter?: unknown, confirm?: boolean, root?: any }} [options]
      */
     async filterAllVideo(actressName, { filter, confirm = true, root = null } = {}) {
-        const listFeature = await this.getRuntimeService("features").getFeatureApi("list"), normalized = normalizeQuickFilterKey(filter ?? listFeature?.getActiveQuickFilter?.() ?? "waitCheck"), filterLabel = QUICK_FILTER_LABELS[normalized];
+        const listFeature = await this.getListFeatureApi();
+        if (!listFeature?.scanAllPages || !listFeature.evaluateListItem) return { cancelled: true, unavailable: true };
+        const requestedFilter = String(filter ?? listFeature.getActiveQuickFilter?.() ?? "waitCheck"), normalized = [ "all", "waitCheck", "filter", "favorite", "hasDown", "hasWatch" ].includes(requestedFilter) ? requestedFilter : "waitCheck", filterLabel = { all: "全部", waitCheck: "待鉴定", filter: "已屏蔽", favorite: "已收藏", hasDown: "已下载", hasWatch: "已观看" }[normalized];
         const confirmText = "all" === normalized
             ? "将处理当前搜索全部分页的所有作品（包括屏蔽项）并加入黑名单。"
             : `将处理当前搜索全部分页中符合「${filterLabel}」筛选的作品并加入黑名单。`;
@@ -381,20 +458,20 @@ export class BlacklistPlugin extends BasePlugin {
             return { cancelled: true, busy: true };
         }
         $("#favoriteAllVideo, #hasDownAllVideo, #filterAllVideo").attr("aria-disabled", "true").addClass("jhs-batch-busy");
-        const scope = await this.getRuntimeService("scope")();
-        const context = "function" === typeof listFeature?.createEvaluationContext ? await listFeature.createEvaluationContext() : createListEvaluationContext({});
+        const scope = this.scope;
+        const context = "function" === typeof listFeature?.createEvaluationContext ? await listFeature.createEvaluationContext() : {};
         const isCancelled = () => !isActiveBatchRun(run) || Boolean(scope?.disposed);
         const statusHost = () => (this.blacklistRoot || $()).find("#checkBlacklistMsg");
         try {
-            const records = await scanAllPages({
-                startDom: root ? $(root) : $(document),
-                currentUrl: root ? null : window.location.href,
-                firstPageUrl: root ? null : (this.getRuntimeService("host")?.resolveFirstPageUrl?.(window.location.href) ?? window.location.href),
-                itemSelector: (this.getRuntimeService("host")?.getListSelectors?.() ?? this.getSelector()).requestDomItemSelector,
-                nextPageSelector: (this.getRuntimeService("host")?.getListSelectors?.() ?? this.getSelector()).nextPageSelector,
-                fetchHtml: async (/** @type {string} */ url) => requestHostPage(this.getRuntimeService("http"), url, scope),
+            const records = await listFeature.scanAllPages({
+                startDom: root ? $(root) : $(this.document),
+                currentUrl: root ? null : this.getCurrentUrl(),
+                firstPageUrl: root ? null : (this.hostAdapter?.resolveFirstPageUrl?.(this.getCurrentUrl()) ?? this.getCurrentUrl()),
+                itemSelector: (this.hostAdapter?.getListSelectors?.() ?? this.getSelector()).requestDomItemSelector,
+                nextPageSelector: (this.hostAdapter?.getListSelectors?.() ?? this.getSelector()).nextPageSelector,
+                fetchHtml: async (/** @type {string} */ url) => requestHostPage(this.http, url, scope),
                 parseItem: (/** @type {any} */ item) => readListItem(item),
-                evaluate: (/** @type {any} */ item) => evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized }),
+                evaluate: (/** @type {any} */ item) => listFeature.evaluateListItem({ carNum: item.carNum, title: item.title || "" }, context, { filter: normalized }),
                 isCancelled,
                 onProgress: (/** @type {{ page: number, scanned: number, matched: number }} */ {page, scanned, matched}) => {
                     const host = statusHost(); host.length && host.text(`正在扫描第 ${page} 页 · 已扫描 ${scanned} · 匹配 ${matched} 个番号`);
@@ -404,9 +481,9 @@ export class BlacklistPlugin extends BasePlugin {
             let updated = 0;
             for (let index = 0; index < records.length; index += 75) {
                 const chunk = records.slice(index, index + 75);
-                await this.getRuntimeService("state").patch(chunk.map((item) => item.carNum), { blocked: !0 }, {
+                await this.state.patch(chunk.map((/** @type {BlacklistRecord} */ item) => item.carNum), { blocked: !0 }, {
                     type: "actor-page-block",
-                    records: chunk.map((item) => ({ carNum: item.carNum, url: item.url || "", names: actressName, publishTime: item.publishTime || "", fc2Source: item.fc2Source })),
+                    records: chunk.map((/** @type {BlacklistRecord} */ item) => ({ carNum: item.carNum, url: item.url || "", names: actressName, publishTime: item.publishTime || "", fc2Source: item.fc2Source })),
                 });
                 updated += chunk.length;
                 clog.log("一键屏蔽进度", `已屏蔽 ${updated}/${records.length} 个番号`);
@@ -419,7 +496,7 @@ export class BlacklistPlugin extends BasePlugin {
         }
     }
     /** @param {string} e @param {string} t @param {any} n @param {string} [site] @param {number} [page] @param {number} [processed] @param {Set<string>} [visited] */
-    async filterActorVideo(e, t, n, site = l ? I : T, page = 1, processed = 0, visited = new Set()) {
+    async filterActorVideo(e, t, n, site = this.isJavBus ? I : T, page = 1, processed = 0, visited = new Set()) {
         let {nextPageLink: a, recordCount} = await this.parseAndSaveFilterInfo(n, e, t, site);
         processed += recordCount, (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`正在处理第 ${page} 页 · 已屏蔽 ${processed} 个番号`);
         // 页数上限 + 已访问集合：宿主分页异常自指时不再无限递归
@@ -428,7 +505,7 @@ export class BlacklistPlugin extends BasePlugin {
             let n;
             this.lastPageLink = a;
             clog.log("正在请求下一页内容:", a);
-            const scope = await this.getRuntimeService("scope")(), i = await requestHostPage(this.getRuntimeService("http"), a, scope);
+            const scope = this.scope, i = await requestHostPage(this.http, a, scope);
             n = utils.htmlTo$dom(i);
             await this.filterActorVideo(e, t, n, site, page + 1, processed, visited);
         } else page >= 200 ? ((this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`已达到页数上限（200 页），已停止 · 已屏蔽 ${processed} 个番号`), clog.warn("演员视频分页扫描已达上限，已停止")) : (this.blacklistRoot || $()).find("#checkBlacklistMsg").text(`处理完成 · ${page} 页 · 新增 ${processed} 个番号`);
@@ -436,9 +513,9 @@ export class BlacklistPlugin extends BasePlugin {
     /** @param {any} e @param {string} t @param {string} n @param {string} site */
     async parseAndSaveFilterInfo(e, t, n, site) {
         if (![ T, I ].includes(site)) throw new Error(`未知黑名单来源站点: ${site}`);
-        const page = e || $(document), selector = this.getSelector(site);
+        const page = e || $(this.document), selector = this.getSelector(site);
         site === I && page.find(".avatar-box").length > 0 && page.find(".avatar-box").parent().remove();
-        const pageState = parseDetailPage(page, {
+        const pageState = parseHostListPage(page, {
             boxSelector: site === I ? `${selector.boxSelector}, #waterfall` : selector.boxSelector,
             requestDomItemSelector: e ? selector.requestDomItemSelector : selector.itemSelector
         }), nextPageLink = page.find(selector.nextPageSelector).attr("href");
@@ -456,11 +533,22 @@ export class BlacklistPlugin extends BasePlugin {
                 publishTime
             });
         }
-        await storageManager.batchSaveBlacklistCarList(records);
+        await this.repository.saveCars(records);
         return {
             nextPageLink,
             lastPublishTime: selectLatestPublishTime(publishTimes),
             recordCount: records.length
         };
+    }
+
+    dispose() {
+        this.blacklistSearchDebounced?.cancel?.();
+        this.blacklistSearchDebounced = null;
+        this.taskStatusUnsubscribe?.();
+        this.taskStatusUnsubscribe = null;
+        this.tableObj?.destroy?.();
+        this.tableObj = null;
+        this.blacklistRoot = null;
+        this.started = false;
     }
 }

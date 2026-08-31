@@ -11,7 +11,7 @@ import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core
 import { QUICK_FILTER_LABELS, isHardHidden, normalizeQuickFilterKey } from "../../features/list/list-filters.js";
 import { createListEvaluationContext, evaluateListItem, findMatchedTitleKeyword } from "../../features/list/list-evaluator.js";
 import { scanAllPages } from "../../features/list/batch-scanner.js";
-import { endBatchRun, isActiveBatchRun, isBatchRunCancelled, requestCancelBatchRun, tryBeginBatchRun } from "../../features/list/batch-coordinator.js";
+import { endBatchRun, isActiveBatchRun, isBatchRunCancelled, requestCancelBatchRun, tryBeginBatchRun } from "../../core/batch-coordinator.js";
 import { ListView } from "../../features/list/list-view.js";
 
 /** @typedef {Record<string, any>} ListRecord */

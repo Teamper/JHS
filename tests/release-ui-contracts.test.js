@@ -12,7 +12,7 @@ describe("v6.4.1 frozen UI contracts", () => {
     const offline = read("src/plugins/offline/unified-offline.js");
     const setting = read("src/plugins/backup/setting.js");
     const settingTemplate = read("src/plugins/backup/setting-templates.js");
-    const blacklist = read("src/plugins/blacklist/blacklist.js");
+    const blacklist = read("src/features/library/blacklist-controller.js");
 
     it("uses native, tokenized Avatar candidate buttons without hover scaling", () => {
         const avatar = newVideo.slice(newVideo.indexOf("async searchAvatar()"));

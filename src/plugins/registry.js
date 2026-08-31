@@ -6,7 +6,6 @@ import { LEGACY_PLUGIN_DEPENDENCY_MAP } from "./dependency-map.js";
 import { ActressInfoPlugin } from "./avatar/actress-info.js";
 import { SearchByImagePlugin } from "./avatar/search-by-image.js";
 import { SettingPlugin } from "./backup/setting.js";
-import { BlacklistPlugin } from "./blacklist/blacklist.js";
 import { Fc2By123AvPlugin } from "./external-search/fc2-by-123av.js";
 import { Fc2Plugin } from "./external-search/fc2.js";
 import { HitShowPlugin } from "./external-search/hit-show.js";
@@ -72,7 +71,6 @@ export const legacyContributionManifests = Object.freeze([
     manifest("external-bridge.translation", "external-bridge", TranslatePlugin, ["javdb", "javbus"], { javdb: 24, javbus: 20 }, [SERVICE.translation, SERVICE.settings, REGISTRY.feature], { managedByFeature: true }),
     manifest("detail.external-magnets", "detail", MagnetHubPlugin, ["javdb", "javbus"], { javdb: 26, javbus: 17 }, [SERVICE.storage, SERVICE.http, SERVICE.magnet], { managedByFeature: true }),
     manifest("detail.screenshot", "detail", ScreenShotPlugin, ["javdb", "javbus"], { javdb: 27, javbus: 18 }, [SERVICE.screenshot, SERVICE.settings], { managedByFeature: true }),
-    manifest("library.blacklist", "library", BlacklistPlugin, ["javdb", "javbus"], { javdb: 28, javbus: 21 }, [PORT.host, SERVICE.dialog, SERVICE.storage, SERVICE.http, SERVICE.state, REGISTRY.feature], { managedByFeature: true }),
     manifest("discovery.new-video", "discovery", NewVideoPlugin, ["javdb"], { javdb: 30 }, [SERVICE.dialog, SERVICE.storage, SERVICE.actressInfo, SERVICE.movie, SERVICE.state], { managedByFeature: true }),
     manifest("discovery.scheduler", "discovery", TaskPlugin, ["javdb", "javbus"], { javdb: 31, javbus: 22 }, [SERVICE.storage, SERVICE.http, SERVICE.actressInfo, SERVICE.movie, REGISTRY.feature], { managedByFeature: true }),
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [PORT.host, SERVICE.settings, SERVICE.profile, REGISTRY.feature], { managedByFeature: true }),

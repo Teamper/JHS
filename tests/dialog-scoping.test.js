@@ -2,7 +2,7 @@ import { readTestFile } from "./helpers/read-test-file.js";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const blacklist = readTestFile(join(process.cwd(), "src/plugins/blacklist/blacklist.js"), "utf8");
+const blacklist = readTestFile(join(process.cwd(), "src/features/library/blacklist-controller.js"), "utf8");
 const settingBackup = readTestFile(join(process.cwd(), "src/plugins/backup/setting-backup.js"), "utf8");
 const history = readTestFile(join(process.cwd(), "src/features/library/history-controller.js"), "utf8");
 

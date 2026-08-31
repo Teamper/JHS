@@ -5,25 +5,28 @@ import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { LibraryController } from "../src/features/library/library-controller.js";
 
 describe("Library FeatureRuntime ownership", () => {
-    it("passes the feature scope to the migrated history contribution once", async () => {
+    it("passes the feature scope to the migrated library contributions once", async () => {
         const scope = new LifecycleScope("feature:library"), repository = {}, historyController = {
             start: vi.fn(async () => {}),
             get historyRepository() { return repository; },
-        }, blacklistPlugin = {
+        }, blacklistController = {
+            start: vi.fn(async () => {}),
             openBlacklistDialog: vi.fn(),
             parseAndSaveFilterInfo: vi.fn(),
         };
-        const controller = new LibraryController({ historyController, blacklistPlugin, favoriteActressesEnabled: false, route: "other", scope });
+        const controller = new LibraryController({ historyController, blacklistController, favoriteActressesEnabled: false, route: "other", scope });
 
         await controller.start();
         await controller.start();
 
         expect(historyController.start).toHaveBeenCalledOnce();
         expect(historyController.start).toHaveBeenCalledWith({ scope });
+        expect(blacklistController.start).toHaveBeenCalledOnce();
+        expect(blacklistController.start).toHaveBeenCalledWith({ scope });
         expect(controller.getApi().getHistoryRepository()).toBe(repository);
         expect(controller.getApi().hasBlacklist).toBe(true);
         controller.getApi().openBlacklistDialog("event");
-        expect(blacklistPlugin.openBlacklistDialog).toHaveBeenCalledWith("event");
+        expect(blacklistController.openBlacklistDialog).toHaveBeenCalledWith("event");
         controller.dispose();
         expect(scope.disposed).toBe(false);
         scope.dispose();

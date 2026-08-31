@@ -1,6 +1,8 @@
 // @ts-check
 
 import { ListView } from "./list-view.js";
+import { scanAllPages } from "./batch-scanner.js";
+import { evaluateListItem } from "./list-evaluator.js";
 
 /**
  * Own the list feature lifecycle while the legacy page implementation is being
@@ -89,6 +91,8 @@ export class ListController {
             revertTranslation: call("revertTranslation"),
             invalidateTranslations: call("invalidateTranslations"),
             getCurrentPageSummary: call("getCurrentPageSummary"),
+            scanAllPages: (/** @type {any} */ options) => scanAllPages(options),
+            evaluateListItem: (/** @type {any} */ record, /** @type {any} */ context, /** @type {any} */ options) => evaluateListItem(record, context, options),
         });
     }
 

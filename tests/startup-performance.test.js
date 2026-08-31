@@ -208,7 +208,7 @@ describe("startup scheduling", () => {
       "src/core/http.js",
       "src/core/storage.js",
       "src/core/utils.js",
-      "src/plugins/blacklist/blacklist.js",
+      "src/features/library/blacklist-controller.js",
       "src/plugins/external-search/fc2-by-123av.js",
       "src/plugins/image-viewer/screenshot.js",
       "src/plugins/status/auto-page.js"

@@ -58,6 +58,8 @@ const unifiedOffline = await read("src/plugins/offline/unified-offline.js");
 const hitShow = await read("src/plugins/external-search/hit-show.js");
 const listPageButton = await read("src/plugins/status/list-page-button.js");
 const historySource = await read("src/features/library/history-controller.js");
+const blacklistControllerSource = await read("src/features/library/blacklist-controller.js");
+const blacklistRepositorySource = await read("src/features/library/blacklist-repository.js");
 const libraryManifestSource = await read("src/features/library/manifest.js");
 const libraryControllerSource = await read("src/features/library/library-controller.js");
 const externalBridgeManifestSource = await read("src/features/external-bridge/manifest.js");
@@ -297,11 +299,13 @@ assert(!listPageButton.includes('getOptionalDependency("HistoryPlugin")'), "list
 assert(!fc2.includes('getOptionalDependency("FilterTitleKeywordPlugin")'), "FC2 must not resolve FilterTitleKeywordPlugin directly");
 assertIncludes(libraryManifestSource, 'id: "library"', "real library feature manifest");
 assertIncludes(libraryManifestSource, 'new LibraryController({', "library feature controller ownership");
+assertIncludes(libraryManifestSource, 'new BlacklistController({', "library blacklist controller ownership");
 assertIncludes(libraryControllerSource, 'this.historyController?.start({ scope: this.scope })', "library history lifecycle handoff");
+assertIncludes(libraryControllerSource, 'this.blacklistController?.start?.({ scope: this.scope })', "library blacklist lifecycle handoff");
 assertIncludes(libraryControllerSource, "this.state.patch", "library state import lifecycle handoff");
 assertIncludes(libraryControllerSource, 'if (this.route === "detail") this.bindDetailKeywordFilter(this.document);', "library native keyword lifecycle");
 assertIncludes(libraryControllerSource, 'blacklistCall("parseAndSaveFilterInfo")', "library blacklist API boundary");
-assertIncludes(libraryControllerSource, 'hasBlacklist: Boolean(this.blacklistPlugin)', "library blacklist availability");
+assertIncludes(libraryControllerSource, 'hasBlacklist: Boolean(this.blacklistController)', "library blacklist availability");
 assertIncludes(libraryControllerSource, 'historyCall("openHistory")', "library history API boundary");
 assertIncludes(libraryControllerSource, 'bindDetailKeywordFilter: (/** @type {any[]} */ ...args) => this.bindDetailKeywordFilter(...args)', "library keyword API boundary");
 assertIncludes(libraryControllerSource, 'filter_keyword_title', "library keyword storage boundary");
@@ -446,7 +450,6 @@ const expectedPlugins = [
   ["status/bus-detail-page.js", "BusDetailPagePlugin", "BusDetailPagePlugin"],
   ["status/detail-page-button.js", "DetailPageButtonPlugin", "DetailPageButtonPlugin"],
   ["external-search/review.js", "ReviewPlugin", "ReviewPlugin"],
-  ["blacklist/blacklist.js", "BlacklistPlugin", "BlacklistPlugin"],
   ["status/list-page-button.js", "ListPageButtonPlugin", "ListPageButtonPlugin"],
   ["status/list-page.js", "ListPagePlugin", "ListPagePlugin"],
   ["status/fc2-navigation.js", "Fc2NavigationPlugin", "Fc2NavigationPlugin"],
@@ -483,11 +486,11 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavDB plugin registration order changed"
 );
 assert(
-  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,SearchByImagePlugin,BusNavBarPlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,BlacklistPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,SearchByImagePlugin,BusNavBarPlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavBus plugin registration order changed"
 );
 assertIncludes(registry, 'OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"]', "shared registry");
@@ -524,6 +527,8 @@ sourceByFile.set("core/utils.js", await read("src/core/utils.js"));
 sourceByFile.set("features/stats/stats-controller.js", statsControllerSource);
 sourceByFile.set("features/library/library-controller.js", libraryControllerSource);
 sourceByFile.set("features/library/history-controller.js", historySource);
+sourceByFile.set("features/library/blacklist-controller.js", blacklistControllerSource);
+sourceByFile.set("features/library/blacklist-repository.js", blacklistRepositorySource);
 sourceByFile.set("features/compatibility/compatibility-controller.js", compatibilityControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
@@ -541,7 +546,7 @@ const regressionMatrix = [
   ["123pan 授权同步", [["one-two-three/offline.js", "startTokenSync"], ["one-two-three/offline.js", "visibilitychange"], ["one-two-three/offline.js", "syncFallbackMs = 3e5"]]],
   ["统一离线提交", [["offline/unified-offline.js", "getAvailability"], ["offline/unified-offline.js", "capabilities"], ["offline/unified-offline.js", "appendOfflineHistory"]]],
   ["新作品检测", [["new-video/task.js", "TaskPlugin"], ["new-video/new-video.js", "NewVideoPlugin"], ["core/storage.js", "newVideoList"]]],
-  ["黑名单检测", [["blacklist/blacklist.js", "BlacklistPlugin"], ["features/library/library-controller.js", "filter_keyword_title"], ["core/storage.js", "batchSaveBlacklistCarList"]]],
+  ["黑名单检测", [["features/library/blacklist-controller.js", "class BlacklistController"], ["features/library/blacklist-repository.js", "class BlacklistRepository"], ["features/library/library-controller.js", "filter_keyword_title"], ["core/storage.js", "batchSaveBlacklistCarList"]]],
   ["统计面板", [["features/stats/stats-controller.js", "class StatsController"], ["features/stats/stats-controller.js", "coverageStart"], ["features/stats/stats-controller.js", "6.4.0"]]],
   ["兼容增强", [["features/compatibility/compatibility-controller.js", "class CompatibilityController"], ["features/compatibility/compatibility-controller.js", "jhs-actress-state-container"], ["features/compatibility/compatibility-controller.js", "createTreeWalker"]]],
   ["数据导入导出", [["backup/setting-backup.js", "importSettingData"], ["backup/setting-backup.js", "exportSettingData"], ["core/storage.js", "exportData"]]],

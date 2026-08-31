@@ -1,61 +1,61 @@
 import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import vm from "node:vm";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
+import { BlacklistController } from "../src/features/library/blacklist-controller.js";
 
-const source = readTestFile(join(process.cwd(), "src/plugins/blacklist/blacklist.js"), "utf8");
+const source = readTestFile(join(process.cwd(), "src/features/library/blacklist-controller.js"), "utf8");
 const tableSource = readTestFile(join(process.cwd(), "src/ui/table/create-jhs-table.js"), "utf8");
 
-function createPlugin() {
+function createController() {
     const dom = new JSDOM(`<body><input id="searchValue"><select id="dataType"><option value=""></option><option value="actor">actor</option><option value="actress">actress</option></select><select id="statusType"><option value=""></option><option value="normal">normal</option><option value="stop">stop</option></select><select id="urlType"><option value=""></option><option value="hasT">hasT</option><option value="noT">noT</option></select></body>`, { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
     const blacklist = [
-        { starId: "a-1", name: "Alpha", allName: ["别名 One"], role: "actor", url: "https://javdb.com/actors/a?t=c", lastPublishTime: "old" },
-        { starId: "b-1", name: "Beta", allName: "Second Alias", role: "actress", url: "https://javdb.com/actors/b", lastPublishTime: "new" }
+        { starId: "a-1", name: "Alpha", allName: ["别名 One"], role: "actor", url: "https://javdb.com/actors/a?t=c", lastPublishTime: "2000-01-01" },
+        { starId: "b-1", name: "Beta", allName: "Second Alias", role: "actress", url: "https://javdb.com/actors/b", lastPublishTime: "2026-08-30" },
     ];
-    const storageManager = { getBlacklist: vi.fn(async () => blacklist), getBlacklistCarList: vi.fn(async () => [{ starId: "a-1", carNum: "ABC-1" }]), getSetting: vi.fn(async () => 8760) };
-    class BasePlugin { getBean() { return {}; } }
-    const JhsSelect = { setValue: vi.fn((target, value) => $(target).val(value)) };
+    const storage = { get: vi.fn(async key => key === "blacklist" ? blacklist : key === "blacklist_car_list" ? [{ starId: "a-1", carNum: "ABC-1" }] : []), set: vi.fn(async () => {}) };
     let tabulatorOptions;
     function Tabulator(selector, options) { tabulatorOptions = options; }
-    const createJhsTable = (Runtime, selector, options) => new Runtime(selector, options);
-    const context = vm.createContext({
-        console, Object, Array, Map, Set, Promise, Date, URL, $, BasePlugin, storageManager, JhsSelect,
-        i: (target, key, value) => target[key] = value,
-        shouldSkipStopped: value => value === "old",
-        B: "actor", P: "actress", D: "censored", A: "uncensored", T: "javdb", I: "javbus", l: false, r: true,
-        window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
-        normalizeHttpUrl: value => { try { const url = new URL(String(value), dom.window.location.href); return ["http:", "https:"].includes(url.protocol) ? url.href : null; } catch { return null; } }, parseNumberSetting: (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback,
-        renderStateView: vi.fn(), utils: {}, show: {}, clog: {}, navigator: {}, jhsEventBus: {}, stateService: {}, gmHttp: {}, Tabulator, createJhsTable
+    const controller = new BlacklistController({
+        hostAdapter: { site: "javdb", document: dom.window.document, location: dom.window.location, getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }) },
+        storage,
+        scope: { disposed: false, assertActive() {}, addCleanup() {} },
     });
-    vm.runInContext(`${source};globalThis.TestPlugin=BlacklistPlugin`, context);
-    const plugin = new context.TestPlugin;
-    plugin.checkBlacklist_ruleTime = 8760;
-    return { plugin, $, storageManager, JhsSelect, getTabulatorOptions: () => tabulatorOptions };
+    vi.stubGlobal("$", $);
+    vi.stubGlobal("document", dom.window.document);
+    vi.stubGlobal("window", dom.window);
+    vi.stubGlobal("Tabulator", Tabulator);
+    vi.stubGlobal("utils", {});
+    vi.stubGlobal("show", {});
+    vi.stubGlobal("clog", {});
+    return { controller, $, storage, getTabulatorOptions: () => tabulatorOptions };
 }
 
 describe("blacklist combined filters", () => {
     it("combines search, role, status and URL category without clearing sibling filters", async () => {
-        const { plugin, $ } = createPlugin();
-        // the dialog owns a scoped root (set by openBlacklistDialog); filters live under it
-        plugin.blacklistRoot = $("body");
-        plugin.blacklistRoot.find("#searchValue").val("别名"), plugin.blacklistRoot.find("#dataType").val("actor"), plugin.blacklistRoot.find("#statusType").val("stop"), plugin.blacklistRoot.find("#urlType").val("hasT");
-        const result = await plugin.getTableData();
+        const { controller, $ } = createController();
+        controller.blacklistRoot = $("body");
+        controller.blacklistRoot.find("#searchValue").val("别名");
+        controller.blacklistRoot.find("#dataType").val("actor");
+        controller.blacklistRoot.find("#statusType").val("stop");
+        controller.blacklistRoot.find("#urlType").val("hasT");
+        const result = await controller.getTableData();
         expect(result).toHaveLength(1);
         expect(result[0]).toMatchObject({ starId: "a-1", count: 1, isUnCheck: true });
-        expect(plugin.blacklistRoot.find("#statusType").val()).toBe("stop");
-        expect(plugin.blacklistRoot.find("#urlType").val()).toBe("hasT");
+        expect(controller.blacklistRoot.find("#statusType").val()).toBe("stop");
+        expect(controller.blacklistRoot.find("#urlType").val()).toBe("hasT");
     });
 
     it("keeps one table instance across empty and non-empty reloads", async () => {
-        const { plugin } = createPlugin(), table = { setData: vi.fn() };
-        plugin.tableObj = table, plugin.getTableData = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{ starId: "a" }]);
-        await plugin.reloadTable(), await plugin.reloadTable();
+        const { controller } = createController(), table = { setData: vi.fn() };
+        controller.tableObj = table;
+        controller.getTableData = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([{ starId: "a" }]);
+        await controller.reloadTable();
+        await controller.reloadTable();
         expect(table.setData).toHaveBeenNthCalledWith(1, []);
         expect(table.setData).toHaveBeenNthCalledWith(2, [{ starId: "a" }]);
-        expect(plugin.tableObj).toBe(table);
+        expect(controller.tableObj).toBe(table);
     });
 });
 
@@ -76,10 +76,10 @@ describe("blacklist reset and pagination contracts", () => {
     });
 
     it("returns a safe DOM link for imported actress names and URLs", async () => {
-        const harness = createPlugin();
-        harness.plugin.getTableData = vi.fn(async () => []);
-        await harness.plugin.loadTableData();
-        const formatter = harness.getTabulatorOptions().columns[0].formatter, node = formatter({ getData: () => ({ name: '<img id="injected">', url: 'javascript:alert(1)' }) });
+        const harness = createController();
+        harness.controller.getTableData = vi.fn(async () => []);
+        await harness.controller.loadTableData();
+        const formatter = harness.getTabulatorOptions().columns[0].formatter, node = formatter({ getData: () => ({ name: '<img id="injected">', url: "javascript:alert(1)" }) });
         expect(node.tagName).toBe("A");
         expect(node.textContent).toBe('<img id="injected">');
         expect(node.querySelector("#injected")).toBeNull();

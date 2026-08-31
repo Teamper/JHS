@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { endBatchRun, isActiveBatchRun, isBatchRunActive, isBatchRunCancelled, requestCancelBatchRun, tryBeginBatchRun } from "../src/features/list/batch-coordinator.js";
+import { endBatchRun, isActiveBatchRun, isBatchRunActive, isBatchRunCancelled, requestCancelBatchRun, tryBeginBatchRun } from "../src/core/batch-coordinator.js";
 
 describe("batch Single Flight coordinator", () => {
     it("accepts exactly one run at a time", () => {
