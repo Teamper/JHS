@@ -24,6 +24,14 @@ describe("List FeatureRuntime ownership", () => {
             hostAdapter,
             storage: { getLocal: () => null, setLocal: () => {} },
             scope,
+            ui: {
+                getJQuery: () => globalThis.$,
+                getClog: () => ({}),
+                show: {},
+                confirm: vi.fn(),
+                openPage: (...args) => globalThis.utils?.openPage?.(...args),
+                time: () => undefined,
+            },
         });
 
         await controller.start();
@@ -90,7 +98,20 @@ describe("List FeatureRuntime ownership", () => {
             document: dom.window.document,
             location: dom.window.location,
             getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }),
-        }, controller = new ListController({ hostAdapter, stateService, storage, http: { request: vi.fn() }, scope });
+        }, controller = new ListController({
+            hostAdapter,
+            stateService,
+            storage,
+            http: { request: vi.fn() },
+            scope,
+            ui: {
+                getJQuery: () => globalThis.$,
+                getClog: () => ({}),
+                show: {},
+                confirm: vi.fn(),
+                time: () => undefined,
+            },
+        });
 
         await controller.start();
         const api = controller.getApi();

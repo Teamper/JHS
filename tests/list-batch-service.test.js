@@ -20,6 +20,12 @@ function createService(scope, stateService = { patch: vi.fn(async () => {}) }) {
         stateService,
         http: { request: vi.fn() },
         getEvaluationContext: () => createListEvaluationContext({ carMap: new Map([["ABC-123", { stateFlags: { favorite: true } }]]) }),
+        ui: {
+            getJQuery: () => globalThis.$,
+            getClog: () => globalThis.clog ?? {},
+            show: globalThis.show ?? {},
+            confirm: (...args) => globalThis.utils?.q?.(...args),
+        },
     });
 }
 

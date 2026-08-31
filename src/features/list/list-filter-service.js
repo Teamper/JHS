@@ -15,7 +15,7 @@ const STATUS_DEFINITIONS = Object.freeze({
 
 /** Own asynchronous list evaluation and card-state rendering. */
 export class ListFilterService {
-    /** @param {{scope: any, window?: Window & {isListPage?: boolean}, document?: Document, selectors: Record<string, string>, site?: string, getActiveFilter: () => unknown, captureRevision: () => string, isCurrentRevision: (revision: string) => boolean, getEvaluationContext: () => Promise<any> | any, readItem: (item: Element) => {carNum?: unknown, title?: unknown} | null, recordPhase?: (phase: string, itemCount?: number | null) => void, scheduleRecount?: () => void, translateItems?: (items: Element[]) => Promise<void> | void, onJavBusFiltered?: () => Promise<void> | void, time?: (label: string) => unknown, logTiming?: (timing: {readDuration: unknown, assembleDuration: unknown, processDuration: unknown, totalDuration: unknown}) => void}} options */
+    /** @param {{scope: any, window?: Window & {isListPage?: boolean}, document?: Document, selectors: Record<string, string>, site?: string, getActiveFilter: () => unknown, captureRevision: () => string, isCurrentRevision: (revision: string) => boolean, getEvaluationContext: () => Promise<any> | any, readItem: (item: Element) => {carNum?: unknown, title?: unknown} | null, recordPhase?: (phase: string, itemCount?: number | null) => void, scheduleRecount?: () => void, translateItems?: (items: Element[]) => Promise<void> | void, onJavBusFiltered?: () => Promise<void> | void, time?: (label: string) => unknown, logTiming?: (timing: {readDuration: unknown, assembleDuration: unknown, processDuration: unknown, totalDuration: unknown}) => void, ui?: any}} options */
     constructor(options) {
         this.scope = options.scope;
         this.window = options.window ?? globalThis.window ?? null;
@@ -31,7 +31,8 @@ export class ListFilterService {
         this.scheduleRecount = options.scheduleRecount ?? (() => {});
         this.translateItems = options.translateItems ?? (() => {});
         this.onJavBusFiltered = options.onJavBusFiltered ?? (() => {});
-        this.time = options.time ?? ((label) => /** @type {any} */ (globalThis).utils?.time?.(label));
+        this.ui = options.ui ?? null;
+        this.time = options.time ?? ((label) => this.ui?.time?.(label));
         this.logTiming = options.logTiming ?? ((timing) => this.reportTiming(timing));
         this.disposed = false;
         this.scope.addCleanup(() => this.dispose());
@@ -52,7 +53,7 @@ export class ListFilterService {
         if (filtered && this.site === "javbus" && !this.disposed) {
             const timer = setTimeout(() => {
                 if (this.disposed) return;
-                void Promise.resolve(this.onJavBusFiltered()).catch((error) => /** @type {any} */ (globalThis).clog?.error?.("JavBus图片高度修正失败", error));
+                void Promise.resolve(this.onJavBusFiltered()).catch((error) => this.ui?.getClog?.().error?.("JavBus图片高度修正失败", error));
             });
             this.scope.ownTimeout(timer);
         }
@@ -85,7 +86,7 @@ export class ListFilterService {
             const record = this.readItem(item) ?? {}, carNum = String(record.carNum ?? ""), title = String(record.title ?? "");
             const evaluation = evaluateListItem({ carNum, title }, evaluationContext, { filter: activeFilter });
             const keyword = evaluation.visibilityReasons.keyword ? findMatchedTitleKeyword(evaluationContext.titleKeywords, title, carNum) : null;
-            const $item = /** @type {any} */ (globalThis).$(item);
+            const $item = this.getJQuery()(item);
             $item.attr("data-jhs-flags", JSON.stringify(evaluation.flags))
                 .attr("data-jhs-visibility", JSON.stringify(evaluation.visibilityReasons))
                 .attr("data-jhs-recent", evaluation.recent ? _ : C)
@@ -99,7 +100,7 @@ export class ListFilterService {
             if (!evaluation.hardHidden) translatedItems.push(item);
         }
         this.scheduleRecount();
-        void Promise.resolve(this.translateItems(translatedItems)).catch((error) => /** @type {any} */ (globalThis).clog?.error?.("列表页翻译任务失败", error));
+        void Promise.resolve(this.translateItems(translatedItems)).catch((error) => this.ui?.getClog?.().error?.("列表页翻译任务失败", error));
         this.recordPhase("doFilter-end", items.length);
         const processDuration = this.time("处理页面耗时"), totalDuration = this.time("累计耗费时间");
         this.logTiming({ readDuration, assembleDuration, processDuration, totalDuration });
@@ -118,7 +119,7 @@ export class ListFilterService {
             [ evaluation.visibilityReasons.actressBlacklist, STATUS_DEFINITIONS.actressBlacklist, evaluationContext.actressCarNumToNameMap?.get?.(carNum) || "" ],
         ].filter((item) => item[0]);
         if (!badgeDefs.length) return;
-        const $ = /** @type {any} */ (globalThis).$;
+        const $ = this.getJQuery();
         const box = $(`<span class="jhs-status-tags ${tagPosition === "rightTop" ? "jhs-status-tags--right" : "jhs-status-tags--left"}"></span>`);
         badgeDefs.forEach((([, definition, tip]) => {
             const badge = $(`<span class="jhs-badge ${this.site === "javdb" ? "jhs-badge--success" : "jhs-badge--neutral"} status-tag" data-tip="${escapeHtml(String(tip || ""))}" title="">${escapeHtml(definition.text)}</span>`);
@@ -141,7 +142,7 @@ export class ListFilterService {
 
     /** @param {{readDuration: unknown, assembleDuration: unknown, processDuration: unknown, totalDuration: unknown}} timing */
     reportTiming(timing) {
-        const logger = /** @type {any} */ (globalThis).clog;
+        const logger = this.ui?.getClog?.() ?? {};
         if (typeof logger?.html !== "function") return;
         logger.html(`
             <table class="countTable jhs-layout-b12542a5">
@@ -149,6 +150,12 @@ export class ListFilterService {
                 <tr><td colspan="2" class="jhs-count-table__cell">${timing.processDuration}</td><td colspan="2" class="jhs-count-table__cell">${timing.totalDuration}</td></tr>
             </table>
         `);
+    }
+
+    getJQuery() {
+        const jq = this.ui?.getJQuery?.();
+        if (typeof jq !== "function") throw new TypeError("列表筛选服务需要 jQuery");
+        return jq;
     }
 
     dispose() {

@@ -7,14 +7,12 @@ import { createListEvaluationContext } from "../src/features/list/list-evaluator
 import { ListFilterService } from "../src/features/list/list-filter-service.js";
 
 afterEach(() => {
-    delete globalThis.$;
     delete window.isListPage;
 });
 
 describe("ListFilterService", () => {
     it("commits canonical state metadata and renders status tags for visible cards", async () => {
         window.isListPage = true;
-        globalThis.$ = jqueryFactory;
         document.body.innerHTML = '<div class="movie-list"><div class="item"><div class="tags"></div><div class="video-title"><strong>ABC-123</strong> 标题</div></div></div>';
         const item = document.querySelector(".item"), scope = new LifecycleScope("feature:list"), context = createListEvaluationContext({
             settings: { tagPosition: "leftTop" },
@@ -35,6 +33,7 @@ describe("ListFilterService", () => {
             scheduleRecount,
             translateItems,
             logTiming,
+            ui: { getJQuery: () => jqueryFactory, getClog: () => ({}), time: () => undefined },
         });
 
         await expect(service.doFilter("1:0")).resolves.toBe(true);
@@ -54,7 +53,6 @@ describe("ListFilterService", () => {
 
     it("does not commit a card after its revision becomes stale", async () => {
         window.isListPage = true;
-        globalThis.$ = jqueryFactory;
         document.body.innerHTML = '<div class="movie-list"><div class="item"><div class="tags"></div></div></div>';
         let resolveContext, current = true;
         const contextPromise = new Promise((resolve) => { resolveContext = resolve; }), item = document.querySelector(".item"), scope = new LifecycleScope("feature:list"), scheduleRecount = vi.fn();
@@ -70,6 +68,7 @@ describe("ListFilterService", () => {
             getEvaluationContext: async () => { const context = await contextPromise; current = false; return context; },
             readItem: vi.fn(() => ({ carNum: "ABC-123", title: "标题" })),
             scheduleRecount,
+            ui: { getJQuery: () => jqueryFactory, getClog: () => ({}), time: () => undefined },
         });
         const request = service.doFilter("1:0");
         resolveContext(createListEvaluationContext());

@@ -11,7 +11,7 @@ import { scanAllPages } from "./batch-scanner.js";
 
 /** Own list-wide batch scanning, progress UI, and state writes. */
 export class ListBatchService {
-    /** @param {{scope: any, document?: Document, window?: any, location?: Location | URL | string, hostAdapter?: any, selectors: Record<string, string>, stateService: any, http: any, getEvaluationContext: () => Promise<any> | any}} options */
+    /** @param {{scope: any, document?: Document, window?: any, location?: Location | URL | string, hostAdapter?: any, selectors: Record<string, string>, stateService: any, http: any, getEvaluationContext: () => Promise<any> | any, ui?: any}} options */
     constructor(options) {
         this.scope = options.scope;
         this.document = options.document ?? globalThis.document ?? null;
@@ -22,6 +22,7 @@ export class ListBatchService {
         this.stateService = options.stateService;
         this.http = options.http;
         this.getEvaluationContext = options.getEvaluationContext;
+        this.ui = options.ui ?? null;
         this.disposed = false;
         this.scope.addCleanup(() => this.dispose());
     }
@@ -40,14 +41,13 @@ export class ListBatchService {
             ? (normalized === "all" ? "将处理当前榜单页内的所有作品，包括屏蔽项。" : `将处理当前榜单页内符合「${filterLabel}」筛选的作品。`)
             : (normalized === "all" ? "将处理当前搜索全部分页的所有作品，包括屏蔽项。" : `将处理当前搜索全部分页中符合「${filterLabel}」的作品。`);
         if (confirm) {
-            const runtimeUtils = /** @type {any} */ (globalThis).utils;
-            if (typeof runtimeUtils?.q !== "function") throw new TypeError("列表批量服务需要确认器");
-            const proceed = await new Promise((resolve) => runtimeUtils.q(null, confirmText, () => resolve(true), () => resolve(false)));
+            if (typeof this.ui?.confirm !== "function") throw new TypeError("列表批量服务需要确认器");
+            const proceed = await new Promise((resolve) => this.ui.confirm(null, confirmText, () => resolve(true), () => resolve(false)));
             if (!proceed) return { cancelled: true };
         }
         const run = tryBeginBatchRun();
         if (!run) {
-            /** @type {any} */ (globalThis).show?.error?.("已有批量任务正在执行");
+            this.ui?.show?.error?.("已有批量任务正在执行");
             return { cancelled: true, busy: true };
         }
         /** @type {any} */
@@ -55,11 +55,11 @@ export class ListBatchService {
         const isCancelled = () => isBatchRunCancelled(run) || this.scope.disposed;
         const setProgress = (/** @type {string} */ text) => {
             const label = progressElement?.find?.(".jhs-batch-progress__label");
-            label?.length ? label.text(text) : /** @type {any} */ (globalThis).clog?.debug?.(text);
+            label?.length ? label.text(text) : this.ui?.getClog?.().debug?.(text);
         };
         const onProgress = (/** @type {{page: number, scanned: number, matched: number}} */ progress) => {
             setProgress(`已扫描 ${progress.page} 页 · 匹配 ${progress.matched} 项`);
-            /** @type {any} */ (globalThis).clog?.debug?.(`批量扫描第 ${progress.page} 页 · 已扫描 ${progress.scanned} · 匹配 ${progress.matched}`);
+            this.ui?.getClog?.().debug?.(`批量扫描第 ${progress.page} 页 · 已扫描 ${progress.scanned} · 匹配 ${progress.matched}`);
         };
         try {
             const context = await this.getEvaluationContext();
@@ -101,7 +101,7 @@ export class ListBatchService {
             this.scheduleRemoval(progressElement, 1800);
             return { matched: records.length, updated };
         } catch (error) {
-            /** @type {any} */ (globalThis).clog?.error?.("批量操作失败:", error);
+            this.ui?.getClog?.().error?.("批量操作失败:", error);
             setProgress("批量操作失败");
             progressElement?.addClass?.("jhs-batch-progress--error");
             this.scheduleRemoval(progressElement, 2500);
@@ -113,7 +113,7 @@ export class ListBatchService {
     }
 
     getJQuery() {
-        const jq = /** @type {any} */ (globalThis).$;
+        const jq = this.ui?.getJQuery?.();
         if ("function" !== typeof jq) throw new TypeError("列表批量服务需要 jQuery");
         return jq;
     }

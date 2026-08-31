@@ -2,7 +2,7 @@
 
 /** Own list-card context-menu blocking and its lifecycle listener. */
 export class ListContextMenuController {
-    /** @param {{scope: any, document?: Document, selectors: Record<string, string>, site?: string, readItem: (item: Element) => {carNum?: string, url?: string, publishTime?: string, fc2Source?: string} | null, stateService?: any, parseActressName?: (url: string) => Promise<string | null> | string | null, confirm?: (event: MouseEvent, message: string, callback: () => Promise<void>) => void}} options */
+    /** @param {{scope: any, document?: Document, selectors: Record<string, string>, site?: string, readItem: (item: Element) => {carNum?: string, url?: string, publishTime?: string, fc2Source?: string} | null, stateService?: any, parseActressName?: (url: string) => Promise<string | null> | string | null, confirm?: (event: MouseEvent, message: string, callback: () => Promise<void>) => void, ui?: any}} options */
     constructor(options) {
         this.scope = options.scope;
         this.document = options.document ?? globalThis.document ?? null;
@@ -11,7 +11,8 @@ export class ListContextMenuController {
         this.readItem = options.readItem;
         this.stateService = options.stateService ?? null;
         this.parseActressName = options.parseActressName ?? (async () => null);
-        this.confirm = options.confirm ?? ((event, message, callback) => /** @type {any} */ (globalThis).utils?.q?.(event, message, callback));
+        this.ui = options.ui ?? null;
+        this.confirm = options.confirm ?? ((event, message, callback) => this.ui?.confirm?.(event, message, callback));
         /** @type {Element | null} */ this.root = null;
         this.started = false;
         this.disposed = false;
@@ -25,7 +26,7 @@ export class ListContextMenuController {
         this.root = this.document.querySelector(this.selectors.boxSelector);
         if (!this.root) return;
         this.scope.listen(this.root, "contextmenu", (/** @type {MouseEvent} */ event) => {
-            void this.handle(event).catch((error) => /** @type {any} */ (globalThis).clog?.error?.("右键菜单处理失败", error));
+            void this.handle(event).catch((error) => this.ui?.getClog?.().error?.("右键菜单处理失败", error));
         });
     }
 
@@ -45,10 +46,10 @@ export class ListContextMenuController {
             try {
                 const names = actorName || await this.parseActressName(record.url || "");
                 await this.stateService.patch(record.carNum, { blocked: true }, { record: { carNum: record.carNum, url: record.url, names: names || "", publishTime: record.publishTime, fc2Source: record.fc2Source } });
-                /** @type {any} */ (globalThis).show?.ok?.("操作成功");
+                this.ui?.show?.ok?.("操作成功");
             } catch (error) {
-                /** @type {any} */ (globalThis).clog?.error?.("屏蔽操作失败:", error);
-                /** @type {any} */ (globalThis).show?.error?.("操作失败");
+                this.ui?.getClog?.().error?.("屏蔽操作失败:", error);
+                this.ui?.show?.error?.("操作失败");
             }
         });
     }

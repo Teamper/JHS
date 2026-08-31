@@ -44,6 +44,7 @@ export class ListController {
         this.http = options.http ?? null;
         this.stateService = options.stateService ?? null;
         this.styles = options.styles ?? null;
+        this.ui = /** @type {any} */ (options).ui ?? null;
         this.styleRelease = null;
         this.view = null;
         this.state = new ListStateController({
@@ -135,6 +136,7 @@ export class ListController {
                 scheduleRecount: () => this.summary?.scheduleRecount?.(),
                 translateItems: (items) => { this.titleTranslation?.translateListItems?.(items); },
                 onJavBusFiltered: () => this.busImgPlugin?.logImageHeightsByRow?.(this.settings?.snapshot?.()),
+                ui: this.ui,
             });
             this.incremental = new ListIncrementalService({
                 scope: this.scope,
@@ -162,6 +164,7 @@ export class ListController {
                 readItem: (item) => this.readListItem(item),
                 stateService: this.stateService,
                 parseActressName: (/** @type {string} */ url) => this.parseActressName(url),
+                ui: this.ui,
             });
             this.actressNames = this.settings && this.http ? new ListActressNameService({ scope: this.scope, settings: this.settings, http: this.http, site: this.hostAdapter.site }) : null;
             this.pagination = new ListPaginationController({ scope: this.scope, document: this.hostAdapter.document, location: this.hostAdapter.location });
@@ -179,7 +182,7 @@ export class ListController {
                     const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
                     if (names.includes("hoverBigImg")) this.images?.configureHoverPreview(this.settings?.snapshot?.().hoverBigImg === "yes" ? "yes" : "no");
                 },
-                onReloadHistory: () => this.getLibraryFeatureApi().then((/** @type {any} */ api) => api?.reloadHistoryTable?.()).catch((/** @type {unknown} */ error) => clog.warn("鉴定记录刷新失败", error)),
+                onReloadHistory: () => this.getLibraryFeatureApi().then((/** @type {any} */ api) => api?.reloadHistoryTable?.()).catch((/** @type {unknown} */ error) => this.ui?.getClog?.().warn?.("鉴定记录刷新失败", error)),
             });
             if (this.stateService && this.http) this.batch = new ListBatchService({
                 scope: this.scope,
@@ -191,6 +194,7 @@ export class ListController {
                 stateService: this.stateService,
                 http: this.http,
                 getEvaluationContext: () => this.createEvaluationContext(),
+                ui: this.ui,
             });
         }
         this.started = true;
@@ -206,7 +210,7 @@ export class ListController {
                 this.scope.ownTimeout(setTimeout(() => {
                     if (this.scope.disposed) return;
                     void Promise.resolve(this.actionsPlugin?.handle?.({ scope: this.scope, listFeatureApi })).catch((/** @type {unknown} */ error) => {
-                        clog.error("列表操作初始化失败", error);
+                        this.ui?.getClog?.().error?.("列表操作初始化失败", error);
                     });
                 }, 0));
             })
@@ -339,7 +343,7 @@ export class ListController {
         try {
             return parseListItem(item);
         } catch (error) {
-            /** @type {any} */ (globalThis).show?.error?.("提取番号信息失败");
+            this.ui?.show?.error?.("提取番号信息失败");
             throw error;
         }
     }
@@ -354,7 +358,7 @@ export class ListController {
         const shouldOpenTab = newTab || Boolean(event && (event.ctrlKey || event.metaKey || event.button === 1));
         const destination = new URL(aHref, baseUrl);
         if (autoplay) destination.searchParams.set("autoPlay", "1");
-        /** @type {any} */ (globalThis).utils?.openPage?.(destination.href, carNum, true, { event, newTab: shouldOpenTab });
+        this.ui?.openPage?.(destination.href, carNum, true, { event, newTab: shouldOpenTab });
     }
 
     /** Resolve optional detail-page actress names through the feature-owned service. */

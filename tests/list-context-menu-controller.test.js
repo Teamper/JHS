@@ -8,7 +8,6 @@ describe("ListContextMenuController", () => {
     it("blocks a card through the state service after confirmation", async () => {
         document.body.innerHTML = '<div class="movie-list"><div class="item"><img></div></div>';
         const scope = new LifecycleScope("feature:list"), stateService = { patch: vi.fn(async () => {}) }, confirm = vi.fn((_event, _message, callback) => void callback()), show = { ok: vi.fn(), error: vi.fn() };
-        vi.stubGlobal("show", show);
         const service = new ListContextMenuController({
             scope,
             document,
@@ -17,6 +16,7 @@ describe("ListContextMenuController", () => {
             readItem: vi.fn(() => ({ carNum: "ABC-123", url: "/v/ABC-123", publishTime: "2026-08-25", fc2Source: "fc2" })),
             stateService,
             confirm,
+            ui: { show, getClog: () => ({}) },
         });
         service.start();
         const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
@@ -33,7 +33,7 @@ describe("ListContextMenuController", () => {
     it("uses the visible actor name before requesting detail-page fallback", async () => {
         document.body.innerHTML = '<div class="movie-list"><div class="actor-section-name">Actor A, Actor B</div><div class="item"><img></div></div>';
         const scope = new LifecycleScope("feature:list"), stateService = { patch: vi.fn(async () => {}) }, parseActressName = vi.fn(async () => "remote actor"), confirm = vi.fn((_event, _message, callback) => void callback());
-        const service = new ListContextMenuController({ scope, document, selectors: { boxSelector: ".movie-list" }, site: "javdb", readItem: () => ({ carNum: "ABC-123", url: "/v/ABC-123" }), stateService, parseActressName, confirm });
+        const service = new ListContextMenuController({ scope, document, selectors: { boxSelector: ".movie-list" }, site: "javdb", readItem: () => ({ carNum: "ABC-123", url: "/v/ABC-123" }), stateService, parseActressName, confirm, ui: { show: {}, getClog: () => ({}) } });
         service.start();
         document.querySelector("img").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
         await new Promise((resolve) => setTimeout(resolve, 0));
