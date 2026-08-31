@@ -261,6 +261,8 @@ assertIncludes(listControllerSource, "this.hostAdapter.prepareListItems?.(items)
 assertIncludes(listControllerSource, "attachListHost", "list host migration handoff");
 assertIncludes(listControllerSource, "new ListContextMenuController({", "list context-menu ownership");
 assertIncludes(listControllerSource, "attachListContextMenu", "list context-menu migration handoff");
+assertIncludes(listControllerSource, "onOpenMovieDetail:", "list navigation action ownership");
+assertIncludes(listControllerSource, "this.openMovieDetail(item, options)", "list navigation API ownership");
 assertIncludes(listControllerSource, 'configureHoverPreview: route(this.images, "configureHoverPreview")', "list image API ownership");
 assertIncludes(listControllerSource, 'rebuildItemIndex: route(this.index, "rebuildItemIndex")', "list index API ownership");
 assertIncludes(listControllerSource, 'bindMovieDetailNavigation: route(this.view, "bindMovieDetailNavigation")', "list view API ownership");

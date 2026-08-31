@@ -73,7 +73,7 @@ export class ListController {
                 hostAdapter: this.hostAdapter,
                 selectors,
                 onFilterChange: (filter, options) => this.setQuickFilter(filter, options),
-                onOpenMovieDetail: (item, options) => this.legacyPlugin?.openMovieDetail?.(item, options),
+                onOpenMovieDetail: (item, options) => this.openMovieDetail(item, options),
             });
             this.state.setView(this.view);
             this.index = new ListIndexController({
@@ -254,7 +254,7 @@ export class ListController {
             rebuildItemIndex: route(this.index, "rebuildItemIndex"),
             bindMovieDetailNavigation: route(this.view, "bindMovieDetailNavigation"),
             bindClick: call("bindClick"),
-            openMovieDetail: call("openMovieDetail"),
+            openMovieDetail: (/** @type {any} */ item, /** @type {{event?: MouseEvent | null, autoplay?: boolean, newTab?: boolean} | undefined} */ options) => this.openMovieDetail(item, options),
             showCarNumBox: call("showCarNumBox"),
             findCarNumAndHref: (/** @type {any} */ item) => this.readListItem(item),
             parseActressName: call("parseActressName"),
@@ -317,6 +317,19 @@ export class ListController {
             /** @type {any} */ (globalThis).show?.error?.("提取番号信息失败");
             throw error;
         }
+    }
+
+    /** Open a list card through the shared navigation helper without delegating to the legacy plugin. */
+    /** @param {any} item @param {{event?: MouseEvent | null, autoplay?: boolean, newTab?: boolean}} [options] */
+    async openMovieDetail(item, { event = null, autoplay = false, newTab = false } = {}) {
+        const { carNum, aHref } = this.readListItem(item);
+        if (!carNum || !aHref || carNum.includes("FC2-")) return;
+        const baseUrl = this.hostAdapter.location?.href ?? this.hostAdapter.document?.location?.href ?? globalThis.window?.location?.href;
+        if (!baseUrl) return;
+        const shouldOpenTab = newTab || Boolean(event && (event.ctrlKey || event.metaKey || event.button === 1));
+        const destination = new URL(aHref, baseUrl);
+        if (autoplay) destination.searchParams.set("autoPlay", "1");
+        /** @type {any} */ (globalThis).utils?.openPage?.(destination.href, carNum, true, { event, newTab: shouldOpenTab });
     }
 
     /** @param {unknown} filter @param {{syncUi?: boolean}} [options] */

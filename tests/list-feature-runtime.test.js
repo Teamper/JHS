@@ -39,11 +39,15 @@ describe("List FeatureRuntime ownership", () => {
         const api = controller.getApi();
         expect(api.getListSelectors()).toEqual({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" });
         controller.state.setView({ applyVisibility: vi.fn(), syncQuickFilterUi: vi.fn() });
-        const dom = new JSDOM('<div class="item"><a href="/v/ABC-123"><div class="video-title"><strong>ABC-123</strong> title</div></a></div>');
+        const dom = new JSDOM('<div class="item"><a href="/v/ABC-123"><div class="video-title"><strong>ABC-123</strong> title</div></a></div>', { url: "https://javdb.com/search" });
         globalThis.$ = jqueryFactory(dom.window);
+        hostAdapter.document = dom.window.document;
+        hostAdapter.location = dom.window.location;
         const card = globalThis.$(".item");
+        const openPage = vi.fn();
+        globalThis.utils = { openPage };
         api.batchSaveAllVideos("scope", "favorite");
-        api.openMovieDetail("item", { newTab: false });
+        await api.openMovieDetail(card, { newTab: false });
         const filterRequest = vi.spyOn(controller.filter, "doFilter").mockResolvedValue(true);
         await api.doFilter("1:0");
         expect(api.findCarNumAndHref(card)).toMatchObject({ carNum: "ABC-123", url: "/v/ABC-123" });
@@ -52,7 +56,15 @@ describe("List FeatureRuntime ownership", () => {
         expect(legacyPlugin.batchSaveAllVideos).toHaveBeenCalledWith("scope", "favorite");
         expect(filterRequest).toHaveBeenCalledWith("1:0");
         expect(legacyPlugin.doFilter).not.toHaveBeenCalled();
-        expect(legacyPlugin.openMovieDetail).toHaveBeenCalledWith("item", { newTab: false });
+        expect(openPage).toHaveBeenCalledWith("https://javdb.com/v/ABC-123", "ABC-123", true, { event: null, newTab: false });
+        expect(legacyPlugin.openMovieDetail).not.toHaveBeenCalled();
+        openPage.mockClear();
+        const modifiedEvent = new dom.window.MouseEvent("click", { ctrlKey: true, button: 0 });
+        await api.openMovieDetail(card, { event: modifiedEvent, autoplay: true });
+        expect(openPage).toHaveBeenCalledWith("https://javdb.com/v/ABC-123?autoPlay=1", "ABC-123", true, { event: modifiedEvent, newTab: true });
+        const fc2Card = globalThis.$('<div class="item"><a href="/v/FC2-123"><div class="video-title"><strong>FC2-123</strong> title</div></a></div>');
+        await api.openMovieDetail(fc2Card);
+        expect(openPage).toHaveBeenCalledOnce();
         expect(legacyPlugin.findCarNumAndHref).not.toHaveBeenCalled();
         expect(legacyPlugin.parseActressName).toHaveBeenCalledWith("/movie/ABC-123");
         expect(legacyPlugin.setQuickFilter).not.toHaveBeenCalled();
@@ -201,4 +213,4 @@ describe("List FeatureRuntime ownership", () => {
     });
 });
 
-afterEach(() => { delete globalThis.$; });
+afterEach(() => { delete globalThis.$; delete globalThis.utils; });
