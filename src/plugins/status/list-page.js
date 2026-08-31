@@ -137,6 +137,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {any} */ this.listEvaluation = null;
         /** @type {any} */ this.listSummary = null;
         /** @type {any} */ this.listTranslation = null;
+        /** @type {any} */ this.listFilter = null;
         /** @type {any} */ this.listIncremental = null;
     }
     getName() {
@@ -181,6 +182,10 @@ export class ListPagePlugin extends BasePlugin {
     /** Attach the FeatureRuntime-owned title translation service during migration. @param {any} translation */
     attachListTranslation(translation) {
         this.listTranslation = translation;
+    }
+    /** Attach the FeatureRuntime-owned list filter service during migration. @param {any} filter */
+    attachListFilter(filter) {
+        this.listFilter = filter;
     }
     /** Attach the FeatureRuntime-owned incremental list service during migration. @param {any} incremental */
     attachListIncremental(incremental) {
@@ -448,10 +453,12 @@ export class ListPagePlugin extends BasePlugin {
         }));
     }
     async doFilter(revision = this.captureListRevision()) {
+        if (this.listFilter) return this.listFilter.doFilter(revision);
         return this.doFilterItems(null, revision);
     }
     /** @param {Element[] | null} [items] @param {string} [revision] */
     async doFilterItems(items = null, revision = this.captureListRevision()) {
+        if (this.listFilter) return this.listFilter.doFilterItems(items, revision);
         if (!window.isListPage) return !1;
         let e = items ? $(items).toArray() : $(this.getListSelectors().itemSelector).toArray();
         if (!e.length) return !0;

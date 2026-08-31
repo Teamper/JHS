@@ -4,7 +4,7 @@ const LIST_EFFECT_KEYS = new Set([ "tagPosition", "defaultQuickFilterTab" ]);
 
 /** Own list-wide refresh subscriptions while delegating the legacy filter work. */
 export class ListEventController {
-    /** @param {{scope: any, settings?: any, eventBus?: any, storage?: any, state: any, index: any, legacyPlugin?: any, evaluation?: any, onHoverSettingChanged?: (event: any) => void, onReloadHistory?: () => Promise<void> | void}} options */
+    /** @param {{scope: any, settings?: any, eventBus?: any, storage?: any, state: any, index: any, legacyPlugin?: any, evaluation?: any, filter?: any, onHoverSettingChanged?: (event: any) => void, onReloadHistory?: () => Promise<void> | void}} options */
     constructor(options) {
         this.scope = options.scope;
         this.settings = options.settings ?? null;
@@ -14,6 +14,7 @@ export class ListEventController {
         this.index = options.index;
         this.legacyPlugin = options.legacyPlugin ?? null;
         this.evaluation = options.evaluation ?? null;
+        this.filter = options.filter ?? null;
         this.onHoverSettingChanged = options.onHoverSettingChanged ?? (() => {});
         this.onReloadHistory = options.onReloadHistory ?? (() => {});
         /** @type {(() => void)[]} */ this.cleanups = [];
@@ -43,7 +44,7 @@ export class ListEventController {
         this.evaluation?.invalidate();
         this.legacyPlugin.filterContext = null;
         this.storage?._invalidateCache?.(this.storage.car_list_key);
-        await this.legacyPlugin.doFilter?.(revision);
+        await (this.filter?.doFilter?.(revision) ?? this.legacyPlugin?.doFilter?.(revision));
         this.state.reconcileListItems(null, revision);
         await this.onReloadHistory();
     }
@@ -57,7 +58,7 @@ export class ListEventController {
         const items = this.index?.getIndexedItems(payload?.carNums || []) ?? [];
         const revision = this.state.captureListRevision();
         if (items.length) {
-            await this.legacyPlugin.doFilterItems?.(items, revision);
+            await (this.filter?.doFilterItems?.(items, revision) ?? this.legacyPlugin?.doFilterItems?.(items, revision));
             this.state.reconcileListItems(items, revision);
         }
         await this.onReloadHistory();
