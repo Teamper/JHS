@@ -261,6 +261,9 @@ assertIncludes(listControllerSource, "this.hostAdapter.prepareListItems?.(items)
 assertIncludes(listControllerSource, "attachListHost", "list host migration handoff");
 assertIncludes(listControllerSource, "new ListContextMenuController({", "list context-menu ownership");
 assertIncludes(listControllerSource, "attachListContextMenu", "list context-menu migration handoff");
+assertIncludes(listControllerSource, "new ListPaginationController({", "list pagination ownership");
+assertIncludes(listControllerSource, "attachListPagination", "list pagination migration handoff");
+assertIncludes(listControllerSource, "this.pagination ? this.pagination.start()", "list pagination lifecycle ownership");
 assertIncludes(listControllerSource, "onOpenMovieDetail:", "list navigation action ownership");
 assertIncludes(listControllerSource, "this.openMovieDetail(item, options)", "list navigation API ownership");
 assertIncludes(listControllerSource, "showCarNumBox: (/** @type {string} */ carNum) => this.showCarNumBox(carNum)", "list card reveal API ownership");

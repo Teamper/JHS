@@ -141,6 +141,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {any} */ this.listFilter = null;
         /** @type {any} */ this.listIncremental = null;
         /** @type {any} */ this.listContextMenu = null;
+        /** @type {any} */ this.listPagination = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -200,6 +201,10 @@ export class ListPagePlugin extends BasePlugin {
     /** Attach the FeatureRuntime-owned list context-menu controller during migration. @param {any} contextMenu */
     attachListContextMenu(contextMenu) {
         this.listContextMenu = contextMenu;
+    }
+    /** Attach the FeatureRuntime-owned pagination controller during migration. @param {any} pagination */
+    attachListPagination(pagination) {
+        this.listPagination = pagination;
     }
     /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
     async getLibraryFeatureApi() {
@@ -271,7 +276,7 @@ export class ListPagePlugin extends BasePlugin {
         const hoverBigImg = settingsService.snapshot().hoverBigImg;
         this.configureHoverPreview(hoverBigImg === _ ? "yes" : "no");
         this.listHostAdapter?.prepareList ? this.listHostAdapter.prepareList() : (this.cleanRepeatId(), this.fixBusTitleBox());
-        this.replaceHdImg(), this.addJumpPageControl();
+        this.replaceHdImg(), this.listPagination ? this.listPagination.start() : this.addJumpPageControl();
         const revision = this.advanceListGeneration();
         await this.doFilter(revision), await this.createQuickFilter(), this.reconcileListItems(null, revision), await this.bindClick(),
         this.rememberTagExpand(),
@@ -382,7 +387,7 @@ export class ListPagePlugin extends BasePlugin {
     async processAddedItems(items, revision = this.captureListRevision()) {
         if (this.listIncremental) return this.listIncremental.processAddedItems(items, revision);
         const selector = this.getListSelectors(), covers = items.flatMap((/** @type {Element} */ item) => [ ...item.querySelectorAll(selector.coverImgSelector) ]);
-        this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items);
+        this.replaceHdImg(covers), this.listPagination ? this.listPagination.start() : this.addJumpPageControl(), this.fixBusTitleBox(items);
         const filtered = await this.doFilterItems(items, revision);
         if (!filtered && !this.isCurrentListGeneration(revision)) {
             const connected = items.filter((item) => item.isConnected && "true" !== /** @type {HTMLElement} */ (item).dataset.jhsProcessed);
