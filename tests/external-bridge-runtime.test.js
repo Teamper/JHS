@@ -6,7 +6,7 @@ describe("ExternalBridgeController", () => {
     it("starts enabled bridge contributions with one Feature scope", async () => {
         const scope = new LifecycleScope("feature:external-bridge"), plugins = Object.fromEntries([
             ["translationController", { start: vi.fn() }],
-            ["oneOneFivePlugin", { handle: vi.fn() }],
+            ["oneOneFiveController", { start: vi.fn() }],
             ["unifiedOfflinePlugin", { handle: vi.fn(), registry: { providers: new Map([["115", { id: "115" }]]) } }],
             ["oneTwoThreeController", { start: vi.fn() }],
             ["javTrailersPlugin", { handle: vi.fn() }],
@@ -18,7 +18,7 @@ describe("ExternalBridgeController", () => {
 
         expect(plugins.oneTwoThreeController.start).toHaveBeenCalledOnce();
         expect(plugins.translationController.start).toHaveBeenCalledOnce();
-        expect(plugins.oneOneFivePlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(plugins.oneOneFiveController.start).toHaveBeenCalledOnce();
         expect(plugins.unifiedOfflinePlugin.handle).toHaveBeenCalledWith({ scope, oneTwoThreeController: plugins.oneTwoThreeController });
         expect(plugins.javTrailersPlugin.handle).toHaveBeenCalledWith({ scope });
         expect(plugins.subtitlePlugin.handle).toHaveBeenCalledWith({ scope });

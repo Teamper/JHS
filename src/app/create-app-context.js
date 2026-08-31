@@ -112,7 +112,7 @@ export function createAppContext(runtime) {
         .register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline)
         .register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.account, account)
         .register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
-    if (runtime.hostAdapter) container.register(PORT.host, runtime.hostAdapter);
+    container.register(PORT.host, runtime.hostAdapter ?? null);
     if (runtime.hostAdapters?.javdb) container.register(PORT.javdbHost, runtime.hostAdapters.javdb);
     if (runtime.hostAdapters?.javbus) container.register(PORT.javbusHost, runtime.hostAdapters.javbus);
 

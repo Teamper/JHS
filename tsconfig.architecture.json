@@ -76,8 +76,6 @@
     "src/plugins/image-viewer/screenshot.js",
     "src/plugins/new-video/task.js",
     "src/plugins/external-search/javtrailers.js",
-    "src/plugins/one-one-five/client.js",
-    "src/plugins/one-one-five/plugins.js",
     "src/plugins/offline/unified-offline.js",
     "src/plugins/stats/stats.js",
     "src/plugins/status/auto-page.js",

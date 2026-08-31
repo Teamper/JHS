@@ -5,10 +5,10 @@
  * the Feature API.
  */
 export class ExternalBridgeController {
-    /** @param {{translationController?: any, oneOneFivePlugin?: any, unifiedOfflinePlugin?: any, oneTwoThreeController?: any, javTrailersPlugin?: any, subtitlePlugin?: any, scope: any}} options */
+    /** @param {{translationController?: any, oneOneFiveController?: any, unifiedOfflinePlugin?: any, oneTwoThreeController?: any, javTrailersPlugin?: any, subtitlePlugin?: any, scope: any}} options */
     constructor(options) {
         this.translationController = options.translationController ?? null;
-        this.oneOneFivePlugin = options.oneOneFivePlugin ?? null;
+        this.oneOneFiveController = options.oneOneFiveController ?? null;
         this.unifiedOfflinePlugin = options.unifiedOfflinePlugin ?? null;
         this.oneTwoThreeController = options.oneTwoThreeController ?? null;
         this.javTrailersPlugin = options.javTrailersPlugin ?? null;
@@ -24,7 +24,7 @@ export class ExternalBridgeController {
         return Promise.resolve().then(() => Promise.all([
             this.oneTwoThreeController?.start(),
             this.translationController?.start(),
-            this.oneOneFivePlugin?.handle({ scope: this.scope }),
+            this.oneOneFiveController?.start(),
             this.unifiedOfflinePlugin?.handle({ scope: this.scope, oneTwoThreeController: this.oneTwoThreeController }),
             this.javTrailersPlugin?.handle({ scope: this.scope }),
             this.subtitlePlugin?.handle({ scope: this.scope }),

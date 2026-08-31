@@ -66,6 +66,7 @@ const externalBridgeManifestSource = await read("src/features/external-bridge/ma
 const externalBridgeControllerSource = await read("src/features/external-bridge/external-bridge-controller.js");
 const externalBridgeTranslationSource = await read("src/features/external-bridge/translation-controller.js");
 const one23AuthControllerSource = await read("src/features/external-bridge/one-two-three-controller.js");
+const one115ControllerSource = await read("src/features/external-bridge/one-one-five-controller.js");
 const discoveryManifestSource = await read("src/features/discovery/manifest.js");
 const discoveryControllerSource = await read("src/features/discovery/discovery-controller.js");
 const compatibilityManifestSource = await read("src/features/compatibility/manifest.js");
@@ -83,7 +84,6 @@ const uiPrimitives = await read("src/core/ui-primitives.js");
 const history = await read("src/features/library/history-controller.js");
 const review = await read("src/plugins/external-search/review.js");
 const related = await read("src/plugins/external-search/related.js");
-const one115Offline = await read("src/plugins/one-one-five/plugins.js");
 const mobileSource = await read("src/plugins/status/mobile-bottom-bar.js");
 const settingSource = await read("src/plugins/backup/setting.js");
 const settingFormsSource = await read("src/plugins/backup/setting-forms.js");
@@ -443,8 +443,10 @@ assertIncludes(externalBridgeManifestSource, 'id: "external-bridge"', "real exte
 assertIncludes(externalBridgeManifestSource, 'new ExternalBridgeController({', "external bridge feature controller ownership");
 assertIncludes(externalBridgeManifestSource, 'new ExternalBridgeTranslationController({', "external bridge translation controller ownership");
 assertIncludes(externalBridgeManifestSource, 'new OneTwoThreeAuthController({', "external bridge 123Pan controller ownership");
+assertIncludes(externalBridgeManifestSource, 'new OneOneFiveMatchController({', "external bridge 115 controller ownership");
 assertIncludes(externalBridgeControllerSource, 'this.translationController?.start()', "external bridge translation lifecycle handoff");
 assertIncludes(externalBridgeControllerSource, 'this.oneTwoThreeController?.start()', "external bridge 123Pan lifecycle handoff");
+assertIncludes(externalBridgeControllerSource, 'this.oneOneFiveController?.start()', "external bridge 115 lifecycle handoff");
 assertIncludes(externalBridgeTranslationSource, 'translation: this.translation', "external bridge translation service boundary");
 assertIncludes(externalBridgeTranslationSource, 'this.scope.addCleanup?.(() => this.dispose())', "external bridge translation scope cleanup");
 assert(!externalBridgeTranslationSource.includes('getRuntimeService('), "external bridge translation must not resolve legacy runtime services");
@@ -504,7 +506,7 @@ assert(!fc2.includes("import { detailStateController }"), "FC2 must not import a
 assertIncludes(fc2, '"123av" === context.source ? void this.load123AvDetail(context)', "FC2 controller must own 123AV detail orchestration");
 assert(!fc2By123Av.includes('getDependency("Fc2Plugin")'), "123AV data source must not depend on the FC2 UI plugin");
 assert(!uiPrimitives.includes('.trigger("change")'), "JhsSelect must dispatch one native change without jQuery double fire");
-for (const [label, source] of [["123", one23AuthControllerSource], ["115", one115Offline]]) {
+for (const [label, source] of [["123", one23AuthControllerSource], ["115", one115ControllerSource]]) {
   assert(!source.includes("injectJavDbButtons"), `${label} provider must not inject JavDB UI`);
   assert(!source.includes("injectJavBusButtons"), `${label} provider must not inject JavBus UI`);
 }
@@ -556,7 +558,7 @@ assert(!themeSource.includes(".sda-content"), "JavDB host cleanup must not leak 
 for (const removedBestResourceToken of [ "bestResourceBtn", "submitBestResource", "findBestResource", "selectBestCapableResource" ])
   assert(!unifiedOffline.includes(removedBestResourceToken) && !magnetHubSource.includes(removedBestResourceToken), `best-resource path returned: ${removedBestResourceToken}`);
 for (const removedPlugin of [ "OneOneFiveOfflinePlugin", "OneOneFiveRenamePlugin" ])
-  assert(!registry.includes(removedPlugin) && !one115Offline.includes(removedPlugin), `retired 115 plugin returned: ${removedPlugin}`);
+  assert(!registry.includes(removedPlugin) && !one115ControllerSource.includes(removedPlugin), `retired 115 plugin returned: ${removedPlugin}`);
 assertIncludes(unifiedOffline, "forceAvailabilityRefresh", "offline retries must bypass availability cache");
 assertIncludes(unifiedOffline, "preferredProviderId", "offline retries must prefer their original provider");
 assert(!statusImport.includes("$.ajax("), "multi-page import must use one awaited promise chain");
@@ -597,7 +599,6 @@ const expectedPlugins = [
   ["image-viewer/bus-img.js", "BusImgPlugin", "BusImgPlugin"],
   ["new-video/task.js", "TaskPlugin", "TaskPlugin"],
   ["new-video/new-video.js", "NewVideoPlugin", "NewVideoPlugin"],
-  ["one-one-five/plugins.js", "OneOneFiveMatchPlugin", "OneOneFiveMatchPlugin"],
   ["offline/unified-offline.js", "UnifiedOfflinePlugin", "UnifiedOfflinePlugin"],
   ["status/mobile-bottom-bar.js", "MobileBottomBarPlugin", "MobileBottomBarPlugin"]
 ];
@@ -615,11 +616,11 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,HitShowPlugin,Top250Plugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,OtherSitePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,HitShowPlugin,Top250Plugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,OtherSitePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,UnifiedOfflinePlugin",
   "JavDB plugin registration order changed"
 );
 assert(
-  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TaskPlugin,MobileBottomBarPlugin,UnifiedOfflinePlugin",
   "JavBus plugin registration order changed"
 );
 assert(!registry.includes("OneTwoThreeOfflinePlugin"), "123Pan auth must not be registered as a legacy plugin");
@@ -665,6 +666,7 @@ sourceByFile.set("features/identity/identity-actress-info-controller.js", identi
 sourceByFile.set("features/compatibility/compatibility-controller.js", compatibilityControllerSource);
 sourceByFile.set("features/external-bridge/translation-controller.js", externalBridgeTranslationSource);
 sourceByFile.set("features/external-bridge/one-two-three-controller.js", one23AuthControllerSource);
+sourceByFile.set("features/external-bridge/one-one-five-controller.js", one115ControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
 sourceByFile.set("backup/setting-styles.js", await read("src/plugins/backup/setting-styles.js"));
@@ -694,13 +696,13 @@ const regressionMatrix = [
   ["版本迁移", [["core/migration.js", "DATA_MIGRATIONS"], ["core/migration.js", "migration-snapshot"], ["core/migration.js", "collision"]]],
   ["可恢复状态事务", [["core/state-service.js", "mutation_journal"], ["core/state-service.js", 'commitState: "pending"'], ["core/state-service.js", "recoverPendingTransaction"]]],
   ["离线能力路由", [["offline/unified-offline.js", "capabilities.includes(type)"], ["offline/unified-offline.js", '"ready", "unknown"'], ["offline/unified-offline.js", "getCandidates(resource"]]],
-  ["115 增量匹配", [["one-one-five/plugins.js", "IntersectionObserver"], ["one-one-five/plugins.js", 'rootMargin: "200px"'], ["one-one-five/plugins.js", "list-items-added"]]],
+  ["115 增量匹配", [["features/external-bridge/one-one-five-controller.js", "IntersectionObserver"], ["features/external-bridge/one-one-five-controller.js", 'rootMargin: "200px"'], ["features/external-bridge/one-one-five-controller.js", "list-items-added"]]],
   ["设置页", [["backup/setting.js", "SettingPlugin"], ["backup/setting-backup.js", "importSettingData"]]],
   ["演员信息解析", [["core/plugin-manager.js", "getActressPageInfo"], ["status/list-page.js", "parseActressName"]]],
   ["移动端适配", [["status/mobile-bottom-bar.js", "MobileBottomBarPlugin"], ["core/utils.js", "isMobileMode"], ["core/plugin-manager.js", "shouldSkipOnMobile"]]]
 ];
 
-assert(!sourceByFile.get("one-one-five/plugins.js").includes("new MutationObserver"), "115 must reuse the ListPage MutationObserver");
+assert(!sourceByFile.get("features/external-bridge/one-one-five-controller.js").includes("new MutationObserver"), "115 must reuse the ListPage MutationObserver");
 for (const [file, source] of [
   ["status/list-page.js", listPageSource],
   ["status/detail-page-button.js", sourceByFile.get("status/detail-page-button.js")],

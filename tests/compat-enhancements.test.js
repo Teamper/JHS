@@ -57,5 +57,5 @@ describe("status and media UX contracts", () => {
         expect(imageViewer).toHaveBeenCalledWith(fixture.dom.querySelector(".preview-images img"));
     });
     it("intercepts image paste only on the navigation search input", () => { expect(nav).toContain('$("#search-keyword").on("paste.jhsIdentityNav"'); expect(nav).toContain('type.includes("image")'); });
-    it("uses configured 115 concurrency and cache lifetime", () => { const one15 = readTestFile(join(import.meta.dirname, "../src/plugins/one-one-five/plugins.js"), "utf8"); expect(one15).toContain("mapLimit(cards, this.concurrency"); expect(one15).toContain('getSetting("oneOneFiveConcurrency"'); expect(one15).toContain('getSetting("oneOneFiveCacheMinutes"'); expect(one15).toContain('rootMargin: "200px"'); });
+    it("uses configured 115 concurrency and cache lifetime", () => { const one15 = readTestFile(join(import.meta.dirname, "../src/features/external-bridge/one-one-five-controller.js"), "utf8"); expect(one15).toContain("mapLimit(cards, this.concurrency"); expect(one15).toContain('getSetting("oneOneFiveConcurrency"'); expect(one15).toContain('getSetting("oneOneFiveCacheMinutes"'); expect(one15).toContain('rootMargin: "200px"'); });
 });

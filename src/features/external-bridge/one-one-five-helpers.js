@@ -2,8 +2,11 @@
 
 import { normalizeCarNum } from "../../core/constants.js";
 
+/** Normalize the 115 search keyword while preserving the FC2 compatibility rule. */
 export function normalize115Keyword(/** @type {unknown} */ carNum) { const normalized = normalizeCarNum(carNum); return normalized?.replace(/^FC2-/i, "") || null; }
+/** Format a 115 file size for the matching UI. */
 export function format115Size(/** @type {unknown} */ bytes) { const value = Number(bytes) || 0; if (!value) return "0 B"; const units = ["B", "KB", "MB", "GB", "TB"], index = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024))); return `${(value / 1024 ** index).toFixed(index ? 2 : 0)} ${units[index]}`; }
+/** Preview a normalized 115 filename without mutating the remote file. */
 /** @param {string} fileName @param {string} carNum @param {{uppercase?: boolean, keepTitle?: boolean, keepSuffix?: boolean, maxLength?: number}} [options] */
 export function preview115Rename(fileName, carNum, options = {}) {
     const extension = fileName.match(/\.[^.]+$/)?.[0] || "", tags = fileName.match(/-(?:U|UC|C|4K|8K|H265|HEVC|CN|CHS|CHT)\b/gi) || [];
