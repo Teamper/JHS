@@ -6,20 +6,20 @@ import { LibraryController } from "../src/features/library/library-controller.js
 
 describe("Library FeatureRuntime ownership", () => {
     it("passes the feature scope to the migrated history contribution once", async () => {
-        const scope = new LifecycleScope("feature:library"), repository = {}, historyPlugin = {
-            handle: vi.fn(async () => {}),
+        const scope = new LifecycleScope("feature:library"), repository = {}, historyController = {
+            start: vi.fn(async () => {}),
             get historyRepository() { return repository; },
         }, blacklistPlugin = {
             openBlacklistDialog: vi.fn(),
             parseAndSaveFilterInfo: vi.fn(),
         };
-        const controller = new LibraryController({ historyPlugin, blacklistPlugin, favoriteActressesEnabled: false, route: "other", scope });
+        const controller = new LibraryController({ historyController, blacklistPlugin, favoriteActressesEnabled: false, route: "other", scope });
 
         await controller.start();
         await controller.start();
 
-        expect(historyPlugin.handle).toHaveBeenCalledOnce();
-        expect(historyPlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(historyController.start).toHaveBeenCalledOnce();
+        expect(historyController.start).toHaveBeenCalledWith({ scope });
         expect(controller.getApi().getHistoryRepository()).toBe(repository);
         expect(controller.getApi().hasBlacklist).toBe(true);
         controller.getApi().openBlacklistDialog("event");

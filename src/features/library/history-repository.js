@@ -3,7 +3,11 @@
 export class HistoryRepository {
     /** @param {{storage: any, state: any}} dependencies */
     constructor(dependencies) { this.storage = dependencies.storage; this.state = dependencies.state; }
-    list() { return this.storage.getCarList(); }
+    async list() {
+        if (typeof this.storage?.getCarList === "function") return this.storage.getCarList();
+        const value = await this.storage?.get?.("car_list");
+        return Array.isArray(value) ? value : [];
+    }
     activity() { return this.state.getActivityLog(); }
     offline() { return this.state.getOfflineHistory(); }
     /** @param {string} transactionId */

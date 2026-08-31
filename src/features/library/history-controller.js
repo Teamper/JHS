@@ -1,11 +1,10 @@
 // @ts-check
 
-import { b, d, g, h, k, l, m, normalizeCarNum, p, r, u, v, y } from "../../core/constants.js";
-import { BasePlugin } from "../../core/plugin-manager.js";
+import { b, d, g, h, k, m, normalizeCarNum, p, u, v, y } from "../../core/constants.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
 import { JhsSelect } from "../../core/ui-primitives.js";
-import { HistorySelectionModel } from "../../features/history/history-selection-model.js";
-import { HistoryRepository } from "../../features/history/history-repository.js";
+import { HistorySelectionModel } from "./history-selection-model.js";
+import { HistoryRepository } from "./history-repository.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 
 /** @typedef {Record<string, any>} HistoryRecord */
@@ -78,9 +77,23 @@ export function buildEditRecordForm(flags) {
     return `\n            <div class="jhs-layout-8cddc29a">\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">番号:</label>\n                    <input type="text" id="edit-carNum" class="jhs-field jhs-history-edit-field" readonly>\n                </div>\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">演员 (用空格隔开):</label>\n                    <textarea id="edit-names" class="jhs-textarea jhs-history-edit-field"></textarea>\n                </div>\n                <fieldset class="jhs-layout-da303dcf"><legend class="jhs-layout-27f87d75">状态:</legend>\n                    <label class="jhs-option-row">收藏 <input type="checkbox" id="edit-favorite" class="mini-switch" ${flags.favorite ? "checked" : ""}></label>\n                    <label class="jhs-option-row">已下载 <input type="checkbox" id="edit-downloaded" class="mini-switch" ${flags.downloaded ? "checked" : ""}></label>\n                    <label class="jhs-option-row">已观看 <input type="checkbox" id="edit-watched" class="mini-switch" ${flags.watched ? "checked" : ""}></label>\n                    <label class="jhs-option-row">屏蔽 <input type="checkbox" id="edit-blocked" class="mini-switch" ${flags.blocked ? "checked" : ""}></label>\n                </fieldset>\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">链接:</label>\n                    <input type="text" id="edit-url" class="jhs-field jhs-history-edit-field">\n                </div>\n                <div class="jhs-layout-da303dcf">\n                    <label class="jhs-layout-27f87d75">备注:</label>\n                    <textarea id="edit-remark" class="jhs-textarea jhs-history-edit-field"></textarea>\n                </div>\n            </div>\n        `;
 }
 
-export class HistoryPlugin extends BasePlugin {
-    constructor() {
-        super(...arguments);
+export class HistoryController {
+    /** @param {{hostAdapter?: any, dialog?: any, movie?: any, settings?: any, state?: any, storage?: any, styles?: any, features?: any, fc2Plugin?: any, scope: any}} options */
+    constructor(options) {
+        this.hostAdapter = options.hostAdapter;
+        this.document = options.hostAdapter?.document ?? globalThis.document;
+        this.site = options.hostAdapter?.site ?? "unknown";
+        this.isJavDB = this.site === "javdb";
+        this.isJavBus = this.site === "javbus";
+        this.dialog = options.dialog;
+        this.movie = options.movie;
+        this.settings = options.settings;
+        this.state = options.state;
+        this.storage = options.storage;
+        this.styles = options.styles;
+        this.features = options.features;
+        this.fc2Plugin = options.fc2Plugin ?? null;
+        this.scope = options.scope;
         /** @type {TableHandle | null} */ this.tableObj = null;
         /** @type {JQueryHandle | null} */ this.historyRoot = null;
         this.historySelectionModel = new HistorySelectionModel();
@@ -94,14 +107,12 @@ export class HistoryPlugin extends BasePlugin {
         this.hasDownCount = 0;
         this.hasWatchCount = 0;
         this.waitCheckCount = 0;
-    }
-    getName() {
-        return "HistoryPlugin";
+        this.started = false;
     }
     /** @param {string} value */
     getSourceLabel(value) {
         if (!value) return "";
-        const movie = this.getRuntimeService("movie"), settings = this.getRuntimeService("settings").snapshot();
+        const movie = this.movie, settings = this.settings?.snapshot?.() ?? {};
         if (movie.matchesProviderUrl("av123", value)) return "123AV";
         try {
             const origin = new URL(value).origin;
@@ -111,11 +122,11 @@ export class HistoryPlugin extends BasePlugin {
         return value.includes("javdb") ? "JavDB" : value.includes("javbus") ? "JavBus" : value.includes("123av") ? "123AV" : "其他";
     }
     get historyRepository() {
-        return this._historyRepository ||= new HistoryRepository({ storage: storageManager, state: this.getRuntimeService("state") });
+        return this._historyRepository ||= new HistoryRepository({ storage: this.storage, state: this.state });
     }
     async getExternalBridgeFeatureApi() {
         try {
-            return await this.getRuntimeService("features").getFeatureApi("external-bridge");
+            return await this.features?.getFeatureApi("external-bridge");
         } catch (error) {
             clog.warn("External Bridge Feature API 不可用，跳过离线操作", error);
             return null;
@@ -147,24 +158,34 @@ export class HistoryPlugin extends BasePlugin {
         $(".miniHistoryBtnBox").show());
     }
     /** @param {{scope?: any}} [options] */
-    async handle(options = {}) {
-        const scope = options.scope ?? await this.getRuntimeService("scope")();
+    async start(options = {}) {
+        const scope = options.scope ?? this.scope;
+        if (this.started) return;
+        this.started = true;
+        try {
+            const css = (await this.initCss()).replace(/^\s*<style>|<\/style>\s*$/g, "");
+            const removeStyle = this.styles?.register?.("jhs-history", css);
+            typeof removeStyle === "function" && scope.addCleanup?.(removeStyle);
+        } catch (error) {
+            this.started = false;
+            throw error;
+        }
         const openHistory = (/** @type {any} */ _event) => this.openHistory();
-        if (r) {
+        if (this.isJavDB) {
             $(".navbar-end").prepend('<div class="navbar-item has-sub-btns is-hoverable historyBtnBox">\n                    <button type="button" id="historyBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>');
             $(".navbar-search").css("margin-left", "0").before('\n                <div class="navbar-item miniHistoryBtnBox">\n                    <button type="button" id="miniHistoryBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>\n            ');
             this.handleResize();
             const resize = () => this.handleResize();
             $(window).on("resize.jhsHistory", resize);
             $("#historyBtn,#miniHistoryBtn").on("click.jhsHistory", openHistory);
-            scope.addCleanup(() => {
+            scope?.addCleanup?.(() => {
                 $(window).off("resize.jhsHistory", resize);
                 $("#historyBtn,#miniHistoryBtn").off(".jhsHistory");
                 $(".historyBtnBox,.miniHistoryBtnBox").remove();
                 $(".navbar-search").css("margin-left", "");
             });
         }
-        if (l) void this.createBusButton(scope, openHistory).catch((error) => clog.warn("鉴定记录入口初始化失败", error));
+        if (this.isJavBus) void this.createBusButton(scope, openHistory).catch((error) => clog.warn("鉴定记录入口初始化失败", error));
     }
     /** @param {any} scope @param {(event: any) => void} openHistory */
     async createBusButton(scope, openHistory) {
@@ -181,21 +202,22 @@ export class HistoryPlugin extends BasePlugin {
                 Date.now() - startedAt >= 2500 && finish(!1);
             }), 25);
             const startedAt = Date.now();
-            scope.addCleanup(() => finish(!1));
+            scope?.addCleanup?.(() => finish(!1));
         });
         if (scope.disposed) return;
         if (!ready) return void clog.warn("鉴定记录入口未创建：JavBus 顶部工具区未就绪");
         $("#top-right-box").append('<button type="button" id="historyBtn" class="jhs-btn jhs-btn--secondary">鉴定记录</button>');
         $("#historyBtn,#miniHistoryBtn").on("click.jhsHistory", openHistory);
-        scope.addCleanup(() => {
+        scope?.addCleanup?.(() => {
             $("#historyBtn,#miniHistoryBtn").off(".jhsHistory");
             $("#top-right-box #historyBtn").remove();
         });
     }
+    dispose() { this.started = false; }
     openHistory() {
         let e = `\n            <div class="jhs-layout-7cb3f981 jhs-history-dialog"> \n                 <div id="filterBox" class="jhs-layout-53809f1e">\n                    <select id="dataType" class="jhs-select-source">\n                        <option value="all" selected>所有</option>\n                        <option value="waitCheck">待鉴定</option>\n                        <option value="filter">${u}</option>\n                        <option value="favorite">${b}</option>\n                        <option value="hasDown">${y}</option>\n                        <option value="hasWatch">${k}</option>\n                    </select>\n                    <input id="searchCarNum" type="text" placeholder="搜索番号|演员" class="jhs-field">\n                    <button type="button" id="clearSearchbtn" class="jhs-btn jhs-btn--secondary jhs-layout-21a4fe43">重置</button>\n                </div>\n                <div id="allSelectBox" class="jhs-layout-66253c00">\n                    <button type="button" class="jhs-btn jhs-btn--dark multiple-history-deleteBtn jhs-layout-7daea5fa"> <span>移除</span> </button>\n                    <button type="button" class="jhs-btn jhs-btn--watch multiple-history-hasWatchBtn jhs-layout-2e003268">标记观看</button>\n                    <button type="button" class="jhs-btn jhs-btn--down multiple-history-hasDownBtn jhs-layout-2e003268">标记下载</button>\n                    <button type="button" class="jhs-btn jhs-btn--fav multiple-history-favoriteBtn jhs-layout-2e003268">标记收藏</button>\n                    <button type="button" class="jhs-btn jhs-btn--filter multiple-history-filterBtn jhs-layout-2e003268">标记屏蔽</button>\n                </div>\n                <div id="table-container" class="jhs-layout-81eaab28"></div>\n            </div>\n        `;
         e = e.replace('<div id="filterBox"', '<div id="historyViewTabs" class="jhs-segmented" role="tablist"><button type="button" class="jhs-btn jhs-segmented__item active" data-history-view="state">作品状态</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="activity">操作记录</button><button type="button" class="jhs-btn jhs-segmented__item" data-history-view="offline">离线任务</button></div><div id="filterBox"');
-        this.getRuntimeService("dialog").open({
+        this.dialog.open({
             type: 1,
             title: "鉴定记录",
             content: e,
@@ -611,7 +633,7 @@ export class HistoryPlugin extends BasePlugin {
     handleDelete(e, t) {
         utils.q(e, `是否移除${t}?`, (async () => {
             try {
-                await this.historyRepository.remove(t), (await this.getRuntimeService("features").getFeatureApi("list"))?.showCarNumBox?.(t),
+                await this.historyRepository.remove(t), (await this.features?.getFeatureApi("list"))?.showCarNumBox?.(t),
                 await this.reloadTable();
             } catch (error) {
                 clog.error("移除历史记录失败:", error), show.error("移除失败，请稍后重试");
@@ -621,18 +643,18 @@ export class HistoryPlugin extends BasePlugin {
     /** @param {any} e @param {HistoryRecord} t */
     async handleClickDetail(e, t) {
         if (t.carNum.includes("FC2-")) {
-            const plugin = this.getOptionalDependency("Fc2Plugin");
+            const plugin = this.fc2Plugin;
             if (!plugin) return t.url ? void utils.openPage(t.url, t.carNum, !1, e) : void show.info("FC2 详情功能已禁用");
             const source = await plugin.resolveFc2Source(t), movieId = await plugin.resolveMovieIdForRecord(t.carNum, t.url);
-            if (r) plugin.openFc2Dialog(movieId, t.carNum, t.url, { source });
-            else if (l) await plugin.openFc2Page(movieId, t.carNum, t.url, { newTab: !0 }, { source });
+            if (this.isJavDB) plugin.openFc2Dialog(movieId, t.carNum, t.url, { source });
+            else if (this.isJavBus) await plugin.openFc2Page(movieId, t.carNum, t.url, { newTab: !0 }, { source });
             return;
         }
-        if (r) {
+        if (this.isJavDB) {
             if (!t.url) return void window.open("/search?q=" + t.carNum, "_blank");
             utils.openPage(t.url, t.carNum, !1, e);
         }
-        if (l) {
+        if (this.isJavBus) {
             // 无来源链接时不能退化为打开站点首页
             if (!t.url) return void show.info("该记录没有来源链接");
             t.url.includes("javdb") ? window.open(t.url, "_blank") : utils.openPage(t.url, t.carNum, !1, e);
@@ -643,7 +665,7 @@ export class HistoryPlugin extends BasePlugin {
         const carNum = e.carNum, names = e.names || "", url = e.url || "", remark = e.remark || "", flags = normalizeStateFlags(e.stateFlags);
         let editRoot = $();
         const c = buildEditRecordForm(flags);
-        const dialog = this.getRuntimeService("dialog");
+        const dialog = this.dialog;
         dialog.open({
             type: 1,
             title: `编辑记录: ${carNum}`,

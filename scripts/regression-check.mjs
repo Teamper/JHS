@@ -57,7 +57,7 @@ const javDbHostAdapter = await read("src/platform/hosts/javdb-host-adapter.js");
 const unifiedOffline = await read("src/plugins/offline/unified-offline.js");
 const hitShow = await read("src/plugins/external-search/hit-show.js");
 const listPageButton = await read("src/plugins/status/list-page-button.js");
-const historySource = await read("src/plugins/status/history.js");
+const historySource = await read("src/features/library/history-controller.js");
 const libraryManifestSource = await read("src/features/library/manifest.js");
 const libraryControllerSource = await read("src/features/library/library-controller.js");
 const externalBridgeManifestSource = await read("src/features/external-bridge/manifest.js");
@@ -73,7 +73,7 @@ const listFiltersSource = await read("src/features/list/list-filters.js");
 const fc2 = await read("src/plugins/external-search/fc2.js");
 const fc2By123Av = await read("src/plugins/external-search/fc2-by-123av.js");
 const uiPrimitives = await read("src/core/ui-primitives.js");
-const history = await read("src/plugins/status/history.js");
+const history = await read("src/features/library/history-controller.js");
 const review = await read("src/plugins/external-search/review.js");
 const related = await read("src/plugins/external-search/related.js");
 const one23Offline = await read("src/plugins/one-two-three/offline.js");
@@ -297,7 +297,7 @@ assert(!listPageButton.includes('getOptionalDependency("HistoryPlugin")'), "list
 assert(!fc2.includes('getOptionalDependency("FilterTitleKeywordPlugin")'), "FC2 must not resolve FilterTitleKeywordPlugin directly");
 assertIncludes(libraryManifestSource, 'id: "library"', "real library feature manifest");
 assertIncludes(libraryManifestSource, 'new LibraryController({', "library feature controller ownership");
-assertIncludes(libraryControllerSource, 'this.historyPlugin?.handle({ scope: this.scope })', "library history lifecycle handoff");
+assertIncludes(libraryControllerSource, 'this.historyController?.start({ scope: this.scope })', "library history lifecycle handoff");
 assertIncludes(libraryControllerSource, "this.state.patch", "library state import lifecycle handoff");
 assertIncludes(libraryControllerSource, 'if (this.route === "detail") this.bindDetailKeywordFilter(this.document);', "library native keyword lifecycle");
 assertIncludes(libraryControllerSource, 'blacklistCall("parseAndSaveFilterInfo")', "library blacklist API boundary");
@@ -334,7 +334,7 @@ assert(!busNavBarSource.includes('getOptionalDependency("SearchByImagePlugin")')
 assert(!historySource.includes('getOptionalDependency("UnifiedOfflinePlugin")'), "history must use the external bridge API");
 assert(!unifiedOffline.includes('getOptionalDependency("OneTwoThreeOfflinePlugin")'), "unified offline must receive providers from the external bridge controller");
 assert(!settingSource.includes('getOptionalDependency("TranslatePlugin")'), "settings must not resolve the translation plugin directly");
-assertIncludes(historySource, "async handle(options = {})", "history feature lifecycle entry");
+assertIncludes(historySource, "async start(options = {})", "history feature lifecycle entry");
 assertIncludes(historySource, "scope.addCleanup", "history feature scope cleanup");
 assertIncludes(statusImport, "mountStateImportAction()", "state import feature lifecycle entry");
 assertIncludes(statusImport, 'id = "wantWatchBtn"', "state import feature scope cleanup");
@@ -445,7 +445,6 @@ const expectedPlugins = [
   ["external-search/other-site.js", "OtherSitePlugin", "OtherSitePlugin"],
   ["status/bus-detail-page.js", "BusDetailPagePlugin", "BusDetailPagePlugin"],
   ["status/detail-page-button.js", "DetailPageButtonPlugin", "DetailPageButtonPlugin"],
-  ["status/history.js", "HistoryPlugin", "HistoryPlugin"],
   ["external-search/review.js", "ReviewPlugin", "ReviewPlugin"],
   ["blacklist/blacklist.js", "BlacklistPlugin", "BlacklistPlugin"],
   ["status/list-page-button.js", "ListPageButtonPlugin", "ListPageButtonPlugin"],
@@ -484,11 +483,11 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,HistoryPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,NavBarPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,MagnetHubPlugin,ScreenShotPlugin,BlacklistPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavDB plugin registration order changed"
 );
 assert(
-  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,HistoryPlugin,AutoPagePlugin,SearchByImagePlugin,BusNavBarPlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,BlacklistPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,SearchByImagePlugin,BusNavBarPlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,BlacklistPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavBus plugin registration order changed"
 );
 assertIncludes(registry, 'OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"]', "shared registry");
@@ -524,6 +523,7 @@ sourceByFile.set("core/plugin-manager.js", await read("src/core/plugin-manager.j
 sourceByFile.set("core/utils.js", await read("src/core/utils.js"));
 sourceByFile.set("features/stats/stats-controller.js", statsControllerSource);
 sourceByFile.set("features/library/library-controller.js", libraryControllerSource);
+sourceByFile.set("features/library/history-controller.js", historySource);
 sourceByFile.set("features/compatibility/compatibility-controller.js", compatibilityControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));

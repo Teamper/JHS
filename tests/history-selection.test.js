@@ -5,8 +5,8 @@ import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
-import { HistorySelectionModel } from "../src/features/history/history-selection-model.js";
-import { HistoryRepository } from "../src/features/history/history-repository.js";
+import { HistorySelectionModel } from "../src/features/library/history-selection-model.js";
+import { HistoryRepository } from "../src/features/library/history-repository.js";
 
 function createRecords(count = 120) {
     return Array.from({ length: count }, ((_, index) => ({
@@ -50,7 +50,7 @@ function loadHistory(records = createRecords()) {
         document: dom.window.document,
         window: dom.window,
         $,
-        BasePlugin: class { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : name === "state" ? stateService : null; } },
+        BasePlugin: class {},
         HistorySelectionModel, HistoryRepository,
         Tabulator: class {},
         layer,
@@ -75,8 +75,8 @@ function loadHistory(records = createRecords()) {
         y: "下载",
         k: "观看"
     });
-    vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/status/history.js"), "utf8")};globalThis.History=HistoryPlugin`, context);
-    const plugin = new context.History, root = $("#history");
+    vm.runInContext(`${readTestFile(join(process.cwd(), "src/features/library/history-controller.js"), "utf8")};globalThis.History=HistoryController`, context);
+    const plugin = new context.History({ dialog: { open: layer.open, close: layer.close }, state: stateService, storage: { getCarList }, movie: {}, settings: { snapshot: () => ({}) }, features: {}, hostAdapter: { site: "javdb" }, scope: {} }), root = $("#history");
     const table = {
         currentData: records.slice(0, 50),
         selectedData: [],

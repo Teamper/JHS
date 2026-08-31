@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { buildActionButtons, buildCarNumCell, buildEditRecordForm, buildNamesCell } from "../src/plugins/status/history.js";
+import { buildActionButtons, buildCarNumCell, buildEditRecordForm, buildNamesCell } from "../src/features/library/history-controller.js";
 
 const HOSTILE = {
     carNum: 'ABC-1"><img src=x onerror=alert(1)>',

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const blacklist = readTestFile(join(process.cwd(), "src/plugins/blacklist/blacklist.js"), "utf8");
 const settingBackup = readTestFile(join(process.cwd(), "src/plugins/backup/setting-backup.js"), "utf8");
-const history = readTestFile(join(process.cwd(), "src/plugins/status/history.js"), "utf8");
+const history = readTestFile(join(process.cwd(), "src/features/library/history-controller.js"), "utf8");
 
 function methodBody(source, start, end) {
     return source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));

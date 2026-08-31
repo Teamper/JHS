@@ -7,9 +7,9 @@ import { requestHostPage } from "../../core/host-page-request.js";
  * migrated away from direct plugin-to-plugin calls.
  */
 export class LibraryController {
-    /** @param {{historyPlugin?: {handle: (options?: {scope: any}) => Promise<any> | any, historyRepository?: any}, blacklistPlugin?: Record<string, any>, keywordFilterEnabled?: boolean, stateImportEnabled?: boolean, favoriteActressesEnabled?: boolean, hostAdapter?: any, storage?: any, settings?: any, eventBus?: any, storageMutation?: any, state?: any, http?: any, route?: string, scope: any}} options */
+    /** @param {{historyController?: {start: (options?: {scope: any}) => Promise<any> | any, historyRepository?: any} | null, blacklistPlugin?: Record<string, any>, keywordFilterEnabled?: boolean, stateImportEnabled?: boolean, favoriteActressesEnabled?: boolean, hostAdapter?: any, storage?: any, settings?: any, eventBus?: any, storageMutation?: any, state?: any, http?: any, route?: string, scope: any}} options */
     constructor(options) {
-        this.historyPlugin = options.historyPlugin ?? null;
+        this.historyController = options.historyController ?? null;
         this.blacklistPlugin = options.blacklistPlugin ?? null;
         this.keywordFilterEnabled = options.keywordFilterEnabled !== false;
         this.stateImportEnabled = options.stateImportEnabled !== false;
@@ -34,7 +34,7 @@ export class LibraryController {
         if (this.started) return Promise.resolve();
         this.started = true;
         return Promise.resolve().then(async () => {
-            await this.historyPlugin?.handle({ scope: this.scope });
+            await this.historyController?.start({ scope: this.scope });
             await this.mountFavoriteActresses();
             if (this.route === "detail") this.bindDetailKeywordFilter(this.document);
             this.mountStateImportAction();
@@ -46,11 +46,11 @@ export class LibraryController {
 
     /** Expose the stable library capability surface for later migrations. */
     getApi() {
-        const historyCall = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => /** @type {any} */ (this.historyPlugin)?.[name]?.(...args);
+        const historyCall = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => /** @type {any} */ (this.historyController)?.[name]?.(...args);
         const blacklistCall = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => this.blacklistPlugin?.[name]?.(...args);
         return Object.freeze({
-            getHistoryRepository: () => this.historyPlugin?.historyRepository ?? null,
-            hasHistory: Boolean(this.historyPlugin),
+            getHistoryRepository: () => this.historyController?.historyRepository ?? null,
+            hasHistory: Boolean(this.historyController),
             openHistory: historyCall("openHistory"),
             reloadHistoryTable: historyCall("reloadTable"),
             hasKeywordFilter: this.keywordFilterEnabled,

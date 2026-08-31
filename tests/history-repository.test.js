@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { HistoryRepository } from "../src/features/history/history-repository.js";
+import { HistoryRepository } from "../src/features/library/history-repository.js";
 
 describe("history repository", () => {
     it("centralizes history reads and mutations without changing state contracts", async () => {
@@ -18,5 +18,12 @@ describe("history repository", () => {
         expect(state.toggle).toHaveBeenCalledWith("ABC-1", "favorite", { type: "test" });
         expect(state.patch).toHaveBeenCalledWith(["ABC-1"], { favorite: true }, { type: "test" });
         expect(state.removeOfflineHistory).toHaveBeenCalledWith("offline-1");
+    });
+
+    it("reads the car list through the generic storage service", async () => {
+        const storage = { get: vi.fn(async (key) => key === "car_list" ? [{ carNum: "ABC-2" }] : null) };
+        const repository = new HistoryRepository({ storage, state: {} });
+        await expect(repository.list()).resolves.toEqual([{ carNum: "ABC-2" }]);
+        expect(storage.get).toHaveBeenCalledWith("car_list");
     });
 });

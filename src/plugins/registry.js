@@ -35,7 +35,6 @@ import { DetailWorkspacePlugin } from "./status/detail-workspace.js";
 import { Fc2NavigationPlugin } from "./status/fc2-navigation.js";
 import { FoldCategoryPlugin } from "./status/fold-category.js";
 import { HighlightMagnetPlugin } from "./status/highlight-magnet.js";
-import { HistoryPlugin } from "./status/history.js";
 import { ListPageButtonPlugin } from "./status/list-page-button.js";
 import { ListPagePlugin } from "./status/list-page.js";
 import { MobileBottomBarPlugin } from "./status/mobile-bottom-bar.js";
@@ -54,7 +53,6 @@ export const legacyContributionManifests = Object.freeze([
     manifest("list.fc2-navigation", "list", Fc2NavigationPlugin, ["javdb"], { javdb: 4 }, [PORT.host], { managedByFeature: true }),
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 5 }, [SERVICE.settings], { managedByFeature: true }),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [PORT.host, SERVICE.settings, REGISTRY.feature], { managedByFeature: true }),
-    manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog, SERVICE.movie, SERVICE.settings, SERVICE.state, REGISTRY.feature], { managedByFeature: true }),
     manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.profile, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, SERVICE.translation, REGISTRY.settings, REGISTRY.feature]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }, [SERVICE.movie], { managedByFeature: true }),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache, REGISTRY.feature], { managedByFeature: true }),
