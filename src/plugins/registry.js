@@ -7,7 +7,6 @@ import { SettingPlugin } from "./backup/setting.js";
 import { Fc2By123AvPlugin } from "./external-search/fc2-by-123av.js";
 import { Fc2Plugin } from "./external-search/fc2.js";
 import { HitShowPlugin } from "./external-search/hit-show.js";
-import { JavTrailersPlugin } from "./external-search/javtrailers.js";
 import { MagnetHubPlugin } from "./external-search/magnet-hub.js";
 import { OtherSitePlugin } from "./external-search/other-site.js";
 import { RelatedPlugin } from "./external-search/related.js";
@@ -31,7 +30,6 @@ import { HighlightMagnetPlugin } from "./status/highlight-magnet.js";
 import { ListPageButtonPlugin } from "./status/list-page-button.js";
 import { ListPagePluginAdapter as ListPagePlugin } from "../compat/list-page-adapter.js";
 import { MobileBottomBarPlugin } from "./status/mobile-bottom-bar.js";
-import { SubTitleCatPlugin } from "./subtitle/subtitle-cat.js";
 
 const manifest = (id, featureId, plugin, sites, order, requires = [], options = {}) => defineContribution({
     id, featureId, legacyPluginId: plugin.legacyPluginId ?? plugin.name, plugin, sites, order, requires, ...options,
@@ -65,8 +63,6 @@ export const legacyContributionManifests = Object.freeze([
     manifest("list.javbus-images", "list", BusImgPlugin, ["javbus"], { javbus: 9 }, [], { managedByFeature: true }),
     manifest("detail.javbus-native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }, [], { managedByFeature: true }),
     manifest("detail.javbus-preview", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings, SERVICE.storage, SERVICE.movie], { managedByFeature: true }),
-    manifest("external-bridge.javtrailers", "external-bridge", JavTrailersPlugin, ["javtrailers"], { javtrailers: 1 }, [], { managedByFeature: true }),
-    manifest("external-bridge.subtitle", "external-bridge", SubTitleCatPlugin, ["subtitlecat"], { subtitlecat: 1 }, [], { managedByFeature: true }),
 ]);
 
 const contributionIds = new Set();

@@ -67,6 +67,8 @@ const externalBridgeControllerSource = await read("src/features/external-bridge/
 const externalBridgeTranslationSource = await read("src/features/external-bridge/translation-controller.js");
 const one23AuthControllerSource = await read("src/features/external-bridge/one-two-three-controller.js");
 const one115ControllerSource = await read("src/features/external-bridge/one-one-five-controller.js");
+const javTrailersControllerSource = await read("src/features/external-bridge/javtrailers-controller.js");
+const subtitleControllerSource = await read("src/features/external-bridge/subtitle-cat-controller.js");
 const discoveryManifestSource = await read("src/features/discovery/manifest.js");
 const discoveryControllerSource = await read("src/features/discovery/discovery-controller.js");
 const compatibilityManifestSource = await read("src/features/compatibility/manifest.js");
@@ -448,6 +450,11 @@ assertIncludes(externalBridgeControllerSource, 'this.translationController?.star
 assertIncludes(externalBridgeControllerSource, 'this.oneTwoThreeController?.start()', "external bridge 123Pan lifecycle handoff");
 assertIncludes(externalBridgeControllerSource, 'this.oneOneFiveController?.start()', "external bridge 115 lifecycle handoff");
 assertIncludes(externalBridgeManifestSource, 'new UnifiedOfflineController({', "external bridge offline controller ownership");
+assertIncludes(externalBridgeManifestSource, 'new JavTrailersController({', "external bridge JavTrailers controller ownership");
+assertIncludes(externalBridgeManifestSource, 'new SubtitleCatController({', "external bridge SubtitleCat controller ownership");
+assertIncludes(externalBridgeControllerSource, 'this.javTrailersController?.start()', "external bridge JavTrailers lifecycle handoff");
+assertIncludes(externalBridgeControllerSource, 'this.subtitleController?.start()', "external bridge SubtitleCat lifecycle handoff");
+assert(!externalBridgeManifestSource.includes("resolveLegacyPlugin"), "external bridge must not resolve retired external-page plugins");
 assertIncludes(externalBridgeTranslationSource, 'translation: this.translation', "external bridge translation service boundary");
 assertIncludes(externalBridgeTranslationSource, 'this.scope.addCleanup?.(() => this.dispose())', "external bridge translation scope cleanup");
 assert(!externalBridgeTranslationSource.includes('getRuntimeService('), "external bridge translation must not resolve legacy runtime services");
@@ -575,8 +582,6 @@ const expectedPlugins = [
   ["status/detail-page.js", "DetailPagePlugin", "DetailPagePlugin"],
   ["status/detail-workspace.js", "DetailWorkspacePlugin", "DetailWorkspacePlugin"],
   ["image-viewer/preview-video.js", "PreviewVideoPlugin", "PreviewVideoPlugin"],
-  ["external-search/javtrailers.js", "JavTrailersPlugin", "JavTrailersPlugin"],
-  ["subtitle/subtitle-cat.js", "SubTitleCatPlugin", "SubTitleCatPlugin"],
   ["external-search/fc2.js", "Fc2Plugin", "Fc2Plugin"],
   ["status/highlight-magnet.js", "HighlightMagnetPlugin", "HighlightMagnetPlugin"],
   ["status/fold-category.js", "FoldCategoryPlugin", "FoldCategoryPlugin"],
@@ -625,8 +630,8 @@ assert(
 );
 assert(!registry.includes("OneTwoThreeOfflinePlugin"), "123Pan auth must not be registered as a legacy plugin");
 assert(!registry.includes("UnifiedOfflinePlugin"), "unified offline must not be registered as a legacy plugin");
-assertIncludes(registry, 'JavTrailersPlugin, ["javtrailers"]', "shared registry");
-assertIncludes(registry, 'SubTitleCatPlugin, ["subtitlecat"]', "shared registry");
+assert(!registry.includes("JavTrailersPlugin"), "JavTrailers must not be registered as a legacy plugin");
+assert(!registry.includes("SubTitleCatPlugin"), "SubtitleCat must not be registered as a legacy plugin");
 const siteContext = await read("src/core/site-context.js");
 for (const [metadataToken, runtimeToken] of [
   ["javdb", "JAVDB_HOST_PATTERN"],
@@ -669,6 +674,8 @@ sourceByFile.set("features/external-bridge/translation-controller.js", externalB
 sourceByFile.set("features/external-bridge/one-two-three-controller.js", one23AuthControllerSource);
 sourceByFile.set("features/external-bridge/one-one-five-controller.js", one115ControllerSource);
 sourceByFile.set("features/external-bridge/unified-offline-controller.js", unifiedOfflineControllerSource);
+sourceByFile.set("features/external-bridge/javtrailers-controller.js", javTrailersControllerSource);
+sourceByFile.set("features/external-bridge/subtitle-cat-controller.js", subtitleControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
 sourceByFile.set("backup/setting-styles.js", await read("src/plugins/backup/setting-styles.js"));
@@ -683,6 +690,8 @@ const regressionMatrix = [
   ["JavBus 列表页", [["status/list-page.js", "fixBusTitleBox"], ["image-viewer/bus-img.js", "BusImgPlugin"], ["status/list-page-button.js", "ListPageButtonPlugin"]]],
   ["JavBus 详情页", [["status/bus-detail-page.js", "BusDetailPagePlugin"], ["image-viewer/bus-preview-video.js", "BusPreviewVideoPlugin"]]],
   ["123pan 授权同步", [["features/external-bridge/one-two-three-controller.js", "class OneTwoThreeAuthController"], ["features/external-bridge/one-two-three-controller.js", "visibilitychange"], ["features/external-bridge/one-two-three-controller.js", "syncFallbackMs = 3e5"]]],
+  ["JavTrailers 预告片", [["features/external-bridge/javtrailers-controller.js", "class JavTrailersController"], ["features/external-bridge/javtrailers-controller.js", "handlePlayJavTrailers"], ["features/external-bridge/javtrailers-controller.js", "jhsJavTrailers"]]],
+  ["SubtitleCat 筛选", [["features/external-bridge/subtitle-cat-controller.js", "class SubtitleCatController"], ["features/external-bridge/subtitle-cat-controller.js", "sub-table"], ["features/external-bridge/subtitle-cat-controller.js", "该番号无字幕"]]],
   ["统一离线提交", [["features/external-bridge/unified-offline-controller.js", "getAvailability"], ["features/external-bridge/unified-offline-controller.js", "capabilities"], ["features/external-bridge/unified-offline-controller.js", "appendOfflineHistory"]]],
   ["新作品检测", [["new-video/task.js", "TaskPlugin"], ["new-video/new-video.js", "NewVideoPlugin"], ["core/storage.js", "newVideoList"]]],
   ["黑名单检测", [["features/library/blacklist-controller.js", "class BlacklistController"], ["features/library/blacklist-repository.js", "class BlacklistRepository"], ["features/library/library-controller.js", "filter_keyword_title"], ["core/storage.js", "batchSaveBlacklistCarList"]]],

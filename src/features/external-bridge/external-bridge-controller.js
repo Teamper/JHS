@@ -5,14 +5,14 @@
  * the Feature API.
  */
 export class ExternalBridgeController {
-    /** @param {{translationController?: any, oneOneFiveController?: any, offlineController?: any, oneTwoThreeController?: any, javTrailersPlugin?: any, subtitlePlugin?: any, scope: any}} options */
+    /** @param {{translationController?: any, oneOneFiveController?: any, offlineController?: any, oneTwoThreeController?: any, javTrailersController?: any, subtitleController?: any, scope: any}} options */
     constructor(options) {
         this.translationController = options.translationController ?? null;
         this.oneOneFiveController = options.oneOneFiveController ?? null;
         this.offlineController = options.offlineController ?? null;
         this.oneTwoThreeController = options.oneTwoThreeController ?? null;
-        this.javTrailersPlugin = options.javTrailersPlugin ?? null;
-        this.subtitlePlugin = options.subtitlePlugin ?? null;
+        this.javTrailersController = options.javTrailersController ?? null;
+        this.subtitleController = options.subtitleController ?? null;
         this.scope = options.scope;
         this.started = false;
     }
@@ -26,8 +26,8 @@ export class ExternalBridgeController {
             this.translationController?.start(),
             this.oneOneFiveController?.start(),
             this.offlineController?.start(),
-            this.javTrailersPlugin?.handle({ scope: this.scope }),
-            this.subtitlePlugin?.handle({ scope: this.scope }),
+            this.javTrailersController?.start(),
+            this.subtitleController?.start(),
         ])).catch((error) => {
             this.dispose();
             throw error;

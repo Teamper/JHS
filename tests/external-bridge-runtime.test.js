@@ -9,8 +9,8 @@ describe("ExternalBridgeController", () => {
             ["oneOneFiveController", { start: vi.fn() }],
             ["offlineController", { start: vi.fn(), registry: { providers: new Map([["115", { id: "115" }]]) } }],
             ["oneTwoThreeController", { start: vi.fn() }],
-            ["javTrailersPlugin", { handle: vi.fn() }],
-            ["subtitlePlugin", { handle: vi.fn() }],
+            ["javTrailersController", { start: vi.fn() }],
+            ["subtitleController", { start: vi.fn() }],
         ]);
         const controller = new ExternalBridgeController({ ...plugins, scope });
 
@@ -20,8 +20,8 @@ describe("ExternalBridgeController", () => {
         expect(plugins.translationController.start).toHaveBeenCalledOnce();
         expect(plugins.oneOneFiveController.start).toHaveBeenCalledOnce();
         expect(plugins.offlineController.start).toHaveBeenCalledOnce();
-        expect(plugins.javTrailersPlugin.handle).toHaveBeenCalledWith({ scope });
-        expect(plugins.subtitlePlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(plugins.javTrailersController.start).toHaveBeenCalledOnce();
+        expect(plugins.subtitleController.start).toHaveBeenCalledOnce();
         expect(controller.getApi()).toMatchObject({ hasTranslation: true, hasOffline: true });
         expect(controller.getApi().getOfflineProvider("115")).toBe(plugins.offlineController.registry.providers.get("115"));
     });

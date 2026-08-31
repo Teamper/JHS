@@ -3,6 +3,8 @@
 import { defineFeature } from "../../contracts/manifests.js";
 import { PORT, REGISTRY, SERVICE } from "../../contracts/tokens.js";
 import { ExternalBridgeController } from "./external-bridge-controller.js";
+import { JavTrailersController } from "./javtrailers-controller.js";
+import { SubtitleCatController } from "./subtitle-cat-controller.js";
 import { ExternalBridgeTranslationController } from "./translation-controller.js";
 import { OneOneFiveMatchController } from "./one-one-five-controller.js";
 import { OneTwoThreeAuthController } from "./one-two-three-controller.js";
@@ -27,13 +29,13 @@ export default defineFeature({
         const offlineController = runtime.enabledContributions.includes("external-bridge.offline") && supportedHost
             ? new UnifiedOfflineController({ document: globalThis.document, window: globalThis.window, route: runtime.route, hostAdapter: deps[PORT.host], offline: deps[SERVICE.offline], dialog: deps[SERVICE.dialog], state: deps[SERVICE.state], settings: deps[SERVICE.settings], styles: deps[PORT.style], eventBus: deps[SERVICE.eventBus], oneTwoThreeController, scope: runtime.scope })
             : null;
-        const javTrailersPlugin = runtime.enabledContributions.includes("external-bridge.javtrailers")
-            ? runtime.resolveLegacyPlugin?.("JavTrailersPlugin")
+        const javTrailersController = runtime.enabledContributions.includes("external-bridge.javtrailers")
+            ? new JavTrailersController({ document: globalThis.document, window: globalThis.window, scope: runtime.scope })
             : null;
-        const subtitlePlugin = runtime.enabledContributions.includes("external-bridge.subtitle")
-            ? runtime.resolveLegacyPlugin?.("SubTitleCatPlugin")
+        const subtitleController = runtime.enabledContributions.includes("external-bridge.subtitle")
+            ? new SubtitleCatController({ document: globalThis.document, window: globalThis.window, scope: runtime.scope })
             : null;
-        const controller = new ExternalBridgeController({ translationController, oneOneFiveController, offlineController, oneTwoThreeController, javTrailersPlugin, subtitlePlugin, scope: runtime.scope });
+        const controller = new ExternalBridgeController({ translationController, oneOneFiveController, offlineController, oneTwoThreeController, javTrailersController, subtitleController, scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

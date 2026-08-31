@@ -75,7 +75,6 @@
     "src/plugins/image-viewer/preview-video.js",
     "src/plugins/image-viewer/screenshot.js",
     "src/plugins/new-video/task.js",
-    "src/plugins/external-search/javtrailers.js",
     "src/plugins/stats/stats.js",
     "src/plugins/status/auto-page.js",
     "src/plugins/status/bus-detail-page.js",
@@ -89,7 +88,6 @@
     "src/plugins/status/list-page.js",
     "src/plugins/status/mobile-bottom-bar.js",
     "src/plugins/status/want-and-watched-videos.js",
-    "src/plugins/subtitle/subtitle-cat.js"
   ],
   "exclude": ["src/app/bootstrap.js"]
 }
