@@ -37,4 +37,13 @@ describe("ListStateController", () => {
         expect(view.applyVisibility).not.toHaveBeenCalled();
         scope.dispose();
     });
+
+    it("creates the filter bar from the injected settings provider", async () => {
+        const scope = new LifecycleScope("feature:list"), view = { createQuickFilter: vi.fn(async () => {}) }, controller = new ListStateController({ scope, view, defaultFilter: () => "all" });
+
+        await controller.createQuickFilter();
+
+        expect(view.createQuickFilter).toHaveBeenCalledWith("all");
+        scope.dispose();
+    });
 });

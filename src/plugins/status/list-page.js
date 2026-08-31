@@ -249,6 +249,7 @@ export class ListPagePlugin extends BasePlugin {
         return !0;
     }
     async createQuickFilter() {
+        if (this.listState) return this.listState.createQuickFilter();
         return this.getListView().createQuickFilter(await storageManager.getSetting("defaultQuickFilterTab", "waitCheck"));
     }
     /** @param {Element[] | null} [items] */

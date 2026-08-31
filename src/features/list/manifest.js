@@ -32,7 +32,7 @@ export default defineFeature({
         const fc2LookupPlugin = runtime.enabledContributions.includes("list.fc2-lookup")
             ? runtime.resolveLegacyPlugin?.("Fc2By123AvPlugin")
             : null;
-        const controller = new ListController({ legacyPlugin, autoPagePlugin, foldCategoryPlugin, actionsPlugin, fc2NavigationPlugin, coverPlugin, fc2LookupPlugin, hostAdapter: deps[PORT.host], scope: runtime.scope });
+        const controller = new ListController({ legacyPlugin, autoPagePlugin, foldCategoryPlugin, actionsPlugin, fc2NavigationPlugin, coverPlugin, fc2LookupPlugin, hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

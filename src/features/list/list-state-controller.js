@@ -10,10 +10,11 @@ import { normalizeQuickFilterKey } from "./list-filters.js";
  * commit after a newer filter or DOM generation.
  */
 export class ListStateController {
-    /** @param {{scope: any, view?: any, onPhase?: (phase: string, itemCount?: number | null) => void}} options */
+    /** @param {{scope: any, view?: any, defaultFilter?: () => unknown, onPhase?: (phase: string, itemCount?: number | null) => void}} options */
     constructor(options) {
         this.scope = options.scope;
         this.view = options.view ?? null;
+        this.defaultFilter = options.defaultFilter ?? (() => "waitCheck");
         this.onPhase = options.onPhase ?? (() => {});
         this.activeQuickFilter = "waitCheck";
         this.listGeneration = 0;
@@ -73,6 +74,13 @@ export class ListStateController {
     syncQuickFilterUi() {
         if (this.disposed) return;
         return this.view?.syncQuickFilterUi(this.activeQuickFilter);
+    }
+
+    /** @param {unknown} [initialFilter] */
+    async createQuickFilter(initialFilter = this.defaultFilter()) {
+        this.scope.assertActive();
+        if (this.disposed) return;
+        return this.view?.createQuickFilter(initialFilter);
     }
 
     dispose() {
