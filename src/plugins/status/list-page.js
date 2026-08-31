@@ -133,6 +133,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {any} */ this.listMedia = null;
         /** @type {any} */ this.listImages = null;
         /** @type {any} */ this.listEvents = null;
+        /** @type {any} */ this.listBatch = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -160,6 +161,10 @@ export class ListPagePlugin extends BasePlugin {
     /** Attach the FeatureRuntime-owned event subscriptions during migration. @param {any} events */
     attachListEvents(events) {
         this.listEvents = events;
+    }
+    /** Attach the FeatureRuntime-owned batch service during migration. @param {any} batch */
+    attachListBatch(batch) {
+        this.listBatch = batch;
     }
     /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
     async getLibraryFeatureApi() {
@@ -565,6 +570,7 @@ export class ListPagePlugin extends BasePlugin {
      * @param {string} flag @param {{ filter?: unknown, confirm?: boolean, root?: any }} [options]
      */
     async batchSaveAllVideos(scope, flag, { filter = this.activeQuickFilter || "waitCheck", confirm = true, root = null } = {}) {
+        if (this.listBatch) return this.listBatch.batchSaveAllVideos(scope, flag, { filter, confirm, root });
         const stateFlag = legacyActionToFlag(flag);
         if (!stateFlag) throw new TypeError(`不支持的状态操作: ${flag}`);
         const normalized = normalizeQuickFilterKey(filter), filterLabel = QUICK_FILTER_LABELS[normalized];

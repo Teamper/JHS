@@ -8,6 +8,8 @@ import { ListDomObserver } from "../src/features/list/list-dom-observer.js";
 import { ListMediaController } from "../src/features/list/list-media-controller.js";
 import { ListImageController } from "../src/features/list/list-image-controller.js";
 import { ListEventController } from "../src/features/list/list-event-controller.js";
+import { ListBatchService } from "../src/features/list/list-batch-service.js";
+import { createListEvaluationContext } from "../src/features/list/list-evaluator.js";
 import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 
 describe("List FeatureRuntime ownership", () => {
@@ -47,6 +49,31 @@ describe("List FeatureRuntime ownership", () => {
         expect(api.getActiveQuickFilter()).toBe("favorite");
         controller.dispose();
         expect(scope.disposed).toBe(false);
+        scope.dispose();
+    });
+
+    it("routes the feature batch API through the owned service", async () => {
+        const dom = new JSDOM('<div class="movie-list"><div class="item"><a href="/v/ABC-123"><div class="video-title"><strong>ABC-123</strong> title</div></a></div></div>', { url: "https://javdb.com/search?q=abc" });
+        globalThis.$ = jqueryFactory(dom.window);
+        const scope = new LifecycleScope("feature:list"), stateService = { patch: vi.fn(async () => {}) }, legacyPlugin = {
+            handle: vi.fn(async () => {}),
+            attachListBatch: vi.fn(),
+            createEvaluationContext: vi.fn(async () => createListEvaluationContext({ carMap: new Map([["ABC-123", { stateFlags: { favorite: true } }]]) })),
+        }, hostAdapter = {
+            document: dom.window.document,
+            location: dom.window.location,
+            getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", requestDomItemSelector: ".movie-list .item", nextPageSelector: ".pagination-next" }),
+        }, controller = new ListController({ legacyPlugin, hostAdapter, stateService, http: { request: vi.fn() }, scope });
+
+        await controller.start();
+        const api = controller.getApi();
+        await expect(api.batchSaveAllVideos({ kind: "search" }, "favorite", { filter: "favorite", confirm: false })).resolves.toMatchObject({ matched: 1, updated: 1 });
+
+        expect(controller.batch).toBeInstanceOf(ListBatchService);
+        expect(legacyPlugin.attachListBatch).toHaveBeenCalledWith(controller.batch);
+        expect(stateService.patch).toHaveBeenCalledOnce();
+        controller.dispose();
+        expect(controller.batch).toBeNull();
         scope.dispose();
     });
 
