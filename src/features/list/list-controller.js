@@ -255,7 +255,7 @@ export class ListController {
             bindMovieDetailNavigation: route(this.view, "bindMovieDetailNavigation"),
             bindClick: call("bindClick"),
             openMovieDetail: (/** @type {any} */ item, /** @type {{event?: MouseEvent | null, autoplay?: boolean, newTab?: boolean} | undefined} */ options) => this.openMovieDetail(item, options),
-            showCarNumBox: call("showCarNumBox"),
+            showCarNumBox: (/** @type {string} */ carNum) => this.showCarNumBox(carNum),
             findCarNumAndHref: (/** @type {any} */ item) => this.readListItem(item),
             parseActressName: call("parseActressName"),
             setQuickFilter: (/** @type {unknown} */ filter, /** @type {{syncUi?: boolean}} [options] */ options) => this.setQuickFilter(filter, options),
@@ -330,6 +330,18 @@ export class ListController {
         const destination = new URL(aHref, baseUrl);
         if (autoplay) destination.searchParams.set("autoPlay", "1");
         /** @type {any} */ (globalThis).utils?.openPage?.(destination.href, carNum, true, { event, newTab: shouldOpenTab });
+    }
+
+    /** Reveal a hidden list card through the HostAdapter-owned item boundary. */
+    /** @param {string} carNum */
+    showCarNumBox(carNum) {
+        const target = String(carNum ?? "").trim();
+        if (!target) return;
+        const items = this.hostAdapter.locateListItems?.() ?? [];
+        const item = items.find((/** @type {Element} */ candidate) => candidate.querySelector(".video-title strong")?.textContent?.trim() === target);
+        if (!item || item.getAttribute("data-hide") !== "yes") return;
+        item.removeAttribute("data-hide");
+        item.style.removeProperty("display");
     }
 
     /** @param {unknown} filter @param {{syncUi?: boolean}} [options] */

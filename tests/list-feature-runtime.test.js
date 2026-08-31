@@ -39,11 +39,12 @@ describe("List FeatureRuntime ownership", () => {
         const api = controller.getApi();
         expect(api.getListSelectors()).toEqual({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" });
         controller.state.setView({ applyVisibility: vi.fn(), syncQuickFilterUi: vi.fn() });
-        const dom = new JSDOM('<div class="item"><a href="/v/ABC-123"><div class="video-title"><strong>ABC-123</strong> title</div></a></div>', { url: "https://javdb.com/search" });
+        const dom = new JSDOM('<div class="item"><a href="/v/ABC-123"><div class="video-title"><strong>ABC-123</strong> title</div></a></div><div class="item" data-hide="yes" style="display:none"><div class="video-title"><strong>HIDDEN-1</strong> hidden</div></div>', { url: "https://javdb.com/search" });
         globalThis.$ = jqueryFactory(dom.window);
         hostAdapter.document = dom.window.document;
         hostAdapter.location = dom.window.location;
-        const card = globalThis.$(".item");
+        hostAdapter.locateListItems = () => [ ...dom.window.document.querySelectorAll(".item") ];
+        const card = globalThis.$(".item").eq(0);
         const openPage = vi.fn();
         globalThis.utils = { openPage };
         api.batchSaveAllVideos("scope", "favorite");
@@ -65,6 +66,10 @@ describe("List FeatureRuntime ownership", () => {
         const fc2Card = globalThis.$('<div class="item"><a href="/v/FC2-123"><div class="video-title"><strong>FC2-123</strong> title</div></a></div>');
         await api.openMovieDetail(fc2Card);
         expect(openPage).toHaveBeenCalledOnce();
+        api.showCarNumBox("HIDDEN-1");
+        const revealed = dom.window.document.querySelectorAll(".item")[1];
+        expect(revealed.getAttribute("data-hide")).toBeNull();
+        expect(revealed.style.display).toBe("");
         expect(legacyPlugin.findCarNumAndHref).not.toHaveBeenCalled();
         expect(legacyPlugin.parseActressName).toHaveBeenCalledWith("/movie/ABC-123");
         expect(legacyPlugin.setQuickFilter).not.toHaveBeenCalled();
