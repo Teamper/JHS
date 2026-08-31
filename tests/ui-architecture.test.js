@@ -43,7 +43,7 @@ describe("detail workspace adapters", () => {
 
 describe("list toolbar and UI cleanup contracts", () => {
     const commandbar = readTestFile(join(process.cwd(), "src/plugins/status/mobile-bottom-bar.js"), "utf8");
-    const hitShow = readTestFile(join(process.cwd(), "src/plugins/external-search/hit-show.js"), "utf8");
+    const hitShow = readTestFile(join(process.cwd(), "src/features/discovery/hit-show-controller.js"), "utf8");
     const translate = readTestFile(join(process.cwd(), "src/features/external-bridge/translation-controller.js"), "utf8");
     const translationUi = readTestFile(join(process.cwd(), "src/ui/translation/title-translation.js"), "utf8");
     const settings = readTestFile(join(process.cwd(), "src/plugins/backup/setting-templates.js"), "utf8");

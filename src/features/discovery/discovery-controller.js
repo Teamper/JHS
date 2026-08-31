@@ -5,9 +5,9 @@
  * the Discovery Feature API.
  */
 export class DiscoveryController {
-    /** @param {{hitShowPlugin?: any, top250Plugin?: any, newVideoPlugin?: any, taskPlugin?: any, scope: any}} options */
+    /** @param {{hitShowController?: any, hitShowPlugin?: any, top250Plugin?: any, newVideoPlugin?: any, taskPlugin?: any, scope: any}} options */
     constructor(options) {
-        this.hitShowPlugin = options.hitShowPlugin ?? null;
+        this.hitShowController = options.hitShowController ?? options.hitShowPlugin ?? null;
         this.top250Plugin = options.top250Plugin ?? null;
         this.newVideoPlugin = options.newVideoPlugin ?? null;
         this.taskPlugin = options.taskPlugin ?? null;
@@ -24,7 +24,7 @@ export class DiscoveryController {
         const taskApi = this.getApi();
         this.newVideoPlugin?.setTaskApi?.(taskApi);
         return Promise.resolve()
-            .then(() => this.hitShowPlugin?.handle?.({ scope: this.scope, discoveryApi: this.getApi() }))
+            .then(() => this.hitShowController?.start ? this.hitShowController.start({ discoveryApi: this.getApi() }) : this.hitShowController?.handle?.({ scope: this.scope, discoveryApi: this.getApi() }))
             .then(() => this.top250Plugin?.handle?.({ scope: this.scope, discoveryApi: this.getApi() }))
             .then(() => {
                 if (!this.newVideoPlugin && !this.taskPlugin) return;
@@ -60,10 +60,10 @@ export class DiscoveryController {
         /** @param {any} plugin @param {string} method @returns {((...args: any[]) => any) | undefined} */
         const expose = (plugin, method) => plugin ? /** @type {(...args: any[]) => any} */ ((...args) => invoke(plugin, method, args)) : undefined;
         return Object.freeze({
-            hasHitShow: Boolean(this.hitShowPlugin),
-            markDataListHtml: expose(this.hitShowPlugin, "markDataListHtml"),
-            initializeRenderedList: expose(this.hitShowPlugin, "initializeRenderedList"),
-            loadScore: expose(this.hitShowPlugin, "loadScore"),
+            hasHitShow: Boolean(this.hitShowController),
+            markDataListHtml: expose(this.hitShowController, "markDataListHtml"),
+            initializeRenderedList: expose(this.hitShowController, "initializeRenderedList"),
+            loadScore: expose(this.hitShowController, "loadScore"),
             hasTop250: Boolean(this.top250Plugin),
             openLoginDialog: expose(this.top250Plugin, "openLoginDialog"),
             hasNewVideo: Boolean(this.newVideoPlugin),

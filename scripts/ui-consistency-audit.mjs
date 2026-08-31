@@ -36,7 +36,7 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, fc2
   readFile(join(srcRoot, "plugins", "status", "mobile-bottom-bar.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "new-video", "new-video.js"), "utf8"),
   readFile(join(srcRoot, "core", "plugin-manager.js"), "utf8"),
-  readFile(join(srcRoot, "plugins", "external-search", "hit-show.js"), "utf8"),
+  readFile(join(srcRoot, "features", "discovery", "hit-show-controller.js"), "utf8"),
   readFile(join(srcRoot, "features", "external-bridge", "translation-controller.js"), "utf8"),
   readFile(join(srcRoot, "ui", "translation", "title-translation.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "backup", "setting-styles.js"), "utf8"),
@@ -138,7 +138,7 @@ requireMatch(commandbar, /\[ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" \]/,
 requireMatch(commandbar, /\[ "#statsBtn", "#blacklistBtn" \][\s\S]*jhs-commandbar__menu/, "statistics and blacklist must be grouped in more menu");
 requireMatch(commandbar, /#addBlacklistBtn[\s\S]*jhs-commandbar__context/, "actor context action must remain directly visible");
 requireMatch(commandbar, /#filterAllVideo[\s\S]*#favoriteAllVideo[\s\S]*#hasDownAllVideo/, "batch menu must contain exactly the three bulk actions");
-requireMatch(hitShow, /async handle\(\{[\s\S]*?\}\s*=\s*\{\}\)[\s\S]*await this\.handlePlayback/, "hit show handle must await its data flow");
+requireMatch(hitShow, /async start\(options\s*=\s*\{\}\)[\s\S]*await this\.handlePlayback/, "hit show start must await its data flow");
 requireMatch(hitShow, /jhs-hitshow-heading/, "hit show title and period must share a dedicated heading row");
 requireMatch(hitShow, /class="jhs-segmented__item \$\{[^}]+\? "active"/, "hit show period must use the active class");
 requireMatch(hitShow, /aria-selected="\$\{[^}]+\? "true" : "false"\}"/, "hit show period must expose aria-selected");
@@ -308,9 +308,9 @@ for (const file of sourceFiles) {
   }
   forbidMatch(source, /class\s*=\s*["'][^"']*\bjhs-btn\b[^"']*\s(?:button|is-(?:info|small|primary|success|danger|warning))(?:\s|["'])/i,
     `${path} mixes JHS and Bulma button classes`);
-  if (["src/plugins/external-search/top250.js", "src/plugins/external-search/hit-show.js", "src/plugins/external-search/fc2.js", "src/plugins/status/list-page.js"].includes(path))
+  if (["src/plugins/external-search/top250.js", "src/features/discovery/hit-show-controller.js", "src/plugins/external-search/fc2.js", "src/plugins/status/list-page.js"].includes(path))
     forbidMatch(source, /class=["'][^"']*(?:\bbutton\b|\bbuttons\b|\btag\s+is-(?:primary|warning|success|info))/, `${path} contains legacy Bulma controls`);
-  if (["src/plugins/external-search/top250.js", "src/plugins/external-search/hit-show.js"].includes(path))
+  if (["src/plugins/external-search/top250.js", "src/features/discovery/hit-show-controller.js"].includes(path))
     forbidMatch(source, /上一頁|下一頁|人評價/, `${path} contains traditional JHS UI copy`);
   forbidMatch(source, /id=["']conditionBox["']/, `${path} contains the duplicate Top250 condition id`);
   forbidMatch(source, /menu-btn|main-tab-btn|(?:class|removeClass|addClass|querySelector)[^\n]{0,80}a-(?:normal|primary|success|danger|warning|info)/,

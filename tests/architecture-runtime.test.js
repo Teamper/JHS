@@ -118,7 +118,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(javdbDetail.getBean("Fc2Plugin").managedByFeature).toBe(true);
         expect(javdb.getPluginNames()).toEqual([
             "ListPagePlugin", "AutoPagePlugin", "Fc2Plugin", "Fc2NavigationPlugin", "FoldCategoryPlugin", "ListPageButtonPlugin",
-            "SettingPlugin", "HitShowPlugin", "TOP250Plugin", "CoverButtonPlugin",
+            "SettingPlugin", "TOP250Plugin", "CoverButtonPlugin",
             "Fc2By123AvPlugin", "DetailPagePlugin", "DetailWorkspacePlugin", "ReviewPlugin", "RelatedPlugin", "DetailPageButtonPlugin",
             "HighlightMagnetPlugin", "PreviewVideoPlugin", "OtherSitePlugin",
             "MagnetHubPlugin", "ScreenShotPlugin", "NewVideoPlugin",

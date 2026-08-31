@@ -1,25 +1,24 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { HitShowController } from "../src/features/discovery/hit-show-controller.js";
 
 function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), cache = {}, sortMethod = "default", activeSortMethod = null, withListPage = true } = {}) {
     const dom = new JSDOM('<section class="section"><div class="container"><h2 class="section-title">榜单</h2><div class="box"></div></div></section>', { url: "https://javdb.com/advanced_search?handlePlayback=1&period=daily" });
-    const $ = jqueryFactory(dom.window), storage = new Map([["jhs_sortMethod", sortMethod]]);
+    const $ = jqueryFactory(dom.window);
+    vi.stubGlobal("document", dom.window.document);
     $.expr.pseudos.hidden = element => "none" === element.style.display;
     // 持久化评分缓存（storageManager.cachedRequest）的内存替身，并用旧 cache 参数播种
     const ttlStore = new Map([["jhs_hitshow_scores_v1", { ...cache }]]);
-    const storageManager = {
+    const storage = {
         cachedRequest: vi.fn(async (key, ttl, loader) => {
             if (ttlStore.has(key)) return ttlStore.get(key);
             const value = await loader();
             return ttlStore.set(key, value), value;
         }),
         cacheSet: vi.fn(async (key, value) => ttlStore.set(key, JSON.parse(JSON.stringify(value)))),
-    }, settings = { snapshot: () => ({ sortMethod }) };
+    }, settings = { snapshot: () => ({ sortMethod, hoverBigImg: "no" }) };
     const host = {
         locateListRoot: () => dom.window.document.querySelector(".movie-list"),
         getListContainer: () => dom.window.document.querySelector(".movie-list")?.parentElement ?? null,
@@ -30,24 +29,16 @@ function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), c
     const loadingClose = vi.fn(), sortItems = vi.fn().mockResolvedValue(), mountOwnedRankingControls = vi.fn().mockResolvedValue(), listPage = {
         advanceListGeneration: vi.fn(() => "1:0"), configureHoverPreview: vi.fn(), replaceHdImg: vi.fn(), doFilter: vi.fn().mockResolvedValue(), createQuickFilter: vi.fn().mockResolvedValue(), applyVisibility: vi.fn(), reconcileListItems: vi.fn(), rebuildItemIndex: vi.fn(), bindMovieDetailNavigation: vi.fn(), bindClick: vi.fn().mockResolvedValue(), getListSelectors: host.getListSelectors, getSelector: host.getListSelectors
     }, coverButton = { addSvgBtn: vi.fn() }, features = { getFeatureApi: vi.fn(async () => withListPage ? listPage : null) };
-    const context = vm.createContext({
-        BasePlugin: class {
-            getBean(name) { return { ListPagePlugin: withListPage ? listPage : undefined, ListPageButtonPlugin: { sortItems, mountOwnedRankingControls, activeSortMethod: () => activeSortMethod ?? "default" }, CoverButtonPlugin: coverButton }[name]; }
-            getRuntimeService(name) { return { host, features, scope: async () => ({ signal: { aborted: false } }), movie: { rankings: async () => { if (rankingError) throw rankingError; return movies; }, detail: async ({ movieId }) => fetchScore(movieId) }, settings }[name]; }
-        },
-        i: (target, key, value) => (target[key] = value), $, document: dom.window.document, window: dom.window,
-        URLSearchParams, isHitShowPage: () => true, storageManager,
-        normalizeJavdbMediaUrl: value => { if (!value) return null; const url = new URL(String(value), dom.window.location.href); return url.href.replace(/^https:\/\/[^/]+\/rhe951l4q(?=\/)/i, "https://c0.jdbstatic.com"); },
-        jhsEventBus: { emit: vi.fn(async () => {}) },
-        loading: () => ({ close: loadingClose }), clog: { error: vi.fn(), warn: vi.fn() }, show: { error: vi.fn() },
-        localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
-        escapeHtml: value => $("<span></span>").text(String(value ?? "")).html(),
-        normalizeHttpUrl: value => value
-    });
-    const source = readTestFile(join(process.cwd(), "src/plugins/external-search/hit-show.js"), "utf8");
-    vm.runInContext(`${source};globalThis.HitShowPlugin=HitShowPlugin`, context);
-    return { plugin: new context.HitShowPlugin(), context, dom, $, storage, ttlStore, storageManager, loadingClose, sortItems, mountOwnedRankingControls, listPage, coverButton, fetchScore, emitListItems: context.jhsEventBus.emit };
+    const movie = { rankings: vi.fn(async () => { if (rankingError) throw rankingError; return movies; }), detail: vi.fn(async ({ movieId }) => fetchScore(movieId)) }, eventBus = { emit: vi.fn(async () => {}) }, listActions = { sortItems, mountOwnedRankingControls, activeSortMethod: () => activeSortMethod ?? "default" };
+    vi.stubGlobal("$", $);
+    vi.stubGlobal("loading", () => ({ close: loadingClose }));
+    vi.stubGlobal("clog", { error: vi.fn(), warn: vi.fn() });
+    vi.stubGlobal("show", { error: vi.fn() });
+    const scope = new LifecycleScope("test:hit-show"), plugin = new HitShowController({ document: dom.window.document, window: dom.window, hostAdapter: host, movie, settings, storage, features, listActions, coverActions: coverButton, eventBus, scope });
+    return { plugin, dom, $, storage, ttlStore, storageManager: storage, loadingClose, sortItems, mountOwnedRankingControls, listPage, coverButton, fetchScore, emitListItems: eventBus.emit };
 }
+
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 const movie = id => ({ id, number: id.toUpperCase(), release_date: "2026-08-16", origin_title: id, cover_url: "https://c0.jdbstatic.com/covers/a.jpg", magnets_count: 0 });
 
@@ -154,15 +145,16 @@ describe("HitShowPlugin lifecycle", () => {
     });
 
     it("re-sorts after scores only when the page-local sort is rate count", async () => {
-        const fetchScore = vi.fn().mockResolvedValue({ score: 4, watchedCount: 9 });
+        const rateScore = vi.fn().mockResolvedValue({ score: 4, watchedCount: 9 });
         // 页内覆盖为评价人数：评分补全后重排一次
-        const rateCount = loadHitShow({ movies: [movie("a")], fetchScore, activeSortMethod: "rateCount" });
+        const rateCount = loadHitShow({ movies: [movie("a")], fetchScore: rateScore, activeSortMethod: "rateCount" });
         await rateCount.plugin.handlePlayback();
         await vi.waitFor(() => expect(rateCount.sortItems).toHaveBeenCalledTimes(1));
         // 全局 sortMethod 不再驱动热播排序：全局评价人数 + 无页内覆盖 → 完全不排序
-        const legacy = loadHitShow({ movies: [movie("a")], fetchScore, sortMethod: "rateCount" });
+        const legacyScore = vi.fn().mockResolvedValue({ score: 4, watchedCount: 9 });
+        const legacy = loadHitShow({ movies: [movie("a")], fetchScore: legacyScore, sortMethod: "rateCount" });
         await legacy.plugin.handlePlayback();
-        await vi.waitFor(() => expect(legacy.fetchScore).toHaveBeenCalledOnce());
+        await vi.waitFor(() => expect(legacyScore).toHaveBeenCalledOnce());
         await new Promise(resolve => setTimeout(resolve, 0));
         expect(legacy.sortItems).not.toHaveBeenCalled();
     });

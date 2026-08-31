@@ -1,19 +1,18 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { HitShowController } from "../src/features/discovery/hit-show-controller.js";
 
 function loadHitShow() {
-    const dom = new JSDOM('<div id="movie"><div id="score_movie"></div></div>', { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window), source = readTestFile(join(process.cwd(), "src/plugins/external-search/hit-show.js"), "utf8");
-    const escapeHtml = value => $("<span></span>").text(String(value ?? "")).html(), normalizeHttpUrl = value => { if (value == null || value === "") return null; try { const url = new URL(value, "https://javdb.com/"); return ["http:", "https:"].includes(url.protocol) ? url.href : null; } catch { return null; } };
-    const normalizeJavdbMediaUrl = value => { const url = normalizeHttpUrl(value); return url?.replace(/^https:\/\/[^/]+\/rhe951l4q(?=\/)/i, "https://c0.jdbstatic.com") ?? null; };
-    const context = vm.createContext({ BasePlugin: class {}, i: (target, key, value) => (target[key] = value), $, document: dom.window.document, escapeHtml, normalizeJavdbMediaUrl, loading: () => ({ close() {} }), window: dom.window });
-    vm.runInContext(`${source};globalThis.HitShowPlugin=HitShowPlugin`, context);
-    return { plugin: new context.HitShowPlugin(), dom };
+    const dom = new JSDOM('<div id="movie"><div id="score_movie"></div></div>', { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
+    vi.stubGlobal("$", $);
+    vi.stubGlobal("document", dom.window.document);
+    const plugin = new HitShowController({ document: dom.window.document, window: dom.window, hostAdapter: {}, movie: {}, settings: { snapshot: () => ({}) }, storage: {}, features: {}, scope: new LifecycleScope("test:rendering") });
+    return { plugin, dom };
 }
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("external rendering boundaries", () => {
     it("escapes list data and rejects executable cover URLs", () => {

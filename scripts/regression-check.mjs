@@ -55,7 +55,7 @@ const detailWorkspace = await read("src/plugins/status/detail-workspace.js");
 const fc2DetailWorkspace = await read("src/ui/detail/fc2-detail-workspace.js");
 const javDbHostAdapter = await read("src/platform/hosts/javdb-host-adapter.js");
 const unifiedOfflineControllerSource = await read("src/features/external-bridge/unified-offline-controller.js");
-const hitShow = await read("src/plugins/external-search/hit-show.js");
+const hitShow = await read("src/features/discovery/hit-show-controller.js");
 const listPageButton = await read("src/plugins/status/list-page-button.js");
 const historySource = await read("src/features/library/history-controller.js");
 const blacklistControllerSource = await read("src/features/library/blacklist-controller.js");
@@ -465,6 +465,7 @@ assert(!one23AuthControllerSource.includes('getRuntimeService('), "external brid
 assertIncludes(externalBridgeControllerSource, 'getOfflineProvider:', "external bridge offline API boundary");
 assertIncludes(discoveryManifestSource, 'id: "discovery"', "real discovery feature manifest");
 assertIncludes(discoveryManifestSource, 'new DiscoveryController({', "discovery feature controller ownership");
+assertIncludes(discoveryManifestSource, 'new HitShowController({', "discovery hot-ranking controller ownership");
 assertIncludes(compatibilityManifestSource, 'id: "compatibility"', "real compatibility feature manifest");
 assertIncludes(compatibilityControllerSource, "scope", "compatibility feature controller ownership");
 assertIncludes(statsManifestSource, 'id: "stats"', "real stats feature manifest");
@@ -585,7 +586,6 @@ const expectedPlugins = [
   ["external-search/fc2.js", "Fc2Plugin", "Fc2Plugin"],
   ["status/highlight-magnet.js", "HighlightMagnetPlugin", "HighlightMagnetPlugin"],
   ["status/fold-category.js", "FoldCategoryPlugin", "FoldCategoryPlugin"],
-  ["external-search/hit-show.js", "HitShowPlugin", "HitShowPlugin"],
   ["external-search/top250.js", "Top250Plugin", "TOP250Plugin"],
   ["external-search/other-site.js", "OtherSitePlugin", "OtherSitePlugin"],
   ["status/bus-detail-page.js", "BusDetailPagePlugin", "BusDetailPagePlugin"],
@@ -621,7 +621,7 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,HitShowPlugin,Top250Plugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,OtherSitePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,Top250Plugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,OtherSitePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin",
   "JavDB plugin registration order changed"
 );
 assert(
@@ -630,6 +630,7 @@ assert(
 );
 assert(!registry.includes("OneTwoThreeOfflinePlugin"), "123Pan auth must not be registered as a legacy plugin");
 assert(!registry.includes("UnifiedOfflinePlugin"), "unified offline must not be registered as a legacy plugin");
+assert(!registry.includes("HitShowPlugin"), "HitShow must not be registered as a legacy plugin");
 assert(!registry.includes("JavTrailersPlugin"), "JavTrailers must not be registered as a legacy plugin");
 assert(!registry.includes("SubTitleCatPlugin"), "SubtitleCat must not be registered as a legacy plugin");
 const siteContext = await read("src/core/site-context.js");
@@ -676,6 +677,7 @@ sourceByFile.set("features/external-bridge/one-one-five-controller.js", one115Co
 sourceByFile.set("features/external-bridge/unified-offline-controller.js", unifiedOfflineControllerSource);
 sourceByFile.set("features/external-bridge/javtrailers-controller.js", javTrailersControllerSource);
 sourceByFile.set("features/external-bridge/subtitle-cat-controller.js", subtitleControllerSource);
+sourceByFile.set("features/discovery/hit-show-controller.js", hitShow);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
 sourceByFile.set("backup/setting-styles.js", await read("src/plugins/backup/setting-styles.js"));
@@ -693,6 +695,7 @@ const regressionMatrix = [
   ["JavTrailers 预告片", [["features/external-bridge/javtrailers-controller.js", "class JavTrailersController"], ["features/external-bridge/javtrailers-controller.js", "handlePlayJavTrailers"], ["features/external-bridge/javtrailers-controller.js", "jhsJavTrailers"]]],
   ["SubtitleCat 筛选", [["features/external-bridge/subtitle-cat-controller.js", "class SubtitleCatController"], ["features/external-bridge/subtitle-cat-controller.js", "sub-table"], ["features/external-bridge/subtitle-cat-controller.js", "该番号无字幕"]]],
   ["统一离线提交", [["features/external-bridge/unified-offline-controller.js", "getAvailability"], ["features/external-bridge/unified-offline-controller.js", "capabilities"], ["features/external-bridge/unified-offline-controller.js", "appendOfflineHistory"]]],
+  ["热播榜单", [["features/discovery/hit-show-controller.js", "class HitShowController"], ["features/discovery/hit-show-controller.js", "handlePlayback"], ["features/discovery/hit-show-controller.js", "loadScore"]]],
   ["新作品检测", [["new-video/task.js", "TaskPlugin"], ["new-video/new-video.js", "NewVideoPlugin"], ["core/storage.js", "newVideoList"]]],
   ["黑名单检测", [["features/library/blacklist-controller.js", "class BlacklistController"], ["features/library/blacklist-repository.js", "class BlacklistRepository"], ["features/library/library-controller.js", "filter_keyword_title"], ["core/storage.js", "batchSaveBlacklistCarList"]]],
   ["统计面板", [["features/stats/stats-controller.js", "class StatsController"], ["features/stats/stats-controller.js", "coverageStart"], ["features/stats/stats-controller.js", "6.4.0"]]],
