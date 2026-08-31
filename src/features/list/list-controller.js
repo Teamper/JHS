@@ -217,12 +217,14 @@ export class ListController {
         const listFeatureApi = this.getApi();
         const view = this.view;
         const hasCore = Boolean(this.legacyPlugin);
+        const ownsListInteractions = Boolean(this.hostAdapter.document && this.view && this.media && this.contextMenu);
         return Promise.resolve()
             .then(() => this.registerStyles())
             .then(() => {
                 if (hasCore) this.domObserver?.start();
-                return this.legacyPlugin && view ? this.legacyPlugin.handle({ scope: this.scope, view, skipOwnedDomObserver: Boolean(this.domObserver) }) : undefined;
+                return this.legacyPlugin && view ? (/** @type {any} */ (this.legacyPlugin)).handle({ scope: this.scope, view, skipOwnedDomObserver: Boolean(this.domObserver), skipOwnedInteractions: ownsListInteractions }) : undefined;
             })
+            .then(() => ownsListInteractions ? this.bindClick() : undefined)
             .then(() => hasCore ? this.autoPagePlugin?.handle?.({ scope: this.scope, listFeatureApi }) : undefined)
             .then(() => hasCore ? this.foldCategoryPlugin?.handle?.({ scope: this.scope }) : undefined)
             .then(() => {

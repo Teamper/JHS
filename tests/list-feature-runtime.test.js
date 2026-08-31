@@ -30,7 +30,7 @@ describe("List FeatureRuntime ownership", () => {
         await controller.start();
 
         expect(legacyPlugin.handle).toHaveBeenCalledOnce();
-        expect(legacyPlugin.handle).toHaveBeenCalledWith({ scope, view: expect.any(ListView), skipOwnedDomObserver: true });
+        expect(legacyPlugin.handle).toHaveBeenCalledWith({ scope, view: expect.any(ListView), skipOwnedDomObserver: true, skipOwnedInteractions: false });
         expect(legacyPlugin.attachListHost).toHaveBeenCalledWith(hostAdapter);
         expect(controller.view).toBeInstanceOf(ListView);
         expect(legacyPlugin.attachListDomObserver).toHaveBeenCalledWith(expect.any(ListDomObserver));
@@ -168,6 +168,7 @@ describe("List FeatureRuntime ownership", () => {
     it("starts the DOM observer through the controller-owned lifecycle", async () => {
         const dom = new JSDOM('<div class="movie-list"></div>', { url: "https://javdb.com/search" });
         dom.window.isListPage = true;
+        globalThis.$ = jqueryFactory(dom.window);
         const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = {
             document: dom.window.document,
             location: dom.window.location,

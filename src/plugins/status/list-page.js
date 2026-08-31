@@ -240,7 +240,7 @@ export class ListPagePlugin extends BasePlugin {
         });
         return this.listView;
     }
-    /** @param {{scope?: any, view?: any, skipOwnedDomObserver?: boolean}} [options] */
+    /** @param {{scope?: any, view?: any, skipOwnedDomObserver?: boolean, skipOwnedInteractions?: boolean}} [options] */
     async handle(options = {}) {
         this.listView = options.view ?? null;
         if (!window.isListPage) return;
@@ -283,7 +283,7 @@ export class ListPagePlugin extends BasePlugin {
         this.listHostAdapter?.prepareList ? this.listHostAdapter.prepareList() : (this.cleanRepeatId(), this.fixBusTitleBox());
         this.replaceHdImg(), this.listPagination ? this.listPagination.start() : this.addJumpPageControl();
         const revision = this.advanceListGeneration();
-        await this.doFilter(revision), await this.createQuickFilter(), this.reconcileListItems(null, revision), await this.bindClick(),
+        await this.doFilter(revision), await this.createQuickFilter(), this.reconcileListItems(null, revision), options.skipOwnedInteractions || await this.bindClick(),
         this.listTagExpand ? this.listTagExpand.start() : this.rememberTagExpand(),
         $(this.getListSelectors().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await getListEventBus().emit("list-items-added", { items: $(this.getListSelectors().itemSelector).toArray() }, { broadcast: !1 }),
         options.skipOwnedDomObserver || this.checkDom(scope), scope.addCleanup((() => {

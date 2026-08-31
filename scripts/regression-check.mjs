@@ -245,7 +245,9 @@ assertIncludes(listPageAdapterSource, "const delegate = new ListPagePlugin()", "
 assertIncludes(registry, 'ListPagePluginAdapter as ListPagePlugin', "list registry compatibility shell");
 assertIncludes(listControllerSource, "this.domObserver?.start()", "list DOM observer startup ownership");
 assertIncludes(listControllerSource, "skipOwnedDomObserver", "list DOM observer compatibility boundary");
+assertIncludes(listControllerSource, "skipOwnedInteractions", "list interaction compatibility boundary");
 assertIncludes(listPageSource, "options.skipOwnedDomObserver || this.checkDom(scope)", "legacy list DOM observer fallback");
+assertIncludes(listPageSource, "options.skipOwnedInteractions || await this.bindClick()", "legacy list interaction fallback");
 assertIncludes(listControllerSource, "new ListView({", "list view host boundary");
 assertIncludes(listControllerSource, "new ListDomObserver({", "list DOM observer ownership");
 assertIncludes(listControllerSource, "attachListDomObserver", "list DOM observer migration handoff");
