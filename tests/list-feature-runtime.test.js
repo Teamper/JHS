@@ -11,11 +11,12 @@ import { ListEventController } from "../src/features/list/list-event-controller.
 import { ListBatchService } from "../src/features/list/list-batch-service.js";
 import { ListFilterService } from "../src/features/list/list-filter-service.js";
 import { ListIncrementalService } from "../src/features/list/list-incremental-service.js";
+import { ListContextMenuController } from "../src/features/list/list-context-menu-controller.js";
 import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 
 describe("List FeatureRuntime ownership", () => {
     it("passes the feature lifecycle scope to the legacy migration adapter", async () => {
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListHost: vi.fn(), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), attachListEvents: vi.fn(), attachListFilter: vi.fn(), attachListIncremental: vi.fn(), doFilter: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListHost: vi.fn(), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), attachListEvents: vi.fn(), attachListFilter: vi.fn(), attachListIncremental: vi.fn(), attachListContextMenu: vi.fn(), doFilter: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
             legacyPlugin,
             hostAdapter,
             scope,
@@ -34,6 +35,7 @@ describe("List FeatureRuntime ownership", () => {
         expect(legacyPlugin.attachListEvents).toHaveBeenCalledWith(expect.any(ListEventController));
         expect(legacyPlugin.attachListFilter).toHaveBeenCalledWith(expect.any(ListFilterService));
         expect(legacyPlugin.attachListIncremental).toHaveBeenCalledWith(expect.any(ListIncrementalService));
+        expect(legacyPlugin.attachListContextMenu).toHaveBeenCalledWith(expect.any(ListContextMenuController));
         const api = controller.getApi();
         expect(api.getListSelectors()).toEqual({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" });
         controller.state.setView({ applyVisibility: vi.fn(), syncQuickFilterUi: vi.fn() });

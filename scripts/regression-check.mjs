@@ -259,6 +259,8 @@ assertIncludes(listControllerSource, "new ListFilterService({", "list filter ser
 assertIncludes(listControllerSource, "attachListFilter", "list filter migration handoff");
 assertIncludes(listControllerSource, "this.hostAdapter.prepareListItems?.(items)", "list host incremental normalization");
 assertIncludes(listControllerSource, "attachListHost", "list host migration handoff");
+assertIncludes(listControllerSource, "new ListContextMenuController({", "list context-menu ownership");
+assertIncludes(listControllerSource, "attachListContextMenu", "list context-menu migration handoff");
 assertIncludes(listControllerSource, 'configureHoverPreview: route(this.images, "configureHoverPreview")', "list image API ownership");
 assertIncludes(listControllerSource, 'rebuildItemIndex: route(this.index, "rebuildItemIndex")', "list index API ownership");
 assertIncludes(listControllerSource, 'bindMovieDetailNavigation: route(this.view, "bindMovieDetailNavigation")', "list view API ownership");
@@ -271,6 +273,8 @@ assertIncludes(listControllerSource, "attachListIncremental", "list incremental 
 assertIncludes(listPageSource, "if (this.listIncremental) return this.listIncremental.processAddedItems", "legacy list incremental compatibility handoff");
 assertIncludes(listPageSource, "if (this.listFilter) return this.listFilter.doFilterItems", "legacy list filter compatibility handoff");
 assertIncludes(listPageSource, "this.listHostAdapter?.prepareList", "legacy list host compatibility handoff");
+assertIncludes(listPageSource, "if (this.listContextMenu)", "legacy list context-menu compatibility handoff");
+assertIncludes(listEventSource, "this.filter?.doFilter?.(revision)", "list event filter ownership");
 assertIncludes(listEventSource, "this.filter?.doFilter?.(revision)", "list event filter ownership");
 assertIncludes(listEventSource, "this.filter?.doFilterItems?.(items, revision)", "list state event filter ownership");
 assertIncludes(listFilterServiceSource, "evaluateListItem({ carNum, title }", "list filter evaluation ownership");

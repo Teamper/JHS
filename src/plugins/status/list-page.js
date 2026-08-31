@@ -140,6 +140,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {any} */ this.listTranslation = null;
         /** @type {any} */ this.listFilter = null;
         /** @type {any} */ this.listIncremental = null;
+        /** @type {any} */ this.listContextMenu = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -195,6 +196,10 @@ export class ListPagePlugin extends BasePlugin {
     /** Attach the FeatureRuntime-owned incremental list service during migration. @param {any} incremental */
     attachListIncremental(incremental) {
         this.listIncremental = incremental;
+    }
+    /** Attach the FeatureRuntime-owned list context-menu controller during migration. @param {any} contextMenu */
+    attachListContextMenu(contextMenu) {
+        this.listContextMenu = contextMenu;
     }
     /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
     async getLibraryFeatureApi() {
@@ -717,6 +722,11 @@ export class ListPagePlugin extends BasePlugin {
     }
     async bindClick() {
         const e = this.getListSelectors();
+        if (this.listContextMenu) {
+            this.bindMovieDetailNavigation(e.boxSelector);
+            this.listMedia?.start();
+            return this.listContextMenu.start();
+        }
         this.bindMovieDetailNavigation(e.boxSelector), this.listMedia ? this.listMedia.start() : $(e.boxSelector).off("click.jhsListVideo").on("click.jhsListVideo", ".item video", (async (/** @type {any} */ e) => {
             const t = e.currentTarget;
             t.paused ? await safePlay(t, {

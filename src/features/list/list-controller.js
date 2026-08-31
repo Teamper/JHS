@@ -13,6 +13,7 @@ import { ListSummaryService } from "./list-summary-service.js";
 import { ListTranslationService } from "./list-translation-service.js";
 import { ListFilterService } from "./list-filter-service.js";
 import { ListIncrementalService } from "./list-incremental-service.js";
+import { ListContextMenuController } from "./list-context-menu-controller.js";
 import { scanAllPages } from "./batch-scanner.js";
 import { evaluateListItem } from "./list-evaluator.js";
 import { readListItem as parseListItem } from "../../core/list-item-reader.js";
@@ -22,7 +23,7 @@ import { readListItem as parseListItem } from "../../core/list-item-reader.js";
  * strangled out of PluginManager.
  */
 export class ListController {
-    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any, findCarNumAndHref?: (item: any) => {carNum?: unknown} | null, recordListPhase?: (phase: string, itemCount?: number | null) => void, attachListHost?: (host: any) => void, attachListState?: (state: ListStateController) => void, attachListIndex?: (index: ListIndexController) => void, attachListDomObserver?: (observer: ListDomObserver) => void, attachListMedia?: (media: ListMediaController) => void, attachListImages?: (images: ListImageController) => void, attachListEvents?: (events: ListEventController) => void, attachListBatch?: (batch: ListBatchService) => void, attachListEvaluation?: (evaluation: ListEvaluationService) => void, attachListSummary?: (summary: ListSummaryService) => void, attachListTranslation?: (translation: any) => void, attachListFilter?: (filter: ListFilterService) => void, attachListIncremental?: (incremental: ListIncrementalService) => void, processAddedItems?: (items: Element[], revision: string) => Promise<void> | void, getLibraryFeatureApi?: () => Promise<any>, createEvaluationContext?: () => Promise<any>, createQuickFilter?: (initialFilter?: unknown) => Promise<any> | any, initCss?: () => Promise<string> | string}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2NavigationPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, coverPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2LookupPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any, settings?: {snapshot: () => Record<string, any>}, storage?: any, eventBus?: any, http?: any, stateService?: any, styles?: {register: (id: string, css: string) => () => void}}} options */
+    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any, findCarNumAndHref?: (item: any) => {carNum?: unknown} | null, recordListPhase?: (phase: string, itemCount?: number | null) => void, attachListHost?: (host: any) => void, attachListState?: (state: ListStateController) => void, attachListIndex?: (index: ListIndexController) => void, attachListDomObserver?: (observer: ListDomObserver) => void, attachListMedia?: (media: ListMediaController) => void, attachListImages?: (images: ListImageController) => void, attachListEvents?: (events: ListEventController) => void, attachListBatch?: (batch: ListBatchService) => void, attachListEvaluation?: (evaluation: ListEvaluationService) => void, attachListSummary?: (summary: ListSummaryService) => void, attachListTranslation?: (translation: any) => void, attachListFilter?: (filter: ListFilterService) => void, attachListIncremental?: (incremental: ListIncrementalService) => void, attachListContextMenu?: (contextMenu: ListContextMenuController) => void, processAddedItems?: (items: Element[], revision: string) => Promise<void> | void, getLibraryFeatureApi?: () => Promise<any>, createEvaluationContext?: () => Promise<any>, createQuickFilter?: (initialFilter?: unknown) => Promise<any> | any, initCss?: () => Promise<string> | string}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2NavigationPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, coverPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2LookupPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any, settings?: {snapshot: () => Record<string, any>}, storage?: any, eventBus?: any, http?: any, stateService?: any, styles?: {register: (id: string, css: string) => () => void}}} options */
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin ?? null;
         this.autoPagePlugin = options.autoPagePlugin ?? null;
@@ -57,6 +58,7 @@ export class ListController {
         this.titleTranslation = null;
         this.filter = null;
         this.incremental = null;
+        this.contextMenu = null;
         this.translation = /** @type {any} */ (options).translation ?? null;
         this.started = false;
     }
@@ -145,6 +147,15 @@ export class ListController {
                 eventBus: this.eventBus,
                 autoPage: () => (/** @type {any} */ (this.autoPagePlugin))?.checkLoad?.(),
             });
+            this.contextMenu = new ListContextMenuController({
+                scope: this.scope,
+                document: this.hostAdapter.document,
+                selectors,
+                site: this.hostAdapter.site,
+                readItem: (item) => this.readListItem(item),
+                stateService: this.stateService,
+                parseActressName: (url) => (/** @type {any} */ (this.legacyPlugin))?.parseActressName?.(url),
+            });
             this.events = new ListEventController({
                 scope: this.scope,
                 settings: this.settings,
@@ -186,6 +197,7 @@ export class ListController {
         this.titleTranslation && (/** @type {any} */ (this.legacyPlugin))?.attachListTranslation?.(this.titleTranslation);
         this.filter && (/** @type {any} */ (this.legacyPlugin))?.attachListFilter?.(this.filter);
         this.incremental && (/** @type {any} */ (this.legacyPlugin))?.attachListIncremental?.(this.incremental);
+        this.contextMenu && (/** @type {any} */ (this.legacyPlugin))?.attachListContextMenu?.(this.contextMenu);
         this.started = true;
         const listFeatureApi = this.getApi();
         const view = this.view;
@@ -279,6 +291,8 @@ export class ListController {
         this.filter = null;
         this.incremental?.dispose();
         this.incremental = null;
+        this.contextMenu?.dispose();
+        this.contextMenu = null;
         this.images?.dispose();
         this.images = null;
         this.media?.dispose();
