@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### Fixed
 
+- 完成 6.5 启动性能评审：基于 Edge 30 次 warm/cold 采样收敛 JavDB/JavBus 的过渡基线为 282/288 ms，继续保留 110% 硬回归门禁与 12% bundle ceiling，详见 ADR-013。
 - 列表 Feature 的兼容壳不再重新打包已移除的旧 `ListPagePlugin` 实现，保留旧插件名与 Feature API 入口；eager Feature 启动改为共享 activation promise 并行等待，idle Feature 仍在全部 eager Feature 完成后安排，保持原有生命周期与禁用边界。
 - 收敛启动阶段的设置迁移为一次最新草稿更新，避免共享存储锁重入并同步更新 SettingsService 快照；修复 FeatureRuntime 接管 legacy 插件样式时 `<style>` 包装导致首条 CSS 规则失效的问题，恢复详情页移动端间距；补齐 HTTP 重定向逐跳安全校验与批量请求单飞回归覆盖。
 - 修复全量审计确认的榜单、弹窗、并发与设置回归：Top250 在自有榜单页恢复挂载，即使宿主页面缺少“猜你喜歡/猜你喜欢”标签也会拦截原生会员榜单路由；Top250 筛选栏恢复到列表上方，封面渲染优先使用接口明确返回的 `thumb_url`，并在 `cover_url` 缺失时安全回退，同时把 API 的 `/rhe951l4q/` 代理媒体路径还原到公开 CDN，避免图片请求静默失败。新片工作区使用独立弹窗内悬停预览，表格弹窗保持尾行与分页可达；熔断改为按逻辑请求统计且忽略普通 4xx，多标签状态写入、迁移、导入和缓存更新增加互斥与失效处理。历史跨页全选、瀑布流失败收敛、延迟创建的命令栏按钮、设置子面板与关键词重试、外部请求超时和凭证编码等路径同步修复，并为关键熔断与榜单场景补充回归测试。

@@ -16,3 +16,4 @@
 10. [外部 URL 信任](010-url-trust.md)
 11. [Vendor Bridge](011-vendor-bridge.md)
 12. [Browser 与发布门禁](012-browser-release-gate.md)
+13. [6.5 启动预算复核](013-startup-budget-review.md)

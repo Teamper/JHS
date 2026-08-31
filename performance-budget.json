@@ -11,10 +11,10 @@
       "JavBus": 2
     },
     "startupMedianMilliseconds": {
-      "JavDB": 220,
-      "JavBus": 230
+      "JavDB": 282,
+      "JavBus": 288
     },
-    "startupBaselineReason": "Five-sample median from the deterministic desktop-wide Edge fixture harness; CI warnings require RC review rather than automatic failure",
+    "startupBaselineReason": "ADR-013: 30 warm and 30 cold samples from the deterministic desktop-wide Edge 152.0.4191.53 fixture harness; 6.5 transition architecture baseline reviewed with a hard 110% regression gate, while the 12% bundle ceiling remains unchanged",
     "startupRegressionRatio": 0.1
   }
 }
