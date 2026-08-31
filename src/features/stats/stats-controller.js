@@ -57,7 +57,7 @@ export class StatsController {
     /** @param {string} featureId */
     async getFeatureApi(featureId) {
         try { return await this.features?.getFeatureApi?.(featureId); }
-        catch (error) { clog.warn(`统计 Feature API 不可用: ${featureId}`, error); return null; }
+        catch (error) { this.ui?.getClog?.().warn?.(`统计 Feature API 不可用: ${featureId}`, error); return null; }
     }
 
     getDialogArea() {

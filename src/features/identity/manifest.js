@@ -10,21 +10,21 @@ import { IdentityNavigationController } from "./identity-navigation-controller.j
 
 export default defineFeature({
     id: "identity", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: [], startup: "eager",
-    requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch, SERVICE.actressInfo, SERVICE.settings],
+    requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch, SERVICE.actressInfo, SERVICE.settings, SERVICE.ui],
     contributes: ["identity.javdb-navigation", "identity.javbus-navigation", "identity.image-search", "identity.actress-info"],
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const javdbNavigationController = runtime.enabledContributions.includes("identity.javdb-navigation") && deps[PORT.host].site === "javdb"
-            ? new IdentityNavigationController({ hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], styles: deps[PORT.style], scope: runtime.scope })
+            ? new IdentityNavigationController({ hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], styles: deps[PORT.style], ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
         const javbusNavigationController = runtime.enabledContributions.includes("identity.javbus-navigation") && deps[PORT.host].site === "javbus"
-            ? new IdentityBusNavigationController({ hostAdapter: deps[PORT.host], scope: runtime.scope })
+            ? new IdentityBusNavigationController({ hostAdapter: deps[PORT.host], ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
         const imageSearchController = runtime.enabledContributions.includes("identity.image-search")
-            ? new IdentityImageSearchController({ dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], imageSearch: deps[SERVICE.imageSearch], styles: deps[PORT.style], scope: runtime.scope })
+            ? new IdentityImageSearchController({ dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], imageSearch: deps[SERVICE.imageSearch], styles: deps[PORT.style], ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
         const actressInfoController = runtime.enabledContributions.includes("identity.actress-info") && deps[PORT.host].site === "javdb"
-            ? new IdentityActressInfoController({ hostAdapter: deps[PORT.host], actressInfo: deps[SERVICE.actressInfo], settings: deps[SERVICE.settings], styles: deps[PORT.style], scope: runtime.scope })
+            ? new IdentityActressInfoController({ hostAdapter: deps[PORT.host], actressInfo: deps[SERVICE.actressInfo], settings: deps[SERVICE.settings], styles: deps[PORT.style], ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
         const controller = new IdentityController({ javdbNavigationController, javbusNavigationController, imageSearchController, actressInfoController, scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));

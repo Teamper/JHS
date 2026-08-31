@@ -23,7 +23,6 @@ describe("IdentityActressInfoController", () => {
     });
 
     it("owns the style and settings listener through the feature scope", async () => {
-        vi.stubGlobal("$", $);
         const scope = new LifecycleScope("feature:identity");
         const settings = createSettings({ enableLoadActressInfo: "no" });
         const removeStyle = vi.fn();
@@ -32,6 +31,7 @@ describe("IdentityActressInfoController", () => {
             settings,
             actressInfo: {},
             styles: { register: vi.fn(() => removeStyle) },
+            ui: { getJQuery: () => $, getClog: () => ({}) },
             scope,
         });
 
@@ -45,12 +45,12 @@ describe("IdentityActressInfoController", () => {
     });
 
     it("OFF 时不挂载但仍删除自己创建的面板", async () => {
-        vi.stubGlobal("$", $);
         const scope = new LifecycleScope("feature:identity");
         const controller = new IdentityActressInfoController({
             hostAdapter: { site: "javdb", document },
             settings: createSettings({ enableLoadActressInfo: "no" }),
             actressInfo: {},
+            ui: { getJQuery: () => $, getClog: () => ({}) },
             scope,
         });
         $("body").append('<div class="actress-info">旧节点</div>');
@@ -63,7 +63,6 @@ describe("IdentityActressInfoController", () => {
     });
 
     it("查询中切 OFF 后异步返回不再 append", async () => {
-        vi.stubGlobal("$", $);
         window.history.replaceState({}, "", "/v/test-id");
         let resolveInfo;
         const pending = new Promise((resolve) => { resolveInfo = resolve; });
@@ -73,6 +72,7 @@ describe("IdentityActressInfoController", () => {
             hostAdapter: { site: "javdb", document },
             settings,
             actressInfo: { lookup: vi.fn(() => pending), profileUrl: vi.fn(() => "") },
+            ui: { getJQuery: () => $, getClog: () => ({}) },
             scope,
         });
         $("body").append('<div>女優A</div><a class="female"></a><div><strong>演員</strong></div>');

@@ -21,7 +21,7 @@ describe("IdentityNavigationController", () => {
         const styles = { register: vi.fn(() => () => {}) };
         const controller = new IdentityNavigationController({
             hostAdapter: { site: "javdb", document, location: window.location },
-            movie: { externalNavigationLinks: () => [{ url: "https://example.test", label: "外部站点" }] }, styles, scope,
+            movie: { externalNavigationLinks: () => [{ url: "https://example.test", label: "外部站点" }] }, styles, ui: { getJQuery: () => $, show: {} }, scope,
         });
 
         await controller.start({ identityApi: { hasSearchByImage: true, openSearchByImage } });
@@ -41,7 +41,7 @@ describe("IdentityNavigationController", () => {
         document.body.innerHTML = '<nav id="navbar"><div><div><span></span></div></div></nav>';
         vi.stubGlobal("$", $);
         const scope = new LifecycleScope("feature:identity"), openSearchByImage = vi.fn();
-        const controller = new IdentityBusNavigationController({ hostAdapter: { site: "javbus", document, location: window.location }, scope });
+        const controller = new IdentityBusNavigationController({ hostAdapter: { site: "javbus", document, location: window.location }, ui: { getJQuery: () => $ }, scope });
 
         controller.start({ identityApi: { hasSearchByImage: true, openSearchByImage } });
 

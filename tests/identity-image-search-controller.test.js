@@ -22,8 +22,7 @@ describe("IdentityImageSearchController", () => {
             }),
             close: vi.fn(),
         };
-        vi.stubGlobal("$", $);
-        const controller = new IdentityImageSearchController({ dialog, storage: {}, imageSearch: {}, styles, scope });
+        const controller = new IdentityImageSearchController({ dialog, storage: {}, imageSearch: {}, styles, ui: { getJQuery: () => $, getUtils: () => ({}), getLoading: () => () => ({ close() {} }), show: {}, getClog: () => ({}) }, scope });
 
         await controller.start();
         controller.open();
@@ -38,8 +37,7 @@ describe("IdentityImageSearchController", () => {
 
     it("resolves image searches through the injected service and closes progress UI", async () => {
         const scope = new LifecycleScope("feature:identity"), progress = { close: vi.fn() }, resolve = vi.fn(async (source, options) => ({ source, options, targets: [] }));
-        vi.stubGlobal("loading", vi.fn(() => progress));
-        const controller = new IdentityImageSearchController({ dialog: { open: vi.fn() }, storage: {}, imageSearch: { resolve }, scope });
+        const controller = new IdentityImageSearchController({ dialog: { open: vi.fn() }, storage: {}, imageSearch: { resolve }, ui: { getLoading: () => vi.fn(() => progress), getUtils: () => ({}), show: {}, getClog: () => ({}) }, scope });
 
         await expect(controller.searchByImage("https://example.test/image.jpg")).resolves.toMatchObject({ source: "https://example.test/image.jpg", options: { scope } });
         expect(resolve).toHaveBeenCalledWith("https://example.test/image.jpg", { scope });

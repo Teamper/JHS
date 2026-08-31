@@ -2,7 +2,7 @@
 
 /** Own JavDB actress information lookup, rendering, and scoped cleanup. */
 export class IdentityActressInfoController {
-    /** @param {{hostAdapter?: any, settings: any, actressInfo: any, styles?: any, scope: any}} options */
+    /** @param {{hostAdapter?: any, settings: any, actressInfo: any, styles?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.document = options.hostAdapter?.document ?? globalThis.document;
@@ -11,13 +11,18 @@ export class IdentityActressInfoController {
         this.settings = options.settings;
         this.actressInfo = options.actressInfo;
         this.styles = options.styles;
+        this.ui = options.ui ?? null;
         this.scope = options.scope;
         this.started = false;
         this.generation = 0;
     }
 
-    getJQuery() { return /** @type {any} */ (globalThis).$ ?? this.window?.jQuery; }
-    getClog() { return /** @type {any} */ (globalThis).clog ?? {}; }
+    getJQuery() {
+        const jq = this.ui?.getJQuery?.();
+        if (typeof jq !== "function") throw new TypeError("演员信息需要 jQuery");
+        return jq;
+    }
+    getClog() { return this.ui?.getClog?.() ?? {}; }
 
     /** Start the actress information contribution and own its settings listener. */
     async start() {

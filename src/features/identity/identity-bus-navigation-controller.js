@@ -2,16 +2,21 @@
 
 /** Own the JavBus image-search navigation action and its scoped cleanup. */
 export class IdentityBusNavigationController {
-    /** @param {{hostAdapter?: any, scope: any}} options */
+    /** @param {{hostAdapter?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.document = options.hostAdapter?.document ?? globalThis.document;
         this.window = this.document?.defaultView ?? globalThis.window;
+        this.ui = options.ui ?? null;
         this.scope = options.scope;
         this.started = false;
     }
 
-    getJQuery() { return /** @type {any} */ (globalThis).$ ?? this.window?.jQuery; }
+    getJQuery() {
+        const jq = this.ui?.getJQuery?.();
+        if (typeof jq !== "function") throw new TypeError("JavBus 身份导航需要 jQuery");
+        return jq;
+    }
 
     /** @param {{identityApi?: any}} [options] */
     start(options = {}) {

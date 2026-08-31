@@ -154,7 +154,7 @@ export async function bootstrapJhs() {
         const logger = initializeLoggerRuntime(context.rootScope, {
             clogMsgCount: context.services.settings.snapshot().clogMsgCount,
         });
-        context.services.ui.configure({ show: logger.show, clog: logger.clog, loading: logger.loading, jquery: globalThis.$ ?? window.jQuery, confirm: utils.q?.bind(utils), showImageViewer: window.showImageViewer, getDialogArea: utils.getDialogArea?.bind(utils), setupEscClose: utils.setupEscClose?.bind(utils), time: utils.time?.bind(utils), openPage: utils.openPage?.bind(utils) });
+        context.services.ui.configure({ show: logger.show, clog: logger.clog, loading: logger.loading, jquery: globalThis.$ ?? window.jQuery, utils, confirm: utils.q?.bind(utils), showImageViewer: window.showImageViewer, getDialogArea: utils.getDialogArea?.bind(utils), setupEscClose: utils.setupEscClose?.bind(utils), time: utils.time?.bind(utils), openPage: utils.openPage?.bind(utils) });
         markPhase("logger");
         initializeThemeRuntime(context.rootScope);
         initializeUiAccessibility(context.rootScope);

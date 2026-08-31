@@ -2,7 +2,7 @@
 
 /** Own the image-search dialog, input events, and integration calls. */
 export class IdentityImageSearchController {
-    /** @param {{dialog: any, storage: any, imageSearch: any, styles?: any, scope: any}} options */
+    /** @param {{dialog: any, storage: any, imageSearch: any, styles?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.document = globalThis.document;
         this.window = this.document?.defaultView ?? globalThis.window;
@@ -10,17 +10,22 @@ export class IdentityImageSearchController {
         this.storage = options.storage;
         this.imageSearch = options.imageSearch;
         this.styles = options.styles;
+        this.ui = options.ui ?? null;
         this.scope = options.scope;
         this.started = false;
         this.isUploading = false;
         this.activeDialogId = null;
     }
 
-    getJQuery() { return /** @type {any} */ (globalThis).$ ?? (/** @type {any} */ (this.window))?.jQuery; }
-    getUtils() { return /** @type {any} */ (globalThis).utils; }
-    getShow() { return /** @type {any} */ (globalThis).show ?? {}; }
-    getLoading() { return /** @type {any} */ (globalThis).loading ?? (() => ({ close() {} })); }
-    getClog() { return /** @type {any} */ (globalThis).clog ?? {}; }
+    getJQuery() {
+        const jq = this.ui?.getJQuery?.();
+        if (typeof jq !== "function") throw new TypeError("以图识图需要 jQuery");
+        return jq;
+    }
+    getUtils() { return this.ui?.getUtils?.() ?? {}; }
+    getShow() { return this.ui?.show ?? {}; }
+    getLoading() { return this.ui?.getLoading?.() ?? (() => ({ close() {} })); }
+    getClog() { return this.ui?.getClog?.() ?? {}; }
 
     initCss() {
         return `

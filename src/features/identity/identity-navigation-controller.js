@@ -4,19 +4,24 @@ import { JhsSelect } from "../../core/ui-primitives.js";
 
 /** Own the JavDB navigation surface and its scoped search interactions. */
 export class IdentityNavigationController {
-    /** @param {{hostAdapter?: any, movie?: any, styles?: any, scope: any}} options */
+    /** @param {{hostAdapter?: any, movie?: any, styles?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.document = options.hostAdapter?.document ?? globalThis.document;
         this.window = this.document?.defaultView ?? globalThis.window;
         this.movie = options.movie;
         this.styles = options.styles;
+        this.ui = options.ui ?? null;
         this.scope = options.scope;
         this.identityApi = null;
         this.started = false;
     }
 
-    getJQuery() { return /** @type {any} */ (globalThis).$ ?? this.window?.jQuery; }
+    getJQuery() {
+        const jq = this.ui?.getJQuery?.();
+        if (typeof jq !== "function") throw new TypeError("身份导航需要 jQuery");
+        return jq;
+    }
 
     async initCss() {
         return `
@@ -103,7 +108,7 @@ export class IdentityNavigationController {
                 const file = items[index].getAsFile();
                 $("#search-keyword").blur();
                 const api = this.identityApi;
-                if (!api) return void show.info("以图识图功能已禁用");
+                if (!api) return void this.ui?.show?.info?.("以图识图功能已禁用");
                 return void api.openSearchByImage?.(() => {
                     api.handleSearchImageFile?.(file);
                     api.resetSearchImageUi?.();
