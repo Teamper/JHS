@@ -27,7 +27,6 @@ import { OneOneFiveMatchPlugin } from "./one-one-five/plugins.js";
 import { OneTwoThreeOfflinePlugin } from "./one-two-three/offline.js";
 import { AutoPagePlugin } from "./status/auto-page.js";
 import { BusDetailPagePlugin } from "./status/bus-detail-page.js";
-import { BusNavBarPlugin } from "./status/bus-nav-bar.js";
 import { DetailPageButtonPlugin } from "./status/detail-page-button.js";
 import { DetailPagePlugin } from "./status/detail-page.js";
 import { DetailWorkspacePlugin } from "./status/detail-workspace.js";
@@ -74,7 +73,6 @@ export const legacyContributionManifests = Object.freeze([
     manifest("responsive-shell.bottom-bar", "responsive-shell", MobileBottomBarPlugin, ["javdb", "javbus"], { javdb: 33, javbus: 24 }, [PORT.host, SERVICE.settings, SERVICE.profile, REGISTRY.feature], { managedByFeature: true }),
     manifest("external-bridge.115-match", "external-bridge", OneOneFiveMatchPlugin, ["javdb", "javbus"], { javdb: 34, javbus: 25 }, [PORT.host, SERVICE.dialog, SERVICE.offline], { managedByFeature: true }),
     manifest("external-bridge.offline", "external-bridge", UnifiedOfflinePlugin, ["javdb", "javbus"], { javdb: 35, javbus: 26 }, [PORT.host, SERVICE.dialog, SERVICE.offline, SERVICE.state], { managedByFeature: true }),
-    manifest("identity.javbus-navigation", "identity", BusNavBarPlugin, ["javbus"], { javbus: 7 }, [], { managedByFeature: true }),
     manifest("list.javbus-images", "list", BusImgPlugin, ["javbus"], { javbus: 9 }, [], { managedByFeature: true }),
     manifest("detail.javbus-native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }, [], { managedByFeature: true }),
     manifest("detail.javbus-preview", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings, SERVICE.storage, SERVICE.movie], { managedByFeature: true }),

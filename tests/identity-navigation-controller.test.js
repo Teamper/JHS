@@ -3,6 +3,7 @@
 import jquery from "jquery";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { IdentityBusNavigationController } from "../src/features/identity/identity-bus-navigation-controller.js";
 import { IdentityNavigationController } from "../src/features/identity/identity-navigation-controller.js";
 
 const $ = jquery;
@@ -36,15 +37,19 @@ describe("IdentityNavigationController", () => {
         expect(document.querySelector(".jhs-identity-other-nav")).toBeNull();
     });
 
-    it("leaves the host untouched on JavBus", async () => {
+    it("mounts and removes the JavBus image-search action through the feature scope", () => {
+        document.body.innerHTML = '<nav id="navbar"><div><div><span></span></div></div></nav>';
         vi.stubGlobal("$", $);
-        const scope = new LifecycleScope("feature:identity"), styles = { register: vi.fn() };
-        const controller = new IdentityNavigationController({ hostAdapter: { site: "javbus", document, location: window.location }, styles, scope });
+        const scope = new LifecycleScope("feature:identity"), openSearchByImage = vi.fn();
+        const controller = new IdentityBusNavigationController({ hostAdapter: { site: "javbus", document, location: window.location }, scope });
 
-        await controller.start({ identityApi: { hasSearchByImage: true } });
+        controller.start({ identityApi: { hasSearchByImage: true, openSearchByImage } });
 
-        expect(styles.register).not.toHaveBeenCalled();
-        expect(controller.started).toBe(false);
+        const button = document.querySelector("#search-img-btn");
+        expect(button).not.toBeNull();
+        $(button).trigger("click");
+        expect(openSearchByImage).toHaveBeenCalledOnce();
         scope.dispose();
+        expect(document.querySelector("#search-img-btn")).toBeNull();
     });
 });

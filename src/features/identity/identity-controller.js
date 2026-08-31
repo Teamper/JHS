@@ -5,10 +5,10 @@
  * implementations are being migrated to service-backed boundaries.
  */
 export class IdentityController {
-    /** @param {{javdbNavigationController?: {start: (options?: {scope?: any, identityApi?: any}) => Promise<any> | any} | null, javbusNavigationPlugin?: {handle: (options?: {scope: any, identityApi?: any}) => Promise<any> | any}, imageSearchPlugin?: Record<string, any>, actressInfoPlugin?: {handle: (options?: {scope?: any}) => Promise<any> | any}, scope: any}} options */
+    /** @param {{javdbNavigationController?: {start: (options?: {scope?: any, identityApi?: any}) => Promise<any> | any} | null, javbusNavigationController?: {start: (options?: {scope?: any, identityApi?: any}) => Promise<any> | any} | null, imageSearchPlugin?: Record<string, any>, actressInfoPlugin?: {handle: (options?: {scope?: any}) => Promise<any> | any}, scope: any}} options */
     constructor(options) {
         this.javdbNavigationController = options.javdbNavigationController ?? null;
-        this.javbusNavigationPlugin = options.javbusNavigationPlugin ?? null;
+        this.javbusNavigationController = options.javbusNavigationController ?? null;
         this.imageSearchPlugin = options.imageSearchPlugin ?? null;
         this.actressInfoPlugin = options.actressInfoPlugin ?? null;
         this.scope = options.scope;
@@ -29,7 +29,7 @@ export class IdentityController {
         return Promise.resolve().then(async () => {
             const api = this.getApi();
             await this.javdbNavigationController?.start({ scope: this.scope, identityApi: api });
-            await this.javbusNavigationPlugin?.handle({ scope: this.scope, identityApi: api });
+            await this.javbusNavigationController?.start({ scope: this.scope, identityApi: api });
             await this.actressInfoPlugin?.handle({ scope: this.scope });
         }).catch((error) => {
             this.dispose();

@@ -207,7 +207,7 @@ const listPageSource = await read("src/plugins/status/list-page.js");
 const identityManifestSource = await read("src/features/identity/manifest.js");
 const identityControllerSource = await read("src/features/identity/identity-controller.js");
 const identityNavigationSource = await read("src/features/identity/identity-navigation-controller.js");
-const busNavBarSource = await read("src/plugins/status/bus-nav-bar.js");
+const identityBusNavigationSource = await read("src/features/identity/identity-bus-navigation-controller.js");
 const identityActressSource = await read("src/plugins/avatar/actress-info.js");
 const listManifestSource = await read("src/features/list/manifest.js");
 const listControllerSource = await read("src/features/list/list-controller.js");
@@ -424,6 +424,9 @@ assertIncludes(identityControllerSource, 'this.javdbNavigationController?.start(
 assertIncludes(identityManifestSource, 'new IdentityNavigationController({', "identity navigation controller ownership");
 assertIncludes(identityNavigationSource, 'this.scope.addCleanup?.(() => {', "identity navigation scope cleanup");
 assertIncludes(identityNavigationSource, 'this.getJQuery()("#search-keyword")', "identity navigation DOM ownership");
+assertIncludes(identityManifestSource, 'new IdentityBusNavigationController({', "identity JavBus navigation controller ownership");
+assertIncludes(identityControllerSource, 'this.javbusNavigationController?.start({ scope: this.scope, identityApi: api })', "identity JavBus navigation lifecycle handoff");
+assertIncludes(identityBusNavigationSource, 'this.scope.addCleanup(() => button.off(".jhsIdentityNav").remove())', "identity JavBus navigation scope cleanup");
 assertIncludes(identityControllerSource, 'hasSearchByImage: Boolean(this.imageSearchPlugin)', "identity image-search API boundary");
 assertIncludes(externalBridgeManifestSource, 'id: "external-bridge"', "real external bridge feature manifest");
 assertIncludes(externalBridgeManifestSource, 'new ExternalBridgeController({', "external bridge feature controller ownership");
@@ -441,10 +444,10 @@ for (const source of [hitShow, await read("src/plugins/external-search/top250.js
   assert(!source.includes('getOptionalDependency("TaskPlugin")') && !source.includes('getOptionalDependency("HitShowPlugin")') && !source.includes('getOptionalDependency("TOP250Plugin")'), "Discovery consumers must use Feature APIs");
 }
 assertIncludes(identityNavigationSource, 'this.identityApi?.openSearchByImage?.()', "JavDB navigation identity API boundary");
-assertIncludes(busNavBarSource, 'identityApi.openSearchByImage?.()', "JavBus navigation identity API boundary");
+assertIncludes(identityBusNavigationSource, 'identityApi.openSearchByImage?.()', "JavBus navigation identity API boundary");
 assertIncludes(identityActressSource, 'options.scope ?? await this.getRuntimeService("scope")()', "identity actress scope handoff");
 assert(!identityNavigationSource.includes('getOptionalDependency("SearchByImagePlugin")'), "JavDB navigation must not resolve SearchByImagePlugin directly");
-assert(!busNavBarSource.includes('getOptionalDependency("SearchByImagePlugin")'), "JavBus navigation must not resolve SearchByImagePlugin directly");
+assert(!identityBusNavigationSource.includes('getOptionalDependency("SearchByImagePlugin")'), "JavBus navigation must not resolve SearchByImagePlugin directly");
 assert(!historySource.includes('getOptionalDependency("UnifiedOfflinePlugin")'), "history must use the external bridge API");
 assert(!unifiedOffline.includes('getOptionalDependency("OneTwoThreeOfflinePlugin")'), "unified offline must receive providers from the external bridge controller");
 assert(!settingSource.includes('getOptionalDependency("TranslatePlugin")'), "settings must not resolve the translation plugin directly");
@@ -566,7 +569,6 @@ const expectedPlugins = [
   ["backup/setting.js", "SettingPlugin", "SettingPlugin"],
   ["image-viewer/bus-preview-video.js", "BusPreviewVideoPlugin", "BusPreviewVideoPlugin"],
   ["avatar/search-by-image.js", "SearchByImagePlugin", "SearchByImagePlugin"],
-  ["status/bus-nav-bar.js", "BusNavBarPlugin", "BusNavBarPlugin"],
   ["external-search/related.js", "RelatedPlugin", "RelatedPlugin"],
   ["image-viewer/cover-button.js", "CoverButtonPlugin", "CoverButtonPlugin"],
   ["external-search/fc2-by-123av.js", "Fc2By123AvPlugin", "Fc2By123AvPlugin"],
@@ -599,7 +601,7 @@ assert(
   "JavDB plugin registration order changed"
 );
 assert(
-  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,SearchByImagePlugin,BusNavBarPlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,SearchByImagePlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavBus plugin registration order changed"
 );
 assertIncludes(registry, 'OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"]', "shared registry");
@@ -639,6 +641,7 @@ sourceByFile.set("features/library/history-controller.js", historySource);
 sourceByFile.set("features/library/blacklist-controller.js", blacklistControllerSource);
 sourceByFile.set("features/library/blacklist-repository.js", blacklistRepositorySource);
 sourceByFile.set("features/identity/identity-navigation-controller.js", identityNavigationSource);
+sourceByFile.set("features/identity/identity-bus-navigation-controller.js", identityBusNavigationSource);
 sourceByFile.set("features/compatibility/compatibility-controller.js", compatibilityControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
@@ -652,7 +655,7 @@ const regressionMatrix = [
   ["JavDB 详情页", [["status/detail-page.js", "DetailPagePlugin"], ["status/detail-page-button.js", "showStatus"], ["image-viewer/preview-video.js", "PreviewVideoPlugin"]]],
   ["JavDB 演员页", [["features/library/library-controller.js", "mountFavoriteActresses"], ["avatar/actress-info.js", "ActressInfoPlugin"], ["core/plugin-manager.js", "getActressPageInfo"]]],
   ["JavBus 列表页", [["status/list-page.js", "fixBusTitleBox"], ["image-viewer/bus-img.js", "BusImgPlugin"], ["status/list-page-button.js", "ListPageButtonPlugin"]]],
-  ["JavBus 详情页", [["status/bus-detail-page.js", "BusDetailPagePlugin"], ["image-viewer/bus-preview-video.js", "BusPreviewVideoPlugin"], ["status/bus-nav-bar.js", "BusNavBarPlugin"]]],
+  ["JavBus 详情页", [["status/bus-detail-page.js", "BusDetailPagePlugin"], ["image-viewer/bus-preview-video.js", "BusPreviewVideoPlugin"]]],
   ["123pan 授权同步", [["one-two-three/offline.js", "startTokenSync"], ["one-two-three/offline.js", "visibilitychange"], ["one-two-three/offline.js", "syncFallbackMs = 3e5"]]],
   ["统一离线提交", [["offline/unified-offline.js", "getAvailability"], ["offline/unified-offline.js", "capabilities"], ["offline/unified-offline.js", "appendOfflineHistory"]]],
   ["新作品检测", [["new-video/task.js", "TaskPlugin"], ["new-video/new-video.js", "NewVideoPlugin"], ["core/storage.js", "newVideoList"]]],

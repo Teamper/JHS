@@ -59,7 +59,7 @@ for (const [label, url, setup, selector, expectedPlugins] of [
   }, "#search-box #search-img-btn", ["SearchByImagePlugin", "ActressInfoPlugin"]],
   ["JavBus", "https://www.javbus.com/", () => {
     document.body.insertAdjacentHTML("afterbegin", '<nav id="navbar"><div><div><span></span></div></div></nav>');
-  }, "#search-img-btn.jhs-identity-search-image-btn", ["BusNavBarPlugin", "SearchByImagePlugin"]],
+  }, "#search-img-btn.jhs-identity-search-image-btn", ["SearchByImagePlugin"]],
 ]) {
   test(`${label} identity navigation is mounted by the Identity feature`, async ({ context, page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers each Identity host entry");

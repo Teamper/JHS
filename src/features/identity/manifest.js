@@ -3,6 +3,7 @@
 import { defineFeature } from "../../contracts/manifests.js";
 import { PORT, SERVICE } from "../../contracts/tokens.js";
 import { IdentityController } from "./identity-controller.js";
+import { IdentityBusNavigationController } from "./identity-bus-navigation-controller.js";
 import { IdentityNavigationController } from "./identity-navigation-controller.js";
 
 export default defineFeature({
@@ -14,8 +15,8 @@ export default defineFeature({
         const javdbNavigationController = runtime.enabledContributions.includes("identity.javdb-navigation") && deps[PORT.host].site === "javdb"
             ? new IdentityNavigationController({ hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], styles: deps[PORT.style], scope: runtime.scope })
             : null;
-        const javbusNavigationPlugin = runtime.enabledContributions.includes("identity.javbus-navigation")
-            ? runtime.resolveLegacyPlugin?.("BusNavBarPlugin")
+        const javbusNavigationController = runtime.enabledContributions.includes("identity.javbus-navigation") && deps[PORT.host].site === "javbus"
+            ? new IdentityBusNavigationController({ hostAdapter: deps[PORT.host], scope: runtime.scope })
             : null;
         const imageSearchPlugin = runtime.enabledContributions.includes("identity.image-search")
             ? runtime.resolveLegacyPlugin?.("SearchByImagePlugin")
@@ -23,7 +24,7 @@ export default defineFeature({
         const actressInfoPlugin = runtime.enabledContributions.includes("identity.actress-info")
             ? runtime.resolveLegacyPlugin?.("ActressInfoPlugin")
             : null;
-        const controller = new IdentityController({ javdbNavigationController, javbusNavigationPlugin, imageSearchPlugin, actressInfoPlugin, scope: runtime.scope });
+        const controller = new IdentityController({ javdbNavigationController, javbusNavigationController, imageSearchPlugin, actressInfoPlugin, scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

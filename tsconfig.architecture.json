@@ -83,7 +83,6 @@
     "src/plugins/one-two-three/offline.js",
     "src/plugins/offline/unified-offline.js",
     "src/plugins/stats/stats.js",
-    "src/plugins/status/bus-nav-bar.js",
     "src/plugins/status/auto-page.js",
     "src/plugins/status/bus-detail-page.js",
     "src/plugins/status/compat-enhancements.js",
