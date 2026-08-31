@@ -130,6 +130,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {any} */ this.listState = null;
         /** @type {any} */ this.listIndex = null;
         /** @type {any} */ this.listDomObserver = null;
+        /** @type {any} */ this.listMedia = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -145,6 +146,10 @@ export class ListPagePlugin extends BasePlugin {
     /** Attach the FeatureRuntime-owned DOM observer during migration. @param {any} observer */
     attachListDomObserver(observer) {
         this.listDomObserver = observer;
+    }
+    /** Attach the FeatureRuntime-owned media interaction during migration. @param {any} media */
+    attachListMedia(media) {
+        this.listMedia = media;
     }
     /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
     async getLibraryFeatureApi() {
@@ -649,7 +654,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     async bindClick() {
         const e = this.getListSelectors();
-        this.bindMovieDetailNavigation(e.boxSelector), $(e.boxSelector).off("click.jhsListVideo").on("click.jhsListVideo", ".item video", (async (/** @type {any} */ e) => {
+        this.bindMovieDetailNavigation(e.boxSelector), this.listMedia ? this.listMedia.start() : $(e.boxSelector).off("click.jhsListVideo").on("click.jhsListVideo", ".item video", (async (/** @type {any} */ e) => {
             const t = e.currentTarget;
             t.paused ? await safePlay(t, {
                 context: "列表视频",

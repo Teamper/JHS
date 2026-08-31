@@ -5,11 +5,12 @@ import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { ListController } from "../src/features/list/list-controller.js";
 import { ListView } from "../src/features/list/list-view.js";
 import { ListDomObserver } from "../src/features/list/list-dom-observer.js";
+import { ListMediaController } from "../src/features/list/list-media-controller.js";
 import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 
 describe("List FeatureRuntime ownership", () => {
     it("passes the feature lifecycle scope to the legacy migration adapter", async () => {
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListDomObserver: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
             legacyPlugin,
             hostAdapter,
             scope,
@@ -22,6 +23,7 @@ describe("List FeatureRuntime ownership", () => {
         expect(legacyPlugin.handle).toHaveBeenCalledWith({ scope, view: expect.any(ListView) });
         expect(controller.view).toBeInstanceOf(ListView);
         expect(legacyPlugin.attachListDomObserver).toHaveBeenCalledWith(expect.any(ListDomObserver));
+        expect(legacyPlugin.attachListMedia).toHaveBeenCalledWith(expect.any(ListMediaController));
         const api = controller.getApi();
         expect(api.getListSelectors()).toEqual({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" });
         controller.state.setView({ applyVisibility: vi.fn(), syncQuickFilterUi: vi.fn() });
