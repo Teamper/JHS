@@ -4,6 +4,7 @@ import { defineFeature } from "../../contracts/manifests.js";
 import { PORT, REGISTRY, SERVICE } from "../../contracts/tokens.js";
 import { ExternalBridgeController } from "./external-bridge-controller.js";
 import { ExternalBridgeTranslationController } from "./translation-controller.js";
+import { OneTwoThreeAuthController } from "./one-two-three-controller.js";
 
 export default defineFeature({
     id: "external-bridge", kind: "feature", disableable: true, sites: ["javdb", "javbus", "123pan", "javtrailers", "subtitlecat"], routes: [], startup: "eager",
@@ -20,8 +21,8 @@ export default defineFeature({
         const unifiedOfflinePlugin = runtime.enabledContributions.includes("external-bridge.offline")
             ? runtime.resolveLegacyPlugin?.("UnifiedOfflinePlugin")
             : null;
-        const oneTwoThreePlugin = runtime.enabledContributions.includes("external-bridge.123pan")
-            ? runtime.resolveLegacyPlugin?.("OneTwoThreeOfflinePlugin")
+        const oneTwoThreeController = runtime.enabledContributions.includes("external-bridge.123pan")
+            ? new OneTwoThreeAuthController({ document: globalThis.document, window: globalThis.window, storage: deps[SERVICE.storage], scope: runtime.scope })
             : null;
         const javTrailersPlugin = runtime.enabledContributions.includes("external-bridge.javtrailers")
             ? runtime.resolveLegacyPlugin?.("JavTrailersPlugin")
@@ -29,7 +30,7 @@ export default defineFeature({
         const subtitlePlugin = runtime.enabledContributions.includes("external-bridge.subtitle")
             ? runtime.resolveLegacyPlugin?.("SubTitleCatPlugin")
             : null;
-        const controller = new ExternalBridgeController({ translationController, oneOneFivePlugin, unifiedOfflinePlugin, oneTwoThreePlugin, javTrailersPlugin, subtitlePlugin, scope: runtime.scope });
+        const controller = new ExternalBridgeController({ translationController, oneOneFivePlugin, unifiedOfflinePlugin, oneTwoThreeController, javTrailersPlugin, subtitlePlugin, scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

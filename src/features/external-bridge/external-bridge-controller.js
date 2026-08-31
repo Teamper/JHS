@@ -5,12 +5,12 @@
  * the Feature API.
  */
 export class ExternalBridgeController {
-    /** @param {{translationController?: any, oneOneFivePlugin?: any, unifiedOfflinePlugin?: any, oneTwoThreePlugin?: any, javTrailersPlugin?: any, subtitlePlugin?: any, scope: any}} options */
+    /** @param {{translationController?: any, oneOneFivePlugin?: any, unifiedOfflinePlugin?: any, oneTwoThreeController?: any, javTrailersPlugin?: any, subtitlePlugin?: any, scope: any}} options */
     constructor(options) {
         this.translationController = options.translationController ?? null;
         this.oneOneFivePlugin = options.oneOneFivePlugin ?? null;
         this.unifiedOfflinePlugin = options.unifiedOfflinePlugin ?? null;
-        this.oneTwoThreePlugin = options.oneTwoThreePlugin ?? null;
+        this.oneTwoThreeController = options.oneTwoThreeController ?? null;
         this.javTrailersPlugin = options.javTrailersPlugin ?? null;
         this.subtitlePlugin = options.subtitlePlugin ?? null;
         this.scope = options.scope;
@@ -22,10 +22,10 @@ export class ExternalBridgeController {
         if (this.started) return Promise.resolve();
         this.started = true;
         return Promise.resolve().then(() => Promise.all([
-            this.oneTwoThreePlugin?.handle({ scope: this.scope }),
+            this.oneTwoThreeController?.start(),
             this.translationController?.start(),
             this.oneOneFivePlugin?.handle({ scope: this.scope }),
-            this.unifiedOfflinePlugin?.handle({ scope: this.scope, oneTwoThreePlugin: this.oneTwoThreePlugin }),
+            this.unifiedOfflinePlugin?.handle({ scope: this.scope, oneTwoThreeController: this.oneTwoThreeController }),
             this.javTrailersPlugin?.handle({ scope: this.scope }),
             this.subtitlePlugin?.handle({ scope: this.scope }),
         ])).catch((error) => {

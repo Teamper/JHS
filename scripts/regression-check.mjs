@@ -65,6 +65,7 @@ const libraryControllerSource = await read("src/features/library/library-control
 const externalBridgeManifestSource = await read("src/features/external-bridge/manifest.js");
 const externalBridgeControllerSource = await read("src/features/external-bridge/external-bridge-controller.js");
 const externalBridgeTranslationSource = await read("src/features/external-bridge/translation-controller.js");
+const one23AuthControllerSource = await read("src/features/external-bridge/one-two-three-controller.js");
 const discoveryManifestSource = await read("src/features/discovery/manifest.js");
 const discoveryControllerSource = await read("src/features/discovery/discovery-controller.js");
 const compatibilityManifestSource = await read("src/features/compatibility/manifest.js");
@@ -82,7 +83,6 @@ const uiPrimitives = await read("src/core/ui-primitives.js");
 const history = await read("src/features/library/history-controller.js");
 const review = await read("src/plugins/external-search/review.js");
 const related = await read("src/plugins/external-search/related.js");
-const one23Offline = await read("src/plugins/one-two-three/offline.js");
 const one115Offline = await read("src/plugins/one-one-five/plugins.js");
 const mobileSource = await read("src/plugins/status/mobile-bottom-bar.js");
 const settingSource = await read("src/plugins/backup/setting.js");
@@ -442,11 +442,16 @@ assert(!identityActressSource.includes('getRuntimeService('), "identity actress 
 assertIncludes(externalBridgeManifestSource, 'id: "external-bridge"', "real external bridge feature manifest");
 assertIncludes(externalBridgeManifestSource, 'new ExternalBridgeController({', "external bridge feature controller ownership");
 assertIncludes(externalBridgeManifestSource, 'new ExternalBridgeTranslationController({', "external bridge translation controller ownership");
+assertIncludes(externalBridgeManifestSource, 'new OneTwoThreeAuthController({', "external bridge 123Pan controller ownership");
 assertIncludes(externalBridgeControllerSource, 'this.translationController?.start()', "external bridge translation lifecycle handoff");
+assertIncludes(externalBridgeControllerSource, 'this.oneTwoThreeController?.start()', "external bridge 123Pan lifecycle handoff");
 assertIncludes(externalBridgeTranslationSource, 'translation: this.translation', "external bridge translation service boundary");
 assertIncludes(externalBridgeTranslationSource, 'this.scope.addCleanup?.(() => this.dispose())', "external bridge translation scope cleanup");
 assert(!externalBridgeTranslationSource.includes('getRuntimeService('), "external bridge translation must not resolve legacy runtime services");
-assertIncludes(externalBridgeControllerSource, 'this.unifiedOfflinePlugin?.handle({ scope: this.scope, oneTwoThreePlugin: this.oneTwoThreePlugin })', "external bridge offline lifecycle handoff");
+assertIncludes(externalBridgeControllerSource, 'this.unifiedOfflinePlugin?.handle({ scope: this.scope, oneTwoThreeController: this.oneTwoThreeController })', "external bridge offline lifecycle handoff");
+assertIncludes(one23AuthControllerSource, 'this.scope.listen(this.document, "visibilitychange"', "external bridge 123Pan visibility lifecycle");
+assertIncludes(one23AuthControllerSource, 'this.syncFallbackMs = 3e5', "external bridge 123Pan fallback polling");
+assert(!one23AuthControllerSource.includes('getRuntimeService('), "external bridge 123Pan must not resolve legacy runtime services");
 assertIncludes(externalBridgeControllerSource, 'getOfflineProvider:', "external bridge offline API boundary");
 assertIncludes(discoveryManifestSource, 'id: "discovery"', "real discovery feature manifest");
 assertIncludes(discoveryManifestSource, 'new DiscoveryController({', "discovery feature controller ownership");
@@ -499,7 +504,7 @@ assert(!fc2.includes("import { detailStateController }"), "FC2 must not import a
 assertIncludes(fc2, '"123av" === context.source ? void this.load123AvDetail(context)', "FC2 controller must own 123AV detail orchestration");
 assert(!fc2By123Av.includes('getDependency("Fc2Plugin")'), "123AV data source must not depend on the FC2 UI plugin");
 assert(!uiPrimitives.includes('.trigger("change")'), "JhsSelect must dispatch one native change without jQuery double fire");
-for (const [label, source] of [["123", one23Offline], ["115", one115Offline]]) {
+for (const [label, source] of [["123", one23AuthControllerSource], ["115", one115Offline]]) {
   assert(!source.includes("injectJavDbButtons"), `${label} provider must not inject JavDB UI`);
   assert(!source.includes("injectJavBusButtons"), `${label} provider must not inject JavBus UI`);
 }
@@ -592,7 +597,6 @@ const expectedPlugins = [
   ["image-viewer/bus-img.js", "BusImgPlugin", "BusImgPlugin"],
   ["new-video/task.js", "TaskPlugin", "TaskPlugin"],
   ["new-video/new-video.js", "NewVideoPlugin", "NewVideoPlugin"],
-  ["one-two-three/offline.js", "OneTwoThreeOfflinePlugin", "OneTwoThreeOfflinePlugin"],
   ["one-one-five/plugins.js", "OneOneFiveMatchPlugin", "OneOneFiveMatchPlugin"],
   ["offline/unified-offline.js", "UnifiedOfflinePlugin", "UnifiedOfflinePlugin"],
   ["status/mobile-bottom-bar.js", "MobileBottomBarPlugin", "MobileBottomBarPlugin"]
@@ -618,7 +622,7 @@ assert(
   javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavBus plugin registration order changed"
 );
-assertIncludes(registry, 'OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"]', "shared registry");
+assert(!registry.includes("OneTwoThreeOfflinePlugin"), "123Pan auth must not be registered as a legacy plugin");
 assertIncludes(registry, 'JavTrailersPlugin, ["javtrailers"]', "shared registry");
 assertIncludes(registry, 'SubTitleCatPlugin, ["subtitlecat"]', "shared registry");
 const siteContext = await read("src/core/site-context.js");
@@ -660,6 +664,7 @@ sourceByFile.set("features/identity/identity-image-search-controller.js", identi
 sourceByFile.set("features/identity/identity-actress-info-controller.js", identityActressSource);
 sourceByFile.set("features/compatibility/compatibility-controller.js", compatibilityControllerSource);
 sourceByFile.set("features/external-bridge/translation-controller.js", externalBridgeTranslationSource);
+sourceByFile.set("features/external-bridge/one-two-three-controller.js", one23AuthControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
 sourceByFile.set("backup/setting-styles.js", await read("src/plugins/backup/setting-styles.js"));
@@ -673,7 +678,7 @@ const regressionMatrix = [
   ["JavDB 演员页", [["features/library/library-controller.js", "mountFavoriteActresses"], ["features/identity/identity-actress-info-controller.js", "class IdentityActressInfoController"], ["core/plugin-manager.js", "getActressPageInfo"]]],
   ["JavBus 列表页", [["status/list-page.js", "fixBusTitleBox"], ["image-viewer/bus-img.js", "BusImgPlugin"], ["status/list-page-button.js", "ListPageButtonPlugin"]]],
   ["JavBus 详情页", [["status/bus-detail-page.js", "BusDetailPagePlugin"], ["image-viewer/bus-preview-video.js", "BusPreviewVideoPlugin"]]],
-  ["123pan 授权同步", [["one-two-three/offline.js", "startTokenSync"], ["one-two-three/offline.js", "visibilitychange"], ["one-two-three/offline.js", "syncFallbackMs = 3e5"]]],
+  ["123pan 授权同步", [["features/external-bridge/one-two-three-controller.js", "class OneTwoThreeAuthController"], ["features/external-bridge/one-two-three-controller.js", "visibilitychange"], ["features/external-bridge/one-two-three-controller.js", "syncFallbackMs = 3e5"]]],
   ["统一离线提交", [["offline/unified-offline.js", "getAvailability"], ["offline/unified-offline.js", "capabilities"], ["offline/unified-offline.js", "appendOfflineHistory"]]],
   ["新作品检测", [["new-video/task.js", "TaskPlugin"], ["new-video/new-video.js", "NewVideoPlugin"], ["core/storage.js", "newVideoList"]]],
   ["黑名单检测", [["features/library/blacklist-controller.js", "class BlacklistController"], ["features/library/blacklist-repository.js", "class BlacklistRepository"], ["features/library/library-controller.js", "filter_keyword_title"], ["core/storage.js", "batchSaveBlacklistCarList"]]],

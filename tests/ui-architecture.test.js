@@ -52,7 +52,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     const pluginPanels = readTestFile(join(process.cwd(), "src/plugins/backup/setting-panels.js"), "utf8");
     const reviews = readTestFile(join(process.cwd(), "src/plugins/external-search/review.js"), "utf8");
     const reviewUi = readTestFile(join(process.cwd(), "src/ui/detail/review-panel.js"), "utf8");
-    const oneTwoThreeOffline = readTestFile(join(process.cwd(), "src/plugins/one-two-three/offline.js"), "utf8");
+    const oneTwoThreeOffline = readTestFile(join(process.cwd(), "src/features/external-bridge/one-two-three-controller.js"), "utf8");
     const pan123Integration = readTestFile(join(process.cwd(), "src/integrations/pan123/manifest.js"), "utf8");
     const newVideo = readTestFile(join(process.cwd(), "src/plugins/new-video/new-video.js"), "utf8");
     const related = readTestFile(join(process.cwd(), "src/plugins/external-search/related.js"), "utf8");
@@ -219,7 +219,8 @@ describe("list toolbar and UI cleanup contracts", () => {
 
     it("keeps 123 auth sync separate from its Integration API boundary", () => {
         expect(reviewUi).toContain('jhs-review-offline-btn jhs-offline-btn');
-        expect(oneTwoThreeOffline).toContain("startTokenSync(scope)");
+        expect(oneTwoThreeOffline).toContain("class OneTwoThreeAuthController");
+        expect(oneTwoThreeOffline).toContain("this.scope.listen(this.document, \"visibilitychange\"");
         expect(oneTwoThreeOffline).not.toContain("gmHttp");
         expect(oneTwoThreeOffline).not.toContain("offline_download/task");
         expect(pan123Integration).toContain('capabilities: ["offline.resolve", "offline.submit"]');

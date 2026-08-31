@@ -78,7 +78,6 @@
     "src/plugins/external-search/javtrailers.js",
     "src/plugins/one-one-five/client.js",
     "src/plugins/one-one-five/plugins.js",
-    "src/plugins/one-two-three/offline.js",
     "src/plugins/offline/unified-offline.js",
     "src/plugins/stats/stats.js",
     "src/plugins/status/auto-page.js",

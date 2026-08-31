@@ -49,11 +49,11 @@ export class UnifiedOfflinePlugin extends BasePlugin {
     constructor() { super(), this.registry = new OfflineProviderRegistry, this.BUTTON_COOLDOWN_MS = 1800; }
     getName() { return "UnifiedOfflinePlugin"; }
     async initCss() { return '<style>.jhs-offline-btn.loading{cursor:wait;opacity:.65}.jhs-offline-native{margin-left:6px;padding:3px 8px}</style>'; }
-    /** @param {{scope?: any, oneTwoThreePlugin?: any}} [options] */
+    /** @param {{scope?: any, oneTwoThreeController?: any}} [options] */
     async handle(options = {}) {
         if (!(r || l)) return;
         const scope = options.scope ?? await this.getRuntimeService("scope")();
-        this.registerProviders(scope, options.oneTwoThreePlugin), this.bindSubmit(), scope.addCleanup((() => $(document).off(".jhsUnifiedOffline")));
+        this.registerProviders(scope, options.oneTwoThreeController), this.bindSubmit(), scope.addCleanup((() => $(document).off(".jhsUnifiedOffline")));
         if (window.isDetailPage) this.injectNativeButtons(), jhsEventBus && scope.addCleanup(jhsEventBus.on("magnet-items-updated", (() => this.injectNativeButtons())));
     }
     /** @param {any} scope */

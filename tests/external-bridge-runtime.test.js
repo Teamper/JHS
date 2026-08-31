@@ -8,7 +8,7 @@ describe("ExternalBridgeController", () => {
             ["translationController", { start: vi.fn() }],
             ["oneOneFivePlugin", { handle: vi.fn() }],
             ["unifiedOfflinePlugin", { handle: vi.fn(), registry: { providers: new Map([["115", { id: "115" }]]) } }],
-            ["oneTwoThreePlugin", { handle: vi.fn() }],
+            ["oneTwoThreeController", { start: vi.fn() }],
             ["javTrailersPlugin", { handle: vi.fn() }],
             ["subtitlePlugin", { handle: vi.fn() }],
         ]);
@@ -16,10 +16,10 @@ describe("ExternalBridgeController", () => {
 
         await controller.start();
 
-        expect(plugins.oneTwoThreePlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(plugins.oneTwoThreeController.start).toHaveBeenCalledOnce();
         expect(plugins.translationController.start).toHaveBeenCalledOnce();
         expect(plugins.oneOneFivePlugin.handle).toHaveBeenCalledWith({ scope });
-        expect(plugins.unifiedOfflinePlugin.handle).toHaveBeenCalledWith({ scope, oneTwoThreePlugin: plugins.oneTwoThreePlugin });
+        expect(plugins.unifiedOfflinePlugin.handle).toHaveBeenCalledWith({ scope, oneTwoThreeController: plugins.oneTwoThreeController });
         expect(plugins.javTrailersPlugin.handle).toHaveBeenCalledWith({ scope });
         expect(plugins.subtitlePlugin.handle).toHaveBeenCalledWith({ scope });
         expect(controller.getApi()).toMatchObject({ hasTranslation: true, hasOffline: true });

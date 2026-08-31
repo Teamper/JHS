@@ -22,7 +22,6 @@ import { NewVideoPlugin } from "./new-video/new-video.js";
 import { TaskPlugin } from "./new-video/task.js";
 import { UnifiedOfflinePlugin } from "./offline/unified-offline.js";
 import { OneOneFiveMatchPlugin } from "./one-one-five/plugins.js";
-import { OneTwoThreeOfflinePlugin } from "./one-two-three/offline.js";
 import { AutoPagePlugin } from "./status/auto-page.js";
 import { BusDetailPagePlugin } from "./status/bus-detail-page.js";
 import { DetailPageButtonPlugin } from "./status/detail-page-button.js";
@@ -70,7 +69,6 @@ export const legacyContributionManifests = Object.freeze([
     manifest("list.javbus-images", "list", BusImgPlugin, ["javbus"], { javbus: 9 }, [], { managedByFeature: true }),
     manifest("detail.javbus-native", "detail", BusDetailPagePlugin, ["javbus"], { javbus: 10 }, [], { managedByFeature: true }),
     manifest("detail.javbus-preview", "detail", BusPreviewVideoPlugin, ["javbus"], { javbus: 16 }, [SERVICE.settings, SERVICE.storage, SERVICE.movie], { managedByFeature: true }),
-    manifest("external-bridge.123pan", "external-bridge", OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"], { javdb: 0, javbus: 0, "123pan": 1 }, [SERVICE.storage], { managedByFeature: true }),
     manifest("external-bridge.javtrailers", "external-bridge", JavTrailersPlugin, ["javtrailers"], { javtrailers: 1 }, [], { managedByFeature: true }),
     manifest("external-bridge.subtitle", "external-bridge", SubTitleCatPlugin, ["subtitlecat"], { subtitlecat: 1 }, [], { managedByFeature: true }),
 ]);
