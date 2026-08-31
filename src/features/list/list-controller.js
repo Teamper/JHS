@@ -22,6 +22,7 @@ import { scanAllPages } from "./batch-scanner.js";
 import { evaluateListItem } from "./list-evaluator.js";
 import { readListItem as parseListItem } from "../../core/list-item-reader.js";
 import { isHitShowPage } from "../../core/site-context.js";
+import { LIST_FEATURE_CSS } from "./list-styles.js";
 
 /**
  * Own the list feature lifecycle while the legacy page implementation is being
@@ -79,7 +80,7 @@ export class ListController {
         if (this.started) return Promise.resolve();
         const selectors = this.hostAdapter.getListSelectors?.() ?? this.legacyPlugin?.getSelector?.();
         if (this.legacyPlugin && !selectors) throw new Error("List feature requires a list selector contract");
-        if (this.legacyPlugin) {
+        if (selectors) {
             this.diagnostics = new ListDiagnosticsService({ scope: this.scope, document: this.hostAdapter.document, selectors, state: this.state });
             this.view = new ListView({
                 hostAdapter: this.hostAdapter,
@@ -217,7 +218,7 @@ export class ListController {
         this.started = true;
         const listFeatureApi = this.getApi();
         const view = this.view;
-        const hasCore = Boolean(this.legacyPlugin);
+        const hasCore = Boolean(this.view);
         const ownsListInteractions = Boolean(this.hostAdapter.document && this.view && this.media && this.contextMenu);
         return Promise.resolve()
             .then(() => this.registerStyles())
@@ -244,10 +245,8 @@ export class ListController {
     }
 
     async registerStyles() {
-        if (this.styleRelease || !this.styles || !this.legacyPlugin?.initCss) return;
-        const css = await this.legacyPlugin.initCss();
-        if (!css) return;
-        this.styleRelease = this.styles.register("jhs-list-feature-style", css.replace(/^\s*<style>|<\/style>\s*$/g, ""));
+        if (this.styleRelease || !this.styles) return;
+        this.styleRelease = this.styles.register("jhs-list-feature-style", LIST_FEATURE_CSS);
     }
 
     /** Run the initial native-list pipeline owned by FeatureRuntime. */

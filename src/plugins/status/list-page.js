@@ -13,6 +13,7 @@ import { createListEvaluationContext, evaluateListItem, findMatchedTitleKeyword 
 import { scanAllPages } from "../../features/list/batch-scanner.js";
 import { endBatchRun, isActiveBatchRun, isBatchRunCancelled, requestCancelBatchRun, tryBeginBatchRun } from "../../core/batch-coordinator.js";
 import { ListView } from "../../features/list/list-view.js";
+import { LIST_FEATURE_CSS } from "../../features/list/list-styles.js";
 
 /** @typedef {Record<string, any>} ListRecord */
 /** @typedef {any} JQueryHandle */
@@ -100,7 +101,7 @@ const Te = {
 
 export class ListPagePlugin extends BasePlugin {
     async initCss() {
-        return `<style>.jhs-status-tags{position:absolute;z-index:var(--jhs-z-content);top:5px;display:flex;flex-wrap:wrap;gap:4px;max-width:90%}.jhs-status-tags--right{right:0;justify-content:flex-end}.jhs-status-tags--left{left:0}.status-tag{padding:0 5px;border-radius:10px}.status-tag .tag{color:inherit!important}.jhs-jump-page-input{width:60px;margin-left:10px}.jhs-jump-page-btn{margin-left:5px}.jhs-quick-filter{display:flex;align-items:center;gap:var(--jhs-space-1);min-width:0}.jhs-quick-filter__more{position:relative}.jhs-quick-filter__menu{min-width:190px}.jhs-filter-menu__separator{height:1px;margin:var(--jhs-space-1) 0;background:var(--jhs-border)}.jhs-batch-progress{position:fixed;right:16px;bottom:16px;z-index:var(--jhs-z-modal);display:flex;align-items:center;gap:var(--jhs-space-2);padding:var(--jhs-space-2) var(--jhs-space-3);border:1px solid var(--jhs-border);border-radius:var(--jhs-radius-md);background:var(--jhs-surface);color:var(--jhs-text);box-shadow:0 4px 16px rgba(0,0,0,.18)}.jhs-btn.jhs-batch-busy{opacity:.55;cursor:not-allowed}</style>`;
+        return `<style>${LIST_FEATURE_CSS}</style>`;
     }
     constructor() {
         super(...arguments);

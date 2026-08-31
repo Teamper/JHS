@@ -294,14 +294,46 @@ describe("List FeatureRuntime ownership", () => {
     });
 
     it("registers feature-owned styles outside PluginManager", async () => {
-        const scope = new LifecycleScope("feature:list"), release = vi.fn(), styles = { register: vi.fn(() => release) }, legacyPlugin = { initCss: vi.fn(() => "<style>.list-test{color:red}</style>"), handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({ legacyPlugin, hostAdapter, styles, scope });
+        const scope = new LifecycleScope("feature:list"), release = vi.fn(), styles = { register: vi.fn(() => release) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({ hostAdapter, styles, scope });
 
         await controller.start();
 
-        expect(styles.register).toHaveBeenCalledWith("jhs-list-feature-style", ".list-test{color:red}");
+        expect(styles.register).toHaveBeenCalledWith("jhs-list-feature-style", expect.stringContaining(".jhs-status-tags"));
         controller.dispose();
         expect(release).toHaveBeenCalledOnce();
         scope.dispose();
+    });
+
+    it("starts the list core without a legacy ListPagePlugin", async () => {
+        const dom = new JSDOM('<div class="movie-list"></div>', { url: "https://javdb.com/search" });
+        dom.window.isListPage = true;
+        const previousDocument = globalThis.document, previousMutationObserver = globalThis.MutationObserver;
+        globalThis.$ = jqueryFactory(dom.window);
+        globalThis.document = dom.window.document;
+        globalThis.MutationObserver = dom.window.MutationObserver;
+        const scope = new LifecycleScope("feature:list"), prepareList = vi.fn(), hostAdapter = {
+            document: dom.window.document,
+            location: dom.window.location,
+            getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }),
+            prepareList,
+        }, controller = new ListController({ hostAdapter, scope, styles: { register: vi.fn(() => vi.fn()) } });
+
+        try {
+            await controller.start();
+
+            expect(controller.view).toBeInstanceOf(ListView);
+            expect(prepareList).toHaveBeenCalledOnce();
+            expect(controller.filter).toBeInstanceOf(ListFilterService);
+            expect(controller.domObserver.observer).not.toBeNull();
+        } finally {
+            controller.dispose();
+            scope.dispose();
+            delete globalThis.$;
+            if (previousDocument) globalThis.document = previousDocument;
+            else delete globalThis.document;
+            if (previousMutationObserver) globalThis.MutationObserver = previousMutationObserver;
+            else delete globalThis.MutationObserver;
+        }
     });
 });
 

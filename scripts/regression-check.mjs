@@ -236,8 +236,7 @@ assertIncludes(listManifestSource, 'id: "list"', "real list feature manifest");
 assertIncludes(listManifestSource, 'contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions", "list.fc2-navigation", "list.cover-state-actions", "list.javbus-images", "list.fc2-lookup"]', "list feature contribution ownership");
 assertIncludes(listManifestSource, "REGISTRY.feature", "list direct Feature API dependency");
 assertIncludes(listManifestSource, 'resolveLegacyPlugin?.("BusImgPlugin")', "list JavBus image contribution boundary");
-assertIncludes(listManifestSource, 'resolveLegacyPlugin?.("ListPagePlugin")', "list migration adapter resolution");
-assertIncludes(listManifestSource, 'ensureDelegate?.({ scope: () => Promise.resolve(runtime.scope) })', "list feature delegate ownership");
+assert(!listManifestSource.includes('resolveLegacyPlugin?.("ListPagePlugin")'), "List core must not resolve ListPagePlugin");
 assertIncludes(listManifestSource, "http: deps[SERVICE.http]", "list batch HTTP service injection");
 assertIncludes(listManifestSource, "stateService: deps[SERVICE.state]", "list batch state service injection");
 assertIncludes(listPageAdapterSource, "class ListPagePluginAdapter extends BasePlugin", "list compatibility shell");
@@ -250,6 +249,7 @@ assertIncludes(listControllerSource, "skipOwnedInteractions", "list interaction 
 assertIncludes(listControllerSource, "async startListLifecycle()", "list initial lifecycle ownership");
 assertIncludes(listControllerSource, "this.hostAdapter.prepareList?.()", "list host preparation ownership");
 assertIncludes(listControllerSource, "this.filter?.doFilter?.(revision)", "list initial filtering ownership");
+assertIncludes(listControllerSource, "LIST_FEATURE_CSS", "list feature style ownership");
 assertIncludes(listPageSource, "options.skipOwnedDomObserver || this.checkDom(scope)", "legacy list DOM observer fallback");
 assertIncludes(listPageSource, "options.skipOwnedInteractions || await this.bindClick()", "legacy list interaction fallback");
 assertIncludes(listPageSource, "if (options.skipOwnedListLifecycle) return", "legacy list lifecycle fallback");

@@ -10,11 +10,8 @@ export default defineFeature({
     contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions", "list.fc2-navigation", "list.cover-state-actions", "list.javbus-images", "list.fc2-lookup"],
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
-        // Disabling the historical ListPagePlugin id disables only list.core;
-        // other list contributions must retain their previous optional behavior.
+        // Disabling list.core disables the List Feature while optional contributions retain their own switches.
         if (!runtime.enabledContributions.includes("list.core")) return { dispose: () => {} };
-        const legacyPluginAdapter = runtime.resolveLegacyPlugin?.("ListPagePlugin");
-        const legacyPlugin = legacyPluginAdapter?.ensureDelegate?.({ scope: () => Promise.resolve(runtime.scope) }) ?? legacyPluginAdapter;
         const autoPagePlugin = runtime.enabledContributions.includes("list.auto-page")
             ? runtime.resolveLegacyPlugin?.("AutoPagePlugin")
             : null;
@@ -36,7 +33,7 @@ export default defineFeature({
         const busImgPlugin = runtime.enabledContributions.includes("list.javbus-images")
             ? runtime.resolveLegacyPlugin?.("BusImgPlugin")
             : null;
-        const controller = new ListController(/** @type {any} */ ({ legacyPlugin, features: deps[REGISTRY.feature], busImgPlugin, autoPagePlugin, foldCategoryPlugin, actionsPlugin, fc2NavigationPlugin, coverPlugin, fc2LookupPlugin, hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], eventBus: deps[SERVICE.eventBus], http: deps[SERVICE.http], stateService: deps[SERVICE.state], translation: deps[SERVICE.translation], styles: deps[PORT.style], scope: runtime.scope }));
+        const controller = new ListController(/** @type {any} */ ({ features: deps[REGISTRY.feature], busImgPlugin, autoPagePlugin, foldCategoryPlugin, actionsPlugin, fc2NavigationPlugin, coverPlugin, fc2LookupPlugin, hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], eventBus: deps[SERVICE.eventBus], http: deps[SERVICE.http], stateService: deps[SERVICE.state], translation: deps[SERVICE.translation], styles: deps[PORT.style], scope: runtime.scope }));
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });
