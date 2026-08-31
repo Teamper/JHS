@@ -1,6 +1,7 @@
 // @ts-check
 
 import { ListView } from "./list-view.js";
+import { ListStateController } from "./list-state-controller.js";
 import { scanAllPages } from "./batch-scanner.js";
 import { evaluateListItem } from "./list-evaluator.js";
 
@@ -9,7 +10,7 @@ import { evaluateListItem } from "./list-evaluator.js";
  * strangled out of PluginManager.
  */
 export class ListController {
-    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2NavigationPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, coverPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2LookupPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any}} options */
+    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any, recordListPhase?: (phase: string, itemCount?: number | null) => void, attachListState?: (state: ListStateController) => void}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2NavigationPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, coverPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2LookupPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any}} options */
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin ?? null;
         this.autoPagePlugin = options.autoPagePlugin ?? null;
@@ -21,6 +22,10 @@ export class ListController {
         this.scope = options.scope;
         this.hostAdapter = options.hostAdapter;
         this.view = null;
+        this.state = new ListStateController({
+            scope: this.scope,
+            onPhase: (phase, itemCount) => this.legacyPlugin?.recordListPhase?.(phase, itemCount),
+        });
         this.started = false;
     }
 
@@ -33,10 +38,12 @@ export class ListController {
             this.view = new ListView({
                 hostAdapter: this.hostAdapter,
                 selectors,
-                onFilterChange: (filter, options) => this.legacyPlugin?.setQuickFilter?.(filter, options),
+                onFilterChange: (filter, options) => this.setQuickFilter(filter, options),
                 onOpenMovieDetail: (item, options) => this.legacyPlugin?.openMovieDetail?.(item, options),
             });
+            this.state.setView(this.view);
         }
+        this.legacyPlugin?.attachListState?.(this.state);
         this.started = true;
         const listFeatureApi = this.getApi();
         const view = this.view;
@@ -69,14 +76,15 @@ export class ListController {
         const call = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => legacyPlugin?.[name]?.(...args);
         return Object.freeze({
             getListSelectors: () => this.hostAdapter.getListSelectors?.() ?? legacyPlugin?.getListSelectors?.() ?? legacyPlugin?.getSelector?.(),
-            advanceListGeneration: call("advanceListGeneration"),
+            advanceListGeneration: () => this.state.advanceListGeneration(),
             configureHoverPreview: call("configureHoverPreview"),
             replaceHdImg: call("replaceHdImg"),
             doFilter: call("doFilter"),
             createQuickFilter: call("createQuickFilter"),
             batchSaveAllVideos: call("batchSaveAllVideos"),
-            reconcileListItems: call("reconcileListItems"),
-            applyVisibility: call("applyVisibility"),
+            reconcileListItems: (/** @type {Element[] | null} */ items, /** @type {string} */ revision) => this.state.reconcileListItems(items, revision),
+            applyVisibility: (/** @type {Element[] | null} */ items) => this.state.applyVisibility(items),
+            syncQuickFilterUi: () => this.state.syncQuickFilterUi(),
             rebuildItemIndex: call("rebuildItemIndex"),
             bindMovieDetailNavigation: call("bindMovieDetailNavigation"),
             bindClick: call("bindClick"),
@@ -84,8 +92,8 @@ export class ListController {
             showCarNumBox: call("showCarNumBox"),
             findCarNumAndHref: call("findCarNumAndHref"),
             parseActressName: call("parseActressName"),
-            setQuickFilter: call("setQuickFilter"),
-            getActiveQuickFilter: () => legacyPlugin?.activeQuickFilter,
+            setQuickFilter: (/** @type {unknown} */ filter, /** @type {{syncUi?: boolean}} [options] */ options) => this.setQuickFilter(filter, options),
+            getActiveQuickFilter: () => this.state.activeQuickFilter,
             createEvaluationContext: call("createEvaluationContext"),
             translateListItems: call("translateListItems"),
             revertTranslation: call("revertTranslation"),
@@ -97,8 +105,14 @@ export class ListController {
     }
 
     dispose() {
+        this.state.dispose();
         this.view?.dispose();
         this.view = null;
         this.started = false;
+    }
+
+    /** @param {unknown} filter @param {{syncUi?: boolean}} [options] */
+    setQuickFilter(filter, options) {
+        return this.state.setQuickFilter(filter, options);
     }
 }

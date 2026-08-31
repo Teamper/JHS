@@ -127,9 +127,14 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {number} */ this.filterRevision = 0;
         /** @type {any} */ this.listView = null;
         /** @type {any} */ this.libraryFeatureApi = null;
+        /** @type {any} */ this.listState = null;
     }
     getName() {
         return "ListPagePlugin";
+    }
+    /** Attach the FeatureRuntime-owned list state during migration. @param {any} state */
+    attachListState(state) {
+        this.listState = state;
     }
     /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
     async getLibraryFeatureApi() {
@@ -214,15 +219,18 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @returns {string} */
     advanceListGeneration() {
+        if (this.listState) return this.listState.advanceListGeneration();
         this.listGeneration += 1;
         return this.captureListRevision();
     }
     /** @returns {string} */
     captureListRevision() {
+        if (this.listState) return this.listState.captureListRevision();
         return `${this.listGeneration}:${this.filterRevision}`;
     }
     /** @param {string} revision */
     isCurrentListGeneration(revision) {
+        if (this.listState) return this.listState.isCurrentListGeneration(revision);
         return revision === this.captureListRevision();
     }
     /** @param {string} phase @param {number | null} [itemCount] */
@@ -230,11 +238,12 @@ export class ListPagePlugin extends BasePlugin {
         const diagnostics = /** @type {any} */ (globalThis).__jhsBrowserDiagnostics;
         if (!diagnostics) return;
         const phases = diagnostics.listPhases ||= [];
-        phases.push({ phase, generation: this.listGeneration, filterRevision: this.filterRevision, activeQuickFilter: this.activeQuickFilter || "waitCheck", itemCount: itemCount ?? $(this.getListSelectors().itemSelector).length });
+        phases.push({ phase, generation: this.listState?.listGeneration ?? this.listGeneration, filterRevision: this.listState?.filterRevision ?? this.filterRevision, activeQuickFilter: (this.listState?.activeQuickFilter ?? this.activeQuickFilter) || "waitCheck", itemCount: itemCount ?? $(this.getListSelectors().itemSelector).length });
         phases.length > 200 && phases.splice(0, phases.length - 200);
     }
     /** @param {Element[] | null} items @param {string} revision */
     reconcileListItems(items, revision) {
+        if (this.listState) return this.listState.reconcileListItems(items, revision);
         if (!this.isCurrentListGeneration(revision)) return !1;
         this.applyVisibility(items);
         return !0;
@@ -244,15 +253,18 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {Element[] | null} [items] */
     applyVisibility(items = null) {
+        if (this.listState) return this.listState.applyVisibility(items);
         const elements = items ? $(items) : $(this.getListSelectors().itemSelector);
         this.recordListPhase("applyVisibility", elements.length);
         return this.getListView().applyVisibility(items, this.activeQuickFilter);
     }
     /** @param {unknown} filter @param {{ syncUi?: boolean }} [options] */
     setQuickFilter(filter, { syncUi = !0 } = {}) {
+        if (this.listState) return this.listState.setQuickFilter(filter, { syncUi });
         this.filterRevision += 1, this.activeQuickFilter = normalizeQuickFilterKey(filter), this.advanceListGeneration(), this.recordListPhase("setQuickFilter"), this.reconcileListItems(null, this.captureListRevision()), syncUi && this.syncQuickFilterUi();
     }
     syncQuickFilterUi() {
+        if (this.listState) return this.listState.syncQuickFilterUi();
         return this.getListView().syncQuickFilterUi(this.activeQuickFilter);
     }
     rememberTagExpand() {
