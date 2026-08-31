@@ -15,7 +15,7 @@ import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 
 describe("List FeatureRuntime ownership", () => {
     it("passes the feature lifecycle scope to the legacy migration adapter", async () => {
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), attachListEvents: vi.fn(), attachListFilter: vi.fn(), attachListIncremental: vi.fn(), doFilter: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListHost: vi.fn(), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), attachListEvents: vi.fn(), attachListFilter: vi.fn(), attachListIncremental: vi.fn(), doFilter: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
             legacyPlugin,
             hostAdapter,
             scope,
@@ -26,6 +26,7 @@ describe("List FeatureRuntime ownership", () => {
 
         expect(legacyPlugin.handle).toHaveBeenCalledOnce();
         expect(legacyPlugin.handle).toHaveBeenCalledWith({ scope, view: expect.any(ListView) });
+        expect(legacyPlugin.attachListHost).toHaveBeenCalledWith(hostAdapter);
         expect(controller.view).toBeInstanceOf(ListView);
         expect(legacyPlugin.attachListDomObserver).toHaveBeenCalledWith(expect.any(ListDomObserver));
         expect(legacyPlugin.attachListMedia).toHaveBeenCalledWith(expect.any(ListMediaController));

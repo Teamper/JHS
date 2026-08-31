@@ -127,6 +127,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {number} */ this.filterRevision = 0;
         /** @type {any} */ this.listView = null;
         /** @type {any} */ this.libraryFeatureApi = null;
+        /** @type {any} */ this.listHostAdapter = null;
         /** @type {any} */ this.listState = null;
         /** @type {any} */ this.listIndex = null;
         /** @type {any} */ this.listDomObserver = null;
@@ -142,6 +143,10 @@ export class ListPagePlugin extends BasePlugin {
     }
     getName() {
         return "ListPagePlugin";
+    }
+    /** Attach the FeatureRuntime-owned host adapter during migration. @param {any} hostAdapter */
+    attachListHost(hostAdapter) {
+        this.listHostAdapter = hostAdapter;
     }
     /** Attach the FeatureRuntime-owned list state during migration. @param {any} state */
     attachListState(state) {
@@ -260,7 +265,8 @@ export class ListPagePlugin extends BasePlugin {
         if (isHitShowPage()) return;
         const hoverBigImg = settingsService.snapshot().hoverBigImg;
         this.configureHoverPreview(hoverBigImg === _ ? "yes" : "no");
-        this.cleanRepeatId(), this.replaceHdImg(), this.addJumpPageControl(), this.fixBusTitleBox();
+        this.listHostAdapter?.prepareList ? this.listHostAdapter.prepareList() : (this.cleanRepeatId(), this.fixBusTitleBox());
+        this.replaceHdImg(), this.addJumpPageControl();
         const revision = this.advanceListGeneration();
         await this.doFilter(revision), await this.createQuickFilter(), this.reconcileListItems(null, revision), await this.bindClick(),
         this.rememberTagExpand(),

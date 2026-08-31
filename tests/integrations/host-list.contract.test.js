@@ -19,3 +19,19 @@ it("exposes list selectors through each host adapter", () => {
         boxSelector: ".masonry", itemSelector: ".masonry .item", nextPageSelector: "#next",
     });
 });
+
+it("normalizes JavBus list wrappers and title boxes idempotently", () => {
+    const dom = new JSDOM('<div id="waterfall_h"><div id="waterfall"><div class="masonry"><div class="item movie-box"><img title="Title <unsafe>"><div class="photo-info"><span>Original title<br></span></div></div></div></div></div>');
+    const host = new JavBusHostAdapter(dom.window.document, dom.window.location);
+
+    host.prepareList();
+    host.prepareList();
+
+    const item = dom.window.document.querySelector(".masonry .item"), titleBox = item.querySelector(".video-title");
+    expect(dom.window.document.querySelector("#waterfall_h")).toBeNull();
+    expect(dom.window.document.querySelector("#no-page")).not.toBeNull();
+    expect(dom.window.document.querySelectorAll(".video-title")).toHaveLength(1);
+    expect(titleBox.getAttribute("title")).toBe("Title <unsafe>");
+    expect(titleBox.textContent).toBe("Original title");
+    expect(item.querySelectorAll("br")).toHaveLength(0);
+});

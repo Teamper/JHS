@@ -35,6 +35,39 @@ export class JavBusHostAdapter {
     locateListRoot() { return this.document.querySelector(".masonry"); }
     locateListItems() { return [...(this.locateListRoot()?.querySelectorAll(":scope > .item, :scope > .movie-box") ?? [])]; }
     getListContainer() { return this.locateListRoot()?.parentElement ?? null; }
+    /** Normalize JavBus list wrappers and title nodes before feature filtering. */
+    prepareList() {
+        const legacyRoot = this.document.querySelector("#waterfall_h");
+        legacyRoot?.removeAttribute("id");
+        legacyRoot?.setAttribute("id", "no-page");
+        for (const waterfall of [ ...this.document.querySelectorAll('[id="waterfall"]') ]) {
+            if (waterfall.classList.contains("masonry")) continue;
+            const parent = waterfall.parentElement;
+            if (!parent) continue;
+            while (waterfall.firstElementChild) parent.insertBefore(waterfall.firstElementChild, waterfall);
+            waterfall.remove();
+        }
+        this.prepareListItems(this.locateListItems());
+    }
+    /** @param {Element[]} items */
+    prepareListItems(items) {
+        for (const item of items) {
+            if (item.querySelector(".avatar-box")) continue;
+            const titleNode = item.querySelector(".photo-info span"), image = item.querySelector("img"), title = image?.getAttribute("title")?.trim() ?? "";
+            if (!titleNode || titleNode.firstElementChild?.classList.contains("video-title")) {
+                item.querySelectorAll("br").forEach((lineBreak) => lineBreak.remove());
+                continue;
+            }
+            const titleBox = this.document.createElement("span");
+            titleBox.className = "video-title";
+            titleBox.setAttribute("title", title);
+            const firstContent = titleNode.firstChild;
+            if (firstContent) titleBox.append(firstContent);
+            else titleBox.textContent = title;
+            titleNode.prepend(titleBox);
+            item.querySelectorAll("br").forEach((lineBreak) => lineBreak.remove());
+        }
+    }
     getListSelectors() {
         return Object.freeze({
             boxSelector: ".masonry", itemSelector: ".masonry .item", coverImgSelector: ".masonry .movie-box .photo-frame img",
