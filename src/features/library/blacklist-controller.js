@@ -233,11 +233,13 @@ export class BlacklistController {
                     await this.reloadTable();
                 })).on("click", "#toSetting", (() => {
                     try {
-                        openSettingsUi("task-panel", (() => {
+                        void Promise.resolve(openSettingsUi("task-panel", (() => {
                             $("#setting-blacklist").css({
                                 border: "1px solid var(--jhs-status-filter)"
                             });
-                        }));
+                        }))).catch((error) => {
+                            clog.warn("设置中心打开失败，无法定位黑名单配置", error);
+                        });
                     } catch (error) {
                         clog.warn("设置中心未就绪，无法打开黑名单配置", error);
                     }
