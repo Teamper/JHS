@@ -90,6 +90,7 @@ describe("feature controller ownership", () => {
         const scope = createScope(), controller = new StatsController({
             diagnostics: { exportSnapshot: vi.fn(() => ({ activeFeatures: [], errors: [] })) },
             dialog: { open: vi.fn(), close: vi.fn() }, movie: {}, storage: {}, state: { getActivityLog: vi.fn() }, features: {}, route: "detail", scope,
+            ui: {},
         });
         await controller.start();
 

@@ -10,7 +10,6 @@ function createScope() {
 describe("native stats scope semantics", () => {
     beforeEach(() => {
         document.body.innerHTML = '<button id="newVideoBtn" type="button">新作品</button>';
-        vi.stubGlobal("utils", { getDialogArea: vi.fn(() => ["1040px", "760px"]), setupEscClose: vi.fn() });
     });
 
     it("keeps full-library metrics static and only exposes scope-matched actions", async () => {
@@ -32,12 +31,13 @@ describe("native stats scope semantics", () => {
                 return 12;
             }),
         };
+        const ui = { getDialogArea: vi.fn(() => ["1040px", "760px"]), setupEscClose: vi.fn() };
         const controller = new StatsController({
             diagnostics: { exportSnapshot: () => ({ activeFeatures: ["list"], errors: [] }) }, dialog,
             movie: { externalSiteOrigin: () => "https://javdb.com" }, storage,
             state: { getActivityLog: vi.fn(async () => ({ entries: [], coverageStart: null })) },
             features: { getFeatureApi: vi.fn(async (id) => id === "discovery" ? { hasNewVideo: true, getPendingNewVideoTotal: newVideo.getPendingNewVideoTotal, openNewVideoDialog: newVideo.openNewVideoDialog } : listPage) },
-            route: "list", scope: createScope(),
+            ui, route: "list", scope: createScope(),
         });
 
         await controller.start();
@@ -58,5 +58,7 @@ describe("native stats scope semantics", () => {
         expect(newVideo.openNewVideoDialog).toHaveBeenCalledOnce();
         expect(listPage.setQuickFilter).toHaveBeenCalledWith("blockedItems");
         expect(dialog.close).toHaveBeenCalledTimes(2);
+        expect(ui.getDialogArea).toHaveBeenCalledWith("lg");
+        expect(ui.setupEscClose).toHaveBeenCalledWith(12);
     });
 });

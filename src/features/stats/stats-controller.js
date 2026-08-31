@@ -8,13 +8,14 @@ import { StatsRepository, computeLibraryStats } from "./stats-repository.js";
  * Own the statistics surface and its page-lifetime UI.
  */
 export class StatsController {
-    /** @param {{diagnostics: any, dialog: any, movie: any, storage: any, state: any, features: any, scope: any, route?: string}} options */
+    /** @param {{diagnostics: any, dialog: any, movie: any, storage: any, state: any, ui: any, features: any, scope: any, route?: string}} options */
     constructor(options) {
         this.diagnostics = options.diagnostics;
         this.dialog = options.dialog;
         this.movie = options.movie;
         this.storage = options.storage;
         this.features = options.features;
+        this.ui = options.ui;
         this.scope = options.scope;
         this.route = options.route ?? "unknown";
         this.statsRepository = new StatsRepository({ storage: this.storage, state: options.state });
@@ -60,8 +61,7 @@ export class StatsController {
     }
 
     getDialogArea() {
-        const utils = /** @type {any} */ (globalThis).utils;
-        return utils?.getDialogArea?.("lg") ?? ["1040px", "760px"];
+        return this.ui?.getDialogArea?.("lg") ?? ["1040px", "760px"];
     }
 
     /** Open the statistics dialog for the current page. */
@@ -141,8 +141,7 @@ export class StatsController {
                 if (action === "new-video") return counter?.openNewVideoDialog?.();
                 if (action === "filter") return listFeature?.setQuickFilter?.(button.dataset.filter);
             }));
-            const utils = /** @type {any} */ (globalThis).utils;
-            utils?.setupEscClose?.(layerIndex);
+            this.ui?.setupEscClose?.(layerIndex);
         } });
     }
 
