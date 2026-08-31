@@ -16,6 +16,7 @@ describe("ListEventController", () => {
         expect(filter.doFilterItems).toHaveBeenCalledWith(["card"], "2:0");
         expect(legacyPlugin.doFilter).not.toHaveBeenCalled();
         expect(legacyPlugin.doFilterItems).not.toHaveBeenCalled();
+        expect(legacyPlugin.filterContext).toEqual({});
         expect(storage._invalidateCache).toHaveBeenCalledTimes(2);
         expect(evaluation.invalidate).toHaveBeenCalledTimes(2);
         expect(state.reconcileListItems).toHaveBeenCalledTimes(2);
@@ -33,6 +34,16 @@ describe("ListEventController", () => {
         await controller.refreshAll({ changedNames: ["theme"] });
 
         expect(legacyPlugin.doFilter).not.toHaveBeenCalled();
+        scope.dispose();
+    });
+
+    it("invalidates the legacy filter cache only when the feature filter is absent", async () => {
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { filterContext: { cached: true }, doFilter: vi.fn(async () => {}) }, state = { advanceListGeneration: vi.fn(() => "1:0"), captureListRevision: vi.fn(() => "1:0"), reconcileListItems: vi.fn() }, controller = new ListEventController({ scope, state, legacyPlugin });
+
+        await controller.refreshAll({ changedNames: ["defaultQuickFilterTab"] });
+
+        expect(legacyPlugin.filterContext).toBeNull();
+        expect(legacyPlugin.doFilter).toHaveBeenCalledWith("1:0");
         scope.dispose();
     });
 });

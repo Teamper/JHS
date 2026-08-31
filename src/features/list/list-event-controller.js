@@ -42,7 +42,7 @@ export class ListEventController {
         if (changedNames && !changedNames.some((name) => LIST_EFFECT_KEYS.has(name))) return;
         const revision = this.state.advanceListGeneration();
         this.evaluation?.invalidate();
-        this.legacyPlugin.filterContext = null;
+        if (!this.filter) this.legacyPlugin && (this.legacyPlugin.filterContext = null);
         this.storage?._invalidateCache?.(this.storage.car_list_key);
         await (this.filter?.doFilter?.(revision) ?? this.legacyPlugin?.doFilter?.(revision));
         this.state.reconcileListItems(null, revision);
@@ -53,7 +53,7 @@ export class ListEventController {
     async refreshCarState(payload = {}) {
         if (this.disposed) return;
         this.evaluation?.invalidate();
-        this.legacyPlugin.filterContext = null;
+        if (!this.filter) this.legacyPlugin && (this.legacyPlugin.filterContext = null);
         this.storage?._invalidateCache?.(this.storage.car_list_key);
         const items = this.index?.getIndexedItems(payload?.carNums || []) ?? [];
         const revision = this.state.captureListRevision();

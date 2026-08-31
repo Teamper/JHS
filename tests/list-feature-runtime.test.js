@@ -101,6 +101,7 @@ describe("List FeatureRuntime ownership", () => {
             handle: vi.fn(async () => {}),
             attachListBatch: vi.fn(),
             attachListEvaluation: vi.fn(),
+            createEvaluationContext: vi.fn(),
         }, hostAdapter = {
             document: dom.window.document,
             location: dom.window.location,
@@ -115,6 +116,7 @@ describe("List FeatureRuntime ownership", () => {
         expect(legacyPlugin.attachListBatch).toHaveBeenCalledWith(controller.batch);
         expect(legacyPlugin.attachListEvaluation).toHaveBeenCalledWith(controller.evaluation);
         expect(stateService.patch).toHaveBeenCalledOnce();
+        expect(legacyPlugin.createEvaluationContext).not.toHaveBeenCalled();
         controller.dispose();
         expect(controller.batch).toBeNull();
         scope.dispose();

@@ -132,7 +132,7 @@ export class ListController {
                 getActiveFilter: () => this.state.activeQuickFilter,
                 captureRevision: () => this.state.captureListRevision(),
                 isCurrentRevision: (revision) => this.state.isCurrentListGeneration(revision),
-                getEvaluationContext: () => this.evaluation?.createEvaluationContext?.() ?? (/** @type {any} */ (this.legacyPlugin))?.createEvaluationContext?.(),
+                getEvaluationContext: () => this.createEvaluationContext(),
                 readItem: (item) => this.readListItem(item),
                 recordPhase: (phase, itemCount) => this.diagnostics?.recordPhase(phase, itemCount),
                 scheduleRecount: () => this.summary?.scheduleRecount?.(),
@@ -194,7 +194,7 @@ export class ListController {
                 selectors,
                 stateService: this.stateService,
                 http: this.http,
-                getEvaluationContext: () => this.evaluation?.createEvaluationContext?.() ?? this.legacyPlugin?.createEvaluationContext?.(),
+                getEvaluationContext: () => this.createEvaluationContext(),
             });
         }
         this.legacyPlugin?.attachListHost?.(this.hostAdapter);
@@ -275,7 +275,7 @@ export class ListController {
             parseActressName: (/** @type {string} */ url) => this.parseActressName(url),
             setQuickFilter: (/** @type {unknown} */ filter, /** @type {{syncUi?: boolean}} [options] */ options) => this.setQuickFilter(filter, options),
             getActiveQuickFilter: () => this.state.activeQuickFilter,
-            createEvaluationContext: (/** @type {any[]} */ ...args) => this.evaluation ? (/** @type {any} */ (this.evaluation)).createEvaluationContext(...args) : legacyPlugin?.createEvaluationContext?.(...args),
+            createEvaluationContext: (/** @type {any[]} */ ...args) => this.createEvaluationContext(...args),
             translateListItems: (/** @type {any[]} */ ...args) => {
                 const translation = /** @type {any} */ (this.titleTranslation);
                 return translation ? translation.translateListItems(...args) : legacyPlugin?.translateListItems?.(...args);
@@ -366,6 +366,12 @@ export class ListController {
     getLibraryFeatureApi() {
         if (this.features?.getFeatureApi) return Promise.resolve(this.features.getFeatureApi("library"));
         return Promise.resolve((/** @type {any} */ (this.legacyPlugin))?.getLibraryFeatureApi?.() ?? null);
+    }
+
+    /** Resolve the canonical evaluator context, retaining the legacy fallback for isolated callers. @param {...any} args */
+    createEvaluationContext(...args) {
+        if (this.evaluation) return (/** @type {any} */ (this.evaluation)).createEvaluationContext(...args);
+        return (/** @type {any} */ (this.legacyPlugin))?.createEvaluationContext?.(...args);
     }
 
     /** Reveal a hidden list card through the HostAdapter-owned item boundary. */
