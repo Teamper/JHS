@@ -60,20 +60,13 @@ test("quick-filter and DOM generations reject stale filter commits", async ({ co
   await injectUserscriptRuntime(page);
   await page.evaluate(async () => {
     const listPage = window.unsafeWindow.pluginManager.getBean("ListPagePlugin");
-    const originalGetFilterContext = listPage.getFilterContext.bind(listPage);
+    const pending = [];
     for (let index = 0; index < 50; index += 1) {
-      const context = listPage.filterContext || await originalGetFilterContext();
-      let release;
-      listPage.filterContext = null;
-      listPage.getFilterContext = () => new Promise((resolve) => { release = resolve; });
-      const pending = listPage.doFilter(listPage.captureListRevision());
+      pending.push(listPage.doFilter(listPage.captureListRevision()));
       index % 2 && listPage.advanceListGeneration();
       listPage.setQuickFilter(index % 2 ? "favorite" : "blockedItems");
-      release(context);
-      listPage.filterContext = context;
-      await pending;
     }
-    listPage.getFilterContext = originalGetFilterContext;
+    await Promise.all(pending);
     listPage.setQuickFilter("all");
     return window.__jhsBrowserDiagnostics.listPhases || [];
   });
