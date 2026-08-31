@@ -14,6 +14,7 @@ import { ListTranslationService } from "./list-translation-service.js";
 import { ListFilterService } from "./list-filter-service.js";
 import { ListIncrementalService } from "./list-incremental-service.js";
 import { ListContextMenuController } from "./list-context-menu-controller.js";
+import { ListActressNameService } from "./list-actress-name-service.js";
 import { scanAllPages } from "./batch-scanner.js";
 import { evaluateListItem } from "./list-evaluator.js";
 import { readListItem as parseListItem } from "../../core/list-item-reader.js";
@@ -59,6 +60,7 @@ export class ListController {
         this.filter = null;
         this.incremental = null;
         this.contextMenu = null;
+        this.actressNames = null;
         this.translation = /** @type {any} */ (options).translation ?? null;
         this.started = false;
     }
@@ -154,8 +156,9 @@ export class ListController {
                 site: this.hostAdapter.site,
                 readItem: (item) => this.readListItem(item),
                 stateService: this.stateService,
-                parseActressName: (url) => (/** @type {any} */ (this.legacyPlugin))?.parseActressName?.(url),
+                parseActressName: (/** @type {string} */ url) => this.parseActressName(url),
             });
+            this.actressNames = this.settings && this.http ? new ListActressNameService({ scope: this.scope, settings: this.settings, http: this.http, site: this.hostAdapter.site }) : null;
             this.events = new ListEventController({
                 scope: this.scope,
                 settings: this.settings,
@@ -257,7 +260,7 @@ export class ListController {
             openMovieDetail: (/** @type {any} */ item, /** @type {{event?: MouseEvent | null, autoplay?: boolean, newTab?: boolean} | undefined} */ options) => this.openMovieDetail(item, options),
             showCarNumBox: (/** @type {string} */ carNum) => this.showCarNumBox(carNum),
             findCarNumAndHref: (/** @type {any} */ item) => this.readListItem(item),
-            parseActressName: call("parseActressName"),
+            parseActressName: (/** @type {string} */ url) => this.parseActressName(url),
             setQuickFilter: (/** @type {unknown} */ filter, /** @type {{syncUi?: boolean}} [options] */ options) => this.setQuickFilter(filter, options),
             getActiveQuickFilter: () => this.state.activeQuickFilter,
             createEvaluationContext: (/** @type {any[]} */ ...args) => this.evaluation ? (/** @type {any} */ (this.evaluation)).createEvaluationContext(...args) : legacyPlugin?.createEvaluationContext?.(...args),
@@ -293,6 +296,8 @@ export class ListController {
         this.incremental = null;
         this.contextMenu?.dispose();
         this.contextMenu = null;
+        this.actressNames?.dispose();
+        this.actressNames = null;
         this.images?.dispose();
         this.images = null;
         this.media?.dispose();
@@ -330,6 +335,13 @@ export class ListController {
         const destination = new URL(aHref, baseUrl);
         if (autoplay) destination.searchParams.set("autoPlay", "1");
         /** @type {any} */ (globalThis).utils?.openPage?.(destination.href, carNum, true, { event, newTab: shouldOpenTab });
+    }
+
+    /** Resolve optional detail-page actress names while preserving the legacy fallback. */
+    /** @param {string} url */
+    parseActressName(url) {
+        if (this.actressNames) return this.actressNames.parse(url);
+        return (/** @type {any} */ (this.legacyPlugin))?.parseActressName?.(url);
     }
 
     /** Reveal a hidden list card through the HostAdapter-owned item boundary. */
