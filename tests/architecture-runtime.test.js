@@ -261,6 +261,23 @@ describe("v6.5 architecture runtime contracts", () => {
         await expect(runtime.getFeatureApi("missing-api")).resolves.toBeNull();
     });
 
+    it("binds declared legacy API aliases after Feature activation and clears them on dispose", async () => {
+        const diagnostics = new DiagnosticsService(), adapter = { setFeatureApi: vi.fn() }, runtime = new FeatureRuntime({
+            container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics,
+            disabled: [], site: "javdb", route: "list",
+        });
+        runtime.setLegacyResolver((name) => name === "ListPagePlugin" ? adapter : null);
+        runtime.register(defineFeature({
+            id: "aliased-feature", kind: "feature", disableable: true, sites: ["javdb"], routes: ["list"], startup: "on-demand",
+            legacyApiAliases: ["ListPagePlugin"], requires: [], contributes: [], providesCommands: [], activate: () => ({ api: { ready: true } }),
+        }));
+
+        const activation = await runtime.activate("aliased-feature");
+        expect(adapter.setFeatureApi).toHaveBeenNthCalledWith(1, { ready: true });
+        activation.dispose();
+        expect(adapter.setFeatureApi).toHaveBeenNthCalledWith(2, null);
+    });
+
     it("gives a legacy contribution a route-independent scope without activating its owner feature", async () => {
         const diagnostics = new DiagnosticsService(), runtime = new FeatureRuntime({
             container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics,

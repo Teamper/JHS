@@ -282,6 +282,7 @@ export class ListController {
         return Object.freeze({
             getListSelectors: () => this.hostAdapter.getListSelectors?.() ?? legacyPlugin?.getListSelectors?.() ?? legacyPlugin?.getSelector?.(),
             advanceListGeneration: () => this.state.advanceListGeneration(),
+            captureListRevision: () => this.state.captureListRevision(),
             configureHoverPreview: route(this.images, "configureHoverPreview"),
             replaceHdImg: route(this.images, "replaceHdImg"),
             doFilter: (/** @type {any[]} */ ...args) => this.filter ? this.filter.doFilter(...args) : legacyPlugin?.doFilter?.(...args),

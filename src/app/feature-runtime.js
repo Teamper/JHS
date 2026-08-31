@@ -131,6 +131,8 @@ export class FeatureRuntime {
                 scope, enabledContributions, route: this.route,
                 resolveLegacyPlugin: (/** @type {string} */ name) => this.legacyResolver?.(name),
             }));
+            const legacyApiAliases = manifest.legacyApiAliases ?? [];
+            legacyApiAliases.forEach((/** @type {string} */ name) => this.legacyResolver?.(name)?.setFeatureApi?.(result?.api ?? null));
             for (const command of manifest.providesCommands) {
                 const handler = result?.commands?.[command];
                 if (typeof handler !== "function") throw new Error(`Feature ${manifest.id} did not provide command ${command}`);
@@ -141,6 +143,7 @@ export class FeatureRuntime {
             this.diagnostics.recordStartup(manifest.id, performance.now() - started);
             return Object.freeze({ manifest, scope, enabledContributions, api: result?.api ?? null, dispose: () => {
                 result?.dispose?.();
+                legacyApiAliases.forEach((/** @type {string} */ name) => this.legacyResolver?.(name)?.setFeatureApi?.(null));
                 // 6.5: contribution scopes belong to the feature that owns their contribution ids;
                 // disposing the feature must tear down those scopes too so listeners/observers/timers
                 // do not leak across activate -> dispose -> activate cycles.

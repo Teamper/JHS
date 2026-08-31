@@ -37,6 +37,7 @@ export function defineFeature(manifest) {
     if (!FEATURE_KINDS.has(String(manifest.kind))) throw new TypeError("Feature kind must be system or feature");
     if (!STARTUP_MODES.has(String(manifest.startup))) throw new TypeError("Feature startup mode is invalid");
     for (const field of ["sites", "routes", "contributes", "providesCommands"]) requireUniqueStrings(manifest[field], field);
+    if (manifest.legacyApiAliases !== undefined) requireUniqueStrings(manifest.legacyApiAliases, "legacyApiAliases");
     requireUniqueTokens(manifest.requires, "requires");
     if (typeof manifest.activate !== "function") throw new TypeError("Feature activate must be a function");
     if (typeof manifest.disableable !== "boolean") throw new TypeError("Feature disableable must be explicit");

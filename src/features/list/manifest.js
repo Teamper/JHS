@@ -6,6 +6,7 @@ import { ListController } from "./list-controller.js";
 
 export default defineFeature({
     id: "list", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["list", "other"], startup: "eager",
+    legacyApiAliases: ["ListPagePlugin"],
     requires: [PORT.host, PORT.style, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings, SERVICE.eventBus, REGISTRY.feature],
     contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions", "list.fc2-navigation", "list.cover-state-actions", "list.javbus-images", "list.fc2-lookup"],
     providesCommands: [],
