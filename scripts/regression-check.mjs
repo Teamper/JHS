@@ -208,6 +208,7 @@ const identityManifestSource = await read("src/features/identity/manifest.js");
 const identityControllerSource = await read("src/features/identity/identity-controller.js");
 const identityNavigationSource = await read("src/features/identity/identity-navigation-controller.js");
 const identityBusNavigationSource = await read("src/features/identity/identity-bus-navigation-controller.js");
+const identityImageSearchSource = await read("src/features/identity/identity-image-search-controller.js");
 const identityActressSource = await read("src/plugins/avatar/actress-info.js");
 const listManifestSource = await read("src/features/list/manifest.js");
 const listControllerSource = await read("src/features/list/list-controller.js");
@@ -427,7 +428,11 @@ assertIncludes(identityNavigationSource, 'this.getJQuery()("#search-keyword")', 
 assertIncludes(identityManifestSource, 'new IdentityBusNavigationController({', "identity JavBus navigation controller ownership");
 assertIncludes(identityControllerSource, 'this.javbusNavigationController?.start({ scope: this.scope, identityApi: api })', "identity JavBus navigation lifecycle handoff");
 assertIncludes(identityBusNavigationSource, 'this.scope.addCleanup(() => button.off(".jhsIdentityNav").remove())', "identity JavBus navigation scope cleanup");
-assertIncludes(identityControllerSource, 'hasSearchByImage: Boolean(this.imageSearchPlugin)', "identity image-search API boundary");
+assertIncludes(identityManifestSource, 'new IdentityImageSearchController({', "identity image-search controller ownership");
+assertIncludes(identityControllerSource, 'hasSearchByImage: Boolean(this.imageSearchController)', "identity image-search API boundary");
+assertIncludes(identityImageSearchSource, 'this.scope.addCleanup?.(() => this.dispose())', "identity image-search scope cleanup");
+assertIncludes(identityImageSearchSource, 'this.imageSearch.resolve(source, { scope: this.scope })', "identity image-search service boundary");
+assert(!identityImageSearchSource.includes('getRuntimeService('), "identity image-search must not resolve legacy runtime services");
 assertIncludes(externalBridgeManifestSource, 'id: "external-bridge"', "real external bridge feature manifest");
 assertIncludes(externalBridgeManifestSource, 'new ExternalBridgeController({', "external bridge feature controller ownership");
 assertIncludes(externalBridgeControllerSource, 'this.unifiedOfflinePlugin?.handle({ scope: this.scope, oneTwoThreePlugin: this.oneTwoThreePlugin })', "external bridge offline lifecycle handoff");
@@ -568,7 +573,6 @@ const expectedPlugins = [
   ["status/auto-page.js", "AutoPagePlugin", "AutoPagePlugin"],
   ["backup/setting.js", "SettingPlugin", "SettingPlugin"],
   ["image-viewer/bus-preview-video.js", "BusPreviewVideoPlugin", "BusPreviewVideoPlugin"],
-  ["avatar/search-by-image.js", "SearchByImagePlugin", "SearchByImagePlugin"],
   ["external-search/related.js", "RelatedPlugin", "RelatedPlugin"],
   ["image-viewer/cover-button.js", "CoverButtonPlugin", "CoverButtonPlugin"],
   ["external-search/fc2-by-123av.js", "Fc2By123AvPlugin", "Fc2By123AvPlugin"],
@@ -597,11 +601,11 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,HitShowPlugin,Top250Plugin,SearchByImagePlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,HitShowPlugin,Top250Plugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,ActressInfoPlugin,OtherSitePlugin,TranslatePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavDB plugin registration order changed"
 );
 assert(
-  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,SearchByImagePlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
+  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TranslatePlugin,TaskPlugin,MobileBottomBarPlugin,OneOneFiveMatchPlugin,UnifiedOfflinePlugin",
   "JavBus plugin registration order changed"
 );
 assertIncludes(registry, 'OneTwoThreeOfflinePlugin, ["javdb", "javbus", "123pan"]', "shared registry");
@@ -642,6 +646,7 @@ sourceByFile.set("features/library/blacklist-controller.js", blacklistController
 sourceByFile.set("features/library/blacklist-repository.js", blacklistRepositorySource);
 sourceByFile.set("features/identity/identity-navigation-controller.js", identityNavigationSource);
 sourceByFile.set("features/identity/identity-bus-navigation-controller.js", identityBusNavigationSource);
+sourceByFile.set("features/identity/identity-image-search-controller.js", identityImageSearchSource);
 sourceByFile.set("features/compatibility/compatibility-controller.js", compatibilityControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));

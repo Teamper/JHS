@@ -90,10 +90,10 @@ describe("6.2.0 audit remediation", () => {
     });
 
     it("keeps all JHS UI layout decisions on mobileMode", () => {
-        const setting = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8"), search = readTestFile(join(process.cwd(), "src/plugins/avatar/search-by-image.js"), "utf8"), mobile = readTestFile(join(process.cwd(), "src/plugins/status/mobile-bottom-bar.js"), "utf8");
+        const setting = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8"), search = readTestFile(join(process.cwd(), "src/features/identity/identity-image-search-controller.js"), "utf8"), mobile = readTestFile(join(process.cwd(), "src/plugins/status/mobile-bottom-bar.js"), "utf8");
         expect(setting).not.toContain("utils.isMobile()");
         expect(search).not.toContain("utils.isMobile()");
-        expect(search).toContain("utils.isMobileMode()");
+        expect(search).toContain("isMobileMode");
         expect(mobile).not.toContain("@media (min-width: 769px)");
     });
 });

@@ -56,10 +56,10 @@ for (const [label, url] of [
 for (const [label, url, setup, selector, expectedPlugins] of [
   ["JavDB", "https://javdb.com/", () => {
     document.body.insertAdjacentHTML("afterbegin", '<div id="navbar-menu-hero"></div><div id="search-bar-container"></div>');
-  }, "#search-box #search-img-btn", ["SearchByImagePlugin", "ActressInfoPlugin"]],
+  }, "#search-box #search-img-btn", ["ActressInfoPlugin"]],
   ["JavBus", "https://www.javbus.com/", () => {
     document.body.insertAdjacentHTML("afterbegin", '<nav id="navbar"><div><div><span></span></div></div></nav>');
-  }, "#search-img-btn.jhs-identity-search-image-btn", ["SearchByImagePlugin"]],
+  }, "#search-img-btn.jhs-identity-search-image-btn", []],
 ]) {
   test(`${label} identity navigation is mounted by the Identity feature`, async ({ context, page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers each Identity host entry");

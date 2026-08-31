@@ -4,7 +4,6 @@ import { defineContribution } from "../contracts/manifests.js";
 import { PORT, REGISTRY, SERVICE } from "../contracts/tokens.js";
 import { LEGACY_PLUGIN_DEPENDENCY_MAP } from "./dependency-map.js";
 import { ActressInfoPlugin } from "./avatar/actress-info.js";
-import { SearchByImagePlugin } from "./avatar/search-by-image.js";
 import { SettingPlugin } from "./backup/setting.js";
 import { Fc2By123AvPlugin } from "./external-search/fc2-by-123av.js";
 import { Fc2Plugin } from "./external-search/fc2.js";
@@ -53,7 +52,6 @@ export const legacyContributionManifests = Object.freeze([
     manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.profile, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, SERVICE.translation, REGISTRY.settings, REGISTRY.feature]),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache, REGISTRY.feature], { managedByFeature: true }),
     manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account], { managedByFeature: true }),
-    manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch], { managedByFeature: true }),
     manifest("list.cover-state-actions", "list", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie, SERVICE.state, REGISTRY.feature], { managedByFeature: true }),
     manifest("list.fc2-lookup", "list", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [PORT.host, SERVICE.movie, SERVICE.translation, SERVICE.settings], { managedByFeature: true }),
     manifest("detail.javdb-native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }, [], { managedByFeature: true }),

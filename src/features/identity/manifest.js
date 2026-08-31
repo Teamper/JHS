@@ -4,6 +4,7 @@ import { defineFeature } from "../../contracts/manifests.js";
 import { PORT, SERVICE } from "../../contracts/tokens.js";
 import { IdentityController } from "./identity-controller.js";
 import { IdentityBusNavigationController } from "./identity-bus-navigation-controller.js";
+import { IdentityImageSearchController } from "./identity-image-search-controller.js";
 import { IdentityNavigationController } from "./identity-navigation-controller.js";
 
 export default defineFeature({
@@ -18,13 +19,13 @@ export default defineFeature({
         const javbusNavigationController = runtime.enabledContributions.includes("identity.javbus-navigation") && deps[PORT.host].site === "javbus"
             ? new IdentityBusNavigationController({ hostAdapter: deps[PORT.host], scope: runtime.scope })
             : null;
-        const imageSearchPlugin = runtime.enabledContributions.includes("identity.image-search")
-            ? runtime.resolveLegacyPlugin?.("SearchByImagePlugin")
+        const imageSearchController = runtime.enabledContributions.includes("identity.image-search")
+            ? new IdentityImageSearchController({ dialog: deps[SERVICE.dialog], storage: deps[SERVICE.storage], imageSearch: deps[SERVICE.imageSearch], styles: deps[PORT.style], scope: runtime.scope })
             : null;
         const actressInfoPlugin = runtime.enabledContributions.includes("identity.actress-info")
             ? runtime.resolveLegacyPlugin?.("ActressInfoPlugin")
             : null;
-        const controller = new IdentityController({ javdbNavigationController, javbusNavigationController, imageSearchPlugin, actressInfoPlugin, scope: runtime.scope });
+        const controller = new IdentityController({ javdbNavigationController, javbusNavigationController, imageSearchController, actressInfoPlugin, scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });
