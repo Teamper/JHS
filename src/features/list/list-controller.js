@@ -178,7 +178,6 @@ export class ListController {
                 storage: this.storage,
                 state: this.state,
                 index: this.index,
-                legacyPlugin: this.legacyPlugin,
                 evaluation: this.evaluation,
                 filter: this.filter,
                 onHoverSettingChanged: (event) => {

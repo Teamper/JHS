@@ -265,7 +265,7 @@ assertIncludes(listControllerSource, "new ListSummaryService({", "list summary o
 assertIncludes(listControllerSource, 'this.features.getFeatureApi("library")', "list Library Feature API ownership");
 assertIncludes(listControllerSource, "this.busImgPlugin?.logImageHeightsByRow", "list JavBus image contribution ownership");
 assertIncludes(listControllerSource, "createEvaluationContext(...args)", "list evaluation capability boundary");
-assertIncludes(listEventSource, "if (!this.filter) this.legacyPlugin", "legacy filter cache fallback boundary");
+assert(!listEventSource.includes("legacyPlugin"), "list events must not depend on the legacy filter plugin");
 assertIncludes(listControllerSource, "new ListTranslationService({", "list translation ownership");
 assertIncludes(listControllerSource, "new ListFilterService({", "list filter service ownership");
 assertIncludes(listControllerSource, "this.hostAdapter.prepareListItems?.(items)", "list host incremental normalization");

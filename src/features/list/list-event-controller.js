@@ -2,9 +2,9 @@
 
 const LIST_EFFECT_KEYS = new Set([ "tagPosition", "defaultQuickFilterTab" ]);
 
-/** Own list-wide refresh subscriptions while delegating the legacy filter work. */
+/** Own list-wide refresh subscriptions and route filtering through the feature service. */
 export class ListEventController {
-    /** @param {{scope: any, settings?: any, eventBus?: any, storage?: any, state: any, index: any, legacyPlugin?: any, evaluation?: any, filter?: any, onHoverSettingChanged?: (event: any) => void, onReloadHistory?: () => Promise<void> | void}} options */
+    /** @param {{scope: any, settings?: any, eventBus?: any, storage?: any, state: any, index: any, evaluation?: any, filter?: any, onHoverSettingChanged?: (event: any) => void, onReloadHistory?: () => Promise<void> | void}} options */
     constructor(options) {
         this.scope = options.scope;
         this.settings = options.settings ?? null;
@@ -12,7 +12,6 @@ export class ListEventController {
         this.storage = options.storage ?? null;
         this.state = options.state;
         this.index = options.index;
-        this.legacyPlugin = options.legacyPlugin ?? null;
         this.evaluation = options.evaluation ?? null;
         this.filter = options.filter ?? null;
         this.onHoverSettingChanged = options.onHoverSettingChanged ?? (() => {});
@@ -42,9 +41,8 @@ export class ListEventController {
         if (changedNames && !changedNames.some((name) => LIST_EFFECT_KEYS.has(name))) return;
         const revision = this.state.advanceListGeneration();
         this.evaluation?.invalidate();
-        if (!this.filter) this.legacyPlugin && (this.legacyPlugin.filterContext = null);
         this.storage?._invalidateCache?.(this.storage.car_list_key);
-        await (this.filter?.doFilter?.(revision) ?? this.legacyPlugin?.doFilter?.(revision));
+        await this.filter?.doFilter?.(revision);
         this.state.reconcileListItems(null, revision);
         await this.onReloadHistory();
     }
@@ -53,12 +51,11 @@ export class ListEventController {
     async refreshCarState(payload = {}) {
         if (this.disposed) return;
         this.evaluation?.invalidate();
-        if (!this.filter) this.legacyPlugin && (this.legacyPlugin.filterContext = null);
         this.storage?._invalidateCache?.(this.storage.car_list_key);
         const items = this.index?.getIndexedItems(payload?.carNums || []) ?? [];
         const revision = this.state.captureListRevision();
         if (items.length) {
-            await (this.filter?.doFilterItems?.(items, revision) ?? this.legacyPlugin?.doFilterItems?.(items, revision));
+            await this.filter?.doFilterItems?.(items, revision);
             this.state.reconcileListItems(items, revision);
         }
         await this.onReloadHistory();
