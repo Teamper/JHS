@@ -211,6 +211,7 @@ const listControllerSource = await read("src/features/list/list-controller.js");
 const listDomObserverSource = await read("src/features/list/list-dom-observer.js");
 const listMediaSource = await read("src/features/list/list-media-controller.js");
 const listImageSource = await read("src/features/list/list-image-controller.js");
+const listEventSource = await read("src/features/list/list-event-controller.js");
 const listPageAdapterSource = await read("src/compat/list-page-adapter.js");
 const listViewSource = await read("src/features/list/list-view.js");
 const listActionsSource = await read("src/plugins/status/list-page-button.js");
@@ -238,6 +239,8 @@ assertIncludes(listControllerSource, "new ListMediaController({", "list media li
 assertIncludes(listControllerSource, "attachListMedia", "list media migration handoff");
 assertIncludes(listControllerSource, "new ListImageController({", "list image lifecycle ownership");
 assertIncludes(listControllerSource, "attachListImages", "list image migration handoff");
+assertIncludes(listControllerSource, "new ListEventController({", "list event lifecycle ownership");
+assertIncludes(listControllerSource, "attachListEvents", "list event migration handoff");
 assertIncludes(listControllerSource, "readItem: (item) => this.readListItem(item)", "list card reader ownership");
 assertIncludes(listControllerSource, "findCarNumAndHref: (/** @type {any} */ item) => this.readListItem(item)", "list card reader capability");
 assertIncludes(listControllerSource, "onFilterChange: (filter, options)", "list view filter callback boundary");
@@ -251,6 +254,8 @@ assertIncludes(listDomObserverSource, "scope.ownTimeout(this.processTimer)", "li
 assertIncludes(listMediaSource, "scope.listen(root, \"click\"", "list media listener lifecycle ownership");
 assertIncludes(listImageSource, "scope.ownObserver(this.hdImageObserver)", "list image observer lifecycle ownership");
 assertIncludes(listImageSource, "hdPendingCleanups", "list image pending listener ownership");
+assertIncludes(listEventSource, "scope.listen(this.settings, \"settings.changed\"", "list settings listener lifecycle ownership");
+assertIncludes(listEventSource, "legacy-refresh", "list refresh event ownership");
 assertIncludes(listPageSource, "this.listMedia ? this.listMedia.start()", "legacy list media compatibility handoff");
 assertIncludes(listPageSource, "if (this.listImages) return this.listImages.replaceHdImg(e);", "legacy list image compatibility handoff");
 assertIncludes(listPageSource, "if (this.listDomObserver) return this.listDomObserver.start();", "legacy list DOM observer compatibility handoff");

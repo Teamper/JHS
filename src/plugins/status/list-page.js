@@ -132,6 +132,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {any} */ this.listDomObserver = null;
         /** @type {any} */ this.listMedia = null;
         /** @type {any} */ this.listImages = null;
+        /** @type {any} */ this.listEvents = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -155,6 +156,10 @@ export class ListPagePlugin extends BasePlugin {
     /** Attach the FeatureRuntime-owned image lifecycle during migration. @param {any} images */
     attachListImages(images) {
         this.listImages = images;
+    }
+    /** Attach the FeatureRuntime-owned event subscriptions during migration. @param {any} events */
+    attachListEvents(events) {
+        this.listEvents = events;
     }
     /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
     async getLibraryFeatureApi() {
@@ -191,6 +196,8 @@ export class ListPagePlugin extends BasePlugin {
         if (!window.isListPage) return;
         const scope = options.scope ?? await this.getRuntimeService("scope")();
         const settingsService = this.getRuntimeService("settings");
+        if (this.listEvents) this.listEvents.start();
+        else {
         const reloadHistoryTable = () => {
             void this.getLibraryFeatureApi().then((libraryFeatureApi) => libraryFeatureApi?.reloadHistoryTable?.()).catch((error) => clog.warn("鉴定记录刷新失败", error));
         };
@@ -216,6 +223,7 @@ export class ListPagePlugin extends BasePlugin {
             items.length && (await this.doFilterItems(items, revision), this.reconcileListItems(items, revision));
             reloadHistoryTable();
         })));
+        }
         // 自有榜单页没有宿主列表 DOM 可劫持，DOM 管线由 HitShowPlugin.initializeRenderedList 驱动；
         // Top250（handleTop）与 v6.4.1 一致走完整管线（其自有列表在同步前缀阶段已创建）；
         // 但状态标记/黑名单/设置变更的刷新监听在两类页面都必须保持活跃，否则卡片标记永不更新。

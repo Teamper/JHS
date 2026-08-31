@@ -7,11 +7,12 @@ import { ListView } from "../src/features/list/list-view.js";
 import { ListDomObserver } from "../src/features/list/list-dom-observer.js";
 import { ListMediaController } from "../src/features/list/list-media-controller.js";
 import { ListImageController } from "../src/features/list/list-image-controller.js";
+import { ListEventController } from "../src/features/list/list-event-controller.js";
 import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 
 describe("List FeatureRuntime ownership", () => {
     it("passes the feature lifecycle scope to the legacy migration adapter", async () => {
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), attachListEvents: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
             legacyPlugin,
             hostAdapter,
             scope,
@@ -26,6 +27,7 @@ describe("List FeatureRuntime ownership", () => {
         expect(legacyPlugin.attachListDomObserver).toHaveBeenCalledWith(expect.any(ListDomObserver));
         expect(legacyPlugin.attachListMedia).toHaveBeenCalledWith(expect.any(ListMediaController));
         expect(legacyPlugin.attachListImages).toHaveBeenCalledWith(expect.any(ListImageController));
+        expect(legacyPlugin.attachListEvents).toHaveBeenCalledWith(expect.any(ListEventController));
         const api = controller.getApi();
         expect(api.getListSelectors()).toEqual({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" });
         controller.state.setView({ applyVisibility: vi.fn(), syncQuickFilterUi: vi.fn() });

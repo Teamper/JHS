@@ -6,6 +6,7 @@ import { ListIndexController } from "./list-index-controller.js";
 import { ListDomObserver } from "./list-dom-observer.js";
 import { ListMediaController } from "./list-media-controller.js";
 import { ListImageController } from "./list-image-controller.js";
+import { ListEventController } from "./list-event-controller.js";
 import { scanAllPages } from "./batch-scanner.js";
 import { evaluateListItem } from "./list-evaluator.js";
 import { readListItem as parseListItem } from "../../core/list-item-reader.js";
@@ -15,7 +16,7 @@ import { readListItem as parseListItem } from "../../core/list-item-reader.js";
  * strangled out of PluginManager.
  */
 export class ListController {
-    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any, findCarNumAndHref?: (item: any) => {carNum?: unknown} | null, recordListPhase?: (phase: string, itemCount?: number | null) => void, attachListState?: (state: ListStateController) => void, attachListIndex?: (index: ListIndexController) => void, attachListDomObserver?: (observer: ListDomObserver) => void, attachListMedia?: (media: ListMediaController) => void, attachListImages?: (images: ListImageController) => void, processAddedItems?: (items: Element[], revision: string) => Promise<void> | void, createQuickFilter?: (initialFilter?: unknown) => Promise<any> | any, initCss?: () => Promise<string> | string}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2NavigationPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, coverPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2LookupPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any, settings?: {snapshot: () => Record<string, any>}, styles?: {register: (id: string, css: string) => () => void}}} options */
+    /** @param {{legacyPlugin?: {getSelector?: () => Record<string, string>, getListSelectors?: () => Record<string, string>, handle: (options?: {scope: any, view: ListView}) => Promise<any> | any, setQuickFilter?: (filter: unknown, options?: any) => any, openMovieDetail?: (item: any, options?: any) => any, findCarNumAndHref?: (item: any) => {carNum?: unknown} | null, recordListPhase?: (phase: string, itemCount?: number | null) => void, attachListState?: (state: ListStateController) => void, attachListIndex?: (index: ListIndexController) => void, attachListDomObserver?: (observer: ListDomObserver) => void, attachListMedia?: (media: ListMediaController) => void, attachListImages?: (images: ListImageController) => void, attachListEvents?: (events: ListEventController) => void, processAddedItems?: (items: Element[], revision: string) => Promise<void> | void, getLibraryFeatureApi?: () => Promise<any>, createQuickFilter?: (initialFilter?: unknown) => Promise<any> | any, initCss?: () => Promise<string> | string}, autoPagePlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, foldCategoryPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, actionsPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2NavigationPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, coverPlugin?: {handle?: (options?: {scope: any, listFeatureApi: any}) => Promise<any> | any}, fc2LookupPlugin?: {handle?: (options?: {scope: any}) => Promise<any> | any}, scope: any, hostAdapter: any, settings?: {snapshot: () => Record<string, any>}, storage?: any, eventBus?: any, styles?: {register: (id: string, css: string) => () => void}}} options */
     constructor(options) {
         this.legacyPlugin = options.legacyPlugin ?? null;
         this.autoPagePlugin = options.autoPagePlugin ?? null;
@@ -26,6 +27,9 @@ export class ListController {
         this.fc2LookupPlugin = options.fc2LookupPlugin ?? null;
         this.scope = options.scope;
         this.hostAdapter = options.hostAdapter;
+        this.settings = options.settings ?? null;
+        this.storage = options.storage ?? null;
+        this.eventBus = options.eventBus ?? null;
         this.styles = options.styles ?? null;
         this.styleRelease = null;
         this.view = null;
@@ -38,6 +42,7 @@ export class ListController {
         this.domObserver = null;
         this.media = null;
         this.images = null;
+        this.events = null;
         this.started = false;
     }
 
@@ -73,12 +78,27 @@ export class ListController {
             });
             this.media = new ListMediaController({ scope: this.scope, document: this.hostAdapter.document, selectors });
             this.images = new ListImageController({ scope: this.scope, document: this.hostAdapter.document, window: this.hostAdapter.document?.defaultView ?? globalThis.window, site: this.hostAdapter.site, selector: selectors.coverImgSelector });
+            this.events = new ListEventController({
+                scope: this.scope,
+                settings: this.settings,
+                eventBus: this.eventBus,
+                storage: this.storage,
+                state: this.state,
+                index: this.index,
+                legacyPlugin: this.legacyPlugin,
+                onHoverSettingChanged: (event) => {
+                    const names = /** @type {string[] | undefined} */ (event.detail?.names) || [];
+                    if (names.includes("hoverBigImg")) this.images?.configureHoverPreview(this.settings?.snapshot?.().hoverBigImg === "yes" ? "yes" : "no");
+                },
+                onReloadHistory: () => this.legacyPlugin?.getLibraryFeatureApi?.().then((/** @type {any} */ api) => api?.reloadHistoryTable?.()).catch((/** @type {unknown} */ error) => clog.warn("鉴定记录刷新失败", error)),
+            });
         }
         this.legacyPlugin?.attachListState?.(this.state);
         this.index && this.legacyPlugin?.attachListIndex?.(this.index);
         this.domObserver && this.legacyPlugin?.attachListDomObserver?.(this.domObserver);
         this.media && this.legacyPlugin?.attachListMedia?.(this.media);
         this.images && this.legacyPlugin?.attachListImages?.(this.images);
+        this.events && this.legacyPlugin?.attachListEvents?.(this.events);
         this.started = true;
         const listFeatureApi = this.getApi();
         const view = this.view;
@@ -148,6 +168,8 @@ export class ListController {
     }
 
     dispose() {
+        this.events?.dispose();
+        this.events = null;
         this.images?.dispose();
         this.images = null;
         this.media?.dispose();
