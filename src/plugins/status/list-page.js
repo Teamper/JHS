@@ -240,7 +240,7 @@ export class ListPagePlugin extends BasePlugin {
         });
         return this.listView;
     }
-    /** @param {{scope?: any, view?: any}} [options] */
+    /** @param {{scope?: any, view?: any, skipOwnedDomObserver?: boolean}} [options] */
     async handle(options = {}) {
         this.listView = options.view ?? null;
         if (!window.isListPage) return;
@@ -286,7 +286,7 @@ export class ListPagePlugin extends BasePlugin {
         await this.doFilter(revision), await this.createQuickFilter(), this.reconcileListItems(null, revision), await this.bindClick(),
         this.listTagExpand ? this.listTagExpand.start() : this.rememberTagExpand(),
         $(this.getListSelectors().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await getListEventBus().emit("list-items-added", { items: $(this.getListSelectors().itemSelector).toArray() }, { broadcast: !1 }),
-        this.checkDom(scope), scope.addCleanup((() => {
+        options.skipOwnedDomObserver || this.checkDom(scope), scope.addCleanup((() => {
             this.processTimer && clearTimeout(this.processTimer), this.processTimer = null, this.pendingItems.clear();
             this.hdImageObserver?.disconnect(), this.hdImageObserver = null;
             this.hdPendingCleanups.forEach((cleanup => cleanup())), this.hdPendingCleanups.clear();

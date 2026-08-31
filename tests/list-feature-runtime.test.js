@@ -30,7 +30,7 @@ describe("List FeatureRuntime ownership", () => {
         await controller.start();
 
         expect(legacyPlugin.handle).toHaveBeenCalledOnce();
-        expect(legacyPlugin.handle).toHaveBeenCalledWith({ scope, view: expect.any(ListView) });
+        expect(legacyPlugin.handle).toHaveBeenCalledWith({ scope, view: expect.any(ListView), skipOwnedDomObserver: true });
         expect(legacyPlugin.attachListHost).toHaveBeenCalledWith(hostAdapter);
         expect(controller.view).toBeInstanceOf(ListView);
         expect(legacyPlugin.attachListDomObserver).toHaveBeenCalledWith(expect.any(ListDomObserver));
@@ -163,6 +163,31 @@ describe("List FeatureRuntime ownership", () => {
         expect(legacyPlugin.bindClick).not.toHaveBeenCalled();
         controller.dispose();
         scope.dispose();
+    });
+
+    it("starts the DOM observer through the controller-owned lifecycle", async () => {
+        const dom = new JSDOM('<div class="movie-list"></div>', { url: "https://javdb.com/search" });
+        dom.window.isListPage = true;
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = {
+            document: dom.window.document,
+            location: dom.window.location,
+            getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }),
+        }, controller = new ListController({ legacyPlugin, hostAdapter, scope });
+        const previousMutationObserver = globalThis.MutationObserver;
+        globalThis.MutationObserver = dom.window.MutationObserver;
+
+        try {
+            await controller.start();
+
+            expect(controller.domObserver.started).toBe(true);
+            expect(controller.domObserver.observer).not.toBeNull();
+            expect(legacyPlugin.handle).toHaveBeenCalledWith(expect.objectContaining({ skipOwnedDomObserver: true }));
+            controller.dispose();
+            scope.dispose();
+        } finally {
+            if (previousMutationObserver) globalThis.MutationObserver = previousMutationObserver;
+            else delete globalThis.MutationObserver;
+        }
     });
 
     it("starts the waterfall contribution with the feature-owned list API", async () => {
