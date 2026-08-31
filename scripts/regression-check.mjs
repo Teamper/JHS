@@ -232,6 +232,8 @@ assertIncludes(listControllerSource, "this.legacyPlugin.handle({ scope: this.sco
 assertIncludes(listControllerSource, "new ListView({", "list view host boundary");
 assertIncludes(listControllerSource, "new ListDomObserver({", "list DOM observer ownership");
 assertIncludes(listControllerSource, "attachListDomObserver", "list DOM observer migration handoff");
+assertIncludes(listControllerSource, "readItem: (item) => this.readListItem(item)", "list card reader ownership");
+assertIncludes(listControllerSource, "findCarNumAndHref: (/** @type {any} */ item) => this.readListItem(item)", "list card reader capability");
 assertIncludes(listControllerSource, "onFilterChange: (filter, options)", "list view filter callback boundary");
 assertIncludes(listControllerSource, "batchSaveAllVideos: call(\"batchSaveAllVideos\")", "list batch capability boundary");
 assertIncludes(listControllerSource, "this.scope.ownTimeout(setTimeout", "list action deferred lifecycle handoff");

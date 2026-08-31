@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { JSDOM } from "jsdom";
+import jqueryFactory from "jquery";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { ListController } from "../src/features/list/list-controller.js";
 import { ListView } from "../src/features/list/list-view.js";
@@ -23,14 +25,17 @@ describe("List FeatureRuntime ownership", () => {
         const api = controller.getApi();
         expect(api.getListSelectors()).toEqual({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" });
         controller.state.setView({ applyVisibility: vi.fn(), syncQuickFilterUi: vi.fn() });
+        const dom = new JSDOM('<div class="item"><a href="/v/ABC-123"><div class="video-title"><strong>ABC-123</strong> title</div></a></div>');
+        globalThis.$ = jqueryFactory(dom.window);
+        const card = globalThis.$(".item");
         api.batchSaveAllVideos("scope", "favorite");
         api.openMovieDetail("item", { newTab: false });
-        api.findCarNumAndHref("item");
+        expect(api.findCarNumAndHref(card)).toMatchObject({ carNum: "ABC-123", url: "/v/ABC-123" });
         api.parseActressName("/movie/ABC-123");
         api.setQuickFilter("favorite", { syncUi: false });
         expect(legacyPlugin.batchSaveAllVideos).toHaveBeenCalledWith("scope", "favorite");
         expect(legacyPlugin.openMovieDetail).toHaveBeenCalledWith("item", { newTab: false });
-        expect(legacyPlugin.findCarNumAndHref).toHaveBeenCalledWith("item");
+        expect(legacyPlugin.findCarNumAndHref).not.toHaveBeenCalled();
         expect(legacyPlugin.parseActressName).toHaveBeenCalledWith("/movie/ABC-123");
         expect(legacyPlugin.setQuickFilter).not.toHaveBeenCalled();
         expect(api.getActiveQuickFilter()).toBe("favorite");
@@ -148,3 +153,5 @@ describe("List FeatureRuntime ownership", () => {
         scope.dispose();
     });
 });
+
+afterEach(() => { delete globalThis.$; });

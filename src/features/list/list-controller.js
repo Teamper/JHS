@@ -6,6 +6,7 @@ import { ListIndexController } from "./list-index-controller.js";
 import { ListDomObserver } from "./list-dom-observer.js";
 import { scanAllPages } from "./batch-scanner.js";
 import { evaluateListItem } from "./list-evaluator.js";
+import { readListItem as parseListItem } from "../../core/list-item-reader.js";
 
 /**
  * Own the list feature lifecycle while the legacy page implementation is being
@@ -53,7 +54,7 @@ export class ListController {
                 scope: this.scope,
                 selectors,
                 document: this.hostAdapter.document,
-                readItem: (item) => this.legacyPlugin?.findCarNumAndHref?.(item),
+                readItem: (item) => this.readListItem(item),
             });
             this.domObserver = new ListDomObserver({
                 scope: this.scope,
@@ -124,7 +125,7 @@ export class ListController {
             bindClick: call("bindClick"),
             openMovieDetail: call("openMovieDetail"),
             showCarNumBox: call("showCarNumBox"),
-            findCarNumAndHref: call("findCarNumAndHref"),
+            findCarNumAndHref: (/** @type {any} */ item) => this.readListItem(item),
             parseActressName: call("parseActressName"),
             setQuickFilter: (/** @type {unknown} */ filter, /** @type {{syncUi?: boolean}} [options] */ options) => this.setQuickFilter(filter, options),
             getActiveQuickFilter: () => this.state.activeQuickFilter,
@@ -149,6 +150,16 @@ export class ListController {
         this.styleRelease = null;
         this.view = null;
         this.started = false;
+    }
+
+    /** Read one list card through the feature-owned parser while preserving the legacy error notice. */
+    readListItem(/** @type {any} */ item) {
+        try {
+            return parseListItem(item);
+        } catch (error) {
+            /** @type {any} */ (globalThis).show?.error?.("提取番号信息失败");
+            throw error;
+        }
     }
 
     /** @param {unknown} filter @param {{syncUi?: boolean}} [options] */
