@@ -277,6 +277,7 @@ assertIncludes(listControllerSource, "attachListTagExpand", "list actor-tag migr
 assertIncludes(listControllerSource, "onOpenMovieDetail:", "list navigation action ownership");
 assertIncludes(listControllerSource, "this.openMovieDetail(item, options)", "list navigation API ownership");
 assertIncludes(listControllerSource, "showCarNumBox: (/** @type {string} */ carNum) => this.showCarNumBox(carNum)", "list card reveal API ownership");
+assertIncludes(listControllerSource, "bindClick: () => this.bindClick()", "list interaction API ownership");
 assertIncludes(listControllerSource, 'configureHoverPreview: route(this.images, "configureHoverPreview")', "list image API ownership");
 assertIncludes(listControllerSource, 'rebuildItemIndex: route(this.index, "rebuildItemIndex")', "list index API ownership");
 assertIncludes(listControllerSource, 'bindMovieDetailNavigation: route(this.view, "bindMovieDetailNavigation")', "list view API ownership");

@@ -145,6 +145,26 @@ describe("List FeatureRuntime ownership", () => {
         scope.dispose();
     });
 
+    it("binds list interactions through the controller-owned services", async () => {
+        const dom = new JSDOM('<div class="movie-list"><div class="item"><img src="cover.jpg"><video></video></div></div>', { url: "https://javdb.com/search" });
+        globalThis.$ = jqueryFactory(dom.window);
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), bindClick: vi.fn(async () => {}) }, hostAdapter = {
+            document: dom.window.document,
+            location: dom.window.location,
+            getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }),
+        }, controller = new ListController({ legacyPlugin, hostAdapter, scope });
+
+        await controller.start();
+        await controller.getApi().bindClick();
+
+        expect(controller.view.navigationRoot).not.toBeNull();
+        expect(controller.media.started).toBe(true);
+        expect(controller.contextMenu.started).toBe(true);
+        expect(legacyPlugin.bindClick).not.toHaveBeenCalled();
+        controller.dispose();
+        scope.dispose();
+    });
+
     it("starts the waterfall contribution with the feature-owned list API", async () => {
         const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), getSelector: vi.fn(() => ({ boxSelector: ".movie-list" })) }, autoPagePlugin = { handle: vi.fn(async () => {}) }, foldCategoryPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
             legacyPlugin,

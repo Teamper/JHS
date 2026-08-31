@@ -250,7 +250,6 @@ export class ListController {
     /** Expose the stable list capability surface to other Features. */
     getApi() {
         const legacyPlugin = /** @type {any} */ (this.legacyPlugin);
-        const call = (/** @type {string} */ name) => (/** @type {any[]} */ ...args) => legacyPlugin?.[name]?.(...args);
         const route = (/** @type {any} */ feature, /** @type {string} */ name) => (/** @type {any[]} */ ...args) => feature && "function" === typeof feature[name] ? feature[name](...args) : legacyPlugin?.[name]?.(...args);
         return Object.freeze({
             getListSelectors: () => this.hostAdapter.getListSelectors?.() ?? legacyPlugin?.getListSelectors?.() ?? legacyPlugin?.getSelector?.(),
@@ -268,7 +267,7 @@ export class ListController {
             syncQuickFilterUi: () => this.state.syncQuickFilterUi(),
             rebuildItemIndex: route(this.index, "rebuildItemIndex"),
             bindMovieDetailNavigation: route(this.view, "bindMovieDetailNavigation"),
-            bindClick: call("bindClick"),
+            bindClick: () => this.bindClick(),
             openMovieDetail: (/** @type {any} */ item, /** @type {{event?: MouseEvent | null, autoplay?: boolean, newTab?: boolean} | undefined} */ options) => this.openMovieDetail(item, options),
             showCarNumBox: (/** @type {string} */ carNum) => this.showCarNumBox(carNum),
             findCarNumAndHref: (/** @type {any} */ item) => this.readListItem(item),
@@ -372,6 +371,18 @@ export class ListController {
     createEvaluationContext(...args) {
         if (this.evaluation) return (/** @type {any} */ (this.evaluation)).createEvaluationContext(...args);
         return (/** @type {any} */ (this.legacyPlugin))?.createEvaluationContext?.(...args);
+    }
+
+    /** Bind list navigation, video playback, and context-menu interactions through owned services. */
+    bindClick() {
+        const selectors = this.hostAdapter.getListSelectors?.() ?? (/** @type {any} */ (this.legacyPlugin))?.getListSelectors?.() ?? (/** @type {any} */ (this.legacyPlugin))?.getSelector?.();
+        if (!selectors?.boxSelector) return;
+        if (this.view && this.media && this.contextMenu) {
+            this.view.bindMovieDetailNavigation(selectors.boxSelector);
+            this.media.start();
+            return this.contextMenu.start();
+        }
+        return (/** @type {any} */ (this.legacyPlugin))?.bindClick?.();
     }
 
     /** Reveal a hidden list card through the HostAdapter-owned item boundary. */
