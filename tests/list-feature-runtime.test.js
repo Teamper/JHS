@@ -13,13 +13,15 @@ import { ListFilterService } from "../src/features/list/list-filter-service.js";
 import { ListIncrementalService } from "../src/features/list/list-incremental-service.js";
 import { ListContextMenuController } from "../src/features/list/list-context-menu-controller.js";
 import { ListPaginationController } from "../src/features/list/list-pagination-controller.js";
+import { ListTagExpandController } from "../src/features/list/list-tag-expand-controller.js";
 import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 
 describe("List FeatureRuntime ownership", () => {
     it("passes the feature lifecycle scope to the legacy migration adapter", async () => {
-        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListHost: vi.fn(), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), attachListEvents: vi.fn(), attachListFilter: vi.fn(), attachListIncremental: vi.fn(), attachListContextMenu: vi.fn(), attachListPagination: vi.fn(), doFilter: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
+        const scope = new LifecycleScope("feature:list"), legacyPlugin = { handle: vi.fn(async () => {}), attachListHost: vi.fn(), attachListDomObserver: vi.fn(), attachListMedia: vi.fn(), attachListImages: vi.fn(), attachListEvents: vi.fn(), attachListFilter: vi.fn(), attachListIncremental: vi.fn(), attachListContextMenu: vi.fn(), attachListPagination: vi.fn(), attachListTagExpand: vi.fn(), doFilter: vi.fn(), batchSaveAllVideos: vi.fn(), openMovieDetail: vi.fn(), findCarNumAndHref: vi.fn(), parseActressName: vi.fn(), setQuickFilter: vi.fn() }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" }) }, controller = new ListController({
             legacyPlugin,
             hostAdapter,
+            storage: { getLocal: () => null, setLocal: () => {} },
             scope,
         });
 
@@ -38,6 +40,7 @@ describe("List FeatureRuntime ownership", () => {
         expect(legacyPlugin.attachListIncremental).toHaveBeenCalledWith(expect.any(ListIncrementalService));
         expect(legacyPlugin.attachListContextMenu).toHaveBeenCalledWith(expect.any(ListContextMenuController));
         expect(legacyPlugin.attachListPagination).toHaveBeenCalledWith(expect.any(ListPaginationController));
+        expect(legacyPlugin.attachListTagExpand).toHaveBeenCalledWith(expect.any(ListTagExpandController));
         const api = controller.getApi();
         expect(api.getListSelectors()).toEqual({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".cover img" });
         controller.state.setView({ applyVisibility: vi.fn(), syncQuickFilterUi: vi.fn() });

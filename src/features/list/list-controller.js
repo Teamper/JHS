@@ -16,6 +16,7 @@ import { ListIncrementalService } from "./list-incremental-service.js";
 import { ListContextMenuController } from "./list-context-menu-controller.js";
 import { ListActressNameService } from "./list-actress-name-service.js";
 import { ListPaginationController } from "./list-pagination-controller.js";
+import { ListTagExpandController } from "./list-tag-expand-controller.js";
 import { scanAllPages } from "./batch-scanner.js";
 import { evaluateListItem } from "./list-evaluator.js";
 import { readListItem as parseListItem } from "../../core/list-item-reader.js";
@@ -63,6 +64,7 @@ export class ListController {
         this.contextMenu = null;
         this.actressNames = null;
         this.pagination = null;
+        this.tagExpand = null;
         this.translation = /** @type {any} */ (options).translation ?? null;
         this.started = false;
     }
@@ -162,6 +164,7 @@ export class ListController {
             });
             this.actressNames = this.settings && this.http ? new ListActressNameService({ scope: this.scope, settings: this.settings, http: this.http, site: this.hostAdapter.site }) : null;
             this.pagination = new ListPaginationController({ scope: this.scope, document: this.hostAdapter.document, location: this.hostAdapter.location });
+            this.tagExpand = this.storage ? new ListTagExpandController({ scope: this.scope, document: this.hostAdapter.document, location: this.hostAdapter.location, storage: this.storage }) : null;
             this.events = new ListEventController({
                 scope: this.scope,
                 settings: this.settings,
@@ -205,6 +208,7 @@ export class ListController {
         this.incremental && (/** @type {any} */ (this.legacyPlugin))?.attachListIncremental?.(this.incremental);
         this.contextMenu && (/** @type {any} */ (this.legacyPlugin))?.attachListContextMenu?.(this.contextMenu);
         this.pagination && (/** @type {any} */ (this.legacyPlugin))?.attachListPagination?.(this.pagination);
+        this.tagExpand && (/** @type {any} */ (this.legacyPlugin))?.attachListTagExpand?.(this.tagExpand);
         this.started = true;
         const listFeatureApi = this.getApi();
         const view = this.view;
@@ -304,6 +308,8 @@ export class ListController {
         this.actressNames = null;
         this.pagination?.dispose();
         this.pagination = null;
+        this.tagExpand?.dispose();
+        this.tagExpand = null;
         this.images?.dispose();
         this.images = null;
         this.media?.dispose();

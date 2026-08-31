@@ -142,6 +142,7 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {any} */ this.listIncremental = null;
         /** @type {any} */ this.listContextMenu = null;
         /** @type {any} */ this.listPagination = null;
+        /** @type {any} */ this.listTagExpand = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -205,6 +206,10 @@ export class ListPagePlugin extends BasePlugin {
     /** Attach the FeatureRuntime-owned pagination controller during migration. @param {any} pagination */
     attachListPagination(pagination) {
         this.listPagination = pagination;
+    }
+    /** Attach the FeatureRuntime-owned actor tag controller during migration. @param {any} tagExpand */
+    attachListTagExpand(tagExpand) {
+        this.listTagExpand = tagExpand;
     }
     /** Resolve library-owned history capabilities without coupling list core to HistoryPlugin. */
     async getLibraryFeatureApi() {
@@ -279,7 +284,7 @@ export class ListPagePlugin extends BasePlugin {
         this.replaceHdImg(), this.listPagination ? this.listPagination.start() : this.addJumpPageControl();
         const revision = this.advanceListGeneration();
         await this.doFilter(revision), await this.createQuickFilter(), this.reconcileListItems(null, revision), await this.bindClick(),
-        this.rememberTagExpand(),
+        this.listTagExpand ? this.listTagExpand.start() : this.rememberTagExpand(),
         $(this.getListSelectors().itemSelector).attr("data-jhs-processed", "true"), this.rebuildItemIndex(), await getListEventBus().emit("list-items-added", { items: $(this.getListSelectors().itemSelector).toArray() }, { broadcast: !1 }),
         this.checkDom(scope), scope.addCleanup((() => {
             this.processTimer && clearTimeout(this.processTimer), this.processTimer = null, this.pendingItems.clear();
