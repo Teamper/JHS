@@ -6,6 +6,7 @@ import { ExternalBridgeController } from "./external-bridge-controller.js";
 import { ExternalBridgeTranslationController } from "./translation-controller.js";
 import { OneOneFiveMatchController } from "./one-one-five-controller.js";
 import { OneTwoThreeAuthController } from "./one-two-three-controller.js";
+import { UnifiedOfflineController } from "./unified-offline-controller.js";
 
 export default defineFeature({
     id: "external-bridge", kind: "feature", disableable: true, sites: ["javdb", "javbus", "123pan", "javtrailers", "subtitlecat"], routes: [], startup: "eager",
@@ -16,14 +17,15 @@ export default defineFeature({
         const translationController = runtime.enabledContributions.includes("external-bridge.translation") && ["detail", "list"].includes(runtime.route)
             ? new ExternalBridgeTranslationController({ document: globalThis.document, window: globalThis.window, route: runtime.route, settings: deps[SERVICE.settings], translation: deps[SERVICE.translation], features: deps[REGISTRY.feature], styles: deps[PORT.style], scope: runtime.scope })
             : null;
-        const oneOneFiveController = runtime.enabledContributions.includes("external-bridge.115-match") && ["javdb", "javbus"].includes(deps[PORT.host]?.site)
+        const supportedHost = ["javdb", "javbus"].includes(deps[PORT.host]?.site);
+        const oneOneFiveController = runtime.enabledContributions.includes("external-bridge.115-match") && supportedHost
             ? new OneOneFiveMatchController({ document: globalThis.document, window: globalThis.window, route: runtime.route, hostAdapter: deps[PORT.host], offline: deps[SERVICE.offline], dialog: deps[SERVICE.dialog], settings: deps[SERVICE.settings], eventBus: deps[SERVICE.eventBus], scope: runtime.scope })
-            : null;
-        const unifiedOfflinePlugin = runtime.enabledContributions.includes("external-bridge.offline")
-            ? runtime.resolveLegacyPlugin?.("UnifiedOfflinePlugin")
             : null;
         const oneTwoThreeController = runtime.enabledContributions.includes("external-bridge.123pan")
             ? new OneTwoThreeAuthController({ document: globalThis.document, window: globalThis.window, storage: deps[SERVICE.storage], scope: runtime.scope })
+            : null;
+        const offlineController = runtime.enabledContributions.includes("external-bridge.offline") && supportedHost
+            ? new UnifiedOfflineController({ document: globalThis.document, window: globalThis.window, route: runtime.route, hostAdapter: deps[PORT.host], offline: deps[SERVICE.offline], dialog: deps[SERVICE.dialog], state: deps[SERVICE.state], settings: deps[SERVICE.settings], styles: deps[PORT.style], eventBus: deps[SERVICE.eventBus], oneTwoThreeController, scope: runtime.scope })
             : null;
         const javTrailersPlugin = runtime.enabledContributions.includes("external-bridge.javtrailers")
             ? runtime.resolveLegacyPlugin?.("JavTrailersPlugin")
@@ -31,7 +33,7 @@ export default defineFeature({
         const subtitlePlugin = runtime.enabledContributions.includes("external-bridge.subtitle")
             ? runtime.resolveLegacyPlugin?.("SubTitleCatPlugin")
             : null;
-        const controller = new ExternalBridgeController({ translationController, oneOneFiveController, unifiedOfflinePlugin, oneTwoThreeController, javTrailersPlugin, subtitlePlugin, scope: runtime.scope });
+        const controller = new ExternalBridgeController({ translationController, oneOneFiveController, offlineController, oneTwoThreeController, javTrailersPlugin, subtitlePlugin, scope: runtime.scope });
         return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

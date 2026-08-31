@@ -5,11 +5,11 @@
  * the Feature API.
  */
 export class ExternalBridgeController {
-    /** @param {{translationController?: any, oneOneFiveController?: any, unifiedOfflinePlugin?: any, oneTwoThreeController?: any, javTrailersPlugin?: any, subtitlePlugin?: any, scope: any}} options */
+    /** @param {{translationController?: any, oneOneFiveController?: any, offlineController?: any, oneTwoThreeController?: any, javTrailersPlugin?: any, subtitlePlugin?: any, scope: any}} options */
     constructor(options) {
         this.translationController = options.translationController ?? null;
         this.oneOneFiveController = options.oneOneFiveController ?? null;
-        this.unifiedOfflinePlugin = options.unifiedOfflinePlugin ?? null;
+        this.offlineController = options.offlineController ?? null;
         this.oneTwoThreeController = options.oneTwoThreeController ?? null;
         this.javTrailersPlugin = options.javTrailersPlugin ?? null;
         this.subtitlePlugin = options.subtitlePlugin ?? null;
@@ -25,7 +25,7 @@ export class ExternalBridgeController {
             this.oneTwoThreeController?.start(),
             this.translationController?.start(),
             this.oneOneFiveController?.start(),
-            this.unifiedOfflinePlugin?.handle({ scope: this.scope, oneTwoThreeController: this.oneTwoThreeController }),
+            this.offlineController?.start(),
             this.javTrailersPlugin?.handle({ scope: this.scope }),
             this.subtitlePlugin?.handle({ scope: this.scope }),
         ])).catch((error) => {
@@ -38,9 +38,9 @@ export class ExternalBridgeController {
     getApi() {
         return Object.freeze({
             hasTranslation: Boolean(this.translationController),
-            hasOffline: Boolean(this.unifiedOfflinePlugin),
-            submitOffline: (/** @type {any[]} */ ...args) => this.unifiedOfflinePlugin?.submitResource?.(...args),
-            getOfflineProvider: (/** @type {string} */ id) => this.unifiedOfflinePlugin?.registry?.providers?.get?.(id) ?? null,
+            hasOffline: Boolean(this.offlineController),
+            submitOffline: (/** @type {any[]} */ ...args) => this.offlineController?.submitResource?.(...args),
+            getOfflineProvider: (/** @type {string} */ id) => this.offlineController?.registry?.providers?.get?.(id) ?? null,
         });
     }
 

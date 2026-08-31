@@ -54,7 +54,7 @@ const registry = await read("src/plugins/registry.js");
 const detailWorkspace = await read("src/plugins/status/detail-workspace.js");
 const fc2DetailWorkspace = await read("src/ui/detail/fc2-detail-workspace.js");
 const javDbHostAdapter = await read("src/platform/hosts/javdb-host-adapter.js");
-const unifiedOffline = await read("src/plugins/offline/unified-offline.js");
+const unifiedOfflineControllerSource = await read("src/features/external-bridge/unified-offline-controller.js");
 const hitShow = await read("src/plugins/external-search/hit-show.js");
 const listPageButton = await read("src/plugins/status/list-page-button.js");
 const historySource = await read("src/features/library/history-controller.js");
@@ -447,10 +447,11 @@ assertIncludes(externalBridgeManifestSource, 'new OneOneFiveMatchController({', 
 assertIncludes(externalBridgeControllerSource, 'this.translationController?.start()', "external bridge translation lifecycle handoff");
 assertIncludes(externalBridgeControllerSource, 'this.oneTwoThreeController?.start()', "external bridge 123Pan lifecycle handoff");
 assertIncludes(externalBridgeControllerSource, 'this.oneOneFiveController?.start()', "external bridge 115 lifecycle handoff");
+assertIncludes(externalBridgeManifestSource, 'new UnifiedOfflineController({', "external bridge offline controller ownership");
 assertIncludes(externalBridgeTranslationSource, 'translation: this.translation', "external bridge translation service boundary");
 assertIncludes(externalBridgeTranslationSource, 'this.scope.addCleanup?.(() => this.dispose())', "external bridge translation scope cleanup");
 assert(!externalBridgeTranslationSource.includes('getRuntimeService('), "external bridge translation must not resolve legacy runtime services");
-assertIncludes(externalBridgeControllerSource, 'this.unifiedOfflinePlugin?.handle({ scope: this.scope, oneTwoThreeController: this.oneTwoThreeController })', "external bridge offline lifecycle handoff");
+assertIncludes(externalBridgeControllerSource, 'this.offlineController?.start()', "external bridge offline lifecycle handoff");
 assertIncludes(one23AuthControllerSource, 'this.scope.listen(this.document, "visibilitychange"', "external bridge 123Pan visibility lifecycle");
 assertIncludes(one23AuthControllerSource, 'this.syncFallbackMs = 3e5', "external bridge 123Pan fallback polling");
 assert(!one23AuthControllerSource.includes('getRuntimeService('), "external bridge 123Pan must not resolve legacy runtime services");
@@ -471,7 +472,7 @@ assertIncludes(identityBusNavigationSource, 'identityApi.openSearchByImage?.()',
 assert(!identityNavigationSource.includes('getOptionalDependency("SearchByImagePlugin")'), "JavDB navigation must not resolve SearchByImagePlugin directly");
 assert(!identityBusNavigationSource.includes('getOptionalDependency("SearchByImagePlugin")'), "JavBus navigation must not resolve SearchByImagePlugin directly");
 assert(!historySource.includes('getOptionalDependency("UnifiedOfflinePlugin")'), "history must use the external bridge API");
-assert(!unifiedOffline.includes('getOptionalDependency("OneTwoThreeOfflinePlugin")'), "unified offline must receive providers from the external bridge controller");
+assert(!unifiedOfflineControllerSource.includes("getRuntimeService("), "unified offline must not resolve legacy runtime services");
 assert(!settingSource.includes('getOptionalDependency("TranslatePlugin")'), "settings must not resolve the translation plugin directly");
 assert(!settingSource.includes('getOptionalDependency("ActressInfoPlugin")'), "settings must not resolve the actress information plugin directly");
 assertIncludes(settingSource, 'getFeatureApi("identity")', "settings identity feature API boundary");
@@ -493,8 +494,8 @@ assert(!/\.jhs-detail-host-workspace\s*\{[^}]*display\s*:\s*flex/.test(detailWor
 assert(!/data-jhs-host-region[^}]*order\s*:/.test(detailWorkspace), "semantic host markers must not control layout order");
 for (const token of ['$("#magnets-content").detach()', '$("#magnet-table").detach()']) assert(!detailWorkspace.includes(token), "host resource DOM must not be detached");
 assertIncludes(fc2DetailWorkspace, '[ "summary", "影片概览" ], [ "gallery", "预览与剧照" ], [ "resources", "资源" ], [ "reviews", "评论" ], [ "related", "相关清单" ]', "FC2 fixed section order");
-assert(!unifiedOffline.includes("$('a[href^=\"magnet:\"],a[href^=\"ed2k:\"]')"), "unified offline must not scan the whole page");
-assert(!unifiedOffline.includes("link.after("), "unified offline must inject through adapter action targets");
+assert(!unifiedOfflineControllerSource.includes("$('a[href^=\"magnet:\"],a[href^=\"ed2k:\"]')"), "unified offline must not scan the whole page");
+assert(!unifiedOfflineControllerSource.includes("link.after("), "unified offline must inject through adapter action targets");
 assert(!hitShow.includes('target="_blank"'), "hit-show cards must use shared detail navigation");
 assert(!listPageButton.includes("window.open("), "pending detail navigation must use ListPagePlugin");
 for (const [label, source] of [["FC2", fc2], ["FC2/123AV", fc2By123Av]]) {
@@ -542,10 +543,10 @@ assert(/@media \(max-width:\s*767px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*disp
 assert(!listPageButton.includes(":visible") && !listPageButton.includes("span.tag:contains"), "start identification must use card data across the full list");
 assert(!listPageSource.includes("currentPageBlockedItemCount"), "unused blocked-item counter must stay removed");
 assert((newVideoTaskSource.match(/锁任务出现错误:/g) || []).length === 1, "background lock failures must be logged once");
-assertIncludes(unifiedOffline, '.attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中")', "focusable offline submitting button state");
-assertIncludes(unifiedOffline, '.removeAttr("aria-busy aria-disabled").text(original)', "offline idle button restoration");
-assert(!unifiedOffline.includes('.prop("disabled", !0)'), "offline submission must preserve button focus");
-assertIncludes(unifiedOffline, "submitted ? setTimeout(restoreButton, this.BUTTON_COOLDOWN_MS) : restoreButton()", "offline success cooldown and immediate failure restoration");
+assertIncludes(unifiedOfflineControllerSource, '.attr({ "aria-busy": "true", "aria-disabled": "true" }).text("提交中")', "focusable offline submitting button state");
+assertIncludes(unifiedOfflineControllerSource, '.removeAttr("aria-busy aria-disabled").text(original)', "offline idle button restoration");
+assert(!unifiedOfflineControllerSource.includes('.prop("disabled", !0)'), "offline submission must preserve button focus");
+assertIncludes(unifiedOfflineControllerSource, "submitted ? this.window.setTimeout(restoreButton, this.BUTTON_COOLDOWN_MS) : restoreButton()", "offline success cooldown and immediate failure restoration");
 for (const removedSetting of [ "showFilterItem", "showFilterActorItem", "showFilterKeywordItem" ])
   assert(!listPageSource.includes(removedSetting) && !settingFormsSource.includes(removedSetting) && !settingTemplatesSource.includes(removedSetting), `retired visibility setting returned: ${removedSetting}`);
 assert(!listPageSource.includes("data-jhs-auto-hide"), "retired auto-hide card attribute returned");
@@ -556,11 +557,11 @@ assert(/\.sda-content\s*\{\s*display\s*:\s*none\s*!important;?\s*\}/.test(javDbA
 assert(!/MutationObserver|setInterval|https?:\/\//.test(javDbAdCleanup), "JavDB ad cleanup must not poll or classify URLs");
 assert(!themeSource.includes(".sda-content"), "JavDB host cleanup must not leak into theme CSS");
 for (const removedBestResourceToken of [ "bestResourceBtn", "submitBestResource", "findBestResource", "selectBestCapableResource" ])
-  assert(!unifiedOffline.includes(removedBestResourceToken) && !magnetHubSource.includes(removedBestResourceToken), `best-resource path returned: ${removedBestResourceToken}`);
+  assert(!unifiedOfflineControllerSource.includes(removedBestResourceToken) && !magnetHubSource.includes(removedBestResourceToken), `best-resource path returned: ${removedBestResourceToken}`);
 for (const removedPlugin of [ "OneOneFiveOfflinePlugin", "OneOneFiveRenamePlugin" ])
   assert(!registry.includes(removedPlugin) && !one115ControllerSource.includes(removedPlugin), `retired 115 plugin returned: ${removedPlugin}`);
-assertIncludes(unifiedOffline, "forceAvailabilityRefresh", "offline retries must bypass availability cache");
-assertIncludes(unifiedOffline, "preferredProviderId", "offline retries must prefer their original provider");
+assertIncludes(unifiedOfflineControllerSource, "forceAvailabilityRefresh", "offline retries must bypass availability cache");
+assertIncludes(unifiedOfflineControllerSource, "preferredProviderId", "offline retries must prefer their original provider");
 assert(!statusImport.includes("$.ajax("), "multi-page import must use one awaited promise chain");
 assertIncludes(statusImport, 'return this.parseMovieList(new DOMParser().parseFromString(html, "text/html"), result)', "multi-page import recursion must be awaited by return");
 assert(!history.includes('$(".layui-layer-content")'), "history events must be scoped to their own layer");
@@ -599,7 +600,6 @@ const expectedPlugins = [
   ["image-viewer/bus-img.js", "BusImgPlugin", "BusImgPlugin"],
   ["new-video/task.js", "TaskPlugin", "TaskPlugin"],
   ["new-video/new-video.js", "NewVideoPlugin", "NewVideoPlugin"],
-  ["offline/unified-offline.js", "UnifiedOfflinePlugin", "UnifiedOfflinePlugin"],
   ["status/mobile-bottom-bar.js", "MobileBottomBarPlugin", "MobileBottomBarPlugin"]
 ];
 
@@ -616,14 +616,15 @@ for (const [file, className, pluginName] of expectedPlugins) {
 const javdbPlugins = extractContributionOrder(registry, "javdb");
 const javbusPlugins = extractContributionOrder(registry, "javbus");
 assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,HitShowPlugin,Top250Plugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,OtherSitePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin,UnifiedOfflinePlugin",
+  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,HitShowPlugin,Top250Plugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,OtherSitePlugin,MagnetHubPlugin,ScreenShotPlugin,NewVideoPlugin,TaskPlugin,MobileBottomBarPlugin",
   "JavDB plugin registration order changed"
 );
 assert(
-  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TaskPlugin,MobileBottomBarPlugin,UnifiedOfflinePlugin",
+  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,TaskPlugin,MobileBottomBarPlugin",
   "JavBus plugin registration order changed"
 );
 assert(!registry.includes("OneTwoThreeOfflinePlugin"), "123Pan auth must not be registered as a legacy plugin");
+assert(!registry.includes("UnifiedOfflinePlugin"), "unified offline must not be registered as a legacy plugin");
 assertIncludes(registry, 'JavTrailersPlugin, ["javtrailers"]', "shared registry");
 assertIncludes(registry, 'SubTitleCatPlugin, ["subtitlecat"]', "shared registry");
 const siteContext = await read("src/core/site-context.js");
@@ -667,6 +668,7 @@ sourceByFile.set("features/compatibility/compatibility-controller.js", compatibi
 sourceByFile.set("features/external-bridge/translation-controller.js", externalBridgeTranslationSource);
 sourceByFile.set("features/external-bridge/one-two-three-controller.js", one23AuthControllerSource);
 sourceByFile.set("features/external-bridge/one-one-five-controller.js", one115ControllerSource);
+sourceByFile.set("features/external-bridge/unified-offline-controller.js", unifiedOfflineControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
 sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
 sourceByFile.set("backup/setting-styles.js", await read("src/plugins/backup/setting-styles.js"));
@@ -681,7 +683,7 @@ const regressionMatrix = [
   ["JavBus 列表页", [["status/list-page.js", "fixBusTitleBox"], ["image-viewer/bus-img.js", "BusImgPlugin"], ["status/list-page-button.js", "ListPageButtonPlugin"]]],
   ["JavBus 详情页", [["status/bus-detail-page.js", "BusDetailPagePlugin"], ["image-viewer/bus-preview-video.js", "BusPreviewVideoPlugin"]]],
   ["123pan 授权同步", [["features/external-bridge/one-two-three-controller.js", "class OneTwoThreeAuthController"], ["features/external-bridge/one-two-three-controller.js", "visibilitychange"], ["features/external-bridge/one-two-three-controller.js", "syncFallbackMs = 3e5"]]],
-  ["统一离线提交", [["offline/unified-offline.js", "getAvailability"], ["offline/unified-offline.js", "capabilities"], ["offline/unified-offline.js", "appendOfflineHistory"]]],
+  ["统一离线提交", [["features/external-bridge/unified-offline-controller.js", "getAvailability"], ["features/external-bridge/unified-offline-controller.js", "capabilities"], ["features/external-bridge/unified-offline-controller.js", "appendOfflineHistory"]]],
   ["新作品检测", [["new-video/task.js", "TaskPlugin"], ["new-video/new-video.js", "NewVideoPlugin"], ["core/storage.js", "newVideoList"]]],
   ["黑名单检测", [["features/library/blacklist-controller.js", "class BlacklistController"], ["features/library/blacklist-repository.js", "class BlacklistRepository"], ["features/library/library-controller.js", "filter_keyword_title"], ["core/storage.js", "batchSaveBlacklistCarList"]]],
   ["统计面板", [["features/stats/stats-controller.js", "class StatsController"], ["features/stats/stats-controller.js", "coverageStart"], ["features/stats/stats-controller.js", "6.4.0"]]],
@@ -695,7 +697,7 @@ const regressionMatrix = [
   ["标记状态与隐藏", [["status/list-page.js", "data-jhs-flags"], ["status/list-page.js", "visibilityReasons"], ["core/state-model.js", "syncLegacyStatus"]]],
   ["版本迁移", [["core/migration.js", "DATA_MIGRATIONS"], ["core/migration.js", "migration-snapshot"], ["core/migration.js", "collision"]]],
   ["可恢复状态事务", [["core/state-service.js", "mutation_journal"], ["core/state-service.js", 'commitState: "pending"'], ["core/state-service.js", "recoverPendingTransaction"]]],
-  ["离线能力路由", [["offline/unified-offline.js", "capabilities.includes(type)"], ["offline/unified-offline.js", '"ready", "unknown"'], ["offline/unified-offline.js", "getCandidates(resource"]]],
+  ["离线能力路由", [["features/external-bridge/unified-offline-controller.js", "capabilities.includes(type)"], ["features/external-bridge/unified-offline-controller.js", '"ready", "unknown"'], ["features/external-bridge/unified-offline-controller.js", "getCandidates(resource"]]],
   ["115 增量匹配", [["features/external-bridge/one-one-five-controller.js", "IntersectionObserver"], ["features/external-bridge/one-one-five-controller.js", 'rootMargin: "200px"'], ["features/external-bridge/one-one-five-controller.js", "list-items-added"]]],
   ["设置页", [["backup/setting.js", "SettingPlugin"], ["backup/setting-backup.js", "importSettingData"]]],
   ["演员信息解析", [["core/plugin-manager.js", "getActressPageInfo"], ["status/list-page.js", "parseActressName"]]],

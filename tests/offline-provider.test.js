@@ -1,41 +1,42 @@
-import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import vm from "node:vm";
+import { LifecycleScope } from "../src/core/lifecycle-scope.js";
+import { OfflineProviderRegistry, UnifiedOfflineController } from "../src/features/external-bridge/unified-offline-controller.js";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-function loadRegistry() {
-    const source = readTestFile(join(import.meta.dirname, "../src/plugins/offline/unified-offline.js"), "utf8"), end = source.indexOf("class UnifiedOfflinePlugin"), context = vm.createContext({ Map, Array, Date, TypeError });
-    vm.runInContext(`${source.slice(0, end)}; globalThis.Registry = OfflineProviderRegistry;`, context);
-    return context.Registry;
-}
+afterEach(() => vi.unstubAllGlobals());
 
-function loadOfflinePlugin(submit, history = vi.fn(async () => {})) {
+function loadOfflineController(submit, history = vi.fn(async () => {})) {
     const dom = new JSDOM('<button class="jhs-offline-btn">离线</button>', { url: "https://javdb.example/v/abc-1" }), $ = jqueryFactory(dom.window);
     const layer = {
         close: vi.fn(),
         open: vi.fn(options => { options.content.appendTo("body"); return 7; }),
     };
     const stateService = { appendOfflineHistory: history, patch: vi.fn() }, closePage = vi.fn().mockResolvedValue(true), getOwningLayerIndex = vi.fn(() => 9);
-    class BasePlugin { getRuntimeService(name) { return name === "dialog" ? { open: layer.open, close: layer.close } : name === "state" ? stateService : null; } }
-    const context = vm.createContext({
-        window: dom.window, document: dom.window.document, $, BasePlugin, Map, Array, Date, TypeError,
-        r: true, l: false, setTimeout, clearTimeout,
-        show: { ok: vi.fn(), error: vi.fn() }, clog: { error: vi.fn() }, utils: { q: vi.fn(), closePage, getOwningLayerIndex, getDialogArea: vi.fn(() => []) }, storageManager: { getSetting: vi.fn(async () => "ask") }, layer,
-        getDetailResourceAdapter: vi.fn(), jhsEventBus: { on: vi.fn() }, readListItem: vi.fn()
+    const show = { ok: vi.fn(), error: vi.fn() }, utils = { q: vi.fn(), closePage, getOwningLayerIndex, getDialogArea: vi.fn(() => []) };
+    vi.stubGlobal("$", $);
+    vi.stubGlobal("show", show);
+    vi.stubGlobal("clog", { error: vi.fn() });
+    vi.stubGlobal("utils", utils);
+    const scope = new LifecycleScope("test:offline"), controller = new UnifiedOfflineController({
+        document: dom.window.document,
+        window: dom.window,
+        route: "detail",
+        hostAdapter: { site: "javdb", readMovieRef: () => ({ carNum: "ABC-1" }) },
+        offline: {},
+        dialog: { open: layer.open, close: layer.close },
+        state: stateService,
+        settings: { snapshot: () => ({ offlineProviderMode: "ask" }) },
+        scope,
     });
-    const source = readTestFile(join(import.meta.dirname, "../src/plugins/offline/unified-offline.js"), "utf8");
-    vm.runInContext(`${source};globalThis.TestOfflinePlugin=UnifiedOfflinePlugin;`, context);
-    const plugin = new context.TestOfflinePlugin(), provider = { id: "115", name: "115", submit };
-    plugin.registry = { getCandidates: vi.fn(async () => [ { provider, availability: { authState: "ready" } } ]), updateAvailability: vi.fn() };
-    return { $, button: $("button"), closePage, context, history, layer, plugin, stateService };
+    const provider = { id: "115", name: "115", submit };
+    controller.registry = { getCandidates: vi.fn(async () => [ { provider, availability: { authState: "ready" } } ]), updateAvailability: vi.fn() };
+    return { $, button: $("button"), closePage, controller, history, layer, show, stateService, utils };
 }
 
 describe("offline provider registry", () => {
     it("filters resources by enabled capability and availability", async () => {
-        const Registry = loadRegistry(), registry = new Registry(), ready = vi.fn().mockResolvedValue({ available: true, authState: "ready" });
+        const registry = new OfflineProviderRegistry(), ready = vi.fn().mockResolvedValue({ available: true, authState: "ready" });
         registry.register({ id: "123", name: "123", capabilities: ["magnet"], isEnabled: async () => true, getAvailability: ready, submit() {} });
         registry.register({ id: "115", name: "115", capabilities: ["magnet", "ed2k"], isEnabled: async () => true, getAvailability: async () => ({ available: true, authState: "unknown" }), submit() {} });
         expect((await registry.getCandidates("ed2k://file")).map(item => item.provider.id)).toEqual(["115"]);
@@ -45,13 +46,13 @@ describe("offline provider registry", () => {
     });
 
     it("excludes login-required providers before ranking", async () => {
-        const Registry = loadRegistry(), registry = new Registry();
+        const registry = new OfflineProviderRegistry();
         registry.register({ id: "115", name: "115", capabilities: ["ed2k"], isEnabled: async () => true, getAvailability: async () => ({ available: false, authState: "login-required" }), submit() {} });
         expect(await registry.getCandidates("ed2k://file")).toEqual([]);
     });
 
     it("uses short negative caching and lets manual retry force an immediate refresh", async () => {
-        const Registry = loadRegistry(), registry = new Registry(), availability = vi.fn()
+        const registry = new OfflineProviderRegistry(), availability = vi.fn()
             .mockResolvedValueOnce({ available: false, authState: "login-required" })
             .mockResolvedValue({ available: true, authState: "ready" });
         registry.register({ id: "115", name: "115", capabilities: ["magnet"], isEnabled: async () => true, getAvailability: availability, submit() {} });
@@ -67,9 +68,9 @@ describe("offline provider registry", () => {
 
 describe("unified offline button state", () => {
     it("closes the owning detail surface after confirming the downloaded state", async () => {
-        const { button, closePage, context, plugin, stateService } = loadOfflinePlugin(vi.fn(async () => {}));
-        context.utils.q.mockImplementation((_event, _message, confirm) => confirm());
-        await plugin.submitResource({ currentTarget: button[0] }, "magnet:?xt=downloaded", button, { carNum: "ABC-1" });
+        const { button, closePage, controller, stateService, utils } = loadOfflineController(vi.fn(async () => {}));
+        utils.q.mockImplementation((_event, _message, confirm) => confirm());
+        await controller.submitResource({ currentTarget: button[0] }, "magnet:?xt=downloaded", button, { carNum: "ABC-1" });
         await vi.waitFor(() => expect(closePage).toHaveBeenCalledOnce());
         expect(stateService.patch).toHaveBeenCalledWith("ABC-1", { downloaded: true }, expect.objectContaining({ type: "offline-mark-downloaded" }));
         expect(closePage).toHaveBeenCalledWith({ root: button[0], layerIndex: 9 });
@@ -77,35 +78,35 @@ describe("unified offline button state", () => {
     });
 
     it("keeps the detail open and reports a targeted error when marking downloaded fails", async () => {
-        const { closePage, context, plugin, stateService } = loadOfflinePlugin(vi.fn(async () => {}));
+        const { closePage, controller, show, stateService } = loadOfflineController(vi.fn(async () => {}));
         stateService.patch.mockRejectedValueOnce(new Error("write failed"));
-        await expect(plugin.markDownloadedAndClose({ carNum: "ABC-1" }, { layerIndex: 9 })).resolves.toBe(false);
+        await expect(controller.markDownloadedAndClose({ carNum: "ABC-1" }, { layerIndex: 9 })).resolves.toBe(false);
         expect(closePage).not.toHaveBeenCalled();
-        expect(context.show.error).toHaveBeenCalledWith("离线已提交，但标记已下载失败");
+        expect(show.error).toHaveBeenCalledWith("离线已提交，但标记已下载失败");
     });
 
     it("keeps the downloaded state and reports a close-only error when no owner closes", async () => {
-        const { closePage, context, plugin, stateService } = loadOfflinePlugin(vi.fn(async () => {}));
+        const { closePage, controller, show, stateService } = loadOfflineController(vi.fn(async () => {}));
         closePage.mockResolvedValueOnce(false);
-        await expect(plugin.markDownloadedAndClose({ carNum: "ABC-1" }, { layerIndex: 9 })).resolves.toBe(false);
+        await expect(controller.markDownloadedAndClose({ carNum: "ABC-1" }, { layerIndex: 9 })).resolves.toBe(false);
         expect(stateService.patch).toHaveBeenCalledOnce();
-        expect(context.show.error).toHaveBeenCalledWith("已标记下载，但无法自动关闭");
+        expect(show.error).toHaveBeenCalledWith("已标记下载，但无法自动关闭");
     });
 
     it("does nothing when no car number can be identified", async () => {
-        const { closePage, plugin, stateService } = loadOfflinePlugin(vi.fn(async () => {}));
-        await expect(plugin.markDownloadedAndClose({}, { layerIndex: 9 })).resolves.toBe(false);
+        const { closePage, controller, stateService } = loadOfflineController(vi.fn(async () => {}));
+        await expect(controller.markDownloadedAndClose({}, { layerIndex: 9 })).resolves.toBe(false);
         expect(stateService.patch).not.toHaveBeenCalled();
         expect(closePage).not.toHaveBeenCalled();
     });
 
     it("uses the declared dialog service when the user must select a provider", async () => {
-        const { $, layer, plugin } = loadOfflinePlugin(vi.fn());
+        const { $, controller, layer } = loadOfflineController(vi.fn());
         const candidates = [
             { provider: { id: "123", name: "123 云盘" }, availability: { authState: "ready" } },
             { provider: { id: "115", name: "115" }, availability: { authState: "unknown" } },
         ];
-        const selected = plugin.chooseCandidate({}, candidates);
+        const selected = controller.chooseCandidate({}, candidates);
         await vi.waitFor(() => expect(layer.open).toHaveBeenCalledOnce());
         $(".jhs-toolbar button").eq(1).trigger("click");
         await expect(selected).resolves.toBe(candidates[1]);
@@ -117,8 +118,8 @@ describe("unified offline button state", () => {
         try {
             let resolveSubmit;
             const submit = vi.fn(() => new Promise(resolve => { resolveSubmit = resolve; }));
-            const { button, history, plugin } = loadOfflinePlugin(submit);
-            const pending = plugin.submitResource({}, "magnet:?xt=ok", button, { carNum: "ABC-1" });
+            const { button, history, controller } = loadOfflineController(submit);
+            const pending = controller.submitResource({}, "magnet:?xt=ok", button, { carNum: "ABC-1" });
             while (!submit.mock.calls.length) await Promise.resolve();
             expect(button.text()).toBe("提交中");
             expect(button.prop("disabled")).toBe(false);
@@ -145,8 +146,8 @@ describe("unified offline button state", () => {
     it("restores the original state immediately after a failed submission", async () => {
         let resolveHistory;
         const history = vi.fn(() => new Promise(resolve => { resolveHistory = resolve; }));
-        const { button, plugin } = loadOfflinePlugin(vi.fn(async () => { throw new Error("failed"); }), history);
-        const pending = plugin.submitResource({}, "magnet:?xt=failed", button, { carNum: "ABC-1" });
+        const { button, controller } = loadOfflineController(vi.fn(async () => { throw new Error("failed"); }), history);
+        const pending = controller.submitResource({}, "magnet:?xt=failed", button, { carNum: "ABC-1" });
         while (!history.mock.calls.length) await Promise.resolve();
         expect(button.text()).toBe("离线");
         expect(button.prop("disabled")).toBe(false);

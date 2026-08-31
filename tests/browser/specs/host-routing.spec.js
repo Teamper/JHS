@@ -439,16 +439,22 @@ test("captured detail ownership survives detached controls, iframe isolation, an
   await injectUserscriptRuntime(detailFrame);
   await detailFrame.evaluate(() => window.settingsService.set("needClosePage", true));
   await detailFrame.evaluate(async () => {
-    const plugin = window.unsafeWindow.pluginManager.getBean("UnifiedOfflinePlugin");
+    const registry = window.offlineProviderRegistry;
+    if (!registry) throw new Error("Unified offline registry was not initialized");
     const button = document.createElement("button");
     button.className = "jhs-offline-btn";
+    button.dataset.resource = "magnet:?xt=urn:btih:fixture";
     button.textContent = "离线";
     document.body.append(button);
-    plugin.registry = {
-      getCandidates: async () => [{ provider: { id: "123", name: "123 云盘", submit: async () => ({ ok: true }) }, availability: { authState: "ready" } }],
-      updateAvailability() {},
-    };
-    await plugin.submitResource({ currentTarget: button, clientX: 120, clientY: 120 }, "magnet:?xt=urn:btih:fixture", window.jQuery(button), { carNum: "ABC-1" });
+    registry.getCandidates = async () => [
+      {
+        provider: { id: "123", name: "123 云盘", submit: async () => ({ ok: true }) },
+        availability: { authState: "ready" },
+      },
+    ];
+    registry.updateAvailability = () => {};
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, clientX: 120, clientY: 120 }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
   await detailFrame.locator(".layui-layer-btn0").click();
   await expect(page.locator(`#layui-layer${iframeLayerIndex}`)).toHaveCount(0);

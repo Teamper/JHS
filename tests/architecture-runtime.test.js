@@ -122,7 +122,7 @@ describe("v6.5 architecture runtime contracts", () => {
             "Fc2By123AvPlugin", "DetailPagePlugin", "DetailWorkspacePlugin", "ReviewPlugin", "RelatedPlugin", "DetailPageButtonPlugin",
             "HighlightMagnetPlugin", "PreviewVideoPlugin", "OtherSitePlugin",
             "MagnetHubPlugin", "ScreenShotPlugin", "NewVideoPlugin",
-            "TaskPlugin", "MobileBottomBarPlugin", "UnifiedOfflinePlugin",
+            "TaskPlugin", "MobileBottomBarPlugin",
         ]);
         const javbus = new PluginManager();
         registerSitePlugins(javbus, createRuntime("javbus", ["ReviewPlugin"]), "javbus");

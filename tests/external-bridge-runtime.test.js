@@ -7,7 +7,7 @@ describe("ExternalBridgeController", () => {
         const scope = new LifecycleScope("feature:external-bridge"), plugins = Object.fromEntries([
             ["translationController", { start: vi.fn() }],
             ["oneOneFiveController", { start: vi.fn() }],
-            ["unifiedOfflinePlugin", { handle: vi.fn(), registry: { providers: new Map([["115", { id: "115" }]]) } }],
+            ["offlineController", { start: vi.fn(), registry: { providers: new Map([["115", { id: "115" }]]) } }],
             ["oneTwoThreeController", { start: vi.fn() }],
             ["javTrailersPlugin", { handle: vi.fn() }],
             ["subtitlePlugin", { handle: vi.fn() }],
@@ -19,11 +19,11 @@ describe("ExternalBridgeController", () => {
         expect(plugins.oneTwoThreeController.start).toHaveBeenCalledOnce();
         expect(plugins.translationController.start).toHaveBeenCalledOnce();
         expect(plugins.oneOneFiveController.start).toHaveBeenCalledOnce();
-        expect(plugins.unifiedOfflinePlugin.handle).toHaveBeenCalledWith({ scope, oneTwoThreeController: plugins.oneTwoThreeController });
+        expect(plugins.offlineController.start).toHaveBeenCalledOnce();
         expect(plugins.javTrailersPlugin.handle).toHaveBeenCalledWith({ scope });
         expect(plugins.subtitlePlugin.handle).toHaveBeenCalledWith({ scope });
         expect(controller.getApi()).toMatchObject({ hasTranslation: true, hasOffline: true });
-        expect(controller.getApi().getOfflineProvider("115")).toBe(plugins.unifiedOfflinePlugin.registry.providers.get("115"));
+        expect(controller.getApi().getOfflineProvider("115")).toBe(plugins.offlineController.registry.providers.get("115"));
     });
 
     it("does not start a second time and releases the started state on failure", async () => {
