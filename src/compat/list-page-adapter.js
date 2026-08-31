@@ -1,17 +1,17 @@
 // @ts-check
 
 import { BasePlugin } from "../core/plugin-manager.js";
-import { ListPagePlugin } from "../plugins/status/list-page.js";
 
 /**
  * Compatibility shell for callers that still resolve ListPagePlugin by name.
- * The business implementation is created and owned by the List Feature.
+ * The business implementation is owned by the List Feature and exposed here
+ * through its stable API; the retired legacy implementation is not bundled.
  */
 export class ListPagePluginAdapter extends BasePlugin {
     /** @param {...any} args */
     constructor(...args) {
         super(...args);
-        /** @type {ListPagePlugin | null} */ this.delegate = null;
+        /** @type {any} */ this.delegate = null;
         /** @type {Record<string, any> | null} */ this.featureApi = null;
         return new Proxy(this, {
             get: (target, property, receiver) => {
@@ -41,15 +41,9 @@ export class ListPagePluginAdapter extends BasePlugin {
         return api;
     }
 
-    /** @param {{scope: () => Promise<any>}} options */
-    ensureDelegate(options) {
-        if (this.delegate) return this.delegate;
-        const delegate = new ListPagePlugin();
-        delegate.pluginManager = this.pluginManager;
-        delegate.declaredDependencies = this.declaredDependencies;
-        delegate.runtimeServices = Object.freeze({ ...this.runtimeServices, scope: options.scope });
-        this.delegate = delegate;
-        return delegate;
+    /** Keep the historical migration hook without recreating the removed implementation. */
+    ensureDelegate() {
+        return this;
     }
 }
 

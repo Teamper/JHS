@@ -2,19 +2,16 @@ import { describe, expect, it, vi } from "vitest";
 import { ListPagePluginAdapter } from "../src/compat/list-page-adapter.js";
 
 describe("ListPagePluginAdapter", () => {
-    it("keeps the legacy name while creating its delegate on Feature activation", async () => {
+    it("keeps the legacy name without recreating the removed implementation", () => {
         const adapter = new ListPagePluginAdapter();
-        adapter.pluginManager = { resolveDeclaredPlugin: () => null };
-        adapter.declaredDependencies = new Set();
-
         const delegate = adapter.ensureDelegate({ scope: () => Promise.resolve({}) });
 
         expect(adapter.getName()).toBe("ListPagePlugin");
         expect(adapter.initCss()).toBe("");
-        expect(delegate.getName()).toBe("ListPagePlugin");
-        delegate.activeQuickFilter = "favorite";
+        expect(delegate).toBe(adapter);
+        adapter.activeQuickFilter = "favorite";
         expect(adapter.activeQuickFilter).toBe("favorite");
-        expect(typeof adapter.getFilterContext).toBe("function");
+        expect(adapter.delegate).toBeNull();
     });
 
     it("proxies the activated list Feature API without creating a legacy delegate", () => {

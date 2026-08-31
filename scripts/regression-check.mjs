@@ -249,7 +249,9 @@ assert(!listManifestSource.includes("resolveLegacyPlugin"), "list must use contr
 assertIncludes(listManifestSource, "http: deps[SERVICE.http]", "list batch HTTP service injection");
 assertIncludes(listManifestSource, "stateService: deps[SERVICE.state]", "list batch state service injection");
 assertIncludes(listPageAdapterSource, "class ListPagePluginAdapter extends BasePlugin", "list compatibility shell");
-assertIncludes(listPageAdapterSource, "const delegate = new ListPagePlugin()", "list feature delegate construction");
+assertIncludes(listPageAdapterSource, "The business implementation is owned by the List Feature", "list feature compatibility ownership");
+assertIncludes(listPageAdapterSource, "ensureDelegate()", "list compatibility migration hook");
+assert(!listPageAdapterSource.includes('from "../plugins/status/list-page.js"'), "list compatibility shell must not bundle the retired implementation");
 assertIncludes(registry, 'ListPagePluginAdapter as ListPagePlugin', "list registry compatibility shell");
 assertIncludes(registry, "const target = managedByFeature ? legacyRegistry : pluginManager", "legacy ownership split");
 assertIncludes(legacyContributionRegistry, "FeatureRuntime owns their lifecycle", "legacy registry lifecycle boundary");
