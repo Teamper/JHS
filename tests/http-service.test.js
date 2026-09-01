@@ -40,6 +40,21 @@ describe("HTTP, URL and settings contracts", () => {
         expect(diagnostics.exportSnapshot()).toMatchObject({ requestConsumers: 0, underlyingRequests: 0 });
     });
 
+    it("does not refill public cache when an in-flight network response crosses clearPublic", async () => {
+        let resolveRequest;
+        const request = vi.fn(() => new Promise((resolve) => { resolveRequest = resolve; })), cache = new CacheService({ storage: {
+            get: vi.fn(async () => undefined), set: vi.fn(async () => {}), remove: vi.fn(async () => {}), keys: vi.fn(async () => []),
+        } });
+        const service = new HttpService({ request }, new ExternalUrlPolicy(), { cache });
+        const options = { providerId: "example", url: "https://api.example.test/data", urlPolicy: { trustClass: "builtin-public", hosts: ["api.example.test"] }, cacheScope: "public", ttlMs: 1000 };
+        const pending = service.request(options);
+        await vi.waitFor(() => expect(request).toHaveBeenCalledOnce());
+        await cache.clearPublic();
+        resolveRequest({ status: 200, data: { value: "stale" }, finalUrl: options.url });
+        await expect(pending).resolves.toMatchObject({ data: { value: "stale" } });
+        expect(cache.publicCache.size).toBe(0);
+    });
+
     it("revalidates finalUrl for every trust class", async () => {
         const service = new HttpService({ request: async () => ({ status: 200, finalUrl: "https://evil.example/data" }) }, new ExternalUrlPolicy());
         await expect(service.request({ providerId: "example", url: "https://api.example.test/data", urlPolicy: { trustClass: "builtin-public", hosts: ["api.example.test"] }, cacheScope: "none" })).rejects.toMatchObject({ code: "INVALID_URL" });

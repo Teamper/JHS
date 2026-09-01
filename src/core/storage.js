@@ -1,5 +1,5 @@
 import { A, B, D, P, a, d, escapeHtml, g, h, i, normalizeCarNum, p, s } from "./constants.js";
-import { IMPORTABLE_DATA_KEYS, PORTABLE_DATA_KEYS, hasPortableUserData, runDataMigrations, validatePortableData } from "./migration.js";
+import { IMPORTABLE_DATA_KEYS, PORTABLE_DATA_KEYS, hasPortableUserData, mergePortableSettings, runDataMigrations, selectPortableSettings, validatePortableData } from "./migration.js";
 import { legacyActionToFlag, normalizeStateFlags } from "./state-model.js";
 import { createIndexedMap, createStatusMap, dedupeByKey, groupDuplicateItems } from "./storage-index.js";
 
@@ -448,14 +448,18 @@ export class StorageManager {
     async importData(e) {
         validatePortableData(e);
         await hasPortableUserData(this) && await this.createSnapshot("导入前自动备份", "auto-import");
+        const imported = { ...e };
+        if (imported.setting && "object" === typeof imported.setting && !Array.isArray(imported.setting)) {
+            imported.setting = mergePortableSettings(await this.getSetting(), imported.setting);
+        }
         const validKeys = new Set([ ...IMPORTABLE_DATA_KEYS, "data_version" ]);
         // 与 state.patch 共用同一把跨标签页锁，避免覆盖后台进行中的状态事务后被恢复流程整体回滚
         await this._withCrossTabLock("jhs_state_mutation", async () => {
             const writes = [];
-            for (const key in e) {
+            for (const key in imported) {
                 if (!validKeys.has(key)) { clog.warn(`[导入] 跳过未知数据键: ${key}`); continue; }
                 if ("third_party_ttl_cache" === key) continue;
-                writes.push("data_version" === key ? this.setDataVersion(e[key]) : this._setItemAndInvalidate(key, e[key]));
+                writes.push("data_version" === key ? this.setDataVersion(imported[key]) : this._setItemAndInvalidate(key, imported[key]));
             }
             await Promise.all(writes), this._invalidateCache(), await runDataMigrations(this);
         });
@@ -465,7 +469,8 @@ export class StorageManager {
         const data = { data_version: await this.getDataVersion() };
         for (const key of PORTABLE_DATA_KEYS) {
             const value = await this.forage.getItem(key);
-            null != value && (data[key] = value);
+            if (null == value) continue;
+            data[key] = key === this.setting_key ? selectPortableSettings(value) : value;
         }
         return data;
     }

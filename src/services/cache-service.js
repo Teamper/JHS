@@ -1,6 +1,6 @@
 // @ts-check
 
-const PUBLIC_CACHE_MAX_ENTRIES = 500, PUBLIC_CACHE_MAX_AGE_MS = 30 * 864e5;
+const PUBLIC_CACHE_MAX_ENTRIES = 500, PUBLIC_CACHE_MAX_AGE_MS = 30 * 864e5, PUBLIC_PRUNE_INTERVAL = 64;
 
 /** @param {string} value @returns {Promise<string>} */
 async function digestKey(value) {
@@ -21,6 +21,11 @@ export class CacheService {
         /** @type {Map<string, Promise<{hit: boolean, value: unknown, negative: boolean}>>} */
         this.publicReads = new Map();
         this.publicGeneration = 0;
+        this.publicWritesSincePrune = 0;
+        this.pruneScheduled = false;
+        this.pruneRunning = false;
+        /** @type {Promise<void> | null} */
+        this.prunePromise = null;
     }
 
     get publicPrefix() { return `jhs_http_public_cache:v${this.namespaceVersion}:`; }
@@ -80,21 +85,58 @@ export class CacheService {
         return read;
     }
 
-    /** @param {string} key @param {unknown} value @param {{scope: string, sessionScopeId?: string, ttlMs: number, negative?: boolean}} policy */
+    /** @param {string} key @param {unknown} value @param {{scope: string, sessionScopeId?: string, ttlMs: number, negative?: boolean, generation?: number}} policy */
     async set(key, value, policy) {
         const ttlMs = Math.min(PUBLIC_CACHE_MAX_AGE_MS, Math.max(0, Number(policy.ttlMs) || 0));
         if (!ttlMs) return;
+        if (policy.scope === "public" && policy.generation != null && policy.generation !== this.publicGeneration) return;
         const entry = { value, expiresAt: Date.now() + ttlMs, negative: policy.negative ?? false }, store = this.storeFor(policy.scope, policy.sessionScopeId), cacheKey = `${this.namespaceVersion}:${key}`;
-        store?.set(cacheKey, entry);
         const storage = this.storage;
-        if (policy.scope !== "public" || !storage) return;
+        if (policy.scope !== "public" || !storage) {
+            store?.set(cacheKey, entry);
+            return;
+        }
+        if (policy.generation != null && policy.generation !== this.publicGeneration) return;
         const persistedKey = this.publicPrefix + await digestKey(key);
+        if (policy.generation != null && policy.generation !== this.publicGeneration) return;
         try {
+            if (policy.generation != null && policy.generation !== this.publicGeneration) return;
             await storage.set(persistedKey, { version: this.namespaceVersion, ...entry, lastUsed: Date.now() });
-            await this.prunePublic();
+            if (policy.generation != null && policy.generation !== this.publicGeneration) {
+                await storage.remove(persistedKey).catch(() => {});
+                return;
+            }
+            store?.set(cacheKey, entry);
+            this.publicWritesSincePrune++;
+            this.schedulePublicPrune();
         } catch {
             // 持久缓存是可丢弃加速层，存储故障不得让真实网络请求失败。
         }
+    }
+
+    /** Schedule bounded public-cache maintenance outside the request critical path. */
+    schedulePublicPrune() {
+        if (!this.storage || this.publicWritesSincePrune < PUBLIC_PRUNE_INTERVAL || this.pruneScheduled || this.pruneRunning) return this.prunePromise;
+        this.pruneScheduled = true;
+        const run = async () => {
+            this.pruneScheduled = false;
+            this.pruneRunning = true;
+            this.publicWritesSincePrune = 0;
+            try { await this.prunePublic(); }
+            catch { /* 维护失败不影响缓存读写和真实网络请求。 */ }
+            finally {
+                this.pruneRunning = false;
+                this.prunePromise = null;
+                this.schedulePublicPrune();
+            }
+        };
+        this.prunePromise = Promise.resolve().then(run);
+        return this.prunePromise;
+    }
+
+    /** Wait for a deferred prune so destructive cache operations can establish a clean boundary. */
+    async waitForPrune() {
+        await this.prunePromise?.catch(() => {});
     }
 
     /** Remove expired entries and keep the persistent public namespace bounded. */
@@ -122,6 +164,7 @@ export class CacheService {
         this.publicGeneration++;
         this.publicCache.clear();
         this.publicReads.clear();
+        await this.waitForPrune();
         const storage = this.storage;
         if (!storage) return;
         let keys;

@@ -59,4 +59,20 @@ describe("CacheService L1/L2 cache", () => {
         await expect(pending).resolves.toMatchObject({ hit: false });
         expect(cache.publicCache.size).toBe(0);
     });
+
+    it("defers persistent pruning and performs one bounded scan per maintenance batch", async () => {
+        const storage = backend(), cache = new CacheService({ storage });
+        for (let index = 0; index < 128; index += 1) await cache.set(`key-${index}`, index, { scope: "public", ttlMs: 60_000 });
+        await cache.waitForPrune();
+        expect(storage.keys.mock.calls.length).toBeLessThanOrEqual(2);
+        expect(storage.get.mock.calls.length).toBeLessThanOrEqual(256);
+    });
+
+    it("does not persist a response with an obsolete public generation", async () => {
+        const storage = backend(), cache = new CacheService({ storage }), generation = cache.publicGeneration;
+        await cache.clearPublic();
+        await cache.set("race", "stale", { scope: "public", ttlMs: 60_000, generation });
+        expect(storage.set).not.toHaveBeenCalled();
+        expect(cache.publicCache.size).toBe(0);
+    });
 });

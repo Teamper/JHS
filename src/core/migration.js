@@ -7,8 +7,28 @@ import { hasAnyState, mergeCanonicalCarRecords, normalizeStateFlags } from "./st
 
 export const PORTABLE_DATA_KEYS = Object.freeze([ "car_list", "filter_keyword_title", "filter_keyword_review", "setting", "blacklist", "blacklist_car_list", "favorite_actresses", "highlighted_tags", "activity_log", "offline_history", "new_video_decisions" ]);
 export const IMPORTABLE_DATA_KEYS = Object.freeze([ ...PORTABLE_DATA_KEYS, "third_party_ttl_cache" ]);
+/** Settings that are bound to this installation's local trust boundary. */
+export const LOCAL_ONLY_SETTING_KEYS = Object.freeze([ "trustedLocalOrigins" ]);
+/** Settings that contain installation-bound credentials and never belong in portable data. */
+export const CREDENTIAL_SETTING_KEYS = Object.freeze([ "webDavPassword" ]);
 const PORTABLE_ARRAY_KEYS = new Set([ "car_list", "filter_keyword_title", "filter_keyword_review", "blacklist", "blacklist_car_list", "favorite_actresses", "highlighted_tags", "offline_history" ]);
 const PORTABLE_OBJECT_KEYS = new Set([ "setting", "third_party_ttl_cache", "activity_log", "new_video_decisions" ]);
+
+/** Remove installation-local and credential fields before exporting portable settings. */
+export function selectPortableSettings(/** @type {Record<string, any>} */ settings) {
+    const portable = settings && "object" === typeof settings && !Array.isArray(settings) ? { ...settings } : {};
+    for (const key of [ ...LOCAL_ONLY_SETTING_KEYS, ...CREDENTIAL_SETTING_KEYS ]) delete portable[key];
+    return portable;
+}
+
+/** Keep the destination installation's local settings while importing portable settings. */
+export function mergePortableSettings(/** @type {Record<string, any>} */ current, /** @type {Record<string, any>} */ imported) {
+    const merged = selectPortableSettings(imported);
+    for (const key of [ ...LOCAL_ONLY_SETTING_KEYS, ...CREDENTIAL_SETTING_KEYS ]) {
+        if (Object.prototype.hasOwnProperty.call(current || {}, key)) merged[key] = current[key];
+    }
+    return merged;
+}
 
 export function validatePortableData(/** @type {Record<string, any>} */ data) {
     if (!data || "object" != typeof data || Array.isArray(data)) throw new TypeError("备份数据格式无效");

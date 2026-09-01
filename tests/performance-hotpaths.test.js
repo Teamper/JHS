@@ -43,9 +43,10 @@ function loadTaskLifecycle({ isListPage = false, hidden = false } = {}) {
 function loadListObserver() {
     const dom = new JSDOM('<div class="movie-list"></div>', { url: "https://javdb.com/" }), $ = jqueryFactory(dom.window);
     dom.window.isListPage = true;
-    const translate = vi.fn(async () => "译文"), mapLimit = vi.fn(async (items, concurrency, mapper) => Promise.all(items.map(mapper))), storageManager = { getSetting: vi.fn(async () => "yes") };
+    const translate = vi.fn(async () => "译文"), mapLimit = vi.fn(async (items, concurrency, mapper) => Promise.all(items.map(mapper))), storageManager = { car_list_key: "car_list", getSetting: vi.fn(async () => "yes"), _invalidateCache: vi.fn() };
     class BasePlugin {
         getSelector() { return { boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }; }
+        getBean() { return null; }
         getRuntimeService(name) {
             if (name === "translation") return { translate };
             if (name === "settings") return { snapshot: () => ({ translateTitle: "yes" }) };
@@ -116,6 +117,21 @@ describe("background task lifecycle", () => {
 });
 
 describe("list mutation hot path", () => {
+    it("reruns the latest refresh after an in-flight refresh becomes stale", async () => {
+        const { plugin } = loadListObserver();
+        let releaseFirst;
+        plugin.doFilter = vi.fn()
+            .mockImplementationOnce(() => new Promise((resolve) => { releaseFirst = resolve; }))
+            .mockResolvedValueOnce(true);
+        const first = plugin.requestListRefresh({ reason: "test-first", full: true });
+        await vi.waitFor(() => expect(plugin.doFilter).toHaveBeenCalledOnce());
+        const second = plugin.requestListRefresh({ reason: "test-latest", full: true });
+        releaseFirst(true);
+        await expect(first).resolves.toBe(true);
+        await expect(second).resolves.toBe(true);
+        expect(plugin.doFilter).toHaveBeenCalledTimes(2);
+    });
+
     it("does not commit visibility from a stale list generation", () => {
         const { plugin } = loadListObserver(), applyVisibility = vi.spyOn(plugin, "applyVisibility"), stale = plugin.advanceListGeneration();
         plugin.advanceListGeneration();

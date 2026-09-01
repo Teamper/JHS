@@ -124,6 +124,12 @@ export class ListPagePlugin extends BasePlugin {
         /** @type {number} */ this.translationGeneration = 0;
         /** @type {number} */ this.listGeneration = 0;
         /** @type {number} */ this.filterRevision = 0;
+        this.refreshRunning = false;
+        this.refreshDirty = false;
+        this.refreshAllRequested = false;
+        this.refreshVisibilityRequested = false;
+        /** @type {Set<Element>} */ this.refreshItems = new Set();
+        /** @type {Promise<boolean> | null} */ this.refreshPromise = null;
     }
     getName() {
         return "ListPagePlugin";
@@ -143,18 +149,12 @@ export class ListPagePlugin extends BasePlugin {
                 // 等由各自 Feature 精确处理，不再触发 doFilter/applyVisibility/History setData。
                 const changedNames = /** @type {string[] | undefined} */ (payload?.changedNames);
                 if (changedNames && !changedNames.some((name) => LIST_EFFECT_KEYS.has(name))) return;
-                const revision = this.advanceListGeneration();
-                this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key), await this.doFilter(revision), this.reconcileListItems(null, revision);
-                const e = this.getOptionalDependency("HistoryPlugin");
-                e?.tableObj && e.tableObj.setData();
+                await this.requestListRefresh({ reason: "event-refresh", full: true });
         };
         [ "legacy-refresh", "blacklist-rules-changed", "filter-rules-changed", "settings-changed" ].forEach((type => scope.addCleanup(getListEventBus().on(type, refreshAll)))),
         scope.addCleanup(getListEventBus().on("car-state-changed", (async payload => {
-            this.filterContext = null, storageManager._invalidateCache(storageManager.car_list_key);
-            const items = this.getIndexedItems(payload.carNums || []), revision = this.captureListRevision();
-            items.length && (await this.doFilterItems(items, revision), this.reconcileListItems(items, revision));
-            const history = this.getOptionalDependency("HistoryPlugin");
-            history?.tableObj && history.tableObj.setData();
+            const items = this.getIndexedItems(payload.carNums || []);
+            await this.requestListRefresh({ items, reason: "car-state-changed", full: true });
         })));
         // 自有榜单页没有宿主列表 DOM 可劫持，DOM 管线由 HitShowPlugin.initializeRenderedList 驱动；
         // Top250（handleTop）与 v6.4.1 一致走完整管线（其自有列表在同步前缀阶段已创建）；
@@ -173,6 +173,7 @@ export class ListPagePlugin extends BasePlugin {
             this.hdPendingCleanups.forEach((cleanup => cleanup())), this.hdPendingCleanups.clear();
             this.configureHoverPreview("no");
             this.recountFrame && (globalThis.cancelAnimationFrame?.(this.recountFrame) ?? clearTimeout(this.recountFrame)), this.recountFrame = null;
+            this.advanceListGeneration(), this.refreshDirty = false, this.refreshAllRequested = false, this.refreshVisibilityRequested = false, this.refreshItems.clear();
             $(this.getSelector().boxSelector).off(".jhsMovieDetail .jhsListVideo .jhsListMenu"), $("#jhs-quick-filter").off(), this.itemIndex.clear();
         }));
     }
@@ -202,6 +203,53 @@ export class ListPagePlugin extends BasePlugin {
         if (!this.isCurrentListGeneration(revision)) return !1;
         this.applyVisibility(items);
         return !0;
+    }
+    /** Coalesce refresh requests and guarantee a final pass for the latest list revision. */
+    /** @param {{items?: Element[] | null, reason?: string, full?: boolean, visibilityOnly?: boolean}} [options] */
+    requestListRefresh({ items = null, reason = "refresh", full = false, visibilityOnly = false } = {}) {
+        (full || items !== null) && this.advanceListGeneration();
+        this.refreshDirty = true;
+        if (full) this.refreshAllRequested = true;
+        else if (visibilityOnly) this.refreshVisibilityRequested = true;
+        else (items || []).forEach((item) => this.refreshItems.add(item));
+        this.recordListPhase("refresh-request:" + reason);
+        if (this.refreshRunning) return this.refreshPromise;
+        this.refreshRunning = true;
+        const run = async () => {
+            try {
+                while (this.refreshDirty) {
+                    const fullRefresh = this.refreshAllRequested, visibilityOnly = this.refreshVisibilityRequested && !fullRefresh, itemsToRefresh = [ ...this.refreshItems ];
+                    this.refreshDirty = false, this.refreshAllRequested = false, this.refreshVisibilityRequested = false, this.refreshItems.clear();
+                    const revision = this.captureListRevision();
+                    this.recordListPhase("refresh-start", fullRefresh ? null : itemsToRefresh.length);
+                    let filtered;
+                    if (fullRefresh) {
+                        this.filterContext = null;
+                        storageManager._invalidateCache(storageManager.car_list_key);
+                        filtered = await this.doFilter(revision);
+                    } else if (visibilityOnly) {
+                        filtered = !0;
+                    } else {
+                        filtered = await this.doFilterItems(itemsToRefresh.filter((item) => item.isConnected), revision);
+                    }
+                    if (!this.isCurrentListGeneration(revision)) {
+                        this.refreshDirty = true, this.refreshAllRequested = true;
+                        continue;
+                    }
+                    filtered !== !1 && this.reconcileListItems(fullRefresh ? null : itemsToRefresh, revision);
+                    if (fullRefresh) {
+                        const history = this.getOptionalDependency("HistoryPlugin");
+                        history?.tableObj && history.tableObj.setData();
+                    }
+                    this.recordListPhase("refresh-end");
+                }
+                return !0;
+            } finally {
+                this.refreshRunning = false;
+                this.refreshPromise = null;
+            }
+        };
+        return this.refreshPromise = run();
     }
     async createQuickFilter() {
         if ($("#jhs-quick-filter").length) return;
@@ -241,7 +289,7 @@ export class ListPagePlugin extends BasePlugin {
         })), $(document).off("click.jhsQuickFilter").on("click.jhsQuickFilter", ((/** @type {any} */ event) => {
             $(event.target).closest(root).length || closeMenu();
         }));
-        this.setQuickFilter(await storageManager.getSetting("defaultQuickFilterTab", "waitCheck"));
+        this.activeQuickFilter || (this.activeQuickFilter = normalizeQuickFilterKey(await storageManager.getSetting("defaultQuickFilterTab", "waitCheck"))), this.applyVisibility(), this.syncQuickFilterUi();
     }
     /** @param {Element[] | null} [items] */
     applyVisibility(items = null) {
@@ -254,7 +302,7 @@ export class ListPagePlugin extends BasePlugin {
     }
     /** @param {unknown} filter @param {{ syncUi?: boolean }} [options] */
     setQuickFilter(filter, { syncUi = !0 } = {}) {
-        this.filterRevision += 1, this.activeQuickFilter = normalizeQuickFilterKey(filter), this.advanceListGeneration(), this.recordListPhase("setQuickFilter"), this.reconcileListItems(null, this.captureListRevision()), syncUi && this.syncQuickFilterUi();
+        this.filterRevision += 1, this.activeQuickFilter = normalizeQuickFilterKey(filter), this.recordListPhase("setQuickFilter"), void this.requestListRefresh({ reason: "quick-filter", visibilityOnly: true })?.catch((/** @type {unknown} */ error) => clog.error("列表筛选刷新失败", error)), this.reconcileListItems(null, this.captureListRevision()), syncUi && this.syncQuickFilterUi();
     }
     syncQuickFilterUi() {
         const filter = normalizeQuickFilterKey(this.activeQuickFilter), isPrimary = PRIMARY_QUICK_FILTERS.includes(filter), root = $("#jhs-quick-filter"), tabs = root.find(".jhs-segmented__item"), options = root.find(".jhs-filter-option");
@@ -283,7 +331,7 @@ export class ListPagePlugin extends BasePlugin {
         if (!scope) return;
         scope.observe(t, ((/** @type {MutationRecord[]} */ records) => {
             for (const record of records) {
-                this.removeIndexedItems(record.removedNodes), (record.removedNodes.length || record.addedNodes.length) && this.advanceListGeneration(), record.addedNodes.length && this.recordListPhase("dom-added", record.addedNodes.length);
+                this.removeIndexedItems(record.removedNodes), record.addedNodes.length && (this.advanceListGeneration(), this.recordListPhase("dom-added", record.addedNodes.length));
                 for (const node of record.addedNodes) {
                 if (node.nodeType !== Node.ELEMENT_NODE) continue;
                 const element = /** @type {Element} */ (node);
@@ -306,12 +354,8 @@ export class ListPagePlugin extends BasePlugin {
     async processAddedItems(items, revision = this.captureListRevision()) {
         const selector = this.getSelector(), covers = items.flatMap((/** @type {Element} */ item) => [ ...item.querySelectorAll(selector.coverImgSelector) ]);
         this.replaceHdImg(covers), this.addJumpPageControl(), this.fixBusTitleBox(items);
-        const filtered = await this.doFilterItems(items, revision);
-        if (!filtered && !this.isCurrentListGeneration(revision)) {
-            const connected = items.filter((item) => item.isConnected && "true" !== /** @type {HTMLElement} */ (item).dataset.jhsProcessed);
-            return connected.length ? this.processAddedItems(connected, this.captureListRevision()) : undefined;
-        }
-        if (!this.reconcileListItems(items, revision)) return;
+        const filtered = await this.requestListRefresh({ items, reason: "dom-added" });
+        if (!filtered) return;
         await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.(), await this.getOptionalDependency("CoverButtonPlugin")?.addSvgBtn?.(items),
         items.forEach((/** @type {Element} */ item) => /** @type {HTMLElement} */ (item).dataset.jhsProcessed = "true"), this.indexItems(items), await getListEventBus().emit("list-items-added", { items }, { broadcast: !1 }), this.getOptionalDependency("AutoPagePlugin")?.checkLoad?.();
     }

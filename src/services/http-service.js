@@ -95,13 +95,16 @@ export class HttpService {
             const cached = await this.cache.get(serializedKey, cachePolicy);
             if (cached.hit) return cached.value;
         }
+        const cacheGeneration = cacheScope === "public" && this.cache ? this.cache.publicGeneration : undefined;
         let entry = this.inflight.get(serializedKey);
         if (!entry) {
             const controller = new AbortController();
             entry = { controller, consumers: 0, promise: Promise.resolve() };
             entry.promise = this.executeUnderlying({ ...options, method, url: initialUrl.href, signal: controller.signal }, urlPolicy)
                 .then(async (response) => {
-                    if (this.cache) await this.cache.set(serializedKey, response, { ...cachePolicy, ttlMs: options.ttlMs ?? 0, negative: options.negative === true });
+                    if (this.cache && (cacheGeneration == null || cacheGeneration === this.cache.publicGeneration)) {
+                        await this.cache.set(serializedKey, response, { ...cachePolicy, ttlMs: options.ttlMs ?? 0, negative: options.negative === true, generation: cacheGeneration });
+                    }
                     return response;
                 })
                 .finally(() => {
