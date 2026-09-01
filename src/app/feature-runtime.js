@@ -138,7 +138,7 @@ export class FeatureRuntime {
             const enabledContributions = Object.freeze(manifest.contributes.filter((/** @type {string} */ id) => !this.disabled.has(id)));
             enabledContributions.forEach((/** @type {string} */ id) => this.diagnostics.setContributionState(id, "inactive"));
             const result = await manifest.activate(dependencies, Object.freeze({
-                scope, enabledContributions, route: this.route,
+                scope, enabledContributions, site: this.site, route: this.route,
                 isContributionEnabled: (/** @type {string} */ featureId, /** @type {string} */ contributionId) => this.isContributionEnabled(featureId, contributionId),
                 runContribution: (/** @type {string} */ contributionId, /** @type {() => any} */ operation) => this.runContribution(contributionId, operation),
                 isolateContribution: (/** @type {string} */ contributionId, /** @type {() => any} */ operation) => this.isolateContribution(contributionId, operation),

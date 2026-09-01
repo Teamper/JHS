@@ -19,7 +19,7 @@ describe("list item reader", () => {
 
     it("reads JavBus-style date nodes", () => {
         const item = card('<div><a href="/ABC-123"><img title="Bus title"></a><date>ABC-123</date><date>2026-8-4</date></div>');
-        expect(readListItem(item)).toMatchObject({ carNum: "ABC-123", title: "Bus title", publishTime: "2026-8-4", fc2Source: "fc2" });
+        expect(readListItem(item)).toMatchObject({ carNum: "ABC-123", title: "Bus title", publishTime: "2026-8-4", fc2Source: "" });
     });
 
     it("rejects cards without an identity", () => expect(() => readListItem(card("<div></div>"))).toThrow("提取番号信息失败"));

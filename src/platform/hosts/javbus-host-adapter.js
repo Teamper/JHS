@@ -1,5 +1,7 @@
 // @ts-check
 
+import { normalizeMovieCarNum } from "../../core/movie-identity.js";
+
 /** JavBus 带分页的列表路径前缀（除 /page/N 外的 /<prefix>/<id>/N 形式）。 */
 const JAVBUS_LIST_PREFIXES = new Set([ "star", "genre", "maker", "actress", "series", "tag", "search", "director", "studio", "label" ]);
 
@@ -29,8 +31,36 @@ export class JavBusHostAdapter {
     }
     detectRoute() { return this.locateNativeMagnets() ? "detail" : this.locateListRoot() ? "list" : "other"; }
     readMovieRef() {
-        const carNum = this.document.querySelector(".info p span, [data-car-number]")?.textContent?.trim() ?? null;
-        return carNum ? Object.freeze({ carNum, url: this.location.href, site: "javbus" }) : null;
+        const pageUrl = (() => {
+            try {
+                const url = new URL(this.location.href);
+                url.search = "";
+                url.hash = "";
+                return url.href;
+            } catch {
+                return this.location.href;
+            }
+        })();
+        const urlCarNum = (() => {
+            try {
+                const segments = new URL(this.location.href).pathname.split("/").filter(Boolean);
+                const last = segments.at(-1) ?? "";
+                return normalizeMovieCarNum(last.replace(/_\d{4}-\d{2}-\d{2}$/, ""));
+            } catch {
+                return null;
+            }
+        })();
+        const dataNode = this.document.querySelector("[data-car-number]"), dataValue = dataNode?.getAttribute("data-car-number") || dataNode?.textContent?.trim() || "";
+        const header = [...this.document.querySelectorAll(".info .header")].find((element) => /識別碼|识别码/i.test(element.textContent?.trim() ?? ""));
+        const valueNode = header?.nextElementSibling;
+        const rowText = header?.parentElement?.textContent?.replace(header.textContent ?? "", "").trim() ?? "";
+        const rawCarNum = dataValue || valueNode?.textContent?.trim() || rowText;
+        const carNum = urlCarNum || normalizeMovieCarNum(rawCarNum);
+        if (!carNum) return null;
+        const actress = [...this.document.querySelectorAll('span[onmouseover*="star_"] a')].map((anchor) => anchor.textContent?.trim() ?? "").filter(Boolean).join(" ");
+        const publishHeader = [...this.document.querySelectorAll("span.header")].find((element) => /發行日期|发行日期/i.test(element.textContent?.trim() ?? ""));
+        const publishTime = publishHeader?.parentElement?.textContent?.replace(publishHeader.textContent ?? "", "").trim() ?? "";
+        return Object.freeze({ carNum, url: pageUrl, site: "javbus", actress, publishTime });
     }
     locateListRoot() { return this.document.querySelector(".masonry"); }
     locateListItems() { return [...(this.locateListRoot()?.querySelectorAll(":scope > .item, :scope > .movie-box") ?? [])]; }

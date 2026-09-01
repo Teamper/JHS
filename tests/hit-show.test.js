@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { HitShowController } from "../src/features/discovery/hit-show-controller.js";
 
-function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), cache = {}, sortMethod = "default", activeSortMethod = null, withListPage = true } = {}) {
-    const dom = new JSDOM('<section class="section"><div class="container"><h2 class="section-title">榜单</h2><div class="box"></div></div></section>', { url: "https://javdb.com/advanced_search?handlePlayback=1&period=daily" });
+function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), cache = {}, sortMethod = "default", activeSortMethod = null, withListPage = true, url = "https://javdb.com/advanced_search?handlePlayback=1&period=daily" } = {}) {
+    const dom = new JSDOM('<section class="section"><div class="container"><h2 class="section-title">榜单</h2><div class="box"></div></div></section>', { url });
     const $ = jqueryFactory(dom.window);
     vi.stubGlobal("document", dom.window.document);
     $.expr.pseudos.hidden = element => "none" === element.style.display;
@@ -36,7 +36,7 @@ function loadHitShow({ movies = [], rankingError = null, fetchScore = vi.fn(), c
     const show = { error: vi.fn() }, clog = { error: vi.fn(), warn: vi.fn() }, ui = { getJQuery: () => $, getLoading: () => () => ({ close: loadingClose }), show, getClog: () => clog };
     vi.stubGlobal("show", show);
     const scope = new LifecycleScope("test:hit-show"), plugin = new HitShowController({ document: dom.window.document, window: dom.window, hostAdapter: host, movie, settings, storage, features, listActions, coverActions: coverButton, eventBus, ui, scope });
-    return { plugin, dom, $, storage, ttlStore, storageManager: storage, loadingClose, sortItems, mountOwnedRankingControls, listPage, coverButton, fetchScore, emitListItems: eventBus.emit };
+    return { plugin, dom, $, storage, ttlStore, storageManager: storage, loadingClose, sortItems, mountOwnedRankingControls, listPage, coverButton, fetchScore, movie, emitListItems: eventBus.emit };
 }
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -165,6 +165,16 @@ describe("HitShowPlugin lifecycle", () => {
         await plugin.handlePlayback();
         expect(listPage.bindMovieDetailNavigation).toHaveBeenCalledOnce();
         expect(plugin.markDataListHtml([movie("a")])).not.toContain('target="_blank"');
+    });
+
+    it("keeps the public hot-ranking entry in the JHS-owned route", async () => {
+        const { plugin, dom, $, movie: rankingMovie } = loadHitShow({ movies: [movie("a")], url: "https://javdb.com/" });
+        await plugin.start({ discoveryApi: { hasHitShow: true } });
+        $(dom.window.document.body).append('<a id="hot-entry" href="/rankings/playback">热播</a>');
+        $("#hot-entry").trigger("click");
+        await vi.waitFor(() => expect(dom.window.location.href).toContain("/advanced_search?handlePlayback=1&period=daily"));
+        await vi.waitFor(() => expect(dom.window.document.querySelector(".jhs-hitshow-list #a")).not.toBeNull());
+        expect(rankingMovie.rankings).toHaveBeenCalledOnce();
     });
 
     it("restores the quick filter bar after filtering externally driven lists", async () => {

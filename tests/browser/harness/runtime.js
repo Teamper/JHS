@@ -55,7 +55,7 @@ export async function injectUserscriptRuntime(page, options = {}) {
       ...settingOverrides,
     });
   }, { disabledPlugins: options.disabledPlugins || [], settingOverrides: options.settingOverrides || {} });
-  await page.evaluate(({ version, nativeTranslation, rankingMovies, topMovies }) => {
+  await page.evaluate(({ version, nativeTranslation, rankingMovies, topMovies, hostPageResponses }) => {
     window.__jhsBrowserTestMetadata = { fixture: true, version };
     window.__jhsBrowserDiagnostics = { requests: [], nativeTranslationRequests: 0, startedAt: performance.now() };
     window.unsafeWindow = window;
@@ -71,12 +71,16 @@ export async function injectUserscriptRuntime(page, options = {}) {
       let aborted = false;
       queueMicrotask(() => {
         if (aborted) return;
-        if (topMovies && String(options.url || "").includes("/api/v1/movies/top")) {
+        const requestedUrl = String(options.url || "");
+        const hostPageResponse = Object.entries(hostPageResponses || {}).find(([url]) => url === requestedUrl)?.[1];
+        if (hostPageResponse != null) {
+          options.onload?.({ status: 200, response: hostPageResponse, responseText: hostPageResponse, responseHeaders: "content-type: text/html; charset=utf-8" });
+        } else if (topMovies && requestedUrl.includes("/api/v1/movies/top")) {
           const payload = { success: 1, data: { movies: topMovies } };
           options.onload?.({ status: 200, response: payload, responseText: JSON.stringify(payload), responseHeaders: "content-type: application/json" });
-        } else if (rankingMovies && String(options.url || "").includes("/api/v1/rankings/playback")) {
+        } else if (rankingMovies && requestedUrl.includes("/api/v1/rankings/playback")) {
           // rankingMovies 可为数组（所有周期同数据）或按 period 键控的对象（验证周期切换管线）
-          const periodMatch = /[?&]period=(\w+)/.exec(String(options.url || ""));
+          const periodMatch = /[?&]period=(\w+)/.exec(requestedUrl);
           const movies = Array.isArray(rankingMovies) ? rankingMovies : rankingMovies[periodMatch?.[1] || "daily"] ?? rankingMovies.daily ?? [];
           const payload = { success: 1, data: { movies } };
           options.onload?.({ status: 200, response: payload, responseText: JSON.stringify(payload), responseHeaders: "content-type: application/json" });
@@ -170,7 +174,13 @@ export async function injectUserscriptRuntime(page, options = {}) {
       alert(message, options = {}) { return this.open({ ...options, content: String(message) }); },
       msg() {}
     };
-  }, { version: browserVersion, nativeTranslation: options.nativeTranslation || "", rankingMovies: options.rankingMovies || null, topMovies: options.topMovies || null });
+  }, {
+    version: browserVersion,
+    nativeTranslation: options.nativeTranslation || "",
+    rankingMovies: options.rankingMovies || null,
+    topMovies: options.topMovies || null,
+    hostPageResponses: options.hostPageResponses || {},
+  });
   markPhase("fixture-setup");
   await page.addScriptTag({ path: join(repoRoot, "JHS.user.js") });
   markPhase("userscript-eval");

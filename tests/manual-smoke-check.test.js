@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { PLACEHOLDER_VERSIONS, REQUIRED_MANUAL_SMOKE_CHECKS, isVersionAtLeast, validateManualSmokeRecord } from "../scripts/manual-smoke-check.mjs";
+
+const manualSmokeDoc = readFileSync(new URL("../docs/release/manual-smoke.md", import.meta.url), "utf8");
 
 function createRecord() {
     return {
@@ -64,7 +67,28 @@ describe("manual Tampermonkey smoke gate", () => {
             "detail.viewerAboveLayer",
             "backup.loadingAboveSettings",
             "cloud.123.confirmClose",
+            "javdb.hitShow",
+            "javdb.top250",
+            "history.crossPageSelection",
+            "list.quickFilters",
+            "list.batchActions",
+            "list.fc2Navigation",
+            "list.fc2Lookup",
+            "detail.reviews",
+            "detail.related",
+            "detail.magnetHub",
+            "detail.nativeMagnetFilter",
+            "detail.preview",
+            "detail.screenshot",
+            "detail.externalSites",
+            "settings.liveReconfigure",
+            "settings.quickPanel",
+            "settings.importExport",
+            "identity.imageSearch",
+            "identity.actressInfo",
+            "failure.optionalContributionIsolation",
         ]));
+        expect(REQUIRED_MANUAL_SMOKE_CHECKS).toHaveLength(37);
         const record = createRecord();
         record.checks["fc2.autopagePage2"] = false;
         expect(() => validateManualSmokeRecord(record, { version: "6.5.0", artifactSha256: "abc123" })).toThrow(/fc2\.autopagePage2/);
@@ -74,5 +98,9 @@ describe("manual Tampermonkey smoke gate", () => {
         const record = createRecord();
         record.checks["javbus.detail"] = false;
         expect(() => validateManualSmokeRecord(record, { version: "6.5.0", artifactSha256: "abc123" })).toThrow(/javbus\.detail/);
+    });
+
+    it("keeps the human checklist synchronized with the enforced contract", () => {
+        for (const check of REQUIRED_MANUAL_SMOKE_CHECKS) expect(manualSmokeDoc).toContain(`"${check}":`);
     });
 });

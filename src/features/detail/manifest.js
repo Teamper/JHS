@@ -22,7 +22,8 @@ export default defineFeature({
     contributes: ["detail.javdb-native", "detail.javbus-native", "detail.workspace", "detail.fc2-owned", "detail.page-state-actions", "detail.javdb-preview", "detail.javbus-preview", "detail.reviews", "detail.related", "detail.native-magnets", "detail.external-magnets", "detail.screenshot", "detail.external-sites"],
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
-        const createFc2Controller = (/** @type {any} */ fc2Lookup) => runtime.enabledContributions.includes("detail.fc2-owned")
+        const isJavDb = deps[PORT.host]?.site === "javdb";
+        const createFc2Controller = (/** @type {any} */ fc2Lookup) => isJavDb && runtime.enabledContributions.includes("detail.fc2-owned")
             ? deps[SERVICE.fc2OwnedDetail].create({
                 hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], magnet: deps[SERVICE.magnet], dialog: deps[SERVICE.dialog],
                 translation: deps[SERVICE.translation], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage],
@@ -30,10 +31,13 @@ export default defineFeature({
                 features: deps[REGISTRY.feature], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope, fc2Lookup,
             })
             : null;
-        const fc2Lookup = runtime.enabledContributions.includes("detail.fc2-owned")
+        const fc2Lookup = isJavDb && runtime.enabledContributions.includes("detail.fc2-owned") && runtime.isContributionEnabled("list", "list.fc2-lookup")
             ? deps[SERVICE.fc2Lookup]
             : null;
         const fc2Plugin = createFc2Controller(fc2Lookup);
+        const pageActionsPlugin = runtime.enabledContributions.includes("detail.page-state-actions")
+            ? new DetailPageStateActionsController({ hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], dialog: deps[SERVICE.dialog], subtitle: deps[SERVICE.subtitle], state: deps[SERVICE.state], settings: deps[SERVICE.settings], ui: deps[SERVICE.ui], scope: runtime.scope })
+            : null;
         if (runtime.route === "owned-detail") {
             const externalMagnetsController = runtime.enabledContributions.includes("detail.external-magnets")
                 ? new DetailExternalMagnetsController({ storage: deps[SERVICE.storage], http: deps[SERVICE.http], magnet: deps[SERVICE.magnet], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope })
@@ -43,7 +47,7 @@ export default defineFeature({
                 : null;
             externalMagnetsController?.start?.();
             externalSitesController?.start?.();
-            const controller = new DetailController({ hostAdapter: deps[PORT.host], fc2Plugin, fc2Lookup, externalMagnetsController, externalSitesPlugin: externalSitesController, isolateContribution: runtime.isolateContribution, ownedDetail: true, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
+            const controller = new DetailController({ hostAdapter: deps[PORT.host], fc2Plugin, fc2Lookup, pageActionsPlugin, externalMagnetsController, externalSitesPlugin: externalSitesController, isolateContribution: runtime.isolateContribution, ownedDetail: true, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
             return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
         }
         const nativeContribution = deps[PORT.host].site === "javbus" ? "detail.javbus-native" : "detail.javdb-native";
@@ -58,11 +62,8 @@ export default defineFeature({
         const reviewController = runtime.enabledContributions.includes("detail.reviews")
             ? new DetailReviewsController({ hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], review: deps[SERVICE.review], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope })
             : null;
-        const relatedController = runtime.enabledContributions.includes("detail.related")
+        const relatedController = isJavDb && runtime.enabledContributions.includes("detail.related")
             ? new DetailRelatedController({ hostAdapter: deps[PORT.host], related: deps[SERVICE.related], settings: deps[SERVICE.settings], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope })
-            : null;
-        const pageActionsPlugin = runtime.enabledContributions.includes("detail.page-state-actions")
-            ? new DetailPageStateActionsController({ hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], dialog: deps[SERVICE.dialog], subtitle: deps[SERVICE.subtitle], state: deps[SERVICE.state], settings: deps[SERVICE.settings], ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
         const screenshotController = runtime.enabledContributions.includes("detail.screenshot")
             ? new DetailScreenshotController({ hostAdapter: deps[PORT.host], screenshot: deps[SERVICE.screenshot], settings: deps[SERVICE.settings], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope })

@@ -24,6 +24,8 @@ export class DetailController {
         this.ownedDetail = options.ownedDetail === true;
         this.surface = new HostedDetailSurface(this.hostAdapter);
         this.movieRef = null;
+        this.nativeContribution = this.hostAdapter?.site === "javbus" ? "detail.javbus-native" : "detail.javdb-native";
+        this.previewContribution = this.hostAdapter?.site === "javbus" ? "detail.javbus-preview" : "detail.javdb-preview";
     }
     start() {
         this.scope.assertActive();
@@ -31,21 +33,21 @@ export class DetailController {
             this.surface.mount();
             this.movieRef = this.hostAdapter.readMovieRef();
         }
-        const run = (/** @type {string} */ id, /** @type {() => any} */ operation) => this.isolateContribution(id, operation);
+        const run = (/** @type {string} */ id, /** @type {() => any} */ operation, enabled = true) => enabled ? this.isolateContribution(id, operation) : undefined;
         if (this.ownedDetail) return Promise.resolve()
-            .then(() => run("detail.fc2-owned", () => this.fc2Plugin?.handle?.({ scope: this.scope, ...(this.externalMagnetsController ? { externalMagnets: this.externalMagnetsController } : {}), ...(this.externalSitesPlugin ? { externalSites: this.externalSitesPlugin } : {}), ...(this.pageActionsPlugin ? { detailActions: this.pageActionsPlugin } : {}), ...(this.fc2Lookup ? { fc2Lookup: this.fc2Lookup } : {}) })))
+            .then(() => run("detail.fc2-owned", () => this.fc2Plugin?.handle?.({ scope: this.scope, ...(this.externalMagnetsController ? { externalMagnets: this.externalMagnetsController } : {}), ...(this.externalSitesPlugin ? { externalSites: this.externalSitesPlugin } : {}), ...(this.pageActionsPlugin ? { detailActions: this.pageActionsPlugin } : {}), ...(this.fc2Lookup ? { fc2Lookup: this.fc2Lookup } : {}) }), Boolean(this.fc2Plugin)))
             .then(() => Object.freeze({ movieRef: this.movieRef, contributions: [...this.enabledContributions] }));
         return Promise.resolve()
-            .then(() => run("detail.fc2-owned", () => this.fc2Plugin?.handle?.({ scope: this.scope, ...(this.externalMagnetsController ? { externalMagnets: this.externalMagnetsController } : {}), ...(this.externalSitesPlugin ? { externalSites: this.externalSitesPlugin } : {}), ...(this.pageActionsPlugin ? { detailActions: this.pageActionsPlugin } : {}), ...(this.fc2Lookup ? { fc2Lookup: this.fc2Lookup } : {}) })))
-            .then(() => run("detail.javdb-native", () => this.nativeController?.start?.()))
-            .then(() => run("detail.workspace", () => this.workspaceController?.start?.()))
-            .then(() => run("detail.reviews", () => this.reviewController?.start?.()))
-            .then(() => run("detail.related", () => this.relatedController?.start?.()))
-            .then(() => run("detail.page-state-actions", () => this.pageActionsPlugin?.handle?.({ scope: this.scope, ...(this.externalMagnetsController ? { externalMagnets: this.externalMagnetsController } : {}), ...(this.magnetPlugin ? { nativeMagnets: this.magnetPlugin } : {}) })))
-            .then(() => run("detail.native-magnets", () => this.magnetPlugin?.handle?.({ scope: this.scope })))
-            .then(() => run("detail.javdb-preview", () => this.previewPlugin?.handle?.({ scope: this.scope, ...(this.pageActionsPlugin ? { detailActions: this.pageActionsPlugin } : {}) })))
-            .then(() => run("detail.external-sites", () => this.externalSitesPlugin?.handle?.({ scope: this.scope })))
-            .then(() => run("detail.screenshot", () => this.screenshotController?.start?.()))
+            .then(() => run("detail.fc2-owned", () => this.fc2Plugin?.handle?.({ scope: this.scope, ...(this.externalMagnetsController ? { externalMagnets: this.externalMagnetsController } : {}), ...(this.externalSitesPlugin ? { externalSites: this.externalSitesPlugin } : {}), ...(this.pageActionsPlugin ? { detailActions: this.pageActionsPlugin } : {}), ...(this.fc2Lookup ? { fc2Lookup: this.fc2Lookup } : {}) }), Boolean(this.fc2Plugin)))
+            .then(() => run(this.nativeContribution, () => this.nativeController?.start?.(), Boolean(this.nativeController)))
+            .then(() => run("detail.workspace", () => this.workspaceController?.start?.(), Boolean(this.workspaceController)))
+            .then(() => run("detail.reviews", () => this.reviewController?.start?.(), Boolean(this.reviewController)))
+            .then(() => run("detail.related", () => this.relatedController?.start?.(), Boolean(this.relatedController)))
+            .then(() => run("detail.page-state-actions", () => this.pageActionsPlugin?.handle?.({ scope: this.scope, ...(this.externalMagnetsController ? { externalMagnets: this.externalMagnetsController } : {}), ...(this.magnetPlugin ? { nativeMagnets: this.magnetPlugin } : {}) }), Boolean(this.pageActionsPlugin)))
+            .then(() => run("detail.native-magnets", () => this.magnetPlugin?.handle?.({ scope: this.scope }), Boolean(this.magnetPlugin)))
+            .then(() => run(this.previewContribution, () => this.previewPlugin?.handle?.({ scope: this.scope, ...(this.pageActionsPlugin ? { detailActions: this.pageActionsPlugin } : {}) }), Boolean(this.previewPlugin)))
+            .then(() => run("detail.external-sites", () => this.externalSitesPlugin?.handle?.({ scope: this.scope }), Boolean(this.externalSitesPlugin)))
+            .then(() => run("detail.screenshot", () => this.screenshotController?.start?.(), Boolean(this.screenshotController)))
             .then(() => Object.freeze({
             movieRef: this.movieRef,
             contributions: [...this.enabledContributions],

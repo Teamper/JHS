@@ -40,6 +40,6 @@ export function readListItem(item) {
     if (!normalized) throw new TypeError("提取番号信息失败");
     return Object.freeze({
         carNum: normalized, aHref: url, url, title, publishTime,
-        fc2Source: ["fc2", "123av"].includes(element.attr("data-jhs-fc2-source")) ? element.attr("data-jhs-fc2-source") : "fc2",
+        fc2Source: ["fc2", "123av"].includes(element.attr("data-jhs-fc2-source")) ? element.attr("data-jhs-fc2-source") : "",
     });
 }

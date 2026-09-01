@@ -29,10 +29,10 @@ export default defineFeature({
         const offlineController = runtime.enabledContributions.includes("external-bridge.offline") && supportedHost
             ? new UnifiedOfflineController({ document: globalThis.document, window: globalThis.window, route: runtime.route, hostAdapter: deps[PORT.host], offline: deps[SERVICE.offline], dialog: deps[SERVICE.dialog], state: deps[SERVICE.state], settings: deps[SERVICE.settings], styles: deps[PORT.style], eventBus: deps[SERVICE.eventBus], oneTwoThreeController, ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
-        const javTrailersController = runtime.enabledContributions.includes("external-bridge.javtrailers")
+        const javTrailersController = runtime.site === "javtrailers" && runtime.enabledContributions.includes("external-bridge.javtrailers")
             ? new JavTrailersController({ document: globalThis.document, window: globalThis.window, ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
-        const subtitleController = runtime.enabledContributions.includes("external-bridge.subtitle")
+        const subtitleController = runtime.enabledContributions.includes("external-bridge.subtitle") && runtime.site === "subtitlecat"
             ? new SubtitleCatController({ document: globalThis.document, window: globalThis.window, ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
         const controller = new ExternalBridgeController({ translationController, oneOneFiveController, offlineController, oneTwoThreeController, javTrailersController, subtitleController, scope: runtime.scope });

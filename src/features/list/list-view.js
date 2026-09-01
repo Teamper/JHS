@@ -97,18 +97,22 @@ export class ListView {
 
     /** @param {any} container */
     bindMovieDetailNavigation(container) {
-        const $ = this.getJQuery(), root = $(container), selector = ".item img, .item .video-title";
+        const $ = this.getJQuery(), root = $(container), selector = ".item";
         root.off("click.jhsMovieDetail auxclick.jhsMovieDetail", selector).on("click.jhsMovieDetail auxclick.jhsMovieDetail", selector, ((/** @type {any} */ event) => {
             if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
             if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
-            event.preventDefault(), event.stopPropagation();
-            void Promise.resolve(this.onOpenMovieDetail($(event.currentTarget).closest(".item"), { event })).catch((error => this.ui?.getClog?.().error?.("打开影片详情失败", error)));
+            if ($(event.target).closest(".jhs-cover-tools, .jhs-card-menu, .item video").length) return;
+            const item = $(event.currentTarget), primaryAnchor = item.find("a[href]").first()[0], clickedAnchor = $(event.target).closest("a")[0];
+            if (clickedAnchor && primaryAnchor && clickedAnchor !== primaryAnchor) return;
+            if (item.attr("data-jhs-fc2-protected") === "true") return;
+            event.preventDefault(), event.stopImmediatePropagation();
+            void Promise.resolve(this.onOpenMovieDetail(item, { event })).catch((error => this.ui?.getClog?.().error?.("打开影片详情失败", error)));
         }));
         this.navigationRoot = root;
     }
 
     dispose() {
-        this.quickFilterRoot?.off(".jhsListView"), this.navigationRoot?.off("click.jhsMovieDetail auxclick.jhsMovieDetail", ".item img, .item .video-title");
+        this.quickFilterRoot?.off(".jhsListView"), this.navigationRoot?.off("click.jhsMovieDetail auxclick.jhsMovieDetail", ".item");
         const $ = this.ui?.getJQuery?.();
         this.document && typeof $ === "function" && $(this.document).off("click.jhsQuickFilter");
         this.quickFilterRoot = null, this.navigationRoot = null;

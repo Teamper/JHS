@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { CompatibilityController } from "../src/features/compatibility/compatibility-controller.js";
 import { DetailController } from "../src/features/detail/detail-controller.js";
+import detailManifest from "../src/features/detail/manifest.js";
+import { PORT, SERVICE } from "../src/contracts/tokens.js";
 import { StatsController } from "../src/features/stats/stats-controller.js";
 
 function createScope() {
@@ -74,6 +76,47 @@ describe("feature controller ownership", () => {
         expect(externalSitesPlugin.handle).toHaveBeenCalledWith({ scope });
     });
 
+    it("uses JavBus-specific contribution IDs for native and preview detail surfaces", async () => {
+        const scope = createScope(), hostAdapter = {
+            site: "javbus",
+            locateDetailRoot: vi.fn(() => null),
+            locateDetailSlots: vi.fn(() => ({})),
+            readMovieRef: vi.fn(() => null),
+        }, calls = [], isolateContribution = vi.fn((id, operation) => {
+            calls.push(id);
+            return operation();
+        });
+        const controller = new DetailController({
+            hostAdapter,
+            nativeController: { start: vi.fn() },
+            previewPlugin: { handle: vi.fn() },
+            isolateContribution,
+            scope,
+            enabledContributions: [],
+        });
+
+        await controller.start();
+
+        expect(calls).toContain("detail.javbus-native");
+        expect(calls).toContain("detail.javbus-preview");
+        expect(calls).not.toContain("detail.javdb-native");
+        expect(calls).not.toContain("detail.javdb-preview");
+    });
+
+    it("does not mark site-ineligible detail contributions active", async () => {
+        const scope = createScope(), hostAdapter = {
+            site: "javbus",
+            locateDetailRoot: vi.fn(() => null),
+            locateDetailSlots: vi.fn(() => ({})),
+            readMovieRef: vi.fn(() => null),
+        }, isolateContribution = vi.fn((_id, operation) => operation());
+        const controller = new DetailController({ hostAdapter, isolateContribution, scope, enabledContributions: ["detail.fc2-owned", "detail.related"] });
+
+        await controller.start();
+
+        expect(isolateContribution).not.toHaveBeenCalled();
+    });
+
     it("mounts only the FC2-owned contribution on an owned-detail route", async () => {
         const scope = createScope(), hostAdapter = { locateDetailRoot: vi.fn(), locateDetailSlots: vi.fn(), readMovieRef: vi.fn() }, calls = [], fc2Plugin = { handle: vi.fn(() => calls.push("fc2")) }, nativeController = { start: vi.fn(() => calls.push("native")) };
         const controller = new DetailController({ hostAdapter, fc2Plugin, nativeController, ownedDetail: true, scope, enabledContributions: ["detail.fc2-owned"] });
@@ -83,6 +126,30 @@ describe("feature controller ownership", () => {
         expect(calls).toEqual(["fc2"]);
         expect(hostAdapter.locateDetailRoot).not.toHaveBeenCalled();
         expect(fc2Plugin.handle).toHaveBeenCalledWith({ scope });
+    });
+
+    it("does not pass a disabled list FC2 lookup into owned detail", async () => {
+        const run = async (lookupEnabled) => {
+            const scope = createScope(), fc2Lookup = { resolveMovieId: vi.fn() }, captured = {};
+            const deps = {
+                [PORT.host]: { site: "javdb", locateDetailRoot: vi.fn(), locateDetailSlots: vi.fn(), readMovieRef: vi.fn() },
+                [SERVICE.fc2Lookup]: fc2Lookup,
+                [SERVICE.fc2OwnedDetail]: { create: vi.fn((options) => { captured.options = options; return { handle: vi.fn() }; }) },
+            };
+            const runtime = {
+                enabledContributions: ["detail.fc2-owned"], route: "owned-detail", scope,
+                isContributionEnabled: vi.fn(() => lookupEnabled),
+                isolateContribution: vi.fn((_id, operation) => operation()),
+            };
+
+            await detailManifest.activate(deps, runtime);
+            return { captured, runtime, fc2Lookup };
+        };
+
+        const disabled = await run(false), enabled = await run(true);
+        expect(disabled.runtime.isContributionEnabled).toHaveBeenCalledWith("list", "list.fc2-lookup");
+        expect(disabled.captured.options.fc2Lookup).toBeNull();
+        expect(enabled.captured.options.fc2Lookup).toBe(enabled.fc2Lookup);
     });
 
     it("starts the native stats contribution and exposes its action", async () => {

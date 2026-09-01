@@ -3,10 +3,26 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>JavDB fixture</title></head>
 <body>
   <main class="container">
-    <section class="movie-panel-info"><div class="panel-block first-block"><span class="value">ABC-123</span></div></section>
-    <div class="video-meta-panel"><div class="columns"><div class="column column-video-cover"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt=""></div><div class="column column-video-info"><h1 class="current-title">ABC-123 Browser Fixture</h1></div></div></div>
-    <section id="magnets-content"><div id="magnet-table">Fixture magnets</div></section>
-    <section id="reviews">Fixture reviews</section>
+    <div class="video-detail" data-controller="movie-detail">
+      <h2 class="title is-4"><strong>ABC-123</strong> <strong class="current-title">ABC-123 Browser Fixture</strong></h2>
+      <div class="video-meta-panel">
+        <div class="columns is-desktop">
+          <div class="column column-video-cover"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt=""></div>
+          <div class="column column-video-info">
+            <nav class="panel movie-panel-info">
+              <div class="panel-block first-block"><strong>番號:</strong><span class="value"><a data-clipboard-text="ABC-123" title="複製番號">ABC</a>-123</span></div>
+              <div class="panel-block" style="display:none"><strong>日期:</strong><span class="value">2026-08-30</span></div>
+              <div class="review-buttons"><button type="button">想看</button><button type="button">看過</button><button type="button">存入清單</button></div>
+              <div class="panel-block"><a>下載</a><a>訂正</a></div>
+            </nav>
+          </div>
+        </div>
+      </div>
+      <div class="actor-list" style="display:none"><span>演员甲</span><span class="female">有码</span></div>
+      <div class="columns"><div class="preview-images"><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="preview"></div></div>
+      <div class="columns" data-controller="movie-tab"><div class="tabs"><a>磁力</a><a>評論</a></div><div id="magnets" data-controller="magnet-sort"><div id="magnets-content"><div id="magnet-table">Fixture magnets</div></div></div></div>
+      <section id="reviews">Fixture reviews</section>
+    </div>
   </main>
 </body>
 </html>

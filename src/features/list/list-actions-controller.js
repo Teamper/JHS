@@ -177,7 +177,8 @@ export class ListActionsController {
         const hasNewVideo = Boolean(this.discoveryFeatureApi?.hasNewVideo), hasBlacklist = Boolean(libraryFeatureApi?.hasBlacklist), hasListPage = Boolean(await this.getListFeatureApi());
         if (r) {
             const e = o.includes("/actors/");
-            let t = $(".main-tabs, .tabs"), n = "加入黑名单", a = "jhs-btn--filter", s = null;
+            let t = $(".main-tabs").first(), n = "加入黑名单", a = "jhs-btn--filter", s = null;
+            if (!t.length) t = $(".tabs").first();
             if (e) {
                 t = $(".toolbar, .section-addition").filter(":last");
                 const e = await storage.getBlacklist(), i = this.getActressPageInfo();
@@ -193,6 +194,7 @@ export class ListActionsController {
             const r = o.includes("advanced_search");
             r && (t = target?.length ? target : $("h2.section-title"));
             const initialSort = this.activeSortMethod(), d = "当前排序方式: " + ("rateCount" === initialSort ? "评价人数" : "date" === initialSort ? "时间" : "默认");
+            if ($("#waitCheckBtn").length) return;
             t.append(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e && hasBlacklist ? `\n<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>\n<button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>批量屏蔽</span></button>\n` : ""}\n                    ${hasListPage ? `\n<button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>批量收藏</span></button>\n<button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>批量标记已下载</span></button>\n` : ""}\n                    ${o.includes("/tags") && hasBlacklist ? `\n<button type="button" id="addBlacklistBtn" class="jhs-btn ${a}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${n}</span></button>\n` : ""}\n                </div>\n                <div class="jhs-list-btn-row">\n                    ${hasNewVideo ? `<button type="button" id="newVideoBtn" class="jhs-btn jhs-btn--secondary"><span>新作品检测 (<span id="newVideoCount">0</span>)</span></button>` : ""}\n                    ${hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}\n                    ${c || !this.supportsSorting() ? "" : this.sortMenuHtml(initialSort, d)}\n                </div>\n            `);
         }
         if (l) {
@@ -203,6 +205,7 @@ export class ListActionsController {
                 e.find((/** @type {BlacklistRecord} */ e) => e.starId === a.starId) && (t = "已加入黑名单", n = "jhs-btn--muted");
             }
             const a = this.activeSortMethod();
+            if ($("#waitCheckBtn").length) return;
             $(".masonry").parent().prepend(`\n                <div class="jhs-list-btn-row">\n                    <button type="button" id="waitCheckBtn" class="jhs-btn jhs-btn--secondary"><span>打开待鉴定</span></button>\n                    ${e && hasBlacklist ? `    \n                        <button type="button" id="addBlacklistBtn" class="jhs-btn ${n}" data-tip="将演员加入黑名单, 后续有作品更新也会纳入屏蔽中"><span>${t}</span></button>\n                        <button type="button" id="filterAllVideo" class="jhs-btn jhs-btn--watch" data-tip="一键屏蔽已选分类的视频列表至鉴定记录中"><span>批量屏蔽</span></button>\n                    ` : ""}${hasListPage ? `    \n                        <button type="button" id="favoriteAllVideo" class="jhs-btn jhs-btn--fav" data-tip="收藏当前搜索全部分页中符合当前筛选的作品"><span>批量收藏</span></button>\n                        <button type="button" id="hasDownAllVideo" class="jhs-btn jhs-btn--down" data-tip="标记当前搜索全部分页中符合当前筛选的作品为已下载"><span>批量标记已下载</span></button>\n                    ` : ""}${!e && hasBlacklist ? `<button type="button" id="blacklistBtn" class="jhs-btn jhs-btn--secondary"><span>演员黑名单</span></button>` : ""}\n                    ${this.supportsSorting() ? this.sortMenuHtml(a) : ""}\n                </div>\n            `);
         }
         $("#waitCheckBtn > span").text("开始鉴定");
@@ -304,7 +307,7 @@ export class ListActionsController {
             const card = $(element), originalIndex = Number(card.attr("data-original-index")) || 0;
             if ("default" === t) return { element, key: originalIndex, originalIndex, index };
             if ("rateCount" === t) {
-                const explicit = Number(card.attr("data-jhs-rate-count")), match = card.find(".score").text().replaceAll(",", "").match(/(?:由\s*)?(\d+)\s*人(?:评价)?/);
+                const explicit = Number(card.attr("data-jhs-rate-count")), match = card.find(".score").text().replaceAll(",", "").match(/(?:由\s*)?(\d+)\s*人(?:评价|評價)?/);
                 return { element, key: Number.isFinite(explicit) ? explicit : match ? Number(match[1]) : 0, originalIndex, index };
             }
             const value = card.attr("data-jhs-publish-time") || card.find(".meta").text().trim() || card.find("date").filter(((/** @type {number} */ index, /** @type {Element} */ element) => /^\d{4}-\d{1,2}-\d{1,2}$/.test($(element).text().trim()))).first().text().trim(), timestamp = Date.parse(value);

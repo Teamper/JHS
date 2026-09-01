@@ -230,6 +230,16 @@ describe("List FeatureRuntime ownership", () => {
         scope.dispose();
     });
 
+    it("does not run absent optional list contributions", async () => {
+        const scope = new LifecycleScope("feature:list"), isolateContribution = vi.fn((_id, operation) => operation()), hostAdapter = { site: "javbus", getListSelectors: () => null };
+        const controller = new ListController({ hostAdapter, isolateContribution, scope });
+
+        await controller.start();
+
+        expect(isolateContribution).not.toHaveBeenCalled();
+        scope.dispose();
+    });
+
     it("passes the feature-owned list API to card actions", async () => {
         const scope = new LifecycleScope("feature:list"), coverPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
             coverPlugin,

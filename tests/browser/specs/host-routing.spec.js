@@ -9,8 +9,13 @@ for (const [label, url, expectedFeature] of [
   test(`${label} uses the real host origin with local fixtures`, async ({ context, page }) => {
     await fulfillHostFixtures(context);
     await page.goto(url, { waitUntil: "domcontentloaded" });
-    await injectUserscriptRuntime(page, { settingOverrides: label === "JavDB" ? { enableLoadPreviewVideo: "no" } : {} });
+    await injectUserscriptRuntime(page, { settingOverrides: label === "JavDB" ? { enableLoadPreviewVideo: "no", enableLoadScreenShot: "no", enableLoadActressInfo: "no" } : {} });
     await expect.poll(() => page.evaluate((id) => window.unsafeWindow.__jhsFeatureRuntime.getActiveFeatureIds().includes(id), expectedFeature)).toBe(true);
+    const detailApi = await page.evaluate(async () => {
+      const api = await window.unsafeWindow.__jhsBrowserTestApi.getFeatureApi("detail");
+      return { hasFc2: Boolean(api?.hasFc2) };
+    });
+    expect(detailApi.hasFc2).toBe(label === "JavDB");
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--jhs-accent").trim()), "Bootstrap must inject the core theme tokens").not.toBe("");
     await expect(page.locator("body")).toBeVisible();
     await assertNoHorizontalOverflow(page);
@@ -31,6 +36,11 @@ for (const [label, url] of [
     await expect.poll(() => page.evaluate(() => window.isListPage)).toBe(true);
     await expect.poll(() => page.evaluate(() => window.unsafeWindow.__jhsFeatureRuntime.getActiveFeatureIds().includes("list"))).toBe(true);
     await expect(page.locator(label === "JavDB" ? ".movie-list .item" : ".masonry .movie-box")).toHaveCount(1);
+    const listApi = await page.evaluate(async () => {
+      const api = await window.unsafeWindow.__jhsBrowserTestApi.getFeatureApi("list");
+      return { hasFc2: Boolean(api?.hasFc2) };
+    });
+    expect(listApi.hasFc2).toBe(label === "JavDB");
     if (testInfo.project.name.startsWith("mobile")) {
       await expect(page.locator("#jhs-fab")).toBeVisible();
       await expect(page.locator("#jhs-fab-menu .jhs-mobile-filter-menu")).toHaveCount(1);
@@ -124,6 +134,19 @@ for (const path of ["/advanced_search?type=3", "/advanced_search?type=100", "/wa
   });
 }
 
+test("JavDB FC2 list keeps cover clicks inside the owned dialog", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the FC2 list navigation");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/advanced_search?type=3", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page);
+  await page.addStyleTag({ content: ".movie-list .item img{width:180px;height:240px}" });
+  const card = page.locator(".movie-list .item");
+  await expect.poll(() => card.getAttribute("data-jhs-fc2-protected"), { timeout: 10_000 }).toBe("true");
+  await card.locator("img").click();
+  await expect(page.locator(".layui-layer .jhs-fc2-dialog-host")).toHaveCount(1);
+  expect(await page.evaluate(() => window.__jhsBrowserDiagnostics.openedTabs)).toEqual([]);
+});
+
 test("JavDB state import entry is mounted by the Library feature", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one desktop project covers the Library state import entry");
   await fulfillHostFixtures(context);
@@ -150,6 +173,7 @@ test("HotShow creates an owned list when advanced search has no native list root
     id: "hot-fixture-fc2", number: "FC2-PPV-1234567", origin_title: "Hot FC2", release_date: "2026-08-28",
     cover_url: "https://c0.jdbstatic.com/covers/fc2.jpg", has_cnsub: false, magnets_count: 0, new_magnets: false,
   }] });
+  await page.addStyleTag({ content: ".jhs-hitshow-list .cover{width:180px;height:240px}.jhs-hitshow-list .cover img{width:100%;height:100%}" });
   await expect.poll(() => page.evaluate(() => window.isListPage)).toBe(true);
   await expect(page.locator(".jhs-hitshow-list #hot-fixture")).toBeVisible();
   await expect(page.locator(".jhs-hitshow-title")).toContainText("热播");
@@ -186,6 +210,14 @@ test("HotShow creates an owned list when advanced search has no native list root
   await expect(fc2Card.locator("a").first()).toHaveAttribute("href", /collection_codes/);
   await fc2Card.locator(".video-title").click();
   await expect(page.locator(".layui-layer .jhs-fc2-dialog-host")).toHaveCount(1);
+  await page.evaluate(() => window.layer.closeAll());
+  await fc2Card.locator(".cover img").click();
+  await expect(page.locator(".layui-layer .jhs-fc2-dialog-host")).toHaveCount(1);
+  await page.evaluate(() => window.layer.closeAll());
+  await page.evaluate(() => { window.__jhsBrowserDiagnostics.openedTabs = []; });
+  await fc2Card.locator(".video-title").click({ modifiers: ["Control"] });
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.openedTabs)).toHaveLength(1);
+  expect((await page.evaluate(() => window.__jhsBrowserDiagnostics.openedTabs[0].url))).toContain("/users/collection_codes");
 });
 
 test("HotShow hover preview stays below the FC2 detail dialog", async ({ context, page }, testInfo) => {
@@ -242,7 +274,6 @@ test("HotShow period tabs fetch and render period-specific rankings", async ({ c
   for (const period of [ "weekly", "monthly" ]) {
     await page.locator(`#jhs-hitshow-period a[href*="period=${period}"]`).click();
     await page.waitForURL(new RegExp(`period=${period}`), { timeout: 15_000 });
-    await injectUserscriptRuntime(page, { rankingMovies: periodMovies });
     await expect(page.locator(`.jhs-hitshow-list #hot-${period}`)).toBeVisible();
     await expect(page.locator(".jhs-hitshow-list #hot-daily")).toHaveCount(0);
     await expect(page.locator("#jhs-hitshow-period .active")).toHaveAttribute("href", new RegExp(`period=${period}`));
@@ -298,6 +329,27 @@ test("FC2 cards keep dialog navigation and use owned-page anchor fallback", asyn
   await injectUserscriptRuntime(page);
   expect(new URL(page.url()).pathname).toBe("/users/collection_codes");
   await expect(page.locator(".jhs-fc2-workspace[data-jhs-fc2-mode='page']")).toBeVisible();
+});
+
+test("FC2 owned detail keeps the legacy Xunlei subtitle action", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the FC2 detail action surface");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/users/collection_codes?movieId=fixture-id&carNum=FC2-123&url=https%3A%2F%2Ffc2ppvdb.com%2Farticles%2F123&source=fc2", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page);
+  const xunlei = page.locator('.jhs-fc2-toolbar [data-jhs-action="xunlei"]');
+  await expect(xunlei).toHaveCount(1);
+  await xunlei.click();
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.requests.some((request) => request.url.includes("api-shoulei-ssl.xunlei.com/oracle/subtitle")))).toBe(true);
+});
+
+test("FC2 entry links stay on the owned search route on non-list host pages", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the legacy FC2 entry bypass");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/fc2", { waitUntil: "domcontentloaded" });
+  await page.locator(".movie-list").evaluate((root) => root.remove());
+  await page.locator("body").evaluate((body) => body.insertAdjacentHTML("beforeend", '<nav><a id="fc2-root" href="/fc2">FC2</a><a id="fc2-tag" href="/tags/fc2?c10=1">FC2 标签</a><a id="fc2-ranking" href="/rankings/movies?p=daily&amp;t=fc2">FC2 排行</a></nav>'));
+  await injectUserscriptRuntime(page);
+  for (const id of ["fc2-root", "fc2-tag", "fc2-ranking"]) await expect(page.locator(`#${id}`)).toHaveAttribute("href", "/advanced_search?type=3&score_min=0&d=1");
 });
 
 test("Settings opens when optional CoverButton and Blacklist contributions are disabled", async ({ context, page }, testInfo) => {
@@ -454,4 +506,14 @@ test("FC2 core workspace survives disabled optional detail contributions", async
   expect(detailApi.hasExternalMagnets).toBe(false);
   await expect(page.locator('[data-jhs-role="other-sites"]')).toHaveCount(0);
   await expect(page.locator('[data-jhs-role="magnet-hub"]')).toHaveCount(0);
+});
+
+test("FC2 owned detail respects a disabled 123AV lookup contribution", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the 123AV capability boundary");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/users/collection_codes?movieId=fixture-id&carNum=FC2-123&url=https%3A%2F%2F123av.com%2Fvideo%2F123&source=123av", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page, { disabledPlugins: ["Fc2By123AvPlugin"] });
+  await expect(page.getByText("123AV 详情功能已禁用", { exact: true })).toBeVisible();
+  const diagnostics = await page.evaluate(() => window.__jhsBrowserDiagnostics);
+  expect(diagnostics.requests.some((request) => request.url.includes("123av.com"))).toBe(false);
 });

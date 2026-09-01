@@ -5,6 +5,8 @@ import { normalizeStateFlags } from "../../core/state-model.js";
 import { getDefaultListSelectors } from "../../core/list-selectors.js";
 import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, normalizeQuickFilterKey } from "../../core/list-filters.js";
 
+/** @typedef {import("../../core/lifecycle-scope.js").LifecycleScope} LifecycleScope */
+
 export class ResponsiveShellBottomBarController {
     /** @param {{hostAdapter?: any, settings?: any, profile?: any, legacyStorage?: any, features?: any, ui?: any, scope?: any, document?: Document, window?: Window}} [options] */
     constructor(options = {}) {
@@ -30,6 +32,10 @@ export class ResponsiveShellBottomBarController {
         this.settingsFeatureApi = null;
         /** @type {any} */
         this.detailFeatureApi = null;
+        /** @type {ReturnType<LifecycleScope["observe"]> | null} */
+        this.commandSourceObserver = null;
+        /** @type {ReturnType<typeof setTimeout> | null} */
+        this.commandSourceTimer = null;
         this.started = false;
     }
     getName() {
@@ -311,6 +317,7 @@ export class ResponsiveShellBottomBarController {
             this.unmountDesktopCommandBar();
         });
         this.syncSurfaces();
+        this.observeCommandSources(scope);
         scope.ownTimeout(setTimeout(() => {
             if (!scope.disposed) this.syncSurfaces();
         }, 0));
@@ -358,57 +365,112 @@ export class ResponsiveShellBottomBarController {
         // 插件并发启动时，部分按钮可能晚于命令栏创建：已存在时补收后到的控件，而不是直接返回
         existing.length ? this.collectCommandControls(existing) : this.buildCommandBar();
     }
+    /** Re-collect controls created after the system Feature (notably list actions) started. */
+    /** @param {LifecycleScope} scope */
+    observeCommandSources(scope) {
+        if (!this.window?.isListPage || !this.document?.body || typeof MutationObserver === "undefined") return;
+        const selectors = "#waitCheckBtn, #newVideoBtn, #historyBtn, #statsBtn, #blacklistBtn, #jhs-quick-filter, #addBlacklistBtn, .jhs-sort-control, #filterAllVideo, #favoriteAllVideo, #hasDownAllVideo";
+        const hasExternalSource = (/** @type {Node} */ node) => {
+            if (node.nodeType !== 1) return false;
+            const element = /** @type {Element} */ (node);
+            return (element.matches(selectors) && !element.closest("#jhs-page-commandbar")) || [...element.querySelectorAll(selectors)].some((source) => !source.closest("#jhs-page-commandbar"));
+        };
+        this.commandSourceObserver = scope.observe(this.document.body, (/** @type {MutationRecord[]} */ records) => {
+            if (this.profile?.current?.() === "compact" || !records.some((record) => [...record.addedNodes].some(hasExternalSource))) return;
+            if (this.commandSourceTimer != null) return;
+            this.commandSourceTimer = setTimeout(() => {
+                this.commandSourceTimer = null;
+                const commandbar = $("#jhs-page-commandbar").first();
+                if (!commandbar.length) return;
+                this.collectCommandControls(commandbar);
+                $(".jhs-list-btn-row").each(((/** @type {number} */ _index, /** @type {Element} */ element) => { if (!element.children.length) element.remove(); }));
+            }, 0);
+        }, { childList: true, subtree: true });
+        scope.addCleanup(() => {
+            if (this.commandSourceTimer != null) { clearTimeout(this.commandSourceTimer); this.commandSourceTimer = null; }
+            this.commandSourceObserver = null;
+        });
+    }
     /** 将当前页面中尚未收拢的来源控件按类别放入命令栏（可重复调用）。 */
     collectCommandControls(/** @type {any} */ commandbar) {
-        const isCollected = (/** @type {string} */ selector) => {
+        const hasSourceOutside = (/** @type {string[]} */ selectors, /** @type {string} */ ownerSelector) => selectors.some((selector) => {
             const item = $(selector).first();
-            return !item.length || !!item.closest("#jhs-page-commandbar").length;
-        };
+            return item.length > 0 && !item.closest(ownerSelector).length;
+        });
         const remember = (/** @type {Element} */ element) => {
+            if ((this._commandBarSources || []).some((source) => source.element === element)) return;
             (this._commandBarSources ||= []).push({ element, parent: null, next: null });
         };
         const left = commandbar.find(".jhs-commandbar__left"), right = commandbar.find(".jhs-commandbar__right");
         if (!left.length || !right.length) return;
-        if (!commandbar.find(".jhs-commandbar__primary").length && [ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" ].some((selector) => !isCollected(selector))) left.append('<div class="jhs-commandbar__primary"></div>');
+        const primarySelectors = [ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" ];
+        if (!commandbar.find(".jhs-commandbar__primary").length && hasSourceOutside(primarySelectors, ".jhs-commandbar__primary")) left.append('<div class="jhs-commandbar__primary"></div>');
         const primary = commandbar.find(".jhs-commandbar__primary");
-        [ "#waitCheckBtn", "#newVideoBtn", "#historyBtn" ].forEach((selector => {
-            if (isCollected(selector)) return;
+        primarySelectors.forEach((selector => {
             const item = $(selector).first();
-            if (item.length) {
+            if (item.length && !item.closest(".jhs-commandbar__primary").length) {
                 remember(item[0]);
                 item.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo(primary);
             }
         }));
+        primarySelectors.forEach((selector) => {
+            const item = $(selector).first();
+            item.length && item.closest(".jhs-commandbar__primary").length && item.detach().appendTo(primary);
+        });
         primary.children().length && left.append(primary);
-        if (!commandbar.find(".jhs-commandbar__more").length && ![ "#statsBtn", "#blacklistBtn" ].every(isCollected)) {
+        const moreSelectors = [ "#statsBtn", "#blacklistBtn" ];
+        const moreMenuSelector = ".jhs-commandbar__more .jhs-commandbar__menu";
+        if (!commandbar.find(".jhs-commandbar__more").length && hasSourceOutside(moreSelectors, moreMenuSelector)) {
             commandbar.find(".jhs-commandbar__left").append('<div class="jhs-commandbar__more"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-more-menu" aria-expanded="false">更多</button><div id="jhs-commandbar-more-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
         }
         const more = commandbar.find(".jhs-commandbar__more");
-        [ "#statsBtn", "#blacklistBtn" ].forEach((selector => {
-            if (isCollected(selector)) return;
+        moreSelectors.forEach((selector => {
             const item = $(selector).first();
-            item.length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(more.find(".jhs-commandbar__menu")));
+            item.length && !item.closest(moreMenuSelector).length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(more.find(".jhs-commandbar__menu")));
         }));
+        moreSelectors.forEach((selector) => {
+            const item = $(selector).first();
+            item.length && item.closest(moreMenuSelector).length && item.parent()[0] !== more.find(".jhs-commandbar__menu")[0] && item.detach().appendTo(more.find(".jhs-commandbar__menu"));
+        });
         more.find(".jhs-commandbar__menu").children().length && more.appendTo(left);
         const quickFilter = $("#jhs-quick-filter").first();
-        quickFilter.length && !quickFilter.closest("#jhs-page-commandbar").length && (remember(quickFilter[0]), left.append($('<div class="jhs-commandbar__filters"></div>').append(quickFilter.detach())));
-        const contextItem = $("#addBlacklistBtn").first();
-        contextItem.length && !contextItem.closest("#jhs-page-commandbar").length && (remember(contextItem[0]), contextItem.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo($('<div class="jhs-commandbar__context"></div>').appendTo(right)));
-        const sort = $(".jhs-sort-control").first();
-        if (sort.length && !sort.closest("#jhs-page-commandbar").length) {
-            const view = $('<label class="jhs-commandbar__view"><span class="jhs-commandbar__sort-label">排序</span></label>');
-            remember(sort[0]), sort.detach().appendTo(view), right.append(view);
+        if (quickFilter.length && !quickFilter.closest(".jhs-commandbar__filters").length) {
+            remember(quickFilter[0]);
+            const filters = commandbar.find(".jhs-commandbar__filters").first();
+            (filters.length ? filters : $('<div class="jhs-commandbar__filters"></div>').appendTo(left)).append(quickFilter.detach());
         }
-        if (!commandbar.find(".jhs-commandbar__batch").length && ![ "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo" ].every(isCollected)) {
+        const contextItem = $("#addBlacklistBtn").first();
+        if (contextItem.length && !contextItem.closest(".jhs-commandbar__context").length) {
+            remember(contextItem[0]);
+            const context = commandbar.find(".jhs-commandbar__context").first();
+            contextItem.attr("class", "jhs-btn jhs-btn--secondary").removeAttr("role tabindex").detach().appendTo(context.length ? context : $('<div class="jhs-commandbar__context"></div>').appendTo(right));
+        }
+        const sort = $(".jhs-sort-control").first();
+        if (sort.length && !sort.closest(".jhs-commandbar__view").length) {
+            remember(sort[0]);
+            const view = commandbar.find(".jhs-commandbar__view").first().length ? commandbar.find(".jhs-commandbar__view").first() : $('<label class="jhs-commandbar__view"><span class="jhs-commandbar__sort-label">排序</span></label>').appendTo(right);
+            sort.detach().appendTo(view);
+        }
+        const batchSelectors = [ "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo" ];
+        const batchMenuSelector = "#jhs-commandbar-batch-menu";
+        if (!commandbar.find(".jhs-commandbar__batch").length && hasSourceOutside(batchSelectors, batchMenuSelector)) {
             right.append('<div class="jhs-commandbar__batch"><button type="button" class="jhs-btn jhs-btn--secondary jhs-commandbar__menu-toggle" aria-haspopup="menu" aria-controls="jhs-commandbar-batch-menu" aria-expanded="false">批量操作</button><div id="jhs-commandbar-batch-menu" class="jhs-popover jhs-commandbar__menu" role="menu"></div></div>');
         }
         const batch = commandbar.find(".jhs-commandbar__batch");
-        [ "#filterAllVideo", "#favoriteAllVideo", "#hasDownAllVideo" ].forEach((selector => {
-            if (isCollected(selector)) return;
+        batchSelectors.forEach((selector => {
             const item = $(selector).first();
-            item.length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batch.find(".jhs-commandbar__menu")));
+            item.length && !item.closest(batchMenuSelector).length && (remember(item[0]), item.attr({ class: "jhs-btn jhs-btn--ghost", role: "menuitem", tabindex: "-1" }).detach().appendTo(batch.find(".jhs-commandbar__menu")));
         }));
         batch.find(".jhs-commandbar__menu").children().length && batch.appendTo(right);
+        // Late source arrival must not change the stable left-to-right command-bar order.
+        [ ".jhs-commandbar__primary", ".jhs-commandbar__more", ".jhs-commandbar__filters" ].forEach((selector) => {
+            const item = commandbar.find(selector).first();
+            item.length && item.detach().appendTo(left);
+        });
+        [ ".jhs-commandbar__context", ".jhs-commandbar__view", ".jhs-commandbar__batch" ].forEach((selector) => {
+            const item = commandbar.find(selector).first();
+            item.length && item.detach().appendTo(right);
+        });
         // 控件从隐藏 parking 或原始位置进入 commandbar；unmount 时统一移入隐藏 parking。
         commandbar.find(".jhs-commandbar__more, .jhs-commandbar__batch").each(((/** @type {number} */ index, /** @type {Element} */ element) => {
             const container = $(element);

@@ -26,8 +26,39 @@ export class JavDbHostAdapter {
         return this.locateListRoot() ? "list" : "other";
     }
     readMovieRef() {
-        const carNum = this.document.querySelector(".panel-block.first-block .value, [data-car-number]")?.textContent?.trim() ?? null;
-        return carNum ? Object.freeze({ carNum, url: this.location.href, site: "javdb" }) : null;
+        const pageUrl = (() => {
+            try {
+                const url = new URL(this.location.href);
+                url.search = "";
+                url.hash = "";
+                return url.href;
+            } catch {
+                return this.location.href;
+            }
+        })();
+        const injectedCarNum = (() => {
+            try { return new URL(this.location.href).searchParams.get("jhsCarNum"); } catch { return null; }
+        })();
+        const copy = this.document.querySelector('.column-video-info a[data-clipboard-text][title*="番"], .video-detail a[data-clipboard-text][title*="番"], a[title="複製番號"]')?.getAttribute("data-clipboard-text");
+        const panelValues = [];
+        const panels = [...this.document.querySelectorAll(".column-video-info .panel-block, .video-detail .panel-block, .movie-panel-info .panel-block")];
+        for (const element of panels) {
+            const label = element.querySelector("strong, .label")?.textContent?.trim() ?? "";
+            if (/(?:番号|番號|^ID)\s*[:：]?/i.test(label)) panelValues.push(element.querySelector("[data-clipboard-text]")?.getAttribute("data-clipboard-text") || element.querySelector(".value")?.textContent || element.textContent || "");
+        }
+        const legacyValue = this.document.querySelector(".panel-block.first-block .value")?.textContent;
+        const dataValue = this.document.querySelector("[data-car-number]")?.getAttribute("data-car-number") || this.document.querySelector("[data-car-number]")?.textContent;
+        const fallback = this.document.querySelector("#video_id, .video-id, .video-title strong")?.textContent;
+        for (const candidate of [injectedCarNum, copy, dataValue, ...panelValues, legacyValue, fallback]) {
+            const text = String(candidate ?? "").trim(), labeled = text.match(/(?:番号|番號|識別碼|ID)\s*[:：]\s*([A-Z0-9][A-Z0-9 _-]*)/i)?.[1], carNum = normalizeMovieCarNum(labeled || text);
+            if (carNum) {
+                const actress = [...this.document.querySelectorAll(".female")].map((marker) => marker.previousElementSibling?.textContent?.trim() ?? "").filter(Boolean).join(" ");
+                const datePanel = panels.find((element) => /日期\s*[:：]?/i.test(element.querySelector("strong, .label")?.textContent?.trim() ?? ""));
+                const publishTime = datePanel?.querySelector(".value")?.textContent?.trim() ?? "";
+                return Object.freeze({ carNum, url: pageUrl, site: "javdb", actress, publishTime });
+            }
+        }
+        return null;
     }
     locateListRoot() { return this.document.querySelector(".movie-list"); }
     locateListItems() { return [...(this.locateListRoot()?.querySelectorAll(":scope > .item") ?? [])]; }

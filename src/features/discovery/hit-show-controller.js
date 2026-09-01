@@ -42,15 +42,28 @@ export class HitShowController {
         this.started = true;
         this.discoveryApi = options.discoveryApi;
         this.scope.addCleanup(() => this.dispose());
-        const $ = this.getJQuery(), links = $("a[href*=\"rankings/playback\"]");
-        links.off("click.jhsHitShow").on("click.jhsHitShow", (/** @type {MouseEvent} */ event) => {
-            if (event.ctrlKey || event.metaKey || event.button === 1) return void this.window.open("/advanced_search?handlePlayback=1&period=daily", "_blank");
-            event.preventDefault();
-            event.stopPropagation();
-            this.window.location.href = "/advanced_search?handlePlayback=1&period=daily";
+        const $ = this.getJQuery(), documentRoot = $(this.document), selector = 'a[href*="rankings/playback"]';
+        documentRoot.off("click.jhsHitShow auxclick.jhsHitShow", selector).on("click.jhsHitShow auxclick.jhsHitShow", selector, (/** @type {any} */ event) => {
+            if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
+            void this.navigateToOwnedRoute("/advanced_search?handlePlayback=1&period=daily", event);
         });
-        this.scope.addCleanup(() => links.off("click.jhsHitShow"));
+        this.scope.addCleanup(() => documentRoot.off("click.jhsHitShow auxclick.jhsHitShow", selector));
         await this.handlePlayback();
+    }
+
+    /** Keep JHS-owned ranking navigation in the current document so host login gates cannot replace it. */
+    /** @param {string} href @param {MouseEvent | null} [event] */
+    async navigateToOwnedRoute(href, event = null) {
+        const target = new URL(href, this.window.location.href);
+        if (event?.ctrlKey || event?.metaKey || event?.button === 1) {
+            const openInTab = /** @type {any} */ (globalThis).GM_openInTab;
+            return openInTab?.(target.href, { insert: 0 }) ?? this.window.open(target.href, "_blank");
+        }
+        event?.preventDefault?.();
+        event?.stopImmediatePropagation?.();
+        if (this.window.location.href === target.href) return this.handlePlayback();
+        this.window.history.pushState({}, "", target.href);
+        return this.handlePlayback();
     }
 
     async handlePlayback() {
@@ -147,6 +160,10 @@ export class HitShowController {
         const title = heading.children("h2.section-title");
         title.length ? title.after(html) : heading.append(html);
         const nav = $("#jhs-hitshow-period");
+        nav.off("click.jhsHitShowRoute").on("click.jhsHitShowRoute", 'a[href*="handlePlayback=1"]', (/** @type {any} */ event) => {
+            if ("click" === event.type && event.button && 0 !== event.button) return;
+            void this.navigateToOwnedRoute($(event.currentTarget).attr("href"), event);
+        });
         nav.off("keydown.jhsPeriod").on("keydown.jhsPeriod", (/** @type {any} */ event) => {
             if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(event.key)) return;
             event.preventDefault();

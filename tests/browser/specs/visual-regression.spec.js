@@ -24,7 +24,7 @@ for (const [label, url, selector] of pages) {
       test.skip(!ENABLED || !VISUAL_PROJECTS.has(testInfo.project.name), "visual regression is opt-in via JHS_VISUAL_REGRESSION=1 and pinned to desktop-wide/mobile");
       await fulfillHostFixtures(context);
       await page.goto(url, { waitUntil: "domcontentloaded" });
-      await injectUserscriptRuntime(page);
+      await injectUserscriptRuntime(page, { settingOverrides: label === "JavDB Detail" ? { enableLoadScreenShot: "no", enableLoadPreviewVideo: "no" } : {} });
       await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.requests !== undefined)).toBe(true);
       await page.evaluate((mode) => {
         const settings = window.unsafeWindow.__jhsBrowserTestApi.services.settings;

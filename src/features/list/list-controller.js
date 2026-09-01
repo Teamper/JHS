@@ -205,11 +205,12 @@ export class ListController {
         this.started = true;
         const listFeatureApi = this.getApi();
         const hasCore = Boolean(this.view);
+        const run = (/** @type {string} */ id, /** @type {() => any} */ operation, enabled = true) => enabled ? this.isolateContribution(id, operation) : undefined;
         return Promise.resolve()
             .then(() => this.registerStyles())
             .then(() => this.startListLifecycle())
-            .then(() => hasCore ? this.isolateContribution("list.auto-page", () => this.autoPagePlugin?.handle?.({ scope: this.scope, listFeatureApi })) : undefined)
-            .then(() => hasCore ? this.isolateContribution("list.fold-category", () => this.foldCategoryController?.start()) : undefined)
+            .then(() => run("list.auto-page", () => this.autoPagePlugin?.handle?.({ scope: this.scope, listFeatureApi }), hasCore && Boolean(this.autoPagePlugin)))
+            .then(() => run("list.fold-category", () => this.foldCategoryController?.start(), hasCore && Boolean(this.foldCategoryController)))
             .then(() => {
                 if (!hasCore || !this.actionsPlugin) return;
                 this.scope.ownTimeout(setTimeout(() => {
@@ -217,9 +218,9 @@ export class ListController {
                     void Promise.resolve(this.isolateContribution("list.actions", () => this.actionsPlugin?.handle?.({ scope: this.scope, listFeatureApi })));
                 }, 0));
             })
-            .then(() => this.isolateContribution("list.fc2-navigation", () => this.fc2NavigationPlugin?.handle?.({ scope: this.scope })))
-            .then(() => this.isolateContribution("list.cover-state-actions", () => this.coverPlugin?.handle?.({ scope: this.scope, listFeatureApi })))
-            .then(() => this.isolateContribution("list.fc2-lookup", () => this.fc2LookupPlugin?.handle?.({ scope: this.scope })))
+            .then(() => run("list.fc2-navigation", () => this.fc2NavigationPlugin?.handle?.({ scope: this.scope }), Boolean(this.fc2NavigationPlugin)))
+            .then(() => run("list.cover-state-actions", () => this.coverPlugin?.handle?.({ scope: this.scope, listFeatureApi }), Boolean(this.coverPlugin)))
+            .then(() => run("list.fc2-lookup", () => this.fc2LookupPlugin?.handle?.({ scope: this.scope }), Boolean(this.fc2LookupPlugin)))
             .catch((error) => {
             this.dispose();
             throw error;
@@ -377,11 +378,20 @@ export class ListController {
     /** Open a list card through the shared navigation helper without delegating to the legacy plugin. */
     /** @param {any} item @param {{event?: MouseEvent | null, autoplay?: boolean, newTab?: boolean}} [options] */
     async openMovieDetail(item, { event = null, autoplay = false, newTab = false } = {}) {
-        const { carNum, aHref } = this.readListItem(item);
-        if (!carNum || !aHref || carNum.includes("FC2-")) return;
+        const { carNum, aHref, fc2Source } = this.readListItem(item);
+        if (!carNum || !aHref) return;
         const baseUrl = this.hostAdapter.location?.href ?? this.hostAdapter.document?.location?.href ?? globalThis.window?.location?.href;
         if (!baseUrl) return;
         const shouldOpenTab = newTab || Boolean(event && (event.ctrlKey || event.metaKey || event.button === 1));
+        if (carNum.includes("FC2-")) {
+            const fc2 = this.fc2NavigationPlugin?.getFc2Api?.();
+            if (!fc2?.hasFc2) return;
+            const movieId = await fc2.resolveMovieIdForRecord(carNum, aHref);
+            const source = fc2Source || await fc2.resolveFc2Source({ url: aHref }) || "";
+            return shouldOpenTab
+                ? fc2.openFc2Page(movieId, carNum, aHref, { event, newTab: true }, { source })
+                : fc2.openFc2Dialog(movieId, carNum, aHref, { source });
+        }
         const destination = new URL(aHref, baseUrl);
         if (autoplay) destination.searchParams.set("autoPlay", "1");
         this.ui?.openPage?.(destination.href, carNum, true, { event, newTab: shouldOpenTab });

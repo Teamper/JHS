@@ -58,4 +58,36 @@ describe("ListView", () => {
         expect(onOpenMovieDetail.mock.calls[0][0].length).toBe(1);
         view.dispose();
     });
+
+    it("does not hijack card toolbar controls as detail navigation", () => {
+        const dom = new JSDOM('<div class="movie-list"><div class="item"><a href="/v/a"><img><div class="jhs-cover-tools"><button type="button" class="jhs-card-menu-trigger"></button></div></a></div></div>');
+        const $ = jqueryFactory(dom.window), onOpenMovieDetail = vi.fn();
+        const view = new ListView({
+            hostAdapter: { site: "javdb", document: dom.window.document },
+            selectors: { boxSelector: ".movie-list", itemSelector: ".movie-list .item" },
+            onOpenMovieDetail,
+            ui: { getJQuery: () => $, getClog: () => ({}) },
+        });
+
+        view.bindMovieDetailNavigation(".movie-list");
+        $(".jhs-card-menu-trigger").trigger($.Event("click", { button: 0 }));
+        expect(onOpenMovieDetail).not.toHaveBeenCalled();
+        view.dispose();
+    });
+
+    it("leaves card video clicks to the list media controller", () => {
+        const dom = new JSDOM('<div class="movie-list"><div class="item"><a href="/v/a"><video></video></a></div></div>');
+        const $ = jqueryFactory(dom.window), onOpenMovieDetail = vi.fn();
+        const view = new ListView({
+            hostAdapter: { site: "javdb", document: dom.window.document },
+            selectors: { boxSelector: ".movie-list", itemSelector: ".movie-list .item" },
+            onOpenMovieDetail,
+            ui: { getJQuery: () => $, getClog: () => ({}) },
+        });
+
+        view.bindMovieDetailNavigation(".movie-list");
+        $(".movie-list video").trigger($.Event("click", { button: 0 }));
+        expect(onOpenMovieDetail).not.toHaveBeenCalled();
+        view.dispose();
+    });
 });

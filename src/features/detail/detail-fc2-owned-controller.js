@@ -105,6 +105,14 @@ export class Fc2OwnedDetailCoordinator {
     getClog() { return this.ui?.getClog?.() ?? /** @type {any} */ (globalThis).clog ?? {}; }
     getUtils() { return this.ui?.getUtils?.() ?? /** @type {any} */ (globalThis).utils ?? {}; }
     getWindow() { return this.hostAdapter?.document?.defaultView ?? this.window ?? globalThis.window; }
+    /** Resolve the configured JavDB origin used by the legacy FC2 bypass route. */
+    getJavDbOrigin() {
+        const windowRef = this.getWindow(), fallback = windowRef?.location?.origin || "";
+        try {
+            const configured = this.movie?.externalSiteOrigin?.("javDbBtn", this.settings?.snapshot?.() ?? {});
+            return configured ? new URL(configured, fallback).origin : fallback;
+        } catch { return fallback; }
+    }
     /** Resolve library-owned keyword filtering without coupling FC2 to its legacy plugin. */
     async getLibraryFeatureApi() {
         if (this.libraryFeatureApi) return this.libraryFeatureApi;
@@ -609,7 +617,7 @@ export class Fc2OwnedDetailCoordinator {
     }
     /** Build the same-origin owned FC2 detail URL used by both interception and native anchor fallback. @param {string | null} movieId @param {string} carNum @param {string} url @param {{source?: string}} [options] */
     createFc2PageUrl(movieId, carNum, url, { source = "" } = {}) {
-        const target = new URL("/users/collection_codes", this.getWindow()?.location?.origin);
+        const target = new URL("/users/collection_codes", this.getJavDbOrigin());
         target.searchParams.set("movieId", movieId || ""), target.searchParams.set("carNum", carNum), target.searchParams.set("url", url), target.searchParams.set("source", source);
         return target.href;
     }

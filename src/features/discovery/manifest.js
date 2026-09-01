@@ -21,7 +21,7 @@ export default defineFeature({
         const top250Controller = runtime.enabledContributions.includes("discovery.top250") && deps[PORT.host]?.site === "javdb"
             ? new Top250Controller({ document: globalThis.document, window: globalThis.window, hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], dialog: deps[SERVICE.dialog], account: deps[SERVICE.account], storage: deps[SERVICE.storage], features: deps[REGISTRY.feature], ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
-        const newVideoController = runtime.enabledContributions.includes("discovery.new-video")
+        const newVideoController = deps[PORT.host]?.site === "javdb" && runtime.enabledContributions.includes("discovery.new-video")
             ? new NewVideoController({ document: globalThis.document, window: globalThis.window, settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], legacyStorage: deps[SERVICE.legacyStorage], dialog: deps[SERVICE.dialog], actressInfo: deps[SERVICE.actressInfo], movie: deps[SERVICE.movie], state: deps[SERVICE.state], eventBus: deps[SERVICE.eventBus], settingPlugin: { openSettingDialog: openSettingsUi }, ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
         const taskController = runtime.enabledContributions.includes("discovery.scheduler")

@@ -37,6 +37,18 @@ describe("FC2 list sorting", () => {
         expect(loaded.$(".movie-list > .item").map(((index, item) => item.id)).get()).toEqual([ "fifty-five", "thirty-two", "five", "two" ]);
     });
 
+    it("parses traditional review-count labels used by JavDB", async () => {
+        const loaded = loadPlugin("https://javdb.com/advanced_search?type=3&score_min=0&d=1", `<div class="movie-list">
+            <div class="item" id="traditional"><div class="score">2.0分, 由 3 人評價</div></div>
+            <div class="item" id="simplified"><div class="score">4.0分, 由 12 人评价</div></div>
+        </div>`);
+        loaded.setSortMethod("rateCount");
+
+        await loaded.plugin.sortItems();
+
+        expect(loaded.$(".movie-list > .item").map(((index, item) => item.id)).get()).toEqual([ "simplified", "traditional" ]);
+    });
+
     it("treats missing autoPage as enabled and blocks non-live sorting", async () => {
         const loaded = loadPlugin("https://javdb.com/actors/abc", `<div class="movie-list">
             <div class="item" id="two"><div class="score">1.0分, 由2人评价</div></div>

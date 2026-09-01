@@ -134,6 +134,11 @@ describe("FC2 owned detail workspace", () => {
         expect(fc2Source).toContain('target.searchParams.set("source", source)');
     });
 
+    it("keeps FC2 owned-detail navigation on the configured JavDB origin", () => {
+        expect(fc2Source).toContain('externalSiteOrigin?.("javDbBtn", this.settings?.snapshot?.() ?? {})');
+        expect(fc2Source).toContain('new URL("/users/collection_codes", this.getJavDbOrigin())');
+    });
+
     it("keeps the native FC2 entry free of a hard list.core dependency so disabling ListPagePlugin stays safe", () => {
         expect(fc2Source).not.toContain('getBean("ListPagePlugin")');
         expect(fc2Source).toContain('o.includes("collection_codes?movieId")');
