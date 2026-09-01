@@ -685,6 +685,7 @@ sourceByFile.set("features/discovery/top250-controller.js", top250);
 sourceByFile.set("features/discovery/task-controller.js", taskControllerSource);
 sourceByFile.set("features/discovery/new-video-controller.js", newVideoControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
+sourceByFile.set("services/fc2-lookup-service.js", await read("src/services/fc2-lookup-service.js"));
 sourceByFile.set("features/system/settings/setting-backup.js", await read("src/features/system/settings/setting-backup.js"));
 sourceByFile.set("features/system/settings/setting-styles.js", await read("src/features/system/settings/setting-styles.js"));
 sourceByFile.set("features/system/settings/setting-templates.js", await read("src/features/system/settings/setting-templates.js"));
@@ -754,13 +755,14 @@ for (const [scope, checks] of regressionMatrix) {
 
 const fc2Source = sourceByFile.get("features/detail/detail-fc2-owned-controller.js");
 const fc2By123AvSource = sourceByFile.get("features/list/list-fc2-lookup-controller.js");
+const fc2LookupSource = sourceByFile.get("services/fc2-lookup-service.js");
 const workspaceSource = sourceByFile.get("features/detail/detail-workspace-controller.js");
 const reviewSource = sourceByFile.get("features/detail/detail-reviews-controller.js");
 const relatedSource = sourceByFile.get("features/detail/detail-related-controller.js");
 assertIncludes(fc2Source, "mountFc2Detail", "FC2 owned workspace");
 assertIncludes(fc2Source, "magnetHubPromise ||=", "FC2 lazy magnet single-flight");
 assertIncludes(fc2DetailWorkspace, "createFc2DetailContext", "FC2 owned workspace");
-assertIncludes(fc2By123AvSource, "loadDetail(context, url)", "123AV FC2 adapter");
+assertIncludes(fc2LookupSource, "getVideoInfo(carNum, url, options", "123AV FC2 lookup service");
 assert(!fc2Source.includes("organizeJhsOwnedDetailWorkspace"), "FC2 must render directly into owned slots");
 assert(!fc2By123AvSource.includes("organizeJhsOwnedDetailWorkspace"), "123AV FC2 must reuse the owned shell");
 assert(!reviewSource.includes("R(movieId, 2, pageSize).catch"), "review page 2 must only load on demand");
