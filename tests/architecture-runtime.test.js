@@ -55,7 +55,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(snapshot.errors[0].message).not.toContain("user:pass");
     });
 
-    it("lazily activates a command owner and preserves contribution-level disabling", async () => {
+    it("lazily activates a command owner and preserves contribution lifecycle states", async () => {
         const commands = new CommandRegistry();
         const diagnostics = new DiagnosticsService();
         const runtime = new FeatureRuntime({
@@ -73,7 +73,11 @@ describe("v6.5 architecture runtime contracts", () => {
         }));
         await commands.execute("detail.open");
         expect(activate).toHaveBeenCalledOnce();
-        expect(diagnostics.exportSnapshot().activeContributions).toEqual(["detail.related"]);
+        expect(diagnostics.exportSnapshot().activeContributions).toEqual([]);
+        expect(diagnostics.exportSnapshot().contributionStates).toMatchObject({
+            "detail.reviews": { state: "disabled" },
+            "detail.related": { state: "skipped" },
+        });
         expect(migrateDisabledPlugins(["ReviewPlugin", "UnknownPlugin"])).toEqual(["detail.reviews", "UnknownPlugin"]);
         expect(migrateDisabledPlugins(["CoverButtonPlugin", "DetailPageButtonPlugin", "BusImgPlugin", "BusPreviewVideoPlugin", "Fc2NavigationPlugin", "detail.fc2-navigation", "detail.fc2-lookup"])).toEqual([
             "list.cover-state-actions", "detail.page-state-actions", "list.javbus-images", "detail.javbus-preview", "list.fc2-navigation", "list.fc2-lookup",

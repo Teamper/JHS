@@ -1,6 +1,8 @@
 // @ts-check
 
 const SENSITIVE_KEY = /^(?:authorization|cookie|set-cookie|password|token|secret|credential)$/i;
+export const CONTRIBUTION_STATES = Object.freeze([ "inactive", "starting", "active", "degraded", "disabled", "skipped" ]);
+const CONTRIBUTION_STATE_SET = new Set(CONTRIBUTION_STATES);
 
 /** @param {unknown} value @param {string} [key] @returns {unknown} */
 function sanitize(value, key = "") {
@@ -17,6 +19,8 @@ export class DiagnosticsService {
         this.startedAt = performance.now();
         this.activeFeatures = new Set();
         this.activeContributions = new Set();
+        /** @type {Map<string, Record<string, unknown>>} */
+        this.contributionStates = new Map();
         /** @type {Map<string, Record<string, unknown>>} */
         this.featureStates = new Map();
         this.startupTimings = new Map();
@@ -41,8 +45,17 @@ export class DiagnosticsService {
     setFeatureState(id, state, message) {
         this.featureStates.set(id, Object.freeze({ id, state, ...(message ? { message } : {}) }));
     }
+    /** @param {string} id @param {"inactive" | "starting" | "active" | "degraded" | "disabled" | "skipped"} state @param {string} [message] */
+    setContributionState(id, state, message) {
+        if (!CONTRIBUTION_STATE_SET.has(state)) throw new TypeError(`Invalid contribution state: ${state}`);
+        this.contributionStates.set(id, Object.freeze({ id, state, ...(message ? { message } : {}) }));
+        if (state === "active") this.activeContributions.add(id);
+        else this.activeContributions.delete(id);
+    }
+    /** @param {string} id @returns {string | null} */
+    getContributionState(id) { return /** @type {string | undefined} */ (this.contributionStates.get(id)?.state) ?? null; }
     /** @param {string} id @param {boolean} active */
-    setContribution(id, active) { active ? this.activeContributions.add(id) : this.activeContributions.delete(id); }
+    setContribution(id, active) { this.setContributionState(id, active ? "active" : "inactive"); }
     /** @param {{id: string}} snapshot */
     updateScope(snapshot) { this.scopes.set(snapshot.id, Object.freeze({ ...snapshot })); }
     /** @param {number} consumers @param {number} underlying */
@@ -81,7 +94,7 @@ export class DiagnosticsService {
     exportSnapshot() {
         const scopes = [...this.scopes.values()];
         return Object.freeze({
-            activeFeatures: [...this.activeFeatures], activeContributions: [...this.activeContributions],
+            activeFeatures: [...this.activeFeatures], activeContributions: [...this.activeContributions], contributionStates: Object.fromEntries(this.contributionStates),
             featureStates: Object.fromEntries(this.featureStates),
             startupTimings: Object.fromEntries(this.startupTimings), activeScopes: scopes,
             globalListeners: scopes.filter((scope) => scope.id === "app:root").reduce((sum, scope) => sum + Number(scope.listeners ?? 0), 0),

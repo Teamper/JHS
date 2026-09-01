@@ -34,6 +34,12 @@ export class FeatureRuntime {
         }
         this.manifests.set(validated.id, validated);
         for (const contributionId of validated.contributes) this.contributionOwners.set(contributionId, validated.id);
+        for (const contributionId of validated.contributes) {
+            const state = this.disabled.has(validated.id) || this.disabled.has(contributionId)
+                ? "disabled"
+                : this.isEligible(validated) ? "inactive" : "skipped";
+            this.diagnostics.setContributionState(contributionId, state);
+        }
         for (const command of validated.providesCommands) {
             this.commands.registerOwner(command, validated.id);
             this.commands.setOwnerEnabled(command, this.isEligible(validated));
@@ -85,18 +91,30 @@ export class FeatureRuntime {
         return (await this.activate(featureId)).api;
     }
 
-    /** Run one optional contribution without allowing it to fail its owning Feature. */
+    /** Run one contribution through the authoritative lifecycle state machine. */
     /** @param {string} contributionId @param {() => any} operation */
-    async isolateContribution(contributionId, operation) {
+    async runContribution(contributionId, operation) {
+        const owner = this.contributionOwners.get(contributionId);
+        if (this.disabled.has(contributionId) || owner && this.disabled.has(owner)) {
+            this.diagnostics.setContributionState(contributionId, "disabled");
+            return null;
+        }
+        this.diagnostics.setContributionState(contributionId, "starting");
         try {
-            return await operation();
+            const result = await operation();
+            this.diagnostics.setContributionState(contributionId, "active");
+            return result;
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            this.diagnostics.setContribution(contributionId, false);
+            this.diagnostics.setContributionState(contributionId, "degraded", message);
             this.diagnostics.recordError({ source: "feature-runtime", contribution: contributionId, phase: "activate", status: "degraded", message });
             return null;
         }
     }
+
+    /** Backward-compatible name for feature-owned controllers. */
+    /** @param {string} contributionId @param {() => any} operation */
+    async isolateContribution(contributionId, operation) { return this.runContribution(contributionId, operation); }
 
     /** @param {string} id */
     activate(id) {
@@ -118,9 +136,11 @@ export class FeatureRuntime {
         try {
             const dependencies = this.container.resolveDeclared(manifest.requires);
             const enabledContributions = Object.freeze(manifest.contributes.filter((/** @type {string} */ id) => !this.disabled.has(id)));
+            enabledContributions.forEach((/** @type {string} */ id) => this.diagnostics.setContributionState(id, "inactive"));
             const result = await manifest.activate(dependencies, Object.freeze({
                 scope, enabledContributions, route: this.route,
                 isContributionEnabled: (/** @type {string} */ featureId, /** @type {string} */ contributionId) => this.isContributionEnabled(featureId, contributionId),
+                runContribution: (/** @type {string} */ contributionId, /** @type {() => any} */ operation) => this.runContribution(contributionId, operation),
                 isolateContribution: (/** @type {string} */ contributionId, /** @type {() => any} */ operation) => this.isolateContribution(contributionId, operation),
             }));
             for (const command of manifest.providesCommands) {
@@ -130,17 +150,23 @@ export class FeatureRuntime {
             }
             this.diagnostics.setFeature(manifest.id, true);
             this.diagnostics.setFeatureState(manifest.id, "active");
-            enabledContributions.forEach((/** @type {string} */ id) => this.diagnostics.setContribution(id, true));
+            enabledContributions.forEach((/** @type {string} */ id) => {
+                if (this.diagnostics.getContributionState(id) === "inactive") this.diagnostics.setContributionState(id, "skipped");
+            });
             this.diagnostics.recordStartup(manifest.id, performance.now() - started);
             return Object.freeze({ manifest, scope, enabledContributions, api: result?.api ?? null, dispose: () => {
                 result?.dispose?.();
                 scope.dispose();
                 this.diagnostics.setFeature(manifest.id, false);
                 this.diagnostics.setFeatureState(manifest.id, "inactive");
-                enabledContributions.forEach((/** @type {string} */ id) => this.diagnostics.setContribution(id, false));
+                enabledContributions.forEach((/** @type {string} */ id) => this.diagnostics.setContributionState(id, "inactive"));
                 this.activations.delete(manifest.id);
             } });
         } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            manifest.contributes
+                .filter((/** @type {string} */ id) => !this.disabled.has(id) && this.diagnostics.getContributionState(id) === "inactive")
+                .forEach((/** @type {string} */ id) => this.diagnostics.setContributionState(id, "degraded", message));
             scope.dispose();
             this.diagnostics.recordError(error);
             throw error;

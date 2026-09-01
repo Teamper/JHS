@@ -35,6 +35,10 @@ describe("7.0 Feature failure isolation", () => {
       broken: { state: "degraded", message: "broken feature" },
       healthy: { state: "active" },
     });
+    expect(runtime.diagnostics.exportSnapshot().contributionStates).toMatchObject({
+      "broken.contribution": { state: "degraded", message: "broken feature" },
+      "healthy.contribution": { state: "skipped" },
+    });
   });
 
   it("does not let one optional contribution failure escape its Feature", async () => {
@@ -44,6 +48,37 @@ describe("7.0 Feature failure isolation", () => {
     expect(result).toBeNull();
     expect(runtime.diagnostics.exportSnapshot().errors.at(-1)).toMatchObject({
       source: "feature-runtime", contribution: "broken.contribution", status: "degraded", message: "broken contribution",
+    });
+    expect(runtime.diagnostics.exportSnapshot().contributionStates["broken.contribution"]).toMatchObject({ state: "degraded", message: "broken contribution" });
+  });
+
+  it("records starting and active only around an executed contribution", async () => {
+    const runtime = createRuntime();
+    let stateDuringRun;
+    const result = await runtime.runContribution("healthy.contribution", async () => {
+      stateDuringRun = runtime.diagnostics.exportSnapshot().contributionStates["healthy.contribution"]?.state;
+      return "ok";
+    });
+
+    expect(result).toBe("ok");
+    expect(stateDuringRun).toBe("starting");
+    expect(runtime.diagnostics.exportSnapshot().contributionStates["healthy.contribution"]).toMatchObject({ state: "active" });
+  });
+
+  it("keeps disabled contributions disabled and unexecuted ones skipped", async () => {
+    const runtime = new FeatureRuntime({
+      container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics: new DiagnosticsService(),
+      disabled: ["feature.disabled"], site: "javdb", route: "list",
+    });
+    runtime.register(defineFeature({
+      id: "feature", kind: "feature", disableable: true, failurePolicy: "degraded", sites: ["javdb"], routes: ["list"], startup: "eager",
+      requires: [], contributes: ["feature.disabled", "feature.skipped"], providesCommands: [], activate: async () => ({}),
+    }));
+
+    await runtime.start();
+    expect(runtime.diagnostics.exportSnapshot().contributionStates).toMatchObject({
+      "feature.disabled": { state: "disabled" },
+      "feature.skipped": { state: "skipped" },
     });
   });
 
