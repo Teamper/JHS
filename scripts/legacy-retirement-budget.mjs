@@ -2,40 +2,24 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
 export const LEGACY_RETIREMENT_BASELINE = Object.freeze({
-  ids: Object.freeze([
-    "list.core",
-    "list.auto-page",
-    "detail.fc2-owned",
-    "list.fc2-navigation",
-    "list.fold-category",
-    "list.actions",
-    "settings.core",
-    "list.cover-state-actions",
-    "list.fc2-lookup",
-    "detail.javdb-native",
-    "detail.workspace",
-    "detail.reviews",
-    "detail.related",
-    "detail.page-state-actions",
-    "detail.native-magnets",
-    "detail.javdb-preview",
-    "detail.external-sites",
-    "detail.external-magnets",
-    "detail.screenshot",
-    "responsive-shell.bottom-bar",
-    "list.javbus-images",
-    "detail.javbus-native",
-    "detail.javbus-preview",
-  ]),
   metrics: Object.freeze({
-    registryEntries: 23,
-    basePluginSubclasses: 24,
-    optionalDependencyCallsites: 39,
-    resolveLegacyContributionCallsites: 23,
-    legacyDependencyEdges: 21,
-    unsafeWindowLegacyExports: 9,
+    registryEntries: 0,
+    basePluginSubclasses: 0,
+    optionalDependencyCallsites: 0,
+    resolveLegacyContributionCallsites: 0,
+    legacyDependencyEdges: 0,
+    unsafeWindowLegacyExports: 0,
   }),
 });
+
+export const LEGACY_RUNTIME_PATHS = Object.freeze([
+  "src/core/plugin-manager.js",
+  "src/core/legacy-contribution-registry.js",
+  "src/plugins/registry.js",
+  "src/plugins/dependency-map.js",
+  "src/compat/list-page-adapter.js",
+  "src/app/compatibility-facade.js",
+]);
 
 async function listJavaScriptFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -85,10 +69,16 @@ export async function collectLegacyRetirementMetrics(rootDir) {
 
 /** @param {Record<string, number>} metrics */
 export function assertLegacyRetirementBudget(metrics) {
-  const baselineIds = new Set(LEGACY_RETIREMENT_BASELINE.ids);
-  const violations = Object.entries(metrics)
-    .filter(([name, value]) => value > LEGACY_RETIREMENT_BASELINE.metrics[name])
-    .map(([name, value]) => `${name} increased from ${LEGACY_RETIREMENT_BASELINE.metrics[name]} to ${value}`);
+  const expectedNames = Object.keys(LEGACY_RETIREMENT_BASELINE.metrics);
+  const missing = expectedNames.filter((name) => !Object.hasOwn(metrics, name));
+  const unknown = Object.keys(metrics).filter((name) => !expectedNames.includes(name));
+  const violations = [
+    ...missing.map((name) => `${name} is missing`),
+    ...unknown.map((name) => `${name} is not part of the sealed retirement metrics`),
+    ...expectedNames
+      .filter((name) => Object.hasOwn(metrics, name) && metrics[name] !== 0)
+      .map((name) => `${name} must remain exactly 0 (current: ${metrics[name]})`),
+  ];
   if (violations.length) throw new Error(`Legacy retirement budget exceeded: ${violations.join("; ")}`);
-  return { baselineIds, violations };
+  return { violations };
 }

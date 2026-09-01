@@ -1,22 +1,28 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { assertLegacyRetirementBudget, collectLegacyRetirementMetrics, LEGACY_RETIREMENT_BASELINE } from "../scripts/legacy-retirement-budget.mjs";
+import { access } from "node:fs/promises";
+import { assertLegacyRetirementBudget, collectLegacyRetirementMetrics, LEGACY_RETIREMENT_BASELINE, LEGACY_RUNTIME_PATHS } from "../scripts/legacy-retirement-budget.mjs";
 
 const rootDir = path.resolve(import.meta.dirname, "..");
 
 describe("7.0 legacy retirement budget", () => {
-  it("freezes the initial 23 contribution order and permits removals only", () => {
-    const currentIds = [];
-    const remainingBaselineIds = LEGACY_RETIREMENT_BASELINE.ids.filter((id) => currentIds.includes(id));
-    expect(currentIds).toEqual(remainingBaselineIds);
+  it("seals every legacy-runtime metric at exactly zero", async () => {
+    expect(LEGACY_RETIREMENT_BASELINE.metrics).toEqual({
+      registryEntries: 0,
+      basePluginSubclasses: 0,
+      optionalDependencyCallsites: 0,
+      resolveLegacyContributionCallsites: 0,
+      legacyDependencyEdges: 0,
+      unsafeWindowLegacyExports: 0,
+    });
+    const metrics = await collectLegacyRetirementMetrics(rootDir);
+    expect(metrics).toEqual(LEGACY_RETIREMENT_BASELINE.metrics);
+    expect(() => assertLegacyRetirementBudget({ ...metrics, registryEntries: 1 })).toThrow(/registryEntries must remain exactly 0/);
   });
 
-  it("ratchets every legacy-runtime metric downward or unchanged", async () => {
-    const metrics = await collectLegacyRetirementMetrics(rootDir);
-    metrics.registryEntries = 0;
-    expect(() => assertLegacyRetirementBudget(metrics)).not.toThrow();
-    for (const [name, value] of Object.entries(metrics)) {
-      expect(value, `${name} must not increase`).toBeLessThanOrEqual(LEGACY_RETIREMENT_BASELINE.metrics[name]);
+  it("keeps every retired legacy runtime file absent", async () => {
+    for (const relativePath of LEGACY_RUNTIME_PATHS) {
+      await expect(access(path.join(rootDir, relativePath))).rejects.toMatchObject({ code: "ENOENT" });
     }
   });
 });

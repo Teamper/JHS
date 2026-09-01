@@ -16,7 +16,6 @@ import { getVendorRuntime } from "../platform/userscript/vendor-runtime.js";
 import { JavBusHostAdapter } from "../platform/hosts/javbus-host-adapter.js";
 import { JavDbHostAdapter } from "../platform/hosts/javdb-host-adapter.js";
 import { featureManifests } from "../features/catalog.js";
-import { attachCompatibilityFacade } from "./compatibility-facade.js";
 import { createAppContext } from "./create-app-context.js";
 import { integrationManifests } from "./integration-catalog.js";
 
@@ -162,10 +161,6 @@ export async function bootstrapJhs() {
             await runDataMigrationsWithoutLock(storageManager);
         });
         markPhase("data-prepare");
-        attachCompatibilityFacade({
-            utils, gmHttp, storageManager, stateService, jhsEventBus,
-            clog: logger.clog, show: logger.show, loading: logger.loading,
-        }, globalThis.unsafeWindow);
         await context.registries.features.start();
         const featureRuntimeApi = Object.freeze({
             getFeatureApi: (/** @type {string} */ id) => context.registries.features.getFeatureApi(id),

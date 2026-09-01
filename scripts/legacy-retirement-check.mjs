@@ -1,20 +1,23 @@
+import { access } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertLegacyRetirementBudget, collectLegacyRetirementMetrics, LEGACY_RETIREMENT_BASELINE } from "./legacy-retirement-budget.mjs";
+import { assertLegacyRetirementBudget, collectLegacyRetirementMetrics, LEGACY_RETIREMENT_BASELINE, LEGACY_RUNTIME_PATHS } from "./legacy-retirement-budget.mjs";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const currentIds = [];
-const baselineIds = LEGACY_RETIREMENT_BASELINE.ids;
-const baselineSet = new Set(baselineIds);
-const additions = currentIds.filter((id) => !baselineSet.has(id));
-const orderChanged = currentIds.some((id, index) => id !== baselineIds.filter((candidate) => currentIds.includes(candidate))[index]);
-if (additions.length || orderChanged) {
-  throw new Error(`Legacy contribution IDs may only be removed; additions: ${additions.join(", ") || "none"}`);
+
+for (const relativePath of LEGACY_RUNTIME_PATHS) {
+  try {
+    await access(path.join(rootDir, relativePath));
+  } catch (error) {
+    if (error?.code === "ENOENT") continue;
+    throw error;
+  }
+  throw new Error(`Retired legacy runtime file returned: ${relativePath}`);
 }
 
 const metrics = await collectLegacyRetirementMetrics(rootDir);
-assertLegacyRetirementBudget({ ...metrics, registryEntries: currentIds.length });
+assertLegacyRetirementBudget(metrics);
 console.log("Legacy retirement budget passed:");
-for (const [name, value] of Object.entries({ ...metrics, registryEntries: currentIds.length })) {
-  console.log(`  ${name.padEnd(38)} ${value} (baseline <= ${LEGACY_RETIREMENT_BASELINE.metrics[name]})`);
+for (const [name, value] of Object.entries(metrics)) {
+  console.log(`  ${name.padEnd(38)} ${value} (sealed == ${LEGACY_RETIREMENT_BASELINE.metrics[name]})`);
 }
