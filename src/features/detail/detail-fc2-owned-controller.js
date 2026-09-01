@@ -46,7 +46,7 @@ export function parseExplicitJavDbMovieId(/** @type {string} */ value) {
     return extractJavDbMovieId(value, window.location.origin);
 }
 
-export class DetailFc2OwnedController {
+export class Fc2OwnedDetailCoordinator {
     /** @param {{hostAdapter?: any, movie?: any, magnet?: any, dialog?: any, translation?: any, settings?: any, storage?: any, screenshot?: any, review?: any, related?: any, state?: any, features?: any, ui?: any, styles?: any, scope?: any, fc2Lookup?: any, detailActions?: any, externalMagnets?: any, externalSites?: any, document?: Document, window?: Window}} [options] */
     constructor(options = {}) {
         this.hostAdapter = options.hostAdapter ?? null;
@@ -150,6 +150,8 @@ export class DetailFc2OwnedController {
     }
     /** @param {string} carNum */
     async resolveMovieId(carNum) {
+        const lookup = this.fc2Lookup;
+        if (lookup?.resolveMovieId) return lookup.resolveMovieId(carNum, { scope: await this.getLifecycleScope() });
         const scope = await this.getLifecycleScope();
         return (await this.getRuntimeService("movie").resolve({ carNum }, { scope }))?.movieId || null;
     }
@@ -417,14 +419,31 @@ export class DetailFc2OwnedController {
     async load123AvDetail(context) {
         const source = this.fc2Lookup;
         if (!source) return void renderFc2State(context.getSlot("summary"), "123AV 详情功能已禁用");
-        source.bindLifecycleScope?.(await this.getLifecycleScope());
-        const movieIdPromise = /** @type {Promise<string | null>} */ (source.resolveMovieId(context.carNum));
+        const scope = await this.getLifecycleScope();
+        const movieIdPromise = /** @type {Promise<string | null>} */ (source.resolveMovieId(context.carNum, { scope }));
+        const infoPromise = /** @type {Promise<{title?: string, publishDate?: string}>} */ (source.getVideoInfo(context.carNum, context.url, { scope }));
+        const imagesPromise = /** @type {Promise<string[]>} */ (source.getImages(context.carNum, { scope }));
+        const peoplePromise = /** @type {Promise<{actors: Array<{name: string, url: string}>, seller?: {name: string, url?: string} | null}>} */ (source.getPeople(context.carNum, { scope }));
+        infoPromise.then((info) => context.isAlive() && this.render123AvSummary(context, info)).catch((error) => {
+            if (!context.isAlive()) return;
+            renderFc2State(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", () => void this.load123AvDetail(context));
+            this.getClog().error?.("123AV 详情加载失败", error);
+        });
+        imagesPromise.then((images) => context.isAlive() && renderFc2Gallery(context, images, null)).catch((error) => {
+            if (!context.isAlive()) return;
+            renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", () => void this.reloadImages(context));
+            this.getClog().error?.("123AV 剧照加载失败", error);
+        });
+        peoplePromise.then(async (data) => {
+            await infoPromise.catch(() => null);
+            if (context.isAlive()) this.render123AvActress(context, data);
+        }).catch((error) => this.getClog().error?.("FC2 演员信息加载失败", error));
         void this.configureJavDbWantButton(context, movieIdPromise), void this.mountPanels(context, movieIdPromise), void movieIdPromise.then((movieId => {
             if (context.isAlive()) return this.fetchAndRenderNativeMagnets(context, movieId);
         })).catch((error => {
             context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="native-magnets"]'), "站内磁力关联失败", (() => void this.load123AvMagnets(context))), this.getClog().error?.("123AV 磁力关联失败", error);
         }));
-        await source.loadDetail(context, context.url);
+        await Promise.allSettled([ infoPromise, imagesPromise, peoplePromise ]);
         // 初始 123AV 摘要翻译走统一入口。
         if (context.isAlive()) void this.applyFc2Translation(context);
     }
@@ -432,8 +451,29 @@ export class DetailFc2OwnedController {
     async load123AvMagnets(context) {
         const source = this.fc2Lookup;
         if (!source) throw new Error("123AV 详情功能已禁用");
-        const movieId = await source.resolveMovieId(context.carNum);
+        const movieId = await source.resolveMovieId(context.carNum, { scope: await this.getLifecycleScope() });
         return this.fetchAndRenderNativeMagnets(context, movieId);
+    }
+    /** @param {Fc2DetailContext} context @param {{title?: string, publishDate?: string}} info */
+    render123AvSummary(context, info) {
+        const $ = this.getJQuery(), body = context.root.find('[data-jhs-role="summary-content"]').empty(), title = $('<h1 class="jhs-fc2-title"><strong class="current-title"></strong></h1>');
+        title.find("strong").text(info.title || "无标题"), body.append(title, $('<div class="jhs-fc2-meta"></div>').append($("<span></span>").text(`番号：${context.carNum}`), $("<span></span>").text(`发行：${info.publishDate || "未知"}`)), '<div class="jhs-fc2-actors" data-jhs-role="actors"><strong>主演：</strong><span>正在加载演员…</span></div>', $('<div class="jhs-fc2-meta" data-jhs-role="seller"></div>'), createFc2SourceLinks(context, this.getRuntimeService("movie")), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(info.publishDate || ""));
+    }
+    /** @param {Fc2DetailContext} context @param {{actors: Array<{name: string, url: string}>, seller?: {name: string, url?: string} | null}} data */
+    render123AvActress(context, data) {
+        const $ = this.getJQuery(), host = context.root.find('[data-jhs-role="actors"]').empty().append("<strong>主演：</strong>");
+        data.actors.length ? data.actors.forEach((actor) => host.append($('<a></a>').addClass("jhs-fc2-actor").attr({ href: actor.url, target: "_blank", rel: "noopener noreferrer" }).text(actor.name))) : host.append($("<span></span>").text("暂无演员信息"));
+        context.root.find('[data-jhs-role="actress-data"]').remove(), context.root.find(".jhs-fc2-summary__body").append($('<span class="jhs-is-hidden" data-jhs-role="actress-data"></span>').text(data.actors.map((actor) => actor.name).join(" ")));
+        if (data.seller) context.root.find('[data-jhs-role="seller"]').empty().append("卖家：", data.seller.url ? $("<a></a>").attr({ href: data.seller.url, target: "_blank", rel: "noopener noreferrer" }).text(data.seller.name) : this.document.createTextNode(data.seller.name));
+    }
+    /** @param {Fc2DetailContext} context */
+    async reloadImages(context) {
+        try {
+            const images = await this.fc2Lookup?.getImages?.(context.carNum, { scope: await this.getLifecycleScope() });
+            if (context.isAlive()) renderFc2Gallery(context, images || [], null);
+        } catch (error) {
+            if (context.isAlive()) renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", () => void this.reloadImages(context));
+        }
     }
     /** 绑定当前工作区自己的 JavDB“想看”操作。 */
     /** @param {Fc2DetailContext} context @param {Promise<string | null | undefined>} movieIdPromise */
@@ -590,4 +630,5 @@ export class DetailFc2OwnedController {
 }
 
 /** Compatibility export for the retained disabled-plugin ID. */
-export const Fc2Plugin = DetailFc2OwnedController;
+export const DetailFc2OwnedController = Fc2OwnedDetailCoordinator;
+export const Fc2Plugin = Fc2OwnedDetailCoordinator;

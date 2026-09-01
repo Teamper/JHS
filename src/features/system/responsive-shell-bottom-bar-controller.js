@@ -3,7 +3,7 @@
 import { k, m, r, v, y } from "../../core/constants.js";
 import { normalizeStateFlags } from "../../core/state-model.js";
 import { getDefaultListSelectors } from "../../core/list-selectors.js";
-import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, normalizeQuickFilterKey } from "../../features/list/list-filters.js";
+import { PRIMARY_QUICK_FILTERS, QUICK_FILTER_LABELS, SECONDARY_QUICK_FILTERS, normalizeQuickFilterKey } from "../../core/list-filters.js";
 
 export class ResponsiveShellBottomBarController {
     /** @param {{hostAdapter?: any, settings?: any, profile?: any, legacyStorage?: any, features?: any, ui?: any, scope?: any, document?: Document, window?: Window}} [options] */

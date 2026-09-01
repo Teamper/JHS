@@ -38,6 +38,8 @@ export const SERVICE = Object.freeze({
     account: createToken("service", "account"),
     offline: createToken("service", "offline"),
     cache: createToken("service", "cache"),
+    fc2Lookup: createToken("service", "fc2-lookup"),
+    fc2OwnedDetail: createToken("service", "fc2-owned-detail"),
     state: createToken("service", "state"),
     eventBus: createToken("service", "event-bus"),
     storageMutation: createToken("service", "storage-mutation"),

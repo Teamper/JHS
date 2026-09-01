@@ -15,17 +15,15 @@ import { DetailExternalSitesController } from "./detail-external-sites-controlle
 import { DetailJavBusPreviewController } from "./detail-javbus-preview-controller.js";
 import { DetailPageStateActionsController } from "./detail-page-state-actions-controller.js";
 import { DetailJavDbPreviewController } from "./detail-javdb-preview-controller.js";
-import { ListFc2LookupController } from "../list/list-fc2-lookup-controller.js";
-import { DetailFc2OwnedController } from "./detail-fc2-owned-controller.js";
 
 export default defineFeature({
     id: "detail", kind: "feature", disableable: true, failurePolicy: "degraded", sites: ["javdb", "javbus"], routes: ["detail", "owned-detail"], startup: "eager",
-    requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.review, SERVICE.related, SERVICE.magnet, SERVICE.screenshot, SERVICE.settings, SERVICE.storage, SERVICE.eventBus, SERVICE.http, SERVICE.dialog, SERVICE.subtitle, SERVICE.state, SERVICE.translation, SERVICE.ui, REGISTRY.feature],
+    requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.fc2Lookup, SERVICE.fc2OwnedDetail, SERVICE.review, SERVICE.related, SERVICE.magnet, SERVICE.screenshot, SERVICE.settings, SERVICE.storage, SERVICE.eventBus, SERVICE.http, SERVICE.dialog, SERVICE.subtitle, SERVICE.state, SERVICE.translation, SERVICE.ui, REGISTRY.feature],
     contributes: ["detail.javdb-native", "detail.javbus-native", "detail.workspace", "detail.fc2-owned", "detail.page-state-actions", "detail.javdb-preview", "detail.javbus-preview", "detail.reviews", "detail.related", "detail.native-magnets", "detail.external-magnets", "detail.screenshot", "detail.external-sites"],
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
         const createFc2Controller = (/** @type {any} */ fc2Lookup) => runtime.enabledContributions.includes("detail.fc2-owned")
-            ? new DetailFc2OwnedController({
+            ? deps[SERVICE.fc2OwnedDetail].create({
                 hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], magnet: deps[SERVICE.magnet], dialog: deps[SERVICE.dialog],
                 translation: deps[SERVICE.translation], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage],
                 screenshot: deps[SERVICE.screenshot], review: deps[SERVICE.review], related: deps[SERVICE.related], state: deps[SERVICE.state],
@@ -33,7 +31,7 @@ export default defineFeature({
             })
             : null;
         const fc2Lookup = runtime.enabledContributions.includes("detail.fc2-owned")
-            ? new ListFc2LookupController({ hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], translation: deps[SERVICE.translation], settings: deps[SERVICE.settings], ui: deps[SERVICE.ui], scope: runtime.scope })
+            ? deps[SERVICE.fc2Lookup]
             : null;
         const fc2Plugin = createFc2Controller(fc2Lookup);
         if (runtime.route === "owned-detail") {

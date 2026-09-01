@@ -16,6 +16,7 @@ const fc2Source = readTestFile(join(repoRoot, "src/features/detail/detail-fc2-ow
 const fc2ViewSource = readTestFile(join(repoRoot, "src/ui/detail/fc2-workspace-view.js"), "utf8");
 const fc2NavigationSource = readTestFile(join(repoRoot, "src/features/list/list-fc2-navigation-controller.js"), "utf8");
 const fc2By123AvSource = readTestFile(join(repoRoot, "src/features/list/list-fc2-lookup-controller.js"), "utf8");
+const fc2LookupSource = readTestFile(join(repoRoot, "src/services/fc2-lookup-service.js"), "utf8");
 const screenshotSource = readTestFile(join(repoRoot, "src/ui/detail/screenshot-panel.js"), "utf8");
 const screenshotControllerSource = readTestFile(join(repoRoot, "src/features/detail/detail-screenshot-controller.js"), "utf8");
 const listPageSource = readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8");
@@ -115,7 +116,10 @@ describe("FC2 owned detail workspace", () => {
     it("keeps state action buttons mounted while either summary renderer refreshes", () => {
         expect(fc2Source).toContain('data-jhs-role="summary-content"');
         expect(fc2Source).toContain("context.root.find('[data-jhs-role=\"summary-content\"]')");
-        expect(fc2By123AvSource).toContain("context.root.find('[data-jhs-role=\"summary-content\"]')");
+        expect(fc2LookupSource).toContain("getVideoInfo");
+        expect(fc2LookupSource).toContain("getPeople");
+        expect(fc2LookupSource).toContain("getImages");
+        expect(fc2By123AvSource).not.toContain("summary-content");
         expect(fc2Source).not.toContain('body.append(context.getSlot("summary").find(".jhs-fc2-toolbar"))');
         expect(fc2By123AvSource).not.toContain('context.getSlot("summary").find(".jhs-fc2-toolbar")');
     });
@@ -162,7 +166,7 @@ describe("FC2 owned detail workspace", () => {
         expect(fc2By123AvSource).not.toContain("mountPanels(context");
         expect(fc2By123AvSource).not.toContain("configureJavDbWantButton(context");
         expect(fc2By123AvSource).not.toContain('getBean("Fc2Plugin")');
-        expect(fc2By123AvSource).toContain("loadSummary(context, url)");
+        expect(fc2LookupSource).toContain("getVideoInfo(carNum, url");
         expect(fc2By123AvSource).not.toContain("() => void this.loadDetail(context, url)");
     });
 

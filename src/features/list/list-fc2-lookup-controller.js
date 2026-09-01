@@ -1,20 +1,17 @@
 // @ts-check
 
-import { _, escapeHtml, o } from "../../core/constants.js";
-import { createFc2SourceLinks, renderFc2Gallery, renderFc2State } from "../../ui/detail/fc2-workspace-view.js";
+import { escapeHtml, o } from "../../core/constants.js";
 
 /** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
 /** @typedef {{ preventDefault: () => void, target: EventTarget }} JQueryClickEvent */
-/** @typedef {{ root: JQueryHandle, carNum: string, isAlive: () => boolean }} Fc2DetailContext */
-/** @typedef {{ title: string, publishDate: string, moviePoster: null }} Fc2Summary */
-/** @typedef {{ actors: Array<{ name: string, url: string }>, seller?: { name: string, url?: string } | null }} Fc2People */
 /** @typedef {{ url: string, imageUrl?: string, title: string, carNum: string }} Fc2CatalogItem */
 
 export class ListFc2LookupController {
-    /** @param {{hostAdapter?: any, movie?: any, translation?: any, settings?: any, ui?: any, scope?: any, document?: Document, window?: Window}} [options] */
+    /** @param {{hostAdapter?: any, movie?: any, lookup?: any, translation?: any, settings?: any, ui?: any, scope?: any, document?: Document, window?: Window}} [options] */
     constructor(options = {}) {
         this.hostAdapter = options.hostAdapter ?? null;
         this.movie = options.movie ?? null;
+        this.lookup = options.lookup ?? null;
         this.translation = options.translation ?? null;
         this.settings = options.settings ?? null;
         this.ui = options.ui ?? null;
@@ -60,6 +57,7 @@ export class ListFc2LookupController {
     /** @param {string} carNum */
     async resolveMovieId(carNum) {
         const scope = await this.getLifecycleScope();
+        if (this.lookup?.resolveMovieId) return this.lookup.resolveMovieId(carNum, { scope });
         return (await this.getRuntimeService("movie").resolve({ carNum }, { scope }))?.movieId || null;
     }
     /** @param {{scope?: any}} [options] */
@@ -135,66 +133,6 @@ export class ListFc2LookupController {
         } finally {
             e.close();
         }
-    }
-    /** 将 123AV 数据填入 Fc2Plugin 创建的固定工作区。 */
-    /** @param {Fc2DetailContext} context @param {string} url */
-    async loadDetail(context, url) {
-        const infoPromise = this.loadSummary(context, url), imagesPromise = this.getImgList(context.carNum), actressPromise = this.getActressInfo(context.carNum);
-        imagesPromise.then((images => context.isAlive() && renderFc2Gallery(context, images, null))).catch((error => context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)))));
-        actressPromise.then((async data => {
-            await infoPromise.catch((() => null));
-            context.isAlive() && this.render123AvActress(context, data);
-        })).catch((error => clog.error("FC2 演员信息加载失败", error)));
-        await Promise.allSettled([ infoPromise, imagesPromise, actressPromise ]);
-    }
-    /** @param {Fc2DetailContext} context @param {string} url */
-    async loadSummary(context, url) {
-        try {
-            const info = await this.get123AvVideoInfo(context.carNum, url);
-            if (!context.isAlive()) return null;
-            this.render123AvSummary(context, info);
-            return info;
-        } catch (error) {
-            context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="summary-content"]'), "影片信息加载失败", (() => void this.loadSummary(context, url))), this.getClog().error?.("123AV 详情加载失败", error);
-            throw error;
-        }
-    }
-    /** @param {Fc2DetailContext} context @param {Fc2Summary} info */
-    render123AvSummary(context, info) {
-        const body = context.root.find('[data-jhs-role="summary-content"]').empty(), title = $('<h1 class="jhs-fc2-title"><strong class="current-title"></strong></h1>');
-        title.find("strong").text(info.title || "无标题"), body.append(title, $('<div class="jhs-fc2-meta"></div>').append($("<span></span>").text(`番号：${context.carNum}`), $("<span></span>").text(`发行：${info.publishDate || "未知"}`)), '<div class="jhs-fc2-actors" data-jhs-role="actors"><strong>主演：</strong><span>正在加载演员…</span></div>', '<div class="jhs-fc2-meta" data-jhs-role="seller"></div>', createFc2SourceLinks(context, this.getRuntimeService("movie")), $('<span class="jhs-is-hidden" data-jhs-role="publish-time"></span>').text(info.publishDate || ""));
-    }
-    /** @param {string} carNum @param {string} e */
-    async get123AvVideoInfo(carNum, e) {
-        const scope = await this.getLifecycleScope();
-        const detail = await this.getRuntimeService("movie").detail({ carNum, url: e, providerId: "av123" }, { scope });
-        return { title: detail?.title || "", publishDate: detail?.releaseDate || "", moviePoster: null };
-    }
-    /** @param {string} e */
-    async getActressInfo(e) {
-        const scope = await this.getLifecycleScope();
-        return this.getRuntimeService("movie").people("fc2ppvdb", { carNum: e }, { scope });
-    }
-    /** @param {string} e */
-    async getImgList(e) {
-        const scope = await this.getLifecycleScope();
-        return (await this.getRuntimeService("movie").images("fc2content", { carNum: e }, { scope })).map(((/** @type {{ url: string }} */ item) => item.url));
-    }
-    /** @param {Fc2DetailContext} context */
-    async reloadImages(context) {
-        try {
-            const images = await this.getImgList(context.carNum);
-            context.isAlive() && renderFc2Gallery(context, images, null);
-        } catch (error) {
-            context.isAlive() && renderFc2State(context.root.find('[data-jhs-role="gallery-grid"]'), "剧照加载失败", (() => void this.reloadImages(context)));
-        }
-    }
-    /** @param {Fc2DetailContext} context @param {Fc2People} data */
-    render123AvActress(context, data) {
-        const host = context.root.find('[data-jhs-role="actors"]').empty().append("<strong>主演：</strong>");
-        data.actors.length ? data.actors.forEach((actor => host.append($("<a></a>").addClass("jhs-fc2-actor").attr({ href: actor.url, target: "_blank", rel: "noopener noreferrer" }).text(actor.name)))) : host.append($("<span></span>").text("暂无演员信息"));
-        context.root.find('[data-jhs-role="actress-data"]').remove(), context.root.find(".jhs-fc2-summary__body").append($('<span class="jhs-is-hidden" data-jhs-role="actress-data"></span>').text(data.actors.map((actor => actor.name)).join(" ")));
-        if (data.seller) context.root.find('[data-jhs-role="seller"]').empty().append("卖家：", data.seller.url ? $("<a></a>").attr({ href: data.seller.url, target: "_blank", rel: "noopener noreferrer" }).text(data.seller.name) : this.document.createTextNode(data.seller.name));
     }
     /** @param {Fc2CatalogItem[]} e */
     markDataListHtml(e) {

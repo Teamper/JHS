@@ -9,11 +9,10 @@ import { ListAutoPageController } from "./list-auto-page-controller.js";
 import { ListActionsController } from "./list-actions-controller.js";
 import { ListCoverStateActionsController } from "./list-cover-state-actions-controller.js";
 import { ListFc2NavigationController } from "./list-fc2-navigation-controller.js";
-import { DetailFc2OwnedController } from "../detail/detail-fc2-owned-controller.js";
 
 export default defineFeature({
     id: "list", kind: "feature", disableable: true, failurePolicy: "degraded", sites: ["javdb", "javbus"], routes: ["list", "other"], startup: "eager",
-    requires: [PORT.host, PORT.style, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.legacyStorage, SERVICE.storageMutation, SERVICE.state, SERVICE.settings, SERVICE.eventBus, SERVICE.movie, SERVICE.screenshot, SERVICE.dialog, SERVICE.review, SERVICE.related, SERVICE.magnet, SERVICE.ui, REGISTRY.feature],
+    requires: [PORT.host, PORT.style, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.legacyStorage, SERVICE.storageMutation, SERVICE.state, SERVICE.settings, SERVICE.eventBus, SERVICE.movie, SERVICE.fc2Lookup, SERVICE.fc2OwnedDetail, SERVICE.screenshot, SERVICE.dialog, SERVICE.review, SERVICE.related, SERVICE.magnet, SERVICE.ui, REGISTRY.feature],
     contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions", "list.fc2-navigation", "list.cover-state-actions", "list.javbus-images", "list.fc2-lookup"],
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
@@ -31,15 +30,15 @@ export default defineFeature({
             ? new ListCoverStateActionsController({ hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], movie: deps[SERVICE.movie], screenshot: deps[SERVICE.screenshot], state: deps[SERVICE.state], features: deps[REGISTRY.feature], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope })
             : null;
         const fc2LookupPlugin = runtime.enabledContributions.includes("list.fc2-lookup")
-            ? new ListFc2LookupController({ hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], translation: deps[SERVICE.translation], settings: deps[SERVICE.settings], ui: deps[SERVICE.ui], scope: runtime.scope })
+            ? new ListFc2LookupController({ hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], lookup: deps[SERVICE.fc2Lookup], translation: deps[SERVICE.translation], settings: deps[SERVICE.settings], ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
         const fc2OwnedEnabled = runtime.isContributionEnabled("detail", "detail.fc2-owned");
         const fc2Controller = runtime.enabledContributions.includes("list.fc2-navigation") && fc2OwnedEnabled
-            ? new DetailFc2OwnedController({
+            ? deps[SERVICE.fc2OwnedDetail].create({
                 hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], magnet: deps[SERVICE.magnet], dialog: deps[SERVICE.dialog],
                 translation: deps[SERVICE.translation], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage],
                 screenshot: deps[SERVICE.screenshot], review: deps[SERVICE.review], related: deps[SERVICE.related], state: deps[SERVICE.state],
-                features: deps[REGISTRY.feature], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope, fc2Lookup: fc2LookupPlugin,
+                features: deps[REGISTRY.feature], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope, fc2Lookup: deps[SERVICE.fc2Lookup],
             })
             : null;
         const fc2NavigationPlugin = runtime.enabledContributions.includes("list.fc2-navigation") && fc2OwnedEnabled

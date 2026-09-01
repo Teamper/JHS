@@ -91,9 +91,7 @@ async function checkImportGraph() {
     const boundaryErrors = [];
     const allowedLayers = {
         core: new Set(["core"]),
-        // Feature-owned controllers may share explicit capability modules with
-        // another feature; cycles remain rejected below.
-        features: new Set(["features", "services", "ui", "contracts", "core", "integrations"]),
+        features: new Set(["services", "ui", "contracts", "core", "integrations"]),
         plugins: new Set(["core", "contracts", "services", "ui", "features", "integrations", "platform", "compat"]),
         compat: new Set(["core", "plugins"]),
         services: new Set(["contracts", "core"]),

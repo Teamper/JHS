@@ -81,7 +81,7 @@ const listImageControllerSource = await read("src/features/list/list-image-contr
 const listBatchServiceSource = await read("src/features/list/list-batch-service.js");
 const listFilterServiceSource = await read("src/features/list/list-filter-service.js");
 const listIncrementalServiceSource = await read("src/features/list/list-incremental-service.js");
-const listFiltersSource = await read("src/features/list/list-filters.js");
+const listFiltersSource = await read("src/core/list-filters.js");
 const fc2 = await read("src/features/detail/detail-fc2-owned-controller.js");
 const fc2By123Av = await read("src/features/list/list-fc2-lookup-controller.js");
 const uiPrimitives = await read("src/core/ui-primitives.js");
@@ -366,7 +366,7 @@ assertIncludes(detailControllerSource, "workspaceController?.start?.()", "detail
 assertIncludes(detailManifestSource, '"detail.workspace"', "detail workspace contribution selection");
 assertIncludes(detailManifestSource, '"detail.javdb-native"', "JavDB native detail contribution selection");
 assertIncludes(detailManifestSource, '"detail.javbus-native"', "JavBus native detail contribution selection");
-assertIncludes(detailManifestSource, "new DetailFc2OwnedController", "FC2 detail direct controller");
+assertIncludes(detailManifestSource, "SERVICE.fc2OwnedDetail", "FC2 detail shared capability");
 assert(!detailManifestSource.includes("resolveLegacyContribution"), "detail feature must not resolve FC2 through the legacy registry");
 assertIncludes(detailWorkspaceSource, "this.scope.observe(resource.observeRoot", "detail workspace injected scope");
 assertIncludes(detailNativeControllerSource, "class DetailNativeController", "JavDB native detail implementation");
@@ -603,7 +603,7 @@ assert(!statusImport.includes("downloaded"), "JavDB watched import must not map 
 
 const expectedControllers = [
   ["features/detail/detail-javdb-preview-controller.js", "DetailJavDbPreviewController", "PreviewVideoPlugin"],
-  ["features/detail/detail-fc2-owned-controller.js", "DetailFc2OwnedController", "Fc2Plugin"],
+  ["features/detail/detail-fc2-owned-controller.js", "Fc2OwnedDetailCoordinator", "Fc2Plugin"],
   ["features/detail/detail-native-magnets-controller.js", "DetailNativeMagnetsController", "HighlightMagnetPlugin"],
   ["features/detail/detail-external-sites-controller.js", "DetailExternalSitesController", "OtherSitePlugin"],
   ["features/detail/detail-page-state-actions-controller.js", "DetailPageStateActionsController", "DetailPageButtonPlugin"],

@@ -5,7 +5,7 @@ import { jhsEventBus } from "../../../core/event-bus.js";
 import { parseNumberSetting } from "../../../core/feature-helpers.js";
 import { applyImageMode } from "./setting-styles.js";
 import { decryptCredential, encryptCredential } from "../../../core/credential-crypto.js";
-import { normalizeQuickFilterKey } from "../../list/list-filters.js";
+import { normalizeQuickFilterKey } from "../../../core/list-filters.js";
 import { bindSettingRows } from "../../../ui/settings/setting-control-renderer.js";
 
 /** @typedef {Record<string, any>} SettingDependencies */

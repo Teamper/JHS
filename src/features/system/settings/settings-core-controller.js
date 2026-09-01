@@ -3,7 +3,7 @@
 import { _, l, normalizeCarNum, r } from "../../../core/constants.js";
 import { buildFallbackCarUrl, parseCarNumberText } from "../../../core/feature-helpers.js";
 import { getDefaultListSelectors } from "../../../core/list-selectors.js";
-import { normalizeQuickFilterKey } from "../../list/list-filters.js";
+import { normalizeQuickFilterKey } from "../../../core/list-filters.js";
 import { legacyActionToFlag } from "../../../core/state-model.js";
 import { registerSettingsUiOwner } from "../../../core/settings-ui-owner.js";
 import { applyThemeMode } from "../../../core/theme.js";

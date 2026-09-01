@@ -24,6 +24,7 @@ import { ScreenshotService } from "../services/screenshot-service.js";
 import { TranslationService } from "../services/translation-service.js";
 import { SubtitleService } from "../services/subtitle-service.js";
 import { AccountService } from "../services/account-service.js";
+import { Fc2LookupService } from "../services/fc2-lookup-service.js";
 import { SettingsService } from "../services/settings-service.js";
 import { StorageService } from "../services/storage-service.js";
 import { WebDavService } from "../services/webdav-service.js";
@@ -37,6 +38,8 @@ import { SettingsRegistry } from "./settings-registry.js";
 import { registerDefaultSettings } from "./settings-catalog.js";
 import { LifecycleScope } from "../core/lifecycle-scope.js";
 import { UiService } from "../services/ui-service.js";
+import { Fc2OwnedDetailCapability } from "./fc2-owned-detail-capability.js";
+import { Fc2OwnedDetailCoordinator } from "../features/detail/detail-fc2-owned-controller.js";
 
 /** @param {{gmRequest: (options: Record<string, any>) => any, gmGetValue: (key: string, fallback?: unknown) => unknown, gmSetValue: (key: string, value: unknown) => void, legacyHttp?: any, legacyStorage?: any, eventBus?: any, storageForage: any, localStorage: Storage, layer: any, stateService: any, storageMutationCoordinator?: any, hostAdapter?: any, hostAdapters?: {javdb?: any, javbus?: any}, disabled?: string[], site?: string, route?: string, localOrigins?: string[]}} runtime */
 export function createAppContext(runtime) {
@@ -102,6 +105,8 @@ export function createAppContext(runtime) {
     const subtitle = new SubtitleService(integrations);
     const account = new AccountService(integrations);
     const offline = new OfflineService(providers, integrations);
+    const fc2Lookup = new Fc2LookupService({ movie });
+    const fc2OwnedDetail = new Fc2OwnedDetailCapability(Fc2OwnedDetailCoordinator);
 
     container
         .register(PORT.navigation, navigationPort).register(PORT.http, httpPort).register(PORT.storage, storagePort)
@@ -110,7 +115,7 @@ export function createAppContext(runtime) {
         .register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.legacyStorage, runtime.legacyStorage ?? null).register(SERVICE.webdav, webdav)
         .register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile)
         .register(SERVICE.state, runtime.stateService).register(SERVICE.eventBus, runtime.eventBus ?? null).register(SERVICE.storageMutation, runtime.storageMutationCoordinator ?? null)
-        .register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.imageSearch, imageSearch).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet)
+        .register(SERVICE.movie, movie).register(SERVICE.fc2Lookup, fc2Lookup).register(SERVICE.fc2OwnedDetail, fc2OwnedDetail).register(SERVICE.actressInfo, actressInfo).register(SERVICE.imageSearch, imageSearch).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet)
         .register(SERVICE.screenshot, screenshot).register(SERVICE.offline, offline)
         .register(SERVICE.translation, translation).register(SERVICE.subtitle, subtitle).register(SERVICE.account, account).register(SERVICE.ui, ui)
         .register(REGISTRY.command, commands).register(REGISTRY.provider, providers).register(REGISTRY.integration, integrations).register(REGISTRY.settings, settingsRegistry);
@@ -120,5 +125,5 @@ export function createAppContext(runtime) {
 
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route, styles });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, legacyStorage: runtime.legacyStorage ?? null, webdav, dialog, styles, ui, settings, cache, profile, state: runtime.stateService, storageMutation: runtime.storageMutationCoordinator ?? null, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, legacyStorage: runtime.legacyStorage ?? null, webdav, dialog, styles, ui, settings, cache, profile, state: runtime.stateService, storageMutation: runtime.storageMutationCoordinator ?? null, movie, fc2Lookup, fc2OwnedDetail, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
 }
