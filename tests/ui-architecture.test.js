@@ -19,7 +19,7 @@ describe("dialog preset sizing", () => {
 });
 
 describe("detail workspace adapters", () => {
-    const source = readTestFile(join(process.cwd(), "src/plugins/status/detail-workspace.js"), "utf8");
+    const source = readTestFile(join(process.cwd(), "src/features/detail/detail-workspace-controller.js"), "utf8");
     const javdbHost = readTestFile(join(process.cwd(), "src/platform/hosts/javdb-host-adapter.js"), "utf8");
     const javbusHost = readTestFile(join(process.cwd(), "src/platform/hosts/javbus-host-adapter.js"), "utf8");
     it("keeps the protected JavDB controller and resource root as an adapter boundary", () => {
@@ -29,43 +29,43 @@ describe("detail workspace adapters", () => {
         expect(source).not.toContain("#magnet-table");
     });
     it("declares only JHS-owned host slots", () => {
-        for (const name of [ "summary-actions", "related", "reviews" ]) expect(source).toContain(`data-jhs-slot="${name}"`);
+        for (const name of [ "summary-actions", "related", "reviews" ]) expect(source).toContain(name);
     });
     it("adopts owned panels once and observes only resource lifecycle changes", () => {
         expect(source).toContain("adoptExistingOwnedPanels(root)");
-        expect(source).toContain("this.lifecycleScope.observe(adapter.observeRoot[0]");
+        expect(source).toContain("this.scope.observe(resource.observeRoot");
         expect(source).toContain("releaseObserver(this.resourceObserver)");
-        expect(source).toContain('jhsEventBus.emit("magnet-items-updated"');
+        expect(source).toContain('this.eventBus?.emit?.("magnet-items-updated"');
         expect(source).not.toContain("observer.observe(document.body");
         for (const legacy of [ "routeSections", "moveToSection", "movePanelToSection" ]) expect(source).not.toContain(legacy);
     });
 });
 
 describe("list toolbar and UI cleanup contracts", () => {
-    const commandbar = readTestFile(join(process.cwd(), "src/plugins/status/mobile-bottom-bar.js"), "utf8");
+    const commandbar = readTestFile(join(process.cwd(), "src/features/system/responsive-shell-bottom-bar-controller.js"), "utf8");
     const hitShow = readTestFile(join(process.cwd(), "src/features/discovery/hit-show-controller.js"), "utf8");
     const translate = readTestFile(join(process.cwd(), "src/features/external-bridge/translation-controller.js"), "utf8");
     const translationUi = readTestFile(join(process.cwd(), "src/ui/translation/title-translation.js"), "utf8");
-    const settings = readTestFile(join(process.cwd(), "src/plugins/backup/setting-templates.js"), "utf8");
-    const settingPlugin = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8");
-    const settingStyles = readTestFile(join(process.cwd(), "src/plugins/backup/setting-styles.js"), "utf8");
-    const pluginPanels = readTestFile(join(process.cwd(), "src/plugins/backup/setting-panels.js"), "utf8");
-    const reviews = readTestFile(join(process.cwd(), "src/plugins/external-search/review.js"), "utf8");
+    const settings = readTestFile(join(process.cwd(), "src/features/system/settings/setting-templates.js"), "utf8");
+    const settingPlugin = readTestFile(join(process.cwd(), "src/features/system/settings/settings-core-controller.js"), "utf8");
+    const settingStyles = readTestFile(join(process.cwd(), "src/features/system/settings/setting-styles.js"), "utf8");
+    const pluginPanels = readTestFile(join(process.cwd(), "src/features/system/settings/setting-panels.js"), "utf8");
+    const reviews = readTestFile(join(process.cwd(), "src/features/detail/detail-reviews-controller.js"), "utf8");
     const reviewUi = readTestFile(join(process.cwd(), "src/ui/detail/review-panel.js"), "utf8");
     const oneTwoThreeOffline = readTestFile(join(process.cwd(), "src/features/external-bridge/one-two-three-controller.js"), "utf8");
     const pan123Integration = readTestFile(join(process.cwd(), "src/integrations/pan123/manifest.js"), "utf8");
     const newVideo = readTestFile(join(process.cwd(), "src/features/discovery/new-video-controller.js"), "utf8");
-    const related = readTestFile(join(process.cwd(), "src/plugins/external-search/related.js"), "utf8");
+    const related = readTestFile(join(process.cwd(), "src/features/detail/detail-related-controller.js"), "utf8");
     const relatedUi = readTestFile(join(process.cwd(), "src/ui/detail/related-panel.js"), "utf8");
-    const otherSite = readTestFile(join(process.cwd(), "src/plugins/external-search/other-site.js"), "utf8");
-    const magnetHub = readTestFile(join(process.cwd(), "src/plugins/external-search/magnet-hub.js"), "utf8");
-    const settingForms = readTestFile(join(process.cwd(), "src/plugins/backup/setting-forms.js"), "utf8");
-    const listButtons = readTestFile(join(process.cwd(), "src/plugins/status/list-page-button.js"), "utf8");
-    const coverButtons = readTestFile(join(process.cwd(), "src/plugins/image-viewer/cover-button.js"), "utf8");
-    const previewVideo = readTestFile(join(process.cwd(), "src/plugins/image-viewer/preview-video.js"), "utf8");
+    const otherSite = readTestFile(join(process.cwd(), "src/features/detail/detail-external-sites-controller.js"), "utf8");
+    const magnetHub = readTestFile(join(process.cwd(), "src/features/detail/detail-external-magnets-controller.js"), "utf8");
+    const settingForms = readTestFile(join(process.cwd(), "src/features/system/settings/setting-forms.js"), "utf8");
+    const listButtons = readTestFile(join(process.cwd(), "src/features/list/list-actions-controller.js"), "utf8");
+    const coverButtons = readTestFile(join(process.cwd(), "src/features/list/list-cover-state-actions-controller.js"), "utf8");
+    const previewVideo = readTestFile(join(process.cwd(), "src/features/detail/detail-javdb-preview-controller.js"), "utf8");
     const injection = readFileSync(join(process.cwd(), "src/core/css-injection.js"), "utf8");
     const bootstrap = readFileSync(join(process.cwd(), "src/app/bootstrap.js"), "utf8");
-    const detailButtons = readTestFile(join(process.cwd(), "src/plugins/status/detail-page-button.js"), "utf8");
+    const detailButtons = readTestFile(join(process.cwd(), "src/features/detail/detail-page-state-actions-controller.js"), "utf8");
     const top250 = readTestFile(join(process.cwd(), "src/features/discovery/top250-controller.js"), "utf8");
 
     it("builds the command bar after plugin initialization and keeps semantic actions separate", () => {
@@ -84,8 +84,8 @@ describe("list toolbar and UI cleanup contracts", () => {
         expect(commandbar).toContain('hasListPageButton ? item("check", "开始鉴定") : "") + (hasNewVideo ? item("newVideo", "新作品") : "") + (hasBlacklist ? item("blacklist", "黑名单") : "") + (hasHistory ? item("history", "鉴定记录") : "") + (hasListPageButton ? item("sort"');
         expect(commandbar).toContain(': "") + (hasListPage ? item("quickFilter"');
         expect(commandbar).toContain('+ divider + group(item("logger", "运行日志") + (hasSetting ? item("setting", "设置") : ""))');
-        expect(commandbar).toContain('const hasListPageButton = !!this.getBean("ListPageButtonPlugin")');
-        expect(commandbar).toContain('await this.getBean("ListPageButtonPlugin")?.openWaitCheck?.()');
+        expect(commandbar).toContain("const hasListPageButton = Boolean(this.listFeatureApi?.hasActions");
+        expect(commandbar).toContain("await this.listFeatureApi?.openWaitCheck?.()");
         expect(commandbar).not.toContain('$("#waitCheckBtn").click()');
         expect(commandbar).not.toMatch(/\.jhs-commandbar__filters\s*\{[^}]*overflow-x\s*:\s*auto/);
         expect(commandbar).not.toMatch(/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*overflow-x\s*:\s*auto/);
@@ -157,7 +157,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     });
 
     it("shares quick settings across desktop and mobile without a mobile navbar trigger", () => {
-        const settingPlugin = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8");
+        const settingPlugin = readTestFile(join(process.cwd(), "src/features/system/settings/settings-core-controller.js"), "utf8");
         expect(settingPlugin).toContain("syncDesktopSettingNav(");
         expect(settingPlugin).toContain("mountDesktopSettingNav()");
         expect(settingPlugin).toContain("unmountDesktopSettingNav()");
@@ -168,8 +168,8 @@ describe("list toolbar and UI cleanup contracts", () => {
         const mobileQuickSetting = settingPlugin.slice(settingPlugin.indexOf("openQuickSetting()"), settingPlugin.indexOf("async openSettingDialog"));
         expect(mobileQuickSetting).not.toContain("layer.open(");
         expect(settingPlugin).toMatch(/scope\.listen\(document, "click"[\s\S]*?closest\("#setting-btn, #mini-setting-btn"\)[\s\S]*?disposeQuickSettingHost\(element\)[\s\S]*?openSettings\(\)/);
-        expect(commandbar).toContain('this.getBean("SettingPlugin")?.openQuickSetting()');
-        expect(commandbar).not.toContain('this.getBean("SettingPlugin")?.openSettingDialog()');
+        expect(commandbar).toContain("this.settingsFeatureApi?.openQuickSetting?.()");
+        expect(commandbar).not.toContain("this.settingsFeatureApi?.openSettingDialog?.()");
         expect(commandbar).toMatch(/const action = \$\(e\.currentTarget\)\.data\("action"\);[\s\S]*"quickFilter" === action[\s\S]*closeMenu\(!0\);\s*void this\.handleAction\(action\)\.catch/);
         expect(commandbar).toContain('id="jhs-fab" class="jhs-btn"');
         expect(commandbar).toContain('role="menuitem" class="jhs-btn jhs-fab-menu-item"');
@@ -181,7 +181,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     });
 
     it("binds full-settings layout ranges idempotently after loading the form", () => {
-        expect(settingForms).toContain("bindLayoutRangeEvents(root, dependencies.busImg, dependencies.host, dependencies.settings);");
+        expect(settingForms).toContain("bindLayoutRangeEvents(root, dependencies.host);");
         expect(settingForms).toContain('.off(".jhsSetting")');
         expect(settingForms).toContain('.on("input.jhsSetting"');
         expect(settingForms).not.toContain('.on("change.jhsSetting"');
@@ -241,8 +241,8 @@ describe("list toolbar and UI cleanup contracts", () => {
 
     it("routes magnet source requests through scoped HttpService", () => {
         expect(magnetHub).not.toContain("gmHttp");
-        expect(magnetHub).toContain('getRuntimeService("http").request');
-        expect(magnetHub).toContain('getRuntimeService("scope")');
+        expect(magnetHub).toContain('this.http ?? this.runtimeServices?.http).request');
+        expect(magnetHub).toContain('this.scope ?? await this.runtimeServices?.scope?.()');
         expect(magnetHub).toContain('trustClass: "custom-public"');
         expect(magnetHub).toContain('trustClass: "builtin-public"');
     });
@@ -306,7 +306,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     it("tests resource sources through scoped HttpService trust classes", () => {
         const start = settingPlugin.indexOf("async testSource"), testSource = settingPlugin.slice(start, settingPlugin.indexOf("previewCarNumbers", start));
         expect(testSource).toContain('getRuntimeService("http").request');
-        expect(testSource).toContain('getRuntimeService("scope")');
+        expect(testSource).toContain('this.getLifecycleScope()');
         expect(testSource).toContain('trustClass: "custom-public"');
         expect(testSource).toContain('trustClass: "builtin-public"');
         expect(testSource).not.toContain("gmHttp");

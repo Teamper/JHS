@@ -27,7 +27,7 @@ for (const [label, url, selector] of pages) {
       await injectUserscriptRuntime(page);
       await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.requests !== undefined)).toBe(true);
       await page.evaluate((mode) => {
-        const settings = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings");
+        const settings = window.unsafeWindow.__jhsBrowserTestApi.services.settings;
         return settings.set("themeMode", mode);
       }, theme);
       await page.waitForTimeout(300);
@@ -42,7 +42,7 @@ test("Settings dialog visual baseline", async ({ context, page }, testInfo) => {
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.unsafeWindow.__jhsFeatureRuntime.getFeatureApi("settings").then((api) => api?.openSettingDialog?.()));
   await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   // 只锁定设置弹窗本身，避免页面背景（FAB/日志浮层/列表状态）造成非确定性 diff。
   await expect(page.locator(".layui-layer")).toHaveScreenshot("settings-dialog.png", { maxDiffPixelRatio: 0.02 });

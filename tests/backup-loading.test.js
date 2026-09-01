@@ -6,7 +6,7 @@ vi.mock("../src/core/credential-crypto.js", () => ({
     encryptData: vi.fn(async value => `encrypted:${value}`),
 }));
 
-import { backupDataByWebDav } from "../src/plugins/backup/setting-backup.js";
+import { backupDataByWebDav } from "../src/features/system/settings/setting-backup.js";
 
 describe("backup loading lifecycle", () => {
     afterEach(() => vi.unstubAllGlobals());

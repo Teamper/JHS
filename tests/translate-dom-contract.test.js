@@ -101,7 +101,7 @@ describe("translation DOM/jQuery contract", () => {
     it("requires an explicit quick root and throws instead of guessing globally", async () => {
         const rootDom = new JSDOM("<!DOCTYPE html><body></body>", { url: "https://javdb.com/" });
         vi.stubGlobal("$", jqueryFactory(rootDom.window));
-        const { initQuickSettingForm } = await import("../src/plugins/backup/setting-forms.js");
+        const { initQuickSettingForm } = await import("../src/features/system/settings/setting-forms.js");
         await expect(initQuickSettingForm({ settingsRegistry: null, settings: {} }, () => null, () => {}, null)).rejects.toThrow("Quick setting root is required");
     });
 });

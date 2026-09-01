@@ -40,6 +40,7 @@ function loadRealListPage({ carList = [] } = {}) {
         readTestFile(join(repoRoot, "src/core/site-context.js"), "utf8"),
         readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"),
         "initializeRuntimeConstants(window.location);",
+        readTestFile(join(repoRoot, "src/core/list-selectors.js"), "utf8"),
         readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"),
         readTestFile(join(repoRoot, "src/features/list/list-filters.js"), "utf8"),
         readTestFile(join(repoRoot, "src/features/list/list-view.js"), "utf8"),
@@ -53,7 +54,15 @@ function loadRealListPage({ carList = [] } = {}) {
     ].join("\n");
     vm.runInContext(source, context);
     contextRef = context;
-    return { dom, plugin: new context.TestListPagePlugin(), $, storageManager };
+    const plugin = new context.TestListPagePlugin({
+        runtimeServices: {
+            translation: { translate: vi.fn(async () => "译文") },
+            settings: { snapshot: () => ({ translateTitle: "no", hoverBigImg: "no" }) },
+            state: { getActivityLog: async () => ({ entries: [] }) },
+            ui: { getJQuery: () => $, getClog: () => ({}) },
+        },
+    });
+    return { dom, plugin, $, storageManager };
 }
 
 /** markDataListHtml 的同构卡片（热播页真实 DOM 结构）。 */

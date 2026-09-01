@@ -1,8 +1,10 @@
 import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import vm from "node:vm";
+import { JSDOM } from "jsdom";
+import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
+import { DetailScreenshotController } from "../src/features/detail/detail-screenshot-controller.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 
@@ -11,52 +13,6 @@ function loadCarNumHelpers() {
     const context = vm.createContext({});
     vm.runInContext(`${source.slice(start, end)}; globalThis.normalize = normalizeCarNum; globalThis.first = firstValidCarNum; globalThis.assertContract = assertPageInfoContract;`, context);
     return context;
-}
-
-function getPageInfo({ url, javdb = false, javbus = false, copyCarNum = null, fallbackCarNum = null } = {}) {
-    const helpers = loadCarNumHelpers();
-    const collection = ({ text = "", attr = null, values = [] } = {}) => {
-        const api = {
-            first: () => api,
-            attr: () => attr,
-            text: () => text,
-            each: () => api,
-            prev: () => api,
-            parent: () => api,
-            find: () => api,
-            map: () => ({ get: () => values })
-        };
-        return api;
-    };
-    const $ = (selector) => {
-        if ("string" != typeof selector) return collection();
-        if (selector.includes("data-clipboard-text")) return collection({ attr: copyCarNum });
-        if (selector.includes(".panel-block")) return collection();
-        if (selector.includes("#video_id")) return collection({ text: fallbackCarNum || "" });
-        if (selector === ".female") return collection({ values: [ "女优甲" ] });
-        if (selector === ".male") return collection({ values: [ "男优乙" ] });
-        if (selector.includes('strong:contains("日期:")')) return collection({ text: "2026-08-11" });
-        if (selector.includes('span[onmouseover*="star_"]')) return collection({ values: [ "女优丙" ] });
-        if (selector.includes("發行日期")) return collection({ text: "發行日期: 2026-08-10" });
-        return collection();
-    };
-    const context = vm.createContext({
-        console,
-        URL,
-        performance: { now: () => 0 },
-        window: { location: new URL(url) },
-        $,
-        r: javdb,
-        l: javbus,
-        o: url,
-        normalizeCarNum: helpers.normalize,
-        firstValidCarNum: helpers.first,
-        assertPageInfoContract: helpers.assertContract,
-        i: (target, key, value) => (target[key] = value)
-    });
-    const source = readTestFile(join(repoRoot, "src/core/plugin-manager.js"), "utf8");
-    vm.runInContext(`${source}; globalThis.TestBasePlugin = BasePlugin;`, context);
-    return context.TestBasePlugin.prototype.getPageInfo.call({});
 }
 
 function loadUtils(url = "https://javdb.example/search?q=ABF-142") {
@@ -93,25 +49,17 @@ function loadDmmParser() {
 }
 
 function loadScreenshotPlugin(overrides = {}) {
-    const warn = vi.fn(), debug = vi.fn(), error = vi.fn(), cachedRequest = vi.fn(), context = vm.createContext({
-        console,
-        URL,
-        BasePlugin: class { getRuntimeService(name) { return "scope" === name ? async () => overrides.scope : overrides[name]; } },
-        normalizeCarNum: loadCarNumHelpers().normalize,
-        clog: { warn, debug, error, log: vi.fn() },
-        storageManager: { cachedRequest },
-        localStorage: { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn() },
-        gmHttp: overrides.gmHttp || { get: vi.fn() },
-        utils: overrides.utils || { htmlTo$dom: vi.fn() },
-        $: overrides.$ || vi.fn(),
-        r: true,
-        l: false
+    const warn = vi.fn(), debug = vi.fn(), error = vi.fn(), cachedRequest = vi.fn();
+    const scope = overrides.scope || { id: "detail", addCleanup: vi.fn(), assertActive: vi.fn() };
+    scope.addCleanup ||= vi.fn();
+    const controller = new DetailScreenshotController({
+        hostAdapter: { site: "javdb", document: {}, locateDetailRoot: () => null },
+        screenshot: overrides.screenshot || { isEnabled: () => true, resolve: vi.fn(async () => null) },
+        settings: overrides.settings || { snapshot: () => ({ enableLoadScreenShot: "yes" }) },
+        ui: { getClog: () => ({ warn, debug, error }), getJQuery: () => overrides.$ || vi.fn() },
+        scope,
     });
-    context.CACHE_TTL = { screenshot: 6048e5 };
-    const parserSource = readTestFile(join(repoRoot, "src/integrations/javstore/parser.js"), "utf8");
-    const source = readTestFile(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
-    vm.runInContext(`${parserSource}\n${source}; globalThis.TestScreenshotPlugin = ScreenShotPlugin;`, context);
-    return { Plugin: context.TestScreenshotPlugin, warn, debug, error, cachedRequest };
+    return { controller, warn, debug, error, cachedRequest };
 }
 
 describe("detail car number propagation", () => {
@@ -125,28 +73,6 @@ describe("detail car number propagation", () => {
         expect(normalize(null)).toBeNull();
         expect(first(" ", "ABF-142", "IPX-001")).toBe("ABF-142");
         expect(first(undefined, "null", "")).toBeNull();
-    });
-
-    it("returns the complete JavDB contract for normal and iframe detail pages", () => {
-        const normal = getPageInfo({ url: "https://javdb.example/v/abc", javdb: true, copyCarNum: "ABF-142" });
-        expect(JSON.parse(JSON.stringify(normal))).toEqual({
-            carNum: "ABF-142", url: "https://javdb.example/v/abc", actress: "女优甲", actors: "男优乙", publishTime: "2026-08-11"
-        });
-        const iframe = getPageInfo({
-            url: "https://javdb.example/v/abc?hideNav=1&jhsCarNum=IPX-001", javdb: true, copyCarNum: "ABF-142"
-        });
-        expect(iframe.carNum).toBe("IPX-001");
-        expect(typeof iframe).toBe("object");
-    });
-
-    it("returns the complete JavBus contract and preserves null as a parse failure", () => {
-        const bus = getPageInfo({ url: "https://javbus.example/ABF-142", javbus: true });
-        expect(JSON.parse(JSON.stringify(bus))).toEqual({
-            carNum: "ABF-142", url: "https://javbus.example/ABF-142", actress: "女优丙", actors: "", publishTime: "2026-08-10"
-        });
-        const missing = getPageInfo({ url: "https://javdb.example/v/abc", javdb: true });
-        expect(missing).not.toBeUndefined();
-        expect(missing.carNum).toBeNull();
     });
 
     it("adds an encoded car number to iframe detail URLs without losing existing query", () => {
@@ -186,8 +112,8 @@ describe("detail car number propagation", () => {
     });
 
     it("rejects an unavailable screenshot number before cache or JavStore access", async () => {
-        const { Plugin, warn, cachedRequest } = loadScreenshotPlugin();
-        await expect(new Plugin().getScreenshot("undefined")).rejects.toThrow("缩略图番号不可用");
+        const { controller, warn, cachedRequest } = loadScreenshotPlugin();
+        await expect(controller.getScreenshot("undefined")).rejects.toThrow("缩略图番号不可用");
         expect(warn).toHaveBeenCalledWith("跳过缩略图解析：番号不可用");
         expect(cachedRequest).not.toHaveBeenCalled();
     });
@@ -195,39 +121,39 @@ describe("detail car number propagation", () => {
     it("resolves screenshots through the declared ScreenshotService", async () => {
         const resolve = vi.fn(async () => [{ url: "https://img.javstore.net/preview.jpg", providerId: "javstore" }]);
         const settings = { snapshot: () => ({ enableLoadScreenShot: "yes" }) };
-        const { Plugin } = loadScreenshotPlugin({ screenshot: { resolve, isEnabled: () => true }, settings, scope: { id: "detail" } });
-        await expect(new Plugin().getScreenshot("IPZZ-479")).resolves.toBe("https://img.javstore.net/preview.jpg");
-        expect(resolve).toHaveBeenCalledWith({ carNum: "IPZZ-479" }, { scope: { id: "detail" }, settings: { enableLoadScreenShot: "yes" } });
+        const { controller } = loadScreenshotPlugin({ screenshot: { resolve, isEnabled: () => true }, settings, scope: { id: "detail" } });
+        await expect(controller.getScreenshot("IPZZ-479")).resolves.toBe("https://img.javstore.net/preview.jpg");
+        expect(resolve).toHaveBeenCalledWith({ carNum: "IPZZ-479" }, { scope: expect.objectContaining({ id: "detail" }), settings: { enableLoadScreenShot: "yes" } });
     });
 
     it("normalizes a legacy JavStore URL again at the image rendering boundary", () => {
-        const append = vi.fn(), container = { empty: vi.fn().mockReturnThis(), append, on: vi.fn().mockReturnThis() };
-        const image = { attributes: {}, attr(values) { Object.assign(this.attributes, values); return this; }, addClass: vi.fn().mockReturnThis() };
-        const { Plugin } = loadScreenshotPlugin({ $: vi.fn(value => value === ".screen-container" ? container : image) });
-        new Plugin().addImg("缩略图", "http://img.javstore.net/legacy.jpg");
-        expect(image.attributes.src).toBe("https://img.javstore.net/legacy.jpg");
-        expect(append).toHaveBeenCalledWith(image);
+        const dom = new JSDOM('<main><div class="preview-images"></div></main>'), $ = jqueryFactory(dom.window);
+        const scope = { addCleanup: vi.fn(), assertActive: vi.fn() }, controller = new DetailScreenshotController({
+            hostAdapter: { site: "javdb", document: dom.window.document, locateDetailRoot: () => dom.window.document, locateNativeGallery: () => dom.window.document.querySelector(".preview-images") },
+            screenshot: { isEnabled: () => true }, settings: { snapshot: () => ({ enableLoadScreenShot: "yes" }) },
+            ui: { getJQuery: () => $, getClog: () => ({}) }, scope,
+        });
+        controller.ensureHostedContainer();
+        controller.addImg("缩略图", "http://img.javstore.net/legacy.jpg");
+        expect(dom.window.document.querySelector(".screen-container img")?.getAttribute("src")).toBe("https://img.javstore.net/legacy.jpg");
     });
 });
 
 describe("source regression contracts", () => {
     it("keeps detail consumers on the strict getPageInfo object contract", () => {
-        for (const file of [
-            "src/plugins/status/detail-page-button.js",
-            "src/plugins/image-viewer/preview-video.js",
-            "src/plugins/image-viewer/screenshot.js"
-        ]) {
+        for (const file of ["src/features/detail/detail-page-state-actions-controller.js", "src/features/detail/detail-javdb-preview-controller.js"]) {
             const source = readTestFile(join(repoRoot, file), "utf8");
             expect(source).toContain("getPageInfo()");
             expect(source).not.toContain("getPageInfo()?.carNum");
         }
+        expect(readTestFile(join(repoRoot, "src/features/detail/detail-screenshot-controller.js"), "utf8")).toContain("readMovieRef()");
         const translate = readTestFile(join(repoRoot, "src/features/external-bridge/translation-controller.js"), "utf8");
         expect(translate).toContain("readCarNum()");
         expect(translate).not.toContain("getPageInfo()?.carNum");
     });
 
     it("routes detail state-action dialogs through the declared DialogService", () => {
-        const source = readTestFile(join(repoRoot, "src/plugins/status/detail-page-button.js"), "utf8");
+        const source = readTestFile(join(repoRoot, "src/features/detail/detail-page-state-actions-controller.js"), "utf8");
         expect(source).toContain('getRuntimeService("dialog")');
         expect(source).not.toContain("layer.open");
     });

@@ -7,9 +7,9 @@ import { FeatureRuntime } from "../src/app/feature-runtime.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 import { defineFeature } from "../src/contracts/manifests.js";
 
-const listButtons = readTestFile(join(process.cwd(), "src/plugins/status/list-page-button.js"), "utf8");
+const listButtons = readTestFile(join(process.cwd(), "src/features/list/list-actions-controller.js"), "utf8");
 const newVideo = readTestFile(join(process.cwd(), "src/features/discovery/new-video-controller.js"), "utf8");
-const coverButtons = readTestFile(join(process.cwd(), "src/plugins/image-viewer/cover-button.js"), "utf8");
+const coverButtons = readTestFile(join(process.cwd(), "src/features/list/list-cover-state-actions-controller.js"), "utf8");
 const registrySource = readTestFile(join(process.cwd(), "src/app/command-registry.js"), "utf8");
 const runtimeSource = readTestFile(join(process.cwd(), "src/app/feature-runtime.js"), "utf8");
 
@@ -33,8 +33,8 @@ describe("capability availability (无死按钮)", () => {
         expect(listButtons).not.toContain("黑名单功能已禁用");
     });
 
-    it("card screenshot button is gated on both the setting and the plugin", () => {
-        expect(coverButtons).toContain('Boolean(this.getBean("ScreenShotPlugin"))');
+    it("card screenshot button is gated on the setting and ScreenshotService", () => {
+        expect(coverButtons).toContain("screenshot?.isEnabled?.(e)");
     });
 
     it("new-video edit dialog is scoped to its layer root", () => {

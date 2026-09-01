@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { JSDOM } from "jsdom";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { ListImageController } from "../src/features/list/list-image-controller.js";
 
@@ -26,6 +27,23 @@ describe("ListImageController", () => {
         expect(image.removeEventListener).toHaveBeenCalledTimes(2);
         expect(preview.destroy).toHaveBeenCalledOnce();
         expect(runtimeWindow.imageHoverPreviewObj).toBeNull();
+        scope.dispose();
+    });
+
+    it("normalizes visible JavBus image heights by row and skips vertical mode", async () => {
+        const dom = new JSDOM('<div class="item"><img></div><div class="item"><img></div><div class="item"><img></div>'), scope = new LifecycleScope("feature:list"), items = [...dom.window.document.querySelectorAll(".item")], images = items.map((item) => item.querySelector("img"));
+        items.forEach((item) => Object.defineProperty(item, "offsetWidth", { configurable: true, value: 100 }));
+        [120, 200, 90].forEach((height, index) => Object.defineProperty(images[index], "offsetHeight", { configurable: true, value: height }));
+        const controller = new ListImageController({ scope, document: dom.window.document, window: dom.window, site: "javbus", selector: ".item img", itemSelector: ".item" });
+
+        await controller.logImageHeightsByRow({ vertical: "no", columns: 2 });
+
+        expect(images[0].style.getPropertyValue("height")).toBe("");
+        expect(images[1].style.getPropertyValue("height")).toBe("120px");
+        expect(images[1].style.getPropertyPriority("height")).toBe("important");
+        expect(images[2].style.getPropertyValue("height")).toBe("");
+        await controller.logImageHeightsByRow({ vertical: "yes", columns: 2 });
+        expect(images[1].style.getPropertyValue("height")).toBe("120px");
         scope.dispose();
     });
 });

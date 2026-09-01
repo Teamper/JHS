@@ -7,11 +7,11 @@ const read = file => readTestFile(join(process.cwd(), file), "utf8");
 
 describe("v6.4.1 frozen UI contracts", () => {
     const newVideo = read("src/features/discovery/new-video-controller.js");
-    const mobile = read("src/plugins/status/mobile-bottom-bar.js");
+    const mobile = read("src/features/system/responsive-shell-bottom-bar-controller.js");
     const logger = read("src/core/logger.js");
     const offline = read("src/features/external-bridge/unified-offline-controller.js");
-    const setting = read("src/plugins/backup/setting.js");
-    const settingTemplate = read("src/plugins/backup/setting-templates.js");
+    const setting = read("src/features/system/settings/settings-core-controller.js");
+    const settingTemplate = read("src/features/system/settings/setting-templates.js");
     const blacklist = read("src/features/library/blacklist-controller.js");
 
     it("uses native, tokenized Avatar candidate buttons without hover scaling", () => {
@@ -35,7 +35,7 @@ describe("v6.4.1 frozen UI contracts", () => {
 
     it("opens mobile logs through the FAB and keeps the floating toggle hidden", () => {
         expect(mobile).toContain('item("logger", "运行日志")');
-        expect(mobile).toContain("clog.openDialog?.()");
+        expect(mobile).toContain("this.getClog().openDialog?.()");
         expect(logger).toContain('window.matchMedia?.("(max-width: 767px)").matches');
         expect(logger).toContain("openDialog() {");
         expect(logger).toContain("content: host.outerHTML");
@@ -56,7 +56,7 @@ describe("v6.4.1 frozen UI contracts", () => {
     it("places the three scheduler snapshots in the task settings panel", () => {
         expect(settingTemplate).toContain('id="setting-task-status-list"');
         expect(setting).toContain('getTaskStatusSnapshot(name)');
-        expect(setting).toContain('jhsEventBus.on("task-status-changed"');
+        expect(setting).toContain('this.getRuntimeService("eventBus")?.on?.("task-status-changed"');
         expect(blacklist).toContain('getTaskStatusSnapshot("blacklist")');
     });
 

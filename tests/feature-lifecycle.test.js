@@ -53,7 +53,7 @@ function loadPlugin(relativePath, overrides = {}) {
 
 describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
     it("AutoPage: OFF 停止（loader 移除、请求清空），ON 重新启动不刷新", async () => {
-        const { Plugin, settings } = loadPlugin("src/plugins/status/auto-page.js", {
+        const { Plugin, settings } = loadPlugin("src/features/list/list-auto-page-controller.js", {
             className: "AutoPagePlugin",
             settingsSnapshot: { autoPage: "no" },
             globals: { LifecycleScope },
@@ -77,7 +77,7 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
     });
 
     it("OtherSite: 使用 SettingsService 快照（无私有缓存），OFF 只删 JHS 自有面板", async () => {
-        const { Plugin, settings } = loadPlugin("src/plugins/external-search/other-site.js", {
+        const { Plugin, settings } = loadPlugin("src/features/detail/detail-external-sites-controller.js", {
             className: "OtherSitePlugin",
             settingsSnapshot: { enableLoadOtherSite: "no" },
         });
@@ -94,7 +94,7 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
     });
 
     it("ON→OFF→ON ×3 通过 settings.changed 切换，监听器只注册一次", async () => {
-        const { Plugin, settings, settingsEvents } = loadPlugin("src/plugins/external-search/other-site.js", {
+        const { Plugin, settings, settingsEvents } = loadPlugin("src/features/detail/detail-external-sites-controller.js", {
             className: "OtherSitePlugin",
             settingsSnapshot: { enableLoadOtherSite: "yes" },
         });
@@ -120,7 +120,7 @@ describe("Live feature lifecycle (mount/unmount/reconfigure)", () => {
     it("AutoPage: stop 释放 liveScope，请求中切 OFF 不再 append", async () => {
         let resolveRequest;
         const pending = new Promise((resolve) => { resolveRequest = resolve; });
-        const { Plugin, settings } = loadPlugin("src/plugins/status/auto-page.js", {
+        const { Plugin, settings } = loadPlugin("src/features/list/list-auto-page-controller.js", {
             className: "AutoPagePlugin",
             settingsSnapshot: { autoPage: "yes" },
             globals: { LifecycleScope, requestHostPage: () => pending },

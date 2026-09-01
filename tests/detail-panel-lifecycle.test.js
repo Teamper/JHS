@@ -19,17 +19,19 @@ function loadPanels({ settings = { enableLoadReview: "yes", enableLoadRelated: "
         utils: { formatDate: value => value, q: (event, message, callback) => callback() }, show: { error: vi.fn(), ok: vi.fn() }, clog: { error: vi.fn(), warn: vi.fn() }, escapeHtml: String,
         i: (target, key, value) => (target[key] = value), createLatestSettingWriter
     });
-    vm.runInContext(readTestFile(join(process.cwd(), "src/ui/detail/related-panel.js"), "utf8"), context);
-    vm.runInContext(readTestFile(join(process.cwd(), "src/ui/detail/review-panel.js"), "utf8"), context);
-    vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/external-search/review.js"), "utf8")};globalThis.Review=ReviewPlugin`, context);
-    vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/external-search/related.js"), "utf8")};globalThis.Related=RelatedPlugin`, context);
-    return { $, Review: context.Review, Related: context.Related, reviewFetch, relatedFetch, storage: runtimeServices.storage, window: dom.window };
+    vm.runInContext(`${readTestFile(join(process.cwd(), "src/ui/detail/related-panel.js"), "utf8")};globalThis.Related=RelatedPanel`, context);
+    vm.runInContext(`${readTestFile(join(process.cwd(), "src/ui/detail/review-panel.js"), "utf8")};globalThis.Review=ReviewPanel`, context);
+    return {
+        $, Related: context.Related, reviewFetch, relatedFetch, storage: runtimeServices.storage, window: dom.window,
+        createReview: () => new context.Review({ review: runtimeServices.review, settings: runtimeServices.settings, storage: runtimeServices.storage, scope: runtimeServices.scope }),
+        createRelated: () => new context.Related({ related: runtimeServices.related, settings: runtimeServices.settings, scope: runtimeServices.scope }),
+    };
 }
 
 describe("detail panel instance lifecycle", () => {
     it("does not fetch reviews until expanded when the preference was never saved", async () => {
-        const { $, Review, reviewFetch } = loadPanels({ settings: {} }), plugin = new Review;
-        const panel = await plugin.showReview("A", $("#review-a"));
+        const { $, createReview, reviewFetch } = loadPanels({ settings: {} }), panelController = createReview();
+        const panel = await panelController.show("A", $("#review-a"));
         expect(reviewFetch).not.toHaveBeenCalled();
         expect(panel.find(".jhs-review-toggle").attr("aria-expanded")).toBe("false");
         panel.find(".jhs-review-toggle").trigger("click");
@@ -37,39 +39,39 @@ describe("detail panel instance lifecycle", () => {
     });
 
     it("keeps review floor, loading state, and panel ownership per target", async () => {
-        const { $, Review, reviewFetch } = loadPanels(), plugin = new Review;
-        const panelA = await plugin.showReview("A", $("#review-a")), panelB = await plugin.showReview("B", $("#review-b"));
+        const { $, createReview, reviewFetch } = loadPanels(), panelController = createReview();
+        const panelA = await panelController.show("A", $("#review-a")), panelB = await panelController.show("B", $("#review-b"));
         expect(panelA[0]).not.toBe(panelB[0]);
         expect(panelA.find(".jhs-review-floor").text()).toBe("#1楼");
         expect(panelB.find(".jhs-review-floor").text()).toBe("#1楼");
-        expect((await plugin.showReview("A", $("#review-a")))[0]).toBe(panelA[0]);
+        expect((await panelController.show("A", $("#review-a")))[0]).toBe(panelA[0]);
         expect(reviewFetch).toHaveBeenCalledTimes(2);
         expect($("[id]").map(((index, item) => item.id)).get()).toEqual([ "review-a", "review-b", "related-a", "related-b" ]);
     });
 
     it("keeps related numbering and duplicate suppression per target", async () => {
-        const { $, Related, relatedFetch } = loadPanels(), plugin = new Related;
-        const panelA = await plugin.showRelated($("#related-a"), "A"), panelB = await plugin.showRelated($("#related-b"), "B");
+        const { $, createRelated, relatedFetch } = loadPanels(), panelController = createRelated();
+        const panelA = await panelController.show($("#related-a"), "A"), panelB = await panelController.show($("#related-b"), "B");
         expect(panelA[0]).not.toBe(panelB[0]);
         expect(panelA.find(".jhs-related-index").text()).toBe("#1");
         expect(panelB.find(".jhs-related-index").text()).toBe("#1");
-        expect((await plugin.showRelated($("#related-a"), "A"))[0]).toBe(panelA[0]);
+        expect((await panelController.show($("#related-a"), "A"))[0]).toBe(panelA[0]);
         expect(relatedFetch).toHaveBeenCalledTimes(2);
     });
 
     it("binds the review context-menu handler exactly once across multiple panels", async () => {
-        const { $, Review, storage, window } = loadPanels(), plugin = new Review;
-        await plugin.showReview("A", $("#review-a")), await plugin.showReview("B", $("#review-b"));
+        const { $, createReview, storage, window } = loadPanels(), panelController = createReview();
+        await panelController.show("A", $("#review-a")), await panelController.show("B", $("#review-b"));
         window.getSelection = () => ({ toString: () => "keyword" });
         $("#review-a .review-content").trigger("contextmenu");
         await vi.waitFor((() => expect(storage.set).toHaveBeenCalledOnce()));
     });
 
     it("adopts owned workspace headers and does not prefetch the second review page", async () => {
-        const { $, Review, reviewFetch } = loadPanels(), plugin = new Review;
+        const { $, createReview, reviewFetch } = loadPanels(), panelController = createReview();
         const section = $('<section><header><div data-jhs-section-actions="reviews"></div></header><div id="owned-reviews"></div></section>').appendTo("body");
         reviewFetch.mockResolvedValueOnce(Array.from({ length: 20 }, ((_, index) => ({ author: String(index), score: 1, createdAt: "2026", likes: 0, content: "ok" }))));
-        const panel = await plugin.showReview("owned", section.find("#owned-reviews"), { ownedSection: section, isActive: () => true });
+        const panel = await panelController.show("owned", section.find("#owned-reviews"), { ownedSection: section, isActive: () => true });
         expect(panel.children(".jhs-panel-header")).toHaveLength(0), expect(section.find('> header [data-jhs-section-actions="reviews"] .jhs-review-toggle')).toHaveLength(1);
         expect(reviewFetch).toHaveBeenCalledTimes(1), expect(panel.find(".jhs-review-load-more")).toHaveLength(1);
     });

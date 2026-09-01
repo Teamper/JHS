@@ -4,7 +4,7 @@ import { B, C, _, b, escapeHtml, k, l, normalizeCarNum, o, r, u, y } from "../..
 import { jhsEventBus } from "../../core/event-bus.js";
 import { mapLimit, safePlay } from "../../core/feature-helpers.js";
 import { requestHostPage } from "../../core/host-page-request.js";
-import { BasePlugin } from "../../core/plugin-manager.js";
+import { getDefaultListSelectors } from "../../core/list-selectors.js";
 import { readCardNames, readListItem } from "../../core/list-item-reader.js";
 import { isHitShowPage } from "../../core/site-context.js";
 import { hasAnyState, legacyActionToFlag, normalizeStateFlags } from "../../core/state-model.js";
@@ -99,12 +99,13 @@ const Te = {
     }
 };
 
-export class ListPagePlugin extends BasePlugin {
+export class ListPagePlugin {
     async initCss() {
         return `<style>${LIST_FEATURE_CSS}</style>`;
     }
-    constructor() {
-        super(...arguments);
+    constructor(/** @type {any} */ options = {}) {
+        this.runtimeServices = { ...(options.runtimeServices ?? {}) };
+        this.selectors = options.selectors ?? null;
         this.currentPageFilterCount = 0;
         this.currentPageFavoriteCount = 0;
         this.currentPageHasDownCount = 0;
@@ -148,6 +149,12 @@ export class ListPagePlugin extends BasePlugin {
     getName() {
         return "ListPagePlugin";
     }
+    /** Resolve selectors from the explicit host boundary for compatibility-only consumers. */
+    getSelector() {
+        return this.selectors ?? this.getRuntimeService("host")?.getListSelectors?.() ?? getDefaultListSelectors(r ? "javdb" : "javbus");
+    }
+    /** Resolve one explicitly injected runtime capability. */
+    getRuntimeService(/** @type {string} */ name) { return this.runtimeServices[name] ?? null; }
     /** Attach the FeatureRuntime-owned host adapter during migration. @param {any} hostAdapter */
     attachListHost(hostAdapter) {
         this.listHostAdapter = hostAdapter;
@@ -402,8 +409,9 @@ export class ListPagePlugin extends BasePlugin {
             return connected.length ? this.processAddedItems(connected, this.captureListRevision()) : undefined;
         }
         if (!this.reconcileListItems(items, revision)) return;
-        await this.getOptionalDependency("ListPageButtonPlugin")?.sortItems?.(), await this.getOptionalDependency("CoverButtonPlugin")?.addSvgBtn?.(items),
-        items.forEach((/** @type {Element} */ item) => /** @type {HTMLElement} */ (item).dataset.jhsProcessed = "true"), this.indexItems(items), await getListEventBus().emit("list-items-added", { items }, { broadcast: !1 }), this.getOptionalDependency("AutoPagePlugin")?.checkLoad?.();
+        const listFeature = await this.getRuntimeService("features")?.getFeatureApi?.("list");
+        await listFeature?.sortItems?.(), await listFeature?.addSvgBtn?.(items),
+        items.forEach((/** @type {Element} */ item) => /** @type {HTMLElement} */ (item).dataset.jhsProcessed = "true"), this.indexItems(items), await getListEventBus().emit("list-items-added", { items }, { broadcast: !1 }), listFeature?.checkLoad?.();
     }
     rebuildItemIndex() {
         if (this.listIndex) {
@@ -488,7 +496,7 @@ export class ListPagePlugin extends BasePlugin {
         if (!e.length) return !0;
         const filtered = await this.filterMovieList(e, revision);
         return filtered && l && setTimeout((() => {
-            this.getOptionalDependency("BusImgPlugin")?.logImageHeightsByRow?.(this.getRuntimeService("settings").snapshot()).catch((/** @type {unknown} */ e) => clog.error("JavBus图片高度修正失败", e));
+            Promise.resolve(this.getRuntimeService("features")?.getFeatureApi?.("list")).then((/** @type {any} */ api) => api?.logImageHeightsByRow?.(this.getRuntimeService("settings")?.snapshot?.())).catch((/** @type {unknown} */ e) => clog.error("JavBus图片高度修正失败", e));
         })), filtered;
     }
     async yieldListFrame() {

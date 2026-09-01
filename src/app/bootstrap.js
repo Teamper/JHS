@@ -6,7 +6,6 @@ import { JhsError } from "../core/jhs-error.js";
 import { runDataMigrationsWithoutLock } from "../core/migration.js";
 import { StorageMutationCoordinator } from "../core/storage-mutation-coordinator.js";
 import { normalizeScreenshotSettingDraft } from "../core/settings-migration.js";
-import { PluginManager } from "../core/plugin-manager.js";
 import { createLegacyRuntime } from "../core/legacy-runtime.js";
 import { initializeEventBus } from "../core/event-bus.js";
 import { migrateDisabledPlugins, parseDisabledPlugins } from "../core/legacy-plugin-contributions.js";
@@ -17,7 +16,6 @@ import { getVendorRuntime } from "../platform/userscript/vendor-runtime.js";
 import { JavBusHostAdapter } from "../platform/hosts/javbus-host-adapter.js";
 import { JavDbHostAdapter } from "../platform/hosts/javdb-host-adapter.js";
 import { featureManifests } from "../features/catalog.js";
-import { registerSitePlugins } from "../plugins/registry.js";
 import { attachCompatibilityFacade } from "./compatibility-facade.js";
 import { createAppContext } from "./create-app-context.js";
 import { integrationManifests } from "./integration-catalog.js";
@@ -153,10 +151,9 @@ export async function bootstrapJhs() {
         });
         Object.assign(globalThis, logger);
         if (localOriginSettings.notice) logger.show.info(localOriginSettings.notice);
-        const pluginManager = new PluginManager({ diagnostics: context.services.diagnostics });
         for (const manifest of integrationManifests) context.registries.integrations.register(manifest);
         for (const manifest of featureManifests) context.registries.features.register(manifest);
-        registerSitePlugins(pluginManager, context.registries.features, siteContext.site);
+        context.services.diagnostics.setFeatureCatalog(featureManifests.flatMap((manifest) => manifest.contributes.map((id) => ({ id, featureId: manifest.id, disableable: manifest.disableable }))));
         markPhase("registry");
         window.isDetailPage = route === "detail";
         window.isListPage = route === "list";
@@ -165,19 +162,31 @@ export async function bootstrapJhs() {
             await runDataMigrationsWithoutLock(storageManager);
         });
         markPhase("data-prepare");
-        // Compatibility infrastructure must be ready before any feature mounts.
-        // A missing logger dependency should fail the whole bootstrap, not leave a half-started page.
         attachCompatibilityFacade({
-            pluginManager, utils, gmHttp, storageManager, stateService, jhsEventBus,
+            utils, gmHttp, storageManager, stateService, jhsEventBus,
             clog: logger.clog, show: logger.show, loading: logger.loading,
         }, globalThis.unsafeWindow);
         await context.registries.features.start();
+        const featureRuntimeApi = Object.freeze({
+            getFeatureApi: (/** @type {string} */ id) => context.registries.features.getFeatureApi(id),
+            getActiveFeatureIds: () => context.registries.features.getActiveFeatureIds(),
+            getDiagnostics: () => context.services.diagnostics.exportSnapshot(),
+        });
+        const publicTarget = globalThis.unsafeWindow ?? globalThis;
+        Object.assign(globalThis, { __jhsFeatureRuntime: featureRuntimeApi });
+        if (publicTarget !== globalThis) Object.assign(publicTarget, { __jhsFeatureRuntime: featureRuntimeApi });
+        if (globalThis.__jhsBrowserTestMetadata?.fixture) {
+            const browserTestApi = Object.freeze({
+                getFeatureApi: featureRuntimeApi.getFeatureApi,
+                services: Object.freeze({ http: context.services.http, movie: context.services.movie, settings: context.services.settings }),
+            });
+            Object.assign(globalThis, { __jhsBrowserTestApi: browserTestApi });
+            if (publicTarget !== globalThis) Object.assign(publicTarget, { __jhsBrowserTestApi: browserTestApi });
+        }
         markPhase("feature-runtime");
-        await Promise.all([pluginManager.processCss(), Promise.resolve(applyThemeMode(context.services.settings.snapshot().themeMode))]);
-        markPhase("plugin-css");
+        await applyThemeMode(context.services.settings.snapshot().themeMode);
+        markPhase("feature-css");
         if (r && /(^|;)\s*locale\s*=\s*en\s*($|;)/i.test(document.cookie)) logger.show.error("请切换到中文语言下才可正常使用本脚本", { duration: -1 });
-        await pluginManager.processPlugins();
-        markPhase("plugin-runtime");
         markPhase("first-ready");
         markPhase("total");
         return context;

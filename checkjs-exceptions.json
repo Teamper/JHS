@@ -20,7 +20,7 @@
       "removalVersion": "6.6"
     },
     {
-      "file": "src/plugins/backup/setting.js",
+      "file": "src/features/system/settings/settings-core-controller.js",
       "category": "compatibility-glue",
       "reason": "Transitional SettingPlugin entry composes typed settings panels, forms and runtime services for legacy registration.",
       "removalVersion": "6.6"

@@ -1,30 +1,15 @@
 import { readTestFile } from "./helpers/read-test-file.js";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { performance } from "node:perf_hooks";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
+import { CommandRegistry } from "../src/app/command-registry.js";
+import { DependencyContainer } from "../src/app/dependency-container.js";
+import { FeatureRuntime } from "../src/app/feature-runtime.js";
+import { defineFeature } from "../src/contracts/manifests.js";
+import { SERVICE } from "../src/contracts/tokens.js";
+import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 
 const repoRoot = join(import.meta.dirname, "..");
-
-function loadPluginClasses() {
-  const idleCallbacks = [];
-  const insertStyle = vi.fn();
-  const context = vm.createContext({
-    console,
-    Date,
-    performance,
-    setTimeout,
-    requestIdleCallback: (callback) => idleCallbacks.push(callback),
-    storageManager: { getSetting: async () => "[]" },
-    utils: { isMobileMode: () => false, insertStyle },
-    clog: { error: vi.fn() },
-    i: (target, key, value) => (target[key] = value)
-  });
-  const source = `${readTestFile(join(repoRoot, "src/core/plugin-manager.js"), "utf8")}\nglobalThis.TestPluginManager = PluginManager; globalThis.TestBasePlugin = BasePlugin;`;
-  vm.runInContext(source, context);
-  return { PluginManager: context.TestPluginManager, BasePlugin: context.TestBasePlugin, idleCallbacks, insertStyle };
-}
 
 function loadStorageManager(forage) {
   const context = vm.createContext({
@@ -134,101 +119,54 @@ function loadHttpManager(requestHandler) {
 }
 
 describe("startup scheduling", () => {
-  it("runs afterPluginsReady only after every immediate handle completes", async () => {
-    const { PluginManager, BasePlugin } = loadPluginClasses();
-    const events = [];
-    class SlowPlugin extends BasePlugin {
-      getName() { return "SlowPlugin"; }
-      async handle() { await new Promise((resolve) => setTimeout(resolve, 10)); events.push("slow"); }
-    }
-    class ToolbarPlugin extends BasePlugin {
-      getName() { return "ToolbarPlugin"; }
-      async handle() { events.push("toolbar-handle"); }
-      async afterPluginsReady() { events.push("toolbar-ready"); }
-    }
-    const manager = new PluginManager();
-    manager.register(SlowPlugin);
-    manager.register(ToolbarPlugin);
+  it("settles all eager features before returning and records degraded failures", async () => {
+    const events = [], diagnostics = new DiagnosticsService(), runtime = new FeatureRuntime({
+      container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics, site: "javdb", route: "list",
+    });
+    runtime.register(defineFeature({
+      id: "slow", kind: "feature", disableable: true, sites: ["javdb"], routes: ["list"], startup: "eager", requires: [], contributes: [], providesCommands: [],
+      activate: async () => { await new Promise((resolve) => setTimeout(resolve, 10)); events.push("slow"); return {}; },
+    }));
+    runtime.register(defineFeature({
+      id: "broken", kind: "feature", disableable: true, sites: ["javdb"], routes: ["list"], startup: "eager", requires: [], contributes: [], providesCommands: [],
+      activate: async () => { await new Promise((resolve) => setTimeout(resolve, 1)); throw new Error("broken"); },
+    }));
 
-    await manager.processPlugins();
+    await runtime.start();
 
-    expect(events).toEqual(["toolbar-handle", "slow", "toolbar-ready"]);
+    expect(events).toEqual(["slow"]);
+    expect(diagnostics.exportSnapshot().featureStates.broken).toMatchObject({ state: "degraded", message: "broken" });
   });
 
-  it("finishes immediate plugins before idle plugins", async () => {
-    const { PluginManager, BasePlugin, idleCallbacks } = loadPluginClasses();
-    const events = [];
-    class ImmediatePlugin extends BasePlugin {
-      getName() { return "ImmediatePlugin"; }
-      async handle() { events.push("immediate"); }
+  it("defers idle features until the browser idle callback", async () => {
+    const callbacks = [], events = [], previous = globalThis.requestIdleCallback;
+    globalThis.requestIdleCallback = (callback) => callbacks.push(callback);
+    const runtime = new FeatureRuntime({
+      container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics: new DiagnosticsService(), site: "javdb", route: "list",
+    });
+    runtime.register(defineFeature({
+      id: "idle", kind: "feature", disableable: true, sites: ["javdb"], routes: ["list"], startup: "idle", requires: [], contributes: [], providesCommands: [],
+      activate: () => { events.push("idle"); return {}; },
+    }));
+    try {
+      await runtime.start();
+      expect(events).toEqual([]);
+      await callbacks[0]();
+      expect(events).toEqual(["idle"]);
+    } finally {
+      if (previous) globalThis.requestIdleCallback = previous;
+      else delete globalThis.requestIdleCallback;
     }
-    class IdlePlugin extends BasePlugin {
-      getName() { return "IdlePlugin"; }
-      getStartupMode() { return "idle"; }
-      async handle() { events.push("idle"); }
-    }
-    const manager = new PluginManager();
-    manager.register(ImmediatePlugin);
-    manager.register(IdlePlugin);
-
-    await manager.processPlugins();
-
-    expect(events).toEqual(["immediate"]);
-    expect(manager.getTimings().find((item) => item.name === "IdlePlugin")?.status).toBe("pending-idle");
-    expect(manager.getStartupReport()).toMatchObject({ idlePending: 1, idleCompleted: 0 });
-
-    await idleCallbacks[0]();
-
-    expect(events).toEqual(["immediate", "idle"]);
-    expect(manager.getStartupReport()).toMatchObject({ idlePending: 0, idleCompleted: 1 });
-  });
-
-  it("shares immutable icon strings through the base prototype", () => {
-    const { PluginManager, BasePlugin } = loadPluginClasses();
-    class FirstPlugin extends BasePlugin { getName() { return "FirstPlugin"; } }
-    class SecondPlugin extends BasePlugin { getName() { return "SecondPlugin"; } }
-    const manager = new PluginManager();
-    manager.register(FirstPlugin);
-    manager.register(SecondPlugin);
-    const first = manager.getBean("FirstPlugin"), second = manager.getBean("SecondPlugin");
-
-    expect(Object.hasOwn(first, "settingSvg")).toBe(false);
-    expect(Object.hasOwn(second, "settingSvg")).toBe(false);
-    expect(first.settingSvg).toBe(second.settingSvg);
-  });
-
-  it("inserts all plugin styles in one DOM batch", async () => {
-    const { PluginManager, BasePlugin, insertStyle } = loadPluginClasses();
-    class FirstPlugin extends BasePlugin {
-      getName() { return "FirstPlugin"; }
-      initCss() { return ".first { color: red; }"; }
-    }
-    class SecondPlugin extends BasePlugin {
-      getName() { return "SecondPlugin"; }
-      initCss() { return "<style>.second { color: blue; }</style>"; }
-    }
-    const manager = new PluginManager();
-    manager.register(FirstPlugin);
-    manager.register(SecondPlugin);
-
-    await manager.processCss();
-
-    expect(insertStyle).toHaveBeenCalledTimes(1);
-    expect(insertStyle).toHaveBeenCalledWith([
-      ".first { color: red; }",
-      "<style>.second { color: blue; }</style>"
-    ]);
   });
 
   it("does not include removed legacy service integrations", () => {
     const mainSource = readTestFile(join(repoRoot, "src/main.js"), "utf8");
-    const registrySource = readTestFile(join(repoRoot, "src/plugins/registry.js"), "utf8");
     const utilsSource = readTestFile(join(repoRoot, "src/core/utils.js"), "utf8");
 
     expect(mainSource).not.toContain("parallel_GM_xmlhttpRequest.js");
     expect(mainSource).not.toContain("@connect      127.0.0.1");
-    expect(registrySource).not.toContain("LocalPlugin");
     expect(utilsSource).not.toContain("pingLocalService");
+    expect(() => readTestFile(join(repoRoot, "src/plugins/registry.js"), "utf8")).toThrow();
   });
 
   it("does not include audited dead methods", () => {
@@ -237,9 +175,9 @@ describe("startup scheduling", () => {
       "src/core/storage.js",
       "src/core/utils.js",
       "src/features/library/blacklist-controller.js",
-      "src/plugins/external-search/fc2-by-123av.js",
-      "src/plugins/image-viewer/screenshot.js",
-      "src/plugins/status/auto-page.js"
+      "src/features/list/list-fc2-lookup-controller.js",
+      "src/features/detail/detail-screenshot-controller.js",
+      "src/features/list/list-auto-page-controller.js"
     ];
     const source = sourceFiles.map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
     const removedMethods = [

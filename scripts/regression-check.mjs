@@ -18,18 +18,18 @@ function extractMetadata(source, key) {
   return source.match(new RegExp(`^// @${key}\\s+(.+)$`, "m"))?.[1]?.trim();
 }
 
-function extractContributionOrder(registrySource, site) {
-  return registrySource.split(/\r?\n/).flatMap((line) => {
-    const match = line.match(/manifest\("[^"]+",\s*"[^"]+",\s*(\w+),\s*\[([^\]]+)\],\s*\{([^}]+)\}(?:,\s*\[[^\]]*\])?(?:,\s*\{[^}]*\})?\)/);
-    if (!match || !match[2].includes(`"${site}"`)) return [];
-    const order = match[3].match(new RegExp(`(?:^|,\\s*)\\s*(?:"${site}"|${site})\\s*:\\s*(\\d+)`));
-    assert(order, `Missing ${site} order for ${match[1]}`);
-    return [{ plugin: match[1], order: Number(order[1]) }];
-  }).filter((item) => item.order > 0).sort((left, right) => left.order - right.order).map((item) => item.plugin);
-}
-
 function assertIncludes(source, token, label) {
   assert(source.includes(token), `${label} missing token: ${token}`);
+}
+
+async function assertMissing(relativePath, label) {
+  try {
+    await stat(join(repoRoot, relativePath));
+  } catch (error) {
+    if (error?.code === "ENOENT") return;
+    throw error;
+  }
+  throw new Error(`${label} must be deleted: ${relativePath}`);
 }
 
 function hash(source) {
@@ -50,16 +50,14 @@ const stateService = await read("src/core/state-service.js");
 const stateDomains = await read("src/core/state-domains.js");
 const mutationCoordinator = await read("src/core/storage-mutation-coordinator.js");
 const bootstrap = await read("src/app/bootstrap.js");
-const registry = await read("src/plugins/registry.js");
-const legacyContributionRegistry = await read("src/core/legacy-contribution-registry.js");
 const featureRuntimeSource = await read("src/app/feature-runtime.js");
-const detailWorkspace = await read("src/plugins/status/detail-workspace.js");
+const detailWorkspace = await read("src/features/detail/detail-workspace-controller.js");
 const fc2DetailWorkspace = await read("src/ui/detail/fc2-detail-workspace.js");
 const javDbHostAdapter = await read("src/platform/hosts/javdb-host-adapter.js");
 const unifiedOfflineControllerSource = await read("src/features/external-bridge/unified-offline-controller.js");
 const hitShow = await read("src/features/discovery/hit-show-controller.js");
 const top250 = await read("src/features/discovery/top250-controller.js");
-const listPageButton = await read("src/plugins/status/list-page-button.js");
+const listPageButton = await read("src/features/list/list-actions-controller.js");
 const historySource = await read("src/features/library/history-controller.js");
 const blacklistControllerSource = await read("src/features/library/blacklist-controller.js");
 const blacklistRepositorySource = await read("src/features/library/blacklist-repository.js");
@@ -79,21 +77,22 @@ const compatibilityControllerSource = await read("src/features/compatibility/com
 const statsManifestSource = await read("src/features/stats/manifest.js");
 const statsControllerSource = await read("src/features/stats/stats-controller.js");
 const statsSource = statsControllerSource;
+const listImageControllerSource = await read("src/features/list/list-image-controller.js");
 const listBatchServiceSource = await read("src/features/list/list-batch-service.js");
 const listFilterServiceSource = await read("src/features/list/list-filter-service.js");
 const listIncrementalServiceSource = await read("src/features/list/list-incremental-service.js");
 const listFiltersSource = await read("src/features/list/list-filters.js");
-const fc2 = await read("src/plugins/external-search/fc2.js");
-const fc2By123Av = await read("src/plugins/external-search/fc2-by-123av.js");
+const fc2 = await read("src/features/detail/detail-fc2-owned-controller.js");
+const fc2By123Av = await read("src/features/list/list-fc2-lookup-controller.js");
 const uiPrimitives = await read("src/core/ui-primitives.js");
 const history = await read("src/features/library/history-controller.js");
-const review = await read("src/plugins/external-search/review.js");
-const related = await read("src/plugins/external-search/related.js");
-const mobileSource = await read("src/plugins/status/mobile-bottom-bar.js");
-const settingSource = await read("src/plugins/backup/setting.js");
-const settingFormsSource = await read("src/plugins/backup/setting-forms.js");
-const settingTemplatesSource = await read("src/plugins/backup/setting-templates.js");
-const magnetHubSource = await read("src/plugins/external-search/magnet-hub.js");
+const review = await read("src/features/detail/detail-reviews-controller.js");
+const related = await read("src/features/detail/detail-related-controller.js");
+const mobileSource = await read("src/features/system/responsive-shell-bottom-bar-controller.js");
+const settingSource = await read("src/features/system/settings/settings-core-controller.js");
+const settingFormsSource = await read("src/features/system/settings/setting-forms.js");
+const settingTemplatesSource = await read("src/features/system/settings/setting-templates.js");
+const magnetHubSource = await read("src/features/detail/detail-external-magnets-controller.js");
 const taskControllerSource = await read("src/features/discovery/task-controller.js");
 const newVideoControllerSource = await read("src/features/discovery/new-video-controller.js");
 const themeSource = await read("src/core/theme.js");
@@ -228,34 +227,34 @@ const listSummarySource = await read("src/features/list/list-summary-service.js"
 const listDiagnosticsSource = await read("src/features/list/list-diagnostics-service.js");
 const listTranslationSource = await read("src/features/list/list-translation-service.js");
 const architectureSource = await read("scripts/architecture-check.mjs");
-const listPageAdapterSource = await read("src/compat/list-page-adapter.js");
 const listViewSource = await read("src/features/list/list-view.js");
-const listActionsSource = await read("src/plugins/status/list-page-button.js");
-const autoPageSource = await read("src/plugins/status/auto-page.js");
-const foldCategorySource = await read("src/plugins/status/fold-category.js");
-const coverButtonSource = await read("src/plugins/image-viewer/cover-button.js");
+const listActionsSource = await read("src/features/list/list-actions-controller.js");
+const autoPageSource = await read("src/features/list/list-auto-page-controller.js");
+const coverButtonSource = await read("src/features/list/list-cover-state-actions-controller.js");
 const compatibilitySource = compatibilityControllerSource;
 const statusImport = libraryControllerSource;
-const responsiveShellSource = await read("src/features/system/responsive-shell-controller.js");
 assertIncludes(listPageSource, "applyVisibility(items = null)", "list page function signature");
 assertIncludes(listPageSource, "async filterMovieList(", "list page function signature");
 assertIncludes(listPageSource, "async doFilter(revision =", "list page function signature");
 assertIncludes(listManifestSource, 'id: "list"', "real list feature manifest");
 assertIncludes(listManifestSource, 'contributes: ["list.core", "list.auto-page", "list.fold-category", "list.actions", "list.fc2-navigation", "list.cover-state-actions", "list.javbus-images", "list.fc2-lookup"]', "list feature contribution ownership");
-assertIncludes(listManifestSource, 'legacyApiAliases: ["ListPagePlugin"]', "list compatibility API alias");
+assert(!listManifestSource.includes("legacyApiAliases"), "list feature must not publish legacy API aliases");
 assertIncludes(listManifestSource, "REGISTRY.feature", "list direct Feature API dependency");
-assertIncludes(listManifestSource, 'resolveLegacyContribution?.("list.javbus-images")', "list JavBus image contribution boundary");
+assertIncludes(listManifestSource, "new ListCoverStateActionsController", "list cover actions direct controller");
+assertIncludes(listManifestSource, 'javbusImagesEnabled: runtime.enabledContributions.includes("list.javbus-images")', "list JavBus image contribution boundary");
 assert(!listManifestSource.includes("resolveLegacyPlugin"), "list must use contribution ids for legacy capabilities");
 assertIncludes(listManifestSource, "http: deps[SERVICE.http]", "list batch HTTP service injection");
 assertIncludes(listManifestSource, "stateService: deps[SERVICE.state]", "list batch state service injection");
-assertIncludes(listPageAdapterSource, "class ListPagePluginAdapter extends BasePlugin", "list compatibility shell");
-assertIncludes(listPageAdapterSource, "The business implementation is owned by the List Feature", "list feature compatibility ownership");
-assertIncludes(listPageAdapterSource, "ensureDelegate()", "list compatibility migration hook");
-assert(!listPageAdapterSource.includes('from "../plugins/status/list-page.js"'), "list compatibility shell must not bundle the retired implementation");
-assertIncludes(registry, 'ListPagePluginAdapter as ListPagePlugin', "list registry compatibility shell");
-assertIncludes(registry, "const target = managedByFeature ? legacyRegistry : pluginManager", "legacy ownership split");
-assertIncludes(legacyContributionRegistry, "FeatureRuntime owns their lifecycle", "legacy registry lifecycle boundary");
-assertIncludes(featureRuntimeSource, "await this.mountLegacyStyles", "feature-owned legacy style lifecycle");
+assert(!listManifestSource.includes("ListPagePluginAdapter"), "list feature must not publish a legacy adapter");
+assert(!bootstrap.includes("PluginManager"), "bootstrap must not instantiate PluginManager");
+assert(!bootstrap.includes("registerSitePlugins"), "bootstrap must not register legacy plugins");
+assert(!featureRuntimeSource.includes("resolveLegacyContribution"), "FeatureRuntime must not resolve legacy contributions");
+assert(!featureRuntimeSource.includes("mountLegacyStyles"), "FeatureRuntime must not mount legacy styles");
+await assertMissing("src/plugins/registry.js", "legacy plugin registry");
+await assertMissing("src/core/legacy-contribution-registry.js", "legacy contribution registry");
+await assertMissing("src/plugins/dependency-map.js", "legacy dependency map");
+await assertMissing("src/core/plugin-manager.js", "legacy plugin manager");
+await assertMissing("src/compat/list-page-adapter.js", "legacy list adapter");
 assert(!bootstrap.includes("setLegacyResolver"), "bootstrap must not own the legacy resolver wiring");
 assertIncludes(listControllerSource, "this.domObserver?.start()", "list DOM observer startup ownership");
 assert(!listControllerSource.includes("this.legacyPlugin?.attachList"), "list controller must not hand off owned services to the legacy plugin");
@@ -278,7 +277,7 @@ assertIncludes(listControllerSource, "new ListEventController({", "list event li
 assertIncludes(listControllerSource, "new ListEvaluationService({", "list evaluation context ownership");
 assertIncludes(listControllerSource, "new ListSummaryService({", "list summary ownership");
 assertIncludes(listControllerSource, 'this.features?.getFeatureApi?.("library")', "list Library Feature API ownership");
-assertIncludes(listControllerSource, "this.busImgPlugin?.logImageHeightsByRow", "list JavBus image contribution ownership");
+assertIncludes(listControllerSource, "this.javbusImagesEnabled ? this.images?.logImageHeightsByRow", "list JavBus image contribution ownership");
 assertIncludes(listControllerSource, "createEvaluationContext()", "list evaluation capability boundary");
 assert(!listEventSource.includes("legacyPlugin"), "list events must not depend on the legacy filter plugin");
 assertIncludes(listControllerSource, "new ListTranslationService({", "list translation ownership");
@@ -292,6 +291,7 @@ assertIncludes(listControllerSource, "onOpenMovieDetail:", "list navigation acti
 assertIncludes(listControllerSource, "this.openMovieDetail(item, options)", "list navigation API ownership");
 assertIncludes(listControllerSource, "showCarNumBox: (/** @type {string} */ carNum) => this.showCarNumBox(carNum)", "list card reveal API ownership");
 assertIncludes(listControllerSource, "bindClick: () => this.bindClick()", "list interaction API ownership");
+assertIncludes(listControllerSource, 'addSvgBtn: route(this.coverPlugin, "addSvgBtn")', "list cover actions API ownership");
 assertIncludes(listControllerSource, 'configureHoverPreview: route(this.images, "configureHoverPreview")', "list image API ownership");
 assertIncludes(listControllerSource, 'rebuildItemIndex: route(this.index, "rebuildItemIndex")', "list index API ownership");
 assertIncludes(listControllerSource, 'bindMovieDetailNavigation: route(this.view, "bindMovieDetailNavigation")', "list view API ownership");
@@ -350,37 +350,40 @@ assertIncludes(listTranslationSource, "translationGeneration", "list translation
 assertIncludes(listTranslationSource, "mapLimit(items, 3", "list translation concurrency ownership");
 const detailControllerSource = await read("src/features/detail/detail-controller.js");
 const detailManifestSource = await read("src/features/detail/manifest.js");
-const detailWorkspaceSource = await read("src/plugins/status/detail-workspace.js");
-const detailPageSource = await read("src/plugins/status/detail-page.js");
-const busDetailPageSource = await read("src/plugins/status/bus-detail-page.js");
-const detailReviewSource = await read("src/plugins/external-search/review.js");
-const detailRelatedSource = await read("src/plugins/external-search/related.js");
-const screenshotSource = await read("src/plugins/image-viewer/screenshot.js");
-const highlightMagnetSource = await read("src/plugins/status/highlight-magnet.js");
-const detailPageButtonSource = await read("src/plugins/status/detail-page-button.js");
-const previewVideoSource = await read("src/plugins/image-viewer/preview-video.js");
-const busPreviewVideoSource = await read("src/plugins/image-viewer/bus-preview-video.js");
-const otherSiteSource = await read("src/plugins/external-search/other-site.js");
-assertIncludes(detailControllerSource, "nativePlugin?.handle?.({ scope: this.scope })", "native detail feature handoff");
-assertIncludes(detailControllerSource, "workspacePlugin?.handle?.({ scope: this.scope })", "detail workspace feature handoff");
+const detailNativeControllerSource = await read("src/features/detail/detail-native-controller.js");
+const detailWorkspaceSource = await read("src/features/detail/detail-workspace-controller.js");
+const detailBusNativeControllerSource = await read("src/features/detail/detail-bus-native-controller.js");
+const detailReviewSource = await read("src/features/detail/detail-reviews-controller.js");
+const detailRelatedSource = await read("src/features/detail/detail-related-controller.js");
+const screenshotSource = await read("src/features/detail/detail-screenshot-controller.js");
+const highlightMagnetSource = await read("src/features/detail/detail-native-magnets-controller.js");
+const detailPageButtonSource = await read("src/features/detail/detail-page-state-actions-controller.js");
+const previewVideoSource = await read("src/features/detail/detail-javdb-preview-controller.js");
+const busPreviewVideoSource = await read("src/features/detail/detail-javbus-preview-controller.js");
+const otherSiteSource = await read("src/features/detail/detail-external-sites-controller.js");
+assertIncludes(detailControllerSource, "nativeController?.start?.()", "native detail feature handoff");
+assertIncludes(detailControllerSource, "workspaceController?.start?.()", "detail workspace feature handoff");
 assertIncludes(detailManifestSource, '"detail.workspace"', "detail workspace contribution selection");
 assertIncludes(detailManifestSource, '"detail.javdb-native"', "JavDB native detail contribution selection");
 assertIncludes(detailManifestSource, '"detail.javbus-native"', "JavBus native detail contribution selection");
-assertIncludes(detailWorkspaceSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail workspace injected scope");
-assertIncludes(detailPageSource, "export class DetailPagePlugin", "JavDB native detail implementation");
-assertIncludes(busDetailPageSource, "export class BusDetailPagePlugin", "JavBus native detail implementation");
-assertIncludes(detailControllerSource, "reviewPlugin?.handle?.({ scope: this.scope })", "detail review feature handoff");
-assertIncludes(detailControllerSource, "relatedPlugin?.handle?.({ scope: this.scope })", "detail related feature handoff");
-assertIncludes(detailControllerSource, "screenshotPlugin?.handle?.({ scope: this.scope })", "detail screenshot feature handoff");
+assertIncludes(detailManifestSource, "new DetailFc2OwnedController", "FC2 detail direct controller");
+assert(!detailManifestSource.includes("resolveLegacyContribution"), "detail feature must not resolve FC2 through the legacy registry");
+assertIncludes(detailWorkspaceSource, "this.scope.observe(resource.observeRoot", "detail workspace injected scope");
+assertIncludes(detailNativeControllerSource, "class DetailNativeController", "JavDB native detail implementation");
+assertIncludes(detailBusNativeControllerSource, "class DetailBusNativeController", "JavBus native detail implementation");
+assertIncludes(detailControllerSource, "reviewController?.start?.()", "detail review feature handoff");
+assertIncludes(detailControllerSource, "relatedController?.start?.()", "detail related feature handoff");
+assertIncludes(detailControllerSource, "screenshotController?.start?.()", "detail screenshot feature handoff");
 assertIncludes(detailControllerSource, "magnetPlugin?.handle?.({ scope: this.scope })", "detail magnet feature handoff");
-assertIncludes(detailControllerSource, "pageActionsPlugin?.handle?.({ scope: this.scope })", "detail page actions feature handoff");
-assertIncludes(detailReviewSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail review injected scope");
-assertIncludes(detailRelatedSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail related injected scope");
-assertIncludes(screenshotSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail screenshot injected scope");
-assertIncludes(highlightMagnetSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail magnet injected scope");
-assertIncludes(detailPageButtonSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail page actions injected scope");
-assertIncludes(detailControllerSource, "previewPlugin?.handle?.({ scope: this.scope })", "detail preview feature handoff");
-assertIncludes(previewVideoSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "JavDB preview injected scope");
+assertIncludes(detailControllerSource, "pageActionsPlugin?.handle?.({ scope: this.scope,", "detail page actions feature handoff");
+assertIncludes(detailReviewSource, "class DetailReviewsController", "detail review controller");
+assertIncludes(detailRelatedSource, "class DetailRelatedController", "detail related controller");
+assertIncludes(screenshotSource, "class DetailScreenshotController", "detail screenshot controller");
+assertIncludes(highlightMagnetSource, "options.scope ?? this.scope ?? await this.getRuntimeService(\"scope\")?.()", "detail magnet injected scope");
+assertIncludes(detailPageButtonSource, "options.scope ?? await this.resolveScope()", "detail page actions injected scope");
+assertIncludes(detailControllerSource, "previewPlugin?.handle?.({ scope: this.scope,", "detail preview feature handoff");
+assertIncludes(detailManifestSource, "new DetailJavDbPreviewController", "JavDB preview direct controller");
+assertIncludes(previewVideoSource, "options.scope ?? await this.resolveScope()", "JavDB preview injected scope");
 assertIncludes(busPreviewVideoSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "JavBus preview injected scope");
 assertIncludes(detailControllerSource, "externalSitesPlugin?.handle?.({ scope: this.scope })", "detail external sites feature handoff");
 assertIncludes(otherSiteSource, "options.scope ?? await this.getRuntimeService(\"scope\")()", "detail external sites injected scope");
@@ -394,11 +397,13 @@ assertIncludes(hitShow, 'getFeatureApi("list")', "hit-show list feature API boun
 assert(!hitShow.includes('getOptionalDependency("ListPagePlugin")'), "hit-show must not resolve ListPagePlugin directly");
 assertIncludes(listActionsSource, 'getFeatureApi("list")', "list actions feature API boundary");
 assert(!listActionsSource.includes('getOptionalDependency("ListPagePlugin")'), "list actions must not resolve ListPagePlugin directly");
-assertIncludes(autoPageSource, 'getFeatureApi("list")', "auto-page feature API boundary");
+assertIncludes(autoPageSource, 'getFeatureApi?.("list")', "auto-page feature API boundary");
 assert(!autoPageSource.includes('getOptionalDependency("ListPagePlugin")'), "auto-page must not resolve ListPagePlugin directly");
-assertIncludes(foldCategorySource, "options.scope", "fold category feature lifecycle handoff");
-assertIncludes(responsiveShellSource, "this.plugin?.handle?.({ scope: this.scope })", "responsive shell feature lifecycle handoff");
-assertIncludes(coverButtonSource, 'getFeatureApi("list")', "cover actions feature API boundary");
+assertIncludes(autoPageSource, "class ListAutoPageController", "auto-page feature controller ownership");
+const listCategoryFoldSource = await read("src/features/list/list-category-fold-controller.js");
+assertIncludes(listCategoryFoldSource, "class ListCategoryFoldController", "fold category feature lifecycle ownership");
+assertIncludes(mobileSource, "class ResponsiveShellBottomBarController", "responsive shell feature controller");
+assertIncludes(coverButtonSource, 'getFeatureApi?.("list")', "cover actions feature API boundary");
 assert(!coverButtonSource.includes('getOptionalDependency("ListPagePlugin")'), "cover actions must not resolve ListPagePlugin directly");
 assertIncludes(historySource, 'getFeatureApi("list")', "history list API boundary");
 assert(!historySource.includes('getOptionalDependency("ListPagePlugin")'), "history must not resolve ListPagePlugin directly");
@@ -406,7 +411,7 @@ assertIncludes(compatibilitySource, 'getFeatureApi?.("list")', "compatibility li
 assert(!compatibilitySource.includes('getOptionalDependency("ListPagePlugin")'), "compatibility must not resolve ListPagePlugin directly");
 assertIncludes(statsSource, 'getFeatureApi("list")', "stats list API boundary");
 assert(!statsSource.includes('getOptionalDependency("ListPagePlugin")'), "stats must not resolve ListPagePlugin directly");
-assertIncludes(mobileSource, 'getFeatureApi("list")', "mobile list API boundary");
+assertIncludes(mobileSource, 'getFeatureApi?.("list")', "mobile list API boundary");
 assert(!mobileSource.includes('getOptionalDependency("ListPagePlugin")'), "mobile must not resolve ListPagePlugin directly");
 assert(!mobileSource.includes('getOptionalDependency("BlacklistPlugin")'), "mobile must not resolve BlacklistPlugin directly");
 assert(!settingSource.includes('getOptionalDependency("ListPagePlugin")'), "settings must not resolve ListPagePlugin directly");
@@ -513,8 +518,8 @@ assertIncludes(listPageSource, "element.matches?.(e.itemSelector) && this.indexI
 assertIncludes(javDbHostAdapter, 'querySelector("#magnets-content")', "protected JavDB resource boundary");
 assert(!detailWorkspace.includes('controller.find("#magnets-content")'), "detail workspace must use the JavDB HostAdapter resource boundary");
 assert(!/routeSections|moveToSection|movePanelToSection/.test(detailWorkspace), "detail workspace must not remount host sections");
-assertIncludes(detailWorkspace, 'jhsEventBus.emit("magnet-items-updated"', "magnet lifecycle event");
-assertIncludes(detailWorkspace, "{ broadcast: !1 }", "DOM lifecycle events must stay local");
+assertIncludes(detailWorkspace, 'this.eventBus?.emit?.("magnet-items-updated"', "magnet lifecycle event");
+assertIncludes(detailWorkspace, "broadcast: false", "DOM lifecycle events must stay local");
 assert(!/\.jhs-detail-host-workspace\s*\{[^}]*display\s*:\s*flex/.test(detailWorkspace), "host workspace must not force flex layout");
 assert(!/data-jhs-host-region[^}]*order\s*:/.test(detailWorkspace), "semantic host markers must not control layout order");
 for (const token of ['$("#magnets-content").detach()', '$("#magnet-table").detach()']) assert(!detailWorkspace.includes(token), "host resource DOM must not be detached");
@@ -539,7 +544,7 @@ for (const [label, source] of [["123", one23AuthControllerSource], ["115", one11
 assert(!history.slice(history.indexOf("async editRecord")).includes("projectLegacyStatus"), "history editor must not project a legacy single status");
 assert(!history.slice(history.indexOf("async editRecord")).includes("legacyActionToFlag"), "history editor must patch four flags directly");
 assertIncludes(storage.slice(storage.indexOf("async getSetting("), storage.indexOf("async saveSetting(")), "Object.prototype.hasOwnProperty.call(", "settings must preserve explicit falsey values");
-assertIncludes(await read("src/plugins/backup/setting.js"), '.off("change.jhsResource", "input, select")', "cloud settings must persist selects through delegated binding");
+assertIncludes(await read("src/features/system/settings/settings-core-controller.js"), '.off("change.jhsResource", "input, select")', "cloud settings must persist selects through delegated binding");
 for (const retiredVisibilityToken of [ "shouldHideInDefaultView", "settingHidden", "data-jhs-setting-hide" ])
   assert(!listPageSource.includes(retiredVisibilityToken), `retired all-view visibility rule returned: ${retiredVisibilityToken}`);
 for (const retiredSetting of [ "showAllItem", "showFavoriteItem", "showHasDownItem", "showHasWatchItem" ])
@@ -560,7 +565,7 @@ assertIncludes(statsSource, 'action: "filter", filter: "blockedItems"', "Stats c
 assertIncludes(statsSource, 'title: "统计"', "Stats dialog title");
 assert(!mobileSource.includes("activeQuickFilter ="), "mobile filter actions must use ListPagePlugin.setQuickFilter");
 assert(!mobileSource.includes('$("#waitCheckBtn").click()'), "mobile identification must call ListPageButtonPlugin.openWaitCheck directly");
-assertIncludes(mobileSource, 'await this.getOptionalDependency("ListPageButtonPlugin")?.openWaitCheck?.()', "mobile identification API");
+assertIncludes(mobileSource, "await this.listFeatureApi?.openWaitCheck?.()", "mobile identification API");
 assert(!/\.jhs-commandbar__filters\s*\{[^}]*overflow-x\s*:\s*auto/.test(mobileSource), "command-bar filters must not clip popovers with horizontal overflow");
 assert(!/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*overflow-x\s*:\s*auto/.test(mobileSource), "tablet command bar must wrap instead of scrolling horizontally");
 assert(/@media \(max-width:\s*1023px\)[\s\S]*?\.jhs-page-commandbar\s*\{[^}]*flex-wrap\s*:\s*wrap[^}]*overflow\s*:\s*visible/.test(mobileSource), "tablet command bar must wrap with visible overflow");
@@ -584,7 +589,7 @@ assert(!themeSource.includes(".sda-content"), "JavDB host cleanup must not leak 
 for (const removedBestResourceToken of [ "bestResourceBtn", "submitBestResource", "findBestResource", "selectBestCapableResource" ])
   assert(!unifiedOfflineControllerSource.includes(removedBestResourceToken) && !magnetHubSource.includes(removedBestResourceToken), `best-resource path returned: ${removedBestResourceToken}`);
 for (const removedPlugin of [ "OneOneFiveOfflinePlugin", "OneOneFiveRenamePlugin" ])
-  assert(!registry.includes(removedPlugin) && !one115ControllerSource.includes(removedPlugin), `retired 115 plugin returned: ${removedPlugin}`);
+  assert(!sourceMain.includes(removedPlugin) && !one115ControllerSource.includes(removedPlugin), `retired 115 plugin returned: ${removedPlugin}`);
 assertIncludes(unifiedOfflineControllerSource, "forceAvailabilityRefresh", "offline retries must bypass availability cache");
 assertIncludes(unifiedOfflineControllerSource, "preferredProviderId", "offline retries must prefer their original provider");
 assert(!statusImport.includes("$.ajax("), "multi-page import must use one awaited promise chain");
@@ -596,57 +601,35 @@ assert(!related.includes('id="related'), "related panels must not expose fixed i
 assertIncludes(statusImport, 'return href.includes("/watched_videos") ? "watched" : "favorite"', "JavDB watched import mapping");
 assert(!statusImport.includes("downloaded"), "JavDB watched import must not map to downloaded");
 
-const expectedPlugins = [
-  ["status/detail-page.js", "DetailPagePlugin", "DetailPagePlugin"],
-  ["status/detail-workspace.js", "DetailWorkspacePlugin", "DetailWorkspacePlugin"],
-  ["image-viewer/preview-video.js", "PreviewVideoPlugin", "PreviewVideoPlugin"],
-  ["external-search/fc2.js", "Fc2Plugin", "Fc2Plugin"],
-  ["status/highlight-magnet.js", "HighlightMagnetPlugin", "HighlightMagnetPlugin"],
-  ["status/fold-category.js", "FoldCategoryPlugin", "FoldCategoryPlugin"],
-  ["external-search/other-site.js", "OtherSitePlugin", "OtherSitePlugin"],
-  ["status/bus-detail-page.js", "BusDetailPagePlugin", "BusDetailPagePlugin"],
-  ["status/detail-page-button.js", "DetailPageButtonPlugin", "DetailPageButtonPlugin"],
-  ["external-search/review.js", "ReviewPlugin", "ReviewPlugin"],
-  ["status/list-page-button.js", "ListPageButtonPlugin", "ListPageButtonPlugin"],
-  ["status/list-page.js", "ListPagePlugin", "ListPagePlugin"],
-  ["status/fc2-navigation.js", "Fc2NavigationPlugin", "Fc2NavigationPlugin"],
-  ["status/auto-page.js", "AutoPagePlugin", "AutoPagePlugin"],
-  ["backup/setting.js", "SettingPlugin", "SettingPlugin"],
-  ["image-viewer/bus-preview-video.js", "BusPreviewVideoPlugin", "BusPreviewVideoPlugin"],
-  ["external-search/related.js", "RelatedPlugin", "RelatedPlugin"],
-  ["image-viewer/cover-button.js", "CoverButtonPlugin", "CoverButtonPlugin"],
-  ["external-search/fc2-by-123av.js", "Fc2By123AvPlugin", "Fc2By123AvPlugin"],
-  ["external-search/magnet-hub.js", "MagnetHubPlugin", "MagnetHubPlugin"],
-  ["image-viewer/screenshot.js", "ScreenShotPlugin", "ScreenShotPlugin"],
-  ["image-viewer/bus-img.js", "BusImgPlugin", "BusImgPlugin"],
-  ["status/mobile-bottom-bar.js", "MobileBottomBarPlugin", "MobileBottomBarPlugin"]
+const expectedControllers = [
+  ["features/detail/detail-javdb-preview-controller.js", "DetailJavDbPreviewController", "PreviewVideoPlugin"],
+  ["features/detail/detail-fc2-owned-controller.js", "DetailFc2OwnedController", "Fc2Plugin"],
+  ["features/detail/detail-native-magnets-controller.js", "DetailNativeMagnetsController", "HighlightMagnetPlugin"],
+  ["features/detail/detail-external-sites-controller.js", "DetailExternalSitesController", "OtherSitePlugin"],
+  ["features/detail/detail-page-state-actions-controller.js", "DetailPageStateActionsController", "DetailPageButtonPlugin"],
+  ["features/list/list-actions-controller.js", "ListActionsController", "ListPageButtonPlugin"],
+  ["plugins/status/list-page.js", "ListPagePlugin", null],
+  ["features/list/list-fc2-navigation-controller.js", "ListFc2NavigationController", "Fc2NavigationPlugin"],
+  ["features/list/list-auto-page-controller.js", "ListAutoPageController", "AutoPagePlugin"],
+  ["features/system/settings/settings-core-controller.js", "SettingsCoreController", "SettingPlugin"],
+  ["features/detail/detail-javbus-preview-controller.js", "DetailJavBusPreviewController", "BusPreviewVideoPlugin"],
+  ["features/list/list-cover-state-actions-controller.js", "ListCoverStateActionsController", "CoverButtonPlugin"],
+  ["features/list/list-fc2-lookup-controller.js", "ListFc2LookupController", "Fc2By123AvPlugin"],
+  ["features/detail/detail-external-magnets-controller.js", "DetailExternalMagnetsController", "MagnetHubPlugin"],
+  ["features/system/responsive-shell-bottom-bar-controller.js", "ResponsiveShellBottomBarController", "MobileBottomBarPlugin"]
 ];
 
 const mainClassMatches = sourceMain.match(/^class\s+[\w$]+\s+extends\s+BasePlugin\s*\{/gm) || [];
 assert(mainClassMatches.length === 0, "src/main.js still contains plugin classes");
 
-for (const [file, className, pluginName] of expectedPlugins) {
-  const source = await read(`src/plugins/${file}`);
-  await stat(join(repoRoot, "src", "plugins", file));
-  assertIncludes(source, `class ${className} extends BasePlugin`, file);
-  assertIncludes(source, `return "${pluginName}"`, file);
+for (const [file, className, compatibilityAlias] of expectedControllers) {
+  const source = await read(`src/${file}`);
+  await stat(join(repoRoot, "src", file));
+  assertIncludes(source, `class ${className}`, file);
+  if (compatibilityAlias) assertIncludes(source, `export const ${compatibilityAlias} = ${className}`, file);
 }
 
-const javdbPlugins = extractContributionOrder(registry, "javdb");
-const javbusPlugins = extractContributionOrder(registry, "javbus");
-assert(
-  javdbPlugins.join(",") === "ListPagePlugin,AutoPagePlugin,Fc2Plugin,Fc2NavigationPlugin,FoldCategoryPlugin,ListPageButtonPlugin,SettingPlugin,CoverButtonPlugin,Fc2By123AvPlugin,DetailPagePlugin,DetailWorkspacePlugin,ReviewPlugin,RelatedPlugin,DetailPageButtonPlugin,HighlightMagnetPlugin,PreviewVideoPlugin,OtherSitePlugin,MagnetHubPlugin,ScreenShotPlugin,MobileBottomBarPlugin",
-  "JavDB plugin registration order changed"
-);
-assert(
-  javbusPlugins.join(",") === "ListPagePlugin,ListPageButtonPlugin,SettingPlugin,AutoPagePlugin,CoverButtonPlugin,BusImgPlugin,BusDetailPagePlugin,DetailWorkspacePlugin,DetailPageButtonPlugin,ReviewPlugin,HighlightMagnetPlugin,BusPreviewVideoPlugin,MagnetHubPlugin,ScreenShotPlugin,OtherSitePlugin,MobileBottomBarPlugin",
-  "JavBus plugin registration order changed"
-);
-assert(!registry.includes("OneTwoThreeOfflinePlugin"), "123Pan auth must not be registered as a legacy plugin");
-assert(!registry.includes("UnifiedOfflinePlugin"), "unified offline must not be registered as a legacy plugin");
-assert(!registry.includes("HitShowPlugin"), "HitShow must not be registered as a legacy plugin");
-assert(!registry.includes("JavTrailersPlugin"), "JavTrailers must not be registered as a legacy plugin");
-assert(!registry.includes("SubTitleCatPlugin"), "SubtitleCat must not be registered as a legacy plugin");
+assert(!sourceMain.includes("registerSitePlugins"), "userscript must not register legacy plugins");
 const siteContext = await read("src/core/site-context.js");
 for (const [metadataToken, runtimeToken] of [
   ["javdb", "JAVDB_HOST_PATTERN"],
@@ -662,8 +645,8 @@ for (const [metadataToken, runtimeToken] of [
 }
 
 const sourceByFile = new Map();
-for (const [file] of expectedPlugins) {
-  sourceByFile.set(file, await read(`src/plugins/${file}`));
+for (const [file] of expectedControllers) {
+  sourceByFile.set(file, await read(`src/${file}`));
 }
 sourceByFile.set("core/storage.js", storage);
 sourceByFile.set("core/logger.js", await read("src/core/logger.js"));
@@ -673,9 +656,15 @@ sourceByFile.set("core/event-bus.js", await read("src/core/event-bus.js"));
 sourceByFile.set("core/state-model.js", stateModel);
 sourceByFile.set("core/migration.js", migration);
 sourceByFile.set("core/state-service.js", stateService);
-sourceByFile.set("core/plugin-manager.js", await read("src/core/plugin-manager.js"));
 sourceByFile.set("core/utils.js", await read("src/core/utils.js"));
 sourceByFile.set("features/stats/stats-controller.js", statsControllerSource);
+sourceByFile.set("features/list/list-image-controller.js", listImageControllerSource);
+sourceByFile.set("features/detail/detail-native-controller.js", detailNativeControllerSource);
+sourceByFile.set("features/detail/detail-workspace-controller.js", detailWorkspaceSource);
+sourceByFile.set("features/detail/detail-bus-native-controller.js", detailBusNativeControllerSource);
+sourceByFile.set("features/detail/detail-reviews-controller.js", detailReviewSource);
+sourceByFile.set("features/detail/detail-related-controller.js", detailRelatedSource);
+sourceByFile.set("features/detail/detail-screenshot-controller.js", screenshotSource);
 sourceByFile.set("features/library/library-controller.js", libraryControllerSource);
 sourceByFile.set("features/library/history-controller.js", historySource);
 sourceByFile.set("features/library/blacklist-controller.js", blacklistControllerSource);
@@ -696,18 +685,18 @@ sourceByFile.set("features/discovery/top250-controller.js", top250);
 sourceByFile.set("features/discovery/task-controller.js", taskControllerSource);
 sourceByFile.set("features/discovery/new-video-controller.js", newVideoControllerSource);
 sourceByFile.set("services/webdav-service.js", await read("src/services/webdav-service.js"));
-sourceByFile.set("backup/setting-backup.js", await read("src/plugins/backup/setting-backup.js"));
-sourceByFile.set("backup/setting-styles.js", await read("src/plugins/backup/setting-styles.js"));
-sourceByFile.set("backup/setting-templates.js", await read("src/plugins/backup/setting-templates.js"));
-sourceByFile.set("backup/setting-panels.js", await read("src/plugins/backup/setting-panels.js"));
-sourceByFile.set("backup/setting-forms.js", await read("src/plugins/backup/setting-forms.js"));
+sourceByFile.set("features/system/settings/setting-backup.js", await read("src/features/system/settings/setting-backup.js"));
+sourceByFile.set("features/system/settings/setting-styles.js", await read("src/features/system/settings/setting-styles.js"));
+sourceByFile.set("features/system/settings/setting-templates.js", await read("src/features/system/settings/setting-templates.js"));
+sourceByFile.set("features/system/settings/setting-panels.js", await read("src/features/system/settings/setting-panels.js"));
+sourceByFile.set("features/system/settings/setting-forms.js", await read("src/features/system/settings/setting-forms.js"));
 
 const regressionMatrix = [
-  ["JavDB 列表页", [["status/list-page.js", "filterMovieList"], ["status/list-page-button.js", "ListPageButtonPlugin"], ["image-viewer/cover-button.js", "CoverButtonPlugin"], ["core/storage.js", "getStatusMap"]]],
-  ["JavDB 详情页", [["status/detail-page.js", "DetailPagePlugin"], ["status/detail-page-button.js", "showStatus"], ["image-viewer/preview-video.js", "PreviewVideoPlugin"]]],
-  ["JavDB 演员页", [["features/library/library-controller.js", "mountFavoriteActresses"], ["features/identity/identity-actress-info-controller.js", "class IdentityActressInfoController"], ["core/plugin-manager.js", "getActressPageInfo"]]],
-  ["JavBus 列表页", [["status/list-page.js", "fixBusTitleBox"], ["image-viewer/bus-img.js", "BusImgPlugin"], ["status/list-page-button.js", "ListPageButtonPlugin"]]],
-  ["JavBus 详情页", [["status/bus-detail-page.js", "BusDetailPagePlugin"], ["image-viewer/bus-preview-video.js", "BusPreviewVideoPlugin"]]],
+  ["JavDB 列表页", [["plugins/status/list-page.js", "filterMovieList"], ["features/list/list-actions-controller.js", "ListPageButtonPlugin"], ["features/list/list-cover-state-actions-controller.js", "CoverButtonPlugin"], ["core/storage.js", "getStatusMap"]]],
+  ["JavDB 详情页", [["features/detail/detail-native-controller.js", "class DetailNativeController"], ["features/detail/detail-page-state-actions-controller.js", "showStatus"], ["features/detail/detail-javdb-preview-controller.js", "PreviewVideoPlugin"]]],
+  ["JavDB 演员页", [["features/library/library-controller.js", "mountFavoriteActresses"], ["features/identity/identity-actress-info-controller.js", "class IdentityActressInfoController"], ["features/list/list-actions-controller.js", "getActressPageInfo"]]],
+  ["JavBus 列表页", [["features/list/list-image-controller.js", "logImageHeightsByRow"], ["features/list/list-actions-controller.js", "ListPageButtonPlugin"]]],
+  ["JavBus 详情页", [["features/detail/detail-bus-native-controller.js", "class DetailBusNativeController"], ["features/detail/detail-javbus-preview-controller.js", "BusPreviewVideoPlugin"]]],
   ["123pan 授权同步", [["features/external-bridge/one-two-three-controller.js", "class OneTwoThreeAuthController"], ["features/external-bridge/one-two-three-controller.js", "visibilitychange"], ["features/external-bridge/one-two-three-controller.js", "syncFallbackMs = 3e5"]]],
   ["JavTrailers 预告片", [["features/external-bridge/javtrailers-controller.js", "class JavTrailersController"], ["features/external-bridge/javtrailers-controller.js", "handlePlayJavTrailers"], ["features/external-bridge/javtrailers-controller.js", "jhsJavTrailers"]]],
   ["SubtitleCat 筛选", [["features/external-bridge/subtitle-cat-controller.js", "class SubtitleCatController"], ["features/external-bridge/subtitle-cat-controller.js", "sub-table"], ["features/external-bridge/subtitle-cat-controller.js", "该番号无字幕"]]],
@@ -718,26 +707,26 @@ const regressionMatrix = [
   ["黑名单检测", [["features/library/blacklist-controller.js", "class BlacklistController"], ["features/library/blacklist-repository.js", "class BlacklistRepository"], ["features/library/library-controller.js", "filter_keyword_title"], ["core/storage.js", "batchSaveBlacklistCarList"]]],
   ["统计面板", [["features/stats/stats-controller.js", "class StatsController"], ["features/stats/stats-controller.js", "coverageStart"], ["features/stats/stats-controller.js", "6.4.0"]]],
   ["兼容增强", [["features/compatibility/compatibility-controller.js", "class CompatibilityController"], ["features/compatibility/compatibility-controller.js", "jhs-actress-state-container"], ["features/compatibility/compatibility-controller.js", "createTreeWalker"]]],
-  ["数据导入导出", [["backup/setting-backup.js", "importSettingData"], ["backup/setting-backup.js", "exportSettingData"], ["core/storage.js", "exportData"]]],
-  ["WebDAV 备份", [["services/webdav-service.js", "class WebDavClient"], ["backup/setting-backup.js", "backupDataByWebDav"], ["services/webdav-service.js", "PROPFIND"]]],
-  ["图片查看器", [["core/logger.js", "showImageViewer"], ["core/logger.js", "new Viewer"], ["image-viewer/screenshot.js", "ScreenShotPlugin"]]],
-  ["第三方请求失败场景", [["core/storage.js", "cachedRequest"], ["core/http.js", "onerror"], ["external-search/other-site.js", "detectOtherSites"]]],
-  ["多标签页同步", [["core/event-bus.js", "eventId"], ["core/event-bus.js", "originId"], ["status/list-page.js", "list-items-added"]]],
-  ["快速筛选", [["status/list-page.js", "createQuickFilter"], ["status/list-page.js", "setQuickFilter"], ["status/list-page.js", "blockedItems"]]],
-  ["标记状态与隐藏", [["status/list-page.js", "data-jhs-flags"], ["status/list-page.js", "visibilityReasons"], ["core/state-model.js", "syncLegacyStatus"]]],
+  ["数据导入导出", [["features/system/settings/setting-backup.js", "importSettingData"], ["features/system/settings/setting-backup.js", "exportSettingData"], ["core/storage.js", "exportData"]]],
+  ["WebDAV 备份", [["services/webdav-service.js", "class WebDavClient"], ["features/system/settings/setting-backup.js", "backupDataByWebDav"], ["services/webdav-service.js", "PROPFIND"]]],
+  ["图片查看器", [["core/logger.js", "showImageViewer"], ["core/logger.js", "new Viewer"], ["features/detail/detail-screenshot-controller.js", "class DetailScreenshotController"]]],
+  ["第三方请求失败场景", [["core/storage.js", "cachedRequest"], ["core/http.js", "onerror"], ["features/detail/detail-external-sites-controller.js", "detectOtherSites"]]],
+  ["多标签页同步", [["core/event-bus.js", "eventId"], ["core/event-bus.js", "originId"], ["plugins/status/list-page.js", "list-items-added"]]],
+  ["快速筛选", [["plugins/status/list-page.js", "createQuickFilter"], ["plugins/status/list-page.js", "setQuickFilter"], ["plugins/status/list-page.js", "blockedItems"]]],
+  ["标记状态与隐藏", [["plugins/status/list-page.js", "data-jhs-flags"], ["plugins/status/list-page.js", "visibilityReasons"], ["core/state-model.js", "syncLegacyStatus"]]],
   ["版本迁移", [["core/migration.js", "DATA_MIGRATIONS"], ["core/migration.js", "migration-snapshot"], ["core/migration.js", "collision"]]],
   ["可恢复状态事务", [["core/state-service.js", "mutation_journal"], ["core/state-service.js", 'commitState: "pending"'], ["core/state-service.js", "recoverPendingTransaction"]]],
   ["离线能力路由", [["features/external-bridge/unified-offline-controller.js", "capabilities.includes(type)"], ["features/external-bridge/unified-offline-controller.js", '"ready", "unknown"'], ["features/external-bridge/unified-offline-controller.js", "getCandidates(resource"]]],
   ["115 增量匹配", [["features/external-bridge/one-one-five-controller.js", "IntersectionObserver"], ["features/external-bridge/one-one-five-controller.js", 'rootMargin: "200px"'], ["features/external-bridge/one-one-five-controller.js", "list-items-added"]]],
-  ["设置页", [["backup/setting.js", "SettingPlugin"], ["backup/setting-backup.js", "importSettingData"]]],
-  ["演员信息解析", [["core/plugin-manager.js", "getActressPageInfo"], ["status/list-page.js", "parseActressName"]]],
-  ["移动端适配", [["status/mobile-bottom-bar.js", "MobileBottomBarPlugin"], ["core/utils.js", "isMobileMode"], ["core/plugin-manager.js", "shouldSkipOnMobile"]]]
+  ["设置页", [["features/system/settings/settings-core-controller.js", "SettingPlugin"], ["features/system/settings/setting-backup.js", "importSettingData"]]],
+  ["演员信息解析", [["features/list/list-actions-controller.js", "getActressPageInfo"], ["plugins/status/list-page.js", "parseActressName"]]],
+  ["移动端适配", [["features/system/responsive-shell-bottom-bar-controller.js", "MobileBottomBarPlugin"], ["core/utils.js", "isMobileMode"]]]
 ];
 
 assert(!sourceByFile.get("features/external-bridge/one-one-five-controller.js").includes("new MutationObserver"), "115 must reuse the ListPage MutationObserver");
 for (const [file, source] of [
-  ["status/list-page.js", listPageSource],
-  ["status/detail-page-button.js", sourceByFile.get("status/detail-page-button.js")],
+  ["plugins/status/list-page.js", listPageSource],
+  ["features/detail/detail-page-state-actions-controller.js", sourceByFile.get("features/detail/detail-page-state-actions-controller.js")],
   ["features/discovery/new-video-controller.js", newVideoControllerSource],
   ["features/stats/stats-controller.js", statsControllerSource]
 ]) {
@@ -763,10 +752,11 @@ for (const [scope, checks] of regressionMatrix) {
   }
 }
 
-const fc2Source = sourceByFile.get("external-search/fc2.js");
-const fc2By123AvSource = sourceByFile.get("external-search/fc2-by-123av.js");
-const workspaceSource = sourceByFile.get("status/detail-workspace.js");
-const reviewSource = sourceByFile.get("external-search/review.js");
+const fc2Source = sourceByFile.get("features/detail/detail-fc2-owned-controller.js");
+const fc2By123AvSource = sourceByFile.get("features/list/list-fc2-lookup-controller.js");
+const workspaceSource = sourceByFile.get("features/detail/detail-workspace-controller.js");
+const reviewSource = sourceByFile.get("features/detail/detail-reviews-controller.js");
+const relatedSource = sourceByFile.get("features/detail/detail-related-controller.js");
 assertIncludes(fc2Source, "mountFc2Detail", "FC2 owned workspace");
 assertIncludes(fc2Source, "magnetHubPromise ||=", "FC2 lazy magnet single-flight");
 assertIncludes(fc2DetailWorkspace, "createFc2DetailContext", "FC2 owned workspace");
@@ -774,8 +764,9 @@ assertIncludes(fc2By123AvSource, "loadDetail(context, url)", "123AV FC2 adapter"
 assert(!fc2Source.includes("organizeJhsOwnedDetailWorkspace"), "FC2 must render directly into owned slots");
 assert(!fc2By123AvSource.includes("organizeJhsOwnedDetailWorkspace"), "123AV FC2 must reuse the owned shell");
 assert(!reviewSource.includes("R(movieId, 2, pageSize).catch"), "review page 2 must only load on demand");
+assert(!relatedSource.includes('id="related'), "related panels must not expose fixed instance ids");
 assert(!sourceMain.includes("isFc2Page"), "FC2 title filtering must bind to the mounted detail root");
 
 console.log(
-  `Regression checks passed for ${version}: ${expectedPlugins.length} plugins, ${regressionMatrix.length} scopes, ${stableReleaseChecks.length} stable release checks`
+  `Regression checks passed for ${version}: ${expectedControllers.length} controllers, ${regressionMatrix.length} scopes, ${stableReleaseChecks.length} stable release checks`
 );

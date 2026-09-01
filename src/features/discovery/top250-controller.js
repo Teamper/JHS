@@ -9,7 +9,7 @@ const CREDENTIAL_KEY = "jhs_appAuthorization";
 
 /** Own the JavDB Top250 page, including auth, filters, pagination, and rendering. */
 export class Top250Controller {
-    /** @param {{document?: Document, window?: any, hostAdapter: any, movie: any, dialog: any, account: any, storage: any, listActions?: any, ui?: any, scope: any}} options */
+    /** @param {{document?: Document, window?: any, hostAdapter: any, movie: any, dialog: any, account: any, storage: any, features?: any, listActions?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.document = options.document ?? globalThis.document;
         this.window = options.window ?? this.document?.defaultView ?? globalThis.window;
@@ -18,6 +18,7 @@ export class Top250Controller {
         this.dialog = options.dialog;
         this.account = options.account;
         this.storage = options.storage;
+        this.features = options.features;
         this.listActions = options.listActions;
         this.ui = options.ui;
         this.scope = options.scope;
@@ -135,7 +136,8 @@ export class Top250Controller {
         this.hookPage();
         this.toolBar(type, typeValue);
         this.renderPagination();
-        await this.listActions?.mountOwnedRankingControls?.($(".jhs-top250-filters"), this.discoveryApi)?.catch?.((/** @type {unknown} */ error) => this.getClog().error?.("Top250 操作按钮挂载失败", error));
+        const listActions = this.listActions ?? await this.features?.getFeatureApi?.("list");
+        await listActions?.mountOwnedRankingControls?.($(".jhs-top250-filters"), this.discoveryApi)?.catch?.((/** @type {unknown} */ error) => this.getClog().error?.("Top250 操作按钮挂载失败", error));
         const $list = this.$listRoot, loadingFactory = this.getLoading(), loading = loadingFactory?.(), state = { done: false };
         $list.html("");
         for (let attempt = 1; attempt <= 3 && !state.done; attempt++) {

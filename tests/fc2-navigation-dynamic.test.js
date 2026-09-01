@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import jquery from "jquery";
 import { initializeEventBus } from "../src/core/event-bus.js";
-import { Fc2NavigationPlugin } from "../src/plugins/status/fc2-navigation.js";
+import { Fc2NavigationPlugin } from "../src/features/list/list-fc2-navigation-controller.js";
 
 class FakeBroadcastChannel {
     static channels = [];
@@ -60,11 +60,8 @@ describe("FC2 dynamic navigation protection", () => {
         globalThis.BroadcastChannel = FakeBroadcastChannel;
         FakeBroadcastChannel.channels = [];
         window.isListPage = true;
-        initializeEventBus();
-        const fc2 = makeFc2Mock(), scope = makeScope(), host = { locateListRoot: () => list };
-        const plugin = new Fc2NavigationPlugin();
-        plugin.getOptionalDependency = (name) => (name === "Fc2Plugin" ? fc2 : undefined);
-        plugin.getRuntimeService = (name) => (name === "host" ? host : name === "scope" ? () => scope : undefined);
+        const eventBus = initializeEventBus(), fc2 = makeFc2Mock(), scope = makeScope(), host = { locateListRoot: () => list };
+        const plugin = new Fc2NavigationPlugin({ hostAdapter: host, fc2, eventBus, scope, window, ui: { getJQuery: () => $, getClog: () => ({}) } });
 
         await plugin.handle({ scope });
         expect(first.querySelector("a").href).toBe("https://owned.example/detail/FC2-123");

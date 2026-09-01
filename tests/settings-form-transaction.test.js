@@ -2,7 +2,7 @@ import { readTestFile } from "./helpers/read-test-file.js";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const source = readTestFile(join(import.meta.dirname, "../src/plugins/backup/setting-forms.js"), "utf8");
+const source = readTestFile(join(import.meta.dirname, "../src/features/system/settings/setting-forms.js"), "utf8");
 
 function methodBody(start, end) {
     return source.slice(source.indexOf(start), source.indexOf(end, source.indexOf(start)));

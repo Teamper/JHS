@@ -5,7 +5,7 @@ import { PORT, REGISTRY, SERVICE } from "../../contracts/tokens.js";
 import { CompatibilityController } from "./compatibility-controller.js";
 
 export default defineFeature({
-    id: "compatibility", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: [], startup: "eager",
+    id: "compatibility", kind: "feature", disableable: true, failurePolicy: "degraded", sites: ["javdb", "javbus"], routes: [], startup: "eager",
     requires: [PORT.host, PORT.style, SERVICE.storage, SERVICE.state, SERVICE.ui, REGISTRY.feature],
     contributes: ["compatibility.enhancements"], providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {

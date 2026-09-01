@@ -12,26 +12,57 @@ function loadMobilePlugin({ beans: beanOverrides = null, isListPage = true, isDe
     const listPage = { activeQuickFilter: "waitCheck", setQuickFilter: vi.fn(), syncQuickFilterUi: vi.fn() }, listButtons = { openWaitCheck: vi.fn(async () => {}), sortItems: vi.fn(async () => {}) };
     const beans = beanOverrides ?? { ListPagePlugin: listPage, ListPageButtonPlugin: listButtons, NewVideoPlugin: {}, BlacklistPlugin: {}, SettingPlugin: {}, DetailPageButtonPlugin: {}, HighlightMagnetPlugin: {}, MagnetHubPlugin: {} };
     const settings = { snapshot: () => ({ sortMethod: "default" }), set: vi.fn(async () => {}) }, host = { readMovieRef: vi.fn(() => ({ carNum: "ABC-123" })) };
-    class BasePlugin { getBean(name) { return beans[name]; } getRuntimeService(name) { return "host" === name ? host : settings; } }
     const labels = { all: "全部", waitCheck: "待鉴定", favorite: "收藏", hasDown: "下载", hasWatch: "已看", blockedItems: "屏蔽项", favoriteUndownloaded: "收藏未下载", favoriteUnwatched: "收藏未观看", downloadedUnwatched: "下载未观看", recent7d: "最近 7 天" };
     const context = vm.createContext({
-        window: dom.window, document: dom.window.document, $, BasePlugin, localStorage: dom.window.localStorage,
+        window: dom.window, document: dom.window.document, $, localStorage: dom.window.localStorage,
         PRIMARY_QUICK_FILTERS: [ "all", "waitCheck", "favorite", "hasDown", "hasWatch" ],
         SECONDARY_QUICK_FILTERS: [ "blockedItems", "favoriteUndownloaded", "favoriteUnwatched", "downloadedUnwatched", "recent7d" ],
         QUICK_FILTER_LABELS: labels, normalizeQuickFilterKey: value => labels[value] ? value : "waitCheck",
         r: true, l: false, m: "屏蔽", v: "收藏", y: "下载", k: "观看", normalizeStateFlags: value => value || {},
         storageManager: {}, stateService: {}, show: { info: vi.fn() }, utils: {}, clog: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() }, setTimeout, clearTimeout
     });
-    const source = readTestFile(join(import.meta.dirname, "../src/plugins/status/mobile-bottom-bar.js"), "utf8");
+    const source = readTestFile(join(import.meta.dirname, "../src/features/system/responsive-shell-bottom-bar-controller.js"), "utf8");
     vm.runInContext(`${source};globalThis.TestMobilePlugin=MobileBottomBarPlugin`, context);
-    const plugin = new context.TestMobilePlugin();
+    const plugin = new context.TestMobilePlugin({
+        hostAdapter: host,
+        settings,
+        profile: { current: () => "regular" },
+        legacyStorage: { getCar: vi.fn(async () => ({})) },
+        features: {},
+        ui: { getJQuery: () => $, getClog: () => context.clog, show: context.show, getUtils: () => context.utils },
+        document: dom.window.document,
+        window: dom.window,
+    });
     if (beans.NewVideoPlugin) plugin.discoveryFeatureApi = { hasNewVideo: true, openNewVideoDialog: beans.NewVideoPlugin.openDialog };
-    if (beans.ListPagePlugin) plugin.listFeatureApi = { getActiveQuickFilter: () => listPage.activeQuickFilter, setQuickFilter: listPage.setQuickFilter, syncQuickFilterUi: listPage.syncQuickFilterUi };
+    if (beans.ListPagePlugin || beans.ListPageButtonPlugin) plugin.listFeatureApi = {
+        hasCore: Boolean(beans.ListPagePlugin),
+        hasActions: Boolean(beans.ListPageButtonPlugin),
+        getActiveQuickFilter: () => listPage.activeQuickFilter,
+        setQuickFilter: listPage.setQuickFilter,
+        syncQuickFilterUi: listPage.syncQuickFilterUi,
+        openWaitCheck: listButtons.openWaitCheck,
+        activeSortMethod: () => settings.snapshot().sortMethod,
+        selectSortMethod: listButtons.sortItems,
+    };
     if (beans.BlacklistPlugin || beans.HistoryPlugin) plugin.libraryFeatureApi = {
         hasBlacklist: Boolean(beans.BlacklistPlugin),
         hasHistory: Boolean(beans.HistoryPlugin),
         openBlacklistDialog: beans.BlacklistPlugin?.openBlacklistDialog,
         openHistory: beans.HistoryPlugin?.openHistory,
+    };
+    if (beans.SettingPlugin) plugin.settingsFeatureApi = { hasSettings: true, openQuickSetting: beans.SettingPlugin.openQuickSetting };
+    if (isDetailPage && (beans.DetailPageButtonPlugin || beans.HighlightMagnetPlugin || beans.MagnetHubPlugin)) plugin.detailFeatureApi = {
+        hasPageActions: Boolean(beans.DetailPageButtonPlugin),
+        showStatus: beans.DetailPageButtonPlugin?.showStatus,
+        filterOne: beans.DetailPageButtonPlugin?.filterOne,
+        favoriteOne: beans.DetailPageButtonPlugin?.favoriteOne,
+        hasDownOne: beans.DetailPageButtonPlugin?.hasDownOne,
+        hasWatchOne: beans.DetailPageButtonPlugin?.hasWatchOne,
+        hasNativeMagnets: Boolean(beans.HighlightMagnetPlugin),
+        toggleMagnetFilter: beans.HighlightMagnetPlugin?.toggleMagnetFilter,
+        hasExternalMagnets: Boolean(beans.MagnetHubPlugin),
+        openMagnetSearch: beans.MagnetHubPlugin?.openMagnetSearch,
+        openSubtitleSearch: beans.DetailPageButtonPlugin?.openSubtitleSearch,
     };
     return { $, host, listButtons, listPage, plugin };
 }

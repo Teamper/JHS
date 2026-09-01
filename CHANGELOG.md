@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ### Fixed
 
+- 开始 7.0 Runtime Strangler Freeze：FeatureRuntime 对 eager Feature 采用 Feature 级故障隔离，普通 Feature/Contribution 降级不阻断其他功能；新增 v7 Feature Matrix 与 legacy retirement ratchet，CI 覆盖全部 `refactor/**` 分支，并清理过期 legacy dependency-map 边。23 项 runtime legacy 迁移期间冻结 Storage 数据契约，旧 `disabledPlugins` 名称映射继续保留。
 - 完成 6.5 启动性能评审：基于 Edge 30 次 warm/cold 采样收敛 JavDB/JavBus 的过渡基线为 282/288 ms，继续保留 110% 硬回归门禁与 12% bundle ceiling，详见 ADR-013。
 - 列表 Feature 的兼容壳不再重新打包已移除的旧 `ListPagePlugin` 实现，保留旧插件名与 Feature API 入口；eager Feature 启动改为共享 activation promise 并行等待，idle Feature 仍在全部 eager Feature 完成后安排，保持原有生命周期与禁用边界。
 - 收敛启动阶段的设置迁移为一次最新草稿更新，避免共享存储锁重入并同步更新 SettingsService 快照；修复 FeatureRuntime 接管 legacy 插件样式时 `<style>` 包装导致首条 CSS 规则失效的问题，恢复详情页移动端间距；补齐 HTTP 重定向逐跳安全校验与批量请求单飞回归覆盖。

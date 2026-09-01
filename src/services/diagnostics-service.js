@@ -17,6 +17,8 @@ export class DiagnosticsService {
         this.startedAt = performance.now();
         this.activeFeatures = new Set();
         this.activeContributions = new Set();
+        /** @type {Map<string, Record<string, unknown>>} */
+        this.featureStates = new Map();
         this.startupTimings = new Map();
         this.scopes = new Map();
         this.requestStats = { consumers: 0, underlying: 0 };
@@ -25,13 +27,8 @@ export class DiagnosticsService {
         /** @type {Array<Record<string, any>>} */
         this.errors = [];
         this.browserMetadata = null;
-        /** @type {string[]} */
-        this.legacyPlugins = [];
-        /** @type {Array<{name: string, disableable: boolean}>} */
-        this.legacyPluginDescriptors = [];
-        this.legacyStartup = null;
-        /** @type {Array<Record<string, unknown>>} */
-        this.legacyTimings = [];
+        /** @type {Array<{id: string, featureId: string, disableable: boolean}>} */
+        this.featureCatalog = [];
         this.legacyHttp = options.legacyHttp ?? null;
         this.networkController = null;
     }
@@ -40,6 +37,10 @@ export class DiagnosticsService {
     recordStartup(id, durationMs) { this.startupTimings.set(id, durationMs); }
     /** @param {string} id @param {boolean} active */
     setFeature(id, active) { active ? this.activeFeatures.add(id) : this.activeFeatures.delete(id); }
+    /** @param {string} id @param {"active" | "inactive" | "degraded" | "failed"} state @param {string} [message] */
+    setFeatureState(id, state, message) {
+        this.featureStates.set(id, Object.freeze({ id, state, ...(message ? { message } : {}) }));
+    }
     /** @param {string} id @param {boolean} active */
     setContribution(id, active) { active ? this.activeContributions.add(id) : this.activeContributions.delete(id); }
     /** @param {{id: string}} snapshot */
@@ -60,13 +61,8 @@ export class DiagnosticsService {
     }
     /** @param {Record<string, unknown>} metadata */
     setBrowserMetadata(metadata) { this.browserMetadata = Object.freeze({ ...metadata }); }
-    /** @param {Array<{name: string, disableable: boolean}>} descriptors @param {Record<string, unknown>} startup @param {Array<Record<string, unknown>>} timings */
-    setLegacyRuntime(descriptors, startup, timings) {
-        this.legacyPluginDescriptors = descriptors.map((item) => Object.freeze({ ...item }));
-        this.legacyPlugins = descriptors.map((item) => item.name);
-        this.legacyStartup = Object.freeze({ ...startup });
-        this.legacyTimings = timings.map((item) => Object.freeze({ ...item }));
-    }
+    /** @param {Array<{id: string, featureId: string, disableable: boolean}>} catalog */
+    setFeatureCatalog(catalog) { this.featureCatalog = catalog.map((item) => Object.freeze({ ...item })); }
     clearErrors() { this.errors = []; }
     /** @param {any} controller */
     setNetworkController(controller) { this.networkController = controller; }
@@ -86,13 +82,14 @@ export class DiagnosticsService {
         const scopes = [...this.scopes.values()];
         return Object.freeze({
             activeFeatures: [...this.activeFeatures], activeContributions: [...this.activeContributions],
+            featureStates: Object.fromEntries(this.featureStates),
             startupTimings: Object.fromEntries(this.startupTimings), activeScopes: scopes,
             globalListeners: scopes.filter((scope) => scope.id === "app:root").reduce((sum, scope) => sum + Number(scope.listeners ?? 0), 0),
             observers: scopes.reduce((sum, scope) => sum + Number(scope.observers ?? 0), 0),
             requestConsumers: this.requestStats.consumers, underlyingRequests: this.requestStats.underlying,
             cacheHits: this.cacheStats.hits, cacheMisses: this.cacheStats.misses,
             providerHealth: Object.fromEntries(this.providerHealth), errors: this.errors.map((error) => ({ ...error })),
-            legacyPlugins: [...this.legacyPlugins], legacyPluginDescriptors: this.legacyPluginDescriptors.map((item) => ({ ...item })), legacyStartup: this.legacyStartup, legacyTimings: this.legacyTimings.map((item) => ({ ...item })),
+            featureCatalog: this.featureCatalog.map((item) => ({ ...item })),
             browser: this.browserMetadata, uptimeMs: performance.now() - this.startedAt,
         });
     }

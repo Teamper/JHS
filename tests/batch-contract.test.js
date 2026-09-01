@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const listPage = readTestFile(join(process.cwd(), "src/plugins/status/list-page.js"), "utf8");
-const listButtons = readTestFile(join(process.cwd(), "src/plugins/status/list-page-button.js"), "utf8");
+const listButtons = readTestFile(join(process.cwd(), "src/features/list/list-actions-controller.js"), "utf8");
 const blacklist = readTestFile(join(process.cwd(), "src/features/library/blacklist-controller.js"), "utf8");
 const scanner = readTestFile(join(process.cwd(), "src/features/list/batch-scanner.js"), "utf8");
 

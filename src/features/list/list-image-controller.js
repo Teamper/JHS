@@ -2,18 +2,53 @@
 
 /** Own list image upgrade and hover-preview lifecycle. */
 export class ListImageController {
-    /** @param {{scope: any, document?: Document, window?: Window & {imageHoverPreviewObj?: any, ImageHoverPreview?: any}, site?: string, selector: string}} options */
+    /** @param {{scope: any, document?: Document, window?: Window & {imageHoverPreviewObj?: any, ImageHoverPreview?: any}, site?: string, selector: string, itemSelector?: string, settings?: any}} options */
     constructor(options) {
         this.scope = options.scope;
         this.document = options.document ?? globalThis.document ?? null;
         this.window = /** @type {any} */ (options.window ?? this.document?.defaultView ?? globalThis.window ?? null);
         this.site = options.site ?? "unknown";
         this.selector = options.selector;
+        this.itemSelector = options.itemSelector ?? "";
+        this.settings = options.settings ?? null;
         /** @type {IntersectionObserver | null} */ this.hdImageObserver = null;
         /** @type {Map<HTMLImageElement, () => void>} */ this.hdPendingCleanups = new Map();
         /** @type {string | null} */ this.hoverPreviewState = null;
         this.disposed = false;
         this.scope.addCleanup(() => this.dispose());
+    }
+
+    /** Collect visible card image heights and normalize uneven JavBus rows. */
+    /** @param {{vertical?: unknown, enableVerticalModel?: unknown, columns?: unknown, containerColumns?: unknown}} [options] */
+    async logImageHeightsByRow(options = {}) {
+        const snapshot = this.settings?.snapshot?.() ?? {};
+        const vertical = options.vertical ?? options.enableVerticalModel ?? snapshot.enableVerticalModel ?? "no";
+        const columns = Number(options.columns ?? options.containerColumns ?? snapshot.containerColumns ?? 5) || 5;
+        if (this.site !== "javbus" || vertical === "yes" || !this.document || !this.itemSelector) return;
+        const visible = [];
+        for (const rawElement of this.document.querySelectorAll(this.itemSelector)) {
+            const element = /** @type {HTMLElement} */ (rawElement);
+            const style = this.window?.getComputedStyle?.(element);
+            if ((element.offsetWidth <= 0 && element.offsetHeight <= 0) || style?.display === "none") continue;
+            const image = element.querySelector("img");
+            if (!image || image.tagName !== "IMG") continue;
+            const imgElement = /** @type {HTMLImageElement} */ (image);
+            imgElement.style.removeProperty("height");
+            const height = imgElement.offsetHeight;
+            if (height > 0) visible.push({ element, imgElement, height });
+        }
+        if (!visible.length) return;
+        for (let index = 0; index < visible.length; index += columns) {
+            const row = visible.slice(index, index + columns);
+            if (row.length < 2) continue;
+            const heights = row.map((item) => item.height);
+            const minimum = Math.min(...heights);
+            const maximum = Math.max(...heights);
+            if (maximum - minimum <= 50) continue;
+            for (const item of row) {
+                if (item.height !== minimum) item.imgElement.style.setProperty("height", `${minimum}px`, "important");
+            }
+        }
     }
 
     /** @param {HTMLImageElement} image */

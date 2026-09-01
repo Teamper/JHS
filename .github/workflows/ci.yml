@@ -2,9 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main, refactor/6.5]
+    branches:
+      - main
+      - 'refactor/**'
   pull_request:
-    branches: [main, refactor/6.5]
+    branches:
+      - main
+      - 'refactor/**'
   workflow_dispatch:
 
 permissions:
@@ -42,8 +46,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Verify 6.5 integration branch contains current main
-        if: github.ref == 'refs/heads/refactor/6.5' || github.base_ref == 'refactor/6.5'
+      - name: Verify refactor branch contains current main
+        if: startsWith(github.ref, 'refs/heads/refactor/') || startsWith(github.base_ref, 'refactor/')
         run: node scripts/check-refactor-sync.mjs
       - run: npm run check
       - name: Verify tracked userscript is current

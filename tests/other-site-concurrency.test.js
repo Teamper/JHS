@@ -3,7 +3,7 @@ import { readTestFile } from "./helpers/read-test-file.js";
 import { join } from "node:path";
 import { mapLimit } from "../src/core/feature-helpers.js";
 
-const otherSite = readTestFile(join(process.cwd(), "src/plugins/external-search/other-site.js"), "utf8");
+const otherSite = readTestFile(join(process.cwd(), "src/features/detail/detail-external-sites-controller.js"), "utf8");
 
 describe("OtherSite concurrency policy", () => {
     it("runs site detection through mapLimit with a bounded worker count", () => {

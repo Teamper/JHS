@@ -32,7 +32,7 @@ describe("resource settings service", () => {
 });
 
 describe("resource settings UI contracts", () => {
-    const template = readTestFile(join(import.meta.dirname, "../src/plugins/backup/setting-templates.js"), "utf8"), setting = readTestFile(join(import.meta.dirname, "../src/plugins/backup/setting.js"), "utf8");
+    const template = readTestFile(join(import.meta.dirname, "../src/features/system/settings/setting-templates.js"), "utf8"), setting = readTestFile(join(import.meta.dirname, "../src/features/system/settings/settings-core-controller.js"), "utf8");
     it("keeps JSON advanced and separates cloud and data tools", () => { expect(template).not.toContain("自定义磁力源 JSON"); expect(template).toContain('id="cloud-services-panel"'); expect(template).toContain('id="data-tools-panel"'); expect(template).toContain("高级 · 导入 / 导出配置"); });
     it("custom delete requires confirmation and built-ins are not deletable", () => { expect(setting).toContain('utils.q(event, `确认删除来源'); expect(setting).toContain("card(source, false"); });
     it("car import requires preview before confirm", () => { expect(template).toContain('id="confirm-car-number-import" class="jhs-btn jhs-btn--primary" disabled'); expect(setting).toContain('if (!this.pendingCarImport) return show.info("请先解析预览")'); });

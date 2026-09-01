@@ -12,16 +12,17 @@ import { CacheService } from "../src/services/cache-service.js";
 import { assessMagnetQuality } from "../src/core/magnet-quality.js";
 
 const repoRoot = join(import.meta.dirname, "..");
-const fc2Source = readTestFile(join(repoRoot, "src/plugins/external-search/fc2.js"), "utf8");
+const fc2Source = readTestFile(join(repoRoot, "src/features/detail/detail-fc2-owned-controller.js"), "utf8");
 const fc2ViewSource = readTestFile(join(repoRoot, "src/ui/detail/fc2-workspace-view.js"), "utf8");
-const fc2NavigationSource = readTestFile(join(repoRoot, "src/plugins/status/fc2-navigation.js"), "utf8");
-const fc2By123AvSource = readTestFile(join(repoRoot, "src/plugins/external-search/fc2-by-123av.js"), "utf8");
-const screenshotSource = readTestFile(join(repoRoot, "src/plugins/image-viewer/screenshot.js"), "utf8");
+const fc2NavigationSource = readTestFile(join(repoRoot, "src/features/list/list-fc2-navigation-controller.js"), "utf8");
+const fc2By123AvSource = readTestFile(join(repoRoot, "src/features/list/list-fc2-lookup-controller.js"), "utf8");
+const screenshotSource = readTestFile(join(repoRoot, "src/ui/detail/screenshot-panel.js"), "utf8");
+const screenshotControllerSource = readTestFile(join(repoRoot, "src/features/detail/detail-screenshot-controller.js"), "utf8");
 const listPageSource = readTestFile(join(repoRoot, "src/plugins/status/list-page.js"), "utf8");
 const historySource = readTestFile(join(repoRoot, "src/features/library/history-controller.js"), "utf8");
 const stateServiceSource = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8");
 const titleFilterSource = readTestFile(join(repoRoot, "src/features/library/library-controller.js"), "utf8");
-const highlightMagnetSource = readTestFile(join(repoRoot, "src/plugins/status/highlight-magnet.js"), "utf8");
+const highlightMagnetSource = readTestFile(join(repoRoot, "src/features/detail/detail-native-magnets-controller.js"), "utf8");
 const primitivesSource = readTestFile(join(repoRoot, "src/core/ui-primitives.js"), "utf8");
 const loggerSource = readTestFile(join(repoRoot, "src/core/logger.js"), "utf8");
 const top250Source = readTestFile(join(repoRoot, "src/features/discovery/top250-controller.js"), "utf8");
@@ -134,7 +135,7 @@ describe("FC2 owned detail workspace", () => {
         expect(fc2Source).toContain('o.includes("collection_codes?movieId")');
         expect(fc2Source).toContain("openFc2Dialog(");
         expect(fc2NavigationSource).toContain("protectFc2Navigation(root, fc2)");
-        expect(fc2NavigationSource).toContain('this.getBean("Fc2Plugin")');
+        expect(fc2NavigationSource).toContain("fc2Source || (await fc2.resolveFc2Source");
         expect(listPageSource).not.toContain("protectFc2Navigation(root)");
         expect(listPageSource).not.toContain('getBean("Fc2Plugin")');
     });
@@ -191,7 +192,7 @@ describe("FC2 owned detail workspace", () => {
 
     it("initializes screenshot through the single ScreenshotService-owned view and keeps stable slots", () => {
         expect(screenshotSource).toContain("renderScreenshotPanel");
-        expect(screenshotSource).toContain('service.isEnabled(this.getSettingsSnapshot())');
+        expect(screenshotControllerSource).toContain('this.screenshot?.isEnabled?.(settings)');
         expect(fc2Source).toContain('screenshotService.isEnabled(settings.snapshot())');
         expect(fc2Source).toContain(".jhs-fc2-screenshot:empty");
         expect(fc2Source).toContain("box ? sitesGroup.show() : sitesGroup.hide()");

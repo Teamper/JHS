@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { MagnetHubPlugin } from "../src/plugins/external-search/magnet-hub.js";
+import { MagnetHubPlugin } from "../src/features/detail/detail-external-magnets-controller.js";
 
 function createPlugin() {
     const request = vi.fn(async options => ({ status: 200, data: "payload", finalUrl: options.url }));

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const blacklist = readTestFile(join(process.cwd(), "src/features/library/blacklist-controller.js"), "utf8");
-const settingBackup = readTestFile(join(process.cwd(), "src/plugins/backup/setting-backup.js"), "utf8");
+const settingBackup = readTestFile(join(process.cwd(), "src/features/system/settings/setting-backup.js"), "utf8");
 const history = readTestFile(join(process.cwd(), "src/features/library/history-controller.js"), "utf8");
 
 function methodBody(source, start, end) {

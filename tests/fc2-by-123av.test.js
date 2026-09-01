@@ -25,9 +25,29 @@ function loadFc2123Av({ search = "", page = 1 } = {}) {
         clog: { error: vi.fn(), log: vi.fn(), warn: vi.fn(), debug: vi.fn() },
         utils: { setHrefParam, smoothScrollToTop: vi.fn(async () => {}) },
     });
-    const source = readTestFile(join(process.cwd(), "src/plugins/external-search/fc2-by-123av.js"), "utf8");
+    const source = readTestFile(join(process.cwd(), "src/features/list/list-fc2-lookup-controller.js"), "utf8");
     vm.runInContext(`${source};globalThis.Fc2By123AvPlugin=Fc2By123AvPlugin`, context);
-    return { plugin: new context.Fc2By123AvPlugin(), $, catalog, setHrefParam, loadingClose, show: context.show, dom };
+    const scope = { addCleanup: vi.fn(), disposed: false };
+    const ui = {
+        getJQuery: () => $,
+        getUtils: () => context.utils,
+        getLoading: () => context.loading,
+        getClog: () => context.clog,
+        show: context.show,
+    };
+    return {
+        plugin: new context.Fc2By123AvPlugin({
+            hostAdapter: host,
+            movie: { catalog },
+            translation: {},
+            settings: { snapshot: () => ({ translateTitle: "_" }) },
+            ui,
+            scope: async () => scope,
+            document: dom.window.document,
+            window: dom.window,
+        }),
+        $, catalog, setHrefParam, loadingClose, show: context.show, dom,
+    };
 }
 
 describe("Fc2By123AvPlugin page-state handling", () => {

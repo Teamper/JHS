@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import jquery from "jquery";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CoverButtonPlugin } from "../src/plugins/image-viewer/cover-button.js";
-import { PreviewVideoPlugin } from "../src/plugins/image-viewer/preview-video.js";
-import { BusPreviewVideoPlugin } from "../src/plugins/image-viewer/bus-preview-video.js";
+import { CoverButtonPlugin } from "../src/features/list/list-cover-state-actions-controller.js";
+import { PreviewVideoPlugin } from "../src/features/detail/detail-javdb-preview-controller.js";
+import { BusPreviewVideoPlugin } from "../src/features/detail/detail-javbus-preview-controller.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { ExternalBridgeTranslationController } from "../src/features/external-bridge/translation-controller.js";
-import { HighlightMagnetPlugin } from "../src/plugins/status/highlight-magnet.js";
+import { HighlightMagnetPlugin } from "../src/features/detail/detail-native-magnets-controller.js";
 
 const $ = jquery;
 const win = /** @type {any} */ (globalThis.window);

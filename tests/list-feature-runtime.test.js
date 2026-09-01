@@ -15,7 +15,6 @@ import { ListContextMenuController } from "../src/features/list/list-context-men
 import { ListPaginationController } from "../src/features/list/list-pagination-controller.js";
 import { ListTagExpandController } from "../src/features/list/list-tag-expand-controller.js";
 import { ListDiagnosticsService } from "../src/features/list/list-diagnostics-service.js";
-import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 
 describe("List FeatureRuntime ownership", () => {
     it("keeps the feature lifecycle independent from the legacy plugin", async () => {
@@ -135,10 +134,11 @@ describe("List FeatureRuntime ownership", () => {
         scope.dispose();
     });
 
-    it("routes JavBus image row correction through the direct contribution", async () => {
-        const scope = new LifecycleScope("feature:list"), logImageHeightsByRow = vi.fn(), busImgPlugin = { logImageHeightsByRow }, hostAdapter = { site: "javbus", getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({ busImgPlugin, hostAdapter, settings: { snapshot: () => ({}) }, scope });
+    it("routes JavBus image row correction through the feature-owned image controller", async () => {
+        const scope = new LifecycleScope("feature:list"), hostAdapter = { site: "javbus", getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" }) }, settings = { snapshot: () => ({}) }, controller = new ListController({ javbusImagesEnabled: true, hostAdapter, settings, scope });
 
         await controller.start();
+        const logImageHeightsByRow = vi.spyOn(controller.images, "logImageHeightsByRow").mockResolvedValue();
         await controller.filter.onJavBusFiltered();
 
         expect(logImageHeightsByRow).toHaveBeenCalledWith({});
@@ -201,10 +201,10 @@ describe("List FeatureRuntime ownership", () => {
         }
     });
 
-    it("starts the waterfall contribution with the feature-owned list API", async () => {
-        const scope = new LifecycleScope("feature:list"), autoPagePlugin = { handle: vi.fn(async () => {}) }, foldCategoryPlugin = { handle: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
+    it("starts auto-page and fold-category through the feature-owned list API", async () => {
+        const scope = new LifecycleScope("feature:list"), autoPagePlugin = { handle: vi.fn(async () => {}) }, foldCategoryController = { start: vi.fn(async () => {}) }, hostAdapter = { getListSelectors: () => ({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" }) }, controller = new ListController({
             autoPagePlugin,
-            foldCategoryPlugin,
+            foldCategoryController,
             hostAdapter,
             scope,
         });
@@ -212,7 +212,7 @@ describe("List FeatureRuntime ownership", () => {
         await controller.start();
 
         expect(autoPagePlugin.handle).toHaveBeenCalledWith({ scope, listFeatureApi: expect.objectContaining({ getListSelectors: expect.any(Function) }) });
-        expect(foldCategoryPlugin.handle).toHaveBeenCalledWith({ scope });
+        expect(foldCategoryController.start).toHaveBeenCalledOnce();
         expect(controller.getApi().getListSelectors()).toEqual({ boxSelector: ".movie-list", itemSelector: ".movie-list .item" });
         scope.dispose();
     });
@@ -273,27 +273,6 @@ describe("List FeatureRuntime ownership", () => {
         } finally {
             vi.useRealTimers();
         }
-    });
-
-    it("does not mount a feature-owned legacy plugin through PluginManager", async () => {
-        const handle = vi.fn(), insertStyle = vi.fn();
-        class FeatureOwnedPlugin extends BasePlugin {
-            getName() { return "FeatureOwnedPlugin"; }
-            initCss() { return "<style data-test=feature-owned></style>"; }
-            handle() { handle(); }
-        }
-        vi.stubGlobal("storageManager", { getSetting: vi.fn(async () => "[]") });
-        vi.stubGlobal("utils", { isMobileMode: () => false, insertStyle });
-        vi.stubGlobal("clog", { error: vi.fn() });
-        const manager = new PluginManager();
-        manager.register(FeatureOwnedPlugin, {}, { managedByFeature: true });
-
-        await manager.processCss();
-        await manager.processPlugins();
-
-        expect(insertStyle).not.toHaveBeenCalled();
-        expect(handle).not.toHaveBeenCalled();
-        expect(manager.getTimings()).toEqual([expect.objectContaining({ name: "FeatureOwnedPlugin", status: "managed-feature" })]);
     });
 
     it("registers feature-owned styles outside PluginManager", async () => {

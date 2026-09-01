@@ -2,16 +2,16 @@ import { readTestFile } from "./helpers/read-test-file.js";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const previewVideo = readTestFile(join(process.cwd(), "src/plugins/image-viewer/preview-video.js"), "utf8");
-const coverButton = readTestFile(join(process.cwd(), "src/plugins/image-viewer/cover-button.js"), "utf8");
-const busPreview = readTestFile(join(process.cwd(), "src/plugins/image-viewer/bus-preview-video.js"), "utf8");
+const previewVideo = readTestFile(join(process.cwd(), "src/features/detail/detail-javdb-preview-controller.js"), "utf8");
+const coverButton = readTestFile(join(process.cwd(), "src/features/list/list-cover-state-actions-controller.js"), "utf8");
+const busPreview = readTestFile(join(process.cwd(), "src/features/detail/detail-javbus-preview-controller.js"), "utf8");
 const listPage = readTestFile(join(process.cwd(), "src/plugins/status/list-page.js"), "utf8");
 const translate = readTestFile(join(process.cwd(), "src/features/external-bridge/translation-controller.js"), "utf8");
 const titleTranslation = readTestFile(join(process.cwd(), "src/ui/translation/title-translation.js"), "utf8");
-const fc2 = readTestFile(join(process.cwd(), "src/plugins/external-search/fc2.js"), "utf8");
-const otherSite = readTestFile(join(process.cwd(), "src/plugins/external-search/other-site.js"), "utf8");
+const fc2 = readTestFile(join(process.cwd(), "src/features/detail/detail-fc2-owned-controller.js"), "utf8");
+const otherSite = readTestFile(join(process.cwd(), "src/features/detail/detail-external-sites-controller.js"), "utf8");
 const navBar = readTestFile(join(process.cwd(), "src/features/identity/identity-navigation-controller.js"), "utf8");
-const autoPage = readTestFile(join(process.cwd(), "src/plugins/status/auto-page.js"), "utf8");
+const autoPage = readTestFile(join(process.cwd(), "src/features/list/list-auto-page-controller.js"), "utf8");
 
 describe("RC 收口：async 回流 gate", () => {
     it("preview-video marks the artificial DMM trigger and gates every await boundary", () => {
@@ -54,15 +54,15 @@ describe("RC 收口：UI surface 与宿主 DOM 边界", () => {
     });
 
     it("AutoPage stops on feature scope dispose and unifies the first-start promise", () => {
-        expect(autoPage).toContain("scope.addCleanup((() => this.stop()))");
+        expect(autoPage).toContain("scope.addCleanup(() => this.dispose())");
         expect(autoPage).toContain("this.waterfallPromise = this.waterfall().finally");
     });
 });
 
 describe("RC 收口：预览 capability / FC2 稳定槽与翻译单入口", () => {
-    const fc2By123 = readTestFile(join(process.cwd(), "src/plugins/external-search/fc2-by-123av.js"), "utf8");
-    const commandbar = readTestFile(join(process.cwd(), "src/plugins/status/mobile-bottom-bar.js"), "utf8");
-    const setting = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8");
+    const fc2By123 = readTestFile(join(process.cwd(), "src/features/list/list-fc2-lookup-controller.js"), "utf8");
+    const commandbar = readTestFile(join(process.cwd(), "src/features/system/responsive-shell-bottom-bar-controller.js"), "utf8");
+    const setting = readTestFile(join(process.cwd(), "src/features/system/settings/settings-core-controller.js"), "utf8");
 
     it("card and JavBus preview buttons are gated by real DMM capability", () => {
         expect(coverButton).toContain("canUseCardPreview(settings)");
@@ -92,9 +92,9 @@ describe("RC 收口：预览 capability / FC2 稳定槽与翻译单入口", () =
         expect(unmount).toContain("#jhs-commandbar-parking");
         expect(unmount).toContain("parking.append(element)");
         expect(unmount).not.toContain("].reverse()");
-        expect(unmount.indexOf('#jhs-page-commandbar").remove()')).toBeGreaterThan(unmount.indexOf("_commandBarSources"));
+        expect(unmount.indexOf('$("#jhs-page-commandbar").remove()')).toBeGreaterThan(unmount.indexOf("_commandBarSources"));
         expect(commandbar).not.toContain('$(".jhs-list-btn-row").filter');
-        expect(setting).toContain('i(this, "_desktopNavGeneration", 0)');
+        expect(setting).toContain("this._desktopNavGeneration = 0");
         expect(setting).toContain("this._desktopNavGeneration++");
         expect(setting).toContain("generation !== this._desktopNavGeneration");
     });

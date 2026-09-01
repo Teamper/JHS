@@ -78,7 +78,7 @@ export function buildEditRecordForm(flags) {
 }
 
 export class HistoryController {
-    /** @param {{hostAdapter?: any, dialog?: any, movie?: any, settings?: any, state?: any, storage?: any, styles?: any, features?: any, fc2Plugin?: any, ui?: any, scope: any}} options */
+    /** @param {{hostAdapter?: any, dialog?: any, movie?: any, settings?: any, state?: any, storage?: any, styles?: any, features?: any, fc2FeatureApi?: any, ui?: any, scope: any}} options */
     constructor(options) {
         this.hostAdapter = options.hostAdapter;
         this.document = options.hostAdapter?.document ?? globalThis.document;
@@ -93,7 +93,7 @@ export class HistoryController {
         this.storage = options.storage;
         this.styles = options.styles;
         this.features = options.features;
-        this.fc2Plugin = options.fc2Plugin ?? null;
+        this.fc2FeatureApi = options.fc2FeatureApi ?? null;
         this.ui = options.ui ?? null;
         this.scope = options.scope;
         /** @type {TableHandle | null} */ this.tableObj = null;
@@ -110,6 +110,15 @@ export class HistoryController {
         this.hasWatchCount = 0;
         this.waitCheckCount = 0;
         this.started = false;
+    }
+    async getFc2FeatureApi() {
+        if (this.fc2FeatureApi) return this.fc2FeatureApi;
+        const featureIds = this.isJavDB || this.isJavBus ? ["list", "detail"] : [];
+        for (const featureId of featureIds) {
+            const api = await this.features?.getFeatureApi?.(featureId);
+            if (api?.hasFc2) return this.fc2FeatureApi = api;
+        }
+        return null;
     }
     getJQuery() {
         const jq = this.ui?.getJQuery?.();
@@ -662,11 +671,11 @@ export class HistoryController {
     async handleClickDetail(e, t) {
         const utils = this.getUtils(), show = this.getShow();
         if (t.carNum.includes("FC2-")) {
-            const plugin = this.fc2Plugin;
-            if (!plugin) return t.url ? void utils.openPage(t.url, t.carNum, !1, e) : void show.info("FC2 详情功能已禁用");
-            const source = await plugin.resolveFc2Source(t), movieId = await plugin.resolveMovieIdForRecord(t.carNum, t.url);
-            if (this.isJavDB) plugin.openFc2Dialog(movieId, t.carNum, t.url, { source });
-            else if (this.isJavBus) await plugin.openFc2Page(movieId, t.carNum, t.url, { newTab: !0 }, { source });
+            const api = await this.getFc2FeatureApi();
+            if (!api) return t.url ? void utils.openPage(t.url, t.carNum, !1, e) : void show.info("FC2 详情功能已禁用");
+            const source = await api.resolveFc2Source(t), movieId = await api.resolveMovieIdForRecord(t.carNum, t.url);
+            if (this.isJavDB) api.openFc2Dialog(movieId, t.carNum, t.url, { source });
+            else if (this.isJavBus) await api.openFc2Page(movieId, t.carNum, t.url, { newTab: !0 }, { source });
             return;
         }
         if (this.isJavDB) {

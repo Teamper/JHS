@@ -71,7 +71,16 @@ function loadListObserver() {
         "globalThis.TestListPagePlugin=ListPagePlugin;"
     ].join("\n");
     vm.runInContext(source, context);
-    return { dom, plugin: new context.TestListPagePlugin(), $, translate, mapLimit, storageManager, clog: context.clog };
+    const plugin = new context.TestListPagePlugin({
+        runtimeServices: {
+            translation: { translate },
+            settings: { snapshot: () => ({ translateTitle: "yes" }) },
+            ui: { getJQuery: () => $, getClog: () => ({}) },
+            scope: async () => ({}),
+        },
+        selectors: { boxSelector: ".movie-list", itemSelector: ".movie-list .item", coverImgSelector: ".movie-list .item img" },
+    });
+    return { dom, plugin, $, translate, mapLimit, storageManager, clog: context.clog };
 }
 
 function initializeAccessibilityDom(html) {

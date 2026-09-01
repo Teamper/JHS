@@ -2,6 +2,7 @@
 
 const FEATURE_KINDS = new Set(["system", "feature"]);
 const STARTUP_MODES = new Set(["eager", "idle", "on-command", "on-demand"]);
+const FAILURE_POLICIES = new Set(["fatal", "degraded"]);
 const TRUST_CLASSES = new Set(["builtin-public", "custom-public", "user-local"]);
 const QUALITY_LEVELS = new Set(["bronze", "silver"]);
 
@@ -36,26 +37,14 @@ export function defineFeature(manifest) {
     requireNonEmptyString(manifest.id, "Feature id");
     if (!FEATURE_KINDS.has(String(manifest.kind))) throw new TypeError("Feature kind must be system or feature");
     if (!STARTUP_MODES.has(String(manifest.startup))) throw new TypeError("Feature startup mode is invalid");
+    const failurePolicy = manifest.failurePolicy ?? "degraded";
+    if (!FAILURE_POLICIES.has(String(failurePolicy))) throw new TypeError("Feature failure policy is invalid");
     for (const field of ["sites", "routes", "contributes", "providesCommands"]) requireUniqueStrings(manifest[field], field);
-    if (manifest.legacyApiAliases !== undefined) requireUniqueStrings(manifest.legacyApiAliases, "legacyApiAliases");
     requireUniqueTokens(manifest.requires, "requires");
     if (typeof manifest.activate !== "function") throw new TypeError("Feature activate must be a function");
     if (typeof manifest.disableable !== "boolean") throw new TypeError("Feature disableable must be explicit");
     if (manifest.kind === "system" && manifest.disableable !== false) throw new TypeError("System features cannot be disableable");
-    return Object.freeze({ ...manifest });
-}
-
-/** @param {Record<string, unknown>} manifest */
-export function defineContribution(manifest) {
-    requireNonEmptyString(manifest.id, "Contribution id");
-    requireNonEmptyString(manifest.featureId, "Contribution featureId");
-    requireNonEmptyString(manifest.legacyPluginId, "Contribution legacyPluginId");
-    requireUniqueStrings(manifest.sites, "sites");
-    requireUniqueTokens(manifest.requires, "requires");
-    if (typeof manifest.plugin !== "function") throw new TypeError("Contribution plugin must be a class");
-    if (!manifest.order || typeof manifest.order !== "object") throw new TypeError("Contribution order must be explicit");
-    if (manifest.managedRoutes !== undefined) requireUniqueStrings(manifest.managedRoutes, "managedRoutes");
-    return Object.freeze({ ...manifest, sites: Object.freeze([...(/** @type {unknown[]} */ (manifest.sites))]), order: Object.freeze({ ...manifest.order }), ...(manifest.managedRoutes === undefined ? {} : { managedRoutes: Object.freeze([...(/** @type {unknown[]} */ (manifest.managedRoutes))]) }) });
+    return Object.freeze({ ...manifest, failurePolicy });
 }
 
 /** @param {Record<string, unknown>} manifest */

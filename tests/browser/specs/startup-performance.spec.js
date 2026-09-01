@@ -3,7 +3,7 @@ import budget from "../../../performance-budget.json" with { type: "json" };
 import { fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
 const SAMPLE_COUNT = Math.max(1, Number.parseInt(process.env.JHS_STARTUP_SAMPLES || "30", 10) || 30);
-const BOOTSTRAP_PHASES = ["legacy-runtime", "pre-settings", "context", "settings-load", "settings-migration", "logger", "theme-ui", "registry", "feature-runtime", "data-prepare", "plugin-css", "plugin-runtime", "first-ready", "total"];
+const BOOTSTRAP_PHASES = ["legacy-runtime", "pre-settings", "context", "settings-load", "settings-migration", "logger", "theme-ui", "registry", "data-prepare", "feature-runtime", "feature-css", "first-ready", "total"];
 
 function median(values) {
   const sorted = [...values].sort((left, right) => left - right);

@@ -64,7 +64,7 @@ async function scan() {
             if (rule.featureOrUi && !isFeatureOrUi) continue;
             lines.forEach((line, index) => {
                 if (rule.id === "host-selector" && /host-adapter\.js$/.test(relativeFile)) return;
-                if (rule.id === "host-selector" && relativeFile === "src/plugins/backup/setting-styles.js") return;
+                if (rule.id === "host-selector" && relativeFile === "src/features/system/settings/setting-styles.js") return;
                 if (rule.id === "app-global-observer" && relativeFile === "src/core/lifecycle-scope.js") return;
                 if (!rule.pattern.test(line)) return;
                 const symbol = normalizeLine(line);
@@ -91,7 +91,9 @@ async function checkImportGraph() {
     const boundaryErrors = [];
     const allowedLayers = {
         core: new Set(["core"]),
-        features: new Set(["services", "ui", "contracts", "core"]),
+        // Feature-owned controllers may share explicit capability modules with
+        // another feature; cycles remain rejected below.
+        features: new Set(["features", "services", "ui", "contracts", "core", "integrations"]),
         plugins: new Set(["core", "contracts", "services", "ui", "features", "integrations", "platform", "compat"]),
         compat: new Set(["core", "plugins"]),
         services: new Set(["contracts", "core"]),
@@ -117,8 +119,7 @@ async function checkImportGraph() {
             const sameSharedLayer = sourceLayer === targetLayer && [ "services", "ui" ].includes(sourceLayer);
             const samePluginDir = sourceLayer === "plugins" && targetLayer === "plugins" && sourceRelative[1] === targetRelative[1];
             const featureCatalog = sourceRelative.join("/") === "features/catalog.js" && targetLayer === "features";
-            const pluginCatalog = sourceRelative.join("/") === "plugins/registry.js" && targetLayer === "plugins";
-            if (allowedLayers[sourceLayer] && !allowedLayers[sourceLayer].has(targetLayer) && !sameFeature && !sameIntegration && !sameSharedLayer && !samePluginDir && !featureCatalog && !pluginCatalog) {
+            if (allowedLayers[sourceLayer] && !allowedLayers[sourceLayer].has(targetLayer) && !sameFeature && !sameIntegration && !sameSharedLayer && !samePluginDir && !featureCatalog) {
                 boundaryErrors.push(`${sourceLayer} -> ${targetLayer}: ${path.relative(rootDir, file)} imports ${path.relative(rootDir, dependency)}`);
             }
         }

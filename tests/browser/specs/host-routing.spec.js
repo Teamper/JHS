@@ -2,15 +2,15 @@ import { expect, test } from "@playwright/test";
 import budget from "../../../performance-budget.json" with { type: "json" };
 import { assertNoHorizontalOverflow, fulfillHostFixtures, injectUserscriptRuntime } from "../harness/runtime.js";
 
-for (const [label, url, expectedPlugin] of [
-  ["JavDB", "https://javdb.com/v/test-id", "DetailPagePlugin"],
-  ["JavBus", "https://www.javbus.com/ABC-123", "BusDetailPagePlugin"]
+for (const [label, url, expectedFeature] of [
+  ["JavDB", "https://javdb.com/v/test-id", "detail"],
+  ["JavBus", "https://www.javbus.com/ABC-123", "detail"]
 ]) {
   test(`${label} uses the real host origin with local fixtures`, async ({ context, page }) => {
     await fulfillHostFixtures(context);
     await page.goto(url, { waitUntil: "domcontentloaded" });
-    await injectUserscriptRuntime(page);
-    await expect.poll(() => page.evaluate((name) => window.unsafeWindow.pluginManager.getPluginNames().includes(name), expectedPlugin)).toBe(true);
+    await injectUserscriptRuntime(page, { settingOverrides: label === "JavDB" ? { enableLoadPreviewVideo: "no" } : {} });
+    await expect.poll(() => page.evaluate((id) => window.unsafeWindow.__jhsFeatureRuntime.getActiveFeatureIds().includes(id), expectedFeature)).toBe(true);
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--jhs-accent").trim()), "Bootstrap must inject the core theme tokens").not.toBe("");
     await expect(page.locator("body")).toBeVisible();
     await assertNoHorizontalOverflow(page);
@@ -29,7 +29,7 @@ for (const [label, url] of [
     await page.goto(url, { waitUntil: "domcontentloaded" });
     await injectUserscriptRuntime(page);
     await expect.poll(() => page.evaluate(() => window.isListPage)).toBe(true);
-    await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("ListPagePlugin"))).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.unsafeWindow.__jhsFeatureRuntime.getActiveFeatureIds().includes("list"))).toBe(true);
     await expect(page.locator(label === "JavDB" ? ".movie-list .item" : ".masonry .movie-box")).toHaveCount(1);
     if (testInfo.project.name.startsWith("mobile")) {
       await expect(page.locator("#jhs-fab")).toBeVisible();
@@ -53,7 +53,7 @@ for (const [label, url] of [
   });
 }
 
-for (const [label, url, setup, selector, expectedPlugins] of [
+for (const [label, url, setup, selector] of [
   ["JavDB", "https://javdb.com/", () => {
     document.body.insertAdjacentHTML("afterbegin", '<div id="navbar-menu-hero"></div><div id="search-bar-container"></div>');
   }, "#search-box #search-img-btn", []],
@@ -68,7 +68,7 @@ for (const [label, url, setup, selector, expectedPlugins] of [
     await page.evaluate(setup);
     await injectUserscriptRuntime(page);
     await expect(page.locator(selector)).toHaveCount(1);
-    await expect.poll(() => page.evaluate((names) => names.every((name) => window.unsafeWindow.pluginManager.getTimings().find((timing) => timing.name === name)?.status === "managed-feature"), expectedPlugins)).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.unsafeWindow.__jhsFeatureRuntime.getActiveFeatureIds().includes("identity"))).toBe(true);
   });
 }
 
@@ -109,10 +109,9 @@ test("legacy disabled plugin migrates to one contribution only", async ({ contex
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/v/test-id", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { disabledPlugins: ["ReviewPlugin"] });
-  const pluginNames = await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames());
-  expect(pluginNames).not.toContain("ReviewPlugin");
-  expect(pluginNames).toContain("RelatedPlugin");
-  expect(pluginNames).toContain("DetailWorkspacePlugin");
+  const detailApi = await page.evaluate(() => window.unsafeWindow.__jhsFeatureRuntime.getFeatureApi("detail"));
+  expect(detailApi).not.toBeNull();
+  expect(detailApi.hasPageActions).toBe(true);
 });
 
 for (const path of ["/advanced_search?type=3", "/advanced_search?type=100", "/want_watch_videos", "/watched_videos"]) {
@@ -121,7 +120,7 @@ for (const path of ["/advanced_search?type=3", "/advanced_search?type=100", "/wa
     await page.goto(`https://javdb.com${path}`, { waitUntil: "domcontentloaded" });
     await injectUserscriptRuntime(page);
     await expect.poll(() => page.evaluate(() => window.isListPage)).toBe(true);
-    await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames().includes("ListPagePlugin"))).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.unsafeWindow.__jhsFeatureRuntime.getActiveFeatureIds().includes("list"))).toBe(true);
   });
 }
 
@@ -185,15 +184,8 @@ test("HotShow creates an owned list when advanced search has no native list root
   const fc2Card = page.locator(".jhs-hitshow-list #hot-fixture-fc2");
   await expect.poll(() => fc2Card.getAttribute("data-jhs-fc2-protected"), { timeout: 10_000 }).toBe("true");
   await expect(fc2Card.locator("a").first()).toHaveAttribute("href", /collection_codes/);
-  await page.evaluate(() => {
-    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
-    fc2.resolveMovieIdForRecord = async () => null;
-    fc2.resolveFc2Source = async () => "fc2";
-    fc2.openFc2Dialog = (...args) => { window.__jhsFc2Navigation = { mode: "dialog", args }; };
-    fc2.openFc2Page = (...args) => { window.__jhsFc2Navigation = { mode: "page", args }; };
-  });
   await fc2Card.locator(".video-title").click();
-  expect(await page.evaluate(() => window.__jhsFc2Navigation?.mode)).toBe("dialog");
+  await expect(page.locator(".layui-layer .jhs-fc2-dialog-host")).toHaveCount(1);
 });
 
 test("HotShow hover preview stays below the FC2 detail dialog", async ({ context, page }, testInfo) => {
@@ -210,11 +202,6 @@ test("HotShow hover preview stays below the FC2 detail dialog", async ({ context
   });
   await expect(page.locator(".jhs-hitshow-list #hot-fixture-fc2")).toBeVisible();
   await expect.poll(() => page.evaluate(() => Boolean(window.imageHoverPreviewObj))).toBe(true);
-  await page.evaluate(() => {
-    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
-    fc2.resolveMovieIdForRecord = async () => null;
-    fc2.resolveFc2Source = async () => "fc2";
-  });
   const fc2Card = page.locator(".jhs-hitshow-list #hot-fixture-fc2");
   await expect.poll(() => fc2Card.getAttribute("data-jhs-fc2-protected"), { timeout: 10_000 }).toBe("true");
   await fc2Card.locator(".cover img").hover();
@@ -281,7 +268,7 @@ test("HotShow sort starts at default and stays page-local", async ({ context, pa
   await page.locator('[data-sort-method="date"]').click();
   await expect(page.locator("#jhs-sort-current")).toHaveText("时间");
   await expect.poll(cardOrder).toEqual([ "BBB-002", "AAA-001" ]);
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().sortMethod)).toBe("rateCount");
+  await expect.poll(() => page.evaluate(() => window.unsafeWindow.__jhsBrowserTestApi.services.settings.snapshot().sortMethod)).toBe("rateCount");
   // 页内切回默认：恢复榜单原始顺序
   await page.locator("#sort-toggle-btn").click();
   await page.locator('[data-sort-method="default"]').click();
@@ -298,20 +285,13 @@ test("FC2 cards keep dialog navigation and use owned-page anchor fallback", asyn
   const href = await page.locator(".movie-list .item a").getAttribute("href");
   expect(new URL(href).pathname).toBe("/users/collection_codes");
   expect(new URL(href).searchParams.get("url")).toBe("/v/vip-fc2-placeholder");
-  await page.evaluate(() => {
-    const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
-    fc2.resolveMovieIdForRecord = async () => null;
-    fc2.resolveFc2Source = async () => "fc2";
-    fc2.openFc2Dialog = (...args) => { window.__jhsFc2Navigation = { mode: "dialog", args }; };
-    fc2.openFc2Page = (...args) => { window.__jhsFc2Navigation = { mode: "page", args }; };
-  });
   await page.evaluate(() => document.querySelector(".movie-list .item img").dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })));
-  await expect.poll(() => page.evaluate(() => window.__jhsFc2Navigation?.mode)).toBe("dialog");
-  await page.evaluate(() => { window.__jhsFc2Navigation = null; });
+  await expect(page.locator(".layui-layer .jhs-fc2-dialog-host")).toHaveCount(1);
+  await page.evaluate(() => window.layer.closeAll());
   await page.evaluate(() => document.querySelector(".movie-list .item img").dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ctrlKey: true })));
-  await expect.poll(() => page.evaluate(() => window.__jhsFc2Navigation?.mode)).toBe("page");
-  await page.evaluate(() => { window.__jhsFc2Navigation = null; document.querySelector(".movie-list .item img").dispatchEvent(new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 })); });
-  await expect.poll(() => page.evaluate(() => window.__jhsFc2Navigation?.mode)).toBe("page");
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.openedTabs.length)).toBe(1);
+  await page.evaluate(() => document.querySelector(".movie-list .item img").dispatchEvent(new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 })));
+  await expect.poll(() => page.evaluate(() => window.__jhsBrowserDiagnostics.openedTabs.length)).toBe(2);
   const ownedUrl = new URL(href);
   ownedUrl.searchParams.set("movieId", "fixture-id");
   await page.goto(ownedUrl.href, { waitUntil: "domcontentloaded" });
@@ -325,12 +305,12 @@ test("Settings opens when optional CoverButton and Blacklist contributions are d
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { disabledPlugins: ["CoverButtonPlugin", "BlacklistPlugin"] });
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.unsafeWindow.__jhsFeatureRuntime.getFeatureApi("settings").then((api) => api?.openSettingDialog?.()));
   await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   await page.locator('.layui-layer .side-menu-item[data-panel="base-panel"]').click();
   await page.locator(".layui-layer #reviewCount").selectOption("30", { force: true });
   await page.locator(".layui-layer #saveBtn").click();
-  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().reviewCount)).toBe("30");
+  await expect.poll(() => page.evaluate(() => window.unsafeWindow.__jhsBrowserTestApi.services.settings.snapshot().reviewCount)).toBe("30");
   await expect(page.locator(".layui-layer #saveBtn")).not.toHaveAttribute("aria-busy", "true");
 });
 
@@ -339,7 +319,7 @@ test("Settings remains interactive and catalogs a disabled external-sites contri
   await fulfillHostFixtures(context);
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { disabledPlugins: ["OtherSitePlugin", "BusImgPlugin", "UnknownLegacyPlugin"] });
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.unsafeWindow.__jhsFeatureRuntime.getFeatureApi("settings").then((api) => api?.openSettingDialog?.()));
   await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   await page.locator('.layui-layer .side-menu-item[data-panel="base-panel"]').click();
   await expect(page.locator(".layui-layer #base-panel")).toBeVisible();
@@ -347,10 +327,10 @@ test("Settings remains interactive and catalogs a disabled external-sites contri
   const externalSitesToggle = page.locator('.layui-layer .pm-toggle[data-plugin="OtherSitePlugin"]');
   await expect(externalSitesToggle).toBeVisible();
   await expect(externalSitesToggle).not.toBeChecked();
-  await expect(page.locator(".layui-layer #pm-disabled")).toHaveText("1");
+  await expect(page.locator(".layui-layer #pm-disabled")).toHaveText("2");
   const enabled = Number(await page.locator(".layui-layer #pm-enabled").textContent());
   const total = Number(await page.locator(".layui-layer #pm-total").textContent());
-  expect(enabled).toBe(total - 1);
+  expect(enabled).toBe(total - 2);
 });
 
 test("Settings blocks saving until failed hydration is retried successfully", async ({ context, page }, testInfo) => {
@@ -359,17 +339,17 @@ test("Settings blocks saving until failed hydration is retried successfully", as
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   await page.evaluate(() => {
-    const movie = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("movie");
+    const movie = window.unsafeWindow.__jhsBrowserTestApi.services.movie;
     window.__jhsOriginalExternalSiteOrigin = movie.externalSiteOrigin.bind(movie);
     movie.externalSiteOrigin = () => { throw new Error("fixture hydration failure"); };
   });
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.unsafeWindow.__jhsFeatureRuntime.getFeatureApi("settings").then((api) => api?.openSettingDialog?.()));
   const save = page.locator(".layui-layer #saveBtn");
   await expect(save).toBeDisabled();
   await expect(save).toHaveAttribute("data-jhs-settings-ready", "false");
   await expect(page.locator(".layui-layer #settings-hydration-status")).toContainText("表单加载失败");
   await page.evaluate(() => {
-    const movie = window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("movie");
+    const movie = window.unsafeWindow.__jhsBrowserTestApi.services.movie;
     movie.externalSiteOrigin = window.__jhsOriginalExternalSiteOrigin;
   });
   await page.getByRole("button", { name: "重试加载" }).click();
@@ -383,9 +363,11 @@ test("list runtime survives disabled optional list contributions", async ({ cont
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   const disabledPlugins = ["Fc2Plugin", "AutoPagePlugin", "CoverButtonPlugin", "ListPageButtonPlugin"];
   await injectUserscriptRuntime(page, { disabledPlugins });
-  const pluginNames = await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames());
-  expect(pluginNames).toContain("ListPagePlugin");
-  disabledPlugins.forEach((name) => expect(pluginNames).not.toContain(name));
+  const listApi = await page.evaluate(() => window.unsafeWindow.__jhsFeatureRuntime.getFeatureApi("list"));
+  expect(listApi.hasCore).toBe(true);
+  expect(listApi.hasActions).toBe(false);
+  expect(listApi.hasCoverStateActions).toBe(false);
+  expect(listApi.hasFc2).toBe(false);
   await expect(page.locator(".movie-list .item")).toBeVisible();
 });
 
@@ -395,9 +377,10 @@ test("detail state controls survive disabled optional magnet contributions", asy
   await page.goto("https://javdb.com/v/test-id", { waitUntil: "domcontentloaded" });
   const disabledPlugins = ["HighlightMagnetPlugin", "MagnetHubPlugin"];
   await injectUserscriptRuntime(page, { disabledPlugins });
-  const pluginNames = await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames());
-  expect(pluginNames).toContain("DetailPageButtonPlugin");
-  disabledPlugins.forEach((name) => expect(pluginNames).not.toContain(name));
+  const detailApi = await page.evaluate(() => window.unsafeWindow.__jhsFeatureRuntime.getFeatureApi("detail"));
+  expect(detailApi.hasPageActions).toBe(true);
+  expect(detailApi.hasNativeMagnets).toBe(false);
+  expect(detailApi.hasExternalMagnets).toBe(false);
   await expect(page.locator(".jhs-detail-btn-row")).toBeVisible();
 });
 
@@ -467,8 +450,8 @@ test("FC2 core workspace survives disabled optional detail contributions", async
   await page.goto("https://javdb.com/users/collection_codes?movieId=fixture-id&carNum=FC2-123&url=https%3A%2F%2Ffc2ppvdb.com%2Farticles%2F123&source=fc2", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page, { disabledPlugins });
   await expect(page.locator(".jhs-fc2-workspace[data-jhs-fc2-mode='page']")).toBeVisible();
-  const pluginNames = await page.evaluate(() => window.unsafeWindow.pluginManager.getPluginNames());
-  disabledPlugins.forEach((name) => expect(pluginNames).not.toContain(name));
+  const detailApi = await page.evaluate(() => window.unsafeWindow.__jhsFeatureRuntime.getFeatureApi("detail"));
+  expect(detailApi.hasExternalMagnets).toBe(false);
   await expect(page.locator('[data-jhs-role="other-sites"]')).toHaveCount(0);
   await expect(page.locator('[data-jhs-role="magnet-hub"]')).toHaveCount(0);
 });

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
-import { SettingPlugin } from "../src/plugins/backup/setting.js";
+import { SettingPlugin } from "../src/features/system/settings/settings-core-controller.js";
 import { SettingsRegistry } from "../src/app/settings-registry.js";
 import { registerDefaultSettings } from "../src/app/settings-catalog.js";
 import { SettingsService } from "../src/services/settings-service.js";

@@ -16,7 +16,7 @@ function loadClass(file, className, extras = {}) {
 
 describe("6.2.0 audit remediation", () => {
     it("disables AutoPage before creating DOM or listeners", async () => {
-        const querySelector = vi.fn(), addEventListener = vi.fn(), { Class } = loadClass("src/plugins/status/auto-page.js", "AutoPagePlugin", {
+        const querySelector = vi.fn(), addEventListener = vi.fn(), { Class } = loadClass("src/features/list/list-auto-page-controller.js", "ListAutoPageController", {
             window: { isListPage: true, location: { href: "https://javdb.com/" }, addEventListener }, document: { querySelector },
             storageManager: { getSetting: vi.fn().mockResolvedValue("no") }, _: "yes", C: "no", clog: { error: vi.fn() }
         });
@@ -30,7 +30,7 @@ describe("6.2.0 audit remediation", () => {
     it("owns AutoPage global listeners and startup timer in its live scope", async () => {
         const dom = new JSDOM('<div id="list"></div><a class="next" href="/page/2"></a>', { url: "https://javdb.com/" });
         const add = vi.spyOn(dom.window, "addEventListener"), remove = vi.spyOn(dom.window, "removeEventListener");
-        const { Class } = loadClass("src/plugins/status/auto-page.js", "AutoPagePlugin", {
+        const { Class } = loadClass("src/features/list/list-auto-page-controller.js", "ListAutoPageController", {
             window: dom.window, document: dom.window.document, requestAnimationFrame: callback => callback(), setTimeout: vi.fn(() => 1),
             storageManager: { getSetting: vi.fn().mockResolvedValue("yes") }, _: "yes", C: "no", clog: { error: vi.fn() },
             LifecycleScope,
@@ -42,7 +42,7 @@ describe("6.2.0 audit remediation", () => {
         plugin.checkLoad = vi.fn();
         await plugin.start();
         const live = plugin.liveScope;
-        expect(live.snapshot().listeners).toBe(1);
+        expect(live.snapshot().listeners).toBe(2);
         expect(add).toHaveBeenCalledWith("scroll", expect.any(Function), undefined);
         plugin.stop();
         expect(live.snapshot()).toMatchObject({ listeners: 0, disposed: true });
@@ -53,7 +53,7 @@ describe("6.2.0 audit remediation", () => {
         const dom = new JSDOM('<button id="settingSiteBtn"></button><div id="settingsArea" class="jhs-is-hidden"><input type="checkbox" data-site-id="javDbBtn"></div>'), $ = jqueryFactory(dom.window), warn = vi.fn();
         const storage = new Map([["jhs_enabled_sites", "broken-json"]]);
         const storageService = { getLocal: key => storage.get(key) ?? null, setLocal: (key, value) => storage.set(key, value) };
-        const { Class } = loadClass("src/plugins/external-search/other-site.js", "OtherSitePlugin", {
+        const { Class } = loadClass("src/features/detail/detail-external-sites-controller.js", "DetailExternalSitesController", {
             window: dom.window, document: dom.window.document, $, clog: { warn }, normalizeCarNum: value => value
         });
         const plugin = new Class();
@@ -68,7 +68,7 @@ describe("6.2.0 audit remediation", () => {
     });
 
     it("loads external-site definitions through MovieIdentityService", async () => {
-        const { Class } = loadClass("src/plugins/external-search/other-site.js", "OtherSitePlugin", { normalizeCarNum: value => value });
+        const { Class } = loadClass("src/features/detail/detail-external-sites-controller.js", "DetailExternalSitesController", { normalizeCarNum: value => value });
         const plugin = new Class();
         plugin.getSettingCache = vi.fn(async () => ({ javBusUrl: "configured" }));
         const externalSites = vi.fn(() => [{ id: "javBusBtn", baseUrl: "normalized" }]);
@@ -79,7 +79,7 @@ describe("6.2.0 audit remediation", () => {
 
     it("builds the DMM external link without shadowing its site config", async () => {
         const dom = new JSDOM('<a data-jhs-site-id="fanzaBtn"></a>'), $ = jqueryFactory(dom.window);
-        const { Class } = loadClass("src/plugins/external-search/other-site.js", "OtherSitePlugin", {
+        const { Class } = loadClass("src/features/detail/detail-external-sites-controller.js", "DetailExternalSitesController", {
             window: dom.window, document: dom.window.document, $, normalizeCarNum: value => value
         });
         const plugin = new Class(), searchUrl = vi.fn(() => "https://www.dmm.co.jp/search/ABC-1");
@@ -90,7 +90,7 @@ describe("6.2.0 audit remediation", () => {
     });
 
     it("keeps all JHS UI layout decisions on mobileMode", () => {
-        const setting = readTestFile(join(process.cwd(), "src/plugins/backup/setting.js"), "utf8"), search = readTestFile(join(process.cwd(), "src/features/identity/identity-image-search-controller.js"), "utf8"), mobile = readTestFile(join(process.cwd(), "src/plugins/status/mobile-bottom-bar.js"), "utf8");
+        const setting = readTestFile(join(process.cwd(), "src/features/system/settings/settings-core-controller.js"), "utf8"), search = readTestFile(join(process.cwd(), "src/features/identity/identity-image-search-controller.js"), "utf8"), mobile = readTestFile(join(process.cwd(), "src/features/system/responsive-shell-bottom-bar-controller.js"), "utf8");
         expect(setting).not.toContain("utils.isMobile()");
         expect(search).not.toContain("utils.isMobile()");
         expect(search).toContain("isMobileMode");

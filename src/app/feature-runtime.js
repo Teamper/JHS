@@ -15,49 +15,13 @@ export class FeatureRuntime {
         this.disabled = new Set(migrateDisabledPlugins(options.disabled));
         this.site = options.site ?? "unknown";
         this.route = options.route ?? "unknown";
-        this.styles = options.styles ?? null;
         /** @type {Map<string, Record<string, any>>} */
         this.manifests = new Map();
         /** @type {Map<string, string>} */
         this.contributionOwners = new Map();
         /** @type {Map<string, Promise<Record<string, any>>>} */
         this.activations = new Map();
-        /** @type {Map<string, LifecycleScope>} */
-        this.contributionScopes = new Map();
-        /** @type {((name: string) => any) | null} */
-        this.legacyResolver = null;
-        /** @type {any} */ this.legacyContributionRegistry = null;
         this.commands.setActivator((featureId) => this.activate(featureId).then(() => undefined));
-    }
-
-    /** @param {(name: string) => any} resolver */
-    setLegacyResolver(resolver) {
-        if (typeof resolver !== "function") throw new TypeError("Legacy resolver must be a function");
-        this.legacyResolver = resolver;
-    }
-
-    /** @param {any} registry */
-    setLegacyContributionRegistry(registry) {
-        this.legacyContributionRegistry = registry;
-    }
-
-    /** @param {Record<string, any>} manifest @param {readonly string[]} enabledContributions @param {LifecycleScope} scope */
-    async mountLegacyStyles(manifest, enabledContributions, scope) {
-        if (!this.styles?.register || !this.legacyContributionRegistry?.getFeaturePlugins) return;
-        for (const { contributionId, plugin } of this.legacyContributionRegistry.getFeaturePlugins(manifest.id, enabledContributions)) {
-            if (plugin.managedByFeature !== true || typeof plugin.initCss !== "function") continue;
-            try {
-                const css = await plugin.initCss();
-                if (!css) continue;
-                const normalizedCss = css.replace(/^\s*<style(?:\s[^>]*)?>/i, "").replace(/<\/style>\s*$/i, "");
-                const styleId = `jhs-feature-${manifest.id}-${contributionId}`.replace(/[^a-zA-Z0-9_-]/g, "-");
-                const release = this.styles.register(styleId, normalizedCss);
-                typeof release === "function" && scope.addCleanup(release);
-            } catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                this.diagnostics.recordError({ source: "legacy-plugin", plugin: plugin.getName?.() || contributionId, phase: "initCss", message });
-            }
-        }
     }
 
     /** @param {Record<string, any>} manifest */
@@ -84,15 +48,16 @@ export class FeatureRuntime {
         return true;
     }
 
-    /** @param {string} featureId @param {string} contributionId @param {string} legacyPluginId */
-    isContributionEnabled(featureId, contributionId, legacyPluginId) {
+    /** Return whether one contribution is enabled in its owning Feature. */
+    /** @param {string} featureId @param {string} contributionId */
+    isContributionEnabled(featureId, contributionId) {
         const manifest = this.manifests.get(featureId);
-        if (!manifest) return false;
-        if (manifest.sites.length && !manifest.sites.includes(this.site)) return false;
-        if (!manifest.contributes.includes(contributionId)) return false;
-        if (manifest.kind !== "system" && this.disabled.has(manifest.id)) return false;
-        if (manifest.kind === "system") return true;
-        return !this.disabled.has(contributionId) && !this.disabled.has(legacyPluginId);
+        if (!manifest || !manifest.contributes.includes(contributionId)) return false;
+        // Cross-route owners (for example list.fc2-navigation using detail.fc2-owned)
+        // need the contribution's site/disable state without requiring the owner
+        // Feature itself to be eligible for the current route.
+        const siteEligible = !manifest.sites.length || manifest.sites.includes(this.site);
+        return siteEligible && !this.disabled.has(featureId) && !this.disabled.has(contributionId);
     }
 
     /** @param {string} featureId */
@@ -120,17 +85,17 @@ export class FeatureRuntime {
         return (await this.activate(featureId)).api;
     }
 
-    /** Return a page-lifetime scope owned by one enabled legacy contribution. @param {string} featureId @param {string} contributionId @param {string} legacyPluginId */
-    getContributionScope(featureId, contributionId, legacyPluginId) {
-        if (!this.isContributionEnabled(featureId, contributionId, legacyPluginId)) {
-            return Promise.reject(new Error(`Contribution is disabled or ineligible: ${contributionId}`));
+    /** Run one optional contribution without allowing it to fail its owning Feature. */
+    /** @param {string} contributionId @param {() => any} operation */
+    async isolateContribution(contributionId, operation) {
+        try {
+            return await operation();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.diagnostics.setContribution(contributionId, false);
+            this.diagnostics.recordError({ source: "feature-runtime", contribution: contributionId, phase: "activate", status: "degraded", message });
+            return null;
         }
-        let scope = this.contributionScopes.get(contributionId);
-        if (!scope || scope.disposed) {
-            scope = new LifecycleScope(`contribution:${contributionId}`, { onChange: (snapshot) => this.diagnostics.updateScope(snapshot) });
-            this.contributionScopes.set(contributionId, scope);
-        }
-        return Promise.resolve(scope);
     }
 
     /** @param {string} id */
@@ -153,36 +118,25 @@ export class FeatureRuntime {
         try {
             const dependencies = this.container.resolveDeclared(manifest.requires);
             const enabledContributions = Object.freeze(manifest.contributes.filter((/** @type {string} */ id) => !this.disabled.has(id)));
-            await this.mountLegacyStyles(manifest, enabledContributions, scope);
             const result = await manifest.activate(dependencies, Object.freeze({
                 scope, enabledContributions, route: this.route,
-                resolveLegacyContribution: (/** @type {string} */ contributionId) => this.legacyContributionRegistry?.getContributionPlugin?.(contributionId),
+                isContributionEnabled: (/** @type {string} */ featureId, /** @type {string} */ contributionId) => this.isContributionEnabled(featureId, contributionId),
+                isolateContribution: (/** @type {string} */ contributionId, /** @type {() => any} */ operation) => this.isolateContribution(contributionId, operation),
             }));
-            const legacyApiAliases = manifest.legacyApiAliases ?? [];
-            legacyApiAliases.forEach((/** @type {string} */ name) => this.legacyResolver?.(name)?.setFeatureApi?.(result?.api ?? null));
             for (const command of manifest.providesCommands) {
                 const handler = result?.commands?.[command];
                 if (typeof handler !== "function") throw new Error(`Feature ${manifest.id} did not provide command ${command}`);
                 this.commands.registerHandler(command, handler, manifest.id);
             }
             this.diagnostics.setFeature(manifest.id, true);
+            this.diagnostics.setFeatureState(manifest.id, "active");
             enabledContributions.forEach((/** @type {string} */ id) => this.diagnostics.setContribution(id, true));
             this.diagnostics.recordStartup(manifest.id, performance.now() - started);
             return Object.freeze({ manifest, scope, enabledContributions, api: result?.api ?? null, dispose: () => {
                 result?.dispose?.();
-                legacyApiAliases.forEach((/** @type {string} */ name) => this.legacyResolver?.(name)?.setFeatureApi?.(null));
-                // 6.5: contribution scopes belong to the feature that owns their contribution ids;
-                // disposing the feature must tear down those scopes too so listeners/observers/timers
-                // do not leak across activate -> dispose -> activate cycles.
-                for (const contributionId of manifest.contributes) {
-                    const contributionScope = this.contributionScopes.get(contributionId);
-                    if (contributionScope) {
-                        contributionScope.dispose();
-                        this.contributionScopes.delete(contributionId);
-                    }
-                }
                 scope.dispose();
                 this.diagnostics.setFeature(manifest.id, false);
+                this.diagnostics.setFeatureState(manifest.id, "inactive");
                 enabledContributions.forEach((/** @type {string} */ id) => this.diagnostics.setContribution(id, false));
                 this.activations.delete(manifest.id);
             } });
@@ -194,14 +148,26 @@ export class FeatureRuntime {
     }
 
     async start() {
-        const eagerActivations = [];
+        /** @type {Record<string, any>[]} */
+        const eagerManifests = [];
         const idleManifests = [];
         for (const manifest of this.manifests.values()) {
             if (!this.isEligible(manifest)) continue;
-            if (manifest.startup === "eager") eagerActivations.push(this.activate(manifest.id));
+            if (manifest.startup === "eager") eagerManifests.push(manifest);
             else if (manifest.startup === "idle") idleManifests.push(manifest);
         }
-        await Promise.all(eagerActivations);
+        const outcomes = await Promise.allSettled(eagerManifests.map((manifest) => this.activate(manifest.id)));
+        const fatalFailure = outcomes.find((outcome, index) => outcome.status === "rejected" && eagerManifests[index].failurePolicy === "fatal");
+        outcomes.forEach((outcome, index) => {
+            if (outcome.status !== "rejected") return;
+            const manifest = eagerManifests[index];
+            const message = outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason);
+            const state = manifest.failurePolicy === "fatal" ? "failed" : "degraded";
+            this.diagnostics.setFeature(manifest.id, false);
+            this.diagnostics.setFeatureState(manifest.id, state, message);
+            this.diagnostics.recordError({ source: "feature-runtime", feature: manifest.id, phase: "start", status: state, message });
+        });
+        if (fatalFailure?.status === "rejected") throw fatalFailure.reason;
         const schedule = globalThis.requestIdleCallback ?? ((callback) => setTimeout(callback, 0));
         idleManifests.forEach((manifest) => schedule(() => void this.activate(manifest.id).catch(() => undefined)));
     }

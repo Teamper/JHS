@@ -1,52 +1,94 @@
 // @ts-check
 
 import { defineFeature } from "../../contracts/manifests.js";
-import { PORT, SERVICE } from "../../contracts/tokens.js";
+import { PORT, REGISTRY, SERVICE } from "../../contracts/tokens.js";
 import { DetailController } from "./detail-controller.js";
+import { DetailBusNativeController } from "./detail-bus-native-controller.js";
+import { DetailNativeController } from "./detail-native-controller.js";
+import { DetailRelatedController } from "./detail-related-controller.js";
+import { DetailReviewsController } from "./detail-reviews-controller.js";
+import { DetailScreenshotController } from "./detail-screenshot-controller.js";
+import { DetailWorkspaceController } from "./detail-workspace-controller.js";
+import { DetailExternalMagnetsController } from "./detail-external-magnets-controller.js";
+import { DetailNativeMagnetsController } from "./detail-native-magnets-controller.js";
+import { DetailExternalSitesController } from "./detail-external-sites-controller.js";
+import { DetailJavBusPreviewController } from "./detail-javbus-preview-controller.js";
+import { DetailPageStateActionsController } from "./detail-page-state-actions-controller.js";
+import { DetailJavDbPreviewController } from "./detail-javdb-preview-controller.js";
+import { ListFc2LookupController } from "../list/list-fc2-lookup-controller.js";
+import { DetailFc2OwnedController } from "./detail-fc2-owned-controller.js";
 
 export default defineFeature({
-    id: "detail", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: ["detail", "owned-detail"], startup: "eager",
-    requires: [PORT.host, SERVICE.movie, SERVICE.review, SERVICE.related, SERVICE.magnet, SERVICE.screenshot, SERVICE.ui],
+    id: "detail", kind: "feature", disableable: true, failurePolicy: "degraded", sites: ["javdb", "javbus"], routes: ["detail", "owned-detail"], startup: "eager",
+    requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.review, SERVICE.related, SERVICE.magnet, SERVICE.screenshot, SERVICE.settings, SERVICE.storage, SERVICE.eventBus, SERVICE.http, SERVICE.dialog, SERVICE.subtitle, SERVICE.state, SERVICE.translation, SERVICE.ui, REGISTRY.feature],
     contributes: ["detail.javdb-native", "detail.javbus-native", "detail.workspace", "detail.fc2-owned", "detail.page-state-actions", "detail.javdb-preview", "detail.javbus-preview", "detail.reviews", "detail.related", "detail.native-magnets", "detail.external-magnets", "detail.screenshot", "detail.external-sites"],
     providesCommands: [],
     activate: (/** @type {any} */ deps, /** @type {any} */ runtime) => {
-        const fc2Plugin = runtime.enabledContributions.includes("detail.fc2-owned")
-            ? runtime.resolveLegacyContribution?.("detail.fc2-owned")
+        const createFc2Controller = (/** @type {any} */ fc2Lookup) => runtime.enabledContributions.includes("detail.fc2-owned")
+            ? new DetailFc2OwnedController({
+                hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], magnet: deps[SERVICE.magnet], dialog: deps[SERVICE.dialog],
+                translation: deps[SERVICE.translation], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage],
+                screenshot: deps[SERVICE.screenshot], review: deps[SERVICE.review], related: deps[SERVICE.related], state: deps[SERVICE.state],
+                features: deps[REGISTRY.feature], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope, fc2Lookup,
+            })
             : null;
+        const fc2Lookup = runtime.enabledContributions.includes("detail.fc2-owned")
+            ? new ListFc2LookupController({ hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], translation: deps[SERVICE.translation], settings: deps[SERVICE.settings], ui: deps[SERVICE.ui], scope: runtime.scope })
+            : null;
+        const fc2Plugin = createFc2Controller(fc2Lookup);
         if (runtime.route === "owned-detail") {
-            const controller = new DetailController({ hostAdapter: deps[PORT.host], fc2Plugin, ownedDetail: true, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
-            return controller.start().then(() => ({ dispose: () => controller.dispose() }));
+            const externalMagnetsController = runtime.enabledContributions.includes("detail.external-magnets")
+                ? new DetailExternalMagnetsController({ storage: deps[SERVICE.storage], http: deps[SERVICE.http], magnet: deps[SERVICE.magnet], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope })
+                : null;
+            const externalSitesController = runtime.enabledContributions.includes("detail.external-sites")
+                ? new DetailExternalSitesController({ hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], storage: deps[SERVICE.storage], settings: deps[SERVICE.settings], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope })
+                : null;
+            externalMagnetsController?.start?.();
+            externalSitesController?.start?.();
+            const controller = new DetailController({ hostAdapter: deps[PORT.host], fc2Plugin, fc2Lookup, externalMagnetsController, externalSitesPlugin: externalSitesController, isolateContribution: runtime.isolateContribution, ownedDetail: true, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
+            return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
         }
         const nativeContribution = deps[PORT.host].site === "javbus" ? "detail.javbus-native" : "detail.javdb-native";
-        const nativePlugin = runtime.enabledContributions.includes(nativeContribution)
-            ? runtime.resolveLegacyContribution?.(nativeContribution)
+        const nativeController = runtime.enabledContributions.includes(nativeContribution)
+            ? deps[PORT.host].site === "javdb"
+                ? new DetailNativeController({ hostAdapter: deps[PORT.host], scope: runtime.scope })
+                : new DetailBusNativeController({ hostAdapter: deps[PORT.host], ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
-        const workspacePlugin = runtime.enabledContributions.includes("detail.workspace")
-            ? runtime.resolveLegacyContribution?.("detail.workspace")
+        const workspaceController = runtime.enabledContributions.includes("detail.workspace")
+            ? new DetailWorkspaceController({ hostAdapter: deps[PORT.host], styles: deps[PORT.style], eventBus: deps[SERVICE.eventBus], ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
-        const reviewPlugin = runtime.enabledContributions.includes("detail.reviews")
-            ? runtime.resolveLegacyContribution?.("detail.reviews")
+        const reviewController = runtime.enabledContributions.includes("detail.reviews")
+            ? new DetailReviewsController({ hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], review: deps[SERVICE.review], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope })
             : null;
-        const relatedPlugin = runtime.enabledContributions.includes("detail.related")
-            ? runtime.resolveLegacyContribution?.("detail.related")
+        const relatedController = runtime.enabledContributions.includes("detail.related")
+            ? new DetailRelatedController({ hostAdapter: deps[PORT.host], related: deps[SERVICE.related], settings: deps[SERVICE.settings], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope })
             : null;
         const pageActionsPlugin = runtime.enabledContributions.includes("detail.page-state-actions")
-            ? runtime.resolveLegacyContribution?.("detail.page-state-actions")
+            ? new DetailPageStateActionsController({ hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], dialog: deps[SERVICE.dialog], subtitle: deps[SERVICE.subtitle], state: deps[SERVICE.state], settings: deps[SERVICE.settings], ui: deps[SERVICE.ui], scope: runtime.scope })
             : null;
-        const screenshotPlugin = runtime.enabledContributions.includes("detail.screenshot")
-            ? runtime.resolveLegacyContribution?.("detail.screenshot")
+        const screenshotController = runtime.enabledContributions.includes("detail.screenshot")
+            ? new DetailScreenshotController({ hostAdapter: deps[PORT.host], screenshot: deps[SERVICE.screenshot], settings: deps[SERVICE.settings], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope })
             : null;
-        const magnetPlugin = runtime.enabledContributions.includes("detail.native-magnets")
-            ? runtime.resolveLegacyContribution?.("detail.native-magnets")
+        const externalMagnetsController = runtime.enabledContributions.includes("detail.external-magnets")
+            ? new DetailExternalMagnetsController({ storage: deps[SERVICE.storage], http: deps[SERVICE.http], magnet: deps[SERVICE.magnet], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope })
+            : null;
+        const nativeMagnetsController = runtime.enabledContributions.includes("detail.native-magnets")
+            ? new DetailNativeMagnetsController({ hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], eventBus: deps[SERVICE.eventBus], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope })
+            : null;
+        const externalSitesController = runtime.enabledContributions.includes("detail.external-sites")
+            ? new DetailExternalSitesController({ hostAdapter: deps[PORT.host], movie: deps[SERVICE.movie], storage: deps[SERVICE.storage], settings: deps[SERVICE.settings], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope })
+            : null;
+        const javBusPreviewController = deps[PORT.host].site === "javbus" && runtime.enabledContributions.includes("detail.javbus-preview")
+            ? new DetailJavBusPreviewController({ hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], movie: deps[SERVICE.movie], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope })
             : null;
         const previewContribution = deps[PORT.host].site === "javbus" ? "detail.javbus-preview" : "detail.javdb-preview";
-        const previewPlugin = runtime.enabledContributions.includes(previewContribution)
-            ? runtime.resolveLegacyContribution?.(previewContribution)
+        const previewPlugin = deps[PORT.host].site === "javbus" ? javBusPreviewController : runtime.enabledContributions.includes(previewContribution)
+            ? new DetailJavDbPreviewController({ hostAdapter: deps[PORT.host], settings: deps[SERVICE.settings], storage: deps[SERVICE.storage], movie: deps[SERVICE.movie], ui: deps[SERVICE.ui], styles: deps[PORT.style], scope: runtime.scope, detailActions: pageActionsPlugin })
             : null;
-        const externalSitesPlugin = runtime.enabledContributions.includes("detail.external-sites")
-            ? runtime.resolveLegacyContribution?.("detail.external-sites")
-            : null;
-        const controller = new DetailController({ hostAdapter: deps[PORT.host], fc2Plugin, nativePlugin, workspacePlugin, reviewPlugin, relatedPlugin, pageActionsPlugin, magnetPlugin, previewPlugin, externalSitesPlugin, screenshotPlugin, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
-        return controller.start().then(() => ({ dispose: () => controller.dispose() }));
+        const externalSitesPlugin = externalSitesController;
+        externalMagnetsController?.start?.();
+        externalSitesController?.start?.();
+        const controller = new DetailController({ hostAdapter: deps[PORT.host], fc2Plugin, fc2Lookup, nativeController, workspaceController, reviewController, relatedController, pageActionsPlugin, magnetPlugin: nativeMagnetsController, externalMagnetsController, previewPlugin, externalSitesPlugin, screenshotController, isolateContribution: runtime.isolateContribution, scope: runtime.scope, enabledContributions: runtime.enabledContributions });
+        return controller.start().then(() => ({ api: controller.getApi(), dispose: () => controller.dispose() }));
     },
 });

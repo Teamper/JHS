@@ -1,18 +1,15 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it, vi } from "vitest";
-import jquery from "jquery";
 import { CommandRegistry } from "../src/app/command-registry.js";
 import { DependencyContainer } from "../src/app/dependency-container.js";
 import { FeatureRuntime, migrateDisabledPlugins } from "../src/app/feature-runtime.js";
 import { ProviderRegistry } from "../src/app/provider-registry.js";
 import { defineFeature, defineIntegration } from "../src/contracts/manifests.js";
-import { PORT, REGISTRY, SERVICE } from "../src/contracts/tokens.js";
-import { SettingsRegistry } from "../src/app/settings-registry.js";
+import { SERVICE } from "../src/contracts/tokens.js";
 import { featureManifests } from "../src/features/catalog.js";
 import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { openSettingsUi, registerSettingsUiOwner } from "../src/core/settings-ui-owner.js";
-import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
 
 describe("v6.5 architecture runtime contracts", () => {
@@ -29,27 +26,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(() => container.resolveDeclared([SERVICE.movie, SERVICE.movie])).toThrow(/Duplicate declared dependency/);
     });
 
-    it("limits transitional legacy plugins to explicitly declared dependencies", () => {
-        class DependencyPlugin extends BasePlugin { getName() { return "DependencyPlugin"; } }
-        class ConsumerPlugin extends BasePlugin {
-            getName() { return "ConsumerPlugin"; }
-            dependency(name) { return this.getDependency(name); }
-            optionalDependency(name) { return this.getOptionalDependency(name); }
-        }
-        const diagnostics = new DiagnosticsService();
-        const manager = new PluginManager({ diagnostics });
-        manager.setDependencyDeclarations({ ConsumerPlugin: ["DependencyPlugin", "MissingPlugin"] });
-        manager.register(DependencyPlugin);
-        manager.register(ConsumerPlugin);
-        const consumer = manager.getBean("ConsumerPlugin");
-        expect(consumer.dependency("DependencyPlugin")).toBe(manager.getBean("DependencyPlugin"));
-        expect(consumer.optionalDependency("MissingPlugin")).toBeUndefined();
-        expect(() => consumer.dependency("MissingPlugin")).toThrow("Missing dependency: ConsumerPlugin -> MissingPlugin");
-        expect(diagnostics.exportSnapshot().errors.at(-1)).toMatchObject({ plugin: "ConsumerPlugin", phase: "dependency" });
-        expect(() => consumer.dependency("UndeclaredPlugin")).toThrow(/未声明依赖/);
-    });
-
-    it("registers legacy contributions from manifests without changing site order", async () => {
+    it("owns all migrated contributions in Feature manifests", () => {
         expect(featureManifests).toHaveLength(11);
         expect(featureManifests.find((manifest) => manifest.id === "list")?.contributes).toContain("list.core");
         expect(featureManifests.find((manifest) => manifest.id === "library")?.contributes).toContain("library.history");
@@ -58,145 +35,13 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(featureManifests.find((manifest) => manifest.id === "discovery")?.contributes).toContain("discovery.scheduler");
         expect(featureManifests.find((manifest) => manifest.id === "compatibility")?.contributes).toContain("compatibility.enhancements");
         expect(featureManifests.find((manifest) => manifest.id === "stats")?.contributes).toContain("stats.dashboard");
-        window.matchMedia ??= () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
-        const $ = jquery;
-        vi.stubGlobal("$", $);
-        vi.stubGlobal("jQuery", $);
-        vi.stubGlobal("localforage", { INDEXEDDB: "indexeddb", createInstance: () => ({}) });
-        Object.assign(globalThis, { utils: {}, storageManager: {} });
-        const { legacyContributionManifests, registerSitePlugins } = await import("../src/plugins/registry.js");
-        expect(new Set(legacyContributionManifests.map((item) => item.id)).size).toBe(legacyContributionManifests.length);
-        expect(new Set(legacyContributionManifests.map((item) => item.legacyPluginId)).size).toBe(legacyContributionManifests.length);
-        expect(legacyContributionManifests.find((item) => item.id === "discovery.top250")).toBeUndefined();
-        expect(legacyContributionManifests.find((item) => item.id === "library.history")).toBeUndefined();
-        expect(legacyContributionManifests.find((item) => item.id === "library.state-actions")).toBeUndefined();
-        expect(legacyContributionManifests.find((item) => item.id === "library.keyword-filter")).toBeUndefined();
-        expect(legacyContributionManifests.find((item) => item.id === "library.blacklist")).toBeUndefined();
-        expect(legacyContributionManifests.find((item) => item.id === "library.favorite-actresses")).toBeUndefined();
-        expect(legacyContributionManifests.find((item) => item.id === "list.auto-page")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "list.fold-category")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "list.actions")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "list.fc2-navigation")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "list.fc2-navigation")?.featureId).toBe("list");
-        expect(legacyContributionManifests.find((item) => item.id === "list.cover-state-actions")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "list.javbus-images")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "list.fc2-lookup")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "detail.workspace")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "detail.javdb-native")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "detail.javbus-native")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "detail.reviews")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "detail.related")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "detail.screenshot")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "detail.native-magnets")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "detail.external-magnets")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "detail.page-state-actions")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "detail.javdb-preview")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "detail.javbus-preview")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "detail.external-sites")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "detail.fc2-owned")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.find((item) => item.id === "detail.fc2-owned")?.managedRoutes).toEqual(["detail", "owned-detail"]);
-        expect(legacyContributionManifests.filter((item) => !item.managedByFeature).map((item) => item.id)).toEqual(["settings.core"]);
-        expect(legacyContributionManifests.find((item) => item.id === "responsive-shell.bottom-bar")?.managedByFeature).toBe(true);
-        expect(legacyContributionManifests.filter((item) => item.featureId === "identity").every((item) => item.managedByFeature)).toBe(true);
-        expect(legacyContributionManifests.filter((item) => item.featureId === "external-bridge").every((item) => item.managedByFeature)).toBe(true);
-        expect(legacyContributionManifests.filter((item) => item.featureId === "discovery").every((item) => item.managedByFeature)).toBe(true);
-        expect(legacyContributionManifests.filter((item) => item.featureId === "compatibility").every((item) => item.managedByFeature)).toBe(true);
-        expect(legacyContributionManifests.filter((item) => item.featureId === "stats").every((item) => item.managedByFeature)).toBe(true);
-        const createRuntime = (site, disabled = [], route = "list") => {
-            const diagnostics = new DiagnosticsService();
-            const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(PORT.style, {}).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.profile, { current: () => "regular" }).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {}).register(SERVICE.state, {}).register(SERVICE.ui, {}).register(REGISTRY.settings, new SettingsRegistry());
-            const runtime = new FeatureRuntime({ container, commands: new CommandRegistry(), diagnostics, disabled, site, route });
-            container.register(REGISTRY.feature, runtime);
-            featureManifests.forEach((manifest) => runtime.register(manifest));
-            return runtime;
-        };
-        const javdb = new PluginManager();
-        registerSitePlugins(javdb, createRuntime("javdb"), "javdb");
-        expect(javdb.getBean("Fc2Plugin").managedByFeature).toBe(false);
-        const javdbDetail = new PluginManager();
-        registerSitePlugins(javdbDetail, createRuntime("javdb", [], "detail"), "javdb");
-        expect(javdbDetail.getBean("Fc2Plugin").managedByFeature).toBe(true);
-        expect(javdb.getPluginNames()).toEqual([
-            "ListPagePlugin", "AutoPagePlugin", "Fc2Plugin", "Fc2NavigationPlugin", "FoldCategoryPlugin", "ListPageButtonPlugin",
-            "SettingPlugin", "CoverButtonPlugin",
-            "Fc2By123AvPlugin", "DetailPagePlugin", "DetailWorkspacePlugin", "ReviewPlugin", "RelatedPlugin", "DetailPageButtonPlugin",
-            "HighlightMagnetPlugin", "PreviewVideoPlugin", "OtherSitePlugin",
-            "MagnetHubPlugin", "ScreenShotPlugin", "MobileBottomBarPlugin",
-        ]);
-        const javbus = new PluginManager();
-        registerSitePlugins(javbus, createRuntime("javbus", ["ReviewPlugin"]), "javbus");
-        expect(javbus.getPluginNames()).not.toContain("ReviewPlugin");
-        expect(javbus.getPluginNames()).toContain("DetailWorkspacePlugin");
-
-        const javdbWithCoverDisabled = new PluginManager();
-        registerSitePlugins(javdbWithCoverDisabled, createRuntime("javdb", ["CoverButtonPlugin"]), "javdb");
-        expect(javdbWithCoverDisabled.getPluginNames()).not.toContain("CoverButtonPlugin");
-        expect(javdbWithCoverDisabled.getPluginNames()).toContain("DetailPageButtonPlugin");
-        expect(javdbWithCoverDisabled.getPluginDescriptors()).toContainEqual({ name: "CoverButtonPlugin", disableable: true });
-
-        const javdbWithExternalSitesDisabled = new PluginManager();
-        registerSitePlugins(javdbWithExternalSitesDisabled, createRuntime("javdb", ["OtherSitePlugin"]), "javdb");
-        expect(javdbWithExternalSitesDisabled.getPluginNames()).not.toContain("OtherSitePlugin");
-        expect(javdbWithExternalSitesDisabled.getPluginDescriptors()).toContainEqual({ name: "OtherSitePlugin", disableable: true });
-
-        const javbusWithImagesDisabled = new PluginManager();
-        registerSitePlugins(javbusWithImagesDisabled, createRuntime("javbus", ["BusImgPlugin"]), "javbus");
-        expect(javbusWithImagesDisabled.getPluginNames()).not.toContain("BusImgPlugin");
-        expect(javbusWithImagesDisabled.getPluginNames()).toContain("BusPreviewVideoPlugin");
-
-        for (const [site, disabledPlugin, survivingPlugin] of [
-            ["javdb", "Fc2Plugin", "ListPagePlugin"],
-            ["javdb", "AutoPagePlugin", "ListPagePlugin"],
-            ["javdb", "CoverButtonPlugin", "ListPagePlugin"],
-            ["javdb", "ListPageButtonPlugin", "ListPagePlugin"],
-            ["javdb", "HighlightMagnetPlugin", "DetailPageButtonPlugin"],
-            ["javdb", "MagnetHubPlugin", "DetailPageButtonPlugin"],
-        ]) {
-            const manager = new PluginManager();
-            registerSitePlugins(manager, createRuntime(site, [disabledPlugin]), site);
-            expect(manager.getPluginNames(), `${survivingPlugin} must survive disabled ${disabledPlugin}`).not.toContain(disabledPlugin);
-            expect(manager.getPluginNames(), `${survivingPlugin} must survive disabled ${disabledPlugin}`).toContain(survivingPlugin);
-        }
-
-        const legacyDiagnostics = new DiagnosticsService();
-        const javdbWithStaleSystemDisables = new PluginManager({ diagnostics: legacyDiagnostics });
-        registerSitePlugins(javdbWithStaleSystemDisables, createRuntime("javdb", ["settings.core", "stats.dashboard", "responsive-shell.bottom-bar"]), "javdb");
-        expect(javdbWithStaleSystemDisables.getPluginNames()).toEqual(expect.arrayContaining(["SettingPlugin", "MobileBottomBarPlugin"]));
-        expect(javdbWithStaleSystemDisables.getPluginDescriptors().filter((plugin) => plugin.disableable === false).map((plugin) => plugin.name)).toEqual([
-            "SettingPlugin", "MobileBottomBarPlugin",
-        ]);
-        expect(legacyDiagnostics.exportSnapshot().legacyPluginDescriptors.filter((plugin) => plugin.disableable === false).map((plugin) => plugin.name)).toEqual([
-            "SettingPlugin", "MobileBottomBarPlugin",
-        ]);
-    }, 15_000);
-
-    it("declares every literal runtime service used by a legacy contribution", async () => {
-        const { legacyContributionManifests } = await import("../src/plugins/registry.js");
-        const runtimeTokens = new Map([
-            ["host", PORT.host], ["diagnostics", SERVICE.diagnostics], ["review", SERVICE.review],
-            ["related", SERVICE.related], ["movie", SERVICE.movie], ["magnet", SERVICE.magnet],
-            ["settings", SERVICE.settings], ["cache", SERVICE.cache], ["http", SERVICE.http],
-            ["profile", SERVICE.profile], ["actressInfo", SERVICE.actressInfo], ["imageSearch", SERVICE.imageSearch],
-            ["screenshot", SERVICE.screenshot], ["translation", SERVICE.translation], ["subtitle", SERVICE.subtitle],
-            ["account", SERVICE.account], ["webdav", SERVICE.webdav], ["storage", SERVICE.storage], ["features", REGISTRY.feature],
-            ["state", SERVICE.state], ["offline", SERVICE.offline], ["dialog", SERVICE.dialog],
-            ["settingsRegistry", REGISTRY.settings], ["ui", SERVICE.ui],
-        ]);
-        for (const contribution of legacyContributionManifests) {
-            const source = contribution.plugin.toString();
-            const usedNames = [...source.matchAll(/getRuntimeService\(["']([^"']+)["']\)/g)].map((match) => match[1]).filter((name) => name !== "scope");
-            for (const name of new Set(usedNames)) {
-                expect(runtimeTokens.has(name), `${contribution.id} uses unknown runtime service ${name}`).toBe(true);
-                expect(contribution.requires, `${contribution.id} must declare runtime service ${name}`).toContain(runtimeTokens.get(name));
-            }
-        }
-    });
-
-    it("keeps independently disableable legacy contributions out of the hard dependency graph", async () => {
-        const { legacyContributionManifests } = await import("../src/plugins/registry.js");
-        for (const contribution of legacyContributionManifests) {
-            expect(contribution.plugin.toString(), `${contribution.id} must use optional plugin dependencies`).not.toContain("this.getDependency(");
-        }
+        const contributions = featureManifests.flatMap((manifest) => manifest.contributes);
+        expect(new Set(contributions).size).toBe(contributions.length);
+        expect(contributions).toEqual(expect.arrayContaining([
+            "list.core", "list.auto-page", "list.fold-category", "list.actions", "list.fc2-navigation", "list.cover-state-actions", "list.javbus-images", "list.fc2-lookup",
+            "detail.fc2-owned", "detail.page-state-actions", "detail.javdb-preview", "detail.javdb-native", "detail.javbus-native", "detail.workspace", "detail.reviews", "detail.related", "detail.screenshot", "detail.native-magnets", "detail.external-magnets", "detail.external-sites", "detail.javbus-preview",
+            "settings.core", "responsive-shell.bottom-bar",
+        ]));
     });
 
     it("exports measured and redacted diagnostics", () => {
@@ -258,57 +103,6 @@ describe("v6.5 architecture runtime contracts", () => {
 
         await expect(runtime.getFeatureApi("list-api")).resolves.toEqual({ ready: true });
         await expect(runtime.getFeatureApi("missing-api")).resolves.toBeNull();
-    });
-
-    it("binds declared legacy API aliases after Feature activation and clears them on dispose", async () => {
-        const diagnostics = new DiagnosticsService(), adapter = { setFeatureApi: vi.fn() }, runtime = new FeatureRuntime({
-            container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics,
-            disabled: [], site: "javdb", route: "list",
-        });
-        runtime.setLegacyResolver((name) => name === "ListPagePlugin" ? adapter : null);
-        runtime.register(defineFeature({
-            id: "aliased-feature", kind: "feature", disableable: true, sites: ["javdb"], routes: ["list"], startup: "on-demand",
-            legacyApiAliases: ["ListPagePlugin"], requires: [], contributes: [], providesCommands: [], activate: () => ({ api: { ready: true } }),
-        }));
-
-        const activation = await runtime.activate("aliased-feature");
-        expect(adapter.setFeatureApi).toHaveBeenNthCalledWith(1, { ready: true });
-        activation.dispose();
-        expect(adapter.setFeatureApi).toHaveBeenNthCalledWith(2, null);
-    });
-
-    it("gives a legacy contribution a route-independent scope without activating its owner feature", async () => {
-        const diagnostics = new DiagnosticsService(), runtime = new FeatureRuntime({
-            container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics,
-            site: "javdb", route: "list",
-        });
-        runtime.register(defineFeature({
-            id: "detail", kind: "feature", disableable: true, sites: ["javdb"], routes: ["detail"],
-            startup: "on-demand", requires: [], contributes: ["detail.fc2"], providesCommands: [], activate: () => ({}),
-        }));
-        await expect(runtime.getScope("detail")).rejects.toThrow(/ineligible/);
-        const scope = await runtime.getContributionScope("detail", "detail.fc2", "Fc2Plugin");
-        expect(scope.id).toBe("contribution:detail.fc2");
-        expect(runtime.getActiveFeatureIds()).not.toContain("detail");
-    });
-
-    it("disposes contribution scopes when the owning feature is disposed", async () => {
-        const diagnostics = new DiagnosticsService(), runtime = new FeatureRuntime({
-            container: new DependencyContainer(), commands: new CommandRegistry(), diagnostics,
-            site: "javdb", route: "detail",
-        });
-        runtime.register(defineFeature({
-            id: "detail", kind: "feature", disableable: true, sites: ["javdb"], routes: ["detail"],
-            startup: "eager", requires: [], contributes: ["detail.fc2", "detail.related"], providesCommands: [], activate: () => ({}),
-        }));
-        const scope = await runtime.getContributionScope("detail", "detail.fc2", "Fc2Plugin");
-        const activation = await runtime.activate("detail");
-        activation.dispose();
-        expect(scope.disposed).toBe(true);
-        // contribution scopes are recreated lazily after disposal (activate -> dispose -> activate cycle)
-        const scope2 = await runtime.getContributionScope("detail", "detail.fc2", "Fc2Plugin");
-        expect(scope2.disposed).toBe(false);
-        expect(scope2).not.toBe(scope);
     });
 
     it("opens Settings through its registered owner without a DOM trigger", async () => {

@@ -17,9 +17,9 @@ function loadPlugin(url, html, { isHitShowPage = false } = {}) {
         BasePlugin: class { getSelector() { return { boxSelector: ".movie-list", itemSelector: ".movie-list > .item" }; } getRuntimeService(name) { return "settings" === name ? settings : "host" === name ? host : { getFeatureApi: vi.fn(async () => null) }; } },
         clog: { error: vi.fn() }
     });
-    const source = readTestFile(join(import.meta.dirname, "../src/plugins/status/list-page-button.js"), "utf8");
+    const source = readTestFile(join(import.meta.dirname, "../src/features/list/list-actions-controller.js"), "utf8");
     vm.runInContext(`${source};globalThis.Plugin=ListPageButtonPlugin`, context);
-    return { $, plugin: new context.Plugin(), settings, setSortMethod: value => { sortMethod = value; } };
+    return { $, plugin: new context.Plugin({ settings, hostAdapter: { ...host, site: "javdb", location: dom.window.location }, features: { getFeatureApi: vi.fn(async () => null) }, document: dom.window.document, window: dom.window, ui: { getJQuery: () => $, getClog: () => ({ error: vi.fn(), warn: vi.fn() }) }, storage: { getSetting: vi.fn(async () => "yes") } }), settings, setSortMethod: value => { sortMethod = value; } };
 }
 
 describe("FC2 list sorting", () => {

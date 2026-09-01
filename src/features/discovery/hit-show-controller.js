@@ -60,7 +60,8 @@ export class HitShowController {
         try {
             this.hookPage();
             this.toolBar(period);
-            await this.listActions?.mountOwnedRankingControls?.(null, this.discoveryApi)?.catch?.((/** @type {unknown} */ error) => this.getClog().error?.("热播操作按钮挂载失败", error));
+            const listActions = this.listActions ?? await this.features?.getFeatureApi?.("list");
+            await listActions?.mountOwnedRankingControls?.(null, this.discoveryApi)?.catch?.((/** @type {unknown} */ error) => this.getClog().error?.("热播操作按钮挂载失败", error));
             const movies = await this.fetchPlaybackWithRetry(period);
             if (generation !== this.loadGeneration) return;
             if (!movies.length) return void this.renderState("当前周期暂无热播数据");
@@ -131,7 +132,8 @@ export class HitShowController {
             listFeature.bindMovieDetailNavigation(listFeature.getListSelectors().boxSelector);
             await listFeature.bindClick?.();
         }
-        await this.coverActions?.addSvgBtn?.();
+        const coverActions = this.coverActions ?? listFeature;
+        await coverActions?.addSvgBtn?.();
         await this.eventBus?.emit?.("list-items-added", { items: this.$listRoot?.find(".item").toArray() ?? [] }, { broadcast: false });
     }
 
@@ -165,7 +167,8 @@ export class HitShowController {
         const cacheKey = "jhs_hitshow_scores_v1", persisted = await this.storage.cachedRequest(cacheKey, 604_800_000, async () => ({})), cache = persisted && typeof persisted === "object" && !Array.isArray(persisted) ? { ...persisted } : {}, queue = [ ...movies ];
         await Promise.all(Array.from({ length: Math.min(4, queue.length) }, () => this.scoreWorker(queue, cache, generation)));
         generation === this.loadGeneration && await this.storage.cacheSet(cacheKey, cache, 604_800_000);
-        if (generation === this.loadGeneration && this.listActions?.activeSortMethod?.() === "rateCount") await this.listActions.sortItems?.();
+        const listActions = this.listActions ?? await this.features?.getFeatureApi?.("list");
+        if (generation === this.loadGeneration && listActions?.activeSortMethod?.() === "rateCount") await listActions.sortItems?.();
     }
 
     async scoreWorker(/** @type {HitMovie[]} */ queue, /** @type {Record<string, any>} */ cache, /** @type {number} */ generation) {

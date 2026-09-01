@@ -37,7 +37,7 @@ test("full settings layer stays above the compact FAB", async ({ page }, testInf
   test.skip(testInfo.project.name !== "mobile", "one compact viewport covers dialog stacking");
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.unsafeWindow.__jhsFeatureRuntime.getFeatureApi("settings").then((api) => api?.openSettingDialog?.()));
   const layer = page.locator(".layui-layer");
   const save = layer.locator("#saveBtn");
   await expect(save).toHaveAttribute("data-jhs-settings-ready", "true");
@@ -56,7 +56,7 @@ test("backup loading feedback stays above the full settings layer", async ({ pag
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic viewport covers loading stacking");
   await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
-  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  await page.evaluate(() => window.unsafeWindow.__jhsFeatureRuntime.getFeatureApi("settings").then((api) => api?.openSettingDialog?.()));
   const layer = page.locator(".layui-layer");
   await expect(layer.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
   await page.evaluate(() => { window.__jhsLoadingFixture = window.loading(); });

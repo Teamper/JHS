@@ -19,8 +19,8 @@ function loadListButtonPlugin() {
         hasAnyState: flags => [ "favorite", "downloaded", "watched", "blocked" ].some((key => !0 === flags?.[key])),
         isHardHidden: (flags, reasons = {}) => Boolean(flags.blocked || reasons.keyword || reasons.actorBlacklist || reasons.actressBlacklist)
     });
-    vm.runInContext(`${readTestFile(join(process.cwd(), "src/plugins/status/list-page-button.js"), "utf8")};globalThis.Plugin=ListPageButtonPlugin`, context);
-    return { dom, $, plugin: new context.Plugin(), storageManager, show, listFeature };
+    vm.runInContext(`${readTestFile(join(process.cwd(), "src/features/list/list-actions-controller.js"), "utf8")};globalThis.Plugin=ListPageButtonPlugin`, context);
+    return { dom, $, plugin: new context.Plugin({ settings: { snapshot: () => ({}) }, hostAdapter: { site: "javdb", location: dom.window.location }, features: { getFeatureApi: async () => listFeature }, document: dom.window.document, window: dom.window, ui: { getJQuery: () => $, getShow: () => show, show, getClog: () => ({ error: vi.fn(), warn: vi.fn() }) }, storage: storageManager }), storageManager, show, listFeature };
 }
 
 describe("start identification workflow", () => {

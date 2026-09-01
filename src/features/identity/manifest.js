@@ -9,7 +9,7 @@ import { IdentityImageSearchController } from "./identity-image-search-controlle
 import { IdentityNavigationController } from "./identity-navigation-controller.js";
 
 export default defineFeature({
-    id: "identity", kind: "feature", disableable: true, sites: ["javdb", "javbus"], routes: [], startup: "eager",
+    id: "identity", kind: "feature", disableable: true, failurePolicy: "degraded", sites: ["javdb", "javbus"], routes: [], startup: "eager",
     requires: [PORT.host, PORT.style, SERVICE.movie, SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch, SERVICE.actressInfo, SERVICE.settings, SERVICE.ui],
     contributes: ["identity.javdb-navigation", "identity.javbus-navigation", "identity.image-search", "identity.actress-info"],
     providesCommands: [],

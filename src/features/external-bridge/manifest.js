@@ -11,7 +11,7 @@ import { OneTwoThreeAuthController } from "./one-two-three-controller.js";
 import { UnifiedOfflineController } from "./unified-offline-controller.js";
 
 export default defineFeature({
-    id: "external-bridge", kind: "feature", disableable: true, sites: ["javdb", "javbus", "123pan", "javtrailers", "subtitlecat"], routes: [], startup: "eager",
+    id: "external-bridge", kind: "feature", disableable: true, failurePolicy: "degraded", sites: ["javdb", "javbus", "123pan", "javtrailers", "subtitlecat"], routes: [], startup: "eager",
     requires: [PORT.host, PORT.style, SERVICE.dialog, SERVICE.offline, SERVICE.state, SERVICE.storage, SERVICE.translation, SERVICE.settings, SERVICE.eventBus, SERVICE.ui, REGISTRY.feature],
     contributes: ["external-bridge.translation", "external-bridge.115-match", "external-bridge.offline", "external-bridge.123pan", "external-bridge.javtrailers", "external-bridge.subtitle"],
     providesCommands: [],

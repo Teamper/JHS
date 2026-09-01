@@ -61,7 +61,11 @@ export async function injectUserscriptRuntime(page, options = {}) {
     window.unsafeWindow = window;
     window.GM_getValue = (_key, fallback) => fallback;
     window.GM_setValue = () => undefined;
-    window.GM_openInTab = () => ({ close() {} });
+    window.__jhsBrowserDiagnostics.openedTabs = [];
+    window.GM_openInTab = (url, options) => {
+      window.__jhsBrowserDiagnostics.openedTabs.push({ url: String(url), options: options || {} });
+      return { close() {} };
+    };
     window.GM_xmlhttpRequest = (options) => {
       window.__jhsBrowserDiagnostics.requests.push({ method: options.method || "GET", url: String(options.url || "") });
       let aborted = false;
@@ -171,13 +175,13 @@ export async function injectUserscriptRuntime(page, options = {}) {
   await page.addScriptTag({ path: join(repoRoot, "JHS.user.js") });
   markPhase("userscript-eval");
   try {
-    await page.waitForFunction(() => Boolean(window.unsafeWindow?.pluginManager?.getStartupReport), null, { timeout: 15_000 });
+    await page.waitForFunction(() => Boolean(window.unsafeWindow?.__jhsFeatureRuntime?.getActiveFeatureIds), null, { timeout: 15_000 });
     markPhase("startup-ready");
     await page.evaluate((phases) => { window.__jhsBrowserDiagnostics.bootstrapPhases = { ...(window.__jhsBrowserDiagnostics.bootstrapPhases || {}), harness: phases }; }, bootstrapPhases);
   } catch (error) {
     const state = await page.evaluate(() => ({
       phases: window.__jhsBrowserDiagnostics?.bootstrapPhases || {},
-      hasPluginManager: Boolean(window.unsafeWindow?.pluginManager),
+      hasFeatureRuntime: Boolean(window.unsafeWindow?.__jhsFeatureRuntime),
       bootstrapError: document.querySelector("#jhs-bootstrap-error")?.textContent || "",
     })).catch(() => ({}));
     const detail = startupErrors.join("\n") || error.message;

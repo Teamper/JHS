@@ -3,7 +3,7 @@ import jqueryFactory from "jquery";
 import { JSDOM } from "jsdom";
 import { SettingsService } from "../src/services/settings-service.js";
 import { bindSettingControl } from "../src/ui/settings/setting-binding-controller.js";
-import { applyLayoutRangeValue } from "../src/plugins/backup/setting-forms.js";
+import { applyLayoutRangeValue } from "../src/features/system/settings/setting-forms.js";
 
 it("restores layout controls and host DOM when persistence rejects", async () => {
     const dom = new JSDOM('<div id="root"><input id="containerColumns" type="range"><span id="showContainerColumns"></span><input id="containerWidth" type="range"><span id="showContainerWidth"></span></div><div id="list"></div><div id="layout"></div>');

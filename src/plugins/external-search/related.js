@@ -1,10 +1,17 @@
 // @ts-check
 
 import { r } from "../../core/constants.js";
-import { BasePlugin } from "../../core/plugin-manager.js";
 import { RelatedPanel } from "../../ui/detail/related-panel.js";
 
-export class RelatedPlugin extends BasePlugin {
+export class RelatedPlugin {
+    /** @param {{host?: any, related?: any, settings?: any, scope?: any, ui?: any}} [options] */
+    constructor(options = {}) {
+        this.host = options.host ?? null;
+        this.related = options.related ?? null;
+        this.settings = options.settings ?? null;
+        this.scope = options.scope ?? null;
+        this.ui = options.ui ?? null;
+    }
     getName() {
         return "RelatedPlugin";
     }
@@ -26,14 +33,19 @@ export class RelatedPlugin extends BasePlugin {
     async handle(options = {}) {
         if (!window.isDetailPage || !r) return;
         const movieId = new URL(window.location.href).pathname.split("/").filter(Boolean).pop();
-        if (movieId) await this.showRelated(this.getHostedSlot("related"), movieId, { scope: options.scope ?? await this.getRuntimeService("scope")() });
+        if (movieId) await this.showRelated(this.getHostedSlot("related"), movieId, { scope: options.scope ?? await this.getLifecycleScope() });
     }
     getHostedSlot(/** @type {string} */ name) {
-        const element = this.getRuntimeService("host").locateDetailSlots()[name];
-        return element ? $(element) : $();
+        const element = this.host?.locateDetailSlots?.()[name];
+        const jq = this.ui?.getJQuery?.() ?? /** @type {any} */ (globalThis).$;
+        return element ? jq(element) : jq();
     }
     async showRelated(/** @type {any} */ target, /** @type {string} */ movieId, /** @type {Record<string, unknown>} */ options = {}) {
-        const panel = new RelatedPanel({ related: this.getRuntimeService("related"), settings: this.getRuntimeService("settings"), scope: () => options.scope ? Promise.resolve(options.scope) : this.getRuntimeService("scope")() });
+        const panel = new RelatedPanel({ related: this.related, settings: this.settings, scope: () => options.scope ? Promise.resolve(options.scope) : this.getLifecycleScope() });
         return panel.show(target?.length ? target : this.getHostedSlot("related"), movieId, options);
+    }
+    async getLifecycleScope() {
+        const scope = this.scope;
+        return typeof scope === "function" ? await scope() : scope;
     }
 }

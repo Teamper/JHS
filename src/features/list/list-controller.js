@@ -29,9 +29,11 @@ export class ListController {
     /** @param {Record<string, any>} options */
     constructor(options) {
         this.features = /** @type {any} */ (options).features ?? null;
-        this.busImgPlugin = /** @type {any} */ (options).busImgPlugin ?? null;
+        this.coreEnabled = options.coreEnabled !== false;
+        this.javbusImagesEnabled = options.javbusImagesEnabled === true;
         this.autoPagePlugin = options.autoPagePlugin ?? null;
-        this.foldCategoryPlugin = options.foldCategoryPlugin ?? null;
+        this.foldCategoryController = options.foldCategoryController ?? null;
+        this.isolateContribution = options.isolateContribution ?? (/** @param {string} _id @param {() => any} operation */ (_id, operation) => operation());
         this.actionsPlugin = options.actionsPlugin ?? null;
         this.fc2NavigationPlugin = options.fc2NavigationPlugin ?? null;
         this.coverPlugin = options.coverPlugin ?? null;
@@ -76,7 +78,7 @@ export class ListController {
         this.scope.assertActive();
         if (this.started) return Promise.resolve();
         const selectors = this.hostAdapter.getListSelectors?.();
-        if (selectors) {
+        if (this.coreEnabled && selectors) {
             this.diagnostics = new ListDiagnosticsService({ scope: this.scope, document: this.hostAdapter.document, selectors, state: this.state });
             this.view = new ListView({
                 hostAdapter: this.hostAdapter,
@@ -106,7 +108,7 @@ export class ListController {
                 ui: this.ui,
             });
             this.media = new ListMediaController({ scope: this.scope, document: this.hostAdapter.document, selectors });
-            this.images = new ListImageController({ scope: this.scope, document: this.hostAdapter.document, window: this.hostAdapter.document?.defaultView ?? globalThis.window, site: this.hostAdapter.site, selector: selectors.coverImgSelector });
+            this.images = new ListImageController({ scope: this.scope, document: this.hostAdapter.document, window: this.hostAdapter.document?.defaultView ?? globalThis.window, site: this.hostAdapter.site, selector: selectors.coverImgSelector, itemSelector: selectors.itemSelector, settings: this.settings });
             this.evaluation = this.stateService && this.storage ? new ListEvaluationService({ scope: this.scope, storage: this.storage, stateService: this.stateService }) : null;
             this.summary = new ListSummaryService({
                 scope: this.scope,
@@ -138,7 +140,7 @@ export class ListController {
                 recordPhase: (phase, itemCount) => this.diagnostics?.recordPhase(phase, itemCount),
                 scheduleRecount: () => this.summary?.scheduleRecount?.(),
                 translateItems: (items) => { this.titleTranslation?.translateListItems?.(items); },
-                onJavBusFiltered: () => this.busImgPlugin?.logImageHeightsByRow?.(this.settings?.snapshot?.()),
+                onJavBusFiltered: () => this.javbusImagesEnabled ? this.images?.logImageHeightsByRow?.(this.settings?.snapshot?.()) : undefined,
                 ui: this.ui,
             });
             this.incremental = new ListIncrementalService({
@@ -206,20 +208,18 @@ export class ListController {
         return Promise.resolve()
             .then(() => this.registerStyles())
             .then(() => this.startListLifecycle())
-            .then(() => hasCore ? this.autoPagePlugin?.handle?.({ scope: this.scope, listFeatureApi }) : undefined)
-            .then(() => hasCore ? this.foldCategoryPlugin?.handle?.({ scope: this.scope }) : undefined)
+            .then(() => hasCore ? this.isolateContribution("list.auto-page", () => this.autoPagePlugin?.handle?.({ scope: this.scope, listFeatureApi })) : undefined)
+            .then(() => hasCore ? this.isolateContribution("list.fold-category", () => this.foldCategoryController?.start()) : undefined)
             .then(() => {
                 if (!hasCore || !this.actionsPlugin) return;
                 this.scope.ownTimeout(setTimeout(() => {
                     if (this.scope.disposed) return;
-                    void Promise.resolve(this.actionsPlugin?.handle?.({ scope: this.scope, listFeatureApi })).catch((/** @type {unknown} */ error) => {
-                        this.ui?.getClog?.().error?.("列表操作初始化失败", error);
-                    });
+                    void Promise.resolve(this.isolateContribution("list.actions", () => this.actionsPlugin?.handle?.({ scope: this.scope, listFeatureApi })));
                 }, 0));
             })
-            .then(() => this.fc2NavigationPlugin?.handle?.({ scope: this.scope }))
-            .then(() => this.coverPlugin?.handle?.({ scope: this.scope, listFeatureApi }))
-            .then(() => this.fc2LookupPlugin?.handle?.({ scope: this.scope }))
+            .then(() => this.isolateContribution("list.fc2-navigation", () => this.fc2NavigationPlugin?.handle?.({ scope: this.scope })))
+            .then(() => this.isolateContribution("list.cover-state-actions", () => this.coverPlugin?.handle?.({ scope: this.scope, listFeatureApi })))
+            .then(() => this.isolateContribution("list.fc2-lookup", () => this.fc2LookupPlugin?.handle?.({ scope: this.scope })))
             .catch((error) => {
             this.dispose();
             throw error;
@@ -261,11 +261,16 @@ export class ListController {
     getApi() {
         const route = (/** @type {any} */ feature, /** @type {string} */ name) => (/** @type {any[]} */ ...args) => feature?.[name]?.(...args);
         return Object.freeze({
+            hasCore: this.coreEnabled,
+            hasActions: Boolean(this.actionsPlugin),
+            hasCoverStateActions: Boolean(this.coverPlugin),
+            hasFc2: Boolean(this.fc2NavigationPlugin?.fc2),
             getListSelectors: () => this.hostAdapter.getListSelectors?.(),
             advanceListGeneration: () => this.state.advanceListGeneration(),
             captureListRevision: () => this.state.captureListRevision(),
             configureHoverPreview: route(this.images, "configureHoverPreview"),
             replaceHdImg: route(this.images, "replaceHdImg"),
+            logImageHeightsByRow: (/** @type {any[]} */ ...args) => this.javbusImagesEnabled ? this.images?.logImageHeightsByRow?.(...args) : undefined,
             doFilter: (/** @type {any[]} */ ...args) => this.filter?.doFilter?.(...args),
             createQuickFilter: (/** @type {unknown} */ initialFilter) => this.state.createQuickFilter(initialFilter),
             batchSaveAllVideos: (/** @type {any[]} */ ...args) => {
@@ -278,6 +283,14 @@ export class ListController {
             rebuildItemIndex: route(this.index, "rebuildItemIndex"),
             bindMovieDetailNavigation: route(this.view, "bindMovieDetailNavigation"),
             bindClick: () => this.bindClick(),
+            addSvgBtn: route(this.coverPlugin, "addSvgBtn"),
+            enableSvgBtn: route(this.coverPlugin, "enableSvgBtn"),
+            checkLoad: route(this.autoPagePlugin, "checkLoad"),
+            sortItems: route(this.actionsPlugin, "sortItems"),
+            activeSortMethod: route(this.actionsPlugin, "activeSortMethod"),
+            selectSortMethod: route(this.actionsPlugin, "selectSortMethod"),
+            mountOwnedRankingControls: route(this.actionsPlugin, "mountOwnedRankingControls"),
+            openWaitCheck: route(this.actionsPlugin, "openWaitCheck"),
             openMovieDetail: (/** @type {any} */ item, /** @type {{event?: MouseEvent | null, autoplay?: boolean, newTab?: boolean} | undefined} */ options) => this.openMovieDetail(item, options),
             showCarNumBox: (/** @type {string} */ carNum) => this.showCarNumBox(carNum),
             findCarNumAndHref: (/** @type {any} */ item) => this.readListItem(item),
@@ -297,10 +310,20 @@ export class ListController {
             getCurrentPageSummary: route(this.summary, "collectCurrentPageSummary"),
             scanAllPages: (/** @type {any} */ options) => scanAllPages(options),
             evaluateListItem: (/** @type {any} */ record, /** @type {any} */ context, /** @type {any} */ options) => evaluateListItem(record, context, options),
+            resolveFc2Source: (/** @type {any[]} */ ...args) => this.fc2NavigationPlugin?.getFc2Api?.().resolveFc2Source?.(...args),
+            resolveMovieIdForRecord: (/** @type {any[]} */ ...args) => this.fc2NavigationPlugin?.getFc2Api?.().resolveMovieIdForRecord?.(...args),
+            openFc2Dialog: (/** @type {any[]} */ ...args) => this.fc2NavigationPlugin?.getFc2Api?.().openFc2Dialog?.(...args),
+            openFc2Page: (/** @type {any[]} */ ...args) => this.fc2NavigationPlugin?.getFc2Api?.().openFc2Page?.(...args),
         });
     }
 
     dispose() {
+        this.fc2NavigationPlugin?.dispose?.();
+        this.fc2NavigationPlugin = null;
+        this.coverPlugin?.dispose?.();
+        this.coverPlugin = null;
+        this.foldCategoryController?.dispose?.();
+        this.foldCategoryController = null;
         this.batch?.dispose();
         this.batch = null;
         this.events?.dispose();
