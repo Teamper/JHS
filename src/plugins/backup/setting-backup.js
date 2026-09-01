@@ -1,7 +1,7 @@
 // @ts-check
 
 import { escapeHtml } from "../../core/constants.js";
-import { decryptCredential, decryptData, encryptData } from "../../core/credential-crypto.js";
+import { decryptCredential, decryptPortableBackup, encryptPortableBackup } from "../../core/credential-crypto.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 
 /** @typedef {{ name: string, size: number, createTime: string | number, fileId: string }} BackupFile */
@@ -61,7 +61,7 @@ export async function backupDataByWebDav(folderName, webdavService) {
         if (!i) return void show.error("请填写webDav密码并保存后, 再试此功能");
         const s = utils.getNowStr("_", "_") + ".json";
         let o = JSON.stringify(await storageManager.exportData());
-        o = await encryptData(o);
+        o = await encryptPortableBackup(o);
         const e = webdavService.createClient({ url: n, username: a, password: i });
         await e.backup(folderName, s, o), show.ok("备份完成");
     } catch (l) {
@@ -150,7 +150,7 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog
                 } else if (action === "download") {
                     let load = loading();
                     try {
-                        const data = await decryptData(await t.getFileContent(file.fileId));
+                        const data = await decryptPortableBackup(await t.getFileContent(file.fileId));
                         utils.download(data, file.name);
                     } catch (err) {
                         clog.error(err), show.error("下载失败: " + err);
@@ -159,7 +159,7 @@ function openFileListDialogMobile(e, t, n, folderName, showDiffPreviewFn, dialog
                     let load = loading();
                     try {
                         let data = await t.getFileContent(file.fileId);
-                        data = await decryptData(data);
+                        data = await decryptPortableBackup(data);
                         const parsed = JSON.parse(data);
                         const currentData = await storageManager.exportData();
                         const diff = await storageManager.diffData(currentData, parsed);
@@ -257,7 +257,7 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialo
                             })), s && s.addEventListener("click", (async (/** @type {MouseEvent} */ e) => {
                                 let a = loading();
                                 try {
-                                    const e = await decryptData(await t.getFileContent(o.fileId));
+                                    const e = await decryptPortableBackup(await t.getFileContent(o.fileId));
                                         utils.download(e, o.name);
                                 } catch (i) {
                                     clog.error(i), show.error("下载失败: " + i);
@@ -268,7 +268,7 @@ export function openFileListDialog(e, t, n, folderName, showDiffPreviewFn, dialo
                                 let a = loading();
                                 try {
                                     let e = await t.getFileContent(o.fileId);
-                                    e = await decryptData(e);
+                                    e = await decryptPortableBackup(e);
                                     const n = JSON.parse(e), i = await storageManager.exportData(), s = await storageManager.diffData(i, n);
                                     a.close(), showDiffPreviewFn(s, null, n);
                                 } catch (i) {

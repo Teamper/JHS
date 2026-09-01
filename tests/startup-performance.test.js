@@ -57,6 +57,7 @@ function loadTaskPlugin(gmHttp, overrides = {}) {
     show: { info: vi.fn(), error: vi.fn() },
     utils: { ...defaultUtils, ...overrides.utils },
     storageManager: overrides.storageManager || { getSetting: vi.fn(async () => ({})) },
+    selectLatestPublishTime: values => values.filter(Boolean).sort().at(-1) || "",
     $: () => ({ text: vi.fn() })
   });
   const parsers = ["src/integrations/javdb/parser.js", "src/integrations/host-list/parser.js"].map((file) => readTestFile(join(repoRoot, file), "utf8")).join("\n");
@@ -301,6 +302,22 @@ describe("blocked network task termination", () => {
 
     await expect(task.parsePage(dom, "javdb", "actor-1", "演员", [], new Set())).rejects.toThrow("新作品检测-解析列表失败");
     expect(updateFavoriteActress).not.toHaveBeenCalled();
+  });
+
+  it("does not count a dismissed decision as fresh on a later actor scan", async () => {
+    const updateFavoriteActress = vi.fn(async () => true), task = loadTaskPlugin({ get: vi.fn() }, {
+      storageManager: { getCarMap: vi.fn(async () => new Map()), updateFavoriteActress }
+    });
+    task.getRuntimeService = name => name === "state" ? {
+      getNewVideoDecisions: vi.fn(async () => ({ "A-1": { action: "dismissed" } }))
+    } : name === "scope" ? async () => null : name === "movie" ? { externalSiteOrigin: () => "https://javdb.example" } : null;
+
+    await expect(task.parseActorMovies([
+      { carNum: "A-1", title: "A", publishTime: "2026-08-01" }
+    ], "actor", "Actor", [], new Set())).resolves.toBe(0);
+    expect(updateFavoriteActress).toHaveBeenCalledWith(expect.objectContaining({
+      newVideoList: [expect.objectContaining({ carNum: "A-1" })]
+    }));
   });
 
   it("stops pagination after the first blocked page", async () => {

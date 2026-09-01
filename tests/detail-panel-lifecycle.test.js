@@ -27,13 +27,18 @@ function loadPanels({ settings = { enableLoadReview: "yes", enableLoadRelated: "
 }
 
 describe("detail panel instance lifecycle", () => {
-    it("does not fetch reviews until expanded when the preference was never saved", async () => {
+  it("loads reviews by default when the preference was never saved", async () => {
         const { $, Review, reviewFetch } = loadPanels({ settings: {} }), plugin = new Review;
+        const panel = await plugin.showReview("A", $("#review-a"));
+        expect(reviewFetch).toHaveBeenCalledOnce();
+        expect(panel.find(".jhs-review-toggle").attr("aria-expanded")).toBe("true");
+    });
+
+    it("keeps reviews closed when explicitly disabled", async () => {
+        const { $, Review, reviewFetch } = loadPanels({ settings: { enableLoadReview: "no" } }), plugin = new Review;
         const panel = await plugin.showReview("A", $("#review-a"));
         expect(reviewFetch).not.toHaveBeenCalled();
         expect(panel.find(".jhs-review-toggle").attr("aria-expanded")).toBe("false");
-        panel.find(".jhs-review-toggle").trigger("click");
-        await vi.waitFor((() => expect(reviewFetch).toHaveBeenCalledOnce()));
     });
 
     it("keeps review floor, loading state, and panel ownership per target", async () => {

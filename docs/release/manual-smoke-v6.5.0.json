@@ -31,7 +31,14 @@
     "translation.nativeFallbackAndCache": false,
     "detail.viewerAboveLayer": false,
     "backup.loadingAboveSettings": false,
-    "cloud.123.confirmClose": false
+    "cloud.123.confirmClose": false,
+    "install.fresh": false,
+    "upgrade.v641ToV650": false,
+    "backup.crossInstallRestore": false,
+    "newVideo.dismissNoPollution": false,
+    "review.defaultEnabled": false,
+    "settings.screenshotIndependent": false,
+    "cache.clearForcesNetwork": false
   },
   "notes": "PLACEHOLDER — this record is intentionally NOT satisfied. The 6.5.0 release gate must fail until a human runs the real Tampermonkey smoke (docs/release/manual-smoke.md) and commits a humanVerified:true record with the real artifact SHA256."
 }

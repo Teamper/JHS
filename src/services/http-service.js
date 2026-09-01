@@ -92,7 +92,7 @@ export class HttpService {
         const serializedKey = stableSerialize(requestKey);
         const cachePolicy = { scope: cacheScope, sessionScopeId: options.sessionScopeId };
         if (method === "GET" && cacheScope !== "none" && this.cache) {
-            const cached = this.cache.get(serializedKey, cachePolicy);
+            const cached = await this.cache.get(serializedKey, cachePolicy);
             if (cached.hit) return cached.value;
         }
         let entry = this.inflight.get(serializedKey);
@@ -100,8 +100,8 @@ export class HttpService {
             const controller = new AbortController();
             entry = { controller, consumers: 0, promise: Promise.resolve() };
             entry.promise = this.executeUnderlying({ ...options, method, url: initialUrl.href, signal: controller.signal }, urlPolicy)
-                .then((response) => {
-                    this.cache?.set(serializedKey, response, { ...cachePolicy, ttlMs: options.ttlMs ?? 0, negative: options.negative === true });
+                .then(async (response) => {
+                    if (this.cache) await this.cache.set(serializedKey, response, { ...cachePolicy, ttlMs: options.ttlMs ?? 0, negative: options.negative === true });
                     return response;
                 })
                 .finally(() => {

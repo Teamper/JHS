@@ -27,7 +27,7 @@ describe("Quick ↔ Full settings share one key", () => {
         expect(list.find('[data-jhs-setting="enableLoadScreenShot"]')).toHaveLength(1);
         expect(list.find('[data-jhs-setting="enablePreviewVideo"]')).toHaveLength(1);
         expect(list.find('[data-jhs-setting="enableLoadPreviewVideo"]')).toHaveLength(1);
-        // 旧双 key 中的 enableScreenSvg 不再出现在任何 surface
+        // 列表按钮只在完整设置显示，快捷设置仍保持紧凑。
         expect(list.find('[data-jhs-setting="enableScreenSvg"]')).toHaveLength(0);
         expect(list.find('[data-jhs-setting="enableLoadPreviewVideo"]').hasClass("jhs-setting-row--indent")).toBe(true);
     });
@@ -53,6 +53,7 @@ describe("Quick ↔ Full settings share one key", () => {
         fullDescriptors.forEach((descriptor) => { const { row } = renderSettingRow(descriptor, { value: settings.snapshot()[descriptor.key] ?? descriptor.defaultValue }); fullRoot.append(row); });
         bindSettingRows(fullRoot, fullDescriptors, { settings });
         expect(fullRoot.find('[data-jhs-setting="enableLoadScreenShot"] input').is(":checked")).toBe(true);
+        expect(fullRoot.find('[data-jhs-setting="enableScreenSvg"] input').is(":checked")).toBe(true);
     });
 
     it("writes DMM enhancement under the preview master switch independently", async () => {

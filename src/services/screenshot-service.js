@@ -11,7 +11,7 @@ export class ScreenshotService {
     /** @param {import("../app/provider-registry.js").ProviderRegistry} providers @param {import("../app/integration-registry.js").IntegrationRegistry | null} [integrations] */
     constructor(providers, integrations = null) { this.providers = providers; this.integrations = integrations; }
 
-    /** 长缩略图总开关：enableLoadScreenShot 是唯一产品开关。 @param {Record<string, any>} settings */
+    /** 详情/FC2 自动加载开关；列表手动按钮可显式绕过此门禁。 @param {Record<string, any>} settings */
     isEnabled(settings) { return settings?.enableLoadScreenShot !== "no"; }
 
     /** 兼容旧存储：screenshotProviders 可能以 JSON 字符串或数组保存。 @param {unknown} value */
@@ -47,11 +47,11 @@ export class ScreenshotService {
      * 传入 settings 时所有来源（ProviderRegistry / Integration fallback / manual provider）
      * 都必须位于 getEnabledProviders(settings) 白名单内；全部禁用时直接返回 null。
      * @param {Record<string, unknown>} movieRef
-     * @param {{ providerId?: string, scope?: unknown, settings?: Record<string, any> }} [context]
+     * @param {{ providerId?: string, scope?: unknown, settings?: Record<string, any>, allowWhenDisabled?: boolean }} [context]
      */
     async resolve(movieRef, context = {}) {
         // 总开关门禁：任何调用路径在设置关闭时都不得发请求。
-        if (context.settings && !this.isEnabled(context.settings)) return null;
+        if (context.settings && !context.allowWhenDisabled && !this.isEnabled(context.settings)) return null;
         const enabledProviders = context.settings ? this.getEnabledProviders(context.settings) : null;
         const enabledIds = enabledProviders ? new Set(enabledProviders.map((provider) => provider.id)) : null;
         if (enabledProviders && !enabledProviders.length) return null;
@@ -84,7 +84,7 @@ export class ScreenshotService {
     /** @param {string} providerId @param {Record<string, unknown>} movieRef @param {Record<string, unknown>} context */
     async resolveIntegration(providerId, movieRef, context) {
         if (!SCREENSHOT_PROVIDER_IDS.has(providerId)) return null;
-        if (context.settings && !this.isEnabled(context.settings)) return null;
+        if (context.settings && !context.allowWhenDisabled && !this.isEnabled(context.settings)) return null;
         const manifest = this.integrations?.list("movie.images")?.find((item) => item.id === providerId);
         if (!manifest) return null;
         const adapter = this.integrations?.getAdapter(manifest.id);

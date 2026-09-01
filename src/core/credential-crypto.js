@@ -45,6 +45,9 @@ export async function encryptData(value, secret = getInstallationSecret()) {
 }
 
 /** @param {string} value */
+export async function encryptPortableBackup(value) { return encryptData(value, LEGACY_ENCRYPTION_SALT); }
+
+/** @param {string} value */
 export async function decryptData(value, secret = getInstallationSecret()) {
     const combined = base64ToArrayBuffer(value), iv = combined.slice(0, 12), data = combined.slice(12);
     const decrypt = async (/** @type {string} */ candidate) => new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, await getEncryptionKey(candidate), data));
@@ -54,6 +57,9 @@ export async function decryptData(value, secret = getInstallationSecret()) {
         return decrypt(LEGACY_ENCRYPTION_SALT);
     }
 }
+
+/** @param {string} value */
+export async function decryptPortableBackup(value) { return decryptData(value); }
 
 /** @param {string} value */
 export async function encryptCredential(value, secret = getInstallationSecret()) { return value && !value.startsWith(CREDENTIAL_PREFIX) ? CREDENTIAL_PREFIX + await encryptData(value, secret) : value; }

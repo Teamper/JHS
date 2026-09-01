@@ -23,6 +23,21 @@ test("screenshot master switch OFF removes detail screenshot UI", async ({ conte
   await expect(page.locator(".jhs-screenshot-providers")).toHaveCount(0);
 });
 
+test("review defaults ON and explicit OFF closes the panel", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers review default and explicit opt-out");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/v/test-id", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page);
+  const reviewToggle = page.locator(".jhs-review-toggle").first();
+  await expect(reviewToggle).toHaveAttribute("aria-expanded", "true");
+  await page.close();
+  const closedPage = await context.newPage();
+  await closedPage.goto("https://javdb.com/v/test-id", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(closedPage, { settingOverrides: { enableLoadReview: "no" } });
+  await expect(closedPage.locator(".jhs-review-toggle").first()).toHaveAttribute("aria-expanded", "false");
+  await closedPage.close();
+});
+
 test("preview master switch OFF removes card preview buttons", async ({ context, page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers preview gating");
   await fulfillHostFixtures(context);

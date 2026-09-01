@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/core/credential-crypto.js", () => ({
     decryptCredential: vi.fn(async () => "secret"),
-    decryptData: vi.fn(),
-    encryptData: vi.fn(async value => `encrypted:${value}`),
+    decryptPortableBackup: vi.fn(),
+    encryptPortableBackup: vi.fn(async value => `encrypted:${value}`),
 }));
 
 import { backupDataByWebDav } from "../src/plugins/backup/setting-backup.js";

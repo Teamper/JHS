@@ -27,6 +27,16 @@ describe("ScreenshotService", () => {
         expect(new ScreenshotService(providers, integrations).getSearchUrl({ carNum: "ABC-123" })).toBe("https://javstore.net/search?q=ABC-123");
         expect(getSearchUrl).toHaveBeenCalledWith({ carNum: "ABC-123" });
     });
+
+    it("allows the list manual button to resolve while detail auto-load is disabled", async () => {
+        const getImages = vi.fn(async () => [{ url: "https://javstore.net/manual.jpg" }]);
+        const integrations = { list: vi.fn(() => [{ id: "javstore" }]), getAdapter: vi.fn(() => ({ getImages })) };
+        const providers = { getAvailable: vi.fn(async () => []), updateHealth: vi.fn() };
+        const service = new ScreenshotService(providers, integrations);
+        const settings = { enableLoadScreenShot: "no" };
+        await expect(service.resolve({ carNum: "ABC-123" }, { settings })).resolves.toBeNull();
+        await expect(service.resolve({ carNum: "ABC-123" }, { settings, allowWhenDisabled: true })).resolves.toEqual([{ url: "https://javstore.net/manual.jpg" }]);
+    });
 });
 
 describe("ScreenshotService explicit provider resolution", () => {

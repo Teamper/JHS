@@ -30,7 +30,8 @@ for (const [label, url] of [
       const page = await sampleContext.newPage();
       await page.goto(url, { waitUntil: "domcontentloaded" });
       const startedAt = performance.now();
-      await injectUserscriptRuntime(page);
+      // 保持启动基准只测核心引导；评论默认开启的请求不纳入启动预算。
+      await injectUserscriptRuntime(page, { settingOverrides: { enableLoadReview: "no" } });
       samples.push(performance.now() - startedAt);
       await expect.poll(() => page.evaluate(() => Boolean(window.__jhsBrowserDiagnostics?.bootstrapPhases?.["first-ready"]))).toBe(true);
       phaseSamples.push(await page.evaluate(() => window.__jhsBrowserDiagnostics.bootstrapPhases));

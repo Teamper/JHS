@@ -54,10 +54,11 @@ export class ScreenShotPlugin extends BasePlugin {
     async getScreenshot(e) {
         e = normalizeCarNum(e);
         if (!e) throw clog.warn("跳过缩略图解析：番号不可用"), new Error("缩略图番号不可用");
+        const options = /** @type {{ allowWhenDisabled?: boolean }} */ (arguments[1] || {});
         const service = this.getScreenshotService(), settings = this.getSettingsSnapshot();
-        if (!service.isEnabled(settings)) return clog.warn("长缩略图功能已关闭，跳过请求"), null;
+        if (!options.allowWhenDisabled && !service.isEnabled(settings)) return clog.warn("长缩略图功能已关闭，跳过请求"), null;
         const scope = await this.getRuntimeService("scope")();
-        const images = await service.resolve({ carNum: e }, { scope, settings });
+        const images = await service.resolve({ carNum: e }, { scope, settings, allowWhenDisabled: options.allowWhenDisabled === true });
         const image = Array.isArray(images) ? images[0] : images;
         return image?.url || null;
     }

@@ -551,15 +551,15 @@ export class TaskPlugin extends BasePlugin {
                 c.push({ carNum: s, coverUrl: coverUrl, title: r || "", publishTime: l || "", score: score, voteCount: voteCount, url: url });
             })());
         }
-        const d = selectLatestPublishTime(publishTimes), h = await storageManager.getCarMap(), p = c.filter((/** @type {TaskRecord} */ e) => !h.has(e.carNum));
-        p.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(n)}, 共${p.length}部</span>`),
+        const d = selectLatestPublishTime(publishTimes), h = await storageManager.getCarMap(), decisions = await this.getRuntimeService("state")?.getNewVideoDecisions?.() || {}, p = c.filter((/** @type {TaskRecord} */ e) => !h.has(e.carNum)), fresh = p.filter((/** @type {TaskRecord} */ e) => decisions[e.carNum]?.action !== "dismissed");
+        fresh.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(n)}, 共${fresh.length}部</span>`),
         await storageManager.updateFavoriteActress({
             starId: t,
             lastCheckTime: utils.getNowStr(),
             newVideoList: p,
             lastPublishTime: d
         });
-        return p.length;
+        return fresh.length;
     }
     /** @param {TaskRecord[]} items @param {string} starId @param {string} name @param {string[]} titleKeywords @param {Set<string>} blacklistSet */
     async parseActorMovies(items, starId, name, titleKeywords, blacklistSet) {
@@ -571,9 +571,9 @@ export class TaskPlugin extends BasePlugin {
             carNum: item.carNum, coverUrl: item.coverUrl || "", title: item.title || "", publishTime: item.publishTime || "",
             score: Number(item.score) || 0, voteCount: Number(item.voteCount) || 0, url: item.url || "",
         }));
-        const latestPublishTime = selectLatestPublishTime(publishTimes), carMap = await storageManager.getCarMap(), fresh = candidates.filter((/** @type {TaskRecord} */ item) => !carMap.has(item.carNum));
+        const latestPublishTime = selectLatestPublishTime(publishTimes), carMap = await storageManager.getCarMap(), decisions = await this.getRuntimeService("state")?.getNewVideoDecisions?.() || {}, freshItems = candidates.filter((/** @type {TaskRecord} */ item) => !carMap.has(item.carNum)), fresh = freshItems.filter((/** @type {TaskRecord} */ item) => decisions[item.carNum]?.action !== "dismissed");
         fresh.length > 0 && clog.html(`<span class="jhs-task-emphasis">检测出新作品, ${escapeHtml(name)}, 共${fresh.length}部</span>`);
-        await storageManager.updateFavoriteActress({ starId, lastCheckTime: utils.getNowStr(), newVideoList: fresh, lastPublishTime: latestPublishTime });
+        await storageManager.updateFavoriteActress({ starId, lastCheckTime: utils.getNowStr(), newVideoList: freshItems, lastPublishTime: latestPublishTime });
         return fresh.length;
     }
     /** @param {TaskRecord} e */

@@ -7,22 +7,15 @@
  * - enableScreenSvg 控制列表卡片的长缩略图按钮；
  * - enableLoadScreenShot 控制详情截图与 FC2 截图。
  *
- * 6.5 起 enableLoadScreenShot 是唯一总开关，enableScreenSvg 退出产品设置层。
- * 迁移规则（NO 优先）：任一为 "no" 则总开关为 "no"，避免用户关闭过的功能在升级后重新出现。
- *
- * 迁移以旧 key 的存在作为一次性标记：写新 key 与删除旧 key 在同一个
- * lock-scoped atomic update 中完成。迁移后 enableScreenSvg 不再存在于
- * storage，后续 bootstrap 永远不会再次读取它。
+ * 6.5 起两个开关恢复为独立语义：列表卡片按钮与详情/FC2 自动加载互不影响。
+ * 两个旧值都存在时原样保留；缺失项只按兼容默认值补齐。旧版本已删除
+ * enableScreenSvg 时，按 enableLoadScreenShot 的当前值一次性补回，保持可见行为。
  */
 
 /** @param {import("../services/settings-service.js").SettingsService} settings */
 export async function normalizeScreenshotSetting(settings) {
     return settings.update((draft) => {
-        if (!Object.prototype.hasOwnProperty.call(draft, "enableScreenSvg")) return;
-        const legacy = draft.enableScreenSvg;
-        const current = draft.enableLoadScreenShot;
-        const master = (legacy === "no" || current === "no") ? "no" : (current ?? "yes");
-        draft.enableLoadScreenShot = master;
-        delete draft.enableScreenSvg;
+        if (!Object.prototype.hasOwnProperty.call(draft, "enableLoadScreenShot")) draft.enableLoadScreenShot = "yes";
+        if (!Object.prototype.hasOwnProperty.call(draft, "enableScreenSvg")) draft.enableScreenSvg = draft.enableLoadScreenShot ?? "yes";
     });
 }

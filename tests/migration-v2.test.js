@@ -8,7 +8,7 @@ const repoRoot = join(import.meta.dirname, "..");
 
 function loadMigration() {
     const constants = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), start = constants.indexOf("function normalizeCarNum"), end = constants.indexOf("function assertPageInfoContract", start), state = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), migration = readTestFile(join(repoRoot, "src/core/migration.js"), "utf8"), context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", CURRENT_DATA_VERSION: 2, Date, Object, Array, Map, Set, JSON, utils: { getNowStr: () => "2026-08-22" } });
-    vm.runInContext(`${constants.slice(start, end)}\n${state}\n${migration}; globalThis.api = { run: runDataMigrations, validate: validatePortableData };`, context);
+    vm.runInContext(`${constants.slice(start, end)}\n${state}\n${migration}; globalThis.api = { run: runDataMigrations, repair: repairNewVideoTombstones, validate: validatePortableData };`, context);
     return context.api;
 }
 
@@ -52,5 +52,23 @@ describe("data migration v2", () => {
         expect(() => validate({ data_version: 2, activity_log: [] })).toThrow("activity_log 必须为对象");
         expect(() => validate({ data_version: 3, car_list: [] })).toThrow("数据来自更新版本");
         expect(validate({ data_version: 2, car_list: [], new_video_decisions: {} })).toBe(2);
+    });
+
+    it("migrates only tombstones with committed new-video removal evidence", async () => {
+        const { repair } = loadMigration();
+        const { storage, data } = fakeStorage(2, {
+            car_list: [
+                { carNum: "ABC-1", url: "", names: "", status: "", stateFlags: { favorite: false, downloaded: false, watched: false, blocked: false } },
+                { carNum: "ABC-2", url: "", names: "", status: "", stateFlags: { favorite: false, downloaded: false, watched: false, blocked: false } },
+            ],
+            new_video_decisions: {},
+            activity_log: { entries: [{ id: "remove-1", type: "new-video-remove", commitState: "committed", createdAt: "2026-08-22T00:00:00.000Z", changes: [{ carNum: "ABC-1", undoState: "pending" }] }] },
+        });
+        await expect(repair(storage)).resolves.toEqual(["ABC-1"]);
+        expect(data.get("car_list")).toHaveLength(1);
+        expect(data.get("car_list")[0].carNum).toBe("ABC-2");
+        expect(data.get("new_video_decisions")["ABC-1"]).toMatchObject({ action: "dismissed" });
+        await expect(repair(storage)).resolves.toEqual([]);
+        expect(data.get("car_list")).toHaveLength(1);
     });
 });

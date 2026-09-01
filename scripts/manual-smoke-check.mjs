@@ -23,6 +23,13 @@ export const REQUIRED_MANUAL_SMOKE_CHECKS = Object.freeze([
     "detail.viewerAboveLayer",
     "backup.loadingAboveSettings",
     "cloud.123.confirmClose",
+    "install.fresh",
+    "upgrade.v641ToV650",
+    "backup.crossInstallRestore",
+    "newVideo.dismissNoPollution",
+    "review.defaultEnabled",
+    "settings.screenshotIndependent",
+    "cache.clearForcesNetwork",
 ]);
 
 /** Placeholder version strings that can never count as a real human-verified environment. */

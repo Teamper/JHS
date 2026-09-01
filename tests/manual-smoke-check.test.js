@@ -64,6 +64,13 @@ describe("manual Tampermonkey smoke gate", () => {
             "detail.viewerAboveLayer",
             "backup.loadingAboveSettings",
             "cloud.123.confirmClose",
+            "install.fresh",
+            "upgrade.v641ToV650",
+            "backup.crossInstallRestore",
+            "newVideo.dismissNoPollution",
+            "review.defaultEnabled",
+            "settings.screenshotIndependent",
+            "cache.clearForcesNetwork",
         ]));
         const record = createRecord();
         record.checks["fc2.autopagePage2"] = false;

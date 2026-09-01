@@ -71,9 +71,9 @@ describe("migration write ownership", () => {
         expect(bootstrap).not.toContain("saveSetting({ ...settings");
     });
 
-    it("runtime screenshot migration deletes the legacy key atomically and never replace()s", () => {
+    it("runtime screenshot migration uses one atomic update and never replace()s", () => {
         expect(migration).toContain("settings.update");
-        expect(migration).toContain("delete draft.enableScreenSvg");
+        expect(migration).toContain("draft.enableScreenSvg");
         expect(migration).not.toContain("settings.replace");
     });
 

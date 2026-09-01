@@ -15,13 +15,15 @@ export function registerDefaultSettings(registry) {
     /** @param {string} key @param {string} owner @param {string} label @param {Record<string, any>} [extra] */
     const toggle = (key, owner, label, extra = {}) => registry.register({ key, owner, label, ...boolean, defaultValue: extra.defaultValue ?? yes, ...extra });
 
-    // ---- Screenshot（长缩略图，唯一总开关） ----
+    // ---- Screenshot（列表按钮与详情自动加载独立开关） ----
+    toggle("enableScreenSvg", "ScreenshotFeature", "列表长缩略图", {
+        description: "在列表卡片上显示长缩略图按钮；手动点击仍遵守截图来源白名单。",
+        surfaces: ["full"], defaultValue: yes,
+    });
     toggle("enableLoadScreenShot", "ScreenshotFeature", "长缩略图", {
-        description: "在详情页图片区加载长缩略图。关闭后列表长缩略图按钮、详情截图与截图来源请求全部停止。",
+        description: "在详情页与 FC2 页面自动加载长缩略图及对应截图来源请求。",
         surfaces: ["full", "quick"],
     });
-    // 6.5 兼容项：旧设置不再参与 UI，仅保留 descriptor 供迁移读取。
-    toggle("enableScreenSvg", "ScreenshotFeature", "长缩略图（旧）", { surfaces: [], defaultValue: yes });
 
     // ---- Preview（总开关 + DMM 增强子开关） ----
     toggle("enablePreviewVideo", "PreviewVideoFeature", "预览视频", {
@@ -65,6 +67,10 @@ export function registerDefaultSettings(registry) {
     });
 
     // ---- 详情 ----
+    toggle("enableLoadReview", "ReviewFeature", "评论", {
+        description: "在详情页与 FC2 页面加载评论；显式关闭 no 时保持关闭。",
+        surfaces: ["full", "quick"],
+    });
     toggle("enableLoadOtherSite", "OtherSiteFeature", "外部站点", {
         description: "在详情页提供第三方站点入口。",
         surfaces: ["full", "quick"],

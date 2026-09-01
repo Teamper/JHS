@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+## [6.5.0](../../compare/v6.4.1...v6.5.0) - 2026-09-01
+
 ### Fixed
 
+- RC 收口修复备份与状态数据边界：WebDAV 新备份改用跨安装 portable key，凭证仍使用安装级密钥并兼容旧密文；NewVideo 手动移除改写为 `dismissed` 决策，不再污染 `car_list`，旧空墓碑仅按已提交且未撤销的移除活动证据幂等迁移；评论缺省开启，列表截图按钮与详情/FC2 自动加载恢复为独立开关；公共 HTTP 缓存增加 IndexedDB L2，清理第三方缓存时同步清除 L1/L2，冲突事务先归档 SHA-256 诊断证据再释放 journal。
 - 修复全量审计确认的榜单、弹窗、并发与设置回归：Top250 在自有榜单页恢复挂载，即使宿主页面缺少“猜你喜歡/猜你喜欢”标签也会拦截原生会员榜单路由；Top250 筛选栏恢复到列表上方，封面渲染优先使用接口明确返回的 `thumb_url`，并在 `cover_url` 缺失时安全回退，同时把 API 的 `/rhe951l4q/` 代理媒体路径还原到公开 CDN，避免图片请求静默失败。新片工作区使用独立弹窗内悬停预览，表格弹窗保持尾行与分页可达；熔断改为按逻辑请求统计且忽略普通 4xx，多标签状态写入、迁移、导入和缓存更新增加互斥与失效处理。历史跨页全选、瀑布流失败收敛、延迟创建的命令栏按钮、设置子面板与关键词重试、外部请求超时和凭证编码等路径同步修复，并为关键熔断与榜单场景补充回归测试。
 - 修复移动端 FAB 遮挡页面末尾交互控件、离线成功确认“已下载”后因状态刷新使触发按钮脱离 DOM、旧布尔设置不兼容、无 `window.opener`、父子 frame 脚本上下文隔离或资源子弹层所有权错误而无法关闭详情页，以及翻译结果仅使用页面内存缓存导致跨刷新重复请求、首次翻译误走高延迟 GM 传输的问题；翻译现在优先使用原生 `fetch` 并在受限环境自动回退 GM 请求。统一 JHS Layer 弹窗的语义层级，确保详情页图片查看器显示在普通弹窗之上，并让备份、导入、快照等 loading 反馈始终覆盖设置弹窗。Browser smoke 现在按平台维护 Chromium 视觉基线，并以更接近真实 Layui 的 fixture 校验尺寸与层级。
 - 补齐原生翻译超时回退、聚合缓存迁移与设置页完整清理，避免受限网络长期等待和逐标题 IndexedDB 访问；离线确认后的状态写入与详情关闭分别反馈失败。外部图片及视频地址改由 DOM 属性设置，Loading 增加状态语义和减少动态效果支持，Visual gate 只运行实际维护基线的项目并在浏览器缺失时快速失败。
@@ -19,8 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - 修复悬停预览图层级高于详情弹窗的问题：ImageHoverPreview 默认层级从 tooltip 档（9999999999，实际被浏览器钳制到 2147483647，高于所有 JHS 弹窗）调整为新令牌 `--jhs-z-hover-preview`（介于宿主顶栏与 modal 之间），打开 FC2 详情或影片详情弹窗的瞬间预览图不再叠在弹窗之上，弹窗打开期间悬停预览始终被弹窗覆盖；tooltip 档保留给需要覆盖弹窗的原生提示。热播页浏览器测试新增“悬停预览层级必须低于 FC2 详情对话框”的门禁断言。
 - 热播浏览器测试补充“日/周/月榜周期切换”回归门禁：harness 的 rankings mock 支持按 period 返回不同片单，断言周期参数贯穿页面 URL → rankings 请求 query → 卡片渲染与激活标签，防止后续路由重构再次拍平榜单周期。
 - 热播/Top250 自有榜单页的排序改为页内状态：初始固定“默认”（榜单原始顺序），不再跟随全局排序设置；页内选择“评价人数/时间”只对当前页面生效并即时重排（评分补全后按需二次排序），不写回全局 `sortMethod`，普通列表页与移动端 FAB 在自有榜单页上同步遵循页内覆盖。
-
-## [6.5.0](../../compare/v6.4.1...v6.5.0) - 2026-08-25
 
 ### Changed
 
@@ -50,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - DMM 预览、备份文件操作和设置诊断面板进入真实 strict checkJs，移除遮蔽生产实现的同名声明文件；生产源码类型覆盖率提升至 89.2%，最低覆盖门禁同步上调至 89%。
 - PluginManager 与 BasePlugin 的真实运行时实现进入 strict checkJs，移除宽泛的同名声明文件，并显式约束插件注册、启动时序、错误诊断、宿主信息读取与共享图标状态；生产源码类型覆盖率提升至 89.8%。
 - UI primitive 与 JhsSelect 的真实实现进入 strict checkJs，移除同名宽泛声明文件并明确动态容器、原生 Select、可访问性 Observer 和事件边界；生产源码类型覆盖率提升至 90.3%，最低覆盖门禁同步上调至 90%。
-- RC 发布门禁新增 Tampermonkey 人工 Smoke 记录校验；从 6.5.0 起必须记录实际 Edge/Chrome、Tampermonkey、六项真实页面检查和精确 UserScript SHA256，缺失或产物不匹配会阻止发布。
+- RC 发布门禁新增 Tampermonkey 人工 Smoke 记录校验；从 6.5.0 起必须记录实际 Edge/Chrome、Tampermonkey、全部强制 Smoke 检查和精确 UserScript SHA256，缺失或产物不匹配会阻止发布。
 
 ### Fixed
 

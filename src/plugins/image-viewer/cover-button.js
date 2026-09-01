@@ -56,7 +56,7 @@ export class CoverButtonPlugin extends BasePlugin {
                 }
             }
             // 长缩略图与卡片按钮开关即时重建工具箱，不保留死按钮。
-            if (names.some((name) => [ "enableLoadScreenShot", "enableVideoSvg", "enableHandleSvg", "enableSiteSvg", "enableCopySvg" ].includes(name))) void this.enableSvgBtn();
+            if (names.some((name) => [ "enableScreenSvg", "enableVideoSvg", "enableHandleSvg", "enableSiteSvg", "enableCopySvg" ].includes(name))) void this.enableSvgBtn();
         };
         // 6.5：listener 只注册一次，避免 ON→OFF→ON 循环累积；重新开启只重建按钮，不再递归 handle()。
         if (!this._settingsListenerBound) {
@@ -116,7 +116,7 @@ export class CoverButtonPlugin extends BasePlugin {
     }
     /** @param {JQueryHandle | Element | null} [items] */
     async enableSvgBtn(items = null) {
-        const e = this.getRuntimeService("settings").snapshot(), {enableLoadScreenShot: t = _, enableVideoSvg: n = _, enablePreviewVideo: q = _, enableHandleSvg: a = _, enableSiteSvg: i = _, enableCopySvg: s = _} = e;
+        const e = this.getRuntimeService("settings").snapshot(), {enableScreenSvg: t = _, enableVideoSvg: n = _, enablePreviewVideo: q = _, enableHandleSvg: a = _, enableSiteSvg: i = _, enableCopySvg: s = _} = e;
         const scope = items ? $(items) : $(document);
         // videoSvg 是 DMM-only 入口：Preview 总开关与 DMM 子开关都必须 ON，否则不显示（不留死按钮）。
         [ { selector: ".screenSvg", enabled: t === _ && Boolean(this.getOptionalDependency("ScreenShotPlugin")) ? _ : "no" }, { selector: ".videoSvg", enabled: n === _ && canUseCardPreview(e) ? _ : "no" }, { selector: ".handleSvg", enabled: a }, { selector: ".siteSvg", enabled: i }, { selector: ".copySvg", enabled: s } ].forEach((({selector: e, enabled: t}) => {
@@ -171,7 +171,7 @@ export class CoverButtonPlugin extends BasePlugin {
                 i = i.replace("FC2-", "");
                 const screenshot = this.getOptionalDependency("ScreenShotPlugin");
                 if (!screenshot) throw new Error("剧照功能已禁用");
-                const s = await screenshot.getScreenshot(i);
+                const s = await screenshot.getScreenshot(i, { allowWhenDisabled: true });
                 n.close(), (/** @type {any} */ (globalThis)).showImageViewer(s);
             } catch (a) {
                 clog.error("图片预览出错:", a), show.error("图片预览出错:" + a);

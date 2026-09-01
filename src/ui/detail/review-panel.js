@@ -22,9 +22,9 @@ export class ReviewPanel {
         if (options.ownedSection) options.ownedSection.find('[data-jhs-section-actions="reviews"]').first().append(toggle); else panel.append(header);
         panel.append('<div class="jhs-review-list jhs-review-container"></div>', '<div class="jhs-panel-footer jhs-review-footer"></div>');
         target.append(panel); this.bindFilter(panel);
-        const enabled = (this.settings.snapshot().enableLoadReview ?? "no") === "yes";
+        const enabled = (this.settings.snapshot().enableLoadReview ?? "yes") === "yes";
         this.updateToggle(toggle, enabled);
-        const writeExpanded = createLatestSettingWriter({ settings: this.settings, key: "enableLoadReview", fallback: "no", apply: (value) => {
+        const writeExpanded = createLatestSettingWriter({ settings: this.settings, key: "enableLoadReview", fallback: "yes", apply: (value) => {
             const next = value === "yes";
             this.updateToggle(toggle, next);
             panel.find(".jhs-review-container, .jhs-review-footer").toggle(next);

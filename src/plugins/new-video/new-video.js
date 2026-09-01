@@ -152,7 +152,7 @@ export class NewVideoPlugin extends BasePlugin {
     isDecisionHidden(carNum) {
         const decision = this.nvDecisionsCache[normalizeCarNum(carNum)];
         if (!decision) return !1;
-        return "ignored" === decision.action || "snoozed" === decision.action && (!decision.until || Date.parse(decision.until) > Date.now());
+        return [ "ignored", "dismissed" ].includes(decision.action) || "snoozed" === decision.action && (!decision.until || Date.parse(decision.until) > Date.now());
     }
     async getPendingNewVideoTotal() {
         const e = await storageManager.getCarMap(), keys = new Set;
@@ -189,7 +189,7 @@ export class NewVideoPlugin extends BasePlugin {
                         <input id="nvSearch" class="jhs-field jhs-is-hidden" type="search" placeholder="搜索番号、标题或演员" aria-label="搜索新作品">
                         <select id="nvCategoryFilter" class="jhs-select-source jhs-is-hidden" aria-label="新作品类别"><option value="all" selected>所有类别</option><option value="uncensored">无码</option><option value="censored">有码</option><option value="unknown">未知</option><option value="vr">VR</option></select>
                         <select id="nvStateFilter" class="jhs-select-source jhs-is-hidden" aria-label="作品状态"><option value="all">所有状态</option><option value="pending" selected>待处理</option><option value="favorite">已收藏</option><option value="downloaded">已下载</option><option value="watched">已观看</option><option value="blocked">已屏蔽</option></select>
-                        <select id="nvDecisionFilter" class="jhs-select-source jhs-is-hidden" aria-label="新作决策"><option value="pending" selected>待处理</option><option value="ignored">已忽略</option><option value="snoozed">已暂缓</option><option value="all">所有决策</option></select>
+                         <select id="nvDecisionFilter" class="jhs-select-source jhs-is-hidden" aria-label="新作决策"><option value="pending" selected>待处理</option><option value="ignored">已忽略</option><option value="snoozed">已暂缓</option><option value="dismissed">已移除</option><option value="all">所有决策</option></select>
                         <select id="paramSortBy" class="jhs-select-source" aria-label="演员排序">
                             <option value="default" selected>默认排序</option><optgroup label="发行时间"><option value="lastPublishTime_desc">发行时间 新→旧</option><option value="lastPublishTime_asc">发行时间 旧→新</option></optgroup><optgroup label="检测时间"><option value="lastCheckTime_desc">检测时间 新→旧</option><option value="lastCheckTime_asc">检测时间 旧→新</option></optgroup><optgroup label="新作品数"><option value="newVideoCount_desc">新作品数 多→少</option><option value="newVideoCount_asc">新作品数 少→多</option></optgroup>
                         </select>
@@ -559,7 +559,7 @@ export class NewVideoPlugin extends BasePlugin {
                 c += `<div class="nv-card__title" title="${e}">${e}</div>`;
                 c += `<div class="nv-card__actress" title="${escapeHtml(n.actressName)}">${escapeHtml(n.actressName)}</div>`;
                 n.publishTime && (c += `<div class="nv-card__date">${escapeHtml(String(n.publishTime))}</div>`);
-                n.decisionState && "pending" !== n.decisionState && (c += `<span class="jhs-badge jhs-badge--neutral">${"ignored" === n.decisionState ? "已忽略" : "已暂缓"}</span>`), c += `</div></a></div>`;
+                n.decisionState && "pending" !== n.decisionState && (c += `<span class="jhs-badge jhs-badge--neutral">${"ignored" === n.decisionState ? "已忽略" : "dismissed" === n.decisionState ? "已移除" : "已暂缓"}</span>`), c += `</div></a></div>`;
             }
             c += "</div>";
             if (o > 1) {

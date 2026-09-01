@@ -197,7 +197,7 @@ describe("detail car number propagation", () => {
         const settings = { snapshot: () => ({ enableLoadScreenShot: "yes" }) };
         const { Plugin } = loadScreenshotPlugin({ screenshot: { resolve, isEnabled: () => true }, settings, scope: { id: "detail" } });
         await expect(new Plugin().getScreenshot("IPZZ-479")).resolves.toBe("https://img.javstore.net/preview.jpg");
-        expect(resolve).toHaveBeenCalledWith({ carNum: "IPZZ-479" }, { scope: { id: "detail" }, settings: { enableLoadScreenShot: "yes" } });
+        expect(resolve).toHaveBeenCalledWith({ carNum: "IPZZ-479" }, { scope: { id: "detail" }, settings: { enableLoadScreenShot: "yes" }, allowWhenDisabled: false });
     });
 
     it("normalizes a legacy JavStore URL again at the image rendering boundary", () => {

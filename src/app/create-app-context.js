@@ -48,9 +48,9 @@ export function createAppContext(runtime) {
     const dialogPort = new LayerDialogAdapter(runtime.layer);
     const stylePort = new BrowserStyleAdapter();
     const urlPolicy = new ExternalUrlPolicy({ localOrigins: runtime.localOrigins });
-    const cache = new CacheService({ diagnostics });
     const navigation = new NavigationService(navigationPort);
     const storage = new StorageService(storagePort);
+    const cache = new CacheService({ diagnostics, storage });
     const dialog = new DialogService(dialogPort);
     const styles = new StyleRegistry(stylePort);
     const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache });

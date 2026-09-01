@@ -1,5 +1,6 @@
 import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
+import { webcrypto } from "node:crypto";
 import { join } from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
@@ -9,7 +10,7 @@ const repoRoot = join(import.meta.dirname, "..");
 function loadStateService() {
     const constants = readTestFile(join(repoRoot, "src/core/constants.js"), "utf8"), normalizeStart = constants.indexOf("function normalizeCarNum"), normalizeEnd = constants.indexOf("function assertPageInfoContract", normalizeStart);
     const model = readTestFile(join(repoRoot, "src/core/state-model.js"), "utf8"), service = readTestFile(join(repoRoot, "src/core/state-service.js"), "utf8"), serviceEnd = service.indexOf("function attachStateServiceCompatibility");
-    const context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON, Math, window: { location: { href: "https://javdb.example/v/1" } }, crypto: { randomUUID: vi.fn().mockImplementation((() => `id-${Math.random()}`)) }, utils: { getNowStr: () => "2026-08-22 12:00:00" }, clog: { warn: vi.fn(), error: vi.fn(), log: vi.fn() }, show: { info: vi.fn(), error: vi.fn(), ok: vi.fn() } });
+    const context = vm.createContext({ d: "filter", h: "favorite", g: "hasDown", p: "hasWatch", Date, Object, Array, Map, Set, JSON, Math, TextEncoder, Uint8Array, window: { location: { href: "https://javdb.example/v/1" } }, crypto: { subtle: webcrypto.subtle, randomUUID: vi.fn().mockImplementation((() => `id-${Math.random()}`)) }, utils: { getNowStr: () => "2026-08-22 12:00:00" }, clog: { warn: vi.fn(), error: vi.fn(), log: vi.fn() }, show: { info: vi.fn(), error: vi.fn(), ok: vi.fn() } });
     vm.runInContext(`${constants.slice(normalizeStart, normalizeEnd)}\n${model}\n${service.slice(0, serviceEnd)}; globalThis.StateServiceClass = StateService;`, context);
     return context.StateServiceClass;
 }
@@ -82,7 +83,7 @@ describe("StateService durable transactions", () => {
         expect(data.has("mutation_journal")).toBe(false);
     });
 
-    it("rolls a committed journal forward and retains a conflicting journal", async () => {
+    it("rolls a committed journal forward and archives a conflicting journal", async () => {
         const before = { carList: [], actresses: [], decisions: {}, activity: { entries: [] } }, after = { carList: [{ carNum: "ABC-1" }], actresses: [], decisions: {}, activity: { entries: [] } };
         const committed = createHarness({ car_list: before.carList, favorite_actresses: [], new_video_decisions: {}, activity_log: { entries: [{ id: "tx", commitState: "committed", createdAt: "2026-08-22" }] }, mutation_journal: { id: "tx", before, after } });
         await committed.service.recoverPendingTransaction();
@@ -93,6 +94,40 @@ describe("StateService durable transactions", () => {
         await expect(conflict.service.recoverPendingTransaction()).resolves.toBe(true);
         expect(conflict.data.get("car_list")).toEqual([{ carNum: "OTHER" }]);
         expect(conflict.data.has("mutation_journal")).toBe(false);
+        expect(conflict.data.get("mutation_journal_conflicts")).toHaveLength(1);
+        expect(conflict.data.get("mutation_journal_conflicts")[0].currentStateHash).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it("dismisses new videos without creating car-list pollution and can undo", async () => {
+        const { service, data } = createHarness({ car_list: [], favorite_actresses: [{ starId: "a", newVideoList: ["ABC-1"] }], new_video_decisions: {} });
+        const result = await service.removeFromNewVideoList("ABC-1");
+        expect(data.get("car_list")).toEqual([]);
+        expect(data.get("new_video_decisions")["ABC-1"]).toMatchObject({ action: "dismissed", until: null });
+        expect(data.get("favorite_actresses")[0].newVideoList).toEqual([]);
+        await service.undoTransaction(result.transactionId);
+        expect(data.get("car_list")).toEqual([]);
+        expect(data.get("new_video_decisions")).toEqual({});
+        expect(data.get("favorite_actresses")[0].newVideoList).toEqual(["ABC-1"]);
+    });
+
+    it("retains the active journal when conflict evidence cannot be archived", async () => {
+        const before = { carList: [], actresses: [], decisions: {}, activity: { entries: [] } }, after = { carList: [{ carNum: "ABC-1" }], actresses: [], decisions: {}, activity: { entries: [] } };
+        const conflict = createHarness({ car_list: [{ carNum: "OTHER" }], favorite_actresses: [], new_video_decisions: {}, activity_log: { entries: [] }, mutation_journal: { id: "tx", before, after } });
+        conflict.storage.forage.setItem.mockImplementation(async (key, value) => {
+            if (key === "mutation_journal_conflicts") throw new Error("archive unavailable");
+            conflict.data.set(key, value);
+        });
+        await expect(conflict.service.recoverPendingTransaction()).rejects.toThrow("archive unavailable");
+        expect(conflict.data.has("mutation_journal")).toBe(true);
+    });
+
+    it("caps conflict archives at twenty entries", async () => {
+        const before = { carList: [], actresses: [], decisions: {}, activity: { entries: [] } }, after = { carList: [{ carNum: "ABC-1" }], actresses: [], decisions: {}, activity: { entries: [] } };
+        const archives = Array.from({ length: 20 }, ((_, index) => ({ id: index })));
+        const conflict = createHarness({ car_list: [{ carNum: "OTHER" }], favorite_actresses: [], new_video_decisions: {}, activity_log: { entries: [] }, mutation_journal_conflicts: archives, mutation_journal: { id: "tx", before, after } });
+        await conflict.service.recoverPendingTransaction();
+        expect(conflict.data.get("mutation_journal_conflicts")).toHaveLength(20);
+        expect(conflict.data.get("mutation_journal_conflicts")[0].id).toBe(1);
     });
 
     it("records partial undo and restores only unchanged state/new-video effects", async () => {

@@ -1,7 +1,9 @@
 // @ts-check
 
 import { CURRENT_DATA_VERSION, normalizeCarNum } from "./constants.js";
-import { mergeCanonicalCarRecords } from "./state-model.js";
+import { hasAnyState, mergeCanonicalCarRecords, normalizeStateFlags } from "./state-model.js";
+
+/** @typedef {Record<string, any>} MigrationRecord */
 
 export const PORTABLE_DATA_KEYS = Object.freeze([ "car_list", "filter_keyword_title", "filter_keyword_review", "setting", "blacklist", "blacklist_car_list", "favorite_actresses", "highlighted_tags", "activity_log", "offline_history", "new_video_decisions" ]);
 export const IMPORTABLE_DATA_KEYS = Object.freeze([ ...PORTABLE_DATA_KEYS, "third_party_ttl_cache" ]);
@@ -72,6 +74,42 @@ async function migrateStateFlags(/** @type {any} */ storage) {
     warnings.length && await storage.forage.setItem("data_health_warnings", warnings);
 }
 
+/**
+ * 将 6.5 之前为阻止新作重复出现而写入的空墓碑转换为 dismissed 决策。
+ * 只有存在未撤销的 new-video-remove 活动证据时才处理，未知空记录保持不动。
+ * @param {any} storage
+ */
+export async function repairNewVideoTombstones(storage) {
+    const [cars, decisions, activity] = await Promise.all([
+        storage.forage.getItem(storage.car_list_key),
+        storage.forage.getItem("new_video_decisions"),
+        storage.forage.getItem("activity_log"),
+    ]);
+    const list = Array.isArray(cars) ? cars : [], nextDecisions = { ...(decisions || {}) }, entries = Array.isArray(activity?.entries) ? activity.entries : [];
+    const evidence = new Map;
+    entries.filter((/** @param {MigrationRecord} entry */ entry => "new-video-remove" === entry?.type && "committed" === entry?.commitState)).forEach((/** @param {MigrationRecord} entry */ entry => (Array.isArray(entry.changes) ? entry.changes : []).forEach((/** @param {MigrationRecord} change */ change => {
+        const key = normalizeCarNum(change?.carNum);
+        key && evidence.set(key, entry);
+    }))));
+    /** @type {string[]} */
+    const migrated = [];
+    /** @type {MigrationRecord[]} */
+    const remaining = [];
+    list.forEach((/** @param {MigrationRecord} record */ record => {
+        const key = normalizeCarNum(record?.carNum), entry = evidence.get(key), emptyRecord = record && !String(record.url || "").trim() && !String(record.names || "").trim() && !String(record.status || "").trim() && !hasAnyState(normalizeStateFlags(record.stateFlags));
+        if (!key || !entry || !emptyRecord) return void remaining.push(record);
+        const change = (Array.isArray(entry.changes) ? entry.changes : []).find((/** @param {MigrationRecord} item */ item => normalizeCarNum(item?.carNum) === key));
+        if ("reverted" === change?.undoState) return void remaining.push(record);
+        const timestamp = record.updateDate || record.createDate || entry.createdAt || new Date().toISOString(), previous = nextDecisions[key];
+        nextDecisions[key] = { action: "dismissed", until: null, createdAt: previous?.createdAt || timestamp, updatedAt: previous?.updatedAt || timestamp };
+        migrated.push(key);
+    }));
+    if (!migrated.length) return [];
+    await storage.forage.setItem("new_video_decisions", nextDecisions);
+    await storage._setItemAndInvalidate(storage.car_list_key, remaining);
+    return migrated;
+}
+
 /** @type {Readonly<Record<number, (storage: any) => Promise<void>>>} */
 const DATA_MIGRATIONS = Object.freeze({ 1: migrateLegacyStorage, 2: migrateStateFlags });
 
@@ -86,6 +124,7 @@ export async function runDataMigrations(/** @type {any} */ storage) {
             if (!migration) throw new Error(`缺少数据迁移: ${target - 1} → ${target}`);
             await migration(storage), await storage.setDataVersion(target), version = target;
         }
+        await repairNewVideoTombstones(storage);
         return version;
     };
     return locks?.request ? locks.request("jhs_data_migration", run) : run();

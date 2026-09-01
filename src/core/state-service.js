@@ -20,6 +20,15 @@ function stableStateValue(value) {
     return `{${Object.keys(value).sort().map((key => `${JSON.stringify(key)}:${stableStateValue(value[key])}`)).join(",")}}`;
 }
 
+/** @param {any} value @returns {Promise<string>} */
+async function hashState(value) {
+    const subtle = globalThis.crypto?.subtle;
+    if (!subtle) throw new Error("当前环境不支持状态冲突归档哈希");
+    const bytes = new TextEncoder().encode(stableStateValue(value));
+    const digest = await subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest), (byte => byte.toString(16).padStart(2, "0"))).join("");
+}
+
 /** @param {StateRecord} value @param {string} path @returns {any} */
 function getStatePath(value, path) {
     return path.split(".").reduce(((current, key) => current?.[key]), value);
@@ -48,10 +57,10 @@ function captureNewVideoEffect(actresses, decisions, carNum) {
     return { actressItems, decision: cloneStateValue(decisions[key] || null) };
 }
 
-/** @param {StateRecord[]} actresses @param {StateRecord} decisions @param {unknown} carNum @param {StateRecord} effect */
-function canRestoreNewVideoEffect(actresses, decisions, carNum, effect) {
+/** @param {StateRecord[]} actresses @param {StateRecord} decisions @param {unknown} carNum @param {StateRecord} effect @param {StateRecord | null} [expectedDecision] */
+function canRestoreNewVideoEffect(actresses, decisions, carNum, effect, expectedDecision = null) {
     const key = /** @type {string} */ (normalizeCarNum(carNum));
-    if (stableStateValue(decisions[key] || null) !== stableStateValue(null)) return !1;
+    if (stableStateValue(decisions[key] || null) !== stableStateValue(expectedDecision)) return !1;
     return (/** @type {StateRecord[]} */ (effect.actressItems)).every((entry => !(actresses[entry.actressIndex]?.newVideoList || []).some((/** @type {any} */ item) => normalizeCarNum("string" == typeof item ? item : item.carNum) === key)));
 }
 
@@ -170,10 +179,21 @@ export class StateService {
                 return value !== stableStateValue(journal.before[key]) && value !== stableStateValue(journal.after[key]);
             }));
             if (conflict) {
-                // 冲突说明当前数据已被其他（可能已提交的）写入更新：回滚会破坏新数据，抛错会让整个脚本无法启动。
-                // 保守策略：保留当前数据，丢弃陈旧事务日志，并提示用户。
-                clog.warn("[状态] 检测到未完成状态事务且数据已变化，保留当前数据并丢弃陈旧事务日志"), show.info("检测到未完成的状态事务，已保留当前数据；如数据异常请在设置中运行数据健康检查");
-                await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+                // 冲突时保留业务数据，但先把证据归档，避免静默丢失诊断线索。
+                const archive = {
+                    journal: cloneStateValue(journal),
+                    detectedAt: new Date().toISOString(),
+                    currentStateHash: await hashState({ carList: current.carList, actresses: current.actresses, decisions: current.decisions }),
+                };
+                try {
+                    const archives = await this.storage.forage.getItem("mutation_journal_conflicts") || [];
+                    archives.push(archive), archives.length > 20 && archives.splice(0, archives.length - 20);
+                    await this.storage.forage.setItem("mutation_journal_conflicts", archives), await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+                } catch (archiveError) {
+                    clog.error("[状态] 冲突事务归档失败，保留原事务日志", archiveError);
+                    throw archiveError;
+                }
+                clog.warn("[状态] 检测到未完成状态事务且数据已变化，已归档证据并保留当前数据"), show.info("检测到未完成的状态事务，已保留当前数据并归档冲突证据");
                 return;
             }
             await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.before.carList), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.before.actresses), await this.storage.forage.setItem("new_video_decisions", journal.before.decisions);
@@ -248,9 +268,9 @@ export class StateService {
             return { changed: changes.map((/** @type {StateRecord} */ change) => change.carNum), transactionId: activity.id };
         });
     }
-    /** @param {string | string[]} carNums @param {"ignored" | "snoozed" | null} action @param {string | null} [until] */
+    /** @param {string | string[]} carNums @param {"ignored" | "snoozed" | "dismissed" | null} action @param {string | null} [until] */
     async setNewVideoDecision(carNums, action, until = null) {
-        if (![ "ignored", "snoozed", null ].includes(action)) throw new TypeError("无效新作决策");
+        if (![ "ignored", "snoozed", "dismissed", null ].includes(action)) throw new TypeError("无效新作决策");
         const keys = uniqueStateKeys((Array.isArray(carNums) ? carNums : [ carNums ]).map(normalizeCarNum));
         return this._withLock(async () => {
             await this._recoverWithoutLock();
@@ -275,19 +295,16 @@ export class StateService {
             await this._recoverWithoutLock();
             const domains = await this._readDomains(), changed = keys.filter((carNum => {
                 const effect = captureNewVideoEffect(domains.actresses, domains.decisions, carNum);
-                return effect.actressItems.length > 0 || !!effect.decision;
+                return effect.actressItems.length > 0 || !!effect.decision && "dismissed" !== effect.decision.action;
             }));
             if (!changed.length) return { changed: [], transactionId: null };
-            // 墓碑：被移除的新片若没有任何状态记录，落一条空状态 carList 记录。
-            // 否则下一轮检测（!carMap.has）会把它当 fresh 重新加回，“浏览后移除”形同虚设
-            const existingCarNums = new Set(domains.carList.map((/** @param {StateRecord} record */ record => record.carNum))), now = utils.getNowStr();
-            const tombstones = changed.filter((carNum => !existingCarNums.has(carNum))).map((carNum => {
-                /** @type {StateRecord} */
-                const record = { carNum, url: "", names: "", createDate: now, stateFlags: createEmptyStateFlags() };
-                return record.updateDate = now, syncLegacyStatus(record), record;
+            const now = new Date().toISOString(), decisions = { ...domains.decisions }, changes = changed.map((carNum => {
+                const newVideoEffect = captureNewVideoEffect(domains.actresses, domains.decisions, carNum), afterDecision = { action: "dismissed", until: null, createdAt: newVideoEffect.decision?.createdAt || now, updatedAt: now };
+                decisions[carNum] = afterDecision;
+                return { carNum, operation: "new-video-remove", fields: [ "newVideoList", "decision" ], before: null, after: { removed: !0, reason }, newVideoEffect, afterDecision, undoState: "pending" };
             }));
-            const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, changed), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-remove", commitState: "pending", changes: changed.map((carNum => ({ carNum, operation: "new-video-remove", fields: [ "newVideoList", "decision" ], before: null, after: { removed: !0, reason }, newVideoEffect: captureNewVideoEffect(domains.actresses, domains.decisions, carNum), undoState: "pending" }))), createdAt: new Date().toISOString(), undoAttemptedAt: null };
-            await this._commit(domains, { carList: [ ...domains.carList, ...tombstones ], ...effects }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+            const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, changed), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-remove", commitState: "pending", changes, createdAt: now, undoAttemptedAt: null };
+            await this._commit(domains, { carList: domains.carList, actresses: effects.actresses, decisions }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
             return { changed, transactionId: activity.id };
         });
     }
@@ -305,7 +322,7 @@ export class StateService {
             for (const change of transaction.changes) {
                 if ("reverted" === change.undoState) continue;
                 const current = carMap.get(change.carNum);
-                if (change.newVideoEffect && !canRestoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect)) {
+                if (change.newVideoEffect && !canRestoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect, change.afterDecision ?? null)) {
                     change.undoState = "conflict", conflicts.push(change.carNum); continue;
                 }
                 if ("delete" === change.operation) {
