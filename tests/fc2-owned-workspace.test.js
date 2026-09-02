@@ -5,7 +5,8 @@ import vm from "node:vm";
 import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
-import { createJavDbAdapter } from "../src/integrations/javdb/manifest.js";
+import javdbManifest, { createJavDbAdapter } from "../src/integrations/javdb/manifest.js";
+import { createIntegrationRequestFacade } from "../src/app/integration-registry.js";
 import { HttpService } from "../src/services/http-service.js";
 import { ExternalUrlPolicy } from "../src/services/external-url-policy.js";
 import { CacheService } from "../src/services/cache-service.js";
@@ -41,7 +42,7 @@ function loadResolver(responseFactory) {
         return { status: 200, data: await get(options), finalUrl: options.url };
     } };
     const http = new HttpService(port, new ExternalUrlPolicy(), { cache: new CacheService() });
-    const adapter = createJavDbAdapter(http, () => "signature");
+    const adapter = createJavDbAdapter(createIntegrationRequestFacade(http, javdbManifest), () => "signature");
     return { resolveId: carNum => adapter.resolveMovie({ carNum }).then(value => value?.movieId || null), get, requests };
 }
 

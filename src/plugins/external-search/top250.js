@@ -103,7 +103,8 @@ export class Top250Plugin extends BasePlugin {
         }));
     }
     async checkLogin(/** @type {MouseEvent | null} */ e, /** @type {URLSearchParams} */ t) {
-        if (!hasStoredEncryptedCredential(me)) return show.error("该类别依赖移动端接口，请先完成登录"), void this.openLoginDialog();
+        const credential = this.getRuntimeService("credential") || /** @type {any} */ (globalThis).credentialService;
+        if (!(credential?.get ? await credential.get(me) : hasStoredEncryptedCredential(me))) return show.error("该类别依赖移动端接口，请先完成登录"), void this.openLoginDialog();
         let n = "all", a = "", i = t.get("t") || "";
         /^y\d+$/.test(i) ? (n = "year", a = i.substring(1)) : "" !== i && (n = "video_type",
         a = i);
@@ -129,7 +130,8 @@ export class Top250Plugin extends BasePlugin {
                     let a = loading();
                     account.login("javdb", { username: e, password: n }, { scope: await getScope() }).then((async (/** @type {any} */ result) => {
                         if (!result.success) show.error(result.message); else {
-                            await storeEncryptedCredential(me, result.token), show.ok("登录成功"), dialog.close(t), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
+                            const credential = this.getRuntimeService("credential") || /** @type {any} */ (globalThis).credentialService;
+                            credential?.set ? await credential.set(me, result.token) : await storeEncryptedCredential(me, result.token), show.ok("登录成功"), dialog.close(t), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
                         }
                     })).catch(((/** @type {unknown} */ error) => {
                         clog.error("登录异常:", error), show.error(error instanceof Error ? error.message : String(error));

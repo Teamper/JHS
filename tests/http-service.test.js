@@ -78,6 +78,23 @@ describe("HTTP, URL and settings contracts", () => {
         await expect(limited.request(options)).rejects.toMatchObject({ code: "RATE_LIMITED", retryable: true, details: { status: 429 } });
     });
 
+    it("accepts declared WebDAV statuses and counts one breaker failure per logical request", async () => {
+        const policy = new ExternalUrlPolicy(), options = { providerId: "webdav", url: "https://dav.example.test/JHS", urlPolicy: { trustClass: "builtin-public", hosts: ["dav.example.test"] }, cacheScope: "none", retryCount: 2, retryDelayMs: 0, circuitThreshold: 3 };
+        const accepted = new HttpService({ request: async () => ({ status: 405, finalUrl: options.url }) }, policy);
+        await expect(accepted.request({ ...options, acceptableStatuses: [405, 409] })).resolves.toMatchObject({ status: 405 });
+        expect(accepted.getCircuitBreakerStatus()["dav.example.test"]).toMatchObject({ failCount: 0, state: "closed" });
+
+        const request = vi.fn(async () => ({ status: 503, finalUrl: options.url }));
+        const failed = new HttpService({ request }, policy);
+        await expect(failed.request(options)).rejects.toMatchObject({ code: "NETWORK_ERROR" });
+        expect(request).toHaveBeenCalledTimes(3);
+        expect(failed.getCircuitBreakerStatus()["dav.example.test"]).toMatchObject({ failCount: 1, state: "closed" });
+
+        const limited = new HttpService({ request: async () => ({ status: 429, finalUrl: options.url }) }, policy);
+        await expect(limited.request({ ...options, retryCount: 0 })).rejects.toMatchObject({ code: "RATE_LIMITED" });
+        expect(limited.getCircuitBreakerStatus()["dav.example.test"]).toMatchObject({ failCount: 0, state: "closed" });
+    });
+
     it("retries transient failures and records domain health", async () => {
         const request = vi.fn()
             .mockRejectedValueOnce(new DOMException("timeout", "TimeoutError"))

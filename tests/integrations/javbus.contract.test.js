@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import jquery from "jquery";
 import { describe, expect, it, vi } from "vitest";
-import { createJavBusAdapter } from "../../src/integrations/javbus/manifest.js";
+import manifest, { createJavBusAdapter } from "../../src/integrations/javbus/manifest.js";
+import { createIntegrationRequestFacade } from "../../src/app/integration-registry.js";
 import { parseJavBusMovieDetail, parseJavBusMovieRef } from "../../src/integrations/javbus/parser.js";
 import { CacheService } from "../../src/services/cache-service.js";
 import { ExternalUrlPolicy } from "../../src/services/external-url-policy.js";
@@ -27,7 +28,7 @@ describe("javbus normalized contract", () => {
     it("deduplicates concurrent detail and image consumers", async () => {
         const request = vi.fn(async options => ({ status: 200, data: fixture, finalUrl: options.url }));
         const http = new HttpService({ request }, new ExternalUrlPolicy(), { cache: new CacheService() });
-        const adapter = createJavBusAdapter(http);
+        const adapter = createJavBusAdapter(createIntegrationRequestFacade(http, manifest));
         const [detail, images] = await Promise.all([
             adapter.getDetail({ carNum: "ABC-123" }), adapter.getImages({ carNum: "ABC-123" }),
         ]);

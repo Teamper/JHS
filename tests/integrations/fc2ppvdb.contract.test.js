@@ -23,5 +23,5 @@ it("loads details through the declared HTTP boundary", async () => {
     const adapter = createFc2PpvDbAdapter({ request });
     await expect(adapter.getDetail({ carNum: "FC2-12345" })).resolves.toMatchObject({ carNum: "FC2-12345" });
     await expect(adapter.getPeople({ carNum: "FC2-12345" })).resolves.toMatchObject({ actors: [{ name: "Actress A" }] });
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ providerId: "fc2ppvdb", cacheScope: "public" }), undefined);
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ providerId: "fc2ppvdb", capability: "movie.detail" }), undefined);
 });

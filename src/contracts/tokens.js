@@ -23,6 +23,7 @@ export const SERVICE = Object.freeze({
     http: createToken("service", "http"),
     storage: createToken("service", "storage"),
     webdav: createToken("service", "webdav"),
+    credential: createToken("service", "credential"),
     dialog: createToken("service", "dialog"),
     settings: createToken("service", "settings"),
     movie: createToken("service", "movie"),

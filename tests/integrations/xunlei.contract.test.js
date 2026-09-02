@@ -18,8 +18,8 @@ it("searches and downloads through explicit URL trust boundaries", async () => {
     const adapter = createXunleiAdapter({ request });
     const [item] = await adapter.search({ carNum: "ABC-123" }, { scope: "scope" });
     await expect(adapter.download(item, { scope: "scope" })).resolves.toContain("text");
-    expect(request.mock.calls[0][0]).toMatchObject({ cacheScope: "public", urlPolicy: { trustClass: "builtin-public", hosts: ["xunlei.com"] } });
-    expect(request.mock.calls[1][0]).toMatchObject({ cacheScope: "public", urlPolicy: { trustClass: "custom-public" } });
+    expect(request.mock.calls[0][0]).toMatchObject({ capability: "subtitle.search", urlPolicy: { trustClass: "builtin-public", hosts: ["xunlei.com"] } });
+    expect(request.mock.calls[1][0]).toMatchObject({ capability: "subtitle.download", urlPolicy: { trustClass: "custom-public" } });
 });
 
 it("routes subtitle operations through the selected Integration", async () => {

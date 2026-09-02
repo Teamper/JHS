@@ -54,8 +54,8 @@ it("normalizes JavDB host actor movies and uncollect mutations", async () => {
     const adapter = createJavDbAdapter({ request }, () => "signature", hostAdapter);
     await expect(adapter.listActorMovies({ actorId: "a" }, { scope: "scope" })).resolves.toHaveLength(1);
     await expect(adapter.uncollectActor({ actorId: "a", csrfToken: "csrf" }, { scope: "scope" })).resolves.toEqual({ success: true });
-    expect(request.mock.calls[0][0]).toMatchObject({ cacheScope: "public", urlPolicy: { trustClass: "builtin-public", hosts: ["javdb.com"], expectedOrigin: "https://javdb.com" } });
-    expect(request.mock.calls[1][0]).toMatchObject({ method: "POST", cacheScope: "none", headers: { "Content-Type": "application/json", "x-csrf-token": "csrf" } });
+    expect(request.mock.calls[0][0]).toMatchObject({ capability: "actor.movies", urlPolicy: { trustClass: "builtin-public", hosts: ["javdb.com"], expectedOrigin: "https://javdb.com" } });
+    expect(request.mock.calls[1][0]).toMatchObject({ method: "POST", capability: "actor.uncollect", headers: { "Content-Type": "application/json", "x-csrf-token": "csrf" } });
 });
 
 it("normalizes JavDB host actor collections with absolute URLs", () => {
@@ -72,7 +72,7 @@ it("normalizes JavDB login without caching credentials", async () => {
     const request = vi.fn(async options => ({ data: { success: 1, data: { token: "token" } }, finalUrl: options.url }));
     const adapter = createJavDbAdapter({ request }, () => "signature");
     await expect(adapter.login({ username: "user", password: "secret" }, { scope: "scope" })).resolves.toEqual({ success: true, token: "token", message: "" });
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", cacheScope: "none", urlPolicy: { trustClass: "builtin-public", hosts: ["jdforrepam.com"] } }), "scope");
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ method: "POST", capability: "account.login", urlPolicy: { trustClass: "builtin-public", hosts: ["jdforrepam.com"] } }), "scope");
     const login = vi.fn(async () => ({ success: true, token: "token" }));
     const service = new AccountService({ list: () => [{ id: "javdb" }], getAdapter: () => ({ login }) });
     await expect(service.login("javdb", { username: "user", password: "secret" })).resolves.toMatchObject({ success: true });
@@ -85,7 +85,7 @@ it("normalizes JavDB review and related API contracts through HttpService", asyn
     const adapter = createJavDbAdapter({ request }, () => "signature");
     await expect(adapter.listReviews({ movieId: "m1" })).resolves.toEqual([{ author: "A", content: "text", score: 4, createdAt: "2026-01-01", likes: 2 }]);
     await expect(adapter.listRelated({ movieId: "m1" })).resolves.toEqual([{ id: "7", name: "List", movieCount: 3, collectionCount: 2, viewCount: 9, createdAt: "2026-01-02" }]);
-    expect(request.mock.calls[0][0]).toMatchObject({ providerId: "javdb", cacheScope: "public", urlPolicy: { trustClass: "builtin-public", hosts: ["jdforrepam.com"] } });
+    expect(request.mock.calls[0][0]).toMatchObject({ providerId: "javdb", capability: "movie.reviews", urlPolicy: { trustClass: "builtin-public", hosts: ["jdforrepam.com"] } });
 });
 
 it("resolves an exact normalized movie reference through the JavDB search contract", async () => {

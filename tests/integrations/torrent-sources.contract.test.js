@@ -16,7 +16,7 @@ it("normalizes HTML and JSON torrent source contracts", () => {
 it("routes canonical and overridden sources through the correct URL policy", async () => {
     const request = vi.fn(async options => ({ data: fixture, finalUrl: options.url })), adapter = createTorrentSourcesAdapter({ request });
     await adapter.search("u9a9", "ABC-123", { scope: "scope" });
-    expect(request.mock.calls[0][0]).toMatchObject({ providerId: "magnet:u9a9", cacheScope: "public", urlPolicy: { trustClass: "builtin-public", hosts: ["u9a9.com"], expectedOrigin: "https://u9a9.com" } });
+    expect(request.mock.calls[0][0]).toMatchObject({ providerId: "magnet:u9a9", capability: "magnet.search", urlPolicy: { trustClass: "builtin-public", hosts: ["u9a9.com"], expectedOrigin: "https://u9a9.com" } });
     await adapter.search("u9a9", "ABC-123", { baseUrl: "https://mirror.example.com", scope: "scope" });
     expect(request.mock.calls[1][0].urlPolicy).toEqual({ trustClass: "custom-public", expectedOrigin: "https://mirror.example.com" });
     expect(adapter.targetUrl("btsow", "ABC 123")).toBe("https://btsow.lol/search/ABC%20123");

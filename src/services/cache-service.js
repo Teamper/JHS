@@ -11,7 +11,7 @@ async function digestKey(value) {
 export class CacheService {
     /** @param {{namespaceVersion?: number, diagnostics?: import("./diagnostics-service.js").DiagnosticsService, storage?: import("./storage-service.js").StorageService}} [options] */
     constructor(options = {}) {
-        this.namespaceVersion = options.namespaceVersion ?? 1;
+        this.namespaceVersion = options.namespaceVersion ?? 2;
         this.diagnostics = options.diagnostics ?? null;
         this.storage = options.storage ?? null;
         /** @type {Map<string, {value: unknown, expiresAt: number, negative: boolean}>} */
@@ -20,7 +20,8 @@ export class CacheService {
         this.sessionCaches = new Map();
         /** @type {Map<string, Promise<{hit: boolean, value: unknown, negative: boolean}>>} */
         this.publicReads = new Map();
-        this.publicGeneration = 0;
+        this.publicGenerations = new Map();
+        this.publicNamespaces = new Set(["default"]);
         this.publicWritesSincePrune = 0;
         this.pruneScheduled = false;
         this.pruneRunning = false;
@@ -28,7 +29,11 @@ export class CacheService {
         this.prunePromise = null;
     }
 
-    get publicPrefix() { return `jhs_http_public_cache:v${this.namespaceVersion}:`; }
+    get publicGeneration() { return this.publicGenerations.get("default") || 0; }
+    /** @param {string} namespace */
+    generation(namespace) { return this.publicGenerations.get(namespace) || 0; }
+    get publicPrefix() { return this._publicPrefix("default"); }
+    _publicPrefix(namespace = "default") { return `jhs_http_public_cache:v${this.namespaceVersion}:${encodeURIComponent(namespace)}:`; }
 
     /** @param {string} scope @param {string} sessionScopeId */
     storeFor(scope, sessionScopeId = "") {
@@ -42,9 +47,12 @@ export class CacheService {
         return null;
     }
 
-    /** @param {string} key @param {{scope: string, sessionScopeId?: string}} policy */
-    async get(key, policy) {
-        const store = this.storeFor(policy.scope, policy.sessionScopeId), cacheKey = `${this.namespaceVersion}:${key}`, now = Date.now(), storage = this.storage;
+    /** @param {any} namespace @param {any} key @param {any} policy */
+    async get(namespace, key, policy) {
+        if (arguments.length === 2) policy = key, key = namespace, namespace = "default";
+        namespace = String(namespace || "default");
+        this.publicNamespaces.add(namespace);
+        const store = this.storeFor(policy.scope, policy.sessionScopeId), cacheKey = `${namespace}:${this.namespaceVersion}:${key}`, now = Date.now(), storage = this.storage;
         const memoryEntry = store?.get(cacheKey);
         if (memoryEntry && memoryEntry.expiresAt > now) {
             this.diagnostics?.recordCache(true);
@@ -55,11 +63,12 @@ export class CacheService {
             this.diagnostics?.recordCache(false);
             return { hit: false, value: undefined, negative: false };
         }
-        const pending = this.publicReads.get(key);
+        const readKey = `${namespace}:${key}`;
+        const pending = this.publicReads.get(readKey);
         if (pending) return pending;
-        const generation = this.publicGeneration;
+        const generation = this.generation(namespace);
         const read = (async () => {
-            const persistedKey = this.publicPrefix + await digestKey(key);
+            const persistedKey = this._publicPrefix(namespace) + await digestKey(key);
             let entry;
             try { entry = await storage.get(persistedKey); } catch {
                 this.diagnostics?.recordCache(false);
@@ -70,7 +79,7 @@ export class CacheService {
                 this.diagnostics?.recordCache(false);
                 return { hit: false, value: undefined, negative: false };
             }
-            if (generation !== this.publicGeneration) {
+            if (generation !== this.generation(namespace)) {
                 this.diagnostics?.recordCache(false);
                 return { hit: false, value: undefined, negative: false };
             }
@@ -79,30 +88,33 @@ export class CacheService {
             this.diagnostics?.recordCache(true);
             return { hit: true, value: normalized.value, negative: normalized.negative };
         })().finally(() => {
-            if (this.publicReads.get(key) === read) this.publicReads.delete(key);
+            if (this.publicReads.get(readKey) === read) this.publicReads.delete(readKey);
         });
-        this.publicReads.set(key, read);
+        this.publicReads.set(readKey, read);
         return read;
     }
 
-    /** @param {string} key @param {unknown} value @param {{scope: string, sessionScopeId?: string, ttlMs: number, negative?: boolean, generation?: number}} policy */
-    async set(key, value, policy) {
+    /** @param {any} namespace @param {any} key @param {any} value @param {any} policy */
+    async set(namespace, key, value, policy) {
+        if (arguments.length === 3) policy = value, value = key, key = namespace, namespace = "default";
+        namespace = String(namespace || "default");
+        this.publicNamespaces.add(namespace);
         const ttlMs = Math.min(PUBLIC_CACHE_MAX_AGE_MS, Math.max(0, Number(policy.ttlMs) || 0));
         if (!ttlMs) return;
-        if (policy.scope === "public" && policy.generation != null && policy.generation !== this.publicGeneration) return;
-        const entry = { value, expiresAt: Date.now() + ttlMs, negative: policy.negative ?? false }, store = this.storeFor(policy.scope, policy.sessionScopeId), cacheKey = `${this.namespaceVersion}:${key}`;
+        if (policy.scope === "public" && policy.generation != null && policy.generation !== this.generation(namespace)) return;
+        const entry = { value, expiresAt: Date.now() + ttlMs, negative: policy.negative ?? false }, store = this.storeFor(policy.scope, policy.sessionScopeId), cacheKey = `${namespace}:${this.namespaceVersion}:${key}`;
         const storage = this.storage;
         if (policy.scope !== "public" || !storage) {
             store?.set(cacheKey, entry);
             return;
         }
-        if (policy.generation != null && policy.generation !== this.publicGeneration) return;
-        const persistedKey = this.publicPrefix + await digestKey(key);
-        if (policy.generation != null && policy.generation !== this.publicGeneration) return;
+        if (policy.generation != null && policy.generation !== this.generation(namespace)) return;
+        const persistedKey = this._publicPrefix(namespace) + await digestKey(key);
+        if (policy.generation != null && policy.generation !== this.generation(namespace)) return;
         try {
-            if (policy.generation != null && policy.generation !== this.publicGeneration) return;
+            if (policy.generation != null && policy.generation !== this.generation(namespace)) return;
             await storage.set(persistedKey, { version: this.namespaceVersion, ...entry, lastUsed: Date.now() });
-            if (policy.generation != null && policy.generation !== this.publicGeneration) {
+            if (policy.generation != null && policy.generation !== this.generation(namespace)) {
                 await storage.remove(persistedKey).catch(() => {});
                 return;
             }
@@ -145,7 +157,7 @@ export class CacheService {
         let keys;
         try { keys = await this.storage.keys(); } catch { return; }
         const now = Date.now(), candidates = [];
-        for (const key of keys.filter((/** @param {string} item */ item => item.startsWith(this.publicPrefix)))) {
+        for (const key of /** @type {string[]} */ (keys).filter((/** @param {string} item */ item) => item.startsWith("jhs_http_public_cache:v"))) {
             const entry = await this.storage.get(key).catch(() => null);
             if (!entry || entry.version !== this.namespaceVersion || !Number.isFinite(entry.expiresAt) || entry.expiresAt <= now) {
                 await this.storage.remove(key).catch(() => {});
@@ -155,25 +167,39 @@ export class CacheService {
         }
         if (candidates.length > PUBLIC_CACHE_MAX_ENTRIES) {
             candidates.sort((left, right) => left.lastUsed - right.lastUsed);
-            for (const item of candidates.slice(0, candidates.length - PUBLIC_CACHE_MAX_ENTRIES)) await this.storage.remove(item.key).catch(() => {});
+            for (const item of candidates.slice(0, candidates.length - PUBLIC_CACHE_MAX_ENTRIES)) await this.storage.remove(/** @type {any} */ (item).key).catch(() => {});
         }
     }
 
     /** Clear the public L1 and persisted L2 namespace. */
-    async clearPublic() {
-        this.publicGeneration++;
-        this.publicCache.clear();
-        this.publicReads.clear();
+    /** @param {string} namespace */
+    async clearNamespace(namespace) {
+        namespace = String(namespace || "default");
+        this.publicGenerations.set(namespace, this.generation(namespace) + 1);
+        for (const key of this.publicCache.keys()) if (key.startsWith(`${namespace}:`)) this.publicCache.delete(key);
+        for (const key of this.publicReads.keys()) if (key.startsWith(`${namespace}:`)) this.publicReads.delete(key);
         await this.waitForPrune();
         const storage = this.storage;
         if (!storage) return;
         let keys;
         try { keys = await storage.keys(); } catch { return; }
-        await Promise.all(keys.filter((/** @param {string} key */ key => key.startsWith(this.publicPrefix))).map((/** @param {string} key */ key => storage.remove(key).catch(() => {}))));
+        await Promise.all(keys.filter((/** @param {string} key */ key => key.startsWith(this._publicPrefix(namespace)))).map((/** @param {string} key */ key => storage.remove(key).catch(() => {}))));
     }
 
-    async invalidateNamespace() {
-        await this.clearPublic();
-        this.sessionCaches.clear();
+    async clearAll() {
+        const namespaces = new Set(this.publicNamespaces);
+        for (const namespace of namespaces) await this.clearNamespace(namespace);
+        this.publicCache.clear(), this.publicReads.clear(), this.sessionCaches.clear();
+        // Also remove persisted namespaces that were not touched in this tab.
+        // This keeps the settings "clear all" action a true boundary across
+        // tabs and avoids leaving stale v2 entries behind.
+        if (this.storage) {
+            try {
+                const storage = this.storage, prefix = `jhs_http_public_cache:v${this.namespaceVersion}:`, keys = await storage.keys();
+                await Promise.all(keys.filter((/** @type {string} */ key) => key.startsWith(prefix)).map((/** @type {string} */ key) => storage.remove(key).catch(() => {})));
+            } catch { /* cache cleanup remains best effort */ }
+        }
     }
+    async clearPublic() { return this.clearAll(); }
+    async invalidateNamespace() { return this.clearAll(); }
 }

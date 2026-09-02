@@ -58,11 +58,11 @@ function assertSuccess(payload, action) {
 
 /** @param {{request: (options: Record<string, any>, scope?: any) => Promise<any>}} http @param {{now?: () => Date, nonce?: () => number, getTimeout?: () => number}} [runtime] */
 export function createPan123Adapter(http, runtime = {}) {
-    /** @param {string} path @param {unknown} body @param {string} token @param {import("../../core/lifecycle-scope.js").LifecycleScope | undefined} scope */
-    const request = async (path, body, token, scope) => {
+    /** @param {string} path @param {unknown} body @param {string} token @param {import("../../core/lifecycle-scope.js").LifecycleScope | undefined} scope @param {string} capability */
+    const request = async (path, body, token, scope, capability) => {
         const url = signPan123Url(`https://yun.123pan.com${path}`, { now: runtime.now?.(), nonce: runtime.nonce?.() });
         return http.request({
-            providerId: "pan123", method: "POST", url, body: JSON.stringify(body), responseType: "json", cacheScope: "none", timeout: runtime.getTimeout?.() ?? 5000,
+            providerId: "pan123", capability, method: "POST", url, body: JSON.stringify(body), responseType: "json", timeout: runtime.getTimeout?.() ?? 5000,
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "App-Version": "3", platform: "web", Origin: "https://yun.123pan.com", Referer: "https://yun.123pan.com/" },
             urlPolicy: URL_POLICY,
         }, scope);
@@ -74,7 +74,7 @@ export function createPan123Adapter(http, runtime = {}) {
         async resolve(resource, context = {}) {
             const { token, scope } = context;
             if (!token) throw new JhsError("AUTH_REQUIRED", "尚未同步 123 授权", { source: "pan123" });
-            const response = await request("/b/api/v2/offline_download/task/resolve", { urls: resource }, token, scope), payload = assertSuccess(parsePayload(response.data), "解析"), item = payload.data?.list?.[0];
+            const response = await request("/b/api/v2/offline_download/task/resolve", { urls: resource }, token, scope, "offline.resolve"), payload = assertSuccess(parsePayload(response.data), "解析"), item = payload.data?.list?.[0];
             if (!item?.id || !Array.isArray(item.files)) throw new JhsError("INVALID_RESPONSE", "123 云盘解析结果缺少资源文件", { source: "pan123" });
             return /** @type {Pan123ResolvedResource} */ (Object.freeze({ id: item.id, files: Object.freeze(item.files.map((/** @type {any} */ file) => Object.freeze({ id: file.id, size: Number(file.size || 0) }))) }));
         },
@@ -84,7 +84,7 @@ export function createPan123Adapter(http, runtime = {}) {
             if (!token) throw new JhsError("AUTH_REQUIRED", "尚未同步 123 授权", { source: "pan123" });
             if (!resource?.id || !Array.isArray(resource.files) || resource.files.length === 0) throw new JhsError("INVALID_RESPONSE", "没有可建立离线的文件", { source: "pan123" });
             const fileIds = resource.files.map((file) => file.id), totalSize = resource.files.reduce((sum, file) => sum + Number(file.size || 0), 0);
-            const response = await request("/b/api/v2/offline_download/task/submit", { resource_list: [{ resource_id: resource.id, select_file_id: fileIds }] }, token, scope);
+            const response = await request("/b/api/v2/offline_download/task/submit", { resource_list: [{ resource_id: resource.id, select_file_id: fileIds }] }, token, scope, "offline.submit");
             assertSuccess(parsePayload(response.data), "提交");
             return Object.freeze({ fileCount: fileIds.length, totalSize });
         },

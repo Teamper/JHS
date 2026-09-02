@@ -17,5 +17,5 @@ it("normalizes Wikipedia actress information", () => {
 it("loads Wikipedia through the declared HTTP boundary", async () => {
     const request = vi.fn(async options => ({ data: fixture, finalUrl: options.url }));
     await expect(createWikipediaAdapter({ request }).lookup("三上悠亜")).resolves.toEqual(expect.objectContaining({ age: "33岁" }));
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ providerId: "wikipedia", cacheScope: "public" }), undefined);
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ providerId: "wikipedia", capability: "person.actress-info" }), undefined);
 });

@@ -19,11 +19,11 @@ function normalizeBaseOrigin(configured) {
 /** @param {{request: (options: Record<string, any>, scope?: any) => Promise<any>}} http @param {{snapshot: () => Record<string, any>} | null} [settings] */
 export function create123AvAdapter(http, settings = null) {
     const baseOrigin = () => normalizeBaseOrigin(settings?.snapshot().av123Url);
-    /** @param {string} url @param {any} scope */
-    const request = (url, scope) => {
+    /** @param {string} url @param {any} scope @param {string} capability */
+    const request = (url, scope, capability = "movie.detail") => {
         const origin = new URL(url).origin, isBuiltin = origin === DEFAULT_ORIGIN;
         return http.request({
-            providerId: "av123", method: "GET", url, responseType: "text", cacheScope: "public", ttlMs: 604_800_000,
+            providerId: "av123", capability, method: "GET", url, responseType: "text",
             requestOptions: { cookiePartition: { topLevelSite: origin } },
             urlPolicy: isBuiltin ? { trustClass: "builtin-public", hosts: ["123av.com"], expectedOrigin: origin } : { trustClass: "custom-public", expectedOrigin: origin },
         }, scope);
@@ -50,7 +50,7 @@ export function create123AvAdapter(http, settings = null) {
             const urls = sourcePages.map((sourcePage) => keyword
                 ? `${baseOrigin()}/cn/search?keyword=${encodeURIComponent(keyword)}&page=${sourcePage}`
                 : `${baseOrigin()}/cn/makers/fc2?page=${sourcePage}`);
-            const responses = await Promise.all(urls.map((url) => request(url, options.scope)));
+            const responses = await Promise.all(urls.map((url) => request(url, options.scope, keyword ? "movie.search" : "movie.catalog")));
             const lists = responses.map((response, index) => parse123AvCards(response.data, response.finalUrl || urls[index]));
             const items = merge123AvCards(lists).map((item) => Object.freeze({
                 carNum: item.carNum, title: item.title, url: item.href,
@@ -67,7 +67,7 @@ export function create123AvAdapter(http, settings = null) {
             if (!carNum) return null;
             const url = this.searchUrl({ carNum });
             if (!url) return null;
-            const response = await request(url, options.scope);
+            const response = await request(url, options.scope, "movie.search");
             const match = parse123AvCards(response.data, response.finalUrl || url).find((item) => normalizeMovieCarNum(item.carNum) === carNum);
             return match ? defineMovieRef({ carNum, url: match.href, providerId: "av123" }) : null;
         },

@@ -1,9 +1,11 @@
 {
   "version": 1,
   "bundle": {
-    "baselineBytes": 1238500,
+    "baselineBytes": 1170844,
+    "referenceCommit": "4ea5536",
+    "referenceBytes": 1170844,
     "maximumGrowthRatio": 0.12,
-    "reason": "Reviewed v6.5 RC baseline including owned-ranking recovery and sorting; extended after the full audit remediation added cross-tab state locks and recovery, logical-request circuit accounting, bounded caches, dialog-safe hover previews and tables, resilient settings panels, history selection preservation, and late command-bar control collection"
+    "reason": "Pinned to the refactor/6.5@4ea5536 RC artifact; 6.5.0 keeps the 12% growth cap fixed"
   },
   "browserFixture": {
     "maximumInitialRequests": {

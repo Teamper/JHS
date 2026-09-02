@@ -72,11 +72,11 @@ export function createTorrentSourcesAdapter(http) {
             const origin = new URL(options.baseUrl || source.baseUrl).origin, overridden = new URL(origin).hostname !== source.domain;
             const urlPolicy = overridden ? { trustClass: "custom-public", expectedOrigin: origin } : { trustClass: "builtin-public", hosts: [source.domain], expectedOrigin: origin };
             if (source.id === "btsow") {
-                const response = await http.request({ providerId: "magnet:btsow", method: "POST", url: `${origin}/search`, body: JSON.stringify([{ search: keyword }, 50, 1]), headers: { "Content-Type": "application/json" }, responseType: "json", cacheScope: "none", urlPolicy }, options.scope);
+                const response = await http.request({ capability: "magnet.search", providerId: "magnet:btsow", method: "POST", url: `${origin}/search`, body: JSON.stringify([{ search: keyword }, 50, 1]), headers: { "Content-Type": "application/json" }, responseType: "json", urlPolicy }, options.scope);
                 return parseBtsowSource(response.data);
             }
             const url = `${origin}${source.searchPath(keyword)}`;
-            const response = await http.request({ providerId: `magnet:${source.id}`, method: "GET", url, responseType: "text", cacheScope: "public", ttlMs: 21_600_000, urlPolicy }, options.scope);
+            const response = await http.request({ capability: "magnet.search", providerId: `magnet:${source.id}`, method: "GET", url, responseType: "text", urlPolicy }, options.scope);
             return parseTorrentSource(response.data, keyword, source.id);
         },
     });

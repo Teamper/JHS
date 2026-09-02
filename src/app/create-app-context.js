@@ -27,6 +27,7 @@ import { AccountService } from "../services/account-service.js";
 import { SettingsService } from "../services/settings-service.js";
 import { StorageService } from "../services/storage-service.js";
 import { WebDavService } from "../services/webdav-service.js";
+import { CredentialService } from "../services/credential-service.js";
 import { StyleRegistry } from "../services/style-registry.js";
 import { CommandRegistry } from "./command-registry.js";
 import { DependencyContainer } from "./dependency-container.js";
@@ -37,14 +38,14 @@ import { SettingsRegistry } from "./settings-registry.js";
 import { registerDefaultSettings } from "./settings-catalog.js";
 import { LifecycleScope } from "../core/lifecycle-scope.js";
 
-/** @param {{gmRequest: (options: Record<string, any>) => any, gmGetValue: (key: string, fallback?: unknown) => unknown, gmSetValue: (key: string, value: unknown) => void, legacyHttp?: any, legacyStorage?: any, eventBus?: any, storageForage: any, localStorage: Storage, layer: any, stateService: any, hostAdapter?: any, hostAdapters?: {javdb?: any, javbus?: any}, disabled?: string[], site?: string, route?: string, localOrigins?: string[]}} runtime */
+/** @param {{gmRequest: (options: Record<string, any>) => any, gmGetValue: (key: string, fallback?: unknown) => unknown, gmSetValue: (key: string, value: unknown) => void, gmDeleteValue?: (key: string) => void, legacyHttp?: any, legacyStorage?: any, eventBus?: any, storageForage: any, localStorage: Storage, layer: any, stateService: any, hostAdapter?: any, hostAdapters?: {javdb?: any, javbus?: any}, disabled?: string[], site?: string, route?: string, localOrigins?: string[]}} runtime */
 export function createAppContext(runtime) {
     const diagnostics = new DiagnosticsService({ legacyHttp: runtime.legacyHttp });
     const rootScope = new LifecycleScope("app:root", { onChange: (snapshot) => diagnostics.updateScope(snapshot) });
     const container = new DependencyContainer(diagnostics);
     const navigationPort = new BrowserNavigationAdapter();
     const httpPort = new UserscriptHttpAdapter(runtime.gmRequest);
-    const storagePort = new IndexedDbStorageAdapter(runtime.storageForage, runtime.localStorage, runtime.gmGetValue, runtime.gmSetValue);
+    const storagePort = new IndexedDbStorageAdapter(runtime.storageForage, runtime.localStorage, runtime.gmGetValue, runtime.gmSetValue, runtime.gmDeleteValue);
     const dialogPort = new LayerDialogAdapter(runtime.layer);
     const stylePort = new BrowserStyleAdapter();
     const urlPolicy = new ExternalUrlPolicy({ localOrigins: runtime.localOrigins });
@@ -55,11 +56,12 @@ export function createAppContext(runtime) {
     const styles = new StyleRegistry(stylePort);
     const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache });
     diagnostics.setNetworkController(http);
-    const webdav = new WebDavService(http);
     const settings = new SettingsService(storage, { afterPersist: async (_snapshot, changedNames) => {
         runtime.legacyStorage?.invalidateSettingCache?.();
         await runtime.eventBus?.emit?.("settings-changed", { changedNames, source: "service" });
     } });
+    const credential = new CredentialService(storage, runtime.localStorage);
+    const webdav = new WebDavService(http, credential, settings);
     rootScope.listen(settings, "settings.changed", (/** @type {any} */ event) => {
         const names = /** @type {string[] | undefined} */ (event.detail?.names) ?? [];
         if (!names.includes("trustedLocalOrigins")) return;
@@ -106,6 +108,7 @@ export function createAppContext(runtime) {
         .register(PORT.dialog, dialogPort).register(PORT.style, stylePort)
         .register(SERVICE.diagnostics, diagnostics).register(SERVICE.urlPolicy, urlPolicy)
         .register(SERVICE.navigation, navigation).register(SERVICE.http, http).register(SERVICE.storage, storage).register(SERVICE.webdav, webdav)
+        .register(SERVICE.credential, credential)
         .register(SERVICE.dialog, dialog).register(SERVICE.settings, settings).register(SERVICE.cache, cache).register(SERVICE.profile, profile)
         .register(SERVICE.state, runtime.stateService)
         .register(SERVICE.movie, movie).register(SERVICE.actressInfo, actressInfo).register(SERVICE.imageSearch, imageSearch).register(SERVICE.review, review).register(SERVICE.related, related).register(SERVICE.magnet, magnet)
@@ -118,5 +121,5 @@ export function createAppContext(runtime) {
 
     const features = new FeatureRuntime({ container, commands, diagnostics, disabled: runtime.disabled, site: runtime.site, route: runtime.route });
     container.register(REGISTRY.feature, features);
-    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, dialog, styles, settings, cache, profile, state: runtime.stateService, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
+    return Object.freeze({ rootScope, container, ports: Object.freeze({ navigationPort, httpPort, storagePort, dialogPort, stylePort }), services: Object.freeze({ diagnostics, urlPolicy, navigation, http, storage, webdav, credential, dialog, styles, settings, cache, profile, state: runtime.stateService, movie, actressInfo, imageSearch, review, related, magnet, screenshot, translation, subtitle, account, offline }), registries: Object.freeze({ commands, providers, integrations, settings: settingsRegistry, features }) });
 }

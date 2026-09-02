@@ -5,6 +5,12 @@ import { decryptData } from "./credential-crypto.js";
 export const U = "https://jdforrepam.com/api";
 let signatureSecond = 0, signatureValue = "";
 const wantWatchStateCache = new Map();
+async function readJavDbToken() {
+    const runtime = /** @type {any} */ (globalThis);
+    if (runtime.credentialService?.get) return runtime.credentialService.get("jhs_appAuthorization");
+    const encrypted = localStorage.getItem("jhs_appAuthorization");
+    return encrypted ? decryptData(encrypted) : "";
+}
 
 /** @param {unknown} value @returns {Record<string, any>} */
 function asResponseRecord(value) {
@@ -22,7 +28,7 @@ export function O() {
 
 /** 将影片加入当前 JavDB 账号的“想看”，使用与移动端功能相同的登录凭据。 */
 export async function markJavDbWantWatch(/** @type {unknown} */ movieId) {
-    const id = String(movieId || "").trim(), encryptedToken = localStorage.getItem("jhs_appAuthorization"), token = encryptedToken ? await decryptData(encryptedToken) : "";
+    const id = String(movieId || "").trim(), token = await readJavDbToken();
     if (!token) {
         throw Object.assign(new Error("请先登录 JavDB 账号"), { code: "LOGIN_REQUIRED" });
     }
@@ -43,7 +49,8 @@ export async function markJavDbWantWatch(/** @type {unknown} */ movieId) {
     } catch (error) {
         const failure = asResponseRecord(error);
         if (401 === failure.status || "JWTVerificationError" === failure.action || /未登录|登录|unauthorized|jwt/i.test(failure.message || "")) {
-            localStorage.removeItem("jhs_appAuthorization");
+            const runtime = /** @type {any} */ (globalThis);
+            runtime.credentialService?.remove ? await runtime.credentialService.remove("jhs_appAuthorization") : localStorage.removeItem("jhs_appAuthorization");
             throw Object.assign(new Error("JavDB 登录已失效，请重新登录"), { code: "LOGIN_REQUIRED" });
         }
         throw error instanceof Error ? error : new Error(failure.message || "加入 JavDB 想看失败");
@@ -52,7 +59,7 @@ export async function markJavDbWantWatch(/** @type {unknown} */ movieId) {
 
 /** Reads the authenticated account's current want-watch state; null means not logged in. */
 export async function getJavDbWantWatchState(/** @type {unknown} */ movieId) {
-    const id = String(movieId || "").trim(), encryptedToken = localStorage.getItem("jhs_appAuthorization"), token = encryptedToken ? await decryptData(encryptedToken) : "";
+    const id = String(movieId || "").trim(), token = await readJavDbToken();
     if (!token) return null;
     if (!id) throw new Error("JavDB 影片 ID 无效");
     if (wantWatchStateCache.has(id)) return wantWatchStateCache.get(id);
@@ -103,7 +110,7 @@ export const V = async (/** @type {string} */ e) => {
     return (await gmHttp.get(n, null, a)).data.movies;
 }, q = async (/** @type {string} */ e = "all", /** @type {string} */ t = "", /** @type {number} */ n = 1, /** @type {number} */ a = 40) => {
     let i = `${U}/v1/movies/top?start_rank=1&type=${e}&type_value=${t}&ignore_watched=false&page=${n}&limit=${a}`;
-    const l = localStorage.getItem("jhs_appAuthorization"), c = l ? await decryptData(l) : "";
+    const c = await readJavDbToken();
     let s = {
         "user-agent": "Dart/3.5 (dart:io)",
         "accept-language": "zh-TW",

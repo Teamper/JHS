@@ -28,7 +28,7 @@ it("loads search and detail contracts through HttpService", async () => {
     const movieRef = await adapter.resolveMovie({ carNum: "FC2-123" });
     expect(movieRef).toMatchObject({ carNum: "FC2-123", providerId: "av123", url: "https://123av.com/cn/v/fc2-ppv-123" });
     await expect(adapter.getDetail(movieRef)).resolves.toMatchObject({ carNum: "FC2-123", title: "Detail title", releaseDate: "2026-01-02" });
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ providerId: "av123", cacheScope: "public", requestOptions: { cookiePartition: { topLevelSite: "https://123av.com" } } }), undefined);
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ providerId: "av123", capability: "movie.detail", requestOptions: { cookiePartition: { topLevelSite: "https://123av.com" } } }), undefined);
     vi.unstubAllGlobals();
 });
 

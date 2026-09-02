@@ -10,5 +10,5 @@ it("normalizes FC2 content sample images", () => expect(parseFc2ContentImages(fi
 it("loads FC2 content images through HttpService", async () => {
     const request = vi.fn(async options => ({ data: fixture, finalUrl: options.url }));
     await expect(createFc2ContentAdapter({ request }).getImages({ carNum: "FC2-123" })).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ providerId: "fc2content" })]));
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ providerId: "fc2content", cacheScope: "public" }), undefined);
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ providerId: "fc2content", capability: "movie.images" }), undefined);
 });

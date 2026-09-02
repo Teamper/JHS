@@ -4,7 +4,6 @@ import { C, _, r } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { parseNumberSetting } from "../../core/feature-helpers.js";
 import { applyImageMode } from "./setting-styles.js";
-import { decryptCredential, encryptCredential } from "../../core/credential-crypto.js";
 import { normalizeQuickFilterKey } from "../../features/list/list-filters.js";
 import { bindSettingRows } from "../../ui/settings/setting-control-renderer.js";
 
@@ -145,7 +144,11 @@ export async function loadSettingForm(dependencies, layerRoot = null) {
     root.find("#httpRetryCount").val(e.httpRetryCount || 3);
     root.find("#webDavUrl").val(e.webDavUrl || "");
     root.find("#webDavUsername").val(e.webDavUsername || "");
-    root.find("#webDavPassword").val(await decryptCredential(e.webDavPassword) || "");
+    const webdav = dependencies.webdav;
+    const profile = webdav?.getProfile ? await webdav.getProfile() : { url: e.webDavUrl, username: e.webDavUsername, password: "" };
+    root.find("#webDavUrl").val(profile.url || "");
+    root.find("#webDavUsername").val(profile.username || "");
+    root.find("#webDavPassword").val(profile.password || "");
     root.find("#enableTitleSelectFilter").prop("checked", !e.enableTitleSelectFilter || e.enableTitleSelectFilter === _);
     root.find("#enableFavoriteActresses").prop("checked", !e.enableFavoriteActresses || e.enableFavoriteActresses === _);
     root.find("#enableSaveActressCarInfo").prop("checked", !!e.enableSaveActressCarInfo && e.enableSaveActressCarInfo === _);
@@ -278,6 +281,14 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
         }
     }
 
+    const webdavDirty = !dirtyKeys || ["webDavUrl", "webDavUsername", "webDavPassword"].some((key) => dirtyKeys.has(key));
+    if (webdavDirty && dependencies.webdav?.saveProfile) {
+        await dependencies.webdav.saveProfile({
+            url: String(root.find("#webDavUrl").val() || "").trim(),
+            username: String(root.find("#webDavUsername").val() || ""),
+            password: String(root.find("#webDavPassword").val() || ""),
+        });
+    }
     const patch = await collectManualSettingPatch(root, dirtyKeys);
     await dependencies.settings.update((/** @type {Record<string, any>} */ draft) => {
         Object.assign(draft, patch);
@@ -382,7 +393,6 @@ async function collectManualSettingPatch(root, dirtyKeys = null) {
         clogMsgCount: () => root.find("#clogMsgCount").val(),
         webDavUrl: () => configuredUrl(root.find("#webDavUrl").val(), { allowLocalHttp: !0 }),
         webDavUsername: () => String(root.find("#webDavUsername").val() || ""),
-        webDavPassword: async () => encryptCredential(String(root.find("#webDavPassword").val() || "")),
         missAvUrl: () => configuredUrl(root.find("#missAvUrl").val()),
         jableUrl: () => configuredUrl(root.find("#jableUrl").val()),
         avgleUrl: () => configuredUrl(root.find("#avgleUrl").val()),
@@ -396,8 +406,8 @@ async function collectManualSettingPatch(root, dirtyKeys = null) {
         enableSaveActressCarInfo: () => root.find("#enableSaveActressCarInfo").is(":checked") ? _ : C,
     };
     const keys = dirtyKeys instanceof Set
-        ? MANUAL_FORM_SETTING_KEYS.filter((key) => dirtyKeys.has(key))
-        : MANUAL_FORM_SETTING_KEYS;
+        ? MANUAL_FORM_SETTING_KEYS.filter((key) => dirtyKeys.has(key)).filter((key) => !["webDavUrl", "webDavUsername", "webDavPassword"].includes(key))
+        : MANUAL_FORM_SETTING_KEYS.filter((key) => !["webDavUrl", "webDavUsername", "webDavPassword"].includes(key));
     const patch = /** @type {Record<string, unknown>} */ ({});
     for (const key of keys) {
         const getter = getters[key];

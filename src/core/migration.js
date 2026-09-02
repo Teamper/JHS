@@ -8,7 +8,7 @@ import { hasAnyState, mergeCanonicalCarRecords, normalizeStateFlags } from "./st
 export const PORTABLE_DATA_KEYS = Object.freeze([ "car_list", "filter_keyword_title", "filter_keyword_review", "setting", "blacklist", "blacklist_car_list", "favorite_actresses", "highlighted_tags", "activity_log", "offline_history", "new_video_decisions" ]);
 export const IMPORTABLE_DATA_KEYS = Object.freeze([ ...PORTABLE_DATA_KEYS, "third_party_ttl_cache" ]);
 /** Settings that are bound to this installation's local trust boundary. */
-export const LOCAL_ONLY_SETTING_KEYS = Object.freeze([ "trustedLocalOrigins" ]);
+export const LOCAL_ONLY_SETTING_KEYS = Object.freeze([ "trustedLocalOrigins", "webDavUrl", "webDavUsername", "webDavPassword" ]);
 /** Settings that contain installation-bound credentials and never belong in portable data. */
 export const CREDENTIAL_SETTING_KEYS = Object.freeze([ "webDavPassword" ]);
 const PORTABLE_ARRAY_KEYS = new Set([ "car_list", "filter_keyword_title", "filter_keyword_review", "blacklist", "blacklist_car_list", "favorite_actresses", "highlighted_tags", "offline_history" ]);
@@ -130,8 +130,14 @@ export async function repairNewVideoTombstones(storage) {
     return migrated;
 }
 
+async function migrateV3(/** @type {any} */ storage) {
+    await repairNewVideoTombstones(storage);
+    const keys = typeof storage.forage.keys === "function" ? await storage.forage.keys() : [];
+    for (const key of keys) if (String(key).startsWith("jhs_http_public_cache:v1:")) await storage.forage.removeItem(key);
+}
+
 /** @type {Readonly<Record<number, (storage: any) => Promise<void>>>} */
-const DATA_MIGRATIONS = Object.freeze({ 1: migrateLegacyStorage, 2: migrateStateFlags });
+const DATA_MIGRATIONS = Object.freeze({ 1: migrateLegacyStorage, 2: migrateStateFlags, 3: migrateV3 });
 
 export async function runDataMigrations(/** @type {any} */ storage) {
     // 迁移是“读版本→整表覆写→写版本”的多步过程，必须跨标签页互斥，防止双标签页同时执行互相丢数据
@@ -144,7 +150,6 @@ export async function runDataMigrations(/** @type {any} */ storage) {
             if (!migration) throw new Error(`缺少数据迁移: ${target - 1} → ${target}`);
             await migration(storage), await storage.setDataVersion(target), version = target;
         }
-        await repairNewVideoTombstones(storage);
         return version;
     };
     return locks?.request ? locks.request("jhs_data_migration", run) : run();

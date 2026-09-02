@@ -141,4 +141,17 @@ describe("StateService durable transactions", () => {
         const changes = data.get("activity_log").entries[0].changes;
         expect(changes.map(change => change.undoState)).toEqual(["reverted", "conflict"]);
     });
+
+    it("journals only domains actually changed by a conflicted undo", async () => {
+        const { service, data } = createHarness({ car_list: [{ carNum: "ABC-1", stateFlags: { downloaded: false }, status: "" }], favorite_actresses: [], new_video_decisions: {} });
+        const transaction = await service.patch("ABC-1", { downloaded: true });
+        data.get("car_list")[0].stateFlags.downloaded = false;
+        const journals = [];
+        service.storage.forage.setItem = vi.fn(async (key, value) => {
+            if (key === "mutation_journal") journals.push(value);
+            data.set(key, value);
+        });
+        await service.undoTransaction(transaction.transactionId);
+        expect(journals[0].touchedDomains).toEqual(["activity"]);
+    });
 });

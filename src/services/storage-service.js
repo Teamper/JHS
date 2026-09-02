@@ -22,4 +22,6 @@ export class StorageService {
     getValue(key, fallback) { return this.port.getValue(key, fallback); }
     /** @param {string} key @param {unknown} value */
     setValue(key, value) { return this.port.setValue(key, value); }
+    /** @param {string} key */
+    removeValue(key) { return this.port.removeValue(key); }
 }

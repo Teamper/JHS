@@ -19,11 +19,21 @@ export class FeatureRuntime {
         this.manifests = new Map();
         /** @type {Map<string, string>} */
         this.contributionOwners = new Map();
+        this.contributionManifests = new Map();
         /** @type {Map<string, Promise<Record<string, any>>>} */
         this.activations = new Map();
         /** @type {Map<string, LifecycleScope>} */
         this.contributionScopes = new Map();
         this.commands.setActivator((featureId) => this.activate(featureId).then(() => undefined));
+    }
+
+    /** @param {Array<Record<string, any>>} manifests */
+    setContributionManifests(manifests) { this.contributionManifests = new Map(manifests.map((item) => [item.id, item])); }
+
+    activeSurfaces() {
+        if (this.route === "list") return new Set(["global", "list", "list-page", "list-card"]);
+        if (this.route === "detail" || this.route === "owned-detail") return new Set(["global", "detail", "detail-page", this.route]);
+        return new Set(["global", this.route]);
     }
 
     /** @param {Record<string, any>} manifest */
@@ -58,6 +68,9 @@ export class FeatureRuntime {
         if (!manifest.contributes.includes(contributionId)) return false;
         if (manifest.kind !== "system" && this.disabled.has(manifest.id)) return false;
         if (manifest.kind === "system") return true;
+        const contribution = this.contributionManifests.get(contributionId);
+        if (contribution?.routes?.length && !contribution.routes.includes(this.route)) return false;
+        if (contribution?.surfaces?.length && !contribution.surfaces.some((/** @type {string} */ surface) => this.activeSurfaces().has(surface))) return false;
         return !this.disabled.has(contributionId) && !this.disabled.has(legacyPluginId);
     }
 

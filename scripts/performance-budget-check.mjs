@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const budget = JSON.parse(await readFile(path.join(rootDir, "performance-budget.json"), "utf8"));
 if (!budget.bundle?.reason) throw new Error("Bundle budget changes require a reason");
+if (budget.bundle.referenceCommit !== "4ea5536" || budget.bundle.referenceBytes !== 1170844 || budget.bundle.baselineBytes !== budget.bundle.referenceBytes) throw new Error("Bundle baseline must remain pinned to refactor/6.5@4ea5536");
 if (!budget.browserFixture?.startupBaselineReason) throw new Error("Fixture startup baseline changes require a reason");
 for (const label of Object.keys(budget.browserFixture.maximumInitialRequests || {})) {
     const baseline = budget.browserFixture.startupMedianMilliseconds?.[label];

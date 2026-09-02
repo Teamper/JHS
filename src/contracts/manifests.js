@@ -50,10 +50,12 @@ export function defineContribution(manifest) {
     requireNonEmptyString(manifest.featureId, "Contribution featureId");
     requireNonEmptyString(manifest.legacyPluginId, "Contribution legacyPluginId");
     requireUniqueStrings(manifest.sites, "sites");
+    requireUniqueStrings(manifest.routes, "routes");
+    requireUniqueStrings(manifest.surfaces, "surfaces");
     requireUniqueTokens(manifest.requires, "requires");
     if (typeof manifest.plugin !== "function") throw new TypeError("Contribution plugin must be a class");
     if (!manifest.order || typeof manifest.order !== "object") throw new TypeError("Contribution order must be explicit");
-    return Object.freeze({ ...manifest, sites: Object.freeze([...(/** @type {unknown[]} */ (manifest.sites))]), order: Object.freeze({ ...manifest.order }) });
+    return Object.freeze({ ...manifest, sites: Object.freeze([...(/** @type {unknown[]} */ (manifest.sites))]), routes: Object.freeze([...(/** @type {unknown[]} */ (manifest.routes))]), surfaces: Object.freeze([...(/** @type {unknown[]} */ (manifest.surfaces))]), order: Object.freeze({ ...manifest.order }) });
 }
 
 /** @param {Record<string, unknown>} manifest */

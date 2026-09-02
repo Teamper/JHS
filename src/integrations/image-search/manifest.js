@@ -43,8 +43,8 @@ export function createImageSearchAdapter(http) {
         /** @param {string} dataUrl @param {{scope?: any}} [options] */
         async upload(dataUrl, options = {}) {
             const response = await http.request({
-                providerId: "image-search", method: "POST", url: IMGUR_UPLOAD_URL, body: dataUrlToFormData(dataUrl),
-                headers: { Authorization: `Client-ID ${IMGUR_CLIENT_ID}` }, responseType: "json", cacheScope: "none", urlPolicy: URL_POLICY, timeout: 30_000,
+                providerId: "image-search", capability: "image.upload", method: "POST", url: IMGUR_UPLOAD_URL, body: dataUrlToFormData(dataUrl),
+                headers: { Authorization: `Client-ID ${IMGUR_CLIENT_ID}` }, responseType: "json", urlPolicy: URL_POLICY, timeout: 30_000,
             }, options.scope);
             return parseImgurUpload(response.data);
         },

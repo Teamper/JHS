@@ -22,9 +22,8 @@ export function createGoogleTranslateAdapter(http) {
                 "query.text": text,
             }).toString();
             const response = await http.request({
-                providerId: "google-translate", method: "GET", url: url.href, responseType: "json",
+                providerId: "google-translate", capability: "text.translate", method: "GET", url: url.href, responseType: "json",
                 transport: "native-fetch", nativeTimeout: 1_500, timeout: 5_000,
-                cacheScope: "public", ttlMs: 2_592_000_000,
                 urlPolicy: { trustClass: "builtin-public", hosts: ["translate-pa.googleapis.com"] },
             }, options.scope);
             return parseGoogleTranslation(response.data);
@@ -37,5 +36,5 @@ export default defineIntegration({
     capabilities: ["text.translate"], requires: [SERVICE.http],
     createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }),
     createAdapter: (/** @type {any} */ client) => createGoogleTranslateAdapter(client.http), createHostAdapter: null,
-    cachePolicy: { "text.translate": CACHE.externalDetail }, quality: "silver",
+    cachePolicy: { "text.translate": "none" }, quality: "silver",
 });

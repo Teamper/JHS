@@ -4,7 +4,6 @@ import { initializeRuntimeConstants, l, r } from "../core/constants.js";
 import { injectCoreCss } from "../core/css-injection.js";
 import { JhsError } from "../core/jhs-error.js";
 import { runDataMigrations } from "../core/migration.js";
-import { normalizeScreenshotSetting } from "../core/settings-migration.js";
 import { PluginManager } from "../core/plugin-manager.js";
 import { createLegacyRuntime } from "../core/legacy-runtime.js";
 import { initializeEventBus } from "../core/event-bus.js";
@@ -59,13 +58,31 @@ async function readDisabledPluginSettings(storageManager) {
     return { migrated, needsMigration: JSON.stringify(previous) !== JSON.stringify(migrated) };
 }
 
-async function persistDisabledPluginMigration(settings) {
-    // 在 update 的最新草稿上重算迁移：update 无变更时不落盘，也不会覆盖并发期间其他标签页写入的禁用项
+/** Apply bootstrap compatibility values in one atomic settings write. */
+async function persistBootstrapMigration(settings, disabledMigration, localOriginSettings, legacySortMethod, legacyFoldCategory, legacyVideoMuted, credentialMigration = null) {
     await settings.update((draft) => {
         const previous = parseDisabledPlugins(typeof draft.disabledPlugins === "string" ? draft.disabledPlugins : "[]");
         const migrated = migrateDisabledPlugins(previous);
         if (JSON.stringify(previous) !== JSON.stringify(migrated)) draft.disabledPlugins = JSON.stringify(migrated);
+        if (localOriginSettings.needsOrigin) {
+            const origins = new Set(Array.isArray(draft.trustedLocalOrigins) ? draft.trustedLocalOrigins : []);
+            for (const origin of localOriginSettings.origins) origins.add(origin);
+            draft.trustedLocalOrigins = [ ...origins ];
+        }
+        if (localOriginSettings.needsNotice) draft.localOriginTrustNoticeV1 = true;
+        if (!Object.prototype.hasOwnProperty.call(draft, "enableLoadScreenShot")) draft.enableLoadScreenShot = "yes";
+        if (!Object.prototype.hasOwnProperty.call(draft, "enableScreenSvg")) draft.enableScreenSvg = draft.enableLoadScreenShot ?? "yes";
+        if (draft.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) draft.sortMethod = legacySortMethod;
+        if (draft.foldCategoryCollapsed == null && ["yes", "no"].includes(legacyFoldCategory || "")) draft.foldCategoryCollapsed = legacyFoldCategory === "yes";
+        if (draft.videoMuted == null && ["yes", "no"].includes(legacyVideoMuted || "")) draft.videoMuted = legacyVideoMuted === "yes";
+        for (const key of credentialMigration?.cleanup?.settingKeys || []) delete draft[key];
     });
+}
+
+// Kept as a named compatibility seam for diagnostics/tests; bootstrap invokes
+// the consolidated writer above so local-origin changes are not a second write.
+async function persistLocalOriginMigration(settings, resolved) {
+    return persistBootstrapMigration(settings, null, resolved, null, null, null);
 }
 
 async function resolveLocalOrigins(storageManager) {
@@ -83,19 +100,6 @@ async function resolveLocalOrigins(storageManager) {
         return { origins: [...origins], notice: `WebDAV 仅信任精确来源：${legacyOrigin}`, needsNotice: true };
     }
     return { origins: [...origins], notice: null };
-}
-
-async function persistLocalOriginMigration(settings, resolved) {
-    if (!resolved.needsOrigin && !resolved.needsNotice) return;
-    await settings.update((draft) => {
-        if (resolved.needsOrigin) {
-            const origins = new Set(Array.isArray(draft.trustedLocalOrigins) ? draft.trustedLocalOrigins : []);
-            const legacyOrigin = resolved.origins[resolved.origins.length - 1];
-            if (legacyOrigin) origins.add(legacyOrigin);
-            draft.trustedLocalOrigins = [ ...origins ];
-        }
-        draft.localOriginTrustNoticeV1 = true;
-    });
 }
 
 export async function bootstrapJhs() {
@@ -119,7 +123,7 @@ export async function bootstrapJhs() {
         const hostAdapter = r ? javdbHostAdapter : l ? javbusHostAdapter : null;
         const route = hostAdapter?.detectRoute() ?? "other";
         const context = createAppContext({
-            gmRequest: globalThis.GM_xmlhttpRequest, gmGetValue: globalThis.GM_getValue, gmSetValue: globalThis.GM_setValue,
+            gmRequest: globalThis.GM_xmlhttpRequest, gmGetValue: globalThis.GM_getValue, gmSetValue: globalThis.GM_setValue, gmDeleteValue: globalThis.GM_deleteValue,
             legacyHttp: gmHttp, legacyStorage: storageManager, eventBus: jhsEventBus, storageForage: storageManager.forage, localStorage: globalThis.localStorage,
             layer: vendors.layer, stateService, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
         });
@@ -127,27 +131,16 @@ export async function bootstrapJhs() {
         injectCoreCss(context.services.styles);
         // 6.5: expose the single settings write entry so legacy writers (storageManager.saveSetting/saveSettingItem)
         // route through SettingsService with lock + re-read + merge.
-        Object.assign(globalThis, { settingsService: context.services.settings });
+        Object.assign(globalThis, { settingsService: context.services.settings, credentialService: context.services.credential });
         await context.services.settings.load();
         markPhase("settings-load");
-        await persistDisabledPluginMigration(context.services.settings);
-        await persistLocalOriginMigration(context.services.settings, localOriginSettings);
-        await normalizeScreenshotSetting(context.services.settings);
+        const credentialMigration = await context.services.credential.migrateLegacy(context.services.settings, { deferCleanup: true });
         context.services.profile.start();
         const legacySortMethod = localStorage.getItem("jhs_sortMethod");
         const legacyFoldCategory = localStorage.getItem("jhs_foldCategory");
         const legacyVideoMuted = localStorage.getItem("jhs_videoMuted");
-        await context.services.settings.update((draft) => {
-            if (draft.sortMethod == null && ["default", "rateCount", "date"].includes(legacySortMethod || "")) {
-                draft.sortMethod = legacySortMethod;
-            }
-            if (draft.foldCategoryCollapsed == null && ["yes", "no"].includes(legacyFoldCategory || "")) {
-                draft.foldCategoryCollapsed = legacyFoldCategory === "yes";
-            }
-            if (draft.videoMuted == null && ["yes", "no"].includes(legacyVideoMuted || "")) {
-                draft.videoMuted = legacyVideoMuted === "yes";
-            }
-        });
+        await persistBootstrapMigration(context.services.settings, disabledMigration, localOriginSettings, legacySortMethod, legacyFoldCategory, legacyVideoMuted, credentialMigration);
+        context.services.credential.cleanupLegacyPageStorage(credentialMigration.cleanup?.pageKeys);
         markPhase("settings-migration");
         const logger = initializeLoggerRuntime(context.rootScope, {
             clogMsgCount: context.services.settings.snapshot().clogMsgCount,
@@ -174,10 +167,13 @@ export async function bootstrapJhs() {
             pluginManager, utils, gmHttp, storageManager, stateService, jhsEventBus,
             clog: logger.clog, show: logger.show, loading: logger.loading,
         }, globalThis.unsafeWindow);
-        await context.registries.features.start();
-        markPhase("feature-runtime");
         window.isDetailPage = route === "detail";
         window.isListPage = route === "list";
+        // Legacy plugins inspect these route flags during their handle() phase.
+        // Publish them before feature activation so list/detail contributions
+        // (including delayed FC2 navigation protection) can attach on startup.
+        await context.registries.features.start();
+        markPhase("feature-runtime");
         await runDataMigrations(storageManager);
         await stateService.recoverPendingTransaction();
         markPhase("data-prepare");

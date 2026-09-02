@@ -53,7 +53,7 @@ export function createExternalSitesAdapter(http) {
             const urlPolicy = target.hostname === builtinHost || target.hostname.endsWith(`.${builtinHost}`)
                 ? { trustClass: "builtin-public", hosts: [builtinHost], expectedOrigin: target.origin }
                 : { trustClass: "custom-public", expectedOrigin: target.origin };
-            const response = await http.request({ providerId: `external-site:${siteId}`, method: "GET", url, responseType: "text", cacheScope: "public", ttlMs: 86_400_000, urlPolicy }, options.scope);
+            const response = await http.request({ capability: "movie.external-sites", providerId: `external-site:${siteId}`, method: "GET", url, responseType: "text", urlPolicy }, options.scope);
             return Object.freeze({ searchUrl: url, matches: parseExternalSiteResults(response.data, site, carNum, definition.baseUrl) });
         },
     });

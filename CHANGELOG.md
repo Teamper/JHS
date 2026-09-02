@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 
 ## [Unreleased]
 
+- 深审收口：HTTP 逻辑请求熔断与 WebDAV 405/409 状态边界、GM 安全凭证迁移、v3 一次性数据迁移、按 namespace 隔离缓存、115 无会话缓存、Contribution 路由/Surface 契约及 schema 2 状态 journal。
+
 ## [6.5.0](../../compare/v6.4.1...v6.5.0) - 2026-09-01
 
 ### Fixed

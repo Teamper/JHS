@@ -48,24 +48,26 @@ import { WantAndWatchedVideosPlugin } from "./status/want-and-watched-videos.js"
 import { SubTitleCatPlugin } from "./subtitle/subtitle-cat.js";
 import { TranslatePlugin } from "./translate/translate.js";
 
-const manifest = (id, featureId, plugin, sites, order, requires = []) => defineContribution({
+const manifest = (id, featureId, plugin, sites, order, requires = [], options = {}) => defineContribution({
     id, featureId, legacyPluginId: plugin.legacyPluginId ?? plugin.name, plugin, sites, order, requires,
+    routes: options.routes ?? (featureId === "detail" ? ["detail", "owned-detail"] : []),
+    surfaces: options.surfaces ?? (featureId === "detail" ? ["detail-page"] : []),
 });
 
 export const legacyContributionManifests = Object.freeze([
     manifest("list.core", "list", ListPagePlugin, ["javdb", "javbus"], { javdb: 1, javbus: 1 }, [PORT.host, SERVICE.translation, SERVICE.http, SERVICE.storage, SERVICE.state, SERVICE.settings]),
     manifest("list.auto-page", "list", AutoPagePlugin, ["javdb", "javbus"], { javdb: 2, javbus: 5 }, [SERVICE.http, SERVICE.settings]),
-    manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related, SERVICE.state]),
-    manifest("detail.fc2-navigation", "detail", Fc2NavigationPlugin, ["javdb"], { javdb: 4 }, [PORT.host]),
+    manifest("detail.fc2-owned", "detail", Fc2Plugin, ["javdb"], { javdb: 3 }, [SERVICE.movie, SERVICE.magnet, SERVICE.dialog, SERVICE.translation, SERVICE.settings, SERVICE.storage, SERVICE.screenshot, SERVICE.review, SERVICE.related, SERVICE.state], { routes: ["list", "detail", "owned-detail"], surfaces: ["list-card", "detail-page"] }),
+    manifest("detail.fc2-navigation", "detail", Fc2NavigationPlugin, ["javdb"], { javdb: 4 }, [PORT.host], { routes: ["list"], surfaces: ["list-card"] }),
     manifest("list.fold-category", "list", FoldCategoryPlugin, ["javdb"], { javdb: 5 }, [SERVICE.settings]),
     manifest("list.actions", "list", ListPageButtonPlugin, ["javdb", "javbus"], { javdb: 5, javbus: 2 }, [SERVICE.settings]),
     manifest("library.history", "library", HistoryPlugin, ["javdb", "javbus"], { javdb: 6, javbus: 4 }, [SERVICE.dialog, SERVICE.movie, SERVICE.settings, SERVICE.state]),
     manifest("settings.core", "settings", SettingPlugin, ["javdb", "javbus"], { javdb: 7, javbus: 3 }, [PORT.host, SERVICE.diagnostics, SERVICE.profile, SERVICE.webdav, SERVICE.dialog, SERVICE.storage, SERVICE.settings, SERVICE.cache, SERVICE.http, SERVICE.offline, SERVICE.magnet, SERVICE.movie, SERVICE.state, SERVICE.translation, REGISTRY.settings]),
     manifest("identity.javdb-navigation", "identity", NavBarPlugin, ["javdb"], { javdb: 8 }, [SERVICE.movie]),
     manifest("discovery.hit-show", "discovery", HitShowPlugin, ["javdb"], { javdb: 9 }, [PORT.host, SERVICE.movie, SERVICE.settings, SERVICE.cache]),
-    manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account]),
+    manifest("discovery.top250", "discovery", Top250Plugin, ["javdb"], { javdb: 10 }, [PORT.host, SERVICE.dialog, SERVICE.account, SERVICE.credential]),
     manifest("identity.image-search", "identity", SearchByImagePlugin, ["javdb", "javbus"], { javdb: 11, javbus: 6 }, [SERVICE.dialog, SERVICE.storage, SERVICE.imageSearch]),
-    manifest("detail.cover-state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie, SERVICE.state]),
+    manifest("detail.cover-state-actions", "detail", CoverButtonPlugin, ["javdb", "javbus"], { javdb: 12, javbus: 8 }, [SERVICE.storage, SERVICE.settings, SERVICE.movie, SERVICE.state], { routes: ["list", "detail", "owned-detail"], surfaces: ["list-card", "detail-page"] }),
     manifest("detail.fc2-lookup", "detail", Fc2By123AvPlugin, ["javdb"], { javdb: 13 }, [PORT.host, SERVICE.movie, SERVICE.translation, SERVICE.settings]),
     manifest("detail.javdb-native", "detail", DetailPagePlugin, ["javdb"], { javdb: 14 }),
     manifest("detail.workspace", "detail", DetailWorkspacePlugin, ["javdb", "javbus"], { javdb: 15, javbus: 11 }, [PORT.host]),
@@ -111,6 +113,7 @@ for (const contribution of legacyContributionManifests) {
 /** @param {import("../core/plugin-manager.js").PluginManager} pluginManager @param {import("../app/feature-runtime.js").FeatureRuntime} featureRuntime @param {string} site */
 export function registerSitePlugins(pluginManager, featureRuntime, site) {
     pluginManager.setDependencyDeclarations(LEGACY_PLUGIN_DEPENDENCY_MAP);
+    featureRuntime.setContributionManifests?.(legacyContributionManifests);
     pluginManager.setCatalogDescriptors(legacyContributionManifests
         .filter((item) => item.sites.includes(site))
         .map((item) => ({ name: item.legacyPluginId, disableable: featureRuntime.isFeatureDisableable(item.featureId) })));
@@ -133,6 +136,7 @@ export function registerSitePlugins(pluginManager, featureRuntime, site) {
                 [SERVICE.subtitle, "subtitle"],
                 [SERVICE.account, "account"],
                 [SERVICE.webdav, "webdav"],
+                [SERVICE.credential, "credential"],
                 [SERVICE.storage, "storage"],
                 [SERVICE.state, "state"],
                 [SERVICE.offline, "offline"],

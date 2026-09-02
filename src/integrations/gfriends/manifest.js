@@ -43,8 +43,8 @@ export function createGfriendsAdapter(http) {
             const source = SOURCES.find((item) => item.id === (options.sourceId || SOURCES[0].id));
             if (!source) throw new JhsError("UNSUPPORTED", `未知头像数据源：${options.sourceId}`, { source: "gfriends" });
             const response = await http.request({
-                providerId: `gfriends:${source.id}`, method: "GET", url: source.catalogUrl, responseType: "json",
-                cacheScope: "public", ttlMs: 604_800_000, timeout: 20_000, urlPolicy: { trustClass: "builtin-public", hosts: [new URL(source.catalogUrl).hostname] },
+                providerId: `gfriends:${source.id}`, capability: "person.avatar-search", method: "GET", url: source.catalogUrl, responseType: "json",
+                timeout: 20_000, urlPolicy: { trustClass: "builtin-public", hosts: [new URL(source.catalogUrl).hostname] },
             }, options.scope);
             const index = parseGfriendsCatalog(response.data, source.contentBaseUrl), results = new Set();
             names.map((name) => String(name).toLowerCase().trim()).filter(Boolean).forEach((name) => index.get(name)?.forEach((url) => results.add(url)));

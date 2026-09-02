@@ -15,8 +15,7 @@ export function createDmmAdapter(http) {
         async getPreview(movieRef, options = {}) {
             const url = new URL(movieRef.url);
             const response = await http.request({
-                providerId: "dmm", method: "GET", url: url.href, responseType: "text",
-                cacheScope: "public", ttlMs: 604_800_000,
+                providerId: "dmm", capability: "movie.preview", method: "GET", url: url.href, responseType: "text",
                 urlPolicy: { trustClass: "builtin-public", hosts: ["dmm.co.jp"] },
             }, options.scope);
             return parseDmmPreview(response.data, response.finalUrl || url.href);
@@ -32,7 +31,7 @@ export function createDmmAdapter(http) {
                 })}`;
                 try {
                     const response = await http.request({
-                        providerId: "dmm", method: "GET", url, responseType: "json", cacheScope: "public", ttlMs: 604_800_000,
+                        providerId: "dmm", capability: "movie.preview", method: "GET", url, responseType: "json",
                         urlPolicy: { trustClass: "builtin-public", hosts: DMM_HOSTS },
                     }, options.scope);
                     candidates = parseDmmItemCandidates(response.data, carNum, keyword);
@@ -53,7 +52,7 @@ export function createDmmAdapter(http) {
             const tasks = candidates.map(async (/** @type {any} */ candidate) => {
                 const url = `https://www.dmm.co.jp/service/digitalapi/-/html5_player/=/cid=${encodeURIComponent(candidate.contentId)}/mtype=AhRVShI_/service=${encodeURIComponent(candidate.serviceCode)}/floor=${encodeURIComponent(candidate.floorCode)}/mode=/`;
                 const response = await http.request({
-                    providerId: "dmm", method: "GET", url, responseType: "text", cacheScope: "public", ttlMs: 604_800_000,
+                    providerId: "dmm", capability: "movie.preview", method: "GET", url, responseType: "text",
                     headers: { "accept-language": "ja-JP,ja;q=0.9", Cookie: "age_check_done=1" },
                     urlPolicy: { trustClass: "builtin-public", hosts: DMM_HOSTS },
                 }, options.scope);
@@ -77,5 +76,5 @@ export default defineIntegration({
     id: "dmm", trustClass: "builtin-public", hosts: DMM_HOSTS, capabilities: ["movie.preview"], requires: [SERVICE.http],
     createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }),
     createAdapter: (/** @type {any} */ client) => createDmmAdapter(client.http), createHostAdapter: null,
-    cachePolicy: { "movie.preview": CACHE.externalDetail }, quality: "silver",
+    cachePolicy: { "movie.preview": "none" }, quality: "silver",
 });

@@ -15,13 +15,13 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
         const origin = new URL(baseUrl).origin, hostname = new URL(baseUrl).hostname, builtin = hostname === "javdb.com" || hostname.endsWith(".javdb.com");
         return builtin ? { trustClass: "builtin-public", hosts: ["javdb.com"], expectedOrigin: origin } : { trustClass: "custom-public", expectedOrigin: origin };
     };
-    /** @param {string} path @param {Record<string, unknown>} query @param {{scope?: any, ttlMs?: number}} options @param {Record<string, string>} [headers] */
-    const request = async (path, query, options = {}, headers = {}) => {
+    /** @param {string} path @param {Record<string, unknown>} query @param {{scope?: any}} options @param {Record<string, string>} [headers] @param {string} capability */
+    const request = async (path, query, options = {}, headers = {}, capability = "movie.detail") => {
         const url = new URL(path, API_ORIGIN);
         Object.entries(query).forEach(([key, value]) => url.searchParams.set(key, String(value)));
         const response = await http.request({
-            providerId: "javdb", method: "GET", url: url.href, responseType: "json",
-            headers: { jdSignature: sign(), ...headers }, cacheScope: "public", ttlMs: options.ttlMs ?? 86_400_000,
+            providerId: "javdb", capability, method: "GET", url: url.href, responseType: "json",
+            headers: { jdSignature: sign(), ...headers },
             urlPolicy: { trustClass: "builtin-public", hosts: ["jdforrepam.com"] },
         }, options.scope);
         return response.data;
@@ -38,7 +38,7 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
                 platform: "ios", system_version: "17.4", app_version: "official", app_version_number: "1.9.29", app_channel: "official",
             }).forEach(([key, value]) => url.searchParams.set(key, value));
             const response = await http.request({
-                providerId: "javdb", method: "POST", url: url.href, responseType: "json", cacheScope: "none",
+                providerId: "javdb", capability: "account.login", method: "POST", url: url.href, responseType: "json",
                 headers: { "user-agent": "Dart/3.5 (dart:io)", "accept-language": "zh-TW", "content-type": "multipart/form-data; boundary=--dio-boundary-2210433284", jdsignature: sign() },
                 urlPolicy: { trustClass: "builtin-public", hosts: ["jdforrepam.com"] },
             }, options.scope);
@@ -51,7 +51,7 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
         async listActorMovies(actorRef, options = {}) {
             const baseUrl = new URL(actorRef.baseUrl || "https://javdb.com").origin, url = new URL(`/actors/${encodeURIComponent(actorRef.actorId)}?t=d`, baseUrl);
             const response = await http.request({
-                providerId: "javdb-host", method: "GET", url: url.href, responseType: "text", cacheScope: options.ttlMs === 0 ? "none" : "public", ttlMs: options.ttlMs ?? 300_000,
+                providerId: "javdb-host", capability: "actor.movies", method: "GET", url: url.href, responseType: "text",
                 urlPolicy: hostPolicy(baseUrl),
             }, options.scope);
             if (typeof hostAdapter?.parseActorMovies !== "function") throw new TypeError("JavDB HostAdapter parser is unavailable");
@@ -61,7 +61,7 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
         async listActorCollection(query, options = {}) {
             const baseUrl = new URL(query.baseUrl || "https://javdb.com").origin, url = new URL(query.pageUrl || "/users/collection_actors", baseUrl);
             const response = await http.request({
-                providerId: "javdb-host", method: "GET", url: url.href, responseType: "text", cacheScope: "none", urlPolicy: hostPolicy(baseUrl),
+                providerId: "javdb-host", capability: "actor.collection", method: "GET", url: url.href, responseType: "text", urlPolicy: hostPolicy(baseUrl),
             }, options.scope);
             if (typeof hostAdapter?.parseActorCollection !== "function") throw new TypeError("JavDB HostAdapter collection parser is unavailable");
             return hostAdapter.parseActorCollection(response.data, response.finalUrl || url.href);
@@ -70,7 +70,7 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
         async uncollectActor(actorRef, options = {}) {
             const baseUrl = new URL(actorRef.baseUrl || "https://javdb.com").origin, url = new URL(`/actors/${encodeURIComponent(actorRef.actorId)}/uncollect`, baseUrl);
             const response = await http.request({
-                providerId: "javdb-host", method: "POST", url: url.href, body: "null", responseType: "text", cacheScope: "none",
+                providerId: "javdb-host", capability: "actor.uncollect", method: "POST", url: url.href, body: "null", responseType: "text",
                 headers: { "Content-Type": "application/json", "x-csrf-token": actorRef.csrfToken }, urlPolicy: hostPolicy(baseUrl),
             }, options.scope);
             return Object.freeze({ success: typeof response.data === "string" && response.data.includes("removeClass") });
@@ -79,7 +79,7 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
         async resolveMovie(movieRef, options = {}) {
             const carNum = normalizeMovieCarNum(movieRef.carNum);
             if (!carNum) return null;
-            const payload = await request("/api/v2/search", { q: carNum, page: 1, type: "movie", limit: 20, movie_type: "all", from_recent: "false", movie_filter_by: "all", movie_sort_by: "relevance" }, { ...options, ttlMs: 604_800_000 }, { "user-agent": "Dart/3.5 (dart:io)", "accept-language": "zh-TW", host: "jdforrepam.com" });
+            const payload = await request("/api/v2/search", { q: carNum, page: 1, type: "movie", limit: 20, movie_type: "all", from_recent: "false", movie_filter_by: "all", movie_sort_by: "relevance" }, options, { "user-agent": "Dart/3.5 (dart:io)", "accept-language": "zh-TW", host: "jdforrepam.com" }, "movie.search");
             if (!Array.isArray(payload?.data?.movies)) throw new Error(payload?.message || "JavDB search response is invalid");
             const match = payload.data.movies.find((/** @type {any} */ movie) => normalizeMovieCarNum(movie.number) === carNum);
             return match?.id ? Object.freeze({ carNum, movieId: String(match.id), providerId: "javdb" }) : null;
@@ -88,7 +88,7 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
         async getDetail(movieRef, options = {}) {
             const movieId = String(movieRef.movieId || "").trim();
             if (!movieId) throw new TypeError("JavDB movie id is required");
-            const payload = await request(`/api/v4/movies/${encodeURIComponent(movieId)}`, {}, { ...options, ttlMs: 604_800_000 });
+            const payload = await request(`/api/v4/movies/${encodeURIComponent(movieId)}`, {}, options, {}, "movie.detail");
             const movie = payload?.data?.movie;
             if (!movie?.number) throw new Error(payload?.message || "JavDB detail response is invalid");
             const imageUrls = Array.isArray(movie.preview_images) ? movie.preview_images.map((/** @type {any} */ image) => String(image.large_url || "").replace(/https:\/\/[^/]+\/rhe951l4q/, "https://c0.jdbstatic.com")).filter(Boolean) : [];
@@ -107,7 +107,7 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
         async listMagnets(movieRef, options = {}) {
             const movieId = String(movieRef.movieId || "").trim();
             if (!movieId) return [];
-            const payload = await request(`/api/v1/movies/${encodeURIComponent(movieId)}/magnets`, {}, options);
+            const payload = await request(`/api/v1/movies/${encodeURIComponent(movieId)}/magnets`, {}, options, {}, "movie.magnets");
             if (!Array.isArray(payload?.data?.magnets)) throw new Error(payload?.message || "JavDB magnet response is invalid");
             return payload.data.magnets.map((/** @type {any} */ item) => Object.freeze({
                 hash: String(item.hash || ""), title: String(item.name || ""), hasHdTag: Boolean(item.hd), hasSubtitleTag: Boolean(item.cnsub),
@@ -117,7 +117,7 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
         },
         /** @param {{period?: string, filter?: string, scope?: any}} [options] */
         async listRankings(options = {}) {
-            const payload = await request("/api/v1/rankings/playback", { period: options.period || "daily", filter_by: options.filter || "high_score" }, options);
+            const payload = await request("/api/v1/rankings/playback", { period: options.period || "daily", filter_by: options.filter || "high_score" }, options, {}, "movie.ranking");
             if (!Array.isArray(payload?.data?.movies)) throw new Error(payload?.message || "JavDB ranking response is invalid");
             return payload.data.movies.map((/** @type {any} */ movie) => Object.freeze({
                 movieId: String(movie.id), carNum: normalizeMovieCarNum(movie.number), title: String(movie.origin_title || ""),
@@ -129,7 +129,7 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
         async listReviews(movieRef, options = {}) {
             const movieId = String(movieRef.movieId || "").trim();
             if (!movieId) return [];
-            const payload = await request(`/api/v1/movies/${encodeURIComponent(movieId)}/reviews`, { page: options.page ?? 1, sort_by: "hotly", limit: options.limit ?? 20 }, options);
+            const payload = await request(`/api/v1/movies/${encodeURIComponent(movieId)}/reviews`, { page: options.page ?? 1, sort_by: "hotly", limit: options.limit ?? 20 }, options, {}, "movie.reviews");
             if (!Array.isArray(payload?.data?.reviews)) throw new Error(payload?.message || "JavDB review response is invalid");
             return payload.data.reviews.map((/** @type {any} */ review) => Object.freeze({
                 author: String(review.username || "匿名用户"), content: String(review.content || ""),
@@ -141,7 +141,7 @@ export function createJavDbAdapter(http, sign = createJavDbSignature, hostAdapte
         async listRelated(movieRef, options = {}) {
             const movieId = String(movieRef.movieId || "").trim();
             if (!movieId) return [];
-            const payload = await request("/api/v1/lists/related", { movie_id: movieId, page: options.page ?? 1, limit: options.limit ?? 20 }, options);
+            const payload = await request("/api/v1/lists/related", { movie_id: movieId, page: options.page ?? 1, limit: options.limit ?? 20 }, options, {}, "movie.related");
             if (!Array.isArray(payload?.data?.lists)) throw new Error(payload?.message || "JavDB related response is invalid");
             return payload.data.lists.map((/** @type {any} */ item) => Object.freeze({
                 id: String(item.id), name: String(item.name || "未命名清单"), movieCount: Number(item.movies_count) || 0,
@@ -158,5 +158,5 @@ export default defineIntegration({
     requires: [SERVICE.http, PORT.javdbHost],
     createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http], hostAdapter: dependencies[PORT.javdbHost] }),
     createAdapter: (/** @type {any} */ client) => createJavDbAdapter(client.http, createJavDbSignature, client.hostAdapter), createHostAdapter: null,
-    cachePolicy: { "movie.search": "none", "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.state": "none", "movie.reviews": "public-1d", "movie.related": "public-1d", "actor.lookup": "none", "actor.movies": "public-5m", "actor.collection": "none", "actor.uncollect": "none", "actor.avatar-placeholder": "none", "account.login": "none" }, quality: "silver",
+    cachePolicy: { "movie.search": "public-7d", "movie.detail": CACHE.externalDetail, "movie.magnets": "public-1d", "movie.ranking": "public-1d", "movie.state": "none", "movie.reviews": "public-1d", "movie.related": "public-1d", "actor.lookup": "none", "actor.movies": "public-5m", "actor.collection": "none", "actor.uncollect": "none", "actor.avatar-placeholder": "none", "account.login": "none" }, quality: "silver",
 });

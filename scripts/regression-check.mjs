@@ -20,7 +20,7 @@ function extractMetadata(source, key) {
 
 function extractContributionOrder(registrySource, site) {
   return registrySource.split(/\r?\n/).flatMap((line) => {
-    const match = line.match(/manifest\("[^"]+",\s*"[^"]+",\s*(\w+),\s*\[([^\]]+)\],\s*\{([^}]+)\}(?:,\s*\[[^\]]*\])?\)/);
+    const match = line.match(/manifest\("[^"]+",\s*"[^"]+",\s*(\w+),\s*\[([^\]]+)\],\s*\{([^}]+)\}(?:,\s*\[[^\]]*\])?(?:,\s*\{[^}]*\})?\)/);
     if (!match || !match[2].includes(`"${site}"`)) return [];
     const order = match[3].match(new RegExp(`(?:^|,\\s*)\\s*(?:"${site}"|${site})\\s*:\\s*(\\d+)`));
     assert(order, `Missing ${site} order for ${match[1]}`);

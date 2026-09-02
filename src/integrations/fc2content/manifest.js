@@ -18,7 +18,7 @@ export function createFc2ContentAdapter(http) {
             if (!id) return [];
             const url = `https://adult.contents.fc2.com/article/${id}/`;
             const response = await http.request({
-                providerId: "fc2content", method: "GET", url, responseType: "text", cacheScope: "public", ttlMs: 604_800_000,
+                providerId: "fc2content", capability: "movie.images", method: "GET", url, responseType: "text",
                 headers: { referer: url }, urlPolicy: { trustClass: "builtin-public", hosts: ["adult.contents.fc2.com"] },
             }, options.scope);
             return parseFc2ContentImages(response.data, response.finalUrl || url);

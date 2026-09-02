@@ -16,20 +16,20 @@ export class WebDavClient {
         for (const byte of bytes) binary += String.fromCharCode(byte);
         return { Authorization: `Basic ${btoa(binary)}`, Depth: "1" };
     }
-    /** @param {string} method @param {string} path @param {Record<string, string>} [headers] @param {unknown} [body] */
-    async request(method, path, headers = {}, body) {
+    /** @param {string} method @param {string} path @param {Record<string, string>} [headers] @param {unknown} [body] @param {Record<string, unknown>} [requestOptions] */
+    async request(method, path, headers = {}, body, requestOptions = {}) {
         const url = new URL(path.replace(/^\/+/, ""), this.baseUrl);
         const response = await this.http.request({
             providerId: "webdav", method, url: url.href, headers: { ...this.authHeaders(), ...headers }, body,
-            responseType: "text", cacheScope: "none",
+            responseType: "text", cacheScope: "none", ...requestOptions,
             urlPolicy: { trustClass: "user-local", expectedOrigin: this.baseUrl.origin },
         });
         return response.data ?? response.responseText ?? "";
     }
     /** @param {string} folder */
     async ensureFolder(folder) {
-        try { await this.request("MKCOL", folder); }
-        catch (error) { if (!(error instanceof Error) || !/HTTP (405|409)/.test(error.message)) throw error; }
+        // Existing WebDAV collections report 405|409 and are valid outcomes.
+        await this.request("MKCOL", folder, {}, undefined, { acceptableStatuses: [405, 409] });
     }
     /** @param {string} folder @param {string} name @param {string} content */
     async backup(folder, name, content) { await this.ensureFolder(folder); await this.request("PUT", `${folder}/${name}`, { "Content-Type": "text/plain" }, content); }
@@ -53,8 +53,30 @@ export class WebDavClient {
 }
 
 export class WebDavService {
-    /** @param {import("./http-service.js").HttpService} http */
-    constructor(http) { this.http = http; }
+    /** @param {import("./http-service.js").HttpService} http @param {import("./credential-service.js").CredentialService} [credential] @param {import("./settings-service.js").SettingsService} [settings] */
+    constructor(http, credential = undefined, settings = undefined) { this.http = http; this.credential = credential; this.settings = settings; }
     /** @param {{url: string, username: string, password: string}} config */
     createClient(config) { return new WebDavClient(this.http, config.url, config.username, config.password); }
+    /** Return the installation-local profile without exposing the encrypted password. */
+    async getProfile() {
+        const settings = this.settings?.snapshot?.() || {};
+        const password = this.credential ? await this.credential.get("jhs_webdav_password") : "";
+        return { url: String(settings.webDavUrl || ""), username: String(settings.webDavUsername || ""), password };
+    }
+    /** Atomically coordinate the GM credential write with the settings update. */
+    async saveProfile(/** @type {Record<string, any>} */ patch = {}) {
+        if (!this.settings || !this.credential) throw new Error("WebDAV 配置服务未初始化");
+        const previous = /** @type {{password: string}} */ (await this.getProfile());
+        const passwordChanged = Object.prototype.hasOwnProperty.call(patch, "password");
+        if (passwordChanged) await /** @type {any} */ (this.credential).set("jhs_webdav_password", String(patch.password || ""));
+        try {
+            await this.settings.update((draft) => {
+                for (const key of ["url", "username"]) if (Object.prototype.hasOwnProperty.call(patch, key)) draft[key === "url" ? "webDavUrl" : "webDavUsername"] = String(patch[key] || "");
+            });
+        } catch (error) {
+            if (passwordChanged) await /** @type {any} */ (this.credential).set("jhs_webdav_password", previous.password);
+            throw error;
+        }
+        return this.getProfile();
+    }
 }

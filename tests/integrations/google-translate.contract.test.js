@@ -13,5 +13,5 @@ it("normalizes a translation response", () => {
 it("loads translations through the declared HTTP boundary", async () => {
     const request = vi.fn(async options => ({ data: fixture, finalUrl: options.url }));
     await expect(createGoogleTranslateAdapter({ request }).translate("原題")).resolves.toBe("翻译结果");
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ providerId: "google-translate", responseType: "json", cacheScope: "public", transport: "native-fetch" }), undefined);
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ providerId: "google-translate", responseType: "json", transport: "native-fetch" }), undefined);
 });

@@ -15,7 +15,7 @@ export function createJavBusAdapter(http) {
             if (!carNum) throw new TypeError("JavBus movie reference is invalid");
             const url = new URL(movieRef.url || `https://www.javbus.com/${encodeURIComponent(carNum)}`).href;
             const response = await http.request({
-                providerId: "javbus", method: "GET", url, responseType: "text", cacheScope: "public", ttlMs: 604_800_000,
+                providerId: "javbus", capability: "movie.detail", method: "GET", url, responseType: "text",
                 urlPolicy: { trustClass: "builtin-public", hosts: ["javbus.com"] },
             }, options.scope);
             return parseJavBusMovieDetail(response.data, response.finalUrl || url);

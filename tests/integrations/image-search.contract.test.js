@@ -10,7 +10,7 @@ it("normalizes image upload and search target contracts", async () => {
     const request = vi.fn(async () => ({ data: fixture, finalUrl: "https://api.imgur.com/3/image" }));
     const adapter = createImageSearchAdapter({ request });
     await expect(adapter.upload("data:image/png;base64,YQ==", { scope: "scope" })).resolves.toBe("https://i.imgur.com/example.png");
-    expect(request.mock.calls[0][0]).toMatchObject({ providerId: "image-search", method: "POST", responseType: "json", cacheScope: "none", urlPolicy: { trustClass: "builtin-public" } });
+    expect(request.mock.calls[0][0]).toMatchObject({ providerId: "image-search", capability: "image.upload", method: "POST", responseType: "json", urlPolicy: { trustClass: "builtin-public" } });
     expect(request.mock.calls[0][0].body).toBeInstanceOf(FormData);
     expect(adapter.createTargets("https://i.imgur.com/a b.png")).toEqual(expect.arrayContaining([
         expect.objectContaining({ id: "google-lens", url: expect.stringContaining(encodeURIComponent("https://i.imgur.com/a b.png")) }),

@@ -17,7 +17,7 @@ export function createXunleiAdapter(http) {
             const url = new URL("https://api-shoulei-ssl.xunlei.com/oracle/subtitle");
             url.searchParams.set("gcid", ""), url.searchParams.set("cid", ""), url.searchParams.set("name", carNum);
             const response = await http.request({
-                providerId: "xunlei", method: "GET", url: url.href, responseType: "json", cacheScope: "public", ttlMs: 86_400_000,
+                providerId: "xunlei", capability: "subtitle.search", method: "GET", url: url.href, responseType: "json",
                 urlPolicy: { trustClass: "builtin-public", hosts: XUNLEI_HOSTS },
             }, options.scope);
             return parseXunleiSubtitles(response.data);
@@ -26,7 +26,7 @@ export function createXunleiAdapter(http) {
         async download(subtitle, options = {}) {
             const url = new URL(String(subtitle.url ?? ""));
             const response = await http.request({
-                providerId: "xunlei", method: "GET", url: url.href, responseType: "text", cacheScope: "public", ttlMs: 86_400_000,
+                providerId: "xunlei", capability: "subtitle.download", method: "GET", url: url.href, responseType: "text",
                 urlPolicy: { trustClass: "custom-public" },
             }, options.scope);
             if (typeof response.data !== "string") throw new TypeError("迅雷字幕正文不是文本");

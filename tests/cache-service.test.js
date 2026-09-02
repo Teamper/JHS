@@ -75,4 +75,16 @@ describe("CacheService L1/L2 cache", () => {
         expect(storage.set).not.toHaveBeenCalled();
         expect(cache.publicCache.size).toBe(0);
     });
+
+    it("isolates namespaces and clears only the selected persisted namespace", async () => {
+        const storage = backend(), cache = new CacheService({ storage });
+        await cache.set("actress-info", "same-key", "actress", { scope: "public", ttlMs: 60_000 });
+        await cache.set("screenshot", "same-key", "shot", { scope: "public", ttlMs: 60_000 });
+        expect((await cache.get("actress-info", "same-key", { scope: "public" })).value).toBe("actress");
+        expect((await cache.get("screenshot", "same-key", { scope: "public" })).value).toBe("shot");
+        await cache.clearNamespace("actress-info");
+        expect((await cache.get("actress-info", "same-key", { scope: "public" })).hit).toBe(false);
+        expect((await cache.get("screenshot", "same-key", { scope: "public" })).value).toBe("shot");
+        expect([...storage.data.keys()].some((key) => key.includes(":actress-info:") || key.includes(":screenshot:"))).toBe(true);
+    });
 });

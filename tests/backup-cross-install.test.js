@@ -30,15 +30,15 @@ describe("portable backup cross-install restore", () => {
         const destination = createStorage({ webDavUrl: "https://dav-b.example", webDavUsername: "bob", webDavPassword: "AES:destination" });
         const backup = await source.exportData();
 
-        expect(backup.setting).toEqual({ webDavUrl: "https://dav-a.example", webDavUsername: "alice" });
+        expect(backup.setting).toEqual({});
         await destination.importData(backup);
-        expect(destination.data.get("setting")).toEqual({ webDavUrl: "https://dav-a.example", webDavUsername: "alice", webDavPassword: "AES:destination" });
+        expect(destination.data.get("setting")).toEqual({ webDavUrl: "https://dav-b.example", webDavUsername: "bob", webDavPassword: "AES:destination" });
     });
 
     it("preserves a destination credential when importing a legacy backup that contains one", async () => {
         vi.stubGlobal("window", { stateService: null });
         const destination = createStorage({ webDavPassword: "AES:destination", webDavUrl: "https://dav-b.example" });
         await destination.importData({ data_version: 2, setting: { webDavPassword: "AES:source", webDavUrl: "https://dav-a.example" } });
-        expect(destination.data.get("setting")).toEqual({ webDavPassword: "AES:destination", webDavUrl: "https://dav-a.example" });
+        expect(destination.data.get("setting")).toEqual({ webDavPassword: "AES:destination", webDavUrl: "https://dav-b.example" });
     });
 });

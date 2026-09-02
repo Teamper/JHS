@@ -15,7 +15,7 @@ describe("pan123 integration contract", () => {
         await expect(adapter.submit("magnet:?xt=urn:btih:test", { token: "secret", scope })).resolves.toEqual({ fileCount: 2, totalSize: 300 });
         expect(request).toHaveBeenCalledTimes(2);
         for (const [options, receivedScope] of request.mock.calls) {
-            expect(options).toMatchObject({ providerId: "pan123", method: "POST", responseType: "json", cacheScope: "none", timeout: 5000, urlPolicy: { trustClass: "builtin-public", hosts: ["123pan.com"] } });
+            expect(options).toMatchObject({ providerId: "pan123", capability: expect.stringMatching(/^offline\.(resolve|submit)$/), method: "POST", responseType: "json", timeout: 5000, urlPolicy: { trustClass: "builtin-public", hosts: ["123pan.com"] } });
             expect(options.url).toMatch(/^https:\/\/yun\.123pan\.com\/b\/api\/v2\/offline_download\/task\/(resolve|submit)\?/);
             expect(options.headers.Authorization).toBe("Bearer secret");
             expect(receivedScope).toBe(scope);

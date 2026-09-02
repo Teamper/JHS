@@ -18,13 +18,14 @@ export class ActressInfoService {
         const normalized = String(name).trim() === "三上悠亞" ? "三上悠亜" : String(name).trim();
         if (!normalized) return null;
         const key = `actress-info:${normalized}`;
-        const cached = await this.cache.get(key, { scope: "public" });
+        const cached = await this.cache.get("actress-info", key, { scope: "public" });
         if (cached.hit) return cached.value;
+        const generation = this.cache.generation("actress-info");
         for (const manifest of this.integrations.list("person.actress-info")) {
             const adapter = this.integrations.getAdapter(manifest.id);
             if (typeof adapter.lookup !== "function") continue;
             const result = await adapter.lookup(normalized, options);
-            await this.cache.set(key, result, { scope: "public", ttlMs: 604_800_000, negative: !result });
+            await this.cache.set("actress-info", key, result, { scope: "public", ttlMs: 604_800_000, negative: !result, generation });
             return result;
         }
         return null;

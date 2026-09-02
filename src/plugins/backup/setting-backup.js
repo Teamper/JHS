@@ -10,6 +10,12 @@ import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 /** @typedef {any} DialogHandle */
 /** @param {unknown} error */
 const errorMessage = error => error instanceof Error ? error.message : String(error);
+/** @param {any} webdavService */
+async function resolveWebDavProfile(webdavService) {
+    if (typeof webdavService?.getProfile === "function") return webdavService.getProfile();
+    const settings = await storageManager.getSetting();
+    return { url: settings.webDavUrl, username: settings.webDavUsername, password: await decryptCredential(settings.webDavPassword || "") };
+}
 
 /** Handle JSON file import via file input, run diff analysis, show preview. */
 /** @param {ShowDiffPreview} showDiffPreviewFn */
@@ -50,15 +56,14 @@ export async function importSettingData(showDiffPreviewFn) {
 /** Create encrypted backup and upload via WebDAV. */
 /** @param {string} folderName @param {WebDavHandle} webdavService */
 export async function backupDataByWebDav(folderName, webdavService) {
-    const t = await storageManager.getSetting(), n = t.webDavUrl;
+    const t = await resolveWebDavProfile(webdavService), n = t.url;
     if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
-    const a = t.webDavUsername;
+    const a = t.username;
     if (!a) return void show.error("请填写webDav用户名并保存后, 再试此功能");
-    if (!t.webDavPassword) return void show.error("请填写webDav密码并保存后, 再试此功能");
+    if (!t.password) return void show.error("请填写webDav密码并保存后, 再试此功能");
     const r = loading();
     try {
-        const i = await decryptCredential(t.webDavPassword);
-        if (!i) return void show.error("请填写webDav密码并保存后, 再试此功能");
+        const i = t.password;
         const s = utils.getNowStr("_", "_") + ".json";
         let o = JSON.stringify(await storageManager.exportData());
         o = await encryptPortableBackup(o);
@@ -74,15 +79,14 @@ export async function backupDataByWebDav(folderName, webdavService) {
 /** List WebDAV backups and open the file list dialog. */
 /** @param {string} folderName @param {Function} openFileListDialogFn @param {WebDavHandle} webdavService */
 export async function backupListBtnByWebDav(folderName, openFileListDialogFn, webdavService) {
-    const t = await storageManager.getSetting(), n = t.webDavUrl;
+    const t = await resolveWebDavProfile(webdavService), n = t.url;
     if (!n) return void show.error("请填写webDav服务地址并保存后, 再试此功能");
-    const a = t.webDavUsername;
+    const a = t.username;
     if (!a) return void show.error("请填写webDav用户名并保存后, 再试此功能");
-    if (!t.webDavPassword) return void show.error("请填写webDav密码并保存后, 再试此功能");
+    if (!t.password) return void show.error("请填写webDav密码并保存后, 再试此功能");
     const s = loading();
     try {
-        const i = await decryptCredential(t.webDavPassword);
-        if (!i) return void show.error("请填写webDav密码并保存后, 再试此功能");
+        const i = t.password;
         const e = webdavService.createClient({ url: n, username: a, password: i }), files = await e.getBackupList(folderName);
         openFileListDialogFn(files, e, "WebDav");
     } catch (o) {

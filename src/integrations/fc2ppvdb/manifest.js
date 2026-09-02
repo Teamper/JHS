@@ -11,10 +11,9 @@ export function createFc2PpvDbAdapter(http) {
         if (!id) throw new TypeError("FC2PPVDB movie identifier is invalid");
         return new URL(movieRef.url || `https://fc2ppvdb.com/articles/${id}`);
     };
-    /** @param {URL} url @param {any} scope */
-    const request = (url, scope) => http.request({
-        providerId: "fc2ppvdb", method: "GET", url: url.href, responseType: "text",
-        cacheScope: "public", ttlMs: 604_800_000,
+    /** @param {URL} url @param {any} scope @param {string} capability */
+    const request = (url, scope, capability = "movie.detail") => http.request({
+        capability, providerId: "fc2ppvdb", method: "GET", url: url.href, responseType: "text",
         urlPolicy: { trustClass: "builtin-public", hosts: ["fc2ppvdb.com"] },
     }, scope);
     return Object.freeze({
@@ -23,12 +22,12 @@ export function createFc2PpvDbAdapter(http) {
         detailUrl(movieRef) { return resolveUrl(movieRef).href; },
         /** @param {{carNum: string, url?: string}} movieRef @param {{scope?: any}} [options] */
         async getDetail(movieRef, options = {}) {
-            const url = resolveUrl(movieRef), response = await request(url, options.scope);
+            const url = resolveUrl(movieRef), response = await request(url, options.scope, "movie.detail");
             return parseFc2PpvDbDetail(response.data, response.finalUrl || url.href);
         },
         /** @param {{carNum: string, url?: string}} movieRef @param {{scope?: any}} [options] */
         async getPeople(movieRef, options = {}) {
-            const url = resolveUrl(movieRef), response = await request(url, options.scope);
+            const url = resolveUrl(movieRef), response = await request(url, options.scope, "movie.credits");
             return parseFc2PpvDbPeople(response.data, response.finalUrl || url.href);
         },
     });

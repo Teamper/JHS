@@ -12,5 +12,5 @@ it("normalizes the Gfriends catalog into actor avatar URLs", async () => {
     await expect(adapter.searchAvatars(["Alice"], { sourceId: "jsdelivr", scope: "scope" })).resolves.toEqual([
         "https://cdn.jsdelivr.net/gh/gfriends/gfriends/Content/%E5%A5%B3%E4%BC%98/alice%2Favatar%2001.jpg?raw=1",
     ]);
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ providerId: "gfriends:jsdelivr", cacheScope: "public", urlPolicy: { trustClass: "builtin-public", hosts: ["cdn.jsdelivr.net"] } }), "scope");
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ providerId: "gfriends:jsdelivr", capability: "person.avatar-search", urlPolicy: { trustClass: "builtin-public", hosts: ["cdn.jsdelivr.net"] } }), "scope");
 });

@@ -117,22 +117,27 @@ export class StateService {
     }
     /** @param {StateRecord} record */
     async appendOfflineHistory(record) {
-        const history = await this.getOfflineHistory(), item = { id: record.id || globalThis.crypto?.randomUUID?.() || `offline_${Date.now()}`, createdAt: record.createdAt || new Date().toISOString(), ...record, carNum: normalizeCarNum(record.carNum) };
-        history.push(item), history.length > 1e3 && history.splice(0, history.length - 1e3), await this.storage.forage.setItem("offline_history", history), await this.eventBus.emit("offline-history-changed", { ids: [ item.id ] });
-        return item;
+        return this._withLock(async () => {
+            const history = await this.getOfflineHistory(), item = { id: record.id || globalThis.crypto?.randomUUID?.() || `offline_${Date.now()}`, createdAt: record.createdAt || new Date().toISOString(), ...record, carNum: normalizeCarNum(record.carNum) };
+            history.push(item), history.length > 1e3 && history.splice(0, history.length - 1e3), await this.storage.forage.setItem("offline_history", history), await this.eventBus.emit("offline-history-changed", { ids: [ item.id ] });
+            return item;
+        });
     }
     /** @param {string | string[]} ids */
     async removeOfflineHistory(ids) {
-        const keys = new Set(Array.isArray(ids) ? ids : [ ids ]), history = await this.getOfflineHistory(), next = history.filter((/** @param {StateRecord} item */ item => !keys.has(item.id)));
-        if (next.length === history.length) return !1;
-        return await this.storage.forage.setItem("offline_history", next), await this.eventBus.emit("offline-history-changed", { ids: [ ...keys ], removed: !0 }), !0;
+        return this._withLock(async () => {
+            const keys = new Set(Array.isArray(ids) ? ids : [ ids ]), history = await this.getOfflineHistory(), next = history.filter((/** @param {StateRecord} item */ item => !keys.has(item.id)));
+            if (next.length === history.length) return !1;
+            return await this.storage.forage.setItem("offline_history", next), await this.eventBus.emit("offline-history-changed", { ids: [ ...keys ], removed: !0 }), !0;
+        });
     }
     async getNewVideoDecisions() {
         return await this.storage.forage.getItem("new_video_decisions") || {};
     }
-    /** @returns {Promise<StateRecord>} */
-    async _readDomains() {
-        const [carList, actresses, decisions, activity] = await Promise.all([ this.storage.forage.getItem(this.storage.car_list_key), this.storage.forage.getItem(this.storage.favorite_actresses_key), this.storage.forage.getItem("new_video_decisions"), this.storage.forage.getItem("activity_log") ]);
+    /** @param {string[] | null} [requestedDomains] @returns {Promise<StateRecord>} */
+    async _readDomains(requestedDomains = null) {
+        const requested = new Set(requestedDomains ?? ["carList", "actresses", "decisions", "activity"]), read = (/** @type {string} */ domain, /** @type {string} */ key, /** @type {unknown} */ fallback) => requested.has(domain) ? this.storage.forage.getItem(key) : Promise.resolve(fallback);
+        const [carList, actresses, decisions, activity] = await Promise.all([ read("carList", this.storage.car_list_key, []), read("actresses", this.storage.favorite_actresses_key, []), read("decisions", "new_video_decisions", {}), read("activity", "activity_log", null) ]);
         return { carList: carList || [], actresses: actresses || [], decisions: decisions || {}, activity: pruneActivityLog(activity) };
     }
     /** @param {StateRecord[]} actresses @param {StateRecord} decisions @param {string[]} carNums */
@@ -151,15 +156,16 @@ export class StateService {
     async _writeActivity(log) {
         await this.storage.forage.setItem("activity_log", pruneActivityLog(log));
     }
-    /** @param {StateRecord} domains @param {StateRecord} next @param {StateRecord} activity */
-    async _commit(domains, next, activity) {
-        // TODO(performance): 后续按事务声明的 domain 读取与写入，避免无关数据域放大 journal。
+    /** @param {StateRecord} domains @param {StateRecord} next @param {StateRecord} activity @param {string[]} [touchedDomains] */
+    async _commit(domains, next, activity, touchedDomains = ["carList", "activity"]) {
         const pendingActivity = cloneStateValue(activity), pendingLog = { ...domains.activity, entries: [ ...domains.activity.entries, pendingActivity ] };
-        const journal = { id: activity.id, state: "prepared", createdAt: activity.createdAt, before: cloneStateValue(domains), after: cloneStateValue({ ...next, activity: pendingLog }) };
+        const touched = [ ...new Set([ ...touchedDomains, "activity" ]) ];
+        const select = (/** @type {StateRecord} */ source) => Object.fromEntries(touched.map((key) => [key, cloneStateValue(key === "activity" ? pendingLog : source[key])]));
+        const journal = { schema: 2, id: activity.id, state: "prepared", createdAt: activity.createdAt, touchedDomains: touched, before: select(domains), after: select(next) };
         await this.storage.forage.setItem("mutation_journal", journal);
         try {
-            await this.storage._setItemAndInvalidate(this.storage.car_list_key, next.carList), await this._writeActivity(pendingLog),
-            await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, next.actresses), await this.storage.forage.setItem("new_video_decisions", next.decisions);
+            touched.includes("carList") && await this.storage._setItemAndInvalidate(this.storage.car_list_key, next.carList), touched.includes("activity") && await this._writeActivity(pendingLog),
+            touched.includes("actresses") && await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, next.actresses), touched.includes("decisions") && await this.storage.forage.setItem("new_video_decisions", next.decisions);
             activity.commitState = "committed", pendingLog.entries = pendingLog.entries.map((/** @param {StateRecord} entry */ entry => entry.id === activity.id ? activity : entry)), await this._writeActivity(pendingLog);
             await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
         } catch (error) {
@@ -170,10 +176,11 @@ export class StateService {
     /** @param {StateRecord} journal */
     async _recoverJournal(journal) {
         const log = await this.getActivityLog(), activity = log.entries.find((/** @param {StateRecord} entry */ entry => entry.id === journal.id));
+        const touched = Array.isArray(journal.touchedDomains) ? journal.touchedDomains : ["carList", "actresses", "decisions", "activity"];
         if ("committed" === activity?.commitState) {
-            await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.after.carList), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.after.actresses), await this.storage.forage.setItem("new_video_decisions", journal.after.decisions);
+            touched.includes("carList") && await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.after.carList), touched.includes("actresses") && await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.after.actresses), touched.includes("decisions") && await this.storage.forage.setItem("new_video_decisions", journal.after.decisions);
         } else {
-            const current = await this._readDomains(), keys = [ "carList", "actresses", "decisions" ];
+            const current = await this._readDomains(touched), keys = touched.filter((key) => key !== "activity");
             const conflict = keys.some((key => {
                 const value = stableStateValue(current[key]);
                 return value !== stableStateValue(journal.before[key]) && value !== stableStateValue(journal.after[key]);
@@ -183,7 +190,7 @@ export class StateService {
                 const archive = {
                     journal: cloneStateValue(journal),
                     detectedAt: new Date().toISOString(),
-                    currentStateHash: await hashState({ carList: current.carList, actresses: current.actresses, decisions: current.decisions }),
+                    currentStateHash: await hashState(Object.fromEntries(keys.map((key) => [key, current[key]]))),
                 };
                 try {
                     const archives = await this.storage.forage.getItem("mutation_journal_conflicts") || [];
@@ -196,7 +203,7 @@ export class StateService {
                 clog.warn("[状态] 检测到未完成状态事务且数据已变化，已归档证据并保留当前数据"), show.info("检测到未完成的状态事务，已保留当前数据并归档冲突证据");
                 return;
             }
-            await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.before.carList), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.before.actresses), await this.storage.forage.setItem("new_video_decisions", journal.before.decisions);
+            touched.includes("carList") && await this.storage._setItemAndInvalidate(this.storage.car_list_key, journal.before.carList), touched.includes("actresses") && await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, journal.before.actresses), touched.includes("decisions") && await this.storage.forage.setItem("new_video_decisions", journal.before.decisions);
             journal.before.activity ? await this._writeActivity(journal.before.activity) : (log.entries = log.entries.filter((/** @param {StateRecord} entry */ entry => entry.id !== journal.id)), await this._writeActivity(log));
         }
         await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
@@ -242,7 +249,7 @@ export class StateService {
         if (!changes.length) return { changed: [], transactionId: null };
         changes.forEach((change => handled.includes(change.carNum) && (change.newVideoEffect = captureNewVideoEffect(domains.actresses, domains.decisions, change.carNum))));
         const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, handled), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: options.type || "state-patch", commitState: "pending", changes, createdAt: new Date().toISOString(), undoAttemptedAt: null };
-        await this._commit(domains, { carList: [ ...map.values() ], ...effects }, activity), await this.eventBus.emit("car-state-changed", { carNums: changes.map((change => change.carNum)), transactionId: activity.id }), handled.length && await this.eventBus.emit("new-video-changed", { carNums: [ ...new Set(handled) ], reason: "state-handled" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+        await this._commit(domains, { carList: [ ...map.values() ], ...effects }, activity, handled.length ? ["carList", "actresses", "decisions", "activity"] : ["carList", "activity"]), await this.eventBus.emit("car-state-changed", { carNums: changes.map((change => change.carNum)), transactionId: activity.id }), handled.length && await this.eventBus.emit("new-video-changed", { carNums: [ ...new Set(handled) ], reason: "state-handled" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
         return { changed: changes.map((change => change.carNum)), transactionId: activity.id };
     }
     /** @param {string} carNum @param {StateFlag} flag @param {StateRecord} [options] */
@@ -264,7 +271,7 @@ export class StateService {
             const domains = await this._readDomains(), changes = domains.carList.filter((/** @type {StateRecord} */ record) => keys.has(/** @type {string} */ (normalizeCarNum(record.carNum)))).map((/** @type {StateRecord} */ record) => ({ carNum: normalizeCarNum(record.carNum), operation: "delete", fields: [ "record" ], before: cloneStateValue(record), after: null, undoState: "pending" }));
             if (!changes.length) return { changed: [], transactionId: null };
             const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "record-delete", commitState: "pending", changes, createdAt: new Date().toISOString(), undoAttemptedAt: null };
-            await this._commit(domains, { carList: domains.carList.filter((/** @type {StateRecord} */ record) => !keys.has(/** @type {string} */ (normalizeCarNum(record.carNum)))), actresses: domains.actresses, decisions: domains.decisions }, activity), await this.eventBus.emit("car-records-removed", { carNums: changes.map((/** @type {StateRecord} */ change) => change.carNum), transactionId: activity.id }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+            await this._commit(domains, { carList: domains.carList.filter((/** @type {StateRecord} */ record) => !keys.has(/** @type {string} */ (normalizeCarNum(record.carNum)))), actresses: domains.actresses, decisions: domains.decisions }, activity, ["carList", "activity"]), await this.eventBus.emit("car-records-removed", { carNums: changes.map((/** @type {StateRecord} */ change) => change.carNum), transactionId: activity.id }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
             return { changed: changes.map((/** @type {StateRecord} */ change) => change.carNum), transactionId: activity.id };
         });
     }
@@ -284,7 +291,7 @@ export class StateService {
             if (!changes.length) return { changed: [], transactionId: null };
             const activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-decision", commitState: "pending", changes, createdAt: now, undoAttemptedAt: null };
             const changed = changes.map((change => change.carNum));
-            await this._commit(domains, { carList: domains.carList, actresses: domains.actresses, decisions }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason: action || "decision-restored" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+            await this._commit(domains, { carList: domains.carList, actresses: domains.actresses, decisions }, activity, ["decisions", "activity"]), await this.eventBus.emit("new-video-changed", { carNums: changed, reason: action || "decision-restored" }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
             return { changed, transactionId: activity.id };
         });
     }
@@ -304,7 +311,7 @@ export class StateService {
                 return { carNum, operation: "new-video-remove", fields: [ "newVideoList", "decision" ], before: null, after: { removed: !0, reason }, newVideoEffect, afterDecision, undoState: "pending" };
             }));
             const effects = this._removeHandledNewVideos(domains.actresses, domains.decisions, changed), activity = { id: globalThis.crypto?.randomUUID?.() || `activity_${Date.now()}`, type: "new-video-remove", commitState: "pending", changes, createdAt: now, undoAttemptedAt: null };
-            await this._commit(domains, { carList: domains.carList, actresses: effects.actresses, decisions }, activity), await this.eventBus.emit("new-video-changed", { carNums: changed, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
+            await this._commit(domains, { carList: domains.carList, actresses: effects.actresses, decisions }, activity, ["actresses", "decisions", "activity"]), await this.eventBus.emit("new-video-changed", { carNums: changed, reason }), await this.eventBus.emit("activity-log-changed", { transactionId: activity.id });
             return { changed, transactionId: activity.id };
         });
     }
@@ -319,6 +326,7 @@ export class StateService {
             const reverted = [];
             /** @type {string[]} */
             const conflicts = [];
+            const touched = new Set(["activity"]);
             for (const change of transaction.changes) {
                 if ("reverted" === change.undoState) continue;
                 const current = carMap.get(change.carNum);
@@ -326,27 +334,29 @@ export class StateService {
                     change.undoState = "conflict", conflicts.push(change.carNum); continue;
                 }
                 if ("delete" === change.operation) {
-                    current ? (change.undoState = "conflict", conflicts.push(change.carNum)) : (carMap.set(change.carNum, cloneStateValue(change.before)), change.undoState = "reverted", reverted.push(change.carNum));
+                    current ? (change.undoState = "conflict", conflicts.push(change.carNum)) : (carMap.set(change.carNum, cloneStateValue(change.before)), change.undoState = "reverted", reverted.push(change.carNum), touched.add("carList"));
                     continue;
                 }
                 if ("new-video-decision" === change.operation) {
                     const currentDecision = decisions[change.carNum] || null;
-                    stableStateValue(currentDecision) !== stableStateValue(change.after) ? (change.undoState = "conflict", conflicts.push(change.carNum)) : (change.before ? decisions[change.carNum] = cloneStateValue(change.before) : delete decisions[change.carNum], change.undoState = "reverted", reverted.push(change.carNum));
+                    stableStateValue(currentDecision) !== stableStateValue(change.after) ? (change.undoState = "conflict", conflicts.push(change.carNum)) : (change.before ? decisions[change.carNum] = cloneStateValue(change.before) : delete decisions[change.carNum], change.undoState = "reverted", reverted.push(change.carNum), touched.add("decisions"));
                     continue;
                 }
                 if ("new-video-remove" === change.operation) {
-                    restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), change.undoState = "reverted", reverted.push(change.carNum);
+                    restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), change.undoState = "reverted", reverted.push(change.carNum), touched.add("actresses"), touched.add("decisions");
                     continue;
                 }
                 if (![ "patch", "create" ].includes(change.operation) || !current || change.fields.some((/** @param {string} field */ field => stableStateValue(getStatePath(current, field)) !== stableStateValue(getStatePath(change.after, field))))) {
                     change.undoState = "conflict", conflicts.push(change.carNum); continue;
                 }
                 if ("create" === change.operation && !change.before) carMap.delete(change.carNum); else change.fields.forEach((/** @param {string} field */ field => setStatePath(current, field, getStatePath(change.before, field)))), syncLegacyStatus(current), carMap.set(change.carNum, current);
-                change.newVideoEffect && restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), change.undoState = "reverted", reverted.push(change.carNum);
+                touched.add("carList"), change.newVideoEffect && (restoreNewVideoEffect(actresses, decisions, change.carNum, change.newVideoEffect), touched.add("actresses"), touched.add("decisions")), change.undoState = "reverted", reverted.push(change.carNum);
             }
             transaction.undoAttemptedAt = new Date().toISOString();
-            const log = pruneActivityLog(domains.activity), nextCars = [ ...carMap.values() ], journal = { id: `undo_${transactionId}`, state: "prepared", createdAt: transaction.undoAttemptedAt, before: cloneStateValue(domains), after: cloneStateValue({ carList: nextCars, actresses, decisions, activity: log }) };
-            await this.storage.forage.setItem("mutation_journal", journal), await this.storage._setItemAndInvalidate(this.storage.car_list_key, nextCars), await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, actresses), await this.storage.forage.setItem("new_video_decisions", decisions), await this._writeActivity(log), await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
+            const log = pruneActivityLog(domains.activity), nextCars = [ ...carMap.values() ], touchedDomains = [...touched];
+            const select = (/** @type {StateRecord} */ source) => Object.fromEntries(touchedDomains.map((key) => [key, cloneStateValue(key === "activity" ? log : source[key])]));
+            const journal = { schema: 2, id: `undo_${transactionId}`, state: "prepared", createdAt: transaction.undoAttemptedAt, touchedDomains, before: select(domains), after: select({ carList: nextCars, actresses, decisions, activity: log }) };
+            await this.storage.forage.setItem("mutation_journal", journal), touched.has("carList") && await this.storage._setItemAndInvalidate(this.storage.car_list_key, nextCars), touched.has("actresses") && await this.storage._setItemAndInvalidate(this.storage.favorite_actresses_key, actresses), touched.has("decisions") && await this.storage.forage.setItem("new_video_decisions", decisions), await this._writeActivity(log), await this.storage.forage.removeItem("mutation_journal"), this.storage._invalidateCache();
             reverted.length && await this.eventBus.emit("car-state-changed", { carNums: reverted, undoOf: transactionId }), await this.eventBus.emit("activity-log-changed", { transactionId, undo: !0 });
             return { reverted, conflicts };
         });

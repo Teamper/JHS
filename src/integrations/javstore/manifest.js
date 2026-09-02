@@ -7,7 +7,7 @@ import { parseJavStorePreview, parseJavStoreSearch } from "./parser.js";
 export function createJavStoreAdapter(http) {
     /** @param {string} url @param {any} scope */
     const request = (url, scope) => http.request({
-        providerId: "javstore", method: "GET", url, responseType: "text", cacheScope: "public", ttlMs: 604_800_000,
+        providerId: "javstore", capability: "movie.images", method: "GET", url, responseType: "text",
         urlPolicy: { trustClass: "builtin-public", hosts: ["javstore.net"] },
     }, scope);
     return Object.freeze({
@@ -39,5 +39,5 @@ export default defineIntegration({
     capabilities: ["movie.images"], requires: [SERVICE.http],
     createClient: (/** @type {any} */ dependencies) => Object.freeze({ http: dependencies[SERVICE.http] }),
     createAdapter: (/** @type {any} */ client) => createJavStoreAdapter(client.http),
-    createHostAdapter: null, cachePolicy: { "movie.images": CACHE.externalDetail }, quality: "silver",
+    createHostAdapter: null, cachePolicy: { "movie.images": "screenshot-7d" }, quality: "silver",
 });

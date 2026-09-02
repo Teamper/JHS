@@ -14,6 +14,7 @@ import { LifecycleScope } from "../src/core/lifecycle-scope.js";
 import { openSettingsUi, registerSettingsUiOwner } from "../src/core/settings-ui-owner.js";
 import { BasePlugin, PluginManager } from "../src/core/plugin-manager.js";
 import { DiagnosticsService } from "../src/services/diagnostics-service.js";
+import { createIntegrationRequestFacade } from "../src/app/integration-registry.js";
 
 describe("v6.5 architecture runtime contracts", () => {
     it("injects only declared tokens and rejects duplicate or missing dependencies", () => {
@@ -63,7 +64,7 @@ describe("v6.5 architecture runtime contracts", () => {
         expect(legacyContributionManifests.find((item) => item.id === "discovery.top250")?.legacyPluginId).toBe("TOP250Plugin");
         const createRuntime = (site, disabled = []) => {
             const diagnostics = new DiagnosticsService();
-            const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.profile, { current: () => "regular" }).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {}).register(SERVICE.state, {}).register(REGISTRY.settings, new SettingsRegistry());
+            const container = new DependencyContainer().register(PORT.host, { locateDetailSlots: () => ({}) }).register(SERVICE.diagnostics, diagnostics).register(SERVICE.dialog, {}).register(SERVICE.webdav, {}).register(SERVICE.credential, {}).register(SERVICE.review, {}).register(SERVICE.related, {}).register(SERVICE.movie, {}).register(SERVICE.actressInfo, {}).register(SERVICE.imageSearch, {}).register(SERVICE.magnet, {}).register(SERVICE.screenshot, {}).register(SERVICE.translation, {}).register(SERVICE.subtitle, {}).register(SERVICE.account, {}).register(SERVICE.settings, {}).register(SERVICE.profile, { current: () => "regular" }).register(SERVICE.storage, {}).register(SERVICE.cache, {}).register(SERVICE.http, {}).register(SERVICE.offline, {}).register(SERVICE.state, {}).register(REGISTRY.settings, new SettingsRegistry());
             const runtime = new FeatureRuntime({ container, commands: new CommandRegistry(), diagnostics, disabled, site, route: "list" });
             featureManifests.forEach((manifest) => runtime.register(manifest));
             return runtime;
@@ -71,22 +72,20 @@ describe("v6.5 architecture runtime contracts", () => {
         const javdb = new PluginManager();
         registerSitePlugins(javdb, createRuntime("javdb"), "javdb");
         expect(javdb.getPluginNames()).toEqual([
-            "OneTwoThreeOfflinePlugin", "ListPagePlugin", "AutoPagePlugin", "Fc2Plugin", "Fc2NavigationPlugin", "FoldCategoryPlugin", "ListPageButtonPlugin",
-            "HistoryPlugin", "SettingPlugin", "NavBarPlugin", "HitShowPlugin", "TOP250Plugin", "SearchByImagePlugin", "CoverButtonPlugin",
-            "Fc2By123AvPlugin", "DetailPagePlugin", "DetailWorkspacePlugin", "ReviewPlugin", "RelatedPlugin", "DetailPageButtonPlugin",
-            "HighlightMagnetPlugin", "PreviewVideoPlugin", "FilterTitleKeywordPlugin", "ActressInfoPlugin", "OtherSitePlugin", "TranslatePlugin",
-            "WantAndWatchedVideosPlugin", "MagnetHubPlugin", "ScreenShotPlugin", "BlacklistPlugin", "FavoriteActressesPlugin", "NewVideoPlugin",
-            "TaskPlugin", "StatsPlugin", "MobileBottomBarPlugin", "OneOneFiveMatchPlugin", "UnifiedOfflinePlugin", "CompatibilityEnhancementsPlugin",
+            "OneTwoThreeOfflinePlugin", "ListPagePlugin", "AutoPagePlugin", "Fc2Plugin", "Fc2NavigationPlugin", "FoldCategoryPlugin", "ListPageButtonPlugin", "HistoryPlugin",
+            "SettingPlugin", "NavBarPlugin", "HitShowPlugin", "TOP250Plugin", "SearchByImagePlugin", "CoverButtonPlugin",
+            "FilterTitleKeywordPlugin", "ActressInfoPlugin", "TranslatePlugin", "WantAndWatchedVideosPlugin", "BlacklistPlugin",
+            "FavoriteActressesPlugin", "NewVideoPlugin", "TaskPlugin", "StatsPlugin", "MobileBottomBarPlugin", "OneOneFiveMatchPlugin", "UnifiedOfflinePlugin", "CompatibilityEnhancementsPlugin",
         ]);
         const javbus = new PluginManager();
         registerSitePlugins(javbus, createRuntime("javbus", ["ReviewPlugin"]), "javbus");
         expect(javbus.getPluginNames()).not.toContain("ReviewPlugin");
-        expect(javbus.getPluginNames()).toContain("DetailWorkspacePlugin");
+        expect(javbus.getPluginNames()).not.toContain("DetailWorkspacePlugin");
 
         const javdbWithCoverDisabled = new PluginManager();
         registerSitePlugins(javdbWithCoverDisabled, createRuntime("javdb", ["CoverButtonPlugin"]), "javdb");
         expect(javdbWithCoverDisabled.getPluginNames()).not.toContain("CoverButtonPlugin");
-        expect(javdbWithCoverDisabled.getPluginNames()).toContain("DetailPageButtonPlugin");
+        expect(javdbWithCoverDisabled.getPluginNames()).toContain("ListPagePlugin");
         expect(javdbWithCoverDisabled.getPluginDescriptors()).toContainEqual({ name: "CoverButtonPlugin", disableable: true });
 
         const javdbWithExternalSitesDisabled = new PluginManager();
@@ -97,15 +96,15 @@ describe("v6.5 architecture runtime contracts", () => {
         const javbusWithImagesDisabled = new PluginManager();
         registerSitePlugins(javbusWithImagesDisabled, createRuntime("javbus", ["BusImgPlugin"]), "javbus");
         expect(javbusWithImagesDisabled.getPluginNames()).not.toContain("BusImgPlugin");
-        expect(javbusWithImagesDisabled.getPluginNames()).toContain("BusPreviewVideoPlugin");
+        expect(javbusWithImagesDisabled.getPluginNames()).not.toContain("BusPreviewVideoPlugin");
 
         for (const [site, disabledPlugin, survivingPlugin] of [
             ["javdb", "Fc2Plugin", "ListPagePlugin"],
             ["javdb", "AutoPagePlugin", "ListPagePlugin"],
             ["javdb", "CoverButtonPlugin", "ListPagePlugin"],
             ["javdb", "ListPageButtonPlugin", "ListPagePlugin"],
-            ["javdb", "HighlightMagnetPlugin", "DetailPageButtonPlugin"],
-            ["javdb", "MagnetHubPlugin", "DetailPageButtonPlugin"],
+            ["javdb", "HighlightMagnetPlugin", "ListPagePlugin"],
+            ["javdb", "MagnetHubPlugin", "ListPagePlugin"],
         ]) {
             const manager = new PluginManager();
             registerSitePlugins(manager, createRuntime(site, [disabledPlugin]), site);
@@ -133,7 +132,7 @@ describe("v6.5 architecture runtime contracts", () => {
             ["settings", SERVICE.settings], ["cache", SERVICE.cache], ["http", SERVICE.http],
             ["profile", SERVICE.profile], ["actressInfo", SERVICE.actressInfo], ["imageSearch", SERVICE.imageSearch],
             ["screenshot", SERVICE.screenshot], ["translation", SERVICE.translation], ["subtitle", SERVICE.subtitle],
-            ["account", SERVICE.account], ["webdav", SERVICE.webdav], ["storage", SERVICE.storage],
+            ["account", SERVICE.account], ["webdav", SERVICE.webdav], ["credential", SERVICE.credential], ["storage", SERVICE.storage],
             ["state", SERVICE.state], ["offline", SERVICE.offline], ["dialog", SERVICE.dialog],
             ["settingsRegistry", REGISTRY.settings],
         ]);
@@ -274,5 +273,25 @@ describe("v6.5 architecture runtime contracts", () => {
         expect((await registry.getAvailable("magnet", {})).map((provider) => provider.id)).toEqual(["fast", "slow"]);
         registry.updateHealth("fast", { ok: true });
         expect(registry.getHealth("fast")).toMatchObject({ ok: true });
+    });
+
+    it("derives transport cache policy from the requested manifest capability", async () => {
+        const request = vi.fn(async (options, scope) => ({ options, scope }));
+        const facade = createIntegrationRequestFacade({ request }, {
+            id: "fixture", capabilities: ["movie.detail", "movie.state"],
+            cachePolicy: { "movie.detail": "external-detail-v1", "movie.state": "none" },
+        });
+        const detail = await facade.request({ capability: "movie.detail", providerId: "fixture", method: "GET", url: "https://example.test/detail", cacheScope: "session", ttlMs: 1 }, "scope");
+        const state = await facade.request("movie.state", { providerId: "fixture", method: "GET", url: "https://example.test/state", cacheScope: "public", ttlMs: 1 }, "scope");
+        expect(detail.options).toMatchObject({ cacheScope: "public", ttlMs: 604800000, cacheNamespace: "external-detail-v1" });
+        expect(state.options).toMatchObject({ cacheScope: "none", ttlMs: 0 });
+        expect(detail.options).not.toHaveProperty("capability");
+        expect(request).toHaveBeenNthCalledWith(1, expect.any(Object), "scope");
+
+        const sourceFacade = createIntegrationRequestFacade({ request }, {
+            id: "sources", capabilities: ["magnet.search"], cachePolicy: { "magnet.search": "source-configured" },
+        });
+        const post = await sourceFacade.request("magnet.search", { method: "POST", providerId: "btsow", url: "https://example.test/search", body: "{}" }, "scope");
+        expect(post.options).toMatchObject({ cacheScope: "none", ttlMs: 0 });
     });
 });

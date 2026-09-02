@@ -56,7 +56,7 @@ export async function createRequestKey(options) {
     const varyHeaders = [...new Set((options.varyHeaders ?? []).map((/** @type {unknown} */ header) => String(header).toLowerCase()))].sort();
     const varyValues = Object.fromEntries(varyHeaders.map((header) => [header, headers[header] ?? ""]));
     const key = {
-        providerId: String(options.providerId), method, canonicalUrl: canonicalizeUrl(options.url),
+        providerId: String(options.providerId), cacheNamespace: String(options.cacheNamespace ?? options.providerId ?? "default"), method, canonicalUrl: canonicalizeUrl(options.url),
         bodyHash: await sha256(stableSerialize(options.body ?? null)), responseType: String(options.responseType ?? "text"),
         cacheScope: String(options.cacheScope ?? "none"), varyHeadersHash: await sha256(stableSerialize(varyValues)),
         sessionScopeId: options.cacheScope === "session" ? String(options.sessionScopeId ?? "") : "",
@@ -88,22 +88,23 @@ export class HttpService {
         const urlPolicy = /** @type {{trustClass: string, hosts?: string[], expectedOrigin?: string}} */ (options.urlPolicy);
         const initialUrl = this.urlPolicy.assertAllowed(options.url, urlPolicy);
         if (method !== "GET" || cacheScope === "none") return this.executeUnderlying({ ...options, method, url: initialUrl.href, signal: scope?.signal }, urlPolicy);
-        const requestKey = await createRequestKey({ ...options, method, url: initialUrl.href, cacheScope });
+        const cacheNamespace = String(options.cacheNamespace ?? options.providerId ?? "default");
+        const requestKey = await createRequestKey({ ...options, method, url: initialUrl.href, cacheScope, cacheNamespace });
         const serializedKey = stableSerialize(requestKey);
         const cachePolicy = { scope: cacheScope, sessionScopeId: options.sessionScopeId };
         if (method === "GET" && cacheScope !== "none" && this.cache) {
-            const cached = await this.cache.get(serializedKey, cachePolicy);
+            const cached = await this.cache.get(cacheNamespace, serializedKey, cachePolicy);
             if (cached.hit) return cached.value;
         }
-        const cacheGeneration = cacheScope === "public" && this.cache ? this.cache.publicGeneration : undefined;
+        const cacheGeneration = cacheScope === "public" && this.cache ? this.cache.generation(cacheNamespace) : undefined;
         let entry = this.inflight.get(serializedKey);
         if (!entry) {
             const controller = new AbortController();
             entry = { controller, consumers: 0, promise: Promise.resolve() };
             entry.promise = this.executeUnderlying({ ...options, method, url: initialUrl.href, signal: controller.signal }, urlPolicy)
                 .then(async (response) => {
-                    if (this.cache && (cacheGeneration == null || cacheGeneration === this.cache.publicGeneration)) {
-                        await this.cache.set(serializedKey, response, { ...cachePolicy, ttlMs: options.ttlMs ?? 0, negative: options.negative === true, generation: cacheGeneration });
+                    if (this.cache && (cacheGeneration == null || cacheGeneration === this.cache.generation(cacheNamespace))) {
+                        await this.cache.set(cacheNamespace, serializedKey, response, { ...cachePolicy, ttlMs: options.ttlMs ?? 0, negative: options.negative === true, generation: cacheGeneration });
                     }
                     return response;
                 })
@@ -118,7 +119,7 @@ export class HttpService {
 
     /** @param {Record<string, any>} options @param {{trustClass: string, hosts?: string[], expectedOrigin?: string}} urlPolicy */
     async executeUnderlying(options, urlPolicy) {
-        const domain = new URL(options.url).hostname, retryCount = Math.max(0, Math.min(5, Number(options.retryCount ?? 0) || 0));
+        const domain = new URL(options.url).hostname, retryCount = Math.max(0, Math.min(5, Number(options.retryCount ?? 0) || 0)), acceptableStatuses = new Set((options.acceptableStatuses ?? []).map((/** @type {unknown} */ status) => Number(status)).filter(Number.isFinite));
         let finalError = null;
         for (let attempt = 0; attempt <= retryCount; attempt += 1) {
             const blocked = this.checkCircuit(domain);
@@ -136,6 +137,10 @@ export class HttpService {
                         source: options.providerId, details: { domain, status: Number(response.status) || 0, contentLength: String(response.responseText ?? "").length },
                     });
                 }
+                if (acceptableStatuses.has(Number(response.status))) {
+                    this.recordSuccess(domain);
+                    return response;
+                }
                 if (response.status >= 400) {
                     const code = [401, 403].includes(response.status) ? "AUTH_REQUIRED" : response.status === 404 ? "NOT_FOUND" : response.status === 429 ? "RATE_LIMITED" : "NETWORK_ERROR";
                     throw new JhsError(code, `HTTP ${response.status}`, { source: options.providerId, retryable: response.status === 429 || response.status >= 500, details: { status: response.status, domain } });
@@ -144,13 +149,14 @@ export class HttpService {
                 return response;
             } catch (error) {
                 const normalized = JhsError.from(error, options.providerId);
-                if (["NETWORK_ERROR", "TIMEOUT", "RATE_LIMITED", "CF_BLOCKED"].includes(normalized.code)) this.recordFailure(domain, options);
+                this.recordAttempt(domain, true);
                 finalError = normalized;
                 if (!normalized.retryable || attempt >= retryCount || normalized.code === "CF_BLOCKED") break;
                 try { await waitForRetry(Number(options.retryDelayMs ?? 250) * (attempt + 1), options.signal); }
                 catch (abortError) { finalError = JhsError.from(abortError, options.providerId); break; }
             }
         }
+        if (finalError && ["NETWORK_ERROR", "TIMEOUT", "CF_BLOCKED"].includes(finalError.code)) this.recordBreakerFailure(domain, options);
         this.diagnostics?.recordError(finalError);
         throw finalError;
     }
@@ -182,16 +188,23 @@ export class HttpService {
     recordSuccess(domain) {
         const state = this.circuitBreakers.get(domain);
         if (state) state.state = "closed", state.failCount = 0, state.probing = false;
+        this.recordAttempt(domain, false);
+    }
+    /** @param {string} domain @param {boolean} error */
+    recordAttempt(domain, error) {
         const stats = this.domainStats.get(domain) ?? { count: 0, errors: 0, lastUsed: 0 };
-        stats.count += 1, stats.lastUsed = Date.now(), this.domainStats.set(domain, stats);
+        stats.count += 1, stats.errors += error ? 1 : 0, stats.lastUsed = Date.now(), this.domainStats.set(domain, stats);
     }
     /** @param {string} domain @param {Record<string, any>} options */
-    recordFailure(domain, options = {}) {
+    recordBreakerFailure(domain, options = {}) {
         const state = this.ensureCircuit(domain, options);
         state.failCount += 1;
         if (state.state === "half-open" || state.failCount >= state.threshold) state.state = "open", state.openTime = Date.now(), state.probing = false;
-        const stats = this.domainStats.get(domain) ?? { count: 0, errors: 0, lastUsed: 0 };
-        stats.count += 1, stats.errors += 1, stats.lastUsed = Date.now(), this.domainStats.set(domain, stats);
+    }
+    /** @param {string} domain @param {Record<string, any>} options */
+    recordFailure(domain, options = {}) {
+        this.recordAttempt(domain, true);
+        this.recordBreakerFailure(domain, options);
     }
     getCircuitBreakerStatus() { return Object.fromEntries([...this.circuitBreakers].map(([domain, state]) => [domain, { ...state }])); }
     getDomainStats() { return Object.fromEntries([...this.domainStats].map(([domain, stats]) => [domain, { ...stats }])); }

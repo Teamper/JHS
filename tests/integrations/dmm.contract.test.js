@@ -14,7 +14,7 @@ it("normalizes a DMM preview", () => {
 it("loads previews through the declared HTTP boundary", async () => {
     const request = vi.fn(async options => ({ status: 200, data: fixture, finalUrl: options.url }));
     await expect(createDmmAdapter({ request }).getPreview({ url: "https://www.dmm.co.jp/player/1" })).resolves.toEqual({ url: "https://www.dmm.co.jp/preview/sample.mp4" });
-    expect(request).toHaveBeenCalledWith(expect.objectContaining({ providerId: "dmm", cacheScope: "public", ttlMs: 604_800_000 }), undefined);
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ providerId: "dmm" }), undefined);
 });
 
 it("normalizes API candidates and player quality sources", () => {

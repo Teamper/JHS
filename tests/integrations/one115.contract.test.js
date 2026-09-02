@@ -11,7 +11,7 @@ it("normalizes 115 file search contracts", async () => {
     }]);
     const request = vi.fn(async options => ({ data: fixture, finalUrl: options.url })), adapter = createOne115Adapter({ request });
     await expect(adapter.searchFiles("123", { scope: "scope", ttlMs: 60000 })).resolves.toHaveLength(1);
-    expect(request.mock.calls[0][0]).toMatchObject({ providerId: "one115", cacheScope: "session", sessionScopeId: "one115-browser-session", urlPolicy: { trustClass: "builtin-public", hosts: ["115.com"] } });
+    expect(request.mock.calls[0][0]).toMatchObject({ providerId: "one115", urlPolicy: { trustClass: "builtin-public", hosts: ["115.com"] } });
     expect(request.mock.calls[0][0].url).toContain("search_value=123");
     expect(adapter.getPlayUrl({ videoId: "pick-1" })).toBe("https://115.com/?ct=play&pickcode=pick-1");
 });
@@ -26,7 +26,7 @@ it("normalizes 115 account, offline and rename operations", async () => {
     await expect(adapter.checkAccount()).resolves.toEqual({ authenticated: true });
     await expect(adapter.submit("magnet:?xt=urn:btih:abc")).resolves.toEqual({ success: true, taskId: "task" });
     await expect(adapter.renameFile("1", "ABC-1.mkv")).resolves.toEqual({ success: true });
-    expect(request.mock.calls[2][0]).toMatchObject({ method: "POST", cacheScope: "none", headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+    expect(request.mock.calls[2][0]).toMatchObject({ method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" } });
     expect(request.mock.calls[3][0].body).toContain("file_name=ABC-1.mkv");
 });
 
