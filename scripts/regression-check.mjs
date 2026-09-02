@@ -132,9 +132,9 @@ assert(!ciWorkflow.includes("gh release upload"), "release workflow must not upd
 assert(!ciWorkflow.includes("JHS-dev.user.js"), "release workflow must not build dev artifacts");
 assertIncludes(buildScript, "bundle: true", "performance bundled build");
 assertIncludes(buildScript, "keepNames: true", "performance bundled build");
-assertIncludes(buildScript, "minifySyntax: false", "performance bundled build");
+assertIncludes(buildScript, "minifySyntax: true", "performance bundled build");
 assertIncludes(buildScript, "minifyWhitespace: true", "performance bundled build");
-assertIncludes(buildScript, "minifyIdentifiers: false", "performance bundled build");
+assertIncludes(buildScript, "minifyIdentifiers: true", "performance bundled build");
 assertIncludes(buildScript, 'contents.replace(/\\/\\*\\*[\\s\\S]*?\\*\\//g, "")', "production bundle strips source-only JSDoc");
 
 const stableReleaseChecks = [

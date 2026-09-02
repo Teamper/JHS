@@ -156,6 +156,23 @@ describe("startup scheduling", () => {
     expect(manager.getStartupReport()).toMatchObject({ idlePending: 0, idleCompleted: 1 });
   });
 
+  it("binds idle-plugin event entrances before scheduling storage decoration", async () => {
+    const { PluginManager, BasePlugin, idleCallbacks } = loadPluginClasses();
+    const events = [];
+    class IdlePlugin extends BasePlugin {
+      getName() { return "IdlePlugin"; }
+      getStartupMode() { return "idle"; }
+      bindImmediateEvents() { events.push("bind"); }
+      async handle() { events.push("idle"); }
+    }
+    const manager = new PluginManager();
+    manager.register(IdlePlugin);
+    await manager.processPlugins();
+    expect(events).toEqual(["bind"]);
+    await idleCallbacks[0]();
+    expect(events).toEqual(["bind", "idle"]);
+  });
+
   it("shares immutable icon strings through the base prototype", () => {
     const { PluginManager, BasePlugin } = loadPluginClasses();
     class FirstPlugin extends BasePlugin { getName() { return "FirstPlugin"; } }

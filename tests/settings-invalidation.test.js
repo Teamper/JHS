@@ -1,7 +1,10 @@
 import { readTestFile } from "./helpers/read-test-file.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import vm from "node:vm";
+import { JSDOM } from "jsdom";
+import jqueryFactory from "jquery";
+import { describe, expect, it, vi } from "vitest";
 
 const storage = readTestFile(join(process.cwd(), "src/core/storage.js"), "utf8");
 const settingsService = readTestFile(join(process.cwd(), "src/services/settings-service.js"), "utf8");
@@ -58,6 +61,24 @@ describe("settings invalidation ownership", () => {
         expect(openDialog).not.toContain('getDependency("CoverButtonPlugin")');
         expect(settingPlugin).toContain('getBean("CoverButtonPlugin")?.enableSvgBtn?.()');
         expect(settingTemplates).not.toContain("coverButtonPlugin");
+    });
+
+    it("uses the EventBus binding initialized after form import and isolates UI refresh failures", async () => {
+        const dom = new JSDOM("<div></div>"), $ = jqueryFactory(dom.window), bus = { emit: async () => { throw new Error("bus unavailable"); } };
+        const newVideo = { resetBtnTip: () => { throw new Error("new-video unavailable"); } };
+        const blacklist = { resetBtnTip: vi.fn(), reloadTable: vi.fn() };
+        const context = vm.createContext({
+            window: dom.window, document: dom.window.document, $, C: "no", _: "yes", r: true, jhsEventBus: undefined,
+            storageManager: { getReviewFilterKeywordList: async () => [], getTitleFilterKeyword: async () => [] },
+            utils: {}, clog: { error: vi.fn() },
+        });
+        vm.runInContext(`${settingForms}; globalThis.saveSettingFormForTest = saveSettingForm;`, context);
+        context.jhsEventBus = bus;
+        const settings = { snapshot: () => ({ trustedLocalOrigins: [] }), update: async updater => updater({ trustedLocalOrigins: [] }) };
+        await expect(context.saveSettingFormForTest({ settings, newVideo, blacklist, movie: {} }, $(dom.window.document.querySelector("div")))).resolves.toEqual({ ok: true });
+        expect(blacklist.resetBtnTip).toHaveBeenCalledOnce();
+        expect(blacklist.reloadTable).toHaveBeenCalledOnce();
+        expect(context.clog.error).toHaveBeenCalledTimes(2);
     });
 });
 

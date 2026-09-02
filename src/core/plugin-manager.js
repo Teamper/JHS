@@ -181,6 +181,8 @@ export class PluginManager {
             const l = { name: s, elapsed: 0, status: "pending", startupMode: r };
             if (e.has(s)) l.status = "disabled", i.push(l); else if (t && "function" == typeof o.shouldSkipOnMobile && o.shouldSkipOnMobile()) l.status = "skipped-mobile",
             i.push(l); else {
+                if ("function" == typeof o.bindImmediateEvents) try { o.bindImmediateEvents(); }
+                catch (error) { clog.error(`插件 ${s} 即时事件绑定失败`, error), this._addError(s, "bind-immediate-events", error); }
                 const e = { name: s, plugin: o, mode: r, timing: l, startedAt: 0 };
                 "idle" === r ? (l.status = "pending-idle", a.push(e)) : n.push(e), i.push(l);
             }

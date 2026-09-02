@@ -160,8 +160,8 @@ export class StateService {
     async _commit(domains, next, activity, touchedDomains = ["carList", "activity"]) {
         const pendingActivity = cloneStateValue(activity), pendingLog = { ...domains.activity, entries: [ ...domains.activity.entries, pendingActivity ] };
         const touched = [ ...new Set([ ...touchedDomains, "activity" ]) ];
-        const select = (/** @type {StateRecord} */ source) => Object.fromEntries(touched.map((key) => [key, cloneStateValue(key === "activity" ? pendingLog : source[key])]));
-        const journal = { schema: 2, id: activity.id, state: "prepared", createdAt: activity.createdAt, touchedDomains: touched, before: select(domains), after: select(next) };
+        const select = (/** @type {StateRecord} */ source, includePendingActivity = false) => Object.fromEntries(touched.map((key) => [key, cloneStateValue(key === "activity" && includePendingActivity ? pendingLog : source[key])]));
+        const journal = { schema: 2, id: activity.id, state: "prepared", createdAt: activity.createdAt, touchedDomains: touched, before: select(domains), after: select(next, true) };
         await this.storage.forage.setItem("mutation_journal", journal);
         try {
             touched.includes("carList") && await this.storage._setItemAndInvalidate(this.storage.car_list_key, next.carList), touched.includes("activity") && await this._writeActivity(pendingLog),

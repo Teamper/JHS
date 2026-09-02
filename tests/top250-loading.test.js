@@ -5,7 +5,7 @@ import { JSDOM } from "jsdom";
 import jqueryFactory from "jquery";
 import { describe, expect, it, vi } from "vitest";
 
-function loadTop250({ hitShow = null, movies = [], listPageButton = null, html = '<section class="section"><div class="container"><h2 class="section-title">Top250</h2><div class="box"></div></div></section>', url = "https://javdb.com/advanced_search?handleTop=1&handleType=all&type_value=" } = {}) {
+function loadTop250({ hitShow = null, movies = [], listPageButton = null, credential = null, dialog = null, html = '<section class="section"><div class="container"><h2 class="section-title">Top250</h2><div class="box"></div></div></section>', url = "https://javdb.com/advanced_search?handleTop=1&handleType=all&type_value=" } = {}) {
     const dom = new JSDOM(html, { url });
     const $ = jqueryFactory(dom.window), q = vi.fn(), loading = vi.fn(() => ({ close: loadingClose })), loadingClose = vi.fn();
     // 对齐真实 JavDbHostAdapter：自有榜单页（/advanced_search）没有原生 .movie-list，
@@ -21,13 +21,13 @@ function loadTop250({ hitShow = null, movies = [], listPageButton = null, html =
     const context = vm.createContext({
         BasePlugin: class {
             getBean(name) { return { HitShowPlugin: hitShowMock, ListPageButtonPlugin: listPageButtonMock }[name]; }
-            getRuntimeService(name) { return { host, scope: async () => ({ signal: { aborted: false } }), movie: {}, settings: { snapshot: () => ({}) } }[name]; }
+            getRuntimeService(name) { return { host, scope: async () => ({ signal: { aborted: false } }), movie: {}, settings: { snapshot: () => ({}) }, credential, dialog, account: { login: vi.fn() } }[name]; }
         },
         i: (target, key, value) => (target[key] = value), $, document: dom.window.document, window: dom.window,
         URLSearchParams, q, loading,
         show: { info: vi.fn(), error: vi.fn(), ok: vi.fn() }, clog: { error: vi.fn(), log: vi.fn(), warn: vi.fn() },
         escapeHtml: value => $("<span></span>").text(String(value ?? "")).html(),
-        hasStoredEncryptedCredential: () => false, removeStoredEncryptedCredential: () => {}, storeEncryptedCredential: async () => {},
+        utils: { getResponsiveArea: vi.fn(() => ["360px", "auto"]) },
     });
     const source = readTestFile(join(process.cwd(), "src/plugins/external-search/top250.js"), "utf8");
     vm.runInContext(`${source};globalThis.Top250Plugin=Top250Plugin`, context);
@@ -95,5 +95,18 @@ describe("Top250Plugin handleTop loading lifecycle", () => {
         const { plugin } = loadTop250({ hitShow: { markDataListHtml: vi.fn(() => ""), initializeRenderedList: vi.fn(async () => {}), loadScore: vi.fn(async () => {}) } });
         plugin.getRuntimeService = name => name === "host" ? { getListContainer: () => null, getListLayoutContainer: () => null, createOwnedListRoot: () => null } : {};
         await expect(plugin.handleTop()).rejects.toThrow("JavDB 列表容器不可用");
+    });
+
+    it("removes an invalid GM credential and opens one login dialog without re-entering checkLogin", async () => {
+        const credential = { remove: vi.fn(async () => {}) }, dialog = { open: vi.fn(() => 1) };
+        const { plugin, q, show } = loadTop250({ hitShow: { markDataListHtml: vi.fn(() => ""), initializeRenderedList: vi.fn(async () => {}), loadScore: vi.fn(async () => {}) }, credential, dialog });
+        q.mockResolvedValue({ success: 0, action: "JWTVerificationError", message: "JWT 已失效" });
+        plugin.checkLogin = vi.fn();
+        await plugin.handleTop();
+        expect(q).toHaveBeenCalledOnce();
+        expect(credential.remove).toHaveBeenCalledOnce();
+        expect(dialog.open).toHaveBeenCalledOnce();
+        expect(plugin.checkLogin).not.toHaveBeenCalled();
+        expect(show.error).toHaveBeenCalledOnce();
     });
 });

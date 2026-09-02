@@ -10,7 +10,7 @@ import { readListItem } from "../../core/list-item-reader.js";
  * FC2 list-card navigation lives outside list.core so the FC2 path keeps
  * working when the generic list plugin is disabled. It owns:
  * - FC2 card identification on JavDB list pages
- * - original href protection / VIP bypass via owned-detail URL
+ * - primary-anchor ownership without rewriting native hrefs
  * - normal click -> FC2 dialog
  * - Ctrl / Meta / middle click -> FC2 owned detail
  * - source resolution (explicit -> URL inference -> empty)
@@ -34,10 +34,13 @@ export class Fc2NavigationPlugin extends BasePlugin {
             const root = $(current).first();
             if (!root.length) return;
             await this.protectFc2Navigation(root, fc2).catch((error) => clog.warn("FC2 导航保护初始化失败", error));
+            this.bindFc2Navigation(root, fc2);
             if (boundRoot !== current) {
                 boundRoot = current;
-                this.bindFc2Navigation(root, fc2);
-                scope.addCleanup(() => root.off(".jhsFc2Navigation"));
+                scope.addCleanup(() => {
+                    root.off(".jhsFc2Navigation");
+                    root.find('.item a[data-jhs-fc2-primary="true"]').off(".jhsFc2Navigation");
+                });
             }
         };
         await ensureAttached();
@@ -74,12 +77,14 @@ export class Fc2NavigationPlugin extends BasePlugin {
                 const { carNum, aHref, fc2Source } = readListItem(item);
                 if (!carNum?.includes("FC2-") || !aHref) continue;
                 const source = fc2Source || (await fc2.resolveFc2Source({ url: aHref })) || "";
+                const primaryAnchor = item.find("a").first();
+                if (!primaryAnchor.length) continue;
                 item.attr({
                     "data-jhs-original-url": aHref,
                     "data-jhs-fc2-source": source,
                     "data-jhs-fc2-protected": "true",
                 });
-                item.find("a[href]").attr("href", fc2.createFc2PageUrl(null, carNum, aHref, { source }));
+                primaryAnchor.attr("data-jhs-fc2-primary", "true");
             } catch (error) {
                 clog.warn("FC2 导航保护初始化失败", error);
             }
@@ -88,28 +93,50 @@ export class Fc2NavigationPlugin extends BasePlugin {
 
     /** @param {JQueryHandle} root @param {any} fc2 */
     bindFc2Navigation(root, fc2) {
-        const selector = ".item img, .item .video-title";
-        root.off("click.jhsFc2Navigation auxclick.jhsFc2Navigation", selector)
-            .on("click.jhsFc2Navigation auxclick.jhsFc2Navigation", selector, (async (/** @type {any} */ event) => {
+        const selector = '.item a[data-jhs-fc2-primary="true"]';
+        const handleNavigation = async (/** @type {any} */ event) => {
                 if ("auxclick" === event.type && 1 !== event.button || "click" === event.type && event.button && 0 !== event.button) return;
                 if (event.shiftKey || event.altKey || $(event.target).closest("div.meta-buttons,[class^='jhs-match-']").length) return;
                 const item = $(event.currentTarget).closest(".item");
-                const { carNum, aHref, fc2Source } = readListItem(item);
+                const shouldOpenTab = Boolean(event.ctrlKey || event.metaKey || 1 === event.button);
+                const fallbackToNative = (href, carNum, error) => {
+                    clog.error("打开 FC2 详情失败，回退原始链接", error);
+                    if (shouldOpenTab) utils.openPage(href, carNum, !0, { event, newTab: true });
+                    else window.location.href = href;
+                };
+                let carNum;
+                let aHref;
+                let fc2Source;
+                try {
+                    const record = readListItem(item);
+                    carNum = record.carNum;
+                    aHref = item.attr("data-jhs-original-url") || record.aHref;
+                    fc2Source = record.fc2Source;
+                } catch (error) {
+                    aHref = item.attr("data-jhs-original-url") || item.find("a").first().attr("href");
+                    carNum = item.find(".video-title strong").first().text().trim();
+                    if (!aHref) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    fallbackToNative(aHref, carNum, error);
+                    return;
+                }
                 if (!carNum?.includes("FC2-") || !aHref) return;
                 event.preventDefault();
                 event.stopPropagation();
                 try {
-                    const shouldOpenTab = Boolean(event.ctrlKey || event.metaKey || 1 === event.button);
                     const movieId = await fc2.resolveMovieIdForRecord(carNum, aHref);
                     const source = fc2Source || (await fc2.resolveFc2Source({ url: aHref })) || "";
                     if (shouldOpenTab) {
-                        fc2.openFc2Page(movieId, carNum, aHref, { event, newTab: true }, { source });
+                        await fc2.openFc2Page(movieId, carNum, aHref, { event, newTab: true }, { source });
                     } else {
                         fc2.openFc2Dialog(movieId, carNum, aHref, { source });
                     }
-                } catch (error) {
-                    clog.error("打开 FC2 详情失败", error);
-                }
-            }));
+                } catch (error) { fallbackToNative(aHref, carNum, error); }
+            };
+        root.off("click.jhsFc2Navigation auxclick.jhsFc2Navigation", selector);
+        root.find(selector).each((/** @type {number} */ _index, /** @type {Element} */ element) => {
+            $(element).off("click.jhsFc2Navigation auxclick.jhsFc2Navigation").on("click.jhsFc2Navigation auxclick.jhsFc2Navigation", handleNavigation);
+        });
     }
 }

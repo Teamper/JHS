@@ -90,6 +90,7 @@ test("quick-filter and DOM generations reject stale filter commits", async ({ co
     }
     listPage.getFilterContext = originalGetFilterContext;
     listPage.setQuickFilter("all");
+    await listPage.requestListRefresh({ reason: "stress-final", full: true });
     return window.__jhsBrowserDiagnostics.listPhases || [];
   });
   const phases = await page.evaluate(() => window.__jhsBrowserDiagnostics.listPhases || []);

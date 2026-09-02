@@ -143,7 +143,7 @@ export class HistoryPlugin extends BasePlugin {
         $(".navbar-search").css("margin-left", "0").before('\n                <div class="navbar-item miniHistoryBtnBox">\n                    <button type="button" id="miniHistoryBtn" class="jhs-btn navbar-link nav-btn jhs-nav-btn">鉴定记录</button>\n                </div>\n            '),
         this.handleResize(), $(window).resize((() => {
             this.handleResize();
-        })), $("#historyBtn,#miniHistoryBtn").on("click", ((/** @type {any} */ e) => this.openHistory()))), l && await this.createBusButton();
+        })), $("#historyBtn,#miniHistoryBtn").on("click", ((/** @type {any} */ e) => this.openHistory()))), l && void this.createBusButton().catch((error) => clog.warn("鉴定记录入口创建失败", error));
     }
     async createBusButton() {
         const ready = await new Promise((/** @type {(value: boolean) => void} */ resolve) => {

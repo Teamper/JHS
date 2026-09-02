@@ -8,15 +8,18 @@ import { BasePlugin } from "../../core/plugin-manager.js";
 
 export class CompatibilityEnhancementsPlugin extends BasePlugin {
     getName() { return "CompatibilityEnhancementsPlugin"; }
+    getStartupMode() { return "idle"; }
     async initCss() {
         if (!siteContext.isJavDB) return "";
         return `<style>
             .sda-content { display:none!important; }
         </style>`;
     }
+    bindImmediateEvents() {
+        $(document).off("actress-state-changed.jhsActress").on("actress-state-changed.jhsActress", (async () => { $(".jhs-actress-state-container").remove(); await this.decorateActresses(); }));
+    }
     async handle() {
         await this.decorateActresses();
-        $(document).off("actress-state-changed.jhsActress").on("actress-state-changed.jhsActress", (async () => { $(".jhs-actress-state-container").remove(); await this.decorateActresses(); }));
         if (isDetailPage) await this.addRemoveRecord();
         this.linkCommentImages();
     }

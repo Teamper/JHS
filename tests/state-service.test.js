@@ -50,6 +50,28 @@ describe("StateService durable transactions", () => {
         expect(eventBus.emit).toHaveBeenCalledWith("car-state-changed", expect.anything());
     });
 
+    it("rolls back every touched domain when actresses fail after pending activity", async () => {
+        const before = {
+            car_list: [{ carNum: "ABC-1", stateFlags: {}, status: "" }],
+            favorite_actresses: [{ starId: "a", newVideoList: ["ABC-1"] }],
+            new_video_decisions: { "ABC-1": { action: "ignored" } },
+            activity_log: { entries: [] },
+        };
+        const { service, data, storage } = createHarness(before);
+        let writes = 0;
+        storage._setItemAndInvalidate = vi.fn(async (key, value) => {
+            writes += 1;
+            if (writes === 2) throw new Error("actress write failed");
+            data.set(key, value);
+        });
+        await expect(service.patch("ABC-1", { favorite: true })).rejects.toThrow("actress write failed");
+        expect(data.get("car_list")).toEqual(before.car_list);
+        expect(data.get("favorite_actresses")).toEqual(before.favorite_actresses);
+        expect(data.get("new_video_decisions")).toEqual(before.new_video_decisions);
+        expect(data.get("activity_log").entries).toEqual(before.activity_log.entries);
+        expect(data.has("mutation_journal")).toBe(false);
+    });
+
     it("persists explicit history metadata edits even when flags do not change", async () => {
         const { service, data } = createHarness({ car_list: [{ carNum: "ABC-1", names: "Old", remark: "old", stateFlags: { favorite: true }, status: "favorite" }] });
         await service.patch("ABC-1", { favorite: true }, { type: "history-edit", replaceMetadata: true, record: { names: "New", remark: "" } });

@@ -2,6 +2,7 @@
 
 import { initializeRuntimeConstants, l, r } from "../core/constants.js";
 import { injectCoreCss } from "../core/css-injection.js";
+import { buildDetailPanelCss } from "../ui/detail/panel-styles.js";
 import { JhsError } from "../core/jhs-error.js";
 import { runDataMigrations } from "../core/migration.js";
 import { PluginManager } from "../core/plugin-manager.js";
@@ -128,7 +129,7 @@ export async function bootstrapJhs() {
             layer: vendors.layer, stateService, hostAdapter, hostAdapters: { javdb: javdbHostAdapter, javbus: javbusHostAdapter }, site: siteContext.site, route, disabled, localOrigins: localOriginSettings.origins,
         });
         markPhase("context");
-        injectCoreCss(context.services.styles);
+        injectCoreCss(context.services.styles, buildDetailPanelCss());
         // 6.5: expose the single settings write entry so legacy writers (storageManager.saveSetting/saveSettingItem)
         // route through SettingsService with lock + re-read + merge.
         Object.assign(globalThis, { settingsService: context.services.settings, credentialService: context.services.credential });

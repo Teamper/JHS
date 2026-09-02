@@ -33,9 +33,9 @@ export async function buildUserscript({ outputPaths = [distPath, rootPath], tran
     charset: "utf8",
     legalComments: "none",
     keepNames: true,
-    minifySyntax: false,
+    minifySyntax: true,
     minifyWhitespace: true,
-    minifyIdentifiers: false,
+    minifyIdentifiers: true,
     write: false,
     logLevel: "silent",
     plugins: [{

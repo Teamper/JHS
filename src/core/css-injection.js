@@ -36,6 +36,7 @@ function buildJavDbCss() { return `
     .top-meta, .float-buttons { display:none!important; }
     div.tabs.no-bottom, .tabs ul { border-bottom:none!important; }
     .movie-list .item { position:relative!important; }
+    .item > a[data-jhs-fc2-primary="true"], .item > a[data-jhs-fc2-primary="true"] .cover, .item > a[data-jhs-fc2-primary="true"] .cover img { display:block!important; width:100%!important; }
     .movie-list .item .cover img { transform:none!important; transition:none!important; }
     .video-title { display:-webkit-box; height:80px; white-space:normal!important; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
     .main-tabs, .tabs { overflow-x:hidden; flex-wrap:wrap; justify-content:flex-start; }
@@ -65,13 +66,14 @@ const F = `
 
 let coreCssInjected = false;
 
-/** 在 Bootstrap 阶段一次性注入核心、宿主和 UI primitive 样式。 @param {{register?: (id: string, css: string) => unknown}} [styles] */
-export function injectCoreCss(styles) {
+/** 在 Bootstrap 阶段一次性注入核心、宿主和 UI primitive 样式。 @param {{register?: (id: string, css: string) => unknown}} [styles] @param {string} [detailPanelCss] */
+export function injectCoreCss(styles, detailPanelCss = "") {
     if (coreCssInjected) return;
     const register = (/** @type {string} */ id, /** @type {string} */ css) => styles?.register ? styles.register(id, css.replace(/^\s*<style>|<\/style>\s*$/g, "")) : H(css);
     register("jhs-core-theme", buildThemeCss());
     l && register("jhs-host-javbus", buildJavBusCss()), r && register("jhs-host-javdb", buildJavDbCss());
     register("jhs-core-layout", F);
     register("jhs-ui-primitives", buildUiPrimitivesCss());
+    if (detailPanelCss) register("jhs-detail-panels", detailPanelCss);
     coreCssInjected = true;
 }

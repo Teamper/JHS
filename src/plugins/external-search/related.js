@@ -8,20 +8,6 @@ export class RelatedPlugin extends BasePlugin {
     getName() {
         return "RelatedPlugin";
     }
-    async initCss() {
-        return `
-            <style>
-                .jhs-related-panel { min-width:0; }
-                .jhs-related-list { display:grid; }
-                .jhs-related-item { display:grid; gap:var(--jhs-space-2); padding:var(--jhs-space-3) 0; border-bottom:1px solid color-mix(in srgb,var(--jhs-border) 55%,transparent); }
-                .jhs-related-item:last-child { border-bottom:0; }
-                .jhs-related-heading { display:flex; min-width:0; align-items:baseline; gap:var(--jhs-space-2); }
-                .jhs-related-index { flex:none; color:var(--jhs-text-faint); font-size:14px; }
-                .jhs-related-title { min-width:0; overflow:hidden; color:var(--jhs-accent); font-size:16px; font-weight:600; text-overflow:ellipsis; text-decoration:none; white-space:nowrap; }
-                .jhs-related-meta { display:flex; flex-wrap:wrap; gap:var(--jhs-space-2) var(--jhs-space-4); color:var(--jhs-text-muted); font-size:14px; }
-                .jhs-related-time { color:var(--jhs-text-faint); font-size:14px; white-space:nowrap; }
-            </style>`;
-    }
     async handle() {
         if (!window.isDetailPage || !r) return;
         const movieId = new URL(window.location.href).pathname.split("/").filter(Boolean).pop();

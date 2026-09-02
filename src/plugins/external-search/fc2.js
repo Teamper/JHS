@@ -455,15 +455,18 @@ export class Fc2Plugin extends BasePlugin {
             return url.origin === window.location.origin ? "fc2" : "";
         } catch { return ""; }
     }
-    /** Build the same-origin owned FC2 detail URL used by both interception and native anchor fallback. @param {string | null} movieId @param {string} carNum @param {string} url @param {{source?: string}} [options] */
+    /** Build an owned FC2 detail URL only after a movie identity has been resolved. @param {string} movieId @param {string} carNum @param {string} url @param {{source?: string}} [options] */
     createFc2PageUrl(movieId, carNum, url, { source = "" } = {}) {
+        if (!String(movieId || "").trim()) throw new TypeError("FC2 owned detail requires movieId");
         const target = new URL("/users/collection_codes", window.location.origin);
-        target.searchParams.set("movieId", movieId || ""), target.searchParams.set("carNum", carNum), target.searchParams.set("url", url), target.searchParams.set("source", source);
+        target.searchParams.set("movieId", String(movieId).trim()), target.searchParams.set("carNum", carNum), target.searchParams.set("url", url), target.searchParams.set("source", source);
         return target.href;
     }
     /** @param {string | null} movieId @param {string} carNum @param {string} url @param {{ newTab?: boolean }} [navigation] @param {{ source?: string }} [options] */
     async openFc2Page(movieId, carNum, url, navigation = { newTab: !0 }, { source = "" } = {}) {
         source = [ "fc2", "123av" ].includes(source) ? source : "";
-        utils.openPage(this.createFc2PageUrl(movieId, carNum, url, { source }), carNum, !0, navigation);
+        const resolvedMovieId = String(movieId || "").trim();
+        if (!resolvedMovieId) return void utils.openPage(url, carNum, !0, navigation);
+        utils.openPage(this.createFc2PageUrl(resolvedMovieId, carNum, url, { source }), carNum, !0, navigation);
     }
 }

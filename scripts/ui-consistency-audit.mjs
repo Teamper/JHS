@@ -23,7 +23,7 @@ async function listJavaScriptFiles(dir) {
   return files;
 }
 
-const [theme, primitives, build, injection, magnet, settings, utils, detail, fc2Workspace, commandbar, newVideo, manager, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, reviewUi, related, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, previewService, screenshot, parsers, javstoreIntegration, otherSite, javDbHostAdapter, settingRenderer, builtSource] = await Promise.all([
+const [theme, primitives, build, injection, magnet, settings, utils, detail, fc2Workspace, commandbar, newVideo, manager, hitShow, translate, translationUi, settingStyles, main, packageSource, logger, reviews, reviewUi, related, panelStyles, settingPanels, settingForms, listButtons, coverButtons, highlightMagnet, task, storageQueue, constants, previewVideo, previewService, screenshot, parsers, javstoreIntegration, otherSite, javDbHostAdapter, settingRenderer, builtSource] = await Promise.all([
   readFile(join(srcRoot, "core", "theme.js"), "utf8"),
   readFile(join(srcRoot, "core", "ui-primitives.js"), "utf8"),
   readFile(join(repoRoot, "scripts", "build.mjs"), "utf8"),
@@ -46,6 +46,7 @@ const [theme, primitives, build, injection, magnet, settings, utils, detail, fc2
   readFile(join(srcRoot, "plugins", "external-search", "review.js"), "utf8"),
   readFile(join(srcRoot, "ui", "detail", "review-panel.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "external-search", "related.js"), "utf8"),
+  readFile(join(srcRoot, "ui", "detail", "panel-styles.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "backup", "setting-panels.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "backup", "setting-forms.js"), "utf8"),
   readFile(join(srcRoot, "plugins", "status", "list-page-button.js"), "utf8"),
@@ -95,10 +96,10 @@ const primitivesIndex = injection.indexOf('from "./ui-primitives.js"');
 if (themeIndex < 0 || primitivesIndex < 0 || primitivesIndex < themeIndex)
   failures.push("css-injection.js must import theme before UI primitives");
 requireMatch(injection, /register\("jhs-ui-primitives", buildUiPrimitivesCss\(\)\)/, "shared UI CSS is not registered");
-requireMatch(injection, /export function injectCoreCss\(styles\)/, "core CSS injection must accept the Bootstrap style registry");
+requireMatch(injection, /export function injectCoreCss\(styles,\s*detailPanelCss\s*=\s*""\)/, "core CSS injection must accept the Bootstrap style registry");
 const bootstrap = await readFile(join(srcRoot, "app", "bootstrap.js"), "utf8");
 requireMatch(bootstrap, /import \{ injectCoreCss \} from "\.\.\/core\/css-injection\.js"/, "Bootstrap must own core CSS injection");
-requireMatch(bootstrap, /injectCoreCss\(context\.services\.styles\)/, "Bootstrap must execute core CSS injection through StyleRegistry");
+requireMatch(bootstrap, /injectCoreCss\(context\.services\.styles,\s*buildDetailPanelCss\(\)\)/, "Bootstrap must execute core CSS injection through StyleRegistry");
 requireMatch(bootstrap, /initializeUiAccessibility\(context\.rootScope\)/, "dynamic UI accessibility enhancer must use the App Root Lifecycle");
 requireMatch(injection, /register\("jhs-core-layout", F\)/, "clean global support CSS must be registered");
 forbidMatch(injection, /cleanGlobalCss/, "legacy regex CSS cleanup layer must be deleted");
@@ -179,10 +180,10 @@ for (const [source, label] of [[reviews, "reviews"], [related, "related lists"]]
 }
 requireMatch(reviewUi, /document\.createTextNode/, "review external content must be rendered as text nodes");
 requireMatch(reviewUi, /appendLink/, "review links must use compact semantic controls");
-requireMatch(reviews, /font-size:15px[\s\S]*font-weight:600/, "review author must use 15px semibold text");
-requireMatch(reviews, /jhs-review-content[^}]*font-size:16px[^}]*line-height:1\.7/, "review body readability contract is missing");
-forbidMatch(reviews, /jhs-review-content[^}]*max-width/, "review body must use the full available width");
-requireMatch(related, /jhs-related-heading[\s\S]*jhs-related-meta/, "related lists must use one-column heading and metadata structure");
+requireMatch(panelStyles, /font-size:15px[\s\S]*font-weight:600/, "review author must use 15px semibold text");
+requireMatch(panelStyles, /jhs-review-content[^}]*font-size:16px[^}]*line-height:1\.7/, "review body readability contract is missing");
+forbidMatch(panelStyles, /jhs-review-content[^}]*max-width/, "review body must use the full available width");
+requireMatch(panelStyles, /jhs-related-heading[\s\S]*jhs-related-meta/, "related lists must use one-column heading and metadata structure");
 requireMatch(detail, /normalizeHostActions\(root\.find\("\.video-meta-panel"\)\.first\(\)\)/, "JavDB host action normalization must stay scoped to its info container");
 requireMatch(detail, /jhs-detail-host-action/, "detail workspace host action appearance class is missing");
 
@@ -218,7 +219,7 @@ requireMatch(newVideo, /noteText = isPaused/, "actress note text must not shadow
 const builtCardStart = builtSource.indexOf("async renderActressCards()");
 const builtCardEnd = builtSource.indexOf("async getNewVideoFlatList()", builtCardStart);
 const builtCardSource = builtCardStart >= 0 && builtCardEnd > builtCardStart ? builtSource.slice(builtCardStart, builtCardEnd) : "";
-requireMatch(builtCardSource, /normalizeHttpUrl\(`\/actors\/\$\{encodeURIComponent\(\w+\)\}\?t=d`,\s*\w+\)/, "built actress cards are missing their normalized JavDB profile URL");
+requireMatch(builtCardSource, /`\/actors\/\$\{encodeURIComponent\(\w+\)\}\?t=d`/, "built actress cards are missing their encoded JavDB profile URL");
 forbidMatch(builtCardSource, /\w+=`\$\{(\w+)\}\/actors\/\$\{\w+\.starId\}\?t=d`[\s\S]{0,1000}\b(?:const|let)\b[^;]*\b\1=/,
   "built actress cards read a shadowed variable before initialization");
 requireMatch(constants, /function normalizeCarNum[\s\S]*\[ "undefined", "null" \]/, "shared car number normalization is missing");

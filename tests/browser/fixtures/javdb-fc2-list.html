@@ -1,6 +1,15 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>JavDB FC2 list fixture</title></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>JavDB FC2 list fixture</title><style>
+  .movie-list { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; padding:16px; }
+  .movie-list .item { min-width:0; border:1px solid #d7dce3; border-radius:8px; overflow:hidden; background:#fff; }
+  .movie-list .item > a { display:block; min-width:0; padding-bottom:12px; color:#243447; text-decoration:none; }
+  .movie-list .cover { width:100%; aspect-ratio:2 / 3; overflow:hidden; background:#344a5f; }
+  .movie-list .cover img { display:block; width:100%; height:100%; object-fit:cover; }
+  .movie-list .video-title { min-height:44px; padding:10px 12px 0; overflow:hidden; }
+  .movie-list .meta { padding:6px 12px 0; color:#6b7280; font-size:13px; }
+  .movie-list .tags { padding:0 12px 12px; font-size:13px; }
+</style></head>
 <body>
   <nav class="main-tabs"></nav>
   <main class="container">
@@ -9,10 +18,12 @@
         <div class="movie-list">
           <div class="item" data-jhs-fc2-source="fc2">
             <a href="/v/vip-fc2-placeholder" title="FC2 Fixture Movie">
-              <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="">
+              <div class="cover"><img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='450'%3E%3Crect width='300' height='450' fill='%23344a5f'/%3E%3Ccircle cx='150' cy='190' r='88' fill='%238ca7bf'/%3E%3C/svg%3E" alt="FC2 cover">
+              </div>
               <div class="video-title"><strong>FC2-PPV-4959150</strong> FC2 Fixture Movie</div>
               <div class="meta">2026-08-25</div>
             </a>
+            <div class="tags"><a href="/actors/fixture-actor">Fixture Actor</a> <a href="/tags/fc2">FC2</a></div>
           </div>
         </div>
       </div>

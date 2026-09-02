@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 ## [Unreleased]
 
 - 深审收口：HTTP 逻辑请求熔断与 WebDAV 405/409 状态边界、GM 安全凭证迁移、v3 一次性数据迁移、按 namespace 隔离缓存、115 无会话缓存、Contribution 路由/Surface 契约及 schema 2 状态 journal。
+- 6.5 RC 阻断项收口：凭证迁移兼容 6.4.1 无前缀 AES-GCM、损坏密文保留明文并支持嵌套 GM 修复；Top250 失效 JWT 只清理一次并在登录成功后原地重试。
+- FC2 列表保留宿主主链接与次级链接原样，主链接按普通点击、键盘和新标签路径进入自有详情；共享评论/相关清单样式由核心 StyleRegistry 统一注册，补齐列表到 FC2 对话框的浅色/深色及移动端视觉回归。
+- 状态 journal、设置副作用和历史/兼容增强的空闲调度继续保持故障隔离；esbuild 开启语法与标识符压缩，保留既有性能预算与人工 smoke 门禁。
 
 ## [6.5.0](../../compare/v6.4.1...v6.5.0) - 2026-09-01
 

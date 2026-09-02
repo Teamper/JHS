@@ -21,8 +21,19 @@ function fc2Card(carNum, href) {
     const strong = document.createElement("strong");
     strong.textContent = carNum;
     title.appendChild(strong);
+    const cover = document.createElement("div");
+    cover.className = "cover";
+    const image = document.createElement("img");
+    image.src = "/cover.jpg";
+    cover.appendChild(image);
+    anchor.appendChild(cover);
     anchor.appendChild(title);
     item.appendChild(anchor);
+    const secondary = document.createElement("a");
+    secondary.href = "/actors/actor-1";
+    secondary.textContent = "Actor";
+    secondary.addEventListener("click", event => event.preventDefault());
+    item.appendChild(secondary);
     return item;
 }
 
@@ -67,7 +78,9 @@ describe("FC2 dynamic navigation protection", () => {
         plugin.getRuntimeService = (name) => (name === "host" ? host : name === "scope" ? () => scope : undefined);
 
         await plugin.handle();
-        expect(first.querySelector("a").href).toBe("https://owned.example/detail/FC2-123");
+        expect(first.querySelector("a").href).toBe("http://localhost:3000/v/abc");
+        expect(first.querySelector("a").dataset.jhsFc2Primary).toBe("true");
+        expect(first.querySelectorAll("a")[1].href).toBe("http://localhost:3000/actors/actor-1");
         expect(scope.observe).toHaveBeenCalledWith(list, expect.any(Function), { childList: true, subtree: false });
 
         // AutoPage appends a new page of cards; list-items-added triggers protection.
@@ -76,7 +89,7 @@ describe("FC2 dynamic navigation protection", () => {
         const bus = (await import("../src/core/event-bus.js")).jhsEventBus;
         bus.emit("list-items-added", { items: [second] }, { broadcast: false });
         await new Promise((resolve) => setTimeout(resolve, 150));
-        expect(second.querySelector("a").href).toBe("https://owned.example/detail/FC2-456");
+        expect(second.querySelector("a").href).toBe("http://localhost:3000/v/xyz");
         expect(second.querySelector("a").closest(".item").getAttribute("data-jhs-fc2-protected")).toBe("true");
 
         // Fallback observer path (list.core disabled) also protects new cards.
@@ -84,8 +97,37 @@ describe("FC2 dynamic navigation protection", () => {
         list.appendChild(third);
         scope.fireAddedNodes();
         await new Promise((resolve) => setTimeout(resolve, 150));
-        expect(third.querySelector("a").href).toBe("https://owned.example/detail/FC2-789");
+        expect(third.querySelector("a").href).toBe("http://localhost:3000/v/zzz");
 
+        scope.dispose();
+    });
+
+    it("handles the whole primary anchor while leaving secondary links native", async () => {
+        document.body.innerHTML = '<div class="movie-list"></div>';
+        const list = document.querySelector(".movie-list"), card = fc2Card("FC2-999", "/v/primary");
+        list.appendChild(card);
+        const $ = jquery;
+        vi.stubGlobal("$", $), vi.stubGlobal("jQuery", $), vi.stubGlobal("utils", { openPage: vi.fn() });
+        globalThis.BroadcastChannel = FakeBroadcastChannel;
+        FakeBroadcastChannel.channels = [];
+        window.isListPage = true;
+        initializeEventBus();
+        const fc2 = makeFc2Mock(), scope = makeScope(), host = { locateListRoot: () => list };
+        const plugin = new Fc2NavigationPlugin();
+        plugin.getOptionalDependency = (name) => (name === "Fc2Plugin" ? fc2 : undefined);
+        plugin.getRuntimeService = (name) => (name === "host" ? host : name === "scope" ? () => scope : undefined);
+
+        await plugin.handle();
+        const primary = card.querySelector("a[data-jhs-fc2-primary]");
+        primary.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
+        await vi.waitFor(() => expect(fc2.openFc2Dialog).toHaveBeenCalledOnce());
+        primary.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0, ctrlKey: true }));
+        await vi.waitFor(() => expect(fc2.openFc2Page).toHaveBeenCalledOnce());
+        primary.dispatchEvent(new MouseEvent("auxclick", { bubbles: true, button: 1 }));
+        await vi.waitFor(() => expect(fc2.openFc2Page).toHaveBeenCalledTimes(2));
+        card.querySelectorAll("a")[1].dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0 }));
+        expect(fc2.openFc2Dialog).toHaveBeenCalledOnce();
+        expect(card.querySelectorAll("a")[1].href).toBe("http://localhost:3000/actors/actor-1");
         scope.dispose();
     });
 });

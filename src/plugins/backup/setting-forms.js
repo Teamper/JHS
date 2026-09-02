@@ -8,7 +8,6 @@ import { normalizeQuickFilterKey } from "../../features/list/list-filters.js";
 import { bindSettingRows } from "../../ui/settings/setting-control-renderer.js";
 
 /** @typedef {Record<string, any>} SettingDependencies */
-const settingsEventBus = /** @type {NonNullable<typeof jhsEventBus>} */ (jhsEventBus);
 
 /**
  * Explicit ownership whitelist for the bottom "保存设置" button.
@@ -335,14 +334,22 @@ export async function saveSettingForm(dependencies, layerRoot = null) {
     root.data("jhsDirtyReviewKeywords", false);
     root.data("jhsDirtyTitleKeywords", false);
 
-    // Best-effort UI post-processing; it must never turn a successful save into a failure.
-    try {
-        await settingsEventBus.emit("filter-rules-changed", { scope: "title-keyword" });
-        dependencies.newVideo?.resetBtnTip?.();
-        dependencies.blacklist?.resetBtnTip?.();
-        dependencies.blacklist?.reloadTable?.();
-    } catch (error) {
-        if (typeof /** @type {any} */ (globalThis).clog?.error === "function") /** @type {any} */ (globalThis).clog.error("设置保存后 UI 刷新失败（已忽略）", error);
+    // Best-effort UI post-processing; one failed refresh must not skip the rest.
+    /** @type {Array<[string, () => unknown | Promise<unknown>]>} */
+    const postSaveEffects = [
+        ["filter rules", async () => {
+            if (!jhsEventBus) throw new Error("EventBus 尚未初始化");
+            await jhsEventBus.emit("filter-rules-changed", { scope: "title-keyword" });
+        }],
+        ["new-video status", () => dependencies.newVideo?.resetBtnTip?.()],
+        ["blacklist status", () => dependencies.blacklist?.resetBtnTip?.()],
+        ["blacklist table", () => dependencies.blacklist?.reloadTable?.()],
+    ];
+    for (const [name, effect] of postSaveEffects) {
+        try { await effect(); }
+        catch (error) {
+            if (typeof /** @type {any} */ (globalThis).clog?.error === "function") /** @type {any} */ (globalThis).clog.error(`设置保存后 ${name} 刷新失败（已忽略）`, error);
+        }
     }
     return { ok: true };
 }

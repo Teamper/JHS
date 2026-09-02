@@ -7,9 +7,9 @@ export class FavoriteActressesPlugin extends BasePlugin {
     getName() {
         return "FavoriteActressesPlugin";
     }
-    async handle() {
-        this.bindEvent(), await this.highlightActress(), this.replaceActressAvatar();
-    }
+    getStartupMode() { return "idle"; }
+    bindImmediateEvents() { this.bindEvent(); }
+    async handle() { await this.highlightActress(), this.replaceActressAvatar(); }
     async highlightActress() {
         if (!isDetailPage) return;
         if (await storageManager.getSetting("enableFavoriteActresses", _) !== _) return;

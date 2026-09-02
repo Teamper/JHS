@@ -11,6 +11,7 @@ import { HttpService } from "../src/services/http-service.js";
 import { ExternalUrlPolicy } from "../src/services/external-url-policy.js";
 import { CacheService } from "../src/services/cache-service.js";
 import { assessMagnetQuality } from "../src/core/magnet-quality.js";
+import { Fc2Plugin } from "../src/plugins/external-search/fc2.js";
 
 const repoRoot = join(import.meta.dirname, "..");
 const fc2Source = readTestFile(join(repoRoot, "src/plugins/external-search/fc2.js"), "utf8");
@@ -69,6 +70,16 @@ function loadImageViewer() {
 }
 
 describe("FC2 owned detail workspace", () => {
+    it("never builds a private FC2 URL without a resolved movie id", async () => {
+        const openPage = vi.fn();
+        vi.stubGlobal("utils", { openPage });
+        const plugin = new Fc2Plugin();
+        expect(() => plugin.createFc2PageUrl(null, "FC2-123", "/v/abc")).toThrow("movieId");
+        await plugin.openFc2Page(null, "FC2-123", "/v/abc", { newTab: true });
+        expect(openPage).toHaveBeenCalledWith("/v/abc", "FC2-123", true, { newTab: true });
+        vi.unstubAllGlobals();
+    });
+
     it("passes Layer an HTML string instead of a raw DOM node", () => {
         expect(fc2Source).toContain('content: \'<div class="jhs-fc2-dialog-host"></div>\'');
         expect(fc2Source).not.toContain("content: host[0]");
@@ -171,6 +182,9 @@ describe("FC2 owned detail workspace", () => {
         expect(fc2Source).toContain("markJavDbWantWatch(movieId)");
         expect(fc2Source).toContain('this.getBean("TOP250Plugin")');
         expect(top250Source).toContain('"function" === typeof onSuccess ? await onSuccess()');
+        expect(top250Source).not.toContain("hasStoredEncryptedCredential");
+        expect(top250Source).not.toContain("removeStoredEncryptedCredential");
+        expect(top250Source).not.toContain("storeEncryptedCredential");
     });
 
     it("supports exact layer closing, reusable MagnetHub and hardened mobile layout", () => {

@@ -67,6 +67,7 @@ describe("list toolbar and UI cleanup contracts", () => {
     const bootstrap = readFileSync(join(process.cwd(), "src/app/bootstrap.js"), "utf8");
     const detailButtons = readTestFile(join(process.cwd(), "src/plugins/status/detail-page-button.js"), "utf8");
     const top250 = readTestFile(join(process.cwd(), "src/plugins/external-search/top250.js"), "utf8");
+    const panelStyles = readFileSync(join(process.cwd(), "src/ui/detail/panel-styles.js"), "utf8");
 
     it("builds the command bar after plugin initialization and keeps semantic actions separate", () => {
         expect(commandbar).toContain("async afterPluginsReady()");
@@ -202,18 +203,18 @@ describe("list toolbar and UI cleanup contracts", () => {
     });
 
     it("uses semantic review and related layouts with safe external text", () => {
-        expect(reviews).toContain("jhs-review-item");
+        expect(panelStyles).toContain("jhs-review-item");
         expect(reviewUi).toContain("document.createTextNode");
         expect(reviewUi).toContain("appendLink");
         expect(reviews).not.toContain("item columns is-desktop");
         expect(reviews).not.toContain("jhs-layout-");
-        expect(related).toContain("jhs-related-item");
+        expect(panelStyles).toContain("jhs-related-item");
         expect(relatedUi).toContain("encodeURIComponent(item.id)");
         expect(related).not.toContain("item columns is-desktop");
         expect(related).not.toContain("jhs-layout-");
-        expect(reviews).toMatch(/jhs-review-content[^}]*font-size:16px[^}]*line-height:1\.7/);
-        expect(reviews).not.toMatch(/jhs-review-content[^}]*max-width/);
-        expect(related).toContain("jhs-related-heading");
+        expect(panelStyles).toMatch(/jhs-review-content[^}]*font-size:16px[^}]*line-height:1\.7/);
+        expect(panelStyles).not.toMatch(/jhs-review-content[^}]*max-width/);
+        expect(panelStyles).toContain("jhs-related-heading");
         expect(relatedUi).not.toMatch(/\.html\(/);
     });
 
@@ -312,13 +313,19 @@ describe("list toolbar and UI cleanup contracts", () => {
     });
 
     it("defers core CSS side effects to Bootstrap and injects them once", () => {
-        expect(injection).toContain("export function injectCoreCss(styles)");
+        expect(injection).toContain("export function injectCoreCss(styles, detailPanelCss = \"\")");
         expect(injection).toMatch(/register\("jhs-core-theme", buildThemeCss\(\)\)[\s\S]*register\("jhs-ui-primitives", buildUiPrimitivesCss\(\)\)/);
+        expect(injection).toContain('if (detailPanelCss) register("jhs-detail-panels", detailPanelCss)');
+        expect(panelStyles).toContain(".jhs-review-item");
+        expect(panelStyles).toContain(".jhs-related-item");
+        expect(reviews).not.toContain(".jhs-review-item {");
+        expect(related).not.toContain(".jhs-related-item {");
         expect(bootstrap).toContain('import { injectCoreCss } from "../core/css-injection.js"');
-        expect(bootstrap).toContain("injectCoreCss(context.services.styles);");
+        expect(bootstrap).toContain("injectCoreCss(context.services.styles, buildDetailPanelCss());");
     });
 
     it("resets host cover animation without touching hover preview lifecycle", () => {
+        expect(injection).toContain('.item > a[data-jhs-fc2-primary="true"] .cover img');
         expect(injection).toMatch(/\.movie-list \.item \.cover img[\s\S]*transform:none!important[\s\S]*transition:none!important/);
         expect(injection).not.toMatch(/scale\(1\.04\)|\.masonry \.item:hover/);
     });

@@ -3,7 +3,6 @@
 import { escapeHtml, i } from "../../core/constants.js";
 import { q } from "../../core/javdb-api.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
-import { hasStoredEncryptedCredential, removeStoredEncryptedCredential, storeEncryptedCredential } from "../../core/credential-crypto.js";
 
 const me = "jhs_appAuthorization";
 /** @typedef {Record<string, any>} TopMovie */
@@ -11,7 +10,7 @@ const me = "jhs_appAuthorization";
 export class Top250Plugin extends BasePlugin {
     static legacyPluginId = "TOP250Plugin";
     constructor() {
-        super(), i(this, "has_cnsub", ""), i(this, "$contentBox", null), i(this, "$listRoot", null), i(this, "movies", []);
+        super(), i(this, "has_cnsub", ""), i(this, "$contentBox", null), i(this, "$listRoot", null), i(this, "movies", []), i(this, "loginDialogOpen", !1);
     }
     getName() {
         return "TOP250Plugin";
@@ -81,8 +80,16 @@ export class Top250Plugin extends BasePlugin {
                 this.movies = movies;
                 const filtered = movies.filter(((/** @type {TopMovie} */ movie) => "1" === this.has_cnsub ? movie.has_cnsub : "0" !== this.has_cnsub || !movie.has_cnsub)), rendered = hitShow.markDataListHtml(filtered, { thumbnailFirst: !0 });
                 i.html(rendered), await hitShow.initializeRenderedList(), await hitShow.loadScore(filtered), o = !0;
-            } else clog.error(e), i.html(`<h3>${escapeHtml(e.message)}</h3>`), show.error(e.message), "JWTVerificationError" === c && (removeStoredEncryptedCredential(me),
-            await this.checkLogin(null, new URLSearchParams(window.location.search))), o = !0;
+            } else {
+                clog.error(e), i.html(`<h3>${escapeHtml(e.message)}</h3>`), show.error(e.message);
+                if ("JWTVerificationError" === c) {
+                    const credential = this.getRuntimeService("credential");
+                    try { if (credential?.remove) await credential.remove(me); }
+                    catch (error) { clog.warn("删除失效 JavDB Token 失败，仍继续打开登录框", error); }
+                    this.openLoginDialog({ onSuccess: () => this.handleTop() });
+                }
+                o = !0;
+            }
         } catch (r) {
             attempt < 3 ? (clog.error(`获取Top数据失败 (第 ${attempt} 次重试):`, r), await new Promise((e => setTimeout(e, 1e3)))) : (clog.error("所有重试尝试均失败，无法获取Top数据。", r),
             i.html("<h3>无法加载数据，请稍后再试。</h3>"));
@@ -103,8 +110,8 @@ export class Top250Plugin extends BasePlugin {
         }));
     }
     async checkLogin(/** @type {MouseEvent | null} */ e, /** @type {URLSearchParams} */ t) {
-        const credential = this.getRuntimeService("credential") || /** @type {any} */ (globalThis).credentialService;
-        if (!(credential?.get ? await credential.get(me) : hasStoredEncryptedCredential(me))) return show.error("该类别依赖移动端接口，请先完成登录"), void this.openLoginDialog();
+        const credential = this.getRuntimeService("credential");
+        if (!credential?.get || !(await credential.get(me))) return show.error("该类别依赖移动端接口，请先完成登录"), void this.openLoginDialog();
         let n = "all", a = "", i = t.get("t") || "";
         /^y\d+$/.test(i) ? (n = "year", a = i.substring(1)) : "" !== i && (n = "video_type",
         a = i);
@@ -115,8 +122,10 @@ export class Top250Plugin extends BasePlugin {
     }
     /** @param {{onSuccess?: (() => unknown | Promise<unknown>) | null}} [options] */
     openLoginDialog({ onSuccess = null } = {}) {
+        if (this.loginDialogOpen) return null;
+        this.loginDialogOpen = !0;
         const dialog = this.getRuntimeService("dialog"), account = this.getRuntimeService("account"), getScope = this.getRuntimeService("scope");
-        dialog.open({
+        try { return dialog.open({
             type: 1,
             title: "JavDB",
             closeBtn: 1,
@@ -130,8 +139,9 @@ export class Top250Plugin extends BasePlugin {
                     let a = loading();
                     account.login("javdb", { username: e, password: n }, { scope: await getScope() }).then((async (/** @type {any} */ result) => {
                         if (!result.success) show.error(result.message); else {
-                            const credential = this.getRuntimeService("credential") || /** @type {any} */ (globalThis).credentialService;
-                            credential?.set ? await credential.set(me, result.token) : await storeEncryptedCredential(me, result.token), show.ok("登录成功"), dialog.close(t), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
+                            const credential = this.getRuntimeService("credential");
+                            if (!credential?.set) throw new Error("凭证服务不可用");
+                            await credential.set(me, result.token), show.ok("登录成功"), dialog.close(t), "function" === typeof onSuccess ? await onSuccess() : window.location.href = "/advanced_search?handleTop=1&period=daily";
                         }
                     })).catch(((/** @type {unknown} */ error) => {
                         clog.error("登录异常:", error), show.error(error instanceof Error ? error.message : String(error));
@@ -139,7 +149,8 @@ export class Top250Plugin extends BasePlugin {
                         a.close();
                     }));
                 }));
-            }
-        });
+            },
+            end: () => { this.loginDialogOpen = !1; },
+        }); } catch (error) { this.loginDialogOpen = !1; throw error; }
     }
 }

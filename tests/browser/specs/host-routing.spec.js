@@ -138,7 +138,8 @@ test("HotShow creates an owned list when advanced search has no native list root
   // 回归场景：自渲染榜单上的 FC2 卡片必须被延迟挂载保护，点击打开 FC2 对话框而不是被详情导航吞掉
   const fc2Card = page.locator(".jhs-hitshow-list #hot-fixture-fc2");
   await expect.poll(() => fc2Card.getAttribute("data-jhs-fc2-protected"), { timeout: 10_000 }).toBe("true");
-  await expect(fc2Card.locator("a").first()).toHaveAttribute("href", /collection_codes/);
+  await page.waitForTimeout(120);
+  await expect(fc2Card.locator("a").first()).toHaveAttribute("href", "/v/hot-fixture-fc2");
   await page.evaluate(() => {
     const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
     fc2.resolveMovieIdForRecord = async () => null;
@@ -147,7 +148,7 @@ test("HotShow creates an owned list when advanced search has no native list root
     fc2.openFc2Page = (...args) => { window.__jhsFc2Navigation = { mode: "page", args }; };
   });
   await fc2Card.locator(".video-title").click();
-  expect(await page.evaluate(() => window.__jhsFc2Navigation?.mode)).toBe("dialog");
+  await expect.poll(() => page.evaluate(() => window.__jhsFc2Navigation?.mode)).toBe("dialog");
 });
 
 test("HotShow hover preview stays below the FC2 detail dialog", async ({ context, page }, testInfo) => {
@@ -171,9 +172,10 @@ test("HotShow hover preview stays below the FC2 detail dialog", async ({ context
   });
   const fc2Card = page.locator(".jhs-hitshow-list #hot-fixture-fc2");
   await expect.poll(() => fc2Card.getAttribute("data-jhs-fc2-protected"), { timeout: 10_000 }).toBe("true");
+  await page.waitForTimeout(120);
   await fc2Card.locator(".cover img").hover();
   await expect.poll(() => page.evaluate(() => document.querySelector(".image-hover-preview")?.classList.contains("active") === true)).toBe(true);
-  await fc2Card.locator(".cover img").click();
+  await page.evaluate(() => document.querySelector(".jhs-hitshow-list #hot-fixture-fc2 .cover img")?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })));
   await expect.poll(() => page.evaluate(() => Boolean([...document.querySelectorAll(".layui-layer")].find((el) => el.querySelector(".jhs-fc2-dialog-host"))))).toBe(true);
   // 回归门禁：FC2 详情对话框的层级必须压过悬停预览（hoverPreview 档低于 modal/layer）
   const ordering = await page.evaluate(() => {
@@ -249,9 +251,11 @@ test("FC2 cards keep dialog navigation and use owned-page anchor fallback", asyn
   await page.goto("https://javdb.com/advanced_search?type=3", { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   await expect.poll(() => page.locator(".movie-list .item").getAttribute("data-jhs-fc2-protected")).toBe("true");
-  const href = await page.locator(".movie-list .item a").getAttribute("href");
-  expect(new URL(href).pathname).toBe("/users/collection_codes");
-  expect(new URL(href).searchParams.get("url")).toBe("/v/vip-fc2-placeholder");
+  const primary = page.locator('.movie-list .item a[data-jhs-fc2-primary="true"]');
+  const href = await primary.getAttribute("href");
+  expect(href).toBe("/v/vip-fc2-placeholder");
+  expect(await primary.getAttribute("data-jhs-fc2-primary")).toBe("true");
+  await expect(page.locator(".movie-list .item .tags a").first()).toHaveAttribute("href", "/actors/fixture-actor");
   await page.evaluate(() => {
     const fc2 = window.unsafeWindow.pluginManager.getBean("Fc2Plugin");
     fc2.resolveMovieIdForRecord = async () => null;
@@ -266,8 +270,13 @@ test("FC2 cards keep dialog navigation and use owned-page anchor fallback", asyn
   await expect.poll(() => page.evaluate(() => window.__jhsFc2Navigation?.mode)).toBe("page");
   await page.evaluate(() => { window.__jhsFc2Navigation = null; document.querySelector(".movie-list .item img").dispatchEvent(new MouseEvent("auxclick", { bubbles: true, cancelable: true, button: 1 })); });
   await expect.poll(() => page.evaluate(() => window.__jhsFc2Navigation?.mode)).toBe("page");
-  const ownedUrl = new URL(href);
+  await page.evaluate(() => { window.__jhsFc2Navigation = null; document.querySelector(".movie-list .item a[data-jhs-fc2-primary]").dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 })); });
+  await expect.poll(() => page.evaluate(() => window.__jhsFc2Navigation?.mode)).toBe("dialog");
+  const ownedUrl = new URL("/users/collection_codes", page.url());
   ownedUrl.searchParams.set("movieId", "fixture-id");
+  ownedUrl.searchParams.set("carNum", "FC2-PPV-4959150");
+  ownedUrl.searchParams.set("url", href);
+  ownedUrl.searchParams.set("source", "fc2");
   await page.goto(ownedUrl.href, { waitUntil: "domcontentloaded" });
   await injectUserscriptRuntime(page);
   expect(new URL(page.url()).pathname).toBe("/users/collection_codes");

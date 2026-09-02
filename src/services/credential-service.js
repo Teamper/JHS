@@ -1,6 +1,6 @@
 // @ts-check
 
-import { decryptData, encryptCredential } from "../core/credential-crypto.js";
+import { decryptData, encryptCredential, encryptData } from "../core/credential-crypto.js";
 
 export const CREDENTIAL_KEYS = Object.freeze({
     installationSecret: "jhs_credential_install_secret",
@@ -77,18 +77,39 @@ export class CredentialService {
             // a fresh install has nothing to migrate and may continue in-memory.
             if (verifiedSecret !== secret && (legacySecret || this.legacyStorage?.getItem?.(CREDENTIAL_KEYS.javdbToken) || this.legacyStorage?.getItem?.("webDavPassword"))) throw new Error("凭证迁移回读失败");
         }
+        const decryptLegacyCandidate = async (/** @type {string} */ candidate) => {
+            const encoded = String(candidate || "").replace(/^AES:/, "");
+            if (!encoded) return null;
+            try { return await decryptData(encoded, legacySecret || secret); }
+            catch { return null; }
+        };
+        const repairNestedCredential = async (/** @type {string} */ key) => {
+            const stored = await this.storage.getValue(key, "");
+            if (!stored) return false;
+            let outer;
+            try { outer = await decryptData(String(stored).replace(/^AES:/, ""), secret); }
+            catch { return false; }
+            const inner = await decryptLegacyCandidate(outer);
+            if (!inner || inner === outer) return false;
+            await this.set(key, inner);
+            return true;
+        };
         const migrateValue = async (/** @type {string} */ key, /** @type {string} */ legacyValue) => {
             if (!legacyValue || await this.storage.getValue(key, "")) return;
             let value = legacyValue;
-            if (String(legacyValue).startsWith("AES:")) {
-                try { value = await decryptData(String(legacyValue).slice(4), legacySecret || secret); }
-                catch { value = legacyValue; }
-            }
-            const encrypted = String(value).startsWith("AES:") ? value : await encryptCredential(String(value), secret);
+            const decrypted = await decryptLegacyCandidate(legacyValue);
+            if (decrypted != null) value = decrypted;
+            // Failed authentication means the legacy value is plaintext, even if it
+            // happens to carry the historical AES marker; encrypt that raw value
+            // under the current installation secret so runtime reads remain valid.
+            const encrypted = decrypted != null || !String(value).startsWith("AES:")
+                ? await encryptCredential(String(value), secret)
+                : `AES:${await encryptData(String(value), secret)}`;
             await this.storage.setValue(key, encrypted);
             if (await this.storage.getValue(key, "") !== encrypted) throw new Error(`凭证迁移回读失败: ${key}`);
         };
         const legacyToken = this.legacyStorage?.getItem?.(CREDENTIAL_KEYS.javdbToken) || "";
+        const repairedToken = await repairNestedCredential(CREDENTIAL_KEYS.javdbToken);
         await migrateValue(CREDENTIAL_KEYS.javdbToken, legacyToken);
         const snapshot = settings?.snapshot?.() || {};
         const legacyPassword = String(snapshot.webDavPassword || "");
@@ -104,7 +125,7 @@ export class CredentialService {
             if (cleanup.settingKeys.length && settings?.unset) await settings.unset("webDavPassword");
             this.cleanupLegacyPageStorage(cleanup.pageKeys);
         }
-        return { migrated: Boolean(legacyToken || legacyPassword || legacySecret), cleanup };
+        return { migrated: Boolean(legacyToken || legacyPassword || legacySecret || repairedToken), cleanup };
     }
 
     /** Remove legacy page-storage keys after the destination settings commit. */
