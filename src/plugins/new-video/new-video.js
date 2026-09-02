@@ -29,7 +29,7 @@ function aggregateNewVideoRecords(actresses, carMap, decisions, now = Date.now()
 
 export class NewVideoPlugin extends BasePlugin {
     constructor() {
-        super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", new Map), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", new Map), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", new Map), i(this, "nvActorCoverRequests", new Map), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", !1), i(this, "nvWorkspaceMounted", !1), i(this, "nvEventUnsubscribe", null), i(this, "taskStatusUnsubscribe", null), i(this, "nvCoverPreview", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0);
+        super(...arguments), i(this, "currentPage", 1), i(this, "pageSize", 30), i(this, "nvCurrentPage", 1), i(this, "nvPageSize", 60), i(this, "nvFlatListCache", []), i(this, "nvAllItemsMap", new Map), i(this, "nvActressesCache", []), i(this, "nvCarMapCache", new Map), i(this, "nvSortBy", "publishTime_desc"), i(this, "nvSelected", new Set), i(this, "nvDecisionsCache", {}), i(this, "nvCoverCache", new Map), i(this, "nvActorCoverRequests", new Map), i(this, "nvRenderGeneration", 0), i(this, "nvSearchDebounced", null), i(this, "nvInvalidationTimer", null), i(this, "nvWorkspaceReloadPromise", null), i(this, "nvWorkspaceReloadDirty", !1), i(this, "nvWorkspaceMounted", !1), i(this, "nvEventUnsubscribe", null), i(this, "taskStatusUnsubscribe", null), i(this, "nvCoverPreview", null), i(this, "nvWorkspaceRoot", null), i(this, "nvJavDbUrl", ""), i(this, "nvRuleTime", 8760), i(this, "avatarSources", []), i(this, "avatarSourceIndex", 0);
     }
     getName() {
         return "NewVideoPlugin";
@@ -215,13 +215,13 @@ export class NewVideoPlugin extends BasePlugin {
             area: utils.getDialogArea("workspace"),
             anim: -1,
             success: async (e, t) => {
-                this.nvWorkspaceMounted = !0, JhsSelect.enhance(e), this.bindClick(), this.applyViewMode(), this.renderTaskStatuses(), await this.reloadNewVideoWorkspaceData(), utils.setupEscClose(t);
+                this.nvWorkspaceMounted = !0, this.nvWorkspaceRoot = e, JhsSelect.enhance(e), this.bindClick(), this.applyViewMode(), this.renderTaskStatuses(), await this.reloadNewVideoWorkspaceData(), utils.setupEscClose(t);
             },
             end: () => this.cleanupNewVideoWorkspace()
         });
     }
     cleanupNewVideoWorkspace() {
-        this.nvSearchDebounced?.cancel?.(), this.nvSearchDebounced = null, this.nvWorkspaceMounted = !1, this.nvRenderGeneration++, this.nvSelected.clear(), this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map,
+        this.nvSearchDebounced?.cancel?.(), this.nvSearchDebounced = null, this.nvWorkspaceMounted = !1, this.nvWorkspaceRoot = null, this.nvRenderGeneration++, this.nvSelected.clear(), this.nvCoverCache = new Map, this.nvActorCoverRequests = new Map,
         this.nvCoverPreview?.destroy?.(), this.nvCoverPreview = null,
         this.nvAllItemsMap.clear(), this.nvFlatListCache = [], this.nvActressesCache = [], this.nvCarMapCache = new Map, this.nvDecisionsCache = {}, this.nvCurrentPageItems = [];
     }
@@ -574,7 +574,7 @@ export class NewVideoPlugin extends BasePlugin {
             l.html(c), l.find(".nv-cover-img").on("error", (function() { $(this).addClass("jhs-is-hidden").siblings(".nv-card__empty").removeClass("jhs-is-hidden"); })), l.find(".nv-select").on("change", (event => { const carNum = normalizeCarNum(event.currentTarget.value); event.currentTarget.checked ? this.nvSelected.add(carNum) : this.nvSelected.delete(carNum), this.renderBatchBar(); })), l.find(".pagination-btn").off("click").on("click", (e => {
                 const n = parseInt($(e.currentTarget).data("nvpage"));
                 n >= 1 && n <= o && n !== this.nvCurrentPage && (this.nvCurrentPage = n, this.nvRenderGeneration++, this.nvRenderPage(this.nvRenderGeneration), this.renderBatchBar(), l.scrollTop(0));
-            })), this.nvCoverPreview ??= new window.ImageHoverPreview({ selector: ".nv-cover-img", dataAttribute: "data-full", zIndex: JHS_Z_INDEX.dialogHoverPreview }), void this.hydrateVisibleCovers(s, generation);
+            })), this.nvCoverPreview ??= new window.ImageHoverPreview({ selector: ".nv-cover-img", dataAttribute: "data-full", owner: this.nvWorkspaceRoot, resolveOwner: () => this.nvWorkspaceRoot, zIndexStrategy: "owner" }), void this.hydrateVisibleCovers(s, generation);
     }
     async editActress(e) {
         const dialog = this.getRuntimeService("dialog");

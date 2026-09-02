@@ -64,7 +64,7 @@ function loadPreviewClass() {
         listen(target, type, listener) { target.addEventListener(type, listener); this.cleanups.push(() => target.removeEventListener(type, listener)); }
         dispose() { this.cleanups.splice(0).reverse().forEach((cleanup) => cleanup()); }
     }
-    const context = { console, document, Image: FakeImage, LifecycleScope: FakeLifecycleScope, Date, JHS_Z_INDEX: { hoverPreview: 12345690 }, utils: { isMobileMode: () => false }, setTimeout, clearTimeout };
+    const context = { console, document, Image: FakeImage, LifecycleScope: FakeLifecycleScope, Date, JHS_Z_INDEX: { hoverPreview: 12345690, viewer: 999999993 }, utils: { isMobileMode: () => false }, setTimeout, clearTimeout };
     context.window = context;
     context.innerWidth = 800;
     context.innerHeight = 600;
@@ -94,6 +94,17 @@ describe("ImageHoverPreview lifecycle", () => {
         expect(document.listeners.get("mouseover")?.size).toBe(1);
         preview.destroy();
         expect(document.listeners.get("mouseover")?.size).toBe(0);
+    });
+
+    it("derives the preview layer from its owning dialog and leaves room for the viewer", () => {
+        const { Preview, document, firstCover } = loadPreviewClass(), owner = new FakeElement("div");
+        owner.style.zIndex = "500";
+        document.body.appendChild(owner);
+        const preview = new Preview({ selector: ".cover", owner, zIndexStrategy: "owner" });
+        expect(preview.preview.style.zIndex).toBe("501");
+        preview.destroy();
+        expect(document.body.children.includes(preview.preview)).toBe(false);
+        void firstCover;
     });
 
     it("delays hiding and cancels it on a quick re-entry", () => {

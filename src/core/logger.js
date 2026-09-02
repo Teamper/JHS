@@ -146,6 +146,9 @@ window.loading = function() {
             offsetX: 20,
             offsetY: 20,
             zIndex: JHS_Z_INDEX.hoverPreview,
+            owner: null,
+            resolveOwner: null,
+            zIndexStrategy: "fixed",
             transition: .2,
             hideDelay: 100,
             loadedUrlLimit: 128,
@@ -224,9 +227,32 @@ window.loading = function() {
     createPreviewElement() {
         this.preview = document.createElement("div");
         this.preview.className = "image-hover-preview";
-        this.preview.style.zIndex = String(this.config.zIndex);
+        this.preview.style.zIndex = String(this.resolvePreviewZIndex());
         this.preview.style.setProperty("--jhs-hover-transition", `${this.config.transition}s`);
         document.body.appendChild(this.preview);
+    }
+    resolveOwnerElement() {
+        const owner = typeof this.config.resolveOwner === "function" ? this.config.resolveOwner() : this.config.owner;
+        return owner?.jquery ? owner[0] : owner;
+    }
+    resolvePreviewZIndex() {
+        let value = Number(this.config.zIndex) || JHS_Z_INDEX.hoverPreview;
+        if (this.config.zIndexStrategy !== "owner" && !this.resolveOwnerElement()) return value;
+        let owner = this.resolveOwnerElement();
+        while (owner) {
+            const computed = typeof getComputedStyle === "function" ? getComputedStyle(owner).zIndex : "";
+            const candidate = Number(owner.style?.zIndex || computed);
+            if (Number.isFinite(candidate) && candidate > 0) {
+                value = candidate + 1;
+                break;
+            }
+            owner = owner.parentElement;
+        }
+        const viewerZ = Number(JHS_Z_INDEX.viewer) || Number.MAX_SAFE_INTEGER;
+        return Math.min(value, viewerZ - 1);
+    }
+    refreshOwnerZIndex() {
+        if (this.preview && (this.config.zIndexStrategy === "owner" || this.resolveOwnerElement())) this.preview.style.zIndex = String(this.resolvePreviewZIndex());
     }
     bindEvents() {
         if (this.eventsBound || this.destroyed) return;
@@ -262,6 +288,7 @@ window.loading = function() {
     }
     handleMouseEnter(event, delegatedTarget = event.currentTarget) {
         if (this.destroyed || !this.preview) return;
+        this.refreshOwnerZIndex();
         clearTimeout(this.timer);
         this.timer = null;
         this.currentTarget = delegatedTarget;

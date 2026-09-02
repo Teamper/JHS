@@ -204,7 +204,9 @@ for (const [label, source] of [["123", one23Offline], ["115", one115Offline]]) {
 assert(!history.slice(history.indexOf("async editRecord")).includes("projectLegacyStatus"), "history editor must not project a legacy single status");
 assert(!history.slice(history.indexOf("async editRecord")).includes("legacyActionToFlag"), "history editor must patch four flags directly");
 assertIncludes(storage.slice(storage.indexOf("async getSetting("), storage.indexOf("async saveSetting(")), "Object.prototype.hasOwnProperty.call(", "settings must preserve explicit falsey values");
-assertIncludes(await read("src/plugins/backup/setting.js"), '.off("change.jhsResource", "input, select")', "cloud settings must persist selects through delegated binding");
+const settingPluginSource = await read("src/plugins/backup/setting.js");
+assertIncludes(settingPluginSource, "renderCloudSettings(root, cloud)", "cloud settings must render through the shared catalog");
+assertIncludes(settingPluginSource, "bindSettingRows(host, descriptors, { settings })", "cloud settings must persist through the shared binding");
 for (const retiredVisibilityToken of [ "shouldHideInDefaultView", "settingHidden", "data-jhs-setting-hide" ])
   assert(!listPageSource.includes(retiredVisibilityToken), `retired all-view visibility rule returned: ${retiredVisibilityToken}`);
 for (const retiredSetting of [ "showAllItem", "showFavoriteItem", "showHasDownItem", "showHasWatchItem" ])

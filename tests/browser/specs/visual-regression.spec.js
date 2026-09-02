@@ -49,6 +49,21 @@ test("Settings dialog visual baseline", async ({ context, page }, testInfo) => {
   await expect(page.locator(".layui-layer")).toHaveScreenshot("settings-dialog.png", { maxDiffPixelRatio: 0.02 });
 });
 
+test("Settings cloud panel visual baseline", async ({ context, page }, testInfo) => {
+  test.skip(!ENABLED || testInfo.project.name !== "desktop-wide", "cloud settings visual baseline is pinned to desktop-wide and opt-in");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page);
+  await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+  const dialog = page.locator(".layui-layer");
+  await expect(dialog.locator("#saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
+  await dialog.locator('.side-menu-item[data-panel="cloud-services-panel"]').click();
+  const panel = dialog.locator("#cloud-services-panel");
+  await expect(panel).toBeVisible();
+  await expect(panel.locator("#cloud-settings-catalog .jhs-setting-row")).toHaveCount(7);
+  await expect(panel).toHaveScreenshot("settings-cloud.png", { maxDiffPixelRatio: 0.02 });
+});
+
 for (const theme of ["light", "dark"]) {
   test(`JavDB List → FC2 Dialog ${theme}`, async ({ context, page }, testInfo) => {
     test.skip(!ENABLED || !VISUAL_PROJECTS.has(testInfo.project.name), "visual regression is opt-in via JHS_VISUAL_REGRESSION=1 and pinned to desktop-wide/mobile");

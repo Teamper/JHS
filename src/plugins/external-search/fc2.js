@@ -23,6 +23,7 @@ import { createLatestSettingWriter } from "../../ui/settings/setting-binding-con
  * @property {string} url
  * @property {string} source
  * @property {string | null | undefined} movieId
+ * @property {import("../../core/movie-context.js").MovieContext} movieContext
  * @property {number | null | undefined} layerIndex
  * @property {() => boolean} isAlive
  * @property {(name: string) => JQueryHandle} getSlot
@@ -178,7 +179,7 @@ export class Fc2Plugin extends BasePlugin {
             if (!context.isAlive()) return;
             const box = hubGroup.find('[data-jhs-role="magnet-hub-content"]'), expanded = "true" === hubButton.attr("aria-expanded");
             if (expanded) return hubGroup.addClass("is-collapsed"), void hubButton.attr("aria-expanded", "false").text("展开磁力搜索");
-            magnetHubPromise ||= magnetHub.createMagnetHub(context.carNum, { root: context.root });
+            magnetHubPromise ||= magnetHub.createMagnetHub({ movieContext: context.movieContext, root: context.root });
             const hub = await magnetHubPromise;
             if (context.isAlive() && !box.children().length) box.append(hub);
             if (context.isAlive()) hubGroup.removeClass("is-collapsed"), hubButton.attr("aria-expanded", "true").text("收起磁力搜索"), box[0]?.scrollIntoView?.({ block: "nearest" });

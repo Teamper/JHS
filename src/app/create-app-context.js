@@ -56,10 +56,12 @@ export function createAppContext(runtime) {
     const styles = new StyleRegistry(stylePort);
     const http = new HttpService(httpPort, urlPolicy, { diagnostics, cache });
     diagnostics.setNetworkController(http);
+    const settingsRegistry = new SettingsRegistry();
+    registerDefaultSettings(settingsRegistry);
     const settings = new SettingsService(storage, { afterPersist: async (_snapshot, changedNames) => {
         runtime.legacyStorage?.invalidateSettingCache?.();
         await runtime.eventBus?.emit?.("settings-changed", { changedNames, source: "service" });
-    } });
+    }, normalizers: settingsRegistry.normalizers() });
     const credential = new CredentialService(storage, runtime.localStorage);
     const webdav = new WebDavService(http, credential, settings);
     rootScope.listen(settings, "settings.changed", (/** @type {any} */ event) => {
@@ -88,8 +90,6 @@ export function createAppContext(runtime) {
     const profile = new ProfileService({ scope: rootScope, settings });
     const commands = new CommandRegistry();
     const providers = new ProviderRegistry(diagnostics);
-    const settingsRegistry = new SettingsRegistry();
-    registerDefaultSettings(settingsRegistry);
     const integrations = new IntegrationRegistry(container, diagnostics);
     const movie = new MovieIdentityService(integrations);
     const actressInfo = new ActressInfoService(integrations, cache);

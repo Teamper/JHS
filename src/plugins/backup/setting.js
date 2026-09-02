@@ -20,7 +20,7 @@ import { bindSettingRows, renderSettingRow } from "../../ui/settings/setting-con
 export class SettingPlugin extends BasePlugin {
     constructor() {
         super(...arguments), i(this, "folderName", "JHS-数据备份"), i(this, "resourceSettings", new ResourceSettingsService()), i(this, "pendingCarImport", null), i(this, "taskStatusUnsubscribe", null),
-i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this, "_settingNavResizeCleanup", null), i(this, "_desktopNavGeneration", 0), i(this, "_settingsDialogGeneration", 0), i(this, "_fullSettingBinding", null), i(this, "cacheItems", [ {
+i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this, "_settingNavResizeCleanup", null), i(this, "_desktopNavGeneration", 0), i(this, "_settingsDialogGeneration", 0), i(this, "_fullSettingBinding", null), i(this, "_cloudSettingBinding", null), i(this, "cacheItems", [ {
             key: "jhs_dmm_video",
             text: "预览视频缓存",
             title: "预览视频缓存"
@@ -256,6 +256,8 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
                 this._settingsDialogGeneration++;
                 this._fullSettingBinding?.dispose?.();
                 this._fullSettingBinding = null;
+                this._cloudSettingBinding?.dispose?.();
+                this._cloudSettingBinding = null;
                 this._settingsFocusCleanup?.();
                 this._settingsFocusCleanup = null;
                 this.taskStatusUnsubscribe?.(), this.taskStatusUnsubscribe = null;
@@ -270,7 +272,7 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         const host = root.find("#jhs-live-settings");
         const registry = this.getRuntimeService("settingsRegistry"), settings = this.getRuntimeService("settings"), hostAdapter = this.getRuntimeService("host");
         const staticKeys = new Set([ "needClosePage", "themeMode", "mobileMode", "enableClog", "containerColumns", "containerWidth" ]);
-        const descriptors = registry.list({ surfaces: [ "full" ] }).filter((descriptor) => (descriptor.effect || "live") === "live" && !staticKeys.has(descriptor.key));
+        const descriptors = registry.list({ surfaces: [ "full" ] }).filter((descriptor) => (descriptor.effect || "live") === "live" && descriptor.section !== "cloud" && !staticKeys.has(descriptor.key));
         if (host.length) {
             descriptors.forEach((descriptor) => {
                 const { row } = renderSettingRow(descriptor, { value: settings.snapshot()[descriptor.key] ?? descriptor.defaultValue });
@@ -542,39 +544,8 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
         if (layerRoot && (!root[0]?.isConnected || generation !== this._settingsDialogGeneration)) return;
         const builtInCatalog = [...BUILT_IN_NATIVE_MAGNET_SOURCES, ...this.getRuntimeService("magnet").getBuiltInSources()];
         this.resourceState = { custom, tags, filters, builtIn: builtInCatalog.map((source => ({ ...source, ...(builtInOverrides.find((item => item.id === source.id)) || {}) }))), screenshot: { mode: screenshot.mode, providers: BUILT_IN_SCREENSHOT_SOURCES.map((source => { const merged = { ...source, ...(screenshot.providers.find((item => item.id === source.id)) || {}) }; return false === source.implemented ? { ...merged, enabled: false } : merged; })) } };
-        this.resourceCloudState = { enable123Offline: cloud.enable123Offline, enable115Offline: cloud.enable115Offline, enable115Match: cloud.enable115Match, enable115LoginRedirect: cloud.enable115LoginRedirect, providerMode: cloud.providerMode, concurrency: cloud.concurrency, cacheMinutes: cloud.cacheMinutes };
         this.renderResourceSettings(root);
-        root.find("#enable123Offline").prop("checked", cloud.enable123Offline);
-        root.find("#enable115Offline").prop("checked", cloud.enable115Offline);
-        root.find("#offlineProviderMode").val(cloud.providerMode);
-        root.find("#enable115Match").prop("checked", cloud.enable115Match);
-        root.find("#enable115LoginRedirect").prop("checked", cloud.enable115LoginRedirect);
-        root.find("#oneOneFiveConcurrency").val(cloud.concurrency);
-        root.find("#oneOneFiveCacheMinutes").val(cloud.cacheMinutes);
-
-        const applyCloudState = (/** @type {string} */ fieldKey, /** @type {any} */ state) => {
-            if (fieldKey === "enable123Offline" || fieldKey === "enable115Offline" || fieldKey === "enable115Match" || fieldKey === "enable115LoginRedirect") root.find("#" + fieldKey).prop("checked", !!state[fieldKey]);
-            else if (fieldKey === "offlineProviderMode") root.find("#offlineProviderMode").val(state.providerMode);
-            else if (fieldKey === "oneOneFiveConcurrency") root.find("#oneOneFiveConcurrency").val(state.concurrency);
-            else if (fieldKey === "oneOneFiveCacheMinutes") root.find("#oneOneFiveCacheMinutes").val(state.cacheMinutes);
-        };
-        root.find("#cloud-services-panel").off("change.jhsResource", "input, select").on("change.jhsResource", "input, select", (event => {
-            const field = event.currentTarget;
-            const key = field.id;
-            let value;
-            if ([ "enable123Offline", "enable115Offline", "enable115Match", "enable115LoginRedirect" ].includes(key)) value = field.checked;
-            else if ("offlineProviderMode" === key) value = field.value;
-            else if ("oneOneFiveConcurrency" === key) value = Number(field.value) || 4;
-            else if ("oneOneFiveCacheMinutes" === key) value = Number(field.value) || 60;
-            else return;
-            const previous = { ...this.resourceCloudState };
-            this.resourceCloudState = { ...this.resourceCloudState, [key === "offlineProviderMode" ? "providerMode" : key === "oneOneFiveConcurrency" ? "concurrency" : key === "oneOneFiveCacheMinutes" ? "cacheMinutes" : key]: value };
-            void this.resourceSettings.saveCloudSetting(key, value).catch((error) => {
-                this.resourceCloudState = previous;
-                applyCloudState(key, previous);
-                clog.error("云盘设置保存失败", error), show.error("云盘设置保存失败，已恢复原设置");
-            });
-        }));
+        this.renderCloudSettings(root, cloud);
         root.find("#resource-sources-panel").off("change.jhsResource", 'input[name="screenshotMode"]').on("change.jhsResource", 'input[name="screenshotMode"]', (event => {
             const previous = this.resourceState.screenshot.mode;
             this.resourceState.screenshot.mode = event.currentTarget.value;
@@ -605,6 +576,23 @@ i(this, "_desktopSettingNavMounted", !1), i(this, "_settingScope", null), i(this
             root.find("#confirm-car-number-import").prop("disabled", true).text("确认导入");
         }));
         root.find("#check-one-one-five-login").off("click.jhsResource").on("click.jhsResource", (() => this.checkOneOneFiveLogin(root)));
+    }
+    /** Render cloud controls from the canonical settings catalog and bind them to SettingsService. */
+    /** @param {JQueryHandle} root @param {Record<string, any>} cloud */
+    renderCloudSettings(root, cloud) {
+        const host = root.find("#cloud-settings-catalog");
+        if (!host.length) return;
+        this._cloudSettingBinding?.dispose?.();
+        const registry = this.getRuntimeService("settingsRegistry"), settings = this.getRuntimeService("settings");
+        const descriptors = registry.list({ surfaces: [ "full" ] }).filter((descriptor) => descriptor.section === "cloud");
+        host.empty();
+        const valueFor = (key) => key === "offlineProviderMode" ? cloud.providerMode : key === "oneOneFiveConcurrency" ? cloud.concurrency : key === "oneOneFiveCacheMinutes" ? cloud.cacheMinutes : cloud[key];
+        descriptors.forEach((descriptor) => {
+            const rendered = renderSettingRow(descriptor, { value: valueFor(descriptor.key) });
+            rendered.root.attr("id", descriptor.key);
+            host.append(rendered.row);
+        });
+        this._cloudSettingBinding = bindSettingRows(host, descriptors, { settings });
     }
     renderResourceSettings(root = $(document)) {
         const card = (source, custom, kind) => {

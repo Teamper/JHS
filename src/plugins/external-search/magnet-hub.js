@@ -5,6 +5,7 @@ import { escapeHtml, l, r } from "../../core/constants.js";
 import { mapLimit } from "../../core/feature-helpers.js";
 import { calcMagnetScore } from "../../core/magnet-quality.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
+import { createMovieContext } from "../../core/movie-context.js";
 import { BUILT_IN_NATIVE_MAGNET_SOURCES, ResourceSettingsService } from "../../services/resource-settings-service.js";
 import { MagnetSourceRegistry, applyMagnetRules, deduplicateMagnetResults, parseCustomMagnetResponse, parseNativeMagnets, validateCustomMagnetSource } from "../../services/magnet-source-registry.js";
 
@@ -13,6 +14,7 @@ import { MagnetSourceRegistry, applyMagnetRules, deduplicateMagnetResults, parse
 /** @typedef {{ title: string, magnet: string, size?: string | number, date?: string, seeders?: number, tags?: string[], customTagWeight?: number, filterPenalty?: number, hidden?: boolean, _score?: any, [key: string]: any }} MagnetResult */
 /** @typedef {{ id: string, name: string, enabled?: boolean, searchUrlTemplate: string, targetUrlTemplate: string, parserType?: string, [key: string]: any }} CustomSource */
 /** @typedef {{ root?: JQueryHandle | Element, method?: string, body?: unknown, headers?: Record<string, string>, responseType?: string, ttlMs?: number, custom?: boolean, hosts?: string[] }} MagnetRequestOptions */
+/** @typedef {{ movieContext?: import("../../core/movie-context.js").MovieContext, root?: JQueryHandle | Element }} MagnetHubOptions */
 
 export class MagnetHubPlugin extends BasePlugin {
     constructor() {
@@ -58,19 +60,27 @@ export class MagnetHubPlugin extends BasePlugin {
             .magnet-copy { position:absolute; top:var(--jhs-space-2); right:var(--jhs-space-3); }
         </style>`;
     }
-    /** @param {string} e @param {{ root?: JQueryHandle | Element }} [options] */
-    async createMagnetHub(e, options = {}) {
+    /** Create a magnet surface carrying the owning movie context to offline actions. */
+    /** @param {string | MagnetHubOptions} movie @param {MagnetHubOptions} [options] */
+    async createMagnetHub(movie, options = {}) {
         await this.initializeSources();
-        e = e.replace("FC2-", "");
-        const root = options.root ? $(options.root) : $(document), engines = [ ...this.searchEngines ];
+        const input = typeof movie === "string" ? null : movie;
+        const movieContext = typeof movie === "string" ? createMovieContext({ carNum: movie }) : input?.movieContext;
+        if (!movieContext?.carNum) {
+            const empty = $('<div class="magnet-container jhs-ui"></div>');
+            return empty.append($('<div class="magnet-error"></div>').text("无法确定影片身份，未加载磁力"));
+        }
+        const keyword = movieContext.carNum.replace("FC2-", "");
+        const root = (options.root ?? input?.root) ? $(options.root ?? input?.root) : $(document), engines = [ ...this.searchEngines ];
         const storage = this.getRuntimeService("storage"), t = $('<div class="magnet-container jhs-ui"></div>'), n = $('<div class="magnet-tabs"></div>'), a = "jhs_magnetHub_selectedEngine", i = storage.getLocal(a);
+        t.data("jhsMovieContext", movieContext);
         const o = $('<div class="magnet-tabs__options" role="tablist" aria-label="磁力来源"></div>');
         const initialEngine = engines.find((engine => engine.id === i)) || engines[0];
         if (!initialEngine) return t.append($('<div class="magnet-error"></div>').text("暂无可用磁力来源，请前往设置启用来源"));
         /** @type {MagnetSource} */
         let currentEngine = initialEngine;
         engines.forEach((engine => o.append($('<button type="button" class="jhs-btn magnet-tab" role="tab" aria-selected="false" tabindex="-1"></button>').attr("data-engine", engine.id).text(engine.name).toggleClass("active", engine.id === currentEngine.id))));
-        const target = $('<a class="jhs-btn jhs-btn--ghost" data-jhs-role="magnet-target" target="_blank" rel="noopener noreferrer">原网页</a>').attr("href", (currentEngine.targetPage || "#").replace("{keyword}", encodeURIComponent(e))).toggle("all" !== currentEngine.id);
+        const target = $('<a class="jhs-btn jhs-btn--ghost" data-jhs-role="magnet-target" target="_blank" rel="noopener noreferrer">原网页</a>').attr("href", (currentEngine.targetPage || "#").replace("{keyword}", encodeURIComponent(keyword))).toggle("all" !== currentEngine.id);
         n.append(o), n.append(target),
         o.find(".magnet-tab.active").attr({ "aria-selected": "true", tabindex: "0" }),
         t.append(n);
@@ -79,16 +89,16 @@ export class MagnetHubPlugin extends BasePlugin {
             const i = $(n.target).data("engine");
             currentEngine = engines.find((engine => engine.id === i)) || currentEngine;
             if (!currentEngine) return;
-            t.find('[data-jhs-role="magnet-target"]').attr("href", (currentEngine.targetPage || "#").replace("{keyword}", encodeURIComponent(e))).toggle("all" !== currentEngine.id),
+            t.find('[data-jhs-role="magnet-target"]').attr("href", (currentEngine.targetPage || "#").replace("{keyword}", encodeURIComponent(keyword))).toggle("all" !== currentEngine.id),
             storage.setLocal(a, i), t.find(".magnet-tab").removeClass("active").attr({ "aria-selected": "false", tabindex: "-1" }), $(n.target).addClass("active").attr({ "aria-selected": "true", tabindex: "0" }),
-            this.searchEngine(r, currentEngine, e, root);
+            this.searchEngine(r, currentEngine, keyword, root);
         })), t.on("keydown", ".magnet-tab", ((/** @type {KeyboardEvent} */ e) => {
             if (![ "ArrowLeft", "ArrowRight", "Home", "End" ].includes(e.key)) return;
             e.preventDefault();
             const n = t.find(".magnet-tab"), a = n.index(e.currentTarget);
             let i = "Home" === e.key ? 0 : "End" === e.key ? n.length - 1 : "ArrowRight" === e.key ? (a + 1) % n.length : (a - 1 + n.length) % n.length;
             n.eq(i).trigger("click").trigger("focus");
-        })), this.searchEngine(r, currentEngine, e, root), t;
+        })), this.searchEngine(r, currentEngine, keyword, root), t;
     }
     /** @param {JQueryHandle} e @param {MagnetSource} t @param {string} n @param {JQueryHandle} [root] */
     async searchEngine(e, t, n, root = $(document)) {

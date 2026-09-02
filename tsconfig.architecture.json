@@ -32,6 +32,7 @@
     "src/core/magnet-quality.js",
     "src/core/migration.js",
     "src/core/movie-identity.js",
+    "src/core/movie-context.js",
     "src/core/plugin-manager.js",
     "src/core/selection-model.js",
     "src/core/settings-ui-owner.js",

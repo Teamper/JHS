@@ -30,6 +30,7 @@ export function normalizeSettingDescriptor(descriptor) {
         effect,
         surfaces: Object.freeze(surfaces),
         validate: typeof descriptor.validate === "function" ? descriptor.validate : null,
+        normalize: typeof descriptor.normalize === "function" ? descriptor.normalize : null,
         contribution: descriptor.contribution == null ? undefined : String(descriptor.contribution),
     });
 }
@@ -67,5 +68,10 @@ export class SettingsRegistry {
         if (!descriptor) return true;
         if (typeof descriptor.validate === "function") return descriptor.validate(value) === true;
         return true;
+    }
+
+    /** Return the canonical normalizers for SettingsService persistence. */
+    normalizers() {
+        return Object.fromEntries([...this.descriptors.values()].filter((descriptor) => typeof descriptor.normalize === "function").map((descriptor) => [descriptor.key, descriptor.normalize]));
     }
 }

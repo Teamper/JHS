@@ -14,6 +14,12 @@ export function registerDefaultSettings(registry) {
     const yes = "yes", no = "no";
     /** @param {string} key @param {string} owner @param {string} label @param {Record<string, any>} [extra] */
     const toggle = (key, owner, label, extra = {}) => registry.register({ key, owner, label, ...boolean, defaultValue: extra.defaultValue ?? yes, ...extra });
+    /** @param {unknown} value @param {number} fallback @param {number} min @param {number} max */
+    const normalizeInteger = (value, fallback, min, max) => {
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed)) return fallback;
+        return Math.min(max, Math.max(min, Math.round(parsed)));
+    };
 
     // ---- Screenshot（列表按钮与详情自动加载独立开关） ----
     toggle("enableScreenSvg", "ScreenshotFeature", "列表长缩略图", {
@@ -104,4 +110,38 @@ export function registerDefaultSettings(registry) {
     registry.register({ key: "screenshotProviders", owner: "ScreenshotFeature", label: "截图来源", type: "json", defaultValue: [], effect: "manual", surfaces: ["full"] });
     registry.register({ key: "enableClog", owner: "CoreFeature", label: "日志", type: "select", defaultValue: yes, effect: "live", surfaces: ["full"], options: Object.freeze([{ value: yes, label: "开启" }, { value: no, label: "关闭" }]) });
     registry.register({ key: "videoMuted", owner: "PreviewVideoFeature", label: "视频默认静音", type: "boolean", defaultValue: true, effect: "live", surfaces: [] });
+
+    // ---- 云盘服务（与完整设置的云盘面板共用 Catalog / Binding） ----
+    toggle("enable123Offline", "OfflineFeature", "123 云盘离线", {
+        description: "支持 Magnet，需要先在 123 云盘页面同步授权。",
+        surfaces: ["full"], section: "cloud", defaultValue: yes,
+    });
+    toggle("enable115Offline", "OfflineFeature", "115 离线下载", {
+        description: "支持 Magnet 与 ED2K。",
+        surfaces: ["full"], section: "cloud", defaultValue: no,
+    });
+    registry.register({
+        key: "offlineProviderMode", owner: "OfflineFeature", label: "默认服务", description: "选择离线提交时优先使用的服务。",
+        type: "select", defaultValue: "ask", effect: "live", surfaces: ["full"], section: "cloud",
+        options: Object.freeze([{ value: "ask", label: "每次询问" }, { value: "123", label: "优先 123" }, { value: "115", label: "优先 115" }]),
+        normalize: (/** @type {unknown} */ value) => ["ask", "123", "115"].includes(String(value)) ? String(value) : "ask",
+    });
+    toggle("enable115Match", "OfflineFeature", "115 文件匹配", {
+        description: "根据当前番号查找网盘中已存在的视频。",
+        surfaces: ["full"], section: "cloud", defaultValue: no,
+    });
+    toggle("enable115LoginRedirect", "OfflineFeature", "未登录时提供登录入口", {
+        description: "提交失败时显示 115 登录地址。",
+        surfaces: ["full"], section: "cloud", defaultValue: no,
+    });
+    registry.register({
+        key: "oneOneFiveConcurrency", owner: "OfflineFeature", label: "匹配并发数", description: "控制 115 文件匹配的并发请求数，范围 1–10。",
+        type: "number", defaultValue: 4, effect: "live", surfaces: ["full"], section: "cloud",
+        min: 1, max: 10, step: 1, normalize: (/** @type {unknown} */ value) => normalizeInteger(value, 4, 1, 10),
+    });
+    registry.register({
+        key: "oneOneFiveCacheMinutes", owner: "OfflineFeature", label: "匹配缓存（分钟）", description: "设置 115 匹配结果缓存时间，范围 1–1440 分钟。",
+        type: "number", defaultValue: 60, effect: "live", surfaces: ["full"], section: "cloud",
+        min: 1, max: 1440, step: 1, normalize: (/** @type {unknown} */ value) => normalizeInteger(value, 60, 1, 1440),
+    });
 }

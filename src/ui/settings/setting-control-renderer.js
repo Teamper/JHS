@@ -155,7 +155,9 @@ class RowBinding {
         const getValue = makeGetValue(type, element);
         const fallback = descriptor.defaultValue;
         element.off(".jhsSettingBinding").on("change.jhsSettingBinding", () => {
-            const value = getValue();
+            const rawValue = getValue();
+            const value = typeof descriptor.normalize === "function" ? descriptor.normalize(rawValue) : rawValue;
+            setValue(value);
             this.onChanged?.(key, value);
             if ((descriptor.effect || "live") === "live") {
                 this.hub.userChanged(key, value, fallback, descriptor.label || key);
@@ -200,6 +202,11 @@ function makeSetValue(type, element) {
 function makeGetValue(type, element) {
     if (type === "boolean") return () => element.is(":checked") ? "yes" : "no";
     if (type === "select") return () => element.val();
-    if (type === "number") return () => Number(element.val()) || 0;
+    if (type === "number") return () => {
+        const raw = element.val();
+        if (raw == null || String(raw).trim() === "") return Number.NaN;
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) ? parsed : Number.NaN;
+    };
     return () => element.val();
 }

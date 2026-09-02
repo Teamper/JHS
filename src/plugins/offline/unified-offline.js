@@ -4,6 +4,7 @@ import { l, r } from "../../core/constants.js";
 import { jhsEventBus } from "../../core/event-bus.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { readListItem } from "../../core/list-item-reader.js";
+import { readOwnedMovieContext, resolveMovieContext as resolveMovieContextCore } from "../../core/movie-context.js";
 import { getDetailResourceAdapter } from "../../ui/detail/detail-resource-adapter.js";
 
 /** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
@@ -11,6 +12,21 @@ import { getDetailResourceAdapter } from "../../ui/detail/detail-resource-adapte
 /** @typedef {{ id: string, name: string, capabilities: string[], isEnabled: () => boolean | Promise<boolean>, getAvailability: (options: { force: boolean }) => Promise<ProviderAvailability>, submit: (resource: string, info?: any) => Promise<unknown>, openUrl?: () => string, retryPolicy?: { automaticAttempts: number } }} OfflineProvider */
 /** @typedef {{ provider: OfflineProvider, availability: ProviderAvailability }} OfflineCandidate */
 /** @typedef {{ preventDefault: () => void, stopPropagation: () => void, currentTarget: EventTarget }} JQueryClickEvent */
+
+/** Compatibility wrapper for VM-loaded legacy fixtures; production uses the shared resolver. */
+/** @param {Record<string, any>} options */
+function resolveOfflineMovieContext(options) {
+    if (typeof resolveMovieContextCore === "function") return resolveMovieContextCore(options);
+    const explicit = options.explicitContext;
+    if (explicit?.carNum) return { context: explicit, source: "explicit" };
+    const owned = typeof readOwnedMovieContext === "function" ? readOwnedMovieContext(options.trigger) : null;
+    if (owned) return { context: owned, source: "owned-surface" };
+    for (const [source, resolver] of [["list-item", options.listResolver], ["native-detail", options.nativeResolver], ["legacy-fallback", options.legacyResolver]]) {
+        const value = resolver?.();
+        if (value?.carNum) return { context: value, source };
+    }
+    return { context: null, source: "missing" };
+}
 
 class OfflineProviderRegistry {
     constructor() {
@@ -94,17 +110,28 @@ export class UnifiedOfflinePlugin extends BasePlugin {
             const index = dialog.open({ type: 1, title: "选择离线服务", content, area: utils.getDialogArea("sm"), cancel: () => resolve(null) });
         }));
     }
-    /** @param {JQueryHandle} button */
-    getVideoInfo(button) {
-        if (window.isDetailPage) return this.getPageInfo();
+    /** Resolve the movie identity from the action's owning surface. */
+    /** @param {JQueryHandle} button @param {unknown} [explicitContext] */
+    getVideoInfo(button, explicitContext = null) {
         const item = button?.closest?.(".item");
-        return item?.length ? readListItem(item) : this.getPageInfo();
+        const result = resolveOfflineMovieContext({
+            explicitContext,
+            trigger: button,
+            listResolver: () => item?.length ? readListItem(item) : null,
+            nativeResolver: () => window.isDetailPage ? this.getPageInfo() : null,
+            legacyResolver: () => this.getPageInfo?.(),
+            logger: (/** @type {string} */ message) => clog.warn(message),
+        });
+        return result.context;
     }
     /** @param {any} info @param {{root: any, layerIndex: number | null}} closeContext */
     async markDownloadedAndClose(info, closeContext) {
         if (!info?.carNum) return !1;
         try {
-            await this.getRuntimeService("state").patch(info.carNum, { downloaded: !0 }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } });
+            const state = this.getRuntimeService("state");
+            await state.patch(info.carNum, { downloaded: !0 }, { type: "offline-mark-downloaded", record: { ...info, names: info.actress || info.names || "" } });
+            const verified = await state.getState?.(info.carNum);
+            if (verified && verified.stateFlags?.downloaded !== true) throw new Error("状态回读未确认已下载");
         } catch (error) {
             clog.error("离线任务标记已下载失败", error), show.error("离线已提交，但标记已下载失败");
             return !1;
@@ -125,7 +152,8 @@ export class UnifiedOfflinePlugin extends BasePlugin {
         if (!candidates.length) return void show.error("没有已启用且支持该资源的离线服务，请检查授权与设置");
         const selected = candidates.find((candidate => candidate.provider.id === options.preferredProviderId)) || await this.chooseCandidate(event, candidates);
         if (!selected) return;
-        const info = context || this.getVideoInfo(button), detailRoot = button[0] || /** @type {any} */ (event)?.currentTarget || null;
+        const info = this.getVideoInfo(button, context), detailRoot = button[0] || /** @type {any} */ (event)?.currentTarget || null;
+        if (!info) return void show.error("无法确定影片身份，未执行离线操作");
         const closeContext = { root: detailRoot, layerIndex: utils.getOwningLayerIndex({ root: detailRoot }) };
         const original = button.text(), restoreButton = () => {
             if (!button[0]?.isConnected) return;

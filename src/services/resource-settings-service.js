@@ -39,9 +39,20 @@ export function parseBooleanSetting(value, fallback = false) {
 export function parseFiniteNumberSetting(value, fallback, bounds = {}) {
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return fallback;
-    if (bounds.min != null && parsed < bounds.min) return bounds.min;
-    if (bounds.max != null && parsed > bounds.max) return bounds.max;
-    return parsed;
+    const rounded = Math.round(parsed);
+    if (bounds.min != null && rounded < bounds.min) return bounds.min;
+    if (bounds.max != null && rounded > bounds.max) return bounds.max;
+    return rounded;
+}
+
+/** Normalize one canonical cloud setting before it reaches storage. */
+/** @param {string} key @param {unknown} value */
+export function normalizeCloudSetting(key, value) {
+    if (["enable123Offline", "enable115Offline", "enable115Match", "enable115LoginRedirect"].includes(key)) return parseBooleanSetting(value, false);
+    if (key === "offlineProviderMode") return ["ask", "123", "115"].includes(String(value)) ? String(value) : "ask";
+    if (key === "oneOneFiveConcurrency") return parseFiniteNumberSetting(value, 4, { min: 1, max: 10 });
+    if (key === "oneOneFiveCacheMinutes") return parseFiniteNumberSetting(value, 60, { min: 1, max: 1440 });
+    throw new TypeError(`未知云盘设置: ${key}`);
 }
 
 export class ResourceSettingsService {
@@ -91,7 +102,7 @@ export class ResourceSettingsService {
             enable115Offline: parseBooleanSetting(await this.storage.getSetting("enable115Offline", false), false),
             enable115Match: parseBooleanSetting(await this.storage.getSetting("enable115Match", false), false),
             enable115LoginRedirect: parseBooleanSetting(await this.storage.getSetting("enable115LoginRedirect", false), false),
-            providerMode: await this.storage.getSetting("offlineProviderMode", "ask"),
+            providerMode: normalizeCloudSetting("offlineProviderMode", await this.storage.getSetting("offlineProviderMode", "ask")),
             concurrency: parseFiniteNumberSetting(await this.storage.getSetting("oneOneFiveConcurrency", 4), 4, { min: 1, max: 10 }),
             cacheMinutes: parseFiniteNumberSetting(await this.storage.getSetting("oneOneFiveCacheMinutes", 60), 60, { min: 1, max: 1440 })
         };
@@ -101,13 +112,15 @@ export class ResourceSettingsService {
         const keyMap = { enable123Offline: "enable123Offline", enable115Offline: "enable115Offline", enable115Match: "enable115Match", enable115LoginRedirect: "enable115LoginRedirect", offlineProviderMode: "offlineProviderMode", oneOneFiveConcurrency: "oneOneFiveConcurrency", oneOneFiveCacheMinutes: "oneOneFiveCacheMinutes" };
         const storageKey = keyMap[key];
         if (!storageKey) throw new TypeError(`未知云盘设置: ${key}`);
-        await this.storage.saveSettingItem(storageKey, value);
-        return value;
+        const normalized = normalizeCloudSetting(key, value);
+        await this.storage.saveSettingItem(storageKey, normalized);
+        return normalized;
     }
     async saveCloudSettings(/** @type {ResourceRecord} */ value) {
-        if (typeof this.storage.patch === "function") return this.storage.patch({ enable123Offline: value.enable123Offline, enable115Offline: value.enable115Offline, enable115Match: value.enable115Match, enable115LoginRedirect: value.enable115LoginRedirect, offlineProviderMode: value.providerMode || "ask", oneOneFiveConcurrency: value.concurrency, oneOneFiveCacheMinutes: value.cacheMinutes });
-        for (const [key, item] of Object.entries({ enable123Offline: value.enable123Offline, enable115Offline: value.enable115Offline, enable115Match: value.enable115Match, enable115LoginRedirect: value.enable115LoginRedirect, offlineProviderMode: value.providerMode || "ask", oneOneFiveConcurrency: value.concurrency, oneOneFiveCacheMinutes: value.cacheMinutes })) await this.storage.saveSettingItem(key, item);
-        return value;
+        const normalized = { enable123Offline: normalizeCloudSetting("enable123Offline", value.enable123Offline), enable115Offline: normalizeCloudSetting("enable115Offline", value.enable115Offline), enable115Match: normalizeCloudSetting("enable115Match", value.enable115Match), enable115LoginRedirect: normalizeCloudSetting("enable115LoginRedirect", value.enable115LoginRedirect), offlineProviderMode: normalizeCloudSetting("offlineProviderMode", value.providerMode || "ask"), oneOneFiveConcurrency: normalizeCloudSetting("oneOneFiveConcurrency", value.concurrency), oneOneFiveCacheMinutes: normalizeCloudSetting("oneOneFiveCacheMinutes", value.cacheMinutes) };
+        if (typeof this.storage.patch === "function") return this.storage.patch(normalized);
+        for (const [key, item] of Object.entries(normalized)) await this.storage.saveSettingItem(key, item);
+        return normalized;
     }
     async exportConfig() { return { customMagnetSources: await this.getMagnetSources(), magnetTagRules: await this.getMagnetTagRules(), magnetFilterRules: await this.getMagnetFilterRules(), magnetBuiltInSources: await this.getBuiltInSources(), screenshot: await this.getScreenshotSettings() }; }
     async importConfig(/** @type {string} */ text) {

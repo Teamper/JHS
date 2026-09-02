@@ -51,6 +51,17 @@ describe("SettingsService single write entry", () => {
         expect(storage.read()).toMatchObject({ themeMode: "dark" });
     });
 
+    it("persists the normalized value rather than a UI-only clamp", async () => {
+        const value = { setting: { oneOneFiveConcurrency: 4 } };
+        const service = new SettingsService({
+            async get(key) { return value[key]; },
+            async set(key, next) { value[key] = next; },
+        }, { normalizers: { oneOneFiveConcurrency: (input) => Math.min(10, Math.max(1, Math.round(Number(input) || 4))) } });
+        await service.set("oneOneFiveConcurrency", 99);
+        expect(value.setting.oneOneFiveConcurrency).toBe(10);
+        expect(service.snapshot().oneOneFiveConcurrency).toBe(10);
+    });
+
     it("patch preserves keys written by other tabs between read and write", async () => {
         vi.stubGlobal("navigator", { locks: createFakeLocks() });
         const storage = createSharedStorage({ a: 1 });

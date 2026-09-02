@@ -134,6 +134,14 @@ export class StateService {
     async getNewVideoDecisions() {
         return await this.storage.forage.getItem("new_video_decisions") || {};
     }
+    /** Read one normalized state record for post-mutation verification. */
+    /** @param {unknown} carNum */
+    async getState(carNum) {
+        const key = normalizeCarNum(carNum);
+        if (!key) return null;
+        const record = await this.storage.getCar(key);
+        return record ? cloneStateValue(record) : null;
+    }
     /** @param {string[] | null} [requestedDomains] @returns {Promise<StateRecord>} */
     async _readDomains(requestedDomains = null) {
         const requested = new Set(requestedDomains ?? ["carList", "actresses", "decisions", "activity"]), read = (/** @type {string} */ domain, /** @type {string} */ key, /** @type {unknown} */ fallback) => requested.has(domain) ? this.storage.forage.getItem(key) : Promise.resolve(fallback);

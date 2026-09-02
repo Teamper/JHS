@@ -244,3 +244,29 @@ test("FC2 detail screenshot slot follows the master switch live", async ({ conte
   await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").set("enableLoadScreenShot", "yes"));
   await expect(page.locator('[data-jhs-role="screenshot"]')).not.toBeEmpty();
 });
+
+test("cloud settings use the canonical catalog and persist normalized numeric values", async ({ context, page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-wide", "one deterministic project covers the cloud settings catalog");
+  await fulfillHostFixtures(context);
+  await page.goto("https://javdb.com/", { waitUntil: "domcontentloaded" });
+  await injectUserscriptRuntime(page);
+  const openCloud = async () => {
+    await page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").openSettingDialog());
+    await expect(page.locator(".layui-layer #saveBtn")).toHaveAttribute("data-jhs-settings-ready", "true");
+    await page.locator('.layui-layer .side-menu-item[data-panel="cloud-services-panel"]').click();
+    await expect(page.locator(".layui-layer #cloud-settings-catalog")).toBeVisible();
+  };
+  await openCloud();
+  await expect(page.locator(".layui-layer #cloud-settings-catalog .jhs-setting-row")).toHaveCount(7);
+  await page.locator(".layui-layer #oneOneFiveConcurrency").fill("99");
+  await page.locator(".layui-layer #oneOneFiveConcurrency").press("Tab");
+  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveConcurrency)).toBe(10);
+  await page.locator(".layui-layer #oneOneFiveCacheMinutes").fill("4.8");
+  await page.locator(".layui-layer #oneOneFiveCacheMinutes").press("Tab");
+  await expect.poll(() => page.evaluate(() => window.unsafeWindow.pluginManager.getBean("SettingPlugin").getRuntimeService("settings").snapshot().oneOneFiveCacheMinutes)).toBe(5);
+  await page.evaluate(() => window.layer.closeAll());
+  await expect(page.locator(".layui-layer")).toHaveCount(0);
+  await openCloud();
+  await expect(page.locator(".layui-layer #oneOneFiveConcurrency")).toHaveValue("10");
+  await expect(page.locator(".layui-layer #oneOneFiveCacheMinutes")).toHaveValue("5");
+});

@@ -1,11 +1,12 @@
 // @ts-check
 
 export class SettingsService extends EventTarget {
-    /** @param {{get: (key: string) => Promise<unknown>, set: (key: string, value: unknown) => Promise<void>}} storage @param {{validators?: Record<string, (value: unknown) => boolean>, afterPersist?: (snapshot: Readonly<Record<string, unknown>>, changedNames: readonly string[]) => Promise<void> | void}} [options] */
+    /** @param {{get: (key: string) => Promise<unknown>, set: (key: string, value: unknown) => Promise<void>}} storage @param {{validators?: Record<string, (value: unknown) => boolean>, normalizers?: Record<string, (value: unknown) => unknown>, afterPersist?: (snapshot: Readonly<Record<string, unknown>>, changedNames: readonly string[]) => Promise<void> | void}} [options] */
     constructor(storage, options = {}) {
         super();
         this.storage = storage;
         this.validators = options.validators ?? {};
+        this.normalizers = options.normalizers ?? {};
         this.afterPersist = options.afterPersist ?? null;
         /** @type {Readonly<Record<string, unknown>>} */ this.snapshotValue = Object.freeze({});
         this.writeChain = Promise.resolve();
@@ -78,6 +79,9 @@ export class SettingsService extends EventTarget {
             const draft = { ...base };
             const maybePromise = mutator(draft);
             if (maybePromise && typeof maybePromise === "object" && typeof /** @type {PromiseLike<unknown>} */ (maybePromise).then === "function") throw new TypeError("Settings update mutator must be synchronous");
+            for (const [name, normalizer] of Object.entries(this.normalizers)) {
+                if (Object.prototype.hasOwnProperty.call(draft, name) && typeof normalizer === "function") draft[name] = normalizer(draft[name]);
+            }
             const next = Object.freeze(draft);
             const changedNames = [ ...new Set([ ...Object.keys(base), ...Object.keys(next) ]) ].filter((name) => base[name] !== next[name]);
             for (const name of changedNames) {

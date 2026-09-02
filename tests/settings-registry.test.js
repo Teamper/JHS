@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SettingsRegistry, normalizeSettingDescriptor } from "../src/app/settings-registry.js";
+import { registerDefaultSettings } from "../src/app/settings-catalog.js";
 
 describe("SettingsRegistry canonical descriptors", () => {
     it("normalizes a minimal descriptor with defaults", () => {
@@ -55,5 +56,20 @@ describe("SettingsRegistry canonical descriptors", () => {
         expect(registry.isValid("x", "good")).toBe(true);
         expect(registry.isValid("x", "bad")).toBe(false);
         expect(registry.isValid("unknown", "anything")).toBe(true);
+    });
+
+    it("declares cloud controls once and normalizes persisted numeric values", () => {
+        const registry = new SettingsRegistry();
+        registerDefaultSettings(registry);
+        const cloud = registry.list({ surfaces: ["full"] }).filter((descriptor) => descriptor.section === "cloud");
+        expect(cloud.map((descriptor) => descriptor.key)).toEqual([
+            "enable123Offline", "enable115Offline", "offlineProviderMode", "enable115Match",
+            "enable115LoginRedirect", "oneOneFiveConcurrency", "oneOneFiveCacheMinutes",
+        ]);
+        const normalizers = registry.normalizers();
+        expect(normalizers.oneOneFiveConcurrency(99)).toBe(10);
+        expect(normalizers.oneOneFiveConcurrency(-5)).toBe(1);
+        expect(normalizers.oneOneFiveCacheMinutes("4.8")).toBe(5);
+        expect(normalizers.offlineProviderMode("invalid")).toBe("ask");
     });
 });

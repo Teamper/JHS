@@ -4,8 +4,17 @@ import { normalizeCarNum } from "../../core/constants.js";
 
 /** @typedef {any} JQueryHandle Legacy jQuery runtime handle. */
 
+/** Keep the workspace context self-contained for legacy VM-loaded fixtures. */
+/** @param {unknown} value @param {string} [surface] */
+function normalizeWorkspaceMovieContext(value, surface = "other") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const raw = /** @type {Record<string, unknown>} */ (value), carNum = normalizeCarNum(raw.carNum);
+    if (!carNum) return null;
+    return Object.freeze({ ...raw, carNum, movieId: typeof raw.movieId === "string" && raw.movieId.trim() ? raw.movieId.trim() : raw.movieId ?? null, surface: raw.surface || surface });
+}
+
 /** 创建 FC2 自有详情壳，所有异步模块只写入固定插槽。 */
-/** @param {{ carNum?: string, source?: string, mode?: string }} [options] */
+/** @param {{ carNum?: string, movieId?: string|null, url?: string, source?: string, mode?: string }} [options] */
 export function createFc2DetailShell({ carNum = "", source = "fc2", mode = "dialog" } = {}) {
     const workspace = $('<div class="jhs-fc2-workspace jhs-ui"></div>').attr({
         "data-jhs-fc2-source": source,
@@ -27,8 +36,11 @@ export function createFc2DetailContext(root, options = {}) {
     const workspace = $(root).is(".jhs-fc2-workspace") ? $(root) : $(root).find(".jhs-fc2-workspace").first();
     let destroyed = !1;
     const namespace = `.jhsFc2Detail${Date.now()}${Math.random().toString(36).slice(2)}`, observers = new Set();
+    const surface = options.mode === "dialog" ? "fc2-dialog" : "native-detail";
+    const movieContext = normalizeWorkspaceMovieContext({ ...options, carNum: options.carNum || workspace.attr("data-jhs-car-num"), detailUrl: options.url, surface }, surface);
     const context = {
         ...options,
+        movieContext,
         root: workspace,
         workspace,
         namespace,
@@ -42,6 +54,7 @@ export function createFc2DetailContext(root, options = {}) {
             destroyed = !0, workspace.off(namespace).find("*").off(namespace), observers.forEach((observer => observer.disconnect?.())), observers.clear(), workspace.removeData("jhsFc2Context");
         }
     };
-    workspace.data("jhsFc2Context", context);
+    workspace.data("jhsFc2Context", context).attr("data-jhs-surface", surface);
+    movieContext && workspace.data("jhsMovieContext", movieContext);
     return context;
 }
