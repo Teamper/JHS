@@ -231,10 +231,10 @@ requireMatch(utils, /new URL\(e, window\.location\.origin\)[\s\S]*searchParams\.
 requireMatch(previewService, /async fetchVideo\(\)\s*\{\s*const carNum = normalizeCarNum\(this\.carNum\)/, "DMM must validate carNum before cache and parsing");
 requireMatch(previewService, /跳过 DMM 解析：番号不可用/, "DMM invalid-number warning is missing");
 requireMatch(previewVideo, /<video id="jhs-preview-video"[^>]+controls playsinline/, "JavDB DMM playback must use an isolated JHS video element");
-requireMatch(previewVideo, /nativeVideo\.pause\(\)[\s\S]{0,100}jhs-native-preview-hidden/, "successful DMM playback must pause and hide the JavDB player");
+requireMatch(previewVideo, /dmmPlayed \? \(nativeVideo\?\.pause\(\)[\s\S]{0,100}jhs-native-preview-hidden/, "successful DMM playback must pause and hide the available JavDB player");
 requireMatch(previewVideo, /dmmVideo\.muted = muted == null \|\| muted === !0/, "JavDB DMM playback must default to muted autoplay");
 requireMatch(previewVideo, /settings\.set\("videoMuted", dmmVideo\.muted\)/, "JavDB DMM playback must persist muted state through SettingsService");
-requireMatch(previewVideo, /addClass\("is-active"\)[\s\S]{0,300}高画质预览静音重试[\s\S]{0,300}restoreNativePlayer/, "JavDB DMM playback must be visible and retry muted before native fallback");
+requireMatch(previewVideo, /addClass\("is-active"\)[\s\S]*dmmPlayed = ready && \(!shouldPlay \|\| await safePlay[\s\S]*if \(!alive\(\)\)[\s\S]*if \(ready && !dmmPlayed && !dmmVideo\.muted\)[\s\S]*高画质预览静音重试[\s\S]*if \(!alive\(\)\)[\s\S]*restoreNativePlayer/, "JavDB DMM playback must preserve pause, reject stale callbacks and retry muted before native fallback");
 forbidMatch(previewVideo, /nativePreviewSrc|rememberNativeSource|restoreNativeSource|video\.currentSrc/, "JavDB HLS blob sources must never be cached or restored");
 forbidMatch(previewVideo, /\$nativeVideo\.attr\("src"|nativeVideo\.load\(\)/, "JHS must not replace or reload the JavDB HLS media source");
 requireMatch(screenshot, /async getScreenshot\(e\)\s*\{\s*e = normalizeCarNum\(e\)/, "screenshots must validate carNum first");

@@ -116,6 +116,7 @@ export async function bootstrapJhs() {
         Object.assign(globalThis, { utils, gmHttp, storageManager, stateService, jhsEventBus });
         // 黑名单/关键词规则可被其他标签页修改：内存派生缓存不随事件自动失效，必须在此主动清空
         [ "blacklist-rules-changed", "filter-rules-changed", "legacy-refresh" ].forEach((type => jhsEventBus.on(type, (() => storageManager._invalidateCache()))));
+        jhsEventBus.on("car-state-changed", () => storageManager._invalidateCache(storageManager.car_list_key));
         patchLayerRuntime(vendors.layer, utils);
         importVendorStyles(utils);
         markPhase("pre-settings");

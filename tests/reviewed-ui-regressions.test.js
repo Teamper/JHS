@@ -55,4 +55,19 @@ describe("reviewed UI regressions", () => {
         const host = new JavBusHostAdapter(null, null);
         expect(host.resolveFirstPageUrl(`https://www.javbus.com/en/${prefix}/1234567/3`)).toBe(`https://www.javbus.com/en/${prefix}/1234567`);
         expect(host.resolveFirstPageUrl(`https://www.javbus.com/${prefix}/1234567`)).toBe(`https://www.javbus.com/${prefix}/1234567`);
-    });});
+    });    it("keeps native preview actions when DMM is disabled", async () => {
+        const $ = setup('<div class="fancybox-content"><video id="preview-video"></video></div>', "https://javdb.com/v/abc");
+        vi.stubGlobal("getComputedStyle", dom.window.getComputedStyle.bind(dom.window));
+        vi.stubGlobal("MutationObserver", dom.window.MutationObserver);
+        dom.window.HTMLMediaElement.prototype.play = vi.fn(async () => {});
+        const plugin = Object.create(PreviewVideoPlugin.prototype), favoriteOne = vi.fn();
+        plugin.getRuntimeService = () => ({ snapshot: () => ({ enablePreviewVideo: "yes", enableLoadPreviewVideo: "no" }) });
+        plugin.getOptionalDependency = () => ({ favoriteOne });
+        plugin.previewGeneration = 0;
+        await plugin.handleVideo();
+        $("#video-favoriteBtn").trigger("click");
+        expect(favoriteOne).toHaveBeenCalledOnce();
+        plugin.unmountDmmPlayer();
+        expect($("#video-favoriteBtn")).toHaveLength(1);
+    });
+});

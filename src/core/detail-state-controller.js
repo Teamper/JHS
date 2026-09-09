@@ -11,7 +11,7 @@ const DETAIL_STATE_BUTTONS = {
 };
 
 /** @typedef {keyof import("./state-model.js").StateFlags} DetailStateFlag */
-/** @typedef {{root: any, layerIndex: number | null, carNum: string | null, getRecord: any, activityType: string, selectors: Partial<Record<DetailStateFlag, string>>}} DetailStateConfig */
+/** @typedef {{root: any, closeRoot?: any, layerIndex: number | null, carNum: string | null, getRecord: any, activityType: string, selectors: Partial<Record<DetailStateFlag, string>>}} DetailStateConfig */
 
 /** @returns {Array<[DetailStateFlag, {selector: string, inactive: () => string, active: () => string}]>} */
 function stateButtonEntries() {
@@ -24,9 +24,9 @@ export class DetailStateController {
     constructor(stateService) {
         this.stateService = stateService;
     }
-    /** @param {{root?: any, layerIndex?: number | null, carNum: unknown, getRecord?: any, activityType?: string, selectors?: Partial<Record<DetailStateFlag, string>>}} options */
-    bind({ root = document, layerIndex = null, carNum, getRecord = null, activityType = "detail-state", selectors = {} }) {
-        const config = { root, layerIndex, carNum: normalizeCarNum(carNum), getRecord, activityType, selectors };
+    /** @param {{root?: any, closeRoot?: any, layerIndex?: number | null, carNum: unknown, getRecord?: any, activityType?: string, selectors?: Partial<Record<DetailStateFlag, string>>}} options */
+    bind({ root = document, closeRoot = root, layerIndex = null, carNum, getRecord = null, activityType = "detail-state", selectors = {} }) {
+        const config = { root, closeRoot, layerIndex, carNum: normalizeCarNum(carNum), getRecord, activityType, selectors };
         for (const [flag, definition] of stateButtonEntries()) {
             const selector = selectors[flag] || definition.selector;
             $(root).find(selector).off("click.jhsDetailState").on("click.jhsDetailState", ((/** @type {MouseEvent} */ event) => {
@@ -51,7 +51,7 @@ export class DetailStateController {
         button.prop("disabled", !0).attr("aria-busy", "true");
         try {
             const record = "function" == typeof config.getRecord ? await config.getRecord() : config.getRecord || { carNum: config.carNum };
-            await this.stateService.toggle(config.carNum, flag, { type: config.activityType, record }), await this.render(config), await utils.closePage({ layerIndex: config.layerIndex, root: config.root });
+            await this.stateService.toggle(config.carNum, flag, { type: config.activityType, record }), await this.render(config), await utils.closePage({ layerIndex: config.layerIndex, root: config.closeRoot || config.root });
         } catch (error) {
             clog.error("详情状态更新失败", error), show.error("操作失败");
         } finally {
@@ -63,7 +63,7 @@ export class DetailStateController {
         const record = await storageManager.getCar(normalizeCarNum(carNum)), flags = normalizeStateFlags(record?.stateFlags);
         for (const [flag, definition] of stateButtonEntries()) {
             const button = $(root).find(selectors[flag] || definition.selector), active = !!flags[flag];
-            button.attr("aria-pressed", String(active)).find("span").first().text(active ? definition.active() : definition.inactive());
+            button.attr("aria-pressed", String(active)).each((/** @type {number} */ _, /** @type {HTMLElement} */ element) => $(element).find("span").first().text(active ? definition.active() : definition.inactive()));
         }
         return flags;
     }

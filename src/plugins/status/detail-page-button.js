@@ -2,6 +2,7 @@
 
 import { C, _, escapeHtml, k, l, m, normalizeCarNum, r, v, y } from "../../core/constants.js";
 import { DetailStateController } from "../../core/detail-state-controller.js";
+import { jhsEventBus } from "../../core/event-bus.js";
 import { BasePlugin } from "../../core/plugin-manager.js";
 import { createJhsTable } from "../../ui/table/create-jhs-table.js";
 import { createLatestSettingWriter } from "../../ui/settings/setting-binding-controller.js";
@@ -24,6 +25,10 @@ export class DetailPageButtonPlugin extends BasePlugin {
     async handle() {
         const scope = await this.getRuntimeService("scope")();
         this.hideVideoControls(scope), window.isDetailPage && (await this.createMenuBtn(), await this.autoRemoveNewVideoMark());
+        if (window.isDetailPage) scope.addCleanup(jhsEventBus?.on("car-state-changed", payload => {
+            const carNum = this.getPageInfo().carNum;
+            if (payload.carNums?.includes(carNum)) return this.showStatus(carNum);
+        }) || (() => {}));
     }
     async autoRemoveNewVideoMark() {
         try {

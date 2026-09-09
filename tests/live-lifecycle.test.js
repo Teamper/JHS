@@ -79,7 +79,8 @@ describe("PreviewVideoPlugin live lifecycle", () => {
         plugin.lifecycleScope = scope;
         plugin.reconfigure();
         expect($("#jhs-preview-video").length).toBe(0);
-        expect($("#video-bottom-toolbar").length).toBe(0);
+        expect($("#video-bottom-toolbar").length).toBe(1);
+        expect($("#video-bottom-toolbar .jhs-video-quality-btn").length).toBe(0);
         expect($("#preview-video").hasClass("jhs-native-preview-hidden")).toBe(false);
     });
 
