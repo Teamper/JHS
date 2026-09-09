@@ -368,12 +368,12 @@ export class BlacklistPlugin extends BasePlugin {
             show.error("已有批量任务正在执行");
             return { cancelled: true, busy: true };
         }
-        $("#favoriteAllVideo, #hasDownAllVideo, #filterAllVideo").attr("aria-disabled", "true").addClass("jhs-batch-busy");
-        const scope = await this.getRuntimeService("scope")(), listPage = this.getOptionalDependency("ListPagePlugin");
-        const context = "function" === typeof listPage?.createEvaluationContext ? await listPage.createEvaluationContext() : createListEvaluationContext({});
-        const isCancelled = () => !isActiveBatchRun(run) || Boolean(scope?.disposed);
         const statusHost = () => (this.blacklistRoot || $()).find("#checkBlacklistMsg");
         try {
+            $("#favoriteAllVideo, #hasDownAllVideo, #filterAllVideo").attr("aria-disabled", "true").addClass("jhs-batch-busy");
+            const scope = await this.getRuntimeService("scope")(), listPage = this.getOptionalDependency("ListPagePlugin");
+            const context = "function" === typeof listPage?.createEvaluationContext ? await listPage.createEvaluationContext() : createListEvaluationContext({});
+            const isCancelled = () => !isActiveBatchRun(run) || Boolean(scope?.disposed);
             const records = await scanAllPages({
                 startDom: root ? $(root) : $(document),
                 currentUrl: root ? null : window.location.href,

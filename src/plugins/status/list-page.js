@@ -589,10 +589,7 @@ export class ListPagePlugin extends BasePlugin {
             show.error("已有批量任务正在执行");
             return { cancelled: true, busy: true };
         }
-        const runtimeScope = await this.getRuntimeService("scope")(), context = await this.createEvaluationContext();
-        const isCancelled = () => isBatchRunCancelled(run) || Boolean(runtimeScope?.disposed);
-        const progressElement = this.showBatchProgress(run);
-        this.setBatchButtonsDisabled(true);
+        /** @type {any} */ let progressElement;
         const setProgress = (/** @type {string} */ text) => {
             const label = progressElement?.find(".jhs-batch-progress__label");
             label && label.length ? label.text(text) : clog.debug(text);
@@ -602,6 +599,10 @@ export class ListPagePlugin extends BasePlugin {
             clog.debug(`批量扫描第 ${page} 页 · 已扫描 ${scanned} · 匹配 ${matched}`);
         };
         try {
+            const runtimeScope = await this.getRuntimeService("scope")(), context = await this.createEvaluationContext();
+            const isCancelled = () => isBatchRunCancelled(run) || Boolean(runtimeScope?.disposed);
+            progressElement = this.showBatchProgress(run);
+            this.setBatchButtonsDisabled(true);
             const records = await scanAllPages({
                 startDom: root ? $(root) : $(document),
                 currentUrl: isOwnedRankingPage ? null : (root ? null : window.location.href),

@@ -26,4 +26,21 @@ describe("reviewed UI regressions", () => {
         await saveSettingForm({ settings: { snapshot: () => ({}), update: async fn => fn({}) }, webdav: { saveProfile } }, root);
         expect(saveProfile).toHaveBeenCalledWith({ username: "new-user" });
     });
+    it("releases blacklist batch ownership and buttons after context failure", async () => {
+        const $ = setup('<button id="filterAllVideo"></button>'), plugin = Object.create(BlacklistPlugin.prototype);
+        plugin.getRuntimeService = () => async () => null;
+        plugin.getOptionalDependency = () => ({ createEvaluationContext: async () => { throw new Error("context failed"); } });
+        await expect(plugin.filterAllVideo("actor", { confirm: false })).rejects.toThrow("context failed");
+        expect(isBatchRunActive()).toBe(false);
+        expect($("#filterAllVideo").attr("aria-disabled")).not.toBe("true");
+        expect($("#filterAllVideo").hasClass("jhs-batch-busy")).toBe(false);
+    });
+    it("releases batch ownership when scope initialization fails", async () => {
+        setup('<button id="favoriteAllVideo"></button>');
+        const plugin = Object.create(ListPagePlugin.prototype);
+        plugin.getRuntimeService = () => async () => { throw new Error("scope failed"); };
+        await expect(plugin.batchSaveAllVideos({}, "favorite", { confirm: false })).rejects.toThrow("scope failed");
+        expect(isBatchRunActive()).toBe(false);
+        await expect(plugin.batchSaveAllVideos({}, "favorite", { confirm: false })).rejects.toThrow("scope failed");
+    });
 });
